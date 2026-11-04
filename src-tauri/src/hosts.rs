@@ -184,6 +184,14 @@ pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
 
 /// Adds a host (named after its IP) for every single-IP scope entry that has none yet.
 /// Never deletes or renames. Returns how many were added.
+/// Like `sync_scope`, for an engagement save: only IPs that `previous` did not already list become hosts,
+/// so a host the user deleted (or re-addressed) is not recreated on every save.
+pub fn sync_scope_added(conn: &Connection, engagement_id: &str, previous: &[String], scope: &[String]) -> AppResult<usize> {
+    let before: std::collections::HashSet<String> = previous.iter().filter_map(|e| single_ip(e.trim())).collect();
+    let added: Vec<String> = scope.iter().filter(|e| single_ip(e.trim()).is_some_and(|ip| !before.contains(&ip))).cloned().collect();
+    sync_scope(conn, engagement_id, &added)
+}
+
 pub fn sync_scope(conn: &Connection, engagement_id: &str, scope: &[String]) -> AppResult<usize> {
     let mut added = 0;
     for entry in scope {

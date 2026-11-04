@@ -138,8 +138,10 @@ pub fn upsert_scan(conn: &Connection, host_id: &str, ports: &[ScanPort]) -> AppR
             "INSERT INTO services (id, host_id, port, protocol, state, nmap_service, nmap_version, created_at, updated_at) \
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?8) \
              ON CONFLICT (host_id, port, protocol) DO UPDATE SET \
-               state = excluded.state, nmap_service = excluded.nmap_service, \
-               nmap_version = excluded.nmap_version, updated_at = excluded.updated_at",
+               state = excluded.state, \
+               nmap_service = COALESCE(excluded.nmap_service, services.nmap_service), \
+               nmap_version = COALESCE(excluded.nmap_version, services.nmap_version), \
+               updated_at = excluded.updated_at",
             params![uuid::Uuid::new_v4().to_string(), host_id, port, protocol, state, svc, ver, now],
         )?;
     }
@@ -325,6 +327,20 @@ mod tests {
         assert_eq!(field(upsert_scan(c, &h, &[sp(0, "tcp", "open", "", "")])).0, "port");
         assert_eq!(field(upsert_scan(c, &h, &[sp(80, "sctp", "open", "", "")])).0, "protocol");
         assert_eq!(upsert_scan(c, "nope", &[sp(80, "tcp", "open", "", "")]), Err(AppError::NotFound));
+    }
+
+    #[test]
+    fn rescan_without_versions_keeps_known_guess() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let h = host(c, &eng(c), "web");
+        upsert_scan(c, &h, &[sp(22, "tcp", "open", "ssh", "OpenSSH 8.9")]).unwrap();
+        // A later -p- run: no service name or version for the same port.
+        let got = upsert_scan(c, &h, &[sp(22, "tcp", "open", "", "")]).unwrap();
+        assert_eq!((got[0].nmap_service.as_deref(), got[0].nmap_version.as_deref()), (Some("ssh"), Some("OpenSSH 8.9")));
+        // A new guess still replaces the old one.
+        let got = upsert_scan(c, &h, &[sp(22, "tcp", "open", "ssh", "OpenSSH 9.0")]).unwrap();
+        assert_eq!(got[0].nmap_version.as_deref(), Some("OpenSSH 9.0"));
     }
 
     #[test]

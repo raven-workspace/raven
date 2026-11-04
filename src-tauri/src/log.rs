@@ -262,6 +262,10 @@ pub fn create(conn: &Connection, engagement_id: &str, input: LogEntryInput) -> A
             params![att_id, engagement_id, id, input.attachment.as_ref().unwrap().mime, bytes, bytes.len() as i64, now],
         )?;
     } else {
+        // No upload, no attachment: a client-supplied id would point at nothing (or at another entry's image).
+        if let LogContent::Flag { attachment_id, .. } = &mut content {
+            *attachment_id = None;
+        }
         insert_entry(&tx, &id, engagement_id, &input, &title, &content, at, now)?;
     }
     write_hosts(&tx, &id, &host_ids)?;
@@ -515,6 +519,16 @@ mod tests {
         // deleting the entry removes its attachment
         delete(c, &en.id).unwrap();
         assert_eq!(attachment_get(c, attachment_id), Err(AppError::NotFound));
+    }
+
+    #[test]
+    fn flag_without_upload_ignores_client_attachment_id() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let i = input(LogContent::Flag { flag_kind: "local".into(), value: "deadbeef".into(), attachment_id: Some("forged".into()) });
+        let en = create(c, &e, i).unwrap();
+        assert!(matches!(&en.content, LogContent::Flag { attachment_id: None, .. }), "got {:?}", en.content);
     }
 
     #[test]
