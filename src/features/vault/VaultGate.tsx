@@ -132,7 +132,17 @@ export function VaultGate({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-full flex-col bg-bg">
-      <TitleBar title="Raven" right={right} />
+      <TitleBar
+        left={
+          unlocked ? (
+            <Link to="/" className="rounded-sm px-1 py-0.5 text-xs font-semibold text-fg-2 hover:text-fg">
+              Raven
+            </Link>
+          ) : undefined
+        }
+        title={unlocked ? undefined : "Raven"}
+        right={right}
+      />
       <div className="min-h-0 flex-1 overflow-auto">{body}</div>
     </div>
   );

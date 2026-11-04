@@ -21,6 +21,7 @@ describe("smoke", () => {
   beforeEach(() => {
     vi.mocked(api.vaultStatus).mockResolvedValue({ exists: true, unlocked: true });
     vi.mocked(api.settingsGet).mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14 });
+    vi.mocked(api.engagementsList).mockResolvedValue([]);
   });
 
   it("renders app root", async () => {

@@ -11,11 +11,13 @@ export interface DialogProps {
   children?: ReactNode;
   /** Action row, right-aligned (e.g. Cancel + primary Button). */
   footer?: ReactNode;
+  /** `lg` is for forms: wider, higher on screen. The body scrolls when it doesn't fit. */
+  size?: "md" | "lg";
   className?: string;
 }
 
 /** Modal on Radix: hairline border, `--surface` panel, Esc closes. */
-export function Dialog({ open, onOpenChange, title, description, children, footer, className }: DialogProps) {
+export function Dialog({ open, onOpenChange, title, description, children, footer, size = "md", className }: DialogProps) {
   return (
     <RD.Root open={open} onOpenChange={onOpenChange}>
       <RD.Portal>
@@ -23,12 +25,15 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
         <RD.Content
           {...(description ? {} : { "aria-describedby": undefined })}
           className={cx(
-            "fixed top-[18vh] left-1/2 z-50 w-[min(480px,calc(100vw-32px))] -translate-x-1/2",
+            "fixed left-1/2 z-50 flex -translate-x-1/2 flex-col",
+            size === "lg"
+              ? "top-[8vh] max-h-[calc(92vh-24px)] w-[min(560px,calc(100vw-32px))]"
+              : "top-[18vh] max-h-[calc(82vh-24px)] w-[min(480px,calc(100vw-32px))]",
             "rounded border border-line-2 bg-surface text-fg-2",
             className,
           )}
         >
-          <header className="flex items-start justify-between gap-3 border-b border-line px-4 pt-3.5 pb-3">
+          <header className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-4 pt-3.5 pb-3">
             <div className="min-w-0">
               <RD.Title className="m-0 text-[15px] font-semibold tracking-[-0.01em] text-fg">{title}</RD.Title>
               {description && (
@@ -42,8 +47,8 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
               <Kbd>esc</Kbd>
             </RD.Close>
           </header>
-          {children !== undefined && <div className="px-4 py-3.5">{children}</div>}
-          {footer && <footer className="flex justify-end gap-2 border-t border-line px-4 py-3">{footer}</footer>}
+          {children !== undefined && <div className="min-h-0 overflow-y-auto px-4 py-3.5">{children}</div>}
+          {footer && <footer className="flex shrink-0 justify-end gap-2 border-t border-line px-4 py-3">{footer}</footer>}
         </RD.Content>
       </RD.Portal>
     </RD.Root>
