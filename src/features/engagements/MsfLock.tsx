@@ -34,9 +34,10 @@ export function MsfLock({ engagement: e }: { engagement: Engagement }) {
       <button
         type="button"
         onClick={() => setDialog("pick")}
-        className="cursor-default text-fg-2 hover:text-fg"
+        className="cursor-default rounded-sm text-fg-2 hover:text-fg focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
       >
-        Metasploit: <span className={cx(locked && "text-warn")}>{locked ? locked.name : "unused"}</span>
+        Metasploit:{" "}
+        <span className={cx(e.msfHostId && "text-warn")}>{e.msfHostId ? (locked?.name ?? "locked") : "unused"}</span>
       </button>
       <Dialog
         open={dialog === "pick"}

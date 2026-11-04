@@ -61,6 +61,8 @@ beforeEach(() => {
   m.checklistList.mockResolvedValue([]);
   m.checklistPut.mockResolvedValue([]);
   m.logList.mockResolvedValue([]);
+  m.notesList.mockResolvedValue([]);
+  m.notesGet.mockResolvedValue({ engagementId: "e1", hostId: null, body: "", updatedAt: 1 } as never);
   m.tunnelsList.mockResolvedValue([]);
 });
 
@@ -78,6 +80,13 @@ describe("metasploit lock", () => {
     mount("/e/e1", { ...E1, msfHostId: "h1" });
     const btn = await screen.findByRole("button", { name: /Metasploit: VEGA/ });
     expect(within(btn).getByText("VEGA")).toHaveClass("text-warn");
+  });
+
+  it("shows locked, not unused, while the locked host's name is unresolved", async () => {
+    m.hostsList.mockReturnValue(new Promise(() => {}));
+    mount("/e/e1", { ...E1, msfHostId: "h1" });
+    const btn = await screen.findByRole("button", { name: /Metasploit: locked/ });
+    expect(within(btn).getByText("locked")).toHaveClass("text-warn");
   });
 
   it("locks a host from the dialog", async () => {

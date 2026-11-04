@@ -26,6 +26,7 @@ export function useHostMutations(engagementId: string) {
   // shared error path (a locked vault reaches the gate).
   const resync = () => {
     void resyncBoards(engagementId).then(
+      // Refetch again: the resync may have moved a host's derived column after the first invalidation.
       () => qc.invalidateQueries({ queryKey: ["hosts", engagementId] }),
       reportError,
     );
