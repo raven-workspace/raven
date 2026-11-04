@@ -3,6 +3,7 @@ import { BUILTIN_LIBRARY } from '../../../engines/library/data';
 import type { LibraryCommand } from '../../../engines/library/types';
 import { firstBinary, matchesCommand } from '../../../engines/library/matcher';
 import { AD_PLAYBOOKS, ENGAGEMENT_SETUP, HOST_GOALS } from '../../../engines/checklist';
+import { resolveTemplate } from '../../../engines/checklist/template';
 
 const lib = BUILTIN_LIBRARY;
 const ENGAGEMENT_GOALS = [...ENGAGEMENT_SETUP, ...AD_PLAYBOOKS.flatMap((p) => p.goals)];
@@ -130,6 +131,25 @@ describe('built-in command library', () => {
       }
     }
     expect(unknown).toEqual([]);
+  });
+
+  it('operator-fill tokens are reported unresolved, never silently filled', () => {
+    const fills = lib.filter((c) => /\{FILL_[A-Z0-9_]+\}/.test(c.template));
+    expect(fills.length).toBeGreaterThan(5);
+    const ctx = { lhost: '10.10.14.2', lport: '443', rhost: '10.0.0.5', domain: 'corp.local', customVars: {} };
+    const svc = lib.find((c) => c.id === 'win-pe-sc-qc')!;
+    for (const opts of [{}, { legacyAliases: true }]) {
+      const r = resolveTemplate(svc.template, ctx, opts);
+      expect(r.text).toBe('sc.exe qc {FILL_SERVICE}');
+      expect(r.unresolved).toEqual(['FILL_SERVICE']);
+    }
+    // An operator who defines the value as a custom variable gets it filled.
+    expect(resolveTemplate(svc.template, { ...ctx, customVars: { FILL_SERVICE: 'VulnSvc' } }).text).toBe('sc.exe qc VulnSvc');
+    // Sweep: every FILL token in the library stays unresolved with an empty context.
+    for (const c of fills) {
+      const r = resolveTemplate(c.template, ctx);
+      for (const m of c.template.matchAll(/\{(FILL_[A-Z0-9_]+)\}/g)) expect(r.unresolved, c.id).toContain(m[1]);
+    }
   });
 
   it('target-side and attacker-side commands are labelled', () => {
