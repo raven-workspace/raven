@@ -5,11 +5,12 @@ use rand::RngCore;
 use rusqlite::{Connection, ErrorCode, OpenFlags};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 const MIN_PASSWORD_CHARS: usize = 12;
 const SALT_LEN: usize = 16;
 const KEY_LEN: usize = 32;
+const PRAGMA_PREFIX: &str = "PRAGMA key = \"x'";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VaultMeta {
@@ -48,17 +49,33 @@ impl VaultMeta {
             .ok_or_else(|| AppError::Io("invalid salt in vault.json".into()))?;
         let params = Params::new(self.m_kib, self.t, self.p, Some(KEY_LEN))
             .map_err(|e| AppError::Io(format!("invalid argon2 params in vault.json: {e}")))?;
+        let params_blocks = params.block_count();
         let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
         let mut key = Zeroizing::new([0u8; KEY_LEN]);
-        argon
-            .hash_password_into(password.as_bytes(), &salt, key.as_mut())
-            .map_err(|e| AppError::Io(format!("key derivation failed: {e}")))?;
+        // Own the Argon2 working memory so it can be wiped before it is freed.
+        let mut blocks = vec![argon2::Block::default(); params_blocks];
+        let res = argon.hash_password_into_with_memory(
+            password.as_bytes(),
+            &salt,
+            key.as_mut(),
+            &mut blocks,
+        );
+        for b in blocks.iter_mut() {
+            b.zeroize();
+        }
+        res.map_err(|e| AppError::Io(format!("key derivation failed: {e}")))?;
         Ok(key)
     }
 }
 
 fn to_hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push(HEX[(b >> 4) as usize] as char);
+        out.push(HEX[(b & 15) as usize] as char);
+    }
+    out
 }
 
 fn from_hex(s: &str) -> Option<Vec<u8>> {
@@ -69,8 +86,16 @@ fn from_hex(s: &str) -> Option<Vec<u8>> {
 }
 
 fn pragma_for(key: &[u8; KEY_LEN]) -> Zeroizing<String> {
-    let hex = Zeroizing::new(to_hex(key));
-    Zeroizing::new(format!("PRAGMA key = \"x'{}'\";", hex.as_str()))
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    // Exact capacity so the String never reallocates (and leaves unwiped copies).
+    let mut out = Zeroizing::new(String::with_capacity(PRAGMA_PREFIX.len() + KEY_LEN * 2 + 3));
+    out.push_str(PRAGMA_PREFIX);
+    for b in key {
+        out.push(HEX[(b >> 4) as usize] as char);
+        out.push(HEX[(b & 15) as usize] as char);
+    }
+    out.push_str("'\";");
+    out
 }
 
 pub struct Vault {
@@ -215,9 +240,9 @@ impl Vault {
     }
 
     /// `PRAGMA key = "x'<hex>'"` statement for the current key (used to open backups).
-    pub fn key_pragma(&self) -> AppResult<String> {
+    pub fn key_pragma(&self) -> AppResult<Zeroizing<String>> {
         let key = self.key.as_ref().ok_or(AppError::Locked)?;
-        Ok(pragma_for(key).to_string())
+        Ok(pragma_for(key))
     }
 }
 
