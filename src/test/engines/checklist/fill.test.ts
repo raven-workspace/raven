@@ -4,7 +4,7 @@ import type { Host } from '../../../types/host';
 import type { Service } from '../../../types/service';
 import type { Tunnel } from '../../../types/network';
 import type { CredAttempt, Credential } from '../../../types/credentials';
-import { defaultCredFor, defaultDomainCred, fillCommand, quoteContextAt, tunnelFor, type FillInput } from '../../../engines/checklist';
+import { defaultCredFor, defaultDomainCred, fillCommand, hasUnmodelledQuoting, quoteContextAt, tunnelFor, type FillInput } from '../../../engines/checklist';
 
 const host = (p: Partial<Host> = {}): Host => ({
   id: 'h1', engagementId: 'e1', name: 'ms01', ip: '172.16.1.5', os: 'windows', boardColumn: 'enumerate', boardManual: false,
@@ -233,6 +233,48 @@ describe('shell-safe copy (T9-R2)', () => {
   it('leaves values raw without shellSafe, and the display mask unchanged', () => {
     expect(fillCommand("x '{PASS}'", input({ cred: cred({ secret: "a'b" }) })).text).toBe("x 'a'b'");
     expect(fillCommand("x '{PASS}'", input({ cred: cred({ secret: "a'b" }) }), { secretMask: '***' }).text).toBe("x '***'");
+  });
+});
+
+describe('shell-safe copy: DC_HOST and expansion edge cases', () => {
+  const dc = host({ id: 'dc', name: 'dc01', ip: '10.0.0.10' });
+  const withDomain = (t: string, domain: string) =>
+    fillCommand(t, input({ cred: cred({ domain }), hosts: [dc], servicesByHost: adServices('dc') }), { shellSafe: true }).text;
+  const noBare = (out: string, chars: string) => {
+    for (let i = 0; i < out.length; i++) if (chars.includes(out[i])) expect(quoteContextAt(out, i)).not.toBe('bare');
+  };
+
+  it('DC_HOST carrying a hostile credential domain yields no unquoted ;', () => {
+    const out = withDomain('bloodyAD --host {DC_HOST} -d x', 'corp.local;id');
+    expect(out).toBe("bloodyAD --host 'dc01.corp.local;id' -d x");
+    noBare(out, ';');
+  });
+  it('$(…) in the domain is inert inside the /etc/hosts double-quote shape', () => {
+    const out = withDomain('echo "{DC_IP} {DC_HOST} {DOMAIN}" | sudo tee -a /etc/hosts', 'a$(id).local');
+    expect(out).toBe(String.raw`echo "10.0.0.10 dc01.a\$(id).local a\$(id).local" | sudo tee -a /etc/hosts`);
+  });
+  it('quotes a bare value starting with = (zsh =cmd expansion)', () => {
+    expect(fillCommand('x {PASS}', input({ cred: cred({ secret: '=ls' }) }), { shellSafe: true }).text).toBe("x '=ls'");
+    expect(fillCommand('x {PASS}', input({ cred: cred({ secret: 'a=b' }) }), { shellSafe: true }).text).toBe('x a=b');
+  });
+  it('neutralises ! in double quotes (history expansion)', () => {
+    const out = fillCommand('x "{PASS}"', input({ cred: cred({ secret: 'a!b' }) }), { shellSafe: true }).text;
+    expect(out).toBe(`x "a"'!'"b"`);
+  });
+});
+
+describe('shell-safe copy: nested $(…)', () => {
+  it("a quote in the domain is escaped for the single quotes nested inside \"$(echo '…')\"", () => {
+    const t = 'ldapsearch -b "$(echo \'DC={DOMAIN}\' | sed s/a/b/)" -w \'{PASS}\'';
+    const out = fillCommand(t, input({ cred: cred({ domain: "a'b" }) }), { shellSafe: true }).text;
+    expect(out).toContain(String.raw`echo 'DC=a'\''b'`);
+    expect(quoteContextAt('"$(x {Y}', 8)).toBe('bare');
+    expect(quoteContextAt('"$(x) {Y}', 7)).toBe('double');
+  });
+  it('flags unmodelled shapes only outside single quotes', () => {
+    expect(hasUnmodelledQuoting("x '{FILL}$' y")).toBe(false);
+    expect(hasUnmodelledQuoting("x $'a' {PASS}")).toBe(true);
+    expect(hasUnmodelledQuoting('x `id` {PASS}')).toBe(true);
   });
 });
 

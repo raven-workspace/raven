@@ -148,7 +148,8 @@ export function commandContext(input: FillInput, opts: FillOptions = {}): Substi
   };
 }
 
-const CRED_TOKENS = new Set(['USER', 'DOMAIN', 'PASS', 'HASH']);
+/** Tokens whose value is, or derives from, the credential (DC_HOST carries the credential's domain). */
+const CRED_TOKENS = new Set(['USER', 'DOMAIN', 'PASS', 'HASH', 'DC_HOST']);
 
 export function fillCommand(template: string, input: FillInput, opts: FillOptions = {}): FillResult {
   const ctx = commandContext(input, opts);
