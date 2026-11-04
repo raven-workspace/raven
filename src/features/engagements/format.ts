@@ -1,4 +1,5 @@
 import type { Engagement, EngagementKind } from "../../types/engagement";
+import type { Progress } from "../../types/log";
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -71,19 +72,11 @@ export function relativeTime(ms: number, now: number = Date.now()): string {
   return shortDate(ms, new Date(ms).getFullYear() !== new Date(now).getFullYear());
 }
 
-/** Host and flag counts. Zero until hosts exist (build step 2). */
-export interface ProgressSummary {
-  rooted: number;
-  hosts: number;
-  flags: number;
-  flagsTotal: number;
-}
-
-export const EMPTY_PROGRESS: ProgressSummary = { rooted: 0, hosts: 0, flags: 0, flagsTotal: 0 };
+export const EMPTY_PROGRESS: Progress = { hostsTotal: 0, hostsRooted: 0, flagsFound: 0, flagsTotal: 0 };
 
 /** "Rooted 3/6 · flags 7/9". */
-export function progressLine(s: ProgressSummary): string {
-  return `Rooted ${s.rooted}/${s.hosts} · flags ${s.flags}/${s.flagsTotal}`;
+export function progressLine(s: Progress): string {
+  return `Rooted ${s.hostsRooted}/${s.hostsTotal} · flags ${s.flagsFound}/${s.flagsTotal}`;
 }
 
 /** Scope as "10.20.0.0/22" or "10.20.0.0/22 +2"; null when empty. */

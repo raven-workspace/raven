@@ -1,0 +1,31 @@
+import { EmptyState } from "../../ui";
+
+export const SECTIONS = [
+  { id: "board", label: "Board", empty: "Board arrives in build step 2" },
+  { id: "log", label: "Log", empty: "Log arrives in a later build step" },
+  { id: "credentials", label: "Credentials", empty: "Credentials arrive in a later build step" },
+  { id: "findings", label: "Findings", empty: "Findings arrive in a later build step" },
+  { id: "checklist", label: "Engagement checklist", empty: "The engagement checklist arrives in a later build step" },
+  { id: "report", label: "Report", empty: "Report arrives in phase 3" },
+] as const;
+
+export type SectionId = (typeof SECTIONS)[number]["id"];
+
+/** Route for a section: the board is the engagement's index route. */
+export function sectionPath(engagementId: string, section: SectionId): string {
+  return section === "board" ? `/e/${engagementId}` : `/e/${engagementId}/s/${section}`;
+}
+
+export function SectionView({ section }: { section: SectionId }) {
+  const s = SECTIONS.find((x) => x.id === section)!;
+  return (
+    <EmptyState
+      title={s.empty}
+      body={
+        section === "board"
+          ? "Hosts will sit here in columns by stage: Enumerate, Foothold, Privesc, Loot / pivot, Done."
+          : undefined
+      }
+    />
+  );
+}
