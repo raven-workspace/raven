@@ -23,7 +23,7 @@ const E1: Engagement = {
 };
 const host = (id: string, name: string, ip: string, os: Host["os"]): Host => ({
   id, engagementId: "e1", name, ip, os, boardColumn: "enumerate", boardManual: false, dualHomed: false,
-  boardDerived: null, access: "none", createdAt: 1, updatedAt: 1,
+  boardDerived: null, accessReviewedAt: null, access: "none", createdAt: 1, updatedAt: 1,
 });
 const H1 = host("h1", "dc01", "10.10.10.5", "windows");
 const H2 = host("h2", "web02", "10.10.10.6", "linux");

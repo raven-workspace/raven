@@ -4,6 +4,15 @@ import type { ConfirmInput, ScanPort, Service, ServiceInput } from "../types/ser
 import type { ChecklistItem, ChecklistItemInput } from "../types/checklist";
 import type { Attachment, LogEntry, LogEntryInput, Progress } from "../types/log";
 import type { Note, RuledOut, RuledOutInput } from "../types/notes";
+import type {
+  AccessGrant,
+  AccessGrantInput,
+  Credential,
+  CredentialInput,
+  CrackStatus,
+  Username,
+  UsernameInput,
+} from "../types/credentials";
 import type { Hop, HopInput, Tunnel, TunnelInput } from "../types/network";
 import type { Host, HostInput, BoardColumn } from "../types/host";
 import type { Engagement, EngagementInput, EngagementStatus } from "../types/engagement";
@@ -97,6 +106,27 @@ export const api = {
     call<Hop>("hop_create", { engagementId, input }),
   hopUpdate: (id: string, input: HopInput) => call<Hop>("hop_update", { id, input }),
   hopDelete: (id: string) => call<null>("hop_delete", { id }),
+  hostMarkAccessReviewed: (hostId: string) => call<Host>("host_mark_access_reviewed", { hostId }),
+  credentialsList: (engagementId: string) => call<Credential[]>("credentials_list", { engagementId }),
+  credentialCreate: (engagementId: string, input: CredentialInput) =>
+    call<Credential>("credential_create", { engagementId, input }),
+  credentialUpdate: (id: string, input: CredentialInput) =>
+    call<Credential>("credential_update", { id, input }),
+  credentialDelete: (id: string) => call<null>("credential_delete", { id }),
+  credentialCrack: (hashId: string, plaintext: string) =>
+    call<Credential>("credential_crack", { hashId, plaintext }),
+  credentialSetCrackStatus: (id: string, status: CrackStatus) =>
+    call<Credential>("credential_set_crack_status", { id, status }),
+  credentialConvertToAccess: (credId: string, grant: AccessGrantInput) =>
+    call<Username>("credential_convert_to_access", { credId, grant }),
+  usernamesList: (engagementId: string) => call<Username[]>("usernames_list", { engagementId }),
+  usernameCreate: (engagementId: string, input: UsernameInput) =>
+    call<Username>("username_create", { engagementId, input }),
+  usernameDelete: (id: string) => call<null>("username_delete", { id }),
+  accessGrantsList: (engagementId: string) => call<AccessGrant[]>("access_grants_list", { engagementId }),
+  accessGrantCreate: (engagementId: string, input: AccessGrantInput) =>
+    call<AccessGrant>("access_grant_create", { engagementId, input }),
+  accessGrantDelete: (id: string) => call<null>("access_grant_delete", { id }),
   attachmentGet: (id: string) => call<Attachment>("attachment_get", { id }),
   engagementsProgress: () => call<Record<string, Progress>>("engagements_progress"),
 };

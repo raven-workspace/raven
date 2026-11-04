@@ -7,7 +7,7 @@ import { fillCommand, tunnelFor, type FillInput } from '../../../engines/checkli
 
 const host = (p: Partial<Host> = {}): Host => ({
   id: 'h1', engagementId: 'e1', name: 'ms01', ip: '172.16.1.5', os: 'windows', boardColumn: 'enumerate', boardManual: false,
-  access: 'none', createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, ...p,
+  access: 'none', createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, ...p,
 });
 const eng = (p: Partial<Engagement> = {}): Engagement => ({
   id: 'e1', name: 'Eng', kind: 'lab', client: null, subLabel: null, scopeCidrs: [], domain: null, startsAt: null,

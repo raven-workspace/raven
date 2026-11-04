@@ -26,7 +26,7 @@ const E1: Engagement = {
 };
 const host = (id: string, name: string, over: Partial<Host> = {}): Host => ({
   id, engagementId: "e1", name, ip: "10.10.10.5", os: "windows", boardColumn: "enumerate", boardManual: false,
-  dualHomed: false, boardDerived: null, access: "none", createdAt: 1, updatedAt: 1, ...over,
+  dualHomed: false, boardDerived: null, accessReviewedAt: null, access: "none", createdAt: 1, updatedAt: 1, ...over,
 });
 const VEGA = host("h1", "VEGA");
 const WEB = host("h2", "web02", { os: "linux" });

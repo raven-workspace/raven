@@ -23,7 +23,7 @@ const E1: Engagement = {
 };
 const H1: Host = {
   id: "h1", engagementId: "e1", name: "dc01", ip: "10.10.10.5", os: "windows", boardColumn: "enumerate", boardManual: false,
-  dualHomed: false, boardDerived: null, access: "none", createdAt: 1, updatedAt: 1,
+  dualHomed: false, boardDerived: null, accessReviewedAt: null, access: "none", createdAt: 1, updatedAt: 1,
 };
 const svc = (id: string, port: number, nmapService: string): Service => ({
   id, hostId: "h1", port, protocol: "tcp", state: "open", nmapService, nmapVersion: null,

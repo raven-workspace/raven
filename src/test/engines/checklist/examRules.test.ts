@@ -90,7 +90,7 @@ const engagement = (over: Partial<Engagement> = {}): Engagement => ({
 });
 const host = (id: string, name: string, ip: string): Host => ({
   id, engagementId: 'lab', name, ip, os: 'windows', boardColumn: 'enumerate', boardManual: false, access: 'none',
-  createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null,
+  createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null,
 });
 const ms01 = host('ms01', 'MS01', '10.0.0.5');
 const ms02 = host('ms02', 'MS02', '10.0.0.6');

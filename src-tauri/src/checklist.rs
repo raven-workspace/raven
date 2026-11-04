@@ -290,7 +290,7 @@ mod tests {
         )
         .unwrap();
         let mut hook_calls = 0;
-        let out = migrations::migrate(&mut c, &mut |f, t| {
+        let out = migrations::migrate_with(&mut c, &migrations::MIGRATIONS[..3], &mut |f, t| {
             assert_eq!((f, t), (2, 3));
             hook_calls += 1;
             Ok(())

@@ -20,6 +20,7 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
     (1, include_str!("../../migrations/0001_init.sql")),
     (2, include_str!("../../migrations/0002_hosts_log.sql")),
     (3, include_str!("../../migrations/0003_checklist_notes.sql")),
+    (4, include_str!("../../migrations/0004_credentials_findings.sql")),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -245,14 +246,14 @@ mod tests {
         .unwrap();
         let mut hook_calls = 0;
         let out = migrate(&mut c, &mut |f, t| {
-            assert_eq!((f, t), (1, 3));
+            assert_eq!((f, t), (1, 4));
             hook_calls += 1;
             Ok(())
         })
         .unwrap();
         assert_eq!(hook_calls, 1);
-        assert_eq!(out, MigrationOutcome { from: 1, to: 3 });
-        assert_eq!(version(&c), 3);
+        assert_eq!(out, MigrationOutcome { from: 1, to: 4 });
+        assert_eq!(version(&c), 4);
         for t in ["hosts", "services", "log_entries", "log_entry_hosts", "attachments"] {
             let n: i64 = c
                 .query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1", [t], |r| r.get(0))
@@ -265,6 +266,54 @@ mod tests {
         assert_eq!(ran_on, None);
         let kept: i64 = c.query_row("SELECT count(*) FROM settings", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1);
+    }
+
+    #[test]
+    fn migration_0004_from_v3_keeps_data() {
+        let (_d, _p, mut c) = file_db();
+        migrate_with(&mut c, &MIGRATIONS[..3], &mut |_, _| panic!("hook on fresh db")).unwrap();
+        c.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        c.execute(
+            "INSERT INTO engagements (id,name,kind,scope_cidrs,status,created_at,updated_at) VALUES ('e1','x','lab','[]','active',1,1)",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO hosts (id,engagement_id,name,ip,created_at,updated_at) VALUES ('h1','e1','dc01','10.0.0.5',1,1)",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO checklist_items (owner_id,engagement_id,goal_id,status,updated_at) VALUES ('h1','e1','g','done',1)",
+            [],
+        )
+        .unwrap();
+        let mut hook_calls = 0;
+        let out = migrate(&mut c, &mut |f, t| {
+            assert_eq!((f, t), (3, 4));
+            hook_calls += 1;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(hook_calls, 1);
+        assert_eq!(out, MigrationOutcome { from: 3, to: 4 });
+        assert_eq!(version(&c), 4);
+        for t in [
+            "credentials", "usernames", "access_grants", "cred_attempts", "findings",
+            "finding_hosts", "finding_services", "finding_steps", "finding_files", "failed_attempts",
+        ] {
+            let n: i64 = c
+                .query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1", [t], |r| r.get(0))
+                .unwrap();
+            assert_eq!(n, 1, "{t}");
+        }
+        let reviewed: Option<i64> =
+            c.query_row("SELECT access_reviewed_at FROM hosts WHERE id='h1'", [], |r| r.get(0)).unwrap();
+        assert_eq!(reviewed, None);
+        let name: String = c.query_row("SELECT name FROM hosts WHERE id='h1'", [], |r| r.get(0)).unwrap();
+        assert_eq!(name, "dc01");
+        let items: i64 = c.query_row("SELECT count(*) FROM checklist_items", [], |r| r.get(0)).unwrap();
+        assert_eq!(items, 1);
     }
 
     #[test]
