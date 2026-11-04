@@ -7,10 +7,8 @@ import {
 import { resolveTemplate } from "../../engines/checklist/template";
 import { BUILTIN_LIBRARY } from "../../engines/library/data";
 import type { Engagement } from "../../types/engagement";
+import { MASK } from "../credentials/MaskedSecret";
 import type { FilledCommand } from "./CommandList";
-
-/** Shown in place of PASS and HASH; Copy carries the real values. */
-export const SECRET_MASK = "••••••••";
 
 /** The library commands for a goal, filled for this host and filtered by the engagement's exam rules. */
 export function goalCommands(goalId: string, input: FillInput, eng: Engagement): { commands: FilledCommand[]; hadAny: boolean } {
@@ -18,8 +16,9 @@ export function goalCommands(goalId: string, input: FillInput, eng: Engagement):
   const { shown, msfMarker } = filterForKind(all, eng.kind, { hostId: input.host.id, msfHostId: eng.msfHostId });
   const ctx = commandContext(input);
   const commands = shown.map((c) => {
-    const filled = fillCommand(c.template, input, { secretMask: SECRET_MASK });
-    const real = fillCommand(c.template, input);
+    const filled = fillCommand(c.template, input, { secretMask: MASK });
+    // Copy: real values, shell-escaped when the command runs in the Kali shell (see FillOptions.shellSafe).
+    const real = fillCommand(c.template, input, { shellSafe: c.runFrom === "attacker" });
     const tokens = resolveTemplate(c.template, ctx)
       .ranges.filter((r) => !r.resolved && r.canonical !== "interface")
       .map((r) => c.template.slice(r.start, r.end))

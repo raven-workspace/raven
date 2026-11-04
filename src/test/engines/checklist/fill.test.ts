@@ -4,7 +4,7 @@ import type { Host } from '../../../types/host';
 import type { Service } from '../../../types/service';
 import type { Tunnel } from '../../../types/network';
 import type { CredAttempt, Credential } from '../../../types/credentials';
-import { defaultCredFor, fillCommand, tunnelFor, type FillInput } from '../../../engines/checklist';
+import { defaultCredFor, defaultDomainCred, fillCommand, quoteContextAt, tunnelFor, type FillInput } from '../../../engines/checklist';
 
 const host = (p: Partial<Host> = {}): Host => ({
   id: 'h1', engagementId: 'e1', name: 'ms01', ip: '172.16.1.5', os: 'windows', boardColumn: 'enumerate', boardManual: false,
@@ -176,7 +176,7 @@ describe('credential fill', () => {
     const shown = fillCommand("x -u {USER} -p '{PASS}'", input({ cred: pw }), { secretMask: '********' });
     expect(shown.text).toBe("x -u alice -p '********'");
     expect(shown.text).not.toContain("pa'ss");
-    expect(fillCommand("x -p '{PASS}'", input({ cred: pw })).text).toBe("x -p 'pa'ss w0rd'");
+    expect(fillCommand("x -p '{PASS}'", input({ cred: pw }), { shellSafe: true }).text).toBe(String.raw`x -p 'pa'\''ss w0rd'`);
     const hash = cred({ type: 'hash', secret: NT });
     const h = fillCommand('x -H {HASH}', input({ cred: hash }), { secretMask: '********' });
     expect(h.text).toBe('x -H ********');
@@ -198,5 +198,67 @@ describe('defaultCredFor', () => {
     expect(defaultCredFor(host(), creds, attempts)?.id).toBe('c2');
     expect(defaultCredFor(host(), creds, [])).toBeNull();
     expect(defaultCredFor(host(), [], attempts)).toBeNull();
+  });
+});
+
+describe('shell-safe copy (T9-R2)', () => {
+  const real = (t: string, secret: string, extra: Partial<Credential> = {}) =>
+    fillCommand(t, input({ cred: cred({ secret, ...extra }) }), { shellSafe: true }).text;
+  const noBare = (out: string, chars: string) => {
+    for (let i = 0; i < out.length; i++) if (chars.includes(out[i])) expect(quoteContextAt(out, i)).not.toBe('bare');
+  };
+
+  it('escapes a quote inside single quotes', () => {
+    expect(real("x -p '{PASS}'", "pa'ss w0rd")).toBe(String.raw`x -p 'pa'\''ss w0rd'`);
+  });
+  it('never yields an unquoted ; for an injection attempt', () => {
+    const evil = "';curl x|sh;'";
+    const quoted = real("x -p '{PASS}'", evil);
+    expect(quoted).toBe(String.raw`x -p ''\'';curl x|sh;'\'''`);
+    noBare(quoted, ';|');
+    noBare(real('x -p {PASS}', evil), ';|');
+    noBare(real('x -p "{PASS}"', evil), ';|');
+  });
+  it('escapes $ ` \\ and " inside double quotes', () => {
+    expect(real('x -p "{PASS}"', '$HOME"x')).toBe('x -p "\\$HOME\\"x"');
+    expect(real('x -p "{PASS}"', 'a`b\\c')).toBe('x -p "a\\`b\\\\c"');
+  });
+  it('quotes a bare value with a space or shell character, leaves a safe one alone', () => {
+    expect(real('x -p {PASS}', 'two words')).toBe("x -p 'two words'");
+    expect(real('x -p {PASS}', 'Winter2024!')).toBe("x -p 'Winter2024!'");
+    expect(real('x -p {PASS}', 'Winter2024')).toBe('x -p Winter2024');
+    expect(real('x -u {USER}', 'p', { username: 'alice' })).toBe('x -u alice');
+    expect(real('x -u {USER}', 'p', { username: 'svc$' })).toBe("x -u 'svc$'");
+  });
+  it('leaves values raw without shellSafe, and the display mask unchanged', () => {
+    expect(fillCommand("x '{PASS}'", input({ cred: cred({ secret: "a'b" }) })).text).toBe("x 'a'b'");
+    expect(fillCommand("x '{PASS}'", input({ cred: cred({ secret: "a'b" }) }), { secretMask: '***' }).text).toBe("x '***'");
+  });
+});
+
+describe('quoteContextAt', () => {
+  it('tracks quotes and backslashes', () => {
+    const t = String.raw`a '{X}' "{Y}" {Z} \' {W}`;
+    expect(quoteContextAt(t, t.indexOf('{X}'))).toBe('single');
+    expect(quoteContextAt(t, t.indexOf('{Y}'))).toBe('double');
+    expect(quoteContextAt(t, t.indexOf('{Z}'))).toBe('bare');
+    // An escaped quote outside quotes does not open a quote.
+    expect(quoteContextAt(t, t.indexOf('{W}'))).toBe('bare');
+    const u = String.raw`"a\" {X}"`;
+    expect(quoteContextAt(u, u.indexOf('{X}'))).toBe('double');
+  });
+});
+
+describe('defaultDomainCred', () => {
+  it('is the newest domain credential with a valid or admin domain attempt', () => {
+    const creds = [cred({ id: 'c1' }), cred({ id: 'c2', scope: 'local' }), cred({ id: 'c3', username: 'bob' })];
+    const attempts = [
+      att({ credId: 'c1', at: 10 }),
+      att({ id: 'a2', credId: 'c2', at: 30 }),
+      att({ id: 'a3', credId: 'c3', at: 20, hostId: 'h9' }),
+      att({ id: 'a4', credId: 'c3', at: 40, authMode: 'local' }),
+    ];
+    expect(defaultDomainCred(creds, attempts)?.id).toBe('c3');
+    expect(defaultDomainCred(creds, [])).toBeNull();
   });
 });

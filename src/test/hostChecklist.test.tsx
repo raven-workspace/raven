@@ -262,6 +262,31 @@ describe("credential fill on the checklist", () => {
     expect(within(screen.getByRole("region", { name: "Now" })).getByRole("combobox", { name: "Commands use" })).toHaveTextContent("None");
   });
 
+  it("two credentials with the same label get a distinguishing suffix", async () => {
+    const user = userEvent.setup();
+    mount({ creds: [cred("c1", "alice"), cred("c2", "alice", { secret: "Other1" })], attempts: [attempt("a1", "c1", 10)] });
+    await openChecklist(user);
+    expect(await pickerOf()).toHaveTextContent("CORP\\alice · #1");
+    await user.click(await pickerOf());
+    expect(await screen.findByRole("option", { name: "CORP\\alice · #2" })).toBeInTheDocument();
+  });
+
+  it("the pick resets on lock: after unlock the default is back", async () => {
+    const user = userEvent.setup();
+    m.vaultLock.mockResolvedValue(null);
+    m.vaultUnlock.mockResolvedValue({ migratedFrom: 3, migratedTo: 3, dailyBackup: null, dailyBackupError: null });
+    mount({ creds: [cred("c1", "alice")], attempts: [attempt("a1", "c1", 10)] });
+    await openChecklist(user);
+    await user.click(await pickerOf());
+    await user.click(await screen.findByRole("option", { name: "None" }));
+    expect(await pickerOf()).toHaveTextContent("None");
+    await user.keyboard("{Meta>}l{/Meta}");
+    m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+    await user.type(await screen.findByLabelText("Password"), "correct horse battery{Enter}");
+    await openChecklist(user);
+    expect(await pickerOf()).toHaveTextContent("CORP\\alice");
+  });
+
   it("displayed command masks PASS; copy has it", async () => {
     const user = userEvent.setup();
     mount({ creds: [cred("c1", "alice", { secret: "Pa'ss-W0rd" })], attempts: [attempt("a1", "c1", 10)] });
@@ -272,7 +297,7 @@ describe("credential fill on the checklist", () => {
     const pre = [...document.querySelectorAll("pre")].find((p) => p.textContent?.includes("••••••••"));
     expect(pre).toBeDefined();
     await user.click(within(pre!.closest("li")!).getByRole("button", { name: /^Copy command: / }));
-    expect(await navigator.clipboard.readText()).toContain("Pa'ss-W0rd");
+    expect(await navigator.clipboard.readText()).toContain(String.raw`Pa'\''ss-W0rd`);
   });
 });
 

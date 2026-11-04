@@ -19,7 +19,8 @@ import { sectionPath } from "../engagements/sections";
 import { useCredAttempts, useCredentials } from "../credentials/queries";
 import { useLog } from "../log/queries";
 import { AccessFlags } from "./AccessFlags";
-import { newCredLabels } from "./credPick";
+import { CredentialPicker } from "./CredentialPicker";
+import { newCredLabels, useCredFill } from "./credPick";
 import { goalCommands } from "./goalCommands";
 import { GoalRow } from "./GoalRow";
 import { HopsPanel } from "./HopsPanel";
@@ -44,6 +45,7 @@ export function EngagementChecklist() {
   const { hops } = useHops(id);
   const credentials = useCredentials(id).data ?? [];
   const attempts = useCredAttempts(id).data ?? [];
+  const creds = useCredFill(id, { id }, "engagement");
   const { setStatus, setNotes } = useChecklistMutations(id);
   const [tick, setTick] = useState<{ ticking: boolean; message?: string; error?: string }>({ ticking: false });
 
@@ -67,7 +69,7 @@ export function EngagementChecklist() {
   };
   const input: FillInput = {
     host: stand, engagement: eng, hosts, servicesByHost, tunnels,
-    attackerIp: settings.data?.attackerIp ?? "", listenerPort: settings.data?.listenerPort ?? "",
+    attackerIp: settings.data?.attackerIp ?? "", listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
   };
   // The Log section has no deep link to one entry yet: open the section.
   const openEntry = () => void navigate(sectionPath(id, "log"));
@@ -116,6 +118,8 @@ export function EngagementChecklist() {
         <p role="status" className="m-0 text-xs text-fg-2">{tick.message}</p>
         {tick.error && <p role="alert" className="m-0 text-xs text-warn">{tick.error}</p>}
       </div>
+
+      <CredentialPicker credentials={creds.credentials} value={creds.cred} onChange={creds.pick} />
 
       <div className="flex flex-col gap-1">
         <h3 className="m-0 text-[11px] font-semibold uppercase tracking-label text-muted">Setup</h3>

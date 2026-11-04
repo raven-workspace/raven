@@ -6,6 +6,7 @@ import type { Service } from '../../types/service';
 import { ipInScope, parseScopeList } from '../parse/scope';
 import { isNtlmHash, isOwnerless } from '../credentials/matrix';
 import { findDcHost } from './facts';
+import { quoteContextAt, shellEscape } from './shellQuote';
 import { resolveTemplate, type SubstitutionContext } from './template';
 
 export interface FillInput {
@@ -28,6 +29,27 @@ export interface FillOptions {
    * Never mask by replacing text afterwards.
    */
   secretMask?: string;
+  /**
+   * Escape credential values (USER, DOMAIN, PASS, HASH) for the quoting context where each token sits, so a copied
+   * command cannot be broken or injected by a secret. Bourne-shell rules: use it only for commands run from the
+   * attacker (Kali) shell. Target-side commands keep raw values because PowerShell and cmd quote differently.
+   * Never combine with `secretMask` (the mask is not a secret).
+   */
+  shellSafe?: boolean;
+}
+
+/**
+ * Engagement-level default: the newest domain-scope credential with a valid or admin `domain` attempt anywhere
+ * in the engagement.
+ */
+export function defaultDomainCred(credentials: Credential[], attempts: CredAttempt[]): Credential | null {
+  const byId = new Map(credentials.filter((c) => c.scope === 'domain').map((c) => [c.id, c]));
+  let best: CredAttempt | null = null;
+  for (const a of attempts) {
+    if (a.authMode !== 'domain' || (a.result !== 'valid' && a.result !== 'admin') || !byId.has(a.credId)) continue;
+    if (!best || a.at > best.at) best = a;
+  }
+  return best ? byId.get(best.credId)! : null;
 }
 
 /** The newest credential with a valid or admin attempt on this host. */
@@ -126,6 +148,8 @@ export function commandContext(input: FillInput, opts: FillOptions = {}): Substi
   };
 }
 
+const CRED_TOKENS = new Set(['USER', 'DOMAIN', 'PASS', 'HASH']);
+
 export function fillCommand(template: string, input: FillInput, opts: FillOptions = {}): FillResult {
   const ctx = commandContext(input, opts);
   const { unresolved, ranges } = resolveTemplate(template, ctx);
@@ -136,7 +160,11 @@ export function fillCommand(template: string, input: FillInput, opts: FillOption
   for (const r of ranges) {
     text += template.slice(last, r.start);
     const token = template.slice(r.start, r.end);
-    text += r.resolved || r.canonical === 'interface' ? resolveTemplate(token, ctx).text : token;
+    let piece = r.resolved || r.canonical === 'interface' ? resolveTemplate(token, ctx).text : token;
+    if (opts.shellSafe && r.resolved && CRED_TOKENS.has(r.raw.toUpperCase())) {
+      piece = shellEscape(piece, quoteContextAt(template, r.start));
+    }
+    text += piece;
     last = r.end;
   }
   text += template.slice(last);

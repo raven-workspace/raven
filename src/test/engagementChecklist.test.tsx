@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useCredPickStore } from "../features/checklist/credPick";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
@@ -74,6 +75,7 @@ beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
   useCaptureStore.getState().reset();
+  useCredPickStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444" });
   m.engagementsList.mockResolvedValue([E1]);
@@ -167,6 +169,27 @@ describe("engagement checklist", () => {
     expect(await screen.findByRole("button", { name: /First domain user/, expanded: true })).toBeInTheDocument();
     // Having a working domain credential closes the no-credentials playbook.
     expect(screen.getByRole("button", { name: /No credentials/, expanded: false })).toBeInTheDocument();
+  });
+
+  it("RID cycle with the credential shows USER filled and PASS masked, and copies the real values", async () => {
+    const user = userEvent.setup();
+    mount({ services: AD, creds: [cred("c1", { secret: "Pa'ss w0rd" })], attempts: [attempt("a1", "c1")] });
+    await screen.findAllByText("RID cycle with the credential");
+    const pre = [...document.querySelectorAll("pre")].find((p) => p.textContent?.startsWith("nxc smb") && p.textContent.includes("--rid-brute"))!;
+    expect(pre.textContent).toContain("-u svc_sql -p '••••••••'");
+    expect(document.body.textContent).not.toContain("Pa'ss");
+    await user.click(within(pre.closest("li")!).getByRole("button", { name: /^Copy command: / }));
+    expect(await navigator.clipboard.readText()).toContain(String.raw`-u svc_sql -p 'Pa'\''ss w0rd'`);
+  });
+
+  it("the engagement picker defaults to the working domain credential and can be set to none", async () => {
+    const user = userEvent.setup();
+    mount({ services: AD, creds: [cred("c1")], attempts: [attempt("a1", "c1")] });
+    const picker = await screen.findByRole("combobox", { name: "Commands use" });
+    expect(picker).toHaveTextContent("CORP\\svc_sql");
+    await user.click(picker);
+    await user.click(await screen.findByRole("option", { name: "None" }));
+    expect(screen.getByRole("combobox", { name: "Commands use" })).toHaveTextContent("None");
   });
 
   it("local-auth-only success does not open it", async () => {
