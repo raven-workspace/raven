@@ -4,6 +4,8 @@ import { api } from "../../lib/api";
 import { isFreeKey, useEscapeTo, useKeydown } from "../../lib/keys";
 import type { Engagement } from "../../types/engagement";
 import { EmptyState } from "../../ui";
+import { CapturePanel } from "../capture/CapturePanel";
+import { useCaptureStore } from "../capture/useCaptureStore";
 import { EngagementHeader } from "./EngagementHeader";
 import { Sidebar } from "./Sidebar";
 import { StatusStrip } from "./StatusStrip";
@@ -14,6 +16,7 @@ export function EngagementShell() {
   const { id = "", hostId } = useParams();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const openCapture = useCaptureStore((s) => s.openCapture);
   const query = useQuery({
     queryKey: ["engagement", id],
     queryFn: () => api.engagementGet(id),
@@ -24,6 +27,12 @@ export function EngagementShell() {
   useEscapeTo(hostId ? `/e/${id}` : "/");
   useKeydown((e) => {
     if (!isFreeKey(e)) return;
+    if (e.key === "l" || e.key === "L") {
+      // L: capture. From a host view, that host is preselected.
+      e.preventDefault();
+      openCapture({ engagementId: id, hostId: hostId ?? null });
+      return;
+    }
     const n = Number(e.key);
     if (Number.isInteger(n) && n >= 1 && n <= SECTIONS.length) {
       e.preventDefault();
@@ -60,6 +69,7 @@ export function EngagementShell() {
           <Outlet />
         </main>
       </div>
+      <CapturePanel engagement={e} />
     </div>
   );
 }
