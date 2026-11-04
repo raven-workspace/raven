@@ -5,12 +5,12 @@
 
 use crate::backup::{self, BackupInfo};
 use crate::engagements::{self, Engagement, EngagementInput};
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::settings::{self, Settings, SettingsPatch};
 use crate::vault::Vault;
 use serde::Serialize;
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{AppHandle, Manager};
 
 pub type VaultState = Mutex<Vault>;
 
@@ -55,84 +55,115 @@ fn guard(s: &VaultState) -> std::sync::MutexGuard<'_, Vault> {
     s.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-#[tauri::command]
-pub fn vault_status(state: State<VaultState>) -> VaultStatus {
-    vault_status_inner(&guard(&state))
+/// Run blocking work on Tauri's blocking thread pool, never on the macOS main (UI) thread,
+/// so Argon2, migrations and backups can't freeze the window.
+async fn off_main<T, F>(f: F) -> AppResult<T>
+where
+    F: FnOnce() -> AppResult<T> + Send + 'static,
+    T: Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| AppError::Io(format!("background task failed: {e}")))?
+}
+
+/// `f` gets the vault behind the shared mutex. The guard lives only inside the blocking
+/// closure, so it is never held across an `.await`.
+async fn with_vault<T, F>(app: AppHandle, f: F) -> AppResult<T>
+where
+    F: FnOnce(&mut Vault) -> AppResult<T> + Send + 'static,
+    T: Send + 'static,
+{
+    off_main(move || {
+        let state = app.state::<VaultState>();
+        let mut v = guard(&state);
+        f(&mut v)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn vault_create(state: State<VaultState>, password: String) -> AppResult<()> {
-    guard(&state).create(&password).map(|_| ())
+pub async fn vault_status(app: AppHandle) -> AppResult<VaultStatus> {
+    with_vault(app, |v| Ok(vault_status_inner(v))).await
 }
 
 #[tauri::command]
-pub fn vault_unlock(state: State<VaultState>, password: String) -> AppResult<UnlockResult> {
-    vault_unlock_inner(&mut guard(&state), &password)
+pub async fn vault_create(app: AppHandle, password: String) -> AppResult<()> {
+    with_vault(app, move |v| v.create(&password).map(|_| ())).await
 }
 
 #[tauri::command]
-pub fn vault_lock(state: State<VaultState>) {
-    guard(&state).lock();
+pub async fn vault_unlock(app: AppHandle, password: String) -> AppResult<UnlockResult> {
+    with_vault(app, move |v| vault_unlock_inner(v, &password)).await
 }
 
 #[tauri::command]
-pub fn settings_get(state: State<VaultState>) -> AppResult<Settings> {
-    settings_get_inner(&guard(&state))
+pub async fn vault_lock(app: AppHandle) -> AppResult<()> {
+    with_vault(app, |v| {
+        v.lock();
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn settings_update(state: State<VaultState>, patch: SettingsPatch) -> AppResult<Settings> {
-    settings::update(guard(&state).conn()?, patch)
+pub async fn settings_get(app: AppHandle) -> AppResult<Settings> {
+    with_vault(app, |v| settings_get_inner(v)).await
 }
 
 #[tauri::command]
-pub fn backup_now(state: State<VaultState>) -> AppResult<BackupInfo> {
-    backup::take(&guard(&state), "manual")
+pub async fn settings_update(app: AppHandle, patch: SettingsPatch) -> AppResult<Settings> {
+    with_vault(app, move |v| settings::update(v.conn()?, patch)).await
 }
 
 #[tauri::command]
-pub fn backups_list(state: State<VaultState>) -> AppResult<Vec<BackupInfo>> {
-    backup::list(guard(&state).paths())
+pub async fn backup_now(app: AppHandle) -> AppResult<BackupInfo> {
+    with_vault(app, |v| backup::take(v, "manual")).await
 }
 
 #[tauri::command]
-pub fn backup_restore(state: State<VaultState>, file: String) -> AppResult<()> {
-    backup::restore(&mut guard(&state), &file)
+pub async fn backups_list(app: AppHandle) -> AppResult<Vec<BackupInfo>> {
+    with_vault(app, |v| backup::list(v.paths())).await
 }
 
 #[tauri::command]
-pub fn engagements_list(state: State<VaultState>) -> AppResult<Vec<Engagement>> {
-    engagements_list_inner(&guard(&state))
+pub async fn backup_restore(app: AppHandle, file: String) -> AppResult<()> {
+    with_vault(app, move |v| backup::restore(v, &file)).await
 }
 
 #[tauri::command]
-pub fn engagement_get(state: State<VaultState>, id: String) -> AppResult<Engagement> {
-    engagements::get(guard(&state).conn()?, &id)
+pub async fn engagements_list(app: AppHandle) -> AppResult<Vec<Engagement>> {
+    with_vault(app, |v| engagements_list_inner(v)).await
 }
 
 #[tauri::command]
-pub fn engagement_create(state: State<VaultState>, input: EngagementInput) -> AppResult<Engagement> {
-    engagements::create(guard(&state).conn()?, input)
+pub async fn engagement_get(app: AppHandle, id: String) -> AppResult<Engagement> {
+    with_vault(app, move |v| engagements::get(v.conn()?, &id)).await
 }
 
 #[tauri::command]
-pub fn engagement_update(state: State<VaultState>, id: String, input: EngagementInput) -> AppResult<Engagement> {
-    engagements::update(guard(&state).conn()?, &id, input)
+pub async fn engagement_create(app: AppHandle, input: EngagementInput) -> AppResult<Engagement> {
+    with_vault(app, move |v| engagements::create(v.conn()?, input)).await
 }
 
 #[tauri::command]
-pub fn engagement_set_status(state: State<VaultState>, id: String, status: String) -> AppResult<Engagement> {
-    engagements::set_status(guard(&state).conn()?, &id, &status)
+pub async fn engagement_update(app: AppHandle, id: String, input: EngagementInput) -> AppResult<Engagement> {
+    with_vault(app, move |v| engagements::update(v.conn()?, &id, input)).await
 }
 
 #[tauri::command]
-pub fn engagement_delete(state: State<VaultState>, id: String) -> AppResult<()> {
-    engagements::delete(guard(&state).conn()?, &id)
+pub async fn engagement_set_status(app: AppHandle, id: String, status: String) -> AppResult<Engagement> {
+    with_vault(app, move |v| engagements::set_status(v.conn()?, &id, &status)).await
 }
+
+#[tauri::command]
+pub async fn engagement_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| engagements::delete(v.conn()?, &id)).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::AppError;
     use crate::paths::DataPaths;
     use crate::vault::Vault;
 
@@ -148,6 +179,15 @@ mod tests {
         v.lock();
         assert_eq!(engagements_list_inner(&v), Err(AppError::Locked));
         assert!(vault_status_inner(&v).exists);
+    }
+
+    #[test]
+    fn off_main_runs_on_another_thread_and_returns_result() {
+        let caller = std::thread::current().id();
+        let worker = tauri::async_runtime::block_on(off_main(|| Ok(std::thread::current().id()))).unwrap();
+        assert_ne!(worker, caller);
+        let err: AppResult<()> = tauri::async_runtime::block_on(off_main(|| Err(AppError::Locked)));
+        assert_eq!(err, Err(AppError::Locked));
     }
 
     #[test]

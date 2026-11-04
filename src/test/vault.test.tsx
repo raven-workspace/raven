@@ -69,6 +69,19 @@ describe("vault gate", () => {
     expect(screen.getByText("Updated Raven's data (backup saved)")).toBeInTheDocument();
   });
 
+  it("shows Unlocking… while the unlock is pending", async () => {
+    const user = userEvent.setup();
+    m.vaultStatus.mockResolvedValue({ exists: true, unlocked: false });
+    let finish: (r: typeof unlockOk) => void = () => {};
+    m.vaultUnlock.mockReturnValue(new Promise((r) => (finish = r)));
+    mount();
+    await user.type(await screen.findByLabelText("Password"), "correct horse battery{Enter}");
+    const btn = await screen.findByRole("button", { name: "Unlocking…" });
+    expect(btn).toBeDisabled();
+    await act(async () => finish(unlockOk));
+    expect(await screen.findByTestId("inside")).toBeInTheDocument();
+  });
+
   it("setup enforces 12 chars and matching confirmation", async () => {
     const user = userEvent.setup();
     m.vaultStatus.mockResolvedValueOnce({ exists: false, unlocked: false });

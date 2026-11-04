@@ -71,6 +71,18 @@ describe("settings", () => {
     expect(m.backupNow).toHaveBeenCalled();
   });
 
+  it("Back up now shows Backing up… while pending", async () => {
+    const user = userEvent.setup();
+    let finish: (b: { file: string; reason: string; createdAt: number; sizeBytes: number }) => void = () => {};
+    m.backupNow.mockReturnValue(new Promise((r) => (finish = r)));
+    mount();
+    await user.click(await screen.findByRole("button", { name: "Back up now" }));
+    const btn = await screen.findByRole("button", { name: "Backing up…" });
+    expect(btn).toBeDisabled();
+    finish({ file: "b.bak", reason: "manual", createdAt: 1, sizeBytes: 10 });
+    expect(await screen.findByRole("button", { name: "Back up now" })).toBeEnabled();
+  });
+
   it("restore asks for confirmation then locks", async () => {
     const user = userEvent.setup();
     m.backupRestore.mockResolvedValue(null);

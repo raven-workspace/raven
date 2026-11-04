@@ -124,8 +124,13 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
       <Panel
         title="Backups"
         actions={
-          <Button size="sm" onClick={() => backupNow.mutate()} disabled={backupNow.isPending}>
-            Back up now
+          <Button
+            size="sm"
+            onClick={() => backupNow.mutate()}
+            disabled={backupNow.isPending}
+            aria-busy={backupNow.isPending}
+          >
+            {backupNow.isPending ? "Backing up…" : "Back up now"}
           </Button>
         }
       >

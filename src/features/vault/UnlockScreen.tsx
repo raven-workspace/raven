@@ -45,8 +45,8 @@ export function UnlockScreen({ onUnlocked, notice }: { onUnlocked: (r: UnlockRes
           />
         </Field>
         {notice && <p className="m-0 text-xs text-muted">{notice}</p>}
-        <Button type="submit" variant="primary" disabled={busy}>
-          Unlock
+        <Button type="submit" variant="primary" disabled={busy} aria-busy={busy}>
+          {busy ? "Unlocking…" : "Unlock"}
         </Button>
       </form>
     </main>
