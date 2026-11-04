@@ -2,8 +2,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { api } from "../../lib/api";
-import { onLockedError } from "../../lib/lockSignal";
+import { onLockedError, reportError } from "../../lib/lockSignal";
 import { useCaptureStore } from "../capture/useCaptureStore";
+import { closeNotesAfterLock, flushNotes, hasPendingNotes } from "../notes/useNotesStore";
 import type { UnlockResult, VaultStatus } from "../../types/vault";
 import { Button, Kbd, TitleBar } from "../../ui";
 import { SetupScreen } from "./SetupScreen";
@@ -89,6 +90,10 @@ export function VaultGate({ children }: { children: ReactNode }) {
 
   const lockBackend = useCallback(async function run(): Promise<void> {
     clearTimeout(retryTimer.current);
+    // Field notes are saved first, never discarded (unlike capture drafts). A failed save must
+    // not keep the vault open.
+    if (hasPendingNotes()) await flushNotes().catch(reportError);
+    closeNotesAfterLock();
     for (let i = 0; i < 3; i++) {
       try {
         await api.vaultLock();

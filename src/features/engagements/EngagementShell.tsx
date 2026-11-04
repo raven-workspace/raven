@@ -6,6 +6,8 @@ import type { Engagement } from "../../types/engagement";
 import { EmptyState } from "../../ui";
 import { HostView } from "../hosts/HostView";
 import { CapturePanel } from "../capture/CapturePanel";
+import { NotesPanel } from "../notes/NotesPanel";
+import { useNotesStore } from "../notes/useNotesStore";
 import { useCaptureStore } from "../capture/useCaptureStore";
 import { EngagementHeader } from "./EngagementHeader";
 import { Sidebar } from "./Sidebar";
@@ -32,6 +34,12 @@ export function EngagementShell() {
       // L: capture. From a host view, that host is preselected.
       e.preventDefault();
       openCapture({ engagementId: id, hostId: hostId ?? null });
+      return;
+    }
+    if (e.key === "n" || e.key === "N") {
+      // N: field notes. In a host view they open on that host.
+      e.preventDefault();
+      useNotesStore.getState().toggle(hostId ? "host" : "engagement");
       return;
     }
     const n = Number(e.key);
@@ -71,6 +79,7 @@ export function EngagementShell() {
         </main>
       </div>
       <CapturePanel engagement={e} />
+      <NotesPanel engagement={e} hostId={hostId ?? null} />
     </div>
   );
 }
