@@ -2,11 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { BUILTIN_LIBRARY } from '../../../engines/library/data';
 import type { LibraryCommand } from '../../../engines/library/types';
 import { firstBinary, matchesCommand } from '../../../engines/library/matcher';
+import { AD_PLAYBOOKS, ENGAGEMENT_SETUP, HOST_GOALS } from '../../../engines/checklist';
 
 const lib = BUILTIN_LIBRARY;
-const ALL_GOAL_IDS = new Set(lib.flatMap((c) => c.goals));
+const ENGAGEMENT_GOALS = [...ENGAGEMENT_SETUP, ...AD_PLAYBOOKS.flatMap((p) => p.goals)];
+const ALL_GOAL_IDS = new Set([...HOST_GOALS, ...ENGAGEMENT_GOALS].map((g) => g.id));
 /** Library order within a goal (the old commandsForGoal with no operator preferences). */
 const commandsForGoal = (goalId: string, library: LibraryCommand[]) => library.filter((c) => c.goals.includes(goalId));
+/** Records, not commands: the operator writes them by hand. */
+const NO_COMMAND_NEEDED = new Set(['h-foot-arrived', 'h-close-notes', 'e-setup-kind']);
 const FULL_TCP_MISSES = ['nmap -sC -sV 10.0.0.5', 'nmap --top-ports 1000 10.0.0.5'];
 const BANNED_BINS = new Set([
   'nessus', 'openvas', 'sqlmap', 'mitm6', 'arpspoof', 'ettercap', 'bettercap',
@@ -32,8 +36,15 @@ describe('built-in command library', () => {
     expect(dupes).toEqual([]);
   });
 
-  it('every command names at least one goal', () => {
+  it('every goal id referenced exists in HOST_GOALS, ENGAGEMENT_SETUP or AD_PLAYBOOKS', () => {
+    const unknown = lib.flatMap((c) => c.goals.filter((g) => !ALL_GOAL_IDS.has(g)).map((g) => `${c.id} -> ${g}`));
+    expect(unknown).toEqual([]);
     expect(lib.filter((c) => c.goals.length === 0).map((c) => c.id)).toEqual([]);
+  });
+
+  it('every host and engagement goal has at least one command', () => {
+    const missing = [...ALL_GOAL_IDS].filter((id) => !NO_COMMAND_NEEDED.has(id) && !lib.some((c) => c.goals.includes(id)));
+    expect(missing).toEqual([]);
   });
 
   it('every command with a matcher has hit and miss examples', () => {
@@ -172,6 +183,7 @@ describe('built-in command library', () => {
     // brute force is the last resort
     expect(tools('h-foot-brute')).toContain('hydra');
     expect(cmds('h-foot-brute').find((c) => c.tool === 'hydra')?.why).toMatch(/last resort/i);
+    expect(HOST_GOALS.find((g) => g.id === 'h-foot-brute')?.title).toMatch(/last resort/i);
   });
 
   it('no foothold command ticks a foothold goal', () => {
