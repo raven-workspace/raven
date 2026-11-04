@@ -9,7 +9,7 @@ import { matchLine } from '../library/matcher';
 import { HOST_GOALS } from './data/hostChecklist';
 import { AD_PLAYBOOKS, ENGAGEMENT_SETUP } from './data/engagementChecklist';
 import { adHosts, engagementFacts, goalApplies, hostFacts, type HostFacts } from './facts';
-import { scanCommandLines } from './scanImport';
+import { scanProvenanceLines } from './scanImport';
 import type { ChecklistGoal } from './types';
 
 /** One goal a log entry achieved on one owner (a host, or the engagement for `e-` goals). */
@@ -65,12 +65,9 @@ export function ticksForEntry(entry: LogEntry, ctx: TickContext): Tick[] {
   const hostById = new Map(hosts.map((h) => [h.id, h]));
 
   if (entry.content.kind === 'flag') {
-    const goal = HOST_GOAL_BY_ID.get(FLAG_GOAL[entry.content.flagKind]);
-    if (!goal) return out;
-    for (const id of entry.hostIds) {
-      const h = hostById.get(id);
-      if (h && goalApplies(goal, factsOf(h))) push(h.id, goal.id, FLAG_COMMAND_ID);
-    }
+    // A captured flag is a fact: it ticks on every known tagged host without an applicability check.
+    const goalId = FLAG_GOAL[entry.content.flagKind];
+    for (const id of entry.hostIds) if (hostById.has(id)) push(id, goalId, FLAG_COMMAND_ID);
     return out;
   }
   if (entry.content.kind !== 'command') return out;
@@ -123,8 +120,8 @@ export function ticksForEntry(entry: LogEntry, ctx: TickContext): Tick[] {
       const line = rawLine.trim();
       if (line) tickLine(line, block.shell, false, shellCache);
     }
-    // A pasted scan names the command it came from (nmap `as:` header, XML args, typed prompt lines).
-    for (const line of scanCommandLines(block.output ?? '')) tickLine(line, block.shell, true, shellCache);
+    // A pasted scan names the command it came from (nmap `as:` header, XML args); other output lines never count.
+    for (const line of scanProvenanceLines(block.output ?? '')) tickLine(line, block.shell, true, shellCache);
   }
   return out;
 }
@@ -132,7 +129,7 @@ export function ticksForEntry(entry: LogEntry, ctx: TickContext): Tick[] {
 /**
  * Applies ticks to one owner's checklist. A goal not yet done becomes done with `auto: true` (an 'na' or
  * 'in_progress' status is remembered in `autoFrom`); a goal already done keeps its status and gains the evidence
- * link. Returns `state` itself when nothing changes.
+ * link. Returns `state` itself when nothing changes. `ticks` must already be filtered to this state's owner (`Tick.ownerId`).
  */
 export function applyTicks(state: ChecklistState | undefined, ticks: Tick[], now: number): ChecklistState {
   const base: ChecklistState = state ?? {};
@@ -188,6 +185,7 @@ export function removeEntryTicks(state: ChecklistState | undefined, entryId: str
  * Re-applies one log entry's ticks after it was added or edited: `removeEntryTicks` then `applyTicks`, except that a
  * goal this entry still ticks keeps its link in place (with the current command id) and its `completedAt`, so editing
  * a title or output does not move completion times. Returns `state` itself when nothing changes.
+ * `ticks` must already be filtered to this state's owner (`Tick.ownerId`).
  */
 export function replaceEntryTicks(state: ChecklistState | undefined, entryId: string, ticks: Tick[], now: number): ChecklistState {
   const base: ChecklistState = state ?? {};

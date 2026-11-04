@@ -242,11 +242,11 @@ describe('ticksForEntry (flags)', () => {
     ]);
   });
 
-  it('a flag on a host where the goal does not apply ticks nothing there', () => {
+  it('a flag ticks on a host with unknown OS, without an applicability check; unknown host ids tick nothing', () => {
     const unknownOs = host('x', 'X', '10.0.0.9', null);
     const ctx = { ...ctxFor(), hosts: [...hosts, unknownOs] };
-    expect(ticksForEntry(flag('proof', ['x']), ctx)).toEqual([]);
-    expect(ticksForEntry(flag('local', ['x']), ctx)).toHaveLength(1);
+    expect(pairs(ticksForEntry(flag('proof', ['x']), ctx))).toEqual(['x:h-pe-proof']);
+    expect(pairs(ticksForEntry(flag('local', ['x']), ctx))).toEqual(['x:h-orient-proof']);
     expect(ticksForEntry(flag('local', ['nope']), ctx)).toEqual([]);
   });
 });
@@ -261,6 +261,11 @@ describe('ticksForEntry (pasted scan output)', () => {
     ].join('\n');
     const t = ticksForEntry(withBlocks([{ command: '', output }]), ctxFor());
     expect(pairs(t)).toEqual(['ms01:h-enum-full-tcp']);
+  });
+
+  it('output of cat run.sh containing an nmap line ticks nothing', () => {
+    const t = ticksForEntry(withBlocks([{ command: 'cat run.sh', output: 'nmap -p- 10.0.0.6' }]), ctxFor());
+    expect(t).toEqual([]);
   });
 
   it('output lines never tick target-side or engagement goals', () => {

@@ -37,3 +37,15 @@ export function scanCommandLines(scanText: string): string[] {
   }
   return out.filter(Boolean);
 }
+
+/** Only scan provenance: the nmap `as:` header and the XML `args` attribute. Typed-looking output lines are not commands. */
+export function scanProvenanceLines(text: string): string[] {
+  const out: string[] = [];
+  const xml = text.match(NMAP_XML_ARGS);
+  if (xml) out.push(decodeXml(xml[1]).trim());
+  for (const raw of text.split(/\r?\n/)) {
+    const header = raw.trim().match(NMAP_HEADER);
+    if (header) out.push(header[1].trim());
+  }
+  return out.filter(Boolean);
+}
