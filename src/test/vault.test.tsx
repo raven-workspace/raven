@@ -1,9 +1,10 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useMutation, useQuery } from "@tanstack/react-query";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../lib/api";
+import { makeQueryClient } from "../lib/queryClient";
 import { RavenError } from "../types/errors";
 import { SetupScreen } from "../features/vault/SetupScreen";
 import { VaultGate } from "../features/vault/VaultGate";
@@ -14,7 +15,7 @@ const m = vi.mocked(api, true);
 const unlockOk = { migratedFrom: 3, migratedTo: 3, dailyBackup: null, dailyBackupError: null };
 
 function mount() {
-  const qc = new QueryClient();
+  const qc = makeQueryClient();
   return render(
     <QueryClientProvider client={qc}>
       <MemoryRouter>
@@ -280,5 +281,54 @@ describe("vault gate", () => {
     });
     expect(m.vaultLock).toHaveBeenCalledTimes(1);
   });
-});
 
+  describe("any locked error", () => {
+    function Probe() {
+      const list = useQuery({ queryKey: ["engagements"], queryFn: api.engagementsList });
+      const create = useMutation({ mutationFn: () => api.engagementCreate({} as never) });
+      return (
+        <div data-testid="inside">
+          {list.isError ? "list failed" : "ok"}
+          <button onClick={() => create.mutate()}>make</button>
+        </div>
+      );
+    }
+    function mountProbe() {
+      return render(
+        <QueryClientProvider client={makeQueryClient()}>
+          <MemoryRouter>
+            <VaultGate>
+              <Probe />
+            </VaultGate>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+    }
+
+    it("moves the UI to the unlock screen from a rejected query", async () => {
+      m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+      m.engagementsList.mockRejectedValue(new RavenError("locked", "vault is locked"));
+      mountProbe();
+      expect(await screen.findByLabelText("Password")).toBeInTheDocument();
+      expect(screen.queryByTestId("inside")).not.toBeInTheDocument();
+    });
+
+    it("moves the UI to the unlock screen from a rejected mutation", async () => {
+      const user = userEvent.setup();
+      m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+      m.engagementsList.mockResolvedValue([]);
+      m.engagementCreate.mockRejectedValue(new RavenError("locked", "vault is locked"));
+      mountProbe();
+      await user.click(await screen.findByRole("button", { name: "make" }));
+      expect(await screen.findByLabelText("Password")).toBeInTheDocument();
+    });
+
+    it("ignores other errors", async () => {
+      m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+      m.engagementsList.mockRejectedValue(new RavenError("io", "disk"));
+      mountProbe();
+      expect(await screen.findByText("list failed")).toBeInTheDocument();
+      expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+    });
+  });
+});

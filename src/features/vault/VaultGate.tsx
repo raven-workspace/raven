@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { api } from "../../lib/api";
+import { onLockedError } from "../../lib/lockSignal";
 import type { UnlockResult, VaultStatus } from "../../types/vault";
 import { Button, Kbd, TitleBar } from "../../ui";
 import { SetupScreen } from "./SetupScreen";
@@ -75,6 +76,9 @@ export function VaultGate({ children }: { children: ReactNode }) {
     setBackupError(null);
     setStatus((s) => (s ? { ...s, unlocked: false } : s));
   }, [qc]);
+
+  // Any command that answers `locked` means the backend is already locked: move the UI.
+  useEffect(() => (unlocked ? onLockedError(markLocked) : undefined), [unlocked, markLocked]);
 
   const [lockRetrying, setLockRetrying] = useState(false);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
