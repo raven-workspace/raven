@@ -152,6 +152,57 @@ describe("vault gate", () => {
     await vi.waitFor(() => expect(screen.queryByText(/retrying/)).not.toBeInTheDocument(), { timeout: 4000 });
   });
 
+  for (const [label, fire] of [
+    ["visibilitychange", () => document.dispatchEvent(new Event("visibilitychange"))],
+    ["window focus", () => window.dispatchEvent(new Event("focus"))],
+  ] as const) {
+    it(`locks on ${label} when the idle time passed while timers were paused (sleep)`, async () => {
+      m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+      m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14 });
+      vi.useFakeTimers({ shouldAdvanceTime: false });
+      mount();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByTestId("inside")).toBeInTheDocument();
+      // Wall clock jumps 8 hours (laptop closed overnight); no timer callbacks run.
+      vi.setSystemTime(Date.now() + 8 * 60 * 60_000);
+      act(fire);
+      expect(m.vaultLock).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId("inside")).not.toBeInTheDocument();
+    });
+  }
+
+  it("the first input after sleep locks instead of resetting the idle time", async () => {
+    m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14 });
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    mount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    vi.setSystemTime(Date.now() + 31 * 60_000);
+    act(() => {
+      document.dispatchEvent(new Event("pointermove", { bubbles: true }));
+    });
+    expect(m.vaultLock).toHaveBeenCalledTimes(1);
+  });
+
+  it("focus before the idle time does not lock", async () => {
+    m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14 });
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    mount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    vi.setSystemTime(Date.now() + 29 * 60_000);
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(m.vaultLock).not.toHaveBeenCalled();
+  });
+
   it("a huge auto-lock value does not lock immediately", async () => {
     m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
     m.settingsGet.mockResolvedValue({ autoLockMinutes: 1_000_000, backupRetention: 14 });
