@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { closeThread, openThreads } from "../../engines/notes/threads";
-import { RavenError } from "../../types/errors";
 import { api } from "../../lib/api";
+import { cx } from "../../lib/cx";
+import { RavenError } from "../../types/errors";
 import { Button, Dialog, Field, Input, Toggle } from "../../ui";
 import { flushNotes, noteKey, sessionGeneration, useNotesStore, type NoteTarget } from "./useNotesStore";
-import { cx } from "../../lib/cx";
 
 export interface ClosingThread {
   line: number;
@@ -63,15 +63,16 @@ function Body({ thread, target, saved, onClose }: { thread: ClosingThread; targe
           return;
         }
         useNotesStore.getState().edit(target, closeThread(base, thread.line, outcome), priv);
-        try {
-          await flushNotes();
-        } catch (e) {
-          setError(`Couldn't save the note: ${RavenError.from(e).message}`);
-          return;
-        }
-        if (gen !== sessionGeneration()) return; // locked meanwhile: nothing more is written
+        // The pending body now holds the closed line: from here a retry only re-flushes.
         setRewritten(true);
       }
+      try {
+        await flushNotes();
+      } catch (e) {
+        setError(`Couldn't save the note: ${RavenError.from(e).message}. Your reason is kept; try again.`);
+        return;
+      }
+      if (gen !== sessionGeneration()) return; // locked meanwhile: nothing more is written
       if (outcome === "dead") {
         try {
           await api.ruledOutCreate({

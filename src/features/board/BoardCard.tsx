@@ -2,10 +2,9 @@ import type { DragEvent, KeyboardEvent } from "react";
 import { Link } from "react-router";
 import type { Host } from "../../types/host";
 import { Chip } from "../../ui";
+import { OS_LABELS } from "../hosts/columns";
 import { ThreadDot } from "../notes/ThreadDot";
 import { useThreadCounts } from "../notes/useThreadCounts";
-import { OS_LABELS } from "../hosts/columns";
-
 
 export interface BoardCardProps {
   host: Host;

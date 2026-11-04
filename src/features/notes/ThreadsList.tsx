@@ -1,7 +1,6 @@
 import { openThreads } from "../../engines/notes/threads";
-import { Button } from "../../ui";
-import { labelClass } from "../../ui";
 import { cx } from "../../lib/cx";
+import { Button, labelClass } from "../../ui";
 import { openThreadsLabel } from "./useThreadCounts";
 
 /** Open threads of the note shown in the panel, each with a Close button. */

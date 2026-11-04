@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
-import { resetNotesStore } from "../features/notes/useNotesStore";
+import { discardNotes, resetNotesStore } from "../features/notes/useNotesStore";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
@@ -164,6 +164,58 @@ describe("open threads", () => {
     await user.click(within(d).getByRole("button", { name: "Close thread" }));
     expect(await within(d).findByRole("alert")).toHaveTextContent(/already.*✗.*disk full/s);
     expect(m.noteSave).toHaveBeenCalledWith("e1", null, "✗ dead", false);
+  });
+
+  async function openDead(user: ReturnType<typeof userEvent.setup>, p: HTMLElement, name: RegExp) {
+    await user.click(await within(p).findByRole("button", { name }));
+    const d = await screen.findByRole("dialog");
+    await user.click(within(d).getByRole("button", { name: "Dead end" }));
+    await user.type(within(d).getByLabelText("Reason"), "nope");
+    return d;
+  }
+
+  it("a failed save while closing as dead end keeps the dialog and the reason, and a retry saves then creates the ruled-out item once", async () => {
+    setStored(null, "? flaky");
+    m.noteSave.mockRejectedValueOnce(new Error("disk busy"));
+    const user = userEvent.setup();
+    const { p } = await openPanel(user, "/e/e1");
+    const d = await openDead(user, p, /Close thread: flaky/);
+    await user.click(within(d).getByRole("button", { name: "Close thread" }));
+    expect(await within(d).findByRole("alert")).toHaveTextContent(/disk busy/);
+    expect(m.ruledOutCreate).not.toHaveBeenCalled();
+    expect(within(d).getByLabelText("Reason")).toHaveValue("nope");
+    await user.click(within(d).getByRole("button", { name: "Close thread" }));
+    await vi.waitFor(() => expect(m.ruledOutCreate).toHaveBeenCalledTimes(1));
+    expect(m.ruledOutCreate).toHaveBeenCalledWith(expect.objectContaining({ text: "flaky", reason: "nope" }));
+    expect(m.noteSave).toHaveBeenLastCalledWith("e1", null, "✗ flaky", false);
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("a lock between the save and the create creates nothing", async () => {
+    setStored(null, "? locked");
+    m.noteSave.mockImplementation(async (_e, hostId, body, isPrivate) => {
+      discardNotes();
+      return { ownerId: "e1", engagementId: "e1", hostId, body, private: isPrivate, updatedAt: 9 };
+    });
+    const user = userEvent.setup();
+    const { p } = await openPanel(user, "/e/e1");
+    const d = await openDead(user, p, /Close thread: locked/);
+    await user.click(within(d).getByRole("button", { name: "Close thread" }));
+    await vi.waitFor(() => expect(m.noteSave).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 50));
+    expect(m.ruledOutCreate).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the line changed since the dialog opened", async () => {
+    setStored(null, "? moved");
+    const user = userEvent.setup();
+    const { p, ta } = await openPanel(user, "/e/e1");
+    const d = await openDead(user, p, /Close thread: moved/);
+    fireEvent.change(ta, { target: { value: "no longer a thread" } });
+    await user.click(within(d).getByRole("button", { name: "Close thread" }));
+    expect(await within(d).findByRole("alert")).toHaveTextContent(/That line changed/);
+    expect(m.ruledOutCreate).not.toHaveBeenCalled();
+    expect(m.noteSave).not.toHaveBeenCalledWith("e1", null, expect.stringContaining("✗"), false);
   });
 
   it("⌘/ toggles the prefix on the caret line", async () => {
