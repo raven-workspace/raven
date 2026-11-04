@@ -27,6 +27,13 @@ export function useHostMutations(engagementId: string) {
       mutationFn: (v: { id: string; column: BoardColumn }) => api.hostMove(v.id, v.column),
       onSuccess,
     }),
-    remove: useMutation({ mutationFn: (id: string) => api.hostDelete(id), onSuccess }),
+    remove: useMutation({
+      mutationFn: (id: string) => api.hostDelete(id),
+      onSuccess: () => {
+        onSuccess();
+        // Log entries lose the deleted host's link.
+        void qc.invalidateQueries({ queryKey: ["log", engagementId] });
+      },
+    }),
   };
 }

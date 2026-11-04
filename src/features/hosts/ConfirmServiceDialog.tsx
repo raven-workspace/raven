@@ -11,10 +11,14 @@ export interface ConfirmServiceDialogProps {
   /** This host's log entries, offered as "Proved by". */
   entries: LogEntry[];
   onClose: () => void;
+  /** Open the port / protocol / nmap guess editor instead. */
+  onEdit: () => void;
+  /** Ask to delete this service. */
+  onDelete: () => void;
 }
 
 /** The only way a service identity gets confirmed: the user types it. */
-export function ConfirmServiceDialog({ service, entries, onClose }: ConfirmServiceDialogProps) {
+export function ConfirmServiceDialog({ service, entries, onClose, onEdit, onDelete }: ConfirmServiceDialogProps) {
   const formId = useId();
   const { confirm, unconfirm } = useServiceMutations(service.hostId);
   const [product, setProduct] = useState(service.confirmedProduct ?? "");
@@ -55,6 +59,13 @@ export function ConfirmServiceDialog({ service, entries, onClose }: ConfirmServi
       description={guess ? `nmap guessed: ${guess}` : undefined}
       footer={
         <>
+          <Button disabled={pending} onClick={onEdit}>
+            Edit
+          </Button>
+          <Button variant="danger" disabled={pending} onClick={onDelete}>
+            Delete
+          </Button>
+          <span className="flex-1" />
           {confirmed && (
             <Button variant="danger" disabled={pending} onClick={() => unconfirm.mutate(service.id, opts)}>
               Remove confirmation

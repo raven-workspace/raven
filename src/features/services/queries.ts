@@ -11,6 +11,10 @@ export function useServiceMutations(hostId: string) {
   const onSuccess = () => void qc.invalidateQueries({ queryKey: ["services", hostId] });
   return {
     create: useMutation({ mutationFn: (input: ServiceInput) => api.serviceCreate(hostId, input), onSuccess }),
+    update: useMutation({
+      mutationFn: (v: { id: string; input: ServiceInput }) => api.serviceUpdate(v.id, v.input),
+      onSuccess,
+    }),
     confirm: useMutation({
       mutationFn: (v: { id: string; input: ConfirmInput }) => api.serviceConfirm(v.id, v.input),
       onSuccess,

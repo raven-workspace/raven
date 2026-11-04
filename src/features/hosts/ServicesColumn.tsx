@@ -1,8 +1,8 @@
 import { useState } from "react";
 import type { LogEntry } from "../../types/log";
 import type { Service } from "../../types/service";
-import { Button, labelClass } from "../../ui";
-import { useServices } from "../services/queries";
+import { Button, Dialog, labelClass } from "../../ui";
+import { useServiceMutations, useServices } from "../services/queries";
 import { ConfirmServiceDialog } from "./ConfirmServiceDialog";
 import { ServiceDialog } from "./ServiceDialog";
 
@@ -20,6 +20,7 @@ function ServiceRow({ s, onOpen }: { s: Service; onOpen: () => void }) {
         <span className="w-[62px] shrink-0 font-mono text-xs text-fg-2">
           {s.port}/{s.protocol}
         </span>
+        {s.state !== "open" && <span className="shrink-0 font-mono text-[11px] text-muted-2">{s.state}</span>}
         <span className="min-w-0 flex-1 text-[13px]">
           {confirmed ? (
             <>
@@ -39,11 +40,39 @@ function ServiceRow({ s, onOpen }: { s: Service; onOpen: () => void }) {
   );
 }
 
+type Open = { id: string; mode: "confirm" | "edit" | "delete" };
+
+function DeleteServiceDialog({ service, onClose }: { service: Service; onClose: () => void }) {
+  const { remove } = useServiceMutations(service.hostId);
+  const [error, setError] = useState<string>();
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title={`Delete ${service.port}/${service.protocol}?`}
+      description={error ? <span role="alert" className="text-warn">{error}</span> : undefined}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            variant="danger"
+            disabled={remove.isPending}
+            onClick={() => remove.mutate(service.id, { onSuccess: onClose, onError: (e) => setError(e.message) })}
+          >
+            Delete service
+          </Button>
+        </>
+      }
+    />
+  );
+}
+
 export function ServicesColumn({ hostId, entries }: { hostId: string; entries: LogEntry[] }) {
   const services = useServices(hostId);
-  const [confirming, setConfirming] = useState<string>();
+  const [open, setOpen] = useState<Open>();
   const [adding, setAdding] = useState(false);
-  const current = services.data?.find((s) => s.id === confirming);
+  const current = services.data?.find((s) => s.id === open?.id);
+  const close = () => setOpen(undefined);
   return (
     <section aria-label="Services">
       <div className="mb-1 flex items-center justify-between">
@@ -58,10 +87,20 @@ export function ServicesColumn({ hostId, entries }: { hostId: string; entries: L
         <p className="text-xs text-muted">No services yet. Paste an nmap scan to capture them.</p>
       ) : (
         <ul className="m-0 list-none p-0">
-          {services.data?.map((s) => <ServiceRow key={s.id} s={s} onOpen={() => setConfirming(s.id)} />)}
+          {services.data?.map((s) => <ServiceRow key={s.id} s={s} onOpen={() => setOpen({ id: s.id, mode: "confirm" })} />)}
         </ul>
       )}
-      {current && <ConfirmServiceDialog service={current} entries={entries} onClose={() => setConfirming(undefined)} />}
+      {current && open?.mode === "confirm" && (
+        <ConfirmServiceDialog
+          service={current}
+          entries={entries}
+          onClose={close}
+          onEdit={() => setOpen({ id: current.id, mode: "edit" })}
+          onDelete={() => setOpen({ id: current.id, mode: "delete" })}
+        />
+      )}
+      {current && open?.mode === "edit" && <ServiceDialog hostId={hostId} service={current} onClose={close} />}
+      {current && open?.mode === "delete" && <DeleteServiceDialog service={current} onClose={close} />}
       {adding && <ServiceDialog hostId={hostId} onClose={() => setAdding(false)} />}
     </section>
   );

@@ -306,9 +306,9 @@ describe("vault gate", () => {
       const options = await screen.findAllByRole("radio");
       expect(options).toHaveLength(2);
       // Newest first, with date and reason.
-      expect(options[0]!.closest("label")).toHaveTextContent(new Date(newer.createdAt).toLocaleString());
-      expect(options[0]!.closest("label")).toHaveTextContent("manual");
-      expect(options[1]!.closest("label")).toHaveTextContent("daily");
+      expect(options[0]!).toHaveTextContent(new Date(newer.createdAt).toLocaleString());
+      expect(options[0]!).toHaveTextContent("manual");
+      expect(options[1]!).toHaveTextContent("daily");
       m.backupRestoreLocked.mockResolvedValue(null);
       await user.click(screen.getByRole("radio", { name: /daily/ }));
       await user.type(screen.getByLabelText("Password"), "backup password!{Enter}");
@@ -340,6 +340,19 @@ describe("vault gate", () => {
       m.backupRestoreLocked.mockResolvedValue(null);
       await user.type(screen.getByLabelText("Password"), "backup password!{Enter}");
       expect(m.backupRestoreLocked).toHaveBeenCalledWith(newer.file, "backup password!");
+    });
+
+    it("backup choices are Ink options, not native radios, and arrow keys move the choice (M6)", async () => {
+      const user = await openDamaged();
+      const group = await screen.findByRole("radiogroup", { name: "Backup" });
+      expect(document.querySelector('input[type="radio"]')).toBeNull();
+      const manual = screen.getByRole("radio", { name: /manual/ });
+      expect(manual.tagName).toBe("BUTTON");
+      manual.focus();
+      await user.keyboard("{ArrowDown}");
+      expect(screen.getByRole("radio", { name: /daily/ })).toBeChecked();
+      expect(screen.getByRole("radio", { name: /daily/ })).toHaveFocus();
+      expect(group).toBeInTheDocument();
     });
 
     it("focuses the restore password field", async () => {

@@ -27,6 +27,8 @@ export function EditEntryDialog({ entry, hosts, onClose }: EditEntryDialogProps)
   const [observations, setObservations] = useState(entry.observations ?? "");
   const [isPrivate, setPrivate] = useState(entry.private);
   const [nothing, setNothing] = useState(entry.returnedNothing);
+  // Only a command can come back empty.
+  const isCommand = entry.content.kind === "command";
   const [text, setText] = useState(entry.content.kind === "note" ? entry.content.text : "");
   const [error, setError] = useState<string>();
   const [titleError, setTitleError] = useState<string>();
@@ -49,7 +51,7 @@ export function EditEntryDialog({ entry, hosts, onClose }: EditEntryDialogProps)
       ranOn: ranOn === "" ? null : ranOn,
       hostIds,
       observations: observations.trim() === "" ? null : observations.trim(),
-      returnedNothing: nothing,
+      returnedNothing: isCommand && nothing,
       private: isPrivate,
       content: entry.content.kind === "note" ? { ...entry.content, text } : entry.content,
       at: entry.at,
@@ -99,9 +101,11 @@ export function EditEntryDialog({ entry, hosts, onClose }: EditEntryDialogProps)
           <Toggle on={isPrivate} onChange={setPrivate}>
             Private
           </Toggle>
-          <Toggle on={nothing} onChange={setNothing}>
-            Returned nothing
-          </Toggle>
+          {isCommand && (
+            <Toggle on={nothing} onChange={setNothing}>
+              Returned nothing
+            </Toggle>
+          )}
         </div>
         {error && <p role="alert" className="m-0 text-xs text-warn">{error}</p>}
       </form>

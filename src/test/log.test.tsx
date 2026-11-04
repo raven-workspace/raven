@@ -215,4 +215,21 @@ describe("log", () => {
     await vi.waitFor(() => expect(m.logUpdate).toHaveBeenCalled());
     expect(m.logUpdate.mock.calls[0]![1]).toMatchObject({ private: true, returnedNothing: false });
   });
+
+  it("returned nothing is offered only for command entries (M7)", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByRole("button", { name: /older note/ }));
+    await user.click(log().getByRole("button", { name: "Edit" }));
+    expect(screen.queryByRole("button", { name: "Returned nothing" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    const nmap = screen.getByRole("button", { name: /nmap scan/ });
+    await user.click(nmap);
+    await user.click(within(nmap.closest("li")!).getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Returned nothing" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await vi.waitFor(() => expect(m.logUpdate).toHaveBeenCalled());
+    expect(m.logUpdate.mock.calls[0]![1]).toMatchObject({ returnedNothing: true });
+  });
 });

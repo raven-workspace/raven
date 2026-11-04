@@ -111,6 +111,48 @@ describe("host view", () => {
     expect(m.serviceConfirm).toHaveBeenCalledWith("s3", { product: "OpenSSH", version: "8.2p1", entryId: "o" });
   });
 
+  it("service dialog edits port, protocol and nmap guess (I5)", async () => {
+    m.serviceUpdate.mockResolvedValue(svc("s3", 2222));
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByRole("button", { name: /22\/tcp/ }));
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Edit" }));
+    const dialog = await screen.findByRole("dialog", { name: "Edit 22/tcp" });
+    const port = within(dialog).getByLabelText("Port");
+    expect(port).toHaveValue("22");
+    expect(within(dialog).getByLabelText("Service")).toHaveValue("ssh");
+    expect(within(dialog).getByLabelText("Version")).toHaveValue("OpenSSH 8.2");
+    await user.clear(port);
+    await user.type(port, "2222");
+    await user.clear(within(dialog).getByLabelText("Version"));
+    await user.type(within(dialog).getByLabelText("Version"), "OpenSSH 9.6");
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    expect(m.serviceUpdate).toHaveBeenCalledWith("s3", { port: 2222, protocol: "tcp", nmapService: "ssh", nmapVersion: "OpenSSH 9.6" });
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("service dialog deletes after a confirm (I5)", async () => {
+    m.serviceDelete.mockResolvedValue(null);
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByRole("button", { name: /445\/tcp/ }));
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete" }));
+    const confirm = await screen.findByRole("dialog", { name: "Delete 445/tcp?" });
+    expect(m.serviceDelete).not.toHaveBeenCalled();
+    await user.click(within(confirm).getByRole("button", { name: "Delete service" }));
+    expect(m.serviceDelete).toHaveBeenCalledWith("s2");
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("a service that is not open shows its state (M1)", async () => {
+    m.servicesList.mockResolvedValue([svc("s1", 80, { nmapService: "http" }), svc("s4", 161, { protocol: "udp", state: "open|filtered", nmapService: "snmp" })]);
+    mount();
+    const snmp = (await screen.findByRole("button", { name: /161\/udp/ })).closest("li")!;
+    expect(within(snmp).getByText("open|filtered")).toBeInTheDocument();
+    const http = screen.getByRole("button", { name: /80\/tcp/ }).closest("li")!;
+    expect(within(http).queryByText("open")).not.toBeInTheDocument();
+  });
+
   it("story tab lists host entries oldest first", async () => {
     mount();
     await screen.findByText("older on dc01");

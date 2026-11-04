@@ -11,6 +11,8 @@ export function useLogMutations(engagementId: string) {
   const onSuccess = () => {
     void qc.invalidateQueries({ queryKey: ["log", engagementId] });
     void qc.invalidateQueries({ queryKey: ["progress"] });
+    // A service's confirmation can cite an entry; editing or deleting the entry changes that.
+    void qc.invalidateQueries({ queryKey: ["services"] });
   };
   return {
     update: useMutation({

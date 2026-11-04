@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent } from "react";
-import type { ServiceProtocol } from "../../types/service";
+import type { Service, ServiceProtocol } from "../../types/service";
 import { Button, Dialog, Field, Input, Select } from "../../ui";
 import { useServiceMutations } from "../services/queries";
 
@@ -8,41 +8,50 @@ const PROTOCOLS = [
   { value: "udp", label: "udp" },
 ];
 
-/** Add a service by hand (nmap normally supplies them). */
-export function ServiceDialog({ hostId, onClose }: { hostId: string; onClose: () => void }) {
+export interface ServiceDialogProps {
+  hostId: string;
+  /** Edit this service; without it the dialog adds one. */
+  service?: Service;
+  onClose: () => void;
+}
+
+/** Add a service by hand (nmap normally supplies them), or correct one: port, protocol, nmap guess. */
+export function ServiceDialog({ hostId, service, onClose }: ServiceDialogProps) {
   const formId = useId();
-  const { create } = useServiceMutations(hostId);
-  const [port, setPort] = useState("");
-  const [protocol, setProtocol] = useState<ServiceProtocol>("tcp");
-  const [name, setName] = useState("");
-  const [version, setVersion] = useState("");
+  const { create, update } = useServiceMutations(hostId);
+  const [port, setPort] = useState(service ? String(service.port) : "");
+  const [protocol, setProtocol] = useState<ServiceProtocol>(service?.protocol ?? "tcp");
+  const [name, setName] = useState(service?.nmapService ?? "");
+  const [version, setVersion] = useState(service?.nmapVersion ?? "");
   const [error, setError] = useState<string>();
+  const pending = create.isPending || update.isPending;
+  const action = service ? "Save" : "Add service";
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (create.isPending) return;
+    if (pending) return;
     const n = Number(port);
     if (!Number.isInteger(n) || n < 1 || n > 65535) {
       setError("Port is a number from 1 to 65535");
       return;
     }
     setError(undefined);
-    create.mutate(
-      { port: n, protocol, nmapService: name.trim() || null, nmapVersion: version.trim() || null },
-      { onSuccess: onClose, onError: (err) => setError(err.message) },
-    );
+    const input = { port: n, protocol, nmapService: name.trim() || null, nmapVersion: version.trim() || null };
+    const opts = { onSuccess: onClose, onError: (err: Error) => setError(err.message) };
+    if (service) update.mutate({ id: service.id, input }, opts);
+    else create.mutate(input, opts);
   }
 
   return (
     <Dialog
       open
       onOpenChange={(o) => !o && onClose()}
-      title="Add service"
+      title={service ? `Edit ${service.port}/${service.protocol}` : "Add service"}
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button type="submit" form={formId} variant="primary" disabled={create.isPending}>
-            Add service
+          <Button type="submit" form={formId} variant="primary" disabled={pending}>
+            {action}
           </Button>
         </>
       }

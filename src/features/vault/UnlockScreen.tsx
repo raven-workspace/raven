@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { api } from "../../lib/api";
+import { cx } from "../../lib/cx";
 import type { BackupInfo } from "../../types/backup";
 import type { UnlockResult } from "../../types/vault";
 import { Button, Chip, Field, Input } from "../../ui";
@@ -131,6 +132,23 @@ function DamagedPanel({ onRestored }: { onRestored: () => void }) {
     };
   }, [attempt]);
 
+  function choose(f: string) {
+    setFile(f);
+    setError(null);
+  }
+
+  /** Arrow keys move the choice, as in a native radio group. */
+  function onBackupKey(e: KeyboardEvent<HTMLDivElement>) {
+    if (!backups?.length) return;
+    const step = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const i = backups.findIndex((b) => b.file === file);
+    const n = (i + step + backups.length) % backups.length;
+    choose(backups[n]!.file);
+    (e.currentTarget.children[n] as HTMLElement | undefined)?.focus();
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (busy || file === null || pw === "") return;
@@ -166,28 +184,37 @@ function DamagedPanel({ onRestored }: { onRestored: () => void }) {
         )}
         {backups && backups.length === 0 && <p className="m-0 text-xs text-muted">No backups yet</p>}
         {backups && backups.length > 0 && (
-          <fieldset className="m-0 flex max-h-64 flex-col overflow-y-auto border-0 p-0">
-            <legend className="sr-only">Backup</legend>
-            {backups.map((b) => (
-              <label
-                key={b.file}
-                className="flex cursor-pointer items-center gap-3 border-b border-line py-2 last:border-b-0"
-              >
-                <input
-                  type="radio"
-                  name="backup"
-                  value={b.file}
-                  checked={file === b.file}
-                  onChange={() => {
-                    setFile(b.file);
-                    setError(null);
-                  }}
-                />
-                <span className="font-mono text-xs text-fg-2">{new Date(b.createdAt).toLocaleString()}</span>
-                <Chip>{b.reason}</Chip>
-              </label>
-            ))}
-          </fieldset>
+          <div
+            role="radiogroup"
+            aria-label="Backup"
+            onKeyDown={onBackupKey}
+            className="m-0 flex max-h-64 flex-col overflow-y-auto rounded-sm border border-line"
+          >
+            {backups.map((b) => {
+              const on = file === b.file;
+              return (
+                <button
+                  key={b.file}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  tabIndex={on ? 0 : -1}
+                  onClick={() => choose(b.file)}
+                  className={cx(
+                    "flex cursor-default items-center gap-3 border-b border-line px-2.5 py-2 text-left last:border-b-0 focus-visible:outline-1 focus-visible:outline-accent",
+                    on ? "bg-surface text-fg" : "text-fg-2 hover:bg-surface",
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className={cx("size-1.5 shrink-0 rounded-full", on ? "bg-fg" : "border border-line-2")}
+                  />
+                  <span className="font-mono text-xs">{new Date(b.createdAt).toLocaleString()}</span>
+                  <Chip>{b.reason}</Chip>
+                </button>
+              );
+            })}
+          </div>
         )}
         <Field label="Password" error={error ?? undefined}>
           <Input

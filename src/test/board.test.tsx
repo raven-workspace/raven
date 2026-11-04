@@ -188,6 +188,32 @@ describe("board", () => {
     expect(m.hostMove).not.toHaveBeenCalled();
   });
 
+  it("a failed move shows the error and does not steal focus later (M9)", async () => {
+    const user = userEvent.setup();
+    m.hostMove.mockRejectedValueOnce(new Error("db busy"));
+    mount();
+    await ready();
+    within(column("Foothold")).getByRole("link", { name: /dc01/ }).focus();
+    await user.keyboard("]");
+    expect(await screen.findByText("Couldn't move dc01: db busy")).toHaveAttribute("role", "alert");
+    // Later, an unrelated change refetches hosts: focus stays where the user put it.
+    const mystery = within(column("Enumerate")).getByRole("link", { name: /mystery/ });
+    mystery.focus();
+    const store: Record<string, string> = {};
+    const dataTransfer = {
+      setData: (k: string, v: string) => (store[k] = v),
+      getData: (k: string) => store[k] ?? "",
+      effectAllowed: "",
+      dropEffect: "",
+    };
+    fireEvent.dragStart(within(column("Done")).getByRole("link", { name: /web02/ }), { dataTransfer });
+    fireEvent.drop(column("Loot/Pivot"), { dataTransfer });
+    await vi.waitFor(() => expect(within(column("Loot/Pivot")).getByRole("link", { name: /web02/ })).toBeInTheDocument());
+    expect(within(column("Enumerate")).getByRole("link", { name: /mystery/ })).toHaveFocus();
+    // A move that works clears the message.
+    expect(screen.queryByText(/Couldn't move/)).not.toBeInTheDocument();
+  });
+
   it("empty board offers add host", async () => {
     const user = userEvent.setup();
     hosts = [];
