@@ -14,6 +14,9 @@ export interface Host {
   access: HostAccess;
   createdAt: number;
   updatedAt: number;
+  dualHomed: boolean;
+  /** The column the checklist last derived; a hand placement holds until it changes. */
+  boardDerived: BoardColumn | null;
 }
 
 /** Mirrors the Rust `HostInput` (create and full update). */
@@ -22,4 +25,6 @@ export interface HostInput {
   ip?: string | null;
   os?: HostOs | null;
   access?: HostAccess;
+  /** Absent keeps the current value. */
+  dualHomed?: boolean;
 }

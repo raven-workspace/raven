@@ -19,6 +19,8 @@ export interface Engagement {
   updatedAt: number;
   lastActivityAt: number | null;
   lastRanOn: string | null;
+  /** The host holding the Metasploit lock, if any. */
+  msfHostId: string | null;
 }
 
 /** Mirrors the Rust `EngagementInput` (create and full update). */

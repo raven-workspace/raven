@@ -14,7 +14,7 @@ function host(over: Partial<Host> & Pick<Host, "id" | "name">): Host {
     ip: null,
     os: null,
     boardColumn: "enumerate",
-    boardManual: false,
+    boardManual: false, dualHomed: false, boardDerived: null,
     access: "none",
     createdAt: 1,
     updatedAt: 1,

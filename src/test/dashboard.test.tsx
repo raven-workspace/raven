@@ -30,7 +30,7 @@ function eng(over: Partial<Engagement> & Pick<Engagement, "id" | "name">): Engag
     createdAt: 1_700_000_000_000,
     updatedAt: 1_700_000_000_000,
     lastActivityAt: null,
-    lastRanOn: null,
+    lastRanOn: null, msfHostId: null,
     ...over,
   };
 }
@@ -48,7 +48,7 @@ function fixtures(): Engagement[] {
       timeboxStart: now - 2 * HOUR,
       timeboxMinutes: 1425,
       lastActivityAt: now - 12 * MIN,
-      lastRanOn: null,
+      lastRanOn: null, msfHostId: null,
     }),
     eng({ id: "e4", name: "Acme Corp internal", kind: "client", client: "Acme Corp", subLabel: "assumed breach" }),
     eng({ id: "e2", name: "Lumen", kind: "lab", status: "archived" }),
@@ -71,7 +71,7 @@ beforeEach(() => {
   list = fixtures();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.vaultLock.mockResolvedValue(null);
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"] });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "" });
   m.backupsList.mockResolvedValue([]);
   m.engagementsProgress.mockResolvedValue({});
   m.hostsList.mockResolvedValue([]);
@@ -275,7 +275,7 @@ describe("dashboard", () => {
   });
 
   it("autolock_with_open_dialog_discards_draft_cleanly", async () => {
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 1, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"] });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 1, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "" });
     m.vaultUnlock.mockResolvedValue({ migratedFrom: 3, migratedTo: 3, dailyBackup: null, dailyBackupError: null });
     vi.useFakeTimers({ shouldAdvanceTime: false });
     mount();

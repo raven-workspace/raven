@@ -6,6 +6,8 @@
 use crate::backup::{self, BackupInfo};
 use crate::checklist::{self, ChecklistItem, ChecklistItemInput};
 use crate::engagements::{self, Engagement, EngagementInput, Progress};
+use crate::network::{self, Hop, HopInput, Tunnel, TunnelInput};
+use crate::notes::{self, Note, RuledOut, RuledOutInput};
 use crate::log::{self, Attachment, LogEntry, LogEntryInput};
 use std::collections::HashMap;
 use crate::hosts::{self, Host, HostInput};
@@ -178,6 +180,11 @@ pub async fn engagement_delete(app: AppHandle, id: String) -> AppResult<()> {
 }
 
 #[tauri::command]
+pub async fn engagement_set_msf_host(app: AppHandle, engagement_id: String, host_id: Option<String>) -> AppResult<Engagement> {
+    with_vault(app, move |v| engagements::set_msf_host(v.conn()?, &engagement_id, host_id.as_deref())).await
+}
+
+#[tauri::command]
 pub async fn hosts_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<Host>> {
     with_vault(app, move |v| hosts::list(v.conn()?, &engagement_id)).await
 }
@@ -198,6 +205,11 @@ pub async fn host_move(app: AppHandle, id: String, column: String) -> AppResult<
 }
 
 #[tauri::command]
+pub async fn host_sync_board(app: AppHandle, host_id: String, derived: String) -> AppResult<Host> {
+    with_vault(app, move |v| hosts::sync_board(v.conn()?, &host_id, &derived)).await
+}
+
+#[tauri::command]
 pub async fn host_delete(app: AppHandle, id: String) -> AppResult<()> {
     with_vault(app, move |v| hosts::delete(v.conn()?, &id)).await
 }
@@ -205,6 +217,11 @@ pub async fn host_delete(app: AppHandle, id: String) -> AppResult<()> {
 #[tauri::command]
 pub async fn services_list(app: AppHandle, host_id: String) -> AppResult<Vec<Service>> {
     with_vault(app, move |v| services::list(v.conn()?, &host_id)).await
+}
+
+#[tauri::command]
+pub async fn services_list_engagement(app: AppHandle, engagement_id: String) -> AppResult<Vec<Service>> {
+    with_vault(app, move |v| services::list_engagement(v.conn()?, &engagement_id)).await
 }
 
 #[tauri::command]
@@ -269,6 +286,76 @@ pub async fn checklist_put(
     items: Vec<ChecklistItemInput>,
 ) -> AppResult<Vec<ChecklistItem>> {
     with_vault(app, move |v| checklist::put(v.conn()?, &engagement_id, &items)).await
+}
+
+#[tauri::command]
+pub async fn notes_get(app: AppHandle, engagement_id: String, host_id: Option<String>) -> AppResult<Note> {
+    with_vault(app, move |v| notes::get(v.conn()?, &engagement_id, host_id.as_deref())).await
+}
+
+#[tauri::command]
+pub async fn notes_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<Note>> {
+    with_vault(app, move |v| notes::list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn note_save(app: AppHandle, engagement_id: String, host_id: Option<String>, body: String, private: bool) -> AppResult<Note> {
+    with_vault(app, move |v| notes::save(v.conn()?, &engagement_id, host_id.as_deref(), &body, private)).await
+}
+
+#[tauri::command]
+pub async fn ruled_out_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<RuledOut>> {
+    with_vault(app, move |v| notes::ruled_out_list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn ruled_out_create(app: AppHandle, input: RuledOutInput) -> AppResult<RuledOut> {
+    with_vault(app, move |v| notes::ruled_out_create(v.conn()?, input)).await
+}
+
+#[tauri::command]
+pub async fn ruled_out_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| notes::ruled_out_delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn tunnels_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<Tunnel>> {
+    with_vault(app, move |v| network::tunnels_list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn tunnel_create(app: AppHandle, engagement_id: String, input: TunnelInput) -> AppResult<Tunnel> {
+    with_vault(app, move |v| network::tunnel_create(v.conn()?, &engagement_id, input)).await
+}
+
+#[tauri::command]
+pub async fn tunnel_update(app: AppHandle, id: String, input: TunnelInput) -> AppResult<Tunnel> {
+    with_vault(app, move |v| network::tunnel_update(v.conn()?, &id, input)).await
+}
+
+#[tauri::command]
+pub async fn tunnel_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| network::tunnel_delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn hops_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<Hop>> {
+    with_vault(app, move |v| network::hops_list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn hop_create(app: AppHandle, engagement_id: String, input: HopInput) -> AppResult<Hop> {
+    with_vault(app, move |v| network::hop_create(v.conn()?, &engagement_id, input)).await
+}
+
+#[tauri::command]
+pub async fn hop_update(app: AppHandle, id: String, input: HopInput) -> AppResult<Hop> {
+    with_vault(app, move |v| network::hop_update(v.conn()?, &id, input)).await
+}
+
+#[tauri::command]
+pub async fn hop_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| network::hop_delete(v.conn()?, &id)).await
 }
 
 #[tauri::command]

@@ -17,11 +17,11 @@ const m = vi.mocked(api, true);
 const E1: Engagement = {
   id: "e1", name: "Mock exam A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
-  createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null,
+  createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
 
 const host = (id: string, name: string): Host => ({
-  id, engagementId: "e1", name, ip: null, os: null, boardColumn: "enumerate", boardManual: false,
+  id, engagementId: "e1", name, ip: null, os: null, boardColumn: "enumerate", boardManual: false, dualHomed: false, boardDerived: null,
   access: "none", createdAt: 1, updatedAt: 1,
 });
 
@@ -68,7 +68,7 @@ beforeEach(() => {
     entry({ id: "c", title: "secret thing", at: T + 120_000, private: true, returnedNothing: true }),
   ];
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"] });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "" });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementGet.mockResolvedValue(E1);
   m.engagementsProgress.mockResolvedValue({});

@@ -6,7 +6,7 @@ use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 
-const COLS: &str = "id, engagement_id, name, ip, os, board_column, board_manual, access, created_at, updated_at";
+const COLS: &str = "id, engagement_id, name, ip, os, board_column, board_manual, access, created_at, updated_at, dual_homed, board_derived";
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,6 +21,9 @@ pub struct Host {
     pub access: String,
     pub created_at: i64,
     pub updated_at: i64,
+    pub dual_homed: bool,
+    /// The board column the checklist last derived; a hand placement holds until this changes.
+    pub board_derived: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -33,6 +36,9 @@ pub struct HostInput {
     pub os: Option<String>,
     #[serde(default)]
     pub access: Option<String>,
+    /// Absent keeps the current value.
+    #[serde(default)]
+    pub dual_homed: Option<bool>,
 }
 
 fn invalid(field: &str, message: &str) -> AppError {
@@ -50,6 +56,7 @@ struct Clean {
     ip: Option<String>,
     os: Option<String>,
     access: String,
+    dual_homed: Option<bool>,
 }
 
 fn normalise(i: HostInput) -> AppResult<Clean> {
@@ -73,7 +80,7 @@ fn normalise(i: HostInput) -> AppResult<Clean> {
     if !matches!(access.as_str(), "none" | "user" | "root") {
         return Err(invalid("access", "access must be none, user or root"));
     }
-    Ok(Clean { name, ip, os, access })
+    Ok(Clean { name, ip, os, access, dual_homed: i.dual_homed })
 }
 
 fn from_row(r: &Row) -> rusqlite::Result<Host> {
@@ -88,6 +95,8 @@ fn from_row(r: &Row) -> rusqlite::Result<Host> {
         access: r.get(7)?,
         created_at: r.get(8)?,
         updated_at: r.get(9)?,
+        dual_homed: r.get::<_, i64>(10)? != 0,
+        board_derived: r.get(11)?,
     })
 }
 
@@ -139,9 +148,9 @@ pub fn create(conn: &Connection, engagement_id: &str, input: HostInput) -> AppRe
     let id = uuid::Uuid::new_v4().to_string();
     let now = system_now_ms();
     conn.execute(
-        "INSERT INTO hosts (id, engagement_id, name, ip, os, access, created_at, updated_at) \
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?7)",
-        params![id, engagement_id, c.name, c.ip, c.os, c.access, now],
+        "INSERT INTO hosts (id, engagement_id, name, ip, os, access, dual_homed, created_at, updated_at) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?8)",
+        params![id, engagement_id, c.name, c.ip, c.os, c.access, c.dual_homed.unwrap_or(false), now],
     )?;
     get(conn, &id)
 }
@@ -154,8 +163,8 @@ pub fn update(conn: &Connection, id: &str, input: HostInput) -> AppResult<Host> 
             return Err(invalid("ip", DUP_IP));
         }
     conn.execute(
-        "UPDATE hosts SET name=?2, ip=?3, os=?4, access=?5, updated_at=?6 WHERE id=?1",
-        params![id, c.name, c.ip, c.os, c.access, system_now_ms()],
+        "UPDATE hosts SET name=?2, ip=?3, os=?4, access=?5, dual_homed=COALESCE(?6, dual_homed), updated_at=?7 WHERE id=?1",
+        params![id, c.name, c.ip, c.os, c.access, c.dual_homed, system_now_ms()],
     )?;
     get(conn, id)
 }
@@ -172,6 +181,23 @@ pub fn move_to(conn: &Connection, id: &str, column: &str) -> AppResult<Host> {
     if n == 0 {
         return Err(AppError::NotFound);
     }
+    get(conn, id)
+}
+
+/// Applies the board column the checklist derived. Only when `derived` differs from the last
+/// derived value does the host move (and unpin), so a hand placement holds until the next stage completes.
+pub fn sync_board(conn: &Connection, id: &str, derived: &str) -> AppResult<Host> {
+    if !matches!(derived, "enumerate" | "foothold" | "privesc" | "loot" | "done") {
+        return Err(invalid("derived", "column must be enumerate, foothold, privesc, loot or done"));
+    }
+    let current = get(conn, id)?;
+    if current.board_derived.as_deref() == Some(derived) {
+        return Ok(current);
+    }
+    conn.execute(
+        "UPDATE hosts SET board_column=?2, board_manual=0, board_derived=?2, updated_at=?3 WHERE id=?1",
+        params![id, derived, system_now_ms()],
+    )?;
     get(conn, id)
 }
 
@@ -244,7 +270,7 @@ mod tests {
     }
 
     fn hin(name: &str, ip: Option<&str>) -> HostInput {
-        HostInput { name: name.into(), ip: ip.map(str::to_string), os: None, access: None }
+        HostInput { name: name.into(), ip: ip.map(str::to_string), os: None, access: None, dual_homed: None }
     }
 
     fn field<T: std::fmt::Debug>(r: AppResult<T>) -> (String, String) {
@@ -395,5 +421,91 @@ mod tests {
         assert!(engagements::get(c, &e.id).unwrap().scope_cidrs.is_empty());
         assert!(engagements::create(c, eng_input(&["10.0.0.9"])).is_err());
         assert_eq!(engagements::list(c).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn dual_homed_defaults_false_and_is_kept_when_absent() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = engagements::create(c, eng_input(&[])).unwrap();
+        let h = create(c, &e.id, hin("web", None)).unwrap();
+        assert_eq!((h.dual_homed, h.board_derived.clone()), (false, None));
+        let mut i = hin("web", None);
+        i.dual_homed = Some(true);
+        assert!(update(c, &h.id, i).unwrap().dual_homed);
+        assert!(update(c, &h.id, hin("web2", None)).unwrap().dual_homed);
+        let mut i = hin("web2", None);
+        i.dual_homed = Some(false);
+        assert!(!update(c, &h.id, i).unwrap().dual_homed);
+        let mut i = hin("dm", None);
+        i.dual_homed = Some(true);
+        assert!(create(c, &e.id, i).unwrap().dual_homed);
+        assert!(serde_json::to_value(&h).unwrap().get("dualHomed").is_some());
+    }
+
+    #[test]
+    fn sync_board_moves_only_when_derived_changes() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = engagements::create(c, eng_input(&[])).unwrap();
+        let h = create(c, &e.id, hin("web", None)).unwrap();
+        let s = sync_board(c, &h.id, "enumerate").unwrap();
+        assert_eq!((s.board_column.as_str(), s.board_manual, s.board_derived.as_deref()), ("enumerate", false, Some("enumerate")));
+        move_to(c, &h.id, "loot").unwrap();
+        let s = sync_board(c, &h.id, "enumerate").unwrap();
+        assert_eq!((s.board_column.as_str(), s.board_manual), ("loot", true));
+        let s = sync_board(c, &h.id, "foothold").unwrap();
+        assert_eq!((s.board_column.as_str(), s.board_manual, s.board_derived.as_deref()), ("foothold", false, Some("foothold")));
+        assert_eq!(field(sync_board(c, &h.id, "nowhere")).0, "derived");
+        assert_eq!(sync_board(c, "nope", "done"), Err(AppError::NotFound));
+    }
+
+    fn put_all_children(c: &rusqlite::Connection, e: &str, h: &str, other: &str) {
+        crate::notes::save(c, e, Some(h), "n", false).unwrap();
+        crate::notes::ruled_out_create(
+            c,
+            crate::notes::RuledOutInput { engagement_id: e.into(), host_id: Some(h.into()), text: "t".into(), reason: "r".into(), private: false },
+        )
+        .unwrap();
+        crate::network::tunnel_create(
+            c,
+            e,
+            crate::network::TunnelInput { kind: "ssh".into(), via_host_id: h.into(), subnets: vec![], callback_ip: String::new(), status: "up".into(), notes: None },
+        )
+        .unwrap();
+        crate::network::hop_create(
+            c,
+            e,
+            crate::network::HopInput { from_host_id: Some(h.into()), to_host_id: other.into(), via: "ssh".into(), log_entry_id: None, at: None },
+        )
+        .unwrap();
+        engagements::set_msf_host(c, e, Some(h)).unwrap();
+    }
+
+    #[test]
+    fn deleting_host_clears_its_notes_tunnels_hops_and_msf_lock() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = engagements::create(c, eng_input(&[])).unwrap();
+        let h = create(c, &e.id, hin("web", Some("10.0.0.5"))).unwrap();
+        let o = create(c, &e.id, hin("db", Some("10.0.0.6"))).unwrap();
+        put_all_children(c, &e.id, &h.id, &o.id);
+        c.execute(
+            "INSERT INTO checklist_items (owner_id, engagement_id, goal_id, status, updated_at) VALUES (?1, ?2, 'g', 'todo', 1)",
+            params![h.id, e.id],
+        )
+        .unwrap();
+        delete(c, &h.id).unwrap();
+        let n: i64 = c
+            .query_row(
+                "SELECT (SELECT count(*) FROM notes) + (SELECT count(*) FROM ruled_out) + (SELECT count(*) FROM tunnels) \
+                 + (SELECT count(*) FROM hops) + (SELECT count(*) FROM checklist_items)",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(n, 0);
+        assert_eq!(engagements::get(c, &e.id).unwrap().msf_host_id, None);
+        assert_eq!(list(c, &e.id).unwrap().len(), 1);
     }
 }

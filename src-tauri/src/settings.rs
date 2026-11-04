@@ -12,6 +12,8 @@ const MACHINES_KEY: &str = "machines";
 const DEFAULT_MACHINES: [&str; 3] = ["Kali (VM)", "Docker build", "Mac"];
 const MAX_MACHINES: usize = 20;
 const MAX_MACHINE_LEN: usize = 40;
+const ATTACKER_IP_KEY: &str = "attacker_ip";
+const LISTENER_PORT_KEY: &str = "listener_port";
 const RETENTION_RANGE: std::ops::RangeInclusive<u32> = 1..=200;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -20,6 +22,10 @@ pub struct Settings {
     pub auto_lock_minutes: u32,
     pub backup_retention: u32,
     pub machines: Vec<String>,
+    /// Blank or a single IPv4 address; fills `{LHOST}` in command templates.
+    pub attacker_ip: String,
+    /// Blank or 1-65535; fills `{LPORT}`.
+    pub listener_port: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -28,6 +34,8 @@ pub struct SettingsPatch {
     pub auto_lock_minutes: Option<u32>,
     pub backup_retention: Option<u32>,
     pub machines: Option<Vec<String>>,
+    pub attacker_ip: Option<String>,
+    pub listener_port: Option<String>,
 }
 
 pub fn get(conn: &Connection) -> AppResult<Settings> {
@@ -46,7 +54,12 @@ pub fn get(conn: &Connection) -> AppResult<Settings> {
         .and_then(|v| serde_json::from_str::<Vec<String>>(&v).ok())
         .and_then(|v| clean_machines(v).ok())
         .unwrap_or_else(|| DEFAULT_MACHINES.iter().map(|s| s.to_string()).collect());
-    Ok(Settings { auto_lock_minutes, backup_retention, machines })
+    let text = |key: &str| {
+        conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get::<_, String>(0)).unwrap_or_default()
+    };
+    let attacker_ip = clean_ip(&text(ATTACKER_IP_KEY)).unwrap_or_default();
+    let listener_port = clean_port(&text(LISTENER_PORT_KEY)).unwrap_or_default();
+    Ok(Settings { auto_lock_minutes, backup_retention, machines, attacker_ip, listener_port })
 }
 
 fn check(field: &str, v: Option<u32>, range: &std::ops::RangeInclusive<u32>) -> AppResult<()> {
@@ -78,6 +91,32 @@ fn clean_machines(list: Vec<String>) -> AppResult<Vec<String>> {
     Ok(out)
 }
 
+fn bad(field: &str, message: &str) -> AppError {
+    AppError::Validation { field: field.into(), message: message.into() }
+}
+
+/// Blank, or a single IPv4 address (no prefix).
+fn clean_ip(s: &str) -> AppResult<String> {
+    let s = s.trim();
+    if s.is_empty() || (!s.contains('/') && crate::engagements::valid_cidr(s)) {
+        Ok(s.to_string())
+    } else {
+        Err(bad("attackerIp", "must be blank or a single IPv4 address"))
+    }
+}
+
+/// Blank, or a port 1-65535 (stored without leading zeros).
+fn clean_port(s: &str) -> AppResult<String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Ok(String::new());
+    }
+    match s.parse::<u16>() {
+        Ok(n) if n >= 1 && s.bytes().all(|b| b.is_ascii_digit()) => Ok(n.to_string()),
+        _ => Err(bad("listenerPort", "must be blank or a port from 1 to 65535")),
+    }
+}
+
 fn put(conn: &Connection, key: &str, v: u32) -> AppResult<()> {
     put_text(conn, key, &v.to_string())
 }
@@ -94,6 +133,14 @@ pub fn update(conn: &Connection, patch: SettingsPatch) -> AppResult<Settings> {
     check("autoLockMinutes", patch.auto_lock_minutes, &AUTO_LOCK_RANGE)?;
     check("backupRetention", patch.backup_retention, &RETENTION_RANGE)?;
     let machines = patch.machines.map(clean_machines).transpose()?;
+    let attacker_ip = patch.attacker_ip.as_deref().map(clean_ip).transpose()?;
+    let listener_port = patch.listener_port.as_deref().map(clean_port).transpose()?;
+    if let Some(v) = attacker_ip {
+        put_text(conn, ATTACKER_IP_KEY, &v)?;
+    }
+    if let Some(v) = listener_port {
+        put_text(conn, LISTENER_PORT_KEY, &v)?;
+    }
     if let Some(n) = patch.auto_lock_minutes {
         put(conn, AUTO_LOCK_KEY, n)?;
     }
@@ -176,5 +223,37 @@ mod tests {
         // corrupt stored value falls back to the default
         c.execute("INSERT INTO settings(key,value) VALUES('machines','not json') ON CONFLICT(key) DO UPDATE SET value=excluded.value", []).unwrap();
         assert_eq!(get(c).unwrap().machines, ["Kali (VM)", "Docker build", "Mac"]);
+    }
+
+    #[test]
+    fn settings_attacker_ip_and_port_validated() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let s = get(c).unwrap();
+        assert_eq!((s.attacker_ip.as_str(), s.listener_port.as_str()), ("", ""));
+        for bad in ["10.0.0", "10.0.0.0/24", "300.1.1.1", "kali.local", "10.0.0.1/32"] {
+            let p = SettingsPatch { attacker_ip: Some(bad.into()), ..Default::default() };
+            match update(c, p) {
+                Err(AppError::Validation { field, .. }) => assert_eq!(field, "attackerIp", "{bad}"),
+                o => panic!("{o:?}"),
+            }
+        }
+        for bad in ["0", "65536", "http", "-1", "80.5"] {
+            let p = SettingsPatch { listener_port: Some(bad.into()), ..Default::default() };
+            match update(c, p) {
+                Err(AppError::Validation { field, .. }) => assert_eq!(field, "listenerPort", "{bad}"),
+                o => panic!("{o:?}"),
+            }
+        }
+        let s = update(c, SettingsPatch { attacker_ip: Some(" 10.10.14.3 ".into()), listener_port: Some("4444".into()), ..Default::default() }).unwrap();
+        assert_eq!((s.attacker_ip.as_str(), s.listener_port.as_str()), ("10.10.14.3", "4444"));
+        // other settings untouched; a patch without the keys keeps them
+        assert_eq!(s.auto_lock_minutes, 30);
+        let s = update(c, SettingsPatch { auto_lock_minutes: Some(10), ..Default::default() }).unwrap();
+        assert_eq!((s.attacker_ip.as_str(), s.listener_port.as_str()), ("10.10.14.3", "4444"));
+        // blank clears
+        let s = update(c, SettingsPatch { attacker_ip: Some("  ".into()), listener_port: Some("".into()), ..Default::default() }).unwrap();
+        assert_eq!((s.attacker_ip.as_str(), s.listener_port.as_str()), ("", ""));
+        assert!(serde_json::to_value(&s).unwrap().get("attackerIp").is_some());
     }
 }

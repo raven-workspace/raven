@@ -23,7 +23,7 @@ function mount() {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"] });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "" });
   m.backupsList.mockResolvedValue([
     { file: "a.bak", reason: "daily", createdAt: 1_700_000_000_000, sizeBytes: 1_258_291 },
   ]);
@@ -38,7 +38,7 @@ describe("settings", () => {
 
   it("saves auto-lock minutes on blur", async () => {
     const user = userEvent.setup();
-    m.settingsUpdate.mockResolvedValue({ autoLockMinutes: 10, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"] });
+    m.settingsUpdate.mockResolvedValue({ autoLockMinutes: 10, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "" });
     mount();
     const input = await screen.findByLabelText("Auto-lock (minutes)");
     await user.clear(input);

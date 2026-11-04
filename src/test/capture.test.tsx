@@ -31,7 +31,7 @@ const E1: Engagement = {
   createdAt: 1,
   updatedAt: 1,
   lastActivityAt: null,
-  lastRanOn: "Kali (VM)",
+  lastRanOn: "Kali (VM)", msfHostId: null,
 };
 
 function host(over: Partial<Host> & Pick<Host, "id" | "name">): Host {
@@ -40,7 +40,7 @@ function host(over: Partial<Host> & Pick<Host, "id" | "name">): Host {
     ip: null,
     os: null,
     boardColumn: "enumerate",
-    boardManual: false,
+    boardManual: false, dualHomed: false, boardDerived: null,
     access: "none",
     createdAt: 1,
     updatedAt: 1,
@@ -113,7 +113,7 @@ beforeEach(() => {
   m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30,
     backupRetention: 14,
-    machines: ["Kali (VM)", "Docker build", "Mac"],
+    machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "",
   });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementGet.mockResolvedValue(E1);

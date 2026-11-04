@@ -6,7 +6,7 @@ use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 
 const COLS: &str = "id, name, kind, client, sub_label, scope_cidrs, domain, starts_at, ends_at, \
-                    timebox_start, timebox_minutes, status, created_at, updated_at, last_activity_at, last_ran_on";
+                    timebox_start, timebox_minutes, status, created_at, updated_at, last_activity_at, last_ran_on, msf_host_id";
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,6 +27,8 @@ pub struct Engagement {
     pub updated_at: i64,
     pub last_activity_at: Option<i64>,
     pub last_ran_on: Option<String>,
+    /// The host that holds the Metasploit lock, if any.
+    pub msf_host_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -123,6 +125,7 @@ fn from_row(r: &Row) -> rusqlite::Result<Engagement> {
         updated_at: r.get(13)?,
         last_activity_at: r.get(14)?,
         last_ran_on: r.get(15)?,
+        msf_host_id: r.get(16)?,
     })
 }
 
@@ -194,6 +197,13 @@ pub fn set_last_ran_on(conn: &Connection, id: &str, value: Option<&str>) -> AppR
         return Err(AppError::NotFound);
     }
     Ok(())
+}
+
+/// Sets or clears the Metasploit lock. The host must belong to the engagement.
+pub fn set_msf_host(conn: &Connection, id: &str, host_id: Option<&str>) -> AppResult<Engagement> {
+    crate::notes::check_scope(conn, id, host_id)?;
+    conn.execute("UPDATE engagements SET msf_host_id = ?2, updated_at = ?3 WHERE id = ?1", params![id, host_id, system_now_ms()])?;
+    get(conn, id)
 }
 
 /// Per-engagement host and flag progress. `flags_total` is 2 per host (local + proof).
@@ -434,5 +444,40 @@ mod tests {
         set_last_ran_on(c, &e.id, None).unwrap();
         assert_eq!(get(c, &e.id).unwrap().last_ran_on, None);
         assert_eq!(set_last_ran_on(c, "nope", None), Err(AppError::NotFound));
+    }
+
+    #[test]
+    fn msf_lock_set_clear_and_foreign_host_rejected() {
+        use crate::hosts::{self, HostInput};
+        let dir = tempfile::tempdir().unwrap();
+        let mut v = crate::vault::Vault::new(crate::paths::DataPaths::for_root(dir.path().to_path_buf()));
+        v.create_for_test("correct horse battery").unwrap();
+        let c = v.conn().unwrap();
+        let mk = || EngagementInput {
+            name: "lab".into(),
+            kind: "lab".into(),
+            client: None,
+            sub_label: None,
+            scope_cidrs: vec![],
+            domain: None,
+            starts_at: None,
+            ends_at: None,
+            timebox_start: None,
+            timebox_minutes: None,
+        };
+        let hin = |ip: &str| HostInput { name: ip.into(), ip: Some(ip.into()), os: None, access: None, dual_homed: None };
+        let e = create(c, mk()).unwrap();
+        let e2 = create(c, mk()).unwrap();
+        assert_eq!(e.msf_host_id, None);
+        let h = hosts::create(c, &e.id, hin("10.0.0.5")).unwrap();
+        let foreign = hosts::create(c, &e2.id, hin("10.0.0.5")).unwrap();
+        assert_eq!(set_msf_host(c, &e.id, Some(&h.id)).unwrap().msf_host_id.as_deref(), Some(h.id.as_str()));
+        assert_eq!(get(c, &e.id).unwrap().msf_host_id.as_deref(), Some(h.id.as_str()));
+        assert_eq!(set_msf_host(c, &e.id, Some(&foreign.id)), Err(AppError::NotFound));
+        assert_eq!(set_msf_host(c, &e.id, Some("nope")), Err(AppError::NotFound));
+        assert_eq!(get(c, &e.id).unwrap().msf_host_id.as_deref(), Some(h.id.as_str()));
+        assert_eq!(set_msf_host(c, &e.id, None).unwrap().msf_host_id, None);
+        assert_eq!(set_msf_host(c, "nope", None), Err(AppError::NotFound));
+        assert!(serde_json::to_value(&e).unwrap().get("msfHostId").is_some());
     }
 }
