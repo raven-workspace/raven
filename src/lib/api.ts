@@ -3,6 +3,14 @@ import type { BackupInfo } from "../types/backup";
 import type { ConfirmInput, ScanPort, Service, ServiceInput } from "../types/service";
 import type { ChecklistItem, ChecklistItemInput } from "../types/checklist";
 import type { Attachment, LogEntry, LogEntryInput, Progress } from "../types/log";
+import type {
+  FailedAttempt,
+  FailedAttemptInput,
+  Finding,
+  FindingFile,
+  FindingFileInput,
+  FindingInput,
+} from "../types/findings";
 import type { Note, RuledOut, RuledOutInput } from "../types/notes";
 import type {
   AccessGrant,
@@ -135,6 +143,24 @@ export const api = {
   accessGrantCreate: (engagementId: string, input: AccessGrantInput) =>
     call<AccessGrant>("access_grant_create", { engagementId, input }),
   accessGrantDelete: (id: string) => call<null>("access_grant_delete", { id }),
+  findingsList: (engagementId: string) => call<Finding[]>("findings_list", { engagementId }),
+  findingCreate: (engagementId: string, input: FindingInput) =>
+    call<Finding>("finding_create", { engagementId, input }),
+  findingUpdate: (id: string, input: FindingInput) => call<Finding>("finding_update", { id, input }),
+  findingDelete: (id: string) => call<null>("finding_delete", { id }),
+  findingFilesList: (findingId: string) => call<FindingFile[]>("finding_files_list", { findingId }),
+  findingFileCreate: (findingId: string, input: FindingFileInput) =>
+    call<FindingFile>("finding_file_create", { findingId, input }),
+  findingFileUpdate: (id: string, input: FindingFileInput) =>
+    call<FindingFile>("finding_file_update", { id, input }),
+  findingFileDelete: (id: string) => call<null>("finding_file_delete", { id }),
+  failedAttemptsList: (engagementId: string) =>
+    call<FailedAttempt[]>("failed_attempts_list", { engagementId }),
+  failedAttemptCreate: (engagementId: string, input: FailedAttemptInput) =>
+    call<FailedAttempt>("failed_attempt_create", { engagementId, input }),
+  failedAttemptUpdate: (id: string, input: FailedAttemptInput) =>
+    call<FailedAttempt>("failed_attempt_update", { id, input }),
+  failedAttemptDelete: (id: string) => call<null>("failed_attempt_delete", { id }),
   attachmentGet: (id: string) => call<Attachment>("attachment_get", { id }),
   engagementsProgress: () => call<Record<string, Progress>>("engagements_progress"),
 };
