@@ -90,7 +90,7 @@ export function EditEntryDialog({ entry, hosts, onClose }: EditEntryDialogProps)
           />
         </Field>
         {entry.content.kind === "note" && (
-          <Field label="Note">
+          <Field label="Text">
             <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} />
           </Field>
         )}

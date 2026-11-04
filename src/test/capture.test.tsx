@@ -103,7 +103,7 @@ async function ready() {
 
 async function openCapture(user: ReturnType<typeof userEvent.setup>) {
   await user.keyboard("l");
-  return screen.findByRole("dialog", { name: "Capture" });
+  return screen.findByRole("dialog", { name: "Add to log" });
 }
 
 beforeEach(() => {
@@ -151,7 +151,7 @@ describe("capture panel", () => {
     await ready();
     const dialog = await openCapture(user);
     expect(within(dialog).getByLabelText("Paste")).toHaveFocus();
-    expect(within(dialog).getByRole("button", { name: "Note" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByRole("button", { name: "Other" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("pasting nmap output fills title, host and services line", async () => {
@@ -241,14 +241,14 @@ describe("capture panel", () => {
     await user.clear(title);
     await user.type(title, "My scan");
     await user.keyboard("{Meta>}4{/Meta}");
-    expect(within(dialog).getByRole("button", { name: "Note" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByRole("button", { name: "Other" })).toHaveAttribute("aria-pressed", "true");
     expect(title).toHaveValue("My scan");
     expect(within(dialog).queryByText("Private · not in reports")).not.toBeInTheDocument();
     // Only ⌘ shortcuts: Ctrl, or ⌘ with Shift, does nothing.
     within(dialog).getByRole("button", { name: /^Private/ }).focus();
     await user.keyboard("{Control>}p{/Control}{Control>}1{/Control}{Meta>}{Shift>}p{/Shift}{/Meta}");
     expect(within(dialog).queryByText("Private · not in reports")).not.toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "Note" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByRole("button", { name: "Other" })).toHaveAttribute("aria-pressed", "true");
     await user.keyboard("{Meta>}p{/Meta}");
     expect(within(dialog).getByText("Private · not in reports")).toBeInTheDocument();
     await user.keyboard("{Meta>}{Enter}{/Meta}");
@@ -273,6 +273,15 @@ describe("capture panel", () => {
     expect(within(dialog).getByLabelText("Paste")).toHaveValue("remember the vhost");
     await user.click(within(dialog).getByRole("button", { name: "Discard" }));
     expect(within(dialog).getByLabelText("Paste")).toHaveValue("");
+  });
+
+  it("the Other kind explains what it is for", async () => {
+    const user = userEvent.setup();
+    mount();
+    await ready();
+    const dialog = await openCapture(user);
+    await user.click(within(dialog).getByRole("button", { name: "Other" }));
+    expect(within(dialog).getByLabelText("Paste")).toHaveAttribute("placeholder", expect.stringMatching(/isn't a command, screenshot, request or flag/));
   });
 
   it("L is ignored while typing in an input", async () => {

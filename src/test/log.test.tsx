@@ -93,7 +93,7 @@ describe("log", () => {
     expect(titles()[1]).toMatch(/nmap scan/);
     expect(titles()[2]).toMatch(/older note/);
     expect(screen.getByText("09:06")).toHaveAttribute("title", expect.stringContaining("2026"));
-    await pick(user, "Kind", "command");
+    await pick(user, "Kind", "Command");
     expect(rows()).toHaveLength(1);
     await pick(user, "Kind", "All");
     await pick(user, "Host", "No host");
@@ -131,6 +131,16 @@ describe("log", () => {
     mount();
     await user.click(await screen.findByText("local.txt · dc01"));
     expect(screen.getByText(/whoami; hostname/)).toBeInTheDocument();
+  });
+
+  it("a note-kind entry is labelled Other in rows and the Kind filter", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByText("older note");
+    const row = rows().find((li) => li.textContent?.includes("older note"))!;
+    expect(within(row).getByText("Other")).toBeInTheDocument();
+    await pick(user, "Kind", "Other");
+    expect(rows().every((li) => !li.textContent?.includes("nmap scan"))).toBe(true);
   });
 
   it("expanding a command entry shows blocks and observations", async () => {

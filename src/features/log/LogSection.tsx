@@ -5,6 +5,7 @@ import { useParams } from "react-router";
 import type { LogKind } from "../../types/log";
 import { Button, EmptyState, Select, labelClass } from "../../ui";
 import { useHosts } from "../hosts/queries";
+import { KIND_LABELS } from "./kindLabels";
 import { LogEntryRow } from "./LogEntryRow";
 import { useLog } from "./queries";
 
@@ -52,7 +53,7 @@ export function LogSection() {
         </div>
         <div className="flex items-center gap-1.5">
           <span className={labelClass}>Kind</span>
-          <Select aria-label="Kind" className={sel} value={kind} onValueChange={setKind} options={[{ value: "all", label: "All" }, ...KINDS.map((k) => ({ value: k, label: k }))]} />
+          <Select aria-label="Kind" className={sel} value={kind} onValueChange={setKind} options={[{ value: "all", label: "All" }, ...KINDS.map((k) => ({ value: k, label: KIND_LABELS[k] }))]} />
         </div>
         <div className="flex items-center gap-1.5">
           <span className={labelClass}>Ran on</span>

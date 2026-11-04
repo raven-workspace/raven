@@ -1,5 +1,6 @@
 import { buildDraft, detectKind, findFlagInPaste, flagTitle, screenshotFileName, type CaptureDraft, type DraftInput } from "../../engines/capture";
 import { OS_LABELS } from "../hosts/columns";
+import { KIND_LABELS } from "../log/kindLabels";
 import type { BoardColumn, Host, HostOs } from "../../types/host";
 import type { FlagKind, LogContent, LogKind } from "../../types/log";
 import type { CaptureEdits } from "./saveCapture";
@@ -9,7 +10,7 @@ export const KINDS: { kind: LogKind; label: string }[] = [
   { kind: "command", label: "Command" },
   { kind: "screenshot", label: "Screenshot" },
   { kind: "http", label: "HTTP" },
-  { kind: "note", label: "Note" },
+  { kind: "note", label: KIND_LABELS.note },
   { kind: "flag", label: "Flag" },
 ];
 

@@ -182,7 +182,7 @@ describe("host view", () => {
     mount();
     await screen.findByText("older on dc01");
     await user.keyboard("l");
-    const dialog = await screen.findByRole("dialog", { name: "Capture" });
+    const dialog = await screen.findByRole("dialog", { name: "Add to log" });
     expect(within(within(dialog).getByRole("group", { name: "Hosts" })).getByText("dc01")).toBeInTheDocument();
   });
 

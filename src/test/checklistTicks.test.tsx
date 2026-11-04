@@ -76,7 +76,7 @@ async function openCapture(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByRole("navigation", { name: "Engagement" });
   await screen.findAllByText("dc01");
   await user.keyboard("l");
-  return screen.findByRole("dialog", { name: "Capture" });
+  return screen.findByRole("dialog", { name: "Add to log" });
 }
 
 async function saveCapture(user: ReturnType<typeof userEvent.setup>) {

@@ -7,7 +7,7 @@ const PLACEHOLDER: Record<LogKind, string> = {
   command: "Paste a terminal block",
   screenshot: "Paste an image (⌘V)",
   http: "Paste a request (and response)",
-  note: "Write or paste a note",
+  note: "Anything that isn't a command, screenshot, request or flag: e.g. read the exploit source, CVE-2020-13151 applies (UDF enabled)",
   flag: "Flag value",
 };
 

@@ -249,4 +249,20 @@ describe("open threads", () => {
     expect(ta.selectionStart).toBe(5);
     await vi.waitFor(() => expect(m.noteSave).toHaveBeenCalledWith("e1", null, "one\ntwo\nthree", false), { timeout: 2000 });
   });
+
+  it("⌘/ works on non-US layouts: the physical slash key, or / typed with Shift", async () => {
+    const user = userEvent.setup();
+    const { ta } = await openPanel(user, "/e/e1");
+    fireEvent.change(ta, { target: { value: "one" } });
+    ta.setSelectionRange(1, 1);
+    // Canadian CSA: the key right of "." types "é", but it is the US slash key.
+    fireEvent.keyDown(ta, { key: "é", code: "Slash", metaKey: true });
+    expect(ta).toHaveValue("? one");
+    // A layout where "/" needs Shift.
+    fireEvent.keyDown(ta, { key: "/", code: "Digit7", metaKey: true, shiftKey: true });
+    expect(ta).toHaveValue("one");
+    // ⌘? (Shift on the US slash key) stays free for macOS Help.
+    fireEvent.keyDown(ta, { key: "?", code: "Slash", metaKey: true, shiftKey: true });
+    expect(ta).toHaveValue("one");
+  });
 });

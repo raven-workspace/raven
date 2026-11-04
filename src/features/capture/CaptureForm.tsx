@@ -180,7 +180,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
     <div className="flex min-h-0 flex-1 flex-col" onKeyDown={onKeyDown}>
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-4 pt-3.5 pb-3">
         <div className="flex min-w-0 items-center gap-2">
-          <RD.Title className="m-0 text-[15px] font-semibold tracking-[-0.01em] text-fg">Capture</RD.Title>
+          <RD.Title className="m-0 text-[15px] font-semibold tracking-[-0.01em] text-fg">Add to log</RD.Title>
           {pd.private && <Chip>Private · not in reports</Chip>}
         </div>
         <RD.Close aria-label="Close" className="shrink-0 rounded-sm border border-transparent p-0.5 hover:border-line-2">

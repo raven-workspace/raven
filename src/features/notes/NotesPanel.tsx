@@ -53,7 +53,7 @@ export function NotesPanel({ engagement, hostId }: { engagement: Engagement; hos
       if (e.key === "Escape") {
         e.preventDefault();
         close();
-      } else if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key === "/") {
+      } else if ((e.metaKey || e.ctrlKey) && !e.altKey && isSlashChord(e)) {
         const ta = textRef.current;
         if (!ta || e.target !== ta || ta.readOnly) return;
         e.preventDefault();
@@ -225,4 +225,13 @@ function Segment({ on, disabled, onClick, children }: { on: boolean; disabled?: 
       {children}
     </button>
   );
+}
+
+/**
+ * ⌘/ on any layout: the character "/" (some layouts need Shift for it), or the physical key where US
+ * keyboards have "/" (Canadian CSA types "é" there). Shift on that physical key is ⌘?, left to macOS Help.
+ */
+function isSlashChord(e: KeyboardEvent): boolean {
+  if (e.key === "/") return true;
+  return e.code === "Slash" && !e.shiftKey;
 }
