@@ -6,6 +6,7 @@
 use crate::backup::{self, BackupInfo};
 use crate::engagements::{self, Engagement, EngagementInput};
 use crate::hosts::{self, Host, HostInput};
+use crate::services::{self, ConfirmInput, ScanPort, Service, ServiceInput};
 use crate::error::{AppError, AppResult};
 use crate::settings::{self, Settings, SettingsPatch};
 use crate::vault::Vault;
@@ -196,6 +197,41 @@ pub async fn host_move(app: AppHandle, id: String, column: String) -> AppResult<
 #[tauri::command]
 pub async fn host_delete(app: AppHandle, id: String) -> AppResult<()> {
     with_vault(app, move |v| hosts::delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn services_list(app: AppHandle, host_id: String) -> AppResult<Vec<Service>> {
+    with_vault(app, move |v| services::list(v.conn()?, &host_id)).await
+}
+
+#[tauri::command]
+pub async fn services_upsert_scan(app: AppHandle, host_id: String, ports: Vec<ScanPort>) -> AppResult<Vec<Service>> {
+    with_vault(app, move |v| services::upsert_scan(v.conn()?, &host_id, &ports)).await
+}
+
+#[tauri::command]
+pub async fn service_create(app: AppHandle, host_id: String, input: ServiceInput) -> AppResult<Service> {
+    with_vault(app, move |v| services::create(v.conn()?, &host_id, input)).await
+}
+
+#[tauri::command]
+pub async fn service_update(app: AppHandle, id: String, input: ServiceInput) -> AppResult<Service> {
+    with_vault(app, move |v| services::update(v.conn()?, &id, input)).await
+}
+
+#[tauri::command]
+pub async fn service_confirm(app: AppHandle, id: String, input: ConfirmInput) -> AppResult<Service> {
+    with_vault(app, move |v| services::confirm(v.conn()?, &id, input)).await
+}
+
+#[tauri::command]
+pub async fn service_unconfirm(app: AppHandle, id: String) -> AppResult<Service> {
+    with_vault(app, move |v| services::unconfirm(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn service_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| services::delete(v.conn()?, &id)).await
 }
 
 #[cfg(test)]

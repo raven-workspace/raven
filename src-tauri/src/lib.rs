@@ -5,6 +5,7 @@ pub mod error;
 pub mod hosts;
 pub mod migrations;
 pub mod paths;
+pub mod services;
 pub mod settings;
 pub mod vault;
 
@@ -41,6 +42,13 @@ pub fn run() {
             commands::host_update,
             commands::host_move,
             commands::host_delete,
+            commands::services_list,
+            commands::services_upsert_scan,
+            commands::service_create,
+            commands::service_update,
+            commands::service_confirm,
+            commands::service_unconfirm,
+            commands::service_delete,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

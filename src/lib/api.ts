@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { BackupInfo } from "../types/backup";
+import type { ConfirmInput, ScanPort, Service, ServiceInput } from "../types/service";
 import type { Host, HostInput, BoardColumn } from "../types/host";
 import type { Engagement, EngagementInput, EngagementStatus } from "../types/engagement";
 import { RavenError } from "../types/errors";
@@ -48,6 +49,17 @@ export const api = {
   hostUpdate: (id: string, input: HostInput) => call<Host>("host_update", { id, input }),
   hostMove: (id: string, column: BoardColumn) => call<Host>("host_move", { id, column }),
   hostDelete: (id: string) => call<null>("host_delete", { id }),
+
+  servicesList: (hostId: string) => call<Service[]>("services_list", { hostId }),
+  servicesUpsertScan: (hostId: string, ports: ScanPort[]) =>
+    call<Service[]>("services_upsert_scan", { hostId, ports }),
+  serviceCreate: (hostId: string, input: ServiceInput) =>
+    call<Service>("service_create", { hostId, input }),
+  serviceUpdate: (id: string, input: ServiceInput) => call<Service>("service_update", { id, input }),
+  serviceConfirm: (id: string, input: ConfirmInput) =>
+    call<Service>("service_confirm", { id, input }),
+  serviceUnconfirm: (id: string) => call<Service>("service_unconfirm", { id }),
+  serviceDelete: (id: string) => call<null>("service_delete", { id }),
 };
 
 export type Api = typeof api;
