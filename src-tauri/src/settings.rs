@@ -1,12 +1,11 @@
 //! App settings stored as key/value text in the `settings` table.
 
-use crate::backup::read_retention;
+use crate::backup::{read_retention, RETENTION_KEY};
 use crate::error::{AppError, AppResult};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
 const AUTO_LOCK_KEY: &str = "auto_lock_minutes";
-const RETENTION_KEY: &str = "backup_retention";
 const DEFAULT_AUTO_LOCK: u32 = 30;
 const AUTO_LOCK_RANGE: std::ops::RangeInclusive<u32> = 1..=240;
 const RETENTION_RANGE: std::ops::RangeInclusive<u32> = 1..=200;

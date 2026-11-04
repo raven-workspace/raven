@@ -61,12 +61,12 @@ fn valid_cidr(s: &str) -> bool {
         None => (s, None),
     };
     if let Some(p) = prefix
-        && (p.is_empty() || p.len() > 2 || !p.bytes().all(|b| b.is_ascii_digit()) || p.parse::<u8>().map_or(true, |n| n > 32)) {
+        && (p.is_empty() || p.len() > 2 || (p.len() > 1 && p.starts_with('0')) || !p.bytes().all(|b| b.is_ascii_digit()) || p.parse::<u8>().map_or(true, |n| n > 32)) {
             return false;
         }
     let parts: Vec<&str> = ip.split('.').collect();
     parts.len() == 4
-        && parts.iter().all(|o| !o.is_empty() && o.len() <= 3 && o.bytes().all(|b| b.is_ascii_digit()) && o.parse::<u16>().is_ok_and(|n| n <= 255))
+        && parts.iter().all(|o| !o.is_empty() && o.len() <= 3 && !(o.len() > 1 && o.starts_with('0')) && o.bytes().all(|b| b.is_ascii_digit()) && o.parse::<u16>().is_ok_and(|n| n <= 255))
 }
 
 fn opt_trim(v: &Option<String>) -> Option<String> {
@@ -253,14 +253,15 @@ mod tests {
     fn create_rejects_invalid_cidr() {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
-        for bad in ["10.0.0.0/33", "10.0.0/24", "300.1.1.1", "a.b.c.d", "10.0.0.1/", "10.0.0.1/-1"] {
+        for bad in ["10.0.0.0/33", "10.0.0/24", "300.1.1.1", "a.b.c.d", "10.0.0.1/", "10.0.0.1/-1", "010.0.0.1", "10.0.0.0/08", "10.0.0.0/ 24", "256.0.0.1"] {
             let mut i = input("x", "lab");
             i.scope_cidrs = vec![bad.into()];
             assert_eq!(field(create(c, i)), "scopeCidrs", "{bad}");
         }
         let mut i = input("x", "lab");
-        i.scope_cidrs = vec!["10.0.0.0/24".into(), "10.0.0.5".into()];
-        assert!(create(c, i).is_ok());
+        i.scope_cidrs = vec!["10.0.0.0/24".into(), "10.0.0.5".into(), " 10.0.0.1".into(), "0.0.0.0/0".into()];
+        let e = create(c, i).unwrap();
+        assert_eq!(e.scope_cidrs[2], "10.0.0.1");
     }
 
     #[test]

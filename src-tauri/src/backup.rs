@@ -14,7 +14,7 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 pub const DEFAULT_RETENTION: i64 = 14;
-const RETENTION_KEY: &str = "backup_retention";
+pub(crate) const RETENTION_KEY: &str = "backup_retention";
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 const PREFIX: &str = "raven-";
 
