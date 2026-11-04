@@ -8,7 +8,11 @@ export function useServices(hostId: string) {
 
 export function useServiceMutations(hostId: string) {
   const qc = useQueryClient();
-  const onSuccess = () => void qc.invalidateQueries({ queryKey: ["services", hostId] });
+  const onSuccess = () => {
+    void qc.invalidateQueries({ queryKey: ["services", hostId] });
+    // The engagement-wide list (`useEngagementServices`) holds this host's services too.
+    void qc.invalidateQueries({ queryKey: ["services", "engagement"] });
+  };
   return {
     create: useMutation({ mutationFn: (input: ServiceInput) => api.serviceCreate(hostId, input), onSuccess }),
     update: useMutation({

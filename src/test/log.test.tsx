@@ -68,6 +68,9 @@ beforeEach(() => {
     entry({ id: "c", title: "secret thing", at: T + 120_000, private: true, returnedNothing: true }),
   ];
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+  m.servicesListEngagement.mockResolvedValue([]);
+  m.checklistList.mockResolvedValue([]);
+  m.checklistPut.mockResolvedValue([]);
   m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "" });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementGet.mockResolvedValue(E1);

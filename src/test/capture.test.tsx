@@ -110,6 +110,9 @@ beforeEach(() => {
   vi.resetAllMocks();
   useCaptureStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+  m.servicesListEngagement.mockResolvedValue([]);
+  m.checklistList.mockResolvedValue([]);
+  m.checklistPut.mockResolvedValue([]);
   m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30,
     backupRetention: 14,
