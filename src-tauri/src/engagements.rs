@@ -6,7 +6,7 @@ use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 
 const COLS: &str = "id, name, kind, client, sub_label, scope_cidrs, domain, starts_at, ends_at, \
-                    timebox_start, timebox_minutes, status, created_at, updated_at, last_activity_at";
+                    timebox_start, timebox_minutes, status, created_at, updated_at, last_activity_at, last_ran_on";
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,6 +26,7 @@ pub struct Engagement {
     pub created_at: i64,
     pub updated_at: i64,
     pub last_activity_at: Option<i64>,
+    pub last_ran_on: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -55,7 +56,7 @@ fn invalid(field: &str, message: &str) -> AppError {
     AppError::Validation { field: field.into(), message: message.into() }
 }
 
-fn valid_cidr(s: &str) -> bool {
+pub(crate) fn valid_cidr(s: &str) -> bool {
     let (ip, prefix) = match s.split_once('/') {
         Some((ip, p)) => (ip, Some(p)),
         None => (s, None),
@@ -121,6 +122,7 @@ fn from_row(r: &Row) -> rusqlite::Result<Engagement> {
         created_at: r.get(12)?,
         updated_at: r.get(13)?,
         last_activity_at: r.get(14)?,
+        last_ran_on: r.get(15)?,
     })
 }
 
@@ -144,7 +146,9 @@ pub fn create(conn: &Connection, input: EngagementInput) -> AppResult<Engagement
     let i = normalise(input)?;
     let id = uuid::Uuid::new_v4().to_string();
     let now = system_now_ms();
-    conn.execute(
+    // The scope sync shares the transaction: both land or neither does.
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
         "INSERT INTO engagements (id, name, kind, client, sub_label, scope_cidrs, domain, starts_at, ends_at, \
          timebox_start, timebox_minutes, status, created_at, updated_at) \
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,'active',?12,?12)",
@@ -154,12 +158,20 @@ pub fn create(conn: &Connection, input: EngagementInput) -> AppResult<Engagement
             i.domain, i.starts_at, i.ends_at, i.timebox_start, i.timebox_minutes, now
         ],
     )?;
+    crate::hosts::sync_scope(&tx, &id, &i.scope_cidrs)?;
+    tx.commit()?;
     get(conn, &id)
 }
 
 pub fn update(conn: &Connection, id: &str, input: EngagementInput) -> AppResult<Engagement> {
     let i = normalise(input)?;
-    let n = conn.execute(
+    let tx = conn.unchecked_transaction()?;
+    let previous: Vec<String> = match tx.query_row("SELECT scope_cidrs FROM engagements WHERE id = ?1", params![id], |r| r.get::<_, String>(0)) {
+        Ok(json) => serde_json::from_str(&json).unwrap_or_default(),
+        Err(rusqlite::Error::QueryReturnedNoRows) => return Err(AppError::NotFound),
+        Err(e) => return Err(e.into()),
+    };
+    let n = tx.execute(
         "UPDATE engagements SET name=?2, kind=?3, client=?4, sub_label=?5, scope_cidrs=?6, domain=?7, \
          starts_at=?8, ends_at=?9, timebox_start=?10, timebox_minutes=?11, updated_at=?12 WHERE id=?1",
         params![
@@ -171,7 +183,53 @@ pub fn update(conn: &Connection, id: &str, input: EngagementInput) -> AppResult<
     if n == 0 {
         return Err(AppError::NotFound);
     }
+    crate::hosts::sync_scope_added(&tx, id, &previous, &i.scope_cidrs)?;
+    tx.commit()?;
     get(conn, id)
+}
+
+/// Remembers the machine label last used for a log entry (the capture panel's default).
+pub fn set_last_ran_on(conn: &Connection, id: &str, value: Option<&str>) -> AppResult<()> {
+    if conn.execute("UPDATE engagements SET last_ran_on = ?2 WHERE id = ?1", params![id, value])? == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok(())
+}
+
+/// Per-engagement host and flag progress. `flags_total` is 2 per host (local + proof).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Progress {
+    pub hosts_total: i64,
+    pub hosts_rooted: i64,
+    pub flags_found: i64,
+    pub flags_total: i64,
+}
+
+pub fn progress_all(conn: &Connection) -> AppResult<std::collections::HashMap<String, Progress>> {
+    let mut out = std::collections::HashMap::new();
+    let mut st = conn.prepare(
+        "SELECT e.id,
+           (SELECT COUNT(*) FROM hosts h WHERE h.engagement_id = e.id),
+           (SELECT COUNT(DISTINCT lh.host_id) FROM log_entry_hosts lh JOIN log_entries l ON l.id = lh.entry_id
+              WHERE l.engagement_id = e.id AND l.kind = 'flag' AND json_extract(l.content, '$.flagKind') = 'proof'),
+           (SELECT COUNT(*) FROM (SELECT DISTINCT lh.host_id, json_extract(l.content, '$.flagKind')
+              FROM log_entry_hosts lh JOIN log_entries l ON l.id = lh.entry_id
+              WHERE l.engagement_id = e.id AND l.kind = 'flag'))
+         FROM engagements e",
+    )?;
+    let rows = st.query_map([], |r| {
+        let total: i64 = r.get(1)?;
+        Ok((
+            r.get::<_, String>(0)?,
+            Progress { hosts_total: total, hosts_rooted: r.get(2)?, flags_found: r.get(3)?, flags_total: total * 2 },
+        ))
+    })?;
+    for row in rows {
+        let (id, p) = row?;
+        out.insert(id, p);
+    }
+    Ok(out)
 }
 
 pub fn set_status(conn: &Connection, id: &str, status: &str) -> AppResult<Engagement> {
@@ -240,6 +298,7 @@ mod tests {
         assert_eq!(e.id.len(), 36);
         assert_eq!(e.created_at, e.updated_at);
         assert_eq!(e.last_activity_at, None);
+        assert_eq!(e.last_ran_on, None);
         assert_eq!(e.timebox_minutes, Some(1440));
         let all = list(c).unwrap();
         assert_eq!(all, vec![e.clone()]);
@@ -312,6 +371,27 @@ mod tests {
     }
 
     #[test]
+    fn deleted_host_stays_deleted_on_engagement_save() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let mut i = input("a", "lab");
+        i.scope_cidrs = vec!["10.0.0.5".into(), "10.0.0.0/24".into()];
+        let e = create(c, i.clone()).unwrap();
+        let hosts = crate::hosts::list(c, &e.id).unwrap();
+        assert_eq!(hosts.len(), 1, "create syncs every single-IP scope entry");
+        crate::hosts::delete(c, &hosts[0].id).unwrap();
+        // Saving again with the same scope (say, a rename) must not bring the deleted host back.
+        i.name = "renamed".into();
+        update(c, &e.id, i.clone()).unwrap();
+        assert!(crate::hosts::list(c, &e.id).unwrap().is_empty());
+        // A newly added IP still becomes a host.
+        i.scope_cidrs.push("10.0.0.6/32".into());
+        update(c, &e.id, i).unwrap();
+        let ips: Vec<_> = crate::hosts::list(c, &e.id).unwrap().into_iter().filter_map(|h| h.ip).collect();
+        assert_eq!(ips, ["10.0.0.6"]);
+    }
+
+    #[test]
     fn list_orders_active_first() {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
@@ -340,5 +420,19 @@ mod tests {
         let e = create(c, input("a", "lab")).unwrap();
         delete(c, &e.id).unwrap();
         assert_eq!(get(c, &e.id), Err(AppError::NotFound));
+    }
+
+    #[test]
+    fn last_ran_on_round_trips() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = create(c, input("a", "lab")).unwrap();
+        set_last_ran_on(c, &e.id, Some("Mac")).unwrap();
+        let g = get(c, &e.id).unwrap();
+        assert_eq!(g.last_ran_on.as_deref(), Some("Mac"));
+        assert_eq!(serde_json::to_value(&g).unwrap()["lastRanOn"], "Mac");
+        set_last_ran_on(c, &e.id, None).unwrap();
+        assert_eq!(get(c, &e.id).unwrap().last_ran_on, None);
+        assert_eq!(set_last_ran_on(c, "nope", None), Err(AppError::NotFound));
     }
 }

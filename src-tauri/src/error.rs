@@ -12,6 +12,8 @@ pub enum AppError {
     NoVault,
     #[error("not found")]
     NotFound,
+    #[error("the database file is damaged")]
+    Damaged,
     #[error("{message}")]
     Validation { field: String, message: String },
     #[error("io error: {0}")]
@@ -30,6 +32,7 @@ impl AppError {
             AppError::VaultExists => "vault_exists",
             AppError::NoVault => "no_vault",
             AppError::NotFound => "not_found",
+            AppError::Damaged => "damaged",
             AppError::Validation { .. } => "validation",
             AppError::Io(_) => "io",
             AppError::Db(_) => "db",
@@ -80,6 +83,13 @@ mod tests {
         let v = serde_json::to_value(AppError::Locked).unwrap();
         assert_eq!(v["code"], "locked");
         assert!(v.get("field").is_none());
+    }
+
+    #[test]
+    fn damaged_code_and_message() {
+        let v = serde_json::to_value(AppError::Damaged).unwrap();
+        assert_eq!(v["code"], "damaged");
+        assert_eq!(v["message"], "the database file is damaged");
     }
 
     #[test]

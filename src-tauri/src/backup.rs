@@ -8,7 +8,7 @@
 
 use crate::error::{AppError, AppResult};
 use crate::paths::DataPaths;
-use crate::vault::{open_keyed, BackupHook, Vault};
+use crate::vault::{is_unreadable, normalize_password, open_keyed, pragma_for, write_private_file, BackupHook, Vault, VaultMeta};
 use rusqlite::{Connection, ErrorCode, OpenFlags};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -338,13 +338,26 @@ pub fn restore(vault: &mut Vault, file: &str) -> AppResult<()> {
     restore_at(vault, file, system_now_ms())
 }
 
-pub fn restore_at(vault: &mut Vault, file: &str, now_ms: i64) -> AppResult<()> {
+fn validate_backup_name(file: &str) -> AppResult<()> {
     if file.is_empty() || file.contains('/') || file.contains('\\') || file.contains("..") || file.contains('\0') {
         return Err(AppError::Validation { field: "file".into(), message: "invalid backup file name".into() });
     }
     if parse_name(file).is_none() {
         return Err(AppError::Validation { field: "file".into(), message: "not a Raven backup file".into() });
     }
+    Ok(())
+}
+
+/// Remove `-journal`/`-wal`/`-shm` files left for `raven.db`: they belong to the replaced database.
+fn remove_stale_journals(paths: &DataPaths) {
+    let db = paths.db.to_string_lossy().into_owned();
+    for suffix in ["-journal", "-wal", "-shm"] {
+        let _ = std::fs::remove_file(format!("{db}{suffix}"));
+    }
+}
+
+pub fn restore_at(vault: &mut Vault, file: &str, now_ms: i64) -> AppResult<()> {
+    validate_backup_name(file)?;
     vault.conn()?; // must be unlocked
     let pragma = vault.key_pragma()?;
     let paths = vault.paths().clone();
@@ -372,14 +385,90 @@ pub fn restore_at(vault: &mut Vault, file: &str, now_ms: i64) -> AppResult<()> {
         take_at(vault, "pre-restore", now_ms)?;
         vault.lock();
         std::fs::rename(&staged, &paths.db)?;
-        // Stale journals belong to the replaced database.
-        let db = paths.db.to_string_lossy().into_owned();
-        for suffix in ["-journal", "-wal", "-shm"] {
-            let _ = std::fs::remove_file(format!("{db}{suffix}"));
+        remove_stale_journals(&paths);
+        Ok(())
+    })();
+    let _ = std::fs::remove_file(&staged);
+    result
+}
+
+/// Restore a backup while locked, for a database Raven can't read (`AppError::Damaged`).
+///
+/// The key comes from the backup's companion `vault.json` (the live one when it has none)
+/// and `password`. A wrong password changes nothing. The live `raven.db` is renamed to
+/// `raven.db.damaged-<ms>` and kept; no pre-restore backup is taken because it can't be
+/// read. The companion meta then replaces `vault.json`. The vault is left locked.
+pub fn restore_locked(vault: &mut Vault, file: &str, password: &str) -> AppResult<()> {
+    restore_locked_at(vault, file, password, system_now_ms())
+}
+
+pub fn restore_locked_at(vault: &mut Vault, file: &str, password: &str, now_ms: i64) -> AppResult<()> {
+    validate_backup_name(file)?;
+    // While unlocked, `restore` is the path: it takes a pre-restore backup first.
+    if vault.is_unlocked() {
+        return Err(AppError::Validation {
+            field: "file".into(),
+            message: "Lock Raven before restoring this way".into(),
+        });
+    }
+    let paths = vault.paths().clone();
+    let src = paths.backups.join(file);
+    if !src.is_file() {
+        return Err(AppError::NotFound);
+    }
+    let companion = paths.backups.join(companion_name(file));
+    let companion = companion.is_file().then_some(companion);
+    let meta = VaultMeta::read(companion.as_deref().unwrap_or(&paths.vault_meta))?;
+    let wrong_password =
+        || AppError::Validation { field: "password".into(), message: "Wrong password for this backup".into() };
+    let key = meta.derive_key(&normalize_password(password))?;
+    let verified = match meta.verifier_matches(&key) {
+        Some(false) => return Err(wrong_password()),
+        Some(true) => true,
+        None => false,
+    };
+    let pragma = pragma_for(&key);
+    drop(key);
+
+    let staged = paths.root.join(format!("raven.db.restore-{}.tmp", uuid::Uuid::new_v4()));
+    let staged_meta = paths.vault_meta.with_extension("json.restore.tmp");
+    let result = (|| -> AppResult<()> {
+        std::fs::copy(&src, &staged)?;
+        restrict(&staged);
+        sync_file(&staged)?;
+        match open_with_pragma(&staged, &pragma) {
+            Ok(_) => {}
+            // The verifier proved the password, so the backup file itself is unreadable.
+            Err(e) if verified && is_unreadable(&e) => {
+                return Err(AppError::Validation { field: "file".into(), message: "This backup is damaged".into() });
+            }
+            Err(rusqlite::Error::SqliteFailure(e, _)) if !verified && e.code == ErrorCode::NotADatabase => {
+                return Err(wrong_password());
+            }
+            Err(e) => return Err(e.into()),
+        }
+        // Prepare the new vault.json before touching anything live, so the swap below is
+        // only renames.
+        if let Some(c) = &companion {
+            write_private_file(&staged_meta, &std::fs::read(c)?)?;
+        }
+        vault.lock();
+        let damaged = paths.root.join(format!("raven.db.damaged-{now_ms}"));
+        if paths.db.exists() {
+            std::fs::rename(&paths.db, &damaged)?;
+        }
+        if let Err(e) = std::fs::rename(&staged, &paths.db) {
+            let _ = std::fs::rename(&damaged, &paths.db);
+            return Err(e.into());
+        }
+        remove_stale_journals(&paths);
+        if companion.is_some() {
+            std::fs::rename(&staged_meta, &paths.vault_meta)?;
         }
         Ok(())
     })();
     let _ = std::fs::remove_file(&staged);
+    let _ = std::fs::remove_file(&staged_meta);
     result
 }
 
@@ -591,7 +680,7 @@ mod tests {
         let (_d, mut v) = setup();
         add_engagement(&v, "A");
         // Make the db look older so unlock migrates it.
-        v.conn().unwrap().execute_batch("PRAGMA user_version = 0; DROP TABLE settings; DROP TABLE engagements; CREATE TABLE old (x INTEGER);").unwrap();
+        v.conn().unwrap().execute_batch("PRAGMA user_version = 0; DROP TABLE attachments; DROP TABLE log_entry_hosts; DROP TABLE services; DROP TABLE log_entries; DROP TABLE hosts; DROP TABLE settings; DROP TABLE engagements; CREATE TABLE old (x INTEGER);").unwrap();
         v.lock();
         assert!(db_files(&v).is_empty());
         let db_before = std::fs::read(&v.paths().db).unwrap();
@@ -614,6 +703,180 @@ mod tests {
         assert_eq!(db_files(&v).len(), 20);
         take_file_level(v.paths(), "pre-migration", T0 + H).unwrap();
         assert_eq!(db_files(&v).len(), 21);
+    }
+
+    use crate::vault::tests::corrupt_db;
+
+    fn root_names(v: &Vault) -> Vec<String> {
+        let mut n: Vec<String> = std::fs::read_dir(&v.paths().root)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        n.sort();
+        n
+    }
+
+    fn wrong_backup_password(r: AppResult<()>) {
+        match r {
+            Err(AppError::Validation { field, message }) => {
+                assert_eq!(field, "password");
+                assert_eq!(message, "Wrong password for this backup");
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn backups_list_works_while_locked() {
+        let (_d, mut v) = setup();
+        let b = take_at(&v, "manual", T0).unwrap();
+        v.lock();
+        let l = crate::commands::backups_list_inner(&v).unwrap();
+        assert_eq!(l.len(), 1);
+        assert_eq!(l[0].file, b.file);
+    }
+
+    #[test]
+    fn restore_locked_replaces_damaged_db_and_keeps_damaged_copy() {
+        let (_d, mut v) = setup();
+        add_engagement(&v, "A");
+        let b = take_at(&v, "manual", T0).unwrap();
+        add_engagement(&v, "B");
+        v.lock();
+        corrupt_db(v.paths());
+        let damaged = std::fs::read(&v.paths().db).unwrap();
+        assert_eq!(v.unlock(PW), Err(AppError::Damaged));
+        restore_locked(&mut v, &b.file, PW).unwrap();
+        assert!(!v.is_unlocked());
+        // The damaged file is kept, byte for byte, next to the new raven.db.
+        let kept: Vec<String> =
+            root_names(&v).into_iter().filter(|n| n.starts_with("raven.db.damaged-")).collect();
+        assert_eq!(kept.len(), 1, "{:?}", root_names(&v));
+        let ms = kept[0].strip_prefix("raven.db.damaged-").unwrap();
+        assert!(!ms.is_empty() && ms.bytes().all(|c| c.is_ascii_digit()), "{}", kept[0]);
+        assert_eq!(std::fs::read(v.paths().root.join(&kept[0])).unwrap(), damaged);
+        // No staged temp left, and no pre-restore backup was taken.
+        assert!(root_names(&v).iter().all(|n| !n.contains(".tmp")), "{:?}", root_names(&v));
+        assert_eq!(db_files(&v), vec![b.file.clone()]);
+        v.unlock(PW).unwrap();
+        assert_eq!(ids(&v), vec!["A"]);
+    }
+
+    #[test]
+    fn restore_locked_uses_the_backup_companion_meta() {
+        // A backup made under another password (different salt) restores with that password.
+        let (_da, mut a) = setup();
+        add_engagement(&a, "A");
+        let ba = take_at(&a, "manual", T0).unwrap();
+        a.lock();
+        let (_db, mut b) = setup();
+        b.lock();
+        std::fs::create_dir_all(&b.paths().backups).unwrap();
+        for f in [ba.file.clone(), companion_name(&ba.file)] {
+            std::fs::copy(a.paths().backups.join(&f), b.paths().backups.join(&f)).unwrap();
+        }
+        corrupt_db(b.paths());
+        restore_locked(&mut b, &ba.file, PW).unwrap();
+        assert_eq!(
+            std::fs::read(&b.paths().vault_meta).unwrap(),
+            std::fs::read(a.paths().backups.join(companion_name(&ba.file))).unwrap()
+        );
+        b.unlock(PW).unwrap();
+        assert_eq!(ids(&b), vec!["A"]);
+    }
+
+    #[test]
+    fn restore_locked_falls_back_to_live_meta_without_companion() {
+        let (_d, mut v) = setup();
+        add_engagement(&v, "A");
+        let b = take_at(&v, "manual", T0).unwrap();
+        std::fs::remove_file(v.paths().backups.join(companion_name(&b.file))).unwrap();
+        v.lock();
+        corrupt_db(v.paths());
+        restore_locked(&mut v, &b.file, PW).unwrap();
+        v.unlock(PW).unwrap();
+        assert_eq!(ids(&v), vec!["A"]);
+    }
+
+    #[test]
+    fn restore_locked_wrong_password_changes_nothing() {
+        let (_d, mut v) = setup();
+        let b = take_at(&v, "manual", T0).unwrap();
+        v.lock();
+        corrupt_db(v.paths());
+        let db_before = std::fs::read(&v.paths().db).unwrap();
+        let meta_before = std::fs::read(&v.paths().vault_meta).unwrap();
+        let names_before = root_names(&v);
+        wrong_backup_password(restore_locked(&mut v, &b.file, "wrong password here"));
+        // A companion without a verifier falls back to opening the backup: still refused.
+        let comp = v.paths().backups.join(companion_name(&b.file));
+        let mut meta: serde_json::Value = serde_json::from_slice(&std::fs::read(&comp).unwrap()).unwrap();
+        meta.as_object_mut().unwrap().remove("verifier");
+        std::fs::write(&comp, serde_json::to_vec(&meta).unwrap()).unwrap();
+        wrong_backup_password(restore_locked(&mut v, &b.file, "wrong password here"));
+        assert!(!v.is_unlocked());
+        assert_eq!(std::fs::read(&v.paths().db).unwrap(), db_before);
+        assert_eq!(std::fs::read(&v.paths().vault_meta).unwrap(), meta_before);
+        assert_eq!(root_names(&v), names_before);
+    }
+
+    #[test]
+    fn restore_locked_refused_while_unlocked() {
+        let (_d, mut v) = setup();
+        add_engagement(&v, "A");
+        let b = take_at(&v, "manual", T0).unwrap();
+        let db_before = std::fs::read(&v.paths().db).unwrap();
+        let names_before = root_names(&v);
+        match restore_locked(&mut v, &b.file, PW) {
+            Err(AppError::Validation { field, message }) => {
+                assert_eq!(field, "file");
+                assert_eq!(message, "Lock Raven before restoring this way");
+            }
+            other => panic!("{other:?}"),
+        }
+        assert!(v.is_unlocked());
+        assert_eq!(ids(&v), vec!["A"]);
+        assert_eq!(std::fs::read(&v.paths().db).unwrap(), db_before);
+        assert_eq!(root_names(&v), names_before);
+    }
+
+    #[test]
+    fn restore_locked_damaged_backup_with_matching_verifier_says_damaged() {
+        let (_d, mut v) = setup();
+        let b = take_at(&v, "manual", T0).unwrap();
+        v.lock();
+        corrupt_db(v.paths());
+        let db_before = std::fs::read(&v.paths().db).unwrap();
+        // Damage the backup file itself (first page zeroed).
+        let bpath = v.paths().backups.join(&b.file);
+        let mut bytes = std::fs::read(&bpath).unwrap();
+        bytes[..4096].fill(0);
+        std::fs::write(&bpath, &bytes).unwrap();
+        let names_before = root_names(&v);
+        match restore_locked(&mut v, &b.file, PW) {
+            Err(AppError::Validation { field, message }) => {
+                assert_eq!(field, "file");
+                assert_eq!(message, "This backup is damaged");
+            }
+            other => panic!("{other:?}"),
+        }
+        // A wrong password on the same backup is still a wrong password.
+        wrong_backup_password(restore_locked(&mut v, &b.file, "wrong password here"));
+        assert_eq!(std::fs::read(&v.paths().db).unwrap(), db_before);
+        assert_eq!(root_names(&v), names_before);
+    }
+
+    #[test]
+    fn restore_locked_validates_file_name() {
+        let (_d, mut v) = setup();
+        v.lock();
+        for bad in ["../x.db", "a/b.db", "..\\x.db", "", "raven-..db", "notes.db"] {
+            match restore_locked(&mut v, bad, PW) {
+                Err(AppError::Validation { field, .. }) => assert_eq!(field, "file"),
+                other => panic!("{bad}: {other:?}"),
+            }
+        }
+        assert_eq!(restore_locked(&mut v, "raven-20200101-000000-manual.db", PW), Err(AppError::NotFound));
     }
 
     #[test]

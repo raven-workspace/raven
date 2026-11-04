@@ -178,6 +178,9 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
       qc.setQueryData(["engagement", saved.id], saved);
       void qc.invalidateQueries({ queryKey: ["engagements"] });
       void qc.invalidateQueries({ queryKey: ["engagement", saved.id] });
+      // The scope may add hosts.
+      void qc.invalidateQueries({ queryKey: ["hosts", saved.id] });
+      void qc.invalidateQueries({ queryKey: ["progress"] });
       onClose();
     },
     onError: (err) => {

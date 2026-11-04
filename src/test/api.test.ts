@@ -44,5 +44,21 @@ describe("api", () => {
     expect(invoke).toHaveBeenCalledWith("settings_update", { patch: { autoLockMinutes: 10 } });
     await api.backupRestore("f.db");
     expect(invoke).toHaveBeenCalledWith("backup_restore", { file: "f.db" });
+    await api.backupRestoreLocked("f.db", "pw");
+    expect(invoke).toHaveBeenCalledWith("backup_restore_locked", { file: "f.db", password: "pw" });
+  });
+
+  it("wraps the host commands", async () => {
+    invoke.mockResolvedValue(null);
+    await api.hostsList("e1");
+    expect(invoke).toHaveBeenCalledWith("hosts_list", { engagementId: "e1" });
+    await api.hostCreate("e1", { name: "web", ip: "10.0.0.5" });
+    expect(invoke).toHaveBeenCalledWith("host_create", { engagementId: "e1", input: { name: "web", ip: "10.0.0.5" } });
+    await api.hostUpdate("h1", { name: "web2" });
+    expect(invoke).toHaveBeenCalledWith("host_update", { id: "h1", input: { name: "web2" } });
+    await api.hostMove("h1", "privesc");
+    expect(invoke).toHaveBeenCalledWith("host_move", { id: "h1", column: "privesc" });
+    await api.hostDelete("h1");
+    expect(invoke).toHaveBeenCalledWith("host_delete", { id: "h1" });
   });
 });

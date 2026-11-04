@@ -4,7 +4,11 @@
 //! unlocked (no daily backup: a brand-new vault has nothing to back up).
 
 use crate::backup::{self, BackupInfo};
-use crate::engagements::{self, Engagement, EngagementInput};
+use crate::engagements::{self, Engagement, EngagementInput, Progress};
+use crate::log::{self, Attachment, LogEntry, LogEntryInput};
+use std::collections::HashMap;
+use crate::hosts::{self, Host, HostInput};
+use crate::services::{self, ConfirmInput, ScanPort, Service, ServiceInput};
 use crate::error::{AppError, AppResult};
 use crate::settings::{self, Settings, SettingsPatch};
 use crate::vault::Vault;
@@ -41,6 +45,10 @@ pub fn vault_unlock_inner(v: &mut Vault, password: &str) -> AppResult<UnlockResu
         daily_backup: o.daily_backup,
         daily_backup_error: o.daily_backup_error,
     })
+}
+
+pub fn backups_list_inner(v: &Vault) -> AppResult<Vec<BackupInfo>> {
+    backup::list(v.paths())
 }
 
 pub fn settings_get_inner(v: &Vault) -> AppResult<Settings> {
@@ -123,7 +131,14 @@ pub async fn backup_now(app: AppHandle) -> AppResult<BackupInfo> {
 
 #[tauri::command]
 pub async fn backups_list(app: AppHandle) -> AppResult<Vec<BackupInfo>> {
-    with_vault(app, |v| backup::list(v.paths())).await
+    with_vault(app, |v| backups_list_inner(v)).await
+}
+
+/// Restore a backup while locked (the live database is damaged). Leaves the vault locked.
+#[tauri::command]
+pub async fn backup_restore_locked(app: AppHandle, file: String, password: String) -> AppResult<()> {
+    let password = zeroize::Zeroizing::new(password);
+    with_vault(app, move |v| backup::restore_locked(v, &file, &password)).await
 }
 
 #[tauri::command]
@@ -159,6 +174,96 @@ pub async fn engagement_set_status(app: AppHandle, id: String, status: String) -
 #[tauri::command]
 pub async fn engagement_delete(app: AppHandle, id: String) -> AppResult<()> {
     with_vault(app, move |v| engagements::delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn hosts_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<Host>> {
+    with_vault(app, move |v| hosts::list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn host_create(app: AppHandle, engagement_id: String, input: HostInput) -> AppResult<Host> {
+    with_vault(app, move |v| hosts::create(v.conn()?, &engagement_id, input)).await
+}
+
+#[tauri::command]
+pub async fn host_update(app: AppHandle, id: String, input: HostInput) -> AppResult<Host> {
+    with_vault(app, move |v| hosts::update(v.conn()?, &id, input)).await
+}
+
+#[tauri::command]
+pub async fn host_move(app: AppHandle, id: String, column: String) -> AppResult<Host> {
+    with_vault(app, move |v| hosts::move_to(v.conn()?, &id, &column)).await
+}
+
+#[tauri::command]
+pub async fn host_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| hosts::delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn services_list(app: AppHandle, host_id: String) -> AppResult<Vec<Service>> {
+    with_vault(app, move |v| services::list(v.conn()?, &host_id)).await
+}
+
+#[tauri::command]
+pub async fn services_upsert_scan(app: AppHandle, host_id: String, ports: Vec<ScanPort>) -> AppResult<Vec<Service>> {
+    with_vault(app, move |v| services::upsert_scan(v.conn()?, &host_id, &ports)).await
+}
+
+#[tauri::command]
+pub async fn service_create(app: AppHandle, host_id: String, input: ServiceInput) -> AppResult<Service> {
+    with_vault(app, move |v| services::create(v.conn()?, &host_id, input)).await
+}
+
+#[tauri::command]
+pub async fn service_update(app: AppHandle, id: String, input: ServiceInput) -> AppResult<Service> {
+    with_vault(app, move |v| services::update(v.conn()?, &id, input)).await
+}
+
+#[tauri::command]
+pub async fn service_confirm(app: AppHandle, id: String, input: ConfirmInput) -> AppResult<Service> {
+    with_vault(app, move |v| services::confirm(v.conn()?, &id, input)).await
+}
+
+#[tauri::command]
+pub async fn service_unconfirm(app: AppHandle, id: String) -> AppResult<Service> {
+    with_vault(app, move |v| services::unconfirm(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn service_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| services::delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn log_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<LogEntry>> {
+    with_vault(app, move |v| log::list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn log_create(app: AppHandle, engagement_id: String, input: LogEntryInput) -> AppResult<LogEntry> {
+    with_vault(app, move |v| log::create(v.conn()?, &engagement_id, input)).await
+}
+
+#[tauri::command]
+pub async fn log_update(app: AppHandle, id: String, input: LogEntryInput) -> AppResult<LogEntry> {
+    with_vault(app, move |v| log::update(v.conn()?, &id, input)).await
+}
+
+#[tauri::command]
+pub async fn log_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| log::delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn attachment_get(app: AppHandle, id: String) -> AppResult<Attachment> {
+    with_vault(app, move |v| log::attachment_get(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn engagements_progress(app: AppHandle) -> AppResult<HashMap<String, Progress>> {
+    with_vault(app, move |v| engagements::progress_all(v.conn()?)).await
 }
 
 #[cfg(test)]

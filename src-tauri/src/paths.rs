@@ -35,18 +35,33 @@ impl DataPaths {
         let paths = DataPaths::for_root(root);
         private_dir(&paths.root)?;
         private_dir(&paths.backups)?;
-        for f in [&paths.db, &paths.vault_meta] {
-            if f.is_file() {
-                set_mode(f, 0o600)?;
-            }
-        }
-        for entry in std::fs::read_dir(&paths.backups)? {
-            let entry = entry?;
-            if entry.file_type()?.is_file() {
-                set_mode(&entry.path(), 0o600)?;
-            }
-        }
+        tighten_existing(&paths, set_mode);
         Ok(paths)
+    }
+}
+
+/// Best-effort 0600 on existing files (db, vault.json, backups). A file we can't chmod
+/// (e.g. owned by another user) is logged and skipped; it must not stop Raven from starting.
+fn tighten_existing(paths: &DataPaths, setter: impl Fn(&Path, u32) -> AppResult<()>) {
+    let try_set = |f: &Path| {
+        if let Err(e) = setter(f, 0o600) {
+            eprintln!("raven: could not tighten permissions on {}: {e}", f.display());
+        }
+    };
+    for f in [&paths.db, &paths.vault_meta] {
+        if f.is_file() {
+            try_set(f);
+        }
+    }
+    match std::fs::read_dir(&paths.backups) {
+        Ok(rd) => {
+            for entry in rd.flatten() {
+                if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+                    try_set(&entry.path());
+                }
+            }
+        }
+        Err(e) => eprintln!("raven: could not list backups: {e}"),
     }
 }
 
@@ -126,5 +141,35 @@ mod tests {
         assert_eq!(mode(&p.backups), 0o700);
         assert_eq!(mode(&p.db), 0o600);
         assert_eq!(mode(&bk), 0o600);
+    }
+
+    #[test]
+    fn prepare_tolerates_unchmoddable_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("raven-dev");
+        std::fs::create_dir_all(root.join("backups")).unwrap();
+        std::fs::write(root.join("raven.db"), b"x").unwrap();
+        std::fs::write(root.join("vault.json"), b"x").unwrap();
+        let paths = DataPaths::for_root(root);
+        let seen = std::cell::RefCell::new(Vec::new());
+        tighten_existing(&paths, |p, _| {
+            seen.borrow_mut().push(p.to_path_buf());
+            if p.ends_with("raven.db") {
+                Err(AppError::Io("denied".into()))
+            } else {
+                Ok(())
+            }
+        });
+        // The failing file did not stop the next one.
+        assert_eq!(seen.borrow().len(), 2);
+        assert!(DataPaths::prepare(paths.root.clone()).is_ok());
+    }
+
+    #[test]
+    fn prepare_still_fails_when_root_cannot_be_created() {
+        let dir = tempfile::tempdir().unwrap();
+        let blocker = dir.path().join("file");
+        std::fs::write(&blocker, b"x").unwrap();
+        assert!(DataPaths::prepare(blocker.join("raven-dev")).is_err());
     }
 }

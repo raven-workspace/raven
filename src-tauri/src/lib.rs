@@ -2,8 +2,11 @@ pub mod backup;
 pub mod commands;
 pub mod engagements;
 pub mod error;
+pub mod hosts;
+pub mod log;
 pub mod migrations;
 pub mod paths;
+pub mod services;
 pub mod settings;
 pub mod vault;
 
@@ -28,12 +31,31 @@ pub fn run() {
             commands::backup_now,
             commands::backups_list,
             commands::backup_restore,
+            commands::backup_restore_locked,
             commands::engagements_list,
             commands::engagement_get,
             commands::engagement_create,
             commands::engagement_update,
             commands::engagement_set_status,
             commands::engagement_delete,
+            commands::hosts_list,
+            commands::host_create,
+            commands::host_update,
+            commands::host_move,
+            commands::host_delete,
+            commands::services_list,
+            commands::services_upsert_scan,
+            commands::service_create,
+            commands::service_update,
+            commands::service_confirm,
+            commands::service_unconfirm,
+            commands::service_delete,
+            commands::log_list,
+            commands::log_create,
+            commands::log_update,
+            commands::log_delete,
+            commands::attachment_get,
+            commands::engagements_progress,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

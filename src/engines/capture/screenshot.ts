@@ -1,0 +1,1 @@
+export { screenshotFileName } from './titles';

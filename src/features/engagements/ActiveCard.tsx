@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { cx } from "../../lib/cx";
 import type { Engagement } from "../../types/engagement";
 import { Chip } from "../../ui";
+import { useProgress } from "../hosts/queries";
 import {
   EMPTY_PROGRESS,
   KIND_LABEL,
@@ -30,6 +31,7 @@ export function TimeBar({ fraction, over }: { fraction: number; over?: boolean }
 export function ActiveCard({ engagement: e, now }: { engagement: Engagement; now: number }) {
   const scope = scopeSummary(e.scopeCidrs);
   const lastActivity = e.lastActivityAt;
+  const progress = useProgress().data?.[e.id] ?? EMPTY_PROGRESS;
 
   return (
     <Link
@@ -62,7 +64,7 @@ export function ActiveCard({ engagement: e, now }: { engagement: Engagement; now
         </p>
       )}
 
-      <p className="m-0 text-xs text-fg-2">{progressLine(EMPTY_PROGRESS)}</p>
+      <p className="m-0 text-xs text-fg-2">{progressLine(progress)}</p>
 
       <p className="m-0 border-t border-line pt-2 text-xs text-muted">
         {lastActivity === null ? (

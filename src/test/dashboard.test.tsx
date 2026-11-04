@@ -30,6 +30,7 @@ function eng(over: Partial<Engagement> & Pick<Engagement, "id" | "name">): Engag
     createdAt: 1_700_000_000_000,
     updatedAt: 1_700_000_000_000,
     lastActivityAt: null,
+    lastRanOn: null,
     ...over,
   };
 }
@@ -47,6 +48,7 @@ function fixtures(): Engagement[] {
       timeboxStart: now - 2 * HOUR,
       timeboxMinutes: 1425,
       lastActivityAt: now - 12 * MIN,
+      lastRanOn: null,
     }),
     eng({ id: "e4", name: "Acme Corp internal", kind: "client", client: "Acme Corp", subLabel: "assumed breach" }),
     eng({ id: "e2", name: "Lumen", kind: "lab", status: "archived" }),
@@ -69,8 +71,10 @@ beforeEach(() => {
   list = fixtures();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.vaultLock.mockResolvedValue(null);
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14 });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"] });
   m.backupsList.mockResolvedValue([]);
+  m.engagementsProgress.mockResolvedValue({});
+  m.hostsList.mockResolvedValue([]);
   m.engagementsList.mockImplementation(async () => list);
   m.engagementGet.mockImplementation(async (id) => {
     const e = list.find((x) => x.id === id);
@@ -100,9 +104,9 @@ describe("format", () => {
     expect(relativeTime(now - 50 * HOUR, now)).toBe("2d ago");
   });
 
-  it("progressLine is a placeholder until hosts exist", () => {
-    expect(progressLine({ rooted: 0, hosts: 0, flags: 0, flagsTotal: 0 })).toBe("Rooted 0/0 · flags 0/0");
-    expect(progressLine({ rooted: 3, hosts: 6, flags: 7, flagsTotal: 9 })).toBe("Rooted 3/6 · flags 7/9");
+  it("progressLine formats counts", () => {
+    expect(progressLine({ hostsRooted: 0, hostsTotal: 0, flagsFound: 0, flagsTotal: 0 })).toBe("Rooted 0/0 · flags 0/0");
+    expect(progressLine({ hostsRooted: 3, hostsTotal: 6, flagsFound: 7, flagsTotal: 9 })).toBe("Rooted 3/6 · flags 7/9");
   });
 });
 
@@ -133,7 +137,7 @@ describe("dashboard", () => {
     const user = userEvent.setup();
     mount();
     await user.click(await screen.findByRole("link", { name: /Mock exam A/ }));
-    expect(await screen.findByText("Board arrives in build step 2")).toBeInTheDocument();
+    expect(await within(await screen.findByRole("main")).findByText("No hosts yet")).toBeInTheDocument();
   });
 
   it("past search filters by name and client", async () => {
@@ -271,7 +275,7 @@ describe("dashboard", () => {
   });
 
   it("autolock_with_open_dialog_discards_draft_cleanly", async () => {
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 1, backupRetention: 14 });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 1, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"] });
     m.vaultUnlock.mockResolvedValue({ migratedFrom: 3, migratedTo: 3, dailyBackup: null, dailyBackupError: null });
     vi.useFakeTimers({ shouldAdvanceTime: false });
     mount();
@@ -311,12 +315,12 @@ describe("engagement shell", () => {
     expect(await screen.findByRole("heading", { name: "Mock exam A" })).toBeInTheDocument();
     const nav = screen.getByRole("navigation", { name: "Engagement" });
     for (const s of ["Board", "Log", "Credentials", "Findings", "Engagement checklist", "Report"]) {
-      expect(within(nav).getByRole("button", { name: new RegExp(s) })).toBeInTheDocument();
+      expect(within(nav).getByRole("link", { name: new RegExp(s) })).toBeInTheDocument();
     }
-    expect(within(nav).getByRole("button", { name: /Board/ })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: /Board/ })).toHaveAttribute("aria-current", "page");
     expect(within(nav).getByText("Hosts")).toBeInTheDocument();
-    expect(within(nav).getByText("No hosts yet")).toBeInTheDocument();
-    expect(screen.getByText("Board arrives in build step 2")).toBeInTheDocument();
+    expect(await within(nav).findByText("No hosts yet")).toBeInTheDocument();
+    expect(within(screen.getByRole("main")).getByText("No hosts yet")).toBeInTheDocument();
     const strip = screen.getByRole("status", { name: "Engagement status" });
     expect(within(strip).getByText(/left$/)).toBeInTheDocument();
   });
@@ -326,21 +330,21 @@ describe("engagement shell", () => {
     mount("/e/e1");
     const nav = await screen.findByRole("navigation", { name: "Engagement" });
     await user.keyboard("2");
-    expect(within(nav).getByRole("button", { name: /Log/ })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: /Log/ })).toHaveAttribute("aria-current", "page");
     await user.keyboard("6");
-    expect(within(nav).getByRole("button", { name: /Report/ })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: /Report/ })).toHaveAttribute("aria-current", "page");
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
     const dialog = await screen.findByRole("dialog", { name: "Edit engagement" });
     await user.type(within(dialog).getByLabelText("Sub-label"), "3");
     // Radix hides the background from the a11y tree while the dialog is open.
-    expect(within(nav).getByRole("button", { name: /Report/, hidden: true })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: /Report/, hidden: true })).toHaveAttribute("aria-current", "page");
     await user.keyboard("{Escape}");
     await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     // Esc closed the dialog only; still in the shell.
     expect(screen.getByRole("navigation", { name: "Engagement" })).toBeInTheDocument();
     await user.keyboard("1");
-    expect(within(nav).getByRole("button", { name: /Board/ })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: /Board/ })).toHaveAttribute("aria-current", "page");
   });
 
   it("Esc returns to the dashboard", async () => {

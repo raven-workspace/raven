@@ -1,9 +1,10 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useMutation, useQuery } from "@tanstack/react-query";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../lib/api";
+import { makeQueryClient } from "../lib/queryClient";
 import { RavenError } from "../types/errors";
 import { SetupScreen } from "../features/vault/SetupScreen";
 import { VaultGate } from "../features/vault/VaultGate";
@@ -14,7 +15,7 @@ const m = vi.mocked(api, true);
 const unlockOk = { migratedFrom: 3, migratedTo: 3, dailyBackup: null, dailyBackupError: null };
 
 function mount() {
-  const qc = new QueryClient();
+  const qc = makeQueryClient();
   return render(
     <QueryClientProvider client={qc}>
       <MemoryRouter>
@@ -28,7 +29,7 @@ function mount() {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14 });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"] });
   m.vaultLock.mockResolvedValue(null);
 });
 afterEach(() => vi.useRealTimers());
@@ -193,7 +194,7 @@ describe("vault gate", () => {
   ] as const) {
     it(`locks on ${label} when the idle time passed while timers were paused (sleep)`, async () => {
       m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-      m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14 });
+      m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"] });
       vi.useFakeTimers({ shouldAdvanceTime: false });
       mount();
       await act(async () => {
@@ -210,7 +211,7 @@ describe("vault gate", () => {
 
   it("the first input after sleep locks instead of resetting the idle time", async () => {
     m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14 });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"] });
     vi.useFakeTimers({ shouldAdvanceTime: false });
     mount();
     await act(async () => {
@@ -225,7 +226,7 @@ describe("vault gate", () => {
 
   it("focus before the idle time does not lock", async () => {
     m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14 });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"] });
     vi.useFakeTimers({ shouldAdvanceTime: false });
     mount();
     await act(async () => {
@@ -240,7 +241,7 @@ describe("vault gate", () => {
 
   it("a huge auto-lock value does not lock immediately", async () => {
     m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 1_000_000, backupRetention: 14 });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 1_000_000, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"] });
     vi.useFakeTimers();
     mount();
     await act(async () => {
@@ -252,7 +253,7 @@ describe("vault gate", () => {
 
   it("auto-locks after the idle time and activity resets the timer", async () => {
     m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 1, backupRetention: 14 });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 1, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"] });
     vi.useFakeTimers({ shouldAdvanceTime: false });
     mount();
     await act(async () => {
@@ -280,5 +281,159 @@ describe("vault gate", () => {
     });
     expect(m.vaultLock).toHaveBeenCalledTimes(1);
   });
-});
 
+  describe("damaged database", () => {
+    const older = { file: "raven-20261101-090000-daily.db", reason: "daily", createdAt: Date.UTC(2026, 10, 1, 9), sizeBytes: 10 };
+    const newer = { file: "raven-20261103-090000-manual.db", reason: "manual", createdAt: Date.UTC(2026, 10, 3, 9), sizeBytes: 10 };
+
+    async function openDamaged() {
+      const user = userEvent.setup();
+      m.vaultStatus.mockResolvedValue({ exists: true, unlocked: false });
+      m.vaultUnlock.mockRejectedValue(new RavenError("damaged", "the database file is damaged"));
+      m.backupsList.mockResolvedValue([newer, older]);
+      mount();
+      await user.type(await screen.findByLabelText("Password"), "correct horse battery{Enter}");
+      expect(
+        await screen.findByText("Raven can't read its database file. Restore a backup to continue."),
+      ).toBeInTheDocument();
+      return user;
+    }
+
+    it("damaged vault offers restore from backup", async () => {
+      const user = await openDamaged();
+      // The unlock form is replaced while the damaged panel is active.
+      expect(screen.queryByRole("button", { name: "Unlock" })).not.toBeInTheDocument();
+      const options = await screen.findAllByRole("radio");
+      expect(options).toHaveLength(2);
+      // Newest first, with date and reason.
+      expect(options[0]!).toHaveTextContent(new Date(newer.createdAt).toLocaleString());
+      expect(options[0]!).toHaveTextContent("manual");
+      expect(options[1]!).toHaveTextContent("daily");
+      m.backupRestoreLocked.mockResolvedValue(null);
+      await user.click(screen.getByRole("radio", { name: /daily/ }));
+      await user.type(screen.getByLabelText("Password"), "backup password!{Enter}");
+      expect(m.backupRestoreLocked).toHaveBeenCalledWith(older.file, "backup password!");
+      expect(await screen.findByText("Restored. Unlock to continue.")).toBeInTheDocument();
+      const pw = screen.getByLabelText("Password");
+      expect(pw).toHaveValue("");
+      expect(screen.getByRole("button", { name: "Unlock" })).toBeInTheDocument();
+      expect(screen.queryByText(/can't read its database file/)).not.toBeInTheDocument();
+    });
+
+    it("restore while locked shows wrong password inline", async () => {
+      const user = await openDamaged();
+      m.backupRestoreLocked.mockRejectedValue(
+        new RavenError("validation", "Wrong password for this backup", "password"),
+      );
+      await user.click(await screen.findByRole("radio", { name: /manual/ }));
+      const pw = screen.getByLabelText("Password");
+      await user.type(pw, "not it at all{Enter}");
+      expect(await screen.findByText("Wrong password for this backup")).toBeInTheDocument();
+      expect(pw).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByText("Raven can't read its database file. Restore a backup to continue.")).toBeInTheDocument();
+      expect(screen.queryByText("Restored. Unlock to continue.")).not.toBeInTheDocument();
+    });
+
+    it("preselects the newest backup", async () => {
+      const user = await openDamaged();
+      expect(await screen.findByRole("radio", { name: /manual/ })).toBeChecked();
+      m.backupRestoreLocked.mockResolvedValue(null);
+      await user.type(screen.getByLabelText("Password"), "backup password!{Enter}");
+      expect(m.backupRestoreLocked).toHaveBeenCalledWith(newer.file, "backup password!");
+    });
+
+    it("backup choices are Ink options, not native radios, and arrow keys move the choice (M6)", async () => {
+      const user = await openDamaged();
+      const group = await screen.findByRole("radiogroup", { name: "Backup" });
+      expect(document.querySelector('input[type="radio"]')).toBeNull();
+      const manual = screen.getByRole("radio", { name: /manual/ });
+      expect(manual.tagName).toBe("BUTTON");
+      manual.focus();
+      await user.keyboard("{ArrowDown}");
+      expect(screen.getByRole("radio", { name: /daily/ })).toBeChecked();
+      expect(screen.getByRole("radio", { name: /daily/ })).toHaveFocus();
+      expect(group).toBeInTheDocument();
+    });
+
+    it("focuses the restore password field", async () => {
+      await openDamaged();
+      await screen.findAllByRole("radio");
+      expect(screen.getByLabelText("Password")).toHaveFocus();
+    });
+
+    it("a failed backup list offers Try again", async () => {
+      const user = userEvent.setup();
+      m.vaultStatus.mockResolvedValue({ exists: true, unlocked: false });
+      m.vaultUnlock.mockRejectedValue(new RavenError("damaged", "the database file is damaged"));
+      m.backupsList.mockRejectedValueOnce(new RavenError("io", "backups unreadable")).mockResolvedValue([newer]);
+      mount();
+      await user.type(await screen.findByLabelText("Password"), "correct horse battery{Enter}");
+      expect(await screen.findByText("backups unreadable")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Try again" }));
+      expect(await screen.findByRole("radio", { name: /manual/ })).toBeChecked();
+      expect(screen.queryByText("backups unreadable")).not.toBeInTheDocument();
+      expect(m.backupsList).toHaveBeenCalledTimes(2);
+    });
+
+    it("says so when there are no backups", async () => {
+      const user = userEvent.setup();
+      m.vaultStatus.mockResolvedValue({ exists: true, unlocked: false });
+      m.vaultUnlock.mockRejectedValue(new RavenError("damaged", "the database file is damaged"));
+      m.backupsList.mockResolvedValue([]);
+      mount();
+      await user.type(await screen.findByLabelText("Password"), "correct horse battery{Enter}");
+      expect(await screen.findByText("No backups yet")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Restore" })).toBeDisabled();
+    });
+  });
+
+  describe("any locked error", () => {
+    function Probe() {
+      const list = useQuery({ queryKey: ["engagements"], queryFn: api.engagementsList });
+      const create = useMutation({ mutationFn: () => api.engagementCreate({} as never) });
+      return (
+        <div data-testid="inside">
+          {list.isError ? "list failed" : "ok"}
+          <button onClick={() => create.mutate()}>make</button>
+        </div>
+      );
+    }
+    function mountProbe() {
+      return render(
+        <QueryClientProvider client={makeQueryClient()}>
+          <MemoryRouter>
+            <VaultGate>
+              <Probe />
+            </VaultGate>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+    }
+
+    it("moves the UI to the unlock screen from a rejected query", async () => {
+      m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+      m.engagementsList.mockRejectedValue(new RavenError("locked", "vault is locked"));
+      mountProbe();
+      expect(await screen.findByLabelText("Password")).toBeInTheDocument();
+      expect(screen.queryByTestId("inside")).not.toBeInTheDocument();
+    });
+
+    it("moves the UI to the unlock screen from a rejected mutation", async () => {
+      const user = userEvent.setup();
+      m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+      m.engagementsList.mockResolvedValue([]);
+      m.engagementCreate.mockRejectedValue(new RavenError("locked", "vault is locked"));
+      mountProbe();
+      await user.click(await screen.findByRole("button", { name: "make" }));
+      expect(await screen.findByLabelText("Password")).toBeInTheDocument();
+    });
+
+    it("ignores other errors", async () => {
+      m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+      m.engagementsList.mockRejectedValue(new RavenError("io", "disk"));
+      mountProbe();
+      expect(await screen.findByText("list failed")).toBeInTheDocument();
+      expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+    });
+  });
+});
