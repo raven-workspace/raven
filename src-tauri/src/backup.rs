@@ -19,6 +19,7 @@ const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 const PREFIX: &str = "raven-";
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BackupInfo {
     pub file: String,
     pub reason: String,
