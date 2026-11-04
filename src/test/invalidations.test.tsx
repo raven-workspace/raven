@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resyncBoards } from "../features/checklist/ticks";
 import { useHostMutations } from "../features/hosts/queries";
 import { useLogMutations } from "../features/log/queries";
+import { useNotesStore } from "../features/notes/useNotesStore";
 import { useServiceMutations } from "../features/services/queries";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
@@ -87,6 +88,31 @@ describe("cache invalidation (M4)", () => {
     expect(keys()).toContainEqual(["hosts", "e1"]);
     expect(keys()).toContainEqual(["checklist", "e1"]);
     expect(keys()).toContainEqual(["services"]);
+    // Thread counts; the Metasploit lock the store cleared; tunnels and hops through the host.
+    expect(keys()).toContainEqual(["notes", "e1"]);
+    expect(keys()).toContainEqual(["engagement", "e1"]);
+    expect(keys()).toContainEqual(["tunnels", "e1"]);
+    expect(keys()).toContainEqual(["hops", "e1"]);
+    // A deleted DC changes which hosts are AD hosts: the board re-syncs.
+    await vi.waitFor(() => expect(resyncBoards).toHaveBeenCalledWith("e1"));
+  });
+
+  it("host delete drops that host's unsaved note text only", async () => {
+    m.hostDelete.mockResolvedValue(null);
+    useNotesStore.setState({
+      pending: {
+        "e1:h1": { engagementId: "e1", hostId: "h1", body: "? gone", private: false },
+        "e1:h2": { engagementId: "e1", hostId: "h2", body: "? kept", private: false },
+        "e1:": { engagementId: "e1", hostId: null, body: "? kept too", private: false },
+      },
+      errors: { "e1:h1": "not found" },
+    });
+    const { wrapper } = setup();
+    const { result } = renderHook(() => useHostMutations("e1"), { wrapper });
+    await act(() => result.current.remove.mutateAsync("h1"));
+    expect(Object.keys(useNotesStore.getState().pending).sort()).toEqual(["e1:", "e1:h2"]);
+    expect(useNotesStore.getState().errors).toEqual({});
+    useNotesStore.setState({ pending: {}, errors: {} });
   });
 
   it("host create and update invalidate the checklist and services", async () => {

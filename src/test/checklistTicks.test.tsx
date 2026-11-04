@@ -8,7 +8,7 @@ import App from "../App";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { applicableGoals } from "../engines/checklist";
 import { useChecklistMutations } from "../features/checklist/queries";
-import { loadTickContext, syncEntryTicks, tickFromLog } from "../features/checklist/ticks";
+import { autoTickFromLog, loadTickContext, resetAutoTicks, resyncBoards, syncEntryTicks, tickFromLog } from "../features/checklist/ticks";
 import { useServiceMutations } from "../features/services/queries";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
@@ -89,6 +89,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   localStorage.clear();
   useCaptureStore.getState().reset();
+  resetAutoTicks();
   engagement = E1;
   hosts = [
     host({ id: "h1", name: "dc01", ip: "10.10.10.5" }),
@@ -107,6 +108,7 @@ beforeEach(() => {
   m.servicesListEngagement.mockResolvedValue([]);
   m.servicesUpsertScan.mockResolvedValue([]);
   m.logList.mockImplementation(async () => entries);
+  m.notesList.mockResolvedValue([]);
   m.logCreate.mockImplementation(async (_e, input: LogEntryInput) => {
     const e = entry({
       id: `l${nextId++}`, kind: input.content.kind, title: input.title, ranOn: input.ranOn, hostIds: input.hostIds,
@@ -371,6 +373,103 @@ describe("auto-tick wiring", () => {
   });
 });
 
+/** hostSyncBoard as the store does it (hosts.rs sync_board, T6-R2): a hand-placed card with no derived column is seeded, not moved. */
+function rustSyncBoard() {
+  m.hostSyncBoard.mockImplementation(async (id, derived) => {
+    hosts = hosts.map((h) => {
+      if (h.id !== id || h.boardDerived === derived) return h;
+      if (h.boardDerived == null && h.boardManual) return { ...h, boardDerived: derived };
+      return { ...h, boardColumn: derived, boardManual: false, boardDerived: derived };
+    });
+    return hosts.find((h) => h.id === id)!;
+  });
+}
+
+describe("first open of an engagement logged before step 3 (F-R1)", () => {
+  const scan = () => entry({ id: "s1", kind: "command", at: T, content: { kind: "command", blocks: [{ command: FULL_SCAN, output: "" }] } });
+
+  it("a log with a full nmap scan and an empty checklist is ticked automatically on open", async () => {
+    entries = [scan()];
+    mount();
+    await vi.waitFor(() => expect(stored("h1", "h-enum-full-tcp")).toMatchObject({ status: "done", auto: true, completedAt: T }));
+    expect(stored("h1", "h-enum-full-tcp")!.evidence).toEqual([{ entryId: "s1", commandId: "enum-nmap-full-tcp" }]);
+    // Once: a re-render or a second open does not run it again.
+    await screen.findAllByText("dc01");
+    expect(m.checklistPut).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing when the checklist already has rows or the log is empty", async () => {
+    entries = [scan()];
+    store = [item({ ownerId: "h2", goalId: "h-enum-udp", status: "na" })];
+    mount();
+    await screen.findAllByText("dc01");
+    await vi.waitFor(() => expect(m.logList).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(m.checklistPut).not.toHaveBeenCalled();
+  });
+
+  it("a failure is not blocking and the next run tries again", async () => {
+    entries = [scan()];
+    m.checklistPut.mockRejectedValueOnce(new Error("db busy"));
+    const first = mount();
+    await vi.waitFor(() => expect(m.checklistPut).toHaveBeenCalledTimes(1));
+    await screen.findAllByText("dc01");
+    expect(screen.queryByRole("alert")).toBeNull();
+    first.unmount();
+    mount();
+    await vi.waitFor(() => expect(stored("h1", "h-enum-full-tcp")).toMatchObject({ status: "done" }));
+  });
+
+  it("a v2 hand-placed card (manual, no derived column) keeps its column; its local.txt flag ticks the checklist", async () => {
+    rustSyncBoard();
+    hosts = hosts.map((h) => (h.id === "h2" ? { ...h, boardColumn: "done", boardManual: true, boardDerived: null } : h));
+    entries = [entry({ id: "f1", kind: "flag", at: T, hostIds: ["h2"], content: { kind: "flag", flagKind: "local", value: FLAG } })];
+    mount();
+    await vi.waitFor(() => expect(stored("h2", "h-orient-proof")).toMatchObject({ status: "done", auto: true, completedAt: T }));
+    await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "privesc"));
+    // Never synced against the empty checklist first.
+    expect(m.hostSyncBoard).not.toHaveBeenCalledWith("h2", "enumerate");
+    expect(hosts.find((h) => h.id === "h2")).toMatchObject({ boardColumn: "done", boardManual: true, boardDerived: "privesc" });
+    // The card is still in Done on the board.
+    await vi.waitFor(() => expect(within(screen.getByRole("region", { name: "Done" })).getByRole("link", { name: /web02/ })).toBeInTheDocument());
+  });
+
+  it("a board sync started while the automatic tick runs waits for it; concurrent callers share one run", async () => {
+    rustSyncBoard();
+    hosts = hosts.map((h) => (h.id === "h2" ? { ...h, boardColumn: "done", boardManual: true, boardDerived: null } : h));
+    entries = [entry({ id: "f1", kind: "flag", at: T, hostIds: ["h2"], content: { kind: "flag", flagKind: "local", value: FLAG } })];
+    const put = m.checklistPut.getMockImplementation()!;
+    let release: () => void = () => {};
+    m.checklistPut.mockImplementationOnce(async (e, items) => {
+      await new Promise<void>((r) => (release = r));
+      return put(e, items);
+    });
+    const auto = autoTickFromLog("e1");
+    expect(autoTickFromLog("e1")).toBe(auto);
+    await vi.waitFor(() => expect(m.checklistPut).toHaveBeenCalled());
+    const sync = resyncBoards("e1");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(m.hostSyncBoard).not.toHaveBeenCalled();
+    release();
+    await expect(auto).resolves.toBe(true);
+    await sync;
+    expect(m.hostSyncBoard.mock.calls.every(([id, col]) => id !== "h2" || col === "privesc")).toBe(true);
+    expect(m.checklistPut).toHaveBeenCalledTimes(1);
+  });
+
+  it("a board sync on an empty checklist skips a hand-placed card with no derived column", async () => {
+    rustSyncBoard();
+    hosts = [
+      host({ id: "h1", name: "dc01", ip: "10.10.10.5", boardColumn: "done", boardManual: true, boardDerived: null }),
+      host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "loot", boardManual: false, boardDerived: null }),
+    ];
+    await resyncBoards("e1");
+    expect(m.hostSyncBoard).not.toHaveBeenCalledWith("h1", expect.anything());
+    // Not hand-placed: moves as normal.
+    expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "enumerate");
+  });
+});
+
 describe("ticks.ts", () => {
   it("an edit unticks every owner holding evidence from the entry, even when it now ticks nothing", async () => {
     // The flag was on both hosts; it becomes a note.
@@ -397,6 +496,18 @@ describe("ticks.ts", () => {
     expect(m.hostSyncBoard).not.toHaveBeenCalled();
   });
 
+  it("a new save stamps completedAt with the time of the save, not the entry's time (F-R2)", async () => {
+    const now = T + 99_000;
+    vi.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      const flag = entry({ id: "f1", kind: "flag", at: T, hostIds: ["h2"], content: { kind: "flag", flagKind: "local", value: FLAG } });
+      await syncEntryTicks("e1", flag, "f1", await loadTickContext("e1"));
+      expect(stored("h2", "h-orient-proof")!.completedAt).toBe(now);
+    } finally {
+      vi.mocked(Date.now).mockRestore();
+    }
+  });
+
   it("tickFromLog re-derives missing ticks, drops evidence of deleted entries, keeps completedAt and manual state", async () => {
     entries = [
       entry({ id: "s1", kind: "command", at: T, content: { kind: "command", blocks: [{ command: FULL_SCAN, output: "" }] } }),
@@ -418,6 +529,8 @@ describe("ticks.ts", () => {
     expect(stored("h1", "h-enum-udp")).toMatchObject({ status: "na", auto: false, evidence: [], completedAt: null });
     expect(stored("h1", "h-enum-versions")).toMatchObject({ status: "na", notes: "skip" });
     expect(stored("h2", "h-orient-proof")).toMatchObject({ status: "done", auto: true, evidence: [{ entryId: "f1", commandId: "flag" }] });
+    // F-R2: a rebuilt tick is stamped with the entry's time, not the rebuild's.
+    expect(stored("h2", "h-orient-proof")!.completedAt).toBe(T + 1);
     expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "privesc");
 
     // Run again: nothing left to change.

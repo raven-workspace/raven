@@ -96,17 +96,24 @@ export async function syncEntryTicks(engagementId: string, entry: LogEntry | nul
 
 /** Re-reads the store and syncs every host's board column (after a service change alters applicability). */
 export async function resyncBoards(engagementId: string): Promise<void> {
+  await afterAutoTick(engagementId);
   await syncBoards(engagementId, await loadTickContext(engagementId));
 }
 
 /**
  * Moves each host to the column its checklist implies, only when that differs from the column last derived (a
  * hand placement holds until then). `byOwner` is the current checklist; read from the store when left out.
+ *
+ * While the engagement has no checklist rows at all (an engagement from before step 3 whose log has not been ticked
+ * yet), a hand-placed host with no derived column is left alone: its first derived column must come from its real
+ * checklist, so the store's seed (T6-R2) records that one rather than an empty-checklist "enumerate".
  */
 export async function syncBoards(engagementId: string, ctx: TickContext, byOwner?: Map<string, ChecklistState>): Promise<void> {
   const states = byOwner ?? byOwnerOf(await api.checklistList(engagementId));
   const { engagement, hosts, servicesByHost } = ctx;
+  const noRows = [...states.values()].every((s) => Object.keys(s).length === 0);
   for (const host of hosts) {
+    if (noRows && host.boardDerived == null && host.boardManual) continue;
     const applicable = applicableGoals(host, engagement, hosts, servicesByHost);
     const column = derivedColumn(host, states.get(host.id) ?? {}, applicable);
     if (column !== host.boardDerived) await api.hostSyncBoard(host.id, column);
@@ -115,20 +122,20 @@ export async function syncBoards(engagementId: string, ctx: TickContext, byOwner
 
 /**
  * Rebuilds every auto-tick from the whole log, oldest entry first: each entry's ticks are re-applied (a goal it
- * still ticks keeps its completion time) and evidence from entries no longer in the log is removed. Manual statuses
+ * still ticks keeps its completion time, a new tick is stamped with the entry's time) and evidence from entries no longer in the log is removed. Manual statuses
  * and notes stay. Writes the changed items, then syncs the board.
  */
 export async function tickFromLog(engagementId: string, ctx: TickContext): Promise<{ updated: number; message: string }> {
   const [items, log] = await Promise.all([api.checklistList(engagementId), api.logList(engagementId)]);
   const before = byOwnerOf(items);
   const after = new Map(before);
-  const now = Date.now();
   const entries = [...log].sort((a, b) => a.at - b.at);
   for (const entry of entries) {
     const ticks = ticksForEntry(entry, ctx);
     const owners = new Set(ticks.map((t) => t.ownerId));
     for (const [ownerId, state] of after) if (hasEvidenceFrom(state, entry.id)) owners.add(ownerId);
-    for (const ownerId of owners) after.set(ownerId, replaceEntryTicks(after.get(ownerId), entry.id, ticksFor(ticks, ownerId), now));
+    // A goal the rebuild ticks was done when the entry was logged, not now.
+    for (const ownerId of owners) after.set(ownerId, replaceEntryTicks(after.get(ownerId), entry.id, ticksFor(ticks, ownerId), entry.at));
   }
   const known = new Set(log.map((e) => e.id));
   for (const [ownerId, state] of after) {
@@ -142,6 +149,40 @@ export async function tickFromLog(engagementId: string, ctx: TickContext): Promi
   await syncBoards(engagementId, ctx, after);
   const n = next.length;
   return { updated: n, message: `Updated ${n} ${n === 1 ? "goal" : "goals"}` };
+}
+
+/** Per engagement: the automatic first tick from the log, once per app run (see `autoTickFromLog`). */
+const autoTicks = new Map<string, Promise<boolean>>();
+
+/**
+ * F-R1: an engagement from before step 3 has a log but no checklist rows, so nothing it logged counts yet. When the
+ * checklist is empty and the log is not, runs `tickFromLog` once. Runs at most once per engagement (concurrent
+ * callers share the run); a failed run lets the next call try again. Resolves true when it ran the rebuild.
+ */
+export function autoTickFromLog(engagementId: string): Promise<boolean> {
+  const running = autoTicks.get(engagementId);
+  if (running) return running;
+  const run = (async () => {
+    const [items, log] = await Promise.all([api.checklistList(engagementId), api.logList(engagementId)]);
+    if (items.length > 0 || log.length === 0) return false;
+    await tickFromLog(engagementId, await loadTickContext(engagementId));
+    return true;
+  })();
+  autoTicks.set(engagementId, run);
+  run.catch(() => {
+    if (autoTicks.get(engagementId) === run) autoTicks.delete(engagementId);
+  });
+  return run;
+}
+
+/** Waits for a running automatic tick, so no other board sync runs on the still-empty checklist before it. */
+async function afterAutoTick(engagementId: string): Promise<void> {
+  await autoTicks.get(engagementId)?.catch(() => undefined);
+}
+
+/** Test helper: forget which engagements were auto-ticked. */
+export function resetAutoTicks(): void {
+  autoTicks.clear();
 }
 
 /**
@@ -174,6 +215,7 @@ export class FollowUpError extends Error {
  * `FollowUpError` (`CHECKLIST_FAILED`, `BOARD_FAILED` or `MSF_LOCK_FAILED`).
  */
 export async function afterEntrySaved(engagementId: string, entry: LogEntry | null, entryId: string): Promise<void> {
+  await afterAutoTick(engagementId);
   let ctx: TickContext;
   try {
     ctx = await loadTickContext(engagementId);
@@ -211,6 +253,7 @@ export async function afterEntrySaved(engagementId: string, entry: LogEntry | nu
  * message says to use Tick from log.
  */
 export async function deleteEntryWithTicks(engagementId: string, entryId: string): Promise<void> {
+  await afterAutoTick(engagementId);
   const ctx = await loadTickContext(engagementId);
   const { undo, after } = await writeEntryTicks(engagementId, null, entryId, ctx);
   try {

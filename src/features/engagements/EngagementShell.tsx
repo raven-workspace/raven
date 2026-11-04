@@ -1,9 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { Link, Outlet, useNavigate, useParams } from "react-router";
 import { api } from "../../lib/api";
+import { reportError } from "../../lib/lockSignal";
 import { isFreeKey, useEscapeTo, useKeydown } from "../../lib/keys";
 import type { Engagement } from "../../types/engagement";
 import { EmptyState } from "../../ui";
+import { checklistKey } from "../checklist/queries";
+import { autoTickFromLog } from "../checklist/ticks";
 import { HostView } from "../hosts/HostView";
 import { CapturePanel } from "../capture/CapturePanel";
 import { NotesPanel } from "../notes/NotesPanel";
@@ -25,6 +29,18 @@ export function EngagementShell() {
     queryFn: () => api.engagementGet(id),
     initialData: () => qc.getQueryData<Engagement[]>(["engagements"])?.find((e) => e.id === id),
   });
+
+  // F-R1: an engagement logged before step 3 has an empty checklist; tick it from its log once, on open, before
+  // anything else syncs the board. Not blocking: a failure goes to the shared error path (a lock reaches the gate),
+  // and the next open tries again.
+  useEffect(() => {
+    autoTickFromLog(id).then((ran) => {
+      if (!ran) return;
+      void qc.invalidateQueries({ queryKey: checklistKey(id) });
+      void qc.invalidateQueries({ queryKey: ["hosts", id] });
+      void qc.invalidateQueries({ queryKey: ["progress"] });
+    }, reportError);
+  }, [id, qc]);
 
   // Esc: host view -> engagement, engagement -> dashboard.
   useEscapeTo(hostId ? `/e/${id}` : "/");
