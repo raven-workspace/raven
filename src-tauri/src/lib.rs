@@ -1,5 +1,6 @@
 pub mod error;
 pub mod paths;
+pub mod vault;
 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
