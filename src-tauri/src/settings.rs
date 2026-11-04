@@ -79,9 +79,13 @@ fn clean_machines(list: Vec<String>) -> AppResult<Vec<String>> {
 }
 
 fn put(conn: &Connection, key: &str, v: u32) -> AppResult<()> {
+    put_text(conn, key, &v.to_string())
+}
+
+fn put_text(conn: &Connection, key: &str, v: &str) -> AppResult<()> {
     conn.execute(
         "INSERT INTO settings(key, value) VALUES(?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        rusqlite::params![key, v.to_string()],
+        rusqlite::params![key, v],
     )?;
     Ok(())
 }
@@ -98,10 +102,7 @@ pub fn update(conn: &Connection, patch: SettingsPatch) -> AppResult<Settings> {
     }
     if let Some(m) = machines {
         let json = serde_json::to_string(&m).map_err(|e| AppError::Db(e.to_string()))?;
-        conn.execute(
-            "INSERT INTO settings(key, value) VALUES(?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            rusqlite::params![MACHINES_KEY, json],
-        )?;
+        put_text(conn, MACHINES_KEY, &json)?;
     }
     get(conn)
 }

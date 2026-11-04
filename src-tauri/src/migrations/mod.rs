@@ -63,10 +63,35 @@ pub fn migrate_with(
     let tx = conn.transaction()?;
     for (v, sql) in pending {
         tx.execute_batch(sql)?;
+        if *v == 2 {
+            backfill_hosts(&tx)?;
+        }
         tx.execute_batch(&format!("PRAGMA user_version = {v}"))?;
     }
     tx.commit()?;
     Ok(MigrationOutcome { from, to: latest })
+}
+
+/// Data step of 0002: engagements that predate the hosts table get a host for each
+/// single-IP scope entry. Runs inside the migration transaction; add-only, so re-running is safe.
+fn backfill_hosts(conn: &Connection) -> AppResult<()> {
+    let has_hosts: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='hosts')",
+        [],
+        |r| r.get(0),
+    )?;
+    if !has_hosts {
+        return Ok(());
+    }
+    let rows = conn
+        .prepare("SELECT id, scope_cidrs FROM engagements")?
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+        .collect::<Result<Vec<_>, _>>()?;
+    for (id, scope) in rows {
+        let scope: Vec<String> = serde_json::from_str(&scope).unwrap_or_default();
+        crate::hosts::sync_scope(conn, &id, &scope)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -216,5 +241,31 @@ mod tests {
         assert_eq!(ran_on, None);
         let kept: i64 = c.query_row("SELECT count(*) FROM settings", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1);
+    }
+
+    #[test]
+    fn migration_0002_backfills_hosts_from_existing_scope() {
+        let (_d, _p, mut c) = v1_with_row();
+        c.execute(
+            "INSERT INTO engagements (id,name,kind,scope_cidrs,status,created_at,updated_at) \
+             VALUES ('e1','x','lab','[\"10.0.0.0/24\",\"10.0.0.5\",\"10.0.0.6/32\"]','active',1,1)",
+            [],
+        )
+        .unwrap();
+        migrate(&mut c, &mut |_, _| Ok(())).unwrap();
+        let names = |c: &Connection| -> Vec<String> {
+            c.prepare("SELECT name FROM hosts WHERE engagement_id='e1' ORDER BY name")
+                .unwrap()
+                .query_map([], |r| r.get(0))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap()
+        };
+        assert_eq!(names(&c), ["10.0.0.5", "10.0.0.6"]);
+        migrate(&mut c, &mut |_, _| Ok(())).unwrap();
+        assert_eq!(names(&c), ["10.0.0.5", "10.0.0.6"]);
+        // add-only even if sync runs again
+        backfill_hosts(&c).unwrap();
+        assert_eq!(names(&c).len(), 2);
     }
 }
