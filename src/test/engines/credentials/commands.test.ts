@@ -327,3 +327,38 @@ describe('secrets with spaces, quotes, colons and $ are shell-safe in every buil
     for (const h of [secrets[2], '$krb5tgs$23$x\'; rm -rf ~ #']) expect(roundTrip(quoted(h), h)).toBe(true);
   });
 });
+
+describe('secretMask', () => {
+  const MASK = '••••••••';
+  const NTX = 'aad3b435b51404eeaad3b435b51404ee';
+  const secrets: [string, Partial<Credential>][] = [
+    ["it's", {}], ['a"b', {}], ['pa$$word', {}], ['two words', {}], ['line1\nline2', {}], ['a.*+?^${}()|[]\\b', {}],
+    [`${NTX}:${NT}`, { type: 'hash', hashType: 'NTLM' }], [`  ${NT}  `, { type: 'hash', hashType: 'NTLM' }], [`${NT}\n`, { type: 'hash', hashType: 'NTLM' }],
+  ];
+  const frags = (secret: string) => [...secret.trim().split(/[:\n ]/).filter((f) => f.length >= 2), secret.trim()];
+  const build = (c: Credential, secretMask?: string) => ({
+    test: buildTestCommands({ cred: c, hosts: HOSTS, servicesByHost: SBH, attempts: [], secretMask }),
+    roast: buildRoastCommands({ cred: c, hosts: HOSTS, servicesByHost: SBH, secretMask }),
+    spray: buildUsernameSprayCommands({ passwordCred: { ...c, username: '' }, usernames: [user('u1', 'alice')], hosts: HOSTS, servicesByHost: SBH, attempts: [], secretMask }),
+  });
+  const cmds = (b: ReturnType<typeof build>) => [...b.test.commands, ...b.roast.commands, ...b.spray.commands].map((c) => c.command);
+
+  it.each(secrets)('masked build of %j has no fragment of the secret and differs only in the token', (secret, extra) => {
+    const c = cred({ secret, ...extra });
+    const real = cmds(build(c));
+    const masked = cmds(build(c, MASK));
+    expect(real.length).toBeGreaterThan(0);
+    expect(masked).toHaveLength(real.length);
+    real.forEach((r, i) => {
+      for (const f of frags(secret)) expect(masked[i]).not.toContain(f);
+      const flag = r.match(/ (-[Hp]) /)![1];
+      expect(masked[i]).toContain(` ${flag} ${MASK} `);
+      expect(masked[i]).toBe(r.replace(/ -[Hp] ('(?:[^']|'\\'')*') /, ` ${flag} ${MASK} `));
+    });
+  });
+
+  it('a padded NT hash is passed trimmed in the real build', () => {
+    const real = cmds(build(cred({ type: 'hash', hashType: 'NTLM', secret: `  ${NT}\n` })));
+    expect(real[0]).toContain(`-H '${NT}'`);
+  });
+});

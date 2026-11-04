@@ -18,6 +18,7 @@ import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
 import { Select, Toggle, labelClass } from "../../ui";
 import { useChecklist, useChecklistMutations } from "../checklist/queries";
+import { MASK } from "./MaskedSecret";
 import { TestCommands } from "./TestCommands";
 
 interface Props {
@@ -56,15 +57,15 @@ export function RoutineSection({ eid, hosts, creds, usernames, attempts, service
   }
 
   const domain = cred.domain || engagement.data?.domain || undefined;
-  const commandsFor = (id: RoutineStepId): CommandSet & { usersFile?: string } => {
-    const base = { cred, hosts, servicesByHost, attempts, domain };
+  const commandsFor = (id: RoutineStepId, secretMask?: string): CommandSet & { usersFile?: string } => {
+    const base = { cred, hosts, servicesByHost, attempts, domain, secretMask };
     switch (id) {
       case "shares":
         return buildTestCommands({ ...base, services: ["smb"], extraFlags: "--shares", teeSuffix: "shares", includeWorking: true });
       case "roast":
-        return buildRoastCommands({ cred, hosts, servicesByHost, domain });
+        return buildRoastCommands({ cred, hosts, servicesByHost, domain, secretMask });
       case "spray-users":
-        return buildUsernameSprayCommands({ passwordCred: cred, usernames, hosts, servicesByHost, attempts, domain, credentials: creds });
+        return buildUsernameSprayCommands({ passwordCred: cred, usernames, hosts, servicesByHost, attempts, domain, credentials: creds, secretMask });
       default:
         return buildTestCommands({ ...base, services: [id as SprayService] });
     }
@@ -105,7 +106,7 @@ export function RoutineSection({ eid, hosts, creds, usernames, attempts, service
                 <span className="text-[13px] text-fg">{step.title}</span>
                 {!applies && <span className="text-xs text-muted">Doesn't apply</span>}
               </div>
-              {applies && <TestCommands set={commandsFor(step.id)} cred={cred} />}
+              {applies && <TestCommands set={commandsFor(step.id)} shown={commandsFor(step.id, MASK)} />}
             </li>
           );
         })}

@@ -26,13 +26,14 @@ export function shellQuote(s: string): string {
 
 const safeName = (s: string) => s.replace(/[^A-Za-z0-9._-]/g, '_') || 'cred';
 
-function secretFlag(cred: Credential): string {
+/** `-H`/`-p` is chosen from the real credential; `mask` (display builds) replaces the quoted value, unquoted. */
+function secretFlag(cred: Credential, mask?: string): string {
   if (isNtlmHash(cred)) {
     const s = cred.secret.trim();
     const nt = s.includes(':') ? s.split(':')[1] : s;
-    return `-H ${shellQuote(nt)}`;
+    return `-H ${mask ?? shellQuote(nt)}`;
   }
-  return `-p ${shellQuote(cred.secret)}`;
+  return `-p ${mask ?? shellQuote(cred.secret)}`;
 }
 
 function authFlag(cred: Credential, service: SprayService, mode: CredAuthMode, domain?: string): string {
@@ -67,6 +68,8 @@ export function buildTestCommands(input: {
    * enumeration flags like --shares are only useful where the credential authenticates.
    */
   includeWorking?: boolean;
+  /** Display builds: emitted unquoted in place of the secret value. Everything else is unchanged. */
+  secretMask?: string;
 }): CommandSet {
   const { cred, hosts, attempts } = input;
   const sv = (h: Host) => input.servicesByHost.get(h.id) ?? [];
@@ -89,7 +92,7 @@ export function buildTestCommands(input: {
       const ips = todo.map((h) => h.ip!);
       const command = join(
         'nxc', service, input.useTargetsFile ? 'targets.txt' : ips.join(' '),
-        `-u ${shellQuote(cred.username)}`, secretFlag(cred),
+        `-u ${shellQuote(cred.username)}`, secretFlag(cred, input.secretMask),
         authFlag(cred, service, mode, input.domain), input.extraFlags?.trim(),
         `| tee nxc-${service}-${safeName(cred.username)}${mode === 'local' && !NO_AUTH_FLAGS.includes(service) ? '-local' : ''}${input.teeSuffix ? `-${safeName(input.teeSuffix)}` : ''}.txt`,
       );
@@ -102,7 +105,7 @@ export function buildTestCommands(input: {
   return commands.length ? { commands } : { commands: [], notice: 'nothing-left' };
 }
 
-export function buildRoastCommands(input: { cred: Credential; hosts: Host[]; servicesByHost: Map<string, Service[]>; domain?: string }): CommandSet {
+export function buildRoastCommands(input: { cred: Credential; hosts: Host[]; servicesByHost: Map<string, Service[]>; domain?: string; secretMask?: string }): CommandSet {
   const { cred } = input;
   if (!isSprayable(cred) || isOwnerless(cred) || (cred.scope ?? 'domain') !== 'domain') return { commands: [], notice: 'not-sprayable' };
   const sv = (h: Host) => input.servicesByHost.get(h.id) ?? [];
@@ -110,7 +113,7 @@ export function buildRoastCommands(input: { cred: Credential; hosts: Host[]; ser
   if (ldap.length === 0) return { commands: [], notice: 'no-services' };
   const command = join(
     'nxc ldap', ldap.map((h) => h.ip!).join(' '),
-    `-u ${shellQuote(cred.username)}`, secretFlag(cred), authFlag(cred, 'ldap', 'domain', input.domain),
+    `-u ${shellQuote(cred.username)}`, secretFlag(cred, input.secretMask), authFlag(cred, 'ldap', 'domain', input.domain),
     '--kerberoasting kerb.txt --asreproast asrep.txt',
     `| tee nxc-ldap-roast-${safeName(cred.username)}.txt`,
   );
@@ -131,6 +134,8 @@ export function buildUsernameSprayCommands(input: {
   domain?: string;
   /** The engagement's credentials: a user's own credential with this password counts as that user tried. */
   credentials?: Credential[];
+  /** Display builds: emitted unquoted in place of the secret value. */
+  secretMask?: string;
 }): CommandSet & { usersFile: string } {
   const { passwordCred: cred, attempts } = input;
   const service = input.service ?? 'smb';
@@ -167,7 +172,7 @@ export function buildUsernameSprayCommands(input: {
       service, authMode: mode, hostIds: todo.map((h) => h.id),
       command: join(
         'nxc', service, todo.map((h) => h.ip!).join(' '),
-        '-u users.txt', secretFlag(cred), '--continue-on-success',
+        '-u users.txt', secretFlag(cred, input.secretMask), '--continue-on-success',
         authFlag(cred, service, mode, input.domain),
         `| tee nxc-${service}-spray-${sprayTag}${mode === 'local' && !NO_AUTH_FLAGS.includes(service) ? '-local' : ''}.txt`,
       ),

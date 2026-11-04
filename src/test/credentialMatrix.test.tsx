@@ -146,6 +146,25 @@ describe("credential routine", () => {
     expect(document.body).not.toHaveTextContent("Winter2024!");
   });
 
+  it("a whitespace-padded NT hash never reaches the DOM and copies trimmed", async () => {
+    const user = userEvent.setup();
+    const nt = "8846f7eaee8fb117ad06bdd830b7586c";
+    mount({ creds: [cred({ id: "c3", type: "hash", username: "padded", domain: "CORP", secret: ` ${nt}\n`, hashType: "NTLM" })] });
+    const routine = await screen.findByRole("region", { name: "Credential routine" });
+    const smb = within(routine).getByRole("listitem", { name: "SMB" });
+    expect(smb).toHaveTextContent("-H ••••••••");
+    expect(document.body).not.toHaveTextContent(nt);
+    await user.click(within(smb).getByRole("button", { name: "Copy smb domain command" }));
+    expect(await navigator.clipboard.readText()).toContain(`-H '${nt}'`);
+  });
+
+  it("a secret that is a substring of the username or service only masks the secret", async () => {
+    mount({ creds: [cred({ id: "c4", username: "jsmith", secret: "smb" })] });
+    const routine = await screen.findByRole("region", { name: "Credential routine" });
+    const smb = within(routine).getByRole("listitem", { name: "SMB" });
+    expect(within(smb).getAllByText("nxc smb 10.10.10.5 -u 'jsmith' -p •••••••• --local-auth | tee nxc-smb-jsmith-local.txt")).toHaveLength(1);
+  });
+
   it("ticking a routine step sets its checklist item", async () => {
     const user = userEvent.setup();
     mount({ creds: [PW] });
