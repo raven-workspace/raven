@@ -1,4 +1,4 @@
-import type { CaptureDraft } from "../../engines/capture";
+import { buildDraft, type CaptureDraft, type DraftInput } from "../../engines/capture";
 import { api } from "../../lib/api";
 import type { Host } from "../../types/host";
 import type { LogContent, LogEntry, LogKind, NewAttachment } from "../../types/log";
@@ -35,6 +35,10 @@ export interface SaveCaptureArgs {
   addIps: string[];
   image: NewAttachment | null;
   hosts: Host[];
+  /** What `draft` was built from. With it, a command's scan can land on a host created here. */
+  draftInput?: DraftInput;
+  /** Called for each host created, so a retry after a failure reuses it. */
+  onHostCreated?: (host: Host) => void;
 }
 
 /**
@@ -42,13 +46,29 @@ export interface SaveCaptureArgs {
  * (services, and the OS when the host has none). A failure after the entry exists throws
  * `PartialSaveError` carrying the saved entry.
  */
-export async function saveCapture({ engagementId, draft, edits, addIps, image, hosts }: SaveCaptureArgs): Promise<LogEntry> {
+export async function saveCapture(args: SaveCaptureArgs): Promise<LogEntry> {
+  const { engagementId, draft, edits, addIps, image, draftInput, onHostCreated } = args;
   const hostIds = [...edits.hostIds];
+  const hosts = [...args.hosts];
+  const added: Host[] = [];
   for (const ip of addIps) {
-    // A retry after a partial failure finds the host already made.
-    const existing = hosts.find((h) => h.ip === ip);
-    const id = existing ? existing.id : (await api.hostCreate(engagementId, { name: ip, ip })).id;
-    if (!hostIds.includes(id)) hostIds.push(id);
+    // A retry after a failure finds the host already made.
+    let h = hosts.find((x) => x.ip === ip);
+    if (!h) {
+      h = await api.hostCreate(engagementId, { name: ip, ip });
+      hosts.push(h);
+      onHostCreated?.(h);
+    }
+    added.push(h);
+    if (!hostIds.includes(h.id)) hostIds.push(h.id);
+  }
+
+  // First scan of a new box: re-run the draft now that its host exists.
+  let scan = draft.scan;
+  if (!scan && edits.kind === "command" && draftInput && added.length) {
+    const known = new Set(draftInput.hosts.map((h) => h.id));
+    const refs = added.filter((h) => !known.has(h.id)).map((h) => ({ id: h.id, name: h.name, ip: h.ip, column: h.boardColumn }));
+    scan = buildDraft({ ...draftInput, kind: "command", hosts: [...draftInput.hosts, ...refs] }).scan;
   }
 
   const entry = await api.logCreate(engagementId, {
@@ -63,11 +83,11 @@ export async function saveCapture({ engagementId, draft, edits, addIps, image, h
     attachment: image,
   });
 
-  const scan = draft.scan;
   if (scan && hostIds.includes(scan.hostId)) {
+    const { hostId } = scan;
     try {
-      await api.servicesUpsertScan(scan.hostId, scan.ports);
-      const h = hosts.find((x) => x.id === scan.hostId);
+      await api.servicesUpsertScan(hostId, scan.ports);
+      const h = hosts.find((x) => x.id === hostId);
       if (h && !h.os && scan.os) {
         await api.hostUpdate(h.id, { name: h.name, ip: h.ip, os: scan.os, access: h.access });
       }

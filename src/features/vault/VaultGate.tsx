@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Link } from "react-router";
 import { api } from "../../lib/api";
 import { onLockedError } from "../../lib/lockSignal";
+import { useCaptureStore } from "../capture/useCaptureStore";
 import type { UnlockResult, VaultStatus } from "../../types/vault";
 import { Button, Kbd, TitleBar } from "../../ui";
 import { SetupScreen } from "./SetupScreen";
@@ -72,6 +73,8 @@ export function VaultGate({ children }: { children: ReactNode }) {
 
   const markLocked = useCallback(() => {
     qc.clear();
+    // Unsaved capture drafts hold engagement data: they go with the lock.
+    useCaptureStore.getState().reset();
     setNotice(null);
     setBackupError(null);
     setStatus((s) => (s ? { ...s, unlocked: false } : s));

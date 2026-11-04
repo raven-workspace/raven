@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { Host } from "../../types/host";
 import type { FlagKind, LogKind } from "../../types/log";
 import { releaseImage, type PastedImage } from "./imagePaste";
 
@@ -15,6 +16,8 @@ export interface PanelDraft {
   titleEdited: boolean;
   hostIds: string[] | null;
   addIps: string[];
+  /** Hosts a failed save already created; a retry reuses them. */
+  created: Host[];
   ranOn: string | null;
   observations: string;
   returnedNothing: boolean;
@@ -31,6 +34,7 @@ export const EMPTY_DRAFT: PanelDraft = {
   titleEdited: false,
   hostIds: null,
   addIps: [],
+  created: [],
   ranOn: null,
   observations: "",
   returnedNothing: false,

@@ -10,6 +10,7 @@ import { HostChips } from "./HostChips";
 import { clipboardImage, readImage, releaseImage } from "./imagePaste";
 import { KindChips } from "./KindChips";
 import { KindFields } from "./KindFields";
+import { PasteArea } from "./PasteArea";
 import { Toggle } from "./Toggle";
 import { KINDS, resolveCapture } from "./resolve";
 import { PartialSaveError, saveCapture } from "./saveCapture";
@@ -18,20 +19,17 @@ import { EMPTY_DRAFT, useCaptureStore, type PanelDraft } from "./useCaptureStore
 const NO_HOSTS: Host[] = [];
 const NO_MACHINES: string[] = [];
 
-const PLACEHOLDER = {
-  command: "Paste a terminal block",
-  screenshot: "Paste an image (⌘V)",
-  http: "Paste a request (and response)",
-  note: "Write or paste a note",
-  flag: "Flag value",
-} as const;
-
 export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; pasteRef: RefObject<HTMLElement | null> }) {
   const id = engagement.id;
   const qc = useQueryClient();
-  const hosts = useHosts(id).data ?? NO_HOSTS;
+  const listed = useHosts(id).data ?? NO_HOSTS;
   const machines = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet }).data?.machines ?? NO_MACHINES;
   const pd = useCaptureStore((s) => s.drafts[id]) ?? EMPTY_DRAFT;
+  // Hosts a failed save already created count as known, even before the list refetches.
+  const hosts = useMemo(
+    () => (pd.created.length ? [...listed, ...pd.created.filter((c) => !listed.some((h) => h.id === c.id))] : listed),
+    [listed, pd.created],
+  );
   const presetHostId = useCaptureStore((s) => s.hostId);
   const notice = useCaptureStore((s) => s.notice);
   const [saving, setSaving] = useState(false);
@@ -75,7 +73,19 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
     const store = useCaptureStore.getState();
     const image = pd.image && (kind === "screenshot" || kind === "flag") ? { mime: pd.image.mime, dataBase64: pd.image.dataBase64 } : null;
     try {
-      await saveCapture({ engagementId: id, draft: r.draft, edits: r.edits, addIps: pd.addIps, image, hosts });
+      await saveCapture({
+        engagementId: id,
+        draft: r.draft,
+        draftInput: r.draftInput,
+        edits: r.edits,
+        addIps: pd.addIps,
+        image,
+        hosts,
+        onHostCreated: (h) => {
+          const cur = useCaptureStore.getState().drafts[id]?.created ?? [];
+          set({ created: [...cur, h] });
+        },
+      });
       refresh();
       store.discard(id);
       store.close();
@@ -100,8 +110,14 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
     void save();
   }
 
+  /** In a note, Enter saves only while the text is one line (R9). */
+  function noteEnter(e: KeyboardEvent<HTMLElement>) {
+    if (!pd.text.trim().includes("\n")) enterSaves(e);
+  }
+
+  /** ⌘ shortcuts; Ctrl, Shift or Alt with them does nothing. */
   function onKeyDown(e: KeyboardEvent<HTMLElement>) {
-    if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+    if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
     const n = Number(e.key);
     if (Number.isInteger(n) && n >= 1 && n <= KINDS.length) set({ kind: KINDS[n - 1]!.kind });
     else if (e.key.toLowerCase() === "p") set({ private: !pd.private });
@@ -119,11 +135,18 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
     readImage(file).then(
       (image) => {
         releaseImage(useCaptureStore.getState().drafts[id]?.image);
-        focusCaption.current = true;
+        // The caption is the next thing to type, once this is a screenshot.
+        focusCaption.current = keep === null;
         set({ image, kind: keep });
       },
       (err: Error) => setError(err.message),
     );
+  }
+
+  function removeImage() {
+    releaseImage(pd.image);
+    set({ image: null });
+    pasteRef.current?.focus();
   }
 
   function discard() {
@@ -154,29 +177,16 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
         {notice && <p className="m-0 rounded-sm border border-warn px-2.5 py-2 text-[13px] text-warn">{notice}</p>}
         <KindChips kind={kind} onChange={(k) => set({ kind: k })} />
 
-        {kind === "screenshot" && pd.image ? (
-          <div
-            ref={bindPaste}
-            tabIndex={0}
-            aria-label="Paste"
-            onPaste={onPaste}
-            className="rounded-sm border border-line-2 p-1.5 focus-visible:outline-1 focus-visible:outline-accent"
-          >
-            <img src={pd.image.objectUrl} alt="Pasted screenshot" className="mx-auto block max-h-72 max-w-full" />
-          </div>
-        ) : (
-          <Textarea
-            ref={bindPaste}
-            aria-label="Paste"
-            mono
-            rows={kind === "note" ? 8 : 10}
-            placeholder={PLACEHOLDER[kind]}
-            value={pd.text}
-            onChange={(e) => set({ text: e.target.value })}
-            onPaste={onPaste}
-            onKeyDown={kind === "note" ? undefined : enterSaves}
-          />
-        )}
+        <PasteArea
+          kind={kind}
+          text={pd.text}
+          image={pd.image}
+          bindRef={bindPaste}
+          onText={(text) => set({ text })}
+          onPaste={onPaste}
+          onKeyDown={kind === "note" ? noteEnter : enterSaves}
+          onRemoveImage={removeImage}
+        />
 
         <Field label="Title">
           <Input

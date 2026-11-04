@@ -169,6 +169,59 @@ describe("saveCapture", () => {
     expect(m.servicesUpsertScan).not.toHaveBeenCalled();
   });
 
+  it("first scan of a new box re-runs the draft with the created host", async () => {
+    const order: string[] = [];
+    m.hostCreate.mockImplementation(async (_e, input) => {
+      order.push("host");
+      return host({ id: "h9", name: input.name, ip: input.ip ?? null });
+    });
+    m.logCreate.mockImplementation(async (_e, input) => {
+      order.push("log");
+      return entry(input);
+    });
+    m.servicesUpsertScan.mockImplementation(async () => {
+      order.push("services");
+      return [];
+    });
+    m.hostUpdate.mockImplementation(async (id, input) => host({ id, name: input.name }));
+    const text = [
+      "kali@kali:~$ nmap -sCV -p 22,80 10.10.10.9",
+      "Nmap scan report for 10.10.10.9",
+      "PORT   STATE SERVICE VERSION",
+      "22/tcp open  ssh     OpenSSH 8.9",
+      "80/tcp open  http    Apache httpd 2.4.52",
+      "Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel",
+    ].join("\n");
+    const draftInput = {
+      text,
+      image: null,
+      kind: "command" as const,
+      hosts: [{ id: "h1", name: "dc01", ip: "10.10.10.5", column: "enumerate" as const }],
+      scope: ["10.10.10.0/24"],
+      domain: "",
+      machines: ["Kali (VM)"],
+      lastRanOn: null,
+    };
+    const created: string[] = [];
+    await saveCapture({
+      engagementId: "e1",
+      draft: draft({ hostIds: [], scan: null, unknownScopeIps: ["10.10.10.9"] }),
+      draftInput,
+      edits: edits({ hostIds: [] }),
+      addIps: ["10.10.10.9"],
+      image: null,
+      hosts: [DC],
+      onHostCreated: (h) => created.push(h.id),
+    });
+    expect(order).toEqual(["host", "log", "services"]);
+    expect(created).toEqual(["h9"]);
+    expect(m.servicesUpsertScan).toHaveBeenCalledWith("h9", [
+      expect.objectContaining({ port: 22, service: "ssh" }),
+      expect.objectContaining({ port: 80, service: "http" }),
+    ]);
+    expect(m.hostUpdate).toHaveBeenCalledWith("h9", { name: "10.10.10.9", ip: "10.10.10.9", os: "linux", access: "none" });
+  });
+
   it("services failure still keeps the entry", async () => {
     m.servicesUpsertScan.mockRejectedValue(new Error("db busy"));
     const err = await saveCapture({

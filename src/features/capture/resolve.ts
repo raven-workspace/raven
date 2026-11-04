@@ -1,4 +1,4 @@
-import { buildDraft, detectKind, flagTitle, screenshotFileName, type CaptureDraft } from "../../engines/capture";
+import { buildDraft, detectKind, flagTitle, screenshotFileName, type CaptureDraft, type DraftInput } from "../../engines/capture";
 import type { BoardColumn, Host } from "../../types/host";
 import type { FlagKind, LogContent, LogKind } from "../../types/log";
 import type { CaptureEdits } from "./saveCapture";
@@ -31,6 +31,8 @@ export interface CaptureContext {
 
 export interface Resolved {
   draft: CaptureDraft;
+  /** What `draft` was built from; saving re-runs it once new hosts exist. */
+  draftInput: DraftInput;
   edits: CaptureEdits;
   /** Title Raven would use; the placeholder when the user clears the field. */
   autoTitle: string;
@@ -48,7 +50,7 @@ export interface Resolved {
 export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
   const { hosts } = ctx;
   const kind = pd.kind ?? detectKind(pd.text, pd.image !== null);
-  const draft = buildDraft({
+  const draftInput: DraftInput = {
     text: kind === "screenshot" ? pd.caption : pd.text,
     image: pd.image ? { mime: pd.image.mime } : null,
     kind,
@@ -57,7 +59,8 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
     domain: ctx.domain,
     machines: ctx.machines,
     lastRanOn: ctx.lastRanOn,
-  });
+  };
+  const draft = buildDraft(draftInput);
 
   const known = new Set(hosts.map((h) => h.id));
   const preset = ctx.presetHostId && known.has(ctx.presetHostId) ? [ctx.presetHostId] : [];
@@ -85,11 +88,19 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
   const userTitle = pd.titleEdited && pd.title.trim() !== "";
   const scan = draft.scan;
   const scanHost = scan && hostIds.includes(scan.hostId) ? hosts.find((h) => h.id === scan.hostId) : undefined;
-  const servicesLine =
-    scan && scanHost ? `Updates services on ${scanHost.name}: ${scan.ports.map((p) => p.port).join(", ")}` : null;
+  const ports = (list: { port: number }[]) => list.map((p) => p.port).join(", ");
+  let servicesLine = scan && scanHost ? `Updates services on ${scanHost.name}: ${ports(scan.ports)}` : null;
+  if (!scan && kind === "command" && pd.addIps.length) {
+    // First scan of a new box: the scan belongs to an IP that becomes a host on save.
+    const pending = pd.addIps.map((ip) => ({ id: `new:${ip}`, name: ip, ip, column: "enumerate" as const }));
+    const provisional = buildDraft({ ...draftInput, hosts: [...draftInput.hosts, ...pending] }).scan;
+    const ip = provisional?.hostId.startsWith("new:") ? provisional.hostId.slice(4) : null;
+    if (provisional && ip) servicesLine = `Updates services on ${ip}: ${ports(provisional.ports)}`;
+  }
 
   return {
     draft,
+    draftInput,
     autoTitle,
     titleInput: pd.titleEdited ? pd.title : autoTitle,
     selectedHost,

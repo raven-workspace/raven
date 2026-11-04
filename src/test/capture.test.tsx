@@ -47,6 +47,15 @@ function host(over: Partial<Host> & Pick<Host, "id" | "name">): Host {
   };
 }
 
+const NMAP_NEW = [
+  "kali@kali:~$ nmap -sCV -p 22,80 10.10.10.9",
+  "Nmap scan report for 10.10.10.9",
+  "PORT   STATE SERVICE VERSION",
+  "22/tcp open  ssh     OpenSSH 8.9",
+  "80/tcp open  http    Apache httpd 2.4.52",
+  "Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel",
+].join("\n");
+
 const NMAP = [
   "kali@kali:~$ nmap -sCV -p 22,80,3003 10.10.10.5",
   "Starting Nmap 7.94",
@@ -57,6 +66,23 @@ const NMAP = [
   "3003/tcp open  http    Node.js",
   "Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel",
 ].join("\n");
+
+function pngFile() {
+  return new File([new Uint8Array([137, 80, 78, 71])], "shot.png", { type: "image/png" });
+}
+
+async function pasteImage(target: HTMLElement, file: File) {
+  await act(async () => {
+    fireEvent.paste(target, {
+      clipboardData: {
+        items: [{ kind: "file", type: file.type, getAsFile: () => file }],
+        files: [file],
+        types: ["Files"],
+        getData: () => "",
+      },
+    });
+  });
+}
 
 function mount(path = "/e/e1") {
   return render(
@@ -179,6 +205,11 @@ describe("capture panel", () => {
     expect(within(dialog).getByRole("button", { name: "Note" })).toHaveAttribute("aria-pressed", "true");
     expect(title).toHaveValue("My scan");
     expect(within(dialog).queryByText("Private · not in reports")).not.toBeInTheDocument();
+    // Only ⌘ shortcuts: Ctrl, or ⌘ with Shift, does nothing.
+    within(dialog).getByRole("button", { name: /^Private/ }).focus();
+    await user.keyboard("{Control>}p{/Control}{Control>}1{/Control}{Meta>}{Shift>}p{/Shift}{/Meta}");
+    expect(within(dialog).queryByText("Private · not in reports")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Note" })).toHaveAttribute("aria-pressed", "true");
     await user.keyboard("{Meta>}p{/Meta}");
     expect(within(dialog).getByText("Private · not in reports")).toBeInTheDocument();
     await user.keyboard("{Meta>}{Enter}{/Meta}");
@@ -244,6 +275,99 @@ describe("capture panel", () => {
     expect(m.logCreate.mock.calls[0]![1].hostIds).toEqual(["h9"]);
   });
 
+  it("first scan of a new box updates services on the added host", async () => {
+    const user = userEvent.setup();
+    const order: string[] = [];
+    m.hostCreate.mockImplementation(async (_e, input) => {
+      order.push("host");
+      return host({ id: "h9", name: input.name, ip: input.ip ?? null });
+    });
+    m.logCreate.mockImplementationOnce(async () => {
+      order.push("log");
+      throw new Error("never mind");
+    });
+    m.servicesUpsertScan.mockImplementation(async () => {
+      order.push("services");
+      return [];
+    });
+    m.hostUpdate.mockImplementation(async (hid, input) => host({ id: hid, name: input.name }));
+    mount();
+    await ready();
+    const dialog = await openCapture(user);
+    await user.paste(NMAP_NEW);
+    expect(within(dialog).queryByText(/Updates services/)).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "+ 10.10.10.9" }));
+    expect(within(dialog).getByText("Updates services on 10.10.10.9: 22, 80")).toBeInTheDocument();
+    await user.click(within(dialog).getByLabelText("Observations"));
+    await user.keyboard("{Enter}");
+    // The first attempt made the host, then the entry failed; the retry must not make it again.
+    expect(await within(dialog).findByText("never mind")).toBeInTheDocument();
+    await user.keyboard("{Enter}");
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(m.hostCreate).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(["host", "log", "services"]);
+    expect(m.logCreate).toHaveBeenLastCalledWith("e1", expect.objectContaining({ hostIds: ["h9"] }));
+    expect(m.servicesUpsertScan).toHaveBeenCalledWith("h9", expect.arrayContaining([expect.objectContaining({ port: 80 })]));
+    expect(m.hostUpdate).toHaveBeenCalledWith("h9", { name: "10.10.10.9", ip: "10.10.10.9", os: "linux", access: "none" });
+  });
+
+  it("Enter saves a one-line note; a multi-line note keeps Enter as newline", async () => {
+    const user = userEvent.setup();
+    mount();
+    await ready();
+    const dialog = await openCapture(user);
+    await user.paste("line one\nline two");
+    await user.keyboard("{Enter}");
+    expect(within(dialog).getByLabelText("Paste")).toHaveValue("line one\nline two\n");
+    expect(m.logCreate).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole("button", { name: "Discard" }));
+    await user.paste("check the vhost");
+    await user.keyboard("{Enter}");
+    await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
+    expect(m.logCreate.mock.calls[0]![1]).toMatchObject({ title: "check the vhost", content: { kind: "note", text: "check the vhost" } });
+  });
+
+  it("lock discards capture drafts", async () => {
+    const user = userEvent.setup();
+    m.vaultLock.mockResolvedValue(null);
+    m.vaultUnlock.mockResolvedValue({ migratedFrom: 3, migratedTo: 3, dailyBackup: null, dailyBackupError: null });
+    mount();
+    await ready();
+    await openCapture(user);
+    await user.paste("remember the vhost");
+    await user.keyboard("{Meta>}l{/Meta}");
+    expect(await screen.findByLabelText("Password")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Password"), "correct horse battery{Enter}");
+    await ready();
+    const dialog = await openCapture(user);
+    expect(within(dialog).getByLabelText("Paste")).toHaveValue("");
+  });
+
+  it("flag keeps a pasted image as a removable thumbnail", async () => {
+    Object.assign(URL, { createObjectURL: vi.fn(() => "blob:flag"), revokeObjectURL: vi.fn() });
+    const user = userEvent.setup();
+    mount("/e/e1/h/h2");
+    await screen.findByRole("navigation", { name: "Engagement" });
+    const dialog = await openCapture(user);
+    await user.paste("0123456789abcdef0123456789abcdef");
+    await pasteImage(within(dialog).getByLabelText("Paste"), pngFile());
+    await vi.waitFor(() => expect(within(dialog).getByRole("img", { name: "Pasted image" })).toHaveAttribute("src", "blob:flag"));
+    expect(within(dialog).getByRole("button", { name: "Flag" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByLabelText("Paste")).toHaveValue("0123456789abcdef0123456789abcdef");
+    await user.click(within(dialog).getByRole("button", { name: "Remove image" }));
+    expect(within(dialog).queryByRole("img")).not.toBeInTheDocument();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:flag");
+    await user.click(within(dialog).getByLabelText("Paste"));
+    await user.keyboard("{Enter}");
+    await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
+    expect(m.logCreate.mock.calls[0]![1]).toMatchObject({
+      title: "proof.txt · web02",
+      content: { kind: "flag", flagKind: "proof", value: "0123456789abcdef0123456789abcdef" },
+      attachment: null,
+    });
+  });
+
   it("image paste becomes a screenshot with generated file name", async () => {
     const createUrl = vi.fn(() => "blob:shot");
     Object.assign(URL, { createObjectURL: createUrl, revokeObjectURL: vi.fn() });
@@ -251,17 +375,7 @@ describe("capture panel", () => {
     mount("/e/e1/h/h1");
     await screen.findByRole("navigation", { name: "Engagement" });
     const dialog = await openCapture(user);
-    const file = new File([new Uint8Array([137, 80, 78, 71])], "shot.png", { type: "image/png" });
-    await act(async () => {
-      fireEvent.paste(within(dialog).getByLabelText("Paste"), {
-        clipboardData: {
-          items: [{ kind: "file", type: "image/png", getAsFile: () => file }],
-          files: [file],
-          types: ["Files"],
-          getData: () => "",
-        },
-      });
-    });
+    await pasteImage(within(dialog).getByLabelText("Paste"), pngFile());
     await vi.waitFor(() =>
       expect(within(dialog).getByRole("button", { name: "Screenshot" })).toHaveAttribute("aria-pressed", "true"),
     );
