@@ -197,4 +197,10 @@ describe('capture draft', () => {
     expect(d.ranOn).toBe('Kali (VM)');
     expect(d.content).toEqual({ kind: 'command', blocks: [{ shell: 'kali@kali', command: 'whoami', output: 'kali' }] });
   });
+
+  it('rustscan Open ip:port lines yield a blank service, never the parser placeholder (I1)', () => {
+    const text = 'kali@kali:~$ rustscan -a 172.31.166.143\nOpen 172.31.166.143:22\nOpen 172.31.166.143:80';
+    const d = buildDraft({ ...base, text });
+    expect(d.scan?.ports.map((p) => [p.port, p.service, p.version])).toEqual([[22, '', ''], [80, '', '']]);
+  });
 });

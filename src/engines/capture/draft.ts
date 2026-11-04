@@ -53,14 +53,22 @@ function ipsOf(text: string): string[] {
 const VERSION_PLACEHOLDERS = new Set(['unknown version', 'unknown', 'raw port intake']);
 const OPEN_STATES = new Set(['open', 'open|filtered']);
 
-function toScanPorts(ports: ParsedPort[]): ScanPort[] {
+/**
+ * Rustscan's bare `Open ip:port` path names no service and fills in `unknown` / `Unknown`. That pair is a
+ * placeholder, not nmap's own `unknown`, so it is blanked. (The XML/gnmap `|| 'unknown'` fallbacks can't be
+ * told apart from a real nmap `unknown` and are kept.)
+ */
+const isPlaceholderService = (format: string, p: ParsedPort) =>
+  format === 'rustscan' && p.service === 'unknown' && p.version === 'Unknown';
+
+function toScanPorts(ports: ParsedPort[], format: string): ScanPort[] {
   return ports
     .filter((p) => OPEN_STATES.has(p.state.toLowerCase()))
     .map((p) => ({
       port: p.port,
       protocol: p.protocol === 'udp' ? 'udp' : 'tcp',
       state: p.state,
-      service: p.service,
+      service: isPlaceholderService(format, p) ? '' : p.service,
       version: VERSION_PLACEHOLDERS.has(p.version.trim().toLowerCase()) ? '' : p.version,
     }));
 }
@@ -100,7 +108,7 @@ function scanFor(output: string, target: HostRef, domain: string): CaptureDraft[
         return m && isTarget(m[2], [m[1], m[2]], target, domain);
       });
     const os = detectOsFromScan({ format: result.format, ports: match.ports, detectedOs: match.os }, section ?? '');
-    return { hostId: target.id, ports: toScanPorts(match.ports), os: os?.os ?? null };
+    return { hostId: target.id, ports: toScanPorts(match.ports, result.format), os: os?.os ?? null };
   }
 
   const reported = result.detectedIp || result.detectedHost || hosts[0]?.ip;
@@ -108,7 +116,7 @@ function scanFor(output: string, target: HostRef, domain: string): CaptureDraft[
   // Rustscan "Open ip:port" lines for several IPs: which port is whose is not reliable, so no scan.
   const openIps = new Set(Array.from(output.matchAll(/Open\s+((?:\d{1,3}\.){3}\d{1,3}):\d+/g), (m) => m[1]));
   if (openIps.size > 1) return null;
-  return { hostId: target.id, ports: toScanPorts(result.ports), os: analysis.os?.os ?? null };
+  return { hostId: target.id, ports: toScanPorts(result.ports, result.format), os: analysis.os?.os ?? null };
 }
 
 export function buildDraft(input: DraftInput): CaptureDraft {
