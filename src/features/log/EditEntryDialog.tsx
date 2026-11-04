@@ -1,11 +1,15 @@
 import { useId, useState, type FormEvent } from "react";
 import type { Host } from "../../types/host";
 import type { LogEntry, LogEntryInput } from "../../types/log";
-import { Button, Dialog, Field, Input, Textarea } from "../../ui";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../../lib/api";
+import { Button, Dialog, Field, Input, Select, Textarea, Toggle } from "../../ui";
 import { HostChips } from "../capture/HostChips";
 import { useLogMutations } from "./queries";
 
 const NO_IPS: string[] = [];
+const NONE = "__none";
+const NO_MACHINES: string[] = [];
 
 export interface EditEntryDialogProps {
   entry: LogEntry;
@@ -25,19 +29,24 @@ export function EditEntryDialog({ entry, hosts, onClose }: EditEntryDialogProps)
   const [nothing, setNothing] = useState(entry.returnedNothing);
   const [text, setText] = useState(entry.content.kind === "note" ? entry.content.text : "");
   const [error, setError] = useState<string>();
+  const [titleError, setTitleError] = useState<string>();
+  const machines = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet }).data?.machines ?? NO_MACHINES;
+  const ranOnOptions = Array.from(new Set([...machines, ...hosts.map((h) => h.name), ...(entry.ranOn ? [entry.ranOn] : []), ...(ranOn ? [ranOn] : [])]));
 
   function submit(e: FormEvent) {
     e.preventDefault();
     if (update.isPending) return;
     const t = title.trim();
     if (t === "") {
-      setError("Give it a title");
+      setTitleError("Give it a title");
       return;
     }
+    setTitleError(undefined);
+    setError(undefined);
     const input: LogEntryInput = {
       title: t,
       titleEdited: entry.titleEdited || t !== entry.title,
-      ranOn: ranOn.trim() === "" ? null : ranOn.trim(),
+      ranOn: ranOn === "" ? null : ranOn,
       hostIds,
       observations: observations.trim() === "" ? null : observations.trim(),
       returnedNothing: nothing,
@@ -64,7 +73,7 @@ export function EditEntryDialog({ entry, hosts, onClose }: EditEntryDialogProps)
       }
     >
       <form id={formId} onSubmit={submit} noValidate className="flex flex-col gap-3.5">
-        <Field label="Title" error={error}>
+        <Field label="Title" error={titleError}>
           <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} />
         </Field>
         <div className="flex flex-col gap-1.5">
@@ -72,7 +81,11 @@ export function EditEntryDialog({ entry, hosts, onClose }: EditEntryDialogProps)
           <HostChips hosts={hosts} linked={hostIds} addIps={NO_IPS} unknownIps={NO_IPS} onLinked={setHostIds} onAddIps={() => {}} />
         </div>
         <Field label="Ran on">
-          <Input value={ranOn} onChange={(e) => setRanOn(e.target.value)} placeholder="Kali (VM)" />
+          <Select
+            value={ranOn === "" ? NONE : ranOn}
+            onValueChange={(v) => setRanOn(v === NONE ? "" : v)}
+            options={[{ value: NONE, label: "Not set" }, ...ranOnOptions.map((v) => ({ value: v, label: v }))]}
+          />
         </Field>
         {entry.content.kind === "note" && (
           <Field label="Note">
@@ -82,16 +95,15 @@ export function EditEntryDialog({ entry, hosts, onClose }: EditEntryDialogProps)
         <Field label="Observations">
           <Textarea value={observations} onChange={(e) => setObservations(e.target.value)} rows={3} />
         </Field>
-        <div className="flex gap-4 text-[13px] text-fg-2">
-          <label className="flex items-center gap-1.5">
-            <input type="checkbox" checked={isPrivate} onChange={(e) => setPrivate(e.target.checked)} />
+        <div className="flex gap-2">
+          <Toggle on={isPrivate} onChange={setPrivate}>
             Private
-          </label>
-          <label className="flex items-center gap-1.5">
-            <input type="checkbox" checked={nothing} onChange={(e) => setNothing(e.target.checked)} />
+          </Toggle>
+          <Toggle on={nothing} onChange={setNothing}>
             Returned nothing
-          </label>
+          </Toggle>
         </div>
+        {error && <p role="alert" className="m-0 text-xs text-warn">{error}</p>}
       </form>
     </Dialog>
   );

@@ -11,6 +11,16 @@ import type { Host } from "../types/host";
 import type { LogEntry } from "../types/log";
 
 vi.mock("../lib/api");
+
+// jsdom gaps that Radix Select relies on.
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof ResizeObserver;
+Element.prototype.scrollIntoView ??= () => {};
+Element.prototype.hasPointerCapture ??= () => false;
+Element.prototype.releasePointerCapture ??= () => {};
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {
@@ -48,6 +58,10 @@ function mount() {
 
 const log = () => within(screen.getByRole("region", { name: "Log" }));
 const rows = () => log().getAllByRole("listitem");
+async function pick(user: ReturnType<typeof userEvent.setup>, label: string, option: string) {
+  await user.click(log().getByRole("combobox", { name: label }));
+  await user.click(await screen.findByRole("option", { name: option }));
+}
 const titles = () => rows().map((li) => within(li).getAllByRole("button")[0]!.textContent);
 
 beforeEach(() => {
@@ -84,15 +98,15 @@ describe("log", () => {
     expect(titles()[1]).toMatch(/nmap scan/);
     expect(titles()[2]).toMatch(/older note/);
     expect(screen.getByText("09:06")).toHaveAttribute("title", expect.stringContaining("2026"));
-    await user.selectOptions(screen.getByLabelText("Kind"), "command");
+    await pick(user, "Kind", "command");
     expect(rows()).toHaveLength(1);
-    await user.selectOptions(screen.getByLabelText("Kind"), "all");
-    await user.selectOptions(screen.getByLabelText("Host"), "none");
+    await pick(user, "Kind", "All");
+    await pick(user, "Host", "No host");
     expect(rows()).toHaveLength(2);
-    await user.selectOptions(screen.getByLabelText("Host"), "h1");
+    await pick(user, "Host", "dc01");
     expect(rows()).toHaveLength(1);
-    await user.selectOptions(screen.getByLabelText("Host"), "all");
-    await user.selectOptions(screen.getByLabelText("Ran on"), "Kali (VM)");
+    await pick(user, "Host", "All");
+    await pick(user, "Ran on", "Kali (VM)");
     expect(rows()).toHaveLength(1);
   });
 
@@ -147,5 +161,67 @@ describe("log", () => {
     expect(screen.getByText("Delete this entry? Its screenshot goes with it.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Delete entry" }));
     await vi.waitFor(() => expect(m.logDelete).toHaveBeenCalledWith("a"));
+  });
+
+  it("long output folds at 40 lines and expands", async () => {
+    const user = userEvent.setup();
+    const out = Array.from({ length: 60 }, (_, i) => `line${i + 1}`).join("\n");
+    entries = [entry({ id: "l", title: "big", kind: "command", content: { kind: "command", blocks: [{ command: "dump", output: out }] } })];
+    mount();
+    await user.click(await screen.findByRole("button", { name: /big/ }));
+    expect(screen.queryByText(/line60/)).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Show all 60 lines" }));
+    expect(screen.getByText(/line60/)).toBeInTheDocument();
+  });
+
+  it("empty log shows the capture hint", async () => {
+    entries = [];
+    mount();
+    expect(await screen.findByText("Nothing logged yet. Press L to capture.")).toBeInTheDocument();
+  });
+
+  it("delete failure is shown and the dialog stays open", async () => {
+    const user = userEvent.setup();
+    m.logDelete.mockRejectedValue(new Error("disk is read-only"));
+    mount();
+    await user.click(await screen.findByRole("button", { name: /older note/ }));
+    await user.click(log().getByRole("button", { name: "Delete" }));
+    await user.click(screen.getByRole("button", { name: "Delete entry" }));
+    expect(await screen.findByText("disk is read-only")).toBeInTheDocument();
+    expect(screen.getByText("Delete this entry? Its screenshot goes with it.")).toBeInTheDocument();
+  });
+
+  it("load failure shows the error and Try again refetches", async () => {
+    const user = userEvent.setup();
+    m.logList.mockRejectedValueOnce(new Error("db busy"));
+    mount();
+    expect(await screen.findByText("Couldn't load the log")).toBeInTheDocument();
+    expect(screen.getByText("db busy")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("nmap scan")).toBeInTheDocument();
+  });
+
+  it("edit save failure shows a general error, not under the title", async () => {
+    const user = userEvent.setup();
+    m.logUpdate.mockRejectedValue(new Error("write failed"));
+    mount();
+    await user.click(await screen.findByRole("button", { name: /older note/ }));
+    await user.click(log().getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    const err = await screen.findByText("write failed");
+    expect(err).toHaveAttribute("role", "alert");
+    expect(screen.getByLabelText("Title")).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("toggles flip private and returned-nothing in the update", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByRole("button", { name: /older note/ }));
+    await user.click(log().getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Private" }));
+    expect(screen.getByRole("button", { name: "Private" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await vi.waitFor(() => expect(m.logUpdate).toHaveBeenCalled());
+    expect(m.logUpdate.mock.calls[0]![1]).toMatchObject({ private: true, returnedNothing: false });
   });
 });

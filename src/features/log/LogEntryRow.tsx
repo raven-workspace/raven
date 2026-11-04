@@ -12,6 +12,7 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false }: { entry: LogE
   const [open, setOpen] = useState(defaultOpen);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string>();
   const { remove } = useLogMutations(entry.engagementId);
   const d = new Date(entry.at);
   const names = entry.hostIds.map((id) => hosts.find((h) => h.id === id)?.name).filter((n): n is string => !!n);
@@ -51,12 +52,16 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false }: { entry: LogE
       {editing && <EditEntryDialog entry={entry} hosts={hosts} onClose={() => setEditing(false)} />}
       <Dialog
         open={deleting}
-        onOpenChange={setDeleting}
+        onOpenChange={(o) => {
+          setDeleting(o);
+          if (!o) setDeleteError(undefined);
+        }}
         title="Delete this entry? Its screenshot goes with it."
+        description={deleteError ? <span role="alert" className="text-warn">{deleteError}</span> : undefined}
         footer={
           <>
             <Button onClick={() => setDeleting(false)}>Cancel</Button>
-            <Button variant="danger" disabled={remove.isPending} onClick={() => remove.mutate(entry.id, { onSuccess: () => setDeleting(false) })}>
+            <Button variant="danger" disabled={remove.isPending} onClick={() => remove.mutate(entry.id, { onSuccess: () => setDeleting(false), onError: (e) => setDeleteError(e.message) })}>
               Delete entry
             </Button>
           </>
