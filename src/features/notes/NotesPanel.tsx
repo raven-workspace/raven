@@ -1,13 +1,12 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, type MouseEvent } from "react";
-import { isDialogOpen, useKeydown } from "../../lib/keys";
+import { isDialogOpen } from "../../lib/keys";
 import { RavenError } from "../../types/errors";
 import type { Engagement } from "../../types/engagement";
 import { Kbd, labelClass, Textarea, Toggle } from "../../ui";
 import { cx } from "../../lib/cx";
 import { useHosts } from "../hosts/queries";
 import { useNote } from "./queries";
-import { flushQuietly, noteKey, onNoteSaved, useNotesStore, type NotesScope } from "./useNotesStore";
+import { flushQuietly, MIN_WIDTH, maxWidth, noteKey, useNotesStore, type NotesScope } from "./useNotesStore";
 
 /**
  * Field notes (`N`): a panel over the right side of the engagement screen holding the current
@@ -22,18 +21,11 @@ export function NotesPanel({ engagement, hostId }: { engagement: Engagement; hos
   const target = { engagementId: engagement.id, hostId: scope === "host" ? hostId : null };
   const key = noteKey(target);
 
-  const qc = useQueryClient();
-  useEffect(
-    () =>
-      onNoteSaved((note) => {
-        qc.setQueryData(["note", note.engagementId, note.hostId], note);
-        void qc.invalidateQueries({ queryKey: ["notes", note.engagementId] });
-      }),
-    [qc],
-  );
-
   // Route change (other host or scope), closing the screen: save what is pending right away.
   useEffect(() => () => flushQuietly(), [key]);
+
+  // Leaving the engagement closes the panel (its text is flushed by the effect above).
+  useEffect(() => () => useNotesStore.setState({ open: false }), []);
 
   const returnFocus = useRef<HTMLElement | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -48,17 +40,26 @@ export function NotesPanel({ engagement, hostId }: { engagement: Engagement; hos
     }
   }, [open]);
 
-  useKeydown((e) => {
-    const { open: isOpen, close, setScope } = useNotesStore.getState();
-    if (!isOpen) return;
-    if (e.key === "Escape" && !e.defaultPrevented && !isDialogOpen()) {
-      e.preventDefault();
-      close();
-    } else if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "e" && hostId) {
-      e.preventDefault();
-      setScope(scope === "host" ? "engagement" : "host");
-    }
+  // Capture phase: Esc and ⌘E reach the panel before the shell's own Esc handler, whatever the load order.
+  const onKey = useRef<(e: KeyboardEvent) => void>(() => {});
+  useEffect(() => {
+    onKey.current = (e) => {
+      const { open: isOpen, close, setScope } = useNotesStore.getState();
+      if (!isOpen || e.defaultPrevented || isDialogOpen()) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close();
+      } else if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "e" && hostId) {
+        e.preventDefault();
+        setScope(scope === "host" ? "engagement" : "host");
+      }
+    };
   });
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => onKey.current(e);
+    window.addEventListener("keydown", on, true);
+    return () => window.removeEventListener("keydown", on, true);
+  }, []);
 
   if (!open) return null;
   return <PanelBody engagement={engagement} hostId={hostId} scope={scope} width={width} textRef={textRef} />;
@@ -90,7 +91,8 @@ function PanelBody({
   const body = pending?.body ?? note.data?.body ?? "";
   const isPrivate = pending?.private ?? note.data?.private ?? false;
   const ready = note.data !== undefined || pending !== undefined;
-  const title = `Notes · ${scope === "host" ? (hostName ?? "host") : engagement.name}`;
+  const scopeName = scope === "host" ? hostName : engagement.name;
+  const title = scopeName ? `Notes · ${scopeName}` : "Notes";
 
   const startDrag = (e: MouseEvent) => {
     e.preventDefault();
@@ -117,6 +119,8 @@ function PanelBody({
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize notes"
+        aria-valuemin={MIN_WIDTH}
+        aria-valuemax={maxWidth()}
         aria-valuenow={width}
         tabIndex={0}
         onMouseDown={startDrag}
@@ -167,7 +171,7 @@ function PanelBody({
             Private
           </Toggle>
           <span className="text-xs text-muted" aria-live="polite">
-            {pending ? "Saving…" : note.data && note.data.updatedAt > 0 ? "Saved" : ""}
+            {error ? "" : pending ? "Saving…" : note.data && note.data.updatedAt > 0 ? "Saved" : ""}
           </span>
         </div>
       </div>

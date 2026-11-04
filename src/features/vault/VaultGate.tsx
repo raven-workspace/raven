@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import { api } from "../../lib/api";
 import { onLockedError, reportError } from "../../lib/lockSignal";
 import { useCaptureStore } from "../capture/useCaptureStore";
-import { closeNotesAfterLock, flushNotes, hasPendingNotes } from "../notes/useNotesStore";
+import { discardNotes, flushNotes, hasPendingNotes, setNotesQueryClient } from "../notes/useNotesStore";
 import type { UnlockResult, VaultStatus } from "../../types/vault";
 import { Button, Kbd, TitleBar } from "../../ui";
 import { SetupScreen } from "./SetupScreen";
@@ -76,6 +76,9 @@ export function VaultGate({ children }: { children: ReactNode }) {
     qc.clear();
     // Unsaved capture drafts hold engagement data: they go with the lock.
     useCaptureStore.getState().reset();
+    // Notes too: after a lock no note text stays in memory. `lock()` has already started the
+    // flush, which works from a snapshot.
+    discardNotes();
     setNotice(null);
     setBackupError(null);
     setStatus((s) => (s ? { ...s, unlocked: false } : s));
@@ -88,12 +91,20 @@ export function VaultGate({ children }: { children: ReactNode }) {
   const retryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(retryTimer.current), []);
 
-  const lockBackend = useCallback(async function run(): Promise<void> {
+  useEffect(() => {
+    setNotesQueryClient(qc);
+    return () => setNotesQueryClient(null);
+  }, [qc]);
+
+  const lockBackend = useCallback(async function run(notesSaved?: Promise<void>): Promise<void> {
     clearTimeout(retryTimer.current);
-    // Field notes are saved first, never discarded (unlike capture drafts). A failed save must
-    // not keep the vault open.
-    if (hasPendingNotes()) await flushNotes().catch(reportError);
-    closeNotesAfterLock();
+    if (notesSaved) {
+      // Field notes are saved before the backend locks. If that save failed the text is
+      // dropped anyway (see markLocked); a failed save must not keep the vault open.
+      await notesSaved;
+      discardNotes();
+      qc.clear();
+    }
     for (let i = 0; i < 3; i++) {
       try {
         await api.vaultLock();
@@ -110,13 +121,15 @@ export function VaultGate({ children }: { children: ReactNode }) {
     }
     setLockRetrying(true);
     retryTimer.current = setTimeout(() => void run(), LOCK_RETRY_MS);
-  }, []);
+  }, [qc]);
 
   const lock = useCallback(() => {
     // The UI locks at once, never leaving data on screen; the backend lock is
     // retried until the backend confirms it.
+    // Start saving notes first: markLocked clears them from the store.
+    const notesSaved = hasPendingNotes() ? flushNotes().catch(reportError) : undefined;
     markLocked();
-    void lockBackend();
+    void lockBackend(notesSaved);
   }, [markLocked, lockBackend]);
 
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet, enabled: unlocked });

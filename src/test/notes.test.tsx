@@ -1,12 +1,12 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, useNavigate } from "react-router";
+import { MemoryRouter, useLocation, useNavigate } from "react-router";
 import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
-import { resetNotesStore } from "../features/notes/useNotesStore";
+import { resetNotesStore, useNotesStore } from "../features/notes/useNotesStore";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import { RavenError } from "../types/errors";
@@ -41,6 +41,9 @@ function Nav() {
   }, [navigate]);
   return null;
 }
+function Where() {
+  return <span data-testid="where">{useLocation().pathname}</span>;
+}
 
 function mount(path: string) {
   return render(
@@ -48,6 +51,7 @@ function mount(path: string) {
       <MemoryRouter initialEntries={[path]}>
         <input aria-label="probe" />
         <Nav />
+        <Where />
         <App />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -75,9 +79,10 @@ beforeEach(() => {
   m.logList.mockResolvedValue([]);
   m.notesList.mockResolvedValue([]);
   m.notesGet.mockImplementation(async (_e, hostId) => stored[noteKey(hostId)] ?? { ownerId: hostId ?? "e1", engagementId: "e1", hostId, body: "", private: false, updatedAt: 0 });
-  m.noteSave.mockImplementation(async (_e, hostId, body, isPrivate) => ({
-    ownerId: hostId ?? "e1", engagementId: "e1", hostId, body, private: isPrivate, updatedAt: 9,
-  }));
+  m.noteSave.mockImplementation(async (_e, hostId, body, isPrivate) => {
+    setStored(hostId, body, isPrivate);
+    return stored[noteKey(hostId)]!;
+  });
 });
 
 afterEach(() => {
@@ -149,22 +154,33 @@ describe("field notes panel", () => {
     await vi.waitFor(() => expect(m.noteSave).toHaveBeenLastCalledWith("e1", null, "secret", true), { timeout: 2000 });
   });
 
+  // Fake timers are installed after the panel is loaded and the clock is never advanced:
+  // only a real flush (not the 500 ms autosave) can make noteSave run.
   it("closing flushes pending text immediately", async () => {
     const user = userEvent.setup();
     const { ta } = await open(user, "/e/e1");
+    vi.useFakeTimers({ shouldAdvanceTime: false });
     fireEvent.change(ta, { target: { value: "close me" } });
     expect(m.noteSave).not.toHaveBeenCalled();
-    await user.keyboard("{Escape}");
-    await vi.waitFor(() => expect(m.noteSave).toHaveBeenCalledWith("e1", null, "close me", false));
+    fireEvent.keyDown(ta, { key: "Escape" });
+    await act(async () => {});
+    expect(m.noteSave).toHaveBeenCalledWith("e1", null, "close me", false);
   });
 
-  it("switching with cmd+E flushes pending text and loads the other scope", async () => {
+  it("switching with cmd+E flushes pending text immediately and loads the other scope", async () => {
     setStored(null, "eng body");
     const user = userEvent.setup();
     const { p, ta } = await open(user, "/e/e1/h/h1");
+    vi.useFakeTimers({ shouldAdvanceTime: false });
     fireEvent.change(ta, { target: { value: "host text" } });
-    await user.keyboard("{Meta>}e{/Meta}");
-    await vi.waitFor(() => expect(m.noteSave).toHaveBeenCalledWith("e1", "h1", "host text", false));
+    expect(m.noteSave).not.toHaveBeenCalled();
+    fireEvent.keyDown(ta, { key: "e", metaKey: true });
+    await act(async () => {});
+    expect(m.noteSave).toHaveBeenCalledWith("e1", "h1", "host text", false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    vi.useRealTimers();
     expect(within(p).getByText("Notes · Mock exam A")).toBeInTheDocument();
     await vi.waitFor(() => expect(within(p).getByLabelText("Notes")).toHaveValue("eng body"));
     await user.click(within(p).getByRole("button", { name: "Host" }));
@@ -174,10 +190,47 @@ describe("field notes panel", () => {
   it("navigating flushes pending text immediately", async () => {
     const user = userEvent.setup();
     const { ta } = await open(user, "/e/e1/h/h1");
+    vi.useFakeTimers({ shouldAdvanceTime: false });
     fireEvent.change(ta, { target: { value: "before navigating" } });
     expect(m.noteSave).not.toHaveBeenCalled();
     act(() => go("/e/e1"));
-    await vi.waitFor(() => expect(m.noteSave).toHaveBeenCalledWith("e1", "h1", "before navigating", false));
+    await act(async () => {});
+    expect(m.noteSave).toHaveBeenCalledWith("e1", "h1", "before navigating", false);
+  });
+
+  it("a save finishing after leaving the engagement still refreshes the cache", async () => {
+    let finish: () => void = () => {};
+    m.noteSave.mockImplementation(
+      (_e, hostId, body, isPrivate) =>
+        new Promise((resolve) => {
+          finish = () => {
+            setStored(hostId, body, isPrivate);
+            resolve(stored[noteKey(hostId)]!);
+          };
+        }),
+    );
+    const user = userEvent.setup();
+    const { ta } = await open(user, "/e/e1");
+    fireEvent.change(ta, { target: { value: "typed then left" } });
+    act(() => go("/"));
+    await vi.waitFor(() => expect(m.noteSave).toHaveBeenCalled());
+    await screen.findByText(/Archived engagements/).catch(() => null);
+    await act(async () => finish());
+    act(() => go("/e/e1"));
+    await screen.findByText("Mock exam A");
+    await user.keyboard("n");
+    const again = await within(await panel()).findByLabelText("Notes");
+    // Right at first render, before any refetch could have fixed a stale cache.
+    expect(again).toHaveValue("typed then left");
+  });
+
+  it("Esc closes the panel and leaves the route alone when focus is on its Private toggle", async () => {
+    const user = userEvent.setup();
+    const { p } = await open(user, "/e/e1/h/h1");
+    act(() => within(p).getByRole("button", { name: "Private" }).focus());
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("complementary", { name: /Notes/ })).not.toBeInTheDocument();
+    expect(screen.getByTestId("where")).toHaveTextContent("/e/e1/h/h1");
   });
 
   it("lock flushes pending notes before locking", async () => {
@@ -190,19 +243,35 @@ describe("field notes panel", () => {
     expect(m.noteSave.mock.invocationCallOrder[0]).toBeLessThan(m.vaultLock.mock.invocationCallOrder[0]!);
   });
 
-  it("still locks when the flush fails, and keeps the text for the next unlock", async () => {
+  it("still locks when the flush fails, and then holds no note text", async () => {
     m.noteSave.mockRejectedValue(new RavenError("io", "disk"));
     const user = userEvent.setup();
     const { ta } = await open(user, "/e/e1");
-    fireEvent.change(ta, { target: { value: "keep" } });
+    fireEvent.change(ta, { target: { value: "gone with the lock" } });
     await user.keyboard("{Meta>}l{/Meta}");
     await vi.waitFor(() => expect(m.vaultLock).toHaveBeenCalled());
+    expect(m.noteSave).toHaveBeenCalled();
+    expect(useNotesStore.getState().pending).toEqual({});
+    expect(useNotesStore.getState().errors).toEqual({});
+    expect(useNotesStore.getState().open).toBe(false);
+    expect(screen.queryByRole("complementary", { name: /Notes/ })).not.toBeInTheDocument();
+  });
+
+  it("a locked reply clears pending notes and closes the panel", async () => {
+    m.noteSave.mockRejectedValue(new RavenError("locked", "locked"));
+    const user = userEvent.setup();
+    const { ta } = await open(user, "/e/e1");
+    fireEvent.change(ta, { target: { value: "stranded" } });
+    await screen.findByLabelText("Password", undefined, { timeout: 3000 });
+    expect(m.vaultLock).not.toHaveBeenCalled();
+    expect(useNotesStore.getState().pending).toEqual({});
+    expect(useNotesStore.getState().open).toBe(false);
   });
 
   it("shows the server's body error and keeps the text", async () => {
     m.noteSave.mockRejectedValue(new RavenError("validation", "Note is too long (over 1 MiB)", "body"));
     const user = userEvent.setup();
-    const { p, ta } = await open(user, "/e/e1");
+    const { ta } = await open(user, "/e/e1");
     fireEvent.change(ta, { target: { value: "huge" } });
     await user.keyboard("{Escape}");
     await vi.waitFor(() => expect(m.noteSave).toHaveBeenCalled());
@@ -210,8 +279,6 @@ describe("field notes panel", () => {
     const again = await panel();
     expect(await within(again).findByRole("alert")).toHaveTextContent("Note is too long (over 1 MiB)");
     expect(within(again).getByLabelText("Notes")).toHaveValue("huge");
-    void p;
-    void ta;
   });
 
   it("N inside an input types the letter", async () => {

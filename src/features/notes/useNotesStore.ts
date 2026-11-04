@@ -1,3 +1,4 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { create } from "zustand";
 import { api } from "../../lib/api";
 import { reportError } from "../../lib/lockSignal";
@@ -56,14 +57,16 @@ interface NotesState {
 
 let timer: ReturnType<typeof setTimeout> | undefined;
 let chain: Promise<void> = Promise.resolve();
-const savedListeners = new Set<(note: Note) => void>();
+let queryClient: QueryClient | null = null;
 
-/** Called with each saved note, so the panel can refresh its query cache. */
-export function onNoteSaved(cb: (note: Note) => void): () => void {
-  savedListeners.add(cb);
-  return () => {
-    savedListeners.delete(cb);
-  };
+/** The app's query client, set once at the root so saves refresh the cache even after the shell unmounts. */
+export function setNotesQueryClient(qc: QueryClient | null) {
+  queryClient = qc;
+}
+
+function cacheSaved(note: Note) {
+  queryClient?.setQueryData(["note", note.engagementId, note.hostId], note);
+  void queryClient?.invalidateQueries({ queryKey: ["notes", note.engagementId] });
 }
 
 export const useNotesStore = create<NotesState>()((set, get) => ({
@@ -98,12 +101,12 @@ export const useNotesStore = create<NotesState>()((set, get) => ({
   },
 }));
 
-async function flushOnce(): Promise<void> {
+async function flushOnce(snapshot: Record<string, PendingNote>): Promise<void> {
   let failure: unknown;
-  for (const [key, p] of Object.entries(useNotesStore.getState().pending)) {
+  for (const [key, p] of Object.entries(snapshot)) {
     try {
       const saved = await api.noteSave(p.engagementId, p.hostId, p.body, p.private);
-      savedListeners.forEach((cb) => cb(saved));
+      cacheSaved(saved);
       useNotesStore.setState((s) => {
         const errors = { ...s.errors };
         delete errors[key];
@@ -129,7 +132,9 @@ async function flushOnce(): Promise<void> {
  */
 export function flushNotes(): Promise<void> {
   clearTimeout(timer);
-  const run = chain.then(flushOnce);
+  // Snapshot now, not when the chain gets to it: a lock clears `pending` right after this call.
+  const snapshot = { ...useNotesStore.getState().pending };
+  const run = chain.then(() => flushOnce(snapshot));
   chain = run.catch(() => undefined);
   return run;
 }
@@ -144,16 +149,15 @@ export function hasPendingNotes(): boolean {
   return Object.keys(useNotesStore.getState().pending).length > 0;
 }
 
-/** After a lock: closes the panel but keeps unsaved text, so the next unlock still offers it. */
-export function closeNotesAfterLock() {
+/** On every lock: note text is never kept in memory. Drops pending text and errors, closes the panel. */
+export function discardNotes() {
   clearTimeout(timer);
-  useNotesStore.setState({ open: false, errors: {} });
+  useNotesStore.setState({ open: false, pending: {}, errors: {} });
 }
 
 /** Test helper: back to a clean store. */
 export function resetNotesStore() {
   clearTimeout(timer);
   chain = Promise.resolve();
-  savedListeners.clear();
   useNotesStore.setState({ open: false, scope: "engagement", width: storedWidth(), pending: {}, errors: {} });
 }
