@@ -1,6 +1,8 @@
 import { buildDraft, detectKind, findFlagInPaste, flagTitle, screenshotFileName, type CaptureDraft, type DraftInput } from "../../engines/capture";
+import { planCredentialIntake, type CredentialIntakePlan, type PendingCredential } from "../../engines/credentials";
 import { OS_LABELS } from "../hosts/columns";
 import { KIND_LABELS } from "../log/kindLabels";
+import type { Credential, Username } from "../../types/credentials";
 import type { BoardColumn, Host, HostOs } from "../../types/host";
 import type { FlagKind, LogContent, LogKind } from "../../types/log";
 import type { CaptureEdits } from "./saveCapture";
@@ -127,4 +129,27 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
       content,
     },
   };
+}
+
+/**
+ * The credential intake of a command entry: what its nxc output would record against the engagement's
+ * credentials, usernames and hosts. Null for any other kind, or when the output has no nxc results or roast hashes.
+ */
+export function intakePlanFor(
+  edits: Pick<CaptureEdits, "kind" | "content">,
+  ctx: { engagementId: string; hosts: Host[]; credentials: Credential[]; usernames: Username[] },
+): CredentialIntakePlan | null {
+  if (edits.kind !== "command" || edits.content.kind !== "command") return null;
+  return planCredentialIntake({
+    blocks: edits.content.blocks,
+    engagement: { id: ctx.engagementId },
+    hosts: ctx.hosts,
+    credentials: ctx.credentials,
+    usernames: ctx.usernames,
+  });
+}
+
+/** A pending credential is added when the operator turned it on; by default a success is, a failed-only pair isn't. */
+export function isAccepted(p: PendingCredential, toggles: Record<string, boolean>): boolean {
+  return toggles[p.key] ?? !p.failedOnly;
 }

@@ -1,8 +1,11 @@
 import { buildDraft, type CaptureDraft, type DraftInput } from "../../engines/capture";
 import { api } from "../../lib/api";
 import { afterEntrySaved, CHECKLIST_FAILED, FollowUpError } from "../checklist/ticks";
+import { applyIntake } from "../credentials/applyIntake";
+import type { Credential, Username } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import type { LogContent, LogEntry, LogKind, NewAttachment } from "../../types/log";
+import { intakePlanFor, isAccepted } from "./resolve";
 
 const OPEN_STATES = new Set(["open", "open|filtered"]);
 
@@ -19,7 +22,9 @@ export interface CaptureEdits {
   content: LogContent;
 }
 
-/** The entry was saved, but a follow-up step (services, OS, checklist, Metasploit lock) failed. */
+export const INTAKE_FAILED = "Saved the entry, but the credentials didn't update.";
+
+/** The entry was saved, but a follow-up step (services, OS, credentials, checklist, Metasploit lock) failed. */
 export class PartialSaveError extends Error {
   readonly entry: LogEntry;
   /** What made the follow-up step fail. */
@@ -45,11 +50,17 @@ export interface SaveCaptureArgs {
   draftInput?: DraftInput;
   /** Called for each host created, so a retry after a failure reuses it. */
   onHostCreated?: (host: Host) => void;
+  /**
+   * For a command entry: the engagement's credentials and usernames the nxc intake plans against, and the
+   * operator's accept toggles. Absent skips the intake.
+   */
+  intake?: { credentials: Credential[]; usernames: Username[]; toggles: Record<string, boolean> };
 }
 
 /**
  * Saves a capture: creates hosts for `addIps`, then the entry, then applies the nmap scan
- * (services, and the OS when the host has none), then the checklist ticks, board and Metasploit lock.
+ * (services, and the OS when the host has none), then the nxc credential intake, then the checklist ticks, board and
+ * Metasploit lock.
  * A failure after the entry exists throws `PartialSaveError` carrying the saved entry.
  */
 export async function saveCapture(args: SaveCaptureArgs): Promise<LogEntry> {
@@ -89,6 +100,8 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<LogEntry> {
     attachment: image,
   });
 
+  // Each follow-up step runs even when an earlier one failed; the first failure is reported first.
+  const failures: { reason: unknown; message: string; also: string }[] = [];
   if (scan && hostIds.includes(scan.hostId)) {
     const { hostId } = scan;
     try {
@@ -100,25 +113,36 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<LogEntry> {
         await api.hostUpdate(h.id, { name: h.name, ip: h.ip, os: scan.os, access: h.access });
       }
     } catch (e) {
-      // The checklist still follows the entry; the services failure is the one reported first.
-      const followUp = await afterEntrySaved(engagementId, entry, entry.id).then(
-        () => null,
-        (f: unknown) => f,
-      );
-      const partial = new PartialSaveError(entry, e);
-      if (!followUp) throw partial;
-      const also =
-        followUp instanceof FollowUpError && followUp.message !== CHECKLIST_FAILED
-          ? followUp.message
-          : "The checklist didn't update either: use Tick from log on the Engagement checklist.";
-      throw new PartialSaveError(entry, e, `${partial.message}. ${also}`);
+      const message = new PartialSaveError(entry, e).message;
+      failures.push({ reason: e, message, also: message });
+    }
+  }
+  if (args.intake) {
+    // Planned against the hosts as saved, so an IP added here counts as known.
+    const plan = intakePlanFor(edits, { engagementId, hosts, ...args.intake });
+    if (plan) {
+      const acceptKeys = plan.newCredentials.filter((p) => isAccepted(p, args.intake!.toggles)).map((p) => p.key);
+      try {
+        await applyIntake(engagementId, plan, { logEntryId: entry.id, at: entry.at, acceptKeys });
+      } catch (e) {
+        failures.push({ reason: e, message: INTAKE_FAILED, also: "The credentials didn't update either." });
+      }
     }
   }
   try {
     await afterEntrySaved(engagementId, entry, entry.id);
   } catch (e) {
-    if (e instanceof FollowUpError) throw new PartialSaveError(entry, e.reason, e.message);
-    throw new PartialSaveError(entry, e);
+    const checklistAlso = "The checklist didn't update either: use Tick from log on the Engagement checklist.";
+    if (e instanceof FollowUpError) {
+      failures.push({ reason: e.reason, message: e.message, also: e.message !== CHECKLIST_FAILED ? e.message : checklistAlso });
+    } else {
+      failures.push({ reason: e, message: new PartialSaveError(entry, e).message, also: checklistAlso });
+    }
+  }
+  if (failures.length) {
+    const [first, ...rest] = failures;
+    const message = rest.reduce((acc, f) => `${acc}${acc.endsWith(".") ? "" : "."} ${f.also}`, first!.message);
+    throw new PartialSaveError(entry, first!.reason, message);
   }
   return entry;
 }

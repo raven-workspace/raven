@@ -13,11 +13,12 @@ export const usernamesKey = (eid: string) => ["usernames", eid] as const;
 export const accessGrantsKey = (eid: string) => ["accessGrants", eid] as const;
 export const credAttemptsKey = (eid: string) => ["credAttempts", eid] as const;
 
-export function useCredentials(eid: string) {
-  return useQuery({ queryKey: credentialsKey(eid), queryFn: () => api.credentialsList(eid) });
+/** `enabled: false` reads nothing until the caller needs the list. */
+export function useCredentials(eid: string, opts: { enabled?: boolean } = {}) {
+  return useQuery({ queryKey: credentialsKey(eid), queryFn: () => api.credentialsList(eid), enabled: opts.enabled });
 }
-export function useUsernames(eid: string) {
-  return useQuery({ queryKey: usernamesKey(eid), queryFn: () => api.usernamesList(eid) });
+export function useUsernames(eid: string, opts: { enabled?: boolean } = {}) {
+  return useQuery({ queryKey: usernamesKey(eid), queryFn: () => api.usernamesList(eid), enabled: opts.enabled });
 }
 export function useAccessGrants(eid: string) {
   return useQuery({ queryKey: accessGrantsKey(eid), queryFn: () => api.accessGrantsList(eid) });
