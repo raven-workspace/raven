@@ -247,21 +247,41 @@ describe('planCredentialIntake', () => {
       'SMB  172.31.162.96  445  SRV22  [-] corp\\alice:Pass STATUS_LOGON_FAILURE',
     ].join('\n');
     const plan = run(out, "nxc smb x -u users.txt -p 'Pass' --continue-on-success", [bob], [alice])!;
-    // failed lines stay username-subject attempts
-    expect(plan.attempts).toEqual([
-      { engagementId: 'eng1', credId: 'cBob', usernameId: 'uAlice', hostId: 'h96', service: 'smb', port: 445, result: 'failed', authMode: 'domain' },
-    ]);
+    // T5-R1: the user's [-] line from the same paste follows the pending credential
+    expect(plan.attempts).toEqual([]);
     expect(plan.newCredentials).toHaveLength(1);
     const p = plan.newCredentials[0];
     expect(p.input).toMatchObject({ type: 'password', username: 'alice', secret: 'Pass', domain: 'corp', scope: 'domain', engagementId: 'eng1', sourceHostId: 'h95' });
-    expect(p.attempts).toEqual([{ engagementId: 'eng1', hostId: 'h95', service: 'smb', port: 445, result: 'admin', authMode: 'domain' }]);
+    expect(p.attempts).toEqual([
+      { engagementId: 'eng1', hostId: 'h95', service: 'smb', port: 445, result: 'admin', authMode: 'domain' },
+      { engagementId: 'eng1', hostId: 'h96', service: 'smb', port: 445, result: 'failed', authMode: 'domain' },
+    ]);
     expect(p.fromUsername).toEqual({ usernameId: 'uAlice', secretCredIds: ['cBob'] });
-    // declined: the admin result is still recorded against the username + password
+    // declined: every result is still recorded against the username + password
     expect(p.ifDeclined).toEqual([
       { engagementId: 'eng1', credId: 'cBob', usernameId: 'uAlice', hostId: 'h95', service: 'smb', port: 445, result: 'admin', authMode: 'domain' },
+      { engagementId: 'eng1', credId: 'cBob', usernameId: 'uAlice', hostId: 'h96', service: 'smb', port: 445, result: 'failed', authMode: 'domain' },
     ]);
     expect(plan.summary).toEqual({ admin: 1, valid: 0, failed: 1, errored: 0 });
     expect(plan.unrecorded).toBe(0);
+  });
+
+  it('C2/T5-R1: the [-] line before the [+] line gives the same plan', () => {
+    const alice = uname({ id: 'uAlice', username: 'alice' });
+    const bob = cred({ id: 'cBob', username: 'bob', secret: 'Pass', domain: 'corp' });
+    const lines = [
+      'SMB  172.31.162.96  445  SRV22  [-] corp\\alice:Pass STATUS_LOGON_FAILURE',
+      'SMB  172.31.162.95  445  SRV21  [+] corp\\alice:Pass (Pwn3d!)',
+    ];
+    const cmd = "nxc smb x -u users.txt -p 'Pass' --continue-on-success";
+    const fwd = run([...lines].reverse().join('\n'), cmd, [bob], [alice])!;
+    const rev = run(lines.join('\n'), cmd, [bob], [alice])!;
+    for (const plan of [fwd, rev]) {
+      expect(plan.attempts).toEqual([]);
+      expect(plan.newCredentials[0].attempts.map((a) => [a.hostId, a.result]).sort()).toEqual([['h95', 'admin'], ['h96', 'failed']]);
+      expect(plan.newCredentials[0].ifDeclined).toHaveLength(2);
+      expect(plan.summary).toEqual({ admin: 1, valid: 0, failed: 1, errored: 0 });
+    }
   });
 
   it('C2: a local [+] on the listed-username path is a local credential for that host', () => {
@@ -380,11 +400,22 @@ describe('re-planning the same output', () => {
         ...(k ? { usernameId: usernameIdFor(k) } : {}),
       } as CredAttempt);
     };
+    // Mirrors Task 8's real apply when everything is accepted: an accepted pending credential is created with its
+    // own attempts, and username-subject attempts it was derived from (fromUsername) are re-keyed onto it
+    // (only on its host for a local credential); `ifDeclined` is used only when the credential is declined.
+    const rekeyed = new Set<PlannedAttempt>();
     for (const p of plan.newCredentials) {
       const c = addCred(p.input);
       for (const a of p.attempts) addAttempt({ ...a, credId: c.id });
+      const from = p.fromUsername;
+      if (!from) continue;
+      for (const a of plan.attempts) {
+        const sameSubject = from.usernameId ? a.usernameId === from.usernameId : a.usernameKey === from.usernameKey;
+        if (sameSubject && from.secretCredIds.includes(a.credId) && (!from.hostId || a.hostId === from.hostId)) rekeyed.add(a);
+      }
+      for (const a of rekeyed) addAttempt({ ...a, credId: c.id, usernameId: null, usernameKey: undefined } as PlannedAttempt);
     }
-    for (const a of plan.attempts) addAttempt(a);
+    for (const a of plan.attempts) if (!rekeyed.has(a)) addAttempt(a);
     for (const h of plan.newHashes) addCred(h);
   }
 
@@ -392,8 +423,11 @@ describe('re-planning the same output', () => {
     const bob = cred({ id: 'cBob', username: 'bob', secret: 'Pass', domain: 'corp' });
     const listed = uname({ id: 'uListed', username: 'alice', domain: 'corp' });
     const tgs = '$krb5tgs$23$*svc$VERTEX.LAN$MSSQL/db*$aabbccdd$eeff0011';
+    const ownerless = cred({ id: 'cOwnerless', username: '', secret: 'Spray1', domain: null });
     const output = [
       'SMB  172.31.162.95  445  SRV21  [+] corp\\alice:Pass (Pwn3d!)',
+      'SMB  172.31.162.96  445  SRV22  [-] corp\\alice:Pass STATUS_LOGON_FAILURE',
+      'SMB  172.31.162.95  445  SRV21  [+] corp\\frank:Spray1',
       'SMB  172.31.162.95  445  SRV21  [-] corp\\carol:Pass STATUS_LOGON_FAILURE',
       'SMB  172.31.162.95  445  SRV21  [+] corp\\drew:Fresh1',
       'SMB  172.31.162.96  445  SRV22  [-] corp\\drew:Fresh1 STATUS_LOGON_FAILURE',
@@ -403,14 +437,15 @@ describe('re-planning the same output', () => {
       L.unknownHost,
     ].join('\n');
     const command = "nxc smb x -u users.txt -p 'Pass' --continue-on-success";
-    const credentials = [bob];
-    const usernames = [listed];
+    const credentials = [bob, ownerless];
+    const usernames = [listed, uname({ id: 'uFrank', username: 'frank', domain: 'corp' })];
     const attempts: CredAttempt[] = [];
     const plan = run(output, command, credentials, usernames)!;
     // sanity: the first plan really has something to add
     expect(plan.newCredentials.length).toBeGreaterThan(0);
     expect(plan.newUsernames.length).toBeGreaterThan(0);
     expect(plan.newHashes).toHaveLength(1);
+    expect(plan.newCredentials.find((p) => p.input.username === 'frank')!.input.fromSecretId).toBe('cOwnerless');
     apply(plan, credentials, usernames, attempts);
 
     const again = run(output, command, credentials, usernames)!;
@@ -427,5 +462,49 @@ describe('re-planning the same output', () => {
       expect(stored.get(attemptKey({ ...resolved, usernameId: resolved.usernameId ?? null, authMode: resolved.authMode ?? 'domain' })), JSON.stringify(a)).toBe(a.result);
     }
     expect(credentials.map(credKey)).toEqual([...new Set(credentials.map(credKey))]);
+  });
+});
+
+describe('owner-less secrets (spray hit linking)', () => {
+  const ownerless = () => cred({ id: 'cS', username: '', secret: 'Winter2026!', domain: null });
+  const hit = 'SMB  172.31.162.95  445  SRV21  [+] corp.local\\alice:Winter2026!';
+  const cmd = "nxc smb 172.31.162.95 -u users.txt -p 'Winter2026!'";
+  const alice = uname({ id: 'u1', username: 'alice' });
+
+  it('a spray hit links the new credential with fromSecretId', () => {
+    const p = run(hit, cmd, [ownerless()], [alice])!;
+    expect(p.newCredentials).toHaveLength(1);
+    expect(p.newCredentials[0].input.fromSecretId).toBe('cS');
+    expect(p.newCredentials[0].input.username).toBe('alice');
+  });
+
+  it('a spray hit links an already-stored user credential', () => {
+    const stored = cred({ id: 'cA', username: 'alice', domain: 'corp.local', secret: 'Winter2026!' });
+    const p = run(hit, cmd, [ownerless(), stored], [alice])!;
+    expect(p.newCredentials).toHaveLength(0);
+    expect(p.links).toEqual([{ credId: 'cA', fromSecretId: 'cS' }]);
+  });
+
+  it('an already-linked user credential is not offered a link', () => {
+    const stored = cred({ id: 'cA', username: 'alice', domain: 'corp.local', secret: 'Winter2026!', fromSecretId: 'other' });
+    expect(run(hit, cmd, [ownerless(), stored], [alice])!.links).toEqual([]);
+  });
+});
+
+describe('secrets with shell metacharacters or spaces (Review Focus 1)', () => {
+  it("-p 'P@$$w0rd' is one literal secret", () => {
+    const command = "nxc smb 172.31.162.96 -u bob -p 'P@$$w0rd'";
+    expect(knownSecretsOf(command)).toEqual(['P@$$w0rd']);
+    const plan = run('SMB  172.31.162.96  445  SRV22  [+] corp\\bob:P@$$w0rd', command, [])!;
+    expect(plan.newCredentials[0].input.secret).toBe('P@$$w0rd');
+    expect(plan.newCredentials[0].input.username).toBe('bob');
+  });
+
+  it("-p 'a b:c' keeps the space and colon", () => {
+    const command = "nxc smb 172.31.162.96 -u bob -p 'a b:c'";
+    expect(knownSecretsOf(command)).toEqual(['a b:c']);
+    const plan = run('SMB  172.31.162.96  445  SRV22  [+] corp\\bob:a b:c', command, [])!;
+    expect(plan.newCredentials[0].input.secret).toBe('a b:c');
+    expect(plan.newCredentials[0].input.username).toBe('bob');
   });
 });

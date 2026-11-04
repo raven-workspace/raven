@@ -205,6 +205,8 @@ export function planCredentialIntake(input: {
 
   interface Unmatched { r: NxcAuthResult; hostId: string; authMode: CredAuthMode; base: Omit<PlannedAttemptBase, 'credId'>; key: string; credInput: PlannedCredential }
   const unmatched: Unmatched[] = [];
+  // Non-success lines of a username-list spray: they follow the pending credential of their pair, if there is one.
+  const deferred: { key: string; aKey: string; attempt: PlannedAttempt; base: Omit<PlannedAttemptBase, 'credId'>; hostId: string; authMode: CredAuthMode; protocol: string; port: number }[] = [];
 
   const credInputFor = (username: string, secret: string, r: NxcAuthResult, hostId: string, authMode: CredAuthMode, domain?: string): PlannedCredential => ({
     type: HASH_RE.test(secret) ? 'hash' : 'password', username, secret,
@@ -271,18 +273,19 @@ export function planCredentialIntake(input: {
         const subjectRef = listed ? listed.id : `key:${nuKey}`;
         const attempt: PlannedAttempt = { credId: pwCred.id, ...subject, ...base };
         const aKey = `${pwCred.id}|${host.id}|${r.protocol}|${r.port}|${authMode}|${subjectRef}`;
-        if (r.result !== 'admin' && r.result !== 'valid') {
-          merge(attemptMap, aKey, attempt);
-          continue;
-        }
         // R12: a working pair is offered as a credential carrying its results.
         const username = listed?.username ?? r.username;
         const credDomain = authMode === 'local' ? undefined : (listed?.domain ?? domain);
         const input = credInputFor(username, r.secret, r, host.id, authMode, credDomain);
+        const key = pendingKey(input, authMode, host.id);
+        if (r.result !== 'admin' && r.result !== 'valid') {
+          // Decided after the loop: it follows the pending credential if another line makes this pair one (T5-R1).
+          deferred.push({ key, aKey, attempt, base, hostId: host.id, authMode, protocol: r.protocol, port: r.port });
+          continue;
+        }
         // A hit from an owner-less secret records where the user's credential came from.
         const ownerlessSecret = isOwnerless(pwCred) ? pwCred : engCreds.find(c => isOwnerless(c) && secretMatches(c, r.secret));
         if (ownerlessSecret) input.fromSecretId = ownerlessSecret.id;
-        const key = pendingKey(input, authMode, host.id);
         const p = ensurePending(key, input);
         const from = p.fromUsername ?? { ...subject, secretCredIds: [], ...(authMode === 'local' ? { hostId: host.id } : {}) };
         if (!from.secretCredIds.includes(pwCred.id)) from.secretCredIds.push(pwCred.id);
@@ -312,6 +315,13 @@ export function planCredentialIntake(input: {
   for (const u of unmatched) {
     if (failedOnly.has(u.key)) unrecorded++;
     merge(pendingAttempts.get(u.key)!, `${u.hostId}|${u.r.protocol}|${u.r.port}|${u.authMode}`, u.base);
+  }
+  for (const d of deferred) {
+    if (pending.has(d.key)) {
+      merge(pendingAttempts.get(d.key)!, `${d.hostId}|${d.protocol}|${d.port}|${d.authMode}`, d.base);
+      if (!declinedAttempts.has(d.key)) declinedAttempts.set(d.key, new Map());
+      merge(declinedAttempts.get(d.key)!, d.aKey, d.attempt);
+    } else merge(attemptMap, d.aKey, d.attempt);
   }
   for (const [key, p] of pending) {
     p.attempts = [...pendingAttempts.get(key)!.values()];
