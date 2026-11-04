@@ -1,27 +1,22 @@
 import { lazy, Suspense } from "react";
-import { Outlet, Route, Routes } from "react-router";
-import { TitleBar } from "./ui";
+import { Route, Routes } from "react-router";
+import { SettingsPage } from "./features/settings/SettingsPage";
+import { useVault, VaultGate } from "./features/vault/VaultGate";
 
 // Dev-only component gallery. `import.meta.env.DEV` is false in builds, so the
 // route and its chunk are dropped from release bundles.
 const UiGallery = import.meta.env.DEV ? lazy(() => import("./dev/UiGallery")) : null;
 
-function Shell() {
-  return (
-    <div className="flex h-full flex-col bg-bg">
-      <TitleBar title="Raven" />
-      <div className="min-h-0 flex-1">
-        <Outlet />
-      </div>
-    </div>
-  );
+function SettingsRoute() {
+  return <SettingsPage onRestored={useVault().markLocked} />;
 }
 
 export default function App() {
   return (
-    <Routes>
-      <Route element={<Shell />}>
+    <VaultGate>
+      <Routes>
         <Route index element={<div data-testid="app-root" />} />
+        <Route path="settings" element={<SettingsRoute />} />
         {UiGallery && (
           <Route
             path="__ui"
@@ -32,7 +27,7 @@ export default function App() {
             }
           />
         )}
-      </Route>
-    </Routes>
+      </Routes>
+    </VaultGate>
   );
 }

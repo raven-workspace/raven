@@ -1,24 +1,35 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
+import { api } from "../lib/api";
+
+vi.mock("../lib/api");
+
+function mount(path: string) {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter initialEntries={[path]}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
 
 describe("smoke", () => {
-  it("renders app root", () => {
-    render(
-      <MemoryRouter>
-        <App />
-      </MemoryRouter>,
-    );
-    expect(screen.getByTestId("app-root")).toBeInTheDocument();
+  beforeEach(() => {
+    vi.mocked(api.vaultStatus).mockResolvedValue({ exists: true, unlocked: true });
+    vi.mocked(api.settingsGet).mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14 });
+  });
+
+  it("renders app root", async () => {
+    mount("/");
+    expect(await screen.findByTestId("app-root")).toBeInTheDocument();
   });
 
   it("serves the component gallery at /__ui in dev", async () => {
-    render(
-      <MemoryRouter initialEntries={["/__ui"]}>
-        <App />
-      </MemoryRouter>,
-    );
+    mount("/__ui");
     expect(await screen.findByTestId("ui-gallery")).toBeInTheDocument();
   });
 });
