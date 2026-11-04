@@ -57,6 +57,13 @@ interface NotesState {
 
 let timer: ReturnType<typeof setTimeout> | undefined;
 let chain: Promise<void> = Promise.resolve();
+/** Bumped on every lock and unlock; a save that started in an earlier session writes nothing back. */
+let generation = 0;
+export const sessionGeneration = () => generation;
+export function startNotesSession() {
+  generation++;
+}
+
 let queryClient: QueryClient | null = null;
 
 /** The app's query client, set once at the root so saves refresh the cache even after the shell unmounts. */
@@ -103,9 +110,12 @@ export const useNotesStore = create<NotesState>()((set, get) => ({
 
 async function flushOnce(snapshot: Record<string, PendingNote>): Promise<void> {
   let failure: unknown;
+  const gen = generation;
   for (const [key, p] of Object.entries(snapshot)) {
+    if (gen !== generation) return;
     try {
       const saved = await api.noteSave(p.engagementId, p.hostId, p.body, p.private);
+      if (gen !== generation) return; // locked meanwhile: nothing from this save may reach memory
       cacheSaved(saved);
       useNotesStore.setState((s) => {
         const errors = { ...s.errors };
@@ -118,6 +128,7 @@ async function flushOnce(snapshot: Record<string, PendingNote>): Promise<void> {
         return { pending, errors };
       });
     } catch (e) {
+      if (gen !== generation) return;
       failure ??= e;
       const message = RavenError.from(e).message;
       useNotesStore.setState((s) => ({ errors: { ...s.errors, [key]: message } }));
@@ -152,6 +163,7 @@ export function hasPendingNotes(): boolean {
 /** On every lock: note text is never kept in memory. Drops pending text and errors, closes the panel. */
 export function discardNotes() {
   clearTimeout(timer);
+  generation++;
   useNotesStore.setState({ open: false, pending: {}, errors: {} });
 }
 

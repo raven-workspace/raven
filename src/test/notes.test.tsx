@@ -1,3 +1,4 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -8,6 +9,7 @@ import App from "../App";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { resetNotesStore, useNotesStore } from "../features/notes/useNotesStore";
 import { api } from "../lib/api";
+import { reportError } from "../lib/lockSignal";
 import { makeQueryClient } from "../lib/queryClient";
 import { RavenError } from "../types/errors";
 import type { Engagement } from "../types/engagement";
@@ -45,9 +47,11 @@ function Where() {
   return <span data-testid="where">{useLocation().pathname}</span>;
 }
 
+let qc: QueryClient;
 function mount(path: string) {
+  qc = makeQueryClient();
   return render(
-    <QueryClientProvider client={makeQueryClient()}>
+    <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={[path]}>
         <input aria-label="probe" />
         <Nav />
@@ -214,14 +218,34 @@ describe("field notes panel", () => {
     fireEvent.change(ta, { target: { value: "typed then left" } });
     act(() => go("/"));
     await vi.waitFor(() => expect(m.noteSave).toHaveBeenCalled());
-    await screen.findByText(/Archived engagements/).catch(() => null);
     await act(async () => finish());
+    // From here the server never answers a read: only the cache can supply the text.
+    m.notesGet.mockReturnValue(new Promise(() => {}));
     act(() => go("/e/e1"));
     await screen.findByText("Mock exam A");
     await user.keyboard("n");
     const again = await within(await panel()).findByLabelText("Notes");
-    // Right at first render, before any refetch could have fixed a stale cache.
     expect(again).toHaveValue("typed then left");
+  });
+
+  it("a save replying after the vault locked does not refill the query cache", async () => {
+    let finish: () => void = () => {};
+    m.noteSave.mockImplementation(
+      (_e, hostId, body, isPrivate) =>
+        new Promise((resolve) => {
+          finish = () => resolve({ ownerId: "e1", engagementId: "e1", hostId, body, private: isPrivate, updatedAt: 9 });
+        }),
+    );
+    const user = userEvent.setup();
+    const { ta } = await open(user, "/e/e1");
+    expect(qc.getQueryData(["note", "e1", null])).toBeDefined();
+    fireEvent.change(ta, { target: { value: "late reply" } });
+    await vi.waitFor(() => expect(m.noteSave).toHaveBeenCalled(), { timeout: 2000 });
+    act(() => reportError(new RavenError("locked", "locked")));
+    await screen.findByLabelText("Password");
+    await act(async () => finish());
+    expect(qc.getQueryData(["note", "e1", null])).toBeUndefined();
+    expect(useNotesStore.getState().pending).toEqual({});
   });
 
   it("Esc closes the panel and leaves the route alone when focus is on its Private toggle", async () => {

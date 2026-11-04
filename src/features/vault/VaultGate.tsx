@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import { api } from "../../lib/api";
 import { onLockedError, reportError } from "../../lib/lockSignal";
 import { useCaptureStore } from "../capture/useCaptureStore";
-import { discardNotes, flushNotes, hasPendingNotes, setNotesQueryClient } from "../notes/useNotesStore";
+import { discardNotes, flushNotes, hasPendingNotes, sessionGeneration, setNotesQueryClient, startNotesSession } from "../notes/useNotesStore";
 import type { UnlockResult, VaultStatus } from "../../types/vault";
 import { Button, Kbd, TitleBar } from "../../ui";
 import { SetupScreen } from "./SetupScreen";
@@ -98,12 +98,16 @@ export function VaultGate({ children }: { children: ReactNode }) {
 
   const lockBackend = useCallback(async function run(notesSaved?: Promise<void>): Promise<void> {
     clearTimeout(retryTimer.current);
+    const gen = sessionGeneration();
     if (notesSaved) {
       // Field notes are saved before the backend locks. If that save failed the text is
       // dropped anyway (see markLocked); a failed save must not keep the vault open.
       await notesSaved;
-      discardNotes();
-      qc.clear();
+      // Only if no unlock happened meanwhile, so a quick re-unlock isn't wiped.
+      if (gen === sessionGeneration()) {
+        discardNotes();
+        qc.clear();
+      }
     }
     for (let i = 0; i < 3; i++) {
       try {
@@ -139,6 +143,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
 
   const onUnlocked = (r: UnlockResult) => {
     clearTimeout(retryTimer.current);
+    startNotesSession();
     setLockRetrying(false);
     setNotice(r.migratedFrom < r.migratedTo ? "Updated Raven's data (backup saved)" : null);
     setBackupError(r.dailyBackupError);
