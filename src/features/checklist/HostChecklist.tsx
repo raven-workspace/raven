@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   applicableGoals,
   commandContext,
@@ -65,6 +65,9 @@ export function HostChecklist({ engagementId, host, onOpenEntry }: { engagementI
   const { setStatus, setNotes } = useChecklistMutations(engagementId);
   const hops = useHopMutations(engagementId);
 
+  /** The hop already created for the last Save, so a retry after a failed tick never duplicates it. */
+  const createdHop = useRef<string>(undefined);
+
   const hosts = hostsQ.data;
   const eng = engagement.data;
   const groups = useMemo(
@@ -72,6 +75,8 @@ export function HostChecklist({ engagementId, host, onOpenEntry }: { engagementI
     [host, eng, hosts, servicesByHost],
   );
 
+  const failed = hostsQ.error ?? engagement.error ?? servicesQ.error;
+  if (failed) return <p role="alert" className="py-3 text-xs text-warn">Couldn't load the checklist: {failed.message}</p>;
   if (!hosts || !eng || !servicesQ.data) return null;
   const state = byOwner.get(host.id) ?? {};
   const entries = log.data ?? [];
@@ -101,8 +106,13 @@ export function HostChecklist({ engagementId, host, onOpenEntry }: { engagementI
   };
 
   const recordHop = async (fromHostId: string | null, via: string) => {
-    await hops.create.mutateAsync({ fromHostId, toHostId: host.id, via });
+    const key = `${fromHostId ?? KALI}|${via}`;
+    if (createdHop.current !== key) {
+      await hops.create.mutateAsync({ fromHostId, toHostId: host.id, via });
+      createdHop.current = key;
+    }
     await setStatus.mutateAsync({ ownerId: host.id, goalId: "h-foot-arrived", status: "done" });
+    createdHop.current = undefined;
   };
 
   return (

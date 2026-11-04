@@ -136,6 +136,61 @@ describe("host checklist tab", () => {
     expect(screen.queryByText(/uses your one Metasploit host/)).not.toBeInTheDocument();
   });
 
+  it("metasploit commands show without the marker on the locked host itself", async () => {
+    const user = userEvent.setup();
+    const exam = { ...E1, kind: "exam-sim" as const, msfHostId: "h1" };
+    mount({ engagement: exam });
+    await openChecklist(user);
+    expect((await screen.findAllByText(/ms17_010/)).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/uses your one Metasploit host/)).not.toBeInTheDocument();
+  });
+
+  it("a host behind a tunnel shows the tunnel note, in warn when down", async () => {
+    const user = userEvent.setup();
+    const tun = (id: string, status: "up" | "down") => ({
+      id, engagementId: "e1", kind: "ligolo" as const, viaHostId: "h2", subnets: ["10.10.10.0/24"],
+      callbackIp: "10.20.0.1", status, notes: null, createdAt: 1, updatedAt: 1,
+    });
+    m.tunnelsList.mockResolvedValue([tun("t1", "down")]);
+    mount();
+    await openChecklist(user);
+    const notes = await screen.findAllByText(/via tunnel on web02/);
+    expect(notes[0]).toHaveClass("text-warn");
+    expect(notes[0]).toHaveTextContent("(down)");
+  });
+
+  it("an up tunnel is not styled as a warning", async () => {
+    const user = userEvent.setup();
+    m.tunnelsList.mockResolvedValue([
+      { id: "t1", engagementId: "e1", kind: "ligolo", viaHostId: "h2", subnets: ["10.10.10.0/24"], callbackIp: "10.20.0.1", status: "up", notes: null, createdAt: 1, updatedAt: 1 },
+    ]);
+    mount();
+    await openChecklist(user);
+    const notes = await screen.findAllByText(/via tunnel on web02/);
+    expect(notes[0]).not.toHaveClass("text-warn");
+  });
+
+  it("shows an error line when the checklist data fails to load", async () => {
+    const user = userEvent.setup();
+    mount();
+    m.servicesListEngagement.mockRejectedValue(new Error("boom"));
+    await openChecklist(user);
+    expect(await screen.findByRole("alert")).toHaveTextContent("boom");
+  });
+
+  it("a failed tick after the hop was created retries only the tick (hopCreate called once)", async () => {
+    const user = userEvent.setup();
+    mount();
+    m.checklistPut.mockRejectedValueOnce(new Error("tick failed"));
+    await openChecklist(user);
+    await user.type(await screen.findByLabelText("Via"), "smb creds");
+    await user.click(screen.getByRole("button", { name: "Save hop" }));
+    expect(await screen.findByText(/tick failed/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save hop" }));
+    await vi.waitFor(() => expect(m.checklistPut).toHaveBeenCalledTimes(2));
+    expect(m.hopCreate).toHaveBeenCalledTimes(1);
+  });
+
   it("status buttons call checklistPut with auto false", async () => {
     const user = userEvent.setup();
     mount({ items: [item("h-enum-smb", { status: "in_progress", auto: true })] });

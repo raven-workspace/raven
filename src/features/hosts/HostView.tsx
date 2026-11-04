@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { HostChecklist } from "../checklist/HostChecklist";
 import { Link } from "react-router";
 import { EmptyState, Panel } from "../../ui";
+import { HostChecklist } from "../checklist/HostChecklist";
 import { useLog } from "../log/queries";
 import { LogEntryRow } from "../log/LogEntryRow";
 import { OrderButton } from "../log/OrderButton";
