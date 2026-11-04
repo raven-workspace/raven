@@ -378,12 +378,13 @@ export function formatIntakeSummary(plan: CredentialIntakePlan): string {
 
 /**
  * Names a failed-only pair so the operator can tell same-named accounts apart: who, where, and which secret
- * (a hash by its first 8 hex; a password only as "a password", since the paste already shows it).
+ * ("a hash" or "a password": never any part of the secret).
  */
 export function unrecordedLabel(p: PendingCredential, hosts: Pick<Host, 'id' | 'name' | 'ip'>[]): string {
   const ids = [...new Set(p.attempts.map((a) => a.hostId))];
   const where = ids.map((id) => { const h = hosts.find((x) => x.id === id); return h?.name || h?.ip || id; }).join(', ');
-  const secret = p.input.type === 'hash' ? `hash ${(p.input.secret ?? '').split(':').pop()!.slice(0, 8)}…` : 'a password';
+  // Never any part of the secret (T8-R2): the label is shown in the UI.
+  const secret = p.input.type === 'hash' ? 'a hash' : 'a password';
   return `${pendingCredentialLabel(p)} with ${secret} on ${where}`;
 }
 

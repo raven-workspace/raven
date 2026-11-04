@@ -379,6 +379,14 @@ describe('formatting', () => {
     expect(pendingCredentialLabel(p)).toBe('vertex.lan\\apache');
     expect(unrecordedLabel(p, hosts)).toBe('vertex.lan\\apache with a password on SRV22');
   });
+
+  it('names a failed-only hash pair without any part of the hash', () => {
+    const nt = '0123456789abcdef0123456789abcdef';
+    const plan = run(`SMB  172.31.162.96  445  SRV22  [-] vertex.lan\\apache:${nt} STATUS_LOGON_FAILURE`, `nxc smb x -u users.txt -H ${nt}`, [])!;
+    const label = unrecordedLabel(plan.newCredentials[0], hosts);
+    expect(label).toBe('vertex.lan\\apache with a hash on SRV22');
+    expect(label).not.toContain('01234567');
+  });
 });
 
 describe('re-planning the same output', () => {

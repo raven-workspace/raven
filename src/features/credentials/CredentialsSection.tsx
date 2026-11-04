@@ -35,12 +35,8 @@ const STATE_LABEL: Record<OverallState, string> = {
 
 /** Accent only for access that works; warn for dead. */
 function StateChip({ state }: { state: OverallState }) {
-  const accent = state === "admin" || state === "valid";
-  return (
-    <Chip variant={accent ? "accent" : "default"} className={state === "dead" ? "border-warn text-warn" : undefined}>
-      {STATE_LABEL[state]}
-    </Chip>
-  );
+  const variant = state === "admin" || state === "valid" ? "accent" : state === "dead" ? "warn" : "default";
+  return <Chip variant={variant}>{STATE_LABEL[state]}</Chip>;
 }
 
 export function CredentialsSection() {

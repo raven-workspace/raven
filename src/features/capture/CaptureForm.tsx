@@ -105,14 +105,16 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
     const store = useCaptureStore.getState();
     const image = pd.image && (kind === "screenshot" || kind === "flag") ? { mime: pd.image.mime, dataBase64: pd.image.dataBase64 } : null;
     // The lists the preview showed (read now if it hasn't loaded yet). Nothing is saved when they can't be read.
-    let intakeLists: { credentials: Credential[]; usernames: Username[] } | undefined;
+    let intakeLists: { credentials: Credential[]; usernames: Username[]; previewKeys: string[] } | undefined;
     if (hasIntake) {
       try {
         const [credentials, usernames] = await Promise.all([
           qc.ensureQueryData({ queryKey: credentialsKey(id), queryFn: () => api.credentialsList(id) }),
           qc.ensureQueryData({ queryKey: usernamesKey(id), queryFn: () => api.usernamesList(id) }),
         ]);
-        intakeLists = { credentials, usernames };
+        // What the preview offers (computed here too when Save comes before it has rendered).
+        const preview = intakePlanFor(r.edits, { engagementId: id, hosts, credentials, usernames });
+        intakeLists = { credentials, usernames, previewKeys: preview?.newCredentials.map((p) => p.key) ?? [] };
       } catch (e) {
         reportError(e);
         setError(`Couldn't read the credentials: ${e instanceof Error ? e.message : String(e)}`);
@@ -140,7 +142,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
       store.close();
     } catch (e) {
       // A `locked` rejection must reach the vault gate, as query and mutation errors do.
-      reportError(e instanceof PartialSaveError ? e.reason : e);
+      for (const reason of e instanceof PartialSaveError ? e.reasons : [e]) reportError(reason);
       if (e instanceof PartialSaveError) {
         refresh();
         store.discard(id);

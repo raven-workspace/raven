@@ -154,12 +154,8 @@ function AddHostAccess({ eid, host, usernames, onClose }: { eid: string; host: H
 
 /** Accent only for access that works; warn for errored. */
 function ResultChip({ result }: { result: CredAttempt["result"] }) {
-  const accent = result === "admin" || result === "valid";
-  return (
-    <Chip variant={accent ? "accent" : "default"} className={result === "errored" ? "border-warn text-warn" : undefined}>
-      {result}
-    </Chip>
-  );
+  const variant = result === "admin" || result === "valid" ? "accent" : result === "errored" ? "warn" : "default";
+  return <Chip variant={variant}>{result}</Chip>;
 }
 
 function HostResults({ attempts, creds, usernames, titles, onOpenEntry }: {

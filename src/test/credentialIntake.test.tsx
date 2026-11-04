@@ -255,9 +255,50 @@ describe("nxc intake in Add to log", () => {
       "false",
     );
     expect(within(intake).getByText(/10\.10\.10\.99/)).toBeInTheDocument();
+    // no secret from the paste shows in the preview (T8-R2)
+    for (const secret of ["Pass1", "Fresh1", "Nope1"]) expect(intake.textContent).not.toContain(secret);
     // nothing is written before Save
     expect(m.credentialCreate).not.toHaveBeenCalled();
     expect(m.credAttemptsUpsert).not.toHaveBeenCalled();
+  });
+
+  it("a failed-only hash pair is named without any fragment of the hash", async () => {
+    const nt = "0123456789abcdef0123456789abcdef";
+    const user = userEvent.setup();
+    mount();
+    const { intake } = await pasteAndWait(
+      user,
+      [`kali@kali:~$ nxc smb 10.10.10.6 -u eve -H ${nt}`, `SMB  10.10.10.6  445  WEB02  [-] corp.local\\eve:${nt} STATUS_LOGON_FAILURE`].join("\n"),
+    );
+    expect(await within(intake).findByRole("button", { name: "Add corp.local\\eve with a hash on web02" })).toHaveAttribute("aria-pressed", "false");
+    for (let i = 0; i + 6 <= nt.length; i++) expect(intake.textContent).not.toContain(nt.slice(i, i + 6));
+  });
+
+  it("a pair that becomes pending only through a host added in the same save is not created", async () => {
+    const H9 = host({ id: "h9", name: "10.10.10.9", ip: "10.10.10.9" });
+    m.hostCreate.mockResolvedValue(H9);
+    const user = userEvent.setup();
+    mount();
+    const { dialog, intake } = await pasteAndWait(
+      user,
+      [
+        "kali@kali:~$ nxc smb 10.10.10.5 10.10.10.9 -u users.txt -p 'Pass1'",
+        "SMB  10.10.10.5  445  DC01   [+] corp.local\\bob:Pass1",
+        "SMB  10.10.10.9  445  NEWBOX [+] corp.local\\zed:Zed1",
+      ].join("\n"),
+    );
+    // zed only answered on an IP that isn't a host: nothing is offered
+    await within(intake).findByText(/10\.10\.10\.9/);
+    expect(within(intake).queryAllByRole("button", { name: /^Add / })).toHaveLength(0);
+    await user.click(within(dialog).getByRole("button", { name: "+ 10.10.10.9" }));
+    await save(user, dialog);
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    expect(m.hostCreate).toHaveBeenCalledWith("e1", { name: "10.10.10.9", ip: "10.10.10.9" });
+    expect(m.credentialCreate).not.toHaveBeenCalled();
+    expect(db.credentials.some((c) => c.username === "zed")).toBe(false);
+    // bob's result is still recorded with the entry as proof
+    expect(db.attempts.map((a) => [a.credId, a.hostId, a.result, a.logEntryId])).toEqual([["cBob", "h1", "valid", db.log[0]!.id]]);
   });
 
   it("toggles reset when the paste changes", async () => {
@@ -441,7 +482,7 @@ describe("nxc intake in Add to log", () => {
     const { dialog, intake } = await pasteAndWait(user, SPRAY);
     await within(intake).findByRole("button", { name: "Add corp.local\\drew" });
     await save(user, dialog);
-    expect(await within(dialog).findByText("Saved the entry, but the credentials didn't update.")).toBeInTheDocument();
+    expect(await within(dialog).findByText("Saved the entry, but the credentials didn't update. Paste the output again to retry.")).toBeInTheDocument();
     expect(m.logCreate).toHaveBeenCalledTimes(1);
     expect(m.logDelete).not.toHaveBeenCalled();
     expect(db.log).toHaveLength(1);
@@ -460,7 +501,7 @@ describe("nxc intake in Add to log", () => {
     await save(user, dialog);
     expect(
       await within(dialog).findByText(
-        "Saved the entry, but the credentials didn't update. The checklist didn't update either: use Tick from log on the Engagement checklist.",
+        "Saved the entry, but the credentials didn't update. Paste the output again to retry. The checklist didn't update either: use Tick from log on the Engagement checklist.",
       ),
     ).toBeInTheDocument();
   });
@@ -484,6 +525,10 @@ describe("host Credentials tab", () => {
         {
           id: "a2", engagementId: "e1", credId: "cBob", usernameId: "uAlice", hostId: "h1", service: "winrm", port: 5985,
           result: "failed", authMode: "domain", detail: "STATUS_LOGON_FAILURE", logEntryId: null, at: 4000,
+        },
+        {
+          id: "a4", engagementId: "e1", credId: "cBob", usernameId: null, hostId: "h1", service: "rdp", port: 3389,
+          result: "errored", authMode: "domain", detail: "connection reset", logEntryId: null, at: 3000,
         },
         {
           id: "a3", engagementId: "e1", credId: "cBob", usernameId: null, hostId: "h2", service: "smb", port: 445,
@@ -529,12 +574,18 @@ describe("host Credentials tab", () => {
     // results against this host, with proof
     const results = within(panel).getByRole("region", { name: "Results against this host" });
     const rows = within(results).getAllByRole("row").slice(1);
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(3);
     expect(within(rows[0]!).getByText("corp.local\\bob")).toBeInTheDocument();
     expect(within(rows[0]!).getByText("admin")).toBeInTheDocument();
     expect(within(rows[1]!).getByText(/corp\.local\\alice/)).toBeInTheDocument();
     expect(within(rows[1]!).getByText("STATUS_LOGON_FAILURE")).toBeInTheDocument();
     expect(within(rows[1]!).getByText("no proof")).toBeInTheDocument();
+    // result chips: accent for access that works, warn for errored
+    expect(within(rows[0]!).getByText("admin")).toHaveAttribute("data-variant", "accent");
+    const errored = within(rows[2]!).getByText("errored");
+    expect(errored).toHaveAttribute("data-variant", "warn");
+    expect(errored).toHaveClass("border-warn", "text-warn");
+    expect(errored).not.toHaveClass("text-fg-2");
     await user.click(within(rows[0]!).getByRole("button", { name: /nxc smb spray/ }));
     expect(screen.getByRole("tab", { name: "Story" })).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByRole("button", { name: /nxc smb spray/, expanded: true })).toBeInTheDocument();

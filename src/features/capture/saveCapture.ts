@@ -22,19 +22,22 @@ export interface CaptureEdits {
   content: LogContent;
 }
 
-export const INTAKE_FAILED = "Saved the entry, but the credentials didn't update.";
+export const INTAKE_FAILED = "Saved the entry, but the credentials didn't update. Paste the output again to retry.";
 
 /** The entry was saved, but a follow-up step (services, OS, credentials, checklist, Metasploit lock) failed. */
 export class PartialSaveError extends Error {
   readonly entry: LogEntry;
-  /** What made the follow-up step fail. */
+  /** What made the (first) follow-up step fail. */
   readonly reason: unknown;
-  constructor(entry: LogEntry, cause: unknown, message?: string) {
+  /** What made each failed follow-up step fail, in order; `reason` is the first. */
+  readonly reasons: unknown[];
+  constructor(entry: LogEntry, cause: unknown, message?: string, reasons?: unknown[]) {
     const detail = cause instanceof Error ? cause.message : String(cause);
     super(message ?? `Saved, but services didn't update: ${detail}`);
     this.name = "PartialSaveError";
     this.entry = entry;
     this.reason = cause;
+    this.reasons = reasons ?? [cause];
   }
 }
 
@@ -54,7 +57,13 @@ export interface SaveCaptureArgs {
    * For a command entry: the engagement's credentials and usernames the nxc intake plans against, and the
    * operator's accept toggles. Absent skips the intake.
    */
-  intake?: { credentials: Credential[]; usernames: Username[]; toggles: Record<string, boolean> };
+  intake?: {
+    credentials: Credential[];
+    usernames: Username[];
+    toggles: Record<string, boolean>;
+    /** Keys of the pending credentials the preview offered. Only these can be created (T8-R3). */
+    previewKeys: string[];
+  };
 }
 
 /**
@@ -121,11 +130,15 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<LogEntry> {
     // Planned against the hosts as saved, so an IP added here counts as known.
     const plan = intakePlanFor(edits, { engagementId, hosts, ...args.intake });
     if (plan) {
-      const acceptKeys = plan.newCredentials.filter((p) => isAccepted(p, args.intake!.toggles)).map((p) => p.key);
+      // Only what the preview offered is ever created; a pair that became pending only because a host was added in
+      // this save is recorded as declined.
+      const { toggles, previewKeys } = args.intake;
+      const offered = new Set(previewKeys);
+      const acceptKeys = plan.newCredentials.filter((p) => offered.has(p.key) && isAccepted(p, toggles)).map((p) => p.key);
       try {
         await applyIntake(engagementId, plan, { logEntryId: entry.id, at: entry.at, acceptKeys });
       } catch (e) {
-        failures.push({ reason: e, message: INTAKE_FAILED, also: "The credentials didn't update either." });
+        failures.push({ reason: e, message: INTAKE_FAILED, also: "The credentials didn't update either: paste the output again to retry." });
       }
     }
   }
@@ -142,7 +155,7 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<LogEntry> {
   if (failures.length) {
     const [first, ...rest] = failures;
     const message = rest.reduce((acc, f) => `${acc}${acc.endsWith(".") ? "" : "."} ${f.also}`, first!.message);
-    throw new PartialSaveError(entry, first!.reason, message);
+    throw new PartialSaveError(entry, first!.reason, message, failures.map((f) => f.reason));
   }
   return entry;
 }
