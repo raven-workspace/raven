@@ -174,11 +174,26 @@ function EngagementHeader({ engagement: e }: { engagement: Engagement }) {
         </div>
       </div>
       {(e.client || scope || e.domain) && (
-        <p className="m-0 flex flex-wrap items-baseline gap-x-3 text-xs text-muted">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted">
           {e.client && <span className="text-muted-2">{e.client}</span>}
-          {scope && <span className="font-mono text-[11.5px]">{e.scopeCidrs.join("  ")}</span>}
-          {e.domain && <span className="font-mono text-[11.5px]">{e.domain}</span>}
-        </p>
+          {scope && (
+            <ul aria-label="Scope" className="m-0 flex list-none flex-wrap gap-1.5 p-0">
+              {e.scopeCidrs.map((c) => (
+                <li key={c}>
+                  <Chip mono className="border-line text-muted-2">
+                    {c}
+                  </Chip>
+                </li>
+              ))}
+            </ul>
+          )}
+          {e.domain && (
+            <span className="flex items-center gap-1.5">
+              <span className="text-[10.5px] tracking-[0.12em] text-faint uppercase">Domain</span>
+              <span className="font-mono text-[11.5px] text-fg-2">{e.domain}</span>
+            </span>
+          )}
+        </div>
       )}
       {error && <p className="m-0 text-xs text-warn">{error}</p>}
       <EngagementDialog open={editing} onOpenChange={setEditing} engagement={e} />

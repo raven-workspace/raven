@@ -68,7 +68,7 @@ export function Dashboard() {
               )}
             </section>
 
-            <section aria-labelledby={pastId} className="flex flex-col gap-3">
+            <section aria-labelledby={pastId} className="flex flex-col gap-3 border-t border-line pt-8">
               <div className="flex items-center justify-between gap-4">
                 <h2 id={pastId} className={`${labelClass} m-0`}>
                   Past
