@@ -2,6 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resyncBoards } from "../features/checklist/ticks";
 import { useHostMutations } from "../features/hosts/queries";
 import { useLogMutations } from "../features/log/queries";
 import { useServiceMutations } from "../features/services/queries";
@@ -13,6 +14,10 @@ import type { LogEntry, LogEntryInput } from "../types/log";
 import type { Service } from "../types/service";
 
 vi.mock("../lib/api");
+vi.mock("../features/checklist/ticks", async (orig) => ({
+  ...(await orig<typeof import("../features/checklist/ticks")>()),
+  resyncBoards: vi.fn(),
+}));
 const m = vi.mocked(api, true);
 
 function setup() {
@@ -25,6 +30,7 @@ function setup() {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(resyncBoards).mockResolvedValue(undefined);
   m.engagementGet.mockResolvedValue({ id: "e1", kind: "lab", domain: null, msfHostId: null } as Engagement);
   m.hostsList.mockResolvedValue([]);
   m.servicesListEngagement.mockResolvedValue([]);
@@ -93,5 +99,14 @@ describe("cache invalidation (M4)", () => {
     expect(keys()).toContainEqual(["services"]);
     await act(() => result.current.update.mutateAsync({ id: "h1", input: { name: "x" } }));
     expect(keys().filter((k) => JSON.stringify(k) === JSON.stringify(["checklist", "e1"]))).toHaveLength(2);
+  });
+
+  it("changing a host's OS re-syncs the board", async () => {
+    m.hostUpdate.mockResolvedValue({} as Host);
+    const { wrapper, keys } = setup();
+    const { result } = renderHook(() => useHostMutations("e1"), { wrapper });
+    await act(() => result.current.update.mutateAsync({ id: "h1", input: { name: "x", os: "linux" } }));
+    await vi.waitFor(() => expect(resyncBoards).toHaveBeenCalledWith("e1"));
+    await vi.waitFor(() => expect(keys()).toContainEqual(["hosts", "e1"]));
   });
 });

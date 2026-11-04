@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from "react";
 import type { Host, HostAccess, HostInput, HostOs } from "../../types/host";
-import { Button, Dialog, Field, Input, Select } from "../../ui";
+import { Button, Dialog, Field, Input, Select, Toggle } from "../../ui";
 import { useHostMutations } from "./queries";
 
 const OS_OPTIONS = [
@@ -36,6 +36,7 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
   const [ip, setIp] = useState(host?.ip ?? "");
   const [os, setOs] = useState(host?.os ?? "unknown");
   const [access, setAccess] = useState<HostAccess>(host?.access ?? "none");
+  const [dualHomed, setDualHomed] = useState(host?.dualHomed ?? false);
   const [errors, setErrors] = useState<Partial<Record<"name" | "ip" | "form", string>>>({});
   const pending = create.isPending || update.isPending;
 
@@ -52,6 +53,7 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
       ip: ip.trim() === "" ? null : ip.trim(),
       os: os === "unknown" ? null : (os as HostOs),
       access,
+      dualHomed,
     };
     const opts = {
       onSuccess: onClose,
@@ -93,6 +95,9 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
             <Select options={ACCESS_OPTIONS} value={access} onValueChange={(v) => setAccess(v as HostAccess)} />
           </Field>
         </div>
+        <Toggle on={dualHomed} onChange={setDualHomed} className="self-start">
+          Dual-homed (reaches another network)
+        </Toggle>
         {errors.form && <p className="m-0 text-xs text-warn">{errors.form}</p>}
       </form>
     </Dialog>

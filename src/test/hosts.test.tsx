@@ -116,7 +116,7 @@ describe("hosts", () => {
     await user.type(ip, "10.10.10.9");
     await user.click(within(dialog).getByRole("button", { name: "Add host" }));
     await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(m.hostCreate).toHaveBeenLastCalledWith("e1", { name: "dc03", ip: "10.10.10.9", os: null, access: "none" });
+    expect(m.hostCreate).toHaveBeenLastCalledWith("e1", { name: "dc03", ip: "10.10.10.9", os: null, access: "none", dualHomed: false });
     expect(await within(await screen.findByRole("navigation", { name: "Engagement" })).findByRole("link", { name: /dc03/ })).toBeInTheDocument();
   });
 

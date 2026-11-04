@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
+import { reportError } from "../../lib/lockSignal";
+import { resyncBoards } from "../checklist/ticks";
 import type { BoardColumn, HostInput } from "../../types/host";
 
 export function useHosts(engagementId: string) {
@@ -20,11 +22,28 @@ export function useHostMutations(engagementId: string) {
     void qc.invalidateQueries({ queryKey: ["checklist", engagementId] });
     void qc.invalidateQueries({ queryKey: ["services"] });
   };
+  // OS and dual-homed change which goals apply, so the derived column can move. Not fatal: failures go to the
+  // shared error path (a locked vault reaches the gate).
+  const resync = () => {
+    void resyncBoards(engagementId).then(
+      () => qc.invalidateQueries({ queryKey: ["hosts", engagementId] }),
+      reportError,
+    );
+  };
   return {
-    create: useMutation({ mutationFn: (input: HostInput) => api.hostCreate(engagementId, input), onSuccess }),
+    create: useMutation({
+      mutationFn: (input: HostInput) => api.hostCreate(engagementId, input),
+      onSuccess: () => {
+        onSuccess();
+        resync();
+      },
+    }),
     update: useMutation({
       mutationFn: (v: { id: string; input: HostInput }) => api.hostUpdate(v.id, v.input),
-      onSuccess,
+      onSuccess: () => {
+        onSuccess();
+        resync();
+      },
     }),
     move: useMutation({
       mutationFn: (v: { id: string; column: BoardColumn }) => api.hostMove(v.id, v.column),
