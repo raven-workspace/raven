@@ -72,9 +72,21 @@ export function setNotesQueryClient(qc: QueryClient | null) {
   queryClient = qc;
 }
 
+/**
+ * Writes a saved note into both caches before its pending text is dropped: the panel's `["note", …]` and the
+ * engagement's `["notes", …]` list that thread counts read. Without the list write, dropping the pending text made
+ * the counts fall back to the list's old body (a closed thread counted again) until the refetch landed, or for good
+ * if it failed. The refetch still runs, to pick up anything else that changed.
+ */
 function cacheSaved(note: Note) {
-  queryClient?.setQueryData(["note", note.engagementId, note.hostId], note);
-  void queryClient?.invalidateQueries({ queryKey: ["notes", note.engagementId] });
+  if (!queryClient) return;
+  queryClient.setQueryData(["note", note.engagementId, note.hostId], note);
+  queryClient.setQueryData<Note[]>(["notes", note.engagementId], (list) => {
+    if (!list) return list;
+    const i = list.findIndex((n) => n.ownerId === note.ownerId);
+    return i === -1 ? [...list, note] : list.map((n, j) => (j === i ? note : n));
+  });
+  void queryClient.invalidateQueries({ queryKey: ["notes", note.engagementId] });
 }
 
 export const useNotesStore = create<NotesState>()((set, get) => ({

@@ -178,6 +178,7 @@ function PanelBody({
           placeholder="Raw Markdown. Start a line with ? to open a thread."
           value={body}
           readOnly={!ready}
+          {...NO_TEXT_SERVICES}
           onChange={(e) => edit(target, e.target.value, isPrivate)}
           className="min-h-0 flex-1 resize-none"
         />
@@ -209,6 +210,18 @@ function PanelBody({
     </aside>
   );
 }
+
+/**
+ * Raw Markdown, typed fast: no macOS text services in WKWebView (autocapitalised lines, inline writing
+ * suggestions that Return or "-" interact with, substitutions). `writingsuggestions` (Safari 18+) has no React type.
+ */
+const NO_TEXT_SERVICES = {
+  spellCheck: false,
+  autoCorrect: "off",
+  autoCapitalize: "off",
+  autoComplete: "off",
+  writingsuggestions: "false",
+} as const;
 
 function Segment({ on, disabled, onClick, children }: { on: boolean; disabled?: boolean; onClick: () => void; children: string }) {
   return (
