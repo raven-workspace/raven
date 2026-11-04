@@ -1,9 +1,12 @@
 pub mod backup;
+pub mod checklist;
 pub mod commands;
 pub mod engagements;
 pub mod error;
 pub mod hosts;
 pub mod log;
+pub mod network;
+pub mod notes;
 pub mod migrations;
 pub mod paths;
 pub mod services;
@@ -38,12 +41,15 @@ pub fn run() {
             commands::engagement_update,
             commands::engagement_set_status,
             commands::engagement_delete,
+            commands::engagement_set_msf_host,
             commands::hosts_list,
             commands::host_create,
             commands::host_update,
             commands::host_move,
             commands::host_delete,
+            commands::host_sync_board,
             commands::services_list,
+            commands::services_list_engagement,
             commands::services_upsert_scan,
             commands::service_create,
             commands::service_update,
@@ -54,6 +60,22 @@ pub fn run() {
             commands::log_create,
             commands::log_update,
             commands::log_delete,
+            commands::checklist_list,
+            commands::checklist_put,
+            commands::notes_get,
+            commands::notes_list,
+            commands::note_save,
+            commands::ruled_out_list,
+            commands::ruled_out_create,
+            commands::ruled_out_delete,
+            commands::tunnels_list,
+            commands::tunnel_create,
+            commands::tunnel_update,
+            commands::tunnel_delete,
+            commands::hops_list,
+            commands::hop_create,
+            commands::hop_update,
+            commands::hop_delete,
             commands::attachment_get,
             commands::engagements_progress,
         ])

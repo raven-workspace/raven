@@ -23,7 +23,7 @@ function mount() {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"] });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "" });
   m.backupsList.mockResolvedValue([
     { file: "a.bak", reason: "daily", createdAt: 1_700_000_000_000, sizeBytes: 1_258_291 },
   ]);
@@ -38,7 +38,7 @@ describe("settings", () => {
 
   it("saves auto-lock minutes on blur", async () => {
     const user = userEvent.setup();
-    m.settingsUpdate.mockResolvedValue({ autoLockMinutes: 10, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"] });
+    m.settingsUpdate.mockResolvedValue({ autoLockMinutes: 10, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "" });
     mount();
     const input = await screen.findByLabelText("Auto-lock (minutes)");
     await user.clear(input);
@@ -129,5 +129,26 @@ describe("settings", () => {
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Restore" }));
     expect(await screen.findByText("This backup was made with a different password")).toBeInTheDocument();
     expect(onLocked).not.toHaveBeenCalled();
+  });
+
+  it("attacker IP setting rejects a non-IP", async () => {
+    const user = userEvent.setup();
+    m.settingsUpdate.mockRejectedValue(new RavenError("validation", "Must be an IPv4 address", "attackerIp"));
+    mount();
+    expect(await screen.findByText("Filled into checklist commands as LHOST and LPORT")).toBeInTheDocument();
+    const input = await screen.findByLabelText("Your IP (tun0)");
+    await user.type(input, "not-an-ip");
+    await user.tab();
+    expect(m.settingsUpdate).toHaveBeenCalledWith({ attackerIp: "not-an-ip" });
+    expect(await screen.findByText("Must be an IPv4 address")).toBeInTheDocument();
+  });
+
+  it("saves the listener port on blur", async () => {
+    const user = userEvent.setup();
+    m.settingsUpdate.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "4444" });
+    mount();
+    await user.type(await screen.findByLabelText("Listener port"), "4444");
+    await user.tab();
+    expect(m.settingsUpdate).toHaveBeenCalledWith({ listenerPort: "4444" });
   });
 });

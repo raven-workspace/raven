@@ -54,6 +54,40 @@ function NumberSetting({
   );
 }
 
+function TextSetting({
+  label,
+  value,
+  placeholder,
+  hint,
+  error,
+  className,
+  onSave,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  hint?: string;
+  error?: string | undefined;
+  className?: string;
+  onSave: (v: string) => void;
+}) {
+  const [text, setText] = useState(value);
+  return (
+    <Field label={label} hint={hint} error={error} className={className}>
+      <Input
+        mono
+        value={text}
+        placeholder={placeholder}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => {
+          const v = text.trim();
+          if (v !== value) onSave(v);
+        }}
+      />
+    </Field>
+  );
+}
+
 /** `onRestored` runs whenever the backend ends up locked (after a restore, or a failed one). */
 export function SettingsPage({ onRestored }: { onRestored: () => void }) {
   const qc = useQueryClient();
@@ -124,6 +158,31 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
               onSave={(n) => update.mutate({ backupRetention: n })}
             />
           </div>
+        </Panel>
+      )}
+      {settings.data && (
+        <Panel title="Attacker">
+          <div className="flex gap-6">
+            <TextSetting
+              key={`ip-${settings.data.attackerIp}`}
+              label="Your IP (tun0)"
+              value={settings.data.attackerIp}
+              placeholder="10.10.14.9"
+              className="w-44"
+              error={fieldError?.field === "attackerIp" ? fieldError.msg : undefined}
+              onSave={(v) => update.mutate({ attackerIp: v })}
+            />
+            <TextSetting
+              key={`port-${settings.data.listenerPort}`}
+              label="Listener port"
+              value={settings.data.listenerPort}
+              placeholder="4444"
+              className="w-28"
+              error={fieldError?.field === "listenerPort" ? fieldError.msg : undefined}
+              onSave={(v) => update.mutate({ listenerPort: v })}
+            />
+          </div>
+          <p className="m-0 mt-3 text-xs text-muted">Filled into checklist commands as LHOST and LPORT</p>
         </Panel>
       )}
       <Panel

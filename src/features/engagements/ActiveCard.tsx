@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { cx } from "../../lib/cx";
 import type { Engagement } from "../../types/engagement";
 import { Chip } from "../../ui";
+import { threadsLabel, useThreadCounts } from "../notes/useThreadCounts";
 import { useProgress } from "../hosts/queries";
 import {
   EMPTY_PROGRESS,
@@ -32,6 +33,7 @@ export function ActiveCard({ engagement: e, now }: { engagement: Engagement; now
   const scope = scopeSummary(e.scopeCidrs);
   const lastActivity = e.lastActivityAt;
   const progress = useProgress().data?.[e.id] ?? EMPTY_PROGRESS;
+  const threads = useThreadCounts(e.id).total;
 
   return (
     <Link
@@ -64,7 +66,15 @@ export function ActiveCard({ engagement: e, now }: { engagement: Engagement; now
         </p>
       )}
 
-      <p className="m-0 text-xs text-fg-2">{progressLine(progress)}</p>
+      <p className="m-0 flex items-baseline gap-1.5 text-xs text-fg-2">
+        <span>{progressLine(progress)}</span>
+        {threads > 0 && (
+          <>
+            <span className="text-faint">·</span>
+            <span>{threadsLabel(threads)}</span>
+          </>
+        )}
+      </p>
 
       <p className="m-0 border-t border-line pt-2 text-xs text-muted">
         {lastActivity === null ? (

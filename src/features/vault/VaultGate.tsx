@@ -2,8 +2,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { api } from "../../lib/api";
-import { onLockedError } from "../../lib/lockSignal";
+import { onLockedError, reportError } from "../../lib/lockSignal";
 import { useCaptureStore } from "../capture/useCaptureStore";
+import { discardNotes, flushNotes, hasPendingNotes, sessionGeneration, setNotesQueryClient, startNotesSession } from "../notes/useNotesStore";
 import type { UnlockResult, VaultStatus } from "../../types/vault";
 import { Button, Kbd, TitleBar } from "../../ui";
 import { SetupScreen } from "./SetupScreen";
@@ -75,6 +76,9 @@ export function VaultGate({ children }: { children: ReactNode }) {
     qc.clear();
     // Unsaved capture drafts hold engagement data: they go with the lock.
     useCaptureStore.getState().reset();
+    // Notes too: after a lock no note text stays in memory. `lock()` has already started the
+    // flush, which works from a snapshot.
+    discardNotes();
     setNotice(null);
     setBackupError(null);
     setStatus((s) => (s ? { ...s, unlocked: false } : s));
@@ -87,12 +91,36 @@ export function VaultGate({ children }: { children: ReactNode }) {
   const retryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(retryTimer.current), []);
 
-  const lockBackend = useCallback(async function run(): Promise<void> {
+  useEffect(() => {
+    setNotesQueryClient(qc);
+    return () => setNotesQueryClient(null);
+  }, [qc]);
+
+  const lockBackend = useCallback(async function run(notesSaved?: Promise<void>): Promise<void> {
     clearTimeout(retryTimer.current);
+    let gen = sessionGeneration();
+    if (notesSaved) {
+      // Field notes are saved before the backend locks. If that save failed the text is
+      // dropped anyway (see markLocked); a failed save must not keep the vault open.
+      await notesSaved;
+      // Only if no unlock happened meanwhile, so a quick re-unlock isn't wiped.
+      if (gen === sessionGeneration()) {
+        discardNotes();
+        qc.clear();
+        // discardNotes() starts a new generation; follow it so the clear after vaultLock still runs.
+        gen = sessionGeneration();
+      }
+    }
+    // Once the backend is locked, clear the cache again: a mutation that finished while the notes flushed or the
+    // lock ran may have written to it. Only if no unlock happened meanwhile.
+    const locked = () => {
+      setLockRetrying(false);
+      if (gen === sessionGeneration()) qc.clear();
+    };
     for (let i = 0; i < 3; i++) {
       try {
         await api.vaultLock();
-        setLockRetrying(false);
+        locked();
         return;
       } catch {
         // retry
@@ -100,18 +128,20 @@ export function VaultGate({ children }: { children: ReactNode }) {
     }
     const st = await api.vaultStatus().catch(() => null);
     if (st && !st.unlocked) {
-      setLockRetrying(false);
+      locked();
       return;
     }
     setLockRetrying(true);
     retryTimer.current = setTimeout(() => void run(), LOCK_RETRY_MS);
-  }, []);
+  }, [qc]);
 
   const lock = useCallback(() => {
     // The UI locks at once, never leaving data on screen; the backend lock is
     // retried until the backend confirms it.
+    // Start saving notes first: markLocked clears them from the store.
+    const notesSaved = hasPendingNotes() ? flushNotes().catch(reportError) : undefined;
     markLocked();
-    void lockBackend();
+    void lockBackend(notesSaved);
   }, [markLocked, lockBackend]);
 
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet, enabled: unlocked });
@@ -121,6 +151,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
 
   const onUnlocked = (r: UnlockResult) => {
     clearTimeout(retryTimer.current);
+    startNotesSession();
     setLockRetrying(false);
     setNotice(r.migratedFrom < r.migratedTo ? "Updated Raven's data (backup saved)" : null);
     setBackupError(r.dailyBackupError);

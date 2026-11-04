@@ -3,7 +3,8 @@ import { Link } from "react-router";
 import type { Host } from "../../types/host";
 import { Chip } from "../../ui";
 import { OS_LABELS } from "../hosts/columns";
-
+import { ThreadDot } from "../notes/ThreadDot";
+import { useThreadCounts } from "../notes/useThreadCounts";
 
 export interface BoardCardProps {
   host: Host;
@@ -12,6 +13,7 @@ export interface BoardCardProps {
 }
 
 export function BoardCard({ host, onShift }: BoardCardProps) {
+  const threads = useThreadCounts(host.engagementId).byHost.get(host.id) ?? 0;
   function onDragStart(e: DragEvent) {
     e.dataTransfer.setData("text/plain", host.id);
     e.dataTransfer.effectAllowed = "move";
@@ -34,7 +36,10 @@ export function BoardCard({ host, onShift }: BoardCardProps) {
       onKeyDown={onKeyDown}
       className="flex flex-col gap-1 rounded border border-line bg-bg px-3 py-2 text-fg no-underline hover:border-line-strong focus-visible:outline-1 focus-visible:outline-accent"
     >
-      <span className="truncate text-[13px] font-semibold">{host.name}</span>
+      <span className="flex items-center gap-1.5">
+        <span className="truncate text-[13px] font-semibold">{host.name}</span>
+        <ThreadDot count={threads} />
+      </span>
       {host.ip && (
         <span className="font-mono text-[11px] text-muted-2">{host.ip}</span>
       )}

@@ -1,7 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { BackupInfo } from "../types/backup";
 import type { ConfirmInput, ScanPort, Service, ServiceInput } from "../types/service";
+import type { ChecklistItem, ChecklistItemInput } from "../types/checklist";
 import type { Attachment, LogEntry, LogEntryInput, Progress } from "../types/log";
+import type { Note, RuledOut, RuledOutInput } from "../types/notes";
+import type { Hop, HopInput, Tunnel, TunnelInput } from "../types/network";
 import type { Host, HostInput, BoardColumn } from "../types/host";
 import type { Engagement, EngagementInput, EngagementStatus } from "../types/engagement";
 import { RavenError } from "../types/errors";
@@ -42,6 +45,8 @@ export const api = {
     call<Engagement>("engagement_update", { id, input }),
   engagementSetStatus: (id: string, status: EngagementStatus) =>
     call<Engagement>("engagement_set_status", { id, status }),
+  engagementSetMsfHost: (engagementId: string, hostId: string | null) =>
+    call<Engagement>("engagement_set_msf_host", { engagementId, hostId }),
   engagementDelete: (id: string) => call<null>("engagement_delete", { id }),
 
   hostsList: (engagementId: string) => call<Host[]>("hosts_list", { engagementId }),
@@ -49,9 +54,13 @@ export const api = {
     call<Host>("host_create", { engagementId, input }),
   hostUpdate: (id: string, input: HostInput) => call<Host>("host_update", { id, input }),
   hostMove: (id: string, column: BoardColumn) => call<Host>("host_move", { id, column }),
+  hostSyncBoard: (hostId: string, derived: BoardColumn) =>
+    call<Host>("host_sync_board", { hostId, derived }),
   hostDelete: (id: string) => call<null>("host_delete", { id }),
 
   servicesList: (hostId: string) => call<Service[]>("services_list", { hostId }),
+  servicesListEngagement: (engagementId: string) =>
+    call<Service[]>("services_list_engagement", { engagementId }),
   servicesUpsertScan: (hostId: string, ports: ScanPort[]) =>
     call<Service[]>("services_upsert_scan", { hostId, ports }),
   serviceCreate: (hostId: string, input: ServiceInput) =>
@@ -67,6 +76,27 @@ export const api = {
     call<LogEntry>("log_create", { engagementId, input }),
   logUpdate: (id: string, input: LogEntryInput) => call<LogEntry>("log_update", { id, input }),
   logDelete: (id: string) => call<null>("log_delete", { id }),
+  checklistList: (engagementId: string) => call<ChecklistItem[]>("checklist_list", { engagementId }),
+  checklistPut: (engagementId: string, items: ChecklistItemInput[]) =>
+    call<ChecklistItem[]>("checklist_put", { engagementId, items }),
+  notesGet: (engagementId: string, hostId: string | null) =>
+    call<Note>("notes_get", { engagementId, hostId }),
+  notesList: (engagementId: string) => call<Note[]>("notes_list", { engagementId }),
+  noteSave: (engagementId: string, hostId: string | null, body: string, isPrivate: boolean) =>
+    call<Note>("note_save", { engagementId, hostId, body, private: isPrivate }),
+  ruledOutList: (engagementId: string) => call<RuledOut[]>("ruled_out_list", { engagementId }),
+  ruledOutCreate: (input: RuledOutInput) => call<RuledOut>("ruled_out_create", { input }),
+  ruledOutDelete: (id: string) => call<null>("ruled_out_delete", { id }),
+  tunnelsList: (engagementId: string) => call<Tunnel[]>("tunnels_list", { engagementId }),
+  tunnelCreate: (engagementId: string, input: TunnelInput) =>
+    call<Tunnel>("tunnel_create", { engagementId, input }),
+  tunnelUpdate: (id: string, input: TunnelInput) => call<Tunnel>("tunnel_update", { id, input }),
+  tunnelDelete: (id: string) => call<null>("tunnel_delete", { id }),
+  hopsList: (engagementId: string) => call<Hop[]>("hops_list", { engagementId }),
+  hopCreate: (engagementId: string, input: HopInput) =>
+    call<Hop>("hop_create", { engagementId, input }),
+  hopUpdate: (id: string, input: HopInput) => call<Hop>("hop_update", { id, input }),
+  hopDelete: (id: string) => call<null>("hop_delete", { id }),
   attachmentGet: (id: string) => call<Attachment>("attachment_get", { id }),
   engagementsProgress: () => call<Record<string, Progress>>("engagements_progress"),
 };

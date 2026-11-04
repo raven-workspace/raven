@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { EmptyState, Panel } from "../../ui";
+import { EmptyState } from "../../ui";
+import { NowPanel } from "../checklist/NowPanel";
+import { HostChecklist } from "../checklist/HostChecklist";
 import { useLog } from "../log/queries";
 import { LogEntryRow } from "../log/LogEntryRow";
 import { OrderButton } from "../log/OrderButton";
@@ -23,6 +25,8 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   const log = useLog(engagementId);
   const [tab, setTab] = useState<TabId>("story");
   const [order, setOrder] = usePersistedOrder("raven.story.order", "oldest");
+  const [openEntry, setOpenEntry] = useState<string>();
+  const [focusGoal, setFocusGoal] = useState<{ id: string; n: number }>();
   const host = hosts.data?.find((h) => h.id === hostId);
 
   if (hosts.isError) return <EmptyState title="Couldn't load this host" body={hosts.error.message} />;
@@ -43,12 +47,15 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
       <HostHeader host={host} />
       <div className="grid min-h-0 flex-1 grid-cols-[300px_1fr] gap-6">
         <div className="flex min-h-0 flex-col gap-6 overflow-y-auto pr-1">
-          <ServicesColumn hostId={hostId} entries={entries} />
-          <Panel title="Now" aria-label="Now">
-            <p className="m-0 text-xs text-muted">
-              The current stage's open steps arrive with the checklist (build step 3).
-            </p>
-          </Panel>
+          <ServicesColumn engagementId={engagementId} hostId={hostId} entries={entries} />
+          <NowPanel
+            engagementId={engagementId}
+            host={host}
+            onOpenGoal={(id) => {
+              setTab("checklist");
+              setFocusGoal((f) => ({ id, n: (f?.n ?? 0) + 1 }));
+            }}
+          />
         </div>
         <div className="flex min-h-0 min-w-0 flex-col">
           <div className="flex items-center justify-between gap-3">
@@ -59,7 +66,10 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
                   role="tab"
                   type="button"
                   aria-selected={tab === t.id}
-                  onClick={() => setTab(t.id)}
+                  onClick={() => {
+                    setTab(t.id);
+                    setFocusGoal(undefined);
+                  }}
                   className={`h-7 cursor-default rounded-[var(--radius-sm)] px-3 text-[13px] ${
                     tab === t.id ? "bg-surface-hi text-fg shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-muted hover:text-fg"
                   }`}
@@ -70,7 +80,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
             </div>
             {tab === "story" && <OrderButton order={order} onChange={setOrder} />}
           </div>
-          <div role="tabpanel" className="mt-3 min-h-0 flex-1 overflow-y-auto border-t border-line">
+          <div role="tabpanel" className="mt-3 min-h-0 flex-1 overflow-y-auto border-t border-line pl-1 pr-3 pt-1 [scrollbar-gutter:stable]">
             {tab === "story" ? (
               log.isError ? (
                 <p role="alert" className="text-xs text-warn">Couldn't load the log: {log.error.message}</p>
@@ -78,9 +88,19 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
                 <p className="text-[13px] text-muted">Nothing logged on this host yet. Press L to capture.</p>
               ) : (
                 <ul className="m-0 list-none p-0">
-                  {entries.map((e) => <LogEntryRow key={e.id} entry={e} hosts={hosts.data} />)}
+                  {entries.map((e) => <LogEntryRow key={e.id} entry={e} hosts={hosts.data} defaultOpen={e.id === openEntry} />)}
                 </ul>
               )
+            ) : tab === "checklist" ? (
+              <HostChecklist
+                engagementId={engagementId}
+                host={host}
+                focusGoal={focusGoal}
+                onOpenEntry={(id) => {
+                  setOpenEntry(id);
+                  setTab("story");
+                }}
+              />
             ) : (
               <p className="text-[13px] text-muted">
                 {TABS.find((t) => t.id === tab)?.label} arrives with build step {STEPS[tab]}.

@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { dateRange, progressLine, relativeTime, timeLeft } from "../features/engagements/format";
+import { useNotesStore } from "../features/notes/useNotesStore";
 import { api } from "../lib/api";
 import type { Engagement } from "../types/engagement";
 import { RavenError } from "../types/errors";
@@ -30,7 +31,7 @@ function eng(over: Partial<Engagement> & Pick<Engagement, "id" | "name">): Engag
     createdAt: 1_700_000_000_000,
     updatedAt: 1_700_000_000_000,
     lastActivityAt: null,
-    lastRanOn: null,
+    lastRanOn: null, msfHostId: null,
     ...over,
   };
 }
@@ -48,7 +49,7 @@ function fixtures(): Engagement[] {
       timeboxStart: now - 2 * HOUR,
       timeboxMinutes: 1425,
       lastActivityAt: now - 12 * MIN,
-      lastRanOn: null,
+      lastRanOn: null, msfHostId: null,
     }),
     eng({ id: "e4", name: "Acme Corp internal", kind: "client", client: "Acme Corp", subLabel: "assumed breach" }),
     eng({ id: "e2", name: "Lumen", kind: "lab", status: "archived" }),
@@ -71,7 +72,7 @@ beforeEach(() => {
   list = fixtures();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.vaultLock.mockResolvedValue(null);
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"] });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "" });
   m.backupsList.mockResolvedValue([]);
   m.engagementsProgress.mockResolvedValue({});
   m.hostsList.mockResolvedValue([]);
@@ -275,7 +276,7 @@ describe("dashboard", () => {
   });
 
   it("autolock_with_open_dialog_discards_draft_cleanly", async () => {
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 1, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"] });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 1, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "" });
     m.vaultUnlock.mockResolvedValue({ migratedFrom: 3, migratedTo: 3, dailyBackup: null, dailyBackupError: null });
     vi.useFakeTimers({ shouldAdvanceTime: false });
     mount();
@@ -389,6 +390,35 @@ describe("engagement shell", () => {
     await user.click(confirm);
     expect(m.engagementDelete).toHaveBeenCalledWith("e1");
     expect(await screen.findByTestId("app-root")).toBeInTheDocument();
+  });
+
+  it("deleting an engagement drops its unsaved note text and keeps other engagements", async () => {
+    const user = userEvent.setup();
+    m.engagementDelete.mockResolvedValue(null);
+    m.notesList.mockResolvedValue([]);
+    m.noteSave.mockImplementation(async (engagementId, hostId, body, isPrivate) => ({
+      ownerId: hostId ?? engagementId, engagementId, hostId, body, private: isPrivate, updatedAt: 1,
+    }));
+    mount("/e/e1");
+    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    useNotesStore.setState({
+      pending: {
+        "e1:": { engagementId: "e1", hostId: null, body: "? gone", private: false },
+        "e1:h1": { engagementId: "e1", hostId: "h1", body: "? gone too", private: false },
+        "e2:": { engagementId: "e2", hostId: null, body: "? kept", private: false },
+      },
+      errors: { "e1:h1": "not found" },
+    });
+    const dialog = await screen.findByRole("dialog", { name: "Delete engagement" });
+    await user.type(within(dialog).getByLabelText(/Type the engagement name/), "Mock exam A");
+    await user.click(within(dialog).getByRole("button", { name: "Delete engagement" }));
+    await vi.waitFor(() => expect(m.engagementDelete).toHaveBeenCalledWith("e1"));
+    // Only the other engagement's text was left to save.
+    await vi.waitFor(() => expect(useNotesStore.getState().pending).toEqual({}));
+    expect(m.noteSave.mock.calls.map((c) => c[0])).not.toContain("e1");
+    expect(m.noteSave).toHaveBeenCalledWith("e2", null, "? kept", false);
+    expect(useNotesStore.getState().errors).toEqual({});
+    useNotesStore.setState({ pending: {}, errors: {} });
   });
 
   it("edit prefills and saves with engagementUpdate", async () => {

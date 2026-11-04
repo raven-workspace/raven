@@ -1,9 +1,11 @@
 import * as RD from "@radix-ui/react-dialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type RefObject } from "react";
+import { metasploitHostIds, metasploitWarning } from "../../engines/checklist";
 import { api } from "../../lib/api";
 import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
+import type { LogEntry } from "../../types/log";
 import { Button, Chip, Field, Input, Kbd, Select, Textarea } from "../../ui";
 import { useHosts } from "../hosts/queries";
 import { HostChips } from "./HostChips";
@@ -51,6 +53,16 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
     [pd, hosts, machines, engagement, presetHostId],
   );
   const kind = r.edits.kind;
+  // Exam sims: warn (without blocking) when this entry uses Metasploit off the locked host.
+  const msfWarning = useMemo(() => {
+    if (engagement.kind !== "exam-sim" || !engagement.msfHostId) return null;
+    const draft: LogEntry = {
+      id: "", engagementId: id, kind: r.edits.kind, title: "", titleEdited: false, ranOn: r.edits.ranOn || null,
+      hostIds: r.edits.hostIds, observations: null, returnedNothing: false, private: false, content: r.edits.content,
+      at: 0, createdAt: 0, updatedAt: 0,
+    };
+    return metasploitWarning(draft, engagement, metasploitHostIds(draft, engagement, hosts));
+  }, [engagement, hosts, id, r.edits]);
   const set = (patch: Partial<PanelDraft>) => useCaptureStore.getState().update(id, patch);
 
   // After an image paste the caption is the next thing to type.
@@ -62,7 +74,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
   }, [pd.image]);
 
   function refresh() {
-    for (const key of [["log", id], ["hosts", id], ["services"], ["progress"], ["engagement", id]]) {
+    for (const key of [["log", id], ["hosts", id], ["services"], ["services", "engagement", id], ["checklist", id], ["progress"], ["engagement", id], ["engagements"]]) {
       void qc.invalidateQueries({ queryKey: key });
     }
   }
@@ -252,6 +264,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
         </div>
       </div>
 
+      {msfWarning && <p className="m-0 shrink-0 border-t border-line px-4 pt-2.5 text-xs text-warn">{msfWarning}</p>}
       <footer className="flex shrink-0 items-center gap-2 border-t border-line px-4 py-3">
         <Button onClick={discard}>Discard</Button>
         <p role="alert" className="m-0 min-w-0 flex-1 truncate text-xs text-warn">

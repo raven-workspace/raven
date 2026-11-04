@@ -28,7 +28,7 @@ const E1: Engagement = {
   createdAt: 1,
   updatedAt: 1,
   lastActivityAt: null,
-  lastRanOn: null,
+  lastRanOn: null, msfHostId: null,
 };
 
 function host(over: Partial<Host> & Pick<Host, "id" | "name">): Host {
@@ -37,7 +37,7 @@ function host(over: Partial<Host> & Pick<Host, "id" | "name">): Host {
     ip: null,
     os: null,
     boardColumn: "enumerate",
-    boardManual: false,
+    boardManual: false, dualHomed: false, boardDerived: null,
     access: "none",
     createdAt: 1,
     updatedAt: 1,
@@ -69,7 +69,7 @@ beforeEach(() => {
     host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "done" }),
   ];
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"] });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "" });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementGet.mockResolvedValue(E1);
   m.hostsList.mockImplementation(async () => hosts);
@@ -116,7 +116,7 @@ describe("hosts", () => {
     await user.type(ip, "10.10.10.9");
     await user.click(within(dialog).getByRole("button", { name: "Add host" }));
     await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(m.hostCreate).toHaveBeenLastCalledWith("e1", { name: "dc03", ip: "10.10.10.9", os: null, access: "none" });
+    expect(m.hostCreate).toHaveBeenLastCalledWith("e1", { name: "dc03", ip: "10.10.10.9", os: null, access: "none", dualHomed: false });
     expect(await within(await screen.findByRole("navigation", { name: "Engagement" })).findByRole("link", { name: /dc03/ })).toBeInTheDocument();
   });
 

@@ -1,5 +1,6 @@
 import { buildDraft, type CaptureDraft, type DraftInput } from "../../engines/capture";
 import { api } from "../../lib/api";
+import { afterEntrySaved, CHECKLIST_FAILED, FollowUpError } from "../checklist/ticks";
 import type { Host } from "../../types/host";
 import type { LogContent, LogEntry, LogKind, NewAttachment } from "../../types/log";
 
@@ -18,14 +19,14 @@ export interface CaptureEdits {
   content: LogContent;
 }
 
-/** The entry was saved, but a follow-up step (services, OS) failed. */
+/** The entry was saved, but a follow-up step (services, OS, checklist, Metasploit lock) failed. */
 export class PartialSaveError extends Error {
   readonly entry: LogEntry;
   /** What made the follow-up step fail. */
   readonly reason: unknown;
-  constructor(entry: LogEntry, cause: unknown) {
+  constructor(entry: LogEntry, cause: unknown, message?: string) {
     const detail = cause instanceof Error ? cause.message : String(cause);
-    super(`Saved, but services didn't update: ${detail}`);
+    super(message ?? `Saved, but services didn't update: ${detail}`);
     this.name = "PartialSaveError";
     this.entry = entry;
     this.reason = cause;
@@ -48,8 +49,8 @@ export interface SaveCaptureArgs {
 
 /**
  * Saves a capture: creates hosts for `addIps`, then the entry, then applies the nmap scan
- * (services, and the OS when the host has none). A failure after the entry exists throws
- * `PartialSaveError` carrying the saved entry.
+ * (services, and the OS when the host has none), then the checklist ticks, board and Metasploit lock.
+ * A failure after the entry exists throws `PartialSaveError` carrying the saved entry.
  */
 export async function saveCapture(args: SaveCaptureArgs): Promise<LogEntry> {
   const { engagementId, draft, edits, addIps, image, draftInput, onHostCreated } = args;
@@ -99,8 +100,25 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<LogEntry> {
         await api.hostUpdate(h.id, { name: h.name, ip: h.ip, os: scan.os, access: h.access });
       }
     } catch (e) {
-      throw new PartialSaveError(entry, e);
+      // The checklist still follows the entry; the services failure is the one reported first.
+      const followUp = await afterEntrySaved(engagementId, entry, entry.id).then(
+        () => null,
+        (f: unknown) => f,
+      );
+      const partial = new PartialSaveError(entry, e);
+      if (!followUp) throw partial;
+      const also =
+        followUp instanceof FollowUpError && followUp.message !== CHECKLIST_FAILED
+          ? followUp.message
+          : "The checklist didn't update either: use Tick from log on the Engagement checklist.";
+      throw new PartialSaveError(entry, e, `${partial.message}. ${also}`);
     }
+  }
+  try {
+    await afterEntrySaved(engagementId, entry, entry.id);
+  } catch (e) {
+    if (e instanceof FollowUpError) throw new PartialSaveError(entry, e.reason, e.message);
+    throw new PartialSaveError(entry, e);
   }
   return entry;
 }

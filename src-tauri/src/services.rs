@@ -113,6 +113,17 @@ pub fn list(conn: &Connection, host_id: &str) -> AppResult<Vec<Service>> {
     Ok(rows)
 }
 
+/// Every service of every host in the engagement, ordered by host, protocol, port.
+pub fn list_engagement(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Service>> {
+    let cols = COLS.split(", ").map(|c| format!("s.{c}")).collect::<Vec<_>>().join(", ");
+    let mut st = conn.prepare(&format!(
+        "SELECT {cols} FROM services s JOIN hosts h ON h.id = s.host_id WHERE h.engagement_id = ?1 \
+         ORDER BY s.host_id, s.protocol, s.port"
+    ))?;
+    let rows = st.query_map([engagement_id], from_row)?.collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
 pub fn get(conn: &Connection, id: &str) -> AppResult<Service> {
     match conn.query_row(&format!("SELECT {COLS} FROM services WHERE id = ?1"), [id], from_row) {
         Ok(s) => Ok(s),
@@ -277,7 +288,7 @@ mod tests {
     }
 
     fn host(c: &Connection, eng_id: &str, name: &str) -> String {
-        hosts::create(c, eng_id, HostInput { name: name.into(), ip: None, os: None, access: None }).unwrap().id
+        hosts::create(c, eng_id, HostInput { name: name.into(), ip: None, os: None, access: None, dual_homed: None }).unwrap().id
     }
 
     fn entry(c: &Connection, eng_id: &str, id: &str) {
@@ -306,6 +317,21 @@ mod tests {
             Err(AppError::Validation { field, message }) => (field, message),
             o => panic!("expected validation, got {o:?}"),
         }
+    }
+
+    #[test]
+    fn list_engagement_covers_all_hosts_of_that_engagement_only() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let (e1, e2) = (eng(c), eng(c));
+        let (a, b, other) = (host(c, &e1, "a"), host(c, &e1, "b"), host(c, &e2, "o"));
+        for (h, port) in [(&a, 80), (&a, 22), (&b, 443), (&other, 8080)] {
+            upsert_scan(c, h, &[sp(port, "tcp", "open", "x", "")]).unwrap();
+        }
+        let got = list_engagement(c, &e1).unwrap();
+        assert_eq!(got.len(), 3);
+        assert!(got.iter().all(|s| s.host_id == a || s.host_id == b));
+        assert!(list_engagement(c, "nope").unwrap().is_empty());
     }
 
     #[test]

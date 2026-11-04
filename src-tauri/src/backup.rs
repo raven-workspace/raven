@@ -680,7 +680,7 @@ mod tests {
         let (_d, mut v) = setup();
         add_engagement(&v, "A");
         // Make the db look older so unlock migrates it.
-        v.conn().unwrap().execute_batch("PRAGMA user_version = 0; DROP TABLE attachments; DROP TABLE log_entry_hosts; DROP TABLE services; DROP TABLE log_entries; DROP TABLE hosts; DROP TABLE settings; DROP TABLE engagements; CREATE TABLE old (x INTEGER);").unwrap();
+        v.conn().unwrap().execute_batch("PRAGMA user_version = 0; DROP TABLE hops; DROP TABLE tunnels; DROP TABLE ruled_out; DROP TABLE notes; DROP TABLE checklist_items; DROP TABLE attachments; DROP TABLE log_entry_hosts; DROP TABLE services; DROP TABLE log_entries; DROP TABLE hosts; DROP TABLE settings; DROP TABLE engagements; CREATE TABLE old (x INTEGER);").unwrap();
         v.lock();
         assert!(db_files(&v).is_empty());
         let db_before = std::fs::read(&v.paths().db).unwrap();

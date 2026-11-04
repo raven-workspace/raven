@@ -2,11 +2,16 @@ import { describe, it, expect } from 'vitest';
 import { BUILTIN_LIBRARY } from '../../../engines/library/data';
 import type { LibraryCommand } from '../../../engines/library/types';
 import { firstBinary, matchesCommand } from '../../../engines/library/matcher';
+import { AD_PLAYBOOKS, ENGAGEMENT_SETUP, HOST_GOALS } from '../../../engines/checklist';
+import { resolveTemplate } from '../../../engines/checklist/template';
 
 const lib = BUILTIN_LIBRARY;
-const ALL_GOAL_IDS = new Set(lib.flatMap((c) => c.goals));
+const ENGAGEMENT_GOALS = [...ENGAGEMENT_SETUP, ...AD_PLAYBOOKS.flatMap((p) => p.goals)];
+const ALL_GOAL_IDS = new Set([...HOST_GOALS, ...ENGAGEMENT_GOALS].map((g) => g.id));
 /** Library order within a goal (the old commandsForGoal with no operator preferences). */
 const commandsForGoal = (goalId: string, library: LibraryCommand[]) => library.filter((c) => c.goals.includes(goalId));
+/** Records, not commands: the operator writes them by hand. */
+const NO_COMMAND_NEEDED = new Set(['h-foot-arrived', 'h-close-notes', 'e-setup-kind']);
 const FULL_TCP_MISSES = ['nmap -sC -sV 10.0.0.5', 'nmap --top-ports 1000 10.0.0.5'];
 const BANNED_BINS = new Set([
   'nessus', 'openvas', 'sqlmap', 'mitm6', 'arpspoof', 'ettercap', 'bettercap',
@@ -32,8 +37,15 @@ describe('built-in command library', () => {
     expect(dupes).toEqual([]);
   });
 
-  it('every command names at least one goal', () => {
+  it('every goal id referenced exists in HOST_GOALS, ENGAGEMENT_SETUP or AD_PLAYBOOKS', () => {
+    const unknown = lib.flatMap((c) => c.goals.filter((g) => !ALL_GOAL_IDS.has(g)).map((g) => `${c.id} -> ${g}`));
+    expect(unknown).toEqual([]);
     expect(lib.filter((c) => c.goals.length === 0).map((c) => c.id)).toEqual([]);
+  });
+
+  it('every host and engagement goal has at least one command', () => {
+    const missing = [...ALL_GOAL_IDS].filter((id) => !NO_COMMAND_NEEDED.has(id) && !lib.some((c) => c.goals.includes(id)));
+    expect(missing).toEqual([]);
   });
 
   it('every command with a matcher has hit and miss examples', () => {
@@ -121,6 +133,25 @@ describe('built-in command library', () => {
     expect(unknown).toEqual([]);
   });
 
+  it('operator-fill tokens are reported unresolved, never silently filled', () => {
+    const fills = lib.filter((c) => /\{FILL_[A-Z0-9_]+\}/.test(c.template));
+    expect(fills.length).toBeGreaterThan(5);
+    const ctx = { lhost: '10.10.14.2', lport: '443', rhost: '10.0.0.5', domain: 'corp.local', customVars: {} };
+    const svc = lib.find((c) => c.id === 'win-pe-sc-qc')!;
+    for (const opts of [{}, { legacyAliases: true }]) {
+      const r = resolveTemplate(svc.template, ctx, opts);
+      expect(r.text).toBe('sc.exe qc {FILL_SERVICE}');
+      expect(r.unresolved).toEqual(['FILL_SERVICE']);
+    }
+    // An operator who defines the value as a custom variable gets it filled.
+    expect(resolveTemplate(svc.template, { ...ctx, customVars: { FILL_SERVICE: 'VulnSvc' } }).text).toBe('sc.exe qc VulnSvc');
+    // Sweep: every FILL token in the library stays unresolved with an empty context.
+    for (const c of fills) {
+      const r = resolveTemplate(c.template, ctx);
+      for (const m of c.template.matchAll(/\{(FILL_[A-Z0-9_]+)\}/g)) expect(r.unresolved, c.id).toContain(m[1]);
+    }
+  });
+
   it('target-side and attacker-side commands are labelled', () => {
     const byId = new Map(lib.map((c) => [c.id, c]));
     for (const id of ['win-pe-whoami-priv', 'lin-pe-sudo-l', 'orient-ipconfig-all', 'orient-id']) {
@@ -172,6 +203,7 @@ describe('built-in command library', () => {
     // brute force is the last resort
     expect(tools('h-foot-brute')).toContain('hydra');
     expect(cmds('h-foot-brute').find((c) => c.tool === 'hydra')?.why).toMatch(/last resort/i);
+    expect(HOST_GOALS.find((g) => g.id === 'h-foot-brute')?.title).toMatch(/last resort/i);
   });
 
   it('no foothold command ticks a foothold goal', () => {

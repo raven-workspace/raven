@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CaptureDraft } from "../engines/capture";
-import { saveCapture, type CaptureEdits } from "../features/capture/saveCapture";
+import { PartialSaveError, saveCapture, type CaptureEdits } from "../features/capture/saveCapture";
 import { api } from "../lib/api";
+import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 import type { LogEntry, LogEntryInput } from "../types/log";
 
@@ -14,7 +15,7 @@ function host(over: Partial<Host> & Pick<Host, "id" | "name">): Host {
     ip: null,
     os: null,
     boardColumn: "enumerate",
-    boardManual: false,
+    boardManual: false, dualHomed: false, boardDerived: null,
     access: "none",
     createdAt: 1,
     updatedAt: 1,
@@ -79,6 +80,12 @@ function entry(input: LogEntryInput): LogEntry {
 beforeEach(() => {
   vi.resetAllMocks();
   m.logCreate.mockImplementation(async (_e, input) => entry(input));
+  // The checklist follow-up reads the store after the entry saves.
+  m.engagementGet.mockResolvedValue({ id: "e1", kind: "lab", domain: null, msfHostId: null } as Engagement);
+  m.hostsList.mockResolvedValue([]);
+  m.servicesListEngagement.mockResolvedValue([]);
+  m.checklistList.mockResolvedValue([]);
+  m.checklistPut.mockResolvedValue([]);
 });
 
 describe("saveCapture", () => {
@@ -296,5 +303,60 @@ describe("saveCapture", () => {
     });
     expect(m.logCreate).toHaveBeenCalledTimes(1);
     expect(m.logCreate.mock.calls[0]![1].attachment).toEqual({ mime: "image/png", dataBase64: "AAAA" });
+  });
+
+  it("services and checklist both failing says both", async () => {
+    m.servicesUpsertScan.mockRejectedValue(new Error("db busy"));
+    m.checklistList.mockRejectedValue(new Error("db busy"));
+    const err = await saveCapture({
+      engagementId: "e1",
+      draft: draft({ scan: { hostId: "h1", ports: PORTS, os: null } }),
+      edits: edits(),
+      addIps: [],
+      image: null,
+      hosts: [DC],
+    }).catch((e: unknown) => e);
+    expect(err).toMatchObject({
+      message: "Saved, but services didn't update: db busy. The checklist didn't update either: use Tick from log on the Engagement checklist.",
+      entry: { id: "l1" },
+    });
+  });
+
+  it("services failure with a lock-only follow-up failure uses the lock's message", async () => {
+    m.servicesUpsertScan.mockRejectedValue(new Error("db busy"));
+    m.engagementGet.mockResolvedValue({ id: "e1", kind: "exam-sim", domain: null, msfHostId: null } as Engagement);
+    m.hostsList.mockResolvedValue([DC]);
+    m.engagementSetMsfHost.mockRejectedValue(new Error("db busy"));
+    const err = await saveCapture({
+      engagementId: "e1",
+      draft: draft({ scan: { hostId: "h1", ports: PORTS, os: null } }),
+      edits: edits({ content: { kind: "command", blocks: [{ command: "msfconsole -q -x 'use exploit/windows/smb/psexec; set RHOSTS 10.10.10.5'", output: "" }] } }),
+      addIps: [],
+      image: null,
+      hosts: [DC],
+    }).catch((e: unknown) => e);
+    expect(err).toMatchObject({
+      message: "Saved, but services didn't update: db busy. Saved the entry, but the Metasploit lock didn't update.",
+    });
+  });
+
+  it("checklist failure after the entry saved is a partial save carrying its cause", async () => {
+    const cause = new Error("locked");
+    m.checklistPut.mockRejectedValue(cause);
+    m.hostsList.mockResolvedValue([DC]);
+    const err = await saveCapture({
+      engagementId: "e1",
+      draft: draft(),
+      edits: edits({ content: { kind: "flag", flagKind: "local", value: "0123456789abcdef0123456789abcdef" }, kind: "flag" }),
+      addIps: [],
+      image: null,
+      hosts: [DC],
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(PartialSaveError);
+    expect(err).toMatchObject({
+      message: "Saved the entry, but the checklist didn't update. Use Tick from log on the Engagement checklist.",
+      entry: { id: "l1" },
+      reason: cause,
+    });
   });
 });

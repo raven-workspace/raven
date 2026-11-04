@@ -3,6 +3,7 @@ import { useNow } from "../../lib/keys";
 import type { Engagement } from "../../types/engagement";
 import { Kbd, labelClass } from "../../ui";
 import { useProgress } from "../hosts/queries";
+import { useThreadCounts } from "../notes/useThreadCounts";
 import { TimeBar } from "./ActiveCard";
 import {
   EMPTY_PROGRESS,
@@ -13,10 +14,13 @@ import {
   timeLeft,
   timeboxElapsed,
 } from "./format";
+import { Listener } from "./Listener";
+import { MsfLock } from "./MsfLock";
 
 export function StatusStrip({ engagement: e }: { engagement: Engagement }) {
   const now = useNow();
   const progress = useProgress().data?.[e.id] ?? EMPTY_PROGRESS;
+  const threads = useThreadCounts(e.id).total;
   return (
     <div
       role="status"
@@ -29,6 +33,9 @@ export function StatusStrip({ engagement: e }: { engagement: Engagement }) {
         <span>{dateRange(e.startsAt, e.endsAt, now)}</span>
       )}
       <span className="text-fg-2">{progressLine(progress)}</span>
+      {threads > 0 && <span className="text-fg-2">Threads {threads}</span>}
+      {e.kind === "exam-sim" && <MsfLock engagement={e} />}
+      <Listener />
       <span className="ml-auto flex items-center gap-1.5 text-faint">
         <Kbd>1</Kbd>–<Kbd>6</Kbd> sections <Kbd className="ml-2">esc</Kbd> engagements
       </span>
