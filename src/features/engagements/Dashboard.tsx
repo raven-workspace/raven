@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { api } from "../../lib/api";
-import { isDialogOpen, useKeydown, useNow } from "../../lib/keys";
+import { isDialogOpen, isTypingTarget, useKeydown, useNow } from "../../lib/keys";
 import { Button, EmptyState, Input, Kbd, labelClass } from "../../ui";
 import { ActiveCard } from "./ActiveCard";
 import { EngagementDialog } from "./EngagementDialog";
@@ -16,7 +16,9 @@ export function Dashboard() {
   const pastId = useId();
 
   useKeydown((e) => {
-    if (e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "n" && !isDialogOpen()) {
+    if (!e.metaKey || e.ctrlKey || e.altKey || e.key.toLowerCase() !== "n") return;
+    // Same rules as the number keys: not while typing, not over a dialog.
+    if (!e.defaultPrevented && !isTypingTarget(e.target) && !isDialogOpen()) {
       e.preventDefault();
       setCreating(true);
     }

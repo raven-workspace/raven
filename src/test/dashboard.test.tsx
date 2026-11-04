@@ -168,6 +168,37 @@ describe("dashboard", () => {
     expect(await screen.findByRole("dialog", { name: "New engagement" })).toBeInTheDocument();
   });
 
+  it("cmd+N does nothing while typing in the past search", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByRole("table");
+    const search = screen.getByRole("searchbox", { name: "Search past engagements" });
+    await user.click(search);
+    await user.type(search, "rel");
+    // fireEvent: user-event would also type the "n" into the field, which ⌘N never does on macOS.
+    const ev = fireEvent.keyDown(search, { key: "n", metaKey: true });
+    expect(ev).toBe(true); // not preventDefault-ed: the field keeps the key
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(search).toHaveFocus();
+    expect(search).toHaveValue("rel");
+  });
+
+  it("cmd+N with a dialog already open changes nothing", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByRole("table");
+    await user.keyboard("{Meta>}n{/Meta}");
+    const dialog = await screen.findByRole("dialog", { name: "New engagement" });
+    const name = within(dialog).getByLabelText("Name");
+    await user.type(name, "Draft");
+    expect(name).toHaveValue("Draft");
+    fireEvent.keyDown(name, { key: "n", metaKey: true });
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.getByRole("dialog", { name: "New engagement" })).toBe(dialog);
+    expect(name).toHaveValue("Draft");
+    expect(name).toHaveFocus();
+  });
+
   it("timebox_fields_only_for_exam_sim", async () => {
     const user = userEvent.setup();
     m.engagementCreate.mockImplementation(async (input) => eng({ id: "n1", ...input, kind: input.kind } as Engagement));
