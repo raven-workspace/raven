@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../lib/api";
 import { RavenError } from "../types/errors";
+import { SetupScreen } from "../features/vault/SetupScreen";
 import { VaultGate } from "../features/vault/VaultGate";
 
 vi.mock("../lib/api");
@@ -38,6 +39,40 @@ describe("vault gate", () => {
     mount();
     expect(await screen.findByText("Create your Raven password")).toBeInTheDocument();
     expect(screen.getByText(/can't be recovered/)).toBeInTheDocument();
+  });
+
+  it("a failed status check shows a calm error with Try again", async () => {
+    const user = userEvent.setup();
+    m.vaultStatus.mockRejectedValueOnce(new RavenError("io", "disk")).mockResolvedValue({ exists: true, unlocked: false });
+    mount();
+    expect(await screen.findByText("Raven couldn't check its data.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByLabelText("Password")).toBeInTheDocument();
+    expect(screen.queryByText("Raven couldn't check its data.")).not.toBeInTheDocument();
+  });
+
+  it("a failed status check after setup shows Try again instead of a stuck screen", async () => {
+    const user = userEvent.setup();
+    m.vaultStatus
+      .mockResolvedValueOnce({ exists: false, unlocked: false })
+      .mockRejectedValueOnce(new RavenError("io", "disk"))
+      .mockResolvedValue({ exists: true, unlocked: true });
+    m.vaultCreate.mockResolvedValue(null);
+    mount();
+    await user.type(await screen.findByLabelText("Password"), "twelve chars long");
+    await user.type(screen.getByLabelText("Confirm password"), "twelve chars long{Enter}");
+    await user.click(await screen.findByRole("button", { name: "Try again" }));
+    expect(await screen.findByTestId("inside")).toBeInTheDocument();
+  });
+
+  it("setup screen leaves the busy state when onCreated fails", async () => {
+    const user = userEvent.setup();
+    m.vaultCreate.mockResolvedValue(null);
+    render(<SetupScreen onCreated={() => Promise.reject(new Error("refresh failed"))} />);
+    await user.type(screen.getByLabelText("Password"), "twelve chars long");
+    await user.type(screen.getByLabelText("Confirm password"), "twelve chars long{Enter}");
+    expect(await screen.findByText("refresh failed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create password" })).toBeEnabled();
   });
 
   it("shows unlock when locked", async () => {

@@ -36,18 +36,36 @@ export function VaultGate({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<VaultStatus | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [backupError, setBackupError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
+  /** Never throws: a failure shows the "Try again" line instead of a blank window. */
   const refresh = useCallback(async () => {
-    setStatus(await api.vaultStatus());
+    try {
+      const s = await api.vaultStatus();
+      setStatus(s);
+      setLoadFailed(false);
+    } catch {
+      setLoadFailed(true);
+    }
   }, []);
 
   useEffect(() => {
     let live = true;
-    void api.vaultStatus().then((s) => live && setStatus(s));
+    api.vaultStatus().then(
+      (s) => live && setStatus(s),
+      () => live && setLoadFailed(true),
+    );
     return () => {
       live = false;
     };
   }, []);
+
+  const retryLoad = async () => {
+    setRetrying(true);
+    await refresh();
+    setRetrying(false);
+  };
 
   const unlocked = status?.unlocked === true;
 
@@ -114,7 +132,18 @@ export function VaultGate({ children }: { children: ReactNode }) {
   ) : undefined;
 
   let body: ReactNode = null;
-  if (status && !status.exists) body = <SetupScreen onCreated={() => void refresh()} />;
+  if (loadFailed) {
+    body = (
+      <main className="flex h-full items-center justify-center px-6">
+        <div className="flex w-[320px] flex-col items-start gap-3">
+          <p className="m-0 text-[13px] text-fg-2">Raven couldn't check its data.</p>
+          <Button onClick={() => void retryLoad()} disabled={retrying} aria-busy={retrying}>
+            {retrying ? "Trying…" : "Try again"}
+          </Button>
+        </div>
+      </main>
+    );
+  } else if (status && !status.exists) body = <SetupScreen onCreated={refresh} />;
   else if (status && !status.unlocked) body = <UnlockScreen onUnlocked={onUnlocked} notice={lockRetrying ? "Couldn't lock fully — Raven is retrying" : undefined} />;
   else if (status) {
     body = (

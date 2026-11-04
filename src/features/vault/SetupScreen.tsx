@@ -4,7 +4,7 @@ import { Button, Field, Input } from "../../ui";
 
 export const MIN_PASSWORD = 12;
 
-export function SetupScreen({ onCreated }: { onCreated: () => void }) {
+export function SetupScreen({ onCreated }: { onCreated: () => void | Promise<void> }) {
   const [pw, setPw] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<{ field: "pw" | "confirm" | "form"; msg: string } | null>(null);
@@ -24,9 +24,10 @@ export function SetupScreen({ onCreated }: { onCreated: () => void }) {
     setBusy(true);
     try {
       await api.vaultCreate(pw);
-      onCreated();
+      await onCreated();
     } catch (err) {
       setError({ field: "form", msg: err instanceof Error ? err.message : "Couldn't create the vault" });
+    } finally {
       setBusy(false);
     }
   }
