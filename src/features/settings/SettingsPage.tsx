@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../../lib/api";
+import type { BackupInfo } from "../../types/backup";
 import type { Settings } from "../../types/settings";
 import { Button, Chip, Dialog, EmptyState, Field, Input, Panel } from "../../ui";
 
@@ -53,11 +54,12 @@ function NumberSetting({
   );
 }
 
+/** `onRestored` runs whenever the backend ends up locked (after a restore, or a failed one). */
 export function SettingsPage({ onRestored }: { onRestored: () => void }) {
   const qc = useQueryClient();
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
   const backups = useQuery({ queryKey: ["backups"], queryFn: api.backupsList });
-  const [restoreFile, setRestoreFile] = useState<string | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<BackupInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<{ field: string; msg: string } | null>(null);
 
@@ -84,12 +86,15 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
   const restore = useMutation({
     mutationFn: (file: string) => api.backupRestore(file),
     onSuccess: () => {
-      setRestoreFile(null);
+      setRestoreTarget(null);
       onRestored();
     },
-    onError: (e) => {
-      setRestoreFile(null);
-      setError(e.message);
+    onError: async (e) => {
+      setRestoreTarget(null);
+      // A restore can fail after the backend has already locked; never leave the UI unlocked then.
+      const st = await api.vaultStatus().catch(() => null);
+      if (st && !st.unlocked) onRestored();
+      else setError(e.message);
     },
   });
 
@@ -143,7 +148,7 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
               <span className="font-mono text-xs text-fg-2">{new Date(b.createdAt).toLocaleString()}</span>
               <Chip>{b.reason}</Chip>
               <span className="ml-auto font-mono text-xs text-muted">{formatBytes(b.sizeBytes)}</span>
-              <Button size="sm" onClick={() => setRestoreFile(b.file)}>
+              <Button size="sm" onClick={() => setRestoreTarget(b)}>
                 Restore
               </Button>
             </li>
@@ -151,22 +156,28 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
         </ul>
       </Panel>
       <Dialog
-        open={restoreFile !== null}
-        onOpenChange={(o) => !o && setRestoreFile(null)}
+        open={restoreTarget !== null}
+        onOpenChange={(o) => !o && setRestoreTarget(null)}
         title="Restore backup"
         footer={
           <>
-            <Button onClick={() => setRestoreFile(null)}>Cancel</Button>
+            <Button onClick={() => setRestoreTarget(null)}>Cancel</Button>
             <Button
               variant="danger"
               disabled={restore.isPending}
-              onClick={() => restoreFile && restore.mutate(restoreFile)}
+              onClick={() => restoreTarget && restore.mutate(restoreTarget.file)}
             >
               Restore
             </Button>
           </>
         }
       >
+        {restoreTarget && (
+          <div className="mb-3 flex items-center gap-3">
+            <span className="font-mono text-xs text-fg-2">{new Date(restoreTarget.createdAt).toLocaleString()}</span>
+            <Chip>{restoreTarget.reason}</Chip>
+          </div>
+        )}
         <p className="m-0 text-[13px] text-fg-2">
           Restore this backup? Raven will save a backup of the current data first, then lock. Unlock with your password
           to continue.

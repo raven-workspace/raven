@@ -99,4 +99,35 @@ describe("settings", () => {
     expect(m.backupRestore).toHaveBeenCalledWith("a.bak");
     await vi.waitFor(() => expect(onLocked).toHaveBeenCalled());
   });
+
+  it("restore dialog names the backup by date and reason", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByRole("button", { name: "Restore" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(new Date(1_700_000_000_000).toLocaleString())).toBeInTheDocument();
+    expect(within(dialog).getByText("daily")).toBeInTheDocument();
+  });
+
+  it("a failed restore that left the backend locked moves the UI to locked", async () => {
+    const user = userEvent.setup();
+    m.backupRestore.mockRejectedValue(new RavenError("io", "rename failed"));
+    m.vaultStatus.mockResolvedValue({ exists: true, unlocked: false });
+    mount();
+    await user.click(await screen.findByRole("button", { name: "Restore" }));
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Restore" }));
+    await vi.waitFor(() => expect(onLocked).toHaveBeenCalled());
+    expect(m.vaultStatus).toHaveBeenCalled();
+  });
+
+  it("a failed restore with the backend still unlocked shows the error", async () => {
+    const user = userEvent.setup();
+    m.backupRestore.mockRejectedValue(new RavenError("validation", "This backup was made with a different password", "file"));
+    m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+    mount();
+    await user.click(await screen.findByRole("button", { name: "Restore" }));
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Restore" }));
+    expect(await screen.findByText("This backup was made with a different password")).toBeInTheDocument();
+    expect(onLocked).not.toHaveBeenCalled();
+  });
 });
