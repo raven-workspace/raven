@@ -1,3 +1,4 @@
+use crate::backup::{self, BackupInfo};
 use crate::error::{AppError, AppResult};
 use crate::migrations::{self, MigrationOutcome};
 use crate::paths::DataPaths;
@@ -103,6 +104,13 @@ fn pragma_for(key: &[u8; KEY_LEN]) -> Zeroizing<String> {
 /// Task 4 supplies the real pre-migration backup here. An `Err` aborts the migration.
 pub type BackupHook = Box<dyn FnMut(u32, u32) -> AppResult<()> + Send>;
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnlockOutcome {
+    pub migration: MigrationOutcome,
+    pub daily_backup: Option<BackupInfo>,
+    pub daily_backup_error: Option<String>,
+}
+
 pub struct Vault {
     paths: DataPaths,
     backup_hook: Option<BackupHook>,
@@ -112,10 +120,15 @@ pub struct Vault {
 
 impl Vault {
     pub fn new(paths: DataPaths) -> Vault {
-        Vault { paths, backup_hook: None, conn: None, key: None }
+        let hook = backup::pre_migration_hook(paths.clone());
+        Vault { paths, backup_hook: Some(hook), conn: None, key: None }
     }
 
-    /// Install the pre-migration backup hook (default: none, i.e. a no-op).
+    pub fn paths(&self) -> &DataPaths {
+        &self.paths
+    }
+
+    /// Replace the pre-migration backup hook (default: `backup::pre_migration_hook`).
     pub fn set_backup_hook(&mut self, hook: BackupHook) {
         self.backup_hook = Some(hook);
     }
@@ -254,6 +267,17 @@ impl Vault {
         self.conn = Some(conn);
         self.key = Some(key);
         Ok(outcome)
+    }
+
+    /// Unlock, then take the daily backup if due. This is what the unlock command should call.
+    /// A daily-backup failure never fails the unlock: it is reported in `daily_backup_error`.
+    pub fn unlock_with_daily(&mut self, password: &str) -> AppResult<UnlockOutcome> {
+        let migration = self.unlock(password)?;
+        let (daily_backup, daily_backup_error) = match backup::take_daily_if_due(self) {
+            Ok(b) => (b, None),
+            Err(e) => (None, Some(e.to_string())),
+        };
+        Ok(UnlockOutcome { migration, daily_backup, daily_backup_error })
     }
 
     pub fn lock(&mut self) {

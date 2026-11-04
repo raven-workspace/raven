@@ -1,3 +1,4 @@
+pub mod backup;
 pub mod error;
 pub mod migrations;
 pub mod paths;
