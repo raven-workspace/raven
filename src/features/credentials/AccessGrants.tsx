@@ -1,0 +1,93 @@
+import { useState } from "react";
+import type { AccessGrant, AccessLevel, Username } from "../../types/credentials";
+import type { Host } from "../../types/host";
+import { Chip, Field, Input, Select } from "../../ui";
+import { ConfirmDelete } from "../checklist/ConfirmDelete";
+import { usernameLabel } from "../../engines/credentials";
+import { useAccessGrantMutations } from "./queries";
+
+export const LEVEL_LABEL: Record<AccessLevel, string> = { user: "user", admin: "admin", system: "SYSTEM / root" };
+const LEVEL_OPTIONS = (Object.keys(LEVEL_LABEL) as AccessLevel[]).map((value) => ({ value, label: LEVEL_LABEL[value] }));
+
+export const hostLabel = (h: Host | undefined): string => (h ? h.name || h.ip || h.id : "removed host");
+
+export interface AccessDraft {
+  hostId: string;
+  level: AccessLevel;
+  via: string;
+}
+export const EMPTY_ACCESS: AccessDraft = { hostId: "", level: "user", via: "" };
+
+/** Host, level and via: the fields of an access grant. */
+export function AccessFields({ value, onChange, hosts, errors = {} }: {
+  value: AccessDraft;
+  onChange: (v: AccessDraft) => void;
+  hosts: Host[];
+  errors?: Partial<Record<"hostId" | "via", string>>;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-3">
+      <Field label="Access on host" error={errors.hostId}>
+        <Select
+          placeholder="Pick a host"
+          options={hosts.map((h) => ({ value: h.id, label: hostLabel(h) }))}
+          value={value.hostId || undefined}
+          onValueChange={(hostId) => onChange({ ...value, hostId })}
+        />
+      </Field>
+      <Field label="Access level">
+        <Select options={LEVEL_OPTIONS} value={value.level} onValueChange={(level) => onChange({ ...value, level: level as AccessLevel })} />
+      </Field>
+      <Field label="Access via" error={errors.via}>
+        <Input value={value.via} onChange={(e) => onChange({ ...value, via: e.target.value })} placeholder="webshell" />
+      </Field>
+    </div>
+  );
+}
+
+/** A username's grants as small removable tags: "admin on dc01 · via webshell". */
+export function AccessGrantTags({ eid, username, grants, hosts }: {
+  eid: string;
+  username: Username;
+  grants: AccessGrant[];
+  hosts: Host[];
+}) {
+  const { remove } = useAccessGrantMutations(eid);
+  const [removing, setRemoving] = useState<AccessGrant>();
+  if (grants.length === 0) return null;
+  const name = usernameLabel(username);
+  return (
+    <>
+      <ul aria-label={`Access as ${name}`} className="m-0 flex list-none flex-wrap gap-1 p-0">
+        {grants.map((g) => {
+          const host = hostLabel(hosts.find((h) => h.id === g.hostId));
+          return (
+            <li key={g.id}>
+              <Chip variant="accent">
+                <span>{LEVEL_LABEL[g.level]} on {host}{g.via && <span className="text-fg-2"> · via {g.via}</span>}</span>
+                <button
+                  type="button"
+                  aria-label={`Remove access as ${name} on ${host}`}
+                  onClick={() => setRemoving(g)}
+                  className="cursor-default text-muted hover:text-fg"
+                >
+                  ×
+                </button>
+              </Chip>
+            </li>
+          );
+        })}
+      </ul>
+      {removing && (
+        <ConfirmDelete
+          title={`Remove ${LEVEL_LABEL[removing.level]} access as ${name}?`}
+          pending={remove.isPending}
+          error={remove.error?.message}
+          label="Remove access"
+          onCancel={() => setRemoving(undefined)}
+          onConfirm={() => remove.mutate(removing.id, { onSuccess: () => setRemoving(undefined) })}
+        />
+      )}
+    </>
+  );
+}
