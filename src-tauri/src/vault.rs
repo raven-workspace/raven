@@ -8,6 +8,7 @@ use rusqlite::{Connection, ErrorCode, OpenFlags};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::path::Path;
+use unicode_normalization::UnicodeNormalization;
 use zeroize::{Zeroize, Zeroizing};
 
 const MIN_PASSWORD_CHARS: usize = 12;
@@ -69,6 +70,16 @@ impl VaultMeta {
         res.map_err(|e| AppError::Io(format!("key derivation failed: {e}")))?;
         Ok(key)
     }
+}
+
+/// Unicode NFC form of the password, so the same visible password typed with composed or
+/// decomposed characters (e.g. different keyboards/IMEs) derives the same key. ASCII is
+/// unchanged by NFC, so existing ASCII-password vaults keep their keys.
+fn normalize_password(password: &str) -> Zeroizing<String> {
+    if password.is_ascii() {
+        return Zeroizing::new(password.to_owned());
+    }
+    Zeroizing::new(password.nfc().collect())
 }
 
 fn to_hex(bytes: &[u8]) -> String {
@@ -179,6 +190,8 @@ impl Vault {
     }
 
     fn create_with_meta(&mut self, password: &str, meta: VaultMeta) -> AppResult<MigrationOutcome> {
+        let password = normalize_password(password);
+        // Counts Unicode scalar values of the NFC form.
         if password.chars().count() < MIN_PASSWORD_CHARS {
             return Err(AppError::Validation {
                 field: "password".into(),
@@ -194,7 +207,7 @@ impl Vault {
                 "incomplete vault files found (only one of raven.db / vault.json); refusing to overwrite".into(),
             ));
         }
-        let key = meta.derive_key(password)?;
+        let key = meta.derive_key(&password)?;
         match self.create_files(&meta, &key) {
             Ok((conn, outcome)) => {
                 self.conn = Some(conn);
@@ -264,7 +277,7 @@ impl Vault {
         let bytes = std::fs::read(&self.paths.vault_meta)?;
         let meta: VaultMeta = serde_json::from_slice(&bytes)
             .map_err(|e| AppError::Io(format!("invalid vault.json: {e}")))?;
-        let key = meta.derive_key(password)?;
+        let key = meta.derive_key(&normalize_password(password))?;
         // READ_WRITE without CREATE: a missing db must never be created here.
         let mut conn = open_keyed(
             &self.paths.db,
@@ -467,6 +480,50 @@ mod tests {
             v.conn().unwrap().query_row("PRAGMA cipher_memory_security", [], |r| r.get(0)).unwrap();
         assert_eq!(mem, "1");
     }
+
+    // "crème brûlée pâte" in composed (NFC) and decomposed (NFD) form.
+    const PW_NFC: &str = "cr\u{e8}me br\u{fb}l\u{e9}e p\u{e2}te";
+    const PW_NFD: &str = "cre\u{300}me bru\u{302}le\u{301}e pa\u{302}te";
+
+    #[test]
+    fn nfc_and_nfd_passwords_open_the_same_vault() {
+        assert_ne!(PW_NFC, PW_NFD);
+        let (_d, mut v) = setup();
+        v.create_for_test(PW_NFD).unwrap();
+        v.lock();
+        v.unlock(PW_NFC).unwrap();
+        v.lock();
+        v.unlock(PW_NFD).unwrap();
+        let (_d2, mut w) = setup();
+        w.create_for_test(PW_NFC).unwrap();
+        w.lock();
+        w.unlock(PW_NFD).unwrap();
+    }
+
+    #[test]
+    fn password_length_counts_chars_after_nfc() {
+        // 11 characters once composed, 14 code points decomposed: too short.
+        let short_nfd = "cre\u{300}me bru\u{302}le\u{301}";
+        assert_eq!(short_nfd.chars().count(), 14);
+        let (_d, mut v) = setup();
+        assert!(matches!(v.create_for_test(short_nfd), Err(AppError::Validation { .. })));
+    }
+
+    #[test]
+    fn ascii_password_key_is_unchanged() {
+        let meta = VaultMeta {
+            version: 1,
+            kdf: "argon2id".into(),
+            m_kib: 8,
+            t: 1,
+            p: 1,
+            salt_hex: "000102030405060708090a0b0c0d0e0f".into(),
+        };
+        let key = meta.derive_key(PW).unwrap();
+        assert_eq!(to_hex(key.as_ref()), PINNED_ASCII_KEY);
+    }
+    // Derived by the pre-NFC code (commit 811b187): NFC must not change ASCII keys.
+    const PINNED_ASCII_KEY: &str = "0dfe509cfb319e6f63967799aad3c4d9ce06d7e9abef9f74dcc45d30eda9d60c";
 
     #[test]
     fn cleanup_makes_retry_possible() {
