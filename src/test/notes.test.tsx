@@ -282,6 +282,21 @@ describe("field notes panel", () => {
     await screen.findByLabelText("Password");
   });
 
+  it("with notes pending, a cache write landing while the backend locks still does not survive", async () => {
+    let finishLock: () => void = () => {};
+    m.vaultLock.mockImplementation(() => new Promise((resolve) => (finishLock = () => resolve(null))));
+    const user = userEvent.setup();
+    const { ta } = await open(user, "/e/e1");
+    fireEvent.change(ta, { target: { value: "typed just before locking" } });
+    await user.keyboard("{Meta>}l{/Meta}");
+    await vi.waitFor(() => expect(m.vaultLock).toHaveBeenCalled());
+    expect(m.noteSave).toHaveBeenCalledWith("e1", null, "typed just before locking", false);
+    qc.setQueryData(["checklist", "e1"], [{ ownerId: "h1", goalId: "h-enum-full-tcp", status: "done" }]);
+    await act(async () => finishLock());
+    await vi.waitFor(() => expect(qc.getQueryData(["checklist", "e1"])).toBeUndefined());
+    await screen.findByLabelText("Password");
+  });
+
   it("still locks when the flush fails, and then holds no note text", async () => {
     m.noteSave.mockRejectedValue(new RavenError("io", "disk"));
     const user = userEvent.setup();

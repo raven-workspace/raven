@@ -98,7 +98,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
 
   const lockBackend = useCallback(async function run(notesSaved?: Promise<void>): Promise<void> {
     clearTimeout(retryTimer.current);
-    const gen = sessionGeneration();
+    let gen = sessionGeneration();
     if (notesSaved) {
       // Field notes are saved before the backend locks. If that save failed the text is
       // dropped anyway (see markLocked); a failed save must not keep the vault open.
@@ -107,6 +107,8 @@ export function VaultGate({ children }: { children: ReactNode }) {
       if (gen === sessionGeneration()) {
         discardNotes();
         qc.clear();
+        // discardNotes() starts a new generation; follow it so the clear after vaultLock still runs.
+        gen = sessionGeneration();
       }
     }
     // Once the backend is locked, clear the cache again: a mutation that finished while the notes flushed or the
