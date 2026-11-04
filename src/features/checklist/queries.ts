@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { api } from "../../lib/api";
 import { reportError } from "../../lib/lockSignal";
-import type { HopInput, Tunnel } from "../../types/network";
+import type { Hop, HopInput, Tunnel, TunnelInput } from "../../types/network";
 import { resyncBoards } from "./ticks";
 import type { ChecklistItem, ChecklistItemInput, ChecklistState, ChecklistStatus, ItemState } from "../../types/checklist";
 import type { Service } from "../../types/service";
@@ -10,6 +10,7 @@ import type { Service } from "../../types/service";
 const NO_ITEMS: ChecklistItem[] = [];
 const NO_SERVICES: Service[] = [];
 const NO_TUNNELS: Tunnel[] = [];
+const NO_HOPS: Hop[] = [];
 
 export const checklistKey = (engagementId: string) => ["checklist", engagementId] as const;
 export const engagementServicesKey = (engagementId: string) => ["services", "engagement", engagementId] as const;
@@ -91,13 +92,34 @@ export function useTunnels(engagementId: string) {
   return { tunnels: query.data ?? NO_TUNNELS, query };
 }
 
+/** The engagement's hops (how access moved between hosts). */
+export function useHops(engagementId: string) {
+  const query = useQuery({ queryKey: hopsKey(engagementId), queryFn: () => api.hopsList(engagementId) });
+  return { hops: query.data ?? NO_HOPS, query };
+}
+
 export function useHopMutations(engagementId: string) {
   const qc = useQueryClient();
+  const onSuccess = () => void qc.invalidateQueries({ queryKey: hopsKey(engagementId) });
   return {
-    create: useMutation({
-      mutationFn: (input: HopInput) => api.hopCreate(engagementId, input),
-      onSuccess: () => void qc.invalidateQueries({ queryKey: hopsKey(engagementId) }),
-    }),
+    create: useMutation({ mutationFn: (input: HopInput) => api.hopCreate(engagementId, input), onSuccess }),
+    update: useMutation({ mutationFn: (v: { id: string; input: HopInput }) => api.hopUpdate(v.id, v.input), onSuccess }),
+    remove: useMutation({ mutationFn: (id: string) => api.hopDelete(id), onSuccess }),
+  };
+}
+
+/** Tunnels feed command filling, so a change also refreshes the checklist-related queries. */
+export function useTunnelMutations(engagementId: string) {
+  const qc = useQueryClient();
+  const onSuccess = () => {
+    void qc.invalidateQueries({ queryKey: tunnelsKey(engagementId) });
+    void qc.invalidateQueries({ queryKey: checklistKey(engagementId) });
+    void qc.invalidateQueries({ queryKey: engagementServicesKey(engagementId) });
+  };
+  return {
+    create: useMutation({ mutationFn: (input: TunnelInput) => api.tunnelCreate(engagementId, input), onSuccess }),
+    update: useMutation({ mutationFn: (v: { id: string; input: TunnelInput }) => api.tunnelUpdate(v.id, v.input), onSuccess }),
+    remove: useMutation({ mutationFn: (id: string) => api.tunnelDelete(id), onSuccess }),
   };
 }
 
