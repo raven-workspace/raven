@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { api } from "../lib/api";
+import { RavenError } from "../types/errors";
 
 vi.mock("../lib/api");
 const m = vi.mocked(api, true);
@@ -44,6 +45,22 @@ describe("settings", () => {
     await user.type(input, "10");
     await user.tab();
     expect(m.settingsUpdate).toHaveBeenCalledWith({ autoLockMinutes: 10 });
+  });
+
+  it("shows the backend field error and rejects out-of-range input", async () => {
+    const user = userEvent.setup();
+    m.settingsUpdate.mockRejectedValue(new RavenError("validation", "Must be 1 to 240", "autoLockMinutes"));
+    mount();
+    const input = await screen.findByLabelText("Auto-lock (minutes)");
+    expect(input).toHaveAttribute("max", "240");
+    await user.clear(input);
+    await user.type(input, "5");
+    await user.tab();
+    expect(await screen.findByText("Must be 1 to 240")).toBeInTheDocument();
+    await user.clear(input);
+    await user.type(input, "999");
+    await user.tab();
+    expect(m.settingsUpdate).toHaveBeenCalledTimes(1);
   });
 
   it("Back up now creates a backup", async () => {

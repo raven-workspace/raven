@@ -3,7 +3,7 @@ import { api } from "../../lib/api";
 import type { UnlockResult } from "../../types/vault";
 import { Button, Field, Input } from "../../ui";
 
-export function UnlockScreen({ onUnlocked }: { onUnlocked: (r: UnlockResult) => void }) {
+export function UnlockScreen({ onUnlocked, notice }: { onUnlocked: (r: UnlockResult) => void; notice?: string | undefined }) {
   const [pw, setPw] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -44,6 +44,7 @@ export function UnlockScreen({ onUnlocked }: { onUnlocked: (r: UnlockResult) => 
             }}
           />
         </Field>
+        {notice && <p className="m-0 text-xs text-muted">{notice}</p>}
         <Button type="submit" variant="primary" disabled={busy}>
           Unlock
         </Button>

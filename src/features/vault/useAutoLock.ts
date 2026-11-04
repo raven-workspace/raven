@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 
+/** Matches the backend range; also keeps setTimeout under its 2^31-1 ms limit. */
+const MAX_MINUTES = 240;
 const ACTIVITY_EVENTS = ["keydown", "pointerdown", "pointermove", "wheel"] as const;
 
 interface Options {
@@ -20,7 +22,8 @@ export function useAutoLock(minutes: number, { enabled, onLock }: Options) {
 
   useEffect(() => {
     if (!enabled) return;
-    const ms = Math.max(1, minutes) * 60_000;
+    const clamped = Number.isFinite(minutes) ? Math.min(MAX_MINUTES, Math.max(1, minutes)) : 30;
+    const ms = clamped * 60_000;
     let timer: ReturnType<typeof setTimeout>;
     const arm = () => {
       clearTimeout(timer);

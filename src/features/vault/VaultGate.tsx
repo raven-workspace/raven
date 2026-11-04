@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { api } from "../../lib/api";
 import type { UnlockResult, VaultStatus } from "../../types/vault";
@@ -24,6 +24,7 @@ export function useVault(): VaultContextValue {
 }
 
 const DEFAULT_AUTO_LOCK_MINUTES = 30;
+const LOCK_RETRY_MS = 2000;
 
 /**
  * Setup when there is no vault, unlock when locked, children when unlocked.
@@ -57,11 +58,36 @@ export function VaultGate({ children }: { children: ReactNode }) {
     setStatus((s) => (s ? { ...s, unlocked: false } : s));
   }, [qc]);
 
+  const [lockRetrying, setLockRetrying] = useState(false);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(retryTimer.current), []);
+
+  const lockBackend = useCallback(async function run(): Promise<void> {
+    clearTimeout(retryTimer.current);
+    for (let i = 0; i < 3; i++) {
+      try {
+        await api.vaultLock();
+        setLockRetrying(false);
+        return;
+      } catch {
+        // retry
+      }
+    }
+    const st = await api.vaultStatus().catch(() => null);
+    if (st && !st.unlocked) {
+      setLockRetrying(false);
+      return;
+    }
+    setLockRetrying(true);
+    retryTimer.current = setTimeout(() => void run(), LOCK_RETRY_MS);
+  }, []);
+
   const lock = useCallback(() => {
-    // The UI locks even if the backend call fails: never leave data on screen.
-    void api.vaultLock().catch(() => undefined);
+    // The UI locks at once, never leaving data on screen; the backend lock is
+    // retried until the backend confirms it.
     markLocked();
-  }, [markLocked]);
+    void lockBackend();
+  }, [markLocked, lockBackend]);
 
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet, enabled: unlocked });
   useAutoLock(settings.data?.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES, { enabled: unlocked, onLock: lock });
@@ -69,6 +95,8 @@ export function VaultGate({ children }: { children: ReactNode }) {
   const ctx = useMemo(() => ({ lock, markLocked }), [lock, markLocked]);
 
   const onUnlocked = (r: UnlockResult) => {
+    clearTimeout(retryTimer.current);
+    setLockRetrying(false);
     setNotice(r.migratedFrom < r.migratedTo ? "Updated Raven's data (backup saved)" : null);
     setBackupError(r.dailyBackupError);
     setStatus({ exists: true, unlocked: true });
@@ -87,7 +115,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
 
   let body: ReactNode = null;
   if (status && !status.exists) body = <SetupScreen onCreated={() => void refresh()} />;
-  else if (status && !status.unlocked) body = <UnlockScreen onUnlocked={onUnlocked} />;
+  else if (status && !status.unlocked) body = <UnlockScreen onUnlocked={onUnlocked} notice={lockRetrying ? "Couldn't lock fully — Raven is retrying" : undefined} />;
   else if (status) {
     body = (
       <VaultContext.Provider value={ctx}>

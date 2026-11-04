@@ -114,6 +114,43 @@ describe("vault gate", () => {
     expect(screen.queryByTestId("inside")).not.toBeInTheDocument();
   });
 
+  it("retries a failed backend lock while the unlock screen shows", async () => {
+    const user = userEvent.setup();
+    m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+    m.vaultLock.mockRejectedValueOnce(new RavenError("io", "x")).mockResolvedValue(null);
+    mount();
+    await screen.findByTestId("inside");
+    await user.keyboard("{Meta>}l{/Meta}");
+    expect(await screen.findByLabelText("Password")).toBeInTheDocument();
+    await vi.waitFor(() => expect(m.vaultLock).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText("Couldn't lock fully — Raven is retrying")).not.toBeInTheDocument();
+  });
+
+  it("keeps retrying and says so while the backend stays unlocked", async () => {
+    const user = userEvent.setup();
+    m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+    m.vaultLock.mockRejectedValue(new RavenError("io", "x"));
+    mount();
+    await screen.findByTestId("inside");
+    await user.keyboard("{Meta>}l{/Meta}");
+    expect(await screen.findByText("Couldn't lock fully — Raven is retrying")).toBeInTheDocument();
+    expect(screen.getByLabelText("Password")).toBeInTheDocument();
+    m.vaultLock.mockResolvedValue(null);
+    await vi.waitFor(() => expect(screen.queryByText(/retrying/)).not.toBeInTheDocument(), { timeout: 4000 });
+  });
+
+  it("a huge auto-lock value does not lock immediately", async () => {
+    m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 1_000_000, backupRetention: 14 });
+    vi.useFakeTimers();
+    mount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(m.vaultLock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("inside")).toBeInTheDocument();
+  });
+
   it("auto-locks after the idle time and activity resets the timer", async () => {
     m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
     m.settingsGet.mockResolvedValue({ autoLockMinutes: 1, backupRetention: 14 });

@@ -20,27 +20,32 @@ function NumberSetting({
   label,
   value,
   min,
+  max,
+  error,
   onSave,
 }: {
   label: string;
   value: number;
   min: number;
+  max: number;
+  error?: string | undefined;
   onSave: (n: number) => void;
 }) {
   const [text, setText] = useState(String(value));
   return (
-    <Field label={label}>
+    <Field label={label} error={error}>
       <Input
         type="number"
         inputMode="numeric"
         min={min}
+        max={max}
         mono
         className="w-28"
         value={text}
         onChange={(e) => setText(e.target.value)}
         onBlur={() => {
           const n = Number(text);
-          if (!Number.isInteger(n) || n < min) setText(String(value));
+          if (!Number.isInteger(n) || n < min || n > max) setText(String(value));
           else if (n !== value) onSave(n);
         }}
       />
@@ -54,14 +59,22 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
   const backups = useQuery({ queryKey: ["backups"], queryFn: api.backupsList });
   const [restoreFile, setRestoreFile] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fieldError, setFieldError] = useState<{ field: string; msg: string } | null>(null);
 
   const update = useMutation({
-    mutationFn: (patch: Partial<Settings>) => api.settingsUpdate(patch),
+    mutationFn: (patch: Partial<Settings>) => {
+      setFieldError(null);
+      return api.settingsUpdate(patch);
+    },
     onSuccess: (s) => {
       qc.setQueryData(["settings"], s);
       void qc.invalidateQueries({ queryKey: ["backups"] }); // retention may prune
     },
-    onError: (e) => setError(e.message),
+    onError: (e) => {
+      const field = (e as { field?: string }).field;
+      if (field) setFieldError({ field, msg: e.message });
+      else setError(e.message);
+    },
   });
   const backupNow = useMutation({
     mutationFn: api.backupNow,
@@ -92,6 +105,8 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
               label="Auto-lock (minutes)"
               value={settings.data.autoLockMinutes}
               min={1}
+              max={240}
+              error={fieldError?.field === "autoLockMinutes" ? fieldError.msg : undefined}
               onSave={(n) => update.mutate({ autoLockMinutes: n })}
             />
             <NumberSetting
@@ -99,6 +114,8 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
               label="Backups to keep"
               value={settings.data.backupRetention}
               min={1}
+              max={200}
+              error={fieldError?.field === "backupRetention" ? fieldError.msg : undefined}
               onSave={(n) => update.mutate({ backupRetention: n })}
             />
           </div>
