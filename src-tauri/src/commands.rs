@@ -4,7 +4,9 @@
 //! unlocked (no daily backup: a brand-new vault has nothing to back up).
 
 use crate::backup::{self, BackupInfo};
-use crate::engagements::{self, Engagement, EngagementInput};
+use crate::engagements::{self, Engagement, EngagementInput, Progress};
+use crate::log::{self, Attachment, LogEntry, LogEntryInput};
+use std::collections::HashMap;
 use crate::hosts::{self, Host, HostInput};
 use crate::services::{self, ConfirmInput, ScanPort, Service, ServiceInput};
 use crate::error::{AppError, AppResult};
@@ -232,6 +234,36 @@ pub async fn service_unconfirm(app: AppHandle, id: String) -> AppResult<Service>
 #[tauri::command]
 pub async fn service_delete(app: AppHandle, id: String) -> AppResult<()> {
     with_vault(app, move |v| services::delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn log_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<LogEntry>> {
+    with_vault(app, move |v| log::list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn log_create(app: AppHandle, engagement_id: String, input: LogEntryInput) -> AppResult<LogEntry> {
+    with_vault(app, move |v| log::create(v.conn()?, &engagement_id, input)).await
+}
+
+#[tauri::command]
+pub async fn log_update(app: AppHandle, id: String, input: LogEntryInput) -> AppResult<LogEntry> {
+    with_vault(app, move |v| log::update(v.conn()?, &id, input)).await
+}
+
+#[tauri::command]
+pub async fn log_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| log::delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn attachment_get(app: AppHandle, id: String) -> AppResult<Attachment> {
+    with_vault(app, move |v| log::attachment_get(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn engagements_progress(app: AppHandle) -> AppResult<HashMap<String, Progress>> {
+    with_vault(app, move |v| engagements::progress_all(v.conn()?)).await
 }
 
 #[cfg(test)]

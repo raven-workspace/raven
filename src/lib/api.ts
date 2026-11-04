@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { BackupInfo } from "../types/backup";
 import type { ConfirmInput, ScanPort, Service, ServiceInput } from "../types/service";
+import type { Attachment, LogEntry, LogEntryInput, Progress } from "../types/log";
 import type { Host, HostInput, BoardColumn } from "../types/host";
 import type { Engagement, EngagementInput, EngagementStatus } from "../types/engagement";
 import { RavenError } from "../types/errors";
@@ -60,6 +61,14 @@ export const api = {
     call<Service>("service_confirm", { id, input }),
   serviceUnconfirm: (id: string) => call<Service>("service_unconfirm", { id }),
   serviceDelete: (id: string) => call<null>("service_delete", { id }),
+
+  logList: (engagementId: string) => call<LogEntry[]>("log_list", { engagementId }),
+  logCreate: (engagementId: string, input: LogEntryInput) =>
+    call<LogEntry>("log_create", { engagementId, input }),
+  logUpdate: (id: string, input: LogEntryInput) => call<LogEntry>("log_update", { id, input }),
+  logDelete: (id: string) => call<null>("log_delete", { id }),
+  attachmentGet: (id: string) => call<Attachment>("attachment_get", { id }),
+  engagementsProgress: () => call<Record<string, Progress>>("engagements_progress"),
 };
 
 export type Api = typeof api;

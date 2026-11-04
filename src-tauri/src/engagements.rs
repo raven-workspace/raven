@@ -191,6 +191,42 @@ pub fn set_last_ran_on(conn: &Connection, id: &str, value: Option<&str>) -> AppR
     Ok(())
 }
 
+/// Per-engagement host and flag progress. `flags_total` is 2 per host (local + proof).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Progress {
+    pub hosts_total: i64,
+    pub hosts_rooted: i64,
+    pub flags_found: i64,
+    pub flags_total: i64,
+}
+
+pub fn progress_all(conn: &Connection) -> AppResult<std::collections::HashMap<String, Progress>> {
+    let mut out = std::collections::HashMap::new();
+    let mut st = conn.prepare(
+        "SELECT e.id,
+           (SELECT COUNT(*) FROM hosts h WHERE h.engagement_id = e.id),
+           (SELECT COUNT(DISTINCT lh.host_id) FROM log_entry_hosts lh JOIN log_entries l ON l.id = lh.entry_id
+              WHERE l.engagement_id = e.id AND l.kind = 'flag' AND json_extract(l.content, '$.flagKind') = 'proof'),
+           (SELECT COUNT(*) FROM (SELECT DISTINCT lh.host_id, json_extract(l.content, '$.flagKind')
+              FROM log_entry_hosts lh JOIN log_entries l ON l.id = lh.entry_id
+              WHERE l.engagement_id = e.id AND l.kind = 'flag'))
+         FROM engagements e",
+    )?;
+    let rows = st.query_map([], |r| {
+        let total: i64 = r.get(1)?;
+        Ok((
+            r.get::<_, String>(0)?,
+            Progress { hosts_total: total, hosts_rooted: r.get(2)?, flags_found: r.get(3)?, flags_total: total * 2 },
+        ))
+    })?;
+    for row in rows {
+        let (id, p) = row?;
+        out.insert(id, p);
+    }
+    Ok(out)
+}
+
 pub fn set_status(conn: &Connection, id: &str, status: &str) -> AppResult<Engagement> {
     if !matches!(status, "active" | "archived") {
         return Err(invalid("status", "status must be active or archived"));

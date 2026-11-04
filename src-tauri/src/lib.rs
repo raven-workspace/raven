@@ -3,6 +3,7 @@ pub mod commands;
 pub mod engagements;
 pub mod error;
 pub mod hosts;
+pub mod log;
 pub mod migrations;
 pub mod paths;
 pub mod services;
@@ -49,6 +50,12 @@ pub fn run() {
             commands::service_confirm,
             commands::service_unconfirm,
             commands::service_delete,
+            commands::log_list,
+            commands::log_create,
+            commands::log_update,
+            commands::log_delete,
+            commands::attachment_get,
+            commands::engagements_progress,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
