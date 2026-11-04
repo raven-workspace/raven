@@ -4,6 +4,7 @@ import { api } from "../../lib/api";
 import { isFreeKey, useEscapeTo, useKeydown } from "../../lib/keys";
 import type { Engagement } from "../../types/engagement";
 import { EmptyState } from "../../ui";
+import { HostView } from "../hosts/HostView";
 import { CapturePanel } from "../capture/CapturePanel";
 import { useCaptureStore } from "../capture/useCaptureStore";
 import { EngagementHeader } from "./EngagementHeader";
@@ -81,11 +82,8 @@ export function SectionRoute() {
   return <SectionView section={known ? (section as SectionId) : "board"} />;
 }
 
-/** Placeholder until the host view (build step 2, task 13). */
+/** `e/:id/h/:hostId`. */
 export function HostRoute() {
   const { id = "", hostId = "" } = useParams();
-  const host = useQuery({ queryKey: ["hosts", id], queryFn: () => api.hostsList(id) }).data?.find(
-    (h) => h.id === hostId,
-  );
-  return <EmptyState title={host ? host.name : "Host"} body="The host view arrives soon." />;
+  return <HostView engagementId={id} hostId={hostId} />;
 }

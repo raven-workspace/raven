@@ -12,15 +12,6 @@ import type { LogEntry } from "../types/log";
 
 vi.mock("../lib/api");
 
-// jsdom gaps that Radix Select relies on.
-globalThis.ResizeObserver ??= class {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-} as unknown as typeof ResizeObserver;
-Element.prototype.scrollIntoView ??= () => {};
-Element.prototype.hasPointerCapture ??= () => false;
-Element.prototype.releasePointerCapture ??= () => {};
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {
