@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { EmptyState, Panel } from "../../ui";
+import { EmptyState } from "../../ui";
+import { NowPanel } from "../checklist/NowPanel";
 import { HostChecklist } from "../checklist/HostChecklist";
 import { useLog } from "../log/queries";
 import { LogEntryRow } from "../log/LogEntryRow";
@@ -25,6 +26,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   const [tab, setTab] = useState<TabId>("story");
   const [order, setOrder] = usePersistedOrder("raven.story.order", "oldest");
   const [openEntry, setOpenEntry] = useState<string>();
+  const [focusGoal, setFocusGoal] = useState<{ id: string; n: number }>();
   const host = hosts.data?.find((h) => h.id === hostId);
 
   if (hosts.isError) return <EmptyState title="Couldn't load this host" body={hosts.error.message} />;
@@ -46,11 +48,14 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
       <div className="grid min-h-0 flex-1 grid-cols-[300px_1fr] gap-6">
         <div className="flex min-h-0 flex-col gap-6 overflow-y-auto pr-1">
           <ServicesColumn engagementId={engagementId} hostId={hostId} entries={entries} />
-          <Panel title="Now" aria-label="Now">
-            <p className="m-0 text-xs text-muted">
-              The current stage's open steps arrive with the checklist (build step 3).
-            </p>
-          </Panel>
+          <NowPanel
+            engagementId={engagementId}
+            host={host}
+            onOpenGoal={(id) => {
+              setTab("checklist");
+              setFocusGoal((f) => ({ id, n: (f?.n ?? 0) + 1 }));
+            }}
+          />
         </div>
         <div className="flex min-h-0 min-w-0 flex-col">
           <div className="flex items-center justify-between gap-3">
@@ -61,7 +66,10 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
                   role="tab"
                   type="button"
                   aria-selected={tab === t.id}
-                  onClick={() => setTab(t.id)}
+                  onClick={() => {
+                    setTab(t.id);
+                    setFocusGoal(undefined);
+                  }}
                   className={`h-7 cursor-default rounded-[var(--radius-sm)] px-3 text-[13px] ${
                     tab === t.id ? "bg-surface-hi text-fg shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-muted hover:text-fg"
                   }`}
@@ -87,6 +95,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
               <HostChecklist
                 engagementId={engagementId}
                 host={host}
+                focusGoal={focusGoal}
                 onOpenEntry={(id) => {
                   setOpenEntry(id);
                   setTab("story");

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ChecklistGoal } from "../../engines/checklist";
 import type { ChecklistStatus, ItemState } from "../../types/checklist";
 import { Textarea, Toggle, labelClass } from "../../ui";
@@ -24,17 +24,29 @@ export interface GoalRowProps {
   onStatus: (goalId: string, status: ChecklistStatus) => void;
   onNotes: (goalId: string, notes: string) => void;
   onOpenEntry?: (entryId: string) => void;
+  /** Changes each time the row is asked for: it expands and scrolls into view. */
+  focus?: number;
   children?: ReactNode;
 }
 
-export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, onStatus, onNotes, onOpenEntry, children }: GoalRowProps) {
+export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, onStatus, onNotes, onOpenEntry, focus, children }: GoalRowProps) {
   const status = state?.status ?? "todo";
-  const [open, setOpen] = useState(status === "todo" || status === "in_progress");
+  const [open, setOpen] = useState(focus !== undefined || status === "todo" || status === "in_progress");
+  const [seenFocus, setSeenFocus] = useState(focus);
+  if (focus !== seenFocus) {
+    setSeenFocus(focus);
+    if (focus !== undefined) setOpen(true);
+  }
   const notes = state?.notes ?? "";
+  const root = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (focus === undefined) return;
+    root.current?.scrollIntoView({ block: "start" });
+  }, [focus]);
   const titleClass = status === "done" ? "text-muted line-through" : status === "na" ? "text-muted" : "text-fg";
 
   return (
-    <li className="border-b border-line py-2">
+    <li ref={root} data-goal-id={goal.id} className="border-b border-line py-2">
       <div className="flex items-center gap-3">
         <button
           type="button"

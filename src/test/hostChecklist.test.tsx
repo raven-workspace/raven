@@ -84,8 +84,8 @@ describe("host checklist tab", () => {
     const user = userEvent.setup();
     mount();
     await openChecklist(user);
-    expect(await screen.findByText("Check SMB shares and null/guest access")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Enumerate" })).toBeInTheDocument();
+    expect(await within(await screen.findByRole("tabpanel")).findByText("Check SMB shares and null/guest access")).toBeInTheDocument();
+    expect(within(screen.getByRole("tabpanel")).getByRole("heading", { name: "Enumerate" })).toBeInTheDocument();
     expect(screen.queryByText("Check FTP for anonymous access")).not.toBeInTheDocument();
     expect(screen.queryByText("Identify the web stack and framework")).not.toBeInTheDocument();
   });
@@ -131,7 +131,7 @@ describe("host checklist tab", () => {
     const exam = { ...E1, kind: "exam-sim" as const, msfHostId: "h2" };
     mount({ engagement: exam });
     await openChecklist(user);
-    await screen.findByText("Check SMB shares and null/guest access");
+    await within(await screen.findByRole("tabpanel")).findByText("Check SMB shares and null/guest access");
     expect(screen.queryByText(/ms17_010/)).not.toBeInTheDocument();
     expect(screen.queryByText(/uses your one Metasploit host/)).not.toBeInTheDocument();
   });
@@ -175,7 +175,7 @@ describe("host checklist tab", () => {
     mount();
     m.servicesListEngagement.mockRejectedValue(new Error("boom"));
     await openChecklist(user);
-    expect(await screen.findByRole("alert")).toHaveTextContent("boom");
+    expect(await within(await screen.findByRole("tabpanel")).findByRole("alert")).toHaveTextContent("boom");
   });
 
   it("a failed tick after the hop was created retries only the tick (hopCreate called once)", async () => {

@@ -1,20 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
-import {
-  applicableGoals,
-  commandContext,
-  fillCommand,
-  filterForKind,
-  type FillInput,
-} from "../../engines/checklist";
-import { resolveTemplate } from "../../engines/checklist/template";
-import { BUILTIN_LIBRARY } from "../../engines/library/data";
+import { applicableGoals, type FillInput } from "../../engines/checklist";
 import { api } from "../../lib/api";
 import type { Host } from "../../types/host";
 import { Button, Input, Select } from "../../ui";
 import { useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
-import type { FilledCommand } from "./CommandList";
+import { goalCommands } from "./goalCommands";
 import { GoalRow } from "./GoalRow";
 import { useChecklist, useChecklistMutations, useEngagementServices, useHopMutations, useTunnels } from "./queries";
 
@@ -54,7 +46,7 @@ function ArrivedFrom({ host, hosts, onSave }: { host: Host; hosts: Host[]; onSav
   );
 }
 
-export function HostChecklist({ engagementId, host, onOpenEntry }: { engagementId: string; host: Host; onOpenEntry: (entryId: string) => void }) {
+export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal }: { engagementId: string; host: Host; onOpenEntry: (entryId: string) => void; focusGoal?: { id: string; n: number } }) {
   const hostsQ = useHosts(engagementId);
   const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId) });
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
@@ -85,25 +77,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry }: { engagementI
     attackerIp: settings.data?.attackerIp ?? "", listenerPort: settings.data?.listenerPort ?? "",
   };
 
-  const commandsFor = (goalId: string): { commands: FilledCommand[]; hadAny: boolean } => {
-    const all = BUILTIN_LIBRARY.filter((c) => c.goals.includes(goalId));
-    const { shown, msfMarker } = filterForKind(all, eng.kind, { hostId: host.id, msfHostId: eng.msfHostId });
-    const ctx = commandContext(input);
-    const commands = shown.map((c) => {
-      const filled = fillCommand(c.template, input);
-      const tokens = resolveTemplate(c.template, ctx)
-        .ranges.filter((r) => !r.resolved && r.canonical !== "interface")
-        .map((r) => c.template.slice(r.start, r.end))
-        .filter((t) => filled.text.includes(t));
-      const out: FilledCommand = {
-        id: c.id, title: c.title, text: filled.text, unresolved: filled.unresolved,
-        msfMarker: msfMarker.has(c.id), tokens: [...new Set(tokens)],
-      };
-      if (filled.viaTunnel) out.viaTunnel = { viaHostName: filled.viaTunnel.viaHostName, down: filled.viaTunnel.down };
-      return out;
-    });
-    return { commands, hadAny: all.length > 0 };
-  };
+  const commandsFor = (goalId: string) => goalCommands(goalId, input, eng);
 
   const recordHop = async (fromHostId: string | null, via: string) => {
     const key = `${fromHostId ?? KALI}|${via}`;
@@ -131,6 +105,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry }: { engagementI
                   <GoalRow
                     key={g.id}
                     goal={g}
+                    focus={focusGoal?.id === g.id ? focusGoal.n : undefined}
                     state={s}
                     commands={commands}
                     evidence={(s?.evidence ?? []).map((ev) => {
