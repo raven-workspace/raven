@@ -1,0 +1,91 @@
+import type { Engagement, EngagementKind } from '../../types/engagement';
+import type { Host } from '../../types/host';
+import type { LogEntry } from '../../types/log';
+import { namedHostsInLine, shellHost } from '../attribution';
+import type { LibraryCommand } from '../library/types';
+import { firstBinary } from '../library/matcher';
+
+const blocksOf = (entry: LogEntry) => (entry.content.kind === 'command' ? entry.content.blocks : []);
+
+/**
+ * What the engagement kind lets a host's command list show (spec §7). Exam sim removes every `exam: 'banned'`
+ * command and shows `exam: 'metasploit'` commands only on the locked host; while no host is locked they stay
+ * visible and their ids come back in `msfMarker` ("uses your one Metasploit host"). Other kinds change nothing.
+ */
+export function filterForKind(
+  cmds: LibraryCommand[],
+  kind: EngagementKind,
+  ctx: { hostId: string; msfHostId?: string | null },
+): { shown: LibraryCommand[]; msfMarker: Set<string> } {
+  const msfMarker = new Set<string>();
+  if (kind !== 'exam-sim') return { shown: cmds, msfMarker };
+  const shown: LibraryCommand[] = [];
+  for (const cmd of cmds) {
+    if (cmd.exam === 'banned') continue;
+    if (cmd.exam === 'metasploit') {
+      if (ctx.msfHostId && ctx.msfHostId !== ctx.hostId) continue;
+      if (!ctx.msfHostId) msfMarker.add(cmd.id);
+    }
+    shown.push(cmd);
+  }
+  return { shown, msfMarker };
+}
+
+const PROMPT_PREFIX = /^msf\d*(?: \w+\([^)]*\))? >\s*/i;
+/** `use <module>`: long form (exploit/, auxiliary/, post/) or any short-form path like `windows/smb/psexec`. */
+const USE_MODULE = /(?:^|[;\s"'`])use\s+([\w-]+(?:\/[\w.-]+)+)/gi;
+const HANDLER = /(?:^|\/)multi\/handler$/i;
+
+/**
+ * A line that spends the exam's one Metasploit use: it identifies a module with `use <path>` (optionally behind an
+ * `msf6 > ` prompt, or inside `msfconsole -x "..."`). `multi/handler` (a plain listener) never counts, nor does
+ * a bare `msfconsole` / `msfconsole -r file.rc` with no module on the line, nor `msfvenom`.
+ */
+export function isMetasploitLine(line: string): boolean {
+  const text = line.trim().replace(PROMPT_PREFIX, '');
+  if (!text) return false;
+  const startsUse = /^use\s/i.test(text);
+  if (!startsUse && firstBinary(text) !== 'msfconsole') return false;
+  for (const m of text.matchAll(USE_MODULE)) if (!HANDLER.test(m[1])) return true;
+  return false;
+}
+
+const METERPRETER_LABEL = /meterpreter/i;
+
+/**
+ * Hosts a Metasploit log entry is attributed to, using auto-tick's attribution: hosts the block's lines name
+ * (`set RHOSTS ...` counts), the shell host of a meterpreter block, else the entry's own host tags.
+ * Empty when the entry has no Metasploit line.
+ */
+export function metasploitHostIds(entry: LogEntry, engagement: Pick<Engagement, 'domain'>, hosts: Host[]): string[] {
+  const domain = (engagement.domain ?? '').trim().toLowerCase();
+  const ids = new Set<string>();
+  let isMsf = false;
+  for (const block of blocksOf(entry)) {
+    const lines = (block.command ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const meterpreter = METERPRETER_LABEL.test(block.shell ?? '');
+    if (!meterpreter && !lines.some(isMetasploitLine)) continue;
+    isMsf = true;
+    if (meterpreter) {
+      // Lines inside a session (portfwd, autoroute) name other hosts without using Metasploit on them.
+      const h = shellHost(block.shell, entry.ranOn ?? undefined, hosts, domain);
+      if (h) ids.add(h.id);
+      continue;
+    }
+    for (const line of lines) for (const h of namedHostsInLine(line, hosts, domain)) ids.add(h.id);
+  }
+  if (!isMsf) return [];
+  if (ids.size === 0) for (const id of entry.hostIds ?? []) if (hosts.some((h) => h.id === id)) ids.add(id);
+  return [...ids];
+}
+
+/** The warning for a Metasploit entry attributed to a host other than the locked one; null otherwise. */
+export function metasploitWarning(entry: LogEntry, engagement: Pick<Engagement, 'kind' | 'msfHostId'>, hostIds: string[]): string | null {
+  const locked = engagement.msfHostId;
+  if (!locked || engagement.kind !== 'exam-sim') return null;
+  const isMsf = blocksOf(entry).some(
+    (b) => METERPRETER_LABEL.test(b.shell ?? '') || (b.command ?? '').split(/\r?\n/).some(isMetasploitLine),
+  );
+  if (!isMsf || !hostIds.some((id) => id !== locked)) return null;
+  return 'Metasploit is already locked to another host on this engagement. This entry uses it on a different host.';
+}
