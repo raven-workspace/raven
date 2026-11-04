@@ -3,7 +3,7 @@ import type { Host } from '../../types/host';
 import type { ChecklistState, Evidence, ItemState } from '../../types/checklist';
 import type { LogEntry } from '../../types/log';
 import type { Service } from '../../types/service';
-import { namedHostsInLine, shellHost, type HostRef } from '../attribution';
+import { excludesHosts, namedHostsInLine, shellHost, type HostRef } from '../attribution';
 import type { LibraryCommand } from '../library/types';
 import { matchLine } from '../library/matcher';
 import { HOST_GOALS } from './data/hostChecklist';
@@ -88,6 +88,10 @@ export function ticksForEntry(entry: LogEntry, ctx: TickContext): Tick[] {
         if (scanLine) continue;
         if (shellCache.v === undefined) shellCache.v = shellHost(shell, entry.ranOn ?? undefined, hosts, domain);
         attributed = shellCache.v ? [shellCache.v] : [];
+      } else if (named.length === 0 && !scanLine && !excludesHosts(line)) {
+        // A Kali command naming no host (`searchsploit --nmap nmap_svc.xml`) is about the hosts the
+        // entry is tagged with: the host it was logged on, or the chips the user picked.
+        attributed = entry.hostIds.map((id) => hostById.get(id)).filter((h): h is NonNullable<typeof h> => !!h);
       } else {
         attributed = named;
       }

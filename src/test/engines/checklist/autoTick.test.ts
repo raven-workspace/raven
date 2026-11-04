@@ -228,6 +228,28 @@ describe('ticksForEntry (commands)', () => {
   });
 });
 
+describe('ticksForEntry (line names no host)', () => {
+  it('a Kali command naming no host ticks the hosts the entry is tagged with', () => {
+    const t = ticks('searchsploit --nmap nmap_svc.xml', { hostIds: ['web'] });
+    expect(pairs(t)).toContain('web:h-enum-exploits');
+  });
+
+  it('a line that names a host still ticks only that host, not the tags', () => {
+    const t = ticks('nmap -p- -T4 10.0.0.5', { hostIds: ['web'] });
+    expect(pairs(t)).toContain('ms01:h-enum-full-tcp');
+    expect(pairs(t)).not.toContain('web:h-enum-full-tcp');
+  });
+
+  it('a line that excludes hosts never falls back to the tags', () => {
+    const t = ticks('nmap -p- 10.0.0.0/24 --exclude 10.0.0.1', { hostIds: ['web'] });
+    expect(pairs(t)).not.toContain('web:h-enum-full-tcp');
+  });
+
+  it('no tags, no host named: nothing ticks', () => {
+    expect(ticks('searchsploit --nmap nmap_svc.xml')).toEqual([]);
+  });
+});
+
 describe('ticksForEntry (flags)', () => {
   const flag = (flagKind: 'local' | 'proof', hostIds: string[]) =>
     entry('', { kind: 'flag', hostIds, content: { kind: 'flag', flagKind, value: 'abc' } });

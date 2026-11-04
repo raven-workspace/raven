@@ -47,10 +47,15 @@ export function hostsNamedIn(text: string, hosts: HostRef[], domain: string): Ho
   });
 }
 
+/** A line that excludes hosts (`--exclude`, `--excludefile`) names them without targeting them. */
+export function excludesHosts(line: string): boolean {
+  return EXCLUDE.test(firstSegment(line));
+}
+
 /** Hosts an attacker-side command line aims at: those named in its first segment; none when it excludes hosts. */
 export function namedHostsInLine(line: string, hosts: HostRef[], domain: string): HostRef[] {
   const segment = firstSegment(line);
-  return EXCLUDE.test(segment) ? [] : hostsNamedIn(segment, hosts, domain);
+  return excludesHosts(line) ? [] : hostsNamedIn(segment, hosts, domain);
 }
 
 /**
