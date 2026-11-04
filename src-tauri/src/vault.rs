@@ -1,4 +1,5 @@
 use crate::error::{AppError, AppResult};
+use crate::migrations::{self, MigrationOutcome};
 use crate::paths::DataPaths;
 use argon2::{Algorithm, Argon2, Params, Version};
 use rand::RngCore;
@@ -98,15 +99,35 @@ fn pragma_for(key: &[u8; KEY_LEN]) -> Zeroizing<String> {
     out
 }
 
+/// Called as `(from, to)` before migrating an existing database, while its data is intact.
+/// Task 4 supplies the real pre-migration backup here. An `Err` aborts the migration.
+pub type BackupHook = Box<dyn FnMut(u32, u32) -> AppResult<()> + Send>;
+
 pub struct Vault {
     paths: DataPaths,
+    backup_hook: Option<BackupHook>,
     conn: Option<Connection>,
     key: Option<Zeroizing<[u8; KEY_LEN]>>,
 }
 
 impl Vault {
     pub fn new(paths: DataPaths) -> Vault {
-        Vault { paths, conn: None, key: None }
+        Vault { paths, backup_hook: None, conn: None, key: None }
+    }
+
+    /// Install the pre-migration backup hook (default: none, i.e. a no-op).
+    pub fn set_backup_hook(&mut self, hook: BackupHook) {
+        self.backup_hook = Some(hook);
+    }
+
+    /// Run pending migrations on a freshly opened connection, calling the backup hook first
+    /// when the database already has tables.
+    fn migrate_on_open(&mut self, conn: &mut Connection) -> AppResult<MigrationOutcome> {
+        let mut noop = |_: u32, _: u32| Ok(());
+        match self.backup_hook.as_mut() {
+            Some(h) => migrations::migrate(conn, &mut **h),
+            None => migrations::migrate(conn, &mut noop),
+        }
     }
 
     pub fn exists(&self) -> bool {
@@ -117,17 +138,17 @@ impl Vault {
         self.conn.is_some()
     }
 
-    pub fn create(&mut self, password: &str) -> AppResult<()> {
+    pub fn create(&mut self, password: &str) -> AppResult<MigrationOutcome> {
         self.create_with_meta(password, VaultMeta::new_production())
     }
 
     /// Create with weak KDF params so tests stay fast.
     #[cfg(test)]
-    pub fn create_for_test(&mut self, password: &str) -> AppResult<()> {
+    pub fn create_for_test(&mut self, password: &str) -> AppResult<MigrationOutcome> {
         self.create_with_meta(password, VaultMeta::for_test())
     }
 
-    fn create_with_meta(&mut self, password: &str, meta: VaultMeta) -> AppResult<()> {
+    fn create_with_meta(&mut self, password: &str, meta: VaultMeta) -> AppResult<MigrationOutcome> {
         if password.chars().count() < MIN_PASSWORD_CHARS {
             return Err(AppError::Validation {
                 field: "password".into(),
@@ -145,10 +166,10 @@ impl Vault {
         }
         let key = meta.derive_key(password)?;
         match self.create_files(&meta, &key) {
-            Ok(conn) => {
+            Ok((conn, outcome)) => {
                 self.conn = Some(conn);
                 self.key = Some(key);
-                Ok(())
+                Ok(outcome)
             }
             Err(e) => {
                 self.cleanup_created();
@@ -157,14 +178,17 @@ impl Vault {
         }
     }
 
-    fn create_files(&self, meta: &VaultMeta, key: &[u8; KEY_LEN]) -> AppResult<Connection> {
+    fn create_files(
+        &mut self,
+        meta: &VaultMeta,
+        key: &[u8; KEY_LEN],
+    ) -> AppResult<(Connection, MigrationOutcome)> {
         self.write_meta_atomic(meta)?;
-        let conn = Connection::open(&self.paths.db)?;
+        let mut conn = Connection::open(&self.paths.db)?;
         conn.execute_batch(&pragma_for(key))?;
-        // Force the encrypted file to be written now.
-        conn.execute_batch("CREATE TABLE _raven_init (x INTEGER); DROP TABLE _raven_init;")?;
-        conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0))?;
-        Ok(conn)
+        // The first migration writes the encrypted file to disk; a fresh db never triggers the hook.
+        let outcome = self.migrate_on_open(&mut conn)?;
+        Ok((conn, outcome))
     }
 
     fn write_meta_atomic(&self, meta: &VaultMeta) -> AppResult<()> {
@@ -204,7 +228,7 @@ impl Vault {
         }
     }
 
-    pub fn unlock(&mut self, password: &str) -> AppResult<()> {
+    pub fn unlock(&mut self, password: &str) -> AppResult<MigrationOutcome> {
         if !self.exists() {
             return Err(AppError::NoVault);
         }
@@ -213,7 +237,7 @@ impl Vault {
             .map_err(|e| AppError::Io(format!("invalid vault.json: {e}")))?;
         let key = meta.derive_key(password)?;
         // READ_WRITE without CREATE: a missing db must never be created here.
-        let conn = Connection::open_with_flags(
+        let mut conn = Connection::open_with_flags(
             &self.paths.db,
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
@@ -225,9 +249,11 @@ impl Vault {
             }
             Err(e) => return Err(e.into()),
         }
+        // On any migration/backup error the vault stays locked and nothing is stored.
+        let outcome = self.migrate_on_open(&mut conn)?;
         self.conn = Some(conn);
         self.key = Some(key);
-        Ok(())
+        Ok(outcome)
     }
 
     pub fn lock(&mut self) {
@@ -345,6 +371,44 @@ mod tests {
         std::fs::write(&v.paths.db, b"precious").unwrap();
         assert!(matches!(v.create_for_test(PW), Err(AppError::Io(_))));
         assert_eq!(std::fs::read(&v.paths.db).unwrap(), b"precious");
+    }
+
+    #[test]
+    fn create_reports_latest_and_creates_schema() {
+        let (_d, mut v) = setup();
+        let latest = migrations::MIGRATIONS.last().unwrap().0;
+        assert_eq!(v.create_for_test(PW).unwrap(), MigrationOutcome { from: 0, to: latest });
+        let n: i64 = v
+            .conn()
+            .unwrap()
+            .query_row("SELECT count(*) FROM sqlite_master WHERE name='engagements'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn unlock_runs_hook_only_when_behind_and_failure_keeps_locked() {
+        let (_d, mut v) = setup();
+        v.create_for_test(PW).unwrap();
+        // Simulate an older db: drop the version so tables exist but user_version is behind.
+        v.conn().unwrap().execute_batch("DROP TABLE settings; DROP TABLE engagements; PRAGMA user_version = 0; CREATE TABLE old (x INTEGER);").unwrap();
+        v.lock();
+        v.set_backup_hook(Box::new(|_, _| Err(AppError::Io("backup failed".into()))));
+        assert_eq!(v.unlock(PW), Err(AppError::Io("backup failed".into())));
+        assert!(!v.is_unlocked());
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let c2 = calls.clone();
+        v.set_backup_hook(Box::new(move |f, t| {
+            assert_eq!(f, 0);
+            assert!(t >= 1);
+            c2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }));
+        v.unlock(PW).unwrap();
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        v.lock();
+        v.unlock(PW).unwrap();
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 
     #[test]
