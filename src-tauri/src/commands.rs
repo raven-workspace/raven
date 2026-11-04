@@ -43,6 +43,10 @@ pub fn vault_unlock_inner(v: &mut Vault, password: &str) -> AppResult<UnlockResu
     })
 }
 
+pub fn backups_list_inner(v: &Vault) -> AppResult<Vec<BackupInfo>> {
+    backup::list(v.paths())
+}
+
 pub fn settings_get_inner(v: &Vault) -> AppResult<Settings> {
     settings::get(v.conn()?)
 }
@@ -123,7 +127,14 @@ pub async fn backup_now(app: AppHandle) -> AppResult<BackupInfo> {
 
 #[tauri::command]
 pub async fn backups_list(app: AppHandle) -> AppResult<Vec<BackupInfo>> {
-    with_vault(app, |v| backup::list(v.paths())).await
+    with_vault(app, |v| backups_list_inner(v)).await
+}
+
+/// Restore a backup while locked (the live database is damaged). Leaves the vault locked.
+#[tauri::command]
+pub async fn backup_restore_locked(app: AppHandle, file: String, password: String) -> AppResult<()> {
+    let password = zeroize::Zeroizing::new(password);
+    with_vault(app, move |v| backup::restore_locked(v, &file, &password)).await
 }
 
 #[tauri::command]

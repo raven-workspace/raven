@@ -4,6 +4,7 @@ export type ErrorCode =
   | "vault_exists"
   | "no_vault"
   | "not_found"
+  | "damaged"
   | "validation"
   | "io"
   | "db";
@@ -21,6 +22,7 @@ const CODES: readonly ErrorCode[] = [
   "vault_exists",
   "no_vault",
   "not_found",
+  "damaged",
   "validation",
   "io",
   "db",

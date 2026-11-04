@@ -44,5 +44,7 @@ describe("api", () => {
     expect(invoke).toHaveBeenCalledWith("settings_update", { patch: { autoLockMinutes: 10 } });
     await api.backupRestore("f.db");
     expect(invoke).toHaveBeenCalledWith("backup_restore", { file: "f.db" });
+    await api.backupRestoreLocked("f.db", "pw");
+    expect(invoke).toHaveBeenCalledWith("backup_restore_locked", { file: "f.db", password: "pw" });
   });
 });

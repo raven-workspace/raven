@@ -28,6 +28,7 @@ pub fn run() {
             commands::backup_now,
             commands::backups_list,
             commands::backup_restore,
+            commands::backup_restore_locked,
             commands::engagements_list,
             commands::engagement_get,
             commands::engagement_create,

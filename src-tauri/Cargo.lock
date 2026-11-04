@@ -2544,6 +2544,7 @@ name = "raven"
 version = "0.1.0"
 dependencies = [
  "argon2",
+ "blake2",
  "rand",
  "rusqlite",
  "serde",

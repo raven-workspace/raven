@@ -3,6 +3,9 @@ use crate::error::{AppError, AppResult};
 use crate::migrations::{self, MigrationOutcome};
 use crate::paths::DataPaths;
 use argon2::{Algorithm, Argon2, Params, Version};
+use blake2::Blake2bMac;
+use blake2::digest::consts::U32;
+use blake2::digest::{KeyInit, Mac};
 use rand::RngCore;
 use rusqlite::{Connection, ErrorCode, OpenFlags};
 use serde::{Deserialize, Serialize};
@@ -15,6 +18,7 @@ const MIN_PASSWORD_CHARS: usize = 12;
 const SALT_LEN: usize = 16;
 const KEY_LEN: usize = 32;
 const PRAGMA_PREFIX: &str = "PRAGMA key = \"x'";
+const VERIFIER_MESSAGE: &[u8] = b"raven vault verifier v1";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VaultMeta {
@@ -24,6 +28,10 @@ pub struct VaultMeta {
     pub t: u32,
     pub p: u32,
     pub salt_hex: String,
+    /// Lowercase hex Blake2b-256 MAC of `VERIFIER_MESSAGE`, keyed with the DB key. Lets
+    /// unlock tell a wrong password from a damaged database without opening it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verifier: Option<String>,
 }
 
 impl VaultMeta {
@@ -35,7 +43,7 @@ impl VaultMeta {
     fn with_params(m_kib: u32, t: u32, p: u32) -> VaultMeta {
         let mut salt = [0u8; SALT_LEN];
         rand::rngs::OsRng.fill_bytes(&mut salt);
-        VaultMeta { version: 1, kdf: "argon2id".into(), m_kib, t, p, salt_hex: to_hex(&salt) }
+        VaultMeta { version: 1, kdf: "argon2id".into(), m_kib, t, p, salt_hex: to_hex(&salt), verifier: None }
     }
 
     /// Weak, fast parameters. Tests only.
@@ -44,7 +52,8 @@ impl VaultMeta {
         VaultMeta::with_params(8, 1, 1)
     }
 
-    fn derive_key(&self, password: &str) -> AppResult<Zeroizing<[u8; KEY_LEN]>> {
+    /// `password` must already be NFC-normalized (`normalize_password`).
+    pub(crate) fn derive_key(&self, password: &str) -> AppResult<Zeroizing<[u8; KEY_LEN]>> {
         if self.version != 1 || self.kdf != "argon2id" {
             return Err(AppError::Io("unsupported vault.json version or kdf".into()));
         }
@@ -70,12 +79,35 @@ impl VaultMeta {
         res.map_err(|e| AppError::Io(format!("key derivation failed: {e}")))?;
         Ok(key)
     }
+
+    /// `None` when there is no verifier (an older vault), else whether `key` matches it.
+    /// A malformed verifier counts as a mismatch. Constant-time comparison.
+    pub(crate) fn verifier_matches(&self, key: &[u8; KEY_LEN]) -> Option<bool> {
+        let expected = from_hex(self.verifier.as_deref()?);
+        Some(expected.is_some_and(|tag| verifier_mac(key).verify_slice(&tag).is_ok()))
+    }
+
+    pub(crate) fn read(path: &Path) -> AppResult<VaultMeta> {
+        let bytes = std::fs::read(path)?;
+        serde_json::from_slice(&bytes).map_err(|e| AppError::Io(format!("invalid vault.json: {e}")))
+    }
+}
+
+fn verifier_mac(key: &[u8; KEY_LEN]) -> Blake2bMac<U32> {
+    let mut mac = <Blake2bMac<U32> as KeyInit>::new_from_slice(key).expect("32-byte key is a valid Blake2b key");
+    mac.update(VERIFIER_MESSAGE);
+    mac
+}
+
+/// The `verifier` value for `key`.
+pub(crate) fn verifier_hex(key: &[u8; KEY_LEN]) -> String {
+    to_hex(&verifier_mac(key).finalize().into_bytes())
 }
 
 /// Unicode NFC form of the password, so the same visible password typed with composed or
 /// decomposed characters (e.g. different keyboards/IMEs) derives the same key. ASCII is
 /// unchanged by NFC, so existing ASCII-password vaults keep their keys.
-fn normalize_password(password: &str) -> Zeroizing<String> {
+pub(crate) fn normalize_password(password: &str) -> Zeroizing<String> {
     if password.is_ascii() {
         return Zeroizing::new(password.to_owned());
     }
@@ -99,7 +131,7 @@ fn from_hex(s: &str) -> Option<Vec<u8>> {
     (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok()).collect()
 }
 
-fn pragma_for(key: &[u8; KEY_LEN]) -> Zeroizing<String> {
+pub(crate) fn pragma_for(key: &[u8; KEY_LEN]) -> Zeroizing<String> {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     // Exact capacity so the String never reallocates (and leaves unwiped copies).
     let mut out = Zeroizing::new(String::with_capacity(PRAGMA_PREFIX.len() + KEY_LEN * 2 + 3));
@@ -126,6 +158,26 @@ pub(crate) fn open_keyed(path: &Path, key_pragma: &str, flags: OpenFlags) -> rus
     c.execute_batch(key_pragma)?;
     c.execute_batch("PRAGMA cipher_memory_security = ON; PRAGMA foreign_keys = ON;")?;
     Ok(c)
+}
+
+/// Write `bytes` to a new or truncated owner-only (0600) file at `path` and fsync it.
+pub(crate) fn write_private_file(path: &Path, bytes: &[u8]) -> AppResult<()> {
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let result = (|| -> std::io::Result<()> {
+        let mut f = opts.open(path)?;
+        f.write_all(bytes)?;
+        f.sync_all()
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(path);
+    }
+    result.map_err(Into::into)
 }
 
 /// Called as `(from, to)` before migrating an existing database, while its data is intact.
@@ -189,7 +241,7 @@ impl Vault {
         self.create_with_meta(password, VaultMeta::for_test())
     }
 
-    fn create_with_meta(&mut self, password: &str, meta: VaultMeta) -> AppResult<MigrationOutcome> {
+    fn create_with_meta(&mut self, password: &str, mut meta: VaultMeta) -> AppResult<MigrationOutcome> {
         let password = normalize_password(password);
         // Counts Unicode scalar values of the NFC form.
         if password.chars().count() < MIN_PASSWORD_CHARS {
@@ -208,6 +260,7 @@ impl Vault {
             ));
         }
         let key = meta.derive_key(&password)?;
+        meta.verifier = Some(verifier_hex(&key));
         match self.create_files(&meta, &key) {
             Ok((conn, outcome)) => {
                 self.conn = Some(conn);
@@ -246,19 +299,8 @@ impl Vault {
     fn write_meta_atomic(&self, meta: &VaultMeta) -> AppResult<()> {
         let json = serde_json::to_vec_pretty(meta).map_err(|e| AppError::Io(e.to_string()))?;
         let tmp = self.paths.vault_meta.with_extension("json.tmp");
-        let mut opts = std::fs::OpenOptions::new();
-        opts.write(true).create(true).truncate(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            opts.mode(0o600);
-        }
-        let result = (|| -> std::io::Result<()> {
-            let mut f = opts.open(&tmp)?;
-            f.write_all(&json)?;
-            f.sync_all()?;
-            std::fs::rename(&tmp, &self.paths.vault_meta)
-        })();
+        write_private_file(&tmp, &json)?;
+        let result = std::fs::rename(&tmp, &self.paths.vault_meta);
         if result.is_err() {
             let _ = std::fs::remove_file(&tmp);
         }
@@ -280,14 +322,22 @@ impl Vault {
         }
     }
 
+    /// Unlock decision:
+    /// - verifier present, key doesn't match: `WrongPassword`, the db is never opened;
+    /// - verifier present and matches, db unreadable: `Damaged`;
+    /// - no verifier (older vault), `NotADatabase`: `WrongPassword`. A successful unlock
+    ///   then adds the verifier (best-effort: a failed write doesn't fail the unlock).
     pub fn unlock(&mut self, password: &str) -> AppResult<MigrationOutcome> {
         if !self.exists() {
             return Err(AppError::NoVault);
         }
-        let bytes = std::fs::read(&self.paths.vault_meta)?;
-        let meta: VaultMeta = serde_json::from_slice(&bytes)
-            .map_err(|e| AppError::Io(format!("invalid vault.json: {e}")))?;
+        let mut meta = VaultMeta::read(&self.paths.vault_meta)?;
         let key = meta.derive_key(&normalize_password(password))?;
+        let verified = match meta.verifier_matches(&key) {
+            Some(false) => return Err(AppError::WrongPassword),
+            Some(true) => true,
+            None => false,
+        };
         // READ_WRITE without CREATE: a missing db must never be created here.
         let mut conn = open_keyed(
             &self.paths.db,
@@ -296,10 +346,15 @@ impl Vault {
         )?;
         match conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0)) {
             Ok(_) => {}
+            Err(_) if verified => return Err(AppError::Damaged),
             Err(rusqlite::Error::SqliteFailure(e, _)) if e.code == ErrorCode::NotADatabase => {
                 return Err(AppError::WrongPassword);
             }
             Err(e) => return Err(e.into()),
+        }
+        if meta.verifier.is_none() {
+            meta.verifier = Some(verifier_hex(&key));
+            let _ = self.write_meta_atomic(&meta);
         }
         // On any migration/backup error the vault stays locked and nothing is stored.
         let outcome = self.migrate_on_open(&mut conn)?;
@@ -336,7 +391,7 @@ impl Vault {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     const PW: &str = "correct horse battery";
@@ -528,6 +583,7 @@ mod tests {
             t: 1,
             p: 1,
             salt_hex: "000102030405060708090a0b0c0d0e0f".into(),
+            verifier: None,
         };
         let key = meta.derive_key(PW).unwrap();
         assert_eq!(to_hex(key.as_ref()), PINNED_ASCII_KEY);
@@ -542,6 +598,116 @@ mod tests {
         let (_d, mut v) = setup();
         v.create_for_test(PW).unwrap();
         let mode = std::fs::metadata(&v.paths.db).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+    }
+
+    fn read_meta(v: &Vault) -> VaultMeta {
+        serde_json::from_slice(&std::fs::read(&v.paths.vault_meta).unwrap()).unwrap()
+    }
+
+    /// Overwrite the first 4096 bytes of raven.db with zeros.
+    pub(crate) fn corrupt_db(paths: &DataPaths) {
+        use std::io::{Seek, SeekFrom};
+        let mut f = std::fs::OpenOptions::new().write(true).open(&paths.db).unwrap();
+        f.seek(SeekFrom::Start(0)).unwrap();
+        f.write_all(&[0u8; 4096]).unwrap();
+        f.sync_all().unwrap();
+    }
+
+    #[test]
+    fn create_writes_verifier() {
+        let (_d, mut v) = setup();
+        v.create_for_test(PW).unwrap();
+        let meta = read_meta(&v);
+        let verifier = meta.verifier.clone().unwrap();
+        assert_eq!(verifier.len(), 64);
+        assert!(verifier.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)));
+        let key = meta.derive_key(PW).unwrap();
+        assert_eq!(verifier, verifier_hex(&key));
+    }
+
+    #[test]
+    fn verifier_is_blake2b_mac_of_fixed_message() {
+        let key = [7u8; KEY_LEN];
+        let mut mac = <Blake2bMac<U32> as KeyInit>::new_from_slice(&key).unwrap();
+        mac.update(b"raven vault verifier v1");
+        assert_eq!(verifier_hex(&key), to_hex(&mac.finalize().into_bytes()));
+    }
+
+    #[test]
+    fn unlock_wrong_password_with_verifier_never_opens_db() {
+        let (_d, mut v) = setup();
+        v.create_for_test(PW).unwrap();
+        v.lock();
+        // Opening a directory as a database fails with a non-password error, so
+        // `WrongPassword` here proves the verifier answered before any open.
+        std::fs::remove_file(&v.paths.db).unwrap();
+        std::fs::create_dir(&v.paths.db).unwrap();
+        assert_eq!(v.unlock("wrong password here"), Err(AppError::WrongPassword));
+        assert!(!v.is_unlocked());
+    }
+
+    #[test]
+    fn unlock_corrupt_db_with_verifier_is_damaged() {
+        let (_d, mut v) = setup();
+        v.create_for_test(PW).unwrap();
+        v.lock();
+        corrupt_db(&v.paths);
+        assert_eq!(v.unlock(PW), Err(AppError::Damaged));
+        assert!(!v.is_unlocked());
+        // A wrong password on the same damaged file is still just a wrong password.
+        assert_eq!(v.unlock("wrong password here"), Err(AppError::WrongPassword));
+    }
+
+    #[test]
+    fn old_vault_without_verifier_keeps_wrong_password_behaviour() {
+        let (_d, mut v) = setup();
+        v.create_for_test(PW).unwrap();
+        v.lock();
+        let mut meta = read_meta(&v);
+        meta.verifier = None;
+        v.write_meta_atomic(&meta).unwrap();
+        corrupt_db(&v.paths);
+        assert_eq!(v.unlock(PW), Err(AppError::WrongPassword));
+        assert_eq!(read_meta(&v).verifier, None);
+    }
+
+    #[test]
+    fn old_vault_gains_verifier_on_unlock() {
+        let (_d, mut v) = setup();
+        v.create_for_test(PW).unwrap();
+        v.lock();
+        let mut meta = read_meta(&v);
+        let expected = meta.verifier.take().unwrap();
+        v.write_meta_atomic(&meta).unwrap();
+        let raw = String::from_utf8(std::fs::read(&v.paths.vault_meta).unwrap()).unwrap();
+        assert!(!raw.contains("verifier"));
+        // A wrong password adds nothing.
+        assert_eq!(v.unlock("wrong password here"), Err(AppError::WrongPassword));
+        assert_eq!(read_meta(&v).verifier, None);
+        v.unlock(PW).unwrap();
+        assert_eq!(read_meta(&v).verifier, Some(expected));
+        assert!(!v.paths.vault_meta.with_extension("json.tmp").exists());
+        v.lock();
+        v.unlock(PW).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn verifier_write_failure_does_not_fail_unlock() {
+        use std::os::unix::fs::PermissionsExt;
+        let (_d, mut v) = setup();
+        v.create_for_test(PW).unwrap();
+        v.lock();
+        let mut meta = read_meta(&v);
+        meta.verifier = None;
+        v.write_meta_atomic(&meta).unwrap();
+        // A directory where the temp file would go makes the atomic write fail.
+        std::fs::create_dir(v.paths.vault_meta.with_extension("json.tmp")).unwrap();
+        v.unlock(PW).unwrap();
+        assert!(v.is_unlocked());
+        assert_eq!(read_meta(&v).verifier, None);
+        let mode = std::fs::metadata(&v.paths.vault_meta).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600);
     }
 

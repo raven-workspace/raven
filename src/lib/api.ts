@@ -28,6 +28,9 @@ export const api = {
   backupsList: () => call<BackupInfo[]>("backups_list"),
   /** Restores a backup. The vault is left locked afterwards. */
   backupRestore: (file: string) => call<null>("backup_restore", { file }),
+  /** Restores a backup while locked (the database is damaged). The vault stays locked. */
+  backupRestoreLocked: (file: string, password: string) =>
+    call<null>("backup_restore_locked", { file, password }),
 
   engagementsList: () => call<Engagement[]>("engagements_list"),
   engagementGet: (id: string) => call<Engagement>("engagement_get", { id }),

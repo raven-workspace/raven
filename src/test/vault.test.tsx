@@ -282,6 +282,78 @@ describe("vault gate", () => {
     expect(m.vaultLock).toHaveBeenCalledTimes(1);
   });
 
+  describe("damaged database", () => {
+    const older = { file: "raven-20261101-090000-daily.db", reason: "daily", createdAt: Date.UTC(2026, 10, 1, 9), sizeBytes: 10 };
+    const newer = { file: "raven-20261103-090000-manual.db", reason: "manual", createdAt: Date.UTC(2026, 10, 3, 9), sizeBytes: 10 };
+
+    async function openDamaged() {
+      const user = userEvent.setup();
+      m.vaultStatus.mockResolvedValue({ exists: true, unlocked: false });
+      m.vaultUnlock.mockRejectedValue(new RavenError("damaged", "the database file is damaged"));
+      m.backupsList.mockResolvedValue([newer, older]);
+      mount();
+      await user.type(await screen.findByLabelText("Password"), "correct horse battery{Enter}");
+      expect(
+        await screen.findByText("Raven can't read its database file. Restore a backup to continue."),
+      ).toBeInTheDocument();
+      return user;
+    }
+
+    it("damaged vault offers restore from backup", async () => {
+      const user = await openDamaged();
+      // The unlock form is replaced while the damaged panel is active.
+      expect(screen.queryByRole("button", { name: "Unlock" })).not.toBeInTheDocument();
+      const options = await screen.findAllByRole("radio");
+      expect(options).toHaveLength(2);
+      // Newest first, with date and reason.
+      expect(options[0]!.closest("label")).toHaveTextContent(new Date(newer.createdAt).toLocaleString());
+      expect(options[0]!.closest("label")).toHaveTextContent("manual");
+      expect(options[1]!.closest("label")).toHaveTextContent("daily");
+      m.backupRestoreLocked.mockResolvedValue(null);
+      await user.click(screen.getByRole("radio", { name: /daily/ }));
+      await user.type(screen.getByLabelText("Password"), "backup password!{Enter}");
+      expect(m.backupRestoreLocked).toHaveBeenCalledWith(older.file, "backup password!");
+      expect(await screen.findByText("Restored. Unlock to continue.")).toBeInTheDocument();
+      const pw = screen.getByLabelText("Password");
+      expect(pw).toHaveValue("");
+      expect(screen.getByRole("button", { name: "Unlock" })).toBeInTheDocument();
+      expect(screen.queryByText(/can't read its database file/)).not.toBeInTheDocument();
+    });
+
+    it("restore while locked shows wrong password inline", async () => {
+      const user = await openDamaged();
+      m.backupRestoreLocked.mockRejectedValue(
+        new RavenError("validation", "Wrong password for this backup", "password"),
+      );
+      await user.click(await screen.findByRole("radio", { name: /manual/ }));
+      const pw = screen.getByLabelText("Password");
+      await user.type(pw, "not it at all{Enter}");
+      expect(await screen.findByText("Wrong password for this backup")).toBeInTheDocument();
+      expect(pw).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByText("Raven can't read its database file. Restore a backup to continue.")).toBeInTheDocument();
+      expect(screen.queryByText("Restored. Unlock to continue.")).not.toBeInTheDocument();
+    });
+
+    it("preselects the newest backup", async () => {
+      const user = await openDamaged();
+      expect(await screen.findByRole("radio", { name: /manual/ })).toBeChecked();
+      m.backupRestoreLocked.mockResolvedValue(null);
+      await user.type(screen.getByLabelText("Password"), "backup password!{Enter}");
+      expect(m.backupRestoreLocked).toHaveBeenCalledWith(newer.file, "backup password!");
+    });
+
+    it("says so when there are no backups", async () => {
+      const user = userEvent.setup();
+      m.vaultStatus.mockResolvedValue({ exists: true, unlocked: false });
+      m.vaultUnlock.mockRejectedValue(new RavenError("damaged", "the database file is damaged"));
+      m.backupsList.mockResolvedValue([]);
+      mount();
+      await user.type(await screen.findByLabelText("Password"), "correct horse battery{Enter}");
+      expect(await screen.findByText("No backups yet")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Restore" })).toBeDisabled();
+    });
+  });
+
   describe("any locked error", () => {
     function Probe() {
       const list = useQuery({ queryKey: ["engagements"], queryFn: api.engagementsList });
