@@ -80,11 +80,16 @@ impl VaultMeta {
         Ok(key)
     }
 
-    /// `None` when there is no verifier (an older vault), else whether `key` matches it.
-    /// A malformed verifier counts as a mismatch. Constant-time comparison.
+    /// `None` when there is no usable verifier (absent, or not exactly 64 hex characters):
+    /// callers then fall back to opening the database. Otherwise whether `key` matches it,
+    /// compared in constant time; a well-formed but wrong tag is a mismatch.
     pub(crate) fn verifier_matches(&self, key: &[u8; KEY_LEN]) -> Option<bool> {
-        let expected = from_hex(self.verifier.as_deref()?);
-        Some(expected.is_some_and(|tag| verifier_mac(key).verify_slice(&tag).is_ok()))
+        let v = self.verifier.as_deref()?;
+        if v.len() != KEY_LEN * 2 || !v.bytes().all(|c| c.is_ascii_hexdigit()) {
+            return None;
+        }
+        let tag = from_hex(v)?;
+        Some(verifier_mac(key).verify_slice(&tag).is_ok())
     }
 
     pub(crate) fn read(path: &Path) -> AppResult<VaultMeta> {
@@ -158,6 +163,30 @@ pub(crate) fn open_keyed(path: &Path, key_pragma: &str, flags: OpenFlags) -> rus
     c.execute_batch(key_pragma)?;
     c.execute_batch("PRAGMA cipher_memory_security = ON; PRAGMA foreign_keys = ON;")?;
     Ok(c)
+}
+
+/// The file isn't a readable SQLCipher database: wrong key, or damaged bytes.
+pub(crate) fn is_unreadable(e: &rusqlite::Error) -> bool {
+    matches!(
+        e,
+        rusqlite::Error::SqliteFailure(f, _)
+            if f.code == ErrorCode::NotADatabase || f.code == ErrorCode::DatabaseCorrupt
+    )
+}
+
+/// Map a failure reading `sqlite_master` on unlock. With a matching verifier the key is
+/// right, so an unreadable file is `Damaged`. Without one, `NotADatabase` is taken as a
+/// wrong password. Anything else (busy, locked, I/O) is an ordinary db error.
+fn classify_read_failure(e: rusqlite::Error, verified: bool) -> AppError {
+    if verified && is_unreadable(&e) {
+        return AppError::Damaged;
+    }
+    match &e {
+        rusqlite::Error::SqliteFailure(f, _) if !verified && f.code == ErrorCode::NotADatabase => {
+            AppError::WrongPassword
+        }
+        _ => e.into(),
+    }
 }
 
 /// Write `bytes` to a new or truncated owner-only (0600) file at `path` and fsync it.
@@ -327,6 +356,7 @@ impl Vault {
     /// - verifier present and matches, db unreadable: `Damaged`;
     /// - no verifier (older vault), `NotADatabase`: `WrongPassword`. A successful unlock
     ///   then adds the verifier (best-effort: a failed write doesn't fail the unlock).
+    ///   A malformed verifier is treated as absent.
     pub fn unlock(&mut self, password: &str) -> AppResult<MigrationOutcome> {
         if !self.exists() {
             return Err(AppError::NoVault);
@@ -344,15 +374,11 @@ impl Vault {
             &pragma_for(&key),
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
-        match conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0)) {
-            Ok(_) => {}
-            Err(_) if verified => return Err(AppError::Damaged),
-            Err(rusqlite::Error::SqliteFailure(e, _)) if e.code == ErrorCode::NotADatabase => {
-                return Err(AppError::WrongPassword);
-            }
-            Err(e) => return Err(e.into()),
+        if let Err(e) = conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0)) {
+            return Err(classify_read_failure(e, verified));
         }
-        if meta.verifier.is_none() {
+        // Absent or malformed verifier: store a fresh one now the key is known good.
+        if !verified {
             meta.verifier = Some(verifier_hex(&key));
             let _ = self.write_meta_atomic(&meta);
         }
@@ -709,6 +735,57 @@ pub(crate) mod tests {
         assert_eq!(read_meta(&v).verifier, None);
         let mode = std::fs::metadata(&v.paths.vault_meta).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600);
+    }
+
+    #[test]
+    fn malformed_verifier_is_treated_as_absent_and_rewritten() {
+        for bad in ["", "zz", "abcd", &"g".repeat(64), &"a".repeat(63), &"a".repeat(66)] {
+            let (_d, mut v) = setup();
+            v.create_for_test(PW).unwrap();
+            v.lock();
+            let mut meta = read_meta(&v);
+            let good = meta.verifier.replace(bad.to_string()).unwrap();
+            v.write_meta_atomic(&meta).unwrap();
+            // Falls back to opening the db: a wrong password is still refused...
+            assert_eq!(v.unlock("wrong password here"), Err(AppError::WrongPassword), "{bad:?}");
+            // ...and the right one unlocks and stores a fresh verifier.
+            v.unlock(PW).unwrap();
+            assert_eq!(read_meta(&v).verifier, Some(good), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn uppercase_verifier_is_accepted_and_wrong_tag_is_a_mismatch() {
+        let (_d, mut v) = setup();
+        v.create_for_test(PW).unwrap();
+        v.lock();
+        let mut meta = read_meta(&v);
+        meta.verifier = meta.verifier.map(|s| s.to_uppercase());
+        v.write_meta_atomic(&meta).unwrap();
+        v.unlock(PW).unwrap();
+        v.lock();
+        // Well-formed but wrong: mismatch, the db is never opened.
+        meta.verifier = Some("0".repeat(64));
+        v.write_meta_atomic(&meta).unwrap();
+        assert_eq!(v.unlock(PW), Err(AppError::WrongPassword));
+    }
+
+    fn sqlite_err(code: std::os::raw::c_int) -> rusqlite::Error {
+        rusqlite::Error::SqliteFailure(rusqlite::ffi::Error::new(code), None)
+    }
+
+    #[test]
+    fn read_failure_classification() {
+        use rusqlite::ffi;
+        assert_eq!(classify_read_failure(sqlite_err(ffi::SQLITE_NOTADB), true), AppError::Damaged);
+        assert_eq!(classify_read_failure(sqlite_err(ffi::SQLITE_CORRUPT), true), AppError::Damaged);
+        assert_eq!(classify_read_failure(sqlite_err(ffi::SQLITE_NOTADB), false), AppError::WrongPassword);
+        assert_eq!(classify_read_failure(sqlite_err(ffi::SQLITE_CORRUPT), false).code(), "db");
+        for code in [ffi::SQLITE_BUSY, ffi::SQLITE_LOCKED, ffi::SQLITE_IOERR, ffi::SQLITE_CANTOPEN] {
+            for verified in [true, false] {
+                assert_eq!(classify_read_failure(sqlite_err(code), verified).code(), "db", "{code} {verified}");
+            }
+        }
     }
 
     #[test]

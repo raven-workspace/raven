@@ -342,6 +342,26 @@ describe("vault gate", () => {
       expect(m.backupRestoreLocked).toHaveBeenCalledWith(newer.file, "backup password!");
     });
 
+    it("focuses the restore password field", async () => {
+      await openDamaged();
+      await screen.findAllByRole("radio");
+      expect(screen.getByLabelText("Password")).toHaveFocus();
+    });
+
+    it("a failed backup list offers Try again", async () => {
+      const user = userEvent.setup();
+      m.vaultStatus.mockResolvedValue({ exists: true, unlocked: false });
+      m.vaultUnlock.mockRejectedValue(new RavenError("damaged", "the database file is damaged"));
+      m.backupsList.mockRejectedValueOnce(new RavenError("io", "backups unreadable")).mockResolvedValue([newer]);
+      mount();
+      await user.type(await screen.findByLabelText("Password"), "correct horse battery{Enter}");
+      expect(await screen.findByText("backups unreadable")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Try again" }));
+      expect(await screen.findByRole("radio", { name: /manual/ })).toBeChecked();
+      expect(screen.queryByText("backups unreadable")).not.toBeInTheDocument();
+      expect(m.backupsList).toHaveBeenCalledTimes(2);
+    });
+
     it("says so when there are no backups", async () => {
       const user = userEvent.setup();
       m.vaultStatus.mockResolvedValue({ exists: true, unlocked: false });

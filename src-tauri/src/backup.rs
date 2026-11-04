@@ -8,7 +8,7 @@
 
 use crate::error::{AppError, AppResult};
 use crate::paths::DataPaths;
-use crate::vault::{normalize_password, open_keyed, pragma_for, write_private_file, BackupHook, Vault, VaultMeta};
+use crate::vault::{is_unreadable, normalize_password, open_keyed, pragma_for, write_private_file, BackupHook, Vault, VaultMeta};
 use rusqlite::{Connection, ErrorCode, OpenFlags};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -404,6 +404,13 @@ pub fn restore_locked(vault: &mut Vault, file: &str, password: &str) -> AppResul
 
 pub fn restore_locked_at(vault: &mut Vault, file: &str, password: &str, now_ms: i64) -> AppResult<()> {
     validate_backup_name(file)?;
+    // While unlocked, `restore` is the path: it takes a pre-restore backup first.
+    if vault.is_unlocked() {
+        return Err(AppError::Validation {
+            field: "file".into(),
+            message: "Lock Raven before restoring this way".into(),
+        });
+    }
     let paths = vault.paths().clone();
     let src = paths.backups.join(file);
     if !src.is_file() {
@@ -415,9 +422,11 @@ pub fn restore_locked_at(vault: &mut Vault, file: &str, password: &str, now_ms: 
     let wrong_password =
         || AppError::Validation { field: "password".into(), message: "Wrong password for this backup".into() };
     let key = meta.derive_key(&normalize_password(password))?;
-    if meta.verifier_matches(&key) == Some(false) {
-        return Err(wrong_password());
-    }
+    let verified = match meta.verifier_matches(&key) {
+        Some(false) => return Err(wrong_password()),
+        Some(true) => true,
+        None => false,
+    };
     let pragma = pragma_for(&key);
     drop(key);
 
@@ -429,7 +438,11 @@ pub fn restore_locked_at(vault: &mut Vault, file: &str, password: &str, now_ms: 
         sync_file(&staged)?;
         match open_with_pragma(&staged, &pragma) {
             Ok(_) => {}
-            Err(rusqlite::Error::SqliteFailure(e, _)) if e.code == ErrorCode::NotADatabase => {
+            // The verifier proved the password, so the backup file itself is unreadable.
+            Err(e) if verified && is_unreadable(&e) => {
+                return Err(AppError::Validation { field: "file".into(), message: "This backup is damaged".into() });
+            }
+            Err(rusqlite::Error::SqliteFailure(e, _)) if !verified && e.code == ErrorCode::NotADatabase => {
                 return Err(wrong_password());
             }
             Err(e) => return Err(e.into()),
@@ -804,6 +817,52 @@ mod tests {
         assert!(!v.is_unlocked());
         assert_eq!(std::fs::read(&v.paths().db).unwrap(), db_before);
         assert_eq!(std::fs::read(&v.paths().vault_meta).unwrap(), meta_before);
+        assert_eq!(root_names(&v), names_before);
+    }
+
+    #[test]
+    fn restore_locked_refused_while_unlocked() {
+        let (_d, mut v) = setup();
+        add_engagement(&v, "A");
+        let b = take_at(&v, "manual", T0).unwrap();
+        let db_before = std::fs::read(&v.paths().db).unwrap();
+        let names_before = root_names(&v);
+        match restore_locked(&mut v, &b.file, PW) {
+            Err(AppError::Validation { field, message }) => {
+                assert_eq!(field, "file");
+                assert_eq!(message, "Lock Raven before restoring this way");
+            }
+            other => panic!("{other:?}"),
+        }
+        assert!(v.is_unlocked());
+        assert_eq!(ids(&v), vec!["A"]);
+        assert_eq!(std::fs::read(&v.paths().db).unwrap(), db_before);
+        assert_eq!(root_names(&v), names_before);
+    }
+
+    #[test]
+    fn restore_locked_damaged_backup_with_matching_verifier_says_damaged() {
+        let (_d, mut v) = setup();
+        let b = take_at(&v, "manual", T0).unwrap();
+        v.lock();
+        corrupt_db(v.paths());
+        let db_before = std::fs::read(&v.paths().db).unwrap();
+        // Damage the backup file itself (first page zeroed).
+        let bpath = v.paths().backups.join(&b.file);
+        let mut bytes = std::fs::read(&bpath).unwrap();
+        bytes[..4096].fill(0);
+        std::fs::write(&bpath, &bytes).unwrap();
+        let names_before = root_names(&v);
+        match restore_locked(&mut v, &b.file, PW) {
+            Err(AppError::Validation { field, message }) => {
+                assert_eq!(field, "file");
+                assert_eq!(message, "This backup is damaged");
+            }
+            other => panic!("{other:?}"),
+        }
+        // A wrong password on the same backup is still a wrong password.
+        wrong_backup_password(restore_locked(&mut v, &b.file, "wrong password here"));
+        assert_eq!(std::fs::read(&v.paths().db).unwrap(), db_before);
         assert_eq!(root_names(&v), names_before);
     }
 

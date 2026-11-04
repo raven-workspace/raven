@@ -8,17 +8,52 @@ function errorText(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }
 
-export function UnlockScreen({ onUnlocked, notice }: { onUnlocked: (r: UnlockResult) => void; notice?: string | undefined }) {
+type OnUnlocked = (r: UnlockResult) => void;
+
+export function UnlockScreen({ onUnlocked, notice }: { onUnlocked: OnUnlocked; notice?: string | undefined }) {
+  const [damaged, setDamaged] = useState(false);
+  const [restored, setRestored] = useState(false);
+
+  if (damaged) {
+    return (
+      <DamagedPanel
+        onRestored={() => {
+          setRestored(true);
+          setDamaged(false);
+        }}
+      />
+    );
+  }
+  return (
+    <UnlockForm
+      onUnlocked={onUnlocked}
+      onDamaged={() => {
+        setRestored(false);
+        setDamaged(true);
+      }}
+      notice={restored ? "Restored. Unlock to continue." : notice}
+    />
+  );
+}
+
+/** The password form. Remounted after a restore, so the field starts empty. */
+function UnlockForm({
+  onUnlocked,
+  onDamaged,
+  notice,
+}: {
+  onUnlocked: OnUnlocked;
+  onDamaged: () => void;
+  notice: string | undefined;
+}) {
   const [pw, setPw] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [damaged, setDamaged] = useState(false);
-  const [restored, setRestored] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     ref.current?.focus();
-  }, [damaged]);
+  }, []);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -31,31 +66,13 @@ export function UnlockScreen({ onUnlocked, notice }: { onUnlocked: (r: UnlockRes
       const code = (err as { code?: string }).code;
       setBusy(false);
       if (code === "damaged") {
-        setPw("");
-        setError(null);
-        setRestored(false);
-        setDamaged(true);
+        onDamaged();
         return;
       }
       setError(code === "wrong_password" ? "Wrong password" : errorText(err, "Couldn't unlock"));
       ref.current?.focus();
     }
   }
-
-  if (damaged) {
-    return (
-      <DamagedPanel
-        onRestored={() => {
-          setPw("");
-          setError(null);
-          setRestored(true);
-          setDamaged(false);
-        }}
-      />
-    );
-  }
-
-  const shownNotice = restored ? "Restored. Unlock to continue." : notice;
 
   return (
     <main className="flex h-full items-center justify-center px-6">
@@ -73,7 +90,7 @@ export function UnlockScreen({ onUnlocked, notice }: { onUnlocked: (r: UnlockRes
             }}
           />
         </Field>
-        {shownNotice && <p className="m-0 text-xs text-muted">{shownNotice}</p>}
+        {notice && <p className="m-0 text-xs text-muted">{notice}</p>}
         <Button type="submit" variant="primary" disabled={busy} aria-busy={busy}>
           {busy ? "Unlocking…" : "Unlock"}
         </Button>
@@ -90,7 +107,12 @@ function DamagedPanel({ onRestored }: { onRestored: () => void }) {
   const [pw, setPw] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const ref = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
 
   useEffect(() => {
     let live = true;
@@ -107,7 +129,7 @@ function DamagedPanel({ onRestored }: { onRestored: () => void }) {
     return () => {
       live = false;
     };
-  }, []);
+  }, [attempt]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -128,7 +150,20 @@ function DamagedPanel({ onRestored }: { onRestored: () => void }) {
       <form onSubmit={submit} className="flex w-[420px] flex-col gap-4">
         <h1 className="m-0 text-lg font-semibold text-fg">Raven</h1>
         <p className="m-0 text-[13px] text-fg-2">Raven can't read its database file. Restore a backup to continue.</p>
-        {listError && <p className="m-0 text-xs text-warn">{listError}</p>}
+        {listError && (
+          <div className="flex items-center gap-3">
+            <p className="m-0 text-xs text-warn">{listError}</p>
+            <Button
+              size="sm"
+              onClick={() => {
+                setListError(null);
+                setAttempt((n) => n + 1);
+              }}
+            >
+              Try again
+            </Button>
+          </div>
+        )}
         {backups && backups.length === 0 && <p className="m-0 text-xs text-muted">No backups yet</p>}
         {backups && backups.length > 0 && (
           <fieldset className="m-0 flex max-h-64 flex-col overflow-y-auto border-0 p-0">
