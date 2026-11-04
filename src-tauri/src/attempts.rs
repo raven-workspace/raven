@@ -160,10 +160,12 @@ fn clean(conn: &Connection, engagement_id: &str, i: &CredAttemptInput, now: i64)
 /// Merges `new` into `old` (same key). Returns the row to store, or None to leave `old` untouched.
 ///  - a non-errored result always replaces a stored errored one, whatever the order of `at`;
 ///  - otherwise an older `at` is ignored, and on an equal `at` only a stronger result wins;
-///  - a newer errored over a non-errored result never replaces it: it only refreshes `detail`
-///    and the log link when it carries them.
+///  - an errored input over a non-errored result is a complete no-op (detail and proof link untouched).
 fn merge(old: &CredAttempt, new: &Clean) -> Option<CredAttempt> {
     let supersedes_error = old.result == "errored" && new.result != "errored";
+    if new.result == "errored" && old.result != "errored" {
+        return None;
+    }
     if !supersedes_error {
         if new.at < old.at {
             return None;
@@ -173,20 +175,11 @@ fn merge(old: &CredAttempt, new: &Clean) -> Option<CredAttempt> {
         }
     }
     let mut out = old.clone();
-    if new.result == "errored" && old.result != "errored" {
-        if new.detail.is_some() {
-            out.detail = new.detail.clone();
-        }
-        if new.log_entry_id.is_some() {
-            out.log_entry_id = new.log_entry_id.clone();
-        }
-    } else {
-        out.result = new.result.clone();
-        out.at = new.at;
-        out.port = new.port.or(old.port);
-        out.log_entry_id = new.log_entry_id.clone();
-        out.detail = new.detail.clone().or_else(|| if supersedes_error { old.detail.clone() } else { None });
-    }
+    out.result = new.result.clone();
+    out.at = new.at;
+    out.port = new.port.or(old.port);
+    out.log_entry_id = new.log_entry_id.clone();
+    out.detail = new.detail.clone().or_else(|| if supersedes_error { old.detail.clone() } else { None });
     if out == *old { None } else { Some(out) }
 }
 
@@ -445,18 +438,22 @@ mod tests {
         let e = eng(c, "A");
         let h = host(c, &e, "10.0.0.1");
         let k = cred(c, &e, "alice", "Fake!Pass1");
+        let proof = log_entry(c, &e);
+        let other_proof = log_entry(c, &e);
         for (r, svc) in [("admin", "smb"), ("valid", "winrm"), ("failed", "rdp")] {
             let mut first = inp(&k, &h, r, 10);
             first.service = svc.into();
-            one(c, &e, first);
+            first.detail = Some("proof".into());
+            first.log_entry_id = Some(proof.clone());
+            let before = one(c, &e, first);
             let mut err = inp(&k, &h, "errored", 99);
             err.service = svc.into();
             err.detail = Some("timeout".into());
+            err.log_entry_id = Some(other_proof.clone());
             let got = one(c, &e, err);
-            assert_eq!(got.result, r);
-            assert_eq!(got.at, 10);
-            // the error only refreshes detail
-            assert_eq!(got.detail.as_deref(), Some("timeout"));
+            // a complete no-op: result, at, detail and proof link all untouched
+            assert_eq!(got, before);
+            assert_eq!(list(c, &e).unwrap().iter().find(|a| a.id == before.id), Some(&before));
         }
         // a real result replaces an errored one even when older, and keeps its detail if it has none
         let mut err = inp(&k, &h, "errored", 50);
@@ -563,6 +560,48 @@ mod tests {
         assert_eq!(moved.len(), 1);
         assert_eq!(moved[0].auth_mode, "local");
         assert!(list(c, &e).unwrap().iter().any(|a| a.cred_id == secret && a.auth_mode == "domain"));
+    }
+
+    #[test]
+    fn rekey_keeps_stronger_or_newer_existing_row() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "A");
+        let h = host(c, &e, "10.0.0.1");
+        let h2 = host(c, &e, "10.0.0.2");
+        let h3 = host(c, &e, "10.0.0.3");
+        let secret = cred(c, &e, "bob", "Fake!Pass2");
+        let accepted = cred(c, &e, "bob2", "Fake!Pass3");
+        let u = uname(c, &e, "bob");
+        let proof = log_entry(c, &e);
+        let mut ids = vec![];
+        // existing rows on the accepted credential
+        for (host_id, result, at) in [(&h, "admin", 20), (&h2, "valid", 20), (&h3, "valid", 30)] {
+            let mut x = inp(&accepted, host_id, result, at);
+            x.detail = Some("keep".into());
+            x.log_entry_id = Some(proof.clone());
+            ids.push(one(c, &e, x));
+        }
+        // moving rows: errored (newer) over admin, older failed over valid, equal-at weaker over newer valid
+        let mut m1 = inp(&secret, &h, "errored", 99);
+        m1.detail = Some("timeout".into());
+        let mut m2 = inp(&secret, &h2, "failed", 10);
+        m2.detail = Some("old".into());
+        let m3 = inp(&secret, &h3, "failed", 30);
+        for mut m in [m1, m2, m3] {
+            m.username_id = Some(u.clone());
+            one(c, &e, m);
+        }
+        let moved = rekey_username_attempts(c, &u, std::slice::from_ref(&secret), &accepted, None).unwrap();
+        assert_eq!(moved.len(), 3);
+        for before in &ids {
+            assert!(moved.contains(before));
+        }
+        let all = list(c, &e).unwrap();
+        assert_eq!(all.len(), 3);
+        for before in &ids {
+            assert_eq!(all.iter().find(|a| a.id == before.id), Some(before));
+        }
     }
 
     #[test]
