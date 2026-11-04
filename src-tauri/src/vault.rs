@@ -227,6 +227,16 @@ impl Vault {
         key: &[u8; KEY_LEN],
     ) -> AppResult<(Connection, MigrationOutcome)> {
         self.write_meta_atomic(meta)?;
+        // Pre-create raven.db as owner-only; SQLite treats the empty file as a new database
+        // and gives its journal files the same mode.
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        opts.open(&self.paths.db)?;
         let mut conn = open_keyed(&self.paths.db, &pragma_for(key), OpenFlags::default())?;
         // The first migration writes the encrypted file to disk; a fresh db never triggers the hook.
         let outcome = self.migrate_on_open(&mut conn)?;
@@ -524,6 +534,16 @@ mod tests {
     }
     // Derived by the pre-NFC code (commit 811b187): NFC must not change ASCII keys.
     const PINNED_ASCII_KEY: &str = "0dfe509cfb319e6f63967799aad3c4d9ce06d7e9abef9f74dcc45d30eda9d60c";
+
+    #[cfg(unix)]
+    #[test]
+    fn created_db_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let (_d, mut v) = setup();
+        v.create_for_test(PW).unwrap();
+        let mode = std::fs::metadata(&v.paths.db).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+    }
 
     #[test]
     fn cleanup_makes_retry_possible() {
