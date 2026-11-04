@@ -1,5 +1,6 @@
 import { EmptyState } from "../../ui";
 import { Board } from "../board/Board";
+import { LogSection } from "../log/LogSection";
 
 export const SECTIONS = [
   { id: "board", label: "Board", empty: "" },
@@ -19,6 +20,7 @@ export function sectionPath(engagementId: string, section: SectionId): string {
 
 export function SectionView({ section }: { section: SectionId }) {
   if (section === "board") return <Board />;
+  if (section === "log") return <LogSection />;
   const s = SECTIONS.find((x) => x.id === section)!;
   return <EmptyState title={s.empty} />;
 }
