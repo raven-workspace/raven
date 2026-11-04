@@ -63,6 +63,7 @@ export function LogEntryBody({ entry }: { entry: LogEntry }) {
             <span className={labelClass}>{c.flagKind === "local" ? "local.txt" : "proof.txt"}</span>
             <span className="font-mono text-[12.5px] text-fg break-all">{c.value}</span>
           </div>
+          {c.proof && <Output text={c.proof} />}
           {c.attachmentId && <AttachmentImage id={c.attachmentId} alt={`${entry.title} screenshot`} />}
         </>
       )}

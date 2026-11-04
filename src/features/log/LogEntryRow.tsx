@@ -28,7 +28,7 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false }: { entry: LogE
         <time dateTime={d.toISOString()} title={d.toLocaleString()} className="w-11 shrink-0 font-mono text-xs text-muted">
           {`${pad(d.getHours())}:${pad(d.getMinutes())}`}
         </time>
-        <span className={`${labelClass} w-[72px] shrink-0`}>{entry.kind}</span>
+        <span className={`${labelClass} w-24 shrink-0`}>{entry.kind}</span>
         <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{entry.title}</span>
         {names.map((n) => (
           <Chip key={n}>{n}</Chip>

@@ -10,7 +10,7 @@ export type LogContent =
   | { kind: "screenshot"; attachmentId: string; caption: string; fileName: string }
   | { kind: "http"; request: string; response?: string | null }
   | { kind: "note"; text: string }
-  | { kind: "flag"; flagKind: FlagKind; value: string; attachmentId?: string | null };
+  | { kind: "flag"; flagKind: FlagKind; value: string; attachmentId?: string | null; proof?: string | null };
 
 /** Mirrors the Rust `LogEntry`. Timestamps are Unix milliseconds. */
 export interface LogEntry {

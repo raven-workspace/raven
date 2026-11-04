@@ -49,6 +49,7 @@ function mount() {
 }
 
 beforeEach(() => {
+  localStorage.clear();
   vi.resetAllMocks();
   useCaptureStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
@@ -162,6 +163,18 @@ describe("host view", () => {
       expect.stringContaining("newer on dc01"),
     ]);
     expect(screen.queryByText("other host")).not.toBeInTheDocument();
+  });
+
+  it("story order flips to newest first", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByText("older on dc01");
+    await user.click(screen.getByRole("button", { name: /Switch to newest first/ }));
+    const items = screen.getAllByRole("listitem").filter((li) => li.textContent?.includes("on dc01"));
+    expect(items.map((li) => within(li).getAllByRole("button")[0]!.textContent)).toEqual([
+      expect.stringContaining("newer on dc01"),
+      expect.stringContaining("older on dc01"),
+    ]);
   });
 
   it("capture from host view preselects the host", async () => {

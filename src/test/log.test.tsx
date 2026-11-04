@@ -57,6 +57,7 @@ const titles = () => rows().map((li) => within(li).getAllByRole("button")[0]!.te
 
 beforeEach(() => {
   vi.resetAllMocks();
+  localStorage.clear();
   entries = [
     entry({ id: "a", title: "older note", at: T }),
     entry({
@@ -99,6 +100,34 @@ describe("log", () => {
     await pick(user, "Host", "All");
     await pick(user, "Ran on", "Kali (VM)");
     expect(rows()).toHaveLength(1);
+  });
+
+  it("order flips to oldest first and is remembered", async () => {
+    const user = userEvent.setup();
+    const first = mount();
+    await screen.findByText("nmap scan");
+    await user.click(screen.getByRole("button", { name: /Switch to oldest first/ }));
+    expect(titles()[0]).toMatch(/older note/);
+    expect(titles()[2]).toMatch(/secret thing/);
+    first.unmount();
+    mount();
+    await screen.findByText("nmap scan");
+    expect(titles()[0]).toMatch(/older note/);
+    await user.click(screen.getByRole("button", { name: /Switch to newest first/ }));
+    expect(titles()[0]).toMatch(/secret thing/);
+  });
+
+  it("an expanded flag shows the pasted proof block", async () => {
+    const user = userEvent.setup();
+    entries = [
+      entry({
+        id: "f", title: "local.txt · dc01", kind: "flag", hostIds: ["h1"],
+        content: { kind: "flag", flagKind: "local", value: "0123456789abcdef0123456789abcdef", proof: "whoami; hostname\ndc01\ncat local.txt\n0123456789abcdef0123456789abcdef" },
+      }),
+    ];
+    mount();
+    await user.click(await screen.findByText("local.txt · dc01"));
+    expect(screen.getByText(/whoami; hostname/)).toBeInTheDocument();
   });
 
   it("expanding a command entry shows blocks and observations", async () => {

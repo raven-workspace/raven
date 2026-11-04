@@ -3,6 +3,8 @@ import { Link } from "react-router";
 import { EmptyState, Panel } from "../../ui";
 import { useLog } from "../log/queries";
 import { LogEntryRow } from "../log/LogEntryRow";
+import { OrderButton } from "../log/OrderButton";
+import { byOrder, usePersistedOrder } from "../log/usePersistedOrder";
 import { HostHeader } from "./HostHeader";
 import { ServicesColumn } from "./ServicesColumn";
 import { useHosts } from "./queries";
@@ -20,6 +22,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   const hosts = useHosts(engagementId);
   const log = useLog(engagementId);
   const [tab, setTab] = useState<TabId>("story");
+  const [order, setOrder] = usePersistedOrder("raven.story.order", "oldest");
   const host = hosts.data?.find((h) => h.id === hostId);
 
   if (hosts.isError) return <EmptyState title="Couldn't load this host" body={hosts.error.message} />;
@@ -33,7 +36,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
       />
     );
   }
-  const entries = (log.data ?? []).filter((e) => e.hostIds.includes(hostId)).sort((a, b) => a.at - b.at);
+  const entries = (log.data ?? []).filter((e) => e.hostIds.includes(hostId)).sort(byOrder(order));
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
@@ -48,23 +51,26 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
           </Panel>
         </div>
         <div className="flex min-h-0 min-w-0 flex-col">
-          <div role="tablist" className="flex gap-4 border-b border-line">
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                role="tab"
-                type="button"
-                aria-selected={tab === t.id}
-                onClick={() => setTab(t.id)}
-                className={`-mb-px cursor-default border-b px-0.5 pb-2 text-[13px] ${
-                  tab === t.id ? "border-accent text-fg" : "border-transparent text-muted hover:text-fg"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
+          <div className="flex items-center justify-between gap-3">
+            <div role="tablist" className="inline-flex gap-0.5 rounded-[var(--radius)] border border-line-2 bg-surface p-0.5">
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  role="tab"
+                  type="button"
+                  aria-selected={tab === t.id}
+                  onClick={() => setTab(t.id)}
+                  className={`h-7 cursor-default rounded-[var(--radius-sm)] px-3 text-[13px] ${
+                    tab === t.id ? "bg-surface-hi text-fg shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-muted hover:text-fg"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {tab === "story" && <OrderButton order={order} onChange={setOrder} />}
           </div>
-          <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto pt-3">
+          <div role="tabpanel" className="mt-3 min-h-0 flex-1 overflow-y-auto border-t border-line">
             {tab === "story" ? (
               log.isError ? (
                 <p role="alert" className="text-xs text-warn">Couldn't load the log: {log.error.message}</p>

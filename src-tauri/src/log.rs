@@ -24,7 +24,15 @@ pub enum LogContent {
     Screenshot { attachment_id: String, caption: String, file_name: String },
     Http { request: String, #[serde(default)] response: Option<String> },
     Note { text: String },
-    Flag { flag_kind: String, value: String, #[serde(default)] attachment_id: Option<String> },
+    /// `proof` is the terminal block the value was read from (`whoami; ip a; cat local.txt`), if pasted.
+    Flag {
+        flag_kind: String,
+        value: String,
+        #[serde(default)]
+        attachment_id: Option<String>,
+        #[serde(default)]
+        proof: Option<String>,
+    },
 }
 
 impl LogContent {
@@ -436,7 +444,7 @@ mod tests {
     }
 
     fn flag(kind: &str) -> LogContent {
-        LogContent::Flag { flag_kind: kind.into(), value: "deadbeef".into(), attachment_id: None }
+        LogContent::Flag { flag_kind: kind.into(), value: "deadbeef".into(), attachment_id: None, proof: None }
     }
 
     fn field<T: std::fmt::Debug>(r: AppResult<T>) -> String {
@@ -526,7 +534,7 @@ mod tests {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
         let e = eng(c);
-        let i = input(LogContent::Flag { flag_kind: "local".into(), value: "deadbeef".into(), attachment_id: Some("forged".into()) });
+        let i = input(LogContent::Flag { flag_kind: "local".into(), value: "deadbeef".into(), attachment_id: Some("forged".into()), proof: None });
         let en = create(c, &e, i).unwrap();
         assert!(matches!(&en.content, LogContent::Flag { attachment_id: None, .. }), "got {:?}", en.content);
     }
@@ -626,7 +634,7 @@ mod tests {
             LogContent::Http { request: "GET / HTTP/1.1".into(), response: Some("200".into()) },
             LogContent::Http { request: "GET /".into(), response: None },
             LogContent::Note { text: "hi".into() },
-            LogContent::Flag { flag_kind: "local".into(), value: "v".into(), attachment_id: Some("a".into()) },
+            LogContent::Flag { flag_kind: "local".into(), value: "v".into(), attachment_id: Some("a".into()), proof: Some("cat local.txt\nv".into()) },
         ];
         for k in kinds {
             let j = serde_json::to_value(&k).unwrap();
@@ -636,7 +644,7 @@ mod tests {
         let j = serde_json::to_value(shot()).unwrap();
         assert!(j.get("attachmentId").is_some() && j.get("fileName").is_some());
         let f: LogContent = serde_json::from_str(r#"{"kind":"flag","flagKind":"proof","value":"x"}"#).unwrap();
-        assert_eq!(f, LogContent::Flag { flag_kind: "proof".into(), value: "x".into(), attachment_id: None });
+        assert_eq!(f, LogContent::Flag { flag_kind: "proof".into(), value: "x".into(), attachment_id: None, proof: None });
         // stored round trip keeps kind column == tag
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();

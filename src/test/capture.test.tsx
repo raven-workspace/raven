@@ -296,6 +296,27 @@ describe("capture panel", () => {
     expect(within(dialog).getByRole("button", { name: "local.txt" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("a pasted proof block saves the flag value, its file's kind and the block as proof", async () => {
+    const user = userEvent.setup();
+    mount();
+    await ready();
+    const dialog = await openCapture(user);
+    const block = "whoami; hostname; ip a\nweb02\n    inet 10.10.10.6/24 brd 10.10.10.255 scope global ens3\ncat /home/web/local.txt\n0123456789abcdef0123456789abcdef";
+    await user.paste(block);
+    expect(within(dialog).getByRole("button", { name: "Flag" })).toHaveAttribute("aria-pressed", "true");
+    // web02 sits in Privesc (default proof.txt), but the block read local.txt.
+    expect(within(dialog).getByLabelText("Title")).toHaveValue("local.txt · web02");
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
+    expect(m.logCreate).toHaveBeenCalledWith(
+      "e1",
+      expect.objectContaining({
+        hostIds: ["h2"],
+        content: expect.objectContaining({ kind: "flag", flagKind: "local", value: "0123456789abcdef0123456789abcdef", proof: block }),
+      }),
+    );
+  });
+
   it("unknown in-scope IP becomes a host on save", async () => {
     const user = userEvent.setup();
     m.hostCreate.mockResolvedValue(host({ id: "h9", name: "10.10.10.9", ip: "10.10.10.9" }));

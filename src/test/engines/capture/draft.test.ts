@@ -204,3 +204,50 @@ describe('capture draft', () => {
     expect(d.scan?.ports.map((p) => [p.port, p.service, p.version])).toEqual([[22, '', ''], [80, '', '']]);
   });
 });
+
+describe('proof pastes and chained commands', () => {
+  const proof = [
+    'whoami; hostname; ip a',
+    'vega',
+    'vega',
+    '1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000',
+    '    inet 127.0.0.1/8 scope host lo',
+    '2: ens3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1384 qdisc fq_codel state UP group default qlen 1000',
+    '    inet 172.31.166.143/24 brd 172.31.166.255 scope global ens3',
+    '',
+    'cat /home/vega/local.txt',
+    '9bf526ac67d940e99e0ffadc1d6535c5',
+  ].join('\n');
+
+  it('a `;`-chained whoami line is a command', () => {
+    expect(detectKind('whoami; hostname; ip a\nvega', false)).toBe('command');
+    expect(detectKind('hostname && id', false)).toBe('command');
+  });
+
+  it('a block that cats local.txt into a 32-hex line is a flag on the box it ran on', () => {
+    expect(detectKind(proof, false)).toBe('flag');
+    const d = buildDraft({ ...base, text: proof });
+    expect(d.content).toMatchObject({ kind: 'flag', flagKind: 'local', value: '9bf526ac67d940e99e0ffadc1d6535c5', proof });
+    expect(d.title).toBe('local.txt · Vega');
+    expect(d.hostIds).toEqual(['h1']);
+    expect(d.ranOn).toBe('Vega');
+    // The broadcast address is in scope but is not a box to add.
+    expect(d.unknownScopeIps).toEqual([]);
+  });
+
+  it('proof.txt read on Windows after a prompt is a proof flag', () => {
+    const text = 'PS C:\\Users\\Administrator\\Desktop> type proof.txt\r\nAB26AC67D940E99E0FFADC1D6535C5FF \r\n';
+    const d = buildDraft({ ...base, text });
+    expect(d.kind).toBe('flag');
+    expect(d.content).toMatchObject({ flagKind: 'proof', value: 'AB26AC67D940E99E0FFADC1D6535C5FF' });
+  });
+
+  it('a bare value has no proof text', () => {
+    const v = '9bf526ac67d940e99e0ffadc1d6535c5';
+    expect(buildDraft({ ...base, text: v }).content).toMatchObject({ value: v, proof: null });
+  });
+
+  it('cat of another file followed by a hash stays a command', () => {
+    expect(detectKind('cat /etc/hash.txt\n9bf526ac67d940e99e0ffadc1d6535c5', false)).toBe('command');
+  });
+});

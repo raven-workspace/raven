@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { OrderButton } from "./OrderButton";
+import { byOrder, usePersistedOrder } from "./usePersistedOrder";
 import { useParams } from "react-router";
 import type { LogKind } from "../../types/log";
 import { Button, EmptyState, Select, labelClass } from "../../ui";
@@ -16,6 +18,7 @@ export function LogSection() {
   const [host, setHost] = useState("all");
   const [kind, setKind] = useState("all");
   const [ranOn, setRanOn] = useState("all");
+  const [order, setOrder] = usePersistedOrder("raven.log.order", "newest");
 
   const entries = log.data ?? [];
   if (log.isError) {
@@ -38,7 +41,7 @@ export function LogSection() {
     .filter((e) => hostSel === "all" || (hostSel === "none" ? e.hostIds.length === 0 : e.hostIds.includes(hostSel)))
     .filter((e) => kind === "all" || e.kind === kind)
     .filter((e) => ranOnSel === "all" || e.ranOn === ranOnSel)
-    .sort((a, b) => b.at - a.at);
+    .sort(byOrder(order));
 
   return (
     <section aria-label="Log" className="flex flex-col gap-3">
@@ -55,6 +58,7 @@ export function LogSection() {
           <span className={labelClass}>Ran on</span>
           <Select aria-label="Ran on" className={sel} value={ranOnSel} onValueChange={setRanOn} options={[{ value: "all", label: "All" }, ...ranOns.map((r) => ({ value: r, label: r }))]} />
         </div>
+        <OrderButton className="ml-auto" order={order} onChange={setOrder} />
       </div>
       <ul className="m-0 list-none p-0 border-t border-line">
         {shown.map((e) => (

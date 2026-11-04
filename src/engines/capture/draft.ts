@@ -7,6 +7,7 @@ import { parseMultiHostScan, type ParsedPort } from '../parse/scan';
 import { splitPaste } from '../parse/logPaste';
 import { ipInScope } from '../parse/scope';
 import { httpParts, httpTitle } from './http';
+import { findFlagInPaste } from './flag';
 import { detectKind } from './kind';
 import { screenshotFileName } from './screenshot';
 import { commandTitle, flagTitle, noteTitle } from './titles';
@@ -191,14 +192,20 @@ export function buildDraft(input: DraftInput): CaptureDraft {
         unknownScopeIps,
       };
     }
-    case 'flag':
+    case 'flag': {
+      // A pasted proof block (whoami; ip a; cat local.txt) ran on the box itself; its interface
+      // addresses (broadcast, other NICs) are not boxes to add.
+      const found = findFlagInPaste(text);
+      const flagKind = found?.flagKind ?? 'local';
       return {
         ...base,
         kind,
-        title: flagTitle('local', first),
-        content: { kind: 'flag', flagKind: 'local', value: text.trim(), attachmentId: '' },
-        unknownScopeIps,
+        ranOn: found && first ? first.name : base.ranOn,
+        title: flagTitle(flagKind, first),
+        content: { kind: 'flag', flagKind, value: found?.value ?? text.trim(), attachmentId: '', proof: found ? text.trim() : null },
+        unknownScopeIps: found ? [] : unknownScopeIps,
       };
+    }
     default:
       return { ...base, kind: 'note', title: noteTitle(text), content: { kind: 'note', text }, unknownScopeIps };
   }

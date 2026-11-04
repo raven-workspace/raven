@@ -1,4 +1,4 @@
-import { buildDraft, detectKind, flagTitle, screenshotFileName, type CaptureDraft, type DraftInput } from "../../engines/capture";
+import { buildDraft, detectKind, findFlagInPaste, flagTitle, screenshotFileName, type CaptureDraft, type DraftInput } from "../../engines/capture";
 import { OS_LABELS } from "../hosts/columns";
 import type { BoardColumn, Host, HostOs } from "../../types/host";
 import type { FlagKind, LogContent, LogKind } from "../../types/log";
@@ -67,12 +67,14 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
   const preset = ctx.presetHostId && known.has(ctx.presetHostId) ? [ctx.presetHostId] : [];
   const hostIds = (pd.hostIds ?? (draft.hostIds.length ? draft.hostIds : preset)).filter((id) => known.has(id));
   const selectedHost = hosts.find((h) => h.id === hostIds[0]) ?? null;
-  const flagKind = pd.flagKind ?? defaultFlagKind(selectedHost);
+  // A pasted proof block names its file; that beats the guess from the host's board column.
+  const found = kind === "flag" ? findFlagInPaste(pd.text) : null;
+  const flagKind = pd.flagKind ?? found?.flagKind ?? defaultFlagKind(selectedHost);
 
   let content: LogContent = draft.content;
   let autoTitle = draft.title;
   if (content.kind === "flag") {
-    content = { ...content, flagKind, value: pd.text.trim() };
+    content = { ...content, flagKind, value: found?.value ?? pd.text.trim(), proof: found ? pd.text.trim() : null };
     autoTitle = flagTitle(flagKind, selectedHost);
   } else if (content.kind === "screenshot") {
     const fileName = screenshotFileName({
