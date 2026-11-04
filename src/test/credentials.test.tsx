@@ -283,4 +283,76 @@ describe("credentials section", () => {
     await waitFor(() => expect(m.credentialDelete).toHaveBeenCalledWith("c1"));
     await waitFor(() => expect(screen.queryByText("CORP\\jsmith")).not.toBeInTheDocument());
   });
+
+  it("crack commands follow the stored hash type", async () => {
+    const user = userEvent.setup();
+    mount({ creds: [cred({ id: "h", type: "hash", username: "jsmith", secret: "8846f7eaee8fb117ad06bdd830b7586c", hashType: "MD5", crackStatus: "uncracked" })] });
+    const list = await screen.findByRole("region", { name: "Hashes" });
+    expect(within(list).getByText(/hashcat -m 0 /)).toBeInTheDocument();
+    await user.click(within(list).getByRole("button", { name: "Copy hashcat command" }));
+    expect(await navigator.clipboard.readText()).toBe("hashcat -m 0 '8846f7eaee8fb117ad06bdd830b7586c' /usr/share/wordlists/rockyou.txt");
+  });
+
+  it("a hash containing a quote is never in the DOM unrevealed", async () => {
+    const secret = "$6$sa'lt$abcdefgh";
+    mount({ creds: [cred({ id: "h", type: "hash", username: "jsmith", secret, crackStatus: "uncracked" })] });
+    const list = await screen.findByRole("region", { name: "Hashes" });
+    expect(within(list).getByText(/hashcat -m 1800/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("sa'lt");
+    expect(document.body.textContent).not.toContain("abcdefgh");
+  });
+
+  it("mark uncrackable updates the chip and Reset restores it", async () => {
+    const user = userEvent.setup();
+    mount({ creds: [cred({ id: "h", type: "hash", username: "jsmith", secret: "8846f7eaee8fb117ad06bdd830b7586c", crackStatus: "uncracked" })] });
+    m.credentialSetCrackStatus.mockImplementation(async (id, status) => {
+      creds = creds.map((c) => (c.id === id ? { ...c, crackStatus: status } : c));
+      return creds.find((c) => c.id === id)!;
+    });
+    const list = await screen.findByRole("region", { name: "Hashes" });
+    await user.click(within(list).getByRole("button", { name: "Mark jsmith (hash) uncrackable" }));
+    expect(await within(list).findByText("uncrackable")).toBeInTheDocument();
+    await user.click(within(list).getByRole("button", { name: "Reset jsmith (hash)" }));
+    expect(await within(list).findByText("uncracked")).toBeInTheDocument();
+    expect(m.credentialSetCrackStatus).toHaveBeenLastCalledWith("h", "uncracked");
+  });
+
+  it("shows an error when marking uncrackable fails", async () => {
+    const user = userEvent.setup();
+    m.credentialSetCrackStatus.mockRejectedValue(new Error("write failed"));
+    mount({ creds: [cred({ id: "h", type: "hash", username: "jsmith", secret: "8846f7eaee8fb117ad06bdd830b7586c", crackStatus: "uncracked" })] });
+    const list = await screen.findByRole("region", { name: "Hashes" });
+    await user.click(within(list).getByRole("button", { name: "Mark jsmith (hash) uncrackable" }));
+    expect(await within(list).findByRole("alert")).toHaveTextContent("write failed");
+  });
+
+  it("Edit opens the form pre-filled with the secret hidden", async () => {
+    const user = userEvent.setup();
+    mount({ creds: [cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "Winter2024!" })] });
+    await user.click(await screen.findByRole("button", { name: "Edit CORP\\jsmith" }));
+    const dlg = await screen.findByRole("dialog");
+    expect(within(dlg).getByLabelText("Username")).toHaveValue("jsmith");
+    const secret = within(dlg).getByLabelText("Secret");
+    expect(secret).toHaveValue("Winter2024!");
+    expect(secret).toHaveAttribute("type", "password");
+    expect(dlg.textContent).not.toContain("Winter2024!");
+  });
+
+  it("editing into another credential shows the collision instead of saving", async () => {
+    const user = userEvent.setup();
+    m.credentialUpdate.mockResolvedValue(cred({ id: "c2" }));
+    mount({ creds: [
+      cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "Winter2024!" }),
+      cred({ id: "c2", username: "jsmith", domain: "CORP", secret: "Other2024!" }),
+    ] });
+    const rows = await screen.findAllByRole("button", { name: "Edit CORP\\jsmith" });
+    await user.click(rows[1]);
+    const dlg = await screen.findByRole("dialog");
+    const secret = within(dlg).getByLabelText("Secret");
+    await user.clear(secret);
+    await user.type(secret, "Winter2024!");
+    await user.click(within(dlg).getByRole("button", { name: "Save" }));
+    expect(await within(dlg).findByText("Already recorded: CORP\\jsmith")).toBeInTheDocument();
+    expect(m.credentialUpdate).not.toHaveBeenCalled();
+  });
 });

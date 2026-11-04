@@ -57,10 +57,12 @@ function CopyCommand({ label, text }: { label: string; text: string }) {
 function HashRow({ eid, hash, onCrack }: { eid: string; hash: Credential; onCrack: () => void }) {
   const { setCrackStatus } = useCredentialMutations(eid);
   const label = credLabel(hash);
-  const cand = identifyHash(hash.secret, "windows")[0];
+  const candidates = identifyHash(hash.secret, "windows");
+  // The stored type wins over the top guess, so the command matches what the user chose.
+  const cand = candidates.find((c) => c.name === hash.hashType) ?? candidates[0];
   const cmds = getCrackingCommands(hash.secret, cand);
-  // Display never shows the hash: the real command is copied, the mask is shown.
-  const shown = (c?: string) => (c ? c.split(hash.secret.trim()).join(MASK) : undefined);
+  // The displayed command is built from the mask, never from the hash, so nothing can leak.
+  const shown = getCrackingCommands(MASK, cand);
   const dead = hash.crackStatus === "uncrackable";
   return (
     <li className="flex flex-col gap-1 border-b border-line py-2">
@@ -78,11 +80,12 @@ function HashRow({ eid, hash, onCrack }: { eid: string; hash: Credential; onCrac
           )}
         </span>
       </div>
+      {setCrackStatus.error && <p role="alert" className="m-0 text-xs text-warn">{setCrackStatus.error.message}</p>}
       {(cmds.hashcat || cmds.john) && (
         <div className="flex flex-col gap-1">
           {cmds.hashcat && (
             <div className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 break-all font-mono text-xs text-fg-2">{shown(cmds.hashcat)}</code>
+              <code className="min-w-0 flex-1 break-all font-mono text-xs text-fg-2">{shown.hashcat}</code>
               <CopyCommand label="hashcat" text={cmds.hashcat} />
             </div>
           )}
