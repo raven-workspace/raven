@@ -1,0 +1,67 @@
+/*
+ * Raven "Ink" tokens (spec §8). The only source of colour, radius and type.
+ * Flat true black, hairlines, one accent (#c6ff00) used only for meaning:
+ * selection marker, held access, confirmed facts, focus.
+ */
+:root {
+  --bg: #000;
+  --fg: #ffffff;
+  --fg-2: #e8e8e8;
+  --muted: #8a8a8a;
+  --muted-2: #a8a8a8;
+  --faint: #5c5c5c;
+
+  --line: #1f1f1f;
+  --line-2: #2a2a2a;
+  /* Control/chip outline: the mockup's chip border (#3a3a3a). Brightest hairline. */
+  --line-strong: #3a3a3a;
+  --surface: #0b0b0b;
+  --surface-hi: #111111;
+
+  --accent: #c6ff00;
+  --warn: #e0a030;
+
+  color-scheme: dark;
+}
+
+/*
+ * Tailwind v4 theme. Every stock palette, radius, font and shadow scale is
+ * reset to `initial` first, so `bg-blue-500`, `shadow-lg` and friends don't
+ * exist and can't be used by accident.
+ */
+@theme inline {
+  --color-*: initial;
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-muted: var(--muted);
+  --color-muted-2: var(--muted-2);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-line-strong: var(--line-strong);
+  --color-surface: var(--surface);
+  --color-surface-hi: var(--surface-hi);
+  --color-accent: var(--accent);
+  --color-warn: var(--warn);
+
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-shadow-*: initial;
+  --blur-*: initial;
+}
+
+/* Emitted to :root as-is, so `--radius`, `--radius-sm`, `--font-ui` and `--font-mono` are real variables. */
+@theme static {
+  --radius-*: initial;
+  --radius: 8px;
+  --radius-sm: 6px;
+  --radius-full: 9999px;
+
+  --font-*: initial;
+  --font-ui: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  --tracking-label: 0.12em;
+}

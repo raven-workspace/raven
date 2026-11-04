@@ -1,0 +1,38 @@
+import { lazy, Suspense } from "react";
+import { Route, Routes } from "react-router";
+import { Dashboard } from "./features/engagements/Dashboard";
+import { EngagementShell } from "./features/engagements/EngagementShell";
+import { SettingsPage } from "./features/settings/SettingsPage";
+import { useEscapeTo } from "./lib/keys";
+import { useVault, VaultGate } from "./features/vault/VaultGate";
+
+// Dev-only component gallery. `import.meta.env.DEV` is false in builds, so the
+// route and its chunk are dropped from release bundles.
+const UiGallery = import.meta.env.DEV ? lazy(() => import("./dev/UiGallery")) : null;
+
+function SettingsRoute() {
+  useEscapeTo("/");
+  return <SettingsPage onRestored={useVault().markLocked} />;
+}
+
+export default function App() {
+  return (
+    <VaultGate>
+      <Routes>
+        <Route index element={<Dashboard />} />
+        <Route path="e/:id" element={<EngagementShell />} />
+        <Route path="settings" element={<SettingsRoute />} />
+        {UiGallery && (
+          <Route
+            path="__ui"
+            element={
+              <Suspense fallback={null}>
+                <UiGallery />
+              </Suspense>
+            }
+          />
+        )}
+      </Routes>
+    </VaultGate>
+  );
+}
