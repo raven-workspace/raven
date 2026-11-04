@@ -6,7 +6,7 @@ use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 
 const COLS: &str = "id, name, kind, client, sub_label, scope_cidrs, domain, starts_at, ends_at, \
-                    timebox_start, timebox_minutes, status, created_at, updated_at, last_activity_at";
+                    timebox_start, timebox_minutes, status, created_at, updated_at, last_activity_at, last_ran_on";
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,6 +26,7 @@ pub struct Engagement {
     pub created_at: i64,
     pub updated_at: i64,
     pub last_activity_at: Option<i64>,
+    pub last_ran_on: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -55,7 +56,7 @@ fn invalid(field: &str, message: &str) -> AppError {
     AppError::Validation { field: field.into(), message: message.into() }
 }
 
-fn valid_cidr(s: &str) -> bool {
+pub(crate) fn valid_cidr(s: &str) -> bool {
     let (ip, prefix) = match s.split_once('/') {
         Some((ip, p)) => (ip, Some(p)),
         None => (s, None),
@@ -121,6 +122,7 @@ fn from_row(r: &Row) -> rusqlite::Result<Engagement> {
         created_at: r.get(12)?,
         updated_at: r.get(13)?,
         last_activity_at: r.get(14)?,
+        last_ran_on: r.get(15)?,
     })
 }
 
@@ -144,7 +146,9 @@ pub fn create(conn: &Connection, input: EngagementInput) -> AppResult<Engagement
     let i = normalise(input)?;
     let id = uuid::Uuid::new_v4().to_string();
     let now = system_now_ms();
-    conn.execute(
+    // The scope sync shares the transaction: both land or neither does.
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
         "INSERT INTO engagements (id, name, kind, client, sub_label, scope_cidrs, domain, starts_at, ends_at, \
          timebox_start, timebox_minutes, status, created_at, updated_at) \
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,'active',?12,?12)",
@@ -154,12 +158,15 @@ pub fn create(conn: &Connection, input: EngagementInput) -> AppResult<Engagement
             i.domain, i.starts_at, i.ends_at, i.timebox_start, i.timebox_minutes, now
         ],
     )?;
+    crate::hosts::sync_scope(&tx, &id, &i.scope_cidrs)?;
+    tx.commit()?;
     get(conn, &id)
 }
 
 pub fn update(conn: &Connection, id: &str, input: EngagementInput) -> AppResult<Engagement> {
     let i = normalise(input)?;
-    let n = conn.execute(
+    let tx = conn.unchecked_transaction()?;
+    let n = tx.execute(
         "UPDATE engagements SET name=?2, kind=?3, client=?4, sub_label=?5, scope_cidrs=?6, domain=?7, \
          starts_at=?8, ends_at=?9, timebox_start=?10, timebox_minutes=?11, updated_at=?12 WHERE id=?1",
         params![
@@ -171,7 +178,17 @@ pub fn update(conn: &Connection, id: &str, input: EngagementInput) -> AppResult<
     if n == 0 {
         return Err(AppError::NotFound);
     }
+    crate::hosts::sync_scope(&tx, id, &i.scope_cidrs)?;
+    tx.commit()?;
     get(conn, id)
+}
+
+/// Remembers the machine label last used for a log entry (the capture panel's default).
+pub fn set_last_ran_on(conn: &Connection, id: &str, value: Option<&str>) -> AppResult<()> {
+    if conn.execute("UPDATE engagements SET last_ran_on = ?2 WHERE id = ?1", params![id, value])? == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok(())
 }
 
 pub fn set_status(conn: &Connection, id: &str, status: &str) -> AppResult<Engagement> {
@@ -240,6 +257,7 @@ mod tests {
         assert_eq!(e.id.len(), 36);
         assert_eq!(e.created_at, e.updated_at);
         assert_eq!(e.last_activity_at, None);
+        assert_eq!(e.last_ran_on, None);
         assert_eq!(e.timebox_minutes, Some(1440));
         let all = list(c).unwrap();
         assert_eq!(all, vec![e.clone()]);
@@ -340,5 +358,19 @@ mod tests {
         let e = create(c, input("a", "lab")).unwrap();
         delete(c, &e.id).unwrap();
         assert_eq!(get(c, &e.id), Err(AppError::NotFound));
+    }
+
+    #[test]
+    fn last_ran_on_round_trips() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = create(c, input("a", "lab")).unwrap();
+        set_last_ran_on(c, &e.id, Some("Mac")).unwrap();
+        let g = get(c, &e.id).unwrap();
+        assert_eq!(g.last_ran_on.as_deref(), Some("Mac"));
+        assert_eq!(serde_json::to_value(&g).unwrap()["lastRanOn"], "Mac");
+        set_last_ran_on(c, &e.id, None).unwrap();
+        assert_eq!(get(c, &e.id).unwrap().last_ran_on, None);
+        assert_eq!(set_last_ran_on(c, "nope", None), Err(AppError::NotFound));
     }
 }

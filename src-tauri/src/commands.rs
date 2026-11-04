@@ -5,6 +5,7 @@
 
 use crate::backup::{self, BackupInfo};
 use crate::engagements::{self, Engagement, EngagementInput};
+use crate::hosts::{self, Host, HostInput};
 use crate::error::{AppError, AppResult};
 use crate::settings::{self, Settings, SettingsPatch};
 use crate::vault::Vault;
@@ -170,6 +171,31 @@ pub async fn engagement_set_status(app: AppHandle, id: String, status: String) -
 #[tauri::command]
 pub async fn engagement_delete(app: AppHandle, id: String) -> AppResult<()> {
     with_vault(app, move |v| engagements::delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn hosts_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<Host>> {
+    with_vault(app, move |v| hosts::list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn host_create(app: AppHandle, engagement_id: String, input: HostInput) -> AppResult<Host> {
+    with_vault(app, move |v| hosts::create(v.conn()?, &engagement_id, input)).await
+}
+
+#[tauri::command]
+pub async fn host_update(app: AppHandle, id: String, input: HostInput) -> AppResult<Host> {
+    with_vault(app, move |v| hosts::update(v.conn()?, &id, input)).await
+}
+
+#[tauri::command]
+pub async fn host_move(app: AppHandle, id: String, column: String) -> AppResult<Host> {
+    with_vault(app, move |v| hosts::move_to(v.conn()?, &id, &column)).await
+}
+
+#[tauri::command]
+pub async fn host_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| hosts::delete(v.conn()?, &id)).await
 }
 
 #[cfg(test)]

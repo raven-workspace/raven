@@ -20,7 +20,7 @@ function mount(path: string) {
 describe("smoke", () => {
   beforeEach(() => {
     vi.mocked(api.vaultStatus).mockResolvedValue({ exists: true, unlocked: true });
-    vi.mocked(api.settingsGet).mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14 });
+    vi.mocked(api.settingsGet).mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"] });
     vi.mocked(api.engagementsList).mockResolvedValue([]);
   });
 

@@ -18,6 +18,7 @@ export interface Engagement {
   createdAt: number;
   updatedAt: number;
   lastActivityAt: number | null;
+  lastRanOn: string | null;
 }
 
 /** Mirrors the Rust `EngagementInput` (create and full update). */

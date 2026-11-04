@@ -16,7 +16,10 @@ use crate::error::{AppError, AppResult};
 use rusqlite::Connection;
 
 /// (version, SQL). Versions are strictly increasing.
-pub const MIGRATIONS: &[(u32, &str)] = &[(1, include_str!("../../migrations/0001_init.sql"))];
+pub const MIGRATIONS: &[(u32, &str)] = &[
+    (1, include_str!("../../migrations/0001_init.sql")),
+    (2, include_str!("../../migrations/0002_hosts_log.sql")),
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MigrationOutcome {
@@ -83,7 +86,7 @@ mod tests {
 
     fn v1_with_row() -> (tempfile::TempDir, std::path::PathBuf, Connection) {
         let (d, p, mut c) = file_db();
-        migrate(&mut c, &mut |_, _| panic!("hook on fresh db")).unwrap();
+        migrate_with(&mut c, &MIGRATIONS[..1], &mut |_, _| panic!("hook on fresh db")).unwrap();
         c.execute("INSERT INTO settings(key,value) VALUES('k','v')", []).unwrap();
         (d, p, c)
     }
@@ -180,5 +183,38 @@ mod tests {
         .unwrap();
         assert_eq!(calls, 0);
         assert_eq!(out.from, out.to);
+    }
+
+    #[test]
+    fn migration_0002_applies_on_a_v1_db() {
+        let (_d, _p, mut c) = v1_with_row();
+        c.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        c.execute(
+            "INSERT INTO engagements (id,name,kind,scope_cidrs,status,created_at,updated_at) VALUES ('e1','x','lab','[]','active',1,1)",
+            [],
+        )
+        .unwrap();
+        let mut hook_calls = 0;
+        let out = migrate(&mut c, &mut |f, t| {
+            assert_eq!((f, t), (1, 2));
+            hook_calls += 1;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(hook_calls, 1);
+        assert_eq!(out, MigrationOutcome { from: 1, to: 2 });
+        assert_eq!(version(&c), 2);
+        for t in ["hosts", "services", "log_entries", "log_entry_hosts", "attachments"] {
+            let n: i64 = c
+                .query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1", [t], |r| r.get(0))
+                .unwrap();
+            assert_eq!(n, 1, "{t}");
+        }
+        // existing data survives and the new column is present and empty
+        let ran_on: Option<String> =
+            c.query_row("SELECT last_ran_on FROM engagements WHERE id='e1'", [], |r| r.get(0)).unwrap();
+        assert_eq!(ran_on, None);
+        let kept: i64 = c.query_row("SELECT count(*) FROM settings", [], |r| r.get(0)).unwrap();
+        assert_eq!(kept, 1);
     }
 }

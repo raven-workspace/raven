@@ -535,7 +535,7 @@ pub(crate) mod tests {
         let (_d, mut v) = setup();
         v.create_for_test(PW).unwrap();
         // Simulate an older db: drop the version so tables exist but user_version is behind.
-        v.conn().unwrap().execute_batch("DROP TABLE settings; DROP TABLE engagements; PRAGMA user_version = 0; CREATE TABLE old (x INTEGER);").unwrap();
+        v.conn().unwrap().execute_batch("DROP TABLE attachments; DROP TABLE log_entry_hosts; DROP TABLE services; DROP TABLE log_entries; DROP TABLE hosts; DROP TABLE settings; DROP TABLE engagements; PRAGMA user_version = 0; CREATE TABLE old (x INTEGER);").unwrap();
         v.lock();
         v.set_backup_hook(Box::new(|_, _| Err(AppError::Io("backup failed".into()))));
         assert_eq!(v.unlock(PW), Err(AppError::Io("backup failed".into())));
