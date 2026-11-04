@@ -222,6 +222,64 @@ describe("saveCapture", () => {
     expect(m.hostUpdate).toHaveBeenCalledWith("h9", { name: "10.10.10.9", ip: "10.10.10.9", os: "linux", access: "none" });
   });
 
+  it("re-run after creating a host writes only that host's section of a multi-host scan", async () => {
+    m.hostCreate.mockImplementation(async (_e, input) => host({ id: "h9", name: input.name, ip: input.ip ?? null }));
+    m.logCreate.mockImplementation(async (_e, input) => entry(input));
+    m.servicesUpsertScan.mockResolvedValue([]);
+    m.hostUpdate.mockImplementation(async (id, input) => host({ id, name: input.name }));
+    const text = [
+      "kali@kali:~$ nmap -sV 10.10.10.9 10.10.10.8",
+      "Nmap scan report for 10.10.10.9",
+      "PORT   STATE SERVICE VERSION",
+      "22/tcp open  ssh     OpenSSH 8.9",
+      "",
+      "Nmap scan report for 10.10.10.8",
+      "PORT    STATE SERVICE       VERSION",
+      "135/tcp open  msrpc         Microsoft Windows RPC",
+      "Service Info: OS: Windows; CPE: cpe:/o:microsoft:windows",
+    ].join("\n");
+    await saveCapture({
+      engagementId: "e1",
+      draft: draft({ hostIds: [], scan: null, unknownScopeIps: ["10.10.10.9", "10.10.10.8"] }),
+      draftInput: {
+        text,
+        image: null,
+        kind: "command",
+        hosts: [{ id: "h1", name: "dc01", ip: "10.10.10.5", column: "enumerate" }],
+        scope: ["10.10.10.0/24"],
+        domain: "",
+        machines: ["Kali (VM)"],
+        lastRanOn: null,
+      },
+      edits: edits({ hostIds: [] }),
+      addIps: ["10.10.10.9"],
+      image: null,
+      hosts: [DC],
+    });
+    expect(m.servicesUpsertScan).toHaveBeenCalledWith("h9", [expect.objectContaining({ port: 22 })]);
+    expect(m.hostUpdate).not.toHaveBeenCalled();
+  });
+
+  it("only open ports are upserted (M1)", async () => {
+    m.logCreate.mockImplementation(async (_e, input) => entry(input));
+    m.servicesUpsertScan.mockResolvedValue([]);
+    const ports = [
+      ...PORTS,
+      { port: 25, protocol: "tcp" as const, state: "closed", service: "smtp", version: "" },
+      { port: 161, protocol: "udp" as const, state: "open|filtered", service: "snmp", version: "" },
+      { port: 445, protocol: "tcp" as const, state: "filtered", service: "microsoft-ds", version: "" },
+    ];
+    await saveCapture({
+      engagementId: "e1",
+      draft: draft({ scan: { hostId: "h1", ports, os: null } }),
+      edits: edits(),
+      addIps: [],
+      image: null,
+      hosts: [{ ...DC, os: "linux" }],
+    });
+    expect(m.servicesUpsertScan.mock.calls[0]![1].map((p) => p.port)).toEqual([22, 80, 161]);
+  });
+
   it("services failure still keeps the entry", async () => {
     m.servicesUpsertScan.mockRejectedValue(new Error("db busy"));
     const err = await saveCapture({

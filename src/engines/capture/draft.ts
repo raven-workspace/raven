@@ -2,7 +2,8 @@ import type { BoardColumn, HostOs } from '../../types/host';
 import type { CommandBlock, LogContent, LogKind } from '../../types/log';
 import type { ScanPort } from '../../types/service';
 import { HOST_IP, hostsNamedIn, isKaliLabel, namedHostsInLine, shellHost, type HostRef } from '../attribution';
-import { analyzeCommandOutput } from '../parse/commandOutput';
+import { analyzeCommandOutput, detectOsFromScan } from '../parse/commandOutput';
+import { parseMultiHostScan, type ParsedPort } from '../parse/scan';
 import { splitPaste } from '../parse/logPaste';
 import { ipInScope } from '../parse/scope';
 import { httpParts, httpTitle } from './http';
@@ -48,6 +49,68 @@ function ipsOf(text: string): string[] {
   return Array.from(new Set(text.match(HOST_IP) ?? []));
 }
 
+/** Parser placeholders for "no version seen"; stored as blank so they never overwrite a real guess. */
+const VERSION_PLACEHOLDERS = new Set(['unknown version', 'unknown', 'raw port intake']);
+const OPEN_STATES = new Set(['open', 'open|filtered']);
+
+function toScanPorts(ports: ParsedPort[]): ScanPort[] {
+  return ports
+    .filter((p) => OPEN_STATES.has(p.state.toLowerCase()))
+    .map((p) => ({
+      port: p.port,
+      protocol: p.protocol === 'udp' ? 'udp' : 'tcp',
+      state: p.state,
+      service: p.service,
+      version: VERSION_PLACEHOLDERS.has(p.version.trim().toLowerCase()) ? '' : p.version,
+    }));
+}
+
+/** True when a scan's host identity (IP or reported hostname) is `target`. */
+function isTarget(ip: string | undefined, names: (string | undefined)[], target: HostRef, domain: string): boolean {
+  if (ip && target.ip && ip === target.ip) return true;
+  const name = target.name.toLowerCase();
+  const fqdn = domain ? `${name}.${domain.toLowerCase()}` : null;
+  return names.some((n) => {
+    const v = n?.toLowerCase();
+    return !!v && v !== ip && (v === name || v === fqdn || (!!target.ip && v === target.ip));
+  });
+}
+
+const REPORT_HEADER = /^Nmap scan report for (?:(\S+) \()?([^\s)]+)\)?/i;
+
+/**
+ * The scan of `target` inside a command's output, or null. A single-host scan counts only when it reports
+ * `target` (a headerless port list names no host, so the attributed host owns it); a multi-host scan
+ * contributes only `target`'s own section.
+ */
+function scanFor(output: string, target: HostRef, domain: string): CaptureDraft['scan'] {
+  const analysis = analyzeCommandOutput(output);
+  const result = analysis.scan;
+  if (!result || result.format === 'raw-ports') return null;
+
+  const hosts = parseMultiHostScan(output);
+  if (hosts.length > 1) {
+    const match = hosts.find((h) => isTarget(h.ip || undefined, h.hostnames, target, domain));
+    if (!match) return null;
+    // Plain text: analyse the host's own section so its -O lines count and nobody else's do.
+    const section = output
+      .split(/^(?=Nmap scan report for )/im)
+      .find((sec) => {
+        const m = sec.match(REPORT_HEADER);
+        return m && isTarget(m[2], [m[1], m[2]], target, domain);
+      });
+    const os = detectOsFromScan({ format: result.format, ports: match.ports, detectedOs: match.os }, section ?? '');
+    return { hostId: target.id, ports: toScanPorts(match.ports), os: os?.os ?? null };
+  }
+
+  const reported = result.detectedIp || result.detectedHost || hosts[0]?.ip;
+  if (reported && !isTarget(result.detectedIp || hosts[0]?.ip || undefined, [result.detectedHost], target, domain)) return null;
+  // Rustscan "Open ip:port" lines for several IPs: which port is whose is not reliable, so no scan.
+  const openIps = new Set(Array.from(output.matchAll(/Open\s+((?:\d{1,3}\.){3}\d{1,3}):\d+/g), (m) => m[1]));
+  if (openIps.size > 1) return null;
+  return { hostId: target.id, ports: toScanPorts(result.ports), os: analysis.os?.os ?? null };
+}
+
 export function buildDraft(input: DraftInput): CaptureDraft {
   const { text, hosts, scope, domain, machines } = input;
   const kind = input.kind ?? detectKind(text, input.image !== null);
@@ -73,21 +136,7 @@ export function buildDraft(input: DraftInput): CaptureDraft {
     const ranOn = hostShell ? hostShell.name : kaliShell && kaliMachine ? kaliMachine : fallbackRanOn;
 
     const lines = blocks.map((b) => b.command).join('\n');
-    let scan: CaptureDraft['scan'] = null;
-    const analysis = analyzeCommandOutput(blocks.map((b) => b.output).join('\n'));
-    if (analysis.scan && analysis.scan.format !== 'raw-ports' && attributed.length === 1) {
-      scan = {
-        hostId: attributed[0].id,
-        ports: analysis.scan.ports.map((p) => ({
-          port: p.port,
-          protocol: p.protocol === 'udp' ? 'udp' : 'tcp',
-          state: p.state,
-          service: p.service,
-          version: p.version,
-        })),
-        os: analysis.os?.os ?? null,
-      };
-    }
+    const scan = attributed.length === 1 ? scanFor(blocks.map((b) => b.output).join('\n'), attributed[0], domain) : null;
     return {
       kind,
       title: commandTitle(blocks, hosts, domain),

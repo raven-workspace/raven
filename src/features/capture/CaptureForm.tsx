@@ -14,6 +14,7 @@ import { PasteArea } from "./PasteArea";
 import { Toggle } from "./Toggle";
 import { KINDS, resolveCapture } from "./resolve";
 import { PartialSaveError, saveCapture } from "./saveCapture";
+import { reportError } from "../../lib/lockSignal";
 import { EMPTY_DRAFT, useCaptureStore, type PanelDraft } from "./useCaptureStore";
 
 const NO_HOSTS: Host[] = [];
@@ -90,6 +91,8 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
       store.discard(id);
       store.close();
     } catch (e) {
+      // A `locked` rejection must reach the vault gate, as query and mutation errors do.
+      reportError(e instanceof PartialSaveError ? e.reason : e);
       if (e instanceof PartialSaveError) {
         refresh();
         store.discard(id);
@@ -166,7 +169,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-4 pt-3.5 pb-3">
         <div className="flex min-w-0 items-center gap-2">
           <RD.Title className="m-0 text-[15px] font-semibold tracking-[-0.01em] text-fg">Capture</RD.Title>
-          {pd.private && <Chip variant="accent">Private · not in reports</Chip>}
+          {pd.private && <Chip>Private · not in reports</Chip>}
         </div>
         <RD.Close aria-label="Close" className="shrink-0 rounded-sm border border-transparent p-0.5 hover:border-line-2">
           <Kbd>esc</Kbd>

@@ -123,4 +123,78 @@ describe('capture draft', () => {
     expect(d.scan?.ports[0]).toMatchObject({ protocol: 'tcp', state: 'open', service: 'ssh' });
     expect(d.scan?.os).toBe('linux');
   });
+
+  describe('scan belongs to the attributed host (C1)', () => {
+    const five = { id: 'h5', name: 'web01', ip: '10.0.0.5', column: 'enumerate' as const };
+    const lab = { ...base, hosts: [five], scope: ['10.0.0.0/24'] };
+    const multi = [
+      'kali@kali:~$ nmap -sV 10.0.0.5 10.0.0.6',
+      'Nmap scan report for 10.0.0.5',
+      'PORT   STATE SERVICE VERSION',
+      '22/tcp open  ssh     OpenSSH 8.9',
+      '',
+      'Nmap scan report for 10.0.0.6',
+      'PORT     STATE SERVICE       VERSION',
+      '135/tcp  open  msrpc         Microsoft Windows RPC',
+      '445/tcp  open  microsoft-ds',
+      'Service Info: OS: Windows; CPE: cpe:/o:microsoft:windows',
+    ].join('\n');
+
+    it('multi-host paste keeps only the attributed host\'s ports and no OS from the other host', () => {
+      const d = buildDraft({ ...lab, text: multi });
+      expect(d.hostIds).toEqual(['h5']);
+      expect(d.scan?.hostId).toBe('h5');
+      expect(d.scan?.ports.map((p) => p.port)).toEqual([22]);
+      expect(d.scan?.os).toBeNull();
+    });
+
+    it('multi-host paste with the target listed second takes its own section and OS', () => {
+      const six = { id: 'h6', name: 'dc01', ip: '10.0.0.6', column: 'enumerate' as const };
+      const d = buildDraft({ ...lab, hosts: [six], text: multi.replace('10.0.0.5 10.0.0.6', '10.0.0.6') });
+      expect(d.scan?.hostId).toBe('h6');
+      expect(d.scan?.ports.map((p) => p.port)).toEqual([135, 445]);
+      expect(d.scan?.os).toBe('windows');
+    });
+
+    it('single-host scan of a different IP than the attributed host gives no scan', () => {
+      const text = [
+        'kali@kali:~$ nmap -sV 10.0.0.5',
+        'Nmap scan report for 10.0.0.7',
+        'PORT   STATE SERVICE VERSION',
+        '80/tcp open  http    nginx',
+      ].join('\n');
+      expect(buildDraft({ ...lab, text }).scan).toBeNull();
+    });
+
+    it('single-host scan reported by hostname matches the host name', () => {
+      const text = [
+        'kali@kali:~$ nmap -sV 10.0.0.5',
+        'Nmap scan report for web01.corp.local',
+        'PORT   STATE SERVICE VERSION',
+        '80/tcp open  http    nginx',
+      ].join('\n');
+      expect(buildDraft({ ...lab, domain: 'corp.local', text }).scan?.ports.map((p) => p.port)).toEqual([80]);
+    });
+  });
+
+  it('-p- output without versions yields an empty version, not a placeholder (I1)', () => {
+    const text = [
+      'kali@kali:~$ nmap -p- 172.31.166.143',
+      'Nmap scan report for 172.31.166.143',
+      'PORT   STATE SERVICE',
+      '22/tcp open  ssh',
+      '80/tcp open  http',
+    ].join('\n');
+    const d = buildDraft({ ...base, text });
+    expect(d.scan?.ports.map((p) => p.version)).toEqual(['', '']);
+  });
+
+  it('kali two-line zsh prompt is a command run on the kali machine (I3)', () => {
+    const text = '┌──(kali㉿kali)-[~]\n└─$ whoami\nkali';
+    expect(detectKind(text, false)).toBe('command');
+    const d = buildDraft({ ...base, text, lastRanOn: 'Mac' });
+    expect(d.kind).toBe('command');
+    expect(d.ranOn).toBe('Kali (VM)');
+    expect(d.content).toEqual({ kind: 'command', blocks: [{ shell: 'kali@kali', command: 'whoami', output: 'kali' }] });
+  });
 });

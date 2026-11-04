@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import type { Host } from "../../types/host";
 import { Button, Chip, Dialog } from "../../ui";
 import { HostDialog } from "./HostDialog";
-import { COLUMN_LABELS } from "./columns";
+import { COLUMN_LABELS, OS_LABELS } from "./columns";
 import { useHostMutations } from "./queries";
 
 export function HostHeader({ host }: { host: Host }) {
@@ -16,7 +16,7 @@ export function HostHeader({ host }: { host: Host }) {
     <section aria-label="Host" className="flex items-center gap-3 border-b border-line pb-3">
       <h1 className="m-0 text-lg font-semibold tracking-[-0.01em] text-fg">{host.name}</h1>
       {host.ip && <span className="font-mono text-[13px] text-fg-2">{host.ip}</span>}
-      {host.os && <Chip>{host.os}</Chip>}
+      {host.os && <Chip>{OS_LABELS[host.os]}</Chip>}
       {host.access !== "none" && <Chip variant="accent">{host.access}</Chip>}
       <Chip>{COLUMN_LABELS[host.boardColumn]}</Chip>
       <span className="flex-1" />

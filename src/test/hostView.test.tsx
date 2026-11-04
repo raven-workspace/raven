@@ -77,7 +77,7 @@ describe("host view", () => {
     const header = within(await screen.findByRole("region", { name: "Host" }));
     expect(header.getByText("dc01")).toBeInTheDocument();
     expect(header.getByText("10.10.10.5")).toHaveClass("font-mono");
-    expect(header.getByText("windows")).toBeInTheDocument();
+    expect(header.getByText("Windows")).toBeInTheDocument();
     expect(header.getByText("user")).toHaveAttribute("data-variant", "accent");
     expect(header.getByText("Foothold")).toBeInTheDocument();
   });

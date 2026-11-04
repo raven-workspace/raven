@@ -1,5 +1,6 @@
 import { buildDraft, detectKind, flagTitle, screenshotFileName, type CaptureDraft, type DraftInput } from "../../engines/capture";
-import type { BoardColumn, Host } from "../../types/host";
+import { OS_LABELS } from "../hosts/columns";
+import type { BoardColumn, Host, HostOs } from "../../types/host";
 import type { FlagKind, LogContent, LogKind } from "../../types/log";
 import type { CaptureEdits } from "./saveCapture";
 import type { PanelDraft } from "./useCaptureStore";
@@ -89,13 +90,16 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
   const scan = draft.scan;
   const scanHost = scan && hostIds.includes(scan.hostId) ? hosts.find((h) => h.id === scan.hostId) : undefined;
   const ports = (list: { port: number }[]) => list.map((p) => p.port).join(", ");
-  let servicesLine = scan && scanHost ? `Updates services on ${scanHost.name}: ${ports(scan.ports)}` : null;
+  // Saving sets the OS only on a host that has none, so the line says so before it happens.
+  const osPart = (os: HostOs | null, current: HostOs | null) => (os && !current ? ` · OS: ${OS_LABELS[os]}` : "");
+  let servicesLine =
+    scan && scanHost ? `Updates services on ${scanHost.name}: ${ports(scan.ports)}${osPart(scan.os, scanHost.os)}` : null;
   if (!scan && kind === "command" && pd.addIps.length) {
     // First scan of a new box: the scan belongs to an IP that becomes a host on save.
     const pending = pd.addIps.map((ip) => ({ id: `new:${ip}`, name: ip, ip, column: "enumerate" as const }));
     const provisional = buildDraft({ ...draftInput, hosts: [...draftInput.hosts, ...pending] }).scan;
     const ip = provisional?.hostId.startsWith("new:") ? provisional.hostId.slice(4) : null;
-    if (provisional && ip) servicesLine = `Updates services on ${ip}: ${ports(provisional.ports)}`;
+    if (provisional && ip) servicesLine = `Updates services on ${ip}: ${ports(provisional.ports)}${osPart(provisional.os, null)}`;
   }
 
   return {

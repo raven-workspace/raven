@@ -9,6 +9,7 @@ import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
+import { RavenError } from "../types/errors";
 import type { LogEntryInput } from "../types/log";
 
 vi.mock("../lib/api");
@@ -160,7 +161,42 @@ describe("capture panel", () => {
     expect(within(dialog).getByLabelText("Title")).toHaveValue("Versions and default scripts on the open ports · 10.10.10.5");
     const hosts = within(dialog).getByRole("group", { name: "Hosts" });
     expect(within(hosts).getByText("dc01")).toBeInTheDocument();
+    expect(within(dialog).getByText("Updates services on dc01: 22, 80, 3003 · OS: Linux")).toBeInTheDocument();
+  });
+
+  it("services line leaves out the OS when the host already has one", async () => {
+    m.hostsList.mockResolvedValue([
+      host({ id: "h1", name: "dc01", ip: "10.10.10.5", os: "windows", boardColumn: "foothold" }),
+      host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "privesc" }),
+    ]);
+    const user = userEvent.setup();
+    mount();
+    await ready();
+    const dialog = await openCapture(user);
+    await user.paste(NMAP);
     expect(within(dialog).getByText("Updates services on dc01: 22, 80, 3003")).toBeInTheDocument();
+  });
+
+  it("multi-host scan of a new box lists only that box's ports", async () => {
+    const user = userEvent.setup();
+    mount();
+    await ready();
+    const dialog = await openCapture(user);
+    await user.paste(
+      [
+        "kali@kali:~$ nmap -sV 10.10.10.9 10.10.10.8",
+        "Nmap scan report for 10.10.10.9",
+        "PORT   STATE SERVICE VERSION",
+        "22/tcp open  ssh     OpenSSH 8.9",
+        "",
+        "Nmap scan report for 10.10.10.8",
+        "PORT    STATE SERVICE       VERSION",
+        "135/tcp open  msrpc         Microsoft Windows RPC",
+        "Service Info: OS: Windows; CPE: cpe:/o:microsoft:windows",
+      ].join("\n"),
+    );
+    await user.click(within(dialog).getByRole("button", { name: "+ 10.10.10.9" }));
+    expect(within(dialog).getByText("Updates services on 10.10.10.9: 22")).toBeInTheDocument();
   });
 
   it("Enter saves and focus returns", async () => {
@@ -297,7 +333,7 @@ describe("capture panel", () => {
     await user.paste(NMAP_NEW);
     expect(within(dialog).queryByText(/Updates services/)).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "+ 10.10.10.9" }));
-    expect(within(dialog).getByText("Updates services on 10.10.10.9: 22, 80")).toBeInTheDocument();
+    expect(within(dialog).getByText("Updates services on 10.10.10.9: 22, 80 · OS: Linux")).toBeInTheDocument();
     await user.click(within(dialog).getByLabelText("Observations"));
     await user.keyboard("{Enter}");
     // The first attempt made the host, then the entry failed; the retry must not make it again.
@@ -309,6 +345,23 @@ describe("capture panel", () => {
     expect(m.logCreate).toHaveBeenLastCalledWith("e1", expect.objectContaining({ hostIds: ["h9"] }));
     expect(m.servicesUpsertScan).toHaveBeenCalledWith("h9", expect.arrayContaining([expect.objectContaining({ port: 80 })]));
     expect(m.hostUpdate).toHaveBeenCalledWith("h9", { name: "10.10.10.9", ip: "10.10.10.9", os: "linux", access: "none" });
+  });
+
+  it("Kali's two-line prompt pastes as a command and Enter saves it run on Kali", async () => {
+    m.engagementGet.mockResolvedValue({ ...E1, lastRanOn: "Mac" });
+    m.engagementsList.mockResolvedValue([{ ...E1, lastRanOn: "Mac" }]);
+    const user = userEvent.setup();
+    mount();
+    await ready();
+    const dialog = await openCapture(user);
+    await user.paste("┌──(kali㉿kali)-[~]\n└─$ whoami\nkali");
+    expect(within(dialog).getByRole("button", { name: "Command" })).toHaveAttribute("aria-pressed", "true");
+    await user.keyboard("{Enter}");
+    await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
+    expect(m.logCreate.mock.calls[0]![1]).toMatchObject({
+      ranOn: "Kali (VM)",
+      content: { kind: "command", blocks: [{ shell: "kali@kali", command: "whoami", output: "kali" }] },
+    });
   });
 
   it("Enter saves a one-line note; a multi-line note keeps Enter as newline", async () => {
@@ -325,6 +378,38 @@ describe("capture panel", () => {
     await user.keyboard("{Enter}");
     await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
     expect(m.logCreate.mock.calls[0]![1]).toMatchObject({ title: "check the vhost", content: { kind: "note", text: "check the vhost" } });
+  });
+
+  it("a locked vault during save moves to unlock (I4)", async () => {
+    m.logCreate.mockRejectedValue(new RavenError("locked", "vault is locked"));
+    const user = userEvent.setup();
+    mount();
+    await ready();
+    await openCapture(user);
+    await user.paste("remember the vhost");
+    await user.keyboard("{Enter}");
+    expect(await screen.findByLabelText("Password")).toBeInTheDocument();
+  });
+
+  it("a locked vault after the entry saved (services step) also moves to unlock (I4)", async () => {
+    m.servicesUpsertScan.mockRejectedValue(new RavenError("locked", "vault is locked"));
+    const user = userEvent.setup();
+    mount();
+    await ready();
+    const dialog = await openCapture(user);
+    await user.paste(NMAP);
+    await user.click(within(dialog).getByLabelText("Observations"));
+    await user.keyboard("{Enter}");
+    expect(await screen.findByLabelText("Password")).toBeInTheDocument();
+  });
+
+  it("private chip is the plain chip, not the accent (M2)", async () => {
+    const user = userEvent.setup();
+    mount();
+    await ready();
+    const dialog = await openCapture(user);
+    await user.click(within(dialog).getByRole("button", { name: /^Private/ }));
+    expect(within(dialog).getByText("Private · not in reports")).not.toHaveAttribute("data-variant", "accent");
   });
 
   it("lock discards capture drafts", async () => {

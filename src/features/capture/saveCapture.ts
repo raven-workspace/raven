@@ -3,6 +3,8 @@ import { api } from "../../lib/api";
 import type { Host } from "../../types/host";
 import type { LogContent, LogEntry, LogKind, NewAttachment } from "../../types/log";
 
+const OPEN_STATES = new Set(["open", "open|filtered"]);
+
 /** The user-edited final fields of a capture; the draft supplies `scan` and `unknownScopeIps`. */
 export interface CaptureEdits {
   kind: LogKind;
@@ -19,11 +21,14 @@ export interface CaptureEdits {
 /** The entry was saved, but a follow-up step (services, OS) failed. */
 export class PartialSaveError extends Error {
   readonly entry: LogEntry;
+  /** What made the follow-up step fail. */
+  readonly reason: unknown;
   constructor(entry: LogEntry, cause: unknown) {
     const detail = cause instanceof Error ? cause.message : String(cause);
     super(`Saved, but services didn't update: ${detail}`);
     this.name = "PartialSaveError";
     this.entry = entry;
+    this.reason = cause;
   }
 }
 
@@ -86,7 +91,9 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<LogEntry> {
   if (scan && hostIds.includes(scan.hostId)) {
     const { hostId } = scan;
     try {
-      await api.servicesUpsertScan(hostId, scan.ports);
+      // Closed and filtered ports are not services.
+      const open = scan.ports.filter((p) => OPEN_STATES.has(p.state.toLowerCase()));
+      await api.servicesUpsertScan(hostId, open);
       const h = hosts.find((x) => x.id === hostId);
       if (h && !h.os && scan.os) {
         await api.hostUpdate(h.id, { name: h.name, ip: h.ip, os: scan.os, access: h.access });

@@ -2,12 +2,8 @@ import type { DragEvent, KeyboardEvent } from "react";
 import { Link } from "react-router";
 import type { Host } from "../../types/host";
 import { Chip } from "../../ui";
+import { OS_LABELS } from "../hosts/columns";
 
-const OS_LABEL = {
-  windows: "Windows",
-  linux: "Linux",
-  other: "Other",
-} as const;
 
 export interface BoardCardProps {
   host: Host;
@@ -44,7 +40,7 @@ export function BoardCard({ host, onShift }: BoardCardProps) {
       )}
       {(host.os || host.access !== "none") && (
         <span className="mt-0.5 flex gap-1">
-          {host.os && <Chip>{OS_LABEL[host.os]}</Chip>}
+          {host.os && <Chip>{OS_LABELS[host.os]}</Chip>}
           {host.access !== "none" && (
             <Chip variant="accent">{host.access}</Chip>
           )}

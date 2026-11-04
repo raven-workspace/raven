@@ -71,6 +71,40 @@ describe('splitPaste', () => {
   })
 })
 
+describe('kali two-line zsh prompt (I3)', () => {
+  it('splits a multi-command session, takes user@host from the header and keeps output', () => {
+    const text = [
+      '┌──(kali㉿kali)-[~]',
+      '└─$ whoami',
+      'kali',
+      '',
+      '┌──(kali㉿kali)-[~/htb]',
+      '└─$ ls -la',
+      'total 8',
+      'drwxr-xr-x 2 kali kali 4096 .',
+      '┌──(root㉿kali)-[/home/kali]',
+      '└─# id',
+      'uid=0(root) gid=0(root)',
+    ].join('\n')
+    expect(splitPaste(text)).toEqual([
+      { shell: 'kali@kali', command: 'whoami', output: 'kali' },
+      { shell: 'kali@kali', command: 'ls -la', output: 'total 8\ndrwxr-xr-x 2 kali kali 4096 .' },
+      { shell: 'root@kali', command: 'id', output: 'uid=0(root) gid=0(root)' },
+    ])
+  })
+
+  it('a single two-line prompt is a command block', () => {
+    expect(splitPaste('┌──(kali㉿kali)-[~]\n└─$ nmap -p- 10.0.0.5\nPORT STATE')).toEqual([
+      { shell: 'kali@kali', command: 'nmap -p- 10.0.0.5', output: 'PORT STATE' },
+    ])
+  })
+
+  it('detectPrompt sees the second line as a prompt', () => {
+    expect(detectPrompt('└─$ whoami')).toEqual({ shell: 'sh', command: 'whoami' })
+    expect(detectPrompt('└─# id')).toEqual({ shell: 'sh', command: 'id' })
+  })
+})
+
 describe('detectPrompt', () => {
   it('detects powershell and user@host', () => {
     expect(detectPrompt('PS C:\\x> dir')).toEqual({ shell: 'powershell', command: 'dir' })
