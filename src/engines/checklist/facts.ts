@@ -8,6 +8,8 @@ export interface HostFacts {
   os: 'linux' | 'windows' | null;
   ports: Set<number>;
   services: Set<string>;
+  /** Any open service row exists (the host has been scanned), confirmed or not. */
+  scanned: boolean;
   dualHomed: boolean;
   domainJoined: boolean;
   kind: EngagementKind;
@@ -45,6 +47,10 @@ export const CONFIRMED_WORDS: [RegExp, string][] = [
   [/dns|bind/, 'dns'],
 ];
 
+/** WinRM / HTTPAPI listeners are reported as http but are not web apps. */
+const isNotWeb = (version: string | null, port: number): boolean =>
+  /httpapi/i.test(version ?? '') || [5985, 5986, 47001].includes(port);
+
 export function serviceNames(services: Service[]): Set<string> {
   const out = new Set<string>();
   for (const s of services) {
@@ -52,15 +58,13 @@ export function serviceNames(services: Service[]): Set<string> {
     if (s.confirmedProduct) {
       const product = s.confirmedProduct.toLowerCase();
       const hit = CONFIRMED_WORDS.find(([re]) => re.test(product));
-      if (hit) out.add(hit[1]);
+      if (hit && !(hit[1] === 'http' && isNotWeb(s.confirmedProduct, s.port))) out.add(hit[1]);
       continue;
     }
     const name = (s.nmapService ?? '').toLowerCase().trim();
     if (!name) continue;
     if (name.startsWith('http') || name.startsWith('ssl/http')) {
-      // WinRM / HTTPAPI listeners are reported as http by nmap but are not web apps.
-      const notWeb = /httpapi/i.test(s.nmapVersion ?? '') || [5985, 5986, 47001].includes(s.port);
-      if (!notWeb) out.add('http');
+      if (!isNotWeb(s.nmapVersion, s.port)) out.add('http');
       continue;
     }
     out.add(name);
@@ -104,7 +108,9 @@ export function hostFacts(
 ): HostFacts {
   const services = servicesByHost.get(host.id) ?? [];
   const os = hostOs(host.os);
-  const ports = openPorts(services);
+  // A confirmed service speaks only through its confirmed identity: its port no longer counts.
+  const ports = openPorts(services.filter((s) => !s.confirmedProduct));
+  const scanned = openPorts(services).size > 0;
   // Joined: the host is itself a DC-like host (88/389), or a Windows host in an engagement with any AD host.
   const domainJoined =
     ports.has(88) || ports.has(389) || (os === 'windows' && adHosts(hosts, servicesByHost).length > 0);
@@ -112,6 +118,7 @@ export function hostFacts(
     os,
     ports,
     services: serviceNames(services),
+    scanned,
     dualHomed: host.dualHomed === true,
     domainJoined,
     kind: engagement?.kind ?? 'lab',
@@ -128,6 +135,7 @@ export function engagementFacts(
     os: null,
     ports: new Set(),
     services: new Set(),
+    scanned: false,
     dualHomed: false,
     domainJoined: adHosts(hosts, servicesByHost).length > 0,
     kind: engagement.kind,
@@ -144,7 +152,7 @@ export function goalApplies(goal: ChecklistGoal, facts: HostFacts): boolean {
   if (a.ports || a.services) {
     const portHit = a.ports
       ? a.ports.length === 0
-        ? facts.ports.size > 0 || facts.services.size > 0
+        ? facts.scanned || facts.ports.size > 0 || facts.services.size > 0
         : a.ports.some((p) => facts.ports.has(p))
       : false;
     const serviceHit = a.services ? a.services.some((s) => facts.services.has(s)) : false;
@@ -155,7 +163,7 @@ export function goalApplies(goal: ChecklistGoal, facts: HostFacts): boolean {
 
 function stageHint(stage: ChecklistStage, facts: HostFacts): string | undefined {
   if (!stage.emptyHint) return undefined;
-  if (stage.id === 'enumerate') return facts.ports.size === 0 && facts.services.size === 0 ? stage.emptyHint : undefined;
+  if (stage.id === 'enumerate') return !facts.scanned && facts.ports.size === 0 && facts.services.size === 0 ? stage.emptyHint : undefined;
   if (stage.id === 'privesc') return facts.os === null ? stage.emptyHint : undefined;
   return undefined;
 }

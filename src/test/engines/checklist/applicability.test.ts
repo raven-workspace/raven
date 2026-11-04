@@ -144,9 +144,21 @@ describe('applicableGoals', () => {
     // nmap guessed "ppp" but the operator confirmed Apache: the web goals apply.
     const confirmedWeb = goalsFor(host({ os: 'linux' }), [svc(8080, 'ppp', { confirmedProduct: 'Apache httpd' })]);
     expect(all(confirmedWeb)).toContain('h-enum-web-stack');
-    // nmap said http but the operator confirmed it is something else: the web goals do not apply (3333 is not a web port).
-    const notWeb = goalsFor(host({ os: 'linux' }), [svc(3333, 'http', { confirmedProduct: 'CouchDB' })]);
+    // nmap said http but the operator confirmed it is something else: the web goals do not apply.
+    const notWeb = goalsFor(host({ os: 'linux' }), [svc(80, 'http', { confirmedProduct: 'CouchDB' })]);
     expect(all(notWeb)).not.toContain('h-enum-web-stack');
+  });
+
+  it('confirmed non-web product on a web port does not trigger web goals', () => {
+    const r = all(goalsFor(host({ os: 'linux' }), [svc(3000, 'ppp', { confirmedProduct: 'CouchDB' })]));
+    expect(r).not.toContain('h-enum-web-stack');
+    expect(r).toContain('h-enum-exploits');
+  });
+
+  it('confirmed Microsoft HTTPAPI on 5985 is not web', () => {
+    const r = all(goalsFor(host({ os: 'windows' }), [svc(5985, 'http', { confirmedProduct: 'Microsoft HTTPAPI httpd 2.0' })]));
+    expect(r.filter((i) => i.startsWith('h-enum-web-') || i.startsWith('h-foot-web-'))).toEqual([]);
+    expect([...serviceNames([svc(47001, 'http', { confirmedProduct: 'nginx' })])]).toEqual([]);
   });
 
   it('unknown OS hides privesc with a set-the-OS hint', () => {
@@ -231,7 +243,7 @@ describe('facts', () => {
   });
 
   it('serviceNames: an unknown confirmed product adds nothing, not even the nmap name', () => {
-    expect([...serviceNames([svc(3333, 'http', { confirmedProduct: 'CouchDB' })])]).toEqual([]);
+    expect([...serviceNames([svc(80, 'http', { confirmedProduct: 'CouchDB' })])]).toEqual([]);
     expect([...serviceNames([svc(5432, 'ppp', { confirmedProduct: 'PostgreSQL 15' })])]).toEqual(['postgresql']);
   });
 
