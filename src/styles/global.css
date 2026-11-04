@@ -1,1 +1,48 @@
 @import "tailwindcss";
+@import "./tokens.css";
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg-2);
+    font: 14px/1.45 var(--font-ui);
+    -webkit-font-smoothing: antialiased;
+    /* Desktop app, not a page: no rubber-band, no accidental text selection of chrome. */
+    overscroll-behavior: none;
+  }
+
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--font-mono);
+  }
+
+  /* The one focus style: a 1px accent outline. */
+  :focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  ::selection {
+    background: var(--line-strong);
+    color: var(--fg);
+  }
+
+  ::placeholder {
+    color: var(--faint);
+    opacity: 1;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-2) transparent;
+  }
+}
