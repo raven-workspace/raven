@@ -14,6 +14,9 @@ export interface SelectProps {
   value?: string;
   defaultValue?: string;
   onValueChange?: (value: string) => void;
+  open?: boolean;
+  defaultOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
   placeholder?: string;
   disabled?: boolean;
   name?: string;
@@ -30,6 +33,9 @@ export function Select({
   value,
   defaultValue,
   onValueChange,
+  open,
+  defaultOpen,
+  onOpenChange,
   placeholder,
   disabled,
   name,
@@ -38,7 +44,16 @@ export function Select({
   ...triggerProps
 }: SelectProps) {
   return (
-    <RS.Root value={value} defaultValue={defaultValue} onValueChange={onValueChange} disabled={disabled} name={name}>
+    <RS.Root
+      value={value}
+      defaultValue={defaultValue}
+      onValueChange={onValueChange}
+      open={open}
+      defaultOpen={defaultOpen}
+      onOpenChange={onOpenChange}
+      disabled={disabled}
+      name={name}
+    >
       <RS.Trigger
         ref={ref}
         className={cx(
@@ -67,8 +82,11 @@ export function Select({
                 value={o.value}
                 disabled={o.disabled}
                 className={cx(
-                  "relative flex h-7 items-center rounded-[4px] pl-3 pr-2 text-[13px] text-fg-2 outline-none select-none cursor-default",
+                  "relative flex h-7 items-center rounded-[4px] pl-3 pr-2 text-[13px] text-fg-2 select-none cursor-default",
+                  // Radix moves real focus onto the highlighted item, so that item carries the
+                  // Ink focus ring: 1px accent outline drawn inside the item's edge.
                   "data-highlighted:bg-surface-hi data-highlighted:text-fg",
+                  "data-highlighted:outline-solid data-highlighted:outline-1 data-highlighted:outline-accent -outline-offset-1",
                   // Selected item gets the Ink selection marker: a 2px accent bar on the left.
                   "data-[state=checked]:text-fg data-[state=checked]:shadow-[inset_2px_0_0_var(--accent)]",
                   "data-disabled:text-faint",

@@ -1,8 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
-import { Button, Chip, Dialog, Field, Input } from "../ui";
+import { Button, Chip, Dialog, Field, Input, Select } from "../ui";
 
 function DialogHarness() {
   const [open, setOpen] = useState(true);
@@ -56,5 +56,37 @@ describe("ui", () => {
   it("Chip exposes its variant", () => {
     render(<Chip variant="accent">user · vega</Chip>);
     expect(screen.getByText("user · vega")).toHaveAttribute("data-variant", "accent");
+  });
+});
+
+describe("Select focus", () => {
+  it("highlighted item shows the 1px accent outline, not outline-none", async () => {
+    // jsdom gaps that Radix Select relies on.
+    globalThis.ResizeObserver ??= class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+    Element.prototype.scrollIntoView ??= () => {};
+    Element.prototype.hasPointerCapture ??= () => false;
+
+    render(
+      <Select
+        aria-label="Kind"
+        defaultOpen
+        defaultValue="lab"
+        options={[
+          { value: "exam-sim", label: "Exam sim" },
+          { value: "lab", label: "Lab" },
+        ]}
+      />,
+    );
+    const item = await screen.findByRole("option", { name: "Exam sim" });
+    expect(item.className).not.toMatch(/\boutline-none\b/);
+    expect(item.className).toContain("data-highlighted:outline-1");
+    expect(item.className).toContain("data-highlighted:outline-accent");
+    expect(item.className).toContain("-outline-offset-1");
+    act(() => item.focus());
+    await waitFor(() => expect(item).toHaveAttribute("data-highlighted"));
   });
 });
