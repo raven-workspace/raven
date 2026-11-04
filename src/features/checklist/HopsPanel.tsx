@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent } from "react";
 import type { Host } from "../../types/host";
 import type { Hop } from "../../types/network";
 import { Button, Dialog, Field, Input, Panel, Select } from "../../ui";
+import { ConfirmDelete } from "./ConfirmDelete";
 import { useHopMutations } from "./queries";
 
 const KALI = "kali";
@@ -21,6 +22,7 @@ function HopForm({ engagementId, hosts, hop, onClose }: { engagementId: string; 
     e.preventDefault();
     if (pending) return;
     if (to === "") return setErrors({ toHostId: "Pick the host" });
+    if (from === to) return setErrors({ toHostId: "A hop needs two different hosts" });
     if (via.trim() === "") return setErrors({ via: "Say how (creds, exploit, share…)" });
     setErrors({});
     const input = { fromHostId: from === KALI ? null : from, toHostId: to, via: via.trim() };
@@ -70,6 +72,8 @@ function HopForm({ engagementId, hosts, hop, onClose }: { engagementId: string; 
 export function HopsPanel({ engagementId, hosts, hops }: { engagementId: string; hosts: Host[]; hops: Hop[] }) {
   const [editing, setEditing] = useState<Hop | "new" | null>(null);
   const { remove } = useHopMutations(engagementId);
+  const [deleting, setDeleting] = useState<Hop | null>(null);
+  const [deleteError, setDeleteError] = useState<string>();
   return (
     <Panel title="Hops" actions={<Button size="sm" onClick={() => setEditing("new")}>Add hop</Button>}>
       {hops.length === 0 ? (
@@ -82,12 +86,21 @@ export function HopsPanel({ engagementId, hosts, hops }: { engagementId: string;
                 {hostName(hosts, h.fromHostId)} → {hostName(hosts, h.toHostId)} via {h.via}
               </span>
               <Button size="sm" aria-label={`Edit hop to ${hostName(hosts, h.toHostId)}`} onClick={() => setEditing(h)}>Edit</Button>
-              <Button size="sm" aria-label={`Delete hop to ${hostName(hosts, h.toHostId)}`} onClick={() => remove.mutate(h.id)}>Delete</Button>
+              <Button size="sm" aria-label={`Delete hop to ${hostName(hosts, h.toHostId)}`} onClick={() => { setDeleteError(undefined); setDeleting(h); }}>Delete</Button>
             </li>
           ))}
         </ul>
       )}
-      {remove.isError && <p role="alert" className="m-0 mt-1 text-xs text-warn">{remove.error.message}</p>}
+      {deleting && (
+        <ConfirmDelete
+          title={`Delete the hop to ${hostName(hosts, deleting.toHostId)}?`}
+          label="Delete hop"
+          error={deleteError}
+          pending={remove.isPending}
+          onCancel={() => setDeleting(null)}
+          onConfirm={() => remove.mutate(deleting.id, { onSuccess: () => setDeleting(null), onError: (e) => setDeleteError(e.message) })}
+        />
+      )}
       {editing && <HopForm engagementId={engagementId} hosts={hosts} hop={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} />}
     </Panel>
   );

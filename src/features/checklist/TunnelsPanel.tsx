@@ -3,6 +3,7 @@ import { parseScopeList } from "../../engines/parse/scope";
 import type { Host } from "../../types/host";
 import type { Tunnel, TunnelInput, TunnelKind, TunnelStatus } from "../../types/network";
 import { Button, Dialog, Field, Input, Panel, Select, Toggle } from "../../ui";
+import { ConfirmDelete } from "./ConfirmDelete";
 import { useTunnelMutations } from "./queries";
 
 const KINDS: { value: TunnelKind; label: string }[] = [
@@ -91,6 +92,8 @@ function TunnelForm({ engagementId, hosts, tunnel, onClose }: { engagementId: st
 export function TunnelsPanel({ engagementId, hosts, tunnels }: { engagementId: string; hosts: Host[]; tunnels: Tunnel[] }) {
   const [editing, setEditing] = useState<Tunnel | "new" | null>(null);
   const { remove } = useTunnelMutations(engagementId);
+  const [deleting, setDeleting] = useState<Tunnel | null>(null);
+  const [deleteError, setDeleteError] = useState<string>();
   const name = (id: string) => hosts.find((h) => h.id === id)?.name ?? "?";
   return (
     <Panel title="Tunnels" actions={<Button size="sm" onClick={() => setEditing("new")}>Add tunnel</Button>}>
@@ -105,12 +108,21 @@ export function TunnelsPanel({ engagementId, hosts, tunnels }: { engagementId: s
               </span>
               <span className={`text-xs ${t.status === "up" ? "text-fg-2" : "text-warn"}`}>{t.status}</span>
               <Button size="sm" aria-label={`Edit ${t.kind} tunnel via ${name(t.viaHostId)}`} onClick={() => setEditing(t)}>Edit</Button>
-              <Button size="sm" aria-label={`Delete ${t.kind} tunnel via ${name(t.viaHostId)}`} onClick={() => remove.mutate(t.id)}>Delete</Button>
+              <Button size="sm" aria-label={`Delete ${t.kind} tunnel via ${name(t.viaHostId)}`} onClick={() => { setDeleteError(undefined); setDeleting(t); }}>Delete</Button>
             </li>
           ))}
         </ul>
       )}
-      {remove.isError && <p role="alert" className="m-0 mt-1 text-xs text-warn">{remove.error.message}</p>}
+      {deleting && (
+        <ConfirmDelete
+          title={`Delete the ${deleting.kind} tunnel via ${name(deleting.viaHostId)}?`}
+          label="Delete tunnel"
+          error={deleteError}
+          pending={remove.isPending}
+          onCancel={() => setDeleting(null)}
+          onConfirm={() => remove.mutate(deleting.id, { onSuccess: () => setDeleting(null), onError: (e) => setDeleteError(e.message) })}
+        />
+      )}
       {editing && <TunnelForm engagementId={engagementId} hosts={hosts} tunnel={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} />}
     </Panel>
   );

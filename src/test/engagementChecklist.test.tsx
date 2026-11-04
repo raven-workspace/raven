@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -78,7 +78,9 @@ describe("engagement checklist", () => {
 
   it("clock sync shows with an AD host", async () => {
     mount({ services: AD });
+    // The second match is the library command of the same title inside the goal row, not a second goal row.
     expect((await screen.findAllByText("Sync the clock to the DC")).length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('li[data-goal-id="e-setup-clock"]')).toHaveLength(1);
   });
 
   it("no-credentials playbook opens with an AD host; the others say they open with credentials", async () => {
@@ -153,5 +155,66 @@ describe("engagement checklist", () => {
     const section = screen.getByRole("region", { name: "Engagement checklist" });
     expect(await within(section).findByText("Updated 1 goal")).toBeInTheDocument();
     expect(m.checklistPut).toHaveBeenCalledWith("e1", [expect.objectContaining({ ownerId: "h2", goalId: "h-orient-proof", status: "done" })]);
+  });
+
+  it("Tick from log re-fetches the checklist and shows the repaired goal as done", async () => {
+    const user = userEvent.setup();
+    let repaired = false;
+    mount({ services: AD });
+    // tickFromLog reads the log; from then on the store holds the repaired tick.
+    m.logList.mockImplementation(async () => {
+      repaired = true;
+      return [];
+    });
+    m.checklistList.mockImplementation(async () =>
+      repaired ? [{ ownerId: "e1", goalId: "e-setup-clock", status: "done", notes: null, completedAt: 5, auto: true, autoFrom: null, evidence: [], updatedAt: 1 }] : [],
+    );
+    await screen.findAllByText("Sync the clock to the DC");
+    const hostReads = m.hostsList.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "Tick from log" }));
+    await waitFor(() => {
+      const row = screen.getAllByText("Sync the clock to the DC")[0]!.closest("li")!;
+      expect(within(row).getByRole("button", { name: "Done" })).toHaveAttribute("aria-pressed", "true");
+    });
+    await waitFor(() => expect(m.hostsList.mock.calls.length).toBeGreaterThan(hostReads));
+  });
+
+  it("shows an alert when settings fail to load", async () => {
+    m.settingsGet.mockRejectedValue(new Error("settings broke"));
+    mount();
+    expect(await screen.findByRole("alert")).toHaveTextContent("settings broke");
+  });
+
+  it("a hop cannot go from a host to itself", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByRole("button", { name: "Add hop" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add hop" });
+    await user.click(within(dialog).getByRole("combobox", { name: /^From/ }));
+    await user.click(await screen.findByRole("option", { name: "dc01" }));
+    await user.type(within(dialog).getByLabelText("Via"), "creds");
+    await user.click(within(dialog).getByRole("button", { name: "Add hop" }));
+    expect(await within(dialog).findByText("A hop needs two different hosts")).toBeInTheDocument();
+    expect(m.hopCreate).not.toHaveBeenCalled();
+  });
+
+  it("deleting a hop or tunnel asks first", async () => {
+    const user = userEvent.setup();
+    const t: Tunnel = { id: "t1", engagementId: "e1", kind: "chisel", viaHostId: "h1", subnets: ["10.20.0.0/24"], callbackIp: "", status: "up", notes: null, createdAt: 1, updatedAt: 1 };
+    m.hopDelete.mockResolvedValue(null);
+    m.tunnelDelete.mockResolvedValue(null);
+    mount({ hops: [hop()], tunnels: [t] });
+    await user.click(await screen.findByRole("button", { name: /^Delete hop/ }));
+    expect(m.hopDelete).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole("button", { name: "Cancel" }));
+    expect(m.hopDelete).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /^Delete hop/ }));
+    await user.click(await screen.findByRole("button", { name: "Delete hop" }));
+    expect(m.hopDelete).toHaveBeenCalledWith("hp1");
+
+    await user.click(await screen.findByRole("button", { name: /^Delete chisel tunnel/ }));
+    expect(m.tunnelDelete).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole("button", { name: "Delete tunnel" }));
+    expect(m.tunnelDelete).toHaveBeenCalledWith("t1");
   });
 });

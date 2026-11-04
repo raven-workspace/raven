@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import {
@@ -13,7 +13,7 @@ import {
 } from "../../engines/checklist";
 import { api } from "../../lib/api";
 import type { Host } from "../../types/host";
-import { Button, EmptyState } from "../../ui";
+import { Button } from "../../ui";
 import { useHosts } from "../hosts/queries";
 import { sectionPath } from "../engagements/sections";
 import { useLog } from "../log/queries";
@@ -21,7 +21,7 @@ import { goalCommands } from "./goalCommands";
 import { GoalRow } from "./GoalRow";
 import { HopsPanel } from "./HopsPanel";
 import { PlaybookSection } from "./PlaybookSection";
-import { useChecklist, useChecklistMutations, useEngagementServices, useHops, useTunnels } from "./queries";
+import { checklistKey, useChecklist, useChecklistMutations, useEngagementServices, useHops, useTunnels } from "./queries";
 import { loadTickContext, tickFromLog } from "./ticks";
 import { TunnelsPanel } from "./TunnelsPanel";
 
@@ -31,6 +31,7 @@ const CREDS_NOTE = "Opens automatically once credentials arrive (build step 4)";
 export function EngagementChecklist() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const hostsQ = useHosts(id);
   const engagement = useQuery({ queryKey: ["engagement", id], queryFn: () => api.engagementGet(id) });
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
@@ -46,8 +47,8 @@ export function EngagementChecklist() {
   const eng = engagement.data;
   const ad = useMemo(() => (hosts ? adHosts(hosts, servicesByHost) : []), [hosts, servicesByHost]);
 
-  const failed = hostsQ.error ?? engagement.error ?? servicesQ.error;
-  if (failed) return <EmptyState title="Couldn't load the checklist" body={failed.message} />;
+  const failed = hostsQ.error ?? engagement.error ?? servicesQ.error ?? settings.error ?? log.error;
+  if (failed) return <p role="alert" className="py-3 text-xs text-warn">Couldn't load the engagement checklist: {failed.message}</p>;
   if (!hosts || !eng || !servicesQ.data) return null;
 
   const hasAd = ad.length > 0;
@@ -99,6 +100,9 @@ export function EngagementChecklist() {
     try {
       const r = await tickFromLog(id, await loadTickContext(id));
       setTick({ ticking: false, message: r.message });
+      void qc.invalidateQueries({ queryKey: checklistKey(id) });
+      void qc.invalidateQueries({ queryKey: ["hosts", id] });
+      void qc.invalidateQueries({ queryKey: ["progress"] });
     } catch (e) {
       setTick({ ticking: false, error: e instanceof Error ? e.message : String(e) });
     }
