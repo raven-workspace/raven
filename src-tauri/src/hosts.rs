@@ -176,9 +176,13 @@ pub fn move_to(conn: &Connection, id: &str, column: &str) -> AppResult<Host> {
 }
 
 pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM hosts WHERE id = ?1", [id])? == 0 {
+    let tx = conn.unchecked_transaction()?;
+    if tx.execute("DELETE FROM hosts WHERE id = ?1", [id])? == 0 {
         return Err(AppError::NotFound);
     }
+    // checklist_items.owner_id has no FK (it may be an engagement id), so clean up by hand.
+    tx.execute("DELETE FROM checklist_items WHERE owner_id = ?1", [id])?;
+    tx.commit()?;
     Ok(())
 }
 

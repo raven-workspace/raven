@@ -19,6 +19,7 @@ use rusqlite::Connection;
 pub const MIGRATIONS: &[(u32, &str)] = &[
     (1, include_str!("../../migrations/0001_init.sql")),
     (2, include_str!("../../migrations/0002_hosts_log.sql")),
+    (3, include_str!("../../migrations/0003_checklist_notes.sql")),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,6 +75,8 @@ pub fn migrate_with(
 
 /// Data step of 0002: engagements that predate the hosts table get a host for each
 /// single-IP scope entry. Runs inside the migration transaction; add-only, so re-running is safe.
+///
+/// Frozen at 0002's schema; never call live host code from a migration.
 fn backfill_hosts(conn: &Connection) -> AppResult<()> {
     let has_hosts: bool = conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='hosts')",
@@ -89,9 +92,30 @@ fn backfill_hosts(conn: &Connection) -> AppResult<()> {
         .collect::<Result<Vec<_>, _>>()?;
     for (id, scope) in rows {
         let scope: Vec<String> = serde_json::from_str(&scope).unwrap_or_default();
-        crate::hosts::sync_scope(conn, &id, &scope)?;
+        for entry in &scope {
+            let Some(ip) = single_ip_0002(entry.trim()) else { continue };
+            let taken: bool = conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM hosts WHERE engagement_id = ?1 AND ip = ?2)",
+                rusqlite::params![id, ip],
+                |r| r.get(0),
+            )?;
+            if taken {
+                continue;
+            }
+            let now = crate::backup::system_now_ms();
+            conn.execute(
+                "INSERT INTO hosts (id, engagement_id, name, ip, created_at, updated_at) VALUES (?1,?2,?3,?3,?4,?4)",
+                rusqlite::params![uuid::Uuid::new_v4().to_string(), id, ip, now],
+            )?;
+        }
     }
     Ok(())
+}
+
+/// 0002's own copy of the single-IP check: a bare IPv4 address or `/32`.
+fn single_ip_0002(s: &str) -> Option<String> {
+    let bare = s.strip_suffix("/32").unwrap_or(s);
+    bare.parse::<std::net::Ipv4Addr>().ok().map(|_| bare.to_string())
 }
 
 #[cfg(test)]
@@ -221,14 +245,14 @@ mod tests {
         .unwrap();
         let mut hook_calls = 0;
         let out = migrate(&mut c, &mut |f, t| {
-            assert_eq!((f, t), (1, 2));
+            assert_eq!((f, t), (1, 3));
             hook_calls += 1;
             Ok(())
         })
         .unwrap();
         assert_eq!(hook_calls, 1);
-        assert_eq!(out, MigrationOutcome { from: 1, to: 2 });
-        assert_eq!(version(&c), 2);
+        assert_eq!(out, MigrationOutcome { from: 1, to: 3 });
+        assert_eq!(version(&c), 3);
         for t in ["hosts", "services", "log_entries", "log_entry_hosts", "attachments"] {
             let n: i64 = c
                 .query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1", [t], |r| r.get(0))
@@ -267,5 +291,27 @@ mod tests {
         // add-only even if sync runs again
         backfill_hosts(&c).unwrap();
         assert_eq!(names(&c).len(), 2);
+    }
+
+    #[test]
+    fn migration_0002_backfill_is_frozen() {
+        let (_d, _p, mut c) = v1_with_row();
+        c.execute(
+            "INSERT INTO engagements (id,name,kind,scope_cidrs,status,created_at,updated_at) \
+             VALUES ('e1','x','lab','[\"10.10.10.5\",\"10.10.10.0/24\"]','active',1,1)",
+            [],
+        )
+        .unwrap();
+        migrate(&mut c, &mut |_, _| Ok(())).unwrap();
+        let rows: Vec<String> = c
+            .prepare("SELECT ip FROM hosts WHERE engagement_id='e1'")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(rows, ["10.10.10.5"]);
+        let dual: i64 = c.query_row("SELECT dual_homed FROM hosts WHERE engagement_id='e1'", [], |r| r.get(0)).unwrap();
+        assert_eq!(dual, 0);
     }
 }

@@ -4,6 +4,7 @@
 //! unlocked (no daily backup: a brand-new vault has nothing to back up).
 
 use crate::backup::{self, BackupInfo};
+use crate::checklist::{self, ChecklistItem, ChecklistItemInput};
 use crate::engagements::{self, Engagement, EngagementInput, Progress};
 use crate::log::{self, Attachment, LogEntry, LogEntryInput};
 use std::collections::HashMap;
@@ -254,6 +255,20 @@ pub async fn log_update(app: AppHandle, id: String, input: LogEntryInput) -> App
 #[tauri::command]
 pub async fn log_delete(app: AppHandle, id: String) -> AppResult<()> {
     with_vault(app, move |v| log::delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn checklist_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<ChecklistItem>> {
+    with_vault(app, move |v| checklist::list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn checklist_put(
+    app: AppHandle,
+    engagement_id: String,
+    items: Vec<ChecklistItemInput>,
+) -> AppResult<Vec<ChecklistItem>> {
+    with_vault(app, move |v| checklist::put(v.conn()?, &engagement_id, &items)).await
 }
 
 #[tauri::command]

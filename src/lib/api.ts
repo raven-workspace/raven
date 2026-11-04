@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { BackupInfo } from "../types/backup";
 import type { ConfirmInput, ScanPort, Service, ServiceInput } from "../types/service";
+import type { ChecklistItem, ChecklistItemInput } from "../types/checklist";
 import type { Attachment, LogEntry, LogEntryInput, Progress } from "../types/log";
 import type { Host, HostInput, BoardColumn } from "../types/host";
 import type { Engagement, EngagementInput, EngagementStatus } from "../types/engagement";
@@ -67,6 +68,9 @@ export const api = {
     call<LogEntry>("log_create", { engagementId, input }),
   logUpdate: (id: string, input: LogEntryInput) => call<LogEntry>("log_update", { id, input }),
   logDelete: (id: string) => call<null>("log_delete", { id }),
+  checklistList: (engagementId: string) => call<ChecklistItem[]>("checklist_list", { engagementId }),
+  checklistPut: (engagementId: string, items: ChecklistItemInput[]) =>
+    call<ChecklistItem[]>("checklist_put", { engagementId, items }),
   attachmentGet: (id: string) => call<Attachment>("attachment_get", { id }),
   engagementsProgress: () => call<Record<string, Progress>>("engagements_progress"),
 };

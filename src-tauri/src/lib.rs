@@ -1,4 +1,5 @@
 pub mod backup;
+pub mod checklist;
 pub mod commands;
 pub mod engagements;
 pub mod error;
@@ -54,6 +55,8 @@ pub fn run() {
             commands::log_create,
             commands::log_update,
             commands::log_delete,
+            commands::checklist_list,
+            commands::checklist_put,
             commands::attachment_get,
             commands::engagements_progress,
         ])
