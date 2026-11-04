@@ -1,1 +1,7 @@
 .superpowers/
+
+# Raven
+node_modules/
+dist/
+src-tauri/target/
+*.tsbuildinfo
