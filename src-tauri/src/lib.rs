@@ -38,3 +38,19 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn csp_is_locked_down() {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let security = &conf["app"]["security"];
+        for key in ["csp", "devCsp"] {
+            let Some(csp) = security[key].as_str() else { continue };
+            for d in ["default-src 'self'", "base-uri 'self'", "form-action 'none'", "object-src 'none'"] {
+                assert!(csp.contains(d), "{key} is missing {d}: {csp}");
+            }
+        }
+        assert!(security["csp"].is_string());
+    }
+}
