@@ -1,11 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { api } from "../../lib/api";
+import { reportError } from "../../lib/lockSignal";
+import type { HopInput, Tunnel } from "../../types/network";
+import { resyncBoards } from "./ticks";
 import type { ChecklistItem, ChecklistItemInput, ChecklistState, ChecklistStatus, ItemState } from "../../types/checklist";
 import type { Service } from "../../types/service";
 
 const NO_ITEMS: ChecklistItem[] = [];
 const NO_SERVICES: Service[] = [];
+const NO_TUNNELS: Tunnel[] = [];
 
 export const checklistKey = (engagementId: string) => ["checklist", engagementId] as const;
 export const engagementServicesKey = (engagementId: string) => ["services", "engagement", engagementId] as const;
@@ -78,6 +82,25 @@ export function useEngagementServices(engagementId: string) {
   return { servicesByHost, services, query };
 }
 
+export const tunnelsKey = (engagementId: string) => ["tunnels", engagementId] as const;
+export const hopsKey = (engagementId: string) => ["hops", engagementId] as const;
+
+/** The engagement's tunnels, for filling commands behind a pivot. */
+export function useTunnels(engagementId: string) {
+  const query = useQuery({ queryKey: tunnelsKey(engagementId), queryFn: () => api.tunnelsList(engagementId) });
+  return { tunnels: query.data ?? NO_TUNNELS, query };
+}
+
+export function useHopMutations(engagementId: string) {
+  const qc = useQueryClient();
+  return {
+    create: useMutation({
+      mutationFn: (input: HopInput) => api.hopCreate(engagementId, input),
+      onSuccess: () => void qc.invalidateQueries({ queryKey: hopsKey(engagementId) }),
+    }),
+  };
+}
+
 export function useChecklistMutations(engagementId: string) {
   const qc = useQueryClient();
   /** Read from the store, not the cache: a stale or unloaded cache must not wipe evidence or notes. */
@@ -102,7 +125,14 @@ export function useChecklistMutations(engagementId: string) {
         else delete next.completedAt;
         return put([stateToInput(v.ownerId, v.goalId, next)]);
       },
-      onSuccess,
+      onSuccess: (items: ChecklistItem[]) => {
+        onSuccess(items);
+        // A manual Done can move the card. Not fatal: a failure goes to the shared error path.
+        void resyncBoards(engagementId).then(
+          () => qc.invalidateQueries({ queryKey: ["hosts", engagementId] }),
+          reportError,
+        );
+      },
     }),
     setNotes: useMutation({
       mutationFn: async (v: { ownerId: string; goalId: string; notes: string }) => {

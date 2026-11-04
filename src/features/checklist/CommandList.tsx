@@ -1,0 +1,76 @@
+import { useEffect, useRef, useState } from "react";
+import { Button, Chip } from "../../ui";
+
+export interface FilledCommand {
+  id: string;
+  title: string;
+  text: string;
+  unresolved: string[];
+  /** Exam sim, no host locked yet: this command would spend the one Metasploit host. */
+  msfMarker: boolean;
+  viaTunnel?: { viaHostName: string; down: boolean };
+  /** The raw unresolved tokens as they appear in `text`, to mark. */
+  tokens?: string[];
+}
+
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** The command text with unresolved tokens wrapped in a warn-coloured mark (no background). */
+function Text({ text, tokens }: { text: string; tokens: string[] }) {
+  if (tokens.length === 0) return <>{text}</>;
+  const re = new RegExp(`(${tokens.map(escape).join("|")})`);
+  return (
+    <>
+      {text.split(re).map((part, i) =>
+        tokens.includes(part) ? (
+          <mark key={i} className="bg-transparent text-warn">{part}</mark>
+        ) : (
+          <span key={i}>{part}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+export function CommandList({ commands }: { commands: FilledCommand[] }) {
+  const [copied, setCopied] = useState<string>();
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const copy = (c: FilledCommand) => {
+    void navigator.clipboard.writeText(c.text).then(() => {
+      setCopied(c.id);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(undefined), 1500);
+    });
+  };
+
+  return (
+    <ul className="m-0 flex list-none flex-col gap-2 p-0">
+      {commands.map((c) => (
+        <li key={c.id} className="flex flex-col gap-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-fg-2">{c.title}</span>
+            <Button size="sm" aria-label={`Copy command: ${c.title}`} onClick={() => copy(c)}>
+              {copied === c.id ? "Copied" : "Copy"}
+            </Button>
+          </div>
+          <pre className="m-0 overflow-x-auto whitespace-pre-wrap break-all rounded-sm border border-line bg-surface px-2.5 py-1.5 font-mono text-[12.5px] text-fg">
+            <Text text={c.text} tokens={c.tokens ?? []} />
+          </pre>
+          {(c.msfMarker || c.viaTunnel) && (
+            <div className="flex flex-wrap gap-1.5">
+              {c.msfMarker && <Chip>uses your one Metasploit host</Chip>}
+              {c.viaTunnel && (
+                <Chip className={c.viaTunnel.down ? "border-warn text-warn" : undefined}>
+                  via tunnel on {c.viaTunnel.viaHostName}
+                  {c.viaTunnel.down ? " (down)" : ""}
+                </Chip>
+              )}
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}

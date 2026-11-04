@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { HostChecklist } from "../checklist/HostChecklist";
 import { Link } from "react-router";
 import { EmptyState, Panel } from "../../ui";
 import { useLog } from "../log/queries";
@@ -23,6 +24,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   const log = useLog(engagementId);
   const [tab, setTab] = useState<TabId>("story");
   const [order, setOrder] = usePersistedOrder("raven.story.order", "oldest");
+  const [openEntry, setOpenEntry] = useState<string>();
   const host = hosts.data?.find((h) => h.id === hostId);
 
   if (hosts.isError) return <EmptyState title="Couldn't load this host" body={hosts.error.message} />;
@@ -78,9 +80,18 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
                 <p className="text-[13px] text-muted">Nothing logged on this host yet. Press L to capture.</p>
               ) : (
                 <ul className="m-0 list-none p-0">
-                  {entries.map((e) => <LogEntryRow key={e.id} entry={e} hosts={hosts.data} />)}
+                  {entries.map((e) => <LogEntryRow key={e.id} entry={e} hosts={hosts.data} defaultOpen={e.id === openEntry} />)}
                 </ul>
               )
+            ) : tab === "checklist" ? (
+              <HostChecklist
+                engagementId={engagementId}
+                host={host}
+                onOpenEntry={(id) => {
+                  setOpenEntry(id);
+                  setTab("story");
+                }}
+              />
             ) : (
               <p className="text-[13px] text-muted">
                 {TABS.find((t) => t.id === tab)?.label} arrives with build step {STEPS[tab]}.
