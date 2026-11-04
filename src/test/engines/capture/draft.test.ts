@@ -40,15 +40,41 @@ describe('capture draft', () => {
   it('kali prompt sets ranOn to the kali machine', () => {
     const d = buildDraft({ ...base, text: 'kali@kali:~$ ls', lastRanOn: 'Mac' });
     expect(d.ranOn).toBe('Kali (VM)');
+    expect(d.hostIds).toEqual([]);
+    const none = buildDraft({ ...base, machines: ['Docker build', 'Mac'], text: 'kali@kali:~$ ls', lastRanOn: null });
+    expect(none.ranOn).toBe('Docker build');
+    expect(buildDraft({ ...base, machines: ['Mac'], text: 'kali@kali:~$ ls', lastRanOn: 'Mac' }).ranOn).toBe('Mac');
+  });
+
+  it('kali ssh then target prompt prefers the target host', () => {
+    const d = buildDraft({ ...base, text: 'kali@kali:~$ ssh vega@172.31.166.143\nvega@vega:~$ id\nuid=1000' });
+    expect(d.ranOn).toBe('Vega');
+  });
+
+  it('common binary without prompt is a command', () => {
+    expect(detectKind('ping -c1 10.0.0.1', false)).toBe('command');
+    expect(detectKind('./exploit.py --target 1.2.3.4', false)).toBe('command');
+    expect(detectKind('remember to ping later', false)).toBe('note');
+  });
+
+  it('http attribution ignores the response body', () => {
+    const text = 'GET / HTTP/1.1\nHost: example.com\n\nHTTP/1.1 200 OK\n\nsee 172.31.166.143';
+    expect(buildDraft({ ...base, text }).hostIds).toEqual([]);
+  });
+
+  it('out-of-output and known IPs are not offered', () => {
+    const t = 'kali@kali:~$ ping -c1 172.31.166.150\n64 bytes from 172.31.166.151';
+    expect(buildDraft({ ...base, text: t }).unknownScopeIps).toEqual(['172.31.166.150']);
+    expect(buildDraft({ ...base, text: 'kali@kali:~$ ping -c1 172.31.166.143' }).unknownScopeIps).toEqual([]);
   });
 
   it('capture draft ignores out-of-scope IPs', () => {
-    const d = buildDraft({ ...base, text: 'ping 8.8.8.8' });
+    const d = buildDraft({ ...base, text: 'kali@kali:~$ ping -c1 8.8.8.8' });
     expect(d.unknownScopeIps).toEqual([]);
   });
 
   it('unknown in-scope IP is offered', () => {
-    const d = buildDraft({ ...base, text: 'ping 172.31.166.150' });
+    const d = buildDraft({ ...base, text: 'kali@kali:~$ ping -c1 172.31.166.150' });
     expect(d.unknownScopeIps).toEqual(['172.31.166.150']);
   });
 

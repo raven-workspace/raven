@@ -68,18 +68,9 @@ export function buildDraft(input: DraftInput): CaptureDraft {
     });
     const attributed = union(perBlock);
 
-    let ranOn = fallbackRanOn;
-    for (const b of blocks) {
-      const sh = shellHost(b.shell, undefined, hosts, domain);
-      if (sh) {
-        ranOn = sh.name;
-        break;
-      }
-      if (b.shell && isKaliLabel(b.shell) && kaliMachine) {
-        ranOn = kaliMachine;
-        break;
-      }
-    }
+    const hostShell = blocks.map((b) => shellHost(b.shell, undefined, hosts, domain)).find((h) => h);
+    const kaliShell = blocks.some((b) => b.shell && isKaliLabel(b.shell));
+    const ranOn = hostShell ? hostShell.name : kaliShell && kaliMachine ? kaliMachine : fallbackRanOn;
 
     const lines = blocks.map((b) => b.command).join('\n');
     let scan: CaptureDraft['scan'] = null;
@@ -89,7 +80,7 @@ export function buildDraft(input: DraftInput): CaptureDraft {
         hostId: attributed[0].id,
         ports: analysis.scan.ports.map((p) => ({
           port: p.port,
-          protocol: p.protocol as ScanPort['protocol'],
+          protocol: p.protocol === 'udp' ? 'udp' : 'tcp',
           state: p.state,
           service: p.service,
           version: p.version,
@@ -133,9 +124,10 @@ export function buildDraft(input: DraftInput): CaptureDraft {
     }
     case 'http': {
       const parts = httpParts(text);
-      const attributed = named[0] ?? null;
+      const attributed = hostsNamedIn(parts.request, hosts, domain)[0] ?? null;
       return {
         ...base,
+        hostIds: attributed ? [attributed.id] : [],
         kind,
         title: httpTitle(parts, attributed),
         content: { kind: 'http', request: parts.request, response: parts.response },
