@@ -7,6 +7,7 @@ use rand::RngCore;
 use rusqlite::{Connection, ErrorCode, OpenFlags};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
+use std::path::Path;
 use zeroize::{Zeroize, Zeroizing};
 
 const MIN_PASSWORD_CHARS: usize = 12;
@@ -98,6 +99,22 @@ fn pragma_for(key: &[u8; KEY_LEN]) -> Zeroizing<String> {
     }
     out.push_str("'\";");
     out
+}
+
+/// Open `path` with `flags`, apply the key, then per-connection hardening. Every keyed
+/// connection (create, unlock, backup verify, restore check) goes through here.
+///
+/// - `cipher_memory_security = ON`: SQLCipher wipes and locks its memory. Set right after the
+///   key, before the first database access.
+/// - `foreign_keys = ON`: explicit, so `ON DELETE CASCADE` etc. work even if the bundled
+///   SQLite's compile-time default (currently ON in libsqlite3-sys) ever changes.
+///
+/// Does not read the database, so a wrong key surfaces on the caller's first query.
+pub(crate) fn open_keyed(path: &Path, key_pragma: &str, flags: OpenFlags) -> rusqlite::Result<Connection> {
+    let c = Connection::open_with_flags(path, flags)?;
+    c.execute_batch(key_pragma)?;
+    c.execute_batch("PRAGMA cipher_memory_security = ON; PRAGMA foreign_keys = ON;")?;
+    Ok(c)
 }
 
 /// Called as `(from, to)` before migrating an existing database, while its data is intact.
@@ -197,8 +214,7 @@ impl Vault {
         key: &[u8; KEY_LEN],
     ) -> AppResult<(Connection, MigrationOutcome)> {
         self.write_meta_atomic(meta)?;
-        let mut conn = Connection::open(&self.paths.db)?;
-        conn.execute_batch(&pragma_for(key))?;
+        let mut conn = open_keyed(&self.paths.db, &pragma_for(key), OpenFlags::default())?;
         // The first migration writes the encrypted file to disk; a fresh db never triggers the hook.
         let outcome = self.migrate_on_open(&mut conn)?;
         Ok((conn, outcome))
@@ -250,11 +266,11 @@ impl Vault {
             .map_err(|e| AppError::Io(format!("invalid vault.json: {e}")))?;
         let key = meta.derive_key(password)?;
         // READ_WRITE without CREATE: a missing db must never be created here.
-        let mut conn = Connection::open_with_flags(
+        let mut conn = open_keyed(
             &self.paths.db,
+            &pragma_for(&key),
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
-        conn.execute_batch(&pragma_for(&key))?;
         match conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0)) {
             Ok(_) => {}
             Err(rusqlite::Error::SqliteFailure(e, _)) if e.code == ErrorCode::NotADatabase => {
@@ -433,6 +449,23 @@ mod tests {
         v.lock();
         v.unlock(PW).unwrap();
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    fn pragma_i64(v: &Vault, name: &str) -> i64 {
+        v.conn().unwrap().query_row(&format!("PRAGMA {name}"), [], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn foreign_keys_on_after_create_and_unlock() {
+        let (_d, mut v) = setup();
+        v.create_for_test(PW).unwrap();
+        assert_eq!(pragma_i64(&v, "foreign_keys"), 1);
+        v.lock();
+        v.unlock(PW).unwrap();
+        assert_eq!(pragma_i64(&v, "foreign_keys"), 1);
+        let mem: String =
+            v.conn().unwrap().query_row("PRAGMA cipher_memory_security", [], |r| r.get(0)).unwrap();
+        assert_eq!(mem, "1");
     }
 
     #[test]

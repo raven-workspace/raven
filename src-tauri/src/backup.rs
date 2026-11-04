@@ -8,7 +8,7 @@
 
 use crate::error::{AppError, AppResult};
 use crate::paths::DataPaths;
-use crate::vault::{BackupHook, Vault};
+use crate::vault::{open_keyed, BackupHook, Vault};
 use rusqlite::{Connection, ErrorCode, OpenFlags};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -253,8 +253,7 @@ fn prune(paths: &DataPaths, retention: i64, keep: &str) {
 }
 
 fn open_with_pragma(path: &Path, pragma: &str) -> Result<Connection, rusqlite::Error> {
-    let c = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
-    c.execute_batch(pragma)?;
+    let c = open_keyed(path, pragma, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
     c.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0))?;
     Ok(c)
 }

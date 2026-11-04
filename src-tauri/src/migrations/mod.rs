@@ -2,6 +2,15 @@
 //!
 //! Safety rules: an existing database is backed up (via the hook) BEFORE any change,
 //! and all pending migrations plus the version bump commit or roll back as one transaction.
+//!
+//! Writing a migration:
+//! - All pending migrations run inside ONE shared transaction. A migration's SQL must not
+//!   contain `BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`/`RELEASE`, or `VACUUM`.
+//! - Connections run with `PRAGMA foreign_keys = ON` (see `vault::open_keyed`). That pragma
+//!   is a no-op inside a transaction, so a migration that needs `foreign_keys = OFF` (e.g. the
+//!   SQLite 12-step table rebuild of a referenced table) cannot run in the shared transaction;
+//!   it needs its own runner step outside it.
+//! - Append new entries to `MIGRATIONS` with a strictly greater version; never edit a shipped one.
 
 use crate::error::{AppError, AppResult};
 use rusqlite::Connection;
@@ -148,6 +157,15 @@ mod tests {
         c.execute_batch("PRAGMA user_version = 99").unwrap();
         assert!(matches!(migrate(&mut c, &mut |_, _| Ok(())), Err(AppError::Db(_))));
         assert_eq!(version(&c), 99);
+    }
+
+    #[test]
+    fn migration_versions_strictly_increase() {
+        assert!(!MIGRATIONS.is_empty());
+        assert!(MIGRATIONS[0].0 >= 1);
+        for w in MIGRATIONS.windows(2) {
+            assert!(w[0].0 < w[1].0, "versions {} then {}", w[0].0, w[1].0);
+        }
     }
 
     #[test]
