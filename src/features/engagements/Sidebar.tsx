@@ -4,6 +4,8 @@ import { cx } from "../../lib/cx";
 import { HostDialog } from "../hosts/HostDialog";
 import { HostGlyph } from "../hosts/HostGlyph";
 import { useHosts } from "../hosts/queries";
+import { ThreadDot } from "../notes/ThreadDot";
+import { useThreadCounts } from "../notes/useThreadCounts";
 import { SECTIONS, sectionPath } from "./sections";
 
 const row =
@@ -15,6 +17,7 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
   const hostsId = useId();
   const hosts = useHosts(engagementId);
   const [adding, setAdding] = useState(false);
+  const threads = useThreadCounts(engagementId).byHost;
   const list = hosts.data ?? [];
 
   return (
@@ -51,6 +54,7 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
         >
           <HostGlyph column={h.boardColumn} />
           <span className="truncate">{h.name}</span>
+          <ThreadDot count={threads.get(h.id) ?? 0} />
           {h.ip && <span className="ml-auto shrink-0 font-mono text-[10.5px] text-faint">{h.ip}</span>}
         </NavLink>
       ))}
