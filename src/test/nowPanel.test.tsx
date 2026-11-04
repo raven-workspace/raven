@@ -75,6 +75,8 @@ beforeEach(() => {
   m.logList.mockResolvedValue([]);
   m.tunnelsList.mockResolvedValue([]);
   m.hostSyncBoard.mockResolvedValue(H1);
+  m.credentialsList.mockResolvedValue([]);
+  m.credAttemptsList.mockResolvedValue([]);
 });
 
 describe("Now panel", () => {

@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { api } from "../../lib/api";
 import { onLockedError, reportError } from "../../lib/lockSignal";
 import { useCaptureStore } from "../capture/useCaptureStore";
+import { useCredPickStore } from "../checklist/credPick";
 import { discardNotes, flushNotes, hasPendingNotes, sessionGeneration, setNotesQueryClient, startNotesSession } from "../notes/useNotesStore";
 import type { UnlockResult, VaultStatus } from "../../types/vault";
 import { Button, Kbd, TitleBar } from "../../ui";
@@ -76,6 +77,8 @@ export function VaultGate({ children }: { children: ReactNode }) {
     qc.clear();
     // Unsaved capture drafts hold engagement data: they go with the lock.
     useCaptureStore.getState().reset();
+    // Which credential fills commands is session state too.
+    useCredPickStore.getState().reset();
     // Notes too: after a lock no note text stays in memory. `lock()` has already started the
     // flush, which works from a snapshot.
     discardNotes();

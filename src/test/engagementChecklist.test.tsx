@@ -10,6 +10,8 @@ import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 import type { LogEntry } from "../types/log";
+import type { ChecklistItem } from "../types/checklist";
+import type { CredAttempt, Credential } from "../types/credentials";
 import type { Hop, Tunnel } from "../types/network";
 import type { Service } from "../types/service";
 
@@ -39,10 +41,22 @@ const flagEntry: LogEntry = {
   content: { kind: "flag", flagKind: "local", value: "0123456789abcdef0123456789abcdef" }, at: 1000, createdAt: 1000, updatedAt: 1000,
 };
 
-function mount(opts: { services?: Service[]; hops?: Hop[]; log?: LogEntry[]; tunnels?: Tunnel[] } = {}) {
+const cred = (id: string, over: Partial<Credential> = {}): Credential => ({
+  id, engagementId: "e1", type: "password", username: "svc_sql", domain: "CORP", secret: "Winter2024!", hashType: null,
+  scope: "domain", localHostId: null, sourceHostId: null, source: null, notes: null, crackStatus: null, crackedFrom: null,
+  fromSecretId: null, createdAt: 10, updatedAt: 10, ...over,
+});
+const attempt = (id: string, credId: string, over: Partial<CredAttempt> = {}): CredAttempt => ({
+  id, engagementId: "e1", credId, usernameId: null, hostId: "h1", service: "winrm", port: null, result: "valid",
+  authMode: "domain", detail: null, logEntryId: null, at: 100, ...over,
+});
+
+function mount(opts: { services?: Service[]; hops?: Hop[]; log?: LogEntry[]; tunnels?: Tunnel[]; creds?: Credential[]; attempts?: CredAttempt[]; items?: ChecklistItem[]; hosts?: Host[] } = {}) {
+  m.credentialsList.mockResolvedValue(opts.creds ?? []);
+  m.credAttemptsList.mockResolvedValue(opts.attempts ?? []);
   m.engagementGet.mockResolvedValue(E1);
-  m.hostsList.mockResolvedValue([H1, H2]);
-  m.checklistList.mockResolvedValue([]);
+  m.hostsList.mockResolvedValue(opts.hosts ?? [H1, H2]);
+  m.checklistList.mockResolvedValue(opts.items ?? []);
   m.servicesListEngagement.mockResolvedValue(opts.services ?? []);
   m.hopsList.mockResolvedValue(opts.hops ?? []);
   m.tunnelsList.mockResolvedValue(opts.tunnels ?? []);
@@ -83,12 +97,12 @@ describe("engagement checklist", () => {
     expect(document.querySelectorAll('li[data-goal-id="e-setup-clock"]')).toHaveLength(1);
   });
 
-  it("no-credentials playbook opens with an AD host; the others say they open with credentials", async () => {
+  it("no-credentials playbook opens with an AD host; the others stay closed", async () => {
     const user = userEvent.setup();
     mount({ services: AD });
     expect(await screen.findByText("Try null, guest and anonymous SMB")).toBeInTheDocument();
     expect(screen.queryByText("RID cycle with the credential")).not.toBeInTheDocument();
-    expect(screen.getAllByText("Opens automatically once credentials arrive (build step 4)")).toHaveLength(2);
+    expect(screen.queryByText(/Opens automatically once credentials arrive/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /First domain user/ }));
     expect((await screen.findAllByText("RID cycle with the credential")).length).toBeGreaterThan(0);
   });
@@ -146,6 +160,55 @@ describe("engagement checklist", () => {
     mount({ services: AD });
     await screen.findByText("Try null, guest and anonymous SMB");
     expect(screen.getByRole("button", { name: /Domain admin/, expanded: false })).toBeInTheDocument();
+  });
+
+  it("First domain user opens once a domain credential has a valid domain attempt", async () => {
+    mount({ services: AD, creds: [cred("c1")], attempts: [attempt("a1", "c1")] });
+    expect(await screen.findByRole("button", { name: /First domain user/, expanded: true })).toBeInTheDocument();
+    // Having a working domain credential closes the no-credentials playbook.
+    expect(screen.getByRole("button", { name: /No credentials/, expanded: false })).toBeInTheDocument();
+  });
+
+  it("local-auth-only success does not open it", async () => {
+    mount({ services: AD, creds: [cred("c1")], attempts: [attempt("a1", "c1", { authMode: "local" })] });
+    await screen.findByText("Try null, guest and anonymous SMB");
+    expect(screen.getByRole("button", { name: /First domain user/, expanded: false })).toBeInTheDocument();
+  });
+
+  it("an admin attempt on the DC opens Domain admin", async () => {
+    mount({ services: AD, creds: [cred("c1")], attempts: [attempt("a1", "c1", { result: "admin" })] });
+    expect(await screen.findByRole("button", { name: /Domain admin/, expanded: true })).toBeInTheDocument();
+  });
+
+  it("access flag appears for a new valid attempt and Reviewed clears it", async () => {
+    const user = userEvent.setup();
+    let reviewed = false;
+    m.hostMarkAccessReviewed.mockImplementation(async () => {
+      reviewed = true;
+      return { ...H1, accessReviewedAt: 200 };
+    });
+    mount({ services: AD, creds: [cred("c1")], attempts: [attempt("a1", "c1", { result: "admin" })] });
+    m.hostsList.mockImplementation(async () => [reviewed ? { ...H1, accessReviewedAt: 200 } : H1, H2]);
+    const flags = await screen.findByRole("region", { name: "New access" });
+    expect(within(flags).getByText("dc01: admin over winrm as CORP\\svc_sql")).toBeInTheDocument();
+    await user.click(within(flags).getByRole("button", { name: "Reviewed" }));
+    expect(m.hostMarkAccessReviewed).toHaveBeenCalledWith("h1");
+    await waitFor(() => expect(screen.queryByText(/admin over winrm/)).not.toBeInTheDocument());
+  });
+
+  it("a done goal shows new credential since for a later domain credential", async () => {
+    const done: ChecklistItem = { ownerId: "e1", goalId: "e-setup-clock", status: "done", notes: null, completedAt: 5, auto: false, autoFrom: null, evidence: [], updatedAt: 1 };
+    mount({ services: AD, items: [done], creds: [cred("c1", { createdAt: 50 })] });
+    await screen.findAllByText("Sync the clock to the DC");
+    const row = document.querySelector('li[data-goal-id="e-setup-clock"]') as HTMLElement;
+    expect(within(row).getByText(/New credential since/)).toHaveTextContent("CORP\\svc_sql");
+  });
+
+  it("no new credential badge when the credential is older than the done goal", async () => {
+    const done: ChecklistItem = { ownerId: "e1", goalId: "e-setup-clock", status: "done", notes: null, completedAt: 500, auto: false, autoFrom: null, evidence: [], updatedAt: 1 };
+    mount({ services: AD, items: [done], creds: [cred("c1", { createdAt: 50 })] });
+    await screen.findAllByText("Sync the clock to the DC");
+    expect(screen.queryByText(/New credential since/)).not.toBeInTheDocument();
   });
 
   it("Tick from log re-derives a tick that was missing and reports the count", async () => {

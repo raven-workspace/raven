@@ -3,7 +3,8 @@ import type { Engagement } from '../../../types/engagement';
 import type { Host } from '../../../types/host';
 import type { Service } from '../../../types/service';
 import type { Tunnel } from '../../../types/network';
-import { fillCommand, tunnelFor, type FillInput } from '../../../engines/checklist';
+import type { CredAttempt, Credential } from '../../../types/credentials';
+import { defaultCredFor, fillCommand, tunnelFor, type FillInput } from '../../../engines/checklist';
 
 const host = (p: Partial<Host> = {}): Host => ({
   id: 'h1', engagementId: 'e1', name: 'ms01', ip: '172.16.1.5', os: 'windows', boardColumn: 'enumerate', boardManual: false,
@@ -138,5 +139,64 @@ describe('fillCommand', () => {
     const sbh = new Map([...adServices('a'), ...adServices('b')]);
     const r = fillCommand('{DC_IP}', input({ hosts: [a, b], servicesByHost: sbh }));
     expect(r.unresolved).toEqual(['DC_IP']);
+  });
+});
+
+const cred = (p: Partial<Credential> = {}): Credential => ({
+  id: 'c1', engagementId: 'e1', type: 'password', username: 'alice', domain: 'CORP', secret: 'Winter2024!', hashType: null,
+  scope: 'domain', localHostId: null, sourceHostId: null, source: null, notes: null, crackStatus: null, crackedFrom: null,
+  fromSecretId: null, createdAt: 1, updatedAt: 1, ...p,
+});
+const att = (p: Partial<CredAttempt> = {}): CredAttempt => ({
+  id: 'a1', engagementId: 'e1', credId: 'c1', usernameId: null, hostId: 'h1', service: 'smb', port: null, result: 'valid',
+  authMode: 'domain', detail: null, logEntryId: null, at: 10, ...p,
+});
+const NT = '  AAD3B435B51404EEAAD3B435B51404EE:31D6CFE0D16AE931B73C59D7E0C089C0  ';
+
+describe('credential fill', () => {
+  it('fill puts USER and PASS from the picked credential and the NT half for HASH', () => {
+    const t = 'x -d {DOMAIN} -u {USER} -p {PASS}';
+    const r = fillCommand(t, input({ cred: cred(), engagement: eng({ domain: 'other.local' }) }));
+    expect(r.text).toBe('x -d CORP -u alice -p Winter2024!');
+    expect(r.unresolved).toEqual([]);
+    const h = fillCommand('x -u {USER} -H {HASH}', input({ cred: cred({ type: 'hash', secret: NT }) }));
+    expect(h.text).toBe('x -u alice -H 31D6CFE0D16AE931B73C59D7E0C089C0');
+    // A password gives no HASH; a hash gives no PASS.
+    expect(fillCommand('{HASH}', input({ cred: cred() })).unresolved).toEqual(['HASH']);
+    expect(fillCommand('{PASS}', input({ cred: cred({ type: 'hash', secret: NT }) })).unresolved).toEqual(['PASS']);
+  });
+
+  it('an ownerless credential has no USER, and an empty secret stays unresolved', () => {
+    const r = fillCommand('{USER} {PASS}', input({ cred: cred({ username: '', secret: '  ' }) }));
+    expect(r.unresolved).toEqual(['USER', 'PASS']);
+  });
+
+  it('displayed text masks PASS and HASH from the real credential; copy text has them', () => {
+    const pw = cred({ secret: "pa'ss w0rd" });
+    const shown = fillCommand("x -u {USER} -p '{PASS}'", input({ cred: pw }), { secretMask: '********' });
+    expect(shown.text).toBe("x -u alice -p '********'");
+    expect(shown.text).not.toContain("pa'ss");
+    expect(fillCommand("x -p '{PASS}'", input({ cred: pw })).text).toBe("x -p 'pa'ss w0rd'");
+    const hash = cred({ type: 'hash', secret: NT });
+    const h = fillCommand('x -H {HASH}', input({ cred: hash }), { secretMask: '********' });
+    expect(h.text).toBe('x -H ********');
+    expect(h.text).not.toMatch(/31D6/i);
+    // Masked or not, a hash credential still gives no PASS.
+    expect(fillCommand('{PASS}', input({ cred: hash }), { secretMask: '********' }).unresolved).toEqual(['PASS']);
+  });
+});
+
+describe('defaultCredFor', () => {
+  const creds = [cred({ id: 'c1' }), cred({ id: 'c2', username: 'bob' }), cred({ id: 'c3', username: 'carol' })];
+  it('picks the newest credential with a valid or admin attempt on the host', () => {
+    const attempts = [
+      att({ credId: 'c1', at: 10 }),
+      att({ id: 'a2', credId: 'c2', result: 'admin', at: 20 }),
+      att({ id: 'a3', credId: 'c3', result: 'failed', at: 30 }),
+      att({ id: 'a4', credId: 'c3', hostId: 'other', at: 40 }),
+    ];
+    expect(defaultCredFor(host(), creds, attempts)?.id).toBe('c2');
+    expect(defaultCredFor(host(), creds, [])).toBeNull();
+    expect(defaultCredFor(host(), [], attempts)).toBeNull();
   });
 });

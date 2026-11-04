@@ -6,9 +6,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { GoalRow } from "../features/checklist/GoalRow";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useCredPickStore } from "../features/checklist/credPick";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { ChecklistItem } from "../types/checklist";
+import type { CredAttempt, Credential } from "../types/credentials";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 import type { LogEntry } from "../types/log";
@@ -45,7 +47,19 @@ const item = (goalId: string, over: Partial<ChecklistItem> = {}): ChecklistItem 
   updatedAt: 1, ...over,
 });
 
-function mount(opts: { engagement?: Engagement; hosts?: Host[]; items?: ChecklistItem[]; services?: Service[] } = {}) {
+const cred = (id: string, username: string, over: Partial<Credential> = {}): Credential => ({
+  id, engagementId: "e1", type: "password", username, domain: "CORP", secret: "Winter2024!", hashType: null, scope: "domain",
+  localHostId: null, sourceHostId: null, source: null, notes: null, crackStatus: null, crackedFrom: null, fromSecretId: null,
+  createdAt: 1, updatedAt: 1, ...over,
+});
+const attempt = (id: string, credId: string, at: number, over: Partial<CredAttempt> = {}): CredAttempt => ({
+  id, engagementId: "e1", credId, usernameId: null, hostId: "h1", service: "smb", port: null, result: "valid",
+  authMode: "domain", detail: null, logEntryId: null, at, ...over,
+});
+
+function mount(opts: { engagement?: Engagement; hosts?: Host[]; items?: ChecklistItem[]; services?: Service[]; creds?: Credential[]; attempts?: CredAttempt[] } = {}) {
+  m.credentialsList.mockResolvedValue(opts.creds ?? []);
+  m.credAttemptsList.mockResolvedValue(opts.attempts ?? []);
   m.engagementGet.mockResolvedValue(opts.engagement ?? E1);
   m.hostsList.mockResolvedValue(opts.hosts ?? [H1, H2]);
   m.checklistList.mockResolvedValue(opts.items ?? []);
@@ -66,6 +80,7 @@ beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
   useCaptureStore.getState().reset();
+  useCredPickStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444",
@@ -223,6 +238,41 @@ describe("host checklist tab", () => {
     );
     await vi.waitFor(() => expect(m.checklistPut).toHaveBeenCalled());
     expect(m.checklistPut.mock.calls[0][1][0]).toMatchObject({ goalId: "h-foot-arrived", status: "done", auto: false });
+  });
+});
+
+describe("credential fill on the checklist", () => {
+  const tab = async () => within(await screen.findByRole("tabpanel"));
+  const pickerOf = async () => (await tab()).findByRole("combobox", { name: "Commands use" });
+
+  it("picker defaults to the newest credential with access on the host", async () => {
+    const user = userEvent.setup();
+    mount({
+      creds: [cred("c1", "alice"), cred("c2", "bob"), cred("c3", "carol")],
+      attempts: [attempt("a1", "c1", 10), attempt("a2", "c2", 20, { result: "admin" }), attempt("a3", "c3", 30, { result: "failed" })],
+    });
+    await openChecklist(user);
+    expect(await pickerOf()).toHaveTextContent("CORP\\bob");
+    expect((await tab()).getAllByText(/-u bob/).length).toBeGreaterThan(0);
+    // The choice is remembered per host, so Now follows it.
+    await user.click(await pickerOf());
+    await user.click(await screen.findByRole("option", { name: "None" }));
+    expect(await pickerOf()).toHaveTextContent("None");
+    expect((await tab()).queryByText(/-u bob/)).not.toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Now" })).getByRole("combobox", { name: "Commands use" })).toHaveTextContent("None");
+  });
+
+  it("displayed command masks PASS; copy has it", async () => {
+    const user = userEvent.setup();
+    mount({ creds: [cred("c1", "alice", { secret: "Pa'ss-W0rd" })], attempts: [attempt("a1", "c1", 10)] });
+    await openChecklist(user);
+    const panel = await tab();
+    await panel.findAllByText(/-u alice/);
+    expect(screen.queryByText(/Pa'ss-W0rd/)).not.toBeInTheDocument();
+    const pre = [...document.querySelectorAll("pre")].find((p) => p.textContent?.includes("••••••••"));
+    expect(pre).toBeDefined();
+    await user.click(within(pre!.closest("li")!).getByRole("button", { name: /^Copy command: / }));
+    expect(await navigator.clipboard.readText()).toContain("Pa'ss-W0rd");
   });
 });
 

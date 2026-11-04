@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ChecklistGoal } from "../../engines/checklist";
 import type { ChecklistStatus, ItemState } from "../../types/checklist";
-import { Textarea, Toggle, labelClass } from "../../ui";
+import { Chip, Textarea, Toggle, labelClass } from "../../ui";
 import { CommandList, type FilledCommand } from "./CommandList";
 import { EvidenceLinks, type EvidenceLink } from "./EvidenceLinks";
 
@@ -21,6 +21,8 @@ export interface GoalRowProps {
   evidence: EvidenceLink[];
   /** Shown instead of the command list when exam rules removed every command. */
   emptyCommandsText?: string;
+  /** Labels of domain credentials found since this goal was done. */
+  newCredLabels?: string[];
   onStatus: (goalId: string, status: ChecklistStatus) => void;
   onNotes: (goalId: string, notes: string) => void;
   onOpenEntry?: (entryId: string) => void;
@@ -29,7 +31,7 @@ export interface GoalRowProps {
   children?: ReactNode;
 }
 
-export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, onStatus, onNotes, onOpenEntry, focus, children }: GoalRowProps) {
+export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, newCredLabels, onStatus, onNotes, onOpenEntry, focus, children }: GoalRowProps) {
   const status = state?.status ?? "todo";
   const [open, setOpen] = useState(focus !== undefined || status === "todo" || status === "in_progress");
   const [seenFocus, setSeenFocus] = useState(focus);
@@ -58,6 +60,9 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, on
           {open ? "▾" : "▸"}
         </button>
         <span className={`min-w-0 flex-1 text-[13px] ${titleClass}`}>{goal.title}</span>
+        {status === "done" && newCredLabels && newCredLabels.length > 0 && (
+          <Chip>New credential since: {newCredLabels.join(", ")}</Chip>
+        )}
         <div role="group" aria-label={`Status: ${goal.title}`} className="inline-flex shrink-0 gap-0.5">
           {STATUSES.map((s) => (
             <Toggle key={s.value} on={status === s.value} onChange={() => onStatus(goal.id, s.value)}>

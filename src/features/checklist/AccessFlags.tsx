@@ -1,0 +1,45 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { accessFlags } from "../../engines/credentials/state";
+import { credLabel, usernameLabel } from "../../engines/credentials/labels";
+import { api } from "../../lib/api";
+import type { CredAttempt, Credential } from "../../types/credentials";
+import type { Host } from "../../types/host";
+import { Button } from "../../ui";
+import { useUsernames } from "../credentials/queries";
+
+/** Hosts with valid or admin access newer than their last review, each with a Reviewed button. */
+export function AccessFlags({ engagementId, hosts, attempts, credentials }: { engagementId: string; hosts: Host[]; attempts: CredAttempt[]; credentials: Credential[] }) {
+  const qc = useQueryClient();
+  const flags = useMemo(() => accessFlags({ hosts, attempts, credentials }), [hosts, attempts, credentials]);
+  // Bare-username access is named from the username list, read only when a flag needs it.
+  const usernames = useUsernames(engagementId, { enabled: flags.some((f) => f.usernameId) }).data ?? [];
+  const reviewed = useMutation({
+    mutationFn: (hostId: string) => api.hostMarkAccessReviewed(hostId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["hosts", engagementId] }),
+  });
+  if (flags.length === 0) return null;
+  const who = (f: (typeof flags)[number]) => {
+    const c = credentials.find((x) => x.id === f.credId);
+    const u = usernames.find((x) => x.id === f.usernameId);
+    return c ? credLabel(c) : u ? usernameLabel(u) : "unknown";
+  };
+  return (
+    <section aria-label="New access" className="flex flex-col gap-1">
+      <h3 className="m-0 text-[11px] font-semibold uppercase tracking-label text-muted">New access</h3>
+      <ul className="m-0 flex list-none flex-col p-0">
+        {flags.map((f) => {
+          const host = hosts.find((h) => h.id === f.hostId);
+          return (
+            <li key={`${f.hostId}-${f.credId ?? f.usernameId}-${f.service}`} className="flex items-center gap-3 border-b border-line py-2">
+              <span className="min-w-0 flex-1 text-[13px] text-fg">{`${host?.name ?? "unknown host"}: ${f.result} over ${f.service} as ${who(f)}`}</span>
+              <Button size="sm" disabled={reviewed.isPending} onClick={() => reviewed.mutate(f.hostId)}>
+                Reviewed
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}

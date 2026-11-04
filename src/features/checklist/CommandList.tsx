@@ -4,7 +4,10 @@ import { Button, Chip } from "../../ui";
 export interface FilledCommand {
   id: string;
   title: string;
+  /** What is shown: PASS and HASH are masked. */
   text: string;
+  /** What Copy puts on the clipboard: the real values. Falls back to `text`. */
+  copyText?: string;
   unresolved: string[];
   /** Exam sim, no host locked yet: this command would spend the one Metasploit host. */
   msfMarker: boolean;
@@ -38,7 +41,7 @@ export function CommandList({ commands }: { commands: FilledCommand[] }) {
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const copy = (c: FilledCommand) => {
-    void navigator.clipboard.writeText(c.text).then(() => {
+    void navigator.clipboard.writeText(c.copyText ?? c.text).then(() => {
       setCopied(c.id);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => setCopied(undefined), 1500);

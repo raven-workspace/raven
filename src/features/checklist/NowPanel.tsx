@@ -7,6 +7,8 @@ import type { Host } from "../../types/host";
 import { Panel, Toggle, labelClass } from "../../ui";
 import { useHosts } from "../hosts/queries";
 import { CommandList } from "./CommandList";
+import { CredentialPicker } from "./CredentialPicker";
+import { useCredFill } from "./credPick";
 import { goalCommands } from "./goalCommands";
 import { useChecklist, useChecklistMutations, useEngagementServices, useTunnels } from "./queries";
 
@@ -19,6 +21,7 @@ export function NowPanel({ engagementId, host, onOpenGoal }: { engagementId: str
   const { servicesByHost, query: servicesQ } = useEngagementServices(engagementId);
   const { tunnels } = useTunnels(engagementId);
   const { setStatus } = useChecklistMutations(engagementId);
+  const creds = useCredFill(engagementId, host);
 
   const hosts = hostsQ.data;
   const eng = engagement.data;
@@ -35,7 +38,7 @@ export function NowPanel({ engagementId, host, onOpenGoal }: { engagementId: str
   const stage = currentStage(state, applicable);
   const input: FillInput = {
     host, engagement: eng, hosts, servicesByHost, tunnels,
-    attackerIp: settings.data?.attackerIp ?? "", listenerPort: settings.data?.listenerPort ?? "",
+    attackerIp: settings.data?.attackerIp ?? "", listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
   };
   const open = (stage ? (applicable.find((a) => a.stage.id === stage.id)?.goals ?? []) : [])
     .filter((g) => {
@@ -57,6 +60,7 @@ export function NowPanel({ engagementId, host, onOpenGoal }: { engagementId: str
         <p className="m-0 text-xs text-muted">All stages done</p>
       ) : (
         <div className="flex flex-col gap-3">
+          <CredentialPicker credentials={creds.credentials} value={creds.cred} onChange={creds.pick} />
           {open.length === 0 ? (
             <p className="m-0 text-xs text-muted">Nothing allowed in an exam sim; do it by hand</p>
           ) : (
