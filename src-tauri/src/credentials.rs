@@ -271,7 +271,7 @@ fn build(conn: &Connection, engagement_id: &str, i: CredentialInput) -> AppResul
         source_host_id,
         source: blank_to_none(i.source.as_deref()),
         notes: blank_to_none(i.notes.as_deref()),
-        crack_status: crack_status.or_else(|| (i.kind == "hash").then(|| "uncracked".to_string())),
+        crack_status,
         cracked_from,
         from_secret_id,
         kind: i.kind,
@@ -304,6 +304,9 @@ fn insert(conn: &Connection, c: &Credential) -> AppResult<()> {
 pub fn create(conn: &Connection, engagement_id: &str, input: CredentialInput) -> AppResult<Credential> {
     check_scope(conn, engagement_id, None)?;
     let mut c = build(conn, engagement_id, input)?;
+    if c.kind == "hash" && c.crack_status.is_none() {
+        c.crack_status = Some("uncracked".into());
+    }
     if let Some(existing) = find_duplicate(conn, &c, "")? {
         return Ok(existing);
     }
@@ -322,9 +325,18 @@ pub fn update(conn: &Connection, id: &str, input: CredentialInput) -> AppResult<
     if find_duplicate(conn, &c, id)?.is_some() {
         return Err(invalid("secret", "A credential with these values already exists"));
     }
-    // build() defaults a missing hash status to uncracked; on update, absent means keep.
-    let (status, cracked_from, from_secret) = (
-        c.crack_status.clone(),
+    for link in [&c.cracked_from, &c.from_secret_id] {
+        if link.as_deref() == Some(id) {
+            return Err(invalid("crackedFrom", "a credential cannot link to itself"));
+        }
+    }
+    // Absent keeps the current status; a hash with none starts uncracked; a non-hash has none.
+    let status = if c.kind == "hash" {
+        c.crack_status.clone().or(current.crack_status.clone()).or(Some("uncracked".into()))
+    } else {
+        None
+    };
+    let (cracked_from, from_secret) = (
         c.cracked_from.clone().or(current.cracked_from.clone()),
         c.from_secret_id.clone().or(current.from_secret_id.clone()),
     );
@@ -335,7 +347,7 @@ pub fn update(conn: &Connection, id: &str, input: CredentialInput) -> AppResult<
         params![
             id, c.kind, c.username, c.domain, c.secret, c.hash_type, c.scope, c.local_host_id, c.source_host_id,
             c.source, c.notes,
-            status.or(current.crack_status),
+            status,
             cracked_from, from_secret, system_now_ms()
         ],
     )?;
@@ -394,7 +406,13 @@ pub fn crack(conn: &Connection, hash_id: &str, plaintext: &str) -> AppResult<Cre
         updated_at: now,
     };
     let out = match find_duplicate(&tx, &pw, "")? {
-        Some(existing) => existing,
+        Some(existing) => {
+            tx.execute(
+                "UPDATE credentials SET cracked_from=?2, updated_at=?3 WHERE id=?1 AND cracked_from IS NULL",
+                params![existing.id, hash.id, now],
+            )?;
+            get(&tx, &existing.id)?
+        }
         None => {
             insert(&tx, &pw)?;
             get(&tx, &pw.id)?
@@ -549,6 +567,10 @@ pub fn grant_delete(conn: &Connection, id: &str) -> AppResult<()> {
 /// deletes the credential, all or nothing. Returns the username.
 pub fn convert_to_access(conn: &Connection, cred_id: &str, grant: AccessGrantInput) -> AppResult<Username> {
     let cred = get(conn, cred_id)?;
+    let placeholder = matches!(cred.secret.trim().to_lowercase().as_str(), "" | "none" | "n/a" | "-");
+    if cred.kind != "password" || !placeholder {
+        return Err(invalid("secret", "only a placeholder password credential can be converted"));
+    }
     if cred.username.trim().is_empty() {
         return Err(invalid("username", "the credential has no username to convert"));
     }
@@ -769,7 +791,14 @@ mod tests {
         assert_eq!(list(c, &e).unwrap().len(), 2);
         // cracking again does not duplicate the password
         assert_eq!(crack(c, &hash.id, "Summer2024!").unwrap().id, pw.id);
-        assert_eq!(list(c, &e).unwrap().len(), 2);
+        // an existing matching password without a link gains it
+        let h2 = create(c, &e, cin("hash", "bob", &"cd".repeat(16))).unwrap();
+        let loose = create(c, &e, cin("password", "bob", "Winter1!")).unwrap();
+        assert_eq!(loose.cracked_from, None);
+        let linked = crack(c, &h2.id, "Winter1!").unwrap();
+        assert_eq!((linked.id.as_str(), linked.cracked_from.as_deref()), (loose.id.as_str(), Some(h2.id.as_str())));
+        delete(c, &h2.id).unwrap();
+        delete(c, &loose.id).unwrap();
         assert_eq!(field(crack(c, &hash.id, "  ")).0, "plaintext");
         assert_eq!(field(crack(c, &pw.id, "x")).0, "type");
         // deleting the hash leaves the password, unlinked
@@ -777,6 +806,56 @@ mod tests {
         assert_eq!(get(c, &pw.id).unwrap().cracked_from, None);
         assert_eq!(set_crack_status(c, &pw.id, "uncrackable").unwrap().crack_status.as_deref(), Some("uncrackable"));
         assert_eq!(field(set_crack_status(c, &pw.id, "x")).0, "crackStatus");
+    }
+
+    #[test]
+    fn update_keeps_crack_status_and_rejects_self_links() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "a");
+        let hash = create(c, &e, cin("hash", "svc", &"ab".repeat(16))).unwrap();
+        crack(c, &hash.id, "Pw1!").unwrap();
+        let mut edit = cin("hash", "svc", &"ab".repeat(16));
+        edit.notes = Some("n".into());
+        let u = update(c, &hash.id, edit.clone()).unwrap();
+        assert_eq!((u.crack_status.as_deref(), u.notes.as_deref()), (Some("cracked"), Some("n")));
+        set_crack_status(c, &hash.id, "uncrackable").unwrap();
+        edit.domain = Some("corp".into());
+        let u = update(c, &hash.id, edit.clone()).unwrap();
+        assert_eq!((u.crack_status.as_deref(), u.domain.as_deref()), (Some("uncrackable"), Some("corp")));
+        edit.crack_status = Some("uncracked".into());
+        assert_eq!(update(c, &hash.id, edit.clone()).unwrap().crack_status.as_deref(), Some("uncracked"));
+        // retyping away from hash clears the status
+        let pw = update(c, &hash.id, cin("password", "svc", "x")).unwrap();
+        assert_eq!(pw.crack_status, None);
+        let mut selfie = cin("password", "svc", "x");
+        selfie.cracked_from = Some(hash.id.clone());
+        assert_eq!(field(update(c, &hash.id, selfie)).0, "crackedFrom");
+    }
+
+    #[test]
+    fn convert_refuses_real_secret() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "a");
+        let h = host(c, &e, "10.0.0.5");
+        let cred = create(c, &e, cin("password", "alice", "Real1!")).unwrap();
+        c.execute(
+            "INSERT INTO cred_attempts (id,engagement_id,cred_id,host_id,service,result,auth_mode,at) \
+             VALUES ('a1',?1,?2,?3,'smb','valid','domain',1)",
+            params![e, cred.id, h],
+        )
+        .unwrap();
+        assert_eq!(field(convert_to_access(c, &cred.id, ginput(&h))).0, "secret");
+        let hash = create(c, &e, cin("hash", "bob", &"ab".repeat(16))).unwrap();
+        assert_eq!(field(convert_to_access(c, &hash.id, ginput(&h))).0, "secret");
+        assert_eq!(get(c, &cred.id).unwrap().secret, "Real1!");
+        assert_eq!(count(c, "SELECT count(*) FROM cred_attempts"), 1);
+        assert_eq!(usernames_list(c, &e).unwrap().len(), 0);
+        for ph in ["None", "n/a", "-"] {
+            let p = create(c, &e, cin("password", &format!("u{ph}"), ph)).unwrap();
+            convert_to_access(c, &p.id, ginput(&h)).unwrap();
+        }
     }
 
     #[test]
