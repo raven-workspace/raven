@@ -21,6 +21,8 @@ import { CredentialForm } from "./CredentialForm";
 import { CrackDialog, HashesList } from "./HashesList";
 import { MaskedSecret } from "./MaskedSecret";
 import { useAccessGrants, useCredAttempts, useCredentialMutations, useCredentials, useUsernames } from "./queries";
+import { RoutineSection } from "./RoutineSection";
+import { TestGrid } from "./TestGrid";
 import { UsernamesList } from "./UsernamesList";
 
 const STATE_LABEL: Record<OverallState, string> = {
@@ -101,6 +103,9 @@ export function CredentialsSection() {
           </tbody>
         </table>
       )}
+
+      <TestGrid eid={id} hosts={hosts} creds={shown.creds} attempts={shown.attempts} servicesByHost={servicesByHost} />
+      <RoutineSection eid={id} hosts={hosts} creds={shown.creds} usernames={usersQ.data} attempts={shown.attempts} servicesByHost={servicesByHost} />
 
       <UsernamesList eid={id} usernames={usersQ.data} grants={grantsQ.data} hosts={hosts} />
       <HashesList eid={id} hashes={hashes} />

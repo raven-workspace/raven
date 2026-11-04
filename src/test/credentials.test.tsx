@@ -128,7 +128,8 @@ describe("credentials section", () => {
     await user.type(within(dlg).getByLabelText("Secret"), "Winter2024!");
     await user.click(within(dlg).getByRole("button", { name: "Add" }));
 
-    const row = (await screen.findByText("CORP\\jsmith")).closest("tr")!;
+    // The test grid and routine picker also name the credential; the list row is the one in a <tr> with a Delete button.
+    const row = (await screen.findAllByText("CORP\\jsmith")).map((e) => e.closest("tr")).find((r) => r?.querySelector("[aria-label^=Delete]"))!;
     expect(m.credentialCreate).toHaveBeenCalledWith("e1", expect.objectContaining({ username: "jsmith", domain: "CORP", secret: "Winter2024!", type: "password" }));
     expect(within(row).getByText("••••••••")).toBeInTheDocument();
     expect(screen.queryByText("Winter2024!")).not.toBeInTheDocument();
@@ -236,7 +237,7 @@ describe("credentials section", () => {
   it("convert a placeholder credential to access-only", async () => {
     const user = userEvent.setup();
     mount({ creds: [cred({ id: "c1", username: "guest", domain: "CORP", secret: "none" }), cred({ id: "c2", username: "real", secret: "pw" })] });
-    expect(await screen.findByText("CORP\\guest")).toBeInTheDocument();
+    expect((await screen.findAllByText("CORP\\guest")).length).toBeGreaterThan(0);
     // Only the placeholder offers conversion.
     expect(screen.getAllByRole("button", { name: /to access-only$/ })).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: "Convert CORP\\guest to access-only" }));

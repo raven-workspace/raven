@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import type {
   AccessGrantInput,
+  CredAttemptInput,
   CrackStatus,
   CredentialInput,
   UsernameInput,
@@ -80,5 +81,15 @@ export function useAccessGrantMutations(eid: string) {
       onSuccess,
     }),
     remove: useMutation({ mutationFn: (id: string) => api.accessGrantDelete(id), onSuccess }),
+  };
+}
+
+/** Hand-set cell results. Both invalidate the attempts, which drive every cell and state chip. */
+export function useCredAttemptMutations(eid: string) {
+  const qc = useQueryClient();
+  const onSuccess = () => void qc.invalidateQueries({ queryKey: credAttemptsKey(eid) });
+  return {
+    upsert: useMutation({ mutationFn: (input: CredAttemptInput) => api.credAttemptsUpsert(eid, [input]), onSuccess }),
+    remove: useMutation({ mutationFn: (id: string) => api.credAttemptDelete(id), onSuccess }),
   };
 }
