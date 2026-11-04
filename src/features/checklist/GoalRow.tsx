@@ -46,7 +46,7 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, on
   const titleClass = status === "done" ? "text-muted line-through" : status === "na" ? "text-muted" : "text-fg";
 
   return (
-    <li ref={root} data-goal-id={goal.id} className="border-b border-line py-2">
+    <li ref={root} data-goal-id={goal.id} className="border-b border-line py-3">
       <div className="flex items-center gap-3">
         <button
           type="button"

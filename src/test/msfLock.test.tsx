@@ -136,3 +136,24 @@ describe("dual-homed flag", () => {
     expect(screen.getByText("Sweep the new network for hosts")).toBeInTheDocument();
   });
 });
+
+describe("listener on the strip", () => {
+  it("shows LHOST:LPORT from settings, and links to Settings", async () => {
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "172.31.45.160", listenerPort: "4444" });
+    const user = userEvent.setup();
+    mount("/e/e1", { ...E1, kind: "lab" });
+    const link = await screen.findByRole("link", { name: /LHOST 192\.168\.45\.160:4444/ });
+    await user.click(link);
+    expect(await screen.findByLabelText("Your IP (tun0)")).toBeInTheDocument();
+  });
+
+  it("says LHOST is not set when the IP is blank, and shows the port alone when only it is set", async () => {
+    const view = mount("/e/e1", E1);
+    expect(await screen.findByRole("link", { name: /LHOST not set/ })).toBeInTheDocument();
+    view.unmount();
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "443" });
+    mount("/e/e1", E1);
+    expect(await screen.findByRole("link", { name: /LHOST not set · LPORT 443/ })).toBeInTheDocument();
+  });
+});
+

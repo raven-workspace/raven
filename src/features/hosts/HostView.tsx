@@ -80,7 +80,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
             </div>
             {tab === "story" && <OrderButton order={order} onChange={setOrder} />}
           </div>
-          <div role="tabpanel" className="mt-3 min-h-0 flex-1 overflow-y-auto border-t border-line">
+          <div role="tabpanel" className="mt-3 min-h-0 flex-1 overflow-y-auto border-t border-line pl-1 pr-3 pt-1 [scrollbar-gutter:stable]">
             {tab === "story" ? (
               log.isError ? (
                 <p role="alert" className="text-xs text-warn">Couldn't load the log: {log.error.message}</p>

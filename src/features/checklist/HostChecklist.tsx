@@ -90,9 +90,9 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal }: { 
   };
 
   return (
-    <div className="flex flex-col gap-5 py-3">
+    <div className="flex flex-col gap-6 py-3">
       {groups.map(({ stage, goals, hint }) => (
-        <section key={stage.id} aria-label={stage.title} className="flex flex-col gap-1">
+        <section key={stage.id} aria-label={stage.title} className="flex flex-col gap-2 border-t border-line-2 pt-5 first:border-t-0 first:pt-0">
           <h3 className="m-0 text-[11px] font-semibold uppercase tracking-label text-muted">{stage.title}</h3>
           {goals.length === 0 ? (
             <p className="m-0 text-xs text-muted">{hint}</p>
