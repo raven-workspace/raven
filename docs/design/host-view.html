@@ -1,0 +1,89 @@
+<h2>One host: how do we keep everything above the fold?</h2>
+<p class="subtitle">Today the host tabs stack vertically and things sink out of view. Both options keep the essentials pinned. Board cards now show IP and an OS chip, per your note.</p>
+
+<style>
+  .h-wrap{font-size:12px}
+  .h-head{display:flex;gap:8px;align-items:center;padding:6px 8px;border-bottom:1px solid rgba(127,127,127,.3)}
+  .chip{border:1px solid rgba(127,127,127,.5);border-radius:10px;padding:0 7px;font-size:11px}
+  .pane{border:1px solid rgba(127,127,127,.3);border-radius:6px;padding:6px;overflow:hidden}
+  .pane h5{margin:0 0 4px;font-size:12px;opacity:.75}
+  .svc{display:grid;grid-template-columns:44px 1fr;gap:4px;font-size:11px;padding:1px 0}
+  .svc .new{color:#4caf50}
+  .entry{border-left:2px solid #4c8bf5;padding:2px 6px;margin:4px 0}
+  .entry small{display:block;opacity:.65}
+  .obs{font-style:italic;opacity:.85}
+  .step{font-size:11px;padding:1px 0}
+  .tabs span{margin-right:10px;opacity:.7}.tabs span.on{opacity:1;font-weight:600;border-bottom:2px solid #4c8bf5}
+  .warn{color:#e0a030}
+</style>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Three panes, no tabs</h3>
+      <p>Services and checklist on the left, the host's story (log) in the middle, and a right pane for whatever you've selected (an entry, a finding, a credential).</p>
+      <div class="mockup"><div class="mockup-header">Raven › Mock exam A › Vega</div><div class="mockup-body h-wrap">
+        <div class="h-head"><b>Vega</b><span>172.31.x.143</span><span class="chip">Linux</span><span class="chip">user: vega</span><span class="chip">Stage: privesc</span><span class="warn">1 open thread</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1.5fr 1fr;gap:6px;padding:6px">
+          <div>
+            <div class="pane"><h5>Services</h5>
+              <div class="svc"><span>22</span><span>OpenSSH 8.2p1</span></div>
+              <div class="svc"><span>80</span><span>Apache 2.4.41 · Pico CMS</span></div>
+              <div class="svc"><span>3003</span><span class="new">CouchDB 3.1.1 ✓ <small style="opacity:.6">(nmap: cgms?)</small></span></div>
+              <div class="svc"><span>3306</span><span>MySQL</span></div>
+            </div>
+            <div class="pane" style="margin-top:6px"><h5>Checklist · Privesc</h5>
+              <div class="step">✓ sudo -l / SUID / caps</div><div class="step">◻ cron &amp; timers</div><div class="step">◻ writable config files</div>
+            </div>
+          </div>
+          <div class="pane"><h5>Story</h5>
+            <div class="entry">Full TCP scan<small>Kali · 10 open</small></div>
+            <div class="entry">Talk to 3003 directly<small>Kali · <span class="obs">Info protocol, no auth</span></small></div>
+            <div class="entry">📸 :81 welcome page<small>Browser · <span class="obs">header/body mismatch?</span></small></div>
+            <div class="entry">SUID list<small>Vega · <span class="obs">backupd looks non-standard</span></small></div>
+          </div>
+          <div class="pane"><h5>Selected: SUID list</h5>
+            <div style="opacity:.7">command, output (folded), observations…</div>
+            <div class="warn" style="margin-top:6px">Raven: backupd isn't a standard SUID binary</div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Pinned summary column + tabs</h3>
+      <p>A fixed left column always shows services and the current stage's checklist. The rest of the screen is tabs: Story, Checklist, Credentials, Findings.</p>
+      <div class="mockup"><div class="mockup-header">Raven › Mock exam A › Vega</div><div class="mockup-body h-wrap">
+        <div class="h-head"><b>Vega</b><span>172.31.x.143</span><span class="chip">Linux</span><span class="chip">user: vega</span><span class="chip">Stage: privesc</span><span class="warn">1 open thread</span></div>
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:6px;padding:6px">
+          <div>
+            <div class="pane"><h5>Services</h5>
+              <div class="svc"><span>22</span><span>OpenSSH 8.2p1</span></div>
+              <div class="svc"><span>80</span><span>Apache 2.4.41 · Pico CMS</span></div>
+              <div class="svc"><span>3003</span><span class="new">CouchDB 3.1.1 ✓</span></div>
+              <div class="svc"><span>3306</span><span>MySQL</span></div>
+            </div>
+            <div class="pane" style="margin-top:6px"><h5>Now · Privesc</h5>
+              <div class="step">◻ cron &amp; timers</div><div class="step">◻ writable config files</div>
+            </div>
+          </div>
+          <div>
+            <div class="tabs" style="padding:2px 0 6px"><span class="on">Story</span><span>Checklist</span><span>Credentials</span><span>Findings</span></div>
+            <div class="pane">
+              <div class="entry">Full TCP scan<small>Kali · 10 open</small></div>
+              <div class="entry">Talk to 3003 directly<small>Kali · <span class="obs">Info protocol, no auth</span></small></div>
+              <div class="entry">📸 :81 welcome page<small>Browser · <span class="obs">header/body mismatch?</span></small></div>
+              <div class="entry">SUID list<small>Vega · <span class="obs">backupd looks non-standard</span></small></div>
+            </div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:12px">Both: Field notes slide out on <code>N</code>; <code>L</code> adds a log entry. Content is illustrative.</p>
