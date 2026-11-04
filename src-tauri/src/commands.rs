@@ -3,6 +3,7 @@
 //! `vault_create` returns nothing on success and leaves the vault
 //! unlocked (no daily backup: a brand-new vault has nothing to back up).
 
+use crate::attempts::{self, CredAttempt, CredAttemptInput};
 use crate::backup::{self, BackupInfo};
 use crate::credentials::{
     self, AccessGrant, AccessGrantInput, Credential, CredentialInput, Username, UsernameInput,
@@ -414,6 +415,39 @@ pub async fn username_create(app: AppHandle, engagement_id: String, input: Usern
 #[tauri::command]
 pub async fn username_delete(app: AppHandle, id: String) -> AppResult<()> {
     with_vault(app, move |v| credentials::username_delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn cred_attempts_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<CredAttempt>> {
+    with_vault(app, move |v| attempts::list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn cred_attempts_upsert(
+    app: AppHandle,
+    engagement_id: String,
+    inputs: Vec<CredAttemptInput>,
+) -> AppResult<Vec<CredAttempt>> {
+    with_vault(app, move |v| attempts::upsert(v.conn()?, &engagement_id, &inputs)).await
+}
+
+#[tauri::command]
+pub async fn cred_attempt_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| attempts::delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn cred_attempts_rekey(
+    app: AppHandle,
+    username_id: String,
+    secret_cred_ids: Vec<String>,
+    cred_id: String,
+    host_id: Option<String>,
+) -> AppResult<Vec<CredAttempt>> {
+    with_vault(app, move |v| {
+        attempts::rekey_username_attempts(v.conn()?, &username_id, &secret_cred_ids, &cred_id, host_id.as_deref())
+    })
+    .await
 }
 
 #[tauri::command]

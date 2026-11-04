@@ -90,3 +90,40 @@ export interface AccessGrantInput {
   /** Absent means now. */
   at?: number;
 }
+
+export type AttemptResult = "admin" | "valid" | "failed" | "errored";
+export type AuthMode = "domain" | "local";
+export type AttemptService =
+  | "smb" | "winrm" | "rdp" | "mssql" | "ssh" | "ftp" | "ldap" | "wmi" | "vnc" | "nfs" | "http" | "kerberos" | "other";
+
+/** Mirrors the Rust `CredAttempt`. `usernameId` is set when a bare username was tried with `credId`'s secret. */
+export interface CredAttempt {
+  id: string;
+  engagementId: string;
+  credId: string;
+  usernameId: string | null;
+  hostId: string;
+  service: AttemptService;
+  port: number | null;
+  result: AttemptResult;
+  authMode: AuthMode;
+  detail: string | null;
+  logEntryId: string | null;
+  at: number;
+}
+
+/** Mirrors the Rust `CredAttemptInput`. Upserts never downgrade a recorded result. */
+export interface CredAttemptInput {
+  credId: string;
+  usernameId?: string | null;
+  hostId: string;
+  service: AttemptService;
+  port?: number | null;
+  result: AttemptResult;
+  /** Absent means domain. */
+  authMode?: AuthMode;
+  detail?: string | null;
+  logEntryId?: string | null;
+  /** Absent means now. */
+  at?: number;
+}

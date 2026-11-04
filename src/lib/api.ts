@@ -8,6 +8,8 @@ import type {
   AccessGrant,
   AccessGrantInput,
   Credential,
+  CredAttempt,
+  CredAttemptInput,
   CredentialInput,
   CrackStatus,
   Username,
@@ -123,6 +125,12 @@ export const api = {
   usernameCreate: (engagementId: string, input: UsernameInput) =>
     call<Username>("username_create", { engagementId, input }),
   usernameDelete: (id: string) => call<null>("username_delete", { id }),
+  credAttemptsList: (engagementId: string) => call<CredAttempt[]>("cred_attempts_list", { engagementId }),
+  credAttemptsUpsert: (engagementId: string, inputs: CredAttemptInput[]) =>
+    call<CredAttempt[]>("cred_attempts_upsert", { engagementId, inputs }),
+  credAttemptDelete: (id: string) => call<null>("cred_attempt_delete", { id }),
+  credAttemptsRekey: (usernameId: string, secretCredIds: string[], credId: string, hostId?: string | null) =>
+    call<CredAttempt[]>("cred_attempts_rekey", { usernameId, secretCredIds, credId, hostId: hostId ?? null }),
   accessGrantsList: (engagementId: string) => call<AccessGrant[]>("access_grants_list", { engagementId }),
   accessGrantCreate: (engagementId: string, input: AccessGrantInput) =>
     call<AccessGrant>("access_grant_create", { engagementId, input }),

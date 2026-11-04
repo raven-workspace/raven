@@ -1,3 +1,4 @@
+pub mod attempts;
 pub mod backup;
 pub mod checklist;
 pub mod commands;
@@ -88,6 +89,10 @@ pub fn run() {
             commands::usernames_list,
             commands::username_create,
             commands::username_delete,
+            commands::cred_attempts_list,
+            commands::cred_attempts_upsert,
+            commands::cred_attempt_delete,
+            commands::cred_attempts_rekey,
             commands::access_grants_list,
             commands::access_grant_create,
             commands::access_grant_delete,
