@@ -296,6 +296,8 @@ pub fn take_at(vault: &Vault, reason: &str, now_ms: i64) -> AppResult<BackupInfo
 
 /// File-level backup of the encrypted `raven.db` (no connection or key needed). Only valid
 /// while nothing is writing to the db, e.g. before the first migration write on unlock.
+/// Never prunes: the user's retention setting can't be read here (the db may be pre-migration),
+/// so the next normal `take` prunes with the real setting.
 pub fn take_file_level(paths: &DataPaths, reason: &str, now_ms: i64) -> AppResult<BackupInfo> {
     if !valid_reason(reason) {
         return Err(AppError::Validation { field: "reason".into(), message: "invalid backup reason".into() });
@@ -309,9 +311,7 @@ pub fn take_file_level(paths: &DataPaths, reason: &str, now_ms: i64) -> AppResul
         publish(paths, &tmp, reason, now_ms)
     })();
     let _ = std::fs::remove_file(&tmp);
-    let info = res?;
-    prune(paths, DEFAULT_RETENTION, &info.file);
-    Ok(info)
+    res
 }
 
 /// The Vault's default pre-migration hook: file-level copy with reason `pre-migration`.
@@ -603,6 +603,18 @@ mod tests {
         // Byte-identical copy of the encrypted file as it was before migrating, plus vault.json.
         assert_eq!(std::fs::read(v.paths().backups.join(&l[0].file)).unwrap(), db_before);
         assert!(v.paths().backups.join(companion_name(&l[0].file)).exists());
+    }
+
+    #[test]
+    fn pre_migration_backup_does_not_prune_with_default_retention() {
+        let (_d, v) = setup();
+        v.conn().unwrap().execute("INSERT INTO settings(key,value) VALUES('backup_retention','50')", []).unwrap();
+        for i in 0..20 {
+            take_at(&v, "manual", T0 + i * 1000).unwrap();
+        }
+        assert_eq!(db_files(&v).len(), 20);
+        take_file_level(v.paths(), "pre-migration", T0 + H).unwrap();
+        assert_eq!(db_files(&v).len(), 21);
     }
 
     #[test]
