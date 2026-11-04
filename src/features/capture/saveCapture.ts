@@ -1,6 +1,6 @@
 import { buildDraft, type CaptureDraft, type DraftInput } from "../../engines/capture";
 import { api } from "../../lib/api";
-import { afterEntrySaved, FollowUpError } from "../checklist/ticks";
+import { afterEntrySaved, CHECKLIST_FAILED, FollowUpError } from "../checklist/ticks";
 import type { Host } from "../../types/host";
 import type { LogContent, LogEntry, LogKind, NewAttachment } from "../../types/log";
 
@@ -101,13 +101,17 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<LogEntry> {
       }
     } catch (e) {
       // The checklist still follows the entry; the services failure is the one reported first.
-      const ticked = await afterEntrySaved(engagementId, entry, entry.id).then(
-        () => true,
-        () => false,
+      const followUp = await afterEntrySaved(engagementId, entry, entry.id).then(
+        () => null,
+        (f: unknown) => f,
       );
       const partial = new PartialSaveError(entry, e);
-      if (ticked) throw partial;
-      throw new PartialSaveError(entry, e, `${partial.message}. The checklist didn't update either: use Tick from log on the Engagement checklist.`);
+      if (!followUp) throw partial;
+      const also =
+        followUp instanceof FollowUpError && followUp.message !== CHECKLIST_FAILED
+          ? followUp.message
+          : "The checklist didn't update either: use Tick from log on the Engagement checklist.";
+      throw new PartialSaveError(entry, e, `${partial.message}. ${also}`);
     }
   }
   try {

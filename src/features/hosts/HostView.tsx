@@ -43,7 +43,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
       <HostHeader host={host} />
       <div className="grid min-h-0 flex-1 grid-cols-[300px_1fr] gap-6">
         <div className="flex min-h-0 flex-col gap-6 overflow-y-auto pr-1">
-          <ServicesColumn hostId={hostId} entries={entries} />
+          <ServicesColumn engagementId={engagementId} hostId={hostId} entries={entries} />
           <Panel title="Now" aria-label="Now">
             <p className="m-0 text-xs text-muted">
               The current stage's open steps arrive with the checklist (build step 3).

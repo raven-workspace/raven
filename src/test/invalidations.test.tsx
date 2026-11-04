@@ -8,6 +8,7 @@ import { useServiceMutations } from "../features/services/queries";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
+import type { Host } from "../types/host";
 import type { LogEntry, LogEntryInput } from "../types/log";
 import type { Service } from "../types/service";
 
@@ -65,7 +66,7 @@ describe("cache invalidation (M4)", () => {
     m.serviceDelete.mockResolvedValue(null);
     m.serviceCreate.mockResolvedValue({} as Service);
     const { wrapper, keys } = setup();
-    const { result } = renderHook(() => useServiceMutations("h1"), { wrapper });
+    const { result } = renderHook(() => useServiceMutations("e1", "h1"), { wrapper });
     await act(() => result.current.remove.mutateAsync("s1"));
     expect(keys()).toContainEqual(["services", "h1"]);
     expect(keys()).toContainEqual(["services", "engagement"]);
@@ -78,5 +79,19 @@ describe("cache invalidation (M4)", () => {
     await act(() => result.current.remove.mutateAsync("h1"));
     expect(keys()).toContainEqual(["log", "e1"]);
     expect(keys()).toContainEqual(["hosts", "e1"]);
+    expect(keys()).toContainEqual(["checklist", "e1"]);
+    expect(keys()).toContainEqual(["services"]);
+  });
+
+  it("host create and update invalidate the checklist and services", async () => {
+    m.hostCreate.mockResolvedValue({} as Host);
+    m.hostUpdate.mockResolvedValue({} as Host);
+    const { wrapper, keys } = setup();
+    const { result } = renderHook(() => useHostMutations("e1"), { wrapper });
+    await act(() => result.current.create.mutateAsync({ name: "x" }));
+    expect(keys()).toContainEqual(["checklist", "e1"]);
+    expect(keys()).toContainEqual(["services"]);
+    await act(() => result.current.update.mutateAsync({ id: "h1", input: { name: "x" } }));
+    expect(keys().filter((k) => JSON.stringify(k) === JSON.stringify(["checklist", "e1"]))).toHaveLength(2);
   });
 });

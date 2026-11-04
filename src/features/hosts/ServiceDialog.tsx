@@ -9,6 +9,7 @@ const PROTOCOLS = [
 ];
 
 export interface ServiceDialogProps {
+  engagementId: string;
   hostId: string;
   /** Edit this service; without it the dialog adds one. */
   service?: Service;
@@ -16,9 +17,9 @@ export interface ServiceDialogProps {
 }
 
 /** Add a service by hand (nmap normally supplies them), or correct one: port, protocol, nmap guess. */
-export function ServiceDialog({ hostId, service, onClose }: ServiceDialogProps) {
+export function ServiceDialog({ engagementId, hostId, service, onClose }: ServiceDialogProps) {
   const formId = useId();
-  const { create, update } = useServiceMutations(hostId);
+  const { create, update } = useServiceMutations(engagementId, hostId);
   const [port, setPort] = useState(service ? String(service.port) : "");
   const [protocol, setProtocol] = useState<ServiceProtocol>(service?.protocol ?? "tcp");
   const [name, setName] = useState(service?.nmapService ?? "");

@@ -7,6 +7,7 @@ import { useServiceMutations } from "../services/queries";
 const NONE = "none";
 
 export interface ConfirmServiceDialogProps {
+  engagementId: string;
   service: Service;
   /** This host's log entries, offered as "Proved by". */
   entries: LogEntry[];
@@ -18,9 +19,9 @@ export interface ConfirmServiceDialogProps {
 }
 
 /** The only way a service identity gets confirmed: the user types it. */
-export function ConfirmServiceDialog({ service, entries, onClose, onEdit, onDelete }: ConfirmServiceDialogProps) {
+export function ConfirmServiceDialog({ engagementId, service, entries, onClose, onEdit, onDelete }: ConfirmServiceDialogProps) {
   const formId = useId();
-  const { confirm, unconfirm } = useServiceMutations(service.hostId);
+  const { confirm, unconfirm } = useServiceMutations(engagementId, service.hostId);
   const [product, setProduct] = useState(service.confirmedProduct ?? "");
   const [version, setVersion] = useState(service.confirmedVersion ?? "");
   const [entryId, setEntryId] = useState(service.confirmedEntryId ?? NONE);

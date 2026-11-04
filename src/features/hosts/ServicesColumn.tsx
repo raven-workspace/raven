@@ -42,8 +42,8 @@ function ServiceRow({ s, onOpen }: { s: Service; onOpen: () => void }) {
 
 type Open = { id: string; mode: "confirm" | "edit" | "delete" };
 
-function DeleteServiceDialog({ service, onClose }: { service: Service; onClose: () => void }) {
-  const { remove } = useServiceMutations(service.hostId);
+function DeleteServiceDialog({ engagementId, service, onClose }: { engagementId: string; service: Service; onClose: () => void }) {
+  const { remove } = useServiceMutations(engagementId, service.hostId);
   const [error, setError] = useState<string>();
   return (
     <Dialog
@@ -67,7 +67,7 @@ function DeleteServiceDialog({ service, onClose }: { service: Service; onClose: 
   );
 }
 
-export function ServicesColumn({ hostId, entries }: { hostId: string; entries: LogEntry[] }) {
+export function ServicesColumn({ engagementId, hostId, entries }: { engagementId: string; hostId: string; entries: LogEntry[] }) {
   const services = useServices(hostId);
   const [open, setOpen] = useState<Open>();
   const [adding, setAdding] = useState(false);
@@ -92,6 +92,7 @@ export function ServicesColumn({ hostId, entries }: { hostId: string; entries: L
       )}
       {current && open?.mode === "confirm" && (
         <ConfirmServiceDialog
+          engagementId={engagementId}
           service={current}
           entries={entries}
           onClose={close}
@@ -99,9 +100,9 @@ export function ServicesColumn({ hostId, entries }: { hostId: string; entries: L
           onDelete={() => setOpen({ id: current.id, mode: "delete" })}
         />
       )}
-      {current && open?.mode === "edit" && <ServiceDialog hostId={hostId} service={current} onClose={close} />}
-      {current && open?.mode === "delete" && <DeleteServiceDialog service={current} onClose={close} />}
-      {adding && <ServiceDialog hostId={hostId} onClose={() => setAdding(false)} />}
+      {current && open?.mode === "edit" && <ServiceDialog engagementId={engagementId} hostId={hostId} service={current} onClose={close} />}
+      {current && open?.mode === "delete" && <DeleteServiceDialog engagementId={engagementId} service={current} onClose={close} />}
+      {adding && <ServiceDialog engagementId={engagementId} hostId={hostId} onClose={() => setAdding(false)} />}
     </section>
   );
 }

@@ -322,6 +322,24 @@ describe("saveCapture", () => {
     });
   });
 
+  it("services failure with a lock-only follow-up failure uses the lock's message", async () => {
+    m.servicesUpsertScan.mockRejectedValue(new Error("db busy"));
+    m.engagementGet.mockResolvedValue({ id: "e1", kind: "exam-sim", domain: null, msfHostId: null } as Engagement);
+    m.hostsList.mockResolvedValue([DC]);
+    m.engagementSetMsfHost.mockRejectedValue(new Error("db busy"));
+    const err = await saveCapture({
+      engagementId: "e1",
+      draft: draft({ scan: { hostId: "h1", ports: PORTS, os: null } }),
+      edits: edits({ content: { kind: "command", blocks: [{ command: "msfconsole -q -x 'use exploit/windows/smb/psexec; set RHOSTS 10.10.10.5'", output: "" }] } }),
+      addIps: [],
+      image: null,
+      hosts: [DC],
+    }).catch((e: unknown) => e);
+    expect(err).toMatchObject({
+      message: "Saved, but services didn't update: db busy. Saved the entry, but the Metasploit lock didn't update.",
+    });
+  });
+
   it("checklist failure after the entry saved is a partial save carrying its cause", async () => {
     const cause = new Error("locked");
     m.checklistPut.mockRejectedValue(cause);

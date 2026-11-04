@@ -1,17 +1,22 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, renderHook, screen, within } from "@testing-library/react";
+import type { ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { applicableGoals } from "../engines/checklist";
+import { useChecklistMutations } from "../features/checklist/queries";
 import { loadTickContext, syncEntryTicks, tickFromLog } from "../features/checklist/ticks";
+import { useServiceMutations } from "../features/services/queries";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { ChecklistItem, ChecklistItemInput } from "../types/checklist";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 import type { LogEntry, LogEntryInput } from "../types/log";
+import type { Service } from "../types/service";
 
 vi.mock("../lib/api");
 const m = vi.mocked(api, true);
@@ -312,6 +317,43 @@ describe("auto-tick wiring", () => {
     expect(hosts.find((h) => h.id === "h1")).toMatchObject({ boardColumn: "privesc", boardDerived: "privesc" });
   });
 
+  it("hostSyncBoard rejects during a delete → checklist rows restored, entry not deleted, error shown", async () => {
+    const user = userEvent.setup();
+    m.hostSyncBoard.mockRejectedValue(new Error("board busy"));
+    entries = [
+      entry({ id: "f1", title: "local.txt · dc01", kind: "flag", hostIds: ["h1"], content: { kind: "flag", flagKind: "local", value: FLAG } }),
+    ];
+    store = [
+      item({ ownerId: "h1", goalId: "h-orient-proof", status: "done", completedAt: 50, auto: true, evidence: [{ entryId: "f1", commandId: "flag" }] }),
+    ];
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardColumn: "privesc", boardDerived: "privesc" } : h));
+    mount("/e/e1/s/log");
+    await user.click(await screen.findByRole("button", { name: /local.txt · dc01/ }));
+    await user.click(log().getByRole("button", { name: "Delete" }));
+    await user.click(screen.getByRole("button", { name: "Delete entry" }));
+    expect(await screen.findByText("board busy")).toBeInTheDocument();
+    expect(m.logDelete).not.toHaveBeenCalled();
+    expect(entries).toHaveLength(1);
+    expect(m.checklistPut).toHaveBeenCalledTimes(2);
+    expect(stored("h1", "h-orient-proof")).toMatchObject({
+      status: "done", auto: true, completedAt: 50, evidence: [{ entryId: "f1", commandId: "flag" }],
+    });
+  });
+
+  it("a board-only failure on save says the board didn't update", async () => {
+    const user = userEvent.setup();
+    m.hostSyncBoard.mockRejectedValue(new Error("board busy"));
+    mount();
+    const dialog = await openCapture(user);
+    await user.paste(`whoami; hostname; ip a\nweb02\n    inet 10.10.10.6/24 brd 10.10.10.255 scope global ens3\ncat /home/web/local.txt\n${FLAG}`);
+    await saveCapture(user);
+    expect(
+      await within(dialog).findByText("Saved the entry, but the board didn't update. Use Tick from log on the Engagement checklist."),
+    ).toBeInTheDocument();
+    // The checklist itself was written.
+    expect(stored("h2", "h-orient-proof")).toMatchObject({ status: "done", auto: true });
+  });
+
   it("a log edit whose checklist write fails says so", async () => {
     const user = userEvent.setup();
     m.checklistPut.mockRejectedValue(new Error("disk full"));
@@ -348,11 +390,9 @@ describe("ticks.ts", () => {
     store = [
       item({ ownerId: "h1", goalId: "h-orient-proof", status: "done", completedAt: 50, auto: true, evidence: [{ entryId: "f1", commandId: "flag" }] }),
     ];
-    const ctx = await loadTickContext("e1");
     const flag = entry({ id: "f1", kind: "flag", hostIds: ["h1"], content: { kind: "flag", flagKind: "local", value: FLAG } });
     hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardDerived: "privesc" } : h));
     await syncEntryTicks("e1", flag, "f1", await loadTickContext("e1"));
-    expect(ctx.hosts).toHaveLength(2);
     expect(m.checklistPut).not.toHaveBeenCalled();
     expect(m.hostSyncBoard).not.toHaveBeenCalled();
   });
@@ -384,5 +424,78 @@ describe("ticks.ts", () => {
     m.checklistPut.mockClear();
     expect(await tickFromLog("e1", await loadTickContext("e1"))).toEqual({ updated: 0, message: "Updated 0 goals" });
     expect(m.checklistPut).not.toHaveBeenCalled();
+  });
+});
+
+function hookWrapper() {
+  const qc = makeQueryClient();
+  return ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+}
+
+describe("service mutations", () => {
+  it("confirming a service re-syncs the board", async () => {
+    // The enumerate goals that apply with only 3000/tcp seen as http are all closed except the web ones.
+    const svc = (over: Partial<Service>): Service => ({
+      id: "s1", hostId: "h1", port: 3000, protocol: "tcp", state: "open", nmapService: "http", nmapVersion: null,
+      confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1, ...over,
+    });
+    let services = [svc({})];
+    m.servicesListEngagement.mockImplementation(async () => services);
+    m.serviceConfirm.mockImplementation(async () => {
+      services = [svc({ confirmedProduct: "CouchDB", confirmedVersion: "5.1" })];
+      return services[0]!;
+    });
+    const ctx = await loadTickContext("e1");
+    const before = applicableGoals(hosts[0]!, engagement, hosts, ctx.servicesByHost).filter((a) => a.stage.id === "enumerate").flatMap((a) => a.goals);
+    expect(before.some((g) => g.id.startsWith("h-enum-web"))).toBe(true);
+    store = before.filter((g) => !g.id.startsWith("h-enum-web")).map((g) => item({ ownerId: "h1", goalId: g.id, status: "done", completedAt: 1 }));
+    const { result } = renderHook(() => useServiceMutations("e1", "h1"), { wrapper: hookWrapper() });
+    await act(() => result.current.confirm.mutateAsync({ id: "s1", input: { product: "CouchDB", version: "5.1" } }));
+    await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h1", "foothold"));
+  });
+
+  it("a board-sync failure after a service change is not fatal", async () => {
+    m.serviceDelete.mockResolvedValue(null);
+    m.hostSyncBoard.mockRejectedValue(new Error("board busy"));
+    hosts = hosts.map((h) => ({ ...h, boardDerived: null }));
+    const { result } = renderHook(() => useServiceMutations("e1", "h1"), { wrapper: hookWrapper() });
+    await act(() => result.current.remove.mutateAsync("s1"));
+    await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalled());
+    expect(result.current.remove.isError).toBe(false);
+  });
+});
+
+describe("useChecklistMutations", () => {
+  const auto = () =>
+    item({ ownerId: "h1", goalId: "h-enum-udp", status: "done", completedAt: 50, auto: true, autoFrom: "na", notes: "keep", evidence: [{ entryId: "s1", commandId: "x" }] });
+
+  it("setStatus done is manual, clears autoFrom and stamps completedAt; evidence and notes stay", async () => {
+    store = [item({ ownerId: "h1", goalId: "h-enum-udp", status: "in_progress", auto: true, autoFrom: "na", notes: "keep", evidence: [{ entryId: "s1", commandId: "x" }] })];
+    const { result } = renderHook(() => useChecklistMutations("e1"), { wrapper: hookWrapper() });
+    const t0 = Date.now();
+    await act(() => result.current.setStatus.mutateAsync({ ownerId: "h1", goalId: "h-enum-udp", status: "done" }));
+    const sent = m.checklistPut.mock.calls[0]![1];
+    expect(sent).toEqual([
+      { ownerId: "h1", goalId: "h-enum-udp", status: "done", notes: "keep", completedAt: expect.any(Number), auto: false, autoFrom: null, evidence: [{ entryId: "s1", commandId: "x" }] },
+    ]);
+    expect(sent[0]!.completedAt).toBeGreaterThanOrEqual(t0);
+  });
+
+  it("setStatus other than done clears completedAt", async () => {
+    store = [auto()];
+    const { result } = renderHook(() => useChecklistMutations("e1"), { wrapper: hookWrapper() });
+    await act(() => result.current.setStatus.mutateAsync({ ownerId: "h1", goalId: "h-enum-udp", status: "todo" }));
+    expect(m.checklistPut.mock.calls[0]![1]).toEqual([
+      { ownerId: "h1", goalId: "h-enum-udp", status: "todo", notes: "keep", completedAt: null, auto: false, autoFrom: null, evidence: [{ entryId: "s1", commandId: "x" }] },
+    ]);
+  });
+
+  it("setNotes with blank removes the notes and keeps the rest", async () => {
+    store = [auto()];
+    const { result } = renderHook(() => useChecklistMutations("e1"), { wrapper: hookWrapper() });
+    await act(() => result.current.setNotes.mutateAsync({ ownerId: "h1", goalId: "h-enum-udp", notes: "   " }));
+    expect(m.checklistPut.mock.calls[0]![1]).toEqual([
+      { ownerId: "h1", goalId: "h-enum-udp", status: "done", notes: null, completedAt: 50, auto: true, autoFrom: "na", evidence: [{ entryId: "s1", commandId: "x" }] },
+    ]);
   });
 });

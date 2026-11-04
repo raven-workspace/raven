@@ -194,6 +194,15 @@ pub fn sync_board(conn: &Connection, id: &str, derived: &str) -> AppResult<Host>
     if current.board_derived.as_deref() == Some(derived) {
         return Ok(current);
     }
+    // A card placed by hand before the board was derived (pre-0003 hosts) keeps its place: the first sync only
+    // records the derived column, so the placement holds until the next stage completes.
+    if current.board_derived.is_none() && current.board_manual {
+        conn.execute(
+            "UPDATE hosts SET board_derived=?2, updated_at=?3 WHERE id=?1",
+            params![id, derived, system_now_ms()],
+        )?;
+        return get(conn, id);
+    }
     conn.execute(
         "UPDATE hosts SET board_column=?2, board_manual=0, board_derived=?2, updated_at=?3 WHERE id=?1",
         params![id, derived, system_now_ms()],
@@ -458,6 +467,29 @@ mod tests {
         assert_eq!((s.board_column.as_str(), s.board_manual, s.board_derived.as_deref()), ("foothold", false, Some("foothold")));
         assert_eq!(field(sync_board(c, &h.id, "nowhere")).0, "derived");
         assert_eq!(sync_board(c, "nope", "done"), Err(AppError::NotFound));
+    }
+
+    #[test]
+    fn sync_board_seeds_null_derived_without_moving_a_manual_card() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = engagements::create(c, eng_input(&[])).unwrap();
+        let h = create(c, &e.id, hin("web", None)).unwrap();
+        move_to(c, &h.id, "privesc").unwrap();
+        // Hand-placed with no derived column yet: seed it, don't move.
+        let s = sync_board(c, &h.id, "enumerate").unwrap();
+        assert_eq!((s.board_column.as_str(), s.board_manual, s.board_derived.as_deref()), ("privesc", true, Some("enumerate")));
+        // Same derived column again: still holds.
+        let s = sync_board(c, &h.id, "enumerate").unwrap();
+        assert_eq!((s.board_column.as_str(), s.board_manual), ("privesc", true));
+        // The next stage completes: the card moves.
+        let s = sync_board(c, &h.id, "foothold").unwrap();
+        assert_eq!((s.board_column.as_str(), s.board_manual, s.board_derived.as_deref()), ("foothold", false, Some("foothold")));
+        // Null derived and not manual: moves as before.
+        let h2 = create(c, &e.id, hin("dc", None)).unwrap();
+        assert!(h2.board_derived.is_none() && !h2.board_manual);
+        let s = sync_board(c, &h2.id, "privesc").unwrap();
+        assert_eq!((s.board_column.as_str(), s.board_manual, s.board_derived.as_deref()), ("privesc", false, Some("privesc")));
     }
 
     fn put_all_children(c: &rusqlite::Connection, e: &str, h: &str, other: &str) {

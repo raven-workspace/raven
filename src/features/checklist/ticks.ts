@@ -67,14 +67,14 @@ async function write(engagementId: string, items: ChecklistItemInput[]): Promise
  * Re-derives one log entry's ticks after it was created, edited (`entry`) or deleted (`entry` null). Every owner
  * that holds evidence from the entry, or gets a tick from it, runs `replaceEntryTicks` with its own ticks, so a tick
  * moves when the entry's hosts change and an undo restores the prior status. Writes only changed items, in one
- * `checklistPut`, then syncs the board. Returns the rows that undo the write (empty when nothing changed).
+ * `checklistPut`. Returns the rows that undo the write (empty when nothing changed) and the checklist after it.
  */
-export async function syncEntryTicks(
+export async function writeEntryTicks(
   engagementId: string,
   entry: LogEntry | null,
   entryId: string,
   ctx: TickContext,
-): Promise<ChecklistItemInput[]> {
+): Promise<{ undo: ChecklistItemInput[]; after: Map<string, ChecklistState> }> {
   const before = byOwnerOf(await api.checklistList(engagementId));
   const ticks = entry ? ticksForEntry(entry, ctx) : [];
   const owners = new Set(ticks.map((t) => t.ownerId));
@@ -85,8 +85,18 @@ export async function syncEntryTicks(
   for (const ownerId of owners) after.set(ownerId, replaceEntryTicks(before.get(ownerId), entryId, ticksFor(ticks, ownerId), now));
   const { next, prev } = changedItems(before, after);
   if (next.length > 0) await write(engagementId, next);
+  return { undo: prev, after };
+}
+
+/** `writeEntryTicks`, then the board sync. */
+export async function syncEntryTicks(engagementId: string, entry: LogEntry | null, entryId: string, ctx: TickContext): Promise<void> {
+  const { after } = await writeEntryTicks(engagementId, entry, entryId, ctx);
   await syncBoards(engagementId, ctx, after);
-  return prev;
+}
+
+/** Re-reads the store and syncs every host's board column (after a service change alters applicability). */
+export async function resyncBoards(engagementId: string): Promise<void> {
+  await syncBoards(engagementId, await loadTickContext(engagementId));
 }
 
 /**
@@ -146,6 +156,7 @@ export async function lockMetasploit(entry: LogEntry, ctx: TickContext): Promise
 }
 
 export const MSF_LOCK_FAILED = "Saved the entry, but the Metasploit lock didn't update.";
+export const BOARD_FAILED = "Saved the entry, but the board didn't update. Use Tick from log on the Engagement checklist.";
 
 /** A saved log entry's follow-up (checklist or Metasploit lock) failed. `reason` is what made it fail. */
 export class FollowUpError extends Error {
@@ -158,9 +169,9 @@ export class FollowUpError extends Error {
 }
 
 /**
- * The follow-up of a saved, edited (`entry`) or deleted (`entry` null) log entry: its checklist ticks and board,
- * then the exam-sim Metasploit lock. A failed step does not stop the other; the first failure is thrown as a
- * `FollowUpError` (`CHECKLIST_FAILED` or `MSF_LOCK_FAILED`).
+ * The follow-up of a saved, edited (`entry`) or deleted (`entry` null) log entry: its checklist ticks, the board,
+ * then the exam-sim Metasploit lock. A failed step does not stop the lock; the first failure is thrown as a
+ * `FollowUpError` (`CHECKLIST_FAILED`, `BOARD_FAILED` or `MSF_LOCK_FAILED`).
  */
 export async function afterEntrySaved(engagementId: string, entry: LogEntry | null, entryId: string): Promise<void> {
   let ctx: TickContext;
@@ -170,10 +181,18 @@ export async function afterEntrySaved(engagementId: string, entry: LogEntry | nu
     throw new FollowUpError(CHECKLIST_FAILED, e);
   }
   let failure: FollowUpError | null = null;
+  let after: Map<string, ChecklistState> | null = null;
   try {
-    await syncEntryTicks(engagementId, entry, entryId, ctx);
+    ({ after } = await writeEntryTicks(engagementId, entry, entryId, ctx));
   } catch (e) {
     failure = new FollowUpError(CHECKLIST_FAILED, e);
+  }
+  if (after) {
+    try {
+      await syncBoards(engagementId, ctx, after);
+    } catch (e) {
+      failure = new FollowUpError(BOARD_FAILED, e);
+    }
   }
   if (entry) {
     try {
@@ -186,19 +205,21 @@ export async function afterEntrySaved(engagementId: string, entry: LogEntry | nu
 }
 
 /**
- * Deletes a log entry with its checklist evidence. The ticks come off first, so a checklist failure leaves the
- * entry in place (the error is thrown as is). If the delete then fails, the prior checklist rows and board are
- * put back exactly; if that also fails, the thrown message says to use Tick from log.
+ * Deletes a log entry with its checklist evidence. The ticks come off and the board syncs first; if either fails,
+ * the entry stays and the error is thrown as is. If the board sync or the delete fails after the ticks came off, the
+ * prior checklist rows (completion times included) and the board are put back; if that also fails, the thrown
+ * message says to use Tick from log.
  */
 export async function deleteEntryWithTicks(engagementId: string, entryId: string): Promise<void> {
   const ctx = await loadTickContext(engagementId);
-  const undo = await syncEntryTicks(engagementId, null, entryId, ctx);
+  const { undo, after } = await writeEntryTicks(engagementId, null, entryId, ctx);
   try {
+    await syncBoards(engagementId, ctx, after);
     await api.logDelete(entryId);
   } catch (e) {
     try {
       if (undo.length > 0) await write(engagementId, undo);
-      await syncBoards(engagementId, await loadTickContext(engagementId));
+      await resyncBoards(engagementId);
     } catch (restore) {
       const detail = e instanceof Error ? e.message : String(e);
       throw new FollowUpError(`${detail}. The checklist lost this entry's ticks: use Tick from log on the Engagement checklist.`, restore);

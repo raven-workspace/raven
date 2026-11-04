@@ -16,6 +16,9 @@ export function useHostMutations(engagementId: string) {
   const onSuccess = () => {
     void qc.invalidateQueries({ queryKey: ["hosts", engagementId] });
     void qc.invalidateQueries({ queryKey: ["progress"] });
+    // Host facts (OS, IP) change applicability; a deleted host takes its checklist rows and services with it.
+    void qc.invalidateQueries({ queryKey: ["checklist", engagementId] });
+    void qc.invalidateQueries({ queryKey: ["services"] });
   };
   return {
     create: useMutation({ mutationFn: (input: HostInput) => api.hostCreate(engagementId, input), onSuccess }),
