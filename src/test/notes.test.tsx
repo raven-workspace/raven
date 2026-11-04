@@ -267,6 +267,21 @@ describe("field notes panel", () => {
     expect(m.noteSave.mock.invocationCallOrder[0]).toBeLessThan(m.vaultLock.mock.invocationCallOrder[0]!);
   });
 
+  it("a non-notes cache write landing while the backend locks does not survive the lock", async () => {
+    let finishLock: () => void = () => {};
+    m.vaultLock.mockImplementation(() => new Promise((resolve) => (finishLock = () => resolve(null))));
+    const user = userEvent.setup();
+    mount("/e/e1");
+    await screen.findByText("Mock exam A");
+    await user.keyboard("{Meta>}l{/Meta}");
+    await vi.waitFor(() => expect(m.vaultLock).toHaveBeenCalled());
+    // A checklist mutation finishing in the lock window writes to the cache.
+    qc.setQueryData(["checklist", "e1"], [{ ownerId: "h1", goalId: "h-enum-full-tcp", status: "done" }]);
+    await act(async () => finishLock());
+    await vi.waitFor(() => expect(qc.getQueryData(["checklist", "e1"])).toBeUndefined());
+    await screen.findByLabelText("Password");
+  });
+
   it("still locks when the flush fails, and then holds no note text", async () => {
     m.noteSave.mockRejectedValue(new RavenError("io", "disk"));
     const user = userEvent.setup();

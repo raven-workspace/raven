@@ -15,6 +15,22 @@ const cache = new Map<string, { notes: Note[] | undefined; pending: Record<strin
 /** Per note key: the last body parsed and its count, so a keystroke re-parses only the note being typed in. */
 const parsed = new Map<string, { body: string; n: number }>();
 
+/** On every lock (via `discardNotes`): the caches hold note bodies, which never stay in memory once locked. */
+export function clearThreadCounts(): void {
+  cache.clear();
+  parsed.clear();
+}
+
+/** Test helper: every note body the caches hold. */
+export function threadCountsMemory(): string[] {
+  const out = [...parsed.values()].map((p) => p.body);
+  for (const { notes, pending } of cache.values()) {
+    for (const n of notes ?? []) out.push(n.body);
+    for (const p of Object.values(pending)) out.push(p.body);
+  }
+  return out;
+}
+
 function countOf(key: string, body: string): number {
   const hit = parsed.get(key);
   if (hit && hit.body === body) return hit.n;

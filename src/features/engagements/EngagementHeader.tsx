@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { api } from "../../lib/api";
 import type { Engagement, EngagementStatus } from "../../types/engagement";
+import { dropPendingNotes } from "../notes/useNotesStore";
 import { Button, Chip, Dialog, Field, Input } from "../../ui";
 import { EngagementDialog } from "./EngagementDialog";
 import { KIND_LABEL, scopeSummary } from "./format";
@@ -99,7 +100,14 @@ function DeleteDialog({
   onDeleted: () => void;
 }) {
   const [typed, setTyped] = useState("");
-  const del = useMutation({ mutationFn: () => api.engagementDelete(e.id), onSuccess: onDeleted });
+  const del = useMutation({
+    mutationFn: () => api.engagementDelete(e.id),
+    onSuccess: () => {
+      // Its notes are gone: unsaved text for them can never be saved.
+      dropPendingNotes(e.id);
+      onDeleted();
+    },
+  });
   const match = typed === e.name;
   const confirm = () => match && !del.isPending && del.mutate();
 

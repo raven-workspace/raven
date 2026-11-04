@@ -141,8 +141,11 @@ pub fn ruled_out_create(conn: &Connection, input: RuledOutInput) -> AppResult<Ru
     if reason.is_empty() {
         return Err(invalid("reason", "reason must not be blank"));
     }
-    if text.len() > MAX_BODY || reason.len() > MAX_BODY {
-        return Err(invalid("text", "too long"));
+    if text.len() > MAX_BODY {
+        return Err(invalid("text", "text is too long (1 MiB max)"));
+    }
+    if reason.len() > MAX_BODY {
+        return Err(invalid("reason", "reason is too long (1 MiB max)"));
     }
     check_scope(conn, &input.engagement_id, input.host_id.as_deref())?;
     let id = uuid::Uuid::new_v4().to_string();
@@ -268,6 +271,9 @@ mod tests {
         };
         assert_eq!(field(ruled_out_create(c, inp("  ", "r", None))), "text");
         assert_eq!(field(ruled_out_create(c, inp("t", " ", None))), "reason");
+        let long = "a".repeat(MAX_BODY + 1);
+        assert_eq!(field(ruled_out_create(c, inp(&long, "r", None))), "text");
+        assert_eq!(field(ruled_out_create(c, inp("t", &long, None))), "reason");
         let r = ruled_out_create(c, inp(" SMB relay ", " signing on ", Some(&h))).unwrap();
         assert_eq!((r.text.as_str(), r.reason.as_str(), r.host_id.as_deref()), ("SMB relay", "signing on", Some(h.as_str())));
         ruled_out_create(c, inp("kerberoast", "no SPNs", None)).unwrap();

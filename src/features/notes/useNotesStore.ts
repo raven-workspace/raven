@@ -4,6 +4,7 @@ import { api } from "../../lib/api";
 import { reportError } from "../../lib/lockSignal";
 import { RavenError } from "../../types/errors";
 import type { Note } from "../../types/notes";
+import { clearThreadCounts } from "./useThreadCounts";
 
 export type NotesScope = "host" | "engagement";
 
@@ -131,7 +132,8 @@ async function flushOnce(snapshot: Record<string, PendingNote>): Promise<void> {
       if (gen !== generation) return;
       failure ??= e;
       const message = RavenError.from(e).message;
-      useNotesStore.setState((s) => ({ errors: { ...s.errors, [key]: message } }));
+      // Text dropped meanwhile (its host or engagement was deleted) has no error to show.
+      useNotesStore.setState((s) => (s.pending[key] ? { errors: { ...s.errors, [key]: message } } : s));
     }
   }
   if (failure !== undefined) throw failure;
@@ -155,6 +157,25 @@ export function flushQuietly(): void {
   void flushNotes().catch(reportError);
 }
 
+/**
+ * Drops unsaved text whose note is gone, so it neither retries a save that can only fail nor counts as threads:
+ * a deleted host's note (`hostId`), or every note of a deleted engagement (`hostId` left out).
+ */
+export function dropPendingNotes(engagementId: string, hostId?: string): void {
+  const gone = (p: NoteTarget) => p.engagementId === engagementId && (hostId === undefined || p.hostId === hostId);
+  useNotesStore.setState((s) => {
+    const keys = Object.entries(s.pending).filter(([, p]) => gone(p)).map(([k]) => k);
+    if (keys.length === 0) return s;
+    const pending = { ...s.pending };
+    const errors = { ...s.errors };
+    for (const k of keys) {
+      delete pending[k];
+      delete errors[k];
+    }
+    return { pending, errors };
+  });
+}
+
 /** True while any note text is not yet confirmed saved. */
 export function hasPendingNotes(): boolean {
   return Object.keys(useNotesStore.getState().pending).length > 0;
@@ -165,6 +186,8 @@ export function discardNotes() {
   clearTimeout(timer);
   generation++;
   useNotesStore.setState({ open: false, pending: {}, errors: {} });
+  // Thread counts cache note bodies (saved and pending): they go too.
+  clearThreadCounts();
 }
 
 /** Test helper: back to a clean store. */

@@ -41,7 +41,8 @@ function Body({ thread, target, saved, onClose }: { thread: ClosingThread; targe
   const [isPrivate, setIsPrivate] = useState(useNotesStore.getState().pending[noteKey(target)]?.private ?? saved.private);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  // Set once the line is rewritten and saved, so a retry only repeats the ruled-out create.
+  // Set once the closed line is in the pending text (before its save), so a retry skips the rewrite: it re-flushes,
+  // then repeats the ruled-out create.
   const [rewritten, setRewritten] = useState(false);
   const needsReason = outcome === "dead";
   const valid = !needsReason || reason.trim() !== "";

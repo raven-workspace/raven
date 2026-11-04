@@ -109,10 +109,16 @@ export function VaultGate({ children }: { children: ReactNode }) {
         qc.clear();
       }
     }
+    // Once the backend is locked, clear the cache again: a mutation that finished while the notes flushed or the
+    // lock ran may have written to it. Only if no unlock happened meanwhile.
+    const locked = () => {
+      setLockRetrying(false);
+      if (gen === sessionGeneration()) qc.clear();
+    };
     for (let i = 0; i < 3; i++) {
       try {
         await api.vaultLock();
-        setLockRetrying(false);
+        locked();
         return;
       } catch {
         // retry
@@ -120,7 +126,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
     }
     const st = await api.vaultStatus().catch(() => null);
     if (st && !st.unlocked) {
-      setLockRetrying(false);
+      locked();
       return;
     }
     setLockRetrying(true);

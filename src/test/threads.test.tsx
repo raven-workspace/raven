@@ -1,13 +1,16 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { discardNotes, resetNotesStore } from "../features/notes/useNotesStore";
+import { threadCountsMemory } from "../features/notes/useThreadCounts";
 import { api } from "../lib/api";
+import { reportError } from "../lib/lockSignal";
+import { RavenError } from "../types/errors";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
@@ -110,6 +113,21 @@ describe("open threads", () => {
     const { ta } = await openPanel(user, "/e/e1/h/h1");
     fireEvent.change(ta, { target: { value: "? typed" } });
     expect(await screen.findByText("1 thread")).toBeInTheDocument();
+  });
+
+  it("after a lock the thread-count caches hold no note body, saved or pending (T10-R1)", async () => {
+    setStored("h1", "? saved secret");
+    const user = userEvent.setup();
+    const { ta } = await openPanel(user, "/e/e1/h/h1");
+    expect(await screen.findByText("1 thread")).toBeInTheDocument();
+    fireEvent.change(ta, { target: { value: "? pending secret" } });
+    await vi.waitFor(() => expect(threadCountsMemory()).toContain("? pending secret"));
+    expect(threadCountsMemory()).toContain("? saved secret");
+    act(() => reportError(new RavenError("locked", "locked")));
+    await screen.findByLabelText("Password");
+    const left = threadCountsMemory();
+    expect(left).not.toContain("? saved secret");
+    expect(left).not.toContain("? pending secret");
   });
 
   it("the dashboard card shows the engagement's total", async () => {
