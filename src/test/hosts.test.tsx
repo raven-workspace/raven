@@ -117,7 +117,7 @@ describe("hosts", () => {
     await user.click(within(dialog).getByRole("button", { name: "Add host" }));
     await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(m.hostCreate).toHaveBeenLastCalledWith("e1", { name: "dc03", ip: "10.10.10.9", os: null, access: "none" });
-    expect(await screen.findByRole("link", { name: /dc03/ })).toBeInTheDocument();
+    expect(await within(await screen.findByRole("navigation", { name: "Engagement" })).findByRole("link", { name: /dc03/ })).toBeInTheDocument();
   });
 
   it("number keys navigate section routes", async () => {
@@ -142,12 +142,12 @@ describe("hosts", () => {
     const user = userEvent.setup();
     m.engagementUpdate.mockImplementation(async (_id, input) => ({ ...E1, ...input }) as Engagement);
     mount();
-    await screen.findByRole("link", { name: /dc01/ });
+    await within(await screen.findByRole("navigation", { name: "Engagement" })).findByRole("link", { name: /dc01/ });
     expect(m.hostsList).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "Edit" }));
     const dialog = await screen.findByRole("dialog", { name: "Edit engagement" });
     hosts = [...hosts, host({ id: "h4", name: "new04", ip: "10.10.10.20" })];
     await user.click(within(dialog).getByRole("button", { name: "Save" }));
-    expect(await screen.findByRole("link", { name: /new04/ })).toBeInTheDocument();
+    expect(await within(await screen.findByRole("navigation", { name: "Engagement" })).findByRole("link", { name: /new04/ })).toBeInTheDocument();
   });
 });

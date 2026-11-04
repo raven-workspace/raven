@@ -1,7 +1,8 @@
 import { EmptyState } from "../../ui";
+import { Board } from "../board/Board";
 
 export const SECTIONS = [
-  { id: "board", label: "Board", empty: "Board arrives in build step 2" },
+  { id: "board", label: "Board", empty: "" },
   { id: "log", label: "Log", empty: "Log arrives in a later build step" },
   { id: "credentials", label: "Credentials", empty: "Credentials arrive in a later build step" },
   { id: "findings", label: "Findings", empty: "Findings arrive in a later build step" },
@@ -17,15 +18,7 @@ export function sectionPath(engagementId: string, section: SectionId): string {
 }
 
 export function SectionView({ section }: { section: SectionId }) {
+  if (section === "board") return <Board />;
   const s = SECTIONS.find((x) => x.id === section)!;
-  return (
-    <EmptyState
-      title={s.empty}
-      body={
-        section === "board"
-          ? "Hosts will sit here in columns by stage: Enumerate, Foothold, Privesc, Loot / pivot, Done."
-          : undefined
-      }
-    />
-  );
+  return <EmptyState title={s.empty} />;
 }

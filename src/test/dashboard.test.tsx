@@ -137,7 +137,7 @@ describe("dashboard", () => {
     const user = userEvent.setup();
     mount();
     await user.click(await screen.findByRole("link", { name: /Mock exam A/ }));
-    expect(await screen.findByText("Board arrives in build step 2")).toBeInTheDocument();
+    expect(await within(await screen.findByRole("main")).findByText("No hosts yet")).toBeInTheDocument();
   });
 
   it("past search filters by name and client", async () => {
@@ -320,7 +320,7 @@ describe("engagement shell", () => {
     expect(within(nav).getByRole("link", { name: /Board/ })).toHaveAttribute("aria-current", "page");
     expect(within(nav).getByText("Hosts")).toBeInTheDocument();
     expect(await within(nav).findByText("No hosts yet")).toBeInTheDocument();
-    expect(screen.getByText("Board arrives in build step 2")).toBeInTheDocument();
+    expect(within(screen.getByRole("main")).getByText("No hosts yet")).toBeInTheDocument();
     const strip = screen.getByRole("status", { name: "Engagement status" });
     expect(within(strip).getByText(/left$/)).toBeInTheDocument();
   });
