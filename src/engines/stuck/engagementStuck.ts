@@ -1,0 +1,157 @@
+import type { ChecklistState } from "../../types/checklist";
+import type { CredAttempt, Credential, Username } from "../../types/credentials";
+import type { Engagement } from "../../types/engagement";
+import type { Host } from "../../types/host";
+import type { Service } from "../../types/service";
+import type { Tunnel } from "../../types/network";
+import { applicableGoals, adHosts, filterForKind } from "../checklist";
+import { BUILTIN_LIBRARY } from "../library/data";
+import { ROUTINE_STEPS, accessFlags, cellFor, hostSprayServices, isSprayable, routineStepApplies } from "../credentials";
+
+export interface StuckLine {
+  area: "foothold" | "credentials" | "privesc" | "lateral";
+  text: string;
+  /** Null for engagement-level lines. */
+  hostId: string | null;
+  goalId?: string;
+}
+
+const AREA_ORDER: StuckLine["area"][] = ["foothold", "credentials", "privesc", "lateral"];
+/** The proof goal closes the privesc stage: once done the host is rooted, and it is an outcome, never a step to try. */
+const PROOF_GOAL = "h-pe-proof";
+/** Any of these done means the host has a foothold: a caught shell, a credential login, or a recorded arrival. */
+const FOOTHOLD_DONE_GOALS = ["h-foot-shell", "h-foot-creds", "h-foot-arrived"];
+const SPRAY_USERS_ITEM = ROUTINE_STEPS.find((s) => s.id === "spray-users")!.itemId;
+const ASREP_GOALS = ["e-ad-user-asrep", "e-ad-nocreds-asrep"];
+
+const nameOf = (h: Host) => h.name || h.ip || h.id;
+
+/**
+ * Where to look next, sorted by area (spec §6.7): hosts with no foothold and enumeration still to do, untested
+ * credential cells, credentials never sprayed, usernames not AS-REP-checked, open access flags and dual-homed
+ * hosts without a tunnel. Derived on every call.
+ */
+export function engagementStuck(input: {
+  engagement: Engagement;
+  hosts: Host[];
+  servicesByHost: Map<string, Service[]>;
+  byOwner: Map<string, ChecklistState>;
+  credentials: Credential[];
+  attempts: CredAttempt[];
+  usernames: Username[];
+  tunnels: Tunnel[];
+}): StuckLine[] {
+  const { engagement, hosts, servicesByHost, byOwner } = input;
+  const credentials = input.credentials.filter((c) => c.engagementId === engagement.id);
+  const usernames = input.usernames.filter((u) => u.engagementId === engagement.id);
+  const attempts = input.attempts.filter((a) => a.engagementId === engagement.id);
+  const statusOf = (ownerId: string, goalId: string) => byOwner.get(ownerId)?.[goalId]?.status ?? "todo";
+  const out: StuckLine[] = [];
+
+  /** In exam sim a goal whose library commands are all banned has nothing legal to run, so it is not "to do". */
+  const hasLegalCommand = (host: Host, goalId: string) => {
+    const cmds = BUILTIN_LIBRARY.filter((c) => c.goals.includes(goalId));
+    if (cmds.length === 0) return true;
+    return filterForKind(cmds, engagement.kind, { hostId: host.id, msfHostId: engagement.msfHostId }).shown.length > 0;
+  };
+
+  // foothold: no shell yet and enumeration steps still open; privesc: shell, privesc steps still open
+  for (const host of hosts) {
+    const stages = applicableGoals(host, engagement, hosts, servicesByHost);
+    const open = (stageId: string) =>
+      (stages.find((s) => s.stage.id === stageId)?.goals ?? []).filter(
+        (g) => g.id !== PROOF_GOAL && statusOf(host.id, g.id) === "todo" && hasLegalCommand(host, g.id),
+      );
+    const hasFoothold = FOOTHOLD_DONE_GOALS.some((id) => statusOf(host.id, id) === "done");
+    if (hasFoothold) {
+      if (statusOf(host.id, PROOF_GOAL) === "done") continue;
+      const left = open("privesc");
+      if (left.length > 0) {
+        out.push({
+          area: "privesc",
+          text: `${nameOf(host)} — ${left.length} privesc step${left.length === 1 ? "" : "s"} still to do`,
+          hostId: host.id,
+          goalId: left[0]!.id,
+        });
+      }
+      continue;
+    }
+    const todo = open("enumerate");
+    if (todo.length === 0) continue;
+    out.push({
+      area: "foothold",
+      text: `${nameOf(host)} — no foothold; ${todo.length} enumeration step${todo.length === 1 ? "" : "s"} still to do`,
+      hostId: host.id,
+      goalId: todo[0]!.id,
+    });
+  }
+
+  // credentials: untested cells, never sprayed
+  for (const cred of credentials.filter((c) => c.username && isSprayable(c))) {
+    let cells = 0;
+    let firstHost: Host | undefined;
+    for (const host of hosts) {
+      const services = servicesByHost.get(host.id) ?? [];
+      for (const service of hostSprayServices(host, services)) {
+        if (cellFor(cred, host, services, service, attempts).state !== "untested") continue;
+        cells += 1;
+        firstHost ??= host;
+      }
+    }
+    if (cells > 0 && firstHost) {
+      out.push({
+        area: "credentials",
+        text: `${cred.username} — ${cells} host/service cell${cells === 1 ? "" : "s"} untested`,
+        hostId: firstHost.id,
+      });
+    }
+  }
+  if (statusOf(engagement.id, SPRAY_USERS_ITEM) !== "done") {
+    for (const cred of credentials) {
+      if (!routineStepApplies("spray-users", cred, hosts, servicesByHost, usernames)) continue;
+      out.push({
+        area: "credentials",
+        text: `${cred.username || "secret with no owner"} — never sprayed at the usernames`,
+        hostId: null,
+        goalId: SPRAY_USERS_ITEM,
+      });
+    }
+  }
+  if (usernames.length > 0 && adHosts(hosts, servicesByHost).length > 0 && !ASREP_GOALS.some((id) => statusOf(engagement.id, id) === "done")) {
+    const id = ASREP_GOALS.find((g) => byOwner.get(engagement.id)?.[g]) ?? ASREP_GOALS[0]!;
+    out.push({
+      area: "credentials",
+      text: `${usernames.length} username${usernames.length === 1 ? "" : "s"} not yet AS-REP-checked`,
+      hostId: null,
+      goalId: id,
+    });
+  }
+
+  // lateral: access not reviewed, dual-homed without a tunnel
+  const byId = new Map(hosts.map((h) => [h.id, h]));
+  for (const flag of accessFlags({ hosts, attempts, credentials })) {
+    const host = byId.get(flag.hostId);
+    if (!host) continue;
+    const who =
+      credentials.find((c) => c.id === flag.credId)?.username ||
+      usernames.find((u) => u.id === flag.usernameId)?.username ||
+      "a credential";
+    out.push({
+      area: "lateral",
+      text: `${nameOf(host)} — ${who} has ${flag.service} ${flag.result} access you have not reviewed`,
+      hostId: host.id,
+    });
+  }
+  const tunnelled = new Set(input.tunnels.map((t) => t.viaHostId));
+  for (const host of hosts) {
+    if (host.dualHomed !== true || tunnelled.has(host.id)) continue;
+    out.push({
+      area: "lateral",
+      text: `${nameOf(host)} — dual-homed, no tunnel recorded`,
+      hostId: host.id,
+      goalId: "h-pivot-tunnel",
+    });
+  }
+
+  return out.sort((a, b) => AREA_ORDER.indexOf(a.area) - AREA_ORDER.indexOf(b.area));
+}
