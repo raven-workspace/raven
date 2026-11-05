@@ -6,9 +6,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { useCredPickStore } from "../features/checklist/credPick";
-import { resetNotesStore } from "../features/notes/useNotesStore";
+import { resetNotesStore, useNotesStore } from "../features/notes/useNotesStore";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
+import type { ChecklistItem } from "../types/checklist";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 import type { Service } from "../types/service";
@@ -135,5 +136,55 @@ describe("stuck view", () => {
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(await screen.findByText(/web01 — dual-homed, no tunnel recorded/)).toBeInTheDocument();
+  });
+
+  it("a skipped step opens the Checklist tab on that goal", async () => {
+    const user = userEvent.setup();
+    const na: ChecklistItem = { ownerId: "h1", goalId: "h-foot-arrived", status: "na", notes: null, completedAt: null, auto: false, autoFrom: null, evidence: [], updatedAt: 1 };
+    m.checklistList.mockResolvedValue([na]);
+    mount();
+    await screen.findByRole("region", { name: "Host" });
+    await user.keyboard("h");
+    const panel = await screen.findByRole("complementary", { name: /Stuck on web01/ });
+    const skipped = within(await within(panel).findByRole("region", { name: "Skipped steps" }));
+    await user.click(skipped.getByRole("button"));
+    expect(screen.queryByRole("complementary", { name: /Stuck on/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Checklist" })).toHaveAttribute("aria-selected", "true");
+    const row = document.querySelector('li[data-goal-id="h-foot-arrived"]')!;
+    expect(within(row as HTMLElement).getByRole("button", { name: /^Collapse/ })).toBeInTheDocument();
+  });
+
+  it("n closes the stuck view and opens notes", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByRole("region", { name: "Host" });
+    await user.keyboard("h");
+    await screen.findByRole("complementary", { name: /Stuck on web01/ });
+    await user.keyboard("n");
+    expect(await screen.findByRole("complementary", { name: /Notes/ })).toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: /Stuck on/ })).not.toBeInTheDocument();
+  });
+
+  it("h closes notes and opens the stuck view", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByRole("region", { name: "Host" });
+    await user.keyboard("n");
+    await screen.findByRole("complementary", { name: /Notes/ });
+    (document.activeElement as HTMLElement | null)?.blur();
+    await user.keyboard("h");
+    expect(await screen.findByRole("complementary", { name: /Stuck on web01/ })).toBeInTheDocument();
+    expect(useNotesStore.getState().open).toBe(false);
+  });
+
+  it("a Stuck check line opens its host on the goal", async () => {
+    const user = userEvent.setup();
+    mount({ hosts: [host({ dualHomed: true })], path: "/e/e1/s/checklist" });
+    await user.click(await screen.findByRole("button", { name: /Stuck check/ }));
+    await user.click(await screen.findByRole("button", { name: /dual-homed, no tunnel recorded/ }));
+    expect(await screen.findByRole("region", { name: "Host" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Checklist" })).toHaveAttribute("aria-selected", "true");
+    const row = document.querySelector('li[data-goal-id="h-pivot-tunnel"]')!;
+    expect(within(row as HTMLElement).getByRole("button", { name: /^Collapse/ })).toBeInTheDocument();
   });
 });

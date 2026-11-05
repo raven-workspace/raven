@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { isFreeKey, useKeydown } from "../../lib/keys";
 import { EmptyState } from "../../ui";
 import { NowPanel } from "../checklist/NowPanel";
@@ -27,11 +27,23 @@ type TabId = (typeof TABS)[number]["id"];
 export function HostView({ engagementId, hostId }: { engagementId: string; hostId: string }) {
   const hosts = useHosts(engagementId);
   const log = useLog(engagementId);
-  const [tab, setTab] = useState<TabId>("story");
+  const location = useLocation();
+  const navigate = useNavigate();
+  // A Stuck check line arrives with the goal to open; the state is cleared below so back/forward does not repeat it.
+  const arrivedGoal = (location.state as { goalId?: string } | null)?.goalId;
+  const [tab, setTab] = useState<TabId>(arrivedGoal ? "checklist" : "story");
   const [order, setOrder] = usePersistedOrder("raven.story.order", "oldest");
   const [openEntry, setOpenEntry] = useState<string>();
-  const [focusGoal, setFocusGoal] = useState<{ id: string; n: number }>();
+  const [focusGoal, setFocusGoal] = useState<{ id: string; n: number } | undefined>(arrivedGoal ? { id: arrivedGoal, n: 1 } : undefined);
+  useEffect(() => {
+    if (arrivedGoal) void navigate(location.pathname, { replace: true, state: null });
+  }, [arrivedGoal, location.pathname, navigate]);
   const [stuckOpen, setStuckOpen] = useState(false);
+  const [stuckHost, setStuckHost] = useState(hostId);
+  if (stuckHost !== hostId) {
+    setStuckHost(hostId);
+    setStuckOpen(false);
+  }
   // The stuck view and the notes panel share the right edge: opening one closes the other.
   useEffect(() => useNotesStore.subscribe((s) => { if (s.open) setStuckOpen(false); }), []);
   const toggleStuck = () => {

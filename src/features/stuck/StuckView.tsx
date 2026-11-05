@@ -66,11 +66,23 @@ export function StuckView({
     return () => window.removeEventListener("keydown", on, true);
   }, [open]);
 
+  // After a jump to a goal, the goal keeps the focus: closing must not hand it back to the opener.
+  const skipRestoreRef = useRef(false);
   if (!open) return null;
-  return <Body engagementId={engagementId} host={host} onOpenGoal={onOpenGoal} />;
+  return (
+    <Body
+      engagementId={engagementId}
+      host={host}
+      skipRestoreRef={skipRestoreRef}
+      onOpenGoal={(id) => {
+        skipRestoreRef.current = true;
+        onOpenGoal(id);
+      }}
+    />
+  );
 }
 
-function Body({ engagementId, host, onOpenGoal }: { engagementId: string; host: Host; onOpenGoal: (goalId: string) => void }) {
+function Body({ engagementId, host, onOpenGoal, skipRestoreRef }: { engagementId: string; host: Host; onOpenGoal: (goalId: string) => void; skipRestoreRef: React.RefObject<boolean> }) {
   const hostsQ = useHosts(engagementId);
   const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId) });
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
@@ -81,6 +93,7 @@ function Body({ engagementId, host, onOpenGoal }: { engagementId: string; host: 
   const note = useNote(engagementId, host.id);
   const pending = useNotesStore((s) => s.pending[noteKey({ engagementId, hostId: host.id })]);
   const creds = useCredFill(engagementId, host);
+  const credsQ = useCredentials(engagementId);
 
   // Focus the panel on open and give focus back on close, like the notes panel.
   const root = useRef<HTMLElement>(null);
@@ -88,20 +101,23 @@ function Body({ engagementId, host, onOpenGoal }: { engagementId: string; host: 
     const active = document.activeElement;
     const back = active instanceof HTMLElement && active !== document.body ? active : null;
     root.current?.focus();
+    skipRestoreRef.current = false;
     return () => {
-      if (back?.isConnected) back.focus();
+      if (!skipRestoreRef.current && back?.isConnected) back.focus();
     };
-  }, []);
+  }, [skipRestoreRef]);
 
   const hosts = hostsQ.data;
   const eng = engagement.data;
   const title = `Stuck on ${host.name}`;
-  const failed = hostsQ.error ?? engagement.error ?? servicesQ.error;
+  const failed = hostsQ.error ?? engagement.error ?? servicesQ.error ?? log.error ?? note.error ?? credsQ.error;
 
-  let content: React.ReactNode = null;
+  let content: React.ReactNode;
   if (failed) {
     content = <p role="alert" className="m-0 text-xs text-warn">Couldn't load this: {failed.message}</p>;
-  } else if (hosts && eng && servicesQ.data) {
+  } else if (!hosts || !eng || !servicesQ.data || !log.data || !credsQ.data) {
+    content = <p className="m-0 text-xs text-muted">Loading…</p>;
+  } else {
     const s = hostStuck({
       host, engagement: eng, hosts, servicesByHost, state: byOwner.get(host.id) ?? {},
       entries: log.data ?? [], hostNote: pending?.body ?? note.data?.body ?? "",
@@ -113,6 +129,13 @@ function Body({ engagementId, host, onOpenGoal }: { engagementId: string; host: 
     const filled = s.commands
       .map((c) => ({ ...c, commands: goalCommands(c.goalId, input, eng).commands }))
       .filter((c) => c.commands.length > 0);
+    const after = s.phase === "after-foothold";
+    const empty =
+      s.hints.length === 0 &&
+      s.threads.length === 0 &&
+      (after
+        ? filled.length === 0 && s.notes.trim() === ""
+        : s.skipped.length + s.unidentified.length + s.untouched.length === 0);
     content = (
       <>
         <p className="m-0 text-xs text-fg-2">{s.phase === "after-foothold" ? "After a foothold" : "Before a foothold"}</p>
@@ -123,7 +146,7 @@ function Body({ engagementId, host, onOpenGoal }: { engagementId: string; host: 
                 <ul className="m-0 flex list-none flex-col gap-1 p-0">
                   {s.skipped.map((g) => (
                     <li key={g.goalId}>
-                      <button type="button" onClick={() => onOpenGoal(g.goalId)} className="cursor-default text-left text-[13px] text-fg-2 underline-offset-2 hover:text-fg hover:underline">
+                      <button type="button" onClick={() => onOpenGoal(g.goalId)} className="cursor-default text-left text-[13px] text-fg-2 underline-offset-2 hover:text-fg hover:underline focus-visible:outline-1 focus-visible:outline-accent">
                         {g.title}
                       </button>
                     </li>
@@ -182,6 +205,7 @@ function Body({ engagementId, host, onOpenGoal }: { engagementId: string; host: 
             </ul>
           </Section>
         )}
+        {empty && <p className="m-0 text-xs text-muted">Nothing obvious left on this host</p>}
         {s.hints.map((h) => <p key={h} className="m-0 text-xs text-muted">{h}</p>)}
       </>
     );
@@ -230,7 +254,7 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
   });
 
   const go = (l: StuckLine) => {
-    if (l.hostId) void navigate(`/e/${engagementId}/h/${l.hostId}`);
+    if (l.hostId) void navigate(`/e/${engagementId}/h/${l.hostId}`, l.goalId ? { state: { goalId: l.goalId } } : undefined);
     else if (l.goalId) document.querySelector(`[data-goal-id="${l.goalId}"]`)?.scrollIntoView?.({ block: "center" });
   };
 
@@ -240,7 +264,7 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="flex cursor-default items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-label text-muted hover:text-fg"
+        className="flex cursor-default items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-label text-muted hover:text-fg focus-visible:outline-1 focus-visible:outline-accent"
       >
         <span aria-hidden>{open ? "▾" : "▸"}</span>
         <span>Stuck check</span>
@@ -260,7 +284,7 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
                   {group.map((l, i) => (
                     <li key={i}>
                       {l.hostId || l.goalId ? (
-                        <button type="button" onClick={() => go(l)} className="cursor-default text-left text-[13px] text-fg-2 underline-offset-2 hover:text-fg hover:underline">
+                        <button type="button" onClick={() => go(l)} className="cursor-default text-left text-[13px] text-fg-2 underline-offset-2 hover:text-fg hover:underline focus-visible:outline-1 focus-visible:outline-accent">
                           {l.text}
                         </button>
                       ) : (
