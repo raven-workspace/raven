@@ -18,7 +18,8 @@
         "minWidth": 1100,
         "minHeight": 700,
         "titleBarStyle": "Overlay",
-        "hiddenTitle": true
+        "hiddenTitle": true,
+        "dragDropEnabled": false
       }
     ],
     "security": {
