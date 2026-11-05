@@ -32,6 +32,8 @@ export function useLogMutations(engagementId: string) {
     void qc.invalidateQueries({ queryKey: ["engagement", engagementId] });
     // A deleted entry leaves the reproduction steps of any finding that used it.
     void qc.invalidateQueries({ queryKey: ["findings", engagementId] });
+    // An attempt that linked the entry loses the link.
+    void qc.invalidateQueries({ queryKey: ["failedAttempts", engagementId] });
   };
   return {
     update: useMutation({

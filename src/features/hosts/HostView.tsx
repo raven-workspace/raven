@@ -106,7 +106,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
             ) : tab === "credentials" ? (
               <HostCredentials engagementId={engagementId} host={host} onOpenEntry={openInStory} />
             ) : (
-              <HostFindings engagementId={engagementId} host={host} />
+              <HostFindings engagementId={engagementId} host={host} onOpenEntry={openInStory} />
             )}
           </div>
         </div>

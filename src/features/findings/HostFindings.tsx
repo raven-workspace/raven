@@ -4,12 +4,17 @@ import type { Host } from "../../types/host";
 import { sortFindingsBySeverity } from "../../engines/findings";
 import { useEngagementServices } from "../checklist/queries";
 import { useHosts } from "../hosts/queries";
+import { AttemptsList } from "./AttemptsList";
 import { FindingEditor } from "./FindingEditor";
 import { SeverityChip } from "./FindingsSection";
 import { useFindings } from "./queries";
 
 /** The host view's Findings tab: findings that affect this host. Extend with more sections below the list. */
-export function HostFindings({ engagementId, host }: { engagementId: string; host: Host }) {
+export function HostFindings({ engagementId, host, onOpenEntry }: {
+  engagementId: string;
+  host: Host;
+  onOpenEntry: (entryId: string) => void;
+}) {
   const findings = useFindings(engagementId);
   const hosts = useHosts(engagementId);
   const { servicesByHost, query: servicesQ } = useEngagementServices(engagementId);
@@ -43,6 +48,7 @@ export function HostFindings({ engagementId, host }: { engagementId: string; hos
           ))}
         </ul>
       )}
+      <AttemptsList eid={engagementId} hostId={host.id} onOpenEntry={onOpenEntry} />
       {editing && (
         <FindingEditor eid={engagementId} hosts={hosts.data} servicesByHost={servicesByHost} edit={editing} onClose={() => setEditing(undefined)} />
       )}

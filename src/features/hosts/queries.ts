@@ -58,6 +58,8 @@ export function useHostMutations(engagementId: string) {
         onSuccess();
         // Log entries lose the deleted host's link.
         void qc.invalidateQueries({ queryKey: ["log", engagementId] });
+        // Attempts on it keep their record but lose the host.
+        void qc.invalidateQueries({ queryKey: ["failedAttempts", engagementId] });
         // Its note (thread counts) goes with it; unsaved text for it can never be saved.
         dropPendingNotes(engagementId, id);
         void qc.invalidateQueries({ queryKey: ["notes", engagementId] });

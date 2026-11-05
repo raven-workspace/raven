@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { sortFindingsBySeverity } from "../../engines/findings";
 import type { Finding } from "../../types/findings";
 import { Button, Chip, EmptyState, labelClass } from "../../ui";
@@ -7,6 +7,8 @@ import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { useEngagementServices } from "../checklist/queries";
 import { hostLabel } from "../credentials/AccessGrants";
 import { useHosts } from "../hosts/queries";
+import { sectionPath } from "../engagements/sections";
+import { AttemptsList } from "./AttemptsList";
 import { FindingEditor } from "./FindingEditor";
 import { useFindingMutations, useFindings } from "./queries";
 
@@ -18,6 +20,7 @@ export function SeverityChip({ severity }: { severity: Finding["severity"] }) {
 
 export function FindingsSection() {
   const { id = "" } = useParams();
+  const navigate = useNavigate();
   const hostsQ = useHosts(id);
   const findingsQ = useFindings(id);
   const { servicesByHost, query: servicesQ } = useEngagementServices(id);
@@ -74,6 +77,7 @@ export function FindingsSection() {
           onConfirm={() => remove.mutate(deleting.id, { onSuccess: () => setDeleting(undefined) })}
         />
       )}
+      <AttemptsList eid={id} onOpenEntry={() => void navigate(sectionPath(id, "log"))} />
     </section>
   );
 }
