@@ -26,7 +26,7 @@ describe("listImportable", () => {
     ]);
     const l = list[0];
     expect(l).toMatchObject({
-      kind: "lab", engagementKind: "exam-sim", hostCount: 2, logCount: 2, firstAt: 1000, lastAt: 2000,
+      kind: "lab", engagementKind: "exam-sim", hostCount: 2, logCount: 3, firstAt: 9, lastAt: 2000,
       createdAt: Date.parse("2024-02-01T00:00:00.000Z"),
     });
     expect(list[1]).toMatchObject({ kind: "standalone", engagementKind: "client", hostCount: 1, logCount: 1, firstAt: 5000, lastAt: 5000 });

@@ -105,3 +105,27 @@ export const encryptedEnvelope = (over: Record<string, unknown> = {}): Record<st
 });
 
 export const toText = (v: unknown): string => JSON.stringify(v, null, 2);
+
+/** A 1x1 PNG, base64 (synthetic). */
+export const PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+export const image = (id: string, over: Record<string, unknown> = {}) => ({ id, mime: "image/png", data: PNG_B64, ...over });
+
+export const screenshot = (id: string, imageId: string, over: Record<string, unknown> = {}) => ({
+  id,
+  imageId,
+  title: `Shot ${id}`,
+  notes: `notes for ${id}`,
+  createdAt: 1700000000000,
+  ...over,
+});
+
+/** A legacy per-machine command output (folded into the log by old migrateLegacyLogs). */
+export const commandOutput = (id: string, over: Record<string, unknown> = {}) => ({
+  id,
+  title: `output ${id}`,
+  tool: "manual",
+  content: `content of ${id}`,
+  createdAt: 1600000000000,
+  ...over,
+});
