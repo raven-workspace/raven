@@ -20,12 +20,12 @@ const isClosed = (state: ChecklistState, goalId: string) => {
 export function derivedColumn(_host: Host, state: ChecklistState, applicable: Applicable): BoardColumn {
   if (isDone(state, 'h-pe-proof')) {
     const late = applicable.filter((a) => LATE_STAGES.includes(a.stage.id)).flatMap((a) => a.goals);
-    return late.every((g) => isClosed(state, g.id)) ? 'done' : 'loot';
+    return late.every((g) => isClosed(state, g.id)) ? 'reporting' : 'post-exploitation';
   }
-  if (FOOTHOLD_GOALS.some((id) => isDone(state, id))) return 'privesc';
+  if (FOOTHOLD_GOALS.some((id) => isDone(state, id))) return 'privilege-escalation';
   const enumerate = applicable.filter((a) => a.stage.id === 'enumerate').flatMap((a) => a.goals);
-  if (enumerate.length > 0 && enumerate.every((g) => isClosed(state, g.id))) return 'foothold';
-  return 'enumerate';
+  if (enumerate.length > 0 && enumerate.every((g) => isClosed(state, g.id))) return 'vulnerability-detection';
+  return 'information-gathering';
 }
 
 /** The first applicable stage with an open goal, or null when everything applicable is closed. */

@@ -8,8 +8,11 @@
 //!   contain `BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`/`RELEASE`, or `VACUUM`.
 //! - Connections run with `PRAGMA foreign_keys = ON` (see `vault::open_keyed`). That pragma
 //!   is a no-op inside a transaction, so a migration that needs `foreign_keys = OFF` (e.g. the
-//!   SQLite 12-step table rebuild of a referenced table) cannot run in the shared transaction;
-//!   it needs its own runner step outside it.
+//!   SQLite 12-step table rebuild of a referenced table) starts its SQL with the marker line
+//!   `-- raven:foreign-keys-off`. If any pending migration has it, the runner sets the pragma
+//!   OFF before opening the shared transaction, runs `PRAGMA foreign_key_check` before commit
+//!   (any row is an `AppError::Db` and rolls everything back), and restores `foreign_keys = ON`
+//!   on every exit path.
 //! - Append new entries to `MIGRATIONS` with a strictly greater version; never edit a shipped one.
 
 use crate::error::{AppError, AppResult};
@@ -24,7 +27,10 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
     (5, include_str!("../../migrations/0005_ad_set.sql")),
     (6, include_str!("../../migrations/0006_checklist_status_manual.sql")),
     (7, include_str!("../../migrations/0007_cleanup.sql")),
+    (8, include_str!("../../migrations/0008_pen200_columns.sql")),
 ];
+
+const FK_OFF_MARKER: &str = "-- raven:foreign-keys-off";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MigrationOutcome {
@@ -65,6 +71,23 @@ pub fn migrate_with(
     }
     let mut pending: Vec<&(u32, &str)> = list.iter().filter(|(v, _)| *v > from).collect();
     pending.sort_by_key(|(v, _)| *v);
+    let fk_off = pending.iter().any(|(_, sql)| sql.trim_start().starts_with(FK_OFF_MARKER));
+    if fk_off {
+        conn.execute_batch("PRAGMA foreign_keys = OFF")?;
+    }
+    let result = run_pending(conn, &pending, fk_off);
+    if fk_off {
+        // Restore on every exit path; the transaction is already committed or rolled back.
+        let restore = conn.execute_batch("PRAGMA foreign_keys = ON").map_err(AppError::from);
+        result?;
+        restore?;
+    } else {
+        result?;
+    }
+    Ok(MigrationOutcome { from, to: latest })
+}
+
+fn run_pending(conn: &mut Connection, pending: &[&(u32, &str)], check_fks: bool) -> AppResult<()> {
     let tx = conn.transaction()?;
     for (v, sql) in pending {
         tx.execute_batch(sql)?;
@@ -73,8 +96,15 @@ pub fn migrate_with(
         }
         tx.execute_batch(&format!("PRAGMA user_version = {v}"))?;
     }
+    if check_fks {
+        let violations: i64 =
+            tx.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |r| r.get(0))?;
+        if violations > 0 {
+            return Err(AppError::Db(format!("migration left {violations} foreign key violation(s)")));
+        }
+    }
     tx.commit()?;
-    Ok(MigrationOutcome { from, to: latest })
+    Ok(())
 }
 
 /// Data step of 0002: engagements that predate the hosts table get a host for each
@@ -249,14 +279,14 @@ mod tests {
         .unwrap();
         let mut hook_calls = 0;
         let out = migrate(&mut c, &mut |f, t| {
-            assert_eq!((f, t), (1, 7));
+            assert_eq!((f, t), (1, 8));
             hook_calls += 1;
             Ok(())
         })
         .unwrap();
         assert_eq!(hook_calls, 1);
-        assert_eq!(out, MigrationOutcome { from: 1, to: 7 });
-        assert_eq!(version(&c), 7);
+        assert_eq!(out, MigrationOutcome { from: 1, to: 8 });
+        assert_eq!(version(&c), 8);
         for t in ["hosts", "services", "log_entries", "log_entry_hosts", "attachments"] {
             let n: i64 = c
                 .query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1", [t], |r| r.get(0))
@@ -388,7 +418,7 @@ mod tests {
             [],
         )
         .unwrap();
-        let out = migrate(&mut c, &mut |f, t| {
+        let out = migrate_with(&mut c, &MIGRATIONS[..7], &mut |f, t| {
             assert_eq!((f, t), (6, 7));
             Ok(())
         })
@@ -457,5 +487,108 @@ mod tests {
         assert_eq!(rows, ["10.10.10.5"]);
         let dual: i64 = c.query_row("SELECT dual_homed FROM hosts WHERE engagement_id='e1'", [], |r| r.get(0)).unwrap();
         assert_eq!(dual, 0);
+    }
+
+    fn count(c: &Connection, sql: &str) -> i64 {
+        c.query_row(sql, [], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn v7_hosts_rebuild_maps_columns_and_keeps_children() {
+        let (_d, _p, mut c) = file_db();
+        migrate_with(&mut c, &MIGRATIONS[..7], &mut |_, _| panic!("hook on fresh db")).unwrap();
+        c.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        c.execute(
+            "INSERT INTO engagements (id,name,kind,scope_cidrs,status,created_at,updated_at) VALUES ('e1','x','lab','[]','active',1,1)",
+            [],
+        )
+        .unwrap();
+        for (i, (col, manual)) in
+            [("enumerate", 0), ("foothold", 1), ("privesc", 0), ("loot", 0), ("done", 0)].iter().enumerate()
+        {
+            c.execute(
+                "INSERT INTO hosts (id,engagement_id,name,ip,board_column,board_manual,board_derived,created_at,updated_at) \
+                 VALUES (?1,'e1',?1,?2,?3,?4,?3,1,1)",
+                rusqlite::params![format!("h{i}"), format!("10.0.0.{i}"), col, manual],
+            )
+            .unwrap();
+        }
+        c.execute_batch(
+            "INSERT INTO log_entries (id,engagement_id,kind,title,content,at,created_at,updated_at) VALUES ('l1','e1','note','t','c',1,1,1);
+             INSERT INTO services (id,host_id,port,created_at,updated_at) VALUES ('s1','h0',80,1,1);
+             INSERT INTO log_entry_hosts (entry_id,host_id) VALUES ('l1','h0');
+             INSERT INTO tunnels (id,engagement_id,kind,via_host_id,status,created_at,updated_at) VALUES ('t1','e1','ssh','h1','up',1,1);
+             INSERT INTO hops (id,engagement_id,from_host_id,to_host_id,via,at,updated_at) VALUES ('p1','e1','h1','h2','ssh',1,1);
+             INSERT INTO checklist_items (owner_id,engagement_id,goal_id,status,updated_at) VALUES ('h2','e1','g','todo',1);
+             INSERT INTO credentials (id,engagement_id,type,source_host_id,created_at,updated_at) VALUES ('c1','e1','password','h3',1,1);
+             INSERT INTO cleanup_items (id,engagement_id,host_id,kind,target,status,created_at,updated_at) VALUES ('u1','e1','h3','file','t','open',1,1);
+             UPDATE engagements SET msf_host_id='h4' WHERE id='e1';",
+        )
+        .unwrap();
+        let child_counts = |c: &Connection| -> Vec<i64> {
+            [
+                "services", "log_entry_hosts", "tunnels", "hops", "checklist_items", "credentials", "cleanup_items",
+            ]
+            .iter()
+            .map(|t| count(c, &format!("SELECT count(*) FROM {t}")))
+            .collect()
+        };
+        let before = child_counts(&c);
+        assert_eq!(before, vec![1; 7]);
+
+        migrate(&mut c, &mut |_, _| Ok(())).unwrap();
+
+        let cols: Vec<(String, i64)> = c
+            .prepare("SELECT board_column, board_manual FROM hosts ORDER BY id")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            cols,
+            [
+                ("information-gathering".to_string(), 0),
+                ("vulnerability-detection".to_string(), 1),
+                ("privilege-escalation".to_string(), 0),
+                ("post-exploitation".to_string(), 0),
+                ("reporting".to_string(), 0),
+            ]
+        );
+        assert_eq!(count(&c, "SELECT count(*) FROM hosts WHERE board_derived IS NOT NULL"), 0);
+        assert_eq!(child_counts(&c), before);
+        assert_eq!(count(&c, "SELECT count(*) FROM engagements WHERE msf_host_id='h4'"), 1);
+        assert_eq!(count(&c, "SELECT count(*) FROM pragma_foreign_key_check"), 0);
+        assert_eq!(count(&c, "PRAGMA foreign_keys"), 1);
+        assert!(c
+            .execute(
+                "INSERT INTO hosts (id,engagement_id,name,ip,board_column,created_at,updated_at) VALUES ('x','e1','x','10.9.9.9','enumerate',1,1)",
+                [],
+            )
+            .is_err());
+        c.execute(
+            "INSERT INTO hosts (id,engagement_id,name,ip,created_at,updated_at) VALUES ('d','e1','d','10.9.9.8',1,1)",
+            [],
+        )
+        .unwrap();
+        let def: String = c.query_row("SELECT board_column FROM hosts WHERE id='d'", [], |r| r.get(0)).unwrap();
+        assert_eq!(def, "information-gathering");
+        c.execute("DELETE FROM hosts WHERE id='h0'", []).unwrap();
+        assert_eq!(count(&c, "SELECT count(*) FROM services"), 0);
+    }
+
+    #[test]
+    fn fk_off_migration_failure_rolls_back() {
+        let (_d, _p, mut c) = v1_with_row();
+        let list: &[(u32, &str)] = &[
+            MIGRATIONS[0],
+            (2, "-- raven:foreign-keys-off\nCREATE TABLE half (x INTEGER); THIS IS NOT SQL;"),
+        ];
+        let r = migrate_with(&mut c, list, &mut |_, _| Ok(()));
+        assert!(matches!(r, Err(AppError::Db(_))));
+        assert_eq!(version(&c), 1);
+        assert_eq!(count(&c, "SELECT count(*) FROM settings"), 1);
+        assert_eq!(count(&c, "SELECT count(*) FROM sqlite_master WHERE name='half'"), 0);
+        assert_eq!(count(&c, "PRAGMA foreign_keys"), 1);
     }
 }

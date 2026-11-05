@@ -17,7 +17,7 @@ import {
 } from '../../../engines/checklist';
 
 const host = (p: Partial<Host> = {}): Host => ({
-  id: 'h1', engagementId: 'e1', name: 'ms01', ip: '10.10.10.5', os: null, boardColumn: 'enumerate', boardManual: false,
+  id: 'h1', engagementId: 'e1', name: 'ms01', ip: '10.10.10.5', os: null, boardColumn: 'information-gathering', boardManual: false,
   access: 'none', createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, ...p,
 });
 

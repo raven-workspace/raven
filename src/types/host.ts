@@ -1,4 +1,4 @@
-export type BoardColumn = "enumerate" | "foothold" | "privesc" | "loot" | "done";
+export type BoardColumn = "information-gathering" | "vulnerability-detection" | "initial-foothold" | "privilege-escalation" | "post-exploitation" | "reporting";
 export type HostOs = "windows" | "linux" | "other";
 export type HostAccess = "none" | "user" | "root";
 

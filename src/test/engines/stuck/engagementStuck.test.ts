@@ -10,7 +10,7 @@ import type { Tunnel } from "../../../types/network";
 import { engagementStuck } from "../../../engines/stuck";
 
 const host = (id: string, p: Partial<Host> = {}): Host => ({
-  id, engagementId: "e1", name: id, ip: "10.10.10.5", os: "linux", boardColumn: "enumerate", boardManual: false,
+  id, engagementId: "e1", name: id, ip: "10.10.10.5", os: "linux", boardColumn: "information-gathering", boardManual: false,
   access: "none", createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, ...p,
 });
 let n = 0;

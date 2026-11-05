@@ -22,7 +22,7 @@ const E1: Engagement = {
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
 const H1: Host = {
-  id: "h1", engagementId: "e1", name: "dc01", ip: "10.10.10.5", os: "windows", boardColumn: "enumerate", boardManual: false,
+  id: "h1", engagementId: "e1", name: "dc01", ip: "10.10.10.5", os: "windows", boardColumn: "information-gathering", boardManual: false,
   dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1,
 };
 const svc = (id: string, port: number, nmapService: string): Service => ({
@@ -102,7 +102,7 @@ describe("Now panel", () => {
     await user.click(within(group).getByRole("button", { name: "Done" }));
     expect(m.checklistPut).toHaveBeenCalledWith("e1", [expect.objectContaining({ goalId: last, status: "done" })]);
     expect(await panel.findByRole("heading", { name: "Foothold" })).toBeInTheDocument();
-    await waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h1", "foothold"));
+    await waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h1", "vulnerability-detection"));
   });
 
   it("Doing toggles in progress", async () => {

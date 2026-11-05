@@ -35,7 +35,7 @@ function host(over: Partial<Host> & Pick<Host, "id" | "name">): Host {
     engagementId: "e1",
     ip: null,
     os: null,
-    boardColumn: "enumerate",
+    boardColumn: "information-gathering",
     boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false,
     access: "none",
     createdAt: 1,
@@ -68,7 +68,7 @@ function mount() {
 async function ready() {
   await vi.waitFor(() =>
     expect(
-      within(column("Foothold")).getByRole("link", { name: /dc01/ }),
+      within(column("Vulnerability detection")).getByRole("link", { name: /dc01/ }),
     ).toBeInTheDocument(),
   );
 }
@@ -85,7 +85,7 @@ beforeEach(() => {
       name: "dc01",
       ip: "10.10.10.5",
       os: "windows",
-      boardColumn: "foothold",
+      boardColumn: "vulnerability-detection",
       access: "user",
     }),
     host({
@@ -93,9 +93,9 @@ beforeEach(() => {
       name: "web02",
       ip: "10.10.10.6",
       os: "linux",
-      boardColumn: "done",
+      boardColumn: "reporting",
     }),
-    host({ id: "h3", name: "mystery", boardColumn: "enumerate" }),
+    host({ id: "h3", name: "mystery", boardColumn: "information-gathering" }),
   ];
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({
@@ -117,7 +117,7 @@ describe("board", () => {
   it("cards sit in their column with ip and os chip", async () => {
     mount();
     await ready();
-    const foot = column("Foothold");
+    const foot = column("Vulnerability detection");
     expect(within(foot).getByText("1")).toBeInTheDocument();
     const card = within(foot).getByRole("link", { name: /dc01/ });
     expect(within(card).getByText("10.10.10.5")).toHaveClass("font-mono");
@@ -127,14 +127,14 @@ describe("board", () => {
       "accent",
     );
     expect(
-      within(column("Done")).getByRole("link", { name: /web02/ }),
+      within(column("Reporting")).getByRole("link", { name: /web02/ }),
     ).toBeInTheDocument();
-    const mystery = within(column("Enumerate")).getByRole("link", {
+    const mystery = within(column("Information gathering")).getByRole("link", {
       name: /mystery/,
     });
     expect(within(mystery).queryByText(/Windows|Linux|Other/)).toBeNull();
     expect(within(mystery).queryByText("user")).toBeNull();
-    for (const l of ["Enumerate", "Foothold", "Privesc", "Loot/Pivot", "Done"])
+    for (const l of ["Information gathering", "Vulnerability detection", "Initial foothold", "Privilege escalation", "Post-exploitation", "Reporting"])
       expect(column(l)).toBeInTheDocument();
   });
 
@@ -148,14 +148,14 @@ describe("board", () => {
       effectAllowed: "",
       dropEffect: "",
     };
-    const card = within(column("Foothold")).getByRole("link", { name: /dc01/ });
+    const card = within(column("Vulnerability detection")).getByRole("link", { name: /dc01/ });
     fireEvent.dragStart(card, { dataTransfer });
-    const priv = column("Privesc");
+    const priv = column("Privilege escalation");
     fireEvent.dragOver(priv, { dataTransfer });
     expect(priv).toHaveAttribute("data-over", "true");
     fireEvent.drop(priv, { dataTransfer });
     await vi.waitFor(() =>
-      expect(m.hostMove).toHaveBeenCalledWith("h1", "privesc"),
+      expect(m.hostMove).toHaveBeenCalledWith("h1", "privilege-escalation"),
     );
     expect(priv).not.toHaveAttribute("data-over");
   });
@@ -164,24 +164,24 @@ describe("board", () => {
     const user = userEvent.setup();
     mount();
     await ready();
-    const card = within(column("Foothold")).getByRole("link", { name: /dc01/ });
+    const card = within(column("Vulnerability detection")).getByRole("link", { name: /dc01/ });
     card.focus();
     await user.keyboard("]");
     await vi.waitFor(() =>
-      expect(m.hostMove).toHaveBeenLastCalledWith("h1", "privesc"),
+      expect(m.hostMove).toHaveBeenLastCalledWith("h1", "initial-foothold"),
     );
     // moved card keeps focus (re-rendered in the new column)
     await vi.waitFor(() =>
       expect(
-        within(column("Privesc")).getByRole("link", { name: /dc01/ }),
+        within(column("Initial foothold")).getByRole("link", { name: /dc01/ }),
       ).toHaveFocus(),
     );
     await user.keyboard("[[");
     await vi.waitFor(() =>
-      expect(m.hostMove).toHaveBeenLastCalledWith("h1", "foothold"),
+      expect(m.hostMove).toHaveBeenLastCalledWith("h1", "vulnerability-detection"),
     );
     // edges do nothing
-    const done = within(column("Done")).getByRole("link", { name: /web02/ });
+    const done = within(column("Reporting")).getByRole("link", { name: /web02/ });
     m.hostMove.mockClear();
     done.focus();
     await user.keyboard("]");
@@ -193,11 +193,11 @@ describe("board", () => {
     m.hostMove.mockRejectedValueOnce(new Error("db busy"));
     mount();
     await ready();
-    within(column("Foothold")).getByRole("link", { name: /dc01/ }).focus();
+    within(column("Vulnerability detection")).getByRole("link", { name: /dc01/ }).focus();
     await user.keyboard("]");
     expect(await screen.findByText("Couldn't move dc01: db busy")).toHaveAttribute("role", "alert");
     // Later, an unrelated change refetches hosts: focus stays where the user put it.
-    const mystery = within(column("Enumerate")).getByRole("link", { name: /mystery/ });
+    const mystery = within(column("Information gathering")).getByRole("link", { name: /mystery/ });
     mystery.focus();
     const store: Record<string, string> = {};
     const dataTransfer = {
@@ -206,10 +206,10 @@ describe("board", () => {
       effectAllowed: "",
       dropEffect: "",
     };
-    fireEvent.dragStart(within(column("Done")).getByRole("link", { name: /web02/ }), { dataTransfer });
-    fireEvent.drop(column("Loot/Pivot"), { dataTransfer });
-    await vi.waitFor(() => expect(within(column("Loot/Pivot")).getByRole("link", { name: /web02/ })).toBeInTheDocument());
-    expect(within(column("Enumerate")).getByRole("link", { name: /mystery/ })).toHaveFocus();
+    fireEvent.dragStart(within(column("Reporting")).getByRole("link", { name: /web02/ }), { dataTransfer });
+    fireEvent.drop(column("Post-exploitation"), { dataTransfer });
+    await vi.waitFor(() => expect(within(column("Post-exploitation")).getByRole("link", { name: /web02/ })).toBeInTheDocument());
+    expect(within(column("Information gathering")).getByRole("link", { name: /mystery/ })).toHaveFocus();
     // A move that works clears the message.
     expect(screen.queryByText(/Couldn't move/)).not.toBeInTheDocument();
   });

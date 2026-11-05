@@ -23,7 +23,7 @@ const E1: Engagement = {
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: "Kali (VM)", msfHostId: null,
 };
 const host = (over: Partial<Host> & Pick<Host, "id" | "name">): Host => ({
-  engagementId: "e1", ip: null, os: "windows", boardColumn: "foothold", boardManual: false, dualHomed: false,
+  engagementId: "e1", ip: null, os: "windows", boardColumn: "vulnerability-detection", boardManual: false, dualHomed: false,
   boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1, ...over,
 });
 const H1 = host({ id: "h1", name: "dc01", ip: "10.10.10.5" });
@@ -215,7 +215,7 @@ function mount(path = "/e/e1") {
 }
 
 async function openCapture(user: ReturnType<typeof userEvent.setup>) {
-  await screen.findByRole("region", { name: "Foothold" });
+  await screen.findByRole("region", { name: "Vulnerability detection" });
   await user.keyboard("l");
   return screen.findByRole("dialog", { name: "Add to log" });
 }

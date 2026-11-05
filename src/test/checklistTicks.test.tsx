@@ -29,8 +29,8 @@ const E1: Engagement = {
 
 function host(over: Partial<Host> & Pick<Host, "id" | "name">): Host {
   return {
-    engagementId: "e1", ip: null, os: null, boardColumn: "enumerate", boardManual: false, dualHomed: false,
-    boardDerived: "enumerate", accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1, ...over,
+    engagementId: "e1", ip: null, os: null, boardColumn: "information-gathering", boardManual: false, dualHomed: false,
+    boardDerived: "information-gathering", accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1, ...over,
   };
 }
 
@@ -168,7 +168,7 @@ describe("auto-tick wiring", () => {
     store = [
       item({ ownerId: "h1", goalId: "h-orient-proof", status: "done", completedAt: 50, auto: true, evidence: [{ entryId: "f1", commandId: "flag" }] }),
     ];
-    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardColumn: "privesc", boardDerived: "privesc" } : h));
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardColumn: "privilege-escalation", boardDerived: "privilege-escalation" } : h));
     mount("/e/e1/s/log");
     await user.click(await screen.findByRole("button", { name: /local.txt · dc01/ }));
     await user.click(log().getByRole("button", { name: "Edit" }));
@@ -180,8 +180,8 @@ describe("auto-tick wiring", () => {
     expect(m.checklistPut).toHaveBeenCalledTimes(1);
     expect(stored("h1", "h-orient-proof")).toMatchObject({ status: "todo", completedAt: null, auto: false, evidence: [] });
     expect(stored("h2", "h-orient-proof")).toMatchObject({ status: "done", auto: true, evidence: [{ entryId: "f1", commandId: "flag" }] });
-    await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "privesc"));
-    expect(m.hostSyncBoard).toHaveBeenCalledWith("h1", "enumerate");
+    await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "privilege-escalation"));
+    expect(m.hostSyncBoard).toHaveBeenCalledWith("h1", "information-gathering");
   });
 
   it("deleting the entry removes its evidence and restores the prior status", async () => {
@@ -223,12 +223,12 @@ describe("auto-tick wiring", () => {
       expect.objectContaining({ status: "done", auto: true, evidence: [{ entryId: "l1", commandId: "flag" }] }),
     ]);
     expect(m.hostSyncBoard).toHaveBeenCalledTimes(1);
-    expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "privesc");
+    expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "privilege-escalation");
   });
 
   it("a hand-placed card is not moved by a save that does not change the derived column", async () => {
     const user = userEvent.setup();
-    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardColumn: "loot", boardManual: true, boardDerived: "enumerate" } : h));
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardColumn: "post-exploitation", boardManual: true, boardDerived: "information-gathering" } : h));
     mount();
     await openCapture(user);
     await user.paste(FULL_SCAN);
@@ -306,7 +306,7 @@ describe("auto-tick wiring", () => {
     store = [
       item({ ownerId: "h1", goalId: "h-orient-proof", status: "done", completedAt: 50, auto: true, evidence: [{ entryId: "f1", commandId: "flag" }] }),
     ];
-    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardColumn: "privesc", boardDerived: "privesc" } : h));
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardColumn: "privilege-escalation", boardDerived: "privilege-escalation" } : h));
     mount("/e/e1/s/log");
     await user.click(await screen.findByRole("button", { name: /local.txt · dc01/ }));
     await user.click(log().getByRole("button", { name: "Delete" }));
@@ -316,7 +316,7 @@ describe("auto-tick wiring", () => {
     expect(stored("h1", "h-orient-proof")).toMatchObject({
       status: "done", auto: true, completedAt: 50, evidence: [{ entryId: "f1", commandId: "flag" }],
     });
-    expect(hosts.find((h) => h.id === "h1")).toMatchObject({ boardColumn: "privesc", boardDerived: "privesc" });
+    expect(hosts.find((h) => h.id === "h1")).toMatchObject({ boardColumn: "privilege-escalation", boardDerived: "privilege-escalation" });
   });
 
   it("hostSyncBoard rejects during a delete → checklist rows restored, entry not deleted, error shown", async () => {
@@ -328,7 +328,7 @@ describe("auto-tick wiring", () => {
     store = [
       item({ ownerId: "h1", goalId: "h-orient-proof", status: "done", completedAt: 50, auto: true, evidence: [{ entryId: "f1", commandId: "flag" }] }),
     ];
-    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardColumn: "privesc", boardDerived: "privesc" } : h));
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardColumn: "privilege-escalation", boardDerived: "privilege-escalation" } : h));
     mount("/e/e1/s/log");
     await user.click(await screen.findByRole("button", { name: /local.txt · dc01/ }));
     await user.click(log().getByRole("button", { name: "Delete" }));
@@ -422,21 +422,21 @@ describe("first open of an engagement logged before step 3 (F-R1)", () => {
 
   it("a v2 hand-placed card (manual, no derived column) keeps its column; its local.txt flag ticks the checklist", async () => {
     rustSyncBoard();
-    hosts = hosts.map((h) => (h.id === "h2" ? { ...h, boardColumn: "done", boardManual: true, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false } : h));
+    hosts = hosts.map((h) => (h.id === "h2" ? { ...h, boardColumn: "reporting", boardManual: true, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false } : h));
     entries = [entry({ id: "f1", kind: "flag", at: T, hostIds: ["h2"], content: { kind: "flag", flagKind: "local", value: FLAG } })];
     mount();
     await vi.waitFor(() => expect(stored("h2", "h-orient-proof")).toMatchObject({ status: "done", auto: true, completedAt: T }));
-    await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "privesc"));
+    await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "privilege-escalation"));
     // Never synced against the empty checklist first.
-    expect(m.hostSyncBoard).not.toHaveBeenCalledWith("h2", "enumerate");
-    expect(hosts.find((h) => h.id === "h2")).toMatchObject({ boardColumn: "done", boardManual: true, boardDerived: "privesc" });
+    expect(m.hostSyncBoard).not.toHaveBeenCalledWith("h2", "information-gathering");
+    expect(hosts.find((h) => h.id === "h2")).toMatchObject({ boardColumn: "reporting", boardManual: true, boardDerived: "privilege-escalation" });
     // The card is still in Done on the board.
-    await vi.waitFor(() => expect(within(screen.getByRole("region", { name: "Done" })).getByRole("link", { name: /web02/ })).toBeInTheDocument());
+    await vi.waitFor(() => expect(within(screen.getByRole("region", { name: "Reporting" })).getByRole("link", { name: /web02/ })).toBeInTheDocument());
   });
 
   it("a board sync started while the automatic tick runs waits for it; concurrent callers share one run", async () => {
     rustSyncBoard();
-    hosts = hosts.map((h) => (h.id === "h2" ? { ...h, boardColumn: "done", boardManual: true, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false } : h));
+    hosts = hosts.map((h) => (h.id === "h2" ? { ...h, boardColumn: "reporting", boardManual: true, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false } : h));
     entries = [entry({ id: "f1", kind: "flag", at: T, hostIds: ["h2"], content: { kind: "flag", flagKind: "local", value: FLAG } })];
     const put = m.checklistPut.getMockImplementation()!;
     let release: () => void = () => {};
@@ -453,20 +453,20 @@ describe("first open of an engagement logged before step 3 (F-R1)", () => {
     release();
     await expect(auto).resolves.toBe(true);
     await sync;
-    expect(m.hostSyncBoard.mock.calls.every(([id, col]) => id !== "h2" || col === "privesc")).toBe(true);
+    expect(m.hostSyncBoard.mock.calls.every(([id, col]) => id !== "h2" || col === "privilege-escalation")).toBe(true);
     expect(m.checklistPut).toHaveBeenCalledTimes(1);
   });
 
   it("a board sync on an empty checklist skips a hand-placed card with no derived column", async () => {
     rustSyncBoard();
     hosts = [
-      host({ id: "h1", name: "dc01", ip: "10.10.10.5", boardColumn: "done", boardManual: true, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false }),
-      host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "loot", boardManual: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false }),
+      host({ id: "h1", name: "dc01", ip: "10.10.10.5", boardColumn: "reporting", boardManual: true, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false }),
+      host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "post-exploitation", boardManual: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false }),
     ];
     await resyncBoards("e1");
     expect(m.hostSyncBoard).not.toHaveBeenCalledWith("h1", expect.anything());
     // Not hand-placed: moves as normal.
-    expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "enumerate");
+    expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "information-gathering");
   });
 });
 
@@ -490,7 +490,7 @@ describe("ticks.ts", () => {
       item({ ownerId: "h1", goalId: "h-orient-proof", status: "done", completedAt: 50, auto: true, evidence: [{ entryId: "f1", commandId: "flag" }] }),
     ];
     const flag = entry({ id: "f1", kind: "flag", hostIds: ["h1"], content: { kind: "flag", flagKind: "local", value: FLAG } });
-    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardDerived: "privesc" } : h));
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardDerived: "privilege-escalation" } : h));
     await syncEntryTicks("e1", flag, "f1", await loadTickContext("e1"));
     expect(m.checklistPut).not.toHaveBeenCalled();
     expect(m.hostSyncBoard).not.toHaveBeenCalled();
@@ -531,7 +531,7 @@ describe("ticks.ts", () => {
     expect(stored("h2", "h-orient-proof")).toMatchObject({ status: "done", auto: true, evidence: [{ entryId: "f1", commandId: "flag" }] });
     // F-R2: a rebuilt tick is stamped with the entry's time, not the rebuild's.
     expect(stored("h2", "h-orient-proof")!.completedAt).toBe(T + 1);
-    expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "privesc");
+    expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "privilege-escalation");
 
     // Run again: nothing left to change.
     m.checklistPut.mockClear();
@@ -564,7 +564,7 @@ describe("service mutations", () => {
     store = before.filter((g) => !g.id.startsWith("h-enum-web")).map((g) => item({ ownerId: "h1", goalId: g.id, status: "done", completedAt: 1 }));
     const { result } = renderHook(() => useServiceMutations("e1", "h1"), { wrapper: hookWrapper() });
     await act(() => result.current.confirm.mutateAsync({ id: "s1", input: { product: "CouchDB", version: "5.1" } }));
-    await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h1", "foothold"));
+    await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h1", "vulnerability-detection"));
   });
 
   it("a board-sync failure after a service change is not fatal", async () => {

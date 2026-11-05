@@ -21,7 +21,7 @@ const E1: Engagement = {
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
 const H1: Host = {
-  id: "h1", engagementId: "e1", name: "dc01", ip: "10.10.10.5", os: "windows", boardColumn: "foothold",
+  id: "h1", engagementId: "e1", name: "dc01", ip: "10.10.10.5", os: "windows", boardColumn: "vulnerability-detection",
   boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "user", createdAt: 1, updatedAt: 1,
 };
 const svc = (id: string, port: number, over: Partial<Service> = {}): Service => ({
@@ -80,7 +80,7 @@ describe("host view", () => {
     expect(header.getByText("10.10.10.5")).toHaveClass("font-mono");
     expect(header.getByText("Windows")).toBeInTheDocument();
     expect(header.getByText("user")).toHaveAttribute("data-variant", "accent");
-    expect(header.getByText("Foothold")).toBeInTheDocument();
+    expect(header.getByText("Vulnerability detection")).toBeInTheDocument();
   });
 
   it("confirmed service shows identity with nmap guess dimmed", async () => {

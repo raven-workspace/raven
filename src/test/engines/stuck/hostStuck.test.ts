@@ -9,7 +9,7 @@ import { applicableGoals } from "../../../engines/checklist";
 import { hostStuck } from "../../../engines/stuck";
 
 const host = (p: Partial<Host> = {}): Host => ({
-  id: "h1", engagementId: "e1", name: "BOX", ip: "10.10.10.5", os: "linux", boardColumn: "enumerate", boardManual: false,
+  id: "h1", engagementId: "e1", name: "BOX", ip: "10.10.10.5", os: "linux", boardColumn: "information-gathering", boardManual: false,
   access: "none", createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, ...p,
 });
 let n = 0;

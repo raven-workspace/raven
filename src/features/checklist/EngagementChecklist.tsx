@@ -66,7 +66,7 @@ export function EngagementChecklist() {
   // Engagement goals have no host of their own: fill against the DC, else show each template unfilled.
   const dc = findDcHost(hosts, servicesByHost);
   const stand: Host = {
-    ...(dc ?? { name: "", ip: null, os: null, engagementId: eng.id, boardColumn: "enumerate", boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 0, updatedAt: 0 }),
+    ...(dc ?? { name: "", ip: null, os: null, engagementId: eng.id, boardColumn: "information-gathering", boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 0, updatedAt: 0 }),
     id: eng.id,
   };
   const input: FillInput = {

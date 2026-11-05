@@ -4,7 +4,7 @@ import type { ChecklistState } from '../../../types/checklist';
 import { HOST_STAGES, currentStage, derivedColumn } from '../../../engines/checklist';
 
 const host: Host = {
-  id: 'h', engagementId: 'e', name: 'ms01', ip: '10.0.0.5', os: 'windows', boardColumn: 'enumerate', boardManual: false,
+  id: 'h', engagementId: 'e', name: 'ms01', ip: '10.0.0.5', os: 'windows', boardColumn: 'information-gathering', boardManual: false,
   access: 'none', createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false,
 };
 /** Every goal of every stage: the loosest "all applicable" set. */
@@ -16,45 +16,45 @@ const closeAll = (...stageIds: string[]): ChecklistState =>
 
 describe('derivedColumn', () => {
   it('enumerate by default and while any enumerate goal is open', () => {
-    expect(derivedColumn(host, {}, all)).toBe('enumerate');
+    expect(derivedColumn(host, {}, all)).toBe('information-gathering');
     const partial = done(...ids('enumerate').slice(1));
-    expect(derivedColumn(host, partial, all)).toBe('enumerate');
+    expect(derivedColumn(host, partial, all)).toBe('information-gathering');
   });
 
   it('foothold once every applicable enumerate goal is closed (done or na)', () => {
     const state = { ...done(ids('enumerate')[0]), ...Object.fromEntries(ids('enumerate').slice(1).map((id) => [id, { status: 'na' as const }])) };
-    expect(derivedColumn(host, state, all)).toBe('foothold');
+    expect(derivedColumn(host, state, all)).toBe('vulnerability-detection');
   });
 
   it('no applicable enumerate goal stays enumerate', () => {
-    expect(derivedColumn(host, {}, all.filter((a) => a.stage.id !== 'enumerate'))).toBe('enumerate');
+    expect(derivedColumn(host, {}, all.filter((a) => a.stage.id !== 'enumerate'))).toBe('information-gathering');
   });
 
   it('privesc once a foothold goal or local.txt is done', () => {
     for (const g of ['h-foot-shell', 'h-foot-creds', 'h-foot-arrived', 'h-orient-proof']) {
-      expect(derivedColumn(host, done(g), all), g).toBe('privesc');
+      expect(derivedColumn(host, done(g), all), g).toBe('privilege-escalation');
     }
-    expect(derivedColumn(host, done('h-foot-exploit'), all)).toBe('enumerate');
+    expect(derivedColumn(host, done('h-foot-exploit'), all)).toBe('information-gathering');
   });
 
   it('local.txt alone moves to privesc even with enumeration open', () => {
-    expect(derivedColumn(host, done('h-orient-proof'), all)).toBe('privesc');
+    expect(derivedColumn(host, done('h-orient-proof'), all)).toBe('privilege-escalation');
   });
 
   it('loot once proof is done but loot/pivot/closeout goals are open', () => {
-    expect(derivedColumn(host, done('h-pe-proof'), all)).toBe('loot');
+    expect(derivedColumn(host, done('h-pe-proof'), all)).toBe('post-exploitation');
   });
 
   it('done when proof is done and every loot, pivot and closeout goal is closed', () => {
     const state = { ...done('h-pe-proof'), ...closeAll('loot', 'pivot', 'closeout') };
-    expect(derivedColumn(host, state, all)).toBe('done');
+    expect(derivedColumn(host, state, all)).toBe('reporting');
     const oneOpen = { ...state, [ids('closeout')[0]]: { status: 'todo' as const } };
-    expect(derivedColumn(host, oneOpen, all)).toBe('loot');
+    expect(derivedColumn(host, oneOpen, all)).toBe('post-exploitation');
   });
 
   it('done when proof is done and no loot, pivot or closeout goals apply', () => {
     const only = all.filter((a) => !['loot', 'pivot', 'closeout'].includes(a.stage.id));
-    expect(derivedColumn(host, done('h-pe-proof'), only)).toBe('done');
+    expect(derivedColumn(host, done('h-pe-proof'), only)).toBe('reporting');
   });
 });
 

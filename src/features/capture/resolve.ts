@@ -16,11 +16,13 @@ export const KINDS: { kind: LogKind; label: string }[] = [
   { kind: "flag", label: "Flag" },
 ];
 
-const COLUMNS: BoardColumn[] = ["enumerate", "foothold", "privesc", "loot", "done"];
+const COLUMNS: BoardColumn[] = [
+  "information-gathering", "vulnerability-detection", "initial-foothold", "privilege-escalation", "post-exploitation", "reporting",
+];
 
-/** Flags default to `proof` once the host is at Privesc or later. */
+/** Flags default to `proof` once the host is at Privilege escalation or later. */
 export function defaultFlagKind(host: Host | null): FlagKind {
-  return host && COLUMNS.indexOf(host.boardColumn) >= COLUMNS.indexOf("privesc") ? "proof" : "local";
+  return host && COLUMNS.indexOf(host.boardColumn) >= COLUMNS.indexOf("privilege-escalation") ? "proof" : "local";
 }
 
 export interface CaptureContext {
@@ -101,7 +103,7 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
     scan && scanHost ? `Updates services on ${scanHost.name}: ${ports(scan.ports)}${osPart(scan.os, scanHost.os)}` : null;
   if (!scan && kind === "command" && pd.addIps.length) {
     // First scan of a new box: the scan belongs to an IP that becomes a host on save.
-    const pending = pd.addIps.map((ip) => ({ id: `new:${ip}`, name: ip, ip, column: "enumerate" as const }));
+    const pending = pd.addIps.map((ip) => ({ id: `new:${ip}`, name: ip, ip, column: "information-gathering" as const }));
     const provisional = buildDraft({ ...draftInput, hosts: [...draftInput.hosts, ...pending] }).scan;
     const ip = provisional?.hostId.startsWith("new:") ? provisional.hostId.slice(4) : null;
     if (provisional && ip) servicesLine = `Updates services on ${ip}: ${ports(provisional.ports)}${osPart(provisional.os, null)}`;
@@ -162,7 +164,7 @@ export function withProvisionalHosts(hosts: Host[], engagementId: string, addIps
   return [
     ...hosts,
     ...fresh.map((ip): Host => ({
-      id: provisionalHostId(ip), engagementId, name: ip, ip, os: null, boardColumn: "enumerate", boardManual: false,
+      id: provisionalHostId(ip), engagementId, name: ip, ip, os: null, boardColumn: "information-gathering", boardManual: false,
       access: "none", createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false,
     })),
   ];

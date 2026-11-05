@@ -23,7 +23,7 @@ const E1: Engagement = {
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
 const host = (over: Partial<Host> = {}): Host => ({
-  id: "h1", engagementId: "e1", name: "web01", ip: "10.0.0.5", os: "linux", boardColumn: "enumerate", boardManual: false,
+  id: "h1", engagementId: "e1", name: "web01", ip: "10.0.0.5", os: "linux", boardColumn: "information-gathering", boardManual: false,
   dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none",
   createdAt: 1, updatedAt: 1, ...over,
 });

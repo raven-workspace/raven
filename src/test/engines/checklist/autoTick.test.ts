@@ -20,7 +20,7 @@ const engagement = (over: Partial<Engagement> = {}): Engagement => ({
   lastActivityAt: null, lastRanOn: null, msfHostId: null, ...over,
 });
 const host = (id: string, name: string, ip: string, os: Host['os']): Host => ({
-  id, engagementId: 'lab', name, ip, os, boardColumn: 'enumerate', boardManual: false, access: 'none',
+  id, engagementId: 'lab', name, ip, os, boardColumn: 'information-gathering', boardManual: false, access: 'none',
   createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false,
 });
 let n = 0;

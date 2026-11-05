@@ -9,11 +9,12 @@ import { useHostMutations, useHosts } from "../hosts/queries";
 import { BoardCard } from "./BoardCard";
 
 const ORDER: BoardColumn[] = [
-  "enumerate",
-  "foothold",
-  "privesc",
-  "loot",
-  "done",
+  "information-gathering",
+  "vulnerability-detection",
+  "initial-foothold",
+  "privilege-escalation",
+  "post-exploitation",
+  "reporting",
 ];
 
 export function Board() {

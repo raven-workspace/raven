@@ -25,7 +25,14 @@ export function flagTitle(flagKind: FlagKind, host: HostRef | null): string {
   return host ? `${flagKind}.txt · ${host.name}` : `${flagKind}.txt`;
 }
 
-const STAGE: Record<BoardColumn, string> = { enumerate: 'enum', foothold: 'foothold', privesc: 'privesc', loot: 'loot', done: 'done' };
+const STAGE: Record<BoardColumn, string> = {
+  'information-gathering': 'info',
+  'vulnerability-detection': 'vulns',
+  'initial-foothold': 'foothold',
+  'privilege-escalation': 'privesc',
+  'post-exploitation': 'post-ex',
+  reporting: 'report',
+};
 const EXT: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
 
 export function screenshotFileName(input: {
@@ -35,7 +42,7 @@ export function screenshotFileName(input: {
   caption: string;
   mime: string;
 }): string {
-  const stage = input.column ? STAGE[input.column] : 'enum';
+  const stage = input.column ? STAGE[input.column] : 'info';
   const port = input.caption.match(/:(\d+)/) ?? input.caption.match(/port\s*(\d+)/i);
   const words = (input.caption.toLowerCase().match(/[a-z0-9]+/g) ?? []).slice(0, 3);
   const topic = port ? `port${port[1]}` : words.length ? words.join('-') : 'shot';
