@@ -10,6 +10,7 @@ import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
 import type { Finding } from "../types/findings";
 import type { Host } from "../types/host";
+import type { LogEntry } from "../types/log";
 import type { Service } from "../types/service";
 
 vi.mock("../lib/api");
@@ -39,6 +40,11 @@ const finding = (o: Partial<Finding> & { id: string; title: string }): Finding =
   createdAt: 1, updatedAt: 1, ...o,
 });
 
+const logEntry = (id: string): LogEntry => ({
+  id, engagementId: "e1", kind: "note", title: `step ${id}`, titleEdited: false, ranOn: null, hostIds: ["h1"], observations: null,
+  returnedNothing: false, private: false, content: { kind: "note", text: "x" }, at: 1, createdAt: 1, updatedAt: 1,
+});
+
 function mount(findings: Finding[] = []) {
   m.engagementGet.mockResolvedValue(E1);
   m.hostsList.mockResolvedValue([H1, H2]);
@@ -46,7 +52,7 @@ function mount(findings: Finding[] = []) {
   m.checklistList.mockResolvedValue([]);
   m.hopsList.mockResolvedValue([]);
   m.tunnelsList.mockResolvedValue([]);
-  m.logList.mockResolvedValue([]);
+  if (!m.logList.getMockImplementation()) m.logList.mockResolvedValue([]);
   m.notesList.mockResolvedValue([]);
   m.findingsList.mockResolvedValue(findings);
   m.findingCreate.mockImplementation(async (_e, input) => finding({ id: "f9", ...input, title: input.title }));
@@ -124,6 +130,7 @@ describe("findings section", () => {
 
   it("affected hosts and services round-trip", async () => {
     const user = userEvent.setup();
+    m.logList.mockResolvedValue([logEntry("l1"), logEntry("l2")]);
     mount([finding({ id: "f1", title: "Open share", hostIds: ["h1"], serviceIds: ["s1"], refs: ["CVE-2017-0144", "https://example.test/adv"], stepEntryIds: ["l1", "l2"] })]);
     await user.click(await screen.findByRole("button", { name: "Edit Open share" }));
     const dlg = await screen.findByRole("dialog");

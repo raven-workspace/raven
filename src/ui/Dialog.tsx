@@ -11,8 +11,8 @@ export interface DialogProps {
   children?: ReactNode;
   /** Action row, right-aligned (e.g. Cancel + primary Button). */
   footer?: ReactNode;
-  /** `lg` is for forms: wider, higher on screen. The body scrolls when it doesn't fit. */
-  size?: "md" | "lg";
+  /** `lg` is for forms: wider, higher on screen; `xl` is for forms with embedded lists and code. The body scrolls when it doesn't fit. */
+  size?: "md" | "lg" | "xl";
   className?: string;
 }
 
@@ -26,9 +26,11 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
           {...(description ? {} : { "aria-describedby": undefined })}
           className={cx(
             "fixed left-1/2 z-50 flex -translate-x-1/2 flex-col",
-            size === "lg"
-              ? "top-[8vh] max-h-[calc(92vh-24px)] w-[min(560px,calc(100vw-32px))]"
-              : "top-[18vh] max-h-[calc(82vh-24px)] w-[min(480px,calc(100vw-32px))]",
+            size === "xl"
+              ? "top-[6vh] max-h-[calc(94vh-24px)] w-[min(820px,calc(100vw-32px))]"
+              : size === "lg"
+                ? "top-[8vh] max-h-[calc(92vh-24px)] w-[min(560px,calc(100vw-32px))]"
+                : "top-[18vh] max-h-[calc(82vh-24px)] w-[min(480px,calc(100vw-32px))]",
             "rounded border border-line-2 bg-surface text-fg-2",
             className,
           )}

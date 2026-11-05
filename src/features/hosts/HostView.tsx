@@ -4,6 +4,7 @@ import { EmptyState } from "../../ui";
 import { NowPanel } from "../checklist/NowPanel";
 import { HostChecklist } from "../checklist/HostChecklist";
 import { HostCredentials } from "../credentials/HostCredentials";
+import { HostFindings } from "../findings/HostFindings";
 import { useLog } from "../log/queries";
 import { LogEntryRow } from "../log/LogEntryRow";
 import { OrderButton } from "../log/OrderButton";
@@ -19,7 +20,6 @@ const TABS = [
   { id: "findings", label: "Findings" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
-const STEPS: Partial<Record<TabId, number>> = { findings: 4 };
 
 export function HostView({ engagementId, hostId }: { engagementId: string; hostId: string }) {
   const hosts = useHosts(engagementId);
@@ -106,9 +106,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
             ) : tab === "credentials" ? (
               <HostCredentials engagementId={engagementId} host={host} onOpenEntry={openInStory} />
             ) : (
-              <p className="text-[13px] text-muted">
-                {TABS.find((t) => t.id === tab)?.label} arrives with build step {STEPS[tab]}.
-              </p>
+              <HostFindings engagementId={engagementId} host={host} />
             )}
           </div>
         </div>

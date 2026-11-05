@@ -46,3 +46,13 @@
     scrollbar-color: var(--line-2) transparent;
   }
 }
+
+/* Ink theme for highlight.js: muted greys, the accent only for keywords. */
+.hljs { color: var(--muted-2); background: transparent; }
+.hljs-keyword, .hljs-selector-tag { color: var(--accent); }
+.hljs-comment, .hljs-quote { color: var(--faint); font-style: italic; }
+.hljs-string, .hljs-regexp, .hljs-meta .hljs-string { color: var(--fg-2); }
+.hljs-number, .hljs-literal, .hljs-built_in, .hljs-type, .hljs-symbol { color: var(--fg); }
+.hljs-title, .hljs-function .hljs-title, .hljs-class .hljs-title { color: var(--fg); }
+.hljs-variable, .hljs-attr, .hljs-attribute, .hljs-params, .hljs-property { color: var(--muted-2); }
+.hljs-meta, .hljs-doctag, .hljs-subst { color: var(--muted); }

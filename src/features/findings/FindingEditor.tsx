@@ -5,7 +5,10 @@ import type { Service } from "../../types/service";
 import type { Finding, FindingInput, FindingStatus, Severity } from "../../types/findings";
 import { Button, Chip, Dialog, Field, Input, Select, Textarea, Toggle } from "../../ui";
 import { hostLabel } from "../credentials/AccessGrants";
+import { FindingFiles } from "./FindingFiles";
+import { FindingSteps, liveSteps } from "./FindingSteps";
 import { useFindingMutations } from "./queries";
+import { useLog } from "../log/queries";
 
 const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"];
 const SEVERITY_OPTIONS = [{ value: "none", label: "Unrated" }, ...SEVERITIES.map((s) => ({ value: s, label: s }))];
@@ -24,6 +27,7 @@ interface Draft {
   remediation: string;
   exploitNotes: string;
   lessons: string;
+  stepEntryIds: string[];
 }
 
 const toDraft = (f?: Finding): Draft => ({
@@ -39,6 +43,7 @@ const toDraft = (f?: Finding): Draft => ({
   remediation: f?.remediation ?? "",
   exploitNotes: f?.exploitNotes ?? "",
   lessons: f?.lessons ?? "",
+  stepEntryIds: f?.stepEntryIds ?? [],
 });
 
 const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
@@ -53,6 +58,7 @@ export function FindingEditor({ eid, hosts, servicesByHost, edit, onClose }: {
   onClose: () => void;
 }) {
   const { create, update } = useFindingMutations(eid);
+  const log = useLog(eid);
   const [initial] = useState(() => JSON.stringify(toDraft(edit)));
   const [d, setD] = useState<Draft>(() => toDraft(edit));
   const [newRef, setNewRef] = useState("");
@@ -92,8 +98,8 @@ export function FindingEditor({ eid, hosts, servicesByHost, edit, onClose }: {
       refs,
       hostIds: d.hostIds,
       serviceIds: d.serviceIds,
-      // Steps are edited in a later task; pass them through unchanged.
-      stepEntryIds: edit?.stepEntryIds ?? [],
+      // Drop steps whose log entry has since been deleted.
+      stepEntryIds: liveSteps(d.stepEntryIds, log.data),
     };
     setBusy(true);
     const opts = {
@@ -139,7 +145,7 @@ export function FindingEditor({ eid, hosts, servicesByHost, edit, onClose }: {
       <Dialog
         open
         onOpenChange={(o) => !o && requestClose()}
-        size="lg"
+        size="xl"
         title={edit ? "Edit finding" : "Add finding"}
         footer={
           <>
@@ -252,9 +258,12 @@ export function FindingEditor({ eid, hosts, servicesByHost, edit, onClose }: {
           <Field label="Remediation"><Textarea rows={3} value={d.remediation} onChange={(e) => set("remediation", e.target.value)} /></Field>
           <Field label="Exploit notes"><Textarea mono rows={4} value={d.exploitNotes} onChange={(e) => set("exploitNotes", e.target.value)} /></Field>
 
-          {/* Reproduction steps and files arrive in the next task. */}
-          <div data-slot="finding-steps" />
-          <div data-slot="finding-files" />
+          <FindingSteps eid={eid} hostIds={d.hostIds} value={d.stepEntryIds} onChange={(ids) => set("stepEntryIds", ids)} />
+          {edit ? (
+            <FindingFiles findingId={edit.id} />
+          ) : (
+            <p className="m-0 text-xs text-muted">Save the finding to attach files.</p>
+          )}
 
           <Field label={<span className="inline-flex items-center gap-2">Lessons <Chip>Private</Chip></span>} hint="Never included in an export or report.">
             <Textarea rows={3} value={d.lessons} onChange={(e) => set("lessons", e.target.value)} />

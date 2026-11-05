@@ -30,6 +30,8 @@ export function useLogMutations(engagementId: string) {
     void qc.invalidateQueries({ queryKey: ["checklist", engagementId] });
     void qc.invalidateQueries({ queryKey: ["hosts", engagementId] });
     void qc.invalidateQueries({ queryKey: ["engagement", engagementId] });
+    // A deleted entry leaves the reproduction steps of any finding that used it.
+    void qc.invalidateQueries({ queryKey: ["findings", engagementId] });
   };
   return {
     update: useMutation({
