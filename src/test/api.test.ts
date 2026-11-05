@@ -67,8 +67,8 @@ describe("api", () => {
     expect(invoke).toHaveBeenCalledWith("host_create", { engagementId: "e1", input: { name: "web", ip: "10.0.0.5" } });
     await api.hostUpdate("h1", { name: "web2" });
     expect(invoke).toHaveBeenCalledWith("host_update", { id: "h1", input: { name: "web2" } });
-    await api.hostMove("h1", "privesc");
-    expect(invoke).toHaveBeenCalledWith("host_move", { id: "h1", column: "privesc" });
+    await api.hostMove("h1", "privilege-escalation");
+    expect(invoke).toHaveBeenCalledWith("host_move", { id: "h1", column: "privilege-escalation" });
     await api.hostDelete("h1");
     expect(invoke).toHaveBeenCalledWith("host_delete", { id: "h1" });
   });

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import type { FillInput } from "../../engines/checklist";
+import { PIVOT_GOALS, type FillInput } from "../../engines/checklist";
 import { engagementStuck, hostStuck, type StuckLine } from "../../engines/stuck";
 import { api } from "../../lib/api";
 import { cx } from "../../lib/cx";
@@ -13,12 +13,14 @@ import { CommandList, type FilledCommand } from "../checklist/CommandList";
 import { goalCommands } from "../checklist/goalCommands";
 import { useChecklist, useEngagementServices, useTunnels } from "../checklist/queries";
 import { useCredAttempts, useCredentials, useUsernames } from "../credentials/queries";
+import { sectionPath } from "../engagements/sections";
 import { useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
 import { useNote } from "../notes/queries";
 import { noteKey, useNotesStore } from "../notes/useNotesStore";
 
 const WIDTH = 440;
+const PIVOT_IDS = new Set(PIVOT_GOALS.map((g) => g.id));
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -272,7 +274,9 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
   if (!loaded || !hosts || !eng || !credentials || !attempts || !usernames) return null;
 
   const go = (l: StuckLine) => {
-    if (l.hostId) void navigate(`/e/${engagementId}/h/${l.hostId}`, l.goalId ? { state: { goalId: l.goalId } } : undefined);
+    // Engagement-placed steps (the pivot tunnel) are not on the host view: open the engagement checklist on that host's row.
+    if (l.hostId && l.goalId && PIVOT_IDS.has(l.goalId)) void navigate(sectionPath(engagementId, "checklist"), { state: { goalId: l.goalId, hostId: l.hostId } });
+    else if (l.hostId) void navigate(`/e/${engagementId}/h/${l.hostId}`, l.goalId ? { state: { goalId: l.goalId } } : undefined);
     else if (l.goalId) document.querySelector(`[data-goal-id="${l.goalId}"]`)?.scrollIntoView?.({ block: "center" });
   };
 

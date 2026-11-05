@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildDraft, detectKind, httpParts, httpTitle, noteTitle, screenshotFileName, commandTitle, flagTitle } from '../../../engines/capture';
 
-const vega = { id: 'h1', name: 'Vega', ip: '172.31.166.143', column: 'enumerate' as const };
+const vega = { id: 'h1', name: 'Vega', ip: '172.31.166.143', column: 'information-gathering' as const };
 const base = {
   image: null,
   hosts: [vega],
@@ -87,11 +87,11 @@ describe('capture draft', () => {
     expect(buildDraft({ ...base, text }).title).toBe('GET :81/');
   });
 
-  it('screenshot file name 172.31.166.143_enum_port81', () => {
-    const args = { ip: '172.31.166.143', hostName: 'Vega', column: 'enumerate' as const, mime: 'image/png' };
-    expect(screenshotFileName({ ...args, caption: 'web on :81' })).toBe('172.31.166.143_enum_port81.png');
-    expect(screenshotFileName({ ...args, caption: 'Login Page Admin Panel Extra', column: null })).toBe('172.31.166.143_enum_login-page-admin.png');
-    expect(screenshotFileName({ ...args, ip: null, hostName: null, caption: '', mime: 'image/jpeg', column: 'loot' })).toBe('engagement_loot_shot.jpg');
+  it('screenshot file name 172.31.166.143_info_port81', () => {
+    const args = { ip: '172.31.166.143', hostName: 'Vega', column: 'information-gathering' as const, mime: 'image/png' };
+    expect(screenshotFileName({ ...args, caption: 'web on :81' })).toBe('172.31.166.143_info_port81.png');
+    expect(screenshotFileName({ ...args, caption: 'Login Page Admin Panel Extra', column: null })).toBe('172.31.166.143_info_login-page-admin.png');
+    expect(screenshotFileName({ ...args, ip: null, hostName: null, caption: '', mime: 'image/jpeg', column: 'post-exploitation' })).toBe('engagement_post-ex_shot.jpg');
   });
 
   it('32-hex paste is a flag', () => {
@@ -125,7 +125,7 @@ describe('capture draft', () => {
   });
 
   describe('scan belongs to the attributed host (C1)', () => {
-    const five = { id: 'h5', name: 'web01', ip: '10.0.0.5', column: 'enumerate' as const };
+    const five = { id: 'h5', name: 'web01', ip: '10.0.0.5', column: 'information-gathering' as const };
     const lab = { ...base, hosts: [five], scope: ['10.0.0.0/24'] };
     const multi = [
       'kali@kali:~$ nmap -sV 10.0.0.5 10.0.0.6',
@@ -149,7 +149,7 @@ describe('capture draft', () => {
     });
 
     it('multi-host paste with the target listed second takes its own section and OS', () => {
-      const six = { id: 'h6', name: 'dc01', ip: '10.0.0.6', column: 'enumerate' as const };
+      const six = { id: 'h6', name: 'dc01', ip: '10.0.0.6', column: 'information-gathering' as const };
       const d = buildDraft({ ...lab, hosts: [six], text: multi.replace('10.0.0.5 10.0.0.6', '10.0.0.6') });
       expect(d.scan?.hostId).toBe('h6');
       expect(d.scan?.ports.map((p) => p.port)).toEqual([135, 445]);

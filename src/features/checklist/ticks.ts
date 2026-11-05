@@ -2,6 +2,7 @@ import {
   applicableGoals,
   daCoverGoals,
   derivedColumn,
+  factTickGoals,
   metasploitHostIds,
   removeEntryTicks,
   replaceEntryTicks,
@@ -99,12 +100,24 @@ export async function syncEntryTicks(engagementId: string, entry: LogEntry | nul
 export async function resyncBoards(engagementId: string): Promise<void> {
   await afterAutoTick(engagementId);
   const ctx = await loadTickContext(engagementId);
-  const after = await applyDaCover(engagementId, ctx);
+  const facts = await applyFacts(engagementId, ctx);
+  const after = await applyDaCover(engagementId, ctx, facts);
   await syncBoards(engagementId, ctx, after);
 }
 
 /**
- * Domain admin on the DC covers privesc and loot on domain-joined hosts (`daCoverGoals`). Reads the attempts and the
+ * Ticks "every port identified" and "OS identified" from the hosts' own data (`factTickGoals`), through the store's
+ * conditional write. Returns the checklist after it. `byOwner` is the current checklist; read from the store when left out.
+ */
+export async function applyFacts(engagementId: string, ctx: TickContext, byOwner?: Map<string, ChecklistState>): Promise<Map<string, ChecklistState>> {
+  const before: Map<string, ChecklistState> = byOwner ?? byOwnerOf(await api.checklistList(engagementId));
+  const { done, revert } = factTickGoals({ engagement: ctx.engagement, hosts: ctx.hosts, servicesByHost: ctx.servicesByHost, byOwner: before });
+  if (done.length === 0 && revert.length === 0) return before;
+  return byOwnerOf(await api.checklistApplyFacts(engagementId, done, revert));
+}
+
+/**
+ * Domain admin on the DC covers privilege escalation and post-exploitation on domain-joined hosts (`daCoverGoals`). Reads the attempts and the
  * checklist from the store and sends the goals to the store's conditional write, which re-checks every row, so a status
  * set by hand in the meantime is never overwritten. Returns the checklist after it.
  * `byOwner` is the current checklist; read from the store when left out.
@@ -125,7 +138,7 @@ export async function applyDaCover(engagementId: string, ctx: TickContext, byOwn
  *
  * While the engagement has no checklist rows at all (an engagement from before step 3 whose log has not been ticked
  * yet), a hand-placed host with no derived column is left alone: its first derived column must come from its real
- * checklist, so the store's seed (T6-R2) records that one rather than an empty-checklist "enumerate".
+ * checklist, so the store's seed (T6-R2) records that one rather than an empty-checklist "information-gathering".
  */
 export async function syncBoards(engagementId: string, ctx: TickContext, byOwner?: Map<string, ChecklistState>): Promise<void> {
   const states = byOwner ?? byOwnerOf(await api.checklistList(engagementId));
@@ -165,7 +178,10 @@ export async function tickFromLog(engagementId: string, ctx: TickContext): Promi
   }
   const { next } = changedItems(before, after);
   if (next.length > 0) await write(engagementId, next);
-  await syncBoards(engagementId, ctx, after);
+  // Same follow-ups as resyncBoards, so this recovery path restores fact ticks and DA cover too.
+  const facts = await applyFacts(engagementId, ctx, after);
+  const covered = await applyDaCover(engagementId, ctx, facts);
+  await syncBoards(engagementId, ctx, covered);
   const n = next.length;
   return { updated: n, message: `Updated ${n} ${n === 1 ? "goal" : "goals"}` };
 }
@@ -245,7 +261,8 @@ export async function afterEntrySaved(engagementId: string, entry: LogEntry | nu
   let after: Map<string, ChecklistState> | null = null;
   try {
     ({ after } = await writeEntryTicks(engagementId, entry, entryId, ctx));
-    // An intake saved with this entry may have recorded the admin result on the DC.
+    // A scan saved with this entry may have set services and OS; then an intake may have recorded the admin result.
+    after = await applyFacts(engagementId, ctx, after);
     after = await applyDaCover(engagementId, ctx, after);
   } catch (e) {
     failure = new FollowUpError(CHECKLIST_FAILED, e);

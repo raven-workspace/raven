@@ -1,7 +1,7 @@
 import type { CommandMatcher, LibraryCommand } from '../types';
 import { EMPTY_PASS, NULL_USER, NXC_LDAP, NXC_MSSQL, NXC_SMB, impacket } from './patterns';
 
-/** Per-service enumeration (Enumerate stage): SMB, FTP, NFS, RPC, LDAP, DNS, SNMP, SMTP, databases, remote access. */
+/** Per-service enumeration (Information gathering stage): SMB, FTP, NFS, RPC, LDAP, DNS, SNMP, SMTP, databases, remote access. */
 
 const NXC_SMB_NULL: CommandMatcher = { bins: ['nxc', 'netexec'], all: [NXC_SMB, NULL_USER, EMPTY_PASS] };
 const NXC_SMB_NULL_EXAMPLES = {
@@ -308,7 +308,7 @@ export const ENUM_SERVICE_COMMANDS: LibraryCommand[] = [
       'ldapsearch -x -H ldap://{TARGET_IP} -b "$(echo \'DC={DOMAIN}\' | sed \'s/\\./,DC=/g\')" "(objectClass=user)" sAMAccountName description',
     os: 'any',
     runFrom: 'attacker',
-    goals: ['h-enum-ldap'],
+    goals: ['h-enum-ldap', 'h-enum-ad-users'],
     why: 'Descriptions are where admins leave passwords.',
     source: 'oscp-notes',
   },

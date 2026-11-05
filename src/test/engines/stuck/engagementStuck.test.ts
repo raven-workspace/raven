@@ -10,7 +10,7 @@ import type { Tunnel } from "../../../types/network";
 import { engagementStuck } from "../../../engines/stuck";
 
 const host = (id: string, p: Partial<Host> = {}): Host => ({
-  id, engagementId: "e1", name: id, ip: "10.10.10.5", os: "linux", boardColumn: "enumerate", boardManual: false,
+  id, engagementId: "e1", name: id, ip: "10.10.10.5", os: "linux", boardColumn: "information-gathering", boardManual: false,
   access: "none", createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, ...p,
 });
 let n = 0;
@@ -159,7 +159,7 @@ describe("engagementStuck lines", () => {
     const h = host("A");
     const services = { A: [svc("A", 80)] };
     const goals = applicableGoals(h, engagement, [h], new Map([["A", services.A]]));
-    const enumId = goals.find((s) => s.stage.id === "enumerate")!.goals[0]!.id;
+    const enumId = goals.find((s) => s.stage.id === "information-gathering")!.goals[0]!.id;
     const lib: LibraryCommand[] = [
       { id: "b", title: "b", tool: "t", template: "x", os: "any", runFrom: "attacker", goals: [enumId], exam: "banned", source: "raven" },
     ];
@@ -168,7 +168,10 @@ describe("engagementStuck lines", () => {
     it("excludes a goal with only banned commands in exam sim but counts it in lab", () => {
       const lab = run({ hosts: [h], services, library: lib });
       const ex = run({ hosts: [h], services, library: lib, engagement: exam });
-      expect(count(lab)).toBe(count(ex) + 1);
+      // The exam kind also adds the command-free Metasploit decision step, so compare like with like.
+      const exWithoutBan = run({ hosts: [h], services, library: [], engagement: exam });
+      expect(count(exWithoutBan)).toBe(count(ex) + 1);
+      expect(count(lab)).toBe(count(ex));
       expect(ex[0]?.goalId).not.toBe(enumId);
     });
   });

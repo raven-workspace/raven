@@ -137,7 +137,7 @@ export const WINDOWS_COMMANDS: LibraryCommand[] = [
     os: 'windows',
     runFrom: 'target',
     goals: ['h-pe-win-privs'],
-    why: 'Pull both hives back and run secretsdump LOCAL; on a DC go for ntds.dit with diskshadow. The Loot reg save line carries the auto-tick.',
+    why: 'Pull both hives back and run secretsdump LOCAL; on a DC go for ntds.dit with diskshadow. The Post-exploitation reg save line carries the auto-tick.',
     source: 'oscp-notes',
   },
   // ---------------------------------------------------------------- groups

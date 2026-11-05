@@ -9,11 +9,12 @@ import { useHostMutations, useHosts } from "../hosts/queries";
 import { BoardCard } from "./BoardCard";
 
 const ORDER: BoardColumn[] = [
-  "enumerate",
-  "foothold",
-  "privesc",
-  "loot",
-  "done",
+  "information-gathering",
+  "vulnerability-detection",
+  "initial-foothold",
+  "privilege-escalation",
+  "post-exploitation",
+  "reporting",
 ];
 
 export function Board() {
@@ -89,7 +90,13 @@ export function Board() {
           {moveError}
         </p>
       )}
-      <div ref={root} className="grid min-h-0 flex-1 grid-cols-5 gap-3">
+      <div
+        ref={root}
+        className="grid min-h-0 flex-1 gap-3"
+        style={{
+          gridTemplateColumns: `repeat(${ORDER.length}, minmax(0, 1fr))`,
+        }}
+      >
         {ORDER.map((col) => {
           const cards = list.filter((h) => h.boardColumn === col);
           return (
@@ -108,14 +115,14 @@ export function Board() {
               }}
               onDrop={(e) => onDrop(e, col)}
               className={cx(
-                "flex min-h-40 flex-col gap-2 rounded border p-2",
+                "flex min-h-40 min-w-0 flex-col gap-2 rounded border p-2",
                 over === col ? "border-accent" : "border-line",
               )}
             >
               <header
                 className={cx(
                   labelClass,
-                  "flex items-center justify-between px-1",
+                  "flex items-start justify-between gap-2 px-1",
                 )}
               >
                 <span>{COLUMN_LABELS[col]}</span>

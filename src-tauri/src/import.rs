@@ -983,9 +983,9 @@ mod tests {
             }],
             "hosts": [
                 { "id": "h1", "engagementId": "E1", "name": "dc01", "ip": "10.0.0.5", "os": "windows", "access": "root",
-                  "dualHomed": false, "adSet": null, "boardColumn": "loot", "boardManual": true, "accessReviewedAt": null },
+                  "dualHomed": false, "adSet": null, "boardColumn": "post-exploitation", "boardManual": true, "accessReviewedAt": null },
                 { "id": "h2", "engagementId": "E1", "name": "web", "ip": "10.0.0.6", "os": "linux", "access": "user",
-                  "dualHomed": true, "adSet": false, "boardColumn": "foothold", "boardManual": false, "accessReviewedAt": 5 }
+                  "dualHomed": true, "adSet": false, "boardColumn": "vulnerability-detection", "boardManual": false, "accessReviewedAt": 5 }
             ],
             "services": [
                 { "id": "h1:tcp/445", "hostId": "h1", "port": 445, "protocol": "tcp", "state": "open",
@@ -1375,7 +1375,7 @@ mod tests {
         let mut p = plan_json();
         // A second backup where the same principal, host and port carry different ids.
         p["hosts"] = json!([{ "id": "h9", "engagementId": "E1", "name": "dc-again", "ip": "10.0.0.5", "os": null,
-            "access": "none", "dualHomed": false, "adSet": null, "boardColumn": "enumerate", "boardManual": false,
+            "access": "none", "dualHomed": false, "adSet": null, "boardColumn": "information-gathering", "boardManual": false,
             "accessReviewedAt": null }]);
         p["services"] = json!([{ "id": "h9:tcp/445", "hostId": "h9", "port": 445, "protocol": "tcp", "state": "open",
             "nmapService": null, "nmapVersion": null }]);

@@ -5,7 +5,7 @@ import type { Service } from "../../../types/service";
 export const NT = "31d6cfe0d16ae931b73c59d7e0c089c0";
 
 export const host = (id: string, extra: Partial<Host> = {}): Host => ({
-  id, engagementId: "eng1", name: id, ip: null, os: null, boardColumn: "enumerate", boardManual: false,
+  id, engagementId: "eng1", name: id, ip: null, os: null, boardColumn: "information-gathering", boardManual: false,
   access: "none", createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false,
   ...extra,
 });

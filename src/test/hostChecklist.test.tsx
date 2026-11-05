@@ -29,7 +29,7 @@ const E1: Engagement = {
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
 const host = (id: string, name: string, ip: string, over: Partial<Host> = {}): Host => ({
-  id, engagementId: "e1", name, ip, os: "windows", boardColumn: "enumerate", boardManual: false, dualHomed: false,
+  id, engagementId: "e1", name, ip, os: "windows", boardColumn: "information-gathering", boardManual: false, dualHomed: false,
   boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1, ...over,
 });
 const H1 = host("h1", "dc01", "10.10.10.5");
@@ -100,9 +100,38 @@ describe("host checklist tab", () => {
     mount();
     await openChecklist(user);
     expect(await within(await screen.findByRole("tabpanel")).findByText("Check SMB shares and null/guest access")).toBeInTheDocument();
-    expect(within(screen.getByRole("tabpanel")).getByRole("heading", { name: "Enumerate" })).toBeInTheDocument();
+    expect(within(screen.getByRole("tabpanel")).getByRole("heading", { name: "Information gathering" })).toBeInTheDocument();
     expect(screen.queryByText("Check FTP for anonymous access")).not.toBeInTheDocument();
     expect(screen.queryByText("Identify the web stack and framework")).not.toBeInTheDocument();
+  });
+
+  it("stages render in PEN-200 order", async () => {
+    const user = userEvent.setup();
+    mount({ hosts: [host("h1", "dc01", "10.10.10.5", { dualHomed: true, access: "root" })] });
+    await openChecklist(user);
+    const panel = within(await screen.findByRole("tabpanel"));
+    await panel.findByRole("heading", { name: "Information gathering" });
+    const names = panel.getAllByRole("region").map((r) => r.getAttribute("aria-label"));
+    const order = ["Information gathering", "Vulnerability detection", "Initial foothold", "Privilege escalation", "Post-exploitation", "Reporting"];
+    expect(names.filter((n) => order.includes(n ?? ""))).toEqual(order);
+    expect(panel.queryByRole("region", { name: "Lateral movement" })).not.toBeInTheDocument();
+  });
+
+  it("group headings show only when a goal in them applies", async () => {
+    const user = userEvent.setup();
+    mount({ hosts: [host("h1", "web02", "10.10.10.6", { os: "linux", access: "user" })] });
+    await openChecklist(user);
+    const panel = within(await screen.findByRole("tabpanel"));
+    expect(await panel.findByRole("heading", { level: 4, name: "Linux" })).toBeInTheDocument();
+    expect(panel.queryByRole("heading", { name: "Windows" })).not.toBeInTheDocument();
+  });
+
+  it("existing commands still render under h-pe-lin-auto", async () => {
+    const user = userEvent.setup();
+    mount({ hosts: [host("h1", "web02", "10.10.10.6", { os: "linux", access: "user" })] });
+    await openChecklist(user);
+    const panel = within(await screen.findByRole("tabpanel"));
+    expect((await panel.findAllByRole("button", { name: /^Copy command: .*linPEAS/i })).length).toBeGreaterThan(0);
   });
 
   it("commands are filled with the host IP and the attacker IP setting", async () => {

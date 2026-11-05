@@ -17,7 +17,7 @@ import {
 } from '../../../engines/checklist';
 
 const host = (id: string, os: Host['os'], p: Partial<Host> = {}): Host => ({
-  id, engagementId: 'e1', name: id, ip: '10.10.10.5', os, boardColumn: 'enumerate', boardManual: false,
+  id, engagementId: 'e1', name: id, ip: '10.10.10.5', os, boardColumn: 'information-gathering', boardManual: false,
   access: 'none', createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, ...p,
 });
 let n = 0;
@@ -43,9 +43,9 @@ const run = (hosts: Host[], attempts: CredAttempt[], byOwner: Map<string, Checkl
 
 const coverable = (h: Host, hosts: Host[]) =>
   applicableGoals(h, engagement, hosts, servicesOf(hosts))
-    .filter((g) => g.stage.id === 'privesc' || g.stage.id === 'loot')
+    .filter((g) => g.stage.id === 'privilege-escalation' || g.stage.id === 'post-exploitation')
     .flatMap((g) => g.goals.map((x) => x.id))
-    .filter((id) => id !== 'h-pe-proof');
+    .filter((id) => !['h-pe-proof', 'h-orient-network', 'h-post-neighbours'].includes(id));
 
 describe('domain admin cover', () => {
   const hosts = [DC, WS01, LIN01];
@@ -64,11 +64,19 @@ describe('domain admin cover', () => {
     expect(ids).toContain('h-pe-win-privs');
     for (const id of ids) expect(ws[id]).toEqual({ status: 'na', auto: true });
     expect(ws['h-pe-proof']).toBeUndefined();
-    expect(Object.keys(ws).every((id) => id.startsWith('h-pe-') || id.startsWith('h-loot-'))).toBe(true);
+    expect(Object.keys(ws).every((id) => /^h-(pe|loot|post)-/.test(id))).toBe(true);
     expect(Object.keys(ws).sort()).toEqual([...ids].sort());
     expect(out.get('DC')!['h-loot-hashes']).toEqual({ status: 'na', auto: true });
     expect(isCoverMarked(ws['h-loot-hashes'])).toBe(true);
     expect(DA_COVER_LABEL).toBe('Covered by domain admin');
+  });
+
+  it('covers post-exploitation goals but never h-orient-network or h-post-neighbours', () => {
+    const ws = run(hosts, [attempt('DC', 'admin')]).get('WS01')!;
+    expect(ws['h-post-redump']).toEqual({ status: 'na', auto: true });
+    expect(ws['h-post-bloodhound']).toEqual({ status: 'na', auto: true });
+    expect(ws['h-loot-record']).toEqual({ status: 'na', auto: true });
+    for (const id of ['h-pe-proof', 'h-orient-network', 'h-post-neighbours']) expect(ws[id], id).toBeUndefined();
   });
 
   it('Linux hosts are not covered', () => {

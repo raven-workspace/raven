@@ -36,7 +36,7 @@ function host(over: Partial<Host> & Pick<Host, "id" | "name">): Host {
     engagementId: "e1",
     ip: null,
     os: null,
-    boardColumn: "enumerate",
+    boardColumn: "information-gathering",
     boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false,
     access: "none",
     createdAt: 1,
@@ -65,8 +65,8 @@ function mount(path = "/e/e1") {
 beforeEach(() => {
   vi.resetAllMocks();
   hosts = [
-    host({ id: "h1", name: "dc01", ip: "10.10.10.5", boardColumn: "foothold" }),
-    host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "done" }),
+    host({ id: "h1", name: "dc01", ip: "10.10.10.5", boardColumn: "vulnerability-detection" }),
+    host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "reporting" }),
   ];
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "" });
@@ -84,9 +84,9 @@ describe("hosts", () => {
     mount();
     const nav = await screen.findByRole("navigation", { name: "Engagement" });
     const dc = await within(nav).findByRole("link", { name: /dc01/ });
-    expect(within(dc).getByRole("img", { name: "Foothold" })).toBeInTheDocument();
+    expect(within(dc).getByRole("img", { name: "Vulnerability detection" })).toBeInTheDocument();
     expect(within(dc).getByText("10.10.10.5")).toHaveClass("font-mono");
-    expect(within(nav).getByRole("img", { name: "Done" })).toBeInTheDocument();
+    expect(within(nav).getByRole("img", { name: "Reporting" })).toBeInTheDocument();
     await user.click(dc);
     expect(screen.getByTestId("where")).toHaveTextContent("/e/e1/h/h1");
     expect(within(nav).getByRole("link", { name: /dc01/ })).toHaveAttribute("aria-current", "page");

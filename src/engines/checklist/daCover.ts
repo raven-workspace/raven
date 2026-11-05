@@ -20,9 +20,9 @@ export function isCoverMarked(item: ItemState | undefined): boolean {
   return item?.auto === true && item.status === 'na';
 }
 
-const COVERED_STAGES = new Set(['privesc', 'loot']);
-/** Privesc proof stays a real task on every host. */
-const NEVER_COVERED = new Set(['h-pe-proof']);
+const COVERED_STAGES = new Set(['privilege-escalation', 'post-exploitation']);
+/** Privesc proof stays a real task on every host, and the network facts are about the host, not the domain. */
+const NEVER_COVERED = new Set(['h-pe-proof', 'h-orient-network', 'h-post-neighbours']);
 
 function revert(item: ItemState): ItemState {
   const next: ItemState = { ...item, status: 'todo' };

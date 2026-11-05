@@ -29,8 +29,8 @@ const E1: Engagement = {
 
 function host(over: Partial<Host> & Pick<Host, "id" | "name">): Host {
   return {
-    engagementId: "e1", ip: null, os: null, boardColumn: "enumerate", boardManual: false, dualHomed: false,
-    boardDerived: "enumerate", accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1, ...over,
+    engagementId: "e1", ip: null, os: null, boardColumn: "information-gathering", boardManual: false, dualHomed: false,
+    boardDerived: "information-gathering", accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1, ...over,
   };
 }
 
@@ -126,6 +126,27 @@ beforeEach(() => {
     return null;
   });
   m.checklistList.mockImplementation(async () => store);
+  // The store's conditional fact write, as the Rust command does it.
+  m.checklistApplyFacts.mockImplementation(async (_e, done, revert) => {
+    const find = (g: { ownerId: string; goalId: string }) => store.find((i) => i.ownerId === g.ownerId && i.goalId === g.goalId);
+    for (const g of revert) {
+      const row = find(g);
+      if (row && row.status === "done" && row.auto && !row.statusManual && row.evidence.length === 0) {
+        store = store.map((i) => (i === row ? { ...i, status: "todo", auto: false, autoFrom: null, completedAt: null } : i));
+      }
+    }
+    for (const g of done) {
+      const row = find(g);
+      if (!row) {
+        store = [...store, { ownerId: g.ownerId, goalId: g.goalId, status: "done", notes: null, completedAt: 5, auto: true, autoFrom: null, statusManual: false, evidence: [], updatedAt: 1 }];
+      } else if (row.status === "todo" && !row.auto && !row.statusManual) {
+        store = store.map((i) => (i === row ? { ...i, status: "done", auto: true, completedAt: 5 } : i));
+      }
+    }
+    return store;
+  });
+  // The DA cover write is not under test here: it returns the checklist as it stands.
+  m.checklistApplyCover.mockImplementation(async () => store);
   m.checklistPut.mockImplementation(async (_e, items: ChecklistItemInput[]) => {
     for (const it of items) {
       const full = item({ ...it, updatedAt: 2 } as ChecklistItem);
@@ -168,7 +189,7 @@ describe("auto-tick wiring", () => {
     store = [
       item({ ownerId: "h1", goalId: "h-orient-proof", status: "done", completedAt: 50, auto: true, evidence: [{ entryId: "f1", commandId: "flag" }] }),
     ];
-    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardColumn: "privesc", boardDerived: "privesc" } : h));
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardColumn: "privilege-escalation", boardDerived: "privilege-escalation" } : h));
     mount("/e/e1/s/log");
     await user.click(await screen.findByRole("button", { name: /local.txt · dc01/ }));
     await user.click(log().getByRole("button", { name: "Edit" }));
@@ -180,8 +201,8 @@ describe("auto-tick wiring", () => {
     expect(m.checklistPut).toHaveBeenCalledTimes(1);
     expect(stored("h1", "h-orient-proof")).toMatchObject({ status: "todo", completedAt: null, auto: false, evidence: [] });
     expect(stored("h2", "h-orient-proof")).toMatchObject({ status: "done", auto: true, evidence: [{ entryId: "f1", commandId: "flag" }] });
-    await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "privesc"));
-    expect(m.hostSyncBoard).toHaveBeenCalledWith("h1", "enumerate");
+    await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "privilege-escalation"));
+    expect(m.hostSyncBoard).toHaveBeenCalledWith("h1", "information-gathering");
   });
 
   it("deleting the entry removes its evidence and restores the prior status", async () => {
@@ -223,12 +244,12 @@ describe("auto-tick wiring", () => {
       expect.objectContaining({ status: "done", auto: true, evidence: [{ entryId: "l1", commandId: "flag" }] }),
     ]);
     expect(m.hostSyncBoard).toHaveBeenCalledTimes(1);
-    expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "privesc");
+    expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "privilege-escalation");
   });
 
   it("a hand-placed card is not moved by a save that does not change the derived column", async () => {
     const user = userEvent.setup();
-    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardColumn: "loot", boardManual: true, boardDerived: "enumerate" } : h));
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardColumn: "post-exploitation", boardManual: true, boardDerived: "information-gathering" } : h));
     mount();
     await openCapture(user);
     await user.paste(FULL_SCAN);
@@ -306,7 +327,7 @@ describe("auto-tick wiring", () => {
     store = [
       item({ ownerId: "h1", goalId: "h-orient-proof", status: "done", completedAt: 50, auto: true, evidence: [{ entryId: "f1", commandId: "flag" }] }),
     ];
-    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardColumn: "privesc", boardDerived: "privesc" } : h));
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardColumn: "privilege-escalation", boardDerived: "privilege-escalation" } : h));
     mount("/e/e1/s/log");
     await user.click(await screen.findByRole("button", { name: /local.txt · dc01/ }));
     await user.click(log().getByRole("button", { name: "Delete" }));
@@ -316,7 +337,7 @@ describe("auto-tick wiring", () => {
     expect(stored("h1", "h-orient-proof")).toMatchObject({
       status: "done", auto: true, completedAt: 50, evidence: [{ entryId: "f1", commandId: "flag" }],
     });
-    expect(hosts.find((h) => h.id === "h1")).toMatchObject({ boardColumn: "privesc", boardDerived: "privesc" });
+    expect(hosts.find((h) => h.id === "h1")).toMatchObject({ boardColumn: "privilege-escalation", boardDerived: "privilege-escalation" });
   });
 
   it("hostSyncBoard rejects during a delete → checklist rows restored, entry not deleted, error shown", async () => {
@@ -328,7 +349,7 @@ describe("auto-tick wiring", () => {
     store = [
       item({ ownerId: "h1", goalId: "h-orient-proof", status: "done", completedAt: 50, auto: true, evidence: [{ entryId: "f1", commandId: "flag" }] }),
     ];
-    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardColumn: "privesc", boardDerived: "privesc" } : h));
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardColumn: "privilege-escalation", boardDerived: "privilege-escalation" } : h));
     mount("/e/e1/s/log");
     await user.click(await screen.findByRole("button", { name: /local.txt · dc01/ }));
     await user.click(log().getByRole("button", { name: "Delete" }));
@@ -422,21 +443,21 @@ describe("first open of an engagement logged before step 3 (F-R1)", () => {
 
   it("a v2 hand-placed card (manual, no derived column) keeps its column; its local.txt flag ticks the checklist", async () => {
     rustSyncBoard();
-    hosts = hosts.map((h) => (h.id === "h2" ? { ...h, boardColumn: "done", boardManual: true, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false } : h));
+    hosts = hosts.map((h) => (h.id === "h2" ? { ...h, boardColumn: "reporting", boardManual: true, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false } : h));
     entries = [entry({ id: "f1", kind: "flag", at: T, hostIds: ["h2"], content: { kind: "flag", flagKind: "local", value: FLAG } })];
     mount();
     await vi.waitFor(() => expect(stored("h2", "h-orient-proof")).toMatchObject({ status: "done", auto: true, completedAt: T }));
-    await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "privesc"));
+    await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "privilege-escalation"));
     // Never synced against the empty checklist first.
-    expect(m.hostSyncBoard).not.toHaveBeenCalledWith("h2", "enumerate");
-    expect(hosts.find((h) => h.id === "h2")).toMatchObject({ boardColumn: "done", boardManual: true, boardDerived: "privesc" });
+    expect(m.hostSyncBoard).not.toHaveBeenCalledWith("h2", "information-gathering");
+    expect(hosts.find((h) => h.id === "h2")).toMatchObject({ boardColumn: "reporting", boardManual: true, boardDerived: "privilege-escalation" });
     // The card is still in Done on the board.
-    await vi.waitFor(() => expect(within(screen.getByRole("region", { name: "Done" })).getByRole("link", { name: /web02/ })).toBeInTheDocument());
+    await vi.waitFor(() => expect(within(screen.getByRole("region", { name: "Reporting" })).getByRole("link", { name: /web02/ })).toBeInTheDocument());
   });
 
   it("a board sync started while the automatic tick runs waits for it; concurrent callers share one run", async () => {
     rustSyncBoard();
-    hosts = hosts.map((h) => (h.id === "h2" ? { ...h, boardColumn: "done", boardManual: true, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false } : h));
+    hosts = hosts.map((h) => (h.id === "h2" ? { ...h, boardColumn: "reporting", boardManual: true, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false } : h));
     entries = [entry({ id: "f1", kind: "flag", at: T, hostIds: ["h2"], content: { kind: "flag", flagKind: "local", value: FLAG } })];
     const put = m.checklistPut.getMockImplementation()!;
     let release: () => void = () => {};
@@ -453,20 +474,20 @@ describe("first open of an engagement logged before step 3 (F-R1)", () => {
     release();
     await expect(auto).resolves.toBe(true);
     await sync;
-    expect(m.hostSyncBoard.mock.calls.every(([id, col]) => id !== "h2" || col === "privesc")).toBe(true);
+    expect(m.hostSyncBoard.mock.calls.every(([id, col]) => id !== "h2" || col === "privilege-escalation")).toBe(true);
     expect(m.checklistPut).toHaveBeenCalledTimes(1);
   });
 
   it("a board sync on an empty checklist skips a hand-placed card with no derived column", async () => {
     rustSyncBoard();
     hosts = [
-      host({ id: "h1", name: "dc01", ip: "10.10.10.5", boardColumn: "done", boardManual: true, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false }),
-      host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "loot", boardManual: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false }),
+      host({ id: "h1", name: "dc01", ip: "10.10.10.5", boardColumn: "reporting", boardManual: true, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false }),
+      host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "post-exploitation", boardManual: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false }),
     ];
     await resyncBoards("e1");
     expect(m.hostSyncBoard).not.toHaveBeenCalledWith("h1", expect.anything());
     // Not hand-placed: moves as normal.
-    expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "enumerate");
+    expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "information-gathering");
   });
 });
 
@@ -490,7 +511,7 @@ describe("ticks.ts", () => {
       item({ ownerId: "h1", goalId: "h-orient-proof", status: "done", completedAt: 50, auto: true, evidence: [{ entryId: "f1", commandId: "flag" }] }),
     ];
     const flag = entry({ id: "f1", kind: "flag", hostIds: ["h1"], content: { kind: "flag", flagKind: "local", value: FLAG } });
-    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardDerived: "privesc" } : h));
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, boardDerived: "privilege-escalation" } : h));
     await syncEntryTicks("e1", flag, "f1", await loadTickContext("e1"));
     expect(m.checklistPut).not.toHaveBeenCalled();
     expect(m.hostSyncBoard).not.toHaveBeenCalled();
@@ -506,6 +527,73 @@ describe("ticks.ts", () => {
     } finally {
       vi.mocked(Date.now).mockRestore();
     }
+  });
+
+  it("Tick from log keeps fact ticks and DA cover marks", async () => {
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, os: "linux" as const } : h));
+    m.servicesListEngagement.mockResolvedValue([
+      { id: "s1", hostId: "h1", port: 22, protocol: "tcp", state: "open", nmapService: "ssh", nmapVersion: "OpenSSH 8.9", confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1 },
+    ]);
+    entries = [entry({ id: "s1", kind: "command", at: T, content: { kind: "command", blocks: [{ command: FULL_SCAN, output: "" }] } })];
+    store = [
+      item({ ownerId: "h1", goalId: "h-enum-os", status: "done", completedAt: 50, auto: true }),
+      item({ ownerId: "h1", goalId: "h-enum-identified", status: "done", completedAt: 51, auto: true }),
+      item({ ownerId: "h1", goalId: "h-loot-hashes", status: "na", auto: true }),
+    ];
+    await tickFromLog("e1", await loadTickContext("e1"));
+    expect(stored("h1", "h-enum-os")).toMatchObject({ status: "done", auto: true, completedAt: 50, evidence: [] });
+    expect(stored("h1", "h-enum-identified")).toMatchObject({ status: "done", auto: true, completedAt: 51, evidence: [] });
+    expect(stored("h1", "h-loot-hashes")).toMatchObject({ status: "na", auto: true });
+  });
+
+  it("Tick from log also runs the fact ticks", async () => {
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, os: "linux" as const } : h));
+    await tickFromLog("e1", await loadTickContext("e1"));
+    expect(stored("h1", "h-enum-os")).toMatchObject({ status: "done", auto: true });
+  });
+
+  it("a scan capture ticks OS identified and every port identified straight after saving", async () => {
+    const user = userEvent.setup();
+    let services: Service[] = [];
+    m.servicesListEngagement.mockImplementation(async () => services);
+    m.servicesUpsertScan.mockImplementation(async (hostId, ports) => {
+      services = ports.map((p, i) => ({
+        id: `s${i}`, hostId, port: p.port, protocol: p.protocol, state: p.state, nmapService: p.service, nmapVersion: p.version || null,
+        confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1,
+      }));
+      return services;
+    });
+    m.hostUpdate.mockImplementation(async (id, input) => {
+      hosts = hosts.map((h) => (h.id === id ? { ...h, os: input.os ?? null } : h));
+      return hosts.find((h) => h.id === id)!;
+    });
+    mount();
+    await openCapture(user);
+    await user.paste(
+      [
+        "kali@kali:~$ nmap -sCV -p 22,80 10.10.10.5",
+        "Nmap scan report for 10.10.10.5",
+        "PORT   STATE SERVICE VERSION",
+        "22/tcp open  ssh     OpenSSH 8.9",
+        "80/tcp open  http    Apache httpd 2.4.52",
+        "Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel",
+      ].join("\n"),
+    );
+    await saveCapture(user);
+    await vi.waitFor(() => expect(stored("h1", "h-enum-os")).toMatchObject({ status: "done", auto: true }));
+    expect(stored("h1", "h-enum-identified")).toMatchObject({ status: "done", auto: true });
+    expect(m.hostUpdate).toHaveBeenCalled();
+  });
+
+  it("setting the OS ticks OS identified, and clearing it reverts", async () => {
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, os: "linux" as const } : h));
+    await resyncBoards("e1");
+    expect(m.checklistApplyFacts).toHaveBeenCalledWith("e1", [{ ownerId: "h1", goalId: "h-enum-os" }], []);
+    expect(stored("h1", "h-enum-os")).toMatchObject({ status: "done", auto: true });
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, os: null } : h));
+    await resyncBoards("e1");
+    expect(m.checklistApplyFacts).toHaveBeenLastCalledWith("e1", [], [{ ownerId: "h1", goalId: "h-enum-os" }]);
+    expect(stored("h1", "h-enum-os")).toMatchObject({ status: "todo", auto: false });
   });
 
   it("tickFromLog re-derives missing ticks, drops evidence of deleted entries, keeps completedAt and manual state", async () => {
@@ -531,7 +619,7 @@ describe("ticks.ts", () => {
     expect(stored("h2", "h-orient-proof")).toMatchObject({ status: "done", auto: true, evidence: [{ entryId: "f1", commandId: "flag" }] });
     // F-R2: a rebuilt tick is stamped with the entry's time, not the rebuild's.
     expect(stored("h2", "h-orient-proof")!.completedAt).toBe(T + 1);
-    expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "privesc");
+    expect(m.hostSyncBoard).toHaveBeenCalledWith("h2", "privilege-escalation");
 
     // Run again: nothing left to change.
     m.checklistPut.mockClear();
@@ -559,12 +647,12 @@ describe("service mutations", () => {
       return services[0]!;
     });
     const ctx = await loadTickContext("e1");
-    const before = applicableGoals(hosts[0]!, engagement, hosts, ctx.servicesByHost).filter((a) => a.stage.id === "enumerate").flatMap((a) => a.goals);
+    const before = applicableGoals(hosts[0]!, engagement, hosts, ctx.servicesByHost).filter((a) => a.stage.id === "information-gathering").flatMap((a) => a.goals);
     expect(before.some((g) => g.id.startsWith("h-enum-web"))).toBe(true);
     store = before.filter((g) => !g.id.startsWith("h-enum-web")).map((g) => item({ ownerId: "h1", goalId: g.id, status: "done", completedAt: 1 }));
     const { result } = renderHook(() => useServiceMutations("e1", "h1"), { wrapper: hookWrapper() });
     await act(() => result.current.confirm.mutateAsync({ id: "s1", input: { product: "CouchDB", version: "5.1" } }));
-    await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h1", "foothold"));
+    await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h1", "vulnerability-detection"));
   });
 
   it("a board-sync failure after a service change is not fatal", async () => {

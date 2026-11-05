@@ -23,13 +23,13 @@ export interface HostStuck {
   unidentified: UnidentifiedService[];
   untouched: Service[];
   threads: Thread[];
-  /** Applicable goals still to do in privesc, loot and pivot (after a foothold). The UI fills their commands. */
+  /** Applicable goals still to do in privilege escalation, post-exploitation and lateral movement (after a foothold). The UI fills their commands. */
   commands: { goalId: string; title: string }[];
   notes: string;
   hints: string[];
 }
 
-const AFTER_STAGES = ["privesc", "loot", "pivot"];
+const AFTER_STAGES = ["privilege-escalation", "post-exploitation", "lateral-movement"];
 
 const statusOf = (state: ChecklistState, goalId: string) => state[goalId]?.status ?? "todo";
 

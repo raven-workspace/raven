@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,7 +25,7 @@ const E1: Engagement = {
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
 const host = (id: string, name: string, over: Partial<Host> = {}): Host => ({
-  id, engagementId: "e1", name, ip: "10.10.10.5", os: "windows", boardColumn: "enumerate", boardManual: false,
+  id, engagementId: "e1", name, ip: "10.10.10.5", os: "windows", boardColumn: "information-gathering", boardManual: false,
   dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1, ...over,
 });
 const VEGA = host("h1", "VEGA");
@@ -113,7 +113,7 @@ describe("metasploit lock", () => {
 });
 
 describe("dual-homed flag", () => {
-  it("dual-homed toggle makes the pivot goals appear", async () => {
+  it("dual-homed toggle saves, and the pivot goals live on the engagement view, not the host", async () => {
     const user = userEvent.setup();
     const lab = { ...E1, kind: "lab" as const };
     let hosts = [VEGA, WEB];
@@ -132,8 +132,16 @@ describe("dual-homed flag", () => {
     await user.click(within(dialog).getByRole("button", { name: "Dual-homed (reaches another network)" }));
     await user.click(within(dialog).getByRole("button", { name: "Save" }));
     expect(m.hostUpdate).toHaveBeenCalledWith("h1", expect.objectContaining({ dualHomed: true }));
-    expect(await screen.findByText("Tunnel into the next network")).toBeInTheDocument();
-    expect(screen.getByText("Sweep the new network for hosts")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit host" })).not.toBeInTheDocument());
+    expect(screen.queryByText("Tunnel into the next network")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sweep the new network for hosts")).not.toBeInTheDocument();
+
+    // Positive proof the flag took effect: the engagement checklist lists the pivot steps behind this host.
+    await user.click(await screen.findByRole("link", { name: /Engagement checklist/ }));
+    const section = within(await screen.findByRole("region", { name: "Lateral movement" }));
+    expect(await section.findByRole("heading", { name: `Behind ${VEGA.name}` })).toBeInTheDocument();
+    expect(document.querySelector('li[data-goal-id="h-pivot-tunnel"]')).not.toBeNull();
+    expect(document.querySelector('li[data-goal-id="h-pivot-sweep"]')).not.toBeNull();
   });
 });
 

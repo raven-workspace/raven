@@ -25,7 +25,7 @@ const E1: Engagement = {
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
 const host = (id: string, name: string, ip: string): Host => ({
-  id, engagementId: "e1", name, ip, os: "windows", boardColumn: "enumerate", boardManual: false,
+  id, engagementId: "e1", name, ip, os: "windows", boardColumn: "information-gathering", boardManual: false,
   dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1,
 });
 const DC = host("dc", "dc01", "10.10.10.5");
@@ -102,6 +102,25 @@ beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
   useCaptureStore.getState().reset();
+  // The store's conditional fact write, as the Rust command does it.
+  m.checklistApplyFacts.mockImplementation(async (_e, done, revert) => {
+    const find = (g: { ownerId: string; goalId: string }) => store.find((i) => i.ownerId === g.ownerId && i.goalId === g.goalId);
+    for (const g of revert) {
+      const row = find(g);
+      if (row && row.status === "done" && row.auto && !row.statusManual && row.evidence.length === 0) {
+        store = store.map((i) => (i === row ? { ...i, status: "todo", auto: false, autoFrom: null, completedAt: null } : i));
+      }
+    }
+    for (const g of done) {
+      const row = find(g);
+      if (!row) {
+        store = [...store, { ownerId: g.ownerId, goalId: g.goalId, status: "done", notes: null, completedAt: 5, auto: true, autoFrom: null, statusManual: false, evidence: [], updatedAt: 1 }];
+      } else if (row.status === "todo" && !row.auto && !row.statusManual) {
+        store = store.map((i) => (i === row ? { ...i, status: "done", auto: true, completedAt: 5 } : i));
+      }
+    }
+    return store;
+  });
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444" });
   m.engagementsList.mockResolvedValue([E1]);
@@ -126,7 +145,8 @@ describe("domain admin cover", () => {
       expect(wsCover.length).toBeGreaterThan(0);
       expect(wsCover.map((g) => g.goalId)).toContain("h-pe-win-privs");
       expect(wsCover.map((g) => g.goalId)).not.toContain("h-pe-proof");
-      expect(store.filter((i) => i.ownerId === "ws").every((i) => i.status === "na" && i.auto)).toBe(true);
+      expect(store.filter((i) => i.ownerId === "ws" && i.goalId !== "h-enum-os").every((i) => i.status === "na" && i.auto)).toBe(true);
+      expect(store.find((i) => i.ownerId === "ws" && i.goalId === "h-enum-os")).toMatchObject({ status: "done", auto: true });
     });
   });
 

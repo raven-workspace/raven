@@ -22,7 +22,7 @@ const E1: Engagement = {
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
 const host = (id: string, name: string, ip: string): Host => ({
-  id, engagementId: "e1", name, ip, os: "windows", boardColumn: "enumerate", boardManual: false,
+  id, engagementId: "e1", name, ip, os: "windows", boardColumn: "information-gathering", boardManual: false,
   dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1,
 });
 const H1 = host("h1", "dc01", "10.10.10.5");

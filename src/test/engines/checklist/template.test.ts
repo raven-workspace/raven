@@ -4,6 +4,12 @@ import { resolveTemplate } from '../../../engines/checklist/template';
 describe('resolveTemplate', () => {
   const ctx = { lhost: '10.10.14.3', lport: '9001', rhost: '10.0.0.5', customVars: {} };
 
+  it("leaves curl's %{http_code} write-out alone", () => {
+    const r = resolveTemplate("curl -s -o /dev/null -w '%{http_code}\\n' http://{TARGET_IP}/", ctx);
+    expect(r.text).toBe("curl -s -o /dev/null -w '%{http_code}\\n' http://10.0.0.5/");
+    expect(r.unresolved).toEqual([]);
+  });
+
   it('substitutes the case-insensitive target, LHOST and LPORT aliases', () => {
     const r = resolveTemplate('{TARGET_IP} {target} {IP} {TARGET-IP} {LHOST} {lport} <LHOST>', ctx);
     expect(r.text).toBe('10.0.0.5 10.0.0.5 10.0.0.5 10.0.0.5 10.10.14.3 9001 10.10.14.3');

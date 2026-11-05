@@ -87,13 +87,13 @@ const GLOBAL_FIELD_ALIASES: Record<string, 'domain' | 'dcIp' | 'user' | 'cred' |
   WORDLIST: 'wordlist',
 };
 
-// Matches `{TOKEN}` (not immediately preceded by `$`, so `${VAR}` is left
-// untouched) or `<TOKEN>`. `$(cmd)` and `%VAR%` never match this pattern at
+// Matches `{TOKEN}` (not immediately preceded by `$` or `%`, so `${VAR}` and curl's
+// `%{http_code}` write-out are left untouched) or `<TOKEN>`. `$(cmd)` and `%VAR%` never match this pattern at
 // all since neither uses curly/angle brackets, so they're safe by construction.
 // Requires 2+ chars so incidental single-char braces from other tools (e.g.
 // PowerShell's `|%{0}` foreach-object shorthand) are never mistaken for a
 // variable token.
-const TOKEN_RE = /(?<!\$)\{([A-Za-z0-9_-]{2,})\}|<([A-Za-z0-9_-]{2,})>/g;
+const TOKEN_RE = /(?<![$%])\{([A-Za-z0-9_-]{2,})\}|<([A-Za-z0-9_-]{2,})>/g;
 
 const TARGET_ALIASES = new Set(['TARGET_IP', 'TARGET', 'IP', 'TARGET-IP']);
 

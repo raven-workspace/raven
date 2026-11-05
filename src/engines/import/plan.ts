@@ -194,7 +194,8 @@ const OS: Record<string, HostOs> = { windows: "windows", linux: "linux", bsd: "l
 const osOf = (v: unknown): HostOs | null => (hasText(v) ? (OS[v.trim().toLowerCase()] ?? "other") : null);
 
 const COLUMN: Record<string, BoardColumn> = {
-  backlog: "enumerate", recon: "enumerate", foothold: "foothold", root: "loot", completed: "done",
+  backlog: "information-gathering", recon: "information-gathering", foothold: "initial-foothold",
+  root: "post-exploitation", completed: "reporting",
 };
 
 /** Old status and flags say how far the host went. */
@@ -332,7 +333,7 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
         access: accessOf(m),
         dualHomed: m.dualHomed === true,
         adSet: null,
-        boardColumn: (typeof m.status === "string" && COLUMN[m.status]) || "enumerate",
+        boardColumn: (typeof m.status === "string" && COLUMN[m.status]) || "information-gathering",
         boardManual: false,
         accessReviewedAt: toMs(m.accessReviewedAt, null),
       };

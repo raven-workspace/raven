@@ -9,7 +9,7 @@ import { applicableGoals } from "../../../engines/checklist";
 import { hostStuck } from "../../../engines/stuck";
 
 const host = (p: Partial<Host> = {}): Host => ({
-  id: "h1", engagementId: "e1", name: "BOX", ip: "10.10.10.5", os: "linux", boardColumn: "enumerate", boardManual: false,
+  id: "h1", engagementId: "e1", name: "BOX", ip: "10.10.10.5", os: "linux", boardColumn: "information-gathering", boardManual: false,
   access: "none", createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, ...p,
 });
 let n = 0;
@@ -37,7 +37,7 @@ describe("hostStuck before a foothold", () => {
       svc(9999, { nmapService: "abyss?", nmapVersion: null }),
       svc(7777, { nmapService: "unknown", nmapVersion: null }),
     ];
-    const enumGoal = goalIds(host(), services, "enumerate")[0]!;
+    const enumGoal = goalIds(host(), services, "information-gathering")[0]!;
     const r = run({ services, state: { [enumGoal]: { status: "na" } }, note: "x\n? what runs on 9999\n" });
     expect(r.phase).toBe("before-foothold");
     expect(r.skipped.map((s) => s.goalId)).toEqual([enumGoal]);
@@ -62,7 +62,7 @@ describe("hostStuck before a foothold", () => {
 
   it("does not list cover-marked items as skipped", () => {
     const services = [svc(80)];
-    const [a, b] = goalIds(host(), services, "enumerate");
+    const [a, b] = goalIds(host(), services, "information-gathering");
     const r = run({ services, state: { [a!]: { status: "na", auto: true }, [b!]: { status: "na" } } });
     expect(r.skipped.map((s) => s.goalId)).toEqual([b]);
   });
@@ -84,8 +84,8 @@ describe("hostStuck after a foothold", () => {
   it("lists todo privesc and loot goals, notes and threads", () => {
     const h = host({ access: "user" });
     const services = [svc(80)];
-    const priv = goalIds(h, services, "privesc");
-    const loot = goalIds(h, services, "loot");
+    const priv = goalIds(h, services, "privilege-escalation");
+    const loot = goalIds(h, services, "post-exploitation");
     expect(priv.length).toBeGreaterThan(1);
     const r = run({ host: h, services, state: { [priv[0]!]: { status: "done" }, [loot[0]!]: { status: "na", auto: true } }, note: "? try sudo\nplain" });
     expect(r.phase).toBe("after-foothold");
@@ -105,6 +105,19 @@ describe("hostStuck after a foothold", () => {
   });
 });
 
+describe("hostStuck after-foothold stages", () => {
+  it("after a foothold, commands come from privilege-escalation, post-exploitation and lateral-movement", () => {
+    const h = host({ access: "user", dualHomed: true });
+    const services = [svc(80)];
+    const r = run({ host: h, services });
+    const stageOf = (goalId: string) =>
+      applicableGoals(h, engagement, [h], new Map([[h.id, services]])).find((s) => s.goals.some((g) => g.id === goalId))!.stage.id;
+    const stages = new Set(r.commands.map((c) => stageOf(c.goalId)));
+    expect([...stages].sort()).toEqual(["lateral-movement", "post-exploitation", "privilege-escalation"]);
+    expect(r.commands.map((c) => c.goalId)).toContain("h-pivot-tunnel");
+  });
+});
+
 describe("hostStuck hints", () => {
   it("a bare host gets next-step hints", () => {
     const r = run({ host: host({ os: null }) });
@@ -112,9 +125,9 @@ describe("hostStuck hints", () => {
   });
   it("says nothing is left only when every list and other hint is empty", () => {
     const h = host({ access: "root" });
-    const priv = goalIds(h, [svc(80)], "privesc");
+    const priv = goalIds(h, [svc(80)], "privilege-escalation");
     const all = Object.fromEntries(
-      ["privesc", "loot", "pivot"].flatMap((s) => goalIds(h, [svc(80)], s)).concat(priv).map((id) => [id, { status: "done" as const }]),
+      ["privilege-escalation", "post-exploitation", "lateral-movement"].flatMap((s) => goalIds(h, [svc(80)], s)).concat(priv).map((id) => [id, { status: "done" as const }]),
     );
     expect(run({ host: h, services: [svc(80)], state: all }).hints).toEqual(["Nothing obvious left on this host"]);
   });
@@ -157,7 +170,7 @@ describe("hostStuck port ranges", () => {
 describe("hostStuck exam bans", () => {
   const h = host({ access: "user" });
   const services = [svc(80)];
-  const [banned, free] = goalIds(h, services, "privesc");
+  const [banned, free] = goalIds(h, services, "privilege-escalation");
   const lib = (exam?: "banned" | "metasploit"): LibraryCommand[] => [
     { id: "b", title: "b", tool: "t", template: "x", os: "any", runFrom: "attacker", goals: [banned!], ...(exam ? { exam } : {}), source: "raven" },
   ];

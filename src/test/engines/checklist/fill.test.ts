@@ -7,7 +7,7 @@ import type { CredAttempt, Credential } from '../../../types/credentials';
 import { defaultCredFor, defaultDomainCred, fillCommand, hasUnmodelledQuoting, quoteContextAt, tunnelFor, type FillInput } from '../../../engines/checklist';
 
 const host = (p: Partial<Host> = {}): Host => ({
-  id: 'h1', engagementId: 'e1', name: 'ms01', ip: '172.16.1.5', os: 'windows', boardColumn: 'enumerate', boardManual: false,
+  id: 'h1', engagementId: 'e1', name: 'ms01', ip: '172.16.1.5', os: 'windows', boardColumn: 'information-gathering', boardManual: false,
   access: 'none', createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, ...p,
 });
 const eng = (p: Partial<Engagement> = {}): Engagement => ({

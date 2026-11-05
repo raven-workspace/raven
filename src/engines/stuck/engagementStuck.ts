@@ -52,13 +52,13 @@ export function engagementStuck(input: {
   // foothold: no shell yet and enumeration steps still open; privesc: shell, privesc steps still open
   for (const host of hosts) {
     const stages = applicableGoals(host, engagement, hosts, servicesByHost);
-    const open = (stageId: string) =>
-      (stages.find((s) => s.stage.id === stageId)?.goals ?? []).filter(
+    const open = (...stageIds: string[]) =>
+      stages.filter((s) => stageIds.includes(s.stage.id)).flatMap((s) => s.goals).filter(
         (g) => g.id !== PROOF_GOAL && statusOf(host.id, g.id) === "todo" && hasLegalCommand(g.id, engagement, host.id, input.library),
       );
     if (hasFoothold(host, byOwner.get(host.id))) {
       if (statusOf(host.id, PROOF_GOAL) === "done") continue;
-      const left = open("privesc");
+      const left = open("privilege-escalation");
       if (left.length > 0) {
         out.push({
           area: "privesc",
@@ -69,7 +69,7 @@ export function engagementStuck(input: {
       }
       continue;
     }
-    const todo = open("enumerate");
+    const todo = open("information-gathering", "vulnerability-detection");
     if (todo.length === 0) continue;
     out.push({
       area: "foothold",

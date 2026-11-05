@@ -22,7 +22,7 @@ const E1: Engagement = {
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
 const H1: Host = {
-  id: "h1", engagementId: "e1", name: "dc01", ip: "10.10.10.5", os: "windows", boardColumn: "enumerate", boardManual: false,
+  id: "h1", engagementId: "e1", name: "dc01", ip: "10.10.10.5", os: "windows", boardColumn: "information-gathering", boardManual: false,
   dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1,
 };
 const svc = (id: string, port: number, nmapService: string): Service => ({
@@ -36,7 +36,7 @@ const item = (goalId: string, status: ChecklistItem["status"]): ChecklistItem =>
 const SMB = svc("s1", 445, "microsoft-ds");
 const WEB = svc("s2", 80, "http");
 const enumerateIds = (services: Service[], engagement = E1) =>
-  applicableGoals(H1, engagement, [H1], new Map([["h1", services]])).find((a) => a.stage.id === "enumerate")!.goals.map((g) => g.id);
+  applicableGoals(H1, engagement, [H1], new Map([["h1", services]])).find((a) => a.stage.id === "information-gathering")!.goals.map((g) => g.id);
 
 /** A checklist store that behaves like the backend: puts persist, lists read them back. */
 function mount(opts: { engagement?: Engagement; services?: Service[]; items?: ChecklistItem[] } = {}) {
@@ -83,7 +83,7 @@ describe("Now panel", () => {
   it("now lists the open goals of the first stage with open work", async () => {
     mount({ items: [item("h-enum-full-tcp", "done")] });
     const panel = await now();
-    expect(await panel.findByRole("heading", { name: "Enumerate" })).toBeInTheDocument();
+    expect(await panel.findByRole("heading", { name: "Information gathering" })).toBeInTheDocument();
     expect(panel.getByText("Check SMB shares and null/guest access")).toBeInTheDocument();
     expect(panel.queryByText("Scan all 65,535 TCP ports")).not.toBeInTheDocument();
     // The first open goal's first command, filled with the host IP, with Copy.
@@ -91,25 +91,35 @@ describe("Now panel", () => {
     expect(panel.getAllByText(/10\.10\.10\.5/).length).toBeGreaterThan(0);
   });
 
-  it("marking the last open enumerate goal done moves Now to Foothold and calls hostSyncBoard with foothold", async () => {
+  it("marking the last open enumerate goal done moves Now to Vulnerability detection and calls hostSyncBoard with vulnerability-detection", async () => {
     const user = userEvent.setup();
     const ids = enumerateIds([SMB]);
     const last = ids[ids.length - 1];
     mount({ items: ids.slice(0, -1).map((id) => item(id, "done")) });
     const panel = await now();
-    await panel.findByRole("heading", { name: "Enumerate" });
+    await panel.findByRole("heading", { name: "Information gathering" });
     const group = panel.getByRole("group", { name: /^Now: / });
     await user.click(within(group).getByRole("button", { name: "Done" }));
     expect(m.checklistPut).toHaveBeenCalledWith("e1", [expect.objectContaining({ goalId: last, status: "done" })]);
-    expect(await panel.findByRole("heading", { name: "Foothold" })).toBeInTheDocument();
-    await waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h1", "foothold"));
+    expect(await panel.findByRole("heading", { name: "Vulnerability detection" })).toBeInTheDocument();
+    await waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h1", "vulnerability-detection"));
+  });
+
+  it("Now shows the first open host-view stage, never lateral-movement", async () => {
+    const ids = applicableGoals(H1, E1, [H1], new Map([["h1", [SMB]]]))
+      .filter((a) => a.stage.id !== "lateral-movement")
+      .flatMap((a) => a.goals.map((g) => g.id));
+    mount({ items: ids.map((id) => item(id, "done")) });
+    const panel = await now();
+    await panel.findByText("All stages done");
+    expect(panel.queryByRole("heading", { name: "Lateral movement" })).not.toBeInTheDocument();
   });
 
   it("Doing toggles in progress", async () => {
     const user = userEvent.setup();
     mount();
     const panel = await now();
-    await panel.findByRole("heading", { name: "Enumerate" });
+    await panel.findByRole("heading", { name: "Information gathering" });
     await user.click(within(panel.getAllByRole("group", { name: /^Now: / })[0]).getByRole("button", { name: "Doing" }));
     await waitFor(() => expect(m.checklistPut).toHaveBeenCalledWith("e1", [expect.objectContaining({ status: "in_progress" })]));
   });
@@ -125,7 +135,7 @@ describe("Now panel", () => {
     const ids = enumerateIds([WEB], exam);
     mount({ engagement: exam, services: [WEB], items: ids.map((id) => item(id, "done")) });
     const panel = await now();
-    expect(await panel.findByRole("heading", { name: "Foothold" })).toBeInTheDocument();
+    expect(await panel.findByRole("heading", { name: "Vulnerability detection" })).toBeInTheDocument();
     expect(panel.getByText("Test the web app for injection and upload flaws")).toBeInTheDocument();
     expect(panel.queryByText(/sqlmap/)).not.toBeInTheDocument();
   });

@@ -209,8 +209,8 @@ pub fn update(conn: &Connection, id: &str, input: HostInput) -> AppResult<Host> 
 
 /// Moves a host to a board column by hand; this pins it there (`board_manual`).
 pub fn move_to(conn: &Connection, id: &str, column: &str) -> AppResult<Host> {
-    if !matches!(column, "enumerate" | "foothold" | "privesc" | "loot" | "done") {
-        return Err(invalid("column", "column must be enumerate, foothold, privesc, loot or done"));
+    if !matches!(column, "information-gathering" | "vulnerability-detection" | "initial-foothold" | "privilege-escalation" | "post-exploitation" | "reporting") {
+        return Err(invalid("column", "column must be one of the six PEN-200 stages"));
     }
     let n = conn.execute(
         "UPDATE hosts SET board_column=?2, board_manual=1, updated_at=?3 WHERE id=?1",
@@ -235,8 +235,8 @@ pub fn mark_access_reviewed(conn: &Connection, id: &str) -> AppResult<Host> {
 /// Applies the board column the checklist derived. Only when `derived` differs from the last
 /// derived value does the host move (and unpin), so a hand placement holds until the next stage completes.
 pub fn sync_board(conn: &Connection, id: &str, derived: &str) -> AppResult<Host> {
-    if !matches!(derived, "enumerate" | "foothold" | "privesc" | "loot" | "done") {
-        return Err(invalid("derived", "column must be enumerate, foothold, privesc, loot or done"));
+    if !matches!(derived, "information-gathering" | "vulnerability-detection" | "initial-foothold" | "privilege-escalation" | "post-exploitation" | "reporting") {
+        return Err(invalid("derived", "column must be one of the six PEN-200 stages"));
     }
     let current = get(conn, id)?;
     if current.board_derived.as_deref() == Some(derived) {
@@ -347,7 +347,7 @@ mod tests {
         }
         let h = create(c, &e.id, hin("web", Some("10.0.0.5/32"))).unwrap();
         assert_eq!(h.ip.as_deref(), Some("10.0.0.5"));
-        assert_eq!((h.board_column.as_str(), h.board_manual, h.access.as_str()), ("enumerate", false, "none"));
+        assert_eq!((h.board_column.as_str(), h.board_manual, h.access.as_str()), ("information-gathering", false, "none"));
         let (f, m) = field(create(c, &e.id, hin("dup", Some("10.0.0.5"))));
         assert_eq!((f.as_str(), m.as_str()), ("ip", "A host with this IP already exists"));
         // the same IP in another engagement is fine; so are several hosts without IPs
@@ -394,10 +394,10 @@ mod tests {
         let c = v.conn().unwrap();
         let e = engagements::create(c, eng_input(&[])).unwrap();
         let h = create(c, &e.id, hin("web", None)).unwrap();
-        let m = move_to(c, &h.id, "privesc").unwrap();
-        assert_eq!((m.board_column.as_str(), m.board_manual), ("privesc", true));
+        let m = move_to(c, &h.id, "privilege-escalation").unwrap();
+        assert_eq!((m.board_column.as_str(), m.board_manual), ("privilege-escalation", true));
         assert_eq!(field(move_to(c, &h.id, "nowhere")).0, "column");
-        assert_eq!(move_to(c, "nope", "done"), Err(AppError::NotFound));
+        assert_eq!(move_to(c, "nope", "reporting"), Err(AppError::NotFound));
         delete(c, &h.id).unwrap();
         assert_eq!(get(c, &h.id), Err(AppError::NotFound));
         assert_eq!(delete(c, &h.id), Err(AppError::NotFound));
@@ -506,15 +506,15 @@ mod tests {
         let c = v.conn().unwrap();
         let e = engagements::create(c, eng_input(&[])).unwrap();
         let h = create(c, &e.id, hin("web", None)).unwrap();
-        let s = sync_board(c, &h.id, "enumerate").unwrap();
-        assert_eq!((s.board_column.as_str(), s.board_manual, s.board_derived.as_deref()), ("enumerate", false, Some("enumerate")));
-        move_to(c, &h.id, "loot").unwrap();
-        let s = sync_board(c, &h.id, "enumerate").unwrap();
-        assert_eq!((s.board_column.as_str(), s.board_manual), ("loot", true));
-        let s = sync_board(c, &h.id, "foothold").unwrap();
-        assert_eq!((s.board_column.as_str(), s.board_manual, s.board_derived.as_deref()), ("foothold", false, Some("foothold")));
+        let s = sync_board(c, &h.id, "information-gathering").unwrap();
+        assert_eq!((s.board_column.as_str(), s.board_manual, s.board_derived.as_deref()), ("information-gathering", false, Some("information-gathering")));
+        move_to(c, &h.id, "post-exploitation").unwrap();
+        let s = sync_board(c, &h.id, "information-gathering").unwrap();
+        assert_eq!((s.board_column.as_str(), s.board_manual), ("post-exploitation", true));
+        let s = sync_board(c, &h.id, "vulnerability-detection").unwrap();
+        assert_eq!((s.board_column.as_str(), s.board_manual, s.board_derived.as_deref()), ("vulnerability-detection", false, Some("vulnerability-detection")));
         assert_eq!(field(sync_board(c, &h.id, "nowhere")).0, "derived");
-        assert_eq!(sync_board(c, "nope", "done"), Err(AppError::NotFound));
+        assert_eq!(sync_board(c, "nope", "reporting"), Err(AppError::NotFound));
     }
 
     #[test]
@@ -523,21 +523,21 @@ mod tests {
         let c = v.conn().unwrap();
         let e = engagements::create(c, eng_input(&[])).unwrap();
         let h = create(c, &e.id, hin("web", None)).unwrap();
-        move_to(c, &h.id, "privesc").unwrap();
+        move_to(c, &h.id, "privilege-escalation").unwrap();
         // Hand-placed with no derived column yet: seed it, don't move.
-        let s = sync_board(c, &h.id, "enumerate").unwrap();
-        assert_eq!((s.board_column.as_str(), s.board_manual, s.board_derived.as_deref()), ("privesc", true, Some("enumerate")));
+        let s = sync_board(c, &h.id, "information-gathering").unwrap();
+        assert_eq!((s.board_column.as_str(), s.board_manual, s.board_derived.as_deref()), ("privilege-escalation", true, Some("information-gathering")));
         // Same derived column again: still holds.
-        let s = sync_board(c, &h.id, "enumerate").unwrap();
-        assert_eq!((s.board_column.as_str(), s.board_manual), ("privesc", true));
+        let s = sync_board(c, &h.id, "information-gathering").unwrap();
+        assert_eq!((s.board_column.as_str(), s.board_manual), ("privilege-escalation", true));
         // The next stage completes: the card moves.
-        let s = sync_board(c, &h.id, "foothold").unwrap();
-        assert_eq!((s.board_column.as_str(), s.board_manual, s.board_derived.as_deref()), ("foothold", false, Some("foothold")));
+        let s = sync_board(c, &h.id, "vulnerability-detection").unwrap();
+        assert_eq!((s.board_column.as_str(), s.board_manual, s.board_derived.as_deref()), ("vulnerability-detection", false, Some("vulnerability-detection")));
         // Null derived and not manual: moves as before.
         let h2 = create(c, &e.id, hin("dc", None)).unwrap();
         assert!(h2.board_derived.is_none() && !h2.board_manual);
-        let s = sync_board(c, &h2.id, "privesc").unwrap();
-        assert_eq!((s.board_column.as_str(), s.board_manual, s.board_derived.as_deref()), ("privesc", false, Some("privesc")));
+        let s = sync_board(c, &h2.id, "privilege-escalation").unwrap();
+        assert_eq!((s.board_column.as_str(), s.board_manual, s.board_derived.as_deref()), ("privilege-escalation", false, Some("privilege-escalation")));
     }
 
     fn put_all_children(c: &rusqlite::Connection, e: &str, h: &str, other: &str) {

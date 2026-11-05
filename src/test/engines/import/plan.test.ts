@@ -64,12 +64,12 @@ describe("buildImportPlan: hosts", () => {
       ["custom-lab-1"],
     );
     expect(p.hosts.map((h) => [h.id, h.os, h.boardColumn])).toEqual([
-      ["b1", "windows", "enumerate"],
-      ["b2", "linux", "enumerate"],
-      ["b3", "linux", "foothold"],
-      ["b4", "linux", "loot"],
-      ["b5", "other", "done"],
-      ["b6", "linux", "enumerate"],
+      ["b1", "windows", "information-gathering"],
+      ["b2", "linux", "information-gathering"],
+      ["b3", "linux", "initial-foothold"],
+      ["b4", "linux", "post-exploitation"],
+      ["b5", "other", "reporting"],
+      ["b6", "linux", "information-gathering"],
     ]);
     expect(p.hosts[0]).toMatchObject({
       engagementId: "custom-lab-1", name: "DC01", ip: "10.0.0.1", boardManual: false, dualHomed: true,
@@ -82,7 +82,7 @@ describe("buildImportPlan: hosts", () => {
   it("a standalone is its own single host", () => {
     const p = plan(bk([standalone({ id: "custom-solo", name: "Solo", ip: "10.10.10.9", os: "Windows", status: "root" })]), ["custom-solo"]);
     expect(p.hosts).toEqual([
-      expect.objectContaining({ id: "custom-solo", engagementId: "custom-solo#e", name: "Solo", ip: "10.10.10.9", os: "windows", boardColumn: "loot" }),
+      expect.objectContaining({ id: "custom-solo", engagementId: "custom-solo#e", name: "Solo", ip: "10.10.10.9", os: "windows", boardColumn: "post-exploitation" }),
     ]);
   });
 });

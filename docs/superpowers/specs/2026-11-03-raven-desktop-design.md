@@ -95,6 +95,8 @@ This design builds a **new app in a new repo** (this repo), not a rework of the 
 - Engagements can be created (name, kind, client, dates, scope CIDRs, domain, timebox for exam sims), archived (moved to Past) and deleted (with confirmation).
 
 ### 5.2 Engagement view
+
+Superseded by 2026-11-05-raven-pen200-restructure-design.md
 - A **left sidebar** lists the sections: Board, Log, Credentials, Findings, Engagement checklist, Report. Report is a placeholder until phase 3. Below them is a **Hosts** list, with each host's state glyph and an open-thread dot. Selecting a host opens its host view.
 - A **status strip** is pinned at the top of every screen in the engagement:
   - timebox remaining (exam sims);
@@ -176,6 +178,8 @@ A log entry is one **step**. Every kind shares the same shape: title, the conten
   - **Closing** asks for an outcome: panned out, or dead end with a one-line reason. A dead end becomes a **ruled-out** item, marked report or private, which feeds the report's "what was ruled out" content.
 
 ### 6.4 Checklist
+
+Superseded by 2026-11-05-raven-pen200-restructure-design.md
 Port the old host and engagement checklists as they are: goals, stages, applicability, filled commands, auto-tick, exam rules, half-credentials and stuck check. The host stage order stays:
 
 1. enumerate

@@ -3,16 +3,22 @@ import { hasUnmodelledQuoting } from '../../../engines/checklist';
 import { BUILTIN_LIBRARY } from '../../../engines/library/data';
 import type { LibraryCommand } from '../../../engines/library/types';
 import { firstBinary, matchesCommand } from '../../../engines/library/matcher';
-import { AD_PLAYBOOKS, ENGAGEMENT_SETUP, HOST_GOALS } from '../../../engines/checklist';
+import { AD_PLAYBOOKS, ENGAGEMENT_SETUP, HOST_GOALS, LATERAL_MOVEMENT_GOALS } from '../../../engines/checklist';
 import { resolveTemplate } from '../../../engines/checklist/template';
 
 const lib = BUILTIN_LIBRARY;
-const ENGAGEMENT_GOALS = [...ENGAGEMENT_SETUP, ...AD_PLAYBOOKS.flatMap((p) => p.goals)];
-const ALL_GOAL_IDS = new Set([...HOST_GOALS, ...ENGAGEMENT_GOALS].map((g) => g.id));
+const ENGAGEMENT_GOALS = [...ENGAGEMENT_SETUP, ...LATERAL_MOVEMENT_GOALS, ...AD_PLAYBOOKS.flatMap((p) => p.goals)];
+const ALL_GOAL_IDS = new Set([...ENGAGEMENT_GOALS.map((g) => g.id), ...HOST_GOALS.map((g) => g.id)]);
 /** Library order within a goal (the old commandsForGoal with no operator preferences). */
 const commandsForGoal = (goalId: string, library: LibraryCommand[]) => library.filter((c) => c.goals.includes(goalId));
 /** Records, not commands: the operator writes them by hand. */
-const NO_COMMAND_NEEDED = new Set(['h-foot-arrived', 'h-close-notes', 'e-setup-kind']);
+const NO_COMMAND_NEEDED = new Set([
+  'h-foot-arrived', 'h-close-notes', 'e-setup-kind',
+  // Judgement steps: a decision, not a command (the Metasploit commands live on the foothold steps).
+  'h-foot-port', 'h-vuln-rank', 'h-vuln-msf',
+  // New judgement/consolidation steps from the PEN-200 restructure (Task 2/3): no single command does the job.
+  'e-setup-exam-rules', 'e-lat-record-hop',
+]);
 const FULL_TCP_MISSES = ['nmap -sC -sV 10.0.0.5', 'nmap --top-ports 1000 10.0.0.5'];
 const BANNED_BINS = new Set([
   'nessus', 'openvas', 'sqlmap', 'mitm6', 'arpspoof', 'ettercap', 'bettercap',
@@ -23,7 +29,7 @@ const KNOWN_TOKENS = new Set([
   'WORDLIST', 'INTERFACE', 'SUBNET', 'SUBNET_PREFIX', 'TUNNEL_IP',
 ]);
 /** Same shape resolveTemplate treats as a placeholder: `{TOKEN}` (not `${...}`) or `<TOKEN>`. */
-const TOKEN_RE = /(?<!\$)\{([A-Za-z0-9_-]{2,})\}|<([A-Za-z0-9_-]{2,})>/g;
+const TOKEN_RE = /(?<![$%])\{([A-Za-z0-9_-]{2,})\}|<([A-Za-z0-9_-]{2,})>/g;
 
 const first = (goalId: string) => commandsForGoal(goalId, lib)[0];
 
@@ -47,6 +53,29 @@ describe('built-in command library', () => {
   it('every host and engagement goal has at least one command', () => {
     const missing = [...ALL_GOAL_IDS].filter((id) => !NO_COMMAND_NEEDED.has(id) && !lib.some((c) => c.goals.includes(id)));
     expect(missing).toEqual([]);
+  });
+
+  it('field-manual entries have a cardId and an fm- id', () => {
+    const fm = lib.filter((c) => c.source === 'field-manual');
+    expect(fm.length).toBeGreaterThan(100);
+    expect(fm.filter((c) => !c.id.startsWith('fm-')).map((c) => c.id)).toEqual([]);
+    expect(fm.filter((c) => !c.cardId).map((c) => c.id)).toEqual([]);
+  });
+
+  it('field-manual metasploit templates carry the exam rule', () => {
+    // A plain multi/handler listener is free; one that catches Meterpreter spends the exam's one Metasploit machine.
+    const spendsMsf = (t: string) =>
+      /msfconsole|meterpreter|use\s+(exploit|auxiliary|post)\//i.test(t) && !(/multi\/handler/.test(t) && !/meterpreter/i.test(t));
+    const msf = lib.filter((c) => c.source === 'field-manual' && spendsMsf(c.template));
+    expect(msf.map((c) => c.id)).toContain('fm-shell-listeners-11');
+    expect(msf.filter((c) => c.exam !== 'metasploit').map((c) => c.id)).toEqual([]);
+    expect(lib.find((c) => c.id === 'fm-shell-listeners-10')?.exam).toBeUndefined();
+  });
+
+  it('no built-in id is duplicated', () => {
+    const seen = new Set<string>();
+    const dupes = lib.filter((c) => (seen.has(c.id) ? true : (seen.add(c.id), false))).map((c) => c.id);
+    expect(dupes).toEqual([]);
   });
 
   it('every command with a matcher has hit and miss examples', () => {
@@ -111,7 +140,8 @@ describe('built-in command library', () => {
   });
 
   it('msfvenom and multi/handler templates have no exam rule', () => {
-    const free = lib.filter((c) => c.tool === 'msfvenom' || /multi\/handler/.test(c.template));
+    // (A multi/handler that catches Meterpreter is the exception: it spends the Metasploit machine.)
+    const free = lib.filter((c) => c.tool === 'msfvenom' || (/multi\/handler/.test(c.template) && !/meterpreter/i.test(c.template)));
     expect(free.length).toBeGreaterThanOrEqual(2);
     expect(free.filter((c) => c.exam !== undefined).map((c) => c.id)).toEqual([]);
   });
@@ -124,7 +154,16 @@ describe('built-in command library', () => {
 
   it('templates use only known tokens', () => {
     const unknown: string[] = [];
-    for (const c of lib) {
+    // Field-manual entries are copied verbatim from the vault (per Conventions.md §4): a token Raven does not
+    // know (e.g. {PORT}, {FILE}, {EDB_ID}) is still valid vault syntax and is simply left unresolved, same as a
+    // hand-authored {FILL_...}. Only Raven-authored/oscp-notes commands are held to the closed known-token set.
+    // Their tokens must still be {UPPER_SNAKE}; the one .Library-ms payload carries literal XML tags and a GUID.
+    const LITERAL_PAYLOAD = new Set(['fm-cs-windows-library-file-attack-5']);
+    const badShape = lib
+      .filter((x) => x.source === 'field-manual' && !LITERAL_PAYLOAD.has(x.id))
+      .flatMap((c) => [...c.template.matchAll(TOKEN_RE)].filter((m) => !/^\{[A-Z][A-Z0-9_]+\}$/.test(m[0])).map((m) => `${c.id}: ${m[0]}`));
+    expect(badShape).toEqual([]);
+    for (const c of lib.filter((x) => x.source !== 'field-manual')) {
       for (const m of c.template.matchAll(TOKEN_RE)) {
         const name = m[1] ?? m[2];
         // `{FILL_<NAME>}` = a value only the operator knows (service name, CA, export path): left highlighted.
@@ -257,6 +296,8 @@ describe('built-in command library', () => {
     const EXCEPTIONS: Record<string, string> = {
       'h-foot-shell': 'catching a shell: penelope (the listener) stays first',
       'e-ad-user-relay': 'ntlmrelayx -tf needs the nxc --gen-relay-list output first',
+      'h-enum-kerberos': 'confirm KDC and sync the clock before any impacket Kerberos command can run',
+      'h-post-bloodhound': 'its only impacket tool, impacket-smbserver, just moves the collection zip to Kali',
     };
     const wrong: string[] = [];
     for (const goal of ALL_GOAL_IDS) {

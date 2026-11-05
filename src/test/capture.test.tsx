@@ -39,7 +39,7 @@ function host(over: Partial<Host> & Pick<Host, "id" | "name">): Host {
     engagementId: "e1",
     ip: null,
     os: null,
-    boardColumn: "enumerate",
+    boardColumn: "information-gathering",
     boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false,
     access: "none",
     createdAt: 1,
@@ -97,8 +97,8 @@ function mount(path = "/e/e1") {
 }
 
 async function ready() {
-  await screen.findByRole("region", { name: "Foothold" });
-  await within(screen.getByRole("region", { name: "Foothold" })).findByRole("link", { name: /dc01/ });
+  await screen.findByRole("region", { name: "Vulnerability detection" });
+  await within(screen.getByRole("region", { name: "Vulnerability detection" })).findByRole("link", { name: /dc01/ });
 }
 
 async function openCapture(user: ReturnType<typeof userEvent.setup>) {
@@ -121,8 +121,8 @@ beforeEach(() => {
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementGet.mockResolvedValue(E1);
   m.hostsList.mockResolvedValue([
-    host({ id: "h1", name: "dc01", ip: "10.10.10.5", boardColumn: "foothold" }),
-    host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "privesc" }),
+    host({ id: "h1", name: "dc01", ip: "10.10.10.5", boardColumn: "vulnerability-detection" }),
+    host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "privilege-escalation" }),
   ]);
   m.engagementsProgress.mockResolvedValue({});
   m.servicesUpsertScan.mockResolvedValue([]);
@@ -169,8 +169,8 @@ describe("capture panel", () => {
 
   it("services line leaves out the OS when the host already has one", async () => {
     m.hostsList.mockResolvedValue([
-      host({ id: "h1", name: "dc01", ip: "10.10.10.5", os: "windows", boardColumn: "foothold" }),
-      host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "privesc" }),
+      host({ id: "h1", name: "dc01", ip: "10.10.10.5", os: "windows", boardColumn: "vulnerability-detection" }),
+      host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "privilege-escalation" }),
     ]);
     const user = userEvent.setup();
     mount();
@@ -206,7 +206,7 @@ describe("capture panel", () => {
     const user = userEvent.setup();
     mount();
     await ready();
-    const card = within(screen.getByRole("region", { name: "Foothold" })).getByRole("link", { name: /dc01/ });
+    const card = within(screen.getByRole("region", { name: "Vulnerability detection" })).getByRole("link", { name: /dc01/ });
     card.focus();
     const dialog = await openCapture(user);
     await user.paste(NMAP);
@@ -498,14 +498,14 @@ describe("capture panel", () => {
       expect(within(dialog).getByRole("button", { name: "Screenshot" })).toHaveAttribute("aria-pressed", "true"),
     );
     expect(within(dialog).getByRole("img", { name: "Pasted screenshot" })).toHaveAttribute("src", "blob:shot");
-    expect(within(dialog).getByText("10.10.10.5_foothold_shot.png")).toHaveClass("font-mono");
+    expect(within(dialog).getByText("10.10.10.5_vulns_shot.png")).toHaveClass("font-mono");
     await user.type(within(dialog).getByLabelText("Caption"), "login page :8080");
-    expect(within(dialog).getByText("10.10.10.5_foothold_port8080.png")).toBeInTheDocument();
+    expect(within(dialog).getByText("10.10.10.5_vulns_port8080.png")).toBeInTheDocument();
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
     const input = m.logCreate.mock.calls[0]![1];
     expect(input.hostIds).toEqual(["h1"]);
-    expect(input.content).toMatchObject({ kind: "screenshot", caption: "login page :8080", fileName: "10.10.10.5_foothold_port8080.png" });
+    expect(input.content).toMatchObject({ kind: "screenshot", caption: "login page :8080", fileName: "10.10.10.5_vulns_port8080.png" });
     expect(input.attachment).toEqual({ mime: "image/png", dataBase64: "iVBORw==" });
   });
 });

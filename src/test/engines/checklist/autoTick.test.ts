@@ -20,7 +20,7 @@ const engagement = (over: Partial<Engagement> = {}): Engagement => ({
   lastActivityAt: null, lastRanOn: null, msfHostId: null, ...over,
 });
 const host = (id: string, name: string, ip: string, os: Host['os']): Host => ({
-  id, engagementId: 'lab', name, ip, os, boardColumn: 'enumerate', boardManual: false, access: 'none',
+  id, engagementId: 'lab', name, ip, os, boardColumn: 'information-gathering', boardManual: false, access: 'none',
   createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false,
 });
 let n = 0;
@@ -189,9 +189,12 @@ describe('ticksForEntry (commands)', () => {
 
   it('target-side AD commands need a shell host', () => {
     expect(ticks('SharpHound.exe -c All --domaincontroller 10.0.0.1', { ranOn: 'Kali' })).toEqual([]);
-    expect(pairs(ticks('SharpHound.exe -c All --domaincontroller 10.0.0.1', { ranOn: 'MS01' }))).toEqual(['lab:e-ad-user-bloodhound']);
-    expect(ticks('SharpHound.exe -c All', { ranOn: 'MS01' })).toEqual([]);
-    expect(pairs(ticks('SharpHound.exe -c All', { ranOn: 'DC01' }))).toEqual(['lab:e-ad-user-bloodhound']);
+    // Also ticks h-post-bloodhound on the shell host: the field-manual SharpHound.exe matcher fires on any -c value.
+    expect(pairs(ticks('SharpHound.exe -c All --domaincontroller 10.0.0.1', { ranOn: 'MS01' }))).toEqual([
+      'lab:e-ad-user-bloodhound', 'ms01:h-post-bloodhound',
+    ]);
+    expect(pairs(ticks('SharpHound.exe -c All', { ranOn: 'MS01' }))).toEqual(['ms01:h-post-bloodhound']);
+    expect(pairs(ticks('SharpHound.exe -c All', { ranOn: 'DC01' }))).toEqual(['dc:h-post-bloodhound', 'lab:e-ad-user-bloodhound']);
   });
 
   it('an AD goal on a line naming no host ticks nothing', () => {

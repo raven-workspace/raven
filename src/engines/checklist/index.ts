@@ -1,7 +1,7 @@
 export * from './types';
 export * from './facts';
-export { HOST_STAGES, HOST_GOALS } from './data/hostChecklist';
-export { ENGAGEMENT_SETUP, AD_PLAYBOOKS } from './data/engagementChecklist';
+export { HOST_STAGES, HOST_GOALS, PIVOT_GOALS } from './data/hostChecklist';
+export { ENGAGEMENT_SETUP, AD_PLAYBOOKS, LATERAL_MOVEMENT_GOALS } from './data/engagementChecklist';
 export * from './template';
 export * from './fill';
 export * from './autoTick';
@@ -10,3 +10,4 @@ export * from './scanImport';
 export * from './board';
 export * from './shellQuote';
 export * from './daCover';
+export * from './factTicks';
