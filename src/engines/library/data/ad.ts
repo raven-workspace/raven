@@ -178,7 +178,7 @@ export const AD_NOCREDS_DA_COMMANDS: LibraryCommand[] = [
       'ldapsearch -x -H ldap://{DC_IP} -b "$(echo \'DC={DOMAIN}\' | sed \'s/\\./,DC=/g\')" "(objectClass=user)" sAMAccountName description',
     os: 'any',
     runFrom: 'attacker',
-    goals: ['e-ad-nocreds-ldap'],
+    goals: ['e-ad-nocreds-ldap', 'h-enum-ad-users'],
     source: 'oscp-notes',
   },
   // ---------------------------------------------------------------- kerbrute

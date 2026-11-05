@@ -22,7 +22,7 @@ const NO_COMMAND_NEEDED = new Set([
   // Judgement steps: a decision, not a command (the Metasploit commands live on the foothold steps).
   'h-foot-port', 'h-vuln-rank', 'h-vuln-msf',
   // New judgement/consolidation steps from the PEN-200 restructure (Task 2/3): no single command does the job.
-  'h-enum-ad-users', 'e-setup-exam-rules', 'e-lat-record-hop',
+  'e-setup-exam-rules', 'e-lat-record-hop',
 ]);
 const FULL_TCP_MISSES = ['nmap -sC -sV 10.0.0.5', 'nmap --top-ports 1000 10.0.0.5'];
 const BANNED_BINS = new Set([
@@ -68,10 +68,13 @@ describe('built-in command library', () => {
   });
 
   it('field-manual metasploit templates carry the exam rule', () => {
-    const msf = lib.filter(
-      (c) => c.source === 'field-manual' && /msfconsole|meterpreter/i.test(c.template) && !/multi\/handler/.test(c.template),
-    );
+    // A plain multi/handler listener is free; one that catches Meterpreter spends the exam's one Metasploit machine.
+    const spendsMsf = (t: string) =>
+      /msfconsole|meterpreter|use\s+(exploit|auxiliary|post)\//i.test(t) && !(/multi\/handler/.test(t) && !/meterpreter/i.test(t));
+    const msf = lib.filter((c) => c.source === 'field-manual' && spendsMsf(c.template));
+    expect(msf.map((c) => c.id)).toContain('fm-shell-listeners-11');
     expect(msf.filter((c) => c.exam !== 'metasploit').map((c) => c.id)).toEqual([]);
+    expect(lib.find((c) => c.id === 'fm-shell-listeners-10')?.exam).toBeUndefined();
   });
 
   it('no built-in id is duplicated', () => {
@@ -142,7 +145,8 @@ describe('built-in command library', () => {
   });
 
   it('msfvenom and multi/handler templates have no exam rule', () => {
-    const free = lib.filter((c) => c.tool === 'msfvenom' || /multi\/handler/.test(c.template));
+    // (A multi/handler that catches Meterpreter is the exception: it spends the Metasploit machine.)
+    const free = lib.filter((c) => c.tool === 'msfvenom' || (/multi\/handler/.test(c.template) && !/meterpreter/i.test(c.template)));
     expect(free.length).toBeGreaterThanOrEqual(2);
     expect(free.filter((c) => c.exam !== undefined).map((c) => c.id)).toEqual([]);
   });
@@ -158,6 +162,13 @@ describe('built-in command library', () => {
     // Field-manual entries are copied verbatim from the vault (per Conventions.md §4): a token Raven does not
     // know (e.g. {PORT}, {FILE}, {EDB_ID}) is still valid vault syntax and is simply left unresolved, same as a
     // hand-authored {FILL_...}. Only Raven-authored/oscp-notes commands are held to the closed known-token set.
+    // Their tokens must still be {UPPER_SNAKE}; the one .Library-ms payload carries literal XML tags and a GUID,
+    // and curl's -w '%{http_code}' write-out variable is not a Raven token.
+    const LITERAL_PAYLOAD = new Set(['fm-cs-windows-library-file-attack-5']);
+    const badShape = lib
+      .filter((x) => x.source === 'field-manual' && !LITERAL_PAYLOAD.has(x.id))
+      .flatMap((c) => [...c.template.matchAll(TOKEN_RE)].filter((m) => !/^\{[A-Z][A-Z0-9_]+\}$/.test(m[0]) && m[0] !== '{http_code}').map((m) => `${c.id}: ${m[0]}`));
+    expect(badShape).toEqual([]);
     for (const c of lib.filter((x) => x.source !== 'field-manual')) {
       for (const m of c.template.matchAll(TOKEN_RE)) {
         const name = m[1] ?? m[2];

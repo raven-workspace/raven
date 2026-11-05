@@ -308,7 +308,7 @@ export const ENUM_SERVICE_COMMANDS: LibraryCommand[] = [
       'ldapsearch -x -H ldap://{TARGET_IP} -b "$(echo \'DC={DOMAIN}\' | sed \'s/\\./,DC=/g\')" "(objectClass=user)" sAMAccountName description',
     os: 'any',
     runFrom: 'attacker',
-    goals: ['h-enum-ldap'],
+    goals: ['h-enum-ldap', 'h-enum-ad-users'],
     why: 'Descriptions are where admins leave passwords.',
     source: 'oscp-notes',
   },

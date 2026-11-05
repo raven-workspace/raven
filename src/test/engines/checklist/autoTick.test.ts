@@ -193,7 +193,7 @@ describe('ticksForEntry (commands)', () => {
     expect(pairs(ticks('SharpHound.exe -c All --domaincontroller 10.0.0.1', { ranOn: 'MS01' }))).toEqual([
       'lab:e-ad-user-bloodhound', 'ms01:h-post-bloodhound',
     ]);
-    expect(ticks('SharpHound.exe -c All', { ranOn: 'MS01' })).not.toEqual([]);
+    expect(pairs(ticks('SharpHound.exe -c All', { ranOn: 'MS01' }))).toEqual(['ms01:h-post-bloodhound']);
     expect(pairs(ticks('SharpHound.exe -c All', { ranOn: 'DC01' }))).toEqual(['dc:h-post-bloodhound', 'lab:e-ad-user-bloodhound']);
   });
 
