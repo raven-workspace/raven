@@ -48,6 +48,9 @@ describe('target-side writes', () => {
     expect(run('net user hax', onWin)).toEqual([]);
     expect(run('useradd -m -s /bin/bash bob', onWeb)).toEqual([{ kind: 'account', target: 'bob', hostId: 'web' }]);
     expect(run('adduser eve', onWeb)[0].target).toBe('eve');
+    expect(run('useradd bob -s /bin/bash -G sudo', onWeb)[0].target).toBe('bob');
+    expect(run('adduser --disabled-password --gecos "" bob', onWeb)[0].target).toBe('bob');
+    expect(run('net user hacker P@ss /add /domain', onWin)[0].target).toBe('hacker');
   });
   it('services', () => {
     expect(run('sc create evil binPath= C:\\x.exe', onWin)).toEqual([{ kind: 'service', target: 'evil', hostId: 'dc' }]);

@@ -82,6 +82,23 @@ function outFile(t: string[]): string | null {
   return null;
 }
 
+const VALUE_FLAGS = new Set(['-s', '-d', '-g', '-G', '-c', '-e', '-f', '-k', '-K', '-p', '-u', '-b', '-Z']);
+const VALUE_LONG = new Set([
+  '--shell', '--home', '--home-dir', '--gid', '--ingroup', '--groups', '--comment', '--gecos', '--expiredate', '--inactive',
+  '--skel', '--key', '--password', '--uid', '--base-dir', '--selinux-user', '--firstuid', '--lastuid', '--add_extra_groups',
+]);
+
+/** Arguments that are neither flags nor the value of a flag that takes one. */
+function positionals(args: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (VALUE_FLAGS.has(a) || VALUE_LONG.has(a)) i++;
+    else if (!a.startsWith('-')) out.push(a);
+  }
+  return out;
+}
+
 function putArgs(args: string[]): Match | null {
   if (args.length === 0) return null;
   return { kind: 'file', target: args[1] ?? baseName(args[0]), push: true };
@@ -126,7 +143,7 @@ function matchSegment(segment: string, inSmbclient: boolean): Match[] {
       break;
     case 'useradd':
     case 'adduser': {
-      const name = t.slice(1).filter((a) => !a.startsWith('-')).pop();
+      const name = positionals(t.slice(1)).pop();
       if (name) res.push({ kind: 'account', target: name, push: false });
       break;
     }
