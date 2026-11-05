@@ -668,7 +668,7 @@ describe("buildImportPlan: credentials", () => {
 
   it("a redacted credential is skipped and counted", () => {
     const p = lootPlan({
-      credentials: [cred({ id: "c1", redacted: true }), cred({ id: "c2", secret: " [REDACTED] " }), cred({ id: "c3", secret: "real" })],
+      credentials: [cred({ id: "c1", redacted: true }), cred({ id: "c2", secret: " [REDACTED] " }), cred({ id: "c3", username: "zed", secret: "real" })],
       credAttempts: [attempt({ id: "a1", credId: "c1" })],
     });
     expect(p.credentials.map((c) => c.id)).toEqual(["c3"]);
@@ -852,5 +852,146 @@ describe("buildImportPlan: usernames and access", () => {
     const junk = [null, 7, "x", [], {}, { id: 5 }, { username: 3, secret: {} }];
     expect(() => lootPlan({ credentials: junk, credAttempts: junk, usernames: [...junk, { id: "u", username: "a", access: "nope" }] })).not.toThrow();
     expect(() => lootPlan({ credentials: "nope", credAttempts: {}, usernames: 4 })).not.toThrow();
+  });
+});
+
+describe("Task 5 fix round 1: rulings", () => {
+  it("T5-R1: a blank hop or grant via imports as (not recorded)", () => {
+    const p = lootPlan(
+      { usernames: [{ id: "u1", username: "bob", createdAt: ISO, engagementId: "custom-lab-1", access: [{ id: "g1", hostId: "b1", level: "user", via: "  ", at: ISO }] }] },
+      { hops: [{ id: "hop-1", toHostId: "b1", via: "", at: ISO, updatedAt: ISO }] },
+    );
+    expect(p.hops[0].via).toBe("(not recorded)");
+    expect(p.accessGrants[0].via).toBe("(not recorded)");
+  });
+
+  it("T5-R2: loot with no engagementId and no sourceMachineId is counted as unassigned", () => {
+    const p = lootPlan({
+      credentials: [cred({ engagementId: undefined }), cred({ id: "c2", engagementId: " ", secret: "x" })],
+      usernames: [{ id: "u1", username: "bob", createdAt: ISO }],
+    });
+    expect(p.credentials).toEqual([]);
+    expect(p.usernames).toEqual([]);
+    expect(p.skipped.credUnassigned).toBe(2);
+    expect(p.skipped.usernameUnassigned).toBe(1);
+  });
+
+  it("T5-R3: invalid scope entries are dropped and counted", () => {
+    const p = plan(bk([standalone({ id: "custom-solo", scope: ["10.10.10.0/24", "10.1.2.3", "corp.local", "10.0.0.0/33", 7 as never, " "] })]), ["custom-solo"]);
+    expect(p.engagements[0].scopeCidrs).toEqual(["10.10.10.0/24", "10.1.2.3"]);
+    expect(p.skipped.scopeInvalid).toBe(3);
+  });
+
+  it("T5-R4: loot items on an imported host go into its note under ## Loot", () => {
+    const machines = [lab(), labBox({ id: "b1", userFlag: " flag-user-123 " }), standalone({ id: "custom-unpicked" })];
+    const p = plan(bk(machines, {
+      lootItems: [
+        { id: "l1", category: "file", title: "web.config", value: "connStr=abc", notes: "from IIS", createdAt: ISO, machineId: "b1" },
+        { id: "l2", category: "flag", title: "user", value: "flag-user-123", createdAt: ISO, machineId: "b1" },
+        { id: "l3", category: "flag", title: "other", value: "flag-other", createdAt: ISO, machineId: "b1" },
+        { id: "l4", category: "note", title: "secret", value: "[REDACTED]", createdAt: ISO, machineId: "b1" },
+        { id: "l5", category: "weird", title: "multi", value: "line one\n? not a thread", createdAt: ISO, machineId: "b1" },
+        { id: "l6", category: "note", title: "lab level", value: "v", createdAt: ISO, machineId: "custom-lab-1" },
+        { id: "l7", category: "note", title: "nowhere", value: "v", createdAt: ISO },
+        { id: "l8", category: "note", title: "unpicked", value: "v", createdAt: ISO, machineId: "custom-unpicked" },
+      ],
+    }), ["custom-lab-1"]);
+    const note = p.notes.find((n) => n.ownerId === "b1")!;
+    expect(note.body).toBe([
+      "## Loot",
+      "- file · web.config: connStr=abc (from IIS)",
+      "- flag · other: flag-other",
+      "- note · multi: line one",
+      "  \\? not a thread",
+    ].join("\n"));
+    expect(p.skipped.redactedLoot).toBe(1);
+    expect(p.skipped.lootUnassigned).toBe(3);
+  });
+});
+
+describe("Task 5 fix round 1: no lost attempts", () => {
+  it("attempts on a redacted credential follow a kept credential for the same principal", () => {
+    const p = lootPlan({
+      credentials: [
+        cred({ id: "c-red", redacted: true, secret: "[REDACTED]", domain: "CORP", verifications: { b2: { status: "admin" } } }),
+        cred({ id: "c-real", username: "Alice", domain: "corp" }),
+        cred({ id: "c-red2", username: "nobody", redacted: true }),
+      ],
+      credAttempts: [attempt({ id: "a1", credId: "c-red" }), attempt({ id: "a2", credId: "c-red2" })],
+    });
+    expect(p.credentials.map((c) => c.id)).toEqual(["c-real"]);
+    expect(p.credAttempts.map((a) => [a.id, a.credId, a.hostId])).toEqual([["a1", "c-real", "b1"], ["c-red:verification:b2", "c-real", "b2"]]);
+    expect(p.skipped.redactedCredential).toBe(2);
+    expect(p.skipped.attemptCredMissing).toBe(1);
+  });
+
+  it("an attempt id taken by a different attempt gets a stable derived id", () => {
+    const p = lootPlan({ credentials: [cred()], credAttempts: [attempt({ id: "a1" }), attempt({ id: "a1", service: "ssh" })] });
+    expect(p.credAttempts.map((a) => a.id)).toEqual(["a1", "a1:cred_1||b1|ssh|domain"]);
+  });
+
+  it("sourceMachineId decides only when engagementId is absent or names no lab or standalone", () => {
+    const p = lootPlan({
+      credentials: [
+        cred({ id: "c1", engagementId: "custom-unpicked", sourceMachineId: "b1" }),
+        cred({ id: "c2", engagementId: "htb-gone", sourceMachineId: "b1", secret: "x" }),
+      ],
+      usernames: [{ id: "u1", username: "bob", createdAt: ISO, engagementId: "custom-unpicked", sourceMachineId: "b1" }],
+    });
+    expect(p.credentials.map((c) => [c.id, c.engagementId])).toEqual([["c2", "custom-lab-1"]]);
+    expect(p.usernames).toEqual([]);
+  });
+
+  it("a whitespace-only secret with a blank username is skipped", () => {
+    const p = lootPlan({ credentials: [cred({ username: "", secret: "   " })] });
+    expect(p.credentials).toEqual([]);
+    expect(p.skipped.badCredential).toBe(1);
+  });
+
+  it("droppedHostLink counts only kept records", () => {
+    const p = lootPlan({
+      credentials: [cred({ id: "c1" }), cred({ id: "c2", sourceMachineId: "custom-unpicked" })],
+      usernames: [
+        { id: "u1", username: "bob", createdAt: ISO, engagementId: "custom-lab-1" },
+        { id: "u2", username: "bob", createdAt: ISO, engagementId: "custom-lab-1", sourceMachineId: "custom-unpicked" },
+        { id: "u3", username: "eve", createdAt: ISO, engagementId: "custom-lab-1", sourceMachineId: "custom-unpicked" },
+      ],
+    });
+    expect(p.skipped.credDuplicate).toBe(1);
+    expect(p.skipped.droppedHostLink).toBe(1);
+  });
+
+  it("at the same instant the stronger result wins, whichever comes first", () => {
+    const p = lootPlan({
+      credentials: [cred()],
+      credAttempts: [
+        attempt({ id: "a1", result: "admin" }), attempt({ id: "a2", result: "failed" }),
+        attempt({ id: "a3", service: "ssh", result: "failed" }), attempt({ id: "a4", service: "ssh", result: "valid", detail: "ok" }),
+      ],
+    });
+    expect(p.credAttempts.map((a) => [a.id, a.result, a.detail])).toEqual([["a1", "admin", null], ["a3", "valid", "ok"]]);
+  });
+
+  it("a later errored attempt keeps the real result but refreshes detail and log link", () => {
+    const p = lootPlan(
+      {
+        credentials: [cred()],
+        credAttempts: [
+          attempt({ id: "a1", result: "valid", port: 445 }),
+          attempt({ id: "a2", result: "errored", at: "2024-06-01T00:00:00.000Z", detail: "timeout", logEntryId: "log-1" }),
+        ],
+      },
+      { logEntries: [logEntry(1, { id: "log-1" })] as never },
+    );
+    expect(p.credAttempts).toEqual([expect.objectContaining({ id: "a1", result: "valid", at: ISO_MS, port: 445, detail: "timeout", logEntryId: "log-1" })]);
+  });
+
+  it("an explicit attempt and a legacy verification on one key merge into one", () => {
+    const later = "2024-07-01T00:00:00.000Z";
+    const p = lootPlan({
+      credentials: [cred({ verifications: { b1: { status: "admin", protocol: "smb", updatedAt: later } } })],
+      credAttempts: [attempt({ id: "a1", result: "failed", detail: "STATUS_LOGON_FAILURE" })],
+    });
+    expect(p.credAttempts).toEqual([expect.objectContaining({ id: "a1", result: "admin", at: Date.parse(later), detail: "STATUS_LOGON_FAILURE" })]);
   });
 });

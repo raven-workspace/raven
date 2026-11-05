@@ -8,17 +8,14 @@ import type { ServiceProtocol } from "../../types/service";
 import type { ChecklistStatus, Evidence } from "../../types/checklist";
 import type { Hop, Tunnel, TunnelKind } from "../../types/network";
 import type { Finding, Severity } from "../../types/findings";
-import type {
-  AccessGrant, AccessLevel, AttemptResult, AttemptService, AuthMode, CredAttempt, Credential, CredentialScope,
-  CredentialType, CrackStatus, Username,
-} from "../../types/credentials";
+import type { AccessGrant, CredAttempt, Credential, Username } from "../../types/credentials";
 import { HOST_GOALS } from "../checklist/data/hostChecklist";
 import { AD_PLAYBOOKS, ENGAGEMENT_SETUP } from "../checklist/data/engagementChecklist";
-import { attemptKey, defaultHashType, findDuplicateCredential, stripLineBreaks, usernameKey } from "../credentials/keys";
 import { flagTitle, noteTitle, screenshotFileName } from "../capture/titles";
 import { openThreads } from "../notes/threads";
 import { boxesOf, listImportable, machinesOf } from "./list";
 import { gatherLogs, type RawLog } from "./logs";
+import { lootItemsByMachine, lootSection, mapLoot, VIA_NOT_RECORDED } from "./loot";
 import type { OldBackup, OldMachine } from "./types";
 
 /** EngagementInput with every field explicit, plus id and status. */
@@ -217,6 +214,8 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
     if (isObj(img) && typeof img.id === "string" && !images.has(img.id)) images.set(img.id, img);
   }
 
+  const lootByMachine = lootItemsByMachine(b);
+  const lootUsed = new Set<string>();
   /** Old engagement id (a lab id, or a standalone's machine id) -> new engagement id. */
   const engagementOf = new Map<string, string>();
 
@@ -233,7 +232,7 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
       kind: c.engagementKind,
       client: null,
       subLabel: null,
-      scopeCidrs: arr(container.scope).filter(hasText).map((s) => s.trim()),
+      scopeCidrs: scopeOf(container.scope, skip),
       domain: hasText(container.domain) ? container.domain.trim() : null,
       startsAt: null,
       endsAt: null,
@@ -440,7 +439,10 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
       ]);
     }
     for (const m of hostRows) {
-      if (hosts.has(m.id)) pushNote(m.id, m.id, [...shared(m), triageSection(m, rowsOf(m), skip)]);
+      if (!hosts.has(m.id)) continue;
+      const items = lootByMachine.get(m.id);
+      if (items) lootUsed.add(m.id);
+      pushNote(m.id, m.id, [...shared(m), triageSection(m, rowsOf(m), skip), escapeThreads(lootSection(m, items ?? [], skip))]);
     }
 
     const logIds = new Set(plan.logEntries.filter((e) => e.engagementId === engagementId).map((e) => e.id));
@@ -519,7 +521,7 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
         engagementId,
         fromHostId,
         toHostId: h.toHostId,
-        via: typeof h.via === "string" ? h.via.trim() : "",
+        via: hasText(h.via) ? h.via.trim() : VIA_NOT_RECORDED,
         logEntryId: logLink(h.logEntryId),
         at,
         updatedAt: toMs(h.updatedAt, at),
@@ -604,7 +606,13 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
     }
   }
 
-  mapLoot(b, plan, engagementOf, skip, now);
+  const loot = mapLoot(b, { hosts: plan.hosts, logEntries: plan.logEntries, engagementOf, engagementIdsInBackup: new Set(candidates.keys()) }, skip, now);
+  plan.credentials = loot.credentials;
+  plan.usernames = loot.usernames;
+  plan.accessGrants = loot.accessGrants;
+  plan.credAttempts = loot.credAttempts;
+  // Ruling T5-R4: loot items whose machine is not an imported host have nowhere to go.
+  for (const [machineId, items] of lootByMachine) if (!lootUsed.has(machineId)) skip("lootUnassigned", items.length);
   return plan;
 }
 
@@ -728,325 +736,13 @@ function triageSection(m: OldMachine, rows: ServiceRow[], skip: (reason: string)
   return ["## Port triage", ...[...byPort].sort((x, y) => x[0] - y[0]).map((r) => r[1])].join("\n");
 }
 
-// ---------------------------------------------------------------- credentials, usernames, access, attempts
-
-const CRED_TYPES = new Set<string>(["password", "hash", "ticket", "key", "token", "other"]);
-const SCOPES = new Set<string>(["domain", "local", "app"]);
-const CRACK = new Set<string>(["uncracked", "cracked", "uncrackable"]);
-const LEVELS = new Set<string>(["user", "admin", "system"]);
-const RESULTS = new Set<string>(["admin", "valid", "failed", "errored"]);
-/** Result names used before old loot schema 2. */
-const LEGACY_RESULTS: Record<string, AttemptResult> = { tried: "errored", invalid: "failed" };
-/** Old per-machine `credential.verifications` status -> attempt result ('untested' carried no information). */
-const VERIFICATION_RESULTS: Record<string, AttemptResult> = { admin: "admin", user: "valid", failed: "failed" };
-const SERVICES = new Set<string>(["smb", "winrm", "rdp", "mssql", "ssh", "ftp", "ldap", "wmi", "vnc", "nfs", "http", "kerberos", "other"]);
-const AUTH_MODES = new Set<string>(["domain", "local"]);
-const RESULT_RANK: Record<AttemptResult, number> = { errored: 0, failed: 1, valid: 2, admin: 3 };
-const REDACTED = "[REDACTED]";
-
-const optText = (v: unknown): string | null => (hasText(v) ? v.trim() : null);
-const oneOf = <T extends string>(set: Set<string>, v: unknown): T | null => (typeof v === "string" && set.has(v) ? (v as T) : null);
-
-/**
- * Old top-level loot, following old `normalizeLootState` + `mergeImportedLoot`: a record is selected when its
- * `engagementId` (or, failing that, its source machine) maps to an imported engagement. Placeholder secrets are
- * never stored. Duplicates keep the first record and move attempts and grants onto it.
- */
-function mapLoot(b: OldBackup, plan: ImportPlan, engagementOf: Map<string, string>, skip: (reason: string) => void, now: number) {
-  const hostEngagement = new Map(plan.hosts.map((h) => [h.id, h.engagementId]));
-  const logEngagement = new Map(plan.logEntries.map((e) => [e.id, e.engagementId]));
-  /** The imported engagement a record belongs to, else null (not selected). */
-  const engagementFor = (r: Record<string, unknown>): string | null =>
-    (hasText(r.engagementId) && (engagementOf.get(r.engagementId) ?? hostEngagement.get(r.engagementId))) ||
-    (hasText(r.sourceMachineId) && hostEngagement.get(r.sourceMachineId)) ||
-    null;
-  const hostIn = (engagementId: string, v: unknown): v is string => hasText(v) && hostEngagement.get(v) === engagementId;
-  /** A host link in the engagement, else null (a dangling link is counted). */
-  const hostLink = (engagementId: string, v: unknown): string | null => {
-    if (!hasText(v)) return null;
-    if (hostIn(engagementId, v)) return v;
-    skip("droppedHostLink");
-    return null;
-  };
-  const logLink = (engagementId: string, v: unknown): string | null => {
-    if (!hasText(v)) return null;
-    if (logEngagement.get(v) === engagementId) return v;
-    skip("droppedLogLink");
-    return null;
-  };
-  const isImportedHost = (v: unknown) => hasText(v) && hostEngagement.has(v);
-
-  // Credentials.
-  const credIdMap = new Map<string, string>();
-  const credScope = new Map<string, CredentialScope>();
-  const skippedCreds = new Set<string>();
-  const links = new Map<string, { crackedFrom: unknown; fromSecretId: unknown }>();
-  const verifications: { rawId: string; credId: string; scope: CredentialScope; createdAt: number; v: Record<string, unknown> }[] = [];
-  const kept: Credential[] = [];
-  for (const raw of arr(b?.credentials)) {
-    if (!isObj(raw)) {
-      skip("badCredential");
-      continue;
-    }
-    const engagementId = engagementFor(raw);
-    if (!engagementId) continue;
-    const id = optText(raw.id);
-    if (!id || (typeof raw.username !== "string" && typeof raw.secret !== "string")) {
-      skip("badCredential");
-      continue;
-    }
-    const rawSecret = typeof raw.secret === "string" ? raw.secret : "";
-    if (raw.redacted === true || rawSecret.trim() === REDACTED) {
-      skip("redactedCredential");
-      skippedCreds.add(id);
-      continue;
-    }
-    const type = oneOf<CredentialType>(CRED_TYPES, raw.type) ?? "other";
-    const secret = type === "hash" ? rawSecret.trim() : stripLineBreaks(rawSecret);
-    const username = typeof raw.username === "string" ? raw.username.trim() : "";
-    if (!username && !secret) {
-      skip("badCredential");
-      skippedCreds.add(id);
-      continue;
-    }
-    const scope = oneOf<CredentialScope>(SCOPES, raw.scope) ?? "domain";
-    let localHostId: string | null = null;
-    if (scope === "local") {
-      if (!hostIn(engagementId, raw.localHostId)) {
-        skip("credLocalHostMissing");
-        skippedCreds.add(id);
-        continue;
-      }
-      localHostId = raw.localHostId;
-    }
-    const createdAt = toMs(raw.createdAt, now);
-    const c: Credential = {
-      id,
-      engagementId,
-      type,
-      username,
-      domain: optText(raw.domain),
-      secret,
-      hashType: type === "hash" ? (optText(raw.hashType) ?? defaultHashType(secret) ?? null) : null,
-      scope,
-      localHostId,
-      sourceHostId: hostLink(engagementId, raw.sourceMachineId),
-      source: optText(raw.source),
-      notes: optText(raw.notes),
-      crackStatus: type === "hash" ? (oneOf<CrackStatus>(CRACK, raw.crackStatus) ?? "uncracked") : null,
-      crackedFrom: null,
-      fromSecretId: null,
-      createdAt,
-      updatedAt: createdAt,
-    };
-    const dup = findDuplicateCredential(kept, c);
-    if (dup) {
-      skip("credDuplicate");
-      if (!credIdMap.has(id)) credIdMap.set(id, dup.id);
-    } else {
-      kept.push(c);
-      credIdMap.set(id, id);
-      links.set(id, { crackedFrom: raw.crackedFrom, fromSecretId: raw.fromSecretId });
-    }
-    if (!credScope.has(id)) credScope.set(id, scope);
-    if (isObj(raw.verifications)) {
-      for (const v of Object.entries(raw.verifications)) {
-        if (isObj(v[1])) verifications.push({ rawId: id, credId: credIdMap.get(id)!, scope, createdAt, v: { ...v[1], machineId: v[0].trim() } });
-      }
-    }
+/** Ruling T5-R3: scope entries that are not an IPv4 address or CIDR are dropped and counted. */
+function scopeOf(v: unknown, skip: (reason: string) => void): string[] {
+  const out: string[] = [];
+  for (const x of arr(v)) {
+    const s = typeof x === "string" ? x.trim() : "";
+    if (s && validCidr(s)) out.push(s);
+    else if (s || typeof x !== "string") skip("scopeInvalid");
   }
-  // Credential links: only to an imported credential of the same engagement, never to itself or in a cycle.
-  const byId = new Map(kept.map((c) => [c.id, c]));
-  const state = new Map<string, "visiting" | "done">();
-  const visit = (c: Credential) => {
-    state.set(c.id, "visiting");
-    const raw = links.get(c.id)!;
-    for (const field of ["crackedFrom", "fromSecretId"] as const) {
-      if (!hasText(raw[field])) continue;
-      const target = byId.get(credIdMap.get(raw[field]) ?? "");
-      if (!target || target.id === c.id || target.engagementId !== c.engagementId || state.get(target.id) === "visiting") {
-        skip("droppedCredLink");
-        continue;
-      }
-      c[field] = target.id;
-      if (!state.has(target.id)) visit(target);
-    }
-    state.set(c.id, "done");
-    plan.credentials.push(c);
-  };
-  for (const c of kept) if (!state.has(c.id)) visit(c);
-
-  // Usernames, merged by id and then by usernameKey; access removed on any copy stays removed.
-  const userIdMap = new Map<string, string>();
-  const userByKey = new Map<string, Username>();
-  const userById = new Map<string, Username>();
-  const grantSources: { user: Username; access: unknown }[] = [];
-  const deletedAccess = new Map<string, Set<string>>();
-  for (const raw of arr(b?.usernames)) {
-    if (!isObj(raw)) {
-      skip("badUsername");
-      continue;
-    }
-    const engagementId = engagementFor(raw);
-    if (!engagementId) continue;
-    const id = optText(raw.id);
-    const name = optText(raw.username);
-    if (!id || !name) {
-      skip("badUsername");
-      continue;
-    }
-    const u: Username = {
-      id,
-      engagementId,
-      username: name,
-      domain: optText(raw.domain),
-      sourceHostId: hostLink(engagementId, raw.sourceMachineId),
-      source: optText(raw.source),
-      createdAt: toMs(raw.createdAt, now),
-    };
-    const twin = userById.get(id) ?? userByKey.get(usernameKey(u));
-    const target = twin ?? u;
-    if (twin) skip("usernameDuplicate");
-    else {
-      plan.usernames.push(u);
-      userById.set(id, u);
-      userByKey.set(usernameKey(u), u);
-    }
-    if (!userIdMap.has(id)) userIdMap.set(id, target.id);
-    const deleted = deletedAccess.get(target.id) ?? new Set<string>();
-    for (const d of arr(raw.deletedAccessIds)) if (hasText(d)) deleted.add(d);
-    deletedAccess.set(target.id, deleted);
-    grantSources.push({ user: target, access: raw.access });
-  }
-  const grantIds = new Set<string>();
-  for (const { user, access } of grantSources) {
-    for (const g of arr(access)) {
-      if (!isObj(g) || !hasText(g.id) || !oneOf<AccessLevel>(LEVELS, g.level)) {
-        skip("badGrant");
-        continue;
-      }
-      if (deletedAccess.get(user.id)!.has(g.id)) continue;
-      if (!hostIn(user.engagementId, g.hostId)) {
-        skip("grantHostMissing");
-        continue;
-      }
-      if (grantIds.has(g.id)) {
-        skip("duplicate");
-        continue;
-      }
-      grantIds.add(g.id);
-      plan.accessGrants.push({
-        id: g.id,
-        engagementId: user.engagementId,
-        usernameId: user.id,
-        hostId: g.hostId,
-        level: g.level as AccessLevel,
-        via: typeof g.via === "string" ? g.via.trim() : "",
-        logEntryId: logLink(user.engagementId, g.logEntryId),
-        at: toMs(g.at, now),
-      });
-    }
-  }
-
-  // Attempts: explicit ones first, then legacy verifications; one per attemptKey, never downgraded.
-  const attempts = new Map<string, CredAttempt>();
-  const attemptIds = new Set<string>();
-  const upsert = (a: CredAttempt) => {
-    const key = attemptKey(a);
-    const cur = attempts.get(key);
-    if (!cur) {
-      if (attemptIds.has(a.id)) {
-        skip("duplicate");
-        return;
-      }
-      attemptIds.add(a.id);
-      attempts.set(key, a);
-      return;
-    }
-    // Old upsertAttemptInList: a real result always beats a stored 'errored'; otherwise the later one wins,
-    // and at the same instant the stronger one.
-    const supersedesError = cur.result === "errored" && a.result !== "errored";
-    if (!supersedesError && (a.at < cur.at || (a.at === cur.at && RESULT_RANK[a.result] < RESULT_RANK[cur.result]))) return;
-    if (a.result === "errored" && cur.result !== "errored") {
-      attempts.set(key, { ...cur, detail: a.detail ?? cur.detail, logEntryId: a.logEntryId ?? cur.logEntryId });
-      return;
-    }
-    attempts.set(key, {
-      ...cur,
-      result: a.result,
-      at: a.at,
-      port: a.port ?? cur.port,
-      detail: a.detail ?? cur.detail,
-      logEntryId: a.logEntryId ?? cur.logEntryId,
-    });
-  };
-  const keptCred = (rawId: string) => byId.get(credIdMap.get(rawId) ?? "");
-  for (const raw of arr(b?.credAttempts)) {
-    const credRaw = isObj(raw) ? optText(raw.credId) : null;
-    const result = isObj(raw)
-      ? (oneOf<AttemptResult>(RESULTS, raw.result) ?? (typeof raw.result === "string" ? LEGACY_RESULTS[raw.result] : undefined))
-      : undefined;
-    if (!isObj(raw) || !hasText(raw.id) || !credRaw || !hasText(raw.machineId) || !result) {
-      skip("badAttempt");
-      continue;
-    }
-    const c = keptCred(credRaw);
-    if (!c) {
-      // Only an attempt that belonged to this import is counted; others are simply not selected.
-      if (skippedCreds.has(credRaw) || isImportedHost(raw.machineId)) skip("attemptCredMissing");
-      continue;
-    }
-    if (!hostIn(c.engagementId, raw.machineId)) {
-      skip("attemptHostMissing");
-      continue;
-    }
-    let usernameId: string | null = null;
-    if (hasText(raw.usernameId)) {
-      const u = userById.get(userIdMap.get(raw.usernameId) ?? "");
-      if (!u || u.engagementId !== c.engagementId) {
-        skip("attemptUsernameMissing");
-        continue;
-      }
-      usernameId = u.id;
-    }
-    const port = raw.port;
-    upsert({
-      id: raw.id.trim(),
-      engagementId: c.engagementId,
-      credId: c.id,
-      usernameId,
-      hostId: raw.machineId,
-      service: oneOf<AttemptService>(SERVICES, raw.service) ?? "other",
-      port: typeof port === "number" && Number.isInteger(port) && port >= 1 && port <= 65535 ? port : null,
-      result,
-      authMode: oneOf<AuthMode>(AUTH_MODES, raw.authMode) ?? (credScope.get(credRaw) === "local" ? "local" : "domain"),
-      detail: optText(raw.detail),
-      logEntryId: logLink(c.engagementId, raw.logEntryId),
-      at: toMs(raw.at, now),
-    });
-  }
-  for (const { rawId, credId, scope, createdAt, v } of verifications) {
-    const result = typeof v.status === "string" ? VERIFICATION_RESULTS[v.status] : undefined;
-    const c = byId.get(credId);
-    if (!result || !c || !hasText(v.machineId)) continue;
-    if (!hostIn(c.engagementId, v.machineId)) {
-      skip("attemptHostMissing");
-      continue;
-    }
-    upsert({
-      id: `${rawId}:verification:${v.machineId}`,
-      engagementId: c.engagementId,
-      credId: c.id,
-      usernameId: null,
-      hostId: v.machineId,
-      service: oneOf<AttemptService>(SERVICES, v.protocol) ?? "smb",
-      port: null,
-      result,
-      authMode: scope === "local" ? "local" : "domain",
-      detail: null,
-      logEntryId: null,
-      at: toMs(v.updatedAt, createdAt),
-    });
-  }
-  plan.credAttempts.push(...attempts.values());
+  return out;
 }
