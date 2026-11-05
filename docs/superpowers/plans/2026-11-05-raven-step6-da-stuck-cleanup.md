@@ -9,7 +9,7 @@
 
 **Architecture:**
 - **Domain admin cover** is a pure TS engine (`engines/checklist/daCover.ts`). It is applied in the same resync pass that already syncs the board, so every trigger (host, service, checklist or attempt change, and engagement open) covers it.
-- **Cleanup list** is stored in a new table (migration 0006) with a Rust CRUD module. Suggestions are computed in TS from the log and never stored until the user confirms or dismisses them.
+- **Cleanup list** is stored in a new table (migration 0007) with a Rust CRUD module. Suggestions are computed in TS from the log and never stored until the user confirms or dismisses them.
 - **Stuck view** is a pure TS engine (`engines/stuck/`) feeding an overlay opened with `H` from the host view.
 
 **Tech Stack:** Tauri 2 (Rust, rusqlite + SQLCipher), React 19, TypeScript, TanStack Query, zustand, Tailwind v4, Vitest/jsdom.
@@ -19,7 +19,7 @@
 ## Global Constraints
 
 - **Real backups:** never opened, read, copied or committed. These are `a file outside the repo` and any `docs/*backup*.json`. Tests use synthetic fixtures only.
-- **Storage changes** go through migration `0006_cleanup.sql`. The migration runner takes a backup first, as for 0001–0005.
+- **Storage changes** go through migration `0007_cleanup.sql`. The migration runner takes a backup first, as for 0001–0005.
 - **Domain admin cover:** the user's decisions, verbatim.
   - **Trigger:** only a credential attempt with result `admin` on the DC host (`findDcHost`). A hop to the DC does not count.
   - **Hosts:** domain-joined hosts by the existing `hostFacts(...).domainJoined` rule, i.e. the DC plus Windows hosts in an engagement with AD. All engagement kinds.
@@ -105,7 +105,7 @@
 
 **Files:**
 - Create:
-  - `src-tauri/migrations/0006_cleanup.sql`
+  - `src-tauri/migrations/0007_cleanup.sql`
   - `src-tauri/src/cleanup.rs`
   - `src/types/cleanup.ts`
 - Modify:
@@ -157,7 +157,7 @@
 - [ ] **Step 2: Run** `cd src-tauri && cargo test cleanup`. Expected: FAIL.
 - [ ] **Step 3: Implement** the migration, module, commands and TS API.
 - [ ] **Step 4: Run** `cargo test`, `cargo clippy --all-targets -- -D warnings`, `npm run typecheck`. Expected: all green, with the migration tests that already exist still passing.
-- [ ] **Step 5: Commit** `feat(cleanup): cleanup list storage (migration 0006)`.
+- [ ] **Step 5: Commit** `feat(cleanup): cleanup list storage (migration 0007)`.
 
 ---
 
