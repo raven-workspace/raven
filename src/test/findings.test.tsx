@@ -136,8 +136,13 @@ describe("findings section", () => {
     expect(within(dlg).getByRole("button", { name: "dc01" })).toHaveAttribute("aria-pressed", "true");
     expect(within(dlg).getByRole("button", { name: "web01" })).toHaveAttribute("aria-pressed", "false");
     expect(within(dlg).getByRole("button", { name: "445/tcp microsoft-ds" })).toHaveAttribute("aria-pressed", "true");
-    expect(within(dlg).getByRole("link", { name: "https://example.test/adv" })).toHaveAttribute("href", "https://example.test/adv");
+    // No opener plugin: a URL is text with a Copy button, not a dead link.
+    expect(within(dlg).queryByRole("link")).not.toBeInTheDocument();
+    expect(within(dlg).getByText("https://example.test/adv")).toBeInTheDocument();
+    await user.click(within(dlg).getByRole("button", { name: "Copy https://example.test/adv" }));
+    expect(await navigator.clipboard.readText()).toBe("https://example.test/adv");
     expect(within(dlg).getByText("CVE-2017-0144")).toBeInTheDocument();
+    expect(within(dlg).queryByRole("button", { name: "Copy CVE-2017-0144" })).not.toBeInTheDocument();
 
     await user.click(within(dlg).getByRole("button", { name: "web01" }));
     await user.click(within(dlg).getByRole("button", { name: "80/tcp http" }));
@@ -148,6 +153,17 @@ describe("findings section", () => {
       hostIds: ["h1", "h2"], serviceIds: ["s2"], refs: ["CVE-2017-0144", "https://example.test/adv", "EDB-42315"],
       stepEntryIds: ["l1", "l2"], status: "draft",
     })));
+  });
+
+  it("a typed reference already in the list is saved once", async () => {
+    const user = userEvent.setup();
+    mount([finding({ id: "f1", title: "Open share", refs: ["CVE-2017-0144"] })]);
+    await user.click(await screen.findByRole("button", { name: "Edit Open share" }));
+    const dlg = await screen.findByRole("dialog");
+    // Typed but not added with Enter or Add.
+    await user.type(within(dlg).getByLabelText("Add reference"), " CVE-2017-0144 ");
+    await user.click(within(dlg).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.findingUpdate).toHaveBeenCalledWith("f1", expect.objectContaining({ refs: ["CVE-2017-0144"] })));
   });
 
   it("lessons are marked private", async () => {

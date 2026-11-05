@@ -49,6 +49,21 @@ const toDraft = (f?: Finding): Draft => ({
 const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
 const isUrl = (s: string) => /^https?:\/\//i.test(s);
 
+/** Copies a reference URL (there is no opener plugin to open it in a browser). */
+function CopyRef({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const copy = () => {
+    void navigator.clipboard.writeText(value).then(() => {
+      setCopied(true);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return <Button size="sm" aria-label={`Copy ${value}`} onClick={copy}>{copied ? "Copied" : "Copy"}</Button>;
+}
+
 export function FindingEditor({ eid, hosts, servicesByHost, edit, onClose }: {
   eid: string;
   hosts: Host[];
@@ -88,7 +103,9 @@ export function FindingEditor({ eid, hosts, servicesByHost, edit, onClose }: {
     }
     setTitleError(undefined);
     setFormError(undefined);
-    const refs = [...d.refs, ...(newRef.trim() ? [newRef.trim()] : [])];
+    // A typed but not yet added reference is saved too, once.
+    const pending = newRef.trim();
+    const refs = pending && !d.refs.includes(pending) ? [...d.refs, pending] : d.refs;
     const input: FindingInput = {
       title: d.title.trim(),
       severity: d.severity,
@@ -237,12 +254,12 @@ export function FindingEditor({ eid, hosts, servicesByHost, edit, onClose }: {
               <ul className="m-0 flex list-none flex-col gap-1 p-0">
                 {d.refs.map((r) => (
                   <li key={r} className="flex items-center justify-between gap-2 text-[13px]">
-                    {isUrl(r) ? (
-                      <a href={r} target="_blank" rel="noreferrer noopener" className="truncate font-mono text-xs text-fg underline">{r}</a>
-                    ) : (
-                      <span className="truncate font-mono text-xs text-fg">{r}</span>
-                    )}
-                    <Button size="sm" aria-label={`Remove ${r}`} onClick={() => set("refs", d.refs.filter((x) => x !== r))}>Remove</Button>
+                    {/* No opener plugin: a link would be a dead click in the desktop app, so a URL is copied instead. */}
+                    <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg">{r}</span>
+                    <span className="flex shrink-0 gap-1.5">
+                      {isUrl(r) && <CopyRef value={r} />}
+                      <Button size="sm" aria-label={`Remove ${r}`} onClick={() => set("refs", d.refs.filter((x) => x !== r))}>Remove</Button>
+                    </span>
                   </li>
                 ))}
               </ul>

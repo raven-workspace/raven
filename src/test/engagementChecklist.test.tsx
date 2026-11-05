@@ -219,6 +219,13 @@ describe("engagement checklist", () => {
     await waitFor(() => expect(screen.queryByText(/admin over winrm/)).not.toBeInTheDocument());
   });
 
+  it("a bare-username access flag names the username, not the secret's credential", async () => {
+    m.usernamesList.mockResolvedValue([{ id: "u1", engagementId: "e1", username: "alice", domain: "CORP", sourceHostId: null, source: null, createdAt: 1 }]);
+    mount({ services: AD, creds: [cred("c1")], attempts: [attempt("a1", "c1", { usernameId: "u1", result: "valid" })] });
+    const flags = await screen.findByRole("region", { name: "New access" });
+    expect(await within(flags).findByText("dc01: valid over winrm as CORP\\alice")).toBeInTheDocument();
+  });
+
   it("a done goal shows new credential since for a later domain credential", async () => {
     const done: ChecklistItem = { ownerId: "e1", goalId: "e-setup-clock", status: "done", notes: null, completedAt: 5, auto: false, autoFrom: null, evidence: [], updatedAt: 1 };
     mount({ services: AD, items: [done], creds: [cred("c1", { createdAt: 50 })] });

@@ -20,9 +20,13 @@ export function AccessFlags({ engagementId, hosts, attempts, credentials }: { en
   });
   if (flags.length === 0) return null;
   const who = (f: (typeof flags)[number]) => {
+    // A bare-username attempt also carries the secret's credential: the username is who got in.
+    if (f.usernameId) {
+      const u = usernames.find((x) => x.id === f.usernameId);
+      return u ? usernameLabel(u) : "unknown";
+    }
     const c = credentials.find((x) => x.id === f.credId);
-    const u = usernames.find((x) => x.id === f.usernameId);
-    return c ? credLabel(c) : u ? usernameLabel(u) : "unknown";
+    return c ? credLabel(c) : "unknown";
   };
   return (
     <section aria-label="New access" className="flex flex-col gap-1">
