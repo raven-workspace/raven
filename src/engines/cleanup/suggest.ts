@@ -65,14 +65,31 @@ const eq = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 type Match = { kind: CleanupSuggestion['kind']; target: string; push: boolean };
 
-/** `-O x`, `-Ox`, `--output-document=x` / `--output-document x` style option value. */
+/**
+ * Option value for a short flag letter (also inside a cluster: `-qO x`, `-sSLo x`, attached `-qOx`) or a long option
+ * (`--output x`, `--output=x`).
+ */
 function optValue(t: string[], short: string | null, long: string | null): string | null {
+  const cluster = short ? new RegExp(`^-[A-Za-z]*?${short}(.*)$`) : null;
   for (let i = 1; i < t.length; i++) {
     const a = t[i];
     if (long && a === long) return t[i + 1] ?? null;
     if (long && a.startsWith(`${long}=`)) return a.slice(long.length + 1);
-    if (short && a === short) return t[i + 1] ?? null;
-    if (short && a.startsWith(short) && !a.startsWith('--') && a.length > short.length) return a.slice(short.length);
+    if (cluster && !a.startsWith('--')) {
+      const m = cluster.exec(a);
+      if (m) return m[1] === '' ? (t[i + 1] ?? null) : m[1];
+    }
+  }
+  return null;
+}
+
+/** Path after an unquoted-looking `>` / `>>` redirect of stdout (not `2>` or `2>&1`). */
+function redirectTarget(t: string[]): string | null {
+  for (let i = 1; i < t.length; i++) {
+    const m = /^>>?(.*)$/.exec(t[i]);
+    if (!m) continue;
+    const path = m[1] === '' ? t[i + 1] : m[1];
+    return path && !path.startsWith('&') && path !== '/dev/null' ? path : null;
   }
   return null;
 }
@@ -99,9 +116,26 @@ function positionals(args: string[]): string[] {
   return out;
 }
 
+/** A destination that names a directory takes the source's basename. */
+function destTarget(dest: string | undefined, src: string): string {
+  const base = baseName(src);
+  if (dest === undefined || dest === '.') return base;
+  if (dest === '~') return `~/${base}`;
+  return /[\\/]$/.test(dest) ? `${dest}${base}` : dest;
+}
+
 function putArgs(args: string[]): Match | null {
   if (args.length === 0) return null;
-  return { kind: 'file', target: args[1] ?? baseName(args[0]), push: true };
+  return { kind: 'file', target: destTarget(args[1], args[0]), push: true };
+}
+
+const SCP_VALUE_FLAGS = new Set(['-P', '-i', '-o', '-F', '-l', '-c', '-J', '-S', '-D']);
+function scpSource(t: string[]): string | null {
+  for (let i = 1; i < t.length - 1; i++) {
+    if (SCP_VALUE_FLAGS.has(t[i])) i++;
+    else if (!t[i].startsWith('-')) return t[i];
+  }
+  return null;
 }
 
 function remoteScpPath(dest: string): string | null {
@@ -110,7 +144,21 @@ function remoteScpPath(dest: string): string | null {
   return m[2];
 }
 
-function matchSegment(segment: string, inSmbclient: boolean): Match[] {
+const PS_WRAP = /^(?:powershell|pwsh)(?:\.exe)?\s.*?\s-(?:c|command)\s+(.+)$/is;
+const CMD_WRAP = /^cmd(?:\.exe)?\s+\/[ck]\s+(.+)$/is;
+const DOWNLOAD_FILE = /\.DownloadFile\(\s*(['"])(.*?)\1\s*,\s*(['"])(.*?)\3\s*\)/is;
+
+function unquote(text: string): string {
+  const x = text.trim();
+  const q = x[0];
+  return (q === '"' || q === "'") && x.length > 1 && x.endsWith(q) ? x.slice(1, -1) : x;
+}
+
+function matchSegment(segment: string, inSmbclient: boolean, depth = 0): Match[] {
+  const wrap = depth === 0 ? (PS_WRAP.exec(segment) ?? CMD_WRAP.exec(segment)) : null;
+  if (wrap) return splitSegments(unquote(wrap[1])).flatMap((inner) => matchSegment(inner, inSmbclient, 1));
+  const dl = DOWNLOAD_FILE.exec(segment);
+  if (dl && dl[4]) return [{ kind: 'file', target: dl[4], push: false }];
   const t = tokenize(segment);
   if (t.length === 0) return [];
   if (eq(t[0], 'sudo')) t.shift();
@@ -124,7 +172,7 @@ function matchSegment(segment: string, inSmbclient: boolean): Match[] {
   switch (cmd) {
     case 'wget': {
       const ps = outFile(t);
-      file(ps ?? optValue(t, '-O', '--output-document'));
+      file(ps ?? optValue(t, 'O', '--output-document') ?? redirectTarget(t));
       break;
     }
     case 'iwr':
@@ -132,18 +180,22 @@ function matchSegment(segment: string, inSmbclient: boolean): Match[] {
       file(outFile(t));
       break;
     case 'curl':
-      file(optValue(t, '-o', '--output'));
+      file(outFile(t) ?? optValue(t, 'o', '--output') ?? redirectTarget(t));
       break;
     case 'certutil':
       if (t.some((a) => /^[-/]urlcache$/i.test(a)) && t.length > 2) file(t[t.length - 1]);
       break;
     case 'net':
     case 'net1':
-      if (eq(t[1] ?? '', 'user') && t[2] && t.some((a) => eq(a, '/add'))) res.push({ kind: 'account', target: t[2], push: false });
+      if (eq(t[1] ?? '', 'user') && t.some((a) => eq(a, '/add'))) {
+        const name = t.slice(2).find((a) => !a.startsWith('/'));
+        if (name) res.push({ kind: 'account', target: name, push: false });
+      }
       break;
     case 'useradd':
     case 'adduser': {
-      const name = positionals(t.slice(1)).pop();
+      const pos = positionals(t.slice(1));
+      const name = cmd === 'adduser' && pos.length === 2 ? pos[0] : pos.pop();
       if (name) res.push({ kind: 'account', target: name, push: false });
       break;
     }
@@ -157,7 +209,8 @@ function matchSegment(segment: string, inSmbclient: boolean): Match[] {
     }
     case 'scp': {
       const p = remoteScpPath(t[t.length - 1]);
-      if (t.length >= 3 && p) res.push({ kind: 'file', target: p, push: true });
+      const src = scpSource(t);
+      if (p && src) res.push({ kind: 'file', target: destTarget(p, src), push: true });
       break;
     }
     case 'smbclient':
@@ -195,15 +248,16 @@ export function suggestCleanup(entries: LogEntry[], hosts: HostRef[], domain: st
 
   for (const entry of sorted) {
     if (entry.content.kind !== 'command') continue;
-    entry.content.blocks.forEach((block, blockIndex) => {
-      const lines = block.command.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+    (entry.content.blocks ?? []).forEach((block, blockIndex) => {
+      const lines = String(block?.command ?? '').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
       const inSmbclient = lines[0] !== undefined && /^smbclient(\s|$)/i.test(lines[0]);
-      const local = shellHost(block.shell, entry.ranOn ?? undefined, hosts, domain);
+      const local = shellHost(block?.shell, entry.ranOn ?? undefined, hosts, domain);
+      let lastNamed: string | null = null;
       for (const line of lines) {
         for (const segment of splitSegments(line)) {
           for (const m of matchSegment(segment, inSmbclient)) {
             let hostId: string | null;
-            if (m.push) hostId = namedHostsInLine(segment, hosts, domain)[0]?.id ?? entry.hostIds[0] ?? null;
+            if (m.push) hostId = namedHostsInLine(segment, hosts, domain)[0]?.id ?? lastNamed ?? entry.hostIds?.[0] ?? null;
             else if (local) hostId = local.id;
             else continue;
             const key = `${entry.id}:${blockIndex}:${m.target}`;
@@ -212,6 +266,7 @@ export function suggestCleanup(entries: LogEntry[], hosts: HostRef[], domain: st
             out.push({ key, entryId: entry.id, hostId, kind: m.kind, target: m.target, command: line });
           }
         }
+        lastNamed = namedHostsInLine(line, hosts, domain)[0]?.id ?? lastNamed;
       }
     });
   }
