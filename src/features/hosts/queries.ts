@@ -3,6 +3,7 @@ import { api } from "../../lib/api";
 import { reportError } from "../../lib/lockSignal";
 import { hopsKey, tunnelsKey } from "../checklist/queries";
 import { accessGrantsKey, credAttemptsKey, credentialsKey } from "../credentials/queries";
+import { cleanupCountsKey, cleanupKey } from "../cleanup/queries";
 import { findingsKey } from "../findings/queries";
 import { resyncBoards } from "../checklist/ticks";
 import { dropPendingNotes } from "../notes/useNotesStore";
@@ -76,6 +77,9 @@ export function useHostMutations(engagementId: string) {
         void qc.invalidateQueries({ queryKey: ["engagements"] });
         void qc.invalidateQueries({ queryKey: tunnelsKey(engagementId) });
         void qc.invalidateQueries({ queryKey: hopsKey(engagementId) });
+        // Its cleanup items lose the host.
+        void qc.invalidateQueries({ queryKey: cleanupKey(engagementId) });
+        void qc.invalidateQueries({ queryKey: cleanupCountsKey });
         // A deleted DC changes which hosts are AD hosts, and so other hosts' columns.
         resync();
       },

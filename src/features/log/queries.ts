@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { reportError } from "../../lib/lockSignal";
 import type { LogEntry, LogEntryInput } from "../../types/log";
+import { cleanupKey } from "../cleanup/queries";
 import { accessGrantsKey, credAttemptsKey } from "../credentials/queries";
 import { afterEntrySaved, deleteEntryWithTicks, FollowUpError } from "../checklist/ticks";
 
@@ -38,6 +39,8 @@ export function useLogMutations(engagementId: string) {
     // Credential test results and access grants that cited it as proof lose the link.
     void qc.invalidateQueries({ queryKey: credAttemptsKey(engagementId) });
     void qc.invalidateQueries({ queryKey: accessGrantsKey(engagementId) });
+    // A cleanup item that came from it loses the link.
+    void qc.invalidateQueries({ queryKey: cleanupKey(engagementId) });
   };
   return {
     update: useMutation({

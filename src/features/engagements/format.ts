@@ -41,7 +41,7 @@ export function hasTimebox(e: Pick<Engagement, "kind" | "timeboxMinutes">): e is
   return e.kind === "exam-sim" && e.timeboxMinutes !== null;
 }
 
-function shortDate(ms: number, withYear: boolean): string {
+export function shortDate(ms: number, withYear: boolean): string {
   return new Date(ms).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
