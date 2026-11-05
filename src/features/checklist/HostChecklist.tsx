@@ -35,11 +35,17 @@ function ArrivedFrom({ host, hosts, onSave }: { host: Host; hosts: Host[]; onSav
   };
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs text-fg-2">Arrived from</span>
-      <div className="flex items-center gap-2">
-        <Select aria-label="Arrived from" className="w-40" options={options} value={from} onValueChange={setFrom} />
-        <Input aria-label="Via" placeholder="via (creds, exploit, share…)" value={via} onChange={(e) => setVia(e.target.value)} className="flex-1" />
-        <Button variant="primary" disabled={saving || via.trim() === ""} onClick={() => void save()}>
+      <div className="flex items-end gap-2">
+        {/* Fixed-width wrapper: the control's own w-full would otherwise win over a width class and squeeze Via. */}
+        <label className="flex w-48 shrink-0 flex-col gap-1">
+          <span className="text-xs text-fg-2">Arrived from</span>
+          <Select aria-label="Arrived from" options={options} value={from} onValueChange={setFrom} />
+        </label>
+        <label className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-xs text-fg-2">Via</span>
+          <Input aria-label="Via" placeholder="creds, exploit, share…" value={via} onChange={(e) => setVia(e.target.value)} />
+        </label>
+        <Button variant="primary" className="shrink-0" disabled={saving || via.trim() === ""} onClick={() => void save()}>
           Save hop
         </Button>
       </div>
