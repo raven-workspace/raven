@@ -8,6 +8,7 @@ import type { LibraryCommand } from '../library/types';
 import { matchLine } from '../library/matcher';
 import { HOST_GOALS } from './data/hostChecklist';
 import { AD_PLAYBOOKS, ENGAGEMENT_SETUP } from './data/engagementChecklist';
+import { isCoverMarked } from './daCover';
 import { adHosts, engagementFacts, goalApplies, hostFacts, type HostFacts } from './facts';
 import { scanProvenanceLines } from './scanImport';
 import type { ChecklistGoal } from './types';
@@ -146,7 +147,8 @@ export function applyTicks(state: ChecklistState | undefined, ticks: Tick[], now
     const link: Evidence = { entryId: t.entryId, commandId: t.commandId };
     const updated: ItemState = { ...item, evidence: [...evidence, link] };
     if (item.status !== 'done') {
-      if (item.status === 'na' || item.status === 'in_progress') updated.autoFrom = item.status;
+      // A cover-marked 'na' is not a manual status: evidence removal returns it to todo, and the cover re-applies.
+      if ((item.status === 'na' && !isCoverMarked(item)) || item.status === 'in_progress') updated.autoFrom = item.status;
       else delete updated.autoFrom;
       updated.status = 'done';
       updated.completedAt = now;

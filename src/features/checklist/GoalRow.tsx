@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { ChecklistGoal } from "../../engines/checklist";
+import { DA_COVER_LABEL, isCoverMarked, type ChecklistGoal } from "../../engines/checklist";
 import type { ChecklistStatus, ItemState } from "../../types/checklist";
 import { Chip, Textarea, Toggle, labelClass } from "../../ui";
 import { CommandList, type FilledCommand } from "./CommandList";
@@ -63,6 +63,7 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
         {status === "done" && newCredLabels && newCredLabels.length > 0 && (
           <Chip>New credential since: {newCredLabels.join(", ")}</Chip>
         )}
+        {isCoverMarked(state) && <span className="shrink-0 text-xs text-muted">{DA_COVER_LABEL}</span>}
         <div role="group" aria-label={`Status: ${goal.title}`} className="inline-flex shrink-0 gap-0.5">
           {STATUSES.map((s) => (
             <Toggle key={s.value} on={status === s.value} onChange={() => onStatus(goal.id, s.value)}>

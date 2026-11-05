@@ -1,5 +1,6 @@
 import {
   applicableGoals,
+  daCoverChanges,
   derivedColumn,
   metasploitHostIds,
   removeEntryTicks,
@@ -97,7 +98,28 @@ export async function syncEntryTicks(engagementId: string, entry: LogEntry | nul
 /** Re-reads the store and syncs every host's board column (after a service change alters applicability). */
 export async function resyncBoards(engagementId: string): Promise<void> {
   await afterAutoTick(engagementId);
-  await syncBoards(engagementId, await loadTickContext(engagementId));
+  const ctx = await loadTickContext(engagementId);
+  await applyDaCover(engagementId, ctx);
+  await syncBoards(engagementId, ctx);
+}
+
+/**
+ * Domain admin on the DC covers privesc and loot on domain-joined hosts (`daCoverChanges`). Reads the attempts and the
+ * checklist from the store, writes only the changed items in one `checklistPut`, and returns the checklist after it.
+ * `byOwner` is the current checklist; read from the store when left out.
+ */
+export async function applyDaCover(engagementId: string, ctx: TickContext, byOwner?: Map<string, ChecklistState>): Promise<Map<string, ChecklistState>> {
+  const [attempts, before] = await Promise.all([
+    api.credAttemptsList(engagementId),
+    byOwner ?? api.checklistList(engagementId).then(byOwnerOf),
+  ]);
+  const changes = daCoverChanges({ engagement: ctx.engagement, hosts: ctx.hosts, servicesByHost: ctx.servicesByHost, attempts, byOwner: before });
+  if (changes.size === 0) return before;
+  const after = new Map(before);
+  for (const [ownerId, state] of changes) after.set(ownerId, state);
+  const { next } = changedItems(before, after);
+  if (next.length > 0) await write(engagementId, next);
+  return after;
 }
 
 /**
@@ -226,6 +248,8 @@ export async function afterEntrySaved(engagementId: string, entry: LogEntry | nu
   let after: Map<string, ChecklistState> | null = null;
   try {
     ({ after } = await writeEntryTicks(engagementId, entry, entryId, ctx));
+    // An intake saved with this entry may have recorded the admin result on the DC.
+    after = await applyDaCover(engagementId, ctx, after);
   } catch (e) {
     failure = new FollowUpError(CHECKLIST_FAILED, e);
   }

