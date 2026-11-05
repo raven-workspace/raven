@@ -76,6 +76,7 @@ export function UsernamesList({ eid, usernames, grants, hosts }: {
       {deleting && (
         <ConfirmDelete
           title={`Delete username ${usernameLabel(deleting)}?`}
+          detail="Its test results in the matrix and its access grants go with it."
           pending={um.remove.isPending}
           error={um.remove.error?.message}
           label="Delete username"

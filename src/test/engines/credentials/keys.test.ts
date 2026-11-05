@@ -9,6 +9,13 @@ describe("credKey", () => {
     expect(credKey(cred({ secret: "Pw" }))).not.toBe(credKey(cred({ secret: "pw" })));
   });
 
+  it("secrets keep spaces; only leading and trailing line breaks are ignored (F-R1)", () => {
+    expect(credKey(cred({ secret: "pass\r\n" }))).toBe(credKey(cred({ secret: "pass" })));
+    expect(credKey(cred({ secret: " pass " }))).not.toBe(credKey(cred({ secret: "pass" })));
+    expect(findDuplicateCredential([cred({ id: "a", secret: "pass" })], cred({ id: "b", secret: "\npass\n" }))?.id).toBe("a");
+    expect(findDuplicateCredential([cred({ id: "a", secret: "pass" })], cred({ id: "b", secret: " pass" }))).toBeUndefined();
+  });
+
   it("captured hashes key on account and kind, not on the capture text", () => {
     const t = (tail: string) => cred({ type: "hash", username: "svc", secret: `$krb5tgs$23$*svc$R$x/y*$${tail}` });
     expect(credKey(t("aa$bb"))).toBe(credKey(t("cc$dd")));

@@ -94,6 +94,8 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose }: {
         secret,
         scope,
         localHostId: scope === "local" ? localHostId : null,
+        // Not shown in the form: an edit keeps where it was captured.
+        sourceHostId: edit?.sourceHostId ?? null,
         source: source.trim() || null,
         notes: notes.trim() || null,
         ...(type === "hash" && hashType.trim() ? { hashType: hashType.trim() } : {}),

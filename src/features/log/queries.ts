@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { reportError } from "../../lib/lockSignal";
 import type { LogEntry, LogEntryInput } from "../../types/log";
+import { accessGrantsKey, credAttemptsKey } from "../credentials/queries";
 import { afterEntrySaved, deleteEntryWithTicks, FollowUpError } from "../checklist/ticks";
 
 export function useLog(engagementId: string) {
@@ -34,6 +35,9 @@ export function useLogMutations(engagementId: string) {
     void qc.invalidateQueries({ queryKey: ["findings", engagementId] });
     // An attempt that linked the entry loses the link.
     void qc.invalidateQueries({ queryKey: ["failedAttempts", engagementId] });
+    // Credential test results and access grants that cited it as proof lose the link.
+    void qc.invalidateQueries({ queryKey: credAttemptsKey(engagementId) });
+    void qc.invalidateQueries({ queryKey: accessGrantsKey(engagementId) });
   };
   return {
     update: useMutation({

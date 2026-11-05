@@ -7,6 +7,11 @@ import { HostDialog } from "./HostDialog";
 import { COLUMN_LABELS, OS_LABELS } from "./columns";
 import { useHostMutations } from "./queries";
 
+/** What a host delete takes with it (FK cascades) and what stays. */
+const HOST_DELETE_DETAIL =
+  "Its services, credential test results, access grants on it and finding links go with it. " +
+  "Log entries, credentials and findings stay but lose this host.";
+
 export function HostHeader({ host }: { host: Host }) {
   const navigate = useNavigate();
   const { remove } = useHostMutations(host.engagementId);
@@ -36,8 +41,13 @@ export function HostHeader({ host }: { host: Host }) {
           setDeleting(o);
           if (!o) setError(undefined);
         }}
-        title={`Delete ${host.name}? Its services go with it; log entries stay but lose this host.`}
-        description={error ? <span role="alert" className="text-warn">{error}</span> : undefined}
+        title={`Delete ${host.name}?`}
+        description={
+          <>
+            {HOST_DELETE_DETAIL}
+            {error && <> <span role="alert" className="text-warn">{error}</span></>}
+          </>
+        }
         footer={
           <>
             <Button onClick={() => setDeleting(false)}>Cancel</Button>

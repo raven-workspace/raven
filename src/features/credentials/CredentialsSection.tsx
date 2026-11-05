@@ -112,6 +112,7 @@ export function CredentialsSection() {
       {deleting && (
         <ConfirmDelete
           title={`Delete ${credLabel(deleting)}?`}
+          detail="Its test results in the matrix go with it."
           pending={remove.isPending}
           error={remove.error?.message}
           label="Delete credential"

@@ -11,14 +11,17 @@ export function usernameKey(u: Pick<Username, "engagementId" | "username" | "dom
  * Dedupe key. Hash secrets compare case-insensitively (hex), everything else is case-sensitive on the
  * secret. sourceHostId is intentionally NOT part of the key: the first capture wins.
  */
+/** Ruling F-R1: a secret keeps its spaces; only leading and trailing line breaks go. Agrees with Rust. */
+export const stripLineBreaks = (s: string): string => s.replace(/^[\r\n]+|[\r\n]+$/g, "");
+
 export function credKey(c: Pick<Credential, "type" | "username" | "secret" | "domain" | "hashType">): string {
   // A captured hash (Kerberoast, AS-REP, NetNTLM) differs per capture: the account and kind identify it.
   const kind = hashCaptureKind(c);
-  const secret = kind ? `capture:${kind}` : c.type === "hash" ? c.secret.trim().toLowerCase() : c.secret.trim();
+  const secret = kind ? `capture:${kind}` : c.type === "hash" ? stripLineBreaks(c.secret).toLowerCase() : stripLineBreaks(c.secret);
   return `${c.type}|${c.username.trim().toLowerCase()}|${secret}|${(c.domain ?? "").trim().toLowerCase()}`;
 }
 
-const hasSecret = (c: Pick<Credential, "secret">): boolean => c.secret.trim() !== "";
+const hasSecret = (c: Pick<Credential, "secret">): boolean => stripLineBreaks(c.secret) !== "";
 
 type Scoped = Pick<Credential, "engagementId" | "scope" | "localHostId">;
 

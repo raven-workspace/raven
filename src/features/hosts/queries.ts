@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { reportError } from "../../lib/lockSignal";
 import { hopsKey, tunnelsKey } from "../checklist/queries";
+import { accessGrantsKey, credAttemptsKey, credentialsKey } from "../credentials/queries";
+import { findingsKey } from "../findings/queries";
 import { resyncBoards } from "../checklist/ticks";
 import { dropPendingNotes } from "../notes/useNotesStore";
 import type { BoardColumn, HostInput } from "../../types/host";
@@ -60,6 +62,12 @@ export function useHostMutations(engagementId: string) {
         void qc.invalidateQueries({ queryKey: ["log", engagementId] });
         // Attempts on it keep their record but lose the host.
         void qc.invalidateQueries({ queryKey: ["failedAttempts", engagementId] });
+        // Its credential test results and access grants go; credentials lose it as local or source host;
+        // findings lose their link to it.
+        void qc.invalidateQueries({ queryKey: credAttemptsKey(engagementId) });
+        void qc.invalidateQueries({ queryKey: accessGrantsKey(engagementId) });
+        void qc.invalidateQueries({ queryKey: credentialsKey(engagementId) });
+        void qc.invalidateQueries({ queryKey: findingsKey(engagementId) });
         // Its note (thread counts) goes with it; unsaved text for it can never be saved.
         dropPendingNotes(engagementId, id);
         void qc.invalidateQueries({ queryKey: ["notes", engagementId] });

@@ -279,10 +279,61 @@ describe("credentials section", () => {
     mount({ creds: [cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "pw" })] });
     await user.click(await screen.findByRole("button", { name: "Delete CORP\\jsmith" }));
     const dlg = await screen.findByRole("dialog");
+    expect(dlg).toHaveAccessibleDescription("Its test results in the matrix go with it.");
     expect(m.credentialDelete).not.toHaveBeenCalled();
     await user.click(within(dlg).getByRole("button", { name: "Delete credential" }));
     await waitFor(() => expect(m.credentialDelete).toHaveBeenCalledWith("c1"));
     await waitFor(() => expect(screen.queryByText("CORP\\jsmith")).not.toBeInTheDocument());
+  });
+
+  it("username delete confirm says its results and grants go with it", async () => {
+    const user = userEvent.setup();
+    mount({ users: [{ id: "u1", engagementId: "e1", username: "alice", domain: "CORP", sourceHostId: null, source: null, createdAt: 1 }] });
+    await user.click(await screen.findByRole("button", { name: "Delete username CORP\\alice" }));
+    const dlg = await screen.findByRole("dialog", { name: "Delete username CORP\\alice?" });
+    expect(dlg).toHaveAccessibleDescription("Its test results in the matrix and its access grants go with it.");
+    await user.click(within(dlg).getByRole("button", { name: "Cancel" }));
+    expect(m.usernameDelete).not.toHaveBeenCalled();
+  });
+
+  it("editing only the notes keeps every field the form does not show", async () => {
+    const user = userEvent.setup();
+    // Same merge as Rust `update`: sourceHostId, crackedFrom and fromSecretId keep their value when absent.
+    m.credentialUpdate.mockImplementation(async (id, input) => {
+      const old = creds.find((c) => c.id === id)!;
+      const next: Credential = {
+        ...old, type: input.type, username: input.username ?? "", domain: input.domain ?? null, secret: input.secret ?? "",
+        hashType: input.hashType ?? null, scope: input.scope ?? "domain", localHostId: input.localHostId ?? null,
+        source: input.source ?? null, notes: input.notes ?? null,
+        sourceHostId: input.sourceHostId ?? old.sourceHostId,
+        crackedFrom: input.crackedFrom ?? old.crackedFrom, fromSecretId: input.fromSecretId ?? old.fromSecretId,
+      };
+      creds = creds.map((c) => (c.id === id ? next : c));
+      return next;
+    });
+    const hash = cred({
+      id: "c1", type: "hash", username: "svc", domain: "CORP", secret: "8846f7eaee8fb117ad06bdd830b7586c", hashType: "MD5",
+      scope: "local", localHostId: "h1", sourceHostId: "h1", source: "sam dump", crackStatus: "uncracked",
+    });
+    const pw = cred({
+      id: "c2", username: "bob", domain: "CORP", secret: "Winter2024!", sourceHostId: "h1", source: "lsass",
+      crackedFrom: "c3", fromSecretId: "c4",
+    });
+    // c3 is the hash bob's password was cracked from (folded away); c4 the ownerless secret it matched.
+    const parent = cred({ id: "c3", type: "hash", username: "bob", domain: "CORP", secret: "aa".repeat(16), crackStatus: "cracked" });
+    const secret = cred({ id: "c4", secret: "Winter2024!" });
+    mount({ creds: [hash, pw, parent, secret] });
+    for (const [label, before] of [["Edit CORP\\svc (hash)", hash], ["Edit CORP\\bob", pw]] as const) {
+      await user.click(await screen.findByRole("button", { name: label }));
+      const dlg = await screen.findByRole("dialog");
+      await user.type(within(dlg).getByLabelText("Notes"), "checked");
+      await user.click(within(dlg).getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      const after = creds.find((c) => c.id === before.id)!;
+      expect(after).toEqual({ ...before, notes: "checked" });
+    }
+    expect(m.credentialUpdate).toHaveBeenCalledWith("c2", expect.objectContaining({ sourceHostId: "h1", source: "lsass" }));
+    expect(m.credentialUpdate.mock.calls[1][1]).not.toHaveProperty("crackedFrom");
   });
 
   it("crack commands follow the stored hash type", async () => {

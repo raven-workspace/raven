@@ -123,6 +123,11 @@ fn invalid(field: &str, message: &str) -> AppError {
     AppError::Validation { field: field.into(), message: message.into() }
 }
 
+/// Ruling F-R1: a secret keeps its spaces as entered; only leading and trailing line breaks go.
+fn strip_line_breaks(s: &str) -> &str {
+    s.trim_matches(|c| c == '\r' || c == '\n')
+}
+
 fn blank_to_none(s: Option<&str>) -> Option<String> {
     s.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
 }
@@ -168,7 +173,7 @@ fn derive_hash_type(secret: &str) -> Option<String> {
 /// Identity of a credential inside one engagement: type, username, secret (hashes lower-cased),
 /// domain, and the local host for local-scope credentials.
 fn cred_key(c: &Credential) -> (String, String, String, String, String) {
-    let secret = c.secret.trim();
+    let secret = strip_line_breaks(&c.secret);
     let secret = if c.kind == "hash" { secret.to_lowercase() } else { secret.to_string() };
     (
         c.kind.clone(),
@@ -181,13 +186,13 @@ fn cred_key(c: &Credential) -> (String, String, String, String, String) {
 
 /// An existing credential (other than `except_id`) with the same key. Empty secrets never match.
 fn find_duplicate(conn: &Connection, probe: &Credential, except_id: &str) -> AppResult<Option<Credential>> {
-    if probe.secret.trim().is_empty() {
+    if strip_line_breaks(&probe.secret).is_empty() {
         return Ok(None);
     }
     let key = cred_key(probe);
     Ok(list(conn, &probe.engagement_id)?
         .into_iter()
-        .find(|c| c.id != except_id && !c.secret.trim().is_empty() && cred_key(c) == key))
+        .find(|c| c.id != except_id && !strip_line_breaks(&c.secret).is_empty() && cred_key(c) == key))
 }
 
 pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Credential>> {
@@ -253,7 +258,7 @@ fn build(conn: &Connection, engagement_id: &str, i: CredentialInput) -> AppResul
     if let Some(id) = &from_secret_id {
         check_cred_scope(conn, engagement_id, id)?;
     }
-    let secret = i.secret.trim().to_string();
+    let secret = strip_line_breaks(&i.secret).to_string();
     let hash_type = if i.kind == "hash" {
         blank_to_none(i.hash_type.as_deref()).or_else(|| derive_hash_type(&secret))
     } else {
@@ -318,7 +323,8 @@ pub fn create(conn: &Connection, engagement_id: &str, input: CredentialInput) ->
     get(conn, &c.id)
 }
 
-/// Full update. `crackStatus`, `crackedFrom` and `fromSecretId` keep their current values when absent.
+/// Full update. `sourceHostId`, `crackStatus`, `crackedFrom` and `fromSecretId` keep their current values
+/// when absent.
 pub fn update(conn: &Connection, id: &str, input: CredentialInput) -> AppResult<Credential> {
     let current = get(conn, id)?;
     let c = build(conn, &current.engagement_id, input)?;
@@ -336,6 +342,7 @@ pub fn update(conn: &Connection, id: &str, input: CredentialInput) -> AppResult<
     } else {
         None
     };
+    let source_host = c.source_host_id.clone().or(current.source_host_id.clone());
     let (cracked_from, from_secret) = (
         c.cracked_from.clone().or(current.cracked_from.clone()),
         c.from_secret_id.clone().or(current.from_secret_id.clone()),
@@ -345,7 +352,7 @@ pub fn update(conn: &Connection, id: &str, input: CredentialInput) -> AppResult<
          source_host_id=?9, source=?10, notes=?11, crack_status=?12, cracked_from=?13, from_secret_id=?14, updated_at=?15 \
          WHERE id=?1",
         params![
-            id, c.kind, c.username, c.domain, c.secret, c.hash_type, c.scope, c.local_host_id, c.source_host_id,
+            id, c.kind, c.username, c.domain, c.secret, c.hash_type, c.scope, c.local_host_id, source_host,
             c.source, c.notes,
             status,
             cracked_from, from_secret, system_now_ms()
@@ -380,8 +387,8 @@ pub fn crack(conn: &Connection, hash_id: &str, plaintext: &str) -> AppResult<Cre
     if hash.kind != "hash" {
         return Err(invalid("type", "only a hash can be cracked"));
     }
-    let plaintext = plaintext.trim();
-    if plaintext.is_empty() {
+    let plaintext = strip_line_breaks(plaintext);
+    if plaintext.trim().is_empty() {
         return Err(invalid("plaintext", "plaintext is required"));
     }
     let tx = conn.unchecked_transaction()?;
@@ -782,7 +789,7 @@ mod tests {
         let mut hi = cin("hash", "svc", &"ab".repeat(16));
         hi.domain = Some("corp".into());
         let hash = create(c, &e, hi).unwrap();
-        let pw = crack(c, &hash.id, " Summer2024! ").unwrap();
+        let pw = crack(c, &hash.id, "Summer2024!\r\n").unwrap();
         assert_eq!(pw.kind, "password");
         assert_eq!(pw.secret, "Summer2024!");
         assert_eq!((pw.username.as_str(), pw.domain.as_deref()), ("svc", Some("corp")));
@@ -806,6 +813,51 @@ mod tests {
         assert_eq!(get(c, &pw.id).unwrap().cracked_from, None);
         assert_eq!(set_crack_status(c, &pw.id, "uncrackable").unwrap().crack_status.as_deref(), Some("uncrackable"));
         assert_eq!(field(set_crack_status(c, &pw.id, "x")).0, "crackStatus");
+    }
+
+    #[test]
+    fn update_keeps_fields_the_form_does_not_send() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "a");
+        let (src, local) = (host(c, &e, "10.0.0.5"), host(c, &e, "10.0.0.6"));
+        let hash = create(c, &e, cin("hash", "svc", &"ab".repeat(16))).unwrap();
+        let parent = create(c, &e, cin("password", "svc", "Pw1!")).unwrap();
+        let mut i = cin("password", "svc", "Pw2!");
+        i.source_host_id = Some(src.clone());
+        i.source = Some("lsass".into());
+        i.cracked_from = Some(hash.id.clone());
+        i.from_secret_id = Some(parent.id.clone());
+        let made = create(c, &e, i).unwrap();
+        // an edit of the notes alone (no sourceHostId, crackedFrom or fromSecretId sent) keeps them
+        let mut edit = cin("password", "svc", "Pw2!");
+        edit.source = Some("lsass".into());
+        edit.notes = Some("n".into());
+        let u = update(c, &made.id, edit).unwrap();
+        assert_eq!(u.notes.as_deref(), Some("n"));
+        assert_eq!(u.source_host_id.as_deref(), Some(src.as_str()));
+        assert_eq!(u.source.as_deref(), Some("lsass"));
+        assert_eq!(u.cracked_from.as_deref(), Some(hash.id.as_str()));
+        assert_eq!(u.from_secret_id.as_deref(), Some(parent.id.as_str()));
+        // a sent sourceHostId replaces it
+        let mut moved = cin("password", "svc", "Pw2!");
+        moved.source_host_id = Some(local.clone());
+        assert_eq!(update(c, &made.id, moved).unwrap().source_host_id.as_deref(), Some(local.as_str()));
+    }
+
+    #[test]
+    fn secret_keeps_spaces_and_loses_line_breaks() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "a");
+        assert_eq!(create(c, &e, cin("password", "a", " pa ss ")).unwrap().secret, " pa ss ");
+        let nl = create(c, &e, cin("password", "b", "pass\n")).unwrap();
+        assert_eq!(nl.secret, "pass");
+        // dedupe compares the stored form: "pass\r\n" is "pass", " pass" is not
+        assert_eq!(create(c, &e, cin("password", "b", "\r\npass\r\n")).unwrap().id, nl.id);
+        assert_ne!(create(c, &e, cin("password", "b", " pass")).unwrap().id, nl.id);
+        let hash = create(c, &e, cin("hash", "svc", &"ab".repeat(16))).unwrap();
+        assert_eq!(crack(c, &hash.id, " Sum mer \n").unwrap().secret, " Sum mer ");
     }
 
     #[test]

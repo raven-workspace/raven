@@ -145,6 +145,20 @@ describe("host view", () => {
     await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
+  it("host delete confirm says what goes with it and what stays", async () => {
+    const user = userEvent.setup();
+    mount();
+    const header = within(await screen.findByRole("region", { name: "Host" }));
+    await user.click(header.getByRole("button", { name: "Delete" }));
+    const confirm = await screen.findByRole("dialog", { name: "Delete dc01?" });
+    expect(confirm).toHaveAccessibleDescription(
+      "Its services, credential test results, access grants on it and finding links go with it. " +
+        "Log entries, credentials and findings stay but lose this host.",
+    );
+    await user.click(within(confirm).getByRole("button", { name: "Cancel" }));
+    expect(m.hostDelete).not.toHaveBeenCalled();
+  });
+
   it("a service that is not open shows its state (M1)", async () => {
     m.servicesList.mockResolvedValue([svc("s1", 80, { nmapService: "http" }), svc("s4", 161, { protocol: "udp", state: "open|filtered", nmapService: "snmp" })]);
     mount();
