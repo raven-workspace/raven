@@ -200,6 +200,7 @@ beforeEach(() => {
   m.servicesListEngagement.mockResolvedValue([smb("s1", "h1"), smb("s2", "h2")]);
   m.servicesUpsertScan.mockResolvedValue([]);
   m.checklistList.mockResolvedValue([]);
+  m.checklistApplyFacts.mockResolvedValue([]);
   m.checklistPut.mockResolvedValue([]);
   setupBackend();
 });

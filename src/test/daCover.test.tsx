@@ -146,6 +146,7 @@ describe("domain admin cover", () => {
       expect(wsCover.map((g) => g.goalId)).toContain("h-pe-win-privs");
       expect(wsCover.map((g) => g.goalId)).not.toContain("h-pe-proof");
       expect(store.filter((i) => i.ownerId === "ws" && i.goalId !== "h-enum-os").every((i) => i.status === "na" && i.auto)).toBe(true);
+      expect(store.find((i) => i.ownerId === "ws" && i.goalId === "h-enum-os")).toMatchObject({ status: "done", auto: true });
     });
   });
 

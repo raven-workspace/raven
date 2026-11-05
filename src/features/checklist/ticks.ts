@@ -258,7 +258,8 @@ export async function afterEntrySaved(engagementId: string, entry: LogEntry | nu
   let after: Map<string, ChecklistState> | null = null;
   try {
     ({ after } = await writeEntryTicks(engagementId, entry, entryId, ctx));
-    // An intake saved with this entry may have recorded the admin result on the DC.
+    // A scan saved with this entry may have set services and OS; then an intake may have recorded the admin result.
+    after = await applyFacts(engagementId, ctx, after);
     after = await applyDaCover(engagementId, ctx, after);
   } catch (e) {
     failure = new FollowUpError(CHECKLIST_FAILED, e);

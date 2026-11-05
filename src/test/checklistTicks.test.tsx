@@ -540,6 +540,39 @@ describe("ticks.ts", () => {
     expect(stored("h1", "h-loot-hashes")).toMatchObject({ status: "na", auto: true });
   });
 
+  it("a scan capture ticks OS identified and every port identified straight after saving", async () => {
+    const user = userEvent.setup();
+    let services: Service[] = [];
+    m.servicesListEngagement.mockImplementation(async () => services);
+    m.servicesUpsertScan.mockImplementation(async (hostId, ports) => {
+      services = ports.map((p, i) => ({
+        id: `s${i}`, hostId, port: p.port, protocol: p.protocol, state: p.state, nmapService: p.service, nmapVersion: p.version || null,
+        confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1,
+      }));
+      return services;
+    });
+    m.hostUpdate.mockImplementation(async (id, input) => {
+      hosts = hosts.map((h) => (h.id === id ? { ...h, os: input.os ?? null } : h));
+      return hosts.find((h) => h.id === id)!;
+    });
+    mount();
+    await openCapture(user);
+    await user.paste(
+      [
+        "kali@kali:~$ nmap -sCV -p 22,80 10.10.10.5",
+        "Nmap scan report for 10.10.10.5",
+        "PORT   STATE SERVICE VERSION",
+        "22/tcp open  ssh     OpenSSH 8.9",
+        "80/tcp open  http    Apache httpd 2.4.52",
+        "Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel",
+      ].join("\n"),
+    );
+    await saveCapture(user);
+    await vi.waitFor(() => expect(stored("h1", "h-enum-os")).toMatchObject({ status: "done", auto: true }));
+    expect(stored("h1", "h-enum-identified")).toMatchObject({ status: "done", auto: true });
+    expect(m.hostUpdate).toHaveBeenCalled();
+  });
+
   it("setting the OS ticks OS identified, and clearing it reverts", async () => {
     hosts = hosts.map((h) => (h.id === "h1" ? { ...h, os: "linux" as const } : h));
     await resyncBoards("e1");
