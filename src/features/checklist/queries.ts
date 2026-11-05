@@ -22,6 +22,7 @@ export function itemToState(it: ChecklistItem): ItemState {
   if (it.completedAt != null) s.completedAt = it.completedAt;
   if (it.auto) s.auto = true;
   if (it.autoFrom) s.autoFrom = it.autoFrom;
+  if (it.statusManual) s.statusManual = true;
   if (it.evidence.length > 0) s.evidence = it.evidence;
   return s;
 }
@@ -36,6 +37,7 @@ export function stateToInput(ownerId: string, goalId: string, s: ItemState): Che
     completedAt: s.completedAt ?? null,
     auto: s.auto ?? false,
     autoFrom: s.autoFrom ?? null,
+    statusManual: s.statusManual ?? false,
     evidence: s.evidence ?? [],
   };
 }
@@ -141,7 +143,7 @@ export function useChecklistMutations(engagementId: string) {
     setStatus: useMutation({
       mutationFn: async (v: { ownerId: string; goalId: string; status: ChecklistStatus }) => {
         const prev = await current(v.ownerId, v.goalId);
-        const next: ItemState = { ...prev, status: v.status, auto: false };
+        const next: ItemState = { ...prev, status: v.status, auto: false, statusManual: true };
         delete next.autoFrom;
         if (v.status === "done") next.completedAt = Date.now();
         else delete next.completedAt;

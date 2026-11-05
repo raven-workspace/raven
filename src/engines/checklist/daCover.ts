@@ -71,7 +71,7 @@ export function daCoverChanges(input: {
     }
     for (const goalId of wanted ?? []) {
       const item = next[goalId];
-      if (item && (item.status !== 'todo' || item.auto)) continue;
+      if (item && (item.status !== 'todo' || item.auto || item.statusManual)) continue;
       next = { ...next, [goalId]: { ...(item ?? {}), status: 'na', auto: true } };
     }
     if (next !== state) out.set(ownerId, next);

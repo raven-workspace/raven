@@ -128,6 +128,8 @@ pub struct PlanChecklistItem {
     pub completed_at: Option<i64>,
     pub auto: bool,
     pub auto_from: Option<String>,
+    #[serde(default)]
+    pub status_manual: bool,
     pub evidence: Vec<Evidence>,
 }
 
@@ -698,9 +700,9 @@ impl Ctx<'_> {
         let evidence = serde_json::to_string(&i.evidence).map_err(|err| AppError::Db(err.to_string()))?;
         self.tx.execute(
             "INSERT INTO checklist_items \
-               (owner_id, engagement_id, goal_id, status, notes, completed_at, auto, auto_from, evidence, updated_at) \
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
-            params![owner, eng, i.goal_id, i.status, i.notes, i.completed_at, i.auto, i.auto_from, evidence, self.now],
+               (owner_id, engagement_id, goal_id, status, notes, completed_at, auto, auto_from, evidence, updated_at, status_manual) \
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            params![owner, eng, i.goal_id, i.status, i.notes, i.completed_at, i.auto, i.auto_from, evidence, self.now, i.status_manual],
         )?;
         Ok(true)
     }

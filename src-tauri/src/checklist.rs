@@ -26,6 +26,7 @@ pub struct ChecklistItem {
     pub completed_at: Option<i64>,
     pub auto: bool,
     pub auto_from: Option<String>,
+    pub status_manual: bool,
     pub evidence: Vec<Evidence>,
     pub updated_at: i64,
 }
@@ -44,6 +45,9 @@ pub struct ChecklistItemInput {
     pub auto: bool,
     #[serde(default)]
     pub auto_from: Option<String>,
+    /// Left out, the stored value stays (auto-tick writes never clear a hand-set status).
+    #[serde(default)]
+    pub status_manual: Option<bool>,
     #[serde(default)]
     pub evidence: Vec<Evidence>,
 }
@@ -54,7 +58,7 @@ fn invalid(field: &str, message: &str) -> AppError {
 
 pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<ChecklistItem>> {
     let mut st = conn.prepare(
-        "SELECT owner_id, goal_id, status, notes, completed_at, auto, auto_from, evidence, updated_at \
+        "SELECT owner_id, goal_id, status, notes, completed_at, auto, auto_from, evidence, updated_at, status_manual \
          FROM checklist_items WHERE engagement_id = ?1 ORDER BY owner_id, goal_id",
     )?;
     let rows = st.query_map([engagement_id], |r| {
@@ -71,6 +75,7 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<ChecklistIt
             auto_from: r.get(6)?,
             evidence,
             updated_at: r.get(8)?,
+            status_manual: r.get(9)?,
         })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -111,15 +116,15 @@ pub fn put(conn: &Connection, engagement_id: &str, items: &[ChecklistItemInput])
         let evidence = serde_json::to_string(&it.evidence).map_err(|e| AppError::Db(e.to_string()))?;
         tx.execute(
             "INSERT INTO checklist_items \
-               (owner_id, engagement_id, goal_id, status, notes, completed_at, auto, auto_from, evidence, updated_at) \
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) \
+               (owner_id, engagement_id, goal_id, status, notes, completed_at, auto, auto_from, evidence, updated_at, status_manual) \
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,COALESCE(?11, 0)) \
              ON CONFLICT(owner_id, goal_id) DO UPDATE SET \
                status=excluded.status, notes=excluded.notes, completed_at=excluded.completed_at, \
                auto=excluded.auto, auto_from=excluded.auto_from, evidence=excluded.evidence, \
-               updated_at=excluded.updated_at",
+               updated_at=excluded.updated_at, status_manual=COALESCE(?11, status_manual)",
             params![
                 it.owner_id, engagement_id, it.goal_id, it.status, it.notes, it.completed_at,
-                it.auto, it.auto_from, evidence, now
+                it.auto, it.auto_from, evidence, now, it.status_manual
             ],
         )?;
     }
@@ -176,6 +181,7 @@ mod tests {
             completed_at: None,
             auto: false,
             auto_from: None,
+            status_manual: None,
             evidence: vec![],
         }
     }
@@ -206,6 +212,28 @@ mod tests {
         assert_eq!(got.auto_from.as_deref(), Some("na"));
         assert_eq!(got.evidence, a.evidence);
         assert!(got.updated_at > 0);
+    }
+
+    #[test]
+    fn status_manual_round_trips_and_an_omitted_value_keeps_it() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let h = host(c, &e, "10.0.0.5");
+        let mut a = item(&h, "g", "todo");
+        a.status_manual = Some(true);
+        let out = put(c, &e, &[a]).unwrap();
+        assert!(out[0].status_manual);
+        // An auto-tick style write leaves it out: the flag stays.
+        let mut tick = item(&h, "g", "done");
+        tick.auto = true;
+        let out = put(c, &e, &[tick]).unwrap();
+        assert_eq!(out[0].status, "done");
+        assert!(out[0].status_manual);
+        let mut clear = item(&h, "g", "todo");
+        clear.status_manual = Some(false);
+        assert!(!put(c, &e, &[clear]).unwrap()[0].status_manual);
+        assert!(!put(c, &e, &[item(&e, "other", "todo")]).unwrap().iter().any(|i| i.goal_id == "other" && i.status_manual));
     }
 
     #[test]

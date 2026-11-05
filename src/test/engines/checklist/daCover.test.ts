@@ -94,6 +94,18 @@ describe('domain admin cover', () => {
     expect(out['h-loot-hashes']).toEqual({ status: 'na', auto: true, notes: 'check SAM' });
   });
 
+  it('a hand-set To do on a covered goal is never re-covered', () => {
+    const state: ChecklistState = {
+      'h-pe-win-privs': { status: 'todo', auto: false, statusManual: true },
+      'h-pe-win-groups': { status: 'todo' },
+    };
+    const out = run(hosts, [attempt('DC', 'admin')], new Map([['WS01', state]])).get('WS01')!;
+    expect(out['h-pe-win-privs']).toEqual({ status: 'todo', auto: false, statusManual: true });
+    expect(out['h-pe-win-groups']).toEqual({ status: 'na', auto: true });
+    // Nothing else to change once the rest is covered.
+    expect(run(hosts, [attempt('DC', 'admin')], new Map([['WS01', out]])).has('WS01')).toBe(false);
+  });
+
   it('revert touches only cover-marked items', () => {
     const covered = run(hosts, [attempt('DC', 'admin')], new Map([['WS01', manual]])).get('WS01')!;
     const out = run(hosts, [], new Map([['WS01', covered]])).get('WS01')!;

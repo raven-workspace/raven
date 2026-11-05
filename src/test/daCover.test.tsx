@@ -118,9 +118,13 @@ describe("domain admin cover", () => {
     const group = await screen.findByRole("group", { name: "Status: Check token privileges for potato attacks" });
     const row = group.closest("li") as HTMLElement;
     expect(within(row).getByText("Covered by domain admin")).toBeInTheDocument();
-    await user.click(within(group).getByRole("button", { name: "Doing" }));
+    await user.click(within(group).getByRole("button", { name: "To do" }));
     await waitFor(() => expect(within(row).queryByText("Covered by domain admin")).not.toBeInTheDocument());
-    const sent = m.checklistPut.mock.calls.flatMap((c) => c[1]).find((i) => i.goalId === "h-pe-win-privs" && i.status === "in_progress");
-    expect(sent).toMatchObject({ ownerId: "ws", status: "in_progress", auto: false });
+    // Let the resync that follows the put run, then check it never covered the item again.
+    await waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalled());
+    const puts = m.checklistPut.mock.calls.flatMap((c) => c[1]).filter((i) => i.ownerId === "ws" && i.goalId === "h-pe-win-privs");
+    expect(puts[0]).toMatchObject({ ownerId: "ws", status: "todo", auto: false, statusManual: true });
+    expect(puts.slice(1).filter((i) => i.status === "na")).toEqual([]);
+    expect(store.find((i) => i.ownerId === "ws" && i.goalId === "h-pe-win-privs")).toMatchObject({ status: "todo", statusManual: true });
   });
 });

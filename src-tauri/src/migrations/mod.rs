@@ -22,6 +22,7 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
     (3, include_str!("../../migrations/0003_checklist_notes.sql")),
     (4, include_str!("../../migrations/0004_credentials_findings.sql")),
     (5, include_str!("../../migrations/0005_ad_set.sql")),
+    (6, include_str!("../../migrations/0006_checklist_status_manual.sql")),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -247,14 +248,14 @@ mod tests {
         .unwrap();
         let mut hook_calls = 0;
         let out = migrate(&mut c, &mut |f, t| {
-            assert_eq!((f, t), (1, 5));
+            assert_eq!((f, t), (1, 6));
             hook_calls += 1;
             Ok(())
         })
         .unwrap();
         assert_eq!(hook_calls, 1);
-        assert_eq!(out, MigrationOutcome { from: 1, to: 5 });
-        assert_eq!(version(&c), 5);
+        assert_eq!(out, MigrationOutcome { from: 1, to: 6 });
+        assert_eq!(version(&c), 6);
         for t in ["hosts", "services", "log_entries", "log_entry_hosts", "attachments"] {
             let n: i64 = c
                 .query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1", [t], |r| r.get(0))
@@ -333,7 +334,7 @@ mod tests {
         )
         .unwrap();
         let mut hook_calls = 0;
-        let out = migrate(&mut c, &mut |f, t| {
+        let out = migrate_with(&mut c, &MIGRATIONS[..5], &mut |f, t| {
             assert_eq!((f, t), (4, 5));
             hook_calls += 1;
             Ok(())
@@ -348,6 +349,32 @@ mod tests {
         assert_eq!(name, "dc01");
         c.execute("UPDATE hosts SET ad_set = 1 WHERE id='h1'", []).unwrap();
         assert!(c.execute("UPDATE hosts SET ad_set = 2 WHERE id='h1'", []).is_err());
+    }
+
+    #[test]
+    fn migration_0006_from_v5_defaults_status_manual_to_zero() {
+        let (_d, _p, mut c) = v1_with_row();
+        c.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        migrate_with(&mut c, &MIGRATIONS[..5], &mut |_, _| Ok(())).unwrap();
+        c.execute(
+            "INSERT INTO engagements (id,name,kind,scope_cidrs,status,created_at,updated_at) VALUES ('e1','x','lab','[]','active',1,1)",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO checklist_items (owner_id,engagement_id,goal_id,status,updated_at) VALUES ('e1','e1','g','na',1)",
+            [],
+        )
+        .unwrap();
+        let out = migrate(&mut c, &mut |f, t| {
+            assert_eq!((f, t), (5, 6));
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(out, MigrationOutcome { from: 5, to: 6 });
+        let m: i64 = c.query_row("SELECT status_manual FROM checklist_items WHERE goal_id='g'", [], |r| r.get(0)).unwrap();
+        assert_eq!(m, 0);
+        assert!(c.execute("UPDATE checklist_items SET status_manual = 2", []).is_err());
     }
 
     #[test]
