@@ -86,8 +86,8 @@ describe('applicableGoals', () => {
   it('linux web host gets the web steps in vulnerability-detection and a web-shell upgrade', () => {
     const r = goalsFor(host({ os: 'linux' }), onPorts(22, 80));
     expect(ids(r, 'vulnerability-detection')).toEqual([
-      'h-enum-exploits', 'h-vuln-websearch', 'h-vuln-version-gate', 'h-foot-web-auth', 'h-vuln-nse', 'h-foot-web-vulns', 'h-foot-brute',
-      'h-vuln-spray', 'h-vuln-crack', 'h-vuln-rank',
+      'h-enum-exploits', 'h-vuln-websearch', 'h-vuln-version-gate', 'h-foot-web-auth', 'h-vuln-nse', 'h-foot-web-vulns',
+      'h-vuln-spray', 'h-vuln-crack', 'h-foot-brute', 'h-vuln-rank',
     ]);
     expect(ids(r, 'initial-foothold')).toContain('h-foot-webshell');
     expect(ids(r, 'initial-foothold')).not.toContain('h-foot-service');
@@ -110,6 +110,12 @@ describe('applicableGoals', () => {
     const joined = ids(goalsFor(host({ os: 'windows' }), onPorts(88, 389)), 'information-gathering');
     expect(joined).toContain('h-enum-ad-users');
     expect(ids(goalsFor(host({ os: 'windows' }), onPorts(445)), 'information-gathering')).not.toContain('h-enum-ad-users');
+  });
+
+  it('an unscanned host shows no vulnerability-detection steps, and reporting lists notes before cleanup', () => {
+    const r = goalsFor(host(), [], { kind: 'client' });
+    expect(ids(r, 'vulnerability-detection')).toEqual(['h-vuln-crack']);
+    expect(ids(r, 'reporting')).toEqual(['h-close-notes', 'h-close-cleanup']);
   });
 
   it('exam-only Metasploit step appears only in exam-sim', () => {

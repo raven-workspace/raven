@@ -97,16 +97,16 @@ const informationGathering: ChecklistGoal[] = [
 
 const vulnerabilityDetection: ChecklistGoal[] = [
   g(VD, 'Every product and version', 'h-enum-exploits', 'searchsploit every product and version', 'Decides whether to go straight to an exploit or keep enumerating.', SCANNED),
-  g(VD, 'Every product and version', 'h-vuln-websearch', 'Web search for exploits and PoCs', 'Searchsploit misses recent CVEs and GitHub proofs of concept.'),
-  g(VD, 'Every product and version', 'h-vuln-version-gate', "Check the exploit's version gate against the real version", 'An exploit that wrongly treats your version as patched is a missed way in.'),
+  g(VD, 'Every product and version', 'h-vuln-websearch', 'Web search for exploits and PoCs', 'Searchsploit misses recent CVEs and GitHub proofs of concept.', SCANNED),
+  g(VD, 'Every product and version', 'h-vuln-version-gate', "Check the exploit's version gate against the real version", 'An exploit that wrongly treats your version as patched is a missed way in.', SCANNED),
   g(VD, 'Every product and version', 'h-foot-web-auth', 'Default credentials for the product and its logins', 'Default creds on a panel are the fastest foothold.', WEB),
   g(VD, 'Every product and version', 'h-vuln-nse', 'Targeted NSE vuln scripts', 'A script aimed at one service finds what the default scan does not run.', SCANNED),
   g(VD, 'Web apps', 'h-foot-web-vulns', 'Test the web app for injection and upload flaws', 'Decides whether the web app yields code execution.', WEB),
-  g(VD, 'Web apps', 'h-foot-brute', 'Guess or spray logins on exposed services (last resort)', 'Last resort: slow, noisy and can lock accounts; only with known usernames and a short list.', BRUTE),
   g(VD, 'Credentials as a vulnerability', 'h-vuln-spray', 'Spray usernames and found passwords across every login surface', 'A credential from one service is the commonest way into another.', CRED_LOGIN),
   g(VD, 'Credentials as a vulnerability', 'h-vuln-crack', 'Crack the hashes you hold', 'An uncracked hash is a credential you have not used yet.'),
-  g(VD, 'Rank', 'h-vuln-rank', 'Order the candidates', 'Unauthenticated RCE first, then authenticated RCE, file read/write, and info leaks last.'),
-  g(VD, 'Rank', 'h-vuln-msf', 'Exam: decide whether a candidate needs Metasploit', 'Metasploit is allowed on one machine in the exam, so spend it on purpose.', { kinds: ['exam-sim'] }),
+  g(VD, 'Credentials as a vulnerability', 'h-foot-brute', 'Guess or spray logins on exposed services (last resort)', 'Last resort: slow, noisy and can lock accounts; only with known usernames and a short list.', BRUTE),
+  g(VD, 'Rank', 'h-vuln-rank', 'Order the candidates', 'Unauthenticated RCE first, then authenticated RCE, file read/write, and info leaks last.', SCANNED),
+  g(VD, 'Rank', 'h-vuln-msf', 'Exam: decide whether a candidate needs Metasploit', 'Metasploit is allowed on one machine in the exam, so spend it on purpose.', { ...SCANNED, kinds: ['exam-sim'] }),
 ];
 
 const initialFoothold: ChecklistGoal[] = [
@@ -146,7 +146,7 @@ const privilegeEscalation: ChecklistGoal[] = [
   g(PE, 'Linux', 'h-pe-lin-kernel', 'Check for a kernel exploit', 'Last resort: noisy and can crash the box.', LIN),
   g(PE, 'Windows', 'h-pe-win-manual', 'Manual enumeration first', 'A hand-run list shows what a script buries and what it skips.', WIN),
   g(PE, 'Windows', 'h-pe-win-privs', 'Check token privileges for potato attacks', 'SeImpersonate on a service account is an instant SYSTEM.', WIN),
-  g(PE, 'Windows', 'h-pe-win-groups', 'Already an admin but filtered?', 'Backup Operators, DnsAdmins and friends are a direct path to SYSTEM.', WIN),
+  g(PE, 'Windows', 'h-pe-win-groups', 'Check privileged groups, or an admin but filtered (whoami /groups)', 'Backup Operators, DnsAdmins and friends are a direct path to SYSTEM.', WIN),
   g(PE, 'Windows', 'h-pe-win-stored', 'Hunt stored credentials', 'cmdkey, autologon, unattend files and PS history hand out passwords.', WIN),
   g(PE, 'Windows', 'h-pe-win-saved', 'Saved credentials (cmdkey /list)', 'A saved credential runs as its owner with runas, no password needed.', WIN),
   g(PE, 'Windows', 'h-pe-win-services', 'Check services and paths you can abuse', 'Unquoted paths and weak service ACLs run your code as SYSTEM.', WIN),
@@ -178,8 +178,8 @@ const postExploitation: ChecklistGoal[] = [
 ];
 
 const reporting: ChecklistGoal[] = [
-  g(RP, undefined, 'h-close-cleanup', 'Remove the tools you uploaded', 'On a real engagement you leave nothing behind.', { kinds: ['client'] }),
   g(RP, undefined, 'h-close-notes', 'Write the host notes', 'Notes written now save the report from guesswork.'),
+  g(RP, undefined, 'h-close-cleanup', 'Remove the tools you uploaded', 'On a real engagement you leave nothing behind.', { kinds: ['client'] }),
 ];
 
 const lateralMovement: ChecklistGoal[] = [

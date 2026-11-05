@@ -91,7 +91,7 @@ describe("Now panel", () => {
     expect(panel.getAllByText(/10\.10\.10\.5/).length).toBeGreaterThan(0);
   });
 
-  it("marking the last open enumerate goal done moves Now to Vulnerability detection and calls hostSyncBoard with foothold", async () => {
+  it("marking the last open enumerate goal done moves Now to Vulnerability detection and calls hostSyncBoard with vulnerability-detection", async () => {
     const user = userEvent.setup();
     const ids = enumerateIds([SMB]);
     const last = ids[ids.length - 1];

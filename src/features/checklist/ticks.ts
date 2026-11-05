@@ -125,7 +125,7 @@ export async function applyDaCover(engagementId: string, ctx: TickContext, byOwn
  *
  * While the engagement has no checklist rows at all (an engagement from before step 3 whose log has not been ticked
  * yet), a hand-placed host with no derived column is left alone: its first derived column must come from its real
- * checklist, so the store's seed (T6-R2) records that one rather than an empty-checklist "enumerate".
+ * checklist, so the store's seed (T6-R2) records that one rather than an empty-checklist "information-gathering".
  */
 export async function syncBoards(engagementId: string, ctx: TickContext, byOwner?: Map<string, ChecklistState>): Promise<void> {
   const states = byOwner ?? byOwnerOf(await api.checklistList(engagementId));

@@ -75,10 +75,8 @@ describe('domain admin cover', () => {
     const ws = run(hosts, [attempt('DC', 'admin')]).get('WS01')!;
     expect(ws['h-post-redump']).toEqual({ status: 'na', auto: true });
     expect(ws['h-post-bloodhound']).toEqual({ status: 'na', auto: true });
-    for (const id of ['h-pe-proof', 'h-orient-network', 'h-post-neighbours', 'h-loot-record']) {
-      if (id === 'h-loot-record') expect(ws[id]).toEqual({ status: 'na', auto: true });
-      else expect(ws[id], id).toBeUndefined();
-    }
+    expect(ws['h-loot-record']).toEqual({ status: 'na', auto: true });
+    for (const id of ['h-pe-proof', 'h-orient-network', 'h-post-neighbours']) expect(ws[id], id).toBeUndefined();
   });
 
   it('Linux hosts are not covered', () => {
