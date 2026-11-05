@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { isFreeKey, useKeydown } from "../../lib/keys";
 import { EmptyState } from "../../ui";
 import { NowPanel } from "../checklist/NowPanel";
 import { HostChecklist } from "../checklist/HostChecklist";
@@ -9,6 +10,8 @@ import { useLog } from "../log/queries";
 import { LogEntryRow } from "../log/LogEntryRow";
 import { OrderButton } from "../log/OrderButton";
 import { byOrder, usePersistedOrder } from "../log/usePersistedOrder";
+import { useNotesStore } from "../notes/useNotesStore";
+import { StuckView } from "../stuck/StuckView";
 import { HostHeader } from "./HostHeader";
 import { ServicesColumn } from "./ServicesColumn";
 import { useHosts } from "./queries";
@@ -28,6 +31,18 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   const [order, setOrder] = usePersistedOrder("raven.story.order", "oldest");
   const [openEntry, setOpenEntry] = useState<string>();
   const [focusGoal, setFocusGoal] = useState<{ id: string; n: number }>();
+  const [stuckOpen, setStuckOpen] = useState(false);
+  // The stuck view and the notes panel share the right edge: opening one closes the other.
+  useEffect(() => useNotesStore.subscribe((s) => { if (s.open) setStuckOpen(false); }), []);
+  const toggleStuck = () => {
+    if (!stuckOpen) useNotesStore.getState().close();
+    setStuckOpen(!stuckOpen);
+  };
+  useKeydown((e) => {
+    if (!isFreeKey(e) || (e.key !== "h" && e.key !== "H")) return;
+    e.preventDefault();
+    toggleStuck();
+  });
   const openInStory = (id: string) => {
     setOpenEntry(id);
     setTab("story");
@@ -49,7 +64,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
-      <HostHeader host={host} />
+      <HostHeader host={host} onStuck={toggleStuck} />
       <div className="grid min-h-0 flex-1 grid-cols-[300px_1fr] gap-6">
         <div className="flex min-h-0 flex-col gap-6 overflow-y-auto pr-1">
           <ServicesColumn engagementId={engagementId} hostId={hostId} entries={entries} />
@@ -111,6 +126,17 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
           </div>
         </div>
       </div>
+      <StuckView
+        engagementId={engagementId}
+        host={host}
+        open={stuckOpen}
+        onClose={() => setStuckOpen(false)}
+        onOpenGoal={(id) => {
+          setTab("checklist");
+          setFocusGoal((f) => ({ id, n: (f?.n ?? 0) + 1 }));
+          setStuckOpen(false);
+        }}
+      />
     </div>
   );
 }

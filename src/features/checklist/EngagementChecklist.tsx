@@ -15,6 +15,7 @@ import { api } from "../../lib/api";
 import type { Host } from "../../types/host";
 import { Button } from "../../ui";
 import { CleanupPanel } from "../cleanup/CleanupPanel";
+import { EngagementStuckCheck } from "../stuck/StuckView";
 import { useHosts } from "../hosts/queries";
 import { sectionPath } from "../engagements/sections";
 import { useCredAttempts, useCredentials } from "../credentials/queries";
@@ -114,6 +115,8 @@ export function EngagementChecklist() {
 
   return (
     <section aria-label="Engagement checklist" className="flex flex-col gap-5">
+      <EngagementStuckCheck engagementId={id} />
+
       <div className="flex items-center gap-3">
         <Button disabled={tick.ticking} onClick={() => void runTick()}>Tick from log</Button>
         <p role="status" className="m-0 text-xs text-fg-2">{tick.message}</p>
