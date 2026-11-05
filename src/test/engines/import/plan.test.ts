@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildImportPlan, splitAtBytes } from "../../../engines/import/plan";
+import { buildImportPlan, splitAtBytes, validBase64 } from "../../../engines/import/plan";
 import { listImportable } from "../../../engines/import/list";
 import type { OldBackup, OldMachine } from "../../../engines/import/types";
 import { commandOutput, image, lab, labBox, logEntry, PNG_B64, screenshot, standalone } from "./fixtures";
@@ -1109,6 +1109,45 @@ describe("T6 fixes: every record fits the app's own rules", () => {
     );
     expect(p.logEntries).toEqual([]);
     expect(p.skipped.imageTooLarge).toBe(1);
+  });
+
+  it("image data that is not valid standard base64 is skipped as badImage; the rest of the plan is intact", () => {
+    const bad = ["iVBORw0K@@@=", "iVBORw0KGgo", "iVBORw0KGg=o", "iVBORw0KGg===", "iVBORw0KGgo-_A="];
+    const p = plan(
+      bk([standalone({
+        id: "custom-solo", ip: "10.10.11.9", quickNotes: "kept",
+        screenshots: [...bad.map((_, i) => screenshot(`bad${i}`, `img-bad${i}`)), screenshot("ok", "img-ok")],
+      })], { indexedDb: { images: [...bad.map((data, i) => image(`img-bad${i}`, { data })), image("img-ok")] } }),
+      ["custom-solo"],
+    );
+    expect(p.skipped.badImage).toBe(bad.length);
+    expect(p.logEntries.map((e) => e.id)).toEqual(["custom-solo:shot:ok"]);
+    expect(p.hosts).toHaveLength(1);
+    expect(noteOf(p, "custom-solo")!.body).toBe("kept");
+  });
+
+  it("a note past 1 MiB with only whitespace after the cut gets no overflow entry", () => {
+    const quick = "a".repeat(1024 * 1024) + "  \n \t ";
+    const p = plan(bk([lab(), labBox({ id: "b1", ip: "10.10.11.5", quickNotes: quick })]), ["custom-lab-1"]);
+    expect(bytes(noteOf(p, "b1")!.body)).toBeLessThanOrEqual(1024 * 1024);
+    expect(p.logEntries.find((e) => e.id === "b1:notes-overflow")).toBeUndefined();
+    expect(p.skipped.noteOverflowToLog).toBeUndefined();
+  });
+
+  it("finding text past 1 MiB with only whitespace after the cut gets no overflow entry", () => {
+    const remediation = "r".repeat(1024 * 1024) + " \n ";
+    const p = plan(
+      bk([lab(), labBox({ id: "b1", ip: "10.10.11.5", findings: [{ id: "f1", title: "Big", remediation, createdAt: 1, updatedAt: 1 }] as never })]),
+      ["custom-lab-1"],
+    );
+    expect(p.findings[0]!.remediation).toBe("r".repeat(1024 * 1024));
+    expect(p.logEntries.find((e) => e.id === "f1:remediation-overflow")).toBeUndefined();
+  });
+
+  it("validBase64 matches Rust STANDARD: alphabet, length, padding and trailing bits", () => {
+    expect(validBase64(PNG_B64)).toBe(true);
+    for (const ok of ["QQ==", "QUI=", "QUJD"]) expect(validBase64(ok)).toBe(true);
+    for (const bad of ["", "QQ", "QR==", "QUJ=", "Q===", "QQ=A", "QU I=", "-_=="]) expect(validBase64(bad)).toBe(false);
   });
 
   it("splitAtBytes counts UTF-8 bytes, prefers a line break and never splits a character", () => {

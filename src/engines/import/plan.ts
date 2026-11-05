@@ -162,6 +162,16 @@ export function splitAtBytes(s: string, max: number): [string, string] {
   const at = nl > 0 ? nl : cut;
   return [s.slice(0, at), s.slice(at).replace(/^\n/, "")];
 }
+const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+/** Strict standard base64 as Rust `STANDARD.decode` accepts it: the standard alphabet, length % 4 === 0,
+ *  `=` padding only at the end, and zero trailing bits before the padding. */
+export function validBase64(s: string): boolean {
+  if (s.length === 0 || s.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(s)) return false;
+  const pad = s.endsWith("==") ? 2 : s.endsWith("=") ? 1 : 0;
+  if (pad === 0) return true;
+  const last = B64.indexOf(s[s.length - pad - 1]!);
+  return (last & (pad === 2 ? 0b1111 : 0b11)) === 0;
+}
 /** A single IPv4 address (`/32` allowed and dropped), as Rust `hosts::single_ip`; else null. */
 function singleIp(raw: string): string | null {
   const bare = raw.endsWith("/32") ? raw.slice(0, -3) : raw;
@@ -431,7 +441,7 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
         // All whitespace goes: strict base64 decoders reject embedded newlines.
         const data = typeof img.data === "string" ? img.data.trim().replace(/^data:[^,]*,/, "").replace(/\s+/g, "") : "";
         const mime = typeof img.mime === "string" && MIMES.has(img.mime) ? img.mime : sniffMime(data);
-        if (!data || !mime) {
+        if (!data || !mime || !validBase64(data)) {
           skip("badImage");
           continue;
         }
@@ -480,7 +490,8 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
       // Rust notes.rs saves at most 1 MiB: the rest goes to a log note on the same host, so nothing is lost.
       const [body, rest] = splitAtBytes(full, MAX_NOTE_BYTES);
       plan.notes.push({ ownerId, engagementId, hostId, body, private: false });
-      if (rest) {
+      // A blank remainder would be a blank note entry, which Rust check_content rejects.
+      if (rest.trim()) {
         skip("noteOverflowToLog");
         pushLog({
           ...base(`${ownerId}:notes-overflow`, "Notes (continued from import)", hostId ? [hostId] : [], now),
@@ -656,7 +667,7 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
         // Each text field is at most 1 MiB in Rust: the rest goes to a log note, so nothing is lost.
         const fit = (field: string, text: string): string => {
           const [head, rest] = splitAtBytes(text, MAX_FINDING_TEXT_BYTES);
-          if (rest) {
+          if (rest.trim()) {
             skip("findingTextOverflowToLog");
             pushLog({
               ...base(`${f.id}:${field}-overflow`, `${findingTitle}: ${field} (continued from import)`, hostFor(m), createdAt),
