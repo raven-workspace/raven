@@ -78,3 +78,27 @@ export function daCoverChanges(input: {
   }
   return out;
 }
+
+export interface GoalRef {
+  ownerId: string;
+  goalId: string;
+}
+
+/**
+ * `daCoverChanges` as two goal lists for the store's conditional write: `cover` (untouched items to set `na`/auto) and
+ * `revert` (cover-marked items to put back to `todo`). The store re-checks each row, so a status set by hand after
+ * this was computed is never overwritten.
+ */
+export function daCoverGoals(input: Parameters<typeof daCoverChanges>[0]): { cover: GoalRef[]; revert: GoalRef[] } {
+  const cover: GoalRef[] = [];
+  const revertList: GoalRef[] = [];
+  for (const [ownerId, state] of daCoverChanges(input)) {
+    const before = input.byOwner.get(ownerId) ?? {};
+    for (const [goalId, item] of Object.entries(state)) {
+      const old = before[goalId];
+      if (isCoverMarked(item) && !isCoverMarked(old)) cover.push({ ownerId, goalId });
+      else if (isCoverMarked(old) && !isCoverMarked(item)) revertList.push({ ownerId, goalId });
+    }
+  }
+  return { cover, revert: revertList };
+}

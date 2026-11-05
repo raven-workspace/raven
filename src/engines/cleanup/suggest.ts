@@ -242,6 +242,13 @@ function matchSegment(segment: string, inSmbclient: boolean, depth = 0): Match[]
   return res;
 }
 
+/** Short stable non-crypto hash (64-bit FNV-1a, base36), so a key stays short however long the target is. */
+function hashTarget(text: string): string {
+  let h = 0xcbf29ce484222325n;
+  for (const byte of new TextEncoder().encode(text)) h = BigInt.asUintN(64, (h ^ BigInt(byte)) * 0x100000001b3n);
+  return h.toString(36);
+}
+
 export function suggestCleanup(entries: LogEntry[], hosts: HostRef[], domain: string, known: CleanupItem[]): CleanupSuggestion[] {
   const skip = new Set(known.map((k) => k.suggestionKey).filter((k): k is string => !!k));
   const seen = new Set<string>();
@@ -250,7 +257,7 @@ export function suggestCleanup(entries: LogEntry[], hosts: HostRef[], domain: st
 
   for (const entry of sorted) {
     if (entry.content.kind !== 'command') continue;
-    (entry.content.blocks ?? []).forEach((block, blockIndex) => {
+    (entry.content.blocks ?? []).forEach((block) => {
       const lines = String(block?.command ?? '').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
       const inSmbclient = lines[0] !== undefined && /^smbclient(\s|$)/i.test(lines[0]);
       const local = shellHost(block?.shell, entry.ranOn ?? undefined, hosts, domain);
@@ -262,7 +269,7 @@ export function suggestCleanup(entries: LogEntry[], hosts: HostRef[], domain: st
             if (m.push) hostId = namedHostsInLine(segment, hosts, domain)[0]?.id ?? lastNamed ?? entry.hostIds?.[0] ?? null;
             else if (local) hostId = local.id;
             else continue;
-            const key = `${entry.id}:${blockIndex}:${m.target}`;
+            const key = `${entry.id}:${m.kind}:${hashTarget(m.target)}`;
             if (skip.has(key) || seen.has(key)) continue;
             seen.add(key);
             out.push({ key, entryId: entry.id, hostId, kind: m.kind, target: m.target, command: line });

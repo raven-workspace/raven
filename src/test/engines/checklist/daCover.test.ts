@@ -10,6 +10,7 @@ import {
   applicableGoals,
   applyTicks,
   daCoverChanges,
+  daCoverGoals,
   domainAdminConfirmed,
   isCoverMarked,
   removeEntryTicks,
@@ -136,5 +137,29 @@ describe('domain admin cover', () => {
     const ids = AD_PLAYBOOKS.flatMap((p) => p.goals.map((g) => g.id));
     expect(ids).not.toContain('e-ad-da-loot-all');
     expect(ids).toContain('e-ad-da-proof');
+  });
+
+  it('daCoverGoals lists the goals to cover and to revert, for the conditional store write', () => {
+    const goals = (attempts: CredAttempt[], byOwner: Map<string, ChecklistState>) =>
+      daCoverGoals({ engagement, hosts, servicesByHost: servicesOf(hosts), attempts, byOwner });
+    const first = goals([attempt('DC', 'admin')], new Map([['WS01', manual]]));
+    const ids = coverable(WS01, hosts);
+    // Hand-set and worked items are not in the list; the untouched ones are, including the one with notes.
+    expect(first.revert).toEqual([]);
+    const ws = first.cover.filter((g) => g.ownerId === 'WS01').map((g) => g.goalId);
+    expect(ws).toContain('h-loot-hashes');
+    expect(ws).not.toContain('h-pe-win-privs');
+    expect(ws).not.toContain('h-loot-sweep');
+    expect(ws).not.toContain('h-pe-proof');
+    expect(ws.length).toBe(ids.length - 3);
+    expect(first.cover.some((g) => g.ownerId === 'LIN01')).toBe(false);
+    // Once covered, nothing is left to cover; without the trigger the cover-marked items revert.
+    const covered = run(hosts, [attempt('DC', 'admin')], new Map([['WS01', manual]]));
+    const state = new Map([['WS01', covered.get('WS01')!]]);
+    expect(goals([attempt('DC', 'admin')], state).cover.filter((g) => g.ownerId === 'WS01')).toEqual([]);
+    const back = goals([], state);
+    expect(back.cover).toEqual([]);
+    expect(back.revert.map((g) => g.goalId)).toContain('h-loot-hashes');
+    expect(back.revert.map((g) => g.goalId)).not.toContain('h-pe-win-groups');
   });
 });

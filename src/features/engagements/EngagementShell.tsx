@@ -7,7 +7,8 @@ import { isFreeKey, useEscapeTo, useKeydown } from "../../lib/keys";
 import type { Engagement } from "../../types/engagement";
 import { EmptyState } from "../../ui";
 import { checklistKey } from "../checklist/queries";
-import { autoTickFromLog, resyncBoards } from "../checklist/ticks";
+import { resyncAndRefresh } from "../checklist/resync";
+import { autoTickFromLog } from "../checklist/ticks";
 import { HostView } from "../hosts/HostView";
 import { CapturePanel } from "../capture/CapturePanel";
 import { NotesPanel } from "../notes/NotesPanel";
@@ -42,11 +43,7 @@ export function EngagementShell() {
         void qc.invalidateQueries({ queryKey: ["progress"] });
       })
       // Then once more, so an imported or older engagement gets the domain admin cover. Runs whether the tick ran or not.
-      .then(() => resyncBoards(id))
-      .then(() => {
-        void qc.invalidateQueries({ queryKey: checklistKey(id) });
-        void qc.invalidateQueries({ queryKey: ["hosts", id] });
-      }, reportError);
+      .then(() => resyncAndRefresh(qc, id), reportError);
   }, [id, qc]);
 
   // Esc: host view -> engagement, engagement -> dashboard.

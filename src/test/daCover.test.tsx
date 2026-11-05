@@ -1,9 +1,12 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
+import { deleteEntryWithTicks, resyncBoards } from "../features/checklist/ticks";
+import { useChecklist } from "../features/checklist/queries";
+import { useHostMutations } from "../features/hosts/queries";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
@@ -56,6 +59,25 @@ function mount(path: string, attempts: CredAttempt[], items: ChecklistItem[] = [
     }
     return store;
   });
+  // The store's conditional write, as the Rust command does it.
+  m.checklistApplyCover.mockImplementation(async (_e: string, cover, revert) => {
+    const find = (g: { ownerId: string; goalId: string }) => store.find((i) => i.ownerId === g.ownerId && i.goalId === g.goalId);
+    for (const g of revert) {
+      const row = find(g);
+      if (row && row.status === "na" && row.auto && !row.statusManual) {
+        store = store.map((i) => (i === row ? { ...i, status: "todo", auto: false, autoFrom: null, completedAt: null } : i));
+      }
+    }
+    for (const g of cover) {
+      const row = find(g);
+      if (!row) {
+        store = [...store, { ownerId: g.ownerId, goalId: g.goalId, status: "na", notes: null, completedAt: null, auto: true, autoFrom: null, statusManual: false, evidence: [], updatedAt: 1 }];
+      } else if (row.status === "todo" && !row.auto && !row.statusManual) {
+        store = store.map((i) => (i === row ? { ...i, status: "na", auto: true, autoFrom: null, completedAt: null } : i));
+      }
+    }
+    return store;
+  });
   m.servicesListEngagement.mockResolvedValue(SERVICES);
   m.hopsList.mockResolvedValue([]);
   m.tunnelsList.mockResolvedValue([]);
@@ -100,11 +122,11 @@ describe("domain admin cover", () => {
     });
     await user.click(within(dlg).getByRole("button", { name: "Set domain result: admin" }));
     await waitFor(() => {
-      const wsPut = m.checklistPut.mock.calls.flatMap((c) => c[1]).filter((i) => i.ownerId === "ws");
-      expect(wsPut.length).toBeGreaterThan(0);
-      for (const i of wsPut) expect(i).toMatchObject({ status: "na", auto: true });
-      expect(wsPut.map((i) => i.goalId)).toContain("h-pe-win-privs");
-      expect(wsPut.map((i) => i.goalId)).not.toContain("h-pe-proof");
+      const wsCover = m.checklistApplyCover.mock.calls.flatMap((c) => c[1]).filter((g) => g.ownerId === "ws");
+      expect(wsCover.length).toBeGreaterThan(0);
+      expect(wsCover.map((g) => g.goalId)).toContain("h-pe-win-privs");
+      expect(wsCover.map((g) => g.goalId)).not.toContain("h-pe-proof");
+      expect(store.filter((i) => i.ownerId === "ws").every((i) => i.status === "na" && i.auto)).toBe(true);
     });
   });
 
@@ -126,5 +148,82 @@ describe("domain admin cover", () => {
     expect(puts[0]).toMatchObject({ ownerId: "ws", status: "todo", auto: false, statusManual: true });
     expect(puts.slice(1).filter((i) => i.status === "na")).toEqual([]);
     expect(store.find((i) => i.ownerId === "ws" && i.goalId === "h-pe-win-privs")).toMatchObject({ status: "todo", statusManual: true });
+  });
+
+  it("a resync that covers a host refetches the checklist, so the row shows the label", async () => {
+    // WS01 is Linux at first, so DA covers nothing there; the OS edit makes it a member.
+    let ws: Host = { ...WS, os: "linux" };
+    const qc = makeQueryClient();
+    store = [];
+    m.engagementGet.mockResolvedValue(E1);
+    m.hostsList.mockImplementation(async () => [DC, ws]);
+    m.servicesListEngagement.mockResolvedValue(SERVICES);
+    m.logList.mockResolvedValue([]);
+    m.credAttemptsList.mockResolvedValue([ADMIN]);
+    m.checklistList.mockImplementation(async () => store);
+    m.checklistApplyCover.mockImplementation(async (_e, cover) => {
+      store = cover.map((g) => ({ ownerId: g.ownerId, goalId: g.goalId, status: "na", notes: null, completedAt: null, auto: true, autoFrom: null, statusManual: false, evidence: [], updatedAt: 1 }));
+      return store;
+    });
+    m.hostUpdate.mockImplementation(async () => {
+      ws = { ...ws, os: "windows" };
+      return ws;
+    });
+    m.hostSyncBoard.mockResolvedValue(undefined as never);
+    const wrapper = ({ children }: { children: React.ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+    const { result } = renderHook(() => ({ list: useChecklist("e1"), hosts: useHostMutations("e1") }), { wrapper });
+    await waitFor(() => expect(result.current.list.query.isSuccess).toBe(true));
+    expect(result.current.list.items).toEqual([]);
+    const reads = m.checklistList.mock.calls.length;
+    result.current.hosts.update.mutate({ id: "ws", input: { name: "ws01", ip: "10.10.10.6", os: "windows" } as never });
+    await waitFor(() => expect(result.current.list.items.some((i) => i.ownerId === "ws" && i.status === "na" && i.auto)).toBe(true));
+    expect(m.checklistList.mock.calls.length).toBeGreaterThan(reads);
+  });
+
+  it("deleting a log entry re-covers the item its evidence was holding", async () => {
+    const evidence = [{ entryId: "x1", commandId: null }];
+    store = [
+      { ownerId: "ws", goalId: "h-loot-hashes", status: "done", notes: null, completedAt: 5, auto: true, autoFrom: null, statusManual: false, evidence, updatedAt: 1 },
+    ];
+    m.engagementGet.mockResolvedValue(E1);
+    m.hostsList.mockResolvedValue([DC, WS]);
+    m.servicesListEngagement.mockResolvedValue(SERVICES);
+    m.credAttemptsList.mockResolvedValue([ADMIN]);
+    m.checklistList.mockImplementation(async () => store);
+    m.checklistPut.mockImplementation(async (_e: string, put: ChecklistItemInput[]) => {
+      for (const p of put) {
+        const row: ChecklistItem = { notes: null, completedAt: null, auto: false, autoFrom: null, evidence: [], ...p, updatedAt: 1 };
+        store = [...store.filter((i) => !(i.ownerId === p.ownerId && i.goalId === p.goalId)), row];
+      }
+      return store;
+    });
+    m.checklistApplyCover.mockImplementation(async (_e, cover) => {
+      for (const g of cover) {
+        store = store.map((i) => (i.ownerId === g.ownerId && i.goalId === g.goalId && i.status === "todo" && !i.auto ? { ...i, status: "na", auto: true } : i));
+      }
+      return store;
+    });
+    m.hostSyncBoard.mockResolvedValue(undefined as never);
+    m.logDelete.mockResolvedValue(null as never);
+    await deleteEntryWithTicks("e1", "x1");
+    expect(m.logDelete).toHaveBeenCalledWith("x1");
+    expect(store.find((i) => i.ownerId === "ws" && i.goalId === "h-loot-hashes")).toMatchObject({ status: "na", auto: true });
+  });
+
+  it("a resync reads the checklist once and syncs the boards from the cover result", async () => {
+    store = [];
+    m.engagementGet.mockResolvedValue(E1);
+    m.hostsList.mockResolvedValue([DC, WS]);
+    m.servicesListEngagement.mockResolvedValue(SERVICES);
+    m.credAttemptsList.mockResolvedValue([ADMIN]);
+    m.checklistList.mockImplementation(async () => store);
+    m.checklistApplyCover.mockImplementation(async (_e, cover) => {
+      store = cover.map((g) => ({ ownerId: g.ownerId, goalId: g.goalId, status: "na", notes: null, completedAt: null, auto: true, autoFrom: null, statusManual: false, evidence: [], updatedAt: 1 }));
+      return store;
+    });
+    m.hostSyncBoard.mockResolvedValue(undefined as never);
+    await resyncBoards("e1");
+    expect(m.checklistApplyCover).toHaveBeenCalled();
+    expect(m.checklistList).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import type { FillInput } from "../../engines/checklist";
 import { engagementStuck, hostStuck, type StuckLine } from "../../engines/stuck";
@@ -113,12 +113,12 @@ function Body({ engagementId, host, onOpenGoal, skipRestoreRef }: { engagementId
   // Every query the body reads: a failed checklist would otherwise look like "nothing skipped", and failed tunnels
   // would quietly change the filled commands.
   const failed =
-    hostsQ.error ?? engagement.error ?? servicesQ.error ?? log.error ?? note.error ?? credsQ.error ?? checklistQ.error ?? tunnelsQ.error;
+    hostsQ.error ?? engagement.error ?? settings.error ?? servicesQ.error ?? log.error ?? note.error ?? credsQ.error ?? checklistQ.error ?? tunnelsQ.error;
 
   let content: React.ReactNode;
   if (failed) {
     content = <p role="alert" className="m-0 text-xs text-warn">Couldn't load this: {failed.message}</p>;
-  } else if (!hosts || !eng || !servicesQ.data || !log.data || !credsQ.data || !checklistQ.data || !tunnelsQ.data) {
+  } else if (!hosts || !eng || !settings.data || !servicesQ.data || !log.data || !credsQ.data || !checklistQ.data || !tunnelsQ.data) {
     content = <p className="m-0 text-xs text-muted">Loading…</p>;
   } else {
     const s = hostStuck({
@@ -127,7 +127,7 @@ function Body({ engagementId, host, onOpenGoal, skipRestoreRef }: { engagementId
     });
     const input: FillInput = {
       host, engagement: eng, hosts, servicesByHost, tunnels,
-      attackerIp: settings.data?.attackerIp ?? "", listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
+      attackerIp: settings.data.attackerIp, listenerPort: settings.data.listenerPort, cred: creds.cred,
     };
     const filled = s.commands
       .map((c) => ({ ...c, commands: goalCommands(c.goalId, input, eng).commands }))
@@ -254,13 +254,22 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
   // Leads from half-loaded data would be wrong (an unloaded checklist reads as "nothing done"), so wait for all of it.
   const queries = [hostsQ, engagement, servicesQ, checklistQ, tunnelsQ, credentialsQ, attemptsQ, usernamesQ];
   const failed = queries.find((q) => q.error)?.error;
+  const hosts = hostsQ.data;
+  const eng = engagement.data;
+  const credentials = credentialsQ.data;
+  const attempts = attemptsQ.data;
+  const usernames = usernamesQ.data;
+  const loaded = !!servicesQ.data && !!checklistQ.data && !!tunnelsQ.data;
+  // Recomputed only when the data changes, not on every open/close of the panel.
+  const lines = useMemo(
+    () =>
+      loaded && hosts && eng && credentials && attempts && usernames
+        ? engagementStuck({ engagement: eng, hosts, servicesByHost, byOwner, credentials, attempts, usernames, tunnels })
+        : [],
+    [loaded, eng, hosts, servicesByHost, byOwner, credentials, attempts, usernames, tunnels],
+  );
   if (failed) return <p role="alert" className="m-0 text-xs text-warn">Couldn't load the stuck check: {failed.message}</p>;
-  if (!hostsQ.data || !engagement.data || !servicesQ.data || !checklistQ.data || !tunnelsQ.data) return null;
-  if (!credentialsQ.data || !attemptsQ.data || !usernamesQ.data) return null;
-  const lines = engagementStuck({
-    engagement: engagement.data, hosts: hostsQ.data, servicesByHost, byOwner,
-    credentials: credentialsQ.data, attempts: attemptsQ.data, usernames: usernamesQ.data, tunnels,
-  });
+  if (!loaded || !hosts || !eng || !credentials || !attempts || !usernames) return null;
 
   const go = (l: StuckLine) => {
     if (l.hostId) void navigate(`/e/${engagementId}/h/${l.hostId}`, l.goalId ? { state: { goalId: l.goalId } } : undefined);

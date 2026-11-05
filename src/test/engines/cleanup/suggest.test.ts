@@ -97,9 +97,27 @@ describe('parsing', () => {
   it('duplicates collapse', () => {
     expect(run('wget http://x/a -O a\nwget http://x/a -O a', onWeb)).toHaveLength(1);
   });
-  it('key case is not normalised', () => {
-    const e = cmd('net user Hax p /add', { ...onWin, id: 'E' });
-    expect(suggestCleanup([e], hosts, '', [])[0].key).toBe('E:0:Hax');
+  it('key is entry:kind:hash of the target, and case is not normalised', () => {
+    const key = (command: string) => suggestCleanup([cmd(command, { ...onWin, id: 'E' })], hosts, '', [])[0].key;
+    expect(key('net user Hax p /add')).toMatch(/^E:account:[0-9a-z]{1,16}$/);
+    expect(key('net user Hax p /add')).toBe(key('net user Hax q /add'));
+    expect(key('net user Hax p /add')).not.toBe(key('net user hax p /add'));
+  });
+  it('key survives a block edit that moves the command', () => {
+    const e = cmd('adduser z', { ...onWeb, id: 'E' });
+    const first = suggestCleanup([e], hosts, '', [])[0].key;
+    const block = (e.content as { blocks: unknown[] }).blocks[0];
+    const moved = { ...e, content: { ...e.content, blocks: [{ ...(block as object), command: 'id' }, block] } } as LogEntry;
+    expect(suggestCleanup([moved], hosts, '', [])[0].key).toBe(first);
+  });
+  it('a very long target still has a key that fits and can be dismissed', () => {
+    const target = `/tmp/${'a'.repeat(900)}`;
+    const e = cmd(`wget http://x/a -O ${target}`, { ...onWeb, id: 'L' });
+    const [s] = suggestCleanup([e], hosts, '', []);
+    expect(s.target).toBe(target);
+    expect(s.key.length).toBeLessThanOrEqual(500);
+    const item = { id: 'i', engagementId: 'eng', hostId: null, kind: 'file', target: 'x', notes: null, sourceEntryId: null, suggestionKey: s.key, status: 'dismissed', removedAt: null, createdAt: 0, updatedAt: 0 } as CleanupItem;
+    expect(suggestCleanup([e], hosts, '', [item])).toEqual([]);
   });
 });
 
@@ -117,7 +135,8 @@ describe('guards', () => {
       id: k, engagementId: 'eng', hostId: null, kind: 'file', target: k, notes: null, sourceEntryId: null,
       suggestionKey: k, status, removedAt: null, createdAt: 0, updatedAt: 0,
     });
-    const out = suggestCleanup([e], hosts, '', [item('K:0:a', 'dismissed'), item('K:0:b', 'open')]);
+    const keyOf = (t: string) => suggestCleanup([e], hosts, '', []).find((x) => x.target === t)!.key;
+    const out = suggestCleanup([e], hosts, '', [item(keyOf('a'), 'dismissed'), item(keyOf('b'), 'open')]);
     expect(out.map((s) => s.target)).toEqual(['c']);
   });
   it('keys are stable', () => {

@@ -1,6 +1,6 @@
 import {
   applicableGoals,
-  daCoverChanges,
+  daCoverGoals,
   derivedColumn,
   metasploitHostIds,
   removeEntryTicks,
@@ -13,7 +13,7 @@ import { BUILTIN_LIBRARY } from "../../engines/library/data";
 import { api } from "../../lib/api";
 import type { ChecklistItemInput, ChecklistState } from "../../types/checklist";
 import type { LogEntry } from "../../types/log";
-import { byOwnerOf, servicesByHostOf, stateToInput } from "./queries";
+import { byOwnerOf, servicesByHostOf, stateToInput } from "./state";
 
 /** checklist_put accepts at most this many items per call. */
 const PUT_LIMIT = 500;
@@ -99,13 +99,14 @@ export async function syncEntryTicks(engagementId: string, entry: LogEntry | nul
 export async function resyncBoards(engagementId: string): Promise<void> {
   await afterAutoTick(engagementId);
   const ctx = await loadTickContext(engagementId);
-  await applyDaCover(engagementId, ctx);
-  await syncBoards(engagementId, ctx);
+  const after = await applyDaCover(engagementId, ctx);
+  await syncBoards(engagementId, ctx, after);
 }
 
 /**
- * Domain admin on the DC covers privesc and loot on domain-joined hosts (`daCoverChanges`). Reads the attempts and the
- * checklist from the store, writes only the changed items in one `checklistPut`, and returns the checklist after it.
+ * Domain admin on the DC covers privesc and loot on domain-joined hosts (`daCoverGoals`). Reads the attempts and the
+ * checklist from the store and sends the goals to the store's conditional write, which re-checks every row, so a status
+ * set by hand in the meantime is never overwritten. Returns the checklist after it.
  * `byOwner` is the current checklist; read from the store when left out.
  */
 export async function applyDaCover(engagementId: string, ctx: TickContext, byOwner?: Map<string, ChecklistState>): Promise<Map<string, ChecklistState>> {
@@ -113,13 +114,9 @@ export async function applyDaCover(engagementId: string, ctx: TickContext, byOwn
     api.credAttemptsList(engagementId),
     byOwner ?? api.checklistList(engagementId).then(byOwnerOf),
   ]);
-  const changes = daCoverChanges({ engagement: ctx.engagement, hosts: ctx.hosts, servicesByHost: ctx.servicesByHost, attempts, byOwner: before });
-  if (changes.size === 0) return before;
-  const after = new Map(before);
-  for (const [ownerId, state] of changes) after.set(ownerId, state);
-  const { next } = changedItems(before, after);
-  if (next.length > 0) await write(engagementId, next);
-  return after;
+  const { cover, revert } = daCoverGoals({ engagement: ctx.engagement, hosts: ctx.hosts, servicesByHost: ctx.servicesByHost, attempts, byOwner: before });
+  if (cover.length === 0 && revert.length === 0) return before;
+  return byOwnerOf(await api.checklistApplyCover(engagementId, cover, revert));
 }
 
 /**
@@ -279,8 +276,10 @@ export async function afterEntrySaved(engagementId: string, entry: LogEntry | nu
 export async function deleteEntryWithTicks(engagementId: string, entryId: string): Promise<void> {
   await afterAutoTick(engagementId);
   const ctx = await loadTickContext(engagementId);
-  const { undo, after } = await writeEntryTicks(engagementId, null, entryId, ctx);
+  const { undo, after: ticked } = await writeEntryTicks(engagementId, null, entryId, ctx);
   try {
+    // Removing the entry's evidence can free an item the cover still wants, as when saving an entry.
+    const after = await applyDaCover(engagementId, ctx, ticked);
     await syncBoards(engagementId, ctx, after);
     await api.logDelete(entryId);
   } catch (e) {

@@ -1,11 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
-import { reportError } from "../../lib/lockSignal";
 import { hopsKey, tunnelsKey } from "../checklist/queries";
 import { accessGrantsKey, credAttemptsKey, credentialsKey } from "../credentials/queries";
 import { cleanupCountsKey, cleanupKey } from "../cleanup/queries";
 import { findingsKey } from "../findings/queries";
-import { resyncBoards } from "../checklist/ticks";
+import { resyncAndRefresh } from "../checklist/resync";
 import { dropPendingNotes } from "../notes/useNotesStore";
 import type { BoardColumn, HostInput } from "../../types/host";
 
@@ -30,11 +29,8 @@ export function useHostMutations(engagementId: string) {
   // OS and dual-homed change which goals apply, so the derived column can move. Not fatal: failures go to the
   // shared error path (a locked vault reaches the gate).
   const resync = () => {
-    void resyncBoards(engagementId).then(
-      // Refetch again: the resync may have moved a host's derived column after the first invalidation.
-      () => qc.invalidateQueries({ queryKey: ["hosts", engagementId] }),
-      reportError,
-    );
+    // Refetches the checklist and hosts again: the resync may have covered items or moved a derived column.
+    void resyncAndRefresh(qc, engagementId);
   };
   return {
     create: useMutation({

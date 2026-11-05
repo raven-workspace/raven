@@ -3,6 +3,7 @@ import type { BackupInfo } from "../types/backup";
 import type { ImportPlan } from "../engines/import/plan";
 import type { ImportSummary } from "../types/import";
 import type { ConfirmInput, ScanPort, Service, ServiceInput } from "../types/service";
+import type { GoalRef } from "../engines/checklist";
 import type { ChecklistItem, ChecklistItemInput } from "../types/checklist";
 import type { Attachment, LogEntry, LogEntryInput, Progress } from "../types/log";
 import type {
@@ -104,6 +105,9 @@ export const api = {
   checklistList: (engagementId: string) => call<ChecklistItem[]>("checklist_list", { engagementId }),
   checklistPut: (engagementId: string, items: ChecklistItemInput[]) =>
     call<ChecklistItem[]>("checklist_put", { engagementId, items }),
+  /** The domain admin cover as conditional writes: a status set by hand is never overwritten. */
+  checklistApplyCover: (engagementId: string, cover: GoalRef[], revert: GoalRef[]) =>
+    call<ChecklistItem[]>("checklist_apply_cover", { engagementId, cover, revert }),
   notesGet: (engagementId: string, hostId: string | null) =>
     call<Note>("notes_get", { engagementId, hostId }),
   notesList: (engagementId: string) => call<Note[]>("notes_list", { engagementId }),

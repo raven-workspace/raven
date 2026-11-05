@@ -1,8 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
-import { reportError } from "../../lib/lockSignal";
-import { checklistKey } from "../checklist/queries";
-import { resyncBoards } from "../checklist/ticks";
+import { resyncAndRefresh } from "../checklist/resync";
 import type {
   AccessGrantInput,
   CredAttemptInput,
@@ -25,10 +23,7 @@ function useAttemptsChanged(eid: string) {
   const qc = useQueryClient();
   return () => {
     void qc.invalidateQueries({ queryKey: credAttemptsKey(eid) });
-    void resyncBoards(eid).then(() => {
-      void qc.invalidateQueries({ queryKey: checklistKey(eid) });
-      void qc.invalidateQueries({ queryKey: ["hosts", eid] });
-    }, reportError);
+    void resyncAndRefresh(qc, eid);
   };
 }
 

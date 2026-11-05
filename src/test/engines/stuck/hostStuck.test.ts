@@ -141,6 +141,17 @@ describe("hostStuck port ranges", () => {
   it("-p 1-1000 touches 80 but not 8080", () => expect(untouched("nmap -p 1-1000 10.10.10.5")).toEqual([8080]));
   it("-p 22,80-90 touches 22, 80 and 85", () => expect(untouched("nmap -p 22,80-90 10.10.10.5")).toEqual([8080]));
   it("an IP octet range is not a port range", () => expect(untouched("nmap 10.10.10.1-100")).toEqual([22, 80, 85, 8080]));
+  it("--ports=1-100 touches 22, 80 and 85", () => expect(untouched("nmap --ports=1-100 10.10.10.5")).toEqual([8080]));
+  it("--ports 20-30 touches only 22", () => expect(untouched("nmap --ports 20-30 10.10.10.5")).toEqual([80, 85, 8080]));
+  it("-p22,80-90 without a space works", () => expect(untouched("nmap -p22,80-90 10.10.10.5")).toEqual([8080]));
+  it("a protocol prefix and an open-ended range work", () => expect(untouched("nmap -p T:80-90,8000- 10.10.10.5")).toEqual([22]));
+  it("a range outside -p / --ports does not count", () => {
+    expect(untouched("sed -n 1-200p linpeas.out")).toEqual([22, 80, 85, 8080]);
+    expect(untouched("searchsploit CVE-2021-3156")).toEqual([22, 80, 85, 8080]);
+    expect(untouched("ping 10.0.0.1-254")).toEqual([22, 80, 85, 8080]);
+    expect(untouched("seq 1-1000")).toEqual([22, 80, 85, 8080]);
+  });
+  it("a whole-number token still counts anywhere", () => expect(untouched("curl http://10.10.10.5:8080/x ; ssh -p 22 u@h")).toEqual([80, 85]));
 });
 
 describe("hostStuck exam bans", () => {

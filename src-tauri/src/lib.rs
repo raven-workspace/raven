@@ -69,6 +69,7 @@ pub fn run() {
             commands::log_delete,
             commands::checklist_list,
             commands::checklist_put,
+            commands::checklist_apply_cover,
             commands::notes_get,
             commands::notes_list,
             commands::note_save,

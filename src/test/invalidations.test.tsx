@@ -132,7 +132,8 @@ describe("cache invalidation (M4)", () => {
     expect(keys()).toContainEqual(["checklist", "e1"]);
     expect(keys()).toContainEqual(["services"]);
     await act(() => result.current.update.mutateAsync({ id: "h1", input: { name: "x" } }));
-    expect(keys().filter((k) => JSON.stringify(k) === JSON.stringify(["checklist", "e1"]))).toHaveLength(2);
+    // Once for each save, and once more after each resync (it may have written cover rows).
+    await vi.waitFor(() => expect(keys().filter((k) => JSON.stringify(k) === JSON.stringify(["checklist", "e1"]))).toHaveLength(4));
   });
 
   it("changing a host's OS re-syncs the board", async () => {

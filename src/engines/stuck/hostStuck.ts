@@ -39,16 +39,28 @@ const isOpen = (s: Service) => {
 };
 
 /**
- * The port as a whole number token: not inside a longer number or an IP's octets (`8080` and `10.0.0.80` do not
- * mention 80). `-p-` touches every port; a numeric range `a-b` touches the ports inside it.
+ * Whether a `-p` / `--ports` argument (`-p 1-1000`, `-p22,80-90`, `--ports=1-100`, `T:80,8000-`) covers the port.
+ * `-p-` is every port; ranges only count here, so `sed -n 1-200p` or `10.0.0.1-254` do not touch anything.
  */
-function mentions(line: string, port: number): boolean {
-  if (/(?:^|\s)-p-(?=\s|$)/.test(line)) return true;
-  if (new RegExp(`(?<![\\d.])${port}(?!\\d|\\.\\d)`).test(line)) return true;
-  for (const m of line.matchAll(/(?<![\d.])(\d+)-(\d+)(?!\d|\.\d)/g)) {
-    if (Number(m[1]) <= port && port <= Number(m[2])) return true;
+function inPortArgs(line: string, port: number): boolean {
+  for (const m of line.matchAll(/(?:^|\s)(?:-p\s*|--ports(?:=|\s+))(\S+)/g)) {
+    const spec = m[1];
+    if (spec === "-") return true;
+    for (const part of spec.split(",")) {
+      const r = /^(?:[A-Za-z]+:)?(\d+)-(\d*)$/.exec(part);
+      if (r && Number(r[1]) <= port && port <= (r[2] === "" ? 65535 : Number(r[2]))) return true;
+    }
   }
   return false;
+}
+
+/**
+ * The port as a whole number token: not inside a longer number or an IP's octets (`8080` and `10.0.0.80` do not
+ * mention 80), or covered by a port argument (`inPortArgs`).
+ */
+function mentions(line: string, port: number): boolean {
+  if (new RegExp(`(?<![\\d.])${port}(?!\\d|\\.\\d)`).test(line)) return true;
+  return inPortArgs(line, port);
 }
 
 export function hostStuck(input: {

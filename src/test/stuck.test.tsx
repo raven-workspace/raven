@@ -117,6 +117,16 @@ describe("stuck view", () => {
     expect(within(panel).queryByText("Before a foothold")).not.toBeInTheDocument();
   });
 
+  it("a failed settings load shows an error, not commands filled with blank addresses", async () => {
+    const user = userEvent.setup();
+    mount();
+    m.settingsGet.mockRejectedValue(new Error("settings unreadable"));
+    await screen.findByRole("region", { name: "Host" });
+    await user.keyboard("h");
+    const panel = await screen.findByRole("complementary", { name: /Stuck on web01/ });
+    expect(await within(panel).findByRole("alert")).toHaveTextContent("settings unreadable");
+  });
+
   it("before a foothold shows the nudges for a guessed service", async () => {
     const user = userEvent.setup();
     mount({ services: [svc("s1", 9999, { nmapService: "abyss?" })] });
