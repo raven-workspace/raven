@@ -16,10 +16,13 @@ export function useCleanupCounts() {
 
 export function useCleanupMutations(eid: string) {
   const qc = useQueryClient();
-  const onSuccess = () => {
-    void qc.invalidateQueries({ queryKey: cleanupKey(eid) });
-    void qc.invalidateQueries({ queryKey: cleanupCountsKey });
-  };
+  // Returned, so a mutation settles only after the list has refetched: a suggestion hidden while its Add or
+  // Dismiss is in flight never flashes back (clickable) between the save and the refetch.
+  const onSuccess = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: cleanupKey(eid) }),
+      qc.invalidateQueries({ queryKey: cleanupCountsKey }),
+    ]);
   return {
     create: useMutation({ mutationFn: (input: CleanupInput) => api.cleanupCreate(eid, input), onSuccess }),
     update: useMutation({
