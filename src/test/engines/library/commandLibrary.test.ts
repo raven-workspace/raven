@@ -3,17 +3,12 @@ import { hasUnmodelledQuoting } from '../../../engines/checklist';
 import { BUILTIN_LIBRARY } from '../../../engines/library/data';
 import type { LibraryCommand } from '../../../engines/library/types';
 import { firstBinary, matchesCommand } from '../../../engines/library/matcher';
-import { AD_PLAYBOOKS, ENGAGEMENT_SETUP, HOST_GOALS } from '../../../engines/checklist';
+import { AD_PLAYBOOKS, ENGAGEMENT_SETUP, HOST_GOALS, LATERAL_MOVEMENT_GOALS } from '../../../engines/checklist';
 import { resolveTemplate } from '../../../engines/checklist/template';
 
 const lib = BUILTIN_LIBRARY;
-/** TEMPORARY: lateral-movement engagement goals Task 5 adds to ENGAGEMENT_SETUP / AD_PLAYBOOKS. Swap for the real import once Task 5 lands. */
-const PENDING_TASK_5_GOALS = [
-  'e-setup-logging', 'e-setup-vpn', 'e-setup-reach', 'e-setup-exam-rules', 'e-setup-scans', 'e-setup-assumed-breach',
-  'e-lat-spray', 'e-lat-password', 'e-lat-hash', 'e-lat-ticket', 'e-lat-record-hop',
-];
-const ENGAGEMENT_GOALS = [...ENGAGEMENT_SETUP, ...AD_PLAYBOOKS.flatMap((p) => p.goals)];
-const ALL_GOAL_IDS = new Set([...ENGAGEMENT_GOALS.map((g) => g.id), ...HOST_GOALS.map((g) => g.id), ...PENDING_TASK_5_GOALS]);
+const ENGAGEMENT_GOALS = [...ENGAGEMENT_SETUP, ...LATERAL_MOVEMENT_GOALS, ...AD_PLAYBOOKS.flatMap((p) => p.goals)];
+const ALL_GOAL_IDS = new Set([...ENGAGEMENT_GOALS.map((g) => g.id), ...HOST_GOALS.map((g) => g.id)]);
 /** Library order within a goal (the old commandsForGoal with no operator preferences). */
 const commandsForGoal = (goalId: string, library: LibraryCommand[]) => library.filter((c) => c.goals.includes(goalId));
 /** Records, not commands: the operator writes them by hand. */

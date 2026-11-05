@@ -198,14 +198,15 @@ describe("stuck view", () => {
     expect(useNotesStore.getState().open).toBe(false);
   });
 
-  it("a Stuck check line opens its host on the goal", async () => {
+  it("the dual-homed line opens the Lateral movement section on that host's tunnel step", async () => {
     const user = userEvent.setup();
     mount({ hosts: [host({ dualHomed: true })], path: "/e/e1/s/checklist" });
     await user.click(await screen.findByRole("button", { name: /Stuck check/ }));
     await user.click(await screen.findByRole("button", { name: /dual-homed, no tunnel recorded/ }));
-    expect(await screen.findByRole("region", { name: "Host" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Checklist" })).toHaveAttribute("aria-selected", "true");
-    // h-pivot-tunnel is in the engagement-placed Lateral movement stage, hidden from the host view (rendered by Task 5).
-    expect(document.querySelector('li[data-goal-id="h-pivot-tunnel"]')).toBeNull();
+    expect(await screen.findByRole("button", { name: /Lateral movement/ })).toHaveAttribute("aria-expanded", "true");
+    const row = document.querySelector('li[data-goal-id="h-pivot-tunnel"]') as HTMLElement;
+    expect(row).not.toBeNull();
+    expect(within(row).getByRole("button", { name: /^Collapse/ })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Host" })).not.toBeInTheDocument();
   });
 });

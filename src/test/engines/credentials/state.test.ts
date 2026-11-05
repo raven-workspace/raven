@@ -23,12 +23,25 @@ const trig = (
   engagement: eng, hosts: hs.map((h) => h.host), servicesByHost: byHost(...hs), credentials, attempts, hops,
 });
 
+describe("playbookTriggers lateral", () => {
+  it("opens for a dual-homed host", () => {
+    const d = { ...web, host: { ...web.host, dualHomed: true } };
+    expect(trig([d]).lateral).toBe(true);
+    expect(trig([web]).lateral).toBe(false);
+  });
+  it("opens while a credential lacks an attempt on a host with a sprayable service, and closes once tried everywhere", () => {
+    expect(trig([ms02, web], [C()]).lateral).toBe(true);
+    expect(trig([ms02, web], [C()], [A()]).lateral).toBe(false);
+    expect(trig([ms02, web], [C()], [A({ hostId: "other" })]).lateral).toBe(true);
+  });
+});
+
 describe("playbookTriggers", () => {
   it("nocreds opens with an AD host and no working domain cred", () => {
-    expect(trig([dc, ms02])).toEqual({ nocreds: true, user: false, da: false });
+    expect(trig([dc, ms02])).toEqual({ lateral: false, nocreds: true, user: false, da: false });
     expect(trig([ms02, web]).nocreds).toBe(false);
     expect(trig([dc, ms02], [C()], [A({ result: "failed" })]).nocreds).toBe(true);
-    expect(trig([dc, ms02], [C({ scope: "local", localHostId: "ms02" })], [A()])).toEqual({ nocreds: true, user: false, da: false });
+    expect(trig([dc, ms02], [C({ scope: "local", localHostId: "ms02" })], [A()])).toEqual({ lateral: true, nocreds: true, user: false, da: false });
   });
 
   it("user opens on first valid domain cred and nocreds stays open until then", () => {

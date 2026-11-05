@@ -135,6 +135,13 @@ describe("dual-homed flag", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit host" })).not.toBeInTheDocument());
     expect(screen.queryByText("Tunnel into the next network")).not.toBeInTheDocument();
     expect(screen.queryByText("Sweep the new network for hosts")).not.toBeInTheDocument();
+
+    // Positive proof the flag took effect: the engagement checklist lists the pivot steps behind this host.
+    await user.click(await screen.findByRole("link", { name: /Engagement checklist/ }));
+    const section = within(await screen.findByRole("region", { name: "Lateral movement" }));
+    expect(await section.findByRole("heading", { name: `Behind ${VEGA.name}` })).toBeInTheDocument();
+    expect(document.querySelector('li[data-goal-id="h-pivot-tunnel"]')).not.toBeNull();
+    expect(document.querySelector('li[data-goal-id="h-pivot-sweep"]')).not.toBeNull();
   });
 });
 

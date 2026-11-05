@@ -5,6 +5,7 @@ import type { Hop } from "../../types/network";
 import type { Service } from "../../types/service";
 import { domainAdminConfirmed } from "../checklist/daCover";
 import { adHosts, findDcHost } from "../checklist/facts";
+import { hostSprayServices, isSprayable } from "./matrix";
 
 export type PlaybookId = "nocreds" | "user" | "da";
 
@@ -22,7 +23,7 @@ export function playbookTriggers(input: {
   credentials: Credential[];
   attempts: CredAttempt[];
   hops: Hop[];
-}): Record<PlaybookId, boolean> {
+}): Record<PlaybookId, boolean> & { lateral: boolean } {
   const { engagement, hosts, servicesByHost } = input;
   const mine = input.attempts.filter((a) => a.engagementId === engagement.id);
   const domainIds = new Set(
@@ -32,7 +33,17 @@ export function playbookTriggers(input: {
   const dc = findDcHost(hosts, servicesByHost);
   const daByAttempt = domainAdminConfirmed(hosts, servicesByHost, mine);
   const daByHop = !!dc && input.hops.some((h) => h.engagementId === engagement.id && h.toHostId === dc.id);
+  // Lateral movement: a host reaches another network, or a usable credential has not been tried on a host with something to try it on.
+  const untried = input.credentials.some(
+    (c) =>
+      c.engagementId === engagement.id &&
+      isSprayable(c) &&
+      hosts.some(
+        (h) => hostSprayServices(h, servicesByHost.get(h.id) ?? []).length > 0 && !mine.some((a) => a.credId === c.id && a.hostId === h.id),
+      ),
+  );
   return {
+    lateral: hosts.some((h) => h.dualHomed === true) || untried,
     nocreds: adHosts(hosts, servicesByHost).length > 0 && !domainWorks,
     user: domainWorks,
     da: daByAttempt || daByHop,

@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,10 +52,10 @@ const attempt = (id: string, credId: string, over: Partial<CredAttempt> = {}): C
   authMode: "domain", detail: null, logEntryId: null, at: 100, ...over,
 });
 
-function mount(opts: { services?: Service[]; hops?: Hop[]; log?: LogEntry[]; tunnels?: Tunnel[]; creds?: Credential[]; attempts?: CredAttempt[]; items?: ChecklistItem[]; hosts?: Host[] } = {}) {
+function mount(opts: { services?: Service[]; hops?: Hop[]; log?: LogEntry[]; tunnels?: Tunnel[]; creds?: Credential[]; attempts?: CredAttempt[]; items?: ChecklistItem[]; hosts?: Host[]; eng?: Engagement } = {}) {
   m.credentialsList.mockResolvedValue(opts.creds ?? []);
   m.credAttemptsList.mockResolvedValue(opts.attempts ?? []);
-  m.engagementGet.mockResolvedValue(E1);
+  m.engagementGet.mockResolvedValue(opts.eng ?? E1);
   m.hostsList.mockResolvedValue(opts.hosts ?? [H1, H2]);
   m.checklistList.mockResolvedValue(opts.items ?? []);
   m.servicesListEngagement.mockResolvedValue(opts.services ?? []);
@@ -309,5 +309,58 @@ describe("engagement checklist", () => {
     expect(m.tunnelDelete).not.toHaveBeenCalled();
     await user.click(await screen.findByRole("button", { name: "Delete tunnel" }));
     expect(m.tunnelDelete).toHaveBeenCalledWith("t1");
+  });
+
+  it("setup follows Off-the-Bat order with groups", async () => {
+    mount();
+    await screen.findByText("Add the /etc/hosts lines");
+    const setup = screen.getByRole("heading", { name: "Setup" }).parentElement!;
+    const heads = within(setup).getAllByRole("heading", { level: 4 }).map((h) => h.textContent);
+    expect(heads).toEqual(["Workspace", "Network", "Scope", "Kick off scans"]);
+    const ids = [...setup.querySelectorAll("li[data-goal-id]")].map((li) => li.getAttribute("data-goal-id"));
+    expect(ids).toEqual(["e-setup-logging", "e-setup-vpn", "e-setup-reach", "e-setup-kind", "e-setup-scope", "e-setup-hosts", "e-setup-scans", "e-setup-assumed-breach"]);
+  });
+
+  it("exam-rules step shows only in exam sims", async () => {
+    mount();
+    await screen.findByText("Add the /etc/hosts lines");
+    expect(document.querySelector('li[data-goal-id="e-setup-exam-rules"]')).toBeNull();
+    cleanup();
+    mount({ eng: { ...E1, kind: "exam-sim" } });
+    expect(await screen.findByText("Note the start time, the Metasploit allowance and the proof rules")).toBeInTheDocument();
+  });
+
+  it("lateral movement lists pivot steps behind each dual-homed host with filled commands", async () => {
+    mount({ hosts: [{ ...H1, dualHomed: true }, { ...H2, dualHomed: true }] });
+    const section = within(await screen.findByRole("region", { name: "Lateral movement" }));
+    expect(section.getByRole("heading", { name: "Behind dc01" })).toBeInTheDocument();
+    expect(section.getByRole("heading", { name: "Behind web02" })).toBeInTheDocument();
+    const tunnels = document.querySelectorAll('li[data-goal-id="h-pivot-tunnel"]');
+    expect(tunnels).toHaveLength(2);
+    for (const li of tunnels) expect(within(li as HTMLElement).getAllByRole("button", { name: /^Copy command: / }).length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('li[data-goal-id="h-pivot-sweep"]')).toHaveLength(2);
+    expect(document.querySelector('li[data-goal-id="e-lat-record-hop"]')).not.toBeNull();
+  });
+
+  it("ticking a pivot step writes the host as owner", async () => {
+    const user = userEvent.setup();
+    mount({ hosts: [{ ...H1, dualHomed: true }, H2] });
+    await screen.findByRole("region", { name: "Lateral movement" });
+    const li = document.querySelector('li[data-goal-id="h-pivot-tunnel"]') as HTMLElement;
+    await user.click(within(li).getByRole("button", { name: /done/i }));
+    expect(m.checklistPut).toHaveBeenCalledWith("e1", [expect.objectContaining({ ownerId: "h1", goalId: "h-pivot-tunnel" })]);
+  });
+
+  it("lateral movement is closed with no dual-homed host and no untried credential", async () => {
+    mount();
+    const toggle = await screen.findByRole("button", { name: /Lateral movement/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(document.querySelector('li[data-goal-id="e-lat-spray"]')).toBeNull();
+  });
+
+  it("lateral movement opens for a credential not yet tried on a host with a sprayable service", async () => {
+    mount({ services: [{ ...svc("s445", 445) }], creds: [cred("c1")] });
+    await screen.findByRole("region", { name: "Lateral movement" });
+    expect(await screen.findByRole("button", { name: /Lateral movement/ })).toHaveAttribute("aria-expanded", "true");
   });
 });

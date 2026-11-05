@@ -8,11 +8,35 @@ const g = (stage: string, id: string, title: string, why: string, extra: Partial
   ...extra,
 });
 
+const WS = 'Workspace';
+const NW = 'Network';
+const SC = 'Scope';
+const KS = 'Kick off scans';
+
+/** Mirrors the vault's Off-the-Bat checklist, group by group. */
 export const ENGAGEMENT_SETUP: ChecklistGoal[] = [
-  g('e-setup', 'e-setup-kind', 'Choose the engagement kind', 'Decides whether exam-banned commands are hidden and whether cleanup is required.'),
-  g('e-setup', 'e-setup-scope', 'Set the scope', 'Anything outside it is off limits; the log and auto-tick key off it.'),
-  g('e-setup', 'e-setup-hosts', 'Add the /etc/hosts lines', 'Half of AD errors are works-with-IP, fails-with-FQDN.'),
-  g('e-setup', 'e-setup-clock', 'Sync the clock to the DC', 'KRB_AP_ERR_SKEW is a clock problem, not a bad credential.', { applies: { domainJoined: true } }),
+  g('e-setup', 'e-setup-logging', 'Session logging on in every tab', 'Every command and its output is evidence; a tab without logging loses it.', { group: WS }),
+  g('e-setup', 'e-setup-vpn', 'VPN up; note tun0 as LHOST', 'Every reverse shell and payload needs your tun0 address.', { group: NW }),
+  g('e-setup', 'e-setup-reach', 'Confirm you can reach a target', 'No reply is not down (Windows blocks ICMP); no route is a VPN problem.', { group: NW }),
+  g('e-setup', 'e-setup-kind', 'Choose the engagement kind', 'Decides whether exam-banned commands are hidden and whether cleanup is required.', { group: SC }),
+  g('e-setup', 'e-setup-scope', 'Set the scope', 'Anything outside it is off limits; the log and auto-tick key off it.', { group: SC }),
+  g('e-setup', 'e-setup-hosts', 'Add the /etc/hosts lines', 'Half of AD errors are works-with-IP, fails-with-FQDN.', { group: SC }),
+  g('e-setup', 'e-setup-clock', 'Sync the clock to the DC', 'KRB_AP_ERR_SKEW is a clock problem, not a bad credential.', { group: SC, applies: { domainJoined: true } }),
+  g('e-setup', 'e-setup-exam-rules', 'Note the start time, the Metasploit allowance and the proof rules', 'The clock and the single Metasploit use are the exam constraints you cannot get back.', { group: SC, applies: { kinds: ['exam-sim'] } }),
+  g('e-setup', 'e-setup-scans', 'Full TCP and UDP scans running on every host', 'Start them first so they run while you read; SNMP on 161 only shows in UDP.', { group: KS }),
+  g('e-setup', 'e-setup-assumed-breach', 'Assumed breach: spray the starting credentials (N/A if none)', 'Starting credentials work somewhere; find where before anything noisier.', { group: KS }),
+];
+
+const L = 'e-lat';
+const USE = 'Use the credential';
+
+/** Engagement-owned lateral movement steps; the per-host pivot steps live on the `lateral-movement` host stage. */
+export const LATERAL_MOVEMENT_GOALS: ChecklistGoal[] = [
+  g(L, 'e-lat-spray', 'Spray the credential across every host and service', 'A credential is only tried where you tried it; the matrix shows the gaps.', { group: USE }),
+  g(L, 'e-lat-password', 'Log in with the password', 'A plaintext password opens every service the host exposes.', { group: USE }),
+  g(L, 'e-lat-hash', 'Pass the hash', 'An NT hash authenticates without cracking it.', { group: USE }),
+  g(L, 'e-lat-ticket', 'Use a Kerberos ticket', 'Pass-the-ticket and overpass-the-hash work where NTLM is blocked.', { group: USE }),
+  g(L, 'e-lat-record-hop', 'Record the hop: from host, via, to host, access level', 'The hop list is the attack path the report is built from.', { group: 'Land' }),
 ];
 
 const N = 'e-ad-nocreds';
