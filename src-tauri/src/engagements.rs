@@ -207,7 +207,7 @@ pub fn set_msf_host(conn: &Connection, id: &str, host_id: Option<&str>) -> AppRe
 }
 
 /// Per-engagement host and flag progress. `flags_total` is 2 per host (local + proof).
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Progress {
     pub hosts_total: i64,
@@ -222,11 +222,11 @@ fn exam_sim_progress(conn: &Connection) -> AppResult<std::collections::HashMap<S
     let sql = format!(
         "SELECT h.engagement_id, {ad} AS ad,
            EXISTS(SELECT 1 FROM log_entry_hosts lh JOIN log_entries l ON l.id = lh.entry_id
-                  WHERE lh.host_id = h.id AND l.kind = 'flag' AND json_extract(l.content, '$.flagKind') = 'local'),
+                  WHERE lh.host_id = h.id AND l.engagement_id = h.engagement_id AND l.kind = 'flag' AND json_extract(l.content, '$.flagKind') = 'local'),
            EXISTS(SELECT 1 FROM log_entry_hosts lh JOIN log_entries l ON l.id = lh.entry_id
-                  WHERE lh.host_id = h.id AND l.kind = 'flag' AND json_extract(l.content, '$.flagKind') = 'proof')
+                  WHERE lh.host_id = h.id AND l.engagement_id = h.engagement_id AND l.kind = 'flag' AND json_extract(l.content, '$.flagKind') = 'proof')
          FROM hosts h JOIN engagements e ON e.id = h.engagement_id WHERE e.kind = 'exam-sim'",
-        ad = crate::hosts::AD_EFFECTIVE_H
+        ad = crate::hosts::ad_effective_sql("h")
     );
     let mut st = conn.prepare(&sql)?;
     let rows = st
@@ -235,22 +235,20 @@ fn exam_sim_progress(conn: &Connection) -> AppResult<std::collections::HashMap<S
         })?
         .collect::<Result<Vec<_>, _>>()?;
     let mut out: std::collections::HashMap<String, Progress> = std::collections::HashMap::new();
-    let mut ad_seen: std::collections::HashMap<String, (bool, bool)> = std::collections::HashMap::new();
+    let mut ad_proof: std::collections::HashMap<String, bool> = std::collections::HashMap::new();
     for (eid, ad, local, proof) in rows {
         if ad {
-            let e = ad_seen.entry(eid).or_default();
-            e.0 = true;
-            e.1 |= proof;
+            *ad_proof.entry(eid).or_default() |= proof;
         } else {
-            let p = out.entry(eid).or_insert(Progress { hosts_total: 0, hosts_rooted: 0, flags_found: 0, flags_total: 0 });
+            let p = out.entry(eid).or_default();
             p.hosts_total += 1;
             p.flags_total += 2;
             p.hosts_rooted += proof as i64;
             p.flags_found += local as i64 + proof as i64;
         }
     }
-    for (eid, (_, proof)) in ad_seen {
-        let p = out.entry(eid).or_insert(Progress { hosts_total: 0, hosts_rooted: 0, flags_found: 0, flags_total: 0 });
+    for (eid, proof) in ad_proof {
+        let p = out.entry(eid).or_default();
         p.hosts_total += 1;
         p.flags_total += 1;
         p.hosts_rooted += proof as i64;
@@ -596,5 +594,70 @@ mod tests {
         let (_d, v, id) = prog_fixture("lab");
         let p = &progress_all(v.conn().unwrap()).unwrap()[&id];
         assert_eq!((p.hosts_total, p.hosts_rooted, p.flags_found, p.flags_total), (6, 2, 3, 12));
+    }
+
+    #[test]
+    fn exam_sim_progress_edge_cases() {
+        use crate::hosts;
+        let (_d, v, id) = prog_fixture("exam-sim");
+        let c = v.conn().unwrap();
+        let ids: std::collections::HashMap<String, String> = hosts::list(c, &id)
+            .unwrap()
+            .into_iter()
+            .map(|h| (h.name, h.id))
+            .collect();
+        let flag = |eid: &str, host: &str, kind: &str| {
+            c.execute(
+                "INSERT INTO log_entries (id,engagement_id,kind,title,content,at,created_at,updated_at) VALUES (?1,?2,'flag','f',?3,1,1,1)",
+                params![eid, id, format!(r#"{{"flagKind":"{kind}"}}"#)],
+            )
+            .unwrap();
+            c.execute("INSERT INTO log_entry_hosts (entry_id,host_id) VALUES (?1,?2)", params![eid, host]).unwrap();
+        };
+        let get = |c: &Connection| {
+            let p = progress_all(c).unwrap()[&id].clone();
+            (p.hosts_total, p.hosts_rooted, p.flags_found, p.flags_total)
+        };
+        // fixture baseline (4,2,3,7); a local.txt on an AD client does not count
+        flag("x1", &ids["c1"], "local");
+        assert_eq!(get(c), (4, 2, 3, 7));
+        // a proof on an AD client with the DC proof already found still counts the AD set once
+        flag("x2", &ids["c1"], "proof");
+        flag("x3", &ids["c2"], "proof");
+        assert_eq!(get(c), (4, 2, 3, 7));
+        // duplicate proofs on a standalone count once
+        flag("x4", &ids["s1"], "proof");
+        flag("x5", &ids["s1"], "proof");
+        assert_eq!(get(c), (4, 2, 3, 7));
+        // a proof on a client alone counts as the one AD flag
+        c.execute("DELETE FROM log_entries WHERE id IN ('f3','x2','x3')", []).unwrap();
+        assert_eq!(get(c), (4, 1, 2, 7));
+        c.execute("UPDATE hosts SET ad_set = 1 WHERE name = 'c1'", []).unwrap();
+        flag("x6", &ids["c1"], "proof");
+        assert_eq!(get(c), (4, 2, 3, 7));
+        // only AD hosts: (1, p, p, 1)
+        c.execute("UPDATE hosts SET ad_set = 1", []).unwrap();
+        assert_eq!(get(c), (1, 1, 1, 1));
+        c.execute("DELETE FROM log_entries", []).unwrap();
+        assert_eq!(get(c), (1, 0, 0, 1));
+        // an exam sim with no hosts
+        let empty = create(
+            c,
+            EngagementInput {
+                name: "e".into(),
+                kind: "exam-sim".into(),
+                client: None,
+                sub_label: None,
+                scope_cidrs: vec![],
+                domain: None,
+                starts_at: None,
+                ends_at: None,
+                timebox_start: None,
+                timebox_minutes: None,
+            },
+        )
+        .unwrap();
+        let p = &progress_all(c).unwrap()[&empty.id];
+        assert_eq!((p.hosts_total, p.hosts_rooted, p.flags_found, p.flags_total), (0, 0, 0, 0));
     }
 }

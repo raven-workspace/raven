@@ -164,6 +164,13 @@ describe("hosts", () => {
     expect(m.hostUpdate.mock.calls[0]![1]).not.toHaveProperty("adSet");
   });
 
+  it("the AD set chip is absent when the host is not effectively in the AD set", async () => {
+    mount("/e/e1/h/h1");
+    const header = await screen.findByRole("region", { name: "Host" });
+    expect(within(header).getByText("dc01")).toBeInTheDocument();
+    expect(within(header).queryByText("AD set")).not.toBeInTheDocument();
+  });
+
   it("the AD-set toggle shows only in exam sims and saves on, off and automatic", async () => {
     const user = userEvent.setup();
     const exam: Engagement = { ...E1, kind: "exam-sim" };

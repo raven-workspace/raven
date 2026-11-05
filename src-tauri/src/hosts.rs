@@ -6,13 +6,26 @@ use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 
-const COLS: &str = "id, engagement_id, name, ip, os, board_column, board_manual, access, created_at, updated_at, dual_homed, board_derived, access_reviewed_at, ad_set, \
-     COALESCE(ad_set, (EXISTS(SELECT 1 FROM services s WHERE s.host_id = hosts.id AND s.port = 88 AND s.state = 'open') \
-       AND EXISTS(SELECT 1 FROM services s WHERE s.host_id = hosts.id AND s.port = 389 AND s.state = 'open')))";
+/// SQL for a host's effective AD-set flag; `alias` names the hosts table in the query. The one
+/// definition behind both the host list (the chip) and exam-sim progress.
+///
+/// Only `state = 'open'` counts: a UDP scan reports `open|filtered` for most ports, which would
+/// otherwise flag every UDP-scanned host as a DC.
+pub fn ad_effective_sql(alias: &str) -> String {
+    format!(
+        "COALESCE({alias}.ad_set, (EXISTS(SELECT 1 FROM services s WHERE s.host_id = {alias}.id AND s.port = 88 AND s.state = 'open') \
+           AND EXISTS(SELECT 1 FROM services s WHERE s.host_id = {alias}.id AND s.port = 389 AND s.state = 'open')))"
+    )
+}
 
-/// SQL for a host's effective AD-set flag, for the host table aliased `h`.
-pub const AD_EFFECTIVE_H: &str = "COALESCE(h.ad_set, (EXISTS(SELECT 1 FROM services s WHERE s.host_id = h.id AND s.port = 88 AND s.state = 'open') \
-       AND EXISTS(SELECT 1 FROM services s WHERE s.host_id = h.id AND s.port = 389 AND s.state = 'open')))";
+/// Column list for queries written `FROM hosts`.
+fn cols() -> String {
+    format!(
+        "id, engagement_id, name, ip, os, board_column, board_manual, access, created_at, updated_at, dual_homed, \
+         board_derived, access_reviewed_at, ad_set, {}",
+        ad_effective_sql("hosts")
+    )
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -131,7 +144,7 @@ fn ip_key(ip: &Option<String>) -> Option<u32> {
 
 /// Ordered by IP numerically (hosts without an IP last), then name.
 pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Host>> {
-    let mut st = conn.prepare(&format!("SELECT {COLS} FROM hosts WHERE engagement_id = ?1"))?;
+    let mut st = conn.prepare(&format!("SELECT {} FROM hosts WHERE engagement_id = ?1", cols()))?;
     let mut rows = st.query_map([engagement_id], from_row)?.collect::<Result<Vec<_>, _>>()?;
     rows.sort_by(|a, b| {
         (ip_key(&a.ip).is_none(), ip_key(&a.ip), a.name.to_lowercase(), &a.id)
@@ -141,7 +154,7 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Host>> {
 }
 
 pub fn get(conn: &Connection, id: &str) -> AppResult<Host> {
-    match conn.query_row(&format!("SELECT {COLS} FROM hosts WHERE id = ?1"), [id], from_row) {
+    match conn.query_row(&format!("SELECT {} FROM hosts WHERE id = ?1", cols()), [id], from_row) {
         Ok(h) => Ok(h),
         Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
         Err(e) => Err(e.into()),
