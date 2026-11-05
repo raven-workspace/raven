@@ -5,7 +5,7 @@ import { applyIntake } from "../credentials/applyIntake";
 import type { Credential, Username } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import type { LogContent, LogEntry, LogKind, NewAttachment } from "../../types/log";
-import { intakePlanFor, isAccepted } from "./resolve";
+import { intakePlanFor, isAccepted, provisionalHostId, realIntakeKey } from "./resolve";
 
 const OPEN_STATES = new Set(["open", "open|filtered"]);
 
@@ -61,7 +61,10 @@ export interface SaveCaptureArgs {
     credentials: Credential[];
     usernames: Username[];
     toggles: Record<string, boolean>;
-    /** Keys of the pending credentials the preview offered. Only these can be created (T8-R3). */
+    /**
+     * Keys of the pending credentials the preview offered. Only these can be created (T8-R3). A preview planned
+     * with provisional hosts for `addIps` (`new:<ip>`) uses those ids; they are mapped to the created hosts here.
+     */
     previewKeys: string[];
   };
 }
@@ -77,6 +80,8 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<LogEntry> {
   const hostIds = [...edits.hostIds];
   const hosts = [...args.hosts];
   const added: Host[] = [];
+  // Provisional preview id (`new:<ip>`) → the host it became.
+  const createdIds = new Map<string, string>();
   for (const ip of addIps) {
     // A retry after a failure finds the host already made.
     let h = hosts.find((x) => x.ip === ip);
@@ -86,6 +91,7 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<LogEntry> {
       onHostCreated?.(h);
     }
     added.push(h);
+    createdIds.set(provisionalHostId(ip), h.id);
     if (!hostIds.includes(h.id)) hostIds.push(h.id);
   }
 
@@ -130,10 +136,10 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<LogEntry> {
     // Planned against the hosts as saved, so an IP added here counts as known.
     const plan = intakePlanFor(edits, { engagementId, hosts, ...args.intake });
     if (plan) {
-      // Only what the preview offered is ever created; a pair that became pending only because a host was added in
-      // this save is recorded as declined.
-      const { toggles, previewKeys } = args.intake;
-      const offered = new Set(previewKeys);
+      // Only what the preview offered is ever created (T8-R3). The preview planned IPs added here as provisional
+      // hosts (F-R2): their keys and toggles are mapped to the created hosts.
+      const offered = new Set(args.intake.previewKeys.map((k) => realIntakeKey(k, createdIds)));
+      const toggles = Object.fromEntries(Object.entries(args.intake.toggles).map(([k, on]) => [realIntakeKey(k, createdIds), on]));
       const acceptKeys = plan.newCredentials.filter((p) => offered.has(p.key) && isAccepted(p, toggles)).map((p) => p.key);
       try {
         await applyIntake(engagementId, plan, { logEntryId: entry.id, at: entry.at, acceptKeys });

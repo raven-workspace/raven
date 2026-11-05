@@ -274,7 +274,7 @@ describe("nxc intake in Add to log", () => {
     for (let i = 0; i + 6 <= nt.length; i++) expect(intake.textContent).not.toContain(nt.slice(i, i + 6));
   });
 
-  it("a pair that becomes pending only through a host added in the same save is not created", async () => {
+  it("a [+] pair on an IP ticked as a new host is offered, and on accept lands on the new host (F-R2)", async () => {
     const H9 = host({ id: "h9", name: "10.10.10.9", ip: "10.10.10.9" });
     m.hostCreate.mockResolvedValue(H9);
     const user = userEvent.setup();
@@ -282,23 +282,58 @@ describe("nxc intake in Add to log", () => {
     const { dialog, intake } = await pasteAndWait(
       user,
       [
-        "kali@kali:~$ nxc smb 10.10.10.5 10.10.10.9 -u users.txt -p 'Pass1'",
-        "SMB  10.10.10.5  445  DC01   [+] corp.local\\bob:Pass1",
-        "SMB  10.10.10.9  445  NEWBOX [+] corp.local\\zed:Zed1",
+        "kali@kali:~$ nxc smb 10.10.10.5 10.10.10.9 -u bob -p 'Pass'",
+        "SMB  10.10.10.5  445  DC01   [-] corp\\bob:Pass STATUS_LOGON_FAILURE",
+        "SMB  10.10.10.9  445  NEWBOX [+] corp\\bob:Pass",
       ].join("\n"),
     );
-    // zed only answered on an IP that isn't a host: nothing is offered
+    // Before the IP is ticked the [+] line has no host: only the failed-only pair is named.
     await within(intake).findByText(/10\.10\.10\.9/);
-    expect(within(intake).queryAllByRole("button", { name: /^Add / })).toHaveLength(0);
+    expect(within(intake).getByRole("button", { name: /^Add corp\\bob/ })).toHaveAttribute("aria-pressed", "false");
     await user.click(within(dialog).getByRole("button", { name: "+ 10.10.10.9" }));
+    // Ticked: the pair is offered (on by default) and the IP is no longer "not recorded".
+    const add = await within(dialog).findByRole("button", { name: "Add corp\\bob" });
+    expect(add).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).queryByText(/Not recorded/)).not.toBeInTheDocument();
     await save(user, dialog);
     await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 
     expect(m.hostCreate).toHaveBeenCalledWith("e1", { name: "10.10.10.9", ip: "10.10.10.9" });
-    expect(m.credentialCreate).not.toHaveBeenCalled();
-    expect(db.credentials.some((c) => c.username === "zed")).toBe(false);
-    // bob's result is still recorded with the entry as proof
-    expect(db.attempts.map((a) => [a.credId, a.hostId, a.result, a.logEntryId])).toEqual([["cBob", "h1", "valid", db.log[0]!.id]]);
+    const bob = db.credentials.find((c) => c.username === "bob" && c.secret === "Pass")!;
+    expect(bob).toMatchObject({ domain: "corp", scope: "domain", sourceHostId: "h9" });
+    const entry = db.log[0]!;
+    expect(db.attempts.filter((a) => a.credId === bob.id).map((a) => [a.hostId, a.result, a.logEntryId]).sort()).toEqual([
+      ["h1", "failed", entry.id],
+      ["h9", "valid", entry.id],
+    ]);
+  });
+
+  it("a local pair on a ticked new host keeps its accept toggle through the save (F-R2)", async () => {
+    const H9 = host({ id: "h9", name: "10.10.10.9", ip: "10.10.10.9" });
+    m.hostCreate.mockResolvedValue(H9);
+    const user = userEvent.setup();
+    mount();
+    const { dialog } = await pasteAndWait(
+      user,
+      [
+        "kali@kali:~$ nxc smb 10.10.10.9 -u administrator -p 'Local1' --local-auth",
+        "SMB  10.10.10.9  445  NEWBOX [+] NEWBOX\\administrator:Local1 (Pwn3d!)",
+        "SMB  10.10.10.9  445  NEWBOX [-] NEWBOX\\guest:Local1 STATUS_LOGON_FAILURE",
+      ].join("\n"),
+    );
+    await user.click(within(dialog).getByRole("button", { name: "+ 10.10.10.9" }));
+    // The failed-only guest pair is opted in; both keys name the provisional host until the save maps them.
+    const guest = await within(dialog).findByRole("button", { name: /^Add guest/ });
+    await user.click(guest);
+    expect(guest).toHaveAttribute("aria-pressed", "true");
+    await save(user, dialog);
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    const made = db.credentials.filter((c) => c.secret === "Local1");
+    expect(made.map((c) => [c.username, c.scope, c.localHostId]).sort()).toEqual([
+      ["administrator", "local", "h9"],
+      ["guest", "local", "h9"],
+    ]);
   });
 
   it("toggles reset when the paste changes", async () => {

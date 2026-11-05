@@ -17,7 +17,7 @@ import { KindFields } from "./KindFields";
 import { PasteArea } from "./PasteArea";
 import { Toggle } from "./Toggle";
 import { IntakePreview } from "./IntakePreview";
-import { intakePlanFor, KINDS, resolveCapture } from "./resolve";
+import { intakePlanFor, KINDS, resolveCapture, withProvisionalHosts } from "./resolve";
 import { PartialSaveError, saveCapture } from "./saveCapture";
 import { reportError } from "../../lib/lockSignal";
 import { EMPTY_DRAFT, useCaptureStore, type PanelDraft } from "./useCaptureStore";
@@ -68,19 +68,21 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
     };
     return metasploitWarning(draft, engagement, metasploitHostIds(draft, engagement, hosts));
   }, [engagement, hosts, id, r.edits]);
-  // nxc intake: the credentials and usernames are read only once the paste has nxc results or roast hashes.
+  // nxc intake plans with the IPs ticked "+ add as host" as provisional hosts, so pairs on them are offered (F-R2).
+  const intakeHosts = useMemo(() => withProvisionalHosts(hosts, id, pd.addIps), [hosts, id, pd.addIps]);
+  // The credentials and usernames are read only once the paste has nxc results or roast hashes.
   const hasIntake = useMemo(
-    () => intakePlanFor(r.edits, { engagementId: id, hosts, credentials: NO_CREDENTIALS, usernames: NO_USERNAMES }) !== null,
-    [r.edits, id, hosts],
+    () => intakePlanFor(r.edits, { engagementId: id, hosts: intakeHosts, credentials: NO_CREDENTIALS, usernames: NO_USERNAMES }) !== null,
+    [r.edits, id, intakeHosts],
   );
   const credsQ = useCredentials(id, { enabled: hasIntake });
   const usersQ = useUsernames(id, { enabled: hasIntake });
   const intake = useMemo(
     () =>
       hasIntake && credsQ.data && usersQ.data
-        ? intakePlanFor(r.edits, { engagementId: id, hosts, credentials: credsQ.data, usernames: usersQ.data })
+        ? intakePlanFor(r.edits, { engagementId: id, hosts: intakeHosts, credentials: credsQ.data, usernames: usersQ.data })
         : null,
-    [hasIntake, credsQ.data, usersQ.data, r.edits, id, hosts],
+    [hasIntake, credsQ.data, usersQ.data, r.edits, id, intakeHosts],
   );
   const set = (patch: Partial<PanelDraft>) => useCaptureStore.getState().update(id, patch);
 
@@ -113,7 +115,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
           qc.ensureQueryData({ queryKey: usernamesKey(id), queryFn: () => api.usernamesList(id) }),
         ]);
         // What the preview offers (computed here too when Save comes before it has rendered).
-        const preview = intakePlanFor(r.edits, { engagementId: id, hosts, credentials, usernames });
+        const preview = intakePlanFor(r.edits, { engagementId: id, hosts: intakeHosts, credentials, usernames });
         intakeLists = { credentials, usernames, previewKeys: preview?.newCredentials.map((p) => p.key) ?? [] };
       } catch (e) {
         reportError(e);
@@ -272,7 +274,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
         {intake && (
           <IntakePreview
             plan={intake}
-            hosts={hosts}
+            hosts={intakeHosts}
             toggles={pd.intakeToggles}
             onToggle={(key, on) => set({ intakeToggles: { ...pd.intakeToggles, [key]: on } })}
           />
