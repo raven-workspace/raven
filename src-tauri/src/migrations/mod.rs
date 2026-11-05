@@ -11,7 +11,8 @@
 //!   SQLite 12-step table rebuild of a referenced table) starts its SQL with the marker line
 //!   `-- raven:foreign-keys-off`. If any pending migration has it, the runner sets the pragma
 //!   OFF before opening the shared transaction, runs `PRAGMA foreign_key_check` before commit
-//!   (any row is an `AppError::Db` and rolls everything back), and restores `foreign_keys = ON`
+//!   (more rows than before the migrations ran is an `AppError::Db` and rolls everything back;
+//!   orphans that already existed are tolerated), and restores `foreign_keys = ON`
 //!   on every exit path.
 //! - Append new entries to `MIGRATIONS` with a strictly greater version; never edit a shipped one.
 
@@ -89,6 +90,12 @@ pub fn migrate_with(
 
 fn run_pending(conn: &mut Connection, pending: &[&(u32, &str)], check_fks: bool) -> AppResult<()> {
     let tx = conn.transaction()?;
+    // Old databases may already hold orphans; only violations a migration adds are fatal.
+    let before: i64 = if check_fks {
+        tx.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |r| r.get(0))?
+    } else {
+        0
+    };
     for (v, sql) in pending {
         tx.execute_batch(sql)?;
         if *v == 2 {
@@ -99,8 +106,16 @@ fn run_pending(conn: &mut Connection, pending: &[&(u32, &str)], check_fks: bool)
     if check_fks {
         let violations: i64 =
             tx.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |r| r.get(0))?;
-        if violations > 0 {
-            return Err(AppError::Db(format!("migration left {violations} foreign key violation(s)")));
+        if violations > before {
+            let tables = tx
+                .prepare("SELECT DISTINCT \"table\" FROM pragma_foreign_key_check")?
+                .query_map([], |r| r.get::<_, String>(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+            return Err(AppError::Db(format!(
+                "migration added {} foreign key violation(s) in: {}",
+                violations - before,
+                tables.join(", ")
+            )));
         }
     }
     tx.commit()?;
@@ -589,6 +604,47 @@ mod tests {
         assert_eq!(version(&c), 1);
         assert_eq!(count(&c, "SELECT count(*) FROM settings"), 1);
         assert_eq!(count(&c, "SELECT count(*) FROM sqlite_master WHERE name='half'"), 0);
+        assert_eq!(count(&c, "PRAGMA foreign_keys"), 1);
+    }
+
+    fn v2_db() -> Connection {
+        let (_d, _p, mut c) = file_db();
+        std::mem::forget(_d);
+        migrate_with(&mut c, &MIGRATIONS[..2], &mut |_, _| panic!("hook on fresh db")).unwrap();
+        c
+    }
+
+    const ORPHAN: &str = "INSERT INTO services (id,host_id,port,created_at,updated_at) VALUES ('s9','nope',22,1,1)";
+
+    #[test]
+    fn fk_off_migration_rejects_new_violation() {
+        let mut c = v2_db();
+        c.execute("INSERT INTO settings(key,value) VALUES('k','v')", []).unwrap();
+        let sql = format!("-- raven:foreign-keys-off\n{ORPHAN};");
+        let list: &[(u32, &str)] = &[MIGRATIONS[0], MIGRATIONS[1], (3, &sql)];
+        let r = migrate_with(&mut c, list, &mut |_, _| Ok(()));
+        match r {
+            Err(AppError::Db(m)) => assert!(m.contains("services"), "{m}"),
+            other => panic!("expected Db error, got {other:?}"),
+        }
+        assert_eq!(version(&c), 2);
+        assert_eq!(count(&c, "SELECT count(*) FROM services"), 0);
+        assert_eq!(count(&c, "SELECT count(*) FROM settings"), 1);
+        assert_eq!(count(&c, "PRAGMA foreign_keys"), 1);
+    }
+
+    #[test]
+    fn fk_off_migration_tolerates_preexisting_orphan() {
+        let mut c = v2_db();
+        c.execute_batch("PRAGMA foreign_keys = OFF").unwrap();
+        c.execute(ORPHAN, []).unwrap();
+        c.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        let list: &[(u32, &str)] =
+            &[MIGRATIONS[0], MIGRATIONS[1], (3, "-- raven:foreign-keys-off\nCREATE TABLE marker (x INTEGER);")];
+        let out = migrate_with(&mut c, list, &mut |_, _| Ok(())).unwrap();
+        assert_eq!(out, MigrationOutcome { from: 2, to: 3 });
+        assert_eq!(version(&c), 3);
+        assert_eq!(count(&c, "SELECT count(*) FROM services"), 1);
         assert_eq!(count(&c, "PRAGMA foreign_keys"), 1);
     }
 }
