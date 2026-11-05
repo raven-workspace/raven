@@ -447,3 +447,410 @@ describe("fix round 1: nothing user-entered is silently dropped", () => {
     expect(p.skipped.credLinkDropped).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------- Task 5: checklist, network, findings, loot
+
+const ISO = "2024-02-01T10:00:00.000Z";
+const ISO_MS = Date.parse(ISO);
+const cred = (over: Record<string, unknown> = {}) => ({
+  id: "cred_1", type: "password", username: "alice", secret: "Summer2024!", createdAt: ISO, engagementId: "custom-lab-1", ...over,
+});
+const attempt = (over: Record<string, unknown> = {}) => ({
+  id: "att_1", credId: "cred_1", machineId: "b1", service: "smb", result: "valid", at: ISO, authMode: "domain", ...over,
+});
+/** A lab with two boxes (b1, b2) plus a standalone (custom-solo), all selected. */
+const lootBackup = (over: Record<string, unknown> = {}, labOver: Partial<OldMachine> = {}) =>
+  bk(
+    [lab(labOver), labBox({ id: "b1", name: "DC01" }), labBox({ id: "b2", name: "WS01" }), standalone({ id: "custom-solo" }), standalone({ id: "custom-unpicked" })],
+    over,
+  );
+const lootPlan = (over: Record<string, unknown> = {}, labOver: Partial<OldMachine> = {}) =>
+  plan(lootBackup(over, labOver), ["custom-lab-1", "custom-solo"]);
+
+describe("buildImportPlan: checklist", () => {
+  it("lab container goals go to the engagement, box goals to the box", () => {
+    const p = plan(
+      bk([
+        lab({ checklist: { openPorts: [], activeItemId: null, itemsState: {
+          "e-setup-scope": { status: "done", completedAt: ISO, notes: "scope set" },
+          "cred-routine-smb": { status: "in_progress" },
+        } } }),
+        labBox({ id: "b1", checklist: { openPorts: [], activeItemId: null, itemsState: {
+          "h-enum-full-tcp": { status: "done", auto: true, autoFrom: "in_progress" },
+        } } }),
+      ]),
+      ["custom-lab-1"],
+    );
+    expect(p.checklist).toEqual([
+      { engagementId: "custom-lab-1", ownerId: "custom-lab-1", goalId: "e-setup-scope", status: "done", notes: "scope set", completedAt: ISO_MS, auto: false, autoFrom: null, evidence: [] },
+      { engagementId: "custom-lab-1", ownerId: "custom-lab-1", goalId: "cred-routine-smb", status: "in_progress", notes: null, completedAt: null, auto: false, autoFrom: null, evidence: [] },
+      { engagementId: "custom-lab-1", ownerId: "b1", goalId: "h-enum-full-tcp", status: "done", notes: null, completedAt: null, auto: true, autoFrom: "in_progress", evidence: [] },
+    ]);
+  });
+
+  it("a standalone's mixed itemsState routes e-* and cred-routine-* to the engagement, the rest to the host", () => {
+    const p = plan(
+      bk([standalone({ id: "custom-solo", checklist: { openPorts: [], activeItemId: null, itemsState: {
+        "h-enum-udp": { status: "na" },
+        "e-ad-nocreds-rid": { status: "done" },
+        "cred-routine-winrm": { status: "todo" },
+      } } })]),
+      ["custom-solo"],
+    );
+    expect(p.checklist.map((c) => [c.ownerId, c.goalId, c.engagementId])).toEqual([
+      ["custom-solo", "h-enum-udp", "custom-solo#e"],
+      ["custom-solo#e", "e-ad-nocreds-rid", "custom-solo#e"],
+      ["custom-solo#e", "cred-routine-winrm", "custom-solo#e"],
+    ]);
+  });
+
+  it("unknown goal ids are skipped and counted", () => {
+    const p = plan(
+      bk([standalone({ id: "custom-solo", checklist: { openPorts: [], activeItemId: null, itemsState: {
+        "p01-nmap-full": { status: "done" },
+        "h-not-a-goal": { status: "done" },
+        "h-enum-udp": { status: "bogus" },
+        "h-enum-versions": "junk",
+        "h-enum-full-tcp": { status: "done", autoFrom: "weird" },
+      } } })]),
+      ["custom-solo"],
+    );
+    expect(p.checklist.map((c) => [c.goalId, c.autoFrom])).toEqual([["h-enum-full-tcp", null]]);
+    expect(p.skipped.unknownGoal).toBe(2);
+    expect(p.skipped.badChecklistItem).toBe(2);
+  });
+
+  it("evidence keeps only imported entries", () => {
+    const p = plan(
+      bk([standalone({
+        id: "custom-solo",
+        logEntries: [logEntry(1, { id: "log-a" })] as never,
+        checklist: { openPorts: [], activeItemId: null, itemsState: {
+          "h-enum-full-tcp": { status: "done", evidence: [
+            { containerId: "custom-solo", entryId: "log-a", commandId: "nmap-full" },
+            { containerId: "custom-solo", entryId: "log-gone" },
+            "junk",
+          ] },
+        } },
+      })]),
+      ["custom-solo"],
+    );
+    expect(p.checklist[0].evidence).toEqual([{ entryId: "log-a", commandId: "nmap-full" }]);
+    expect(p.skipped.droppedEvidence).toBe(2);
+  });
+
+  it("a lab container's host goals have no host owner and are counted", () => {
+    const p = plan(bk([lab({ checklist: { openPorts: [], activeItemId: null, itemsState: { "h-enum-udp": { status: "done" } } } })]), ["custom-lab-1"]);
+    expect(p.checklist).toEqual([]);
+    expect(p.skipped.checklistNoOwner).toBe(1);
+  });
+});
+
+describe("buildImportPlan: hops and tunnels", () => {
+  it("hops and tunnels map from the container, skipping deleted ids", () => {
+    const p = plan(
+      bk([
+        lab({
+          hops: [
+            { id: "hop-1", toHostId: "b1", via: "evil-winrm", logEntryId: "log-1", at: ISO, updatedAt: ISO },
+            { id: "hop-2", fromHostId: "b1", toHostId: "b2", via: "psexec", credId: "cred_1", at: ISO, updatedAt: ISO },
+            { id: "hop-del", toHostId: "b1", via: "x", at: ISO, updatedAt: ISO },
+          ],
+          deletedHopIds: ["hop-del"],
+          tunnels: [
+            { id: "tun-1", kind: "ligolo", viaHostId: "b1", subnets: ["172.16.1.0/24"], callbackIp: "10.10.14.2", status: "up", notes: "n", createdAt: ISO, updatedAt: ISO },
+            { id: "tun-del", kind: "ssh", viaHostId: "b1", subnets: [], callbackIp: "", status: "down", createdAt: ISO, updatedAt: ISO },
+          ],
+          deletedTunnelIds: ["tun-del"],
+          logEntries: [logEntry(1, { id: "log-1" })] as never,
+        }),
+        labBox({ id: "b1" }),
+        labBox({ id: "b2" }),
+      ]),
+      ["custom-lab-1"],
+    );
+    expect(p.hops).toEqual([
+      { id: "hop-1", engagementId: "custom-lab-1", fromHostId: null, toHostId: "b1", via: "evil-winrm", logEntryId: "log-1", at: ISO_MS, updatedAt: ISO_MS },
+      { id: "hop-2", engagementId: "custom-lab-1", fromHostId: "b1", toHostId: "b2", via: "psexec", logEntryId: null, at: ISO_MS, updatedAt: ISO_MS },
+    ]);
+    expect(p.skipped.hopCredLinkDropped).toBe(1);
+    expect(p.tunnels).toEqual([
+      { id: "tun-1", engagementId: "custom-lab-1", kind: "ligolo", viaHostId: "b1", subnets: ["172.16.1.0/24"], callbackIp: "10.10.14.2", status: "up", notes: "n", createdAt: ISO_MS, updatedAt: ISO_MS },
+    ]);
+  });
+
+  it("a hop to a non-imported host is skipped", () => {
+    const p = plan(
+      bk([
+        lab({ hops: [
+          { id: "hop-1", toHostId: "elsewhere", via: "ssh", at: ISO, updatedAt: ISO },
+          { id: "hop-2", fromHostId: "elsewhere", toHostId: "b1", via: "ssh", at: ISO, updatedAt: ISO },
+          { id: "hop-3", fromHostId: "b1", toHostId: "b1", via: "ssh", at: ISO, updatedAt: ISO },
+          "junk",
+        ], tunnels: [{ id: "tun-1", kind: "chisel", viaHostId: "nope", subnets: [], callbackIp: "", status: "up", createdAt: ISO, updatedAt: ISO }] }),
+        labBox({ id: "b1" }),
+      ]),
+      ["custom-lab-1"],
+    );
+    expect(p.hops).toEqual([]);
+    expect(p.tunnels).toEqual([]);
+    expect(p.skipped.hopHostMissing).toBe(2);
+    expect(p.skipped.badHop).toBe(2);
+    expect(p.skipped.tunnelHostMissing).toBe(1);
+  });
+
+  it("invalid tunnel subnets and callback ip are kept in the notes, not lost", () => {
+    const p = plan(
+      bk([standalone({ id: "custom-solo", tunnels: [
+        { id: "t", kind: "weird", viaHostId: "custom-solo", subnets: ["10.0.0.0/8", "corp net"], callbackIp: "tun0", status: "up", createdAt: ISO, updatedAt: ISO },
+      ] })]),
+      ["custom-solo"],
+    );
+    expect(p.tunnels[0]).toMatchObject({ kind: "other", subnets: ["10.0.0.0/8"], callbackIp: "", notes: "Subnets as entered: corp net\nCallback as entered: tun0" });
+  });
+});
+
+describe("buildImportPlan: findings", () => {
+  it("a LabFinding maps to a draft finding", () => {
+    const p = plan(
+      bk([
+        lab({ findings: [{ id: "f-lab", title: "Weak policy", severity: "low", createdAt: 5, updatedAt: 6 }] as never }),
+        labBox({ id: "b1", findings: [{
+          id: "f-1", title: "SQLi in login", severity: "critical", cvssScore: 9.8, cweCve: "CWE-89, CVE-2024-0001",
+          affectedService: "http/80", repro: "1. ' or 1=1--", remediation: "Use prepared statements", createdAt: 1000, updatedAt: 2000,
+        }] as never }),
+      ]),
+      ["custom-lab-1"],
+    );
+    expect(p.findings).toEqual([
+      {
+        id: "f-lab", engagementId: "custom-lab-1", title: "Weak policy", severity: "low", cvssVector: null, cvssScore: null, status: "draft",
+        description: "", impact: "", remediation: "", exploitNotes: "", lessons: "", refs: [], hostIds: [], serviceIds: [], stepEntryIds: [],
+        createdAt: 5, updatedAt: 6,
+      },
+      {
+        id: "f-1", engagementId: "custom-lab-1", title: "SQLi in login", severity: "critical", cvssVector: null, cvssScore: 9.8, status: "draft",
+        description: "Affected: http/80\n\n1. ' or 1=1--", impact: "", remediation: "Use prepared statements", exploitNotes: "", lessons: "",
+        refs: ["CWE-89", "CVE-2024-0001"], hostIds: ["b1"], serviceIds: [], stepEntryIds: [], createdAt: 1000, updatedAt: 2000,
+      },
+    ]);
+  });
+
+  it("bad severity and score become null; a blank title gets a fallback; junk is counted", () => {
+    const p = plan(
+      bk([standalone({ id: "custom-solo", findings: [{ id: "f", title: " ", severity: "urgent", cvssScore: 42, createdAt: "x", updatedAt: null }, "junk"] as never })]),
+      ["custom-solo"],
+    );
+    expect(p.findings[0]).toMatchObject({ title: "Imported finding", severity: null, cvssScore: null, hostIds: ["custom-solo"], createdAt: NOW, updatedAt: NOW });
+    expect(p.skipped.badFinding).toBe(1);
+  });
+});
+
+describe("buildImportPlan: credentials", () => {
+  it("credentials map to the selected engagement by engagementId or source host; others are not selected", () => {
+    const p = lootPlan({
+      credentials: [
+        cred({ id: "c-lab", domain: "corp.local", sourceMachineId: "b1", notes: "from SAM", source: "secretsdump" }),
+        cred({ id: "c-solo", engagementId: "custom-solo", secret: "s2" }),
+        cred({ id: "c-src", engagementId: undefined, sourceMachineId: "b2", secret: "s3" }),
+        cred({ id: "c-other", engagementId: "custom-unpicked", secret: "s4" }),
+      ],
+    });
+    expect(p.credentials.map((c) => [c.id, c.engagementId])).toEqual([
+      ["c-lab", "custom-lab-1"], ["c-solo", "custom-solo#e"], ["c-src", "custom-lab-1"],
+    ]);
+    expect(p.credentials[0]).toEqual({
+      id: "c-lab", engagementId: "custom-lab-1", type: "password", username: "alice", domain: "corp.local", secret: "Summer2024!",
+      hashType: null, scope: "domain", localHostId: null, sourceHostId: "b1", source: "secretsdump", notes: "from SAM",
+      crackStatus: null, crackedFrom: null, fromSecretId: null, createdAt: ISO_MS, updatedAt: ISO_MS,
+    });
+  });
+
+  it("a redacted credential is skipped and counted", () => {
+    const p = lootPlan({
+      credentials: [cred({ id: "c1", redacted: true }), cred({ id: "c2", secret: " [REDACTED] " }), cred({ id: "c3", secret: "real" })],
+      credAttempts: [attempt({ id: "a1", credId: "c1" })],
+    });
+    expect(p.credentials.map((c) => c.id)).toEqual(["c3"]);
+    expect(p.skipped.redactedCredential).toBe(2);
+    expect(p.credAttempts).toEqual([]);
+    expect(p.skipped.attemptCredMissing).toBe(1);
+  });
+
+  it("password secrets keep spaces and lose only edge line breaks; hashes are trimmed and typed", () => {
+    const p = lootPlan({
+      credentials: [
+        cred({ id: "c1", secret: "\n  pass word  \r\n" }),
+        cred({ id: "c2", type: "hash", username: "bob", secret: "  aad3b435b51404eeaad3b435b51404ee \n" }),
+        cred({ id: "c3", type: "hash", username: "carol", secret: "x", hashType: "Custom", crackStatus: "cracked" }),
+        cred({ id: "c4", type: "wat", username: "drew", secret: "k" }),
+      ],
+    });
+    expect(p.credentials.map((c) => [c.secret, c.hashType, c.crackStatus, c.type])).toEqual([
+      ["  pass word  ", null, null, "password"],
+      ["aad3b435b51404eeaad3b435b51404ee", "NTLM", "uncracked", "hash"],
+      ["x", "Custom", "cracked", "hash"],
+      ["k", null, null, "other"],
+    ]);
+  });
+
+  it("a local credential keeps its imported host; a missing one is skipped and counted", () => {
+    const p = lootPlan({
+      credentials: [
+        cred({ id: "c1", scope: "local", localHostId: "b1" }),
+        cred({ id: "c2", scope: "local", localHostId: "custom-unpicked", secret: "x" }),
+        cred({ id: "c3", scope: "local", secret: "y" }),
+        cred({ id: "c4", scope: "domain", localHostId: "b1", secret: "z" }),
+      ],
+    });
+    expect(p.credentials.map((c) => [c.id, c.scope, c.localHostId])).toEqual([["c1", "local", "b1"], ["c4", "domain", null]]);
+    expect(p.skipped.credLocalHostMissing).toBe(2);
+  });
+
+  it("duplicates by credKey keep the first and move their attempts onto it", () => {
+    const p = lootPlan({
+      credentials: [cred({ id: "c1" }), cred({ id: "c2", username: "ALICE" }), cred({ id: "c3", engagementId: "custom-solo" })],
+      credAttempts: [attempt({ id: "a1", credId: "c2", machineId: "b1", result: "admin" })],
+    });
+    expect(p.credentials.map((c) => c.id)).toEqual(["c1", "c3"]);
+    expect(p.skipped.credDuplicate).toBe(1);
+    expect(p.credAttempts.map((a) => [a.id, a.credId, a.result])).toEqual([["a1", "c1", "admin"]]);
+  });
+
+  it("crackedFrom and fromSecretId follow imported credentials only; links come before their users", () => {
+    const p = lootPlan({
+      credentials: [
+        cred({ id: "c-plain", secret: "Pass1", crackedFrom: "c-hash", fromSecretId: "c-gone" }),
+        cred({ id: "c-hash", type: "hash", secret: "31d6cfe0d16ae931b73c59d7e0c089c0" }),
+      ],
+    });
+    expect(p.credentials.map((c) => [c.id, c.crackedFrom, c.fromSecretId])).toEqual([["c-hash", null, null], ["c-plain", "c-hash", null]]);
+    expect(p.skipped.droppedCredLink).toBe(1);
+  });
+  it("a link cycle is broken rather than stored", () => {
+    const p = lootPlan({
+      credentials: [
+        cred({ id: "c1", secret: "a", crackedFrom: "c2" }),
+        cred({ id: "c2", secret: "b", fromSecretId: "c1", verifications: "junk" }),
+        cred({ id: "c3", secret: "c", crackedFrom: "c3" }),
+      ],
+    });
+    expect(p.credentials.map((c) => [c.id, c.crackedFrom, c.fromSecretId])).toEqual([["c2", null, null], ["c1", "c2", null], ["c3", null, null]]);
+    expect(p.skipped.droppedCredLink).toBe(2);
+  });
+});
+
+describe("buildImportPlan: attempts", () => {
+  it("attempts map machineId to hostId and keep their fields", () => {
+    const p = lootPlan({
+      credentials: [cred()],
+      credAttempts: [attempt({ port: 445, detail: " Pwn3d! ", logEntryId: "log-1", logContainerId: "custom-lab-1" })],
+    }, { logEntries: [logEntry(1, { id: "log-1" })] as never });
+    expect(p.credAttempts).toEqual([{
+      id: "att_1", engagementId: "custom-lab-1", credId: "cred_1", usernameId: null, hostId: "b1", service: "smb", port: 445,
+      result: "valid", authMode: "domain", detail: "Pwn3d!", logEntryId: "log-1", at: ISO_MS,
+    }]);
+  });
+
+  it("tried/invalid results are migrated", () => {
+    const p = lootPlan({
+      credentials: [cred()],
+      credAttempts: [
+        attempt({ id: "a1", result: "tried", service: "winrm" }),
+        attempt({ id: "a2", result: "invalid", service: "ssh" }),
+        attempt({ id: "a3", result: "nonsense", service: "rdp" }),
+      ],
+    });
+    expect(p.credAttempts.map((a) => [a.id, a.result])).toEqual([["a1", "errored"], ["a2", "failed"]]);
+    expect(p.skipped.badAttempt).toBe(1);
+  });
+
+  it("a missing authMode follows the scope", () => {
+    const p = lootPlan({
+      credentials: [cred({ id: "c-loc", scope: "local", localHostId: "b1" }), cred({ id: "c-dom", secret: "other" })],
+      credAttempts: [attempt({ id: "a1", credId: "c-loc", authMode: undefined }), attempt({ id: "a2", credId: "c-dom", authMode: "junk" })],
+    });
+    expect(p.credAttempts.map((a) => [a.id, a.authMode])).toEqual([["a1", "local"], ["a2", "domain"]]);
+  });
+
+  it("legacy verifications become attempts", () => {
+    const p = lootPlan({
+      credentials: [cred({ verifications: {
+        b1: { status: "admin", protocol: "winrm", updatedAt: "2024-03-01T00:00:00.000Z" },
+        b2: { status: "user" },
+        "custom-unpicked": { status: "failed" },
+        "custom-solo": { status: "untested" },
+      } })],
+    });
+    expect(p.credAttempts).toEqual([
+      { id: "cred_1:verification:b1", engagementId: "custom-lab-1", credId: "cred_1", usernameId: null, hostId: "b1", service: "winrm", port: null,
+        result: "admin", authMode: "domain", detail: null, logEntryId: null, at: Date.parse("2024-03-01T00:00:00.000Z") },
+      { id: "cred_1:verification:b2", engagementId: "custom-lab-1", credId: "cred_1", usernameId: null, hostId: "b2", service: "smb", port: null,
+        result: "valid", authMode: "domain", detail: null, logEntryId: null, at: ISO_MS },
+    ]);
+    expect(p.skipped.attemptHostMissing).toBe(1);
+  });
+
+  it("attempts on a non-imported host or another engagement's host are skipped; same key keeps the stronger result", () => {
+    const p = lootPlan({
+      credentials: [cred()],
+      credAttempts: [
+        attempt({ id: "a1", machineId: "custom-unpicked" }),
+        attempt({ id: "a2", machineId: "custom-solo" }),
+        attempt({ id: "a3", result: "errored", at: "2024-05-01T00:00:00.000Z" }),
+        attempt({ id: "a4", result: "admin", at: "2024-04-01T00:00:00.000Z", port: 0 }),
+      ],
+    });
+    expect(p.credAttempts.map((a) => [a.id, a.result, a.port])).toEqual([["a3", "admin", null]]);
+    expect(p.skipped.attemptHostMissing).toBe(2);
+  });
+});
+
+describe("buildImportPlan: usernames and access", () => {
+  it("usernames come with their access grants, respecting deletedAccessIds", () => {
+    const p = lootPlan({
+      usernames: [{
+        id: "user_1", username: " svc_sql ", domain: "corp.local", createdAt: ISO, engagementId: "custom-lab-1", sourceMachineId: "b1", source: "kerbrute",
+        access: [
+          { id: "g1", hostId: "b2", level: "admin", via: "winrm", at: ISO, logEntryId: "gone" },
+          { id: "g2", hostId: "b1", level: "user", via: "ssh", at: ISO },
+          { id: "g3", hostId: "custom-unpicked", level: "user", via: "ssh", at: ISO },
+          { id: "g4", hostId: "b1", level: "god", via: "x", at: ISO },
+        ],
+        deletedAccessIds: ["g2"],
+      }],
+    });
+    expect(p.usernames).toEqual([
+      { id: "user_1", engagementId: "custom-lab-1", username: "svc_sql", domain: "corp.local", sourceHostId: "b1", source: "kerbrute", createdAt: ISO_MS },
+    ]);
+    expect(p.accessGrants).toEqual([
+      { id: "g1", engagementId: "custom-lab-1", usernameId: "user_1", hostId: "b2", level: "admin", via: "winrm", logEntryId: null, at: ISO_MS },
+    ]);
+    expect(p.skipped.grantHostMissing).toBe(1);
+    expect(p.skipped.badGrant).toBe(1);
+  });
+
+  it("a duplicate username merges into the first, grants and attempts included", () => {
+    const p = lootPlan({
+      credentials: [cred()],
+      usernames: [
+        { id: "u1", username: "bob", createdAt: ISO, engagementId: "custom-lab-1" },
+        { id: "u2", username: "BOB", createdAt: ISO, engagementId: "custom-lab-1", access: [{ id: "g1", hostId: "b1", level: "user", via: "rdp", at: ISO }] },
+        { id: "u3", username: "  ", createdAt: ISO, engagementId: "custom-lab-1" },
+      ],
+      credAttempts: [attempt({ usernameId: "u2" }), attempt({ id: "a2", usernameId: "u-gone", service: "ssh" })],
+    });
+    expect(p.usernames.map((u) => u.id)).toEqual(["u1"]);
+    expect(p.accessGrants.map((g) => [g.id, g.usernameId])).toEqual([["g1", "u1"]]);
+    expect(p.credAttempts.map((a) => [a.id, a.usernameId])).toEqual([["att_1", "u1"]]);
+    expect(p.skipped.usernameDuplicate).toBe(1);
+    expect(p.skipped.badUsername).toBe(1);
+    expect(p.skipped.attemptUsernameMissing).toBe(1);
+  });
+
+  it("never throws on malformed loot", () => {
+    const junk = [null, 7, "x", [], {}, { id: 5 }, { username: 3, secret: {} }];
+    expect(() => lootPlan({ credentials: junk, credAttempts: junk, usernames: [...junk, { id: "u", username: "a", access: "nope" }] })).not.toThrow();
+    expect(() => lootPlan({ credentials: "nope", credAttempts: {}, usernames: 4 })).not.toThrow();
+  });
+});

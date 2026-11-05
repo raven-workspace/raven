@@ -5,6 +5,16 @@ import type { BoardColumn, HostAccess, HostOs } from "../../types/host";
 import type { EngagementKind, EngagementStatus } from "../../types/engagement";
 import type { CommandBlock, FlagKind, LogContent, LogKind, NewAttachment } from "../../types/log";
 import type { ServiceProtocol } from "../../types/service";
+import type { ChecklistStatus, Evidence } from "../../types/checklist";
+import type { Hop, Tunnel, TunnelKind } from "../../types/network";
+import type { Finding, Severity } from "../../types/findings";
+import type {
+  AccessGrant, AccessLevel, AttemptResult, AttemptService, AuthMode, CredAttempt, Credential, CredentialScope,
+  CredentialType, CrackStatus, Username,
+} from "../../types/credentials";
+import { HOST_GOALS } from "../checklist/data/hostChecklist";
+import { AD_PLAYBOOKS, ENGAGEMENT_SETUP } from "../checklist/data/engagementChecklist";
+import { attemptKey, defaultHashType, findDuplicateCredential, stripLineBreaks, usernameKey } from "../credentials/keys";
 import { flagTitle, noteTitle, screenshotFileName } from "../capture/titles";
 import { openThreads } from "../notes/threads";
 import { boxesOf, listImportable, machinesOf } from "./list";
@@ -80,12 +90,46 @@ export interface PlanNote {
   private: false;
 }
 
+/** A checklist item with every field explicit. Its identity is (ownerId, goalId). */
+export interface PlanChecklistItem {
+  engagementId: string;
+  /** A host id, or the engagement id for engagement goals and credential routines. */
+  ownerId: string;
+  goalId: string;
+  status: ChecklistStatus;
+  notes: string | null;
+  completedAt: number | null;
+  auto: boolean;
+  autoFrom: "na" | "in_progress" | null;
+  evidence: Evidence[];
+}
+
+export type PlanHop = Hop;
+export type PlanTunnel = Tunnel;
+/** FindingInput with every field explicit, plus id, engagement and times. */
+export type PlanFinding = Finding;
+export type PlanCredential = Credential;
+export type PlanUsername = Username;
+export type PlanAccessGrant = AccessGrant;
+export type PlanCredAttempt = CredAttempt;
+
 export interface ImportPlan {
   engagements: PlanEngagement[];
   hosts: PlanHost[];
   services: PlanService[];
   logEntries: PlanLogEntry[];
   notes: PlanNote[];
+  checklist: PlanChecklistItem[];
+  hops: PlanHop[];
+  tunnels: PlanTunnel[];
+  findings: PlanFinding[];
+  /** Ordered so a credential's crackedFrom/fromSecretId target comes before it. */
+  credentials: PlanCredential[];
+  usernames: PlanUsername[];
+  /** Each grant's username comes earlier in `usernames`. */
+  accessGrants: PlanAccessGrant[];
+  /** Unique on attemptKey; credential, username and host are all in this plan, in one engagement. */
+  credAttempts: PlanCredAttempt[];
   /** Skipped records by reason (e.g. missingImage, badLogEntry). Only reasons that occurred are present. */
   skipped: Record<string, number>;
 }
@@ -143,11 +187,19 @@ export function escapeThreads(body: string): string {
 }
 
 export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number): ImportPlan {
-  const plan: ImportPlan = { engagements: [], hosts: [], services: [], logEntries: [], notes: [], skipped: {} };
+  const plan: ImportPlan = {
+    engagements: [], hosts: [], services: [], logEntries: [], notes: [],
+    checklist: [], hops: [], tunnels: [], findings: [],
+    credentials: [], usernames: [], accessGrants: [], credAttempts: [],
+    skipped: {},
+  };
   const skip = (reason: string, n = 1) => {
     if (n > 0) plan.skipped[reason] = (plan.skipped[reason] ?? 0) + n;
   };
-  const seen = { engagement: new Set<string>(), host: new Set<string>(), service: new Set<string>(), log: new Set<string>(), note: new Set<string>() };
+  const seen = {
+    engagement: new Set<string>(), host: new Set<string>(), service: new Set<string>(), log: new Set<string>(), note: new Set<string>(),
+    checklist: new Set<string>(), hop: new Set<string>(), tunnel: new Set<string>(), finding: new Set<string>(),
+  };
   const fresh = (table: keyof typeof seen, id: string): boolean => {
     if (seen[table].has(id)) {
       skip("duplicate");
@@ -164,6 +216,9 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
   for (const img of arr(isObj(b?.indexedDb) ? b.indexedDb.images : undefined)) {
     if (isObj(img) && typeof img.id === "string" && !images.has(img.id)) images.set(img.id, img);
   }
+
+  /** Old engagement id (a lab id, or a standalone's machine id) -> new engagement id. */
+  const engagementOf = new Map<string, string>();
 
   for (const selected of new Set(Array.isArray(selectedIds) ? selectedIds : [])) {
     const c = candidates.get(selected);
@@ -188,6 +243,7 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
       msfHostId: null,
     };
     plan.engagements.push(engagement);
+    engagementOf.set(container.id, engagementId);
 
     // Hosts and their services.
     const boxes = isLabSel ? boxesOf(machines, container.id) : [];
@@ -386,8 +442,187 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
     for (const m of hostRows) {
       if (hosts.has(m.id)) pushNote(m.id, m.id, [...shared(m), triageSection(m, rowsOf(m), skip)]);
     }
+
+    const logIds = new Set(plan.logEntries.filter((e) => e.engagementId === engagementId).map((e) => e.id));
+    /** An imported log entry of this engagement, else null (a dangling link is counted). */
+    const logLink = (v: unknown): string | null => {
+      if (!hasText(v)) return null;
+      if (logIds.has(v)) return v;
+      skip("droppedLogLink");
+      return null;
+    };
+
+    // Checklist: engagement goals and credential routines belong to the engagement, host goals to the host.
+    for (const m of holders) {
+      const items = isObj(m.checklist) && isObj(m.checklist.itemsState) ? m.checklist.itemsState : {};
+      for (const [goalId, st] of Object.entries(items)) {
+        const engagementGoal = ENGAGEMENT_GOAL_IDS.has(goalId) || goalId.startsWith("cred-routine-");
+        if (!engagementGoal && !HOST_GOAL_IDS.has(goalId)) {
+          skip("unknownGoal");
+          continue;
+        }
+        if (!isObj(st) || typeof st.status !== "string" || !STATUSES.has(st.status)) {
+          skip("badChecklistItem");
+          continue;
+        }
+        const ownerId = engagementGoal ? engagementId : hosts.has(m.id) ? m.id : null;
+        if (!ownerId) {
+          skip("checklistNoOwner");
+          continue;
+        }
+        if (!fresh("checklist", `${ownerId}|${goalId}`)) continue;
+        const evidence: Evidence[] = [];
+        for (const ev of arr(st.evidence)) {
+          if (!isObj(ev) || !hasText(ev.entryId) || !logIds.has(ev.entryId)) {
+            skip("droppedEvidence");
+            continue;
+          }
+          evidence.push({ entryId: ev.entryId, commandId: hasText(ev.commandId) ? ev.commandId : null });
+        }
+        plan.checklist.push({
+          engagementId,
+          ownerId,
+          goalId,
+          status: st.status as ChecklistStatus,
+          notes: hasText(st.notes) ? st.notes : null,
+          completedAt: toMs(st.completedAt, null),
+          auto: st.auto === true,
+          autoFrom: st.autoFrom === "na" || st.autoFrom === "in_progress" ? st.autoFrom : null,
+          evidence,
+        });
+      }
+    }
+
+    // Hops and tunnels live on the container.
+    const deletedHops = new Set(arr(container.deletedHopIds).filter(hasText));
+    for (const h of arr(container.hops)) {
+      if (!isObj(h) || !hasText(h.id) || !hasText(h.toHostId)) {
+        skip("badHop");
+        continue;
+      }
+      if (deletedHops.has(h.id)) continue;
+      const fromHostId = hasText(h.fromHostId) ? h.fromHostId : null;
+      if (!hosts.has(h.toHostId) || (fromHostId !== null && !hosts.has(fromHostId))) {
+        skip("hopHostMissing");
+        continue;
+      }
+      if (fromHostId === h.toHostId) {
+        skip("badHop");
+        continue;
+      }
+      if (!fresh("hop", h.id)) continue;
+      // The new model's hop has no credential or username link.
+      if (hasText(h.credId) || hasText(h.usernameId)) skip("hopCredLinkDropped");
+      const at = toMs(h.at, toMs(h.updatedAt, now));
+      plan.hops.push({
+        id: h.id,
+        engagementId,
+        fromHostId,
+        toHostId: h.toHostId,
+        via: typeof h.via === "string" ? h.via.trim() : "",
+        logEntryId: logLink(h.logEntryId),
+        at,
+        updatedAt: toMs(h.updatedAt, at),
+      });
+    }
+    const deletedTunnels = new Set(arr(container.deletedTunnelIds).filter(hasText));
+    for (const t of arr(container.tunnels)) {
+      if (!isObj(t) || !hasText(t.id) || !hasText(t.viaHostId)) {
+        skip("badTunnel");
+        continue;
+      }
+      if (deletedTunnels.has(t.id)) continue;
+      if (!hosts.has(t.viaHostId)) {
+        skip("tunnelHostMissing");
+        continue;
+      }
+      if (!fresh("tunnel", t.id)) continue;
+      // Values the new model would reject stay readable in the notes.
+      const entered = arr(t.subnets).filter(hasText).map((x) => x.trim());
+      const subnets = entered.filter(validCidr).slice(0, MAX_SUBNETS);
+      const rejected = entered.filter((x) => !subnets.includes(x));
+      const cb = typeof t.callbackIp === "string" ? t.callbackIp.trim() : "";
+      const cbOk = cb === "" || (!cb.includes("/") && validCidr(cb));
+      const extra = [
+        rejected.length ? `Subnets as entered: ${rejected.join(", ")}` : "",
+        cbOk ? "" : `Callback as entered: ${oneLine(cb)}`,
+      ].filter(Boolean).join("\n");
+      const notes = [hasText(t.notes) ? t.notes.trim() : "", extra].filter(Boolean).join("\n\n");
+      const createdAt = toMs(t.createdAt, toMs(t.updatedAt, now));
+      plan.tunnels.push({
+        id: t.id,
+        engagementId,
+        kind: typeof t.kind === "string" && TUNNEL_KINDS.has(t.kind) ? (t.kind as TunnelKind) : "other",
+        viaHostId: t.viaHostId,
+        subnets,
+        callbackIp: cbOk ? cb : "",
+        status: t.status === "up" ? "up" : "down",
+        notes: notes || null,
+        createdAt,
+        updatedAt: toMs(t.updatedAt, createdAt),
+      });
+    }
+
+    // Findings: each machine's LabFindings, linked to that machine when it is a host.
+    for (const m of holders) {
+      for (const f of arr(m.findings)) {
+        if (!isObj(f) || !hasText(f.id)) {
+          skip("badFinding");
+          continue;
+        }
+        if (!fresh("finding", f.id)) continue;
+        const description = [
+          hasText(f.affectedService) ? `Affected: ${oneLine(f.affectedService)}` : "",
+          hasText(f.repro) ? f.repro : "",
+        ].filter(Boolean).join("\n\n");
+        const refs = hasText(f.cweCve)
+          ? [...new Set(f.cweCve.split(/[,;\n]+/).map((r) => r.trim()).filter(Boolean))].slice(0, MAX_REFS)
+          : [];
+        const score = f.cvssScore;
+        const createdAt = toMs(f.createdAt, now);
+        plan.findings.push({
+          id: f.id,
+          engagementId,
+          title: hasText(f.title) ? oneLine(f.title) : "Imported finding",
+          severity: typeof f.severity === "string" && SEVERITIES.has(f.severity) ? (f.severity as Severity) : null,
+          cvssVector: null,
+          cvssScore: typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 10 ? score : null,
+          status: "draft",
+          description,
+          impact: "",
+          remediation: hasText(f.remediation) ? f.remediation : "",
+          exploitNotes: "",
+          lessons: "",
+          refs,
+          hostIds: hostFor(m),
+          serviceIds: [],
+          stepEntryIds: [],
+          createdAt,
+          updatedAt: toMs(f.updatedAt, createdAt),
+        });
+      }
+    }
   }
+
+  mapLoot(b, plan, engagementOf, skip, now);
   return plan;
+}
+
+const HOST_GOAL_IDS = new Set(HOST_GOALS.map((g) => g.id));
+const ENGAGEMENT_GOAL_IDS = new Set([...ENGAGEMENT_SETUP, ...AD_PLAYBOOKS.flatMap((p) => p.goals)].map((g) => g.id));
+const STATUSES = new Set<string>(["todo", "in_progress", "done", "na"]);
+const TUNNEL_KINDS = new Set<string>(["ligolo", "chisel", "ssh", "socks", "other"]);
+const SEVERITIES = new Set<string>(["critical", "high", "medium", "low", "info"]);
+const MAX_SUBNETS = 50;
+const MAX_REFS = 100;
+
+/** IPv4 address or CIDR. Agrees with Rust `valid_cidr` (no leading zeros, prefix 0-32). */
+function validCidr(s: string): boolean {
+  const [ip, prefix, more] = s.split("/");
+  if (more !== undefined) return false;
+  if (prefix !== undefined && !/^(?:[0-9]|[12][0-9]|3[0-2])$/.test(prefix)) return false;
+  const parts = ip!.split(".");
+  return parts.length === 4 && parts.every((o) => /^(?:0|[1-9][0-9]{0,2})$/.test(o) && Number(o) <= 255);
 }
 
 const TITLE_MAX = 300;
@@ -491,4 +726,327 @@ function triageSection(m: OldMachine, rows: ServiceRow[], skip: (reason: string)
   }
   if (byPort.size === 0) return "";
   return ["## Port triage", ...[...byPort].sort((x, y) => x[0] - y[0]).map((r) => r[1])].join("\n");
+}
+
+// ---------------------------------------------------------------- credentials, usernames, access, attempts
+
+const CRED_TYPES = new Set<string>(["password", "hash", "ticket", "key", "token", "other"]);
+const SCOPES = new Set<string>(["domain", "local", "app"]);
+const CRACK = new Set<string>(["uncracked", "cracked", "uncrackable"]);
+const LEVELS = new Set<string>(["user", "admin", "system"]);
+const RESULTS = new Set<string>(["admin", "valid", "failed", "errored"]);
+/** Result names used before old loot schema 2. */
+const LEGACY_RESULTS: Record<string, AttemptResult> = { tried: "errored", invalid: "failed" };
+/** Old per-machine `credential.verifications` status -> attempt result ('untested' carried no information). */
+const VERIFICATION_RESULTS: Record<string, AttemptResult> = { admin: "admin", user: "valid", failed: "failed" };
+const SERVICES = new Set<string>(["smb", "winrm", "rdp", "mssql", "ssh", "ftp", "ldap", "wmi", "vnc", "nfs", "http", "kerberos", "other"]);
+const AUTH_MODES = new Set<string>(["domain", "local"]);
+const RESULT_RANK: Record<AttemptResult, number> = { errored: 0, failed: 1, valid: 2, admin: 3 };
+const REDACTED = "[REDACTED]";
+
+const optText = (v: unknown): string | null => (hasText(v) ? v.trim() : null);
+const oneOf = <T extends string>(set: Set<string>, v: unknown): T | null => (typeof v === "string" && set.has(v) ? (v as T) : null);
+
+/**
+ * Old top-level loot, following old `normalizeLootState` + `mergeImportedLoot`: a record is selected when its
+ * `engagementId` (or, failing that, its source machine) maps to an imported engagement. Placeholder secrets are
+ * never stored. Duplicates keep the first record and move attempts and grants onto it.
+ */
+function mapLoot(b: OldBackup, plan: ImportPlan, engagementOf: Map<string, string>, skip: (reason: string) => void, now: number) {
+  const hostEngagement = new Map(plan.hosts.map((h) => [h.id, h.engagementId]));
+  const logEngagement = new Map(plan.logEntries.map((e) => [e.id, e.engagementId]));
+  /** The imported engagement a record belongs to, else null (not selected). */
+  const engagementFor = (r: Record<string, unknown>): string | null =>
+    (hasText(r.engagementId) && (engagementOf.get(r.engagementId) ?? hostEngagement.get(r.engagementId))) ||
+    (hasText(r.sourceMachineId) && hostEngagement.get(r.sourceMachineId)) ||
+    null;
+  const hostIn = (engagementId: string, v: unknown): v is string => hasText(v) && hostEngagement.get(v) === engagementId;
+  /** A host link in the engagement, else null (a dangling link is counted). */
+  const hostLink = (engagementId: string, v: unknown): string | null => {
+    if (!hasText(v)) return null;
+    if (hostIn(engagementId, v)) return v;
+    skip("droppedHostLink");
+    return null;
+  };
+  const logLink = (engagementId: string, v: unknown): string | null => {
+    if (!hasText(v)) return null;
+    if (logEngagement.get(v) === engagementId) return v;
+    skip("droppedLogLink");
+    return null;
+  };
+  const isImportedHost = (v: unknown) => hasText(v) && hostEngagement.has(v);
+
+  // Credentials.
+  const credIdMap = new Map<string, string>();
+  const credScope = new Map<string, CredentialScope>();
+  const skippedCreds = new Set<string>();
+  const links = new Map<string, { crackedFrom: unknown; fromSecretId: unknown }>();
+  const verifications: { rawId: string; credId: string; scope: CredentialScope; createdAt: number; v: Record<string, unknown> }[] = [];
+  const kept: Credential[] = [];
+  for (const raw of arr(b?.credentials)) {
+    if (!isObj(raw)) {
+      skip("badCredential");
+      continue;
+    }
+    const engagementId = engagementFor(raw);
+    if (!engagementId) continue;
+    const id = optText(raw.id);
+    if (!id || (typeof raw.username !== "string" && typeof raw.secret !== "string")) {
+      skip("badCredential");
+      continue;
+    }
+    const rawSecret = typeof raw.secret === "string" ? raw.secret : "";
+    if (raw.redacted === true || rawSecret.trim() === REDACTED) {
+      skip("redactedCredential");
+      skippedCreds.add(id);
+      continue;
+    }
+    const type = oneOf<CredentialType>(CRED_TYPES, raw.type) ?? "other";
+    const secret = type === "hash" ? rawSecret.trim() : stripLineBreaks(rawSecret);
+    const username = typeof raw.username === "string" ? raw.username.trim() : "";
+    if (!username && !secret) {
+      skip("badCredential");
+      skippedCreds.add(id);
+      continue;
+    }
+    const scope = oneOf<CredentialScope>(SCOPES, raw.scope) ?? "domain";
+    let localHostId: string | null = null;
+    if (scope === "local") {
+      if (!hostIn(engagementId, raw.localHostId)) {
+        skip("credLocalHostMissing");
+        skippedCreds.add(id);
+        continue;
+      }
+      localHostId = raw.localHostId;
+    }
+    const createdAt = toMs(raw.createdAt, now);
+    const c: Credential = {
+      id,
+      engagementId,
+      type,
+      username,
+      domain: optText(raw.domain),
+      secret,
+      hashType: type === "hash" ? (optText(raw.hashType) ?? defaultHashType(secret) ?? null) : null,
+      scope,
+      localHostId,
+      sourceHostId: hostLink(engagementId, raw.sourceMachineId),
+      source: optText(raw.source),
+      notes: optText(raw.notes),
+      crackStatus: type === "hash" ? (oneOf<CrackStatus>(CRACK, raw.crackStatus) ?? "uncracked") : null,
+      crackedFrom: null,
+      fromSecretId: null,
+      createdAt,
+      updatedAt: createdAt,
+    };
+    const dup = findDuplicateCredential(kept, c);
+    if (dup) {
+      skip("credDuplicate");
+      if (!credIdMap.has(id)) credIdMap.set(id, dup.id);
+    } else {
+      kept.push(c);
+      credIdMap.set(id, id);
+      links.set(id, { crackedFrom: raw.crackedFrom, fromSecretId: raw.fromSecretId });
+    }
+    if (!credScope.has(id)) credScope.set(id, scope);
+    if (isObj(raw.verifications)) {
+      for (const v of Object.entries(raw.verifications)) {
+        if (isObj(v[1])) verifications.push({ rawId: id, credId: credIdMap.get(id)!, scope, createdAt, v: { ...v[1], machineId: v[0].trim() } });
+      }
+    }
+  }
+  // Credential links: only to an imported credential of the same engagement, never to itself or in a cycle.
+  const byId = new Map(kept.map((c) => [c.id, c]));
+  const state = new Map<string, "visiting" | "done">();
+  const visit = (c: Credential) => {
+    state.set(c.id, "visiting");
+    const raw = links.get(c.id)!;
+    for (const field of ["crackedFrom", "fromSecretId"] as const) {
+      if (!hasText(raw[field])) continue;
+      const target = byId.get(credIdMap.get(raw[field]) ?? "");
+      if (!target || target.id === c.id || target.engagementId !== c.engagementId || state.get(target.id) === "visiting") {
+        skip("droppedCredLink");
+        continue;
+      }
+      c[field] = target.id;
+      if (!state.has(target.id)) visit(target);
+    }
+    state.set(c.id, "done");
+    plan.credentials.push(c);
+  };
+  for (const c of kept) if (!state.has(c.id)) visit(c);
+
+  // Usernames, merged by id and then by usernameKey; access removed on any copy stays removed.
+  const userIdMap = new Map<string, string>();
+  const userByKey = new Map<string, Username>();
+  const userById = new Map<string, Username>();
+  const grantSources: { user: Username; access: unknown }[] = [];
+  const deletedAccess = new Map<string, Set<string>>();
+  for (const raw of arr(b?.usernames)) {
+    if (!isObj(raw)) {
+      skip("badUsername");
+      continue;
+    }
+    const engagementId = engagementFor(raw);
+    if (!engagementId) continue;
+    const id = optText(raw.id);
+    const name = optText(raw.username);
+    if (!id || !name) {
+      skip("badUsername");
+      continue;
+    }
+    const u: Username = {
+      id,
+      engagementId,
+      username: name,
+      domain: optText(raw.domain),
+      sourceHostId: hostLink(engagementId, raw.sourceMachineId),
+      source: optText(raw.source),
+      createdAt: toMs(raw.createdAt, now),
+    };
+    const twin = userById.get(id) ?? userByKey.get(usernameKey(u));
+    const target = twin ?? u;
+    if (twin) skip("usernameDuplicate");
+    else {
+      plan.usernames.push(u);
+      userById.set(id, u);
+      userByKey.set(usernameKey(u), u);
+    }
+    if (!userIdMap.has(id)) userIdMap.set(id, target.id);
+    const deleted = deletedAccess.get(target.id) ?? new Set<string>();
+    for (const d of arr(raw.deletedAccessIds)) if (hasText(d)) deleted.add(d);
+    deletedAccess.set(target.id, deleted);
+    grantSources.push({ user: target, access: raw.access });
+  }
+  const grantIds = new Set<string>();
+  for (const { user, access } of grantSources) {
+    for (const g of arr(access)) {
+      if (!isObj(g) || !hasText(g.id) || !oneOf<AccessLevel>(LEVELS, g.level)) {
+        skip("badGrant");
+        continue;
+      }
+      if (deletedAccess.get(user.id)!.has(g.id)) continue;
+      if (!hostIn(user.engagementId, g.hostId)) {
+        skip("grantHostMissing");
+        continue;
+      }
+      if (grantIds.has(g.id)) {
+        skip("duplicate");
+        continue;
+      }
+      grantIds.add(g.id);
+      plan.accessGrants.push({
+        id: g.id,
+        engagementId: user.engagementId,
+        usernameId: user.id,
+        hostId: g.hostId,
+        level: g.level as AccessLevel,
+        via: typeof g.via === "string" ? g.via.trim() : "",
+        logEntryId: logLink(user.engagementId, g.logEntryId),
+        at: toMs(g.at, now),
+      });
+    }
+  }
+
+  // Attempts: explicit ones first, then legacy verifications; one per attemptKey, never downgraded.
+  const attempts = new Map<string, CredAttempt>();
+  const attemptIds = new Set<string>();
+  const upsert = (a: CredAttempt) => {
+    const key = attemptKey(a);
+    const cur = attempts.get(key);
+    if (!cur) {
+      if (attemptIds.has(a.id)) {
+        skip("duplicate");
+        return;
+      }
+      attemptIds.add(a.id);
+      attempts.set(key, a);
+      return;
+    }
+    // Old upsertAttemptInList: a real result always beats a stored 'errored'; otherwise the later one wins,
+    // and at the same instant the stronger one.
+    const supersedesError = cur.result === "errored" && a.result !== "errored";
+    if (!supersedesError && (a.at < cur.at || (a.at === cur.at && RESULT_RANK[a.result] < RESULT_RANK[cur.result]))) return;
+    if (a.result === "errored" && cur.result !== "errored") {
+      attempts.set(key, { ...cur, detail: a.detail ?? cur.detail, logEntryId: a.logEntryId ?? cur.logEntryId });
+      return;
+    }
+    attempts.set(key, {
+      ...cur,
+      result: a.result,
+      at: a.at,
+      port: a.port ?? cur.port,
+      detail: a.detail ?? cur.detail,
+      logEntryId: a.logEntryId ?? cur.logEntryId,
+    });
+  };
+  const keptCred = (rawId: string) => byId.get(credIdMap.get(rawId) ?? "");
+  for (const raw of arr(b?.credAttempts)) {
+    const credRaw = isObj(raw) ? optText(raw.credId) : null;
+    const result = isObj(raw)
+      ? (oneOf<AttemptResult>(RESULTS, raw.result) ?? (typeof raw.result === "string" ? LEGACY_RESULTS[raw.result] : undefined))
+      : undefined;
+    if (!isObj(raw) || !hasText(raw.id) || !credRaw || !hasText(raw.machineId) || !result) {
+      skip("badAttempt");
+      continue;
+    }
+    const c = keptCred(credRaw);
+    if (!c) {
+      // Only an attempt that belonged to this import is counted; others are simply not selected.
+      if (skippedCreds.has(credRaw) || isImportedHost(raw.machineId)) skip("attemptCredMissing");
+      continue;
+    }
+    if (!hostIn(c.engagementId, raw.machineId)) {
+      skip("attemptHostMissing");
+      continue;
+    }
+    let usernameId: string | null = null;
+    if (hasText(raw.usernameId)) {
+      const u = userById.get(userIdMap.get(raw.usernameId) ?? "");
+      if (!u || u.engagementId !== c.engagementId) {
+        skip("attemptUsernameMissing");
+        continue;
+      }
+      usernameId = u.id;
+    }
+    const port = raw.port;
+    upsert({
+      id: raw.id.trim(),
+      engagementId: c.engagementId,
+      credId: c.id,
+      usernameId,
+      hostId: raw.machineId,
+      service: oneOf<AttemptService>(SERVICES, raw.service) ?? "other",
+      port: typeof port === "number" && Number.isInteger(port) && port >= 1 && port <= 65535 ? port : null,
+      result,
+      authMode: oneOf<AuthMode>(AUTH_MODES, raw.authMode) ?? (credScope.get(credRaw) === "local" ? "local" : "domain"),
+      detail: optText(raw.detail),
+      logEntryId: logLink(c.engagementId, raw.logEntryId),
+      at: toMs(raw.at, now),
+    });
+  }
+  for (const { rawId, credId, scope, createdAt, v } of verifications) {
+    const result = typeof v.status === "string" ? VERIFICATION_RESULTS[v.status] : undefined;
+    const c = byId.get(credId);
+    if (!result || !c || !hasText(v.machineId)) continue;
+    if (!hostIn(c.engagementId, v.machineId)) {
+      skip("attemptHostMissing");
+      continue;
+    }
+    upsert({
+      id: `${rawId}:verification:${v.machineId}`,
+      engagementId: c.engagementId,
+      credId: c.id,
+      usernameId: null,
+      hostId: v.machineId,
+      service: oneOf<AttemptService>(SERVICES, v.protocol) ?? "smb",
+      port: null,
+      result,
+      authMode: scope === "local" ? "local" : "domain",
+      detail: null,
+      logEntryId: null,
+      at: toMs(v.updatedAt, createdAt),
+    });
+  }
+  plan.credAttempts.push(...attempts.values());
 }
