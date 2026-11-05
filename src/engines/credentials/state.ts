@@ -3,6 +3,7 @@ import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
 import type { Hop } from "../../types/network";
 import type { Service } from "../../types/service";
+import { domainAdminConfirmed } from "../checklist/daCover";
 import { adHosts, findDcHost } from "../checklist/facts";
 
 export type PlaybookId = "nocreds" | "user" | "da";
@@ -29,7 +30,7 @@ export function playbookTriggers(input: {
   );
   const domainWorks = mine.some((a) => hasAccess(a) && a.authMode === "domain" && domainIds.has(a.credId));
   const dc = findDcHost(hosts, servicesByHost);
-  const daByAttempt = !!dc && mine.some((a) => a.result === "admin" && a.hostId === dc.id);
+  const daByAttempt = domainAdminConfirmed(hosts, servicesByHost, mine);
   const daByHop = !!dc && input.hops.some((h) => h.engagementId === engagement.id && h.toHostId === dc.id);
   return {
     nocreds: adHosts(hosts, servicesByHost).length > 0 && !domainWorks,

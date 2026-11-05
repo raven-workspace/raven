@@ -14,13 +14,15 @@ export interface ChecklistItem {
   completedAt: number | null;
   auto: boolean;
   autoFrom: "na" | "in_progress" | null;
+  /** Set by hand (a status button): the domain admin cover never changes it. */
+  statusManual?: boolean;
   evidence: Evidence[];
   updatedAt: number;
 }
 
 /** Mirrors the Rust `ChecklistItemInput` (the item without `updatedAt`). */
-export type ChecklistItemInput = Omit<ChecklistItem, "updatedAt" | "notes" | "completedAt" | "auto" | "autoFrom" | "evidence"> &
-  Partial<Pick<ChecklistItem, "notes" | "completedAt" | "auto" | "autoFrom" | "evidence">>;
+export type ChecklistItemInput = Omit<ChecklistItem, "updatedAt" | "notes" | "completedAt" | "auto" | "autoFrom" | "evidence" | "statusManual"> &
+  Partial<Pick<ChecklistItem, "notes" | "completedAt" | "auto" | "autoFrom" | "evidence" | "statusManual">>;
 
 /** The engine's per-goal shape (the old `itemsState[goalId]`). */
 export interface ItemState {
@@ -29,6 +31,7 @@ export interface ItemState {
   completedAt?: number;
   auto?: boolean;
   autoFrom?: "na" | "in_progress";
+  statusManual?: boolean;
   evidence?: Evidence[];
 }
 

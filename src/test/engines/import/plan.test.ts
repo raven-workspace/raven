@@ -468,6 +468,23 @@ const lootPlan = (over: Record<string, unknown> = {}, labOver: Partial<OldMachin
   plan(lootBackup(over, labOver), ["custom-lab-1", "custom-solo"]);
 
 describe("buildImportPlan: checklist", () => {
+  it("auto is kept only on a done item", () => {
+    const p = plan(
+      bk([
+        lab({ checklist: { openPorts: [], activeItemId: null, itemsState: {
+          "e-setup-scope": { status: "done", auto: true },
+          "cred-routine-smb": { status: "todo", auto: true },
+          "cred-routine-spray-users": { status: "na", auto: true },
+          "e-setup-clock": { status: "in_progress", auto: true },
+        } } }),
+      ]),
+      ["custom-lab-1"],
+    );
+    expect(Object.fromEntries(p.checklist.map((c) => [c.goalId, c.auto]))).toEqual({
+      "e-setup-scope": true, "cred-routine-smb": false, "cred-routine-spray-users": false, "e-setup-clock": false,
+    });
+  });
+
   it("lab container goals go to the engagement, box goals to the box", () => {
     const p = plan(
       bk([

@@ -266,7 +266,7 @@ describe('definitions', () => {
     const eng = engagementGoals.map((g) => g.id);
     for (const id of [
       'e-setup-kind', 'e-setup-scope', 'e-setup-hosts', 'e-setup-clock', 'e-ad-user-bloodhound', 'e-ad-user-kerberoast',
-      'e-ad-user-asrep', 'e-ad-user-users', 'e-ad-nocreds-rid', 'e-ad-user-relay', 'e-ad-da-dcsync', 'e-ad-da-loot-all', 'e-ad-da-proof',
+      'e-ad-user-asrep', 'e-ad-user-users', 'e-ad-nocreds-rid', 'e-ad-user-relay', 'e-ad-da-dcsync', 'e-ad-da-proof',
     ]) expect(eng).toContain(id);
     for (const g of HOST_GOALS) expect(g.why, g.id).toBeTruthy();
     expect(AD_PLAYBOOKS.map((p) => p.id)).toEqual(['nocreds', 'user', 'da']);

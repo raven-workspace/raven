@@ -2,6 +2,7 @@ import { cx } from "../../lib/cx";
 import { useNow } from "../../lib/keys";
 import type { Engagement } from "../../types/engagement";
 import { Kbd, labelClass } from "../../ui";
+import { useCleanupCounts } from "../cleanup/queries";
 import { useProgress } from "../hosts/queries";
 import { useThreadCounts } from "../notes/useThreadCounts";
 import { TimeBar } from "./ActiveCard";
@@ -21,6 +22,7 @@ export function StatusStrip({ engagement: e }: { engagement: Engagement }) {
   const now = useNow();
   const progress = useProgress().data?.[e.id] ?? EMPTY_PROGRESS;
   const threads = useThreadCounts(e.id).total;
+  const cleanup = useCleanupCounts().data?.[e.id] ?? 0;
   return (
     <div
       role="status"
@@ -34,6 +36,7 @@ export function StatusStrip({ engagement: e }: { engagement: Engagement }) {
       )}
       <span className="text-fg-2">{progressLine(progress)}</span>
       {threads > 0 && <span className="text-fg-2">Threads {threads}</span>}
+      {cleanup > 0 && <span className="text-fg-2">Cleanup {cleanup}</span>}
       {e.kind === "exam-sim" && <MsfLock engagement={e} />}
       <Listener />
       <span className="ml-auto flex items-center gap-1.5 text-faint">

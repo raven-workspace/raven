@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { api } from "../../lib/api";
 import type { Host } from "../../types/host";
-import { Button, Chip, Dialog } from "../../ui";
+import { Button, Chip, Dialog, Kbd } from "../../ui";
 import { threadsLabel, useThreadCounts } from "../notes/useThreadCounts";
 import { HostDialog } from "./HostDialog";
 import { COLUMN_LABELS, OS_LABELS } from "./columns";
@@ -15,7 +15,7 @@ const HOST_DELETE_DETAIL =
   "ruled-out items, tunnels through it and hops to or from it go with it; " +
   "log entries, credentials and findings stay but lose this host.";
 
-export function HostHeader({ host }: { host: Host }) {
+export function HostHeader({ host, onStuck }: { host: Host; onStuck?: () => void }) {
   const navigate = useNavigate();
   const { remove } = useHostMutations(host.engagementId);
   const [editing, setEditing] = useState(false);
@@ -35,6 +35,11 @@ export function HostHeader({ host }: { host: Host }) {
       {examSim && host.adSetEffective && <Chip>AD set</Chip>}
       {threads > 0 && <Chip>{threadsLabel(threads)}</Chip>}
       <span className="flex-1" />
+      {onStuck && (
+        <Button size="sm" onClick={onStuck}>
+          Stuck? <Kbd aria-hidden className="ml-1">H</Kbd>
+        </Button>
+      )}
       <Button size="sm" onClick={() => setEditing(true)}>
         Edit
       </Button>

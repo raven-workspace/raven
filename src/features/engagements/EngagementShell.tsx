@@ -7,6 +7,7 @@ import { isFreeKey, useEscapeTo, useKeydown } from "../../lib/keys";
 import type { Engagement } from "../../types/engagement";
 import { EmptyState } from "../../ui";
 import { checklistKey } from "../checklist/queries";
+import { resyncAndRefresh } from "../checklist/resync";
 import { autoTickFromLog } from "../checklist/ticks";
 import { HostView } from "../hosts/HostView";
 import { CapturePanel } from "../capture/CapturePanel";
@@ -34,12 +35,15 @@ export function EngagementShell() {
   // anything else syncs the board. Not blocking: a failure goes to the shared error path (a lock reaches the gate),
   // and the next open tries again.
   useEffect(() => {
-    autoTickFromLog(id).then((ran) => {
-      if (!ran) return;
-      void qc.invalidateQueries({ queryKey: checklistKey(id) });
-      void qc.invalidateQueries({ queryKey: ["hosts", id] });
-      void qc.invalidateQueries({ queryKey: ["progress"] });
-    }, reportError);
+    autoTickFromLog(id)
+      .then((ran) => {
+        if (!ran) return;
+        void qc.invalidateQueries({ queryKey: checklistKey(id) });
+        void qc.invalidateQueries({ queryKey: ["hosts", id] });
+        void qc.invalidateQueries({ queryKey: ["progress"] });
+      })
+      // Then once more, so an imported or older engagement gets the domain admin cover. Runs whether the tick ran or not.
+      .then(() => resyncAndRefresh(qc, id), reportError);
   }, [id, qc]);
 
   // Esc: host view -> engagement, engagement -> dashboard.

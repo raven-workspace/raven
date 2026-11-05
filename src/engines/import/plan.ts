@@ -575,7 +575,7 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
           status: st.status as ChecklistStatus,
           notes: hasText(st.notes) ? st.notes : null,
           completedAt: toMs(st.completedAt, null),
-          auto: st.auto === true,
+          auto: st.auto === true && st.status === "done",
           autoFrom: st.autoFrom === "na" || st.autoFrom === "in_progress" ? st.autoFrom : null,
           evidence,
         });

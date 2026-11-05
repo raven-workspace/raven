@@ -9,3 +9,4 @@ export * from './examRules';
 export * from './scanImport';
 export * from './board';
 export * from './shellQuote';
+export * from './daCover';

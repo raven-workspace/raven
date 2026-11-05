@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { cx } from "../../lib/cx";
 import type { Engagement } from "../../types/engagement";
 import { Chip } from "../../ui";
+import { useCleanupCounts } from "../cleanup/queries";
 import { threadsLabel, useThreadCounts } from "../notes/useThreadCounts";
 import { useProgress } from "../hosts/queries";
 import {
@@ -34,6 +35,7 @@ export function ActiveCard({ engagement: e, now }: { engagement: Engagement; now
   const lastActivity = e.lastActivityAt;
   const progress = useProgress().data?.[e.id] ?? EMPTY_PROGRESS;
   const threads = useThreadCounts(e.id).total;
+  const cleanup = useCleanupCounts().data?.[e.id] ?? 0;
 
   return (
     <Link
@@ -72,6 +74,12 @@ export function ActiveCard({ engagement: e, now }: { engagement: Engagement; now
           <>
             <span className="text-faint">·</span>
             <span>{threadsLabel(threads)}</span>
+          </>
+        )}
+        {cleanup > 0 && (
+          <>
+            <span className="text-faint">·</span>
+            <span>Cleanup {cleanup}</span>
           </>
         )}
       </p>

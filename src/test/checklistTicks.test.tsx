@@ -155,7 +155,7 @@ describe("auto-tick wiring", () => {
     expect(m.checklistPut.mock.calls[0]![1]).toEqual([
       {
         ownerId: "h1", goalId: "h-enum-full-tcp", status: "done", notes: null, completedAt: expect.any(Number),
-        auto: true, autoFrom: null, evidence: [{ entryId: "l1", commandId: "enum-nmap-full-tcp" }],
+        auto: true, autoFrom: null, statusManual: false, evidence: [{ entryId: "l1", commandId: "enum-nmap-full-tcp" }],
       },
     ]);
   });
@@ -191,7 +191,7 @@ describe("auto-tick wiring", () => {
     ];
     store = [
       item({
-        ownerId: "h1", goalId: "h-enum-full-tcp", status: "done", completedAt: 50, auto: true, autoFrom: "in_progress",
+        ownerId: "h1", goalId: "h-enum-full-tcp", status: "done", completedAt: 50, auto: true, autoFrom: "in_progress", statusManual: false,
         notes: "slow over VPN", evidence: [{ entryId: "s1", commandId: "enum-nmap-full-tcp" }],
       }),
       item({ ownerId: "h1", goalId: "h-enum-udp", status: "done", completedAt: 40, notes: "manual" }),
@@ -204,7 +204,7 @@ describe("auto-tick wiring", () => {
     expect(m.checklistPut.mock.calls[0]![1]).toEqual([
       {
         ownerId: "h1", goalId: "h-enum-full-tcp", status: "in_progress", notes: "slow over VPN", completedAt: null,
-        auto: false, autoFrom: null, evidence: [],
+        auto: false, autoFrom: null, statusManual: false, evidence: [],
       },
     ]);
     // The manual tick was not touched.
@@ -589,7 +589,7 @@ describe("useChecklistMutations", () => {
     await act(() => result.current.setStatus.mutateAsync({ ownerId: "h1", goalId: "h-enum-udp", status: "done" }));
     const sent = m.checklistPut.mock.calls[0]![1];
     expect(sent).toEqual([
-      { ownerId: "h1", goalId: "h-enum-udp", status: "done", notes: "keep", completedAt: expect.any(Number), auto: false, autoFrom: null, evidence: [{ entryId: "s1", commandId: "x" }] },
+      { ownerId: "h1", goalId: "h-enum-udp", status: "done", notes: "keep", completedAt: expect.any(Number), auto: false, autoFrom: null, statusManual: true, evidence: [{ entryId: "s1", commandId: "x" }] },
     ]);
     expect(sent[0]!.completedAt).toBeGreaterThanOrEqual(t0);
   });
@@ -599,7 +599,7 @@ describe("useChecklistMutations", () => {
     const { result } = renderHook(() => useChecklistMutations("e1"), { wrapper: hookWrapper() });
     await act(() => result.current.setStatus.mutateAsync({ ownerId: "h1", goalId: "h-enum-udp", status: "todo" }));
     expect(m.checklistPut.mock.calls[0]![1]).toEqual([
-      { ownerId: "h1", goalId: "h-enum-udp", status: "todo", notes: "keep", completedAt: null, auto: false, autoFrom: null, evidence: [{ entryId: "s1", commandId: "x" }] },
+      { ownerId: "h1", goalId: "h-enum-udp", status: "todo", notes: "keep", completedAt: null, auto: false, autoFrom: null, statusManual: true, evidence: [{ entryId: "s1", commandId: "x" }] },
     ]);
   });
 
@@ -608,7 +608,7 @@ describe("useChecklistMutations", () => {
     const { result } = renderHook(() => useChecklistMutations("e1"), { wrapper: hookWrapper() });
     await act(() => result.current.setNotes.mutateAsync({ ownerId: "h1", goalId: "h-enum-udp", notes: "   " }));
     expect(m.checklistPut.mock.calls[0]![1]).toEqual([
-      { ownerId: "h1", goalId: "h-enum-udp", status: "done", notes: null, completedAt: 50, auto: true, autoFrom: "na", evidence: [{ entryId: "s1", commandId: "x" }] },
+      { ownerId: "h1", goalId: "h-enum-udp", status: "done", notes: null, completedAt: 50, auto: true, autoFrom: "na", statusManual: false, evidence: [{ entryId: "s1", commandId: "x" }] },
     ]);
   });
 });

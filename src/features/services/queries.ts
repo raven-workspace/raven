@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
-import { reportError } from "../../lib/lockSignal";
-import { resyncBoards } from "../checklist/ticks";
+import { resyncAndRefresh } from "../checklist/resync";
 import type { ConfirmInput, ServiceInput } from "../../types/service";
 
 export function useServices(hostId: string) {
@@ -18,10 +17,7 @@ export function useServiceMutations(engagementId: string, hostId: string) {
     void qc.invalidateQueries({ queryKey: ["progress"] });
     // A service (above all a confirmed identity) changes which goals apply, so the derived column can move.
     // Not fatal: a failure goes to the shared error path (a locked vault reaches the gate).
-    void resyncBoards(engagementId).then(
-      () => qc.invalidateQueries({ queryKey: ["hosts", engagementId] }),
-      reportError,
-    );
+    void resyncAndRefresh(qc, engagementId);
   };
   return {
     create: useMutation({ mutationFn: (input: ServiceInput) => api.serviceCreate(hostId, input), onSuccess }),

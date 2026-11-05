@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { api } from "../../lib/api";
-import { reportError } from "../../lib/lockSignal";
 import type { Hop, HopInput, Tunnel, TunnelInput } from "../../types/network";
-import { resyncBoards } from "./ticks";
+import { resyncAndRefresh } from "./resync";
+import { byOwnerOf, checklistKey, itemToState, servicesByHostOf, stateToInput } from "./state";
 import type { ChecklistItem, ChecklistItemInput, ChecklistState, ChecklistStatus, ItemState } from "../../types/checklist";
 import type { Service } from "../../types/service";
 
@@ -12,58 +12,9 @@ const NO_SERVICES: Service[] = [];
 const NO_TUNNELS: Tunnel[] = [];
 const NO_HOPS: Hop[] = [];
 
-export const checklistKey = (engagementId: string) => ["checklist", engagementId] as const;
 export const engagementServicesKey = (engagementId: string) => ["services", "engagement", engagementId] as const;
 
-/** A stored row as the engine's per-goal state (absent fields left out). */
-export function itemToState(it: ChecklistItem): ItemState {
-  const s: ItemState = { status: it.status };
-  if (it.notes != null) s.notes = it.notes;
-  if (it.completedAt != null) s.completedAt = it.completedAt;
-  if (it.auto) s.auto = true;
-  if (it.autoFrom) s.autoFrom = it.autoFrom;
-  if (it.evidence.length > 0) s.evidence = it.evidence;
-  return s;
-}
-
-/** The engine's per-goal state as a full upsert row: every field is sent, so an undo clears the stored values. */
-export function stateToInput(ownerId: string, goalId: string, s: ItemState): ChecklistItemInput {
-  return {
-    ownerId,
-    goalId,
-    status: s.status,
-    notes: s.notes ?? null,
-    completedAt: s.completedAt ?? null,
-    auto: s.auto ?? false,
-    autoFrom: s.autoFrom ?? null,
-    evidence: s.evidence ?? [],
-  };
-}
-
-/** Stored rows grouped by owner (a host id, or the engagement id). */
-export function byOwnerOf(items: ChecklistItem[]): Map<string, ChecklistState> {
-  const out = new Map<string, ChecklistState>();
-  for (const it of items) {
-    let state = out.get(it.ownerId);
-    if (!state) {
-      state = {};
-      out.set(it.ownerId, state);
-    }
-    state[it.goalId] = itemToState(it);
-  }
-  return out;
-}
-
-/** Services per host for the whole engagement, from one query. */
-export function servicesByHostOf(services: Service[]): Map<string, Service[]> {
-  const out = new Map<string, Service[]>();
-  for (const s of services) {
-    const list = out.get(s.hostId);
-    if (list) list.push(s);
-    else out.set(s.hostId, [s]);
-  }
-  return out;
-}
+export { byOwnerOf, checklistKey, itemToState, servicesByHostOf, stateToInput };
 
 export function useChecklist(engagementId: string) {
   const query = useQuery({ queryKey: checklistKey(engagementId), queryFn: () => api.checklistList(engagementId) });
@@ -141,7 +92,7 @@ export function useChecklistMutations(engagementId: string) {
     setStatus: useMutation({
       mutationFn: async (v: { ownerId: string; goalId: string; status: ChecklistStatus }) => {
         const prev = await current(v.ownerId, v.goalId);
-        const next: ItemState = { ...prev, status: v.status, auto: false };
+        const next: ItemState = { ...prev, status: v.status, auto: false, statusManual: true };
         delete next.autoFrom;
         if (v.status === "done") next.completedAt = Date.now();
         else delete next.completedAt;
@@ -150,10 +101,7 @@ export function useChecklistMutations(engagementId: string) {
       onSuccess: (items: ChecklistItem[]) => {
         onSuccess(items);
         // A manual Done can move the card. Not fatal: a failure goes to the shared error path.
-        void resyncBoards(engagementId).then(
-          () => qc.invalidateQueries({ queryKey: ["hosts", engagementId] }),
-          reportError,
-        );
+        void resyncAndRefresh(qc, engagementId);
       },
     }),
     setNotes: useMutation({

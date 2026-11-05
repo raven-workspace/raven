@@ -64,7 +64,6 @@ export const AD_PLAYBOOKS: { id: PlaybookId; title: string; opensWhen: string; g
     opensWhen: 'a credential has an admin result on the DC, or a hop to the DC is recorded',
     goals: [
       g(D, `${D}-dcsync`, 'DCSync the domain', 'Every domain hash, including krbtgt, in one command.'),
-      g(D, `${D}-loot-all`, 'Loot every host with the new access', 'Admin on the domain means admin on every host; each one goes back through Loot.'),
       g(D, `${D}-proof`, 'Capture proof on the DC', 'The DC screenshot is the finish line for the AD set.'),
     ],
   },
