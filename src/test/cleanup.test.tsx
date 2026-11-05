@@ -138,10 +138,43 @@ describe("cleanup panel", () => {
     expect(await p.findByRole("heading", { name: "Removed" })).toBeInTheDocument();
     expect(p.getByText(/^Removed \w{3} \d+/)).toBeInTheDocument();
     expect(p.queryByText("On target")).not.toBeInTheDocument();
-    await user.click(p.getByRole("button", { name: "Mark /tmp/x removed" }));
+    await user.click(p.getByRole("button", { name: "Restore /tmp/x" }));
     expect(await p.findByText("On target")).toBeInTheDocument();
     expect(m.cleanupSetRemoved).toHaveBeenNthCalledWith(1, "c1", true);
     expect(m.cleanupSetRemoved).toHaveBeenNthCalledWith(2, "c1", false);
+  });
+
+  it("double-clicking Add creates one item and shows no error", async () => {
+    const user = userEvent.setup();
+    mount({ log: [upload] });
+    const p = await panel();
+    const add = await p.findByRole("button", { name: "Add /tmp/a.sh" });
+    await user.dblClick(add);
+    await waitFor(() => expect(p.getByText("On target")).toBeInTheDocument());
+    expect(m.cleanupCreate).toHaveBeenCalledTimes(1);
+    expect(p.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("double-clicking Dismiss dismisses once and shows no error", async () => {
+    const user = userEvent.setup();
+    mount({ log: [upload] });
+    const p = await panel();
+    await user.dblClick(await p.findByRole("button", { name: "Dismiss /tmp/a.sh" }));
+    await waitFor(() => expect(p.queryByText("Suggested")).not.toBeInTheDocument());
+    expect(m.cleanupDismiss).toHaveBeenCalledTimes(1);
+    expect(p.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("a failed Add brings the suggestion back with the error, and a later success clears it", async () => {
+    const user = userEvent.setup();
+    mount({ log: [upload] });
+    const p = await panel();
+    m.cleanupCreate.mockRejectedValueOnce(new RavenError("validation", "nope"));
+    await user.click(await p.findByRole("button", { name: "Add /tmp/a.sh" }));
+    expect(await p.findByRole("alert")).toHaveTextContent("nope");
+    await user.click(await p.findByRole("button", { name: "Add /tmp/a.sh" }));
+    await waitFor(() => expect(p.getByText("On target")).toBeInTheDocument());
+    expect(p.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("add by hand validates the target", async () => {

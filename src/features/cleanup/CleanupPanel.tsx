@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { suggestCleanup } from "../../engines/cleanup";
 import { cx } from "../../lib/cx";
 import type { CleanupItem, CleanupKind } from "../../types/cleanup";
@@ -26,10 +26,25 @@ export function CleanupPanel({ engagementId, hosts, entries, domain }: {
   const [deleting, setDeleting] = useState<CleanupItem | null>(null);
   const [deleteError, setDeleteError] = useState<string>();
   const items = list.data;
+  // Suggestion keys with a mutation in flight: hidden at once, and a second click on them does nothing.
+  const flying = useRef(new Set<string>());
+  const [flyingKeys, setFlyingKeys] = useState<ReadonlySet<string>>(new Set());
+  const [actionError, setActionError] = useState<string>();
   const suggestions = useMemo(
-    () => (items ? suggestCleanup(entries, hosts, domain ?? "", items) : []),
-    [entries, hosts, domain, items],
+    () => (items ? suggestCleanup(entries, hosts, domain ?? "", items) : []).filter((s) => !flyingKeys.has(s.key)),
+    [entries, hosts, domain, items, flyingKeys],
   );
+  const onErr = (e: Error) => setActionError(e.message);
+  const act = (key: string, run: (settled: () => void) => void) => {
+    if (flying.current.has(key)) return;
+    setActionError(undefined);
+    flying.current.add(key);
+    setFlyingKeys(new Set(flying.current));
+    run(() => {
+      flying.current.delete(key);
+      setFlyingKeys(new Set(flying.current));
+    });
+  };
   const hostName = (id: string | null) => (id === null ? null : (hosts.find((h) => h.id === id)?.name ?? null));
 
   if (list.error) return <p role="alert" className="py-3 text-xs text-warn">Couldn't load the cleanup list: {list.error.message}</p>;
@@ -37,7 +52,6 @@ export function CleanupPanel({ engagementId, hosts, entries, domain }: {
 
   const open = items.filter((i) => i.status === "open");
   const removed = items.filter((i) => i.status === "removed");
-  const err = (m.create.error ?? m.dismiss.error ?? m.setRemoved.error) as Error | null;
   const yearOf = (ms: number) => new Date(ms).getFullYear() !== new Date().getFullYear();
 
   const itemRow = (i: CleanupItem) => (
@@ -53,8 +67,11 @@ export function CleanupPanel({ engagementId, hosts, entries, domain }: {
       )}
       <Toggle
         on={i.status === "removed"}
-        aria-label={`Mark ${i.target} removed`}
-        onChange={(on) => m.setRemoved.mutate({ id: i.id, removed: on })}
+        aria-label={i.status === "removed" ? `Restore ${i.target}` : `Mark ${i.target} removed`}
+        onChange={(on) => {
+          setActionError(undefined);
+          m.setRemoved.mutate({ id: i.id, removed: on }, { onError: onErr });
+        }}
       >
         {i.status === "removed" ? "Removed" : "Mark removed"}
       </Toggle>
@@ -65,7 +82,7 @@ export function CleanupPanel({ engagementId, hosts, entries, domain }: {
 
   return (
     <Panel title="Cleanup" aria-label="Cleanup" actions={<Button size="sm" onClick={() => setEditing("new")}>Add item</Button>}>
-      {err && <p role="alert" className="mb-2 mt-0 text-xs text-warn">{err.message}</p>}
+      {actionError && <p role="alert" className="mb-2 mt-0 text-xs text-warn">{actionError}</p>}
       {suggestions.length > 0 && (
         <div className="mb-3 flex flex-col gap-1">
           <h3 className={subhead}>Suggested</h3>
@@ -79,11 +96,18 @@ export function CleanupPanel({ engagementId, hosts, entries, domain }: {
                 <Button
                   size="sm"
                   aria-label={`Add ${s.target}`}
-                  onClick={() => m.create.mutate({ suggestionKey: s.key, sourceEntryId: s.entryId, hostId: s.hostId, kind: s.kind, target: s.target })}
+                  onClick={() =>
+                    act(s.key, (settled) =>
+                      m.create.mutate(
+                        { suggestionKey: s.key, sourceEntryId: s.entryId, hostId: s.hostId, kind: s.kind, target: s.target },
+                        { onError: onErr, onSettled: settled },
+                      ),
+                    )
+                  }
                 >
                   Add
                 </Button>
-                <Button size="sm" aria-label={`Dismiss ${s.target}`} onClick={() => m.dismiss.mutate(s.key)}>Dismiss</Button>
+                <Button size="sm" aria-label={`Dismiss ${s.target}`} onClick={() => act(s.key, (settled) => m.dismiss.mutate(s.key, { onError: onErr, onSettled: settled }))}>Dismiss</Button>
               </li>
             ))}
           </ul>
