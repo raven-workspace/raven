@@ -1,9 +1,12 @@
+import type { CredAttempt, Credential } from '../../types/credentials';
 import type { Engagement } from '../../types/engagement';
 import type { Host } from '../../types/host';
 import type { Tunnel } from '../../types/network';
 import type { Service } from '../../types/service';
 import { ipInScope, parseScopeList } from '../parse/scope';
+import { isNtlmHash, isOwnerless } from '../credentials/matrix';
 import { findDcHost } from './facts';
+import { quoteContextAt, shellEscape } from './shellQuote';
 import { resolveTemplate, type SubstitutionContext } from './template';
 
 export interface FillInput {
@@ -16,6 +19,48 @@ export interface FillInput {
   attackerIp: string;
   /** Settings.listenerPort: LPORT. */
   listenerPort: string;
+  /** The picked credential: the only source of USER, PASS and HASH. */
+  cred?: Credential | null;
+}
+
+export interface FillOptions {
+  /**
+   * Display builds: PASS and HASH are still decided from the real credential, but their value is this mask.
+   * Never mask by replacing text afterwards.
+   */
+  secretMask?: string;
+  /**
+   * Escape credential values (USER, DOMAIN, PASS, HASH) for the quoting context where each token sits, so a copied
+   * command cannot be broken or injected by a secret. Bourne-shell rules: use it only for commands run from the
+   * attacker (Kali) shell. Target-side commands keep raw values because PowerShell and cmd quote differently.
+   * Never combine with `secretMask` (the mask is not a secret).
+   */
+  shellSafe?: boolean;
+}
+
+/**
+ * Engagement-level default: the newest domain-scope credential with a valid or admin `domain` attempt anywhere
+ * in the engagement.
+ */
+export function defaultDomainCred(credentials: Credential[], attempts: CredAttempt[]): Credential | null {
+  const byId = new Map(credentials.filter((c) => c.scope === 'domain').map((c) => [c.id, c]));
+  let best: CredAttempt | null = null;
+  for (const a of attempts) {
+    if (a.authMode !== 'domain' || (a.result !== 'valid' && a.result !== 'admin') || !byId.has(a.credId)) continue;
+    if (!best || a.at > best.at) best = a;
+  }
+  return best ? byId.get(best.credId)! : null;
+}
+
+/** The newest credential with a valid or admin attempt on this host. */
+export function defaultCredFor(host: Pick<Host, 'id'>, credentials: Credential[], attempts: CredAttempt[]): Credential | null {
+  const byId = new Map(credentials.map((c) => [c.id, c]));
+  let best: CredAttempt | null = null;
+  for (const a of attempts) {
+    if (a.hostId !== host.id || (a.result !== 'valid' && a.result !== 'admin') || !byId.has(a.credId)) continue;
+    if (!best || a.at > best.at) best = a;
+  }
+  return best ? byId.get(best.credId)! : null;
 }
 
 export interface FillResult {
@@ -67,17 +112,23 @@ function dcHostName(dc: Host, domain: string | undefined): string | undefined {
   return `${name}.${domain}`;
 }
 
-/** Credentials (USER, PASS, HASH) are deliberately absent: they stay unresolved until step 4. */
-export function commandContext(input: FillInput): SubstitutionContext {
+export function commandContext(input: FillInput, opts: FillOptions = {}): SubstitutionContext {
   const { host, engagement, hosts, servicesByHost, tunnels } = input;
   const tunnel = tunnelFor(host, tunnels);
   const tunnelIp = tunnel?.callbackIp.trim() || undefined;
   const dc = findDcHost(hosts, servicesByHost);
-  const domain = engagement.domain?.trim() || undefined;
+  const cred = input.cred ?? null;
+  const domain = cred?.domain?.trim() || engagement.domain?.trim() || undefined;
+  const secret = cred ? cred.secret.trim() : '';
+  // Decided from the real credential; the mask only replaces the value.
+  const pass = cred?.type === 'password' && secret ? (opts.secretMask ?? cred.secret) : undefined;
+  const hash = cred && secret && isNtlmHash(cred) ? (opts.secretMask ?? secret.split(':').pop()) : undefined;
   const subnet = subnetFor(host, engagement, tunnels);
   const prefix = subnet?.match(/^(\d+\.\d+\.\d+)\.\d+\/24$/)?.[1];
 
   const computed: Record<string, string | undefined> = {
+    PASS: pass,
+    HASH: hash,
     DC_HOST: dc ? dcHostName(dc, domain) : undefined,
     SUBNET: subnet,
     SUBNET_PREFIX: prefix,
@@ -91,13 +142,17 @@ export function commandContext(input: FillInput): SubstitutionContext {
     lhost: tunnel ? tunnelIp : input.attackerIp.trim() || undefined,
     lport: input.listenerPort.trim() || undefined,
     domain,
+    user: cred && !isOwnerless(cred) ? cred.username.trim() : undefined,
     dcIp: dc?.ip?.trim() || undefined,
     customVars,
   };
 }
 
-export function fillCommand(template: string, input: FillInput): FillResult {
-  const ctx = commandContext(input);
+/** Tokens whose value is, or derives from, the credential (DC_HOST carries the credential's domain). */
+const CRED_TOKENS = new Set(['USER', 'DOMAIN', 'PASS', 'HASH', 'DC_HOST']);
+
+export function fillCommand(template: string, input: FillInput, opts: FillOptions = {}): FillResult {
+  const ctx = commandContext(input, opts);
   const { unresolved, ranges } = resolveTemplate(template, ctx);
   // The engine shows display defaults (10.10.14.X, 4444) for empty known fields; never present those as real.
   // INTERFACE alone keeps its tun0 default and is not reported.
@@ -106,7 +161,11 @@ export function fillCommand(template: string, input: FillInput): FillResult {
   for (const r of ranges) {
     text += template.slice(last, r.start);
     const token = template.slice(r.start, r.end);
-    text += r.resolved || r.canonical === 'interface' ? resolveTemplate(token, ctx).text : token;
+    let piece = r.resolved || r.canonical === 'interface' ? resolveTemplate(token, ctx).text : token;
+    if (opts.shellSafe && r.resolved && CRED_TOKENS.has(r.raw.toUpperCase())) {
+      piece = shellEscape(piece, quoteContextAt(template, r.start));
+    }
+    text += piece;
     last = r.end;
   }
   text += template.slice(last);

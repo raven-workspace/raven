@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { hasUnmodelledQuoting } from '../../../engines/checklist';
 import { BUILTIN_LIBRARY } from '../../../engines/library/data';
 import type { LibraryCommand } from '../../../engines/library/types';
 import { firstBinary, matchesCommand } from '../../../engines/library/matcher';
@@ -307,5 +308,13 @@ describe('built-in command library', () => {
     expect(goalsFor("nxc smb 10.0.0.5 -u '' -p '' --rid-brute 10000").has('e-ad-user-rid')).toBe(false);
     const spray = goalsFor("nxc smb 10.0.0.5 -u users.txt -p 'Pw1!' --continue-on-success | tee x.txt");
     expect([...spray].filter((g) => g.startsWith('e-'))).toEqual([]);
+  });
+});
+
+describe('credential tokens and shell quoting shapes', () => {
+  it('no built-in template puts a credential token where the shell-safe fill cannot model the quoting', () => {
+    const cred = /\{(PASS|HASH|USER|DOMAIN|DC_HOST)\}/;
+    const bad = lib.filter((c) => cred.test(c.template) && hasUnmodelledQuoting(c.template)).map((c) => c.id);
+    expect(bad).toEqual([]);
   });
 });

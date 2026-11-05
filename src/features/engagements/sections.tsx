@@ -2,6 +2,8 @@ import { EmptyState } from "../../ui";
 import { EngagementChecklist } from "../checklist/EngagementChecklist";
 import { Board } from "../board/Board";
 import { LogSection } from "../log/LogSection";
+import { CredentialsSection } from "../credentials/CredentialsSection";
+import { FindingsSection } from "../findings/FindingsSection";
 
 export const SECTIONS = [
   { id: "board", label: "Board", empty: "" },
@@ -22,6 +24,8 @@ export function sectionPath(engagementId: string, section: SectionId): string {
 export function SectionView({ section }: { section: SectionId }) {
   if (section === "board") return <Board />;
   if (section === "log") return <LogSection />;
+  if (section === "credentials") return <CredentialsSection />;
+  if (section === "findings") return <FindingsSection />;
   if (section === "checklist") return <EngagementChecklist />;
   const s = SECTIONS.find((x) => x.id === section)!;
   return <EmptyState title={s.empty} />;

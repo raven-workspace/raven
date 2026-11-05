@@ -3,7 +3,26 @@ import type { BackupInfo } from "../types/backup";
 import type { ConfirmInput, ScanPort, Service, ServiceInput } from "../types/service";
 import type { ChecklistItem, ChecklistItemInput } from "../types/checklist";
 import type { Attachment, LogEntry, LogEntryInput, Progress } from "../types/log";
+import type {
+  FailedAttempt,
+  FailedAttemptInput,
+  Finding,
+  FindingFile,
+  FindingFileInput,
+  FindingInput,
+} from "../types/findings";
 import type { Note, RuledOut, RuledOutInput } from "../types/notes";
+import type {
+  AccessGrant,
+  AccessGrantInput,
+  Credential,
+  CredAttempt,
+  CredAttemptInput,
+  CredentialInput,
+  CrackStatus,
+  Username,
+  UsernameInput,
+} from "../types/credentials";
 import type { Hop, HopInput, Tunnel, TunnelInput } from "../types/network";
 import type { Host, HostInput, BoardColumn } from "../types/host";
 import type { Engagement, EngagementInput, EngagementStatus } from "../types/engagement";
@@ -97,6 +116,51 @@ export const api = {
     call<Hop>("hop_create", { engagementId, input }),
   hopUpdate: (id: string, input: HopInput) => call<Hop>("hop_update", { id, input }),
   hopDelete: (id: string) => call<null>("hop_delete", { id }),
+  hostMarkAccessReviewed: (hostId: string) => call<Host>("host_mark_access_reviewed", { hostId }),
+  credentialsList: (engagementId: string) => call<Credential[]>("credentials_list", { engagementId }),
+  credentialCreate: (engagementId: string, input: CredentialInput) =>
+    call<Credential>("credential_create", { engagementId, input }),
+  credentialUpdate: (id: string, input: CredentialInput) =>
+    call<Credential>("credential_update", { id, input }),
+  credentialDelete: (id: string) => call<null>("credential_delete", { id }),
+  credentialCrack: (hashId: string, plaintext: string) =>
+    call<Credential>("credential_crack", { hashId, plaintext }),
+  credentialSetCrackStatus: (id: string, status: CrackStatus) =>
+    call<Credential>("credential_set_crack_status", { id, status }),
+  credentialConvertToAccess: (credId: string, grant: AccessGrantInput) =>
+    call<Username>("credential_convert_to_access", { credId, grant }),
+  usernamesList: (engagementId: string) => call<Username[]>("usernames_list", { engagementId }),
+  usernameCreate: (engagementId: string, input: UsernameInput) =>
+    call<Username>("username_create", { engagementId, input }),
+  usernameDelete: (id: string) => call<null>("username_delete", { id }),
+  credAttemptsList: (engagementId: string) => call<CredAttempt[]>("cred_attempts_list", { engagementId }),
+  credAttemptsUpsert: (engagementId: string, inputs: CredAttemptInput[]) =>
+    call<CredAttempt[]>("cred_attempts_upsert", { engagementId, inputs }),
+  credAttemptDelete: (id: string) => call<null>("cred_attempt_delete", { id }),
+  credAttemptsRekey: (usernameId: string, secretCredIds: string[], credId: string, hostId?: string | null) =>
+    call<CredAttempt[]>("cred_attempts_rekey", { usernameId, secretCredIds, credId, hostId: hostId ?? null }),
+  accessGrantsList: (engagementId: string) => call<AccessGrant[]>("access_grants_list", { engagementId }),
+  accessGrantCreate: (engagementId: string, input: AccessGrantInput) =>
+    call<AccessGrant>("access_grant_create", { engagementId, input }),
+  accessGrantDelete: (id: string) => call<null>("access_grant_delete", { id }),
+  findingsList: (engagementId: string) => call<Finding[]>("findings_list", { engagementId }),
+  findingCreate: (engagementId: string, input: FindingInput) =>
+    call<Finding>("finding_create", { engagementId, input }),
+  findingUpdate: (id: string, input: FindingInput) => call<Finding>("finding_update", { id, input }),
+  findingDelete: (id: string) => call<null>("finding_delete", { id }),
+  findingFilesList: (findingId: string) => call<FindingFile[]>("finding_files_list", { findingId }),
+  findingFileCreate: (findingId: string, input: FindingFileInput) =>
+    call<FindingFile>("finding_file_create", { findingId, input }),
+  findingFileUpdate: (id: string, input: FindingFileInput) =>
+    call<FindingFile>("finding_file_update", { id, input }),
+  findingFileDelete: (id: string) => call<null>("finding_file_delete", { id }),
+  failedAttemptsList: (engagementId: string) =>
+    call<FailedAttempt[]>("failed_attempts_list", { engagementId }),
+  failedAttemptCreate: (engagementId: string, input: FailedAttemptInput) =>
+    call<FailedAttempt>("failed_attempt_create", { engagementId, input }),
+  failedAttemptUpdate: (id: string, input: FailedAttemptInput) =>
+    call<FailedAttempt>("failed_attempt_update", { id, input }),
+  failedAttemptDelete: (id: string) => call<null>("failed_attempt_delete", { id }),
   attachmentGet: (id: string) => call<Attachment>("attachment_get", { id }),
   engagementsProgress: () => call<Record<string, Progress>>("engagements_progress"),
 };

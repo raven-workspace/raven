@@ -6,7 +6,7 @@ use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 
-const COLS: &str = "id, engagement_id, name, ip, os, board_column, board_manual, access, created_at, updated_at, dual_homed, board_derived";
+const COLS: &str = "id, engagement_id, name, ip, os, board_column, board_manual, access, created_at, updated_at, dual_homed, board_derived, access_reviewed_at";
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -24,6 +24,8 @@ pub struct Host {
     pub dual_homed: bool,
     /// The board column the checklist last derived; a hand placement holds until this changes.
     pub board_derived: Option<String>,
+    /// When the user last reviewed this host's access grants (Unix ms); null = never.
+    pub access_reviewed_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -97,6 +99,7 @@ fn from_row(r: &Row) -> rusqlite::Result<Host> {
         updated_at: r.get(9)?,
         dual_homed: r.get::<_, i64>(10)? != 0,
         board_derived: r.get(11)?,
+        access_reviewed_at: r.get(12)?,
     })
 }
 
@@ -178,6 +181,16 @@ pub fn move_to(conn: &Connection, id: &str, column: &str) -> AppResult<Host> {
         "UPDATE hosts SET board_column=?2, board_manual=1, updated_at=?3 WHERE id=?1",
         params![id, column, system_now_ms()],
     )?;
+    if n == 0 {
+        return Err(AppError::NotFound);
+    }
+    get(conn, id)
+}
+
+/// Stamps the host as access-reviewed now.
+pub fn mark_access_reviewed(conn: &Connection, id: &str) -> AppResult<Host> {
+    let now = system_now_ms();
+    let n = conn.execute("UPDATE hosts SET access_reviewed_at=?2, updated_at=?2 WHERE id=?1", params![id, now])?;
     if n == 0 {
         return Err(AppError::NotFound);
     }

@@ -1,8 +1,10 @@
 import { Button, Dialog } from "../../ui";
 
 /** Confirm-before-delete dialog, same shape as the log entry delete. */
-export function ConfirmDelete({ title, error, pending, label, onConfirm, onCancel }: {
+export function ConfirmDelete({ title, detail, error, pending, label, onConfirm, onCancel }: {
   title: string;
+  /** What else goes (or stays) with it. */
+  detail?: string;
   error?: string;
   pending: boolean;
   label: string;
@@ -14,7 +16,15 @@ export function ConfirmDelete({ title, error, pending, label, onConfirm, onCance
       open
       onOpenChange={(o) => !o && onCancel()}
       title={title}
-      description={error ? <span role="alert" className="text-warn">{error}</span> : undefined}
+      description={
+        detail || error ? (
+          <>
+            {detail}
+            {detail && error && " "}
+            {error && <span role="alert" className="text-warn">{error}</span>}
+          </>
+        ) : undefined
+      }
       footer={
         <>
           <Button onClick={onCancel}>Cancel</Button>

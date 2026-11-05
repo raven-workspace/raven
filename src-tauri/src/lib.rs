@@ -1,6 +1,9 @@
+pub mod attempts;
+pub mod findings;
 pub mod backup;
 pub mod checklist;
 pub mod commands;
+pub mod credentials;
 pub mod engagements;
 pub mod error;
 pub mod hosts;
@@ -46,6 +49,7 @@ pub fn run() {
             commands::host_create,
             commands::host_update,
             commands::host_move,
+            commands::host_mark_access_reviewed,
             commands::host_delete,
             commands::host_sync_board,
             commands::services_list,
@@ -76,6 +80,35 @@ pub fn run() {
             commands::hop_create,
             commands::hop_update,
             commands::hop_delete,
+            commands::credentials_list,
+            commands::credential_create,
+            commands::credential_update,
+            commands::credential_delete,
+            commands::credential_crack,
+            commands::credential_set_crack_status,
+            commands::credential_convert_to_access,
+            commands::usernames_list,
+            commands::username_create,
+            commands::username_delete,
+            commands::cred_attempts_list,
+            commands::cred_attempts_upsert,
+            commands::cred_attempt_delete,
+            commands::cred_attempts_rekey,
+            commands::findings_list,
+            commands::finding_create,
+            commands::finding_update,
+            commands::finding_delete,
+            commands::finding_files_list,
+            commands::finding_file_create,
+            commands::finding_file_update,
+            commands::finding_file_delete,
+            commands::failed_attempts_list,
+            commands::failed_attempt_create,
+            commands::failed_attempt_update,
+            commands::failed_attempt_delete,
+            commands::access_grants_list,
+            commands::access_grant_create,
+            commands::access_grant_delete,
             commands::attachment_get,
             commands::engagements_progress,
         ])

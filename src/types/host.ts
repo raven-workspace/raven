@@ -17,6 +17,8 @@ export interface Host {
   dualHomed: boolean;
   /** The column the checklist last derived; a hand placement holds until it changes. */
   boardDerived: BoardColumn | null;
+  /** When the user last reviewed this host's access grants; null = never. */
+  accessReviewedAt: number | null;
 }
 
 /** Mirrors the Rust `HostInput` (create and full update). */

@@ -1,7 +1,7 @@
 import type { HTMLAttributes } from "react";
 import { cx } from "../lib/cx";
 
-export type ChipVariant = "default" | "accent";
+export type ChipVariant = "default" | "accent" | "warn";
 
 export interface ChipProps extends HTMLAttributes<HTMLSpanElement> {
   /** `accent` only when it means something: held access, confirmed. */
@@ -12,6 +12,8 @@ export interface ChipProps extends HTMLAttributes<HTMLSpanElement> {
 const variants: Record<ChipVariant, string> = {
   default: "border-line-strong text-fg-2",
   accent: "border-accent text-accent",
+  /** Dead, locked or errored. */
+  warn: "border-warn text-warn",
 };
 
 export function Chip({ variant = "default", mono, className, ...rest }: ChipProps) {

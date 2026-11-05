@@ -3,7 +3,14 @@
 //! `vault_create` returns nothing on success and leaves the vault
 //! unlocked (no daily backup: a brand-new vault has nothing to back up).
 
+use crate::attempts::{self, CredAttempt, CredAttemptInput};
 use crate::backup::{self, BackupInfo};
+use crate::findings::{
+    self, FailedAttempt, FailedAttemptInput, Finding, FindingFile, FindingFileInput, FindingInput,
+};
+use crate::credentials::{
+    self, AccessGrant, AccessGrantInput, Credential, CredentialInput, Username, UsernameInput,
+};
 use crate::checklist::{self, ChecklistItem, ChecklistItemInput};
 use crate::engagements::{self, Engagement, EngagementInput, Progress};
 use crate::network::{self, Hop, HopInput, Tunnel, TunnelInput};
@@ -210,6 +217,11 @@ pub async fn host_sync_board(app: AppHandle, host_id: String, derived: String) -
 }
 
 #[tauri::command]
+pub async fn host_mark_access_reviewed(app: AppHandle, host_id: String) -> AppResult<Host> {
+    with_vault(app, move |v| hosts::mark_access_reviewed(v.conn()?, &host_id)).await
+}
+
+#[tauri::command]
 pub async fn host_delete(app: AppHandle, id: String) -> AppResult<()> {
     with_vault(app, move |v| hosts::delete(v.conn()?, &id)).await
 }
@@ -359,6 +371,104 @@ pub async fn hop_delete(app: AppHandle, id: String) -> AppResult<()> {
 }
 
 #[tauri::command]
+pub async fn credentials_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<Credential>> {
+    with_vault(app, move |v| credentials::list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn credential_create(app: AppHandle, engagement_id: String, input: CredentialInput) -> AppResult<Credential> {
+    with_vault(app, move |v| credentials::create(v.conn()?, &engagement_id, input)).await
+}
+
+#[tauri::command]
+pub async fn credential_update(app: AppHandle, id: String, input: CredentialInput) -> AppResult<Credential> {
+    with_vault(app, move |v| credentials::update(v.conn()?, &id, input)).await
+}
+
+#[tauri::command]
+pub async fn credential_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| credentials::delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn credential_crack(app: AppHandle, hash_id: String, plaintext: String) -> AppResult<Credential> {
+    with_vault(app, move |v| credentials::crack(v.conn()?, &hash_id, &plaintext)).await
+}
+
+#[tauri::command]
+pub async fn credential_set_crack_status(app: AppHandle, id: String, status: String) -> AppResult<Credential> {
+    with_vault(app, move |v| credentials::set_crack_status(v.conn()?, &id, &status)).await
+}
+
+#[tauri::command]
+pub async fn credential_convert_to_access(app: AppHandle, cred_id: String, grant: AccessGrantInput) -> AppResult<Username> {
+    with_vault(app, move |v| credentials::convert_to_access(v.conn()?, &cred_id, grant)).await
+}
+
+#[tauri::command]
+pub async fn usernames_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<Username>> {
+    with_vault(app, move |v| credentials::usernames_list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn username_create(app: AppHandle, engagement_id: String, input: UsernameInput) -> AppResult<Username> {
+    with_vault(app, move |v| credentials::username_create(v.conn()?, &engagement_id, input)).await
+}
+
+#[tauri::command]
+pub async fn username_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| credentials::username_delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn cred_attempts_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<CredAttempt>> {
+    with_vault(app, move |v| attempts::list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn cred_attempts_upsert(
+    app: AppHandle,
+    engagement_id: String,
+    inputs: Vec<CredAttemptInput>,
+) -> AppResult<Vec<CredAttempt>> {
+    with_vault(app, move |v| attempts::upsert(v.conn()?, &engagement_id, &inputs)).await
+}
+
+#[tauri::command]
+pub async fn cred_attempt_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| attempts::delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn cred_attempts_rekey(
+    app: AppHandle,
+    username_id: String,
+    secret_cred_ids: Vec<String>,
+    cred_id: String,
+    host_id: Option<String>,
+) -> AppResult<Vec<CredAttempt>> {
+    with_vault(app, move |v| {
+        attempts::rekey_username_attempts(v.conn()?, &username_id, &secret_cred_ids, &cred_id, host_id.as_deref())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn access_grants_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<AccessGrant>> {
+    with_vault(app, move |v| credentials::grants_list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn access_grant_create(app: AppHandle, engagement_id: String, input: AccessGrantInput) -> AppResult<AccessGrant> {
+    with_vault(app, move |v| credentials::grant_create(v.conn()?, &engagement_id, input)).await
+}
+
+#[tauri::command]
+pub async fn access_grant_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| credentials::grant_delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
 pub async fn attachment_get(app: AppHandle, id: String) -> AppResult<Attachment> {
     with_vault(app, move |v| log::attachment_get(v.conn()?, &id)).await
 }
@@ -410,4 +520,68 @@ mod tests {
             assert!(b.contains_key("createdAt") && b.contains_key("sizeBytes"));
         }
     }
+}
+
+#[tauri::command]
+pub async fn findings_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<Finding>> {
+    with_vault(app, move |v| findings::findings_list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn finding_create(app: AppHandle, engagement_id: String, input: FindingInput) -> AppResult<Finding> {
+    with_vault(app, move |v| findings::finding_create(v.conn()?, &engagement_id, input)).await
+}
+
+#[tauri::command]
+pub async fn finding_update(app: AppHandle, id: String, input: FindingInput) -> AppResult<Finding> {
+    with_vault(app, move |v| findings::finding_update(v.conn()?, &id, input)).await
+}
+
+#[tauri::command]
+pub async fn finding_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| findings::finding_delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn finding_files_list(app: AppHandle, finding_id: String) -> AppResult<Vec<FindingFile>> {
+    with_vault(app, move |v| findings::files_list(v.conn()?, &finding_id)).await
+}
+
+#[tauri::command]
+pub async fn finding_file_create(app: AppHandle, finding_id: String, input: FindingFileInput) -> AppResult<FindingFile> {
+    with_vault(app, move |v| findings::file_create(v.conn()?, &finding_id, input)).await
+}
+
+#[tauri::command]
+pub async fn finding_file_update(app: AppHandle, id: String, input: FindingFileInput) -> AppResult<FindingFile> {
+    with_vault(app, move |v| findings::file_update(v.conn()?, &id, input)).await
+}
+
+#[tauri::command]
+pub async fn finding_file_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| findings::file_delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn failed_attempts_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<FailedAttempt>> {
+    with_vault(app, move |v| findings::attempts_list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn failed_attempt_create(
+    app: AppHandle,
+    engagement_id: String,
+    input: FailedAttemptInput,
+) -> AppResult<FailedAttempt> {
+    with_vault(app, move |v| findings::attempt_create(v.conn()?, &engagement_id, input)).await
+}
+
+#[tauri::command]
+pub async fn failed_attempt_update(app: AppHandle, id: String, input: FailedAttemptInput) -> AppResult<FailedAttempt> {
+    with_vault(app, move |v| findings::attempt_update(v.conn()?, &id, input)).await
+}
+
+#[tauri::command]
+pub async fn failed_attempt_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| findings::attempt_delete(v.conn()?, &id)).await
 }

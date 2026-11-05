@@ -3,6 +3,8 @@ import { Link } from "react-router";
 import { EmptyState } from "../../ui";
 import { NowPanel } from "../checklist/NowPanel";
 import { HostChecklist } from "../checklist/HostChecklist";
+import { HostCredentials } from "../credentials/HostCredentials";
+import { HostFindings } from "../findings/HostFindings";
 import { useLog } from "../log/queries";
 import { LogEntryRow } from "../log/LogEntryRow";
 import { OrderButton } from "../log/OrderButton";
@@ -18,7 +20,6 @@ const TABS = [
   { id: "findings", label: "Findings" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
-const STEPS: Record<TabId, number> = { story: 2, checklist: 3, credentials: 4, findings: 4 };
 
 export function HostView({ engagementId, hostId }: { engagementId: string; hostId: string }) {
   const hosts = useHosts(engagementId);
@@ -27,6 +28,10 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   const [order, setOrder] = usePersistedOrder("raven.story.order", "oldest");
   const [openEntry, setOpenEntry] = useState<string>();
   const [focusGoal, setFocusGoal] = useState<{ id: string; n: number }>();
+  const openInStory = (id: string) => {
+    setOpenEntry(id);
+    setTab("story");
+  };
   const host = hosts.data?.find((h) => h.id === hostId);
 
   if (hosts.isError) return <EmptyState title="Couldn't load this host" body={hosts.error.message} />;
@@ -96,15 +101,12 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
                 engagementId={engagementId}
                 host={host}
                 focusGoal={focusGoal}
-                onOpenEntry={(id) => {
-                  setOpenEntry(id);
-                  setTab("story");
-                }}
+                onOpenEntry={openInStory}
               />
+            ) : tab === "credentials" ? (
+              <HostCredentials engagementId={engagementId} host={host} onOpenEntry={openInStory} />
             ) : (
-              <p className="text-[13px] text-muted">
-                {TABS.find((t) => t.id === tab)?.label} arrives with build step {STEPS[tab]}.
-              </p>
+              <HostFindings engagementId={engagementId} host={host} onOpenEntry={openInStory} />
             )}
           </div>
         </div>

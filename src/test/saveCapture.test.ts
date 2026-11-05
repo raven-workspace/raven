@@ -15,7 +15,7 @@ function host(over: Partial<Host> & Pick<Host, "id" | "name">): Host {
     ip: null,
     os: null,
     boardColumn: "enumerate",
-    boardManual: false, dualHomed: false, boardDerived: null,
+    boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null,
     access: "none",
     createdAt: 1,
     updatedAt: 1,
@@ -319,6 +319,29 @@ describe("saveCapture", () => {
     expect(err).toMatchObject({
       message: "Saved, but services didn't update: db busy. The checklist didn't update either: use Tick from log on the Engagement checklist.",
       entry: { id: "l1" },
+    });
+  });
+
+  it("services and credential intake both failing says both and carries every cause", async () => {
+    const busy = new Error("db busy");
+    const locked = new Error("locked");
+    m.servicesUpsertScan.mockRejectedValue(busy);
+    m.credentialsList.mockRejectedValue(locked);
+    const nxc = { kind: "command" as const, blocks: [{ command: "nxc smb 10.10.10.5 -u bob -p 'Fake1'", output: "SMB  10.10.10.5  445  DC01  [+] corp\\bob:Fake1" }] };
+    const err = await saveCapture({
+      engagementId: "e1",
+      draft: draft({ scan: { hostId: "h1", ports: PORTS, os: null } }),
+      edits: edits({ content: nxc }),
+      addIps: [],
+      image: null,
+      hosts: [DC],
+      intake: { credentials: [], usernames: [], toggles: {}, previewKeys: [] },
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(PartialSaveError);
+    expect(err).toMatchObject({
+      message: "Saved, but services didn't update: db busy. The credentials didn't update either: paste the output again to retry.",
+      reason: busy,
+      reasons: [busy, locked],
     });
   });
 

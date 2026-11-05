@@ -49,6 +49,9 @@ describe("cache invalidation (M4)", () => {
     expect(keys()).toContainEqual(["services", "engagement", "e1"]);
     expect(keys()).toContainEqual(["checklist", "e1"]);
     expect(keys()).toContainEqual(["hosts", "e1"]);
+    // Attempts and grants that cited the entry lose their proof link.
+    expect(keys()).toContainEqual(["credAttempts", "e1"]);
+    expect(keys()).toContainEqual(["accessGrants", "e1"]);
   });
 
   it("log update invalidates services", async () => {
@@ -93,6 +96,11 @@ describe("cache invalidation (M4)", () => {
     expect(keys()).toContainEqual(["engagement", "e1"]);
     expect(keys()).toContainEqual(["tunnels", "e1"]);
     expect(keys()).toContainEqual(["hops", "e1"]);
+    // Its test results and grants cascade; credentials and findings lose their link to it.
+    expect(keys()).toContainEqual(["credAttempts", "e1"]);
+    expect(keys()).toContainEqual(["accessGrants", "e1"]);
+    expect(keys()).toContainEqual(["credentials", "e1"]);
+    expect(keys()).toContainEqual(["findings", "e1"]);
     // A deleted DC changes which hosts are AD hosts: the board re-syncs.
     await vi.waitFor(() => expect(resyncBoards).toHaveBeenCalledWith("e1"));
   });

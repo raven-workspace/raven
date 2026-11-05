@@ -21,7 +21,7 @@ const engagement = (over: Partial<Engagement> = {}): Engagement => ({
 });
 const host = (id: string, name: string, ip: string, os: Host['os']): Host => ({
   id, engagementId: 'lab', name, ip, os, boardColumn: 'enumerate', boardManual: false, access: 'none',
-  createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null,
+  createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null,
 });
 let n = 0;
 const svc = (hostId: string, port: number): Service => ({
@@ -225,6 +225,28 @@ describe('ticksForEntry (commands)', () => {
   it('other entry kinds tick nothing', () => {
     const note = entry('', { kind: 'note', content: { kind: 'note', text: 'nmap -p- 10.0.0.5' }, hostIds: ['ms01'] });
     expect(ticksForEntry(note, ctxFor())).toEqual([]);
+  });
+});
+
+describe('ticksForEntry (line names no host)', () => {
+  it('a Kali command naming no host ticks the hosts the entry is tagged with', () => {
+    const t = ticks('searchsploit --nmap nmap_svc.xml', { hostIds: ['web'] });
+    expect(pairs(t)).toContain('web:h-enum-exploits');
+  });
+
+  it('a line that names a host still ticks only that host, not the tags', () => {
+    const t = ticks('nmap -p- -T4 10.0.0.5', { hostIds: ['web'] });
+    expect(pairs(t)).toContain('ms01:h-enum-full-tcp');
+    expect(pairs(t)).not.toContain('web:h-enum-full-tcp');
+  });
+
+  it('a line that excludes hosts never falls back to the tags', () => {
+    const t = ticks('nmap -p- 10.0.0.0/24 --exclude 10.0.0.1', { hostIds: ['web'] });
+    expect(pairs(t)).not.toContain('web:h-enum-full-tcp');
+  });
+
+  it('no tags, no host named: nothing ticks', () => {
+    expect(ticks('searchsploit --nmap nmap_svc.xml')).toEqual([]);
   });
 });
 

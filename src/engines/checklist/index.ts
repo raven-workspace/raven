@@ -8,3 +8,4 @@ export * from './autoTick';
 export * from './examRules';
 export * from './scanImport';
 export * from './board';
+export * from './shellQuote';

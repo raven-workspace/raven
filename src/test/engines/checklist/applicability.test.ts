@@ -18,7 +18,7 @@ import {
 
 const host = (p: Partial<Host> = {}): Host => ({
   id: 'h1', engagementId: 'e1', name: 'ms01', ip: '10.10.10.5', os: null, boardColumn: 'enumerate', boardManual: false,
-  access: 'none', createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, ...p,
+  access: 'none', createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, ...p,
 });
 
 let n = 0;

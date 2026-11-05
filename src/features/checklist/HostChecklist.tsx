@@ -6,6 +6,8 @@ import type { Host } from "../../types/host";
 import { Button, Input, Select } from "../../ui";
 import { useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
+import { CredentialPicker } from "./CredentialPicker";
+import { newCredLabels, useCredFill } from "./credPick";
 import { goalCommands } from "./goalCommands";
 import { GoalRow } from "./GoalRow";
 import { useChecklist, useChecklistMutations, useEngagementServices, useHopMutations, useTunnels } from "./queries";
@@ -33,11 +35,17 @@ function ArrivedFrom({ host, hosts, onSave }: { host: Host; hosts: Host[]; onSav
   };
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs text-fg-2">Arrived from</span>
-      <div className="flex items-center gap-2">
-        <Select aria-label="Arrived from" className="w-40" options={options} value={from} onValueChange={setFrom} />
-        <Input aria-label="Via" placeholder="via (creds, exploit, share…)" value={via} onChange={(e) => setVia(e.target.value)} className="flex-1" />
-        <Button variant="primary" disabled={saving || via.trim() === ""} onClick={() => void save()}>
+      <div className="flex items-end gap-2">
+        {/* Fixed-width wrapper: the control's own w-full would otherwise win over a width class and squeeze Via. */}
+        <label className="flex w-48 shrink-0 flex-col gap-1">
+          <span className="text-xs text-fg-2">Arrived from</span>
+          <Select aria-label="Arrived from" options={options} value={from} onValueChange={setFrom} />
+        </label>
+        <label className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-xs text-fg-2">Via</span>
+          <Input aria-label="Via" placeholder="creds, exploit, share…" value={via} onChange={(e) => setVia(e.target.value)} />
+        </label>
+        <Button variant="primary" className="shrink-0" disabled={saving || via.trim() === ""} onClick={() => void save()}>
           Save hop
         </Button>
       </div>
@@ -56,6 +64,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal }: { 
   const { tunnels } = useTunnels(engagementId);
   const { setStatus, setNotes } = useChecklistMutations(engagementId);
   const hops = useHopMutations(engagementId);
+  const creds = useCredFill(engagementId, host);
 
   /** The hop already created for the last Save, so a retry after a failed tick never duplicates it. */
   const createdHop = useRef<string>(undefined);
@@ -74,7 +83,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal }: { 
   const entries = log.data ?? [];
   const input: FillInput = {
     host, engagement: eng, hosts, servicesByHost, tunnels,
-    attackerIp: settings.data?.attackerIp ?? "", listenerPort: settings.data?.listenerPort ?? "",
+    attackerIp: settings.data?.attackerIp ?? "", listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
   };
 
   const commandsFor = (goalId: string) => goalCommands(goalId, input, eng);
@@ -91,6 +100,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal }: { 
 
   return (
     <div className="flex flex-col gap-6 py-3">
+      <CredentialPicker credentials={creds.credentials} value={creds.cred} onChange={creds.pick} />
       {groups.map(({ stage, goals, hint }) => (
         <section key={stage.id} aria-label={stage.title} className="flex flex-col gap-2 border-t border-line-2 pt-5 first:border-t-0 first:pt-0">
           <h3 className="m-0 text-[11px] font-semibold uppercase tracking-label text-muted">{stage.title}</h3>
@@ -113,6 +123,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal }: { 
                       return { entryId: ev.entryId, label: e?.title ?? "", exists: !!e };
                     })}
                     emptyCommandsText={hadAny && commands.length === 0 ? EXAM_EMPTY : undefined}
+                    newCredLabels={newCredLabels(s?.completedAt, creds.credentials)}
                     onStatus={(goalId, status) => setStatus.mutate({ ownerId: host.id, goalId, status })}
                     onNotes={(goalId, notes) => setNotes.mutate({ ownerId: host.id, goalId, notes })}
                     onOpenEntry={onOpenEntry}

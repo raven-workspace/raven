@@ -36,7 +36,7 @@ function host(over: Partial<Host> & Pick<Host, "id" | "name">): Host {
     ip: null,
     os: null,
     boardColumn: "enumerate",
-    boardManual: false, dualHomed: false, boardDerived: null,
+    boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null,
     access: "none",
     createdAt: 1,
     updatedAt: 1,
