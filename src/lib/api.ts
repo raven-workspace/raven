@@ -108,6 +108,9 @@ export const api = {
   /** The domain admin cover as conditional writes: a status set by hand is never overwritten. */
   checklistApplyCover: (engagementId: string, cover: GoalRef[], revert: GoalRef[]) =>
     call<ChecklistItem[]>("checklist_apply_cover", { engagementId, cover, revert }),
+  /** Ticks driven by the host's own data (identified ports, OS) as conditional writes. */
+  checklistApplyFacts: (engagementId: string, done: GoalRef[], revert: GoalRef[]) =>
+    call<ChecklistItem[]>("checklist_apply_facts", { engagementId, done, revert }),
   notesGet: (engagementId: string, hostId: string | null) =>
     call<Note>("notes_get", { engagementId, hostId }),
   notesList: (engagementId: string) => call<Note[]>("notes_list", { engagementId }),

@@ -191,6 +191,58 @@ pub fn apply_cover(
     list(conn, engagement_id)
 }
 
+/// Facts the app can read from the host's own data (identified ports, OS), as conditional writes. `done` goals become
+/// `done` with `auto` set and no evidence, only where there is no row or the row is an untouched `todo` (not auto, not
+/// set by hand). `revert` goals go back to `todo`, only where the row is fact-marked (`done`, auto, not set by hand,
+/// no evidence). One transaction; returns the engagement's items.
+pub fn apply_facts(
+    conn: &Connection,
+    engagement_id: &str,
+    done: &[GoalRef],
+    revert: &[GoalRef],
+) -> AppResult<Vec<ChecklistItem>> {
+    if done.len() + revert.len() > MAX_ITEMS * 4 {
+        return Err(invalid("facts", "too many items"));
+    }
+    let exists: bool =
+        conn.query_row("SELECT EXISTS(SELECT 1 FROM engagements WHERE id = ?1)", [engagement_id], |r| r.get(0))?;
+    if !exists {
+        return Err(AppError::NotFound);
+    }
+    let tx = conn.unchecked_transaction()?;
+    let now = system_now_ms();
+    for g in done.iter().chain(revert.iter()) {
+        let owned: bool = g.owner_id == engagement_id
+            || tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM hosts WHERE id = ?1 AND engagement_id = ?2)",
+                params![g.owner_id, engagement_id],
+                |r| r.get(0),
+            )?;
+        if !owned || g.goal_id.trim().is_empty() {
+            return Err(invalid("ownerId", "owner is not part of this engagement"));
+        }
+    }
+    for g in revert {
+        tx.execute(
+            "UPDATE checklist_items SET status='todo', auto=0, auto_from=NULL, completed_at=NULL, updated_at=?3 \
+             WHERE owner_id=?1 AND goal_id=?2 AND status='done' AND auto=1 AND status_manual=0 AND evidence='[]'",
+            params![g.owner_id, g.goal_id, now],
+        )?;
+    }
+    for g in done {
+        tx.execute(
+            "INSERT INTO checklist_items \
+               (owner_id, engagement_id, goal_id, status, notes, completed_at, auto, auto_from, evidence, updated_at, status_manual) \
+             VALUES (?1,?2,?3,'done',NULL,?4,1,NULL,'[]',?4,0) \
+             ON CONFLICT(owner_id, goal_id) DO UPDATE SET status='done', auto=1, auto_from=NULL, completed_at=excluded.completed_at, updated_at=excluded.updated_at \
+             WHERE checklist_items.status='todo' AND checklist_items.auto=0 AND checklist_items.status_manual=0",
+            params![g.owner_id, engagement_id, g.goal_id, now],
+        )?;
+    }
+    tx.commit()?;
+    list(conn, engagement_id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -327,6 +379,52 @@ mod tests {
         put(c, &e, &[hand]).unwrap();
         let out = apply_cover(c, &e, &[], &[gref(&h, "k")]).unwrap();
         assert_eq!(row(&out, &h, "k").unwrap().status, "na");
+    }
+
+    #[test]
+    fn apply_facts_sets_done_on_untouched_and_leaves_manual() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let h = host(c, &e, "10.0.0.5");
+        let mut manual = item(&h, "manual", "todo");
+        manual.status_manual = Some(true);
+        put(c, &e, &[item(&h, "untouched", "todo"), manual, item(&h, "prog", "in_progress"), item(&h, "done", "done")]).unwrap();
+        let goals: Vec<GoalRef> = ["missing", "untouched", "manual", "prog", "done"].iter().map(|g| gref(&h, g)).collect();
+        let out = apply_facts(c, &e, &goals, &[]).unwrap();
+        for g in ["missing", "untouched"] {
+            let r = row(&out, &h, g).unwrap();
+            assert_eq!((r.status.as_str(), r.auto, r.evidence.len()), ("done", true, 0), "{g}");
+            assert!(r.completed_at.is_some(), "{g}");
+        }
+        let m = row(&out, &h, "manual").unwrap();
+        assert_eq!((m.status.as_str(), m.auto), ("todo", false));
+        assert_eq!(row(&out, &h, "prog").unwrap().status, "in_progress");
+        assert!(!row(&out, &h, "done").unwrap().auto);
+        assert!(apply_facts(c, &e, &[gref("nope", "g")], &[]).is_err());
+    }
+
+    #[test]
+    fn apply_facts_reverts_only_fact_marked() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let h = host(c, &e, "10.0.0.5");
+        let mut hand = item(&h, "hand", "done");
+        hand.auto = true;
+        hand.status_manual = Some(true);
+        let mut logged = item(&h, "logged", "done");
+        logged.auto = true;
+        logged.evidence = vec![Evidence { entry_id: "x1".into(), command_id: None }];
+        put(c, &e, &[hand, logged, item(&h, "plain", "done")]).unwrap();
+        apply_facts(c, &e, &[gref(&h, "fact")], &[]).unwrap();
+        let goals: Vec<GoalRef> = ["fact", "hand", "logged", "plain"].iter().map(|g| gref(&h, g)).collect();
+        let out = apply_facts(c, &e, &[], &goals).unwrap();
+        let f = row(&out, &h, "fact").unwrap();
+        assert_eq!((f.status.as_str(), f.auto, f.completed_at), ("todo", false, None));
+        for g in ["hand", "logged", "plain"] {
+            assert_eq!(row(&out, &h, g).unwrap().status, "done", "{g}");
+        }
     }
 
     #[test]

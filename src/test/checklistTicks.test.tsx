@@ -126,6 +126,25 @@ beforeEach(() => {
     return null;
   });
   m.checklistList.mockImplementation(async () => store);
+  // The store's conditional fact write, as the Rust command does it.
+  m.checklistApplyFacts.mockImplementation(async (_e, done, revert) => {
+    const find = (g: { ownerId: string; goalId: string }) => store.find((i) => i.ownerId === g.ownerId && i.goalId === g.goalId);
+    for (const g of revert) {
+      const row = find(g);
+      if (row && row.status === "done" && row.auto && !row.statusManual && row.evidence.length === 0) {
+        store = store.map((i) => (i === row ? { ...i, status: "todo", auto: false, autoFrom: null, completedAt: null } : i));
+      }
+    }
+    for (const g of done) {
+      const row = find(g);
+      if (!row) {
+        store = [...store, { ownerId: g.ownerId, goalId: g.goalId, status: "done", notes: null, completedAt: 5, auto: true, autoFrom: null, statusManual: false, evidence: [], updatedAt: 1 }];
+      } else if (row.status === "todo" && !row.auto && !row.statusManual) {
+        store = store.map((i) => (i === row ? { ...i, status: "done", auto: true, completedAt: 5 } : i));
+      }
+    }
+    return store;
+  });
   m.checklistPut.mockImplementation(async (_e, items: ChecklistItemInput[]) => {
     for (const it of items) {
       const full = item({ ...it, updatedAt: 2 } as ChecklistItem);
@@ -506,6 +525,30 @@ describe("ticks.ts", () => {
     } finally {
       vi.mocked(Date.now).mockRestore();
     }
+  });
+
+  it("Tick from log keeps fact ticks and DA cover marks", async () => {
+    entries = [entry({ id: "s1", kind: "command", at: T, content: { kind: "command", blocks: [{ command: FULL_SCAN, output: "" }] } })];
+    store = [
+      item({ ownerId: "h1", goalId: "h-enum-os", status: "done", completedAt: 50, auto: true }),
+      item({ ownerId: "h1", goalId: "h-enum-identified", status: "done", completedAt: 51, auto: true }),
+      item({ ownerId: "h1", goalId: "h-loot-hashes", status: "na", auto: true }),
+    ];
+    await tickFromLog("e1", await loadTickContext("e1"));
+    expect(stored("h1", "h-enum-os")).toMatchObject({ status: "done", auto: true, completedAt: 50, evidence: [] });
+    expect(stored("h1", "h-enum-identified")).toMatchObject({ status: "done", auto: true, completedAt: 51, evidence: [] });
+    expect(stored("h1", "h-loot-hashes")).toMatchObject({ status: "na", auto: true });
+  });
+
+  it("setting the OS ticks OS identified, and clearing it reverts", async () => {
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, os: "linux" as const } : h));
+    await resyncBoards("e1");
+    expect(m.checklistApplyFacts).toHaveBeenCalledWith("e1", [{ ownerId: "h1", goalId: "h-enum-os" }], []);
+    expect(stored("h1", "h-enum-os")).toMatchObject({ status: "done", auto: true });
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, os: null } : h));
+    await resyncBoards("e1");
+    expect(m.checklistApplyFacts).toHaveBeenLastCalledWith("e1", [], [{ ownerId: "h1", goalId: "h-enum-os" }]);
+    expect(stored("h1", "h-enum-os")).toMatchObject({ status: "todo", auto: false });
   });
 
   it("tickFromLog re-derives missing ticks, drops evidence of deleted entries, keeps completedAt and manual state", async () => {

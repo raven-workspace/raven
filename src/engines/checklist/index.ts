@@ -10,3 +10,4 @@ export * from './scanImport';
 export * from './board';
 export * from './shellQuote';
 export * from './daCover';
+export * from './factTicks';

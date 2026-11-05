@@ -319,6 +319,16 @@ pub async fn checklist_apply_cover(
 }
 
 #[tauri::command]
+pub async fn checklist_apply_facts(
+    app: AppHandle,
+    engagement_id: String,
+    done: Vec<GoalRef>,
+    revert: Vec<GoalRef>,
+) -> AppResult<Vec<ChecklistItem>> {
+    with_vault(app, move |v| checklist::apply_facts(v.conn()?, &engagement_id, &done, &revert)).await
+}
+
+#[tauri::command]
 pub async fn notes_get(app: AppHandle, engagement_id: String, host_id: Option<String>) -> AppResult<Note> {
     with_vault(app, move |v| notes::get(v.conn()?, &engagement_id, host_id.as_deref())).await
 }

@@ -2,6 +2,7 @@ import {
   applicableGoals,
   daCoverGoals,
   derivedColumn,
+  factTickGoals,
   metasploitHostIds,
   removeEntryTicks,
   replaceEntryTicks,
@@ -99,8 +100,20 @@ export async function syncEntryTicks(engagementId: string, entry: LogEntry | nul
 export async function resyncBoards(engagementId: string): Promise<void> {
   await afterAutoTick(engagementId);
   const ctx = await loadTickContext(engagementId);
-  const after = await applyDaCover(engagementId, ctx);
+  const facts = await applyFacts(engagementId, ctx);
+  const after = await applyDaCover(engagementId, ctx, facts);
   await syncBoards(engagementId, ctx, after);
+}
+
+/**
+ * Ticks "every port identified" and "OS identified" from the hosts' own data (`factTickGoals`), through the store's
+ * conditional write. Returns the checklist after it. `byOwner` is the current checklist; read from the store when left out.
+ */
+export async function applyFacts(engagementId: string, ctx: TickContext, byOwner?: Map<string, ChecklistState>): Promise<Map<string, ChecklistState>> {
+  const before: Map<string, ChecklistState> = byOwner ?? byOwnerOf(await api.checklistList(engagementId));
+  const { done, revert } = factTickGoals({ engagement: ctx.engagement, hosts: ctx.hosts, servicesByHost: ctx.servicesByHost, byOwner: before });
+  if (done.length === 0 && revert.length === 0) return before;
+  return byOwnerOf(await api.checklistApplyFacts(engagementId, done, revert));
 }
 
 /**
