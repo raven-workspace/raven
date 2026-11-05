@@ -21,7 +21,7 @@ const engagement = (over: Partial<Engagement> = {}): Engagement => ({
 });
 const host = (id: string, name: string, ip: string, os: Host['os']): Host => ({
   id, engagementId: 'lab', name, ip, os, boardColumn: 'enumerate', boardManual: false, access: 'none',
-  createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null,
+  createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false,
 });
 let n = 0;
 const svc = (hostId: string, port: number): Service => ({

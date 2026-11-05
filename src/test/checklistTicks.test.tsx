@@ -30,7 +30,7 @@ const E1: Engagement = {
 function host(over: Partial<Host> & Pick<Host, "id" | "name">): Host {
   return {
     engagementId: "e1", ip: null, os: null, boardColumn: "enumerate", boardManual: false, dualHomed: false,
-    boardDerived: "enumerate", accessReviewedAt: null, access: "none", createdAt: 1, updatedAt: 1, ...over,
+    boardDerived: "enumerate", accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1, ...over,
   };
 }
 
@@ -422,7 +422,7 @@ describe("first open of an engagement logged before step 3 (F-R1)", () => {
 
   it("a v2 hand-placed card (manual, no derived column) keeps its column; its local.txt flag ticks the checklist", async () => {
     rustSyncBoard();
-    hosts = hosts.map((h) => (h.id === "h2" ? { ...h, boardColumn: "done", boardManual: true, boardDerived: null, accessReviewedAt: null } : h));
+    hosts = hosts.map((h) => (h.id === "h2" ? { ...h, boardColumn: "done", boardManual: true, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false } : h));
     entries = [entry({ id: "f1", kind: "flag", at: T, hostIds: ["h2"], content: { kind: "flag", flagKind: "local", value: FLAG } })];
     mount();
     await vi.waitFor(() => expect(stored("h2", "h-orient-proof")).toMatchObject({ status: "done", auto: true, completedAt: T }));
@@ -436,7 +436,7 @@ describe("first open of an engagement logged before step 3 (F-R1)", () => {
 
   it("a board sync started while the automatic tick runs waits for it; concurrent callers share one run", async () => {
     rustSyncBoard();
-    hosts = hosts.map((h) => (h.id === "h2" ? { ...h, boardColumn: "done", boardManual: true, boardDerived: null, accessReviewedAt: null } : h));
+    hosts = hosts.map((h) => (h.id === "h2" ? { ...h, boardColumn: "done", boardManual: true, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false } : h));
     entries = [entry({ id: "f1", kind: "flag", at: T, hostIds: ["h2"], content: { kind: "flag", flagKind: "local", value: FLAG } })];
     const put = m.checklistPut.getMockImplementation()!;
     let release: () => void = () => {};
@@ -460,8 +460,8 @@ describe("first open of an engagement logged before step 3 (F-R1)", () => {
   it("a board sync on an empty checklist skips a hand-placed card with no derived column", async () => {
     rustSyncBoard();
     hosts = [
-      host({ id: "h1", name: "dc01", ip: "10.10.10.5", boardColumn: "done", boardManual: true, boardDerived: null, accessReviewedAt: null }),
-      host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "loot", boardManual: false, boardDerived: null, accessReviewedAt: null }),
+      host({ id: "h1", name: "dc01", ip: "10.10.10.5", boardColumn: "done", boardManual: true, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false }),
+      host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "loot", boardManual: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false }),
     ];
     await resyncBoards("e1");
     expect(m.hostSyncBoard).not.toHaveBeenCalledWith("h1", expect.anything());
@@ -570,7 +570,7 @@ describe("service mutations", () => {
   it("a board-sync failure after a service change is not fatal", async () => {
     m.serviceDelete.mockResolvedValue(null);
     m.hostSyncBoard.mockRejectedValue(new Error("board busy"));
-    hosts = hosts.map((h) => ({ ...h, boardDerived: null, accessReviewedAt: null }));
+    hosts = hosts.map((h) => ({ ...h, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false }));
     const { result } = renderHook(() => useServiceMutations("e1", "h1"), { wrapper: hookWrapper() });
     await act(() => result.current.remove.mutateAsync("s1"));
     await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalled());

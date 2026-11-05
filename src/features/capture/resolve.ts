@@ -163,7 +163,7 @@ export function withProvisionalHosts(hosts: Host[], engagementId: string, addIps
     ...hosts,
     ...fresh.map((ip): Host => ({
       id: provisionalHostId(ip), engagementId, name: ip, ip, os: null, boardColumn: "enumerate", boardManual: false,
-      access: "none", createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null,
+      access: "none", createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false,
     })),
   ];
 }

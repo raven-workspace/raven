@@ -294,7 +294,7 @@ mod tests {
     }
 
     fn host(c: &rusqlite::Connection, e: &str, ip: &str) -> String {
-        hosts::create(c, e, HostInput { name: ip.into(), ip: Some(ip.into()), os: None, access: None, dual_homed: None }).unwrap().id
+        hosts::create(c, e, HostInput { name: ip.into(), ip: Some(ip.into()), os: None, access: None, dual_homed: None, ad_set: None }).unwrap().id
     }
 
     fn field<T: std::fmt::Debug>(r: AppResult<T>) -> String {

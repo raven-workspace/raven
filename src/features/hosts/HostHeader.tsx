@@ -27,6 +27,7 @@ export function HostHeader({ host }: { host: Host }) {
       {host.os && <Chip>{OS_LABELS[host.os]}</Chip>}
       {host.access !== "none" && <Chip variant="accent">{host.access}</Chip>}
       <Chip>{COLUMN_LABELS[host.boardColumn]}</Chip>
+      {host.adSetEffective && <Chip>AD set</Chip>}
       {threads > 0 && <Chip>{threadsLabel(threads)}</Chip>}
       <span className="flex-1" />
       <Button size="sm" onClick={() => setEditing(true)}>

@@ -587,7 +587,7 @@ mod tests {
     }
 
     fn host(c: &Connection, eid: &str, ip: &str) -> String {
-        hosts::create(c, eid, HostInput { name: ip.into(), ip: Some(ip.into()), os: None, access: None, dual_homed: None })
+        hosts::create(c, eid, HostInput { name: ip.into(), ip: Some(ip.into()), os: None, access: None, dual_homed: None, ad_set: None })
             .unwrap()
             .id
     }

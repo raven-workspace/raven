@@ -647,7 +647,7 @@ mod tests {
         hosts::create(
             c,
             eid,
-            HostInput { name: ip.into(), ip: Some(ip.into()), os: None, access: None, dual_homed: None },
+            HostInput { name: ip.into(), ip: Some(ip.into()), os: None, access: None, dual_homed: None, ad_set: None },
         )
         .unwrap()
         .id

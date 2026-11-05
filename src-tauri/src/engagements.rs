@@ -216,6 +216,49 @@ pub struct Progress {
     pub flags_total: i64,
 }
 
+/// Exam sims count the AD set (every host whose effective `ad_set` is on) as ONE target and ONE
+/// flag, the proof.txt on the DC; every other host keeps its local + proof pair.
+fn exam_sim_progress(conn: &Connection) -> AppResult<std::collections::HashMap<String, Progress>> {
+    let sql = format!(
+        "SELECT h.engagement_id, {ad} AS ad,
+           EXISTS(SELECT 1 FROM log_entry_hosts lh JOIN log_entries l ON l.id = lh.entry_id
+                  WHERE lh.host_id = h.id AND l.kind = 'flag' AND json_extract(l.content, '$.flagKind') = 'local'),
+           EXISTS(SELECT 1 FROM log_entry_hosts lh JOIN log_entries l ON l.id = lh.entry_id
+                  WHERE lh.host_id = h.id AND l.kind = 'flag' AND json_extract(l.content, '$.flagKind') = 'proof')
+         FROM hosts h JOIN engagements e ON e.id = h.engagement_id WHERE e.kind = 'exam-sim'",
+        ad = crate::hosts::AD_EFFECTIVE_H
+    );
+    let mut st = conn.prepare(&sql)?;
+    let rows = st
+        .query_map([], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? != 0, r.get::<_, i64>(2)? != 0, r.get::<_, i64>(3)? != 0))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut out: std::collections::HashMap<String, Progress> = std::collections::HashMap::new();
+    let mut ad_seen: std::collections::HashMap<String, (bool, bool)> = std::collections::HashMap::new();
+    for (eid, ad, local, proof) in rows {
+        if ad {
+            let e = ad_seen.entry(eid).or_default();
+            e.0 = true;
+            e.1 |= proof;
+        } else {
+            let p = out.entry(eid).or_insert(Progress { hosts_total: 0, hosts_rooted: 0, flags_found: 0, flags_total: 0 });
+            p.hosts_total += 1;
+            p.flags_total += 2;
+            p.hosts_rooted += proof as i64;
+            p.flags_found += local as i64 + proof as i64;
+        }
+    }
+    for (eid, (_, proof)) in ad_seen {
+        let p = out.entry(eid).or_insert(Progress { hosts_total: 0, hosts_rooted: 0, flags_found: 0, flags_total: 0 });
+        p.hosts_total += 1;
+        p.flags_total += 1;
+        p.hosts_rooted += proof as i64;
+        p.flags_found += proof as i64;
+    }
+    Ok(out)
+}
+
 pub fn progress_all(conn: &Connection) -> AppResult<std::collections::HashMap<String, Progress>> {
     let mut out = std::collections::HashMap::new();
     let mut st = conn.prepare(
@@ -239,6 +282,8 @@ pub fn progress_all(conn: &Connection) -> AppResult<std::collections::HashMap<St
         let (id, p) = row?;
         out.insert(id, p);
     }
+    // Exam sims: the AD set counts once. An exam sim with no hosts keeps its zero row from above.
+    out.extend(exam_sim_progress(conn)?);
     Ok(out)
 }
 
@@ -465,7 +510,7 @@ mod tests {
             timebox_start: None,
             timebox_minutes: None,
         };
-        let hin = |ip: &str| HostInput { name: ip.into(), ip: Some(ip.into()), os: None, access: None, dual_homed: None };
+        let hin = |ip: &str| HostInput { name: ip.into(), ip: Some(ip.into()), os: None, access: None, dual_homed: None, ad_set: None };
         let e = create(c, mk()).unwrap();
         let e2 = create(c, mk()).unwrap();
         assert_eq!(e.msf_host_id, None);
@@ -479,5 +524,77 @@ mod tests {
         assert_eq!(set_msf_host(c, &e.id, None).unwrap().msf_host_id, None);
         assert_eq!(set_msf_host(c, "nope", None), Err(AppError::NotFound));
         assert!(serde_json::to_value(&e).unwrap().get("msfHostId").is_some());
+    }
+
+    fn prog_fixture(kind: &str) -> (tempfile::TempDir, crate::vault::Vault, String) {
+        use crate::hosts::{self, HostInput};
+        let dir = tempfile::tempdir().unwrap();
+        let mut v = crate::vault::Vault::new(crate::paths::DataPaths::for_root(dir.path().to_path_buf()));
+        v.create_for_test("correct horse battery").unwrap();
+        let c = v.conn().unwrap();
+        let e = create(
+            c,
+            EngagementInput {
+                name: "x".into(),
+                kind: kind.into(),
+                client: None,
+                sub_label: None,
+                scope_cidrs: vec![],
+                domain: None,
+                starts_at: None,
+                ends_at: None,
+                timebox_start: None,
+                timebox_minutes: None,
+            },
+        )
+        .unwrap();
+        let mk = |name: &str, ip: &str, ad: Option<bool>| {
+            let h = hosts::create(
+                c,
+                &e.id,
+                HostInput { name: name.into(), ip: Some(ip.into()), os: None, access: None, dual_homed: None, ad_set: Some(ad) },
+            )
+            .unwrap();
+            h.id
+        };
+        let s1 = mk("s1", "10.0.0.1", None);
+        mk("s2", "10.0.0.2", None);
+        mk("s3", "10.0.0.3", None);
+        let dc = mk("dc", "10.0.0.10", None);
+        mk("c1", "10.0.0.11", Some(true));
+        mk("c2", "10.0.0.12", Some(true));
+        for (i, p) in [88, 389].iter().enumerate() {
+            c.execute(
+                "INSERT INTO services (id,host_id,port,protocol,state,created_at,updated_at) VALUES (?1,?2,?3,'tcp','open',1,1)",
+                params![format!("sv{i}"), dc, p],
+            )
+            .unwrap();
+        }
+        let flag = |id: &str, host: &str, kind: &str| {
+            c.execute(
+                "INSERT INTO log_entries (id,engagement_id,kind,title,content,at,created_at,updated_at) VALUES (?1,?2,'flag','f',?3,1,1,1)",
+                params![id, e.id, format!(r#"{{"flagKind":"{kind}"}}"#)],
+            )
+            .unwrap();
+            c.execute("INSERT INTO log_entry_hosts (entry_id,host_id) VALUES (?1,?2)", params![id, host]).unwrap();
+        };
+        flag("f1", &s1, "local");
+        flag("f2", &s1, "proof");
+        flag("f3", &dc, "proof");
+        (dir, v, e.id)
+    }
+
+    #[test]
+    fn exam_sim_progress_counts_ad_set_once() {
+        let (_d, v, id) = prog_fixture("exam-sim");
+        let p = &progress_all(v.conn().unwrap()).unwrap()[&id];
+        assert_eq!((p.hosts_total, p.hosts_rooted, p.flags_found, p.flags_total), (4, 2, 3, 7));
+    }
+
+    #[test]
+    fn lab_progress_unchanged() {
+        let (_d, v, id) = prog_fixture("lab");
+        let p = &progress_all(v.conn().unwrap()).unwrap()[&id];
+        assert_eq!((p.hosts_total, p.hosts_rooted, p.flags_found, p.flags_total), (6, 2, 3, 12));
     }
 }

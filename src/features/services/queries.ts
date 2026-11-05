@@ -14,6 +14,8 @@ export function useServiceMutations(engagementId: string, hostId: string) {
     void qc.invalidateQueries({ queryKey: ["services", hostId] });
     // The engagement-wide list (`useEngagementServices`) holds this host's services too.
     void qc.invalidateQueries({ queryKey: ["services", "engagement"] });
+    // Open 88 and 389 make a host part of the AD set, which changes exam-sim progress.
+    void qc.invalidateQueries({ queryKey: ["progress"] });
     // A service (above all a confirmed identity) changes which goals apply, so the derived column can move.
     // Not fatal: a failure goes to the shared error path (a locked vault reaches the gate).
     void resyncBoards(engagementId).then(

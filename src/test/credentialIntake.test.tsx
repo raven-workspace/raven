@@ -24,7 +24,7 @@ const E1: Engagement = {
 };
 const host = (over: Partial<Host> & Pick<Host, "id" | "name">): Host => ({
   engagementId: "e1", ip: null, os: "windows", boardColumn: "foothold", boardManual: false, dualHomed: false,
-  boardDerived: null, accessReviewedAt: null, access: "none", createdAt: 1, updatedAt: 1, ...over,
+  boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1, ...over,
 });
 const H1 = host({ id: "h1", name: "dc01", ip: "10.10.10.5" });
 const H2 = host({ id: "h2", name: "web02", ip: "10.10.10.6" });
