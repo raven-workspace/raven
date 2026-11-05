@@ -214,6 +214,14 @@ describe("board", () => {
     expect(screen.queryByText(/Couldn't move/)).not.toBeInTheDocument();
   });
 
+  it("the board lays out one grid track per column", async () => {
+    mount();
+    await ready();
+    const grid = column("Reporting").parentElement!;
+    expect(grid.style.gridTemplateColumns).toBe("repeat(6, minmax(0, 1fr))");
+    expect(grid.querySelectorAll(":scope > section")).toHaveLength(6);
+  });
+
   it("empty board offers add host", async () => {
     const user = userEvent.setup();
     hosts = [];

@@ -34,14 +34,14 @@ export function BoardCard({ host, onShift }: BoardCardProps) {
       data-host-id={host.id}
       onDragStart={onDragStart}
       onKeyDown={onKeyDown}
-      className="flex flex-col gap-1 rounded border border-line bg-bg px-3 py-2 text-fg no-underline hover:border-line-strong focus-visible:outline-1 focus-visible:outline-accent"
+      className="flex min-w-0 flex-col gap-1 rounded border border-line bg-bg px-3 py-2 text-fg no-underline hover:border-line-strong focus-visible:outline-1 focus-visible:outline-accent"
     >
-      <span className="flex items-center gap-1.5">
+      <span className="flex min-w-0 items-center gap-1.5">
         <span className="truncate text-[13px] font-semibold">{host.name}</span>
         <ThreadDot count={threads} />
       </span>
       {host.ip && (
-        <span className="font-mono text-[11px] text-muted-2">{host.ip}</span>
+        <span className="truncate font-mono text-[11px] text-muted-2">{host.ip}</span>
       )}
       {(host.os || host.access !== "none") && (
         <span className="mt-0.5 flex gap-1">
