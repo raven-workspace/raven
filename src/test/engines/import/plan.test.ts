@@ -24,12 +24,12 @@ describe("buildImportPlan: engagements", () => {
       {
         id: "custom-lab-1", name: "Lab One", kind: "exam-sim", client: null, subLabel: null,
         scopeCidrs: ["10.10.10.0/24"], domain: "corp.local", startsAt: null, endsAt: null,
-        timeboxStart: null, timeboxMinutes: null, status: "active",
+        timeboxStart: null, timeboxMinutes: null, status: "active", msfHostId: null,
       },
       {
         id: "custom-solo#e", name: "Solo", kind: "client", client: null, subLabel: null,
         scopeCidrs: [], domain: null, startsAt: null, endsAt: null,
-        timeboxStart: null, timeboxMinutes: null, status: "active",
+        timeboxStart: null, timeboxMinutes: null, status: "active", msfHostId: null,
       },
     ]);
   });
@@ -135,6 +135,7 @@ describe("buildImportPlan: log entries", () => {
     });
     expect(e2).toMatchObject({ kind: "note", content: { kind: "note", text: "first\n\nsecond" }, ranOn: null, observations: null, hostIds: [] });
     expect(e2.title.length).toBeGreaterThan(0);
+    expect(p.skipped.droppedHostLink).toBe(1);
   });
 
   it("output-only blocks inside a command entry fold into a neighbour so nothing is lost", () => {
@@ -282,14 +283,14 @@ describe("buildImportPlan: notes", () => {
   it("nextMove becomes one open thread", () => {
     const p = plan(
       bk([
-        lab({ nextMove: "  pivot via\n  web01  ", quickNotes: "lab notes" }),
+        lab({ nextMove: "\n  pivot via\n? web01\n  later  \n", quickNotes: "lab notes", os: "" }),
         labBox({ id: "b1", nextMove: "try kerberoast", quickNotes: "box notes" }),
         labBox({ id: "b2", nextMove: "   " }),
       ]),
       ["custom-lab-1"],
     );
     expect(p.notes).toEqual([
-      { ownerId: "custom-lab-1", engagementId: "custom-lab-1", hostId: null, private: false, body: "lab notes\n\n? pivot via web01" },
+      { ownerId: "custom-lab-1", engagementId: "custom-lab-1", hostId: null, private: false, body: "lab notes\n\n? pivot via\n\\? web01\n  later" },
       { ownerId: "b1", engagementId: "custom-lab-1", hostId: "b1", private: false, body: "box notes\n\n? try kerberoast" },
     ]);
   });
@@ -339,5 +340,110 @@ describe("listImportable counts folded legacy logs", () => {
     const list = listImportable(bk(machines));
     expect(list[0]).toMatchObject({ id: "custom-lab-1", logCount: 4, firstAt: 500, lastAt: 9000 });
     expect(list[1]).toMatchObject({ id: "custom-solo", logCount: 1 });
+  });
+});
+
+describe("fix round 1: nothing user-entered is silently dropped", () => {
+  it("a box's differing domain, vhosts and extraIps go into host note sections", () => {
+    const p = plan(
+      bk([
+        lab({ domain: "corp.local", os: "" }),
+        labBox({ id: "b1", domain: "dev.corp.local", vhosts: ["app.corp.local", 3 as never], extraIps: ["172.16.1.5", ""] }),
+        labBox({ id: "b2", domain: "corp.local" }),
+      ]),
+      ["custom-lab-1"],
+    );
+    expect(p.notes).toEqual([
+      {
+        ownerId: "b1", engagementId: "custom-lab-1", hostId: "b1", private: false,
+        body: "## Domain / vhosts\n- domain: dev.corp.local\n- vhost: app.corp.local\n\n## Extra IPs\n- 172.16.1.5",
+      },
+    ]);
+  });
+
+  it("a lab container's own ip, os, services, open ports and port triage go into the engagement note", () => {
+    const p = plan(
+      bk([
+        lab({
+          ip: "10.0.0.254",
+          os: "Linux",
+          services: [{ port: 443, protocol: "tcp", state: "open", service: "https", version: "nginx", cveNotes: "CVE-2021-1" }],
+          openPorts: [443, 8080],
+          portTriage: { "8080": { status: "checking", note: "admin panel" } } as never,
+        }),
+      ]),
+      ["custom-lab-1"],
+    );
+    expect(p.services).toEqual([]);
+    expect(p.notes).toEqual([
+      {
+        ownerId: "custom-lab-1", engagementId: "custom-lab-1", hostId: null, private: false,
+        body:
+          "## Lab container\n- ip: 10.0.0.254\n- os: Linux\n\n## Services\n- 443/tcp open https nginx\n- 8080/tcp open\n\n" +
+          "## Port triage\n- 443: CVE: CVE-2021-1\n- 8080: checking — admin panel",
+      },
+    ]);
+  });
+
+  it("a service's cveNotes join its port's triage line", () => {
+    const p = plan(
+      bk([
+        standalone({
+          id: "custom-solo",
+          services: [{ port: 445, protocol: "TCP" as never, state: "open", service: "microsoft-ds", cveNotes: "MS17-010\nlikely" }],
+          portTriage: { "445": { status: "key_vector", note: "smb v1" } } as never,
+        }),
+      ]),
+      ["custom-solo"],
+    );
+    expect(p.services.map((s) => s.id)).toEqual(["custom-solo:tcp/445"]);
+    expect(p.notes[0].body).toBe("## Port triage\n- 445: key_vector — smb v1 — CVE: MS17-010 likely");
+  });
+
+  it("msfHostId is mapped when it names an imported host; dangling is null and counted", () => {
+    const ok = plan(bk([lab({ msfHostId: "b1" }), labBox({ id: "b1" })]), ["custom-lab-1"]);
+    expect(ok.engagements[0].msfHostId).toBe("b1");
+    const solo = plan(bk([standalone({ id: "custom-solo", msfHostId: "custom-solo" })]), ["custom-solo"]);
+    expect(solo.engagements[0].msfHostId).toBe("custom-solo");
+    const bad = plan(bk([lab({ msfHostId: "gone", dcHostId: "b1" }), labBox({ id: "b1" })]), ["custom-lab-1"]);
+    expect(bad.engagements[0].msfHostId).toBeNull();
+    expect(bad.skipped.msfHostMissing).toBe(1);
+  });
+
+  it("redacted flags are skipped and counted, so a later real import can add them", () => {
+    const one = plan(bk([standalone({ id: "custom-solo", userFlag: "[REDACTED]", rootFlag: "real" })]), ["custom-solo"]);
+    expect(one.logEntries.map((e) => e.id)).toEqual(["custom-solo:flag:proof"]);
+    expect(one.skipped.redactedFlag).toBe(1);
+    const all = plan(bk([standalone({ id: "custom-solo", userFlag: "u", rootFlag: "r" })], { isRedacted: true }), ["custom-solo"]);
+    expect(all.logEntries).toEqual([]);
+    expect(all.skipped.redactedFlag).toBe(2);
+  });
+
+  it("image base64 with embedded whitespace is stripped clean", () => {
+    const wrapped = PNG_B64.slice(0, 20) + "\n" + PNG_B64.slice(20, 40) + "\r\n \t" + PNG_B64.slice(40);
+    const p = plan(
+      bk([standalone({ id: "custom-solo", screenshots: [screenshot("s1", "img-1")] })], { indexedDb: { images: [image("img-1", { data: ` ${wrapped}\n` })] } }),
+      ["custom-solo"],
+    );
+    expect(p.logEntries[0].attachment).toEqual({ mime: "image/png", dataBase64: PNG_B64 });
+  });
+
+  it("a title past 300 characters keeps its full text in observations", () => {
+    const long = "x".repeat(350);
+    const p = plan(
+      bk([standalone({ id: "custom-solo", logEntries: [logEntry(1, { title: long, observations: "obs" })] as never })]),
+      ["custom-solo"],
+    );
+    expect(p.logEntries[0].title).toBe("x".repeat(300));
+    expect(p.logEntries[0].observations).toBe(`Full title: ${long}\n\nobs`);
+  });
+
+  it("credIds on log entries are counted as dropped links", () => {
+    const p = plan(
+      bk([standalone({ id: "custom-solo", logEntries: [logEntry(1, { id: "a", credIds: ["cred_1"] }), logEntry(2, { id: "b" })] as never })]),
+      ["custom-solo"],
+    );
+    expect(p.logEntries).toHaveLength(2);
+    expect(p.skipped.credLinkDropped).toBe(1);
   });
 });

@@ -46,6 +46,7 @@ export interface OldService {
   state: string;
   service: string;
   version?: string;
+  cveNotes?: string;
 }
 
 export interface OldMachine {

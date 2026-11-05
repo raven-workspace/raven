@@ -25,6 +25,9 @@ export interface PlanEngagement {
   timeboxStart: number | null;
   timeboxMinutes: number | null;
   status: EngagementStatus;
+  /** Old `msfHostId` when it names an imported host of this engagement, else null. Old `dcHostId` is not
+   *  mapped: new Raven derives the DC (`findDcHost`). */
+  msfHostId: string | null;
 }
 
 export interface PlanHost {
@@ -169,7 +172,7 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
     const isLabSel = c.kind === "lab";
     const engagementId = isLabSel ? container.id : `${container.id}#e`;
     if (!fresh("engagement", engagementId)) continue;
-    plan.engagements.push({
+    const engagement: PlanEngagement = {
       id: engagementId,
       name: textOr(container.name, container.id),
       kind: c.engagementKind,
@@ -182,12 +185,23 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
       timeboxStart: null,
       timeboxMinutes: null,
       status: "active",
-    });
+      msfHostId: null,
+    };
+    plan.engagements.push(engagement);
 
     // Hosts and their services.
     const boxes = isLabSel ? boxesOf(machines, container.id) : [];
     const hostRows = isLabSel ? boxes : [container];
     const hosts = new Map<string, PlanHost>();
+    const serviceRows = new Map<string, ServiceRow[]>();
+    const rowsOf = (m: OldMachine): ServiceRow[] => {
+      let rows = serviceRows.get(m.id);
+      if (!rows) {
+        rows = parseServices(m, skip);
+        serviceRows.set(m.id, rows);
+      }
+      return rows;
+    };
     for (const m of hostRows) {
       if (!fresh("host", m.id)) continue;
       const host: PlanHost = {
@@ -205,37 +219,30 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
       };
       hosts.set(m.id, host);
       plan.hosts.push(host);
-      mapServices(m);
+      for (const r of rowsOf(m)) {
+        const id = `${m.id}:${r.protocol}/${r.port}`;
+        if (fresh("service", id)) {
+          plan.services.push({ id, hostId: m.id, port: r.port, protocol: r.protocol, state: r.state, nmapService: r.service, nmapVersion: r.version });
+        }
+      }
     }
 
-    function mapServices(m: OldMachine) {
-      const ports = new Set<number>();
-      const add = (port: number, protocol: ServiceProtocol, state: string, svc: string | null, ver: string | null) => {
-        ports.add(port);
-        const id = `${m.id}:${protocol}/${port}`;
-        if (fresh("service", id)) plan.services.push({ id, hostId: m.id, port, protocol, state, nmapService: svc, nmapVersion: ver });
-      };
-      const validPort = (p: unknown): p is number => typeof p === "number" && Number.isInteger(p) && p >= 1 && p <= 65535;
-      for (const s of arr(m.services)) {
-        const protocol = isObj(s) ? (s.protocol === undefined ? "tcp" : s.protocol) : null;
-        if (!isObj(s) || !validPort(s.port) || (protocol !== "tcp" && protocol !== "udp")) {
-          skip("badService");
-          continue;
-        }
-        add(s.port, protocol, textOr(s.state, "open"), textOr(s.service, null), textOr(s.version, null));
-      }
-      for (const p of arr(m.openPorts)) {
-        if (!validPort(p)) skip("badService");
-        else if (!ports.has(p)) add(p, "tcp", "open", null, null);
-      }
+    // Old dcHostId is deliberately not mapped: new Raven derives the DC with findDcHost.
+    if (hasText(container.msfHostId)) {
+      if (hosts.has(container.msfHostId)) engagement.msfHostId = container.msfHostId;
+      else skip("msfHostMissing");
     }
 
     const hostFor = (m: OldMachine): string[] => (hosts.has(m.id) ? [m.id] : []);
     const pushLog = (e: PlanLogEntry) => {
       if (fresh("log", e.id)) plan.logEntries.push(e);
     };
-    const base = (id: string, title: string, hostIds: string[], at: number) =>
-      ({ id, engagementId, title: title.slice(0, 300), titleEdited: true, ranOn: null, hostIds, observations: null, returnedNothing: false, private: false, at }) as const;
+    /** A title past 300 characters keeps its full text in the observations. */
+    const base = (id: string, title: string, hostIds: string[], at: number, observations: string | null = null) => {
+      const long = title.length > TITLE_MAX;
+      const obs = long ? [`Full title: ${title}`, observations].filter((o): o is string => !!o).join("\n\n") : observations;
+      return { id, engagementId, title: title.slice(0, TITLE_MAX), titleEdited: true, ranOn: null, hostIds, observations: obs, returnedNothing: false, private: false, at } as const;
+    };
 
     // Log entries.
     const gathered = gatherLogs(container, boxes, now);
@@ -247,9 +254,17 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
       else skip("emptyLogEntry");
     }
 
+    // Ruling T4-R2: old `credIds`, `tool` and `outOfScopeIps` are not mapped. The new model has no
+    // entry-to-credential link (attempts keep their own proof links); dropped credIds are counted.
     function mapLog(e: RawLog): PlanLogEntry | null {
-      const hostIds = [...new Set(arr(e.hostIds).filter((h): h is string => typeof h === "string" && hosts.has(h)))];
+      const hostIds: string[] = [];
+      for (const h of arr(e.hostIds)) {
+        if (typeof h === "string" && hosts.has(h)) {
+          if (!hostIds.includes(h)) hostIds.push(h);
+        } else skip("droppedHostLink");
+      }
       if (!isLabSel && hostIds.length === 0) hostIds.push(...hostFor(container!));
+      if (arr(e.credIds).length > 0) skip("credLinkDropped");
       const blocks: CommandBlock[] = arr(e.blocks).filter(isObj).map((bl) => {
         const block: CommandBlock = {
           command: typeof bl.command === "string" ? bl.command : "",
@@ -285,10 +300,9 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
         fallbackTitle = noteTitle(text);
       }
       return {
-        ...base(e.id as string, title || fallbackTitle || "Imported entry", hostIds, toMs(e.at, now)),
+        ...base(e.id as string, title || fallbackTitle || "Imported entry", hostIds, toMs(e.at, now), observations),
         kind: content.kind,
         ranOn: hasText(e.ranOn) ? e.ranOn : null,
-        observations,
         content,
       };
     }
@@ -307,7 +321,8 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
           skip("missingImage");
           continue;
         }
-        const data = typeof img.data === "string" ? img.data.replace(/^data:[^,]*,/, "").trim() : "";
+        // All whitespace goes: strict base64 decoders reject embedded newlines.
+        const data = typeof img.data === "string" ? img.data.trim().replace(/^data:[^,]*,/, "").replace(/\s+/g, "") : "";
         const mime = typeof img.mime === "string" && MIMES.has(img.mime) ? img.mime : sniffMime(data);
         if (!data || !mime) {
           skip("badImage");
@@ -323,6 +338,7 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
         });
       }
     }
+    const redactedBackup = b?.isRedacted === true;
     for (const m of holders) {
       const host = hosts.get(m.id) ?? null;
       const flags: [FlagKind, unknown, unknown][] = [
@@ -331,6 +347,11 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
       ];
       for (const [flagKind, value, at] of flags) {
         if (!hasText(value)) continue;
+        // A placeholder would block the real value forever: re-import is add-only.
+        if (redactedBackup || value.trim() === "[REDACTED]") {
+          skip("redactedFlag");
+          continue;
+        }
         pushLog({
           ...base(`${m.id}:flag:${flagKind}`, flagTitle(flagKind, host), hostFor(m), toMs(at, now)),
           kind: "flag",
@@ -339,7 +360,7 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
       }
     }
 
-    // Notes.
+    // Notes: free text first, then sections for user-entered fields the new model has no column for.
     const pushNote = (ownerId: string, hostId: string | null, parts: string[]) => {
       const filled = parts.filter((p) => p.trim());
       if (filled.length === 0 || !fresh("note", ownerId)) return;
@@ -347,25 +368,127 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
       plan.notes.push({ ownerId, engagementId, hostId, body, private: false });
     };
     const quick = (m: OldMachine) => (typeof m.quickNotes === "string" ? escapeThreads(m.quickNotes) : "");
-    const thread = (m: OldMachine) => (hasText(m.nextMove) ? `? ${oneLine(m.nextMove)}` : "");
-    const triage = (m: OldMachine): string => {
-      if (!isObj(m.portTriage)) return "";
-      const rows: [number, string][] = [];
-      for (const [port, t] of Object.entries(m.portTriage)) {
-        if (!/^\d+$/.test(port) || !isObj(t) || !hasText(t.status)) {
-          skip("badPortTriage");
-          continue;
-        }
-        const note = hasText(t.note) ? ` — ${oneLine(t.note)}` : "";
-        rows.push([Number(port), `- ${port}: ${t.status.trim()}${note}`]);
-      }
-      if (rows.length === 0) return "";
-      return ["## Port triage", ...rows.sort((x, y) => x[0] - y[0]).map((r) => r[1])].join("\n");
-    };
-    if (isLabSel) pushNote(engagementId, null, [quick(container), thread(container)]);
+    const shared = (m: OldMachine) => [
+      quick(m),
+      nextMoveThread(m.nextMove),
+      domainSection(m, engagement.domain),
+      listSection("## Extra IPs", arr(m.extraIps)),
+    ];
+    if (isLabSel) {
+      const rows = rowsOf(container);
+      pushNote(engagementId, null, [
+        ...shared(container),
+        labContainerSection(container),
+        servicesSection(rows),
+        triageSection(container, rows, skip),
+      ]);
+    }
     for (const m of hostRows) {
-      if (hosts.has(m.id)) pushNote(m.id, m.id, [quick(m), thread(m), triage(m)]);
+      if (hosts.has(m.id)) pushNote(m.id, m.id, [...shared(m), triageSection(m, rowsOf(m), skip)]);
     }
   }
   return plan;
+}
+
+const TITLE_MAX = 300;
+
+interface ServiceRow {
+  port: number;
+  protocol: ServiceProtocol;
+  state: string;
+  service: string | null;
+  version: string | null;
+  cveNotes: string | null;
+}
+
+const validPort = (p: unknown): p is number => typeof p === "number" && Number.isInteger(p) && p >= 1 && p <= 65535;
+
+/** `services` rows, then `openPorts` without a row (any protocol) as open tcp with no name. */
+function parseServices(m: OldMachine, skip: (reason: string) => void): ServiceRow[] {
+  const rows: ServiceRow[] = [];
+  const ports = new Set<number>();
+  for (const s of arr(m.services)) {
+    const raw = isObj(s) ? (s.protocol === undefined ? "tcp" : s.protocol) : null;
+    const protocol = typeof raw === "string" ? raw.trim().toLowerCase() : null;
+    if (!isObj(s) || !validPort(s.port) || (protocol !== "tcp" && protocol !== "udp")) {
+      skip("badService");
+      continue;
+    }
+    ports.add(s.port);
+    rows.push({
+      port: s.port,
+      protocol,
+      state: textOr(s.state, "open"),
+      service: textOr(s.service, null),
+      version: textOr(s.version, null),
+      cveNotes: hasText(s.cveNotes) ? oneLine(s.cveNotes) : null,
+    });
+  }
+  for (const p of arr(m.openPorts)) {
+    if (!validPort(p)) skip("badService");
+    else if (!ports.has(p)) {
+      ports.add(p);
+      rows.push({ port: p, protocol: "tcp", state: "open", service: null, version: null, cveNotes: null });
+    }
+  }
+  return rows;
+}
+
+/** First line is the open thread; any further lines follow as plain (escaped) text. */
+function nextMoveThread(v: unknown): string {
+  if (!hasText(v)) return "";
+  const lines = v.split(/\r?\n/);
+  const first = lines.findIndex((l) => l.trim());
+  const rest = lines.slice(first + 1).join("\n").replace(/\s+$/, "");
+  const head = `? ${lines[first]!.trim()}`;
+  return rest.trim() ? `${head}\n${escapeThreads(rest)}` : head;
+}
+
+function listSection(heading: string, items: unknown[]): string {
+  const lines = items.filter(hasText).map((x) => `- ${oneLine(x)}`);
+  return lines.length ? [heading, ...lines].join("\n") : "";
+}
+
+/** The machine's domain when it differs from the engagement's, and its vhosts. */
+function domainSection(m: OldMachine, engagementDomain: string | null): string {
+  const lines: string[] = [];
+  if (hasText(m.domain) && m.domain.trim() !== engagementDomain) lines.push(`- domain: ${oneLine(m.domain)}`);
+  for (const v of arr(m.vhosts)) if (hasText(v)) lines.push(`- vhost: ${oneLine(v)}`);
+  return lines.length ? ["## Domain / vhosts", ...lines].join("\n") : "";
+}
+
+/** A lab container is not a host, so its own ip and os are kept as text. */
+function labContainerSection(m: OldMachine): string {
+  const lines: string[] = [];
+  if (hasText(m.ip)) lines.push(`- ip: ${m.ip.trim()}`);
+  if (hasText(m.os)) lines.push(`- os: ${m.os.trim()}`);
+  return lines.length ? ["## Lab container", ...lines].join("\n") : "";
+}
+
+function servicesSection(rows: ServiceRow[]): string {
+  const lines = rows.map((r) =>
+    `- ${r.port}/${r.protocol} ${r.state}${r.service ? ` ${r.service}` : ""}${r.version ? ` ${r.version}` : ""}`,
+  );
+  return lines.length ? ["## Services", ...lines].join("\n") : "";
+}
+
+/** `- <port>: <status> — <note>`, with a service's cveNotes added to its port's line. */
+function triageSection(m: OldMachine, rows: ServiceRow[], skip: (reason: string) => void): string {
+  const byPort = new Map<number, string>();
+  if (isObj(m.portTriage)) {
+    for (const [port, t] of Object.entries(m.portTriage)) {
+      if (!/^\d+$/.test(port) || !isObj(t) || !hasText(t.status)) {
+        skip("badPortTriage");
+        continue;
+      }
+      byPort.set(Number(port), `- ${port}: ${t.status.trim()}${hasText(t.note) ? ` — ${oneLine(t.note)}` : ""}`);
+    }
+  }
+  for (const r of rows) {
+    if (!r.cveNotes) continue;
+    const line = byPort.get(r.port);
+    byPort.set(r.port, line ? `${line} — CVE: ${r.cveNotes}` : `- ${r.port}: CVE: ${r.cveNotes}`);
+  }
+  if (byPort.size === 0) return "";
+  return ["## Port triage", ...[...byPort].sort((x, y) => x[0] - y[0]).map((r) => r[1])].join("\n");
 }
