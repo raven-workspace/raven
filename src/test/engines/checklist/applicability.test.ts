@@ -11,6 +11,7 @@ import {
   engagementFacts,
   findDcHost,
   goalApplies,
+  hostViewStages,
   hostFacts,
   openPorts,
   serviceNames,
@@ -39,81 +40,109 @@ const all = (r: Result) => r.flatMap((x) => x.goals.map((g) => g.id));
 describe('applicableGoals', () => {
   it('unknown ports show only scan goals with the import hint', () => {
     const r = goalsFor(host());
-    expect(ids(r, 'enumerate')).toEqual(['h-enum-full-tcp', 'h-enum-udp', 'h-enum-versions']);
-    expect(r.find((x) => x.stage.id === 'enumerate')?.hint).toBe('Import a scan to see service steps');
+    expect(ids(r, 'information-gathering')).toEqual(['h-enum-full-tcp', 'h-enum-versions', 'h-enum-udp']);
+    expect(r.find((x) => x.stage.id === 'information-gathering')?.hint).toBe('Import a scan to see service steps');
   });
 
   it('windows host with 445 and 5985 gets smb and remote goals and windows privesc only', () => {
     const r = goalsFor(host({ os: 'windows' }), onPorts(445, 5985));
-    const enumIds = ids(r, 'enumerate');
+    const enumIds = ids(r, 'information-gathering');
     expect(enumIds).toContain('h-enum-smb');
     expect(enumIds).toContain('h-enum-remote');
     expect(enumIds.some((i) => i.startsWith('h-enum-web-'))).toBe(false);
-    const pe = ids(r, 'privesc');
+    const pe = ids(r, 'privilege-escalation');
     expect(pe.some((i) => i.startsWith('h-pe-lin-'))).toBe(false);
-    expect(pe[0]).toBe('h-pe-win-privs');
+    expect(pe[0]).toBe('h-pe-win-manual');
     // kernel is the last check; capturing proof.txt closes the stage
     expect(pe.slice(-2)).toEqual(['h-pe-win-kernel', 'h-pe-proof']);
   });
 
   it('proof.txt is the last privesc goal on linux too, and hidden with the stage when the OS is unknown', () => {
-    const pe = ids(goalsFor(host({ os: 'linux' }), onPorts(22)), 'privesc');
+    const pe = ids(goalsFor(host({ os: 'linux' }), onPorts(22)), 'privilege-escalation');
     expect(pe.slice(-2)).toEqual(['h-pe-lin-kernel', 'h-pe-proof']);
     const unknown = goalsFor(host(), onPorts(22));
-    expect(ids(unknown, 'privesc')).toEqual([]);
-    expect(unknown.find((x) => x.stage.id === 'privesc')?.hint).toBe('Set the OS to see privesc steps');
+    expect(ids(unknown, 'privilege-escalation')).toEqual([]);
+    expect(unknown.find((x) => x.stage.id === 'privilege-escalation')?.hint).toBe('Set the OS to see privesc steps');
   });
 
-  it('local.txt proof is in orient after stabilize; closeout has no flag goal', () => {
+  it('local.txt proof follows the shell upgrade in initial-foothold; reporting has no flag goal', () => {
     const r = goalsFor(host({ os: 'linux' }), onPorts(22));
-    expect(r.map((x) => x.stage.id).indexOf('stabilize')).toBeLessThan(r.map((x) => x.stage.id).indexOf('orient'));
-    expect(ids(r, 'orient')).toContain('h-orient-proof');
-    expect(ids(r, 'closeout')).toEqual(['h-close-notes']);
+    const foot = ids(r, 'initial-foothold');
+    expect(foot.indexOf('h-stab-shell')).toBeLessThan(foot.indexOf('h-orient-proof'));
+    expect(ids(r, 'reporting')).toEqual(['h-close-notes']);
     expect(HOST_GOALS.some((g) => g.id === 'h-close-flags')).toBe(false);
     expect(HOST_GOALS.find((g) => g.id === 'h-orient-proof')?.title).toBe('Capture local.txt with proof in one frame');
     expect(HOST_GOALS.find((g) => g.id === 'h-pe-proof')?.title).toBe('Capture proof.txt as root/SYSTEM in one frame');
   });
 
-  it('foothold stage lists goals in order', () => {
+  it('initial-foothold stage lists goals in order', () => {
     const r = goalsFor(host({ os: 'windows' }), onPorts(445, 5985, 1433));
-    expect(ids(r, 'foothold')).toEqual([
-      'h-foot-creds', 'h-foot-exploit', 'h-foot-service', 'h-foot-brute', 'h-foot-payload', 'h-foot-shell', 'h-foot-arrived',
+    expect(ids(r, 'initial-foothold')).toEqual([
+      'h-foot-listener', 'h-foot-payload', 'h-foot-port', 'h-foot-exploit', 'h-foot-shell', 'h-foot-service', 'h-foot-creds',
+      'h-foot-client', 'h-stab-shell', 'h-orient-identity', 'h-orient-proof', 'h-foot-arrived',
     ]);
   });
 
-  it('linux web host gets web foothold goals and no mssql service abuse', () => {
+  it('linux web host gets the web steps in vulnerability-detection and a web-shell upgrade', () => {
     const r = goalsFor(host({ os: 'linux' }), onPorts(22, 80));
-    expect(ids(r, 'foothold')).toEqual([
-      'h-foot-creds', 'h-foot-exploit', 'h-foot-web-auth', 'h-foot-web-vulns', 'h-foot-brute', 'h-foot-payload', 'h-foot-shell',
-      'h-foot-arrived',
+    expect(ids(r, 'vulnerability-detection')).toEqual([
+      'h-enum-exploits', 'h-vuln-websearch', 'h-vuln-version-gate', 'h-foot-web-auth', 'h-vuln-nse', 'h-foot-web-vulns', 'h-foot-brute',
+      'h-vuln-spray', 'h-vuln-crack', 'h-vuln-rank',
     ]);
+    expect(ids(r, 'initial-foothold')).toContain('h-foot-webshell');
+    expect(ids(r, 'initial-foothold')).not.toContain('h-foot-service');
+  });
+
+  it('new per-service goals follow their ports and services', () => {
+    const at = (...ports: number[]) => ids(goalsFor(host({ os: 'linux' }), onPorts(...ports)), 'information-gathering');
+    expect(at(22)).toContain('h-enum-ssh');
+    expect(at(88)).toContain('h-enum-kerberos');
+    expect(at(143)).toContain('h-enum-mail');
+    expect(at(69)).toContain('h-enum-tftp');
+    expect(at(873)).toContain('h-enum-rsync');
+    expect(at(2375)).toContain('h-enum-docker');
+    expect(at(8080)).toContain('h-enum-tomcat');
+    expect(ids(goalsFor(host({ os: 'linux' }), [svc(9999, 'jenkins')]), 'information-gathering')).toContain('h-enum-tomcat');
+    expect(at(445)).not.toContain('h-enum-ssh');
+  });
+
+  it('domain steps appear only on a domain-joined host', () => {
+    const joined = ids(goalsFor(host({ os: 'windows' }), onPorts(88, 389)), 'information-gathering');
+    expect(joined).toContain('h-enum-ad-users');
+    expect(ids(goalsFor(host({ os: 'windows' }), onPorts(445)), 'information-gathering')).not.toContain('h-enum-ad-users');
+  });
+
+  it('exam-only Metasploit step appears only in exam-sim', () => {
+    const vd = (e: { kind: 'exam-sim' | 'lab' | 'client' }) => ids(goalsFor(host(), onPorts(80), e), 'vulnerability-detection');
+    expect(vd({ kind: 'exam-sim' })).toContain('h-vuln-msf');
+    expect(vd({ kind: 'lab' })).not.toContain('h-vuln-msf');
   });
 
   it('rpcbind alone does not show service abuse', () => {
-    const foot = ids(goalsFor(host({ os: 'linux' }), onPorts(22, 80, 111)), 'foothold');
+    const foot = ids(goalsFor(host({ os: 'linux' }), onPorts(22, 80, 111)), 'initial-foothold');
     expect(foot).not.toContain('h-foot-service');
   });
 
   it('nfs on 2049 shows service abuse', () => {
-    expect(ids(goalsFor(host({ os: 'linux' }), onPorts(22, 111, 2049)), 'foothold')).toContain('h-foot-service');
+    expect(ids(goalsFor(host({ os: 'linux' }), onPorts(22, 111, 2049)), 'initial-foothold')).toContain('h-foot-service');
   });
 
   it('service abuse follows mssql, postgresql, redis and mysql only among databases', () => {
     for (const port of [1433, 5432, 6379, 3306]) {
-      expect(ids(goalsFor(host({ os: 'linux' }), onPorts(port)), 'foothold'), String(port)).toContain('h-foot-service');
+      expect(ids(goalsFor(host({ os: 'linux' }), onPorts(port)), 'initial-foothold'), String(port)).toContain('h-foot-service');
     }
     for (const port of [1521, 27017, 5984, 9200]) {
-      expect(ids(goalsFor(host({ os: 'linux' }), onPorts(port)), 'foothold'), String(port)).not.toContain('h-foot-service');
+      expect(ids(goalsFor(host({ os: 'linux' }), onPorts(port)), 'initial-foothold'), String(port)).not.toContain('h-foot-service');
     }
   });
 
   it('foothold goals follow scanned services and need a scan for service routes', () => {
     const odd = goalsFor(host({ os: 'linux' }), [svc(2222, 'ssh'), svc(63790, 'redis')]);
-    const foot = ids(odd, 'foothold');
+    const foot = ids(odd, 'initial-foothold');
     expect(foot).toContain('h-foot-creds');
     expect(foot).toContain('h-foot-service');
-    expect(foot).toContain('h-foot-brute');
-    expect(ids(goalsFor(host()), 'foothold')).toEqual(['h-foot-payload', 'h-foot-shell', 'h-foot-arrived']);
+    expect(ids(odd, 'vulnerability-detection')).toContain('h-foot-brute');
+    expect(ids(goalsFor(host()), 'initial-foothold')).not.toContain('h-foot-service');
   });
 
   it('matches services from the scan, including smb and http aliases', () => {
@@ -163,28 +192,30 @@ describe('applicableGoals', () => {
 
   it('unknown OS hides privesc with a set-the-OS hint', () => {
     const r = goalsFor(host(), onPorts(22));
-    const pe = r.find((x) => x.stage.id === 'privesc');
+    const pe = r.find((x) => x.stage.id === 'privilege-escalation');
     expect(pe?.goals).toEqual([]);
     expect(pe?.hint).toBe('Set the OS to see privesc steps');
   });
 
   it('maps a linux host to linux privesc and an other OS to none', () => {
-    expect(ids(goalsFor(host({ os: 'linux' })), 'privesc')[0]).toBe('h-pe-lin-sudo');
-    expect(ids(goalsFor(host({ os: 'other' })), 'privesc')).toEqual([]);
+    expect(ids(goalsFor(host({ os: 'linux' })), 'privilege-escalation')[0]).toBe('h-pe-lin-manual');
+    expect(ids(goalsFor(host({ os: 'other' })), 'privilege-escalation')).toEqual([]);
   });
 
-  it('pivot stage appears only when dual-homed', () => {
-    expect(goalsFor(host()).some((x) => x.stage.id === 'pivot')).toBe(false);
+  it('lateral-movement stage appears only when dual-homed, and the host view drops it', () => {
+    expect(goalsFor(host()).some((x) => x.stage.id === 'lateral-movement')).toBe(false);
     const r = goalsFor(host({ dualHomed: true }));
-    expect(ids(r, 'pivot')).toEqual(['h-pivot-tunnel', 'h-pivot-sweep']);
+    expect(hostViewStages(r).some((x) => x.stage.id === 'lateral-movement')).toBe(false);
+    expect(hostViewStages(r).length).toBe(r.length - 1);
+    expect(ids(r, 'lateral-movement')).toEqual(['h-pivot-tunnel', 'h-pivot-sweep']);
   });
 
   it('domain goal h-loot-domain only on domain-joined Windows', () => {
     const win = goalsFor(host({ os: 'windows' }), onPorts(88, 389));
-    expect(ids(win, 'loot')).toContain('h-loot-domain');
+    expect(ids(win, 'post-exploitation')).toContain('h-loot-domain');
     const lin = goalsFor(host({ os: 'linux' }), onPorts(88, 389));
-    expect(ids(lin, 'loot')).not.toContain('h-loot-domain');
-    expect(ids(goalsFor(host({ os: 'windows' }), onPorts(445)), 'loot')).not.toContain('h-loot-domain');
+    expect(ids(lin, 'post-exploitation')).not.toContain('h-loot-domain');
+    expect(ids(goalsFor(host({ os: 'windows' }), onPorts(445)), 'post-exploitation')).not.toContain('h-loot-domain');
   });
 
   it('a Windows member server is domain-joined when the engagement has a DC', () => {
@@ -203,13 +234,13 @@ describe('applicableGoals', () => {
     const map = new Map([['dc1', onPorts(88, 389, 445)], ['dc2', onPorts(88, 389, 445)], ['m', onPorts(445)], ['l', onPorts(22)]]);
     expect(findDcHost([dc1, dc2, member], map)).toBeNull();
     expect(hostFacts(member, null, [dc1, dc2, member], map).domainJoined).toBe(true);
-    expect(ids(applicableGoals(member, null, [dc1, dc2, member], map), 'loot')).toContain('h-loot-domain');
+    expect(ids(applicableGoals(member, null, [dc1, dc2, member], map), 'post-exploitation')).toContain('h-loot-domain');
     // a Linux host next to them is not joined
     expect(hostFacts(lin, null, [dc1, dc2, lin], map).domainJoined).toBe(false);
   });
 
   it('cleanup only in client engagements', () => {
-    const closeout = (e: { kind: 'exam-sim' | 'lab' | 'client' } | null) => ids(goalsFor(host(), [], e), 'closeout');
+    const closeout = (e: { kind: 'exam-sim' | 'lab' | 'client' } | null) => ids(goalsFor(host(), [], e), 'reporting');
     expect(closeout(null)).not.toContain('h-close-cleanup');
     expect(closeout({ kind: 'lab' })).not.toContain('h-close-cleanup');
     expect(closeout({ kind: 'exam-sim' })).not.toContain('h-close-cleanup');
@@ -261,8 +292,10 @@ describe('facts', () => {
 describe('definitions', () => {
   const engagementGoals = [...ENGAGEMENT_SETUP, ...AD_PLAYBOOKS.flatMap((p) => p.goals)];
 
-  it('has the eight host stages and the mandated engagement ids', () => {
-    expect(HOST_STAGES.map((s) => s.id)).toEqual(['enumerate', 'foothold', 'stabilize', 'orient', 'privesc', 'loot', 'pivot', 'closeout']);
+  it('has the seven host stages and the mandated engagement ids', () => {
+    expect(HOST_STAGES.map((s) => s.id)).toEqual([
+      'information-gathering', 'vulnerability-detection', 'initial-foothold', 'privilege-escalation', 'post-exploitation', 'reporting', 'lateral-movement',
+    ]);
     const eng = engagementGoals.map((g) => g.id);
     for (const id of [
       'e-setup-kind', 'e-setup-scope', 'e-setup-hosts', 'e-setup-clock', 'e-ad-user-bloodhound', 'e-ad-user-kerberoast',

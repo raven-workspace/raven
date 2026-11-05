@@ -14,59 +14,91 @@ const done = (...goalIds: string[]): ChecklistState => Object.fromEntries(goalId
 const closeAll = (...stageIds: string[]): ChecklistState =>
   Object.fromEntries(stageIds.flatMap(ids).map((id) => [id, { status: 'na' as const }]));
 
+const cols = HOST_STAGES.map((s) => s.id);
+
 describe('derivedColumn', () => {
-  it('enumerate by default and while any enumerate goal is open', () => {
+  it('information-gathering by default and while any goal there is open', () => {
     expect(derivedColumn(host, {}, all)).toBe('information-gathering');
-    const partial = done(...ids('enumerate').slice(1));
+    const partial = done(...ids('information-gathering').slice(1));
     expect(derivedColumn(host, partial, all)).toBe('information-gathering');
   });
 
-  it('foothold once every applicable enumerate goal is closed (done or na)', () => {
-    const state = { ...done(ids('enumerate')[0]), ...Object.fromEntries(ids('enumerate').slice(1).map((id) => [id, { status: 'na' as const }])) };
+  it('all detection steps closed stays in vulnerability-detection', () => {
+    const state = {
+      ...done(ids('information-gathering')[0]),
+      ...Object.fromEntries(ids('information-gathering').slice(1).map((id) => [id, { status: 'na' as const }])),
+      ...done(...ids('vulnerability-detection')),
+    };
     expect(derivedColumn(host, state, all)).toBe('vulnerability-detection');
   });
 
-  it('no applicable enumerate goal stays enumerate', () => {
-    expect(derivedColumn(host, {}, all.filter((a) => a.stage.id !== 'enumerate'))).toBe('information-gathering');
+  it('every information-gathering goal closed (done or na) moves to vulnerability-detection', () => {
+    const state = { ...done(ids('information-gathering')[0]), ...closeAll('information-gathering') };
+    expect(derivedColumn(host, state, all)).toBe('vulnerability-detection');
   });
 
-  it('privesc once a foothold goal or local.txt is done', () => {
-    for (const g of ['h-foot-shell', 'h-foot-creds', 'h-foot-arrived', 'h-orient-proof']) {
+  it('no applicable information-gathering goal stays information-gathering', () => {
+    expect(derivedColumn(host, {}, all.filter((a) => a.stage.id !== 'information-gathering'))).toBe('information-gathering');
+  });
+
+  it('listener ticked moves to initial-foothold', () => {
+    expect(derivedColumn(host, done('h-foot-listener'), all)).toBe('initial-foothold');
+    expect(derivedColumn(host, done('h-foot-exploit'), all)).toBe('initial-foothold');
+  });
+
+  it('access user with nothing ticked is initial-foothold', () => {
+    expect(derivedColumn({ ...host, access: 'user' }, {}, all)).toBe('initial-foothold');
+    expect(derivedColumn({ ...host, access: 'root' }, {}, all)).toBe('initial-foothold');
+  });
+
+  it('a shell goal or local.txt moves to privilege-escalation', () => {
+    for (const g of ['h-foot-shell', 'h-foot-creds', 'h-stab-shell', 'h-foot-arrived', 'h-orient-proof']) {
       expect(derivedColumn(host, done(g), all), g).toBe('privilege-escalation');
     }
-    expect(derivedColumn(host, done('h-foot-exploit'), all)).toBe('information-gathering');
   });
 
-  it('local.txt alone moves to privesc even with enumeration open', () => {
-    expect(derivedColumn(host, done('h-orient-proof'), all)).toBe('privilege-escalation');
+  it('h-stab-shell done is privilege-escalation even with foothold steps open', () => {
+    expect(derivedColumn(host, done('h-stab-shell'), all)).toBe('privilege-escalation');
+    expect(derivedColumn({ ...host, access: 'user' }, done('h-stab-shell'), all)).toBe('privilege-escalation');
   });
 
-  it('loot once proof is done but loot/pivot/closeout goals are open', () => {
+  it('proof done with post-exploitation open is post-exploitation', () => {
     expect(derivedColumn(host, done('h-pe-proof'), all)).toBe('post-exploitation');
   });
 
-  it('done when proof is done and every loot, pivot and closeout goal is closed', () => {
-    const state = { ...done('h-pe-proof'), ...closeAll('loot', 'pivot', 'closeout') };
+  it('proof done, post-exploitation and reporting closed is reporting', () => {
+    const state = { ...done('h-pe-proof'), ...closeAll('post-exploitation', 'reporting') };
     expect(derivedColumn(host, state, all)).toBe('reporting');
-    const oneOpen = { ...state, [ids('closeout')[0]]: { status: 'todo' as const } };
+    const oneOpen = { ...state, [ids('reporting')[0]]: { status: 'todo' as const } };
     expect(derivedColumn(host, oneOpen, all)).toBe('post-exploitation');
   });
 
-  it('done when proof is done and no loot, pivot or closeout goals apply', () => {
-    const only = all.filter((a) => !['loot', 'pivot', 'closeout'].includes(a.stage.id));
+  it('open pivot goals do not block reporting', () => {
+    const state = { ...done('h-pe-proof'), ...closeAll('post-exploitation', 'reporting') };
+    expect(ids('lateral-movement').length).toBeGreaterThan(0);
+    expect(derivedColumn(host, state, all)).toBe('reporting');
+  });
+
+  it('proof done and no post-exploitation or reporting goals apply is reporting', () => {
+    const only = all.filter((a) => !['post-exploitation', 'reporting'].includes(a.stage.id));
     expect(derivedColumn(host, done('h-pe-proof'), only)).toBe('reporting');
   });
 });
 
 describe('currentStage', () => {
   it('is the first applicable stage with an open goal', () => {
-    expect(currentStage({}, all)?.id).toBe('enumerate');
-    expect(currentStage(closeAll('enumerate'), all)?.id).toBe('foothold');
+    expect(currentStage({}, all)?.id).toBe('information-gathering');
+    expect(currentStage(closeAll('information-gathering'), all)?.id).toBe('vulnerability-detection');
   });
 
   it('skips stages with no applicable goals and returns null when everything is closed', () => {
     const empty = [{ stage: HOST_STAGES[0], goals: [] }, ...all.slice(1)];
-    expect(currentStage({}, empty)?.id).toBe('foothold');
-    expect(currentStage(closeAll(...HOST_STAGES.map((s) => s.id)), all)).toBeNull();
+    expect(currentStage({}, empty)?.id).toBe('vulnerability-detection');
+    expect(currentStage(closeAll(...cols), all)).toBeNull();
+  });
+
+  it('skips engagement-placed stages', () => {
+    const state = closeAll(...cols.filter((c) => c !== 'lateral-movement'));
+    expect(currentStage(state, all)).toBeNull();
   });
 });

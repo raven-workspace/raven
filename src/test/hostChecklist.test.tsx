@@ -100,7 +100,7 @@ describe("host checklist tab", () => {
     mount();
     await openChecklist(user);
     expect(await within(await screen.findByRole("tabpanel")).findByText("Check SMB shares and null/guest access")).toBeInTheDocument();
-    expect(within(screen.getByRole("tabpanel")).getByRole("heading", { name: "Enumerate" })).toBeInTheDocument();
+    expect(within(screen.getByRole("tabpanel")).getByRole("heading", { name: "Information gathering" })).toBeInTheDocument();
     expect(screen.queryByText("Check FTP for anonymous access")).not.toBeInTheDocument();
     expect(screen.queryByText("Identify the web stack and framework")).not.toBeInTheDocument();
   });

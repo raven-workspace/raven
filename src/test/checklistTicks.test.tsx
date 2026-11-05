@@ -559,7 +559,7 @@ describe("service mutations", () => {
       return services[0]!;
     });
     const ctx = await loadTickContext("e1");
-    const before = applicableGoals(hosts[0]!, engagement, hosts, ctx.servicesByHost).filter((a) => a.stage.id === "enumerate").flatMap((a) => a.goals);
+    const before = applicableGoals(hosts[0]!, engagement, hosts, ctx.servicesByHost).filter((a) => a.stage.id === "information-gathering").flatMap((a) => a.goals);
     expect(before.some((g) => g.id.startsWith("h-enum-web"))).toBe(true);
     store = before.filter((g) => !g.id.startsWith("h-enum-web")).map((g) => item({ ownerId: "h1", goalId: g.id, status: "done", completedAt: 1 }));
     const { result } = renderHook(() => useServiceMutations("e1", "h1"), { wrapper: hookWrapper() });

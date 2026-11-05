@@ -4,8 +4,7 @@ import type { ChecklistGoal, ChecklistStage } from './types';
 
 type Applicable = { stage: ChecklistStage; goals: ChecklistGoal[] }[];
 
-const FOOTHOLD_GOALS = ['h-foot-shell', 'h-foot-creds', 'h-foot-arrived', 'h-orient-proof'];
-const LATE_STAGES = ['loot', 'pivot', 'closeout'];
+const SHELL_GOALS = ['h-foot-shell', 'h-foot-creds', 'h-stab-shell', 'h-foot-arrived', 'h-orient-proof'];
 
 const isDone = (state: ChecklistState, goalId: string) => state[goalId]?.status === 'done';
 const isClosed = (state: ChecklistState, goalId: string) => {
@@ -14,23 +13,28 @@ const isClosed = (state: ChecklistState, goalId: string) => {
 };
 
 /**
- * The board column a host's checklist implies. Proof decides the late columns, access goals decide privesc,
- * and Foothold means enumeration is finished (every applicable enumerate goal done or N/A, and at least one).
+ * The board column a host's checklist implies. Proof decides the late columns, shell goals decide privilege
+ * escalation, any foothold work (or recorded access) is Initial foothold, and Vulnerability detection means
+ * information gathering is finished (every applicable goal done or N/A, and at least one). Vulnerability
+ * detection and lateral movement goals never move a host.
  */
-export function derivedColumn(_host: Host, state: ChecklistState, applicable: Applicable): BoardColumn {
+export function derivedColumn(host: Host, state: ChecklistState, applicable: Applicable): BoardColumn {
+  const goalsOf = (stageId: string) => applicable.filter((a) => a.stage.id === stageId).flatMap((a) => a.goals);
   if (isDone(state, 'h-pe-proof')) {
-    const late = applicable.filter((a) => LATE_STAGES.includes(a.stage.id)).flatMap((a) => a.goals);
+    const late = [...goalsOf('post-exploitation'), ...goalsOf('reporting')];
     return late.every((g) => isClosed(state, g.id)) ? 'reporting' : 'post-exploitation';
   }
-  if (FOOTHOLD_GOALS.some((id) => isDone(state, id))) return 'privilege-escalation';
-  const enumerate = applicable.filter((a) => a.stage.id === 'enumerate').flatMap((a) => a.goals);
-  if (enumerate.length > 0 && enumerate.every((g) => isClosed(state, g.id))) return 'vulnerability-detection';
+  if (SHELL_GOALS.some((id) => isDone(state, id))) return 'privilege-escalation';
+  if (goalsOf('initial-foothold').some((g) => isDone(state, g.id)) || host.access !== 'none') return 'initial-foothold';
+  const gathering = goalsOf('information-gathering');
+  if (gathering.length > 0 && gathering.every((g) => isClosed(state, g.id))) return 'vulnerability-detection';
   return 'information-gathering';
 }
 
 /** The first applicable stage with an open goal, or null when everything applicable is closed. */
 export function currentStage(state: ChecklistState, applicable: Applicable): ChecklistStage | null {
   for (const a of applicable) {
+    if (a.stage.placement === 'engagement') continue;
     if (a.goals.some((g) => !isClosed(state, g.id))) return a.stage;
   }
   return null;

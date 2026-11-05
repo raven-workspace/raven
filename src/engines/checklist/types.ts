@@ -23,6 +23,8 @@ export interface ChecklistGoal {
   stage: string;
   title: string;
   why?: string;
+  /** Sub-heading inside its stage; every goal of a stage that uses groups carries one. */
+  group?: string;
   applies?: GoalApplies;
 }
 
@@ -31,4 +33,6 @@ export interface ChecklistStage {
   title: string;
   goals: ChecklistGoal[];
   emptyHint?: string;
+  /** `engagement`: shown on the engagement view, never on a host's own checklist. */
+  placement?: 'engagement';
 }

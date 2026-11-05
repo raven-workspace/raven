@@ -163,8 +163,8 @@ export function goalApplies(goal: ChecklistGoal, facts: HostFacts): boolean {
 
 function stageHint(stage: ChecklistStage, facts: HostFacts): string | undefined {
   if (!stage.emptyHint) return undefined;
-  if (stage.id === 'enumerate') return !facts.scanned && facts.ports.size === 0 && facts.services.size === 0 ? stage.emptyHint : undefined;
-  if (stage.id === 'privesc') return facts.os === null ? stage.emptyHint : undefined;
+  if (stage.id === 'information-gathering') return !facts.scanned && facts.ports.size === 0 && facts.services.size === 0 ? stage.emptyHint : undefined;
+  if (stage.id === 'privilege-escalation') return facts.os === null ? stage.emptyHint : undefined;
   return undefined;
 }
 
@@ -184,4 +184,9 @@ export function applicableGoals(
     out.push({ stage, goals, ...(hint ? { hint } : {}) });
   }
   return out;
+}
+
+/** The stages shown on a host's own checklist: those placed on the engagement view are dropped. */
+export function hostViewStages<T extends { stage: ChecklistStage }>(applicable: T[]): T[] {
+  return applicable.filter((a) => a.stage.placement !== 'engagement');
 }
