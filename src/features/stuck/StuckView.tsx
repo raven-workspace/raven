@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { HOST_STAGES, type FillInput } from "../../engines/checklist";
+import { PIVOT_GOALS, type FillInput } from "../../engines/checklist";
 import { engagementStuck, hostStuck, type StuckLine } from "../../engines/stuck";
 import { api } from "../../lib/api";
 import { cx } from "../../lib/cx";
@@ -20,7 +20,7 @@ import { useNote } from "../notes/queries";
 import { noteKey, useNotesStore } from "../notes/useNotesStore";
 
 const WIDTH = 440;
-const PIVOT_GOALS = new Set(HOST_STAGES.filter((st) => st.placement === "engagement").flatMap((st) => st.goals.map((g) => g.id)));
+const PIVOT_IDS = new Set(PIVOT_GOALS.map((g) => g.id));
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -275,7 +275,7 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
 
   const go = (l: StuckLine) => {
     // Engagement-placed steps (the pivot tunnel) are not on the host view: open the engagement checklist on that host's row.
-    if (l.hostId && l.goalId && PIVOT_GOALS.has(l.goalId)) void navigate(sectionPath(engagementId, "checklist"), { state: { goalId: l.goalId, hostId: l.hostId } });
+    if (l.hostId && l.goalId && PIVOT_IDS.has(l.goalId)) void navigate(sectionPath(engagementId, "checklist"), { state: { goalId: l.goalId, hostId: l.hostId } });
     else if (l.hostId) void navigate(`/e/${engagementId}/h/${l.hostId}`, l.goalId ? { state: { goalId: l.goalId } } : undefined);
     else if (l.goalId) document.querySelector(`[data-goal-id="${l.goalId}"]`)?.scrollIntoView?.({ block: "center" });
   };

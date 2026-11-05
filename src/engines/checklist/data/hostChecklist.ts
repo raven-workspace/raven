@@ -198,3 +198,6 @@ export const HOST_STAGES: ChecklistStage[] = [
 ];
 
 export const HOST_GOALS: ChecklistGoal[] = HOST_STAGES.flatMap((s) => s.goals);
+
+/** The per-host steps of the engagement-placed Lateral movement stage (tunnel and sweep behind a dual-homed host). */
+export const PIVOT_GOALS: ChecklistGoal[] = HOST_STAGES.filter((st) => st.placement === 'engagement').flatMap((st) => st.goals);

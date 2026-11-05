@@ -4,7 +4,7 @@ import { useLocation, useNavigate, useParams } from "react-router";
 import {
   AD_PLAYBOOKS,
   ENGAGEMENT_SETUP,
-  HOST_STAGES,
+  PIVOT_GOALS,
   LATERAL_MOVEMENT_GOALS,
   engagementFacts,
   findDcHost,
@@ -32,9 +32,6 @@ import { PlaybookSection } from "./PlaybookSection";
 import { checklistKey, useChecklist, useChecklistMutations, useEngagementServices, useHops, useTunnels } from "./queries";
 import { loadTickContext, tickFromLog } from "./ticks";
 import { TunnelsPanel } from "./TunnelsPanel";
-
-/** The per-host steps of the engagement-placed Lateral movement stage (the tunnel and sweep behind a dual-homed host). */
-const PIVOT_GOALS = HOST_STAGES.filter((st) => st.placement === "engagement").flatMap((st) => st.goals);
 
 /** Sub-heading above the first row of each group. */
 const GroupHeading = ({ children }: { children: ReactNode }) => (
@@ -64,9 +61,13 @@ export function EngagementChecklist() {
   const location = useLocation();
   // A Stuck check line arrives with the pivot goal and host to focus; cleared below so back/forward does not repeat it.
   const arrived = (location.state as { goalId?: string; hostId?: string } | null) ?? null;
-  const [focus] = useState<{ goalId: string; hostId?: string; n: number } | undefined>(
-    arrived?.goalId ? { goalId: arrived.goalId, hostId: arrived.hostId, n: 1 } : undefined,
-  );
+  const [focus, setFocus] = useState<{ goalId: string; hostId?: string; n: number }>();
+  const [seenKey, setSeenKey] = useState<string>();
+  // Every new arrival (even on this already-mounted route) is a fresh request: the counter re-expands the section and row.
+  if (arrived?.goalId && location.key !== seenKey) {
+    setSeenKey(location.key);
+    setFocus({ goalId: arrived.goalId, hostId: arrived.hostId, n: (focus?.n ?? 0) + 1 });
+  }
   const arrivedGoal = arrived?.goalId;
   useEffect(() => {
     if (arrivedGoal) void navigate(location.pathname, { replace: true, state: null });
@@ -180,7 +181,8 @@ export function EngagementChecklist() {
       <PlaybookSection
         title="Lateral movement"
         opensWhen="A host is dual-homed, or a credential hasn't been tried everywhere"
-        defaultOpen={opens.lateral || !!focus}
+        defaultOpen={opens.lateral}
+        openRequest={focus?.n}
       >
         {dualHomed.map((h) => (
           <Fragment key={h.id}>

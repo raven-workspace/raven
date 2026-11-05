@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -208,5 +208,26 @@ describe("stuck view", () => {
     expect(row).not.toBeNull();
     expect(within(row).getByRole("button", { name: /^Collapse/ })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Host" })).not.toBeInTheDocument();
+  });
+
+  it("clicking the dual-homed line again re-opens a collapsed section on that host's tunnel step", async () => {
+    const user = userEvent.setup();
+    const a = host({ id: "h1", name: "web01", dualHomed: true });
+    const b = host({ id: "h2", name: "web02", ip: "10.0.0.6", dualHomed: true });
+    mount({ hosts: [a, b], path: "/e/e1/s/checklist" });
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const toggle = await screen.findByRole("button", { name: /Lateral movement/ });
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(screen.getByRole("button", { name: /Stuck check/ }));
+    await user.click(await screen.findByRole("button", { name: /web02 — dual-homed, no tunnel recorded/ }));
+    expect(await screen.findByRole("button", { name: /Lateral movement/ })).toHaveAttribute("aria-expanded", "true");
+    const rows = [...document.querySelectorAll('li[data-goal-id="h-pivot-tunnel"]')] as HTMLElement[];
+    expect(rows).toHaveLength(2);
+    // Rows are in host order: the second belongs to web02 and is the one scrolled to.
+    expect(within(rows[1]!).getByRole("button", { name: /^Collapse/ })).toBeInTheDocument();
+    await waitFor(() => expect(scroll.mock.contexts).toContain(rows[1]));
+    expect(scroll.mock.contexts).not.toContain(rows[0]);
   });
 });
