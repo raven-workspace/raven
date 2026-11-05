@@ -106,6 +106,17 @@ describe("stuck view", () => {
     expect(await within(panel).findByText("Import a scan to see service steps")).toBeInTheDocument();
   });
 
+  it("a failed checklist load shows an error, not an empty Skipped list", async () => {
+    m.checklistList.mockRejectedValue(new Error("vault locked"));
+    const user = userEvent.setup();
+    mount();
+    await screen.findByRole("region", { name: "Host" });
+    await user.keyboard("h");
+    const panel = await screen.findByRole("complementary", { name: /Stuck on web01/ });
+    expect(await within(panel).findByRole("alert")).toHaveTextContent("vault locked");
+    expect(within(panel).queryByText("Before a foothold")).not.toBeInTheDocument();
+  });
+
   it("before a foothold shows the nudges for a guessed service", async () => {
     const user = userEvent.setup();
     mount({ services: [svc("s1", 9999, { nmapService: "abyss?" })] });

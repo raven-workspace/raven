@@ -87,9 +87,9 @@ function Body({ engagementId, host, onOpenGoal, skipRestoreRef }: { engagementId
   const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId) });
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
   const log = useLog(engagementId);
-  const { byOwner } = useChecklist(engagementId);
+  const { byOwner, query: checklistQ } = useChecklist(engagementId);
   const { servicesByHost, query: servicesQ } = useEngagementServices(engagementId);
-  const { tunnels } = useTunnels(engagementId);
+  const { tunnels, query: tunnelsQ } = useTunnels(engagementId);
   const note = useNote(engagementId, host.id);
   const pending = useNotesStore((s) => s.pending[noteKey({ engagementId, hostId: host.id })]);
   const creds = useCredFill(engagementId, host);
@@ -110,12 +110,15 @@ function Body({ engagementId, host, onOpenGoal, skipRestoreRef }: { engagementId
   const hosts = hostsQ.data;
   const eng = engagement.data;
   const title = `Stuck on ${host.name}`;
-  const failed = hostsQ.error ?? engagement.error ?? servicesQ.error ?? log.error ?? note.error ?? credsQ.error;
+  // Every query the body reads: a failed checklist would otherwise look like "nothing skipped", and failed tunnels
+  // would quietly change the filled commands.
+  const failed =
+    hostsQ.error ?? engagement.error ?? servicesQ.error ?? log.error ?? note.error ?? credsQ.error ?? checklistQ.error ?? tunnelsQ.error;
 
   let content: React.ReactNode;
   if (failed) {
     content = <p role="alert" className="m-0 text-xs text-warn">Couldn't load this: {failed.message}</p>;
-  } else if (!hosts || !eng || !servicesQ.data || !log.data || !credsQ.data) {
+  } else if (!hosts || !eng || !servicesQ.data || !log.data || !credsQ.data || !checklistQ.data || !tunnelsQ.data) {
     content = <p className="m-0 text-xs text-muted">Loading…</p>;
   } else {
     const s = hostStuck({
@@ -241,16 +244,22 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
   const [open, setOpen] = useState(false);
   const hostsQ = useHosts(engagementId);
   const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId) });
-  const { byOwner } = useChecklist(engagementId);
+  const { byOwner, query: checklistQ } = useChecklist(engagementId);
   const { servicesByHost, query: servicesQ } = useEngagementServices(engagementId);
-  const { tunnels } = useTunnels(engagementId);
-  const credentials = useCredentials(engagementId).data ?? [];
-  const attempts = useCredAttempts(engagementId).data ?? [];
-  const usernames = useUsernames(engagementId).data ?? [];
+  const { tunnels, query: tunnelsQ } = useTunnels(engagementId);
+  const credentialsQ = useCredentials(engagementId);
+  const attemptsQ = useCredAttempts(engagementId);
+  const usernamesQ = useUsernames(engagementId);
 
-  if (!hostsQ.data || !engagement.data || !servicesQ.data) return null;
+  // Leads from half-loaded data would be wrong (an unloaded checklist reads as "nothing done"), so wait for all of it.
+  const queries = [hostsQ, engagement, servicesQ, checklistQ, tunnelsQ, credentialsQ, attemptsQ, usernamesQ];
+  const failed = queries.find((q) => q.error)?.error;
+  if (failed) return <p role="alert" className="m-0 text-xs text-warn">Couldn't load the stuck check: {failed.message}</p>;
+  if (!hostsQ.data || !engagement.data || !servicesQ.data || !checklistQ.data || !tunnelsQ.data) return null;
+  if (!credentialsQ.data || !attemptsQ.data || !usernamesQ.data) return null;
   const lines = engagementStuck({
-    engagement: engagement.data, hosts: hostsQ.data, servicesByHost, byOwner, credentials, attempts, usernames, tunnels,
+    engagement: engagement.data, hosts: hostsQ.data, servicesByHost, byOwner,
+    credentials: credentialsQ.data, attempts: attemptsQ.data, usernames: usernamesQ.data, tunnels,
   });
 
   const go = (l: StuckLine) => {
