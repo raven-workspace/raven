@@ -105,6 +105,16 @@ describe("Now panel", () => {
     await waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h1", "vulnerability-detection"));
   });
 
+  it("Now shows the first open host-view stage, never lateral-movement", async () => {
+    const ids = applicableGoals(H1, E1, [H1], new Map([["h1", [SMB]]]))
+      .filter((a) => a.stage.id !== "lateral-movement")
+      .flatMap((a) => a.goals.map((g) => g.id));
+    mount({ items: ids.map((id) => item(id, "done")) });
+    const panel = await now();
+    await panel.findByText("All stages done");
+    expect(panel.queryByRole("heading", { name: "Lateral movement" })).not.toBeInTheDocument();
+  });
+
   it("Doing toggles in progress", async () => {
     const user = userEvent.setup();
     mount();

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { applicableGoals, currentStage, type FillInput } from "../../engines/checklist";
+import { applicableGoals, currentStage, hostViewStages, type FillInput } from "../../engines/checklist";
 import { api } from "../../lib/api";
 import { cx } from "../../lib/cx";
 import type { Host } from "../../types/host";
@@ -26,7 +26,7 @@ export function NowPanel({ engagementId, host, onOpenGoal }: { engagementId: str
   const hosts = hostsQ.data;
   const eng = engagement.data;
   const applicable = useMemo(
-    () => (hosts && eng ? applicableGoals(host, eng, hosts, servicesByHost) : []),
+    () => (hosts && eng ? hostViewStages(applicableGoals(host, eng, hosts, servicesByHost)) : []),
     [host, eng, hosts, servicesByHost],
   );
 

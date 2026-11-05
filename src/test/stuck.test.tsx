@@ -205,7 +205,7 @@ describe("stuck view", () => {
     await user.click(await screen.findByRole("button", { name: /dual-homed, no tunnel recorded/ }));
     expect(await screen.findByRole("region", { name: "Host" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Checklist" })).toHaveAttribute("aria-selected", "true");
-    const row = document.querySelector('li[data-goal-id="h-pivot-tunnel"]')!;
-    expect(within(row as HTMLElement).getByRole("button", { name: /^Collapse/ })).toBeInTheDocument();
+    // h-pivot-tunnel is in the engagement-placed Lateral movement stage, hidden from the host view (rendered by Task 5).
+    expect(document.querySelector('li[data-goal-id="h-pivot-tunnel"]')).toBeNull();
   });
 });

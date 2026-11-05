@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useRef, useState } from "react";
-import { applicableGoals, type FillInput } from "../../engines/checklist";
+import { Fragment, useMemo, useRef, useState } from "react";
+import { applicableGoals, hostViewStages, type FillInput } from "../../engines/checklist";
 import { api } from "../../lib/api";
 import type { Host } from "../../types/host";
 import { Button, Input, Select } from "../../ui";
@@ -72,7 +72,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal }: { 
   const hosts = hostsQ.data;
   const eng = engagement.data;
   const groups = useMemo(
-    () => (hosts && eng ? applicableGoals(host, eng, hosts, servicesByHost) : []),
+    () => (hosts && eng ? hostViewStages(applicableGoals(host, eng, hosts, servicesByHost)) : []),
     [host, eng, hosts, servicesByHost],
   );
 
@@ -108,12 +108,18 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal }: { 
             <p className="m-0 text-xs text-muted">{hint}</p>
           ) : (
             <ul className="m-0 list-none p-0">
-              {goals.map((g) => {
+              {goals.map((g, i) => {
                 const { commands, hadAny } = commandsFor(g.id);
                 const s = state[g.id];
+                const heading = g.group && g.group !== goals[i - 1]?.group ? g.group : undefined;
                 return (
+                  <Fragment key={g.id}>
+                  {heading && (
+                    <li role="presentation" className="list-none pb-1 pt-3 first:pt-0">
+                      <h4 className="m-0 text-[11px] font-medium tracking-label text-faint">{heading}</h4>
+                    </li>
+                  )}
                   <GoalRow
-                    key={g.id}
                     goal={g}
                     focus={focusGoal?.id === g.id ? focusGoal.n : undefined}
                     state={s}
@@ -130,6 +136,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal }: { 
                   >
                     {g.id === "h-foot-arrived" && <ArrivedFrom host={host} hosts={hosts} onSave={recordHop} />}
                   </GoalRow>
+                  </Fragment>
                 );
               })}
             </ul>
