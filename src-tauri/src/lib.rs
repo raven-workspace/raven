@@ -1,4 +1,5 @@
 pub mod attempts;
+pub mod cleanup;
 pub mod findings;
 pub mod backup;
 pub mod checklist;
@@ -113,6 +114,13 @@ pub fn run() {
             commands::access_grant_delete,
             commands::attachment_get,
             commands::engagements_progress,
+            commands::cleanup_list,
+            commands::cleanup_create,
+            commands::cleanup_update,
+            commands::cleanup_set_removed,
+            commands::cleanup_dismiss,
+            commands::cleanup_delete,
+            commands::cleanup_counts,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

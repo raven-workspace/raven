@@ -13,6 +13,7 @@ import type {
   FindingFileInput,
   FindingInput,
 } from "../types/findings";
+import type { CleanupInput, CleanupItem } from "../types/cleanup";
 import type { Note, RuledOut, RuledOutInput } from "../types/notes";
 import type {
   AccessGrant,
@@ -167,6 +168,16 @@ export const api = {
     call<FailedAttempt>("failed_attempt_update", { id, input }),
   failedAttemptDelete: (id: string) => call<null>("failed_attempt_delete", { id }),
   attachmentGet: (id: string) => call<Attachment>("attachment_get", { id }),
+  cleanupList: (engagementId: string) => call<CleanupItem[]>("cleanup_list", { engagementId }),
+  cleanupCreate: (engagementId: string, input: CleanupInput) =>
+    call<CleanupItem>("cleanup_create", { engagementId, input }),
+  cleanupUpdate: (id: string, input: CleanupInput) => call<CleanupItem>("cleanup_update", { id, input }),
+  cleanupSetRemoved: (id: string, removed: boolean) =>
+    call<CleanupItem>("cleanup_set_removed", { id, removed }),
+  cleanupDismiss: (engagementId: string, suggestionKey: string) =>
+    call<null>("cleanup_dismiss", { engagementId, suggestionKey }),
+  cleanupDelete: (id: string) => call<null>("cleanup_delete", { id }),
+  cleanupCounts: () => call<Record<string, number>>("cleanup_counts"),
   engagementsProgress: () => call<Record<string, Progress>>("engagements_progress"),
 };
 

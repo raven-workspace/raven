@@ -5,6 +5,7 @@
 
 use crate::attempts::{self, CredAttempt, CredAttemptInput};
 use crate::backup::{self, BackupInfo};
+use crate::cleanup::{self, CleanupInput, CleanupItem};
 use crate::findings::{
     self, FailedAttempt, FailedAttemptInput, Finding, FindingFile, FindingFileInput, FindingInput,
 };
@@ -483,6 +484,41 @@ pub async fn attachment_get(app: AppHandle, id: String) -> AppResult<Attachment>
 #[tauri::command]
 pub async fn engagements_progress(app: AppHandle) -> AppResult<HashMap<String, Progress>> {
     with_vault(app, move |v| engagements::progress_all(v.conn()?)).await
+}
+
+#[tauri::command]
+pub async fn cleanup_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<CleanupItem>> {
+    with_vault(app, move |v| cleanup::list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn cleanup_create(app: AppHandle, engagement_id: String, input: CleanupInput) -> AppResult<CleanupItem> {
+    with_vault(app, move |v| cleanup::create(v.conn()?, &engagement_id, input)).await
+}
+
+#[tauri::command]
+pub async fn cleanup_update(app: AppHandle, id: String, input: CleanupInput) -> AppResult<CleanupItem> {
+    with_vault(app, move |v| cleanup::update(v.conn()?, &id, input)).await
+}
+
+#[tauri::command]
+pub async fn cleanup_set_removed(app: AppHandle, id: String, removed: bool) -> AppResult<CleanupItem> {
+    with_vault(app, move |v| cleanup::set_removed(v.conn()?, &id, removed)).await
+}
+
+#[tauri::command]
+pub async fn cleanup_dismiss(app: AppHandle, engagement_id: String, suggestion_key: String) -> AppResult<()> {
+    with_vault(app, move |v| cleanup::dismiss(v.conn()?, &engagement_id, &suggestion_key)).await
+}
+
+#[tauri::command]
+pub async fn cleanup_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| cleanup::delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn cleanup_counts(app: AppHandle) -> AppResult<HashMap<String, i64>> {
+    with_vault(app, move |v| cleanup::counts(v.conn()?)).await
 }
 
 #[cfg(test)]

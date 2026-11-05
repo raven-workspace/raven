@@ -23,6 +23,7 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
     (4, include_str!("../../migrations/0004_credentials_findings.sql")),
     (5, include_str!("../../migrations/0005_ad_set.sql")),
     (6, include_str!("../../migrations/0006_checklist_status_manual.sql")),
+    (7, include_str!("../../migrations/0007_cleanup.sql")),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -248,14 +249,14 @@ mod tests {
         .unwrap();
         let mut hook_calls = 0;
         let out = migrate(&mut c, &mut |f, t| {
-            assert_eq!((f, t), (1, 6));
+            assert_eq!((f, t), (1, 7));
             hook_calls += 1;
             Ok(())
         })
         .unwrap();
         assert_eq!(hook_calls, 1);
-        assert_eq!(out, MigrationOutcome { from: 1, to: 6 });
-        assert_eq!(version(&c), 6);
+        assert_eq!(out, MigrationOutcome { from: 1, to: 7 });
+        assert_eq!(version(&c), 7);
         for t in ["hosts", "services", "log_entries", "log_entry_hosts", "attachments"] {
             let n: i64 = c
                 .query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1", [t], |r| r.get(0))
@@ -366,7 +367,7 @@ mod tests {
             [],
         )
         .unwrap();
-        let out = migrate(&mut c, &mut |f, t| {
+        let out = migrate_with(&mut c, &MIGRATIONS[..6], &mut |f, t| {
             assert_eq!((f, t), (5, 6));
             Ok(())
         })
@@ -375,6 +376,39 @@ mod tests {
         let m: i64 = c.query_row("SELECT status_manual FROM checklist_items WHERE goal_id='g'", [], |r| r.get(0)).unwrap();
         assert_eq!(m, 0);
         assert!(c.execute("UPDATE checklist_items SET status_manual = 2", []).is_err());
+    }
+
+    #[test]
+    fn migration_0007_from_v6_adds_cleanup_items() {
+        let (_d, _p, mut c) = file_db();
+        migrate_with(&mut c, &MIGRATIONS[..6], &mut |_, _| panic!("hook on fresh db")).unwrap();
+        c.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        c.execute(
+            "INSERT INTO engagements (id,name,kind,scope_cidrs,status,created_at,updated_at) VALUES ('e1','x','lab','[]','active',1,1)",
+            [],
+        )
+        .unwrap();
+        let out = migrate(&mut c, &mut |f, t| {
+            assert_eq!((f, t), (6, 7));
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(out, MigrationOutcome { from: 6, to: 7 });
+        assert_eq!(version(&c), 7);
+        let ins = |status: &str, key: Option<&str>| {
+            c.execute(
+                "INSERT INTO cleanup_items (id,engagement_id,kind,target,suggestion_key,status,created_at,updated_at) \
+                 VALUES (lower(hex(randomblob(4))),'e1','file','t',?1,?2,1,1)",
+                rusqlite::params![key, status],
+            )
+        };
+        ins("open", Some("k")).unwrap();
+        assert!(ins("open", Some("k")).is_err());
+        assert!(ins("bogus", None).is_err());
+        ins("open", None).unwrap();
+        ins("open", None).unwrap();
+        let kept: i64 = c.query_row("SELECT count(*) FROM engagements", [], |r| r.get(0)).unwrap();
+        assert_eq!(kept, 1);
     }
 
     #[test]
