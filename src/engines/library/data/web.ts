@@ -1,6 +1,6 @@
 import type { LibraryCommand } from '../types';
 
-/** Web enumeration (Enumerate) and web foothold attempts (Foothold). Preferred: gobuster > ffuf > feroxbuster. */
+/** Web enumeration (Information gathering) and web foothold attempts (Initial foothold). Preferred: gobuster > ffuf > feroxbuster. */
 
 export const WEB_COMMANDS: LibraryCommand[] = [
   // ---------------------------------------------------------------- stack

@@ -1,7 +1,7 @@
 import type { LibraryCommand } from '../types';
 import { NXC_SMB, exe, impacket } from './patterns';
 
-/** Loot stage: OS credential stores, file sweeps, domain material and turning hashes into usable credentials. */
+/** Post-exploitation stage: OS credential stores, file sweeps, domain material and turning hashes into usable credentials. */
 
 const MIMIKATZ = exe('mimikatz');
 const RUBEUS = exe('rubeus');

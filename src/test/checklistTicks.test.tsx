@@ -145,6 +145,8 @@ beforeEach(() => {
     }
     return store;
   });
+  // The DA cover write is not under test here: it returns the checklist as it stands.
+  m.checklistApplyCover.mockImplementation(async () => store);
   m.checklistPut.mockImplementation(async (_e, items: ChecklistItemInput[]) => {
     for (const it of items) {
       const full = item({ ...it, updatedAt: 2 } as ChecklistItem);
@@ -528,6 +530,10 @@ describe("ticks.ts", () => {
   });
 
   it("Tick from log keeps fact ticks and DA cover marks", async () => {
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, os: "linux" as const } : h));
+    m.servicesListEngagement.mockResolvedValue([
+      { id: "s1", hostId: "h1", port: 22, protocol: "tcp", state: "open", nmapService: "ssh", nmapVersion: "OpenSSH 8.9", confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1 },
+    ]);
     entries = [entry({ id: "s1", kind: "command", at: T, content: { kind: "command", blocks: [{ command: FULL_SCAN, output: "" }] } })];
     store = [
       item({ ownerId: "h1", goalId: "h-enum-os", status: "done", completedAt: 50, auto: true }),
@@ -538,6 +544,12 @@ describe("ticks.ts", () => {
     expect(stored("h1", "h-enum-os")).toMatchObject({ status: "done", auto: true, completedAt: 50, evidence: [] });
     expect(stored("h1", "h-enum-identified")).toMatchObject({ status: "done", auto: true, completedAt: 51, evidence: [] });
     expect(stored("h1", "h-loot-hashes")).toMatchObject({ status: "na", auto: true });
+  });
+
+  it("Tick from log also runs the fact ticks", async () => {
+    hosts = hosts.map((h) => (h.id === "h1" ? { ...h, os: "linux" as const } : h));
+    await tickFromLog("e1", await loadTickContext("e1"));
+    expect(stored("h1", "h-enum-os")).toMatchObject({ status: "done", auto: true });
   });
 
   it("a scan capture ticks OS identified and every port identified straight after saving", async () => {

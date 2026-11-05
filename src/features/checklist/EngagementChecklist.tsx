@@ -180,7 +180,7 @@ export function EngagementChecklist() {
 
       <PlaybookSection
         title="Lateral movement"
-        opensWhen="A host is dual-homed, or a credential hasn't been tried everywhere"
+        opensWhen="a host is dual-homed, or a credential hasn't been tried everywhere"
         defaultOpen={opens.lateral}
         openRequest={focus?.n}
       >

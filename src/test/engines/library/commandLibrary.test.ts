@@ -29,7 +29,7 @@ const KNOWN_TOKENS = new Set([
   'WORDLIST', 'INTERFACE', 'SUBNET', 'SUBNET_PREFIX', 'TUNNEL_IP',
 ]);
 /** Same shape resolveTemplate treats as a placeholder: `{TOKEN}` (not `${...}`) or `<TOKEN>`. */
-const TOKEN_RE = /(?<!\$)\{([A-Za-z0-9_-]{2,})\}|<([A-Za-z0-9_-]{2,})>/g;
+const TOKEN_RE = /(?<![$%])\{([A-Za-z0-9_-]{2,})\}|<([A-Za-z0-9_-]{2,})>/g;
 
 const first = (goalId: string) => commandsForGoal(goalId, lib)[0];
 
@@ -157,12 +157,11 @@ describe('built-in command library', () => {
     // Field-manual entries are copied verbatim from the vault (per Conventions.md §4): a token Raven does not
     // know (e.g. {PORT}, {FILE}, {EDB_ID}) is still valid vault syntax and is simply left unresolved, same as a
     // hand-authored {FILL_...}. Only Raven-authored/oscp-notes commands are held to the closed known-token set.
-    // Their tokens must still be {UPPER_SNAKE}; the one .Library-ms payload carries literal XML tags and a GUID,
-    // and curl's -w '%{http_code}' write-out variable is not a Raven token.
+    // Their tokens must still be {UPPER_SNAKE}; the one .Library-ms payload carries literal XML tags and a GUID.
     const LITERAL_PAYLOAD = new Set(['fm-cs-windows-library-file-attack-5']);
     const badShape = lib
       .filter((x) => x.source === 'field-manual' && !LITERAL_PAYLOAD.has(x.id))
-      .flatMap((c) => [...c.template.matchAll(TOKEN_RE)].filter((m) => !/^\{[A-Z][A-Z0-9_]+\}$/.test(m[0]) && m[0] !== '{http_code}').map((m) => `${c.id}: ${m[0]}`));
+      .flatMap((c) => [...c.template.matchAll(TOKEN_RE)].filter((m) => !/^\{[A-Z][A-Z0-9_]+\}$/.test(m[0])).map((m) => `${c.id}: ${m[0]}`));
     expect(badShape).toEqual([]);
     for (const c of lib.filter((x) => x.source !== 'field-manual')) {
       for (const m of c.template.matchAll(TOKEN_RE)) {

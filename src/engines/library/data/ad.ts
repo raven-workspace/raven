@@ -393,7 +393,7 @@ export const AD_NOCREDS_DA_COMMANDS: LibraryCommand[] = [
     os: 'any',
     runFrom: 'attacker',
     goals: ['h-loot-hashes'],
-    why: 'Each (Pwn3d!) host goes back through Loot: local hashes, files, cached creds.',
+    why: 'Each (Pwn3d!) host goes back through Post-exploitation: local hashes, files, cached creds.',
     source: 'oscp-notes',
   },
   {

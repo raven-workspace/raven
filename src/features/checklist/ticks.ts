@@ -117,7 +117,7 @@ export async function applyFacts(engagementId: string, ctx: TickContext, byOwner
 }
 
 /**
- * Domain admin on the DC covers privesc and loot on domain-joined hosts (`daCoverGoals`). Reads the attempts and the
+ * Domain admin on the DC covers privilege escalation and post-exploitation on domain-joined hosts (`daCoverGoals`). Reads the attempts and the
  * checklist from the store and sends the goals to the store's conditional write, which re-checks every row, so a status
  * set by hand in the meantime is never overwritten. Returns the checklist after it.
  * `byOwner` is the current checklist; read from the store when left out.
@@ -178,7 +178,10 @@ export async function tickFromLog(engagementId: string, ctx: TickContext): Promi
   }
   const { next } = changedItems(before, after);
   if (next.length > 0) await write(engagementId, next);
-  await syncBoards(engagementId, ctx, after);
+  // Same follow-ups as resyncBoards, so this recovery path restores fact ticks and DA cover too.
+  const facts = await applyFacts(engagementId, ctx, after);
+  const covered = await applyDaCover(engagementId, ctx, facts);
+  await syncBoards(engagementId, ctx, covered);
   const n = next.length;
   return { updated: n, message: `Updated ${n} ${n === 1 ? "goal" : "goals"}` };
 }

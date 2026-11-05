@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { AD_PLAYBOOKS, ENGAGEMENT_SETUP, HOST_GOALS, HOST_STAGES } from '../../../engines/checklist';
+import { AD_PLAYBOOKS, ENGAGEMENT_SETUP, HOST_GOALS, HOST_STAGES, LATERAL_MOVEMENT_GOALS } from '../../../engines/checklist';
 import { FACT_GOALS } from '../../../engines/checklist/data/hostChecklist';
 
-const ENGAGEMENT_GOALS = [...ENGAGEMENT_SETUP, ...AD_PLAYBOOKS.flatMap((p) => p.goals)];
+const ENGAGEMENT_GOALS = [...ENGAGEMENT_SETUP, ...LATERAL_MOVEMENT_GOALS, ...AD_PLAYBOOKS.flatMap((p) => p.goals)];
 const STAGE_IDS = [
   'information-gathering', 'vulnerability-detection', 'initial-foothold', 'privilege-escalation', 'post-exploitation', 'reporting',
   'lateral-movement',

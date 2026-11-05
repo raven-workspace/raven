@@ -1,7 +1,7 @@
 import type { LibraryCommand } from '../types';
 import { NMAP_UDP } from './patterns';
 
-/** Port scans, versions and exploit search (Enumerate stage). Per-service checks live in enumServices.ts. */
+/** Port scans, versions and exploit search (Information gathering stage). Per-service checks live in enumServices.ts. */
 
 const FULL_TCP_MISSES = ['nmap -sC -sV 10.0.0.5', 'nmap --top-ports 1000 10.0.0.5'];
 

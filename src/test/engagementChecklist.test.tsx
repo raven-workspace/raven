@@ -58,6 +58,8 @@ function mount(opts: { services?: Service[]; hops?: Hop[]; log?: LogEntry[]; tun
   m.engagementGet.mockResolvedValue(opts.eng ?? E1);
   m.hostsList.mockResolvedValue(opts.hosts ?? [H1, H2]);
   m.checklistList.mockResolvedValue(opts.items ?? []);
+  m.checklistApplyFacts.mockResolvedValue(opts.items ?? []);
+  m.checklistApplyCover.mockResolvedValue(opts.items ?? []);
   m.servicesListEngagement.mockResolvedValue(opts.services ?? []);
   m.hopsList.mockResolvedValue(opts.hops ?? []);
   m.tunnelsList.mockResolvedValue(opts.tunnels ?? []);

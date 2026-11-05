@@ -7,7 +7,7 @@ import { excludesHosts, namedHostsInLine, shellHost, type HostRef } from '../att
 import type { LibraryCommand } from '../library/types';
 import { matchLine } from '../library/matcher';
 import { HOST_GOALS } from './data/hostChecklist';
-import { AD_PLAYBOOKS, ENGAGEMENT_SETUP } from './data/engagementChecklist';
+import { AD_PLAYBOOKS, ENGAGEMENT_SETUP, LATERAL_MOVEMENT_GOALS } from './data/engagementChecklist';
 import { isCoverMarked } from './daCover';
 import { adHosts, engagementFacts, goalApplies, hostFacts, type HostFacts } from './facts';
 import { scanProvenanceLines } from './scanImport';
@@ -30,7 +30,7 @@ export interface TickContext {
 
 const HOST_GOAL_BY_ID = new Map<string, ChecklistGoal>(HOST_GOALS.map((g) => [g.id, g]));
 const ENGAGEMENT_GOAL_BY_ID = new Map<string, ChecklistGoal>(
-  [...ENGAGEMENT_SETUP, ...AD_PLAYBOOKS.flatMap((p) => p.goals)].map((g) => [g.id, g]),
+  [...ENGAGEMENT_SETUP, ...LATERAL_MOVEMENT_GOALS, ...AD_PLAYBOOKS.flatMap((p) => p.goals)].map((g) => [g.id, g]),
 );
 
 /** Flag entries tick the proof goal of their kind on each tagged host, with this command id. */
