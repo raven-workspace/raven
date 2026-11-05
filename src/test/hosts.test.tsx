@@ -171,6 +171,15 @@ describe("hosts", () => {
     expect(within(header).queryByText("AD set")).not.toBeInTheDocument();
   });
 
+  it("the AD set chip shows only in exam sims, even for a host that is effectively in the set", async () => {
+    hosts = [host({ id: "h1", name: "dc01", ip: "10.10.10.5", adSetEffective: true })];
+    mount("/e/e1/h/h1");
+    const header = await screen.findByRole("region", { name: "Host" });
+    expect(within(header).getByText("dc01")).toBeInTheDocument();
+    await vi.waitFor(() => expect(m.engagementGet).toHaveBeenCalled());
+    expect(within(header).queryByText("AD set")).not.toBeInTheDocument();
+  });
+
   it("the AD-set toggle shows only in exam sims and saves on, off and automatic", async () => {
     const user = userEvent.setup();
     const exam: Engagement = { ...E1, kind: "exam-sim" };

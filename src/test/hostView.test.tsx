@@ -152,9 +152,9 @@ describe("host view", () => {
     await user.click(header.getByRole("button", { name: "Delete" }));
     const confirm = await screen.findByRole("dialog", { name: "Delete dc01?" });
     expect(confirm).toHaveAccessibleDescription(
-      "Its services, credential test results, access grants on it, finding links, field notes, " +
-        "ruled-out items, tunnels through it and hops to or from it go with it. " +
-        "Log entries, credentials and findings stay but lose this host.",
+      "Its services, checklist items, credential test results, access grants on it, finding links, field notes, " +
+        "ruled-out items, tunnels through it and hops to or from it go with it; " +
+        "log entries, credentials and findings stay but lose this host.",
     );
     await user.click(within(confirm).getByRole("button", { name: "Cancel" }));
     expect(m.hostDelete).not.toHaveBeenCalled();

@@ -1156,3 +1156,49 @@ describe("T6 fixes: every record fits the app's own rules", () => {
     expect(splitAtBytes("é😀", 4)).toEqual(["é", "😀"]);
   });
 });
+
+describe("final review fixes", () => {
+  /** JSON.stringify escapes a lone surrogate as \udXXX; a valid pair is written as-is. */
+  const LONE = /\\u[dD][89a-fA-F][0-9a-fA-F]{2}/;
+
+  it("lone surrogates anywhere in the plan become U+FFFD (serde would reject the whole import)", () => {
+    const p = lootPlan(
+      { credentials: [cred({ secret: "pw\uD83D", notes: "n\uDE00" })] },
+      {
+        quickNotes: "lab \uDC00 notes",
+        logEntries: [logEntry(1, { id: "log-1", blocks: [{ command: "cat x", output: "out\uD800put 😀" }] })] as never,
+      },
+    );
+    const json = JSON.stringify(p);
+    expect(json).not.toMatch(LONE);
+    expect(p.credentials[0]!.secret).toBe("pw�");
+    expect(p.notes.find((n) => n.ownerId === "custom-lab-1")!.body).toContain("lab � notes");
+    const content = p.logEntries.find((e) => e.id === "log-1")!.content as { blocks: { output: string }[] };
+    expect(content.blocks[0]!.output).toBe("out�put 😀");
+  });
+
+  it("fractional timestamps are truncated to whole milliseconds; out-of-range ones fall back", () => {
+    const p = lootPlan(
+      { credentials: [cred({ createdAt: 1700000000000.9 })], credAttempts: [attempt({ at: 1e300 })] },
+      { logEntries: [logEntry(1700000000123.75, { id: "log-1" })] as never },
+    );
+    expect(p.logEntries.find((e) => e.id === "log-1")!.at).toBe(1700000000123);
+    expect(p.credentials[0]!.createdAt).toBe(1700000000000);
+    expect(p.credAttempts[0]!.at).toBe(NOW);
+    for (const v of [p.logEntries[0]!.at, p.credentials[0]!.createdAt, p.credAttempts[0]!.at]) expect(Number.isInteger(v)).toBe(true);
+  });
+
+  it("only the known credential routine ids are engagement goals; other cred-routine-* ids are unknown", () => {
+    const p = plan(
+      bk([standalone({ id: "custom-solo", checklist: { openPorts: [], activeItemId: null, itemsState: {
+        "cred-routine-smb": { status: "done" },
+        "cred-routine-spray-users": { status: "todo" },
+        "cred-routine-bogus": { status: "done" },
+        "cred-routine-": { status: "done" },
+      } } })]),
+      ["custom-solo"],
+    );
+    expect(p.checklist.map((c) => c.goalId)).toEqual(["cred-routine-smb", "cred-routine-spray-users"]);
+    expect(p.skipped.unknownGoal).toBe(2);
+  });
+});

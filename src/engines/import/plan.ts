@@ -13,6 +13,7 @@ import { HOST_GOALS } from "../checklist/data/hostChecklist";
 import { AD_PLAYBOOKS, ENGAGEMENT_SETUP } from "../checklist/data/engagementChecklist";
 import { flagTitle, noteTitle, screenshotFileName } from "../capture/titles";
 import { openThreads } from "../notes/threads";
+import { ROUTINE_STEPS } from "../credentials/commands";
 import { boxesOf, listImportable, machinesOf } from "./list";
 import { gatherLogs, type RawLog } from "./logs";
 import { lootItemsByMachine, lootSection, mapLoot, VIA_NOT_RECORDED } from "./loot";
@@ -180,7 +181,8 @@ function singleIp(raw: string): string | null {
 
 /** Epoch-ms numbers are kept; ISO strings are parsed; anything else is `fallback`. */
 function toMs<T>(v: unknown, fallback: T): number | T {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
+  // Whole milliseconds that fit an i64 exactly: Rust stores these as INTEGER.
+  if (typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= Number.MAX_SAFE_INTEGER) return Math.trunc(v);
   if (typeof v === "string") {
     const ms = Date.parse(v);
     if (Number.isFinite(ms)) return ms;
@@ -543,7 +545,7 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
     for (const m of holders) {
       const items = isObj(m.checklist) && isObj(m.checklist.itemsState) ? m.checklist.itemsState : {};
       for (const [goalId, st] of Object.entries(items)) {
-        const engagementGoal = ENGAGEMENT_GOAL_IDS.has(goalId) || goalId.startsWith("cred-routine-");
+        const engagementGoal = ENGAGEMENT_GOAL_IDS.has(goalId) || ROUTINE_GOAL_IDS.has(goalId);
         if (!engagementGoal && !HOST_GOAL_IDS.has(goalId)) {
           skip("unknownGoal");
           continue;
@@ -714,11 +716,28 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
   plan.credAttempts = loot.credAttempts;
   // Ruling T5-R4: loot items whose machine is not an imported host have nowhere to go.
   for (const [machineId, items] of lootByMachine) if (!lootUsed.has(machineId)) skip("lootUnassigned", items.length);
-  return plan;
+  // Every string, once: serde rejects a lone surrogate, which would fail the whole import.
+  return wellFormedDeep(plan);
+}
+
+/** Replaces lone surrogates in every string of `v`, in place, and returns it. */
+function wellFormedDeep<T>(v: T): T {
+  const walk = (x: unknown): unknown => {
+    if (typeof x === "string") return wellFormed(x);
+    if (Array.isArray(x)) {
+      for (let i = 0; i < x.length; i++) x[i] = walk(x[i]);
+    } else if (isObj(x)) {
+      for (const k of Object.keys(x)) x[k] = walk(x[k]);
+    }
+    return x;
+  };
+  return walk(v) as T;
 }
 
 const HOST_GOAL_IDS = new Set(HOST_GOALS.map((g) => g.id));
 const ENGAGEMENT_GOAL_IDS = new Set([...ENGAGEMENT_SETUP, ...AD_PLAYBOOKS.flatMap((p) => p.goals)].map((g) => g.id));
+/** The credential routine goals (engagement-level), exactly as the app defines them. */
+const ROUTINE_GOAL_IDS = new Set(ROUTINE_STEPS.map((r) => r.itemId));
 const STATUSES = new Set<string>(["todo", "in_progress", "done", "na"]);
 const TUNNEL_KINDS = new Set<string>(["ligolo", "chisel", "ssh", "socks", "other"]);
 const SEVERITIES = new Set<string>(["critical", "high", "medium", "low", "info"]);

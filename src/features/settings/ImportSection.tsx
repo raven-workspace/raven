@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { buildImportPlan, listImportable, readBackup } from "../../engines/import";
 import type { ImportCandidate, ImportPlan } from "../../engines/import";
 import { api } from "../../lib/api";
@@ -86,7 +86,7 @@ export function dateRange(c: ImportCandidate): string {
   return a === b ? a : `${a} – ${b}`;
 }
 
-const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 function countLine(c: { added: number; present: number; merged: number }): string {
   return `${c.added} added · ${c.present} already present${c.merged > 0 ? ` · ${c.merged} merged into existing` : ""}`;
@@ -143,7 +143,9 @@ export function ImportSection() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [result, setResult] = useState<{ summary: ImportSummary; skipped: ImportPlan["skipped"] } | null>(null);
 
-  const candidates = backup ? listImportable(backup) : [];
+  const candidates = useMemo(() => (backup ? listImportable(backup) : []), [backup]);
+  /** Bumped on every file choice: a read that finishes after a newer choice is ignored. */
+  const readToken = useRef(0);
 
   const run = useMutation({
     mutationFn: async () => {
@@ -158,7 +160,14 @@ export function ImportSection() {
       setSelected(new Set());
       void qc.invalidateQueries();
     },
+    // The pre-import backup exists even when the import itself failed.
+    onSettled: () => void qc.invalidateQueries({ queryKey: ["backups"] }),
   });
+
+  function startImport() {
+    if (run.isPending) return;
+    run.mutate();
+  }
 
   async function onFile(file: File | undefined) {
     if (!file) return;
@@ -168,9 +177,16 @@ export function ImportSection() {
     setReadError(null);
     setBackup(null);
     setFileName(file.name);
-    const res = await readBackup(await file.text());
-    if (res.ok) setBackup(res.backup);
-    else setReadError(res.error);
+    const token = ++readToken.current;
+    try {
+      const res = await readBackup(await file.text());
+      if (token !== readToken.current) return;
+      if (res.ok) setBackup(res.backup);
+      else setReadError(res.error);
+    } catch (e) {
+      if (token !== readToken.current) return;
+      setReadError(`Could not read ${file.name}: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   const toggle = (id: string, on: boolean) =>
@@ -226,7 +242,7 @@ export function ImportSection() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px] text-fg">{c.name}</div>
                   <div className="text-xs text-muted">
-                    {plural(c.hostCount, "host")} · {plural(c.logCount, "log entry").replace("entrys", "entries")} · {dateRange(c)}
+                    {plural(c.hostCount, "host", "hosts")} · {plural(c.logCount, "log entry", "log entries")} · {dateRange(c)}
                   </div>
                 </div>
                 <Chip>{c.kind}</Chip>
@@ -240,7 +256,7 @@ export function ImportSection() {
                 variant="primary"
                 disabled={selected.size === 0 || run.isPending}
                 aria-busy={run.isPending}
-                onClick={() => run.mutate()}
+                onClick={startImport}
               >
                 Import
               </Button>

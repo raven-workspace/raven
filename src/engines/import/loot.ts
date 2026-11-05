@@ -17,7 +17,8 @@ const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
 
 /** Epoch-ms numbers are kept; ISO strings are parsed; anything else is `fallback`. */
 function toMs(v: unknown, fallback: number): number {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
+  // Whole milliseconds that fit an i64 exactly: Rust stores these as INTEGER.
+  if (typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= Number.MAX_SAFE_INTEGER) return Math.trunc(v);
   if (typeof v === "string") {
     const ms = Date.parse(v);
     if (Number.isFinite(ms)) return ms;

@@ -322,6 +322,8 @@ pub(crate) fn apply_plan(conn: &Connection, plan: &ImportPlanInput, now: i64) ->
         usernames: HashMap::new(),
         credentials: HashMap::new(),
         added_hosts: HashSet::new(),
+        host_engagement: HashMap::new(),
+        merged_names: HashMap::new(),
     };
     let mut sum = ImportSummary::default();
     let mut added_engagements: HashSet<&str> = HashSet::new();
@@ -343,7 +345,7 @@ pub(crate) fn apply_plan(conn: &Connection, plan: &ImportPlanInput, now: i64) ->
         sum.log_entries.count(cx.log_entry(e)?.into());
     }
     for n in &plan.notes {
-        sum.notes.count(cx.note(n)?.into());
+        sum.notes.count(cx.note(n)?);
     }
     for i in &plan.checklist {
         sum.checklist.count(cx.checklist_item(i)?.into());
@@ -407,6 +409,10 @@ struct Ctx<'a> {
     credentials: HashMap<String, String>,
     /// Hosts this run inserted: an IP collision with one of them is a plan bug, never a merge (Ruling T6-R1).
     added_hosts: HashSet<String>,
+    /// Planned host id -> its planned engagement (services resolve their host through it).
+    host_engagement: HashMap<String, String>,
+    /// Planned host id -> planned name, for hosts merged onto a host the user already had.
+    merged_names: HashMap<String, String>,
 }
 
 impl Ctx<'_> {
@@ -511,7 +517,14 @@ impl Ctx<'_> {
         {
             return Err(invalid("ip", format!("host {}: {ip} is not a single IPv4 address", h.id)));
         }
-        if self.exists("hosts", &h.id)? {
+        self.host_engagement.insert(h.id.clone(), h.engagement_id.clone());
+        if let Some(stored) = self.find("SELECT engagement_id FROM hosts WHERE id = ?1", [&h.id])? {
+            if stored != h.engagement_id {
+                return Err(invalid(
+                    "hostId",
+                    format!("{name} was already imported into another engagement; import it from there or delete it first"),
+                ));
+            }
             return Ok(Outcome::Present);
         }
         if let Some(ip) = &h.ip
@@ -523,6 +536,7 @@ impl Ctx<'_> {
                 return Err(invalid("ip", format!("hosts {existing} and {} in this import share the IP {ip}", h.id)));
             }
             self.hosts.insert(h.id.clone(), existing);
+            self.merged_names.insert(h.id.clone(), name.to_string());
             return Ok(Outcome::Merged);
         }
         self.tx.execute(
@@ -538,10 +552,10 @@ impl Ctx<'_> {
     }
 
     fn service(&mut self, s: &PlanService) -> AppResult<bool> {
-        let host_id = self.hosts.get(&s.host_id).cloned().unwrap_or_else(|| s.host_id.clone());
-        if !self.exists("hosts", &host_id)? {
-            return Err(dangling("hostId", &s.host_id));
-        }
+        // A service comes with its host: resolving through the planned host's engagement means it never
+        // attaches to a host of another engagement.
+        let eng = self.host_engagement.get(&s.host_id).cloned().ok_or_else(|| dangling("hostId", &s.host_id))?;
+        let host_id = self.host_ref(&eng, &s.host_id, "hostId")?;
         if self.exists("services", &s.id)? {
             return Ok(false);
         }
@@ -616,7 +630,7 @@ impl Ctx<'_> {
         Ok(true)
     }
 
-    fn note(&mut self, n: &PlanNote) -> AppResult<bool> {
+    fn note(&mut self, n: &PlanNote) -> AppResult<Outcome> {
         let eng = n.engagement_id.as_str();
         self.engagement_ref(eng)?;
         if n.body.len() > crate::notes::MAX_BODY {
@@ -631,13 +645,38 @@ impl Ctx<'_> {
             _ => return Err(invalid("ownerId", format!("note owner {} does not match its host", n.owner_id))),
         };
         if self.find("SELECT owner_id FROM notes WHERE owner_id = ?1", [&owner])?.is_some() {
-            return Ok(false);
+            // A merged host whose user-made host already has a note: the user's note is never touched; the
+            // imported body becomes a log note on that host, under a fixed id so a re-import finds it.
+            if let (Some(h), Some(old_name)) = (&host_id, self.merged_names.get(&n.owner_id)) {
+                return self.merged_note_entry(eng, h, &n.owner_id, old_name, &n.body);
+            }
+            return Ok(Outcome::Present);
         }
         self.tx.execute(
             "INSERT INTO notes (owner_id, engagement_id, host_id, body, private, updated_at) VALUES (?1,?2,?3,?4,?5,?6)",
             params![owner, eng, host_id, n.body, n.private, self.now],
         )?;
-        Ok(true)
+        Ok(Outcome::Added)
+    }
+
+    fn merged_note_entry(&self, eng: &str, host_id: &str, planned_host: &str, old_name: &str, body: &str) -> AppResult<Outcome> {
+        let id = format!("{planned_host}:imported-notes");
+        if self.exists("log_entries", &id)? {
+            return Ok(Outcome::Present);
+        }
+        if body.trim().is_empty() {
+            return Ok(Outcome::Present);
+        }
+        let title = crate::log::check_title(&format!("Imported notes ({old_name})"))?;
+        let content = LogContent::Note { text: body.to_string() };
+        let json = serde_json::to_string(&content).map_err(|err| AppError::Db(err.to_string()))?;
+        self.tx.execute(
+            "INSERT INTO log_entries (id, engagement_id, kind, title, title_edited, content, at, created_at, updated_at) \
+             VALUES (?1,?2,'note',?3,1,?4,?5,?5,?5)",
+            params![id, eng, title, json, self.now],
+        )?;
+        self.tx.execute("INSERT INTO log_entry_hosts (entry_id, host_id) VALUES (?1, ?2)", params![id, host_id])?;
+        Ok(Outcome::Merged)
     }
 
     fn checklist_item(&mut self, i: &PlanChecklistItem) -> AppResult<bool> {
@@ -1191,6 +1230,68 @@ mod tests {
     }
 
     #[test]
+    fn a_host_stored_under_another_engagement_is_rejected_with_its_name() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        c.execute_batch(
+            "INSERT INTO engagements (id,name,kind,created_at,updated_at) VALUES ('X','other','lab',1,1);
+             INSERT INTO hosts (id,engagement_id,name,ip,created_at,updated_at) VALUES ('h1','X','dc01','10.9.9.9',1,1);",
+        )
+        .unwrap();
+        let before = row_counts(c);
+        let r = apply(&v, &plan_of(plan_json()));
+        match &r {
+            Err(AppError::Validation { message, .. }) => assert!(
+                message.contains("dc01 was already imported into another engagement; import it from there or delete it first"),
+                "{message}"
+            ),
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(row_counts(c), before);
+    }
+
+    #[test]
+    fn a_service_never_attaches_to_a_host_outside_the_import() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        c.execute_batch(
+            "INSERT INTO engagements (id,name,kind,created_at,updated_at) VALUES ('X','other','lab',1,1);
+             INSERT INTO hosts (id,engagement_id,name,ip,created_at,updated_at) VALUES ('hx','X','x','10.9.9.9',1,1);",
+        )
+        .unwrap();
+        let mut p = plan_json();
+        p["services"][1]["hostId"] = json!("hx");
+        let r = apply(&v, &plan_of(p));
+        assert!(matches!(r, Err(AppError::Validation { .. })), "{r:?}");
+        assert_eq!(n(c, "SELECT count(*) FROM services"), 0);
+    }
+
+    #[test]
+    fn a_merged_hosts_note_goes_to_the_log_when_the_user_already_has_one() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        c.execute_batch(
+            "INSERT INTO engagements (id,name,kind,created_at,updated_at) VALUES ('E1','mine','lab',7,7);
+             INSERT INTO hosts (id,engagement_id,name,ip,created_at,updated_at) VALUES ('mine','E1','by hand','10.0.0.5',7,7);
+             INSERT INTO notes (owner_id,engagement_id,host_id,body,updated_at) VALUES ('mine','E1','mine','my note',7);",
+        )
+        .unwrap();
+        let sum = apply(&v, &plan_of(plan_json()));
+        let sum = sum.unwrap();
+        assert_eq!(sum.notes, Counts { added: 1, present: 0, merged: 1 });
+        assert_eq!(s(c, "SELECT body FROM notes WHERE owner_id='mine'").as_deref(), Some("my note"));
+        assert_eq!(s(c, "SELECT title FROM log_entries WHERE id='h1:imported-notes'").as_deref(), Some("Imported notes (dc01)"));
+        let content: LogContent =
+            serde_json::from_str(&s(c, "SELECT content FROM log_entries WHERE id='h1:imported-notes'").unwrap()).unwrap();
+        assert_eq!(content, LogContent::Note { text: "dc notes".into() });
+        assert_eq!(s(c, "SELECT host_id FROM log_entry_hosts WHERE entry_id='h1:imported-notes'").as_deref(), Some("mine"));
+        // A re-import finds the entry and reports the note as present.
+        let again = apply(&v, &plan_of(plan_json())).unwrap();
+        assert_eq!(again.notes, Counts { added: 0, present: 2, merged: 0 });
+        assert_eq!(n(c, "SELECT count(*) FROM log_entries WHERE id='h1:imported-notes'"), 1);
+    }
+
+    #[test]
     fn import_adds_everything_and_counts() {
         let (_d, v) = unlocked();
         let sum = apply(&v, &plan_of(plan_json())).unwrap();
@@ -1301,7 +1402,9 @@ mod tests {
         assert_eq!(sum.engagements, Counts { added: 0, present: 1, merged: 0 });
         assert_eq!(sum.hosts, Counts { added: 0, present: 0, merged: 1 });
         assert_eq!(sum.services, Counts { added: 0, present: 1, merged: 0 });
-        assert_eq!(sum.notes, Counts { added: 0, present: 1, merged: 0 });
+        // h1 already has a note: h9's imported note goes to the log on h1 (never into the user's note).
+        assert_eq!(sum.notes, Counts { added: 0, present: 0, merged: 1 });
+        assert_eq!(s(c, "SELECT host_id FROM log_entry_hosts WHERE entry_id='h9:imported-notes'").as_deref(), Some("h1"));
         assert_eq!(sum.usernames, Counts { added: 0, present: 1, merged: 0 });
         assert_eq!(sum.findings, Counts { added: 1, present: 0, merged: 0 });
         assert_eq!(sum.access_grants, Counts { added: 1, present: 0, merged: 0 });
