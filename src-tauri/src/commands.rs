@@ -18,6 +18,7 @@ use crate::notes::{self, Note, RuledOut, RuledOutInput};
 use crate::log::{self, Attachment, LogEntry, LogEntryInput};
 use std::collections::HashMap;
 use crate::hosts::{self, Host, HostInput};
+use crate::import::{self, ImportPlanInput, ImportSummary};
 use crate::services::{self, ConfirmInput, ScanPort, Service, ServiceInput};
 use crate::error::{AppError, AppResult};
 use crate::settings::{self, Settings, SettingsPatch};
@@ -149,6 +150,12 @@ pub async fn backups_list(app: AppHandle) -> AppResult<Vec<BackupInfo>> {
 pub async fn backup_restore_locked(app: AppHandle, file: String, password: String) -> AppResult<()> {
     let password = zeroize::Zeroizing::new(password);
     with_vault(app, move |v| backup::restore_locked(v, &file, &password)).await
+}
+
+/// Applies an import plan: a `pre-import` backup first, then one add-only transaction.
+#[tauri::command]
+pub async fn import_apply(app: AppHandle, plan: ImportPlanInput) -> AppResult<ImportSummary> {
+    with_vault(app, move |v| import::apply(v, &plan)).await
 }
 
 #[tauri::command]

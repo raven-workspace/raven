@@ -11,6 +11,7 @@ import { Button, Kbd, TitleBar } from "../../ui";
 import { SetupScreen } from "./SetupScreen";
 import { UnlockScreen } from "./UnlockScreen";
 import { useAutoLock } from "./useAutoLock";
+import { clearSecretClipboard } from "../../lib/clipboard";
 
 interface VaultContextValue {
   /** Locks the vault now (same path as ⌘L and the idle timer). */
@@ -82,6 +83,8 @@ export function VaultGate({ children }: { children: ReactNode }) {
     // Notes too: after a lock no note text stays in memory. `lock()` has already started the
     // flush, which works from a snapshot.
     discardNotes();
+    // A copied secret must not outlive the lock.
+    void clearSecretClipboard().catch(() => {});
     setNotice(null);
     setBackupError(null);
     setStatus((s) => (s ? { ...s, unlocked: false } : s));

@@ -1,6 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
 import { useId, useState, type FormEvent } from "react";
+import { api } from "../../lib/api";
 import type { Host, HostAccess, HostInput, HostOs } from "../../types/host";
-import { Button, Dialog, Field, Input, Select, Toggle } from "../../ui";
+import { Button, Dialog, Field, Input, Select, Toggle, labelClass } from "../../ui";
 import { useHostMutations } from "./queries";
 
 const OS_OPTIONS = [
@@ -9,6 +11,14 @@ const OS_OPTIONS = [
   { value: "linux", label: "Linux" },
   { value: "other", label: "Other" },
 ];
+type AdChoice = "auto" | "on" | "off";
+const AD_CHOICES: { value: AdChoice; label: string }[] = [
+  { value: "auto", label: "Automatic" },
+  { value: "on", label: "On" },
+  { value: "off", label: "Off" },
+];
+const AD_VALUE: Record<AdChoice, boolean | null> = { auto: null, on: true, off: false };
+
 const ACCESS_OPTIONS = [
   { value: "none", label: "None" },
   { value: "user", label: "User" },
@@ -37,6 +47,9 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
   const [os, setOs] = useState(host?.os ?? "unknown");
   const [access, setAccess] = useState<HostAccess>(host?.access ?? "none");
   const [dualHomed, setDualHomed] = useState(host?.dualHomed ?? false);
+  const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId) });
+  const examSim = engagement.data?.kind === "exam-sim";
+  const [adChoice, setAdChoice] = useState<AdChoice>(host?.adSet == null ? "auto" : host.adSet ? "on" : "off");
   const [errors, setErrors] = useState<Partial<Record<"name" | "ip" | "form", string>>>({});
   const pending = create.isPending || update.isPending;
 
@@ -54,6 +67,8 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
       os: os === "unknown" ? null : (os as HostOs),
       access,
       dualHomed,
+      // Only exam sims have the AD set; elsewhere the stored value stays untouched.
+      ...(examSim ? { adSet: AD_VALUE[adChoice] } : {}),
     };
     const opts = {
       onSuccess: onClose,
@@ -98,6 +113,28 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
         <Toggle on={dualHomed} onChange={setDualHomed} className="self-start">
           Dual-homed (reaches another network)
         </Toggle>
+        {examSim && (
+          <div role="radiogroup" aria-label="Part of the AD set" className="flex flex-col gap-1.5">
+            <span className={labelClass}>Part of the AD set</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {AD_CHOICES.map((c) => (
+                <Toggle
+                  key={c.value}
+                  role="radio"
+                  aria-checked={adChoice === c.value}
+                  aria-pressed={undefined}
+                  on={adChoice === c.value}
+                  onChange={() => setAdChoice(c.value)}
+                >
+                  {c.label}
+                </Toggle>
+              ))}
+              {adChoice === "auto" && (
+                <span className="text-xs text-muted">{host?.adSet == null && host?.adSetEffective ? "(auto: DC detected)" : "(auto)"}</span>
+              )}
+            </div>
+          </div>
+        )}
         {errors.form && <p className="m-0 text-xs text-warn">{errors.form}</p>}
       </form>
     </Dialog>

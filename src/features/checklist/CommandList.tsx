@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Chip } from "../../ui";
+import { copyPlain, copySecret } from "../../lib/clipboard";
 
 export interface FilledCommand {
   id: string;
@@ -41,7 +42,9 @@ export function CommandList({ commands }: { commands: FilledCommand[] }) {
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const copy = (c: FilledCommand) => {
-    void navigator.clipboard.writeText(c.copyText ?? c.text).then(() => {
+    // A filled command carries a real credential: that copy is a secret.
+    const write = c.copyText !== undefined && c.copyText !== c.text ? copySecret : copyPlain;
+    void write(c.copyText ?? c.text).then(() => {
       setCopied(c.id);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => setCopied(undefined), 1500);

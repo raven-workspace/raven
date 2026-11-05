@@ -288,7 +288,7 @@ mod tests {
     }
 
     fn host(c: &Connection, eng_id: &str, name: &str) -> String {
-        hosts::create(c, eng_id, HostInput { name: name.into(), ip: None, os: None, access: None, dual_homed: None }).unwrap().id
+        hosts::create(c, eng_id, HostInput { name: name.into(), ip: None, os: None, access: None, dual_homed: None, ad_set: None }).unwrap().id
     }
 
     fn entry(c: &Connection, eng_id: &str, id: &str) {

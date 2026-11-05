@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { BackupInfo } from "../types/backup";
+import type { ImportPlan } from "../engines/import/plan";
+import type { ImportSummary } from "../types/import";
 import type { ConfirmInput, ScanPort, Service, ServiceInput } from "../types/service";
 import type { ChecklistItem, ChecklistItemInput } from "../types/checklist";
 import type { Attachment, LogEntry, LogEntryInput, Progress } from "../types/log";
@@ -51,6 +53,9 @@ export const api = {
 
   backupNow: () => call<BackupInfo>("backup_now"),
   backupsList: () => call<BackupInfo[]>("backups_list"),
+  /** Takes a `pre-import` backup, then adds the plan's records in one transaction. Existing rows are never
+   *  changed; a dangling reference fails the whole import (validation) and nothing is written. */
+  importApply: (plan: ImportPlan) => call<ImportSummary>("import_apply", { plan }),
   /** Restores a backup. The vault is left locked afterwards. */
   backupRestore: (file: string) => call<null>("backup_restore", { file }),
   /** Restores a backup while locked (the database is damaged). The vault stays locked. */

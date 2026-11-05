@@ -5,7 +5,7 @@ import { HOST_STAGES, currentStage, derivedColumn } from '../../../engines/check
 
 const host: Host = {
   id: 'h', engagementId: 'e', name: 'ms01', ip: '10.0.0.5', os: 'windows', boardColumn: 'enumerate', boardManual: false,
-  access: 'none', createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null,
+  access: 'none', createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false,
 };
 /** Every goal of every stage: the loosest "all applicable" set. */
 const all = HOST_STAGES.map((stage) => ({ stage, goals: stage.goals }));

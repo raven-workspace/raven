@@ -37,7 +37,7 @@ function host(over: Partial<Host> & Pick<Host, "id" | "name">): Host {
     ip: null,
     os: null,
     boardColumn: "enumerate",
-    boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null,
+    boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false,
     access: "none",
     createdAt: 1,
     updatedAt: 1,
@@ -149,5 +149,78 @@ describe("hosts", () => {
     hosts = [...hosts, host({ id: "h4", name: "new04", ip: "10.10.10.20" })];
     await user.click(within(dialog).getByRole("button", { name: "Save" }));
     expect(await within(await screen.findByRole("navigation", { name: "Engagement" })).findByRole("link", { name: /new04/ })).toBeInTheDocument();
+  });
+
+  it("a lab host dialog has no AD-set control and does not send adSet", async () => {
+    const user = userEvent.setup();
+    m.hostUpdate.mockImplementation(async (id, input) => ({ ...hosts.find((h) => h.id === id)!, name: input.name }));
+    mount("/e/e1/h/h1");
+    const header = await screen.findByRole("region", { name: "Host" });
+    await user.click(within(header).getByRole("button", { name: "Edit" }));
+    const dialog = await screen.findByRole("dialog", { name: "Edit host" });
+    expect(within(dialog).queryByRole("radiogroup", { name: "Part of the AD set" })).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    await vi.waitFor(() => expect(m.hostUpdate).toHaveBeenCalled());
+    expect(m.hostUpdate.mock.calls[0]![1]).not.toHaveProperty("adSet");
+  });
+
+  it("the AD set chip is absent when the host is not effectively in the AD set", async () => {
+    mount("/e/e1/h/h1");
+    const header = await screen.findByRole("region", { name: "Host" });
+    expect(within(header).getByText("dc01")).toBeInTheDocument();
+    expect(within(header).queryByText("AD set")).not.toBeInTheDocument();
+  });
+
+  it("the AD set chip shows only in exam sims, even for a host that is effectively in the set", async () => {
+    hosts = [host({ id: "h1", name: "dc01", ip: "10.10.10.5", adSetEffective: true })];
+    mount("/e/e1/h/h1");
+    const header = await screen.findByRole("region", { name: "Host" });
+    expect(within(header).getByText("dc01")).toBeInTheDocument();
+    await vi.waitFor(() => expect(m.engagementGet).toHaveBeenCalled());
+    expect(within(header).queryByText("AD set")).not.toBeInTheDocument();
+  });
+
+  it("the AD-set toggle shows only in exam sims and saves on, off and automatic", async () => {
+    const user = userEvent.setup();
+    const exam: Engagement = { ...E1, kind: "exam-sim" };
+    m.engagementsList.mockResolvedValue([exam]);
+    m.engagementGet.mockResolvedValue(exam);
+    hosts = [
+      host({ id: "h1", name: "dc01", ip: "10.10.10.5", adSetEffective: true }),
+      host({ id: "h2", name: "web02", ip: "10.10.10.6" }),
+    ];
+    m.hostUpdate.mockImplementation(async (id, input) => {
+      const next = { ...hosts.find((h) => h.id === id)!, name: input.name, adSet: input.adSet ?? null };
+      hosts = hosts.map((h) => (h.id === id ? next : h));
+      return next;
+    });
+    mount("/e/e1/h/h1");
+    const header = await screen.findByRole("region", { name: "Host" });
+    expect(within(header).getByText("AD set")).toBeInTheDocument();
+    const openDialog = async () => {
+      await user.click(within(header).getByRole("button", { name: "Edit" }));
+      const dialog = await screen.findByRole("dialog", { name: "Edit host" });
+      return { dialog, group: within(dialog).getByRole("radiogroup", { name: "Part of the AD set" }) };
+    };
+    // Automatic is the starting choice for a host with no stored value, and it saves null.
+    let { dialog, group } = await openDialog();
+    expect(within(group).getByRole("radio", { name: "Automatic" })).toHaveAttribute("aria-checked", "true");
+    expect(within(dialog).getByText("(auto: DC detected)")).toBeInTheDocument();
+    const saveAs = async (n: number, choice: string | null, expected: boolean | null) => {
+      if (choice) await user.click(within(group).getByRole("radio", { name: choice }));
+      await user.click(within(dialog).getByRole("button", { name: "Save" }));
+      await vi.waitFor(() => expect(m.hostUpdate).toHaveBeenCalledTimes(n));
+      expect(m.hostUpdate.mock.calls[n - 1]![1].adSet).toBe(expected);
+      await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    };
+    await saveAs(1, null, null);
+    ({ dialog, group } = await openDialog());
+    await saveAs(2, "Off", false);
+    ({ dialog, group } = await openDialog());
+    await saveAs(3, "On", true);
+    // A host stored as on opens on On, and Automatic resets it to null.
+    ({ dialog, group } = await openDialog());
+    expect(within(group).getByRole("radio", { name: "On" })).toHaveAttribute("aria-checked", "true");
+    await saveAs(4, "Automatic", null);
   });
 });

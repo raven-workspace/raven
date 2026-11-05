@@ -5,3 +5,8 @@ node_modules/
 dist/
 src-tauri/target/
 *.tsbuildinfo
+
+# Old-Raven backups hold real secrets: never commit them.
+raven_ctf_backup_*.json
+raven-workspace-*.json
+*backup*.json

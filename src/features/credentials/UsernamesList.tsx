@@ -6,6 +6,7 @@ import { Button, Dialog, Input, labelClass } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { AccessFields, AccessGrantTags, EMPTY_ACCESS, type AccessDraft } from "./AccessGrants";
 import { useAccessGrantMutations, useUsernameMutations } from "./queries";
+import { copyPlain } from "../../lib/clipboard";
 
 /** `DOMAIN\user` splits at the first backslash; a bare name has no domain. */
 export function parseUsername(raw: string): { username: string; domain: string | null } {
@@ -44,7 +45,7 @@ export function UsernamesList({ eid, usernames, grants, hosts }: {
 
   const copyAll = () => {
     const file = [...new Set(usernames.map((u) => u.username))].join("\n");
-    void navigator.clipboard.writeText(file).then(() => {
+    void copyPlain(file).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     });

@@ -9,6 +9,7 @@ import { FindingFiles } from "./FindingFiles";
 import { FindingSteps, liveSteps } from "./FindingSteps";
 import { useFindingMutations } from "./queries";
 import { useLog } from "../log/queries";
+import { copyPlain } from "../../lib/clipboard";
 
 const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"];
 const SEVERITY_OPTIONS = [{ value: "none", label: "Unrated" }, ...SEVERITIES.map((s) => ({ value: s, label: s }))];
@@ -55,7 +56,7 @@ function CopyRef({ value }: { value: string }) {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
   const copy = () => {
-    void navigator.clipboard.writeText(value).then(() => {
+    void copyPlain(value).then(() => {
       setCopied(true);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => setCopied(false), 1500);

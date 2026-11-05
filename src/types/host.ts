@@ -19,6 +19,10 @@ export interface Host {
   boardDerived: BoardColumn | null;
   /** When the user last reviewed this host's access grants; null = never. */
   accessReviewedAt: number | null;
+  /** Exam-sim AD set as stored: null = automatic, true/false = set by hand. */
+  adSet: boolean | null;
+  /** Whether the host counts as part of the AD set (`adSet`, else open 88 and 389). */
+  adSetEffective: boolean;
 }
 
 /** Mirrors the Rust `HostInput` (create and full update). */
@@ -29,4 +33,6 @@ export interface HostInput {
   access?: HostAccess;
   /** Absent keeps the current value. */
   dualHomed?: boolean;
+  /** Absent keeps the current value; null resets to automatic. */
+  adSet?: boolean | null;
 }

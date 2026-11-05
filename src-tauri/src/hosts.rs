@@ -6,7 +6,26 @@ use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 
-const COLS: &str = "id, engagement_id, name, ip, os, board_column, board_manual, access, created_at, updated_at, dual_homed, board_derived, access_reviewed_at";
+/// SQL for a host's effective AD-set flag; `alias` names the hosts table in the query. The one
+/// definition behind both the host list (the chip) and exam-sim progress.
+///
+/// Only `state = 'open'` counts: a UDP scan reports `open|filtered` for most ports, which would
+/// otherwise flag every UDP-scanned host as a DC.
+pub fn ad_effective_sql(alias: &str) -> String {
+    format!(
+        "COALESCE({alias}.ad_set, (EXISTS(SELECT 1 FROM services s WHERE s.host_id = {alias}.id AND s.port = 88 AND s.state = 'open') \
+           AND EXISTS(SELECT 1 FROM services s WHERE s.host_id = {alias}.id AND s.port = 389 AND s.state = 'open')))"
+    )
+}
+
+/// Column list for queries written `FROM hosts`.
+fn cols() -> String {
+    format!(
+        "id, engagement_id, name, ip, os, board_column, board_manual, access, created_at, updated_at, dual_homed, \
+         board_derived, access_reviewed_at, ad_set, {}",
+        ad_effective_sql("hosts")
+    )
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,6 +45,10 @@ pub struct Host {
     pub board_derived: Option<String>,
     /// When the user last reviewed this host's access grants (Unix ms); null = never.
     pub access_reviewed_at: Option<i64>,
+    /// Exam-sim AD set, as stored: null = automatic, true/false = set by hand.
+    pub ad_set: Option<bool>,
+    /// Whether the host counts as part of the AD set: `ad_set` if set, else open services on 88 and 389.
+    pub ad_set_effective: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -41,6 +64,14 @@ pub struct HostInput {
     /// Absent keeps the current value.
     #[serde(default)]
     pub dual_homed: Option<bool>,
+    /// Absent keeps the current value; an explicit null resets to automatic.
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub ad_set: Option<Option<bool>>,
+}
+
+/// Distinguishes an absent field (`None`, via `default`) from an explicit null (`Some(None)`).
+fn present_or_null<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Option<bool>>, D::Error> {
+    Option::<bool>::deserialize(d).map(Some)
 }
 
 fn invalid(field: &str, message: &str) -> AppError {
@@ -48,7 +79,7 @@ fn invalid(field: &str, message: &str) -> AppError {
 }
 
 /// A single IPv4 address (no prefix, or `/32`), returned without the `/32`.
-fn single_ip(s: &str) -> Option<String> {
+pub(crate) fn single_ip(s: &str) -> Option<String> {
     let bare = s.strip_suffix("/32").unwrap_or(s);
     (!bare.contains('/') && valid_cidr(bare)).then(|| bare.to_string())
 }
@@ -59,6 +90,7 @@ struct Clean {
     os: Option<String>,
     access: String,
     dual_homed: Option<bool>,
+    ad_set: Option<Option<bool>>,
 }
 
 fn normalise(i: HostInput) -> AppResult<Clean> {
@@ -82,7 +114,7 @@ fn normalise(i: HostInput) -> AppResult<Clean> {
     if !matches!(access.as_str(), "none" | "user" | "root") {
         return Err(invalid("access", "access must be none, user or root"));
     }
-    Ok(Clean { name, ip, os, access, dual_homed: i.dual_homed })
+    Ok(Clean { name, ip, os, access, dual_homed: i.dual_homed, ad_set: i.ad_set })
 }
 
 fn from_row(r: &Row) -> rusqlite::Result<Host> {
@@ -100,6 +132,8 @@ fn from_row(r: &Row) -> rusqlite::Result<Host> {
         dual_homed: r.get::<_, i64>(10)? != 0,
         board_derived: r.get(11)?,
         access_reviewed_at: r.get(12)?,
+        ad_set: r.get::<_, Option<i64>>(13)?.map(|v| v != 0),
+        ad_set_effective: r.get::<_, i64>(14)? != 0,
     })
 }
 
@@ -110,7 +144,7 @@ fn ip_key(ip: &Option<String>) -> Option<u32> {
 
 /// Ordered by IP numerically (hosts without an IP last), then name.
 pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Host>> {
-    let mut st = conn.prepare(&format!("SELECT {COLS} FROM hosts WHERE engagement_id = ?1"))?;
+    let mut st = conn.prepare(&format!("SELECT {} FROM hosts WHERE engagement_id = ?1", cols()))?;
     let mut rows = st.query_map([engagement_id], from_row)?.collect::<Result<Vec<_>, _>>()?;
     rows.sort_by(|a, b| {
         (ip_key(&a.ip).is_none(), ip_key(&a.ip), a.name.to_lowercase(), &a.id)
@@ -120,7 +154,7 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Host>> {
 }
 
 pub fn get(conn: &Connection, id: &str) -> AppResult<Host> {
-    match conn.query_row(&format!("SELECT {COLS} FROM hosts WHERE id = ?1"), [id], from_row) {
+    match conn.query_row(&format!("SELECT {} FROM hosts WHERE id = ?1", cols()), [id], from_row) {
         Ok(h) => Ok(h),
         Err(rusqlite::Error::QueryReturnedNoRows) => Err(AppError::NotFound),
         Err(e) => Err(e.into()),
@@ -151,9 +185,9 @@ pub fn create(conn: &Connection, engagement_id: &str, input: HostInput) -> AppRe
     let id = uuid::Uuid::new_v4().to_string();
     let now = system_now_ms();
     conn.execute(
-        "INSERT INTO hosts (id, engagement_id, name, ip, os, access, dual_homed, created_at, updated_at) \
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?8)",
-        params![id, engagement_id, c.name, c.ip, c.os, c.access, c.dual_homed.unwrap_or(false), now],
+        "INSERT INTO hosts (id, engagement_id, name, ip, os, access, dual_homed, ad_set, created_at, updated_at) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9)",
+        params![id, engagement_id, c.name, c.ip, c.os, c.access, c.dual_homed.unwrap_or(false), c.ad_set.flatten(), now],
     )?;
     get(conn, &id)
 }
@@ -166,8 +200,9 @@ pub fn update(conn: &Connection, id: &str, input: HostInput) -> AppResult<Host> 
             return Err(invalid("ip", DUP_IP));
         }
     conn.execute(
-        "UPDATE hosts SET name=?2, ip=?3, os=?4, access=?5, dual_homed=COALESCE(?6, dual_homed), updated_at=?7 WHERE id=?1",
-        params![id, c.name, c.ip, c.os, c.access, c.dual_homed, system_now_ms()],
+        "UPDATE hosts SET name=?2, ip=?3, os=?4, access=?5, dual_homed=COALESCE(?6, dual_homed), \
+         ad_set=CASE WHEN ?7 THEN ?8 ELSE ad_set END, updated_at=?9 WHERE id=?1",
+        params![id, c.name, c.ip, c.os, c.access, c.dual_homed, c.ad_set.is_some(), c.ad_set.flatten(), system_now_ms()],
     )?;
     get(conn, id)
 }
@@ -292,7 +327,7 @@ mod tests {
     }
 
     fn hin(name: &str, ip: Option<&str>) -> HostInput {
-        HostInput { name: name.into(), ip: ip.map(str::to_string), os: None, access: None, dual_homed: None }
+        HostInput { name: name.into(), ip: ip.map(str::to_string), os: None, access: None, dual_homed: None, ad_set: None }
     }
 
     fn field<T: std::fmt::Debug>(r: AppResult<T>) -> (String, String) {
@@ -552,5 +587,51 @@ mod tests {
         assert_eq!(n, 0);
         assert_eq!(engagements::get(c, &e.id).unwrap().msf_host_id, None);
         assert_eq!(list(c, &e.id).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn ad_set_null_follows_ports_and_explicit_overrides() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = engagements::create(c, eng_input(&[])).unwrap();
+        let h = create(c, &e.id, hin("dc", Some("10.0.0.5"))).unwrap();
+        assert_eq!((h.ad_set, h.ad_set_effective), (None, false));
+        let port = |p: i64, state: &str| {
+            c.execute(
+                "INSERT INTO services (id,host_id,port,protocol,state,created_at,updated_at) VALUES (?1,?2,?3,'tcp',?4,1,1)",
+                params![format!("s{p}"), h.id, p, state],
+            )
+            .unwrap();
+        };
+        port(88, "open");
+        assert!(!get(c, &h.id).unwrap().ad_set_effective);
+        port(389, "closed");
+        assert!(!get(c, &h.id).unwrap().ad_set_effective);
+        c.execute("UPDATE services SET state='open' WHERE port=389", []).unwrap();
+        let g = get(c, &h.id).unwrap();
+        assert_eq!((g.ad_set, g.ad_set_effective), (None, true));
+        // explicit off beats the ports; absent keeps it
+        let mut inp = hin("dc", Some("10.0.0.5"));
+        inp.ad_set = Some(Some(false));
+        let g = update(c, &h.id, inp).unwrap();
+        assert_eq!((g.ad_set, g.ad_set_effective), (Some(false), false));
+        let g = update(c, &h.id, hin("dc", Some("10.0.0.5"))).unwrap();
+        assert_eq!(g.ad_set, Some(false));
+        // explicit null resets to automatic
+        let mut inp = hin("dc", Some("10.0.0.5"));
+        inp.ad_set = Some(None);
+        let g = update(c, &h.id, inp).unwrap();
+        assert_eq!((g.ad_set, g.ad_set_effective), (None, true));
+        // explicit on without ports
+        let mut inp = hin("client", Some("10.0.0.6"));
+        inp.ad_set = Some(Some(true));
+        let cl = create(c, &e.id, inp).unwrap();
+        assert_eq!((cl.ad_set, cl.ad_set_effective), (Some(true), true));
+        // serde: absent vs null vs value
+        let a: HostInput = serde_json::from_str(r#"{"name":"x"}"#).unwrap();
+        let n: HostInput = serde_json::from_str(r#"{"name":"x","adSet":null}"#).unwrap();
+        let t: HostInput = serde_json::from_str(r#"{"name":"x","adSet":true}"#).unwrap();
+        assert_eq!((a.ad_set, n.ad_set, t.ad_set), (None, Some(None), Some(Some(true))));
+        assert!(serde_json::to_value(&cl).unwrap().get("adSetEffective").is_some());
     }
 }

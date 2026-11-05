@@ -22,7 +22,7 @@ const E1: Engagement = {
 };
 const H1: Host = {
   id: "h1", engagementId: "e1", name: "dc01", ip: "10.10.10.5", os: "windows", boardColumn: "foothold",
-  boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, access: "user", createdAt: 1, updatedAt: 1,
+  boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "user", createdAt: 1, updatedAt: 1,
 };
 const svc = (id: string, port: number, over: Partial<Service> = {}): Service => ({
   id, hostId: "h1", port, protocol: "tcp", state: "open", nmapService: null, nmapVersion: null,
@@ -152,11 +152,22 @@ describe("host view", () => {
     await user.click(header.getByRole("button", { name: "Delete" }));
     const confirm = await screen.findByRole("dialog", { name: "Delete dc01?" });
     expect(confirm).toHaveAccessibleDescription(
-      "Its services, credential test results, access grants on it and finding links go with it. " +
-        "Log entries, credentials and findings stay but lose this host.",
+      "Its services, checklist items, credential test results, access grants on it, finding links, field notes, " +
+        "ruled-out items, tunnels through it and hops to or from it go with it; " +
+        "log entries, credentials and findings stay but lose this host.",
     );
     await user.click(within(confirm).getByRole("button", { name: "Cancel" }));
     expect(m.hostDelete).not.toHaveBeenCalled();
+  });
+
+  it("host delete confirm names notes, ruled-out items, tunnels and hops", async () => {
+    const user = userEvent.setup();
+    mount();
+    const header = within(await screen.findByRole("region", { name: "Host" }));
+    await user.click(header.getByRole("button", { name: "Delete" }));
+    const confirm = await screen.findByRole("dialog", { name: "Delete dc01?" });
+    const text = confirm.getAttribute("aria-describedby") ? document.getElementById(confirm.getAttribute("aria-describedby")!)!.textContent! : "";
+    for (const part of ["field notes", "ruled-out items", "tunnels", "hops"]) expect(text).toContain(part);
   });
 
   it("a service that is not open shows its state (M1)", async () => {

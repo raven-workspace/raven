@@ -4,6 +4,7 @@ import { api } from "../../lib/api";
 import type { BackupInfo } from "../../types/backup";
 import type { Settings } from "../../types/settings";
 import { Button, Chip, Dialog, EmptyState, Field, Input, Panel } from "../../ui";
+import { ImportSection } from "./ImportSection";
 
 export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -214,6 +215,7 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
           ))}
         </ul>
       </Panel>
+      <ImportSection />
       <Dialog
         open={restoreTarget !== null}
         onOpenChange={(o) => !o && setRestoreTarget(null)}

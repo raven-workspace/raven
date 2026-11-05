@@ -4,6 +4,7 @@ import { Button, Field, Input, Select, Textarea, labelClass } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { CodeView, guessLanguage, LANGUAGES } from "./CodeView";
 import { useFindingFileMutations, useFindingFiles } from "./queries";
+import { copyPlain } from "../../lib/clipboard";
 
 const MAX_BYTES = 1024 * 1024;
 const AUTO = "auto";
@@ -147,7 +148,7 @@ function FileRow({ findingId, file, onEdit }: { findingId: string; file: Finding
         <Button
           size="sm"
           aria-label={`Copy ${file.name}`}
-          onClick={() => navigator.clipboard.writeText(file.content).then(
+          onClick={() => copyPlain(file.content).then(
             () => {
               setCopyError(undefined);
               setCopied(true);

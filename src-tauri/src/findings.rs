@@ -7,8 +7,8 @@ use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-const MAX_CONTENT: usize = 1024 * 1024;
-const MAX_REFS: usize = 100;
+pub(crate) const MAX_CONTENT: usize = 1024 * 1024;
+pub(crate) const MAX_REFS: usize = 100;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -587,7 +587,7 @@ mod tests {
     }
 
     fn host(c: &Connection, eid: &str, ip: &str) -> String {
-        hosts::create(c, eid, HostInput { name: ip.into(), ip: Some(ip.into()), os: None, access: None, dual_homed: None })
+        hosts::create(c, eid, HostInput { name: ip.into(), ip: Some(ip.into()), os: None, access: None, dual_homed: None, ad_set: None })
             .unwrap()
             .id
     }

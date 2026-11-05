@@ -7,7 +7,7 @@ use crate::notes::check_scope;
 use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 
-const MAX_SUBNETS: usize = 50;
+pub(crate) const MAX_SUBNETS: usize = 50;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -294,7 +294,7 @@ mod tests {
     }
 
     fn host(c: &rusqlite::Connection, e: &str, ip: &str) -> String {
-        hosts::create(c, e, HostInput { name: ip.into(), ip: Some(ip.into()), os: None, access: None, dual_homed: None }).unwrap().id
+        hosts::create(c, e, HostInput { name: ip.into(), ip: Some(ip.into()), os: None, access: None, dual_homed: None, ad_set: None }).unwrap().id
     }
 
     fn field<T: std::fmt::Debug>(r: AppResult<T>) -> String {

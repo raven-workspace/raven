@@ -7,6 +7,7 @@ pub mod credentials;
 pub mod engagements;
 pub mod error;
 pub mod hosts;
+pub mod import;
 pub mod log;
 pub mod network;
 pub mod notes;
@@ -38,6 +39,7 @@ pub fn run() {
             commands::backups_list,
             commands::backup_restore,
             commands::backup_restore_locked,
+            commands::import_apply,
             commands::engagements_list,
             commands::engagement_get,
             commands::engagement_create,

@@ -128,6 +128,16 @@ fn strip_line_breaks(s: &str) -> &str {
     s.trim_matches(|c| c == '\r' || c == '\n')
 }
 
+/// The stored form of a secret: a hash loses all edge whitespace (pasted hashes pick up stray spaces and
+/// tabs), anything else follows F-R1.
+fn clean_secret<'a>(kind: &str, s: &'a str) -> &'a str {
+    if kind == "hash" {
+        s.trim()
+    } else {
+        strip_line_breaks(s)
+    }
+}
+
 fn blank_to_none(s: Option<&str>) -> Option<String> {
     s.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
 }
@@ -173,7 +183,7 @@ fn derive_hash_type(secret: &str) -> Option<String> {
 /// Identity of a credential inside one engagement: type, username, secret (hashes lower-cased),
 /// domain, and the local host for local-scope credentials.
 fn cred_key(c: &Credential) -> (String, String, String, String, String) {
-    let secret = strip_line_breaks(&c.secret);
+    let secret = clean_secret(&c.kind, &c.secret);
     let secret = if c.kind == "hash" { secret.to_lowercase() } else { secret.to_string() };
     (
         c.kind.clone(),
@@ -185,14 +195,14 @@ fn cred_key(c: &Credential) -> (String, String, String, String, String) {
 }
 
 /// An existing credential (other than `except_id`) with the same key. Empty secrets never match.
-fn find_duplicate(conn: &Connection, probe: &Credential, except_id: &str) -> AppResult<Option<Credential>> {
-    if strip_line_breaks(&probe.secret).is_empty() {
+pub(crate) fn find_duplicate(conn: &Connection, probe: &Credential, except_id: &str) -> AppResult<Option<Credential>> {
+    if clean_secret(&probe.kind, &probe.secret).is_empty() {
         return Ok(None);
     }
     let key = cred_key(probe);
     Ok(list(conn, &probe.engagement_id)?
         .into_iter()
-        .find(|c| c.id != except_id && !strip_line_breaks(&c.secret).is_empty() && cred_key(c) == key))
+        .find(|c| c.id != except_id && !clean_secret(&c.kind, &c.secret).is_empty() && cred_key(c) == key))
 }
 
 pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Credential>> {
@@ -258,7 +268,7 @@ fn build(conn: &Connection, engagement_id: &str, i: CredentialInput) -> AppResul
     if let Some(id) = &from_secret_id {
         check_cred_scope(conn, engagement_id, id)?;
     }
-    let secret = strip_line_breaks(&i.secret).to_string();
+    let secret = clean_secret(&i.kind, &i.secret).to_string();
     let hash_type = if i.kind == "hash" {
         blank_to_none(i.hash_type.as_deref()).or_else(|| derive_hash_type(&secret))
     } else {
@@ -637,7 +647,7 @@ mod tests {
         hosts::create(
             c,
             eid,
-            HostInput { name: ip.into(), ip: Some(ip.into()), os: None, access: None, dual_homed: None },
+            HostInput { name: ip.into(), ip: Some(ip.into()), os: None, access: None, dual_homed: None, ad_set: None },
         )
         .unwrap()
         .id
@@ -858,6 +868,20 @@ mod tests {
         assert_ne!(create(c, &e, cin("password", "b", " pass")).unwrap().id, nl.id);
         let hash = create(c, &e, cin("hash", "svc", &"ab".repeat(16))).unwrap();
         assert_eq!(crack(c, &hash.id, " Sum mer \n").unwrap().secret, " Sum mer ");
+    }
+
+    #[test]
+    fn hash_secret_edge_spaces_are_trimmed_and_dedupe() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "a");
+        let nt = "ab".repeat(16);
+        let first = create(c, &e, cin("hash", "svc", &format!("{nt} "))).unwrap();
+        assert_eq!(first.secret, nt);
+        assert_eq!(create(c, &e, cin("hash", "svc", &format!("\t {nt}\r\n"))).unwrap().id, first.id);
+        assert_eq!(create(c, &e, cin("hash", "svc", &nt)).unwrap().id, first.id);
+        // a cracked plaintext is a password and keeps its spaces
+        assert_eq!(crack(c, &first.id, " Sum mer ").unwrap().secret, " Sum mer ");
     }
 
     #[test]

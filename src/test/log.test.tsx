@@ -21,7 +21,7 @@ const E1: Engagement = {
 };
 
 const host = (id: string, name: string): Host => ({
-  id, engagementId: "e1", name, ip: null, os: null, boardColumn: "enumerate", boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null,
+  id, engagementId: "e1", name, ip: null, os: null, boardColumn: "enumerate", boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false,
   access: "none", createdAt: 1, updatedAt: 1,
 });
 

@@ -21,7 +21,7 @@ const E1: Engagement = {
 };
 const H1: Host = {
   id: "h1", engagementId: "e1", name: "dc01", ip: "10.10.10.5", os: "windows", boardColumn: "enumerate", boardManual: false,
-  dualHomed: false, boardDerived: null, accessReviewedAt: null, access: "none", createdAt: 1, updatedAt: 1,
+  dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1,
 };
 
 const cred = (o: Partial<Credential> & { id: string }): Credential => ({

@@ -166,7 +166,7 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<LogEntry>> 
     Ok(rows)
 }
 
-fn check_title(t: &str) -> AppResult<String> {
+pub(crate) fn check_title(t: &str) -> AppResult<String> {
     let t = t.trim().to_string();
     if t.is_empty() || t.chars().count() > 300 {
         return Err(invalid("title", "title must be 1-300 characters"));
@@ -174,7 +174,7 @@ fn check_title(t: &str) -> AppResult<String> {
     Ok(t)
 }
 
-fn check_content(c: &LogContent) -> AppResult<()> {
+pub(crate) fn check_content(c: &LogContent) -> AppResult<()> {
     let bad = |m: &str| Err(invalid("content", m));
     match c {
         LogContent::Command { blocks } => {
@@ -211,7 +211,7 @@ fn check_hosts(conn: &Connection, engagement_id: &str, ids: &[String]) -> AppRes
 }
 
 /// Validates the upload and returns the decoded bytes.
-fn decode_attachment(a: &NewAttachment) -> AppResult<Vec<u8>> {
+pub(crate) fn decode_attachment(a: &NewAttachment) -> AppResult<Vec<u8>> {
     let bad = |m: &str| invalid("attachment", m);
     if !matches!(a.mime.as_str(), "image/png" | "image/jpeg" | "image/webp" | "image/gif") {
         return Err(bad("attachment must be a png, jpeg, webp or gif image"));
@@ -413,7 +413,7 @@ mod tests {
     }
 
     fn host(c: &Connection, e: &str, ip: &str) -> String {
-        hosts::create(c, e, HostInput { name: ip.into(), ip: Some(ip.into()), os: None, access: None, dual_homed: None }).unwrap().id
+        hosts::create(c, e, HostInput { name: ip.into(), ip: Some(ip.into()), os: None, access: None, dual_homed: None, ad_set: None }).unwrap().id
     }
 
     fn input(content: LogContent) -> LogEntryInput {

@@ -26,7 +26,7 @@ const E1: Engagement = {
 };
 const H1: Host = {
   id: "h1", engagementId: "e1", name: "VEGA", ip: "10.10.10.5", os: "linux", boardColumn: "foothold",
-  boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, access: "none", createdAt: 1, updatedAt: 1,
+  boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1,
 };
 
 const stored: Record<string, Note> = {};

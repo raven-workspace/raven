@@ -21,6 +21,7 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
     (2, include_str!("../../migrations/0002_hosts_log.sql")),
     (3, include_str!("../../migrations/0003_checklist_notes.sql")),
     (4, include_str!("../../migrations/0004_credentials_findings.sql")),
+    (5, include_str!("../../migrations/0005_ad_set.sql")),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -246,14 +247,14 @@ mod tests {
         .unwrap();
         let mut hook_calls = 0;
         let out = migrate(&mut c, &mut |f, t| {
-            assert_eq!((f, t), (1, 4));
+            assert_eq!((f, t), (1, 5));
             hook_calls += 1;
             Ok(())
         })
         .unwrap();
         assert_eq!(hook_calls, 1);
-        assert_eq!(out, MigrationOutcome { from: 1, to: 4 });
-        assert_eq!(version(&c), 4);
+        assert_eq!(out, MigrationOutcome { from: 1, to: 5 });
+        assert_eq!(version(&c), 5);
         for t in ["hosts", "services", "log_entries", "log_entry_hosts", "attachments"] {
             let n: i64 = c
                 .query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1", [t], |r| r.get(0))
@@ -289,7 +290,7 @@ mod tests {
         )
         .unwrap();
         let mut hook_calls = 0;
-        let out = migrate(&mut c, &mut |f, t| {
+        let out = migrate_with(&mut c, &MIGRATIONS[..4], &mut |f, t| {
             assert_eq!((f, t), (3, 4));
             hook_calls += 1;
             Ok(())
@@ -314,6 +315,39 @@ mod tests {
         assert_eq!(name, "dc01");
         let items: i64 = c.query_row("SELECT count(*) FROM checklist_items", [], |r| r.get(0)).unwrap();
         assert_eq!(items, 1);
+    }
+
+    #[test]
+    fn migration_0005_from_v4_keeps_data() {
+        let (_d, _p, mut c) = file_db();
+        migrate_with(&mut c, &MIGRATIONS[..4], &mut |_, _| panic!("hook on fresh db")).unwrap();
+        c.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        c.execute(
+            "INSERT INTO engagements (id,name,kind,scope_cidrs,status,created_at,updated_at) VALUES ('e1','x','exam-sim','[]','active',1,1)",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO hosts (id,engagement_id,name,ip,created_at,updated_at) VALUES ('h1','e1','dc01','10.0.0.5',1,1)",
+            [],
+        )
+        .unwrap();
+        let mut hook_calls = 0;
+        let out = migrate(&mut c, &mut |f, t| {
+            assert_eq!((f, t), (4, 5));
+            hook_calls += 1;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(hook_calls, 1);
+        assert_eq!(out, MigrationOutcome { from: 4, to: 5 });
+        assert_eq!(version(&c), 5);
+        let ad: Option<i64> = c.query_row("SELECT ad_set FROM hosts WHERE id='h1'", [], |r| r.get(0)).unwrap();
+        assert_eq!(ad, None);
+        let name: String = c.query_row("SELECT name FROM hosts WHERE id='h1'", [], |r| r.get(0)).unwrap();
+        assert_eq!(name, "dc01");
+        c.execute("UPDATE hosts SET ad_set = 1 WHERE id='h1'", []).unwrap();
+        assert!(c.execute("UPDATE hosts SET ad_set = 2 WHERE id='h1'", []).is_err());
     }
 
     #[test]
