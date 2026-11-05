@@ -96,11 +96,11 @@ beforeEach(() => {
 
 const SECTION = "/e/e1/s/findings";
 
-async function addAttempt(user: ReturnType<typeof userEvent.setup>, kind: string) {
+async function addAttempt(user: ReturnType<typeof userEvent.setup>, kind: string | RegExp) {
   await user.click(await screen.findByRole("button", { name: "Add attempt" }));
   const dlg = await screen.findByRole("dialog");
   await user.type(within(dlg).getByLabelText("What was tried"), "Relay to the DC");
-  await user.click(within(dlg).getByRole("button", { name: kind }));
+  await user.click(within(dlg).getByRole("radio", { name: kind }));
   await user.type(within(dlg).getByLabelText("Reason"), "SMB signing is required");
   return dlg;
 }
@@ -124,7 +124,7 @@ describe("attempts", () => {
   it("operator error saves private and shows the chip", async () => {
     const user = userEvent.setup();
     mount(SECTION);
-    const dlg = await addAttempt(user, /^Operator error or inexperience \(private\)$/ as unknown as string);
+    const dlg = await addAttempt(user, /^Operator error or inexperience \(private\)$/);
     expect(within(dlg).getByText("Never appears in a report")).toBeInTheDocument();
     await user.click(within(dlg).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(m.failedAttemptCreate).toHaveBeenCalledWith("e1", expect.objectContaining({ reasonKind: "operator" })));
@@ -141,7 +141,7 @@ describe("attempts", () => {
     await user.click(within(list).getByRole("button", { name: "Edit Spray the VPN" }));
     const dlg = await screen.findByRole("dialog");
     expect(within(dlg).getByText("Never appears in a report")).toBeInTheDocument();
-    await user.click(within(dlg).getByRole("button", { name: "Insufficient access" }));
+    await user.click(within(dlg).getByRole("radio", { name: "Insufficient access" }));
     expect(within(dlg).queryByText("Never appears in a report")).not.toBeInTheDocument();
     await user.click(within(dlg).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(m.failedAttemptUpdate).toHaveBeenCalledWith("a1", expect.objectContaining({ reasonKind: "access" })));
@@ -157,6 +157,29 @@ describe("attempts", () => {
     expect(within(dlg).getByText("Say what was tried")).toBeInTheDocument();
     expect(within(dlg).getByText("Say why it failed")).toBeInTheDocument();
     expect(m.failedAttemptCreate).not.toHaveBeenCalled();
+  });
+
+  it("saving without a reason kind is refused and nothing is sent", async () => {
+    const user = userEvent.setup();
+    mount(SECTION);
+    await user.click(await screen.findByRole("button", { name: "Add attempt" }));
+    const dlg = await screen.findByRole("dialog");
+    await user.type(within(dlg).getByLabelText("What was tried"), "Relay to the DC");
+    await user.type(within(dlg).getByLabelText("Reason"), "SMB signing is required");
+    await user.click(within(dlg).getByRole("button", { name: "Save" }));
+    expect(within(dlg).getByText("Pick why it failed")).toBeInTheDocument();
+    expect(m.failedAttemptCreate).not.toHaveBeenCalled();
+  });
+
+  it("clicking the selected reason keeps it selected", async () => {
+    const user = userEvent.setup();
+    mount(SECTION);
+    await user.click(await screen.findByRole("button", { name: "Add attempt" }));
+    const dlg = await screen.findByRole("dialog");
+    const radio = within(dlg).getByRole("radio", { name: "Insufficient access" });
+    await user.click(radio);
+    await user.click(radio);
+    expect(radio).toHaveAttribute("aria-checked", "true");
   });
 
   it("delete asks first, then removes the row", async () => {

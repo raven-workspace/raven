@@ -34,7 +34,7 @@ export function AttemptForm({ eid, hosts, findings, log, edit, defaultHostId, on
   const [logEntryId, setLogEntryId] = useState<string | null>(edit?.logEntryId ?? null);
   const [kind, setKind] = useState<ReasonKind | null>(edit?.reasonKind ?? null);
   const [reason, setReason] = useState(edit?.reason ?? "");
-  const [errors, setErrors] = useState<{ title?: string; reason?: string; form?: string }>({});
+  const [errors, setErrors] = useState<{ title?: string; reason?: string; kind?: string; form?: string }>({});
   const pending = create.isPending || update.isPending;
 
   const pick = (v: string) => (v === NONE ? null : v);
@@ -45,15 +45,17 @@ export function AttemptForm({ eid, hosts, findings, log, edit, defaultHostId, on
     const next = {
       title: title.trim() === "" ? "Say what was tried" : undefined,
       reason: reason.trim() === "" ? "Say why it failed" : undefined,
+      kind: kind === null ? "Pick why it failed" : undefined,
     };
     setErrors(next);
-    if (next.title || next.reason) return;
+    if (next.title || next.reason || next.kind || kind === null) return;
     const input: FailedAttemptInput = { title: title.trim(), reason: reason.trim(), reasonKind: kind, hostId, findingId, logEntryId };
     const opts = {
       onSuccess: onClose,
       onError: (e: Error) => {
         const field = (e as { field?: string }).field;
         if (field === "title" || field === "reason") setErrors({ [field]: e.message });
+        else if (field === "reasonKind") setErrors({ kind: e.message });
         else setErrors({ form: e.message });
       },
     };
@@ -96,13 +98,16 @@ export function AttemptForm({ eid, hosts, findings, log, edit, defaultHostId, on
         <Field label="Log entry">
           <Select options={withNone("No log entry", logOptions)} value={logEntryId ?? NONE} onValueChange={(v) => setLogEntryId(pick(v))} />
         </Field>
-        <div role="group" aria-label="Why it failed" className="flex flex-col gap-1.5">
+        <div role="radiogroup" aria-label="Why it failed" className="flex flex-col gap-1.5">
           <span className={labelClass}>Why it failed</span>
           <div className="flex flex-wrap gap-1.5">
             {REASONS.map((r) => (
-              <Toggle key={r} on={kind === r} onChange={(on) => setKind(on ? r : null)}>{REASON_LABELS[r]}</Toggle>
+              <Toggle key={r} role="radio" aria-checked={kind === r} aria-pressed={undefined} on={kind === r} onChange={() => setKind(r)}>
+                {REASON_LABELS[r]}
+              </Toggle>
             ))}
           </div>
+          {errors.kind && <p className="m-0 text-xs text-warn">{errors.kind}</p>}
           {kind === "operator" && <p className="m-0 text-xs text-muted">Never appears in a report</p>}
         </div>
         <Field label="Reason" error={errors.reason}>

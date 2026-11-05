@@ -48,7 +48,7 @@ export function AttemptsList({ eid, hostId, onOpenEntry }: {
                   {a.private && <Chip>Private</Chip>}
                 </span>
                 <span className="block truncate text-[11px] text-muted">
-                  {[a.reasonKind && REASON_LABELS[a.reasonKind], a.reason].filter(Boolean).join(": ")}
+                  {`${REASON_LABELS[a.reasonKind]}: ${a.reason}`}
                   {a.hostId && hostId === undefined ? ` · ${hostLabel(hosts.find((h) => h.id === a.hostId))}` : ""}
                 </span>
               </span>

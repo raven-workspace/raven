@@ -69,7 +69,7 @@ export interface FailedAttempt {
   hostId: string | null;
   findingId: string | null;
   title: string;
-  reasonKind: ReasonKind | null;
+  reasonKind: ReasonKind;
   reason: string;
   /** Set by the server: true iff reasonKind is "operator". */
   private: boolean;
@@ -83,7 +83,7 @@ export interface FailedAttemptInput {
   hostId?: string | null;
   findingId?: string | null;
   title: string;
-  reasonKind?: ReasonKind | null;
+  reasonKind: ReasonKind;
   reason: string;
   logEntryId?: string | null;
 }

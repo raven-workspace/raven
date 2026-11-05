@@ -482,6 +482,9 @@ fn clean_attempt(conn: &Connection, engagement_id: &str, i: &FailedAttemptInput)
         return Err(invalid("reason", "reason is too long (1 MiB max)"));
     }
     let reason_kind = blank_to_none(i.reason_kind.as_deref());
+    if reason_kind.is_none() {
+        return Err(invalid("reasonKind", "say why it failed"));
+    }
     if reason_kind.as_deref().is_some_and(|k| !matches!(k, "control" | "precondition" | "access" | "operator")) {
         return Err(invalid("reasonKind", "reason kind must be control, precondition, access or operator"));
     }
@@ -724,7 +727,7 @@ mod tests {
         assert!(a.private);
         let b = attempt_create(c, &e, att("blocked by EDR", Some("control"), true)).unwrap();
         assert!(!b.private);
-        let n = attempt_create(c, &e, att("no kind", None, true)).unwrap();
+        let n = attempt_create(c, &e, att("other", Some("precondition"), true)).unwrap();
         assert!(!n.private);
         // update re-derives
         let mut u = att("blocked by EDR", Some("operator"), false);
@@ -736,12 +739,25 @@ mod tests {
         let stored: i64 = c.query_row("SELECT private FROM failed_attempts WHERE id = ?1", [&a.id], |r| r.get(0)).unwrap();
         assert_eq!(stored, 0);
         assert_eq!(attempts_list(c, &e).unwrap().len(), 3);
-        assert!(attempt_create(c, &e, att("  ", None, false)).is_err());
-        let mut blank = att("t", None, false);
+        assert!(attempt_create(c, &e, att("  ", Some("control"), false)).is_err());
+        let mut blank = att("t", Some("control"), false);
         blank.reason = " ".into();
         assert!(matches!(attempt_create(c, &e, blank), Err(AppError::Validation { field, .. }) if field == "reason"));
         attempt_delete(c, &a.id).unwrap();
         assert!(matches!(attempt_delete(c, &a.id), Err(AppError::NotFound)));
+    }
+
+    #[test]
+    fn reason_kind_is_required_on_create_and_update() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "A");
+        let is_kind = |r: Result<FailedAttempt, AppError>| matches!(r, Err(AppError::Validation { field, .. }) if field == "reasonKind");
+        assert!(is_kind(attempt_create(c, &e, att("t", None, false))));
+        assert!(is_kind(attempt_create(c, &e, att("t", Some("  "), false))));
+        let a = attempt_create(c, &e, att("t", Some("control"), false)).unwrap();
+        assert!(is_kind(attempt_update(c, &a.id, att("t", None, false))));
+        assert!(is_kind(attempt_update(c, &a.id, att("t", Some(""), false))));
     }
 
     #[test]
@@ -799,14 +815,14 @@ mod tests {
         u.host_ids = vec![hb.clone()];
         assert!(matches!(finding_update(c, &fa.id, u), Err(AppError::NotFound)));
         assert!(findings_list(c, &a).unwrap()[0].host_ids.is_empty());
-        let mut x = att("t", None, false);
+        let mut x = att("t", Some("control"), false);
         x.host_id = Some(hb);
         assert!(matches!(attempt_create(c, &a, x), Err(AppError::NotFound)));
-        let mut x = att("t", None, false);
+        let mut x = att("t", Some("control"), false);
         x.log_entry_id = Some(eb);
         assert!(matches!(attempt_create(c, &a, x), Err(AppError::NotFound)));
         let fb = finding_create(c, &b, fin("b")).unwrap();
-        let mut x = att("t", None, false);
+        let mut x = att("t", Some("control"), false);
         x.finding_id = Some(fb.id);
         assert!(matches!(attempt_create(c, &a, x), Err(AppError::NotFound)));
         assert!(matches!(findings_list(c, "nope"), Err(AppError::NotFound)));
