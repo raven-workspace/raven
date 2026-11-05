@@ -45,15 +45,18 @@ const file = (o: Partial<FindingFile> & { id: string; name: string }): FindingFi
   findingId: "f1", language: null, content: "", createdAt: 1, updatedAt: 1, ...o,
 });
 
-function mount(path: string, findings: Finding[], files: FindingFile[] = []) {
+function mount(path: string, findings: Finding[], files: FindingFile[] = [], log: LogEntry[] | "never" | Error = [L1, L2, L3, L4], servicesError?: Error) {
   m.engagementGet.mockResolvedValue(E1);
   m.hostsList.mockResolvedValue([H1, H2]);
-  m.servicesListEngagement.mockResolvedValue([]);
+  if (servicesError) m.servicesListEngagement.mockRejectedValue(servicesError);
+  else m.servicesListEngagement.mockResolvedValue([]);
   m.servicesList.mockResolvedValue([]);
   m.checklistList.mockResolvedValue([]);
   m.hopsList.mockResolvedValue([]);
   m.tunnelsList.mockResolvedValue([]);
-  m.logList.mockResolvedValue([L1, L2, L3, L4]);
+  if (log === "never") m.logList.mockReturnValue(new Promise<LogEntry[]>(() => {}));
+  else if (log instanceof Error) m.logList.mockRejectedValue(log);
+  else m.logList.mockResolvedValue(log);
   m.notesList.mockResolvedValue([]);
   m.credentialsList.mockResolvedValue([]);
   m.findingsList.mockResolvedValue(findings);
@@ -148,14 +151,97 @@ describe("finding steps", () => {
 
   it("a deleted log entry disappears from steps, the rest stay in order", async () => {
     const user = userEvent.setup();
-    // The server cascade already dropped l2: the finding says [l1, l3]; a stale id never shows or saves.
-    m.logList.mockResolvedValue([L1, L3]);
-    mount(SECTION, [finding({ id: "f1", title: "Shell upload", hostIds: ["h1"], stepEntryIds: ["l3", "l2", "l1"] })]);
-    m.logList.mockResolvedValue([L1, L3]);
+    // l2 is gone from the log: the stale id never shows and is not saved.
+    mount(SECTION, [finding({ id: "f1", title: "Shell upload", hostIds: ["h1"], stepEntryIds: ["l3", "l2", "l1"] })], [], [L1, L3]);
     const dlg = await openEdit(user, "Shell upload");
     await waitFor(() => expect(stepTitles(dlg)).toEqual(["trigger the exploit", "nmap sweep"]));
     await user.click(within(dlg).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(m.findingUpdate).toHaveBeenCalledWith("f1", expect.objectContaining({ stepEntryIds: ["l3", "l1"] })));
+  });
+});
+
+describe("steps while the log is unavailable", () => {
+  it("saving with a log that never loads sends stepEntryIds unchanged, and says the log is loading", async () => {
+    const user = userEvent.setup();
+    mount(SECTION, [finding({ id: "f1", title: "Shell upload", stepEntryIds: ["l2", "l1"] })], [], "never");
+    const dlg = await openEdit(user, "Shell upload");
+    expect(within(dlg).getByText("Loading the log…")).toBeInTheDocument();
+    expect(within(dlg).queryByText(/No steps yet/)).not.toBeInTheDocument();
+    await user.click(within(dlg).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.findingUpdate).toHaveBeenCalledWith("f1", expect.objectContaining({ stepEntryIds: ["l2", "l1"] })));
+  });
+
+  it("a log that fails to load shows the error, not an empty list, and still saves the steps unchanged", async () => {
+    const user = userEvent.setup();
+    mount(SECTION, [finding({ id: "f1", title: "Shell upload", stepEntryIds: ["l2", "l1"] })], [], new Error("db locked"));
+    const dlg = await openEdit(user, "Shell upload");
+    expect(await within(dlg).findByText(/db locked/)).toBeInTheDocument();
+    expect(within(dlg).queryByText(/No steps yet/)).not.toBeInTheDocument();
+    await user.click(within(dlg).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.findingUpdate).toHaveBeenCalledWith("f1", expect.objectContaining({ stepEntryIds: ["l2", "l1"] })));
+  });
+});
+
+describe("unsaved file drafts", () => {
+  async function pasteDraft(user: ReturnType<typeof userEvent.setup>, dlg: HTMLElement) {
+    await user.click(await within(dlg).findByRole("button", { name: "Add file" }));
+    await user.type(within(dlg).getByLabelText("File name"), "poc.lua");
+    await user.click(within(dlg).getByLabelText("File content"));
+    await user.paste("print(1)");
+  }
+
+  it("saving the finding saves the pending file first", async () => {
+    const user = userEvent.setup();
+    mount(SECTION, [finding({ id: "f1", title: "Shell upload" })]);
+    const dlg = await openEdit(user, "Shell upload");
+    await pasteDraft(user, dlg);
+    await user.click(within(dlg).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.findingFileCreate).toHaveBeenCalledWith("f1", { name: "poc.lua", language: "lua", content: "print(1)" }));
+    await waitFor(() => expect(m.findingUpdate).toHaveBeenCalled());
+    expect(m.findingFileCreate.mock.invocationCallOrder[0]).toBeLessThan(m.findingUpdate.mock.invocationCallOrder[0]);
+  });
+
+  it("a failed file save blocks the finding save", async () => {
+    const user = userEvent.setup();
+    mount(SECTION, [finding({ id: "f1", title: "Shell upload" })]);
+    m.findingFileCreate.mockRejectedValue(new Error("too big"));
+    const dlg = await openEdit(user, "Shell upload");
+    await pasteDraft(user, dlg);
+    await user.click(within(dlg).getByRole("button", { name: "Save" }));
+    expect(await within(dlg).findByText("too big")).toBeInTheDocument();
+    expect(m.findingUpdate).not.toHaveBeenCalled();
+  });
+
+  it("cancelling with a pending file asks before discarding", async () => {
+    const user = userEvent.setup();
+    mount(SECTION, [finding({ id: "f1", title: "Shell upload" })]);
+    const dlg = await openEdit(user, "Shell upload");
+    await pasteDraft(user, dlg);
+    await user.click(within(dlg).getByRole("button", { name: "Cancel" }));
+    expect(await screen.findByText("Discard unsaved changes?")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Keep editing" }));
+    expect(screen.getByLabelText("File content")).toHaveValue("print(1)");
+    expect(m.findingFileCreate).not.toHaveBeenCalled();
+  });
+
+  it("an empty file form does not count as unsaved", async () => {
+    const user = userEvent.setup();
+    mount(SECTION, [finding({ id: "f1", title: "Shell upload" })]);
+    const dlg = await openEdit(user, "Shell upload");
+    await user.click(await within(dlg).findByRole("button", { name: "Add file" }));
+    await user.click(within(dlg).getByRole("button", { name: "Cancel file" }));
+    await user.click(within(dlg).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("refuses a chosen file with NUL bytes", async () => {
+    const user = userEvent.setup();
+    mount(SECTION, [finding({ id: "f1", title: "Shell upload" })]);
+    const dlg = await openEdit(user, "Shell upload");
+    await user.click(await within(dlg).findByRole("button", { name: "Add file" }));
+    await user.upload(within(dlg).getByLabelText("Choose a file"), new File(["ab\0cd"], "blob.bin"));
+    expect(await within(dlg).findByRole("alert")).toHaveTextContent("blob.bin: text files only");
+    expect(within(dlg).getByLabelText("File content")).toHaveValue("");
   });
 });
 
@@ -254,6 +340,13 @@ describe("host findings tab", () => {
     expect(within(panel).queryByText("On web01")).not.toBeInTheDocument();
     await user.click(within(panel).getByRole("button", { name: "Open On dc01" }));
     expect(await screen.findByRole("dialog", { name: "Edit finding" })).toBeInTheDocument();
+  });
+
+  it("shows an error line when the hosts fail to load", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1", [], [], [L1], new Error("services down"));
+    await user.click(await screen.findByRole("tab", { name: "Findings" }));
+    expect(await screen.findByText(/Couldn.t load findings: services down/)).toBeInTheDocument();
   });
 
   it("shows an empty message when the host has no findings", async () => {

@@ -12,11 +12,12 @@ import { useFindings } from "./queries";
 export function HostFindings({ engagementId, host }: { engagementId: string; host: Host }) {
   const findings = useFindings(engagementId);
   const hosts = useHosts(engagementId);
-  const { servicesByHost } = useEngagementServices(engagementId);
+  const { servicesByHost, query: servicesQ } = useEngagementServices(engagementId);
   const [editing, setEditing] = useState<Finding>();
 
-  if (findings.isError) return <p role="alert" className="text-xs text-warn">Couldn't load findings: {findings.error.message}</p>;
-  if (!findings.data || !hosts.data) return null;
+  const failed = findings.error ?? hosts.error ?? servicesQ.error;
+  if (failed) return <p role="alert" className="text-xs text-warn">Couldn't load findings: {failed.message}</p>;
+  if (!findings.data || !hosts.data || !servicesQ.data) return null;
   const mine = sortFindingsBySeverity(findings.data.filter((f) => f.hostIds.includes(host.id)));
 
   return (

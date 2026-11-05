@@ -45,14 +45,14 @@ const logEntry = (id: string): LogEntry => ({
   returnedNothing: false, private: false, content: { kind: "note", text: "x" }, at: 1, createdAt: 1, updatedAt: 1,
 });
 
-function mount(findings: Finding[] = []) {
+function mount(findings: Finding[] = [], log: LogEntry[] = []) {
   m.engagementGet.mockResolvedValue(E1);
   m.hostsList.mockResolvedValue([H1, H2]);
   m.servicesListEngagement.mockResolvedValue([S1, S2]);
   m.checklistList.mockResolvedValue([]);
   m.hopsList.mockResolvedValue([]);
   m.tunnelsList.mockResolvedValue([]);
-  if (!m.logList.getMockImplementation()) m.logList.mockResolvedValue([]);
+  m.logList.mockResolvedValue(log);
   m.notesList.mockResolvedValue([]);
   m.findingsList.mockResolvedValue(findings);
   m.findingCreate.mockImplementation(async (_e, input) => finding({ id: "f9", ...input, title: input.title }));
@@ -130,8 +130,7 @@ describe("findings section", () => {
 
   it("affected hosts and services round-trip", async () => {
     const user = userEvent.setup();
-    m.logList.mockResolvedValue([logEntry("l1"), logEntry("l2")]);
-    mount([finding({ id: "f1", title: "Open share", hostIds: ["h1"], serviceIds: ["s1"], refs: ["CVE-2017-0144", "https://example.test/adv"], stepEntryIds: ["l1", "l2"] })]);
+    mount([finding({ id: "f1", title: "Open share", hostIds: ["h1"], serviceIds: ["s1"], refs: ["CVE-2017-0144", "https://example.test/adv"], stepEntryIds: ["l1", "l2"] })], [logEntry("l1"), logEntry("l2")]);
     await user.click(await screen.findByRole("button", { name: "Edit Open share" }));
     const dlg = await screen.findByRole("dialog");
     expect(within(dlg).getByRole("button", { name: "dc01" })).toHaveAttribute("aria-pressed", "true");

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { calculateCvssScore, scoreToSeverity } from "../../engines/findings";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
@@ -66,9 +66,14 @@ export function FindingEditor({ eid, hosts, servicesByHost, edit, onClose }: {
   const [formError, setFormError] = useState<string>();
   const [confirmClose, setConfirmClose] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [fileDirty, setFileDirty] = useState(false);
+  const flushFile = useRef<(() => Promise<boolean>) | null>(null);
+  const registerFlush = useCallback((fn: (() => Promise<boolean>) | null) => {
+    flushFile.current = fn;
+  }, []);
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
 
-  const dirty = JSON.stringify(d) !== initial || newRef.trim() !== "";
+  const dirty = JSON.stringify(d) !== initial || newRef.trim() !== "" || fileDirty;
   const vector = d.cvssVector.trim();
   const score = vector === "" ? null : calculateCvssScore(vector);
   const suggested = score === null ? null : scoreToSeverity(score);
@@ -111,8 +116,15 @@ export function FindingEditor({ eid, hosts, servicesByHost, edit, onClose }: {
       },
       onSettled: () => setBusy(false),
     };
-    if (edit) update.mutate({ id: edit.id, input }, opts);
-    else create.mutate(input, opts);
+    void (async () => {
+      // A pasted file not yet saved is saved first; if that fails, the finding is not saved either.
+      if (flushFile.current && !(await flushFile.current())) {
+        setBusy(false);
+        return;
+      }
+      if (edit) update.mutate({ id: edit.id, input }, opts);
+      else create.mutate(input, opts);
+    })();
   }
 
   const saveRef = useRef(save);
@@ -260,7 +272,7 @@ export function FindingEditor({ eid, hosts, servicesByHost, edit, onClose }: {
 
           <FindingSteps eid={eid} hostIds={d.hostIds} value={d.stepEntryIds} onChange={(ids) => set("stepEntryIds", ids)} />
           {edit ? (
-            <FindingFiles findingId={edit.id} />
+            <FindingFiles findingId={edit.id} onDirty={setFileDirty} register={registerFlush} />
           ) : (
             <p className="m-0 text-xs text-muted">Save the finding to attach files.</p>
           )}

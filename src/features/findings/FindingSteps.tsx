@@ -81,7 +81,11 @@ export function FindingSteps({ eid, hostIds, value, onChange }: {
         </Button>
       </div>
 
-      {steps.length === 0 ? (
+      {steps.length === 0 && value.length > 0 && log.isError ? (
+        <p role="alert" className="m-0 text-xs text-warn">Couldn't load the log, so the steps can't be shown: {log.error.message}</p>
+      ) : steps.length === 0 && value.length > 0 && !log.data ? (
+        <p className="m-0 text-xs text-muted">Loading the log…</p>
+      ) : steps.length === 0 ? (
         <p className="m-0 text-xs text-muted">No steps yet. Add the log entries that reproduce this finding, in order.</p>
       ) : (
         <ol ref={listRef} aria-label="Reproduction steps" className="m-0 flex list-none flex-col p-0">
