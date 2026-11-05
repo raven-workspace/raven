@@ -14,14 +14,17 @@ export function usernameKey(u: Pick<Username, "engagementId" | "username" | "dom
 /** Ruling F-R1: a secret keeps its spaces; only leading and trailing line breaks go. Agrees with Rust. */
 export const stripLineBreaks = (s: string): string => s.replace(/^[\r\n]+|[\r\n]+$/g, "");
 
+/** A hash loses all edge whitespace; any other secret only edge line breaks. Agrees with Rust `clean_secret`. */
+const cleanSecret = (c: Pick<Credential, "type" | "secret">): string => (c.type === "hash" ? c.secret.trim() : stripLineBreaks(c.secret));
+
 export function credKey(c: Pick<Credential, "type" | "username" | "secret" | "domain" | "hashType">): string {
   // A captured hash (Kerberoast, AS-REP, NetNTLM) differs per capture: the account and kind identify it.
   const kind = hashCaptureKind(c);
-  const secret = kind ? `capture:${kind}` : c.type === "hash" ? stripLineBreaks(c.secret).toLowerCase() : stripLineBreaks(c.secret);
+  const secret = kind ? `capture:${kind}` : c.type === "hash" ? cleanSecret(c).toLowerCase() : cleanSecret(c);
   return `${c.type}|${c.username.trim().toLowerCase()}|${secret}|${(c.domain ?? "").trim().toLowerCase()}`;
 }
 
-const hasSecret = (c: Pick<Credential, "secret">): boolean => stripLineBreaks(c.secret) !== "";
+const hasSecret = (c: Pick<Credential, "type" | "secret">): boolean => cleanSecret(c) !== "";
 
 type Scoped = Pick<Credential, "engagementId" | "scope" | "localHostId">;
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Toggle } from "../../ui";
+import { copySecret } from "../../lib/clipboard";
 
 export const MASK = "••••••••";
 
@@ -11,7 +12,7 @@ export function MaskedSecret({ secret, label }: { secret: string; label: string 
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const copy = () => {
-    void navigator.clipboard.writeText(secret).then(() => {
+    void copySecret(secret).then(() => {
       setCopied(true);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => setCopied(false), 1500);

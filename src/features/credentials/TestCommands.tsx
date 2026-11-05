@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CommandSet } from "../../engines/credentials";
 import { Button } from "../../ui";
+import { copySecret } from "../../lib/clipboard";
 
 const NOTICE: Record<NonNullable<CommandSet["notice"]>, string> = {
   "no-services": "No host has the needed service open.",
@@ -17,7 +18,7 @@ function CopyButton({ text, label, children }: { text: string; label: string; ch
       size="sm"
       aria-label={label}
       onClick={() =>
-        void navigator.clipboard.writeText(text).then(() => {
+        void copySecret(text).then(() => {
           setCopied(true);
           clearTimeout(timer.current);
           timer.current = setTimeout(() => setCopied(false), 1500);

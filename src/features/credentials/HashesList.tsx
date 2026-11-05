@@ -4,6 +4,7 @@ import type { Credential } from "../../types/credentials";
 import { Button, Chip, Dialog, Field, Input, labelClass } from "../../ui";
 import { MASK, MaskedSecret } from "./MaskedSecret";
 import { useCredentialMutations } from "./queries";
+import { copySecret } from "../../lib/clipboard";
 
 /** Plaintext for a hash. The server records a linked password; the hash then folds into it. */
 export function CrackDialog({ eid, hash, onClose }: { eid: string; hash: Credential; onClose: () => void }) {
@@ -44,7 +45,7 @@ function CopyCommand({ label, text }: { label: string; text: string }) {
     <Button
       size="sm"
       aria-label={`Copy ${label} command`}
-      onClick={() => void navigator.clipboard.writeText(text).then(() => {
+      onClick={() => void copySecret(text).then(() => {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
       })}

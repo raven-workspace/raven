@@ -16,6 +16,14 @@ describe("credKey", () => {
     expect(findDuplicateCredential([cred({ id: "a", secret: "pass" })], cred({ id: "b", secret: " pass" }))).toBeUndefined();
   });
 
+  it("credKey treats a padded hash as the same hash", () => {
+    const h = (secret: string) => cred({ type: "hash", secret, hashType: "NTLM" });
+    expect(credKey(h(` ${NT}\t\n`))).toBe(credKey(h(NT)));
+    expect(findDuplicateCredential([cred({ id: "a", type: "hash", secret: NT, hashType: "NTLM" })], h(`${NT} `))?.id).toBe("a");
+    // passwords still keep their edge spaces
+    expect(credKey(cred({ secret: " pass " }))).not.toBe(credKey(cred({ secret: "pass" })));
+  });
+
   it("captured hashes key on account and kind, not on the capture text", () => {
     const t = (tail: string) => cred({ type: "hash", username: "svc", secret: `$krb5tgs$23$*svc$R$x/y*$${tail}` });
     expect(credKey(t("aa$bb"))).toBe(credKey(t("cc$dd")));

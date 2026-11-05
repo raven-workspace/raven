@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../lib/api";
+import { copyPlain, copySecret } from "../lib/clipboard";
 import { makeQueryClient } from "../lib/queryClient";
 import { RavenError } from "../types/errors";
 import { SetupScreen } from "../features/vault/SetupScreen";
@@ -161,6 +162,31 @@ describe("vault gate", () => {
     expect(m.vaultLock).toHaveBeenCalled();
     expect(await screen.findByLabelText("Password")).toBeInTheDocument();
     expect(screen.queryByTestId("inside")).not.toBeInTheDocument();
+  });
+
+  it("locking clears the clipboard after a secret copy, and leaves it alone after a non-secret copy", async () => {
+    const user = userEvent.setup();
+    const write = vi.spyOn(navigator.clipboard, "writeText");
+    m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+    mount();
+    await screen.findByTestId("inside");
+    await copySecret("Winter2024!");
+    await user.keyboard("{Meta>}l{/Meta}");
+    expect(await screen.findByLabelText("Password")).toBeInTheDocument();
+    await vi.waitFor(() => expect(write).toHaveBeenLastCalledWith(""));
+
+    write.mockClear();
+    m.vaultStatus.mockResolvedValue({ exists: true, unlocked: false });
+    m.vaultUnlock.mockResolvedValue(unlockOk);
+    await user.type(screen.getByLabelText("Password"), "correct horse battery{Enter}");
+    await screen.findByTestId("inside");
+    await copySecret("Winter2024!");
+    await copyPlain("alice");
+    write.mockClear();
+    await user.keyboard("{Meta>}l{/Meta}");
+    expect(await screen.findByLabelText("Password")).toBeInTheDocument();
+    expect(write).not.toHaveBeenCalled();
+    expect(await navigator.clipboard.readText()).toBe("alice");
   });
 
   it("retries a failed backend lock while the unlock screen shows", async () => {

@@ -9,7 +9,8 @@ import { useHostMutations } from "./queries";
 
 /** What a host delete takes with it (FK cascades) and what stays. */
 const HOST_DELETE_DETAIL =
-  "Its services, credential test results, access grants on it and finding links go with it. " +
+  "Its services, credential test results, access grants on it, finding links, field notes, " +
+  "ruled-out items, tunnels through it and hops to or from it go with it. " +
   "Log entries, credentials and findings stay but lose this host.";
 
 export function HostHeader({ host }: { host: Host }) {
