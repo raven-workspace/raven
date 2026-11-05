@@ -81,9 +81,11 @@ function FileForm({ findingId, file, onDone, onDirty, register }: {
   }
 
   const dirty = JSON.stringify(d) !== JSON.stringify(initial);
-  const submitRef = useRef(submit);
+  // An untouched form has nothing to save: the finding's Save must not be blocked by it.
+  const flush = async () => (dirty ? submit() : true);
+  const submitRef = useRef(flush);
   useEffect(() => {
-    submitRef.current = submit;
+    submitRef.current = flush;
   });
   useEffect(() => {
     onDirty(dirty);

@@ -234,6 +234,27 @@ describe("unsaved file drafts", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("saving the finding works with an untouched Add file form open", async () => {
+    const user = userEvent.setup();
+    mount(SECTION, [finding({ id: "f1", title: "Shell upload" })]);
+    const dlg = await openEdit(user, "Shell upload");
+    await user.click(await within(dlg).findByRole("button", { name: "Add file" }));
+    await user.click(within(dlg).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.findingUpdate).toHaveBeenCalled());
+    expect(m.findingFileCreate).not.toHaveBeenCalled();
+    expect(screen.queryByText("Give the file a name")).not.toBeInTheDocument();
+  });
+
+  it("saving the finding with an untouched Edit file form makes no file update", async () => {
+    const user = userEvent.setup();
+    mount(SECTION, [finding({ id: "f1", title: "Shell upload" })], [file({ id: "ff1", name: "poc.lua", content: "x = 1" })]);
+    const dlg = await openEdit(user, "Shell upload");
+    await user.click(await within(dlg).findByRole("button", { name: "Edit poc.lua" }));
+    await user.click(within(dlg).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.findingUpdate).toHaveBeenCalled());
+    expect(m.findingFileUpdate).not.toHaveBeenCalled();
+  });
+
   it("refuses a chosen file with NUL bytes", async () => {
     const user = userEvent.setup();
     mount(SECTION, [finding({ id: "f1", title: "Shell upload" })]);
