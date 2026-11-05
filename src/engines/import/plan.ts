@@ -136,6 +136,37 @@ const hasText = (v: unknown): v is string => typeof v === "string" && v.trim().l
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 const textOr = <T>(v: unknown, fallback: T): string | T => (hasText(v) ? v : fallback);
 const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
+/** The first `max` code points (Rust counts chars, and a cut must never split a surrogate pair). */
+const cutChars = (s: string, max: number): string => {
+  const cps = Array.from(s);
+  return cps.length > max ? cps.slice(0, max).join("") : s;
+};
+const charCount = (s: string): number => Array.from(s).length;
+/** Lone surrogates become U+FFFD: serde_json rejects them, which would fail the whole import. */
+const wellFormed = (s: string): string =>
+  s.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD");
+const utf8 = new TextEncoder();
+const byteLength = (s: string): number => utf8.encode(s).length;
+/** Splits `s` so the head fits in `max` UTF-8 bytes (Rust `len()`), at the last line break when there is one. */
+export function splitAtBytes(s: string, max: number): [string, string] {
+  if (byteLength(s) <= max) return [s, ""];
+  let bytes = 0;
+  let cut = 0;
+  for (const cp of s) {
+    const n = byteLength(cp);
+    if (bytes + n > max) break;
+    bytes += n;
+    cut += cp.length;
+  }
+  const nl = s.lastIndexOf("\n", cut - 1);
+  const at = nl > 0 ? nl : cut;
+  return [s.slice(0, at), s.slice(at).replace(/^\n/, "")];
+}
+/** A single IPv4 address (`/32` allowed and dropped), as Rust `hosts::single_ip`; else null. */
+function singleIp(raw: string): string | null {
+  const bare = raw.endsWith("/32") ? raw.slice(0, -3) : raw;
+  return !bare.includes("/") && validCidr(bare) ? bare : null;
+}
 
 /** Epoch-ms numbers are kept; ISO strings are parsed; anything else is `fallback`. */
 function toMs<T>(v: unknown, fallback: T): number | T {
@@ -226,9 +257,10 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
     const isLabSel = c.kind === "lab";
     const engagementId = isLabSel ? container.id : `${container.id}#e`;
     if (!fresh("engagement", engagementId)) continue;
+    const engagementName = textOr(container.name, container.id).trim();
     const engagement: PlanEngagement = {
       id: engagementId,
-      name: textOr(container.name, container.id),
+      name: cutChars(engagementName, ENGAGEMENT_NAME_MAX).trimEnd(),
       kind: c.engagementKind,
       client: null,
       subLabel: null,
@@ -257,13 +289,33 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
       }
       return rows;
     };
+    /** Per host: values the new model could not hold, kept as note lines. */
+    const importedValues = new Map<string, string[]>();
+    const usedIps = new Map<string, string>();
     for (const m of hostRows) {
       if (!fresh("host", m.id)) continue;
+      const lines: string[] = [];
+      const fullName = textOr(m.name, m.id).trim();
+      const name = cutChars(fullName, HOST_NAME_MAX).trimEnd();
+      if (name !== fullName) lines.push(`- name: ${oneLine(fullName)}`);
+      // Ruling T6-R1: only a valid single IPv4 address, once per engagement.
+      const rawIp = hasText(m.ip) ? m.ip.trim() : null;
+      let ip = rawIp === null ? null : singleIp(rawIp);
+      if (rawIp !== null && ip === null) {
+        skip("invalidIp");
+        lines.push(`- ip: ${oneLine(rawIp)} (not a single IPv4 address)`);
+      } else if (ip !== null && usedIps.has(ip)) {
+        skip("duplicateIp");
+        lines.push(`- ip: ${oneLine(rawIp!)} (also the IP of ${oneLine(usedIps.get(ip)!)})`);
+        ip = null;
+      }
+      if (ip !== null) usedIps.set(ip, name);
+      if (lines.length) importedValues.set(m.id, lines);
       const host: PlanHost = {
         id: m.id,
         engagementId,
-        name: textOr(m.name, m.id),
-        ip: hasText(m.ip) ? m.ip.trim() : null,
+        name,
+        ip,
         os: osOf(m.os),
         access: accessOf(m),
         dualHomed: m.dualHomed === true,
@@ -294,9 +346,9 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
     };
     /** A title past 300 characters keeps its full text in the observations. */
     const base = (id: string, title: string, hostIds: string[], at: number, observations: string | null = null) => {
-      const long = title.length > TITLE_MAX;
+      const long = charCount(title) > TITLE_MAX;
       const obs = long ? [`Full title: ${title}`, observations].filter((o): o is string => !!o).join("\n\n") : observations;
-      return { id, engagementId, title: title.slice(0, TITLE_MAX), titleEdited: true, ranOn: null, hostIds, observations: obs, returnedNothing: false, private: false, at } as const;
+      return { id, engagementId, title: wellFormed(cutChars(title, TITLE_MAX).trimEnd()), titleEdited: true, ranOn: null, hostIds, observations: obs, returnedNothing: false, private: false, at } as const;
     };
 
     // Log entries.
@@ -347,7 +399,7 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
           }
         }
         content = { kind: "command", blocks: kept };
-        fallbackTitle = oneLine(kept[0]!.command.split("\n").find((l) => l.trim()) ?? "").slice(0, 200);
+        fallbackTitle = cutChars(oneLine(kept[0]!.command.split("\n").find((l) => l.trim()) ?? ""), 200);
       } else {
         const text = blocks.map((bl) => bl.output).filter((o) => o.trim()).join("\n\n") || title || (observations ?? "");
         if (!text.trim()) return null;
@@ -381,6 +433,11 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
         const mime = typeof img.mime === "string" && MIMES.has(img.mime) ? img.mime : sniffMime(data);
         if (!data || !mime) {
           skip("badImage");
+          continue;
+        }
+        // Rust log.rs refuses an attachment past 25 MiB (decoded); it would fail the whole import.
+        if (Math.floor((data.length * 3) / 4) - (data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0) > MAX_ATTACHMENT) {
+          skip("imageTooLarge");
           continue;
         }
         const title = hasText(s.title) ? oneLine(s.title) : "Screenshot";
@@ -419,8 +476,18 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
     const pushNote = (ownerId: string, hostId: string | null, parts: string[]) => {
       const filled = parts.filter((p) => p.trim());
       if (filled.length === 0 || !fresh("note", ownerId)) return;
-      const body = filled.length === 1 ? filled[0]! : filled.map((p) => p.replace(/\s+$/, "")).join("\n\n");
+      const full = filled.length === 1 ? filled[0]! : filled.map((p) => p.replace(/\s+$/, "")).join("\n\n");
+      // Rust notes.rs saves at most 1 MiB: the rest goes to a log note on the same host, so nothing is lost.
+      const [body, rest] = splitAtBytes(full, MAX_NOTE_BYTES);
       plan.notes.push({ ownerId, engagementId, hostId, body, private: false });
+      if (rest) {
+        skip("noteOverflowToLog");
+        pushLog({
+          ...base(`${ownerId}:notes-overflow`, "Notes (continued from import)", hostId ? [hostId] : [], now),
+          kind: "note",
+          content: { kind: "note", text: rest },
+        });
+      }
     };
     const quick = (m: OldMachine) => (typeof m.quickNotes === "string" ? escapeThreads(m.quickNotes) : "");
     const shared = (m: OldMachine) => [
@@ -429,6 +496,12 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
       domainSection(m, engagement.domain),
       listSection("## Extra IPs", arr(m.extraIps)),
     ];
+    const engagementValues = engagement.name !== engagementName ? `## Imported values\n- name: ${oneLine(engagementName)}` : "";
+    const hostValues = (id: string) => {
+      const lines = importedValues.get(id);
+      return lines ? ["## Imported values", ...lines].join("\n") : "";
+    };
+    if (!isLabSel) pushNote(engagementId, null, [engagementValues]);
     if (isLabSel) {
       const rows = rowsOf(container);
       pushNote(engagementId, null, [
@@ -436,13 +509,14 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
         labContainerSection(container),
         servicesSection(rows),
         triageSection(container, rows, skip),
+        engagementValues,
       ]);
     }
     for (const m of hostRows) {
       if (!hosts.has(m.id)) continue;
       const items = lootByMachine.get(m.id);
       if (items) lootUsed.add(m.id);
-      pushNote(m.id, m.id, [...shared(m), triageSection(m, rowsOf(m), skip), escapeThreads(lootSection(m, items ?? [], skip))]);
+      pushNote(m.id, m.id, [...shared(m), triageSection(m, rowsOf(m), skip), escapeThreads(lootSection(m, items ?? [], skip)), hostValues(m.id)]);
     }
 
     const logIds = new Set(plan.logEntries.filter((e) => e.engagementId === engagementId).map((e) => e.id));
@@ -573,26 +647,42 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
           continue;
         }
         if (!fresh("finding", f.id)) continue;
-        const description = [
+        const allRefs = hasText(f.cweCve) ? [...new Set(f.cweCve.split(/[,;\n]+/).map((r) => r.trim()).filter(Boolean))] : [];
+        // Rust findings.rs keeps at most 100 references: the rest are listed in the description.
+        const refs = allRefs.slice(0, MAX_REFS);
+        const moreRefs = allRefs.length > MAX_REFS ? ["More references:", ...allRefs.slice(MAX_REFS).map((r) => `- ${r}`)].join("\n") : "";
+        const findingTitle = hasText(f.title) ? oneLine(f.title) : "Imported finding";
+        const createdAt = toMs(f.createdAt, now);
+        // Each text field is at most 1 MiB in Rust: the rest goes to a log note, so nothing is lost.
+        const fit = (field: string, text: string): string => {
+          const [head, rest] = splitAtBytes(text, MAX_FINDING_TEXT_BYTES);
+          if (rest) {
+            skip("findingTextOverflowToLog");
+            pushLog({
+              ...base(`${f.id}:${field}-overflow`, `${findingTitle}: ${field} (continued from import)`, hostFor(m), createdAt),
+              kind: "note",
+              content: { kind: "note", text: rest },
+            });
+          }
+          return head;
+        };
+        const description = fit("description", [
           hasText(f.affectedService) ? `Affected: ${oneLine(f.affectedService)}` : "",
           hasText(f.repro) ? f.repro : "",
-        ].filter(Boolean).join("\n\n");
-        const refs = hasText(f.cweCve)
-          ? [...new Set(f.cweCve.split(/[,;\n]+/).map((r) => r.trim()).filter(Boolean))].slice(0, MAX_REFS)
-          : [];
+          moreRefs,
+        ].filter(Boolean).join("\n\n"));
         const score = f.cvssScore;
-        const createdAt = toMs(f.createdAt, now);
         plan.findings.push({
           id: f.id,
           engagementId,
-          title: hasText(f.title) ? oneLine(f.title) : "Imported finding",
+          title: findingTitle,
           severity: typeof f.severity === "string" && SEVERITIES.has(f.severity) ? (f.severity as Severity) : null,
           cvssVector: null,
           cvssScore: typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 10 ? score : null,
           status: "draft",
           description,
           impact: "",
-          remediation: hasText(f.remediation) ? f.remediation : "",
+          remediation: fit("remediation", hasText(f.remediation) ? f.remediation : ""),
           exploitNotes: "",
           lessons: "",
           refs,
@@ -623,6 +713,12 @@ const TUNNEL_KINDS = new Set<string>(["ligolo", "chisel", "ssh", "socks", "other
 const SEVERITIES = new Set<string>(["critical", "high", "medium", "low", "info"]);
 const MAX_SUBNETS = 50;
 const MAX_REFS = 100;
+/** Rust limits: hosts.rs, engagements.rs, notes.rs, findings.rs, log.rs. */
+const HOST_NAME_MAX = 80;
+const ENGAGEMENT_NAME_MAX = 120;
+const MAX_NOTE_BYTES = 1024 * 1024;
+const MAX_FINDING_TEXT_BYTES = 1024 * 1024;
+const MAX_ATTACHMENT = 25 * 1024 * 1024;
 
 /** IPv4 address or CIDR. Agrees with Rust `valid_cidr` (no leading zeros, prefix 0-32). */
 function validCidr(s: string): boolean {

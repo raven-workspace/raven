@@ -7,7 +7,7 @@ use crate::notes::check_scope;
 use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 
-const MAX_SUBNETS: usize = 50;
+pub(crate) const MAX_SUBNETS: usize = 50;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]

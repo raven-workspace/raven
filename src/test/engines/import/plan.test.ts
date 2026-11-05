@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildImportPlan } from "../../../engines/import/plan";
+import { buildImportPlan, splitAtBytes } from "../../../engines/import/plan";
 import { listImportable } from "../../../engines/import/list";
 import type { OldBackup, OldMachine } from "../../../engines/import/types";
 import { commandOutput, image, lab, labBox, logEntry, PNG_B64, screenshot, standalone } from "./fixtures";
@@ -285,7 +285,7 @@ describe("buildImportPlan: notes", () => {
       bk([
         lab({ nextMove: "\n  pivot via\n? web01\n  later  \n", quickNotes: "lab notes", os: "" }),
         labBox({ id: "b1", nextMove: "try kerberoast", quickNotes: "box notes" }),
-        labBox({ id: "b2", nextMove: "   " }),
+        labBox({ id: "b2", ip: "10.10.10.6", nextMove: "   " }),
       ]),
       ["custom-lab-1"],
     );
@@ -349,7 +349,7 @@ describe("fix round 1: nothing user-entered is silently dropped", () => {
       bk([
         lab({ domain: "corp.local", os: "" }),
         labBox({ id: "b1", domain: "dev.corp.local", vhosts: ["app.corp.local", 3 as never], extraIps: ["172.16.1.5", ""] }),
-        labBox({ id: "b2", domain: "corp.local" }),
+        labBox({ id: "b2", ip: "10.10.10.6", domain: "corp.local" }),
       ]),
       ["custom-lab-1"],
     );
@@ -993,5 +993,127 @@ describe("Task 5 fix round 1: no lost attempts", () => {
       credAttempts: [attempt({ id: "a1", result: "failed", detail: "STATUS_LOGON_FAILURE" })],
     });
     expect(p.credAttempts).toEqual([expect.objectContaining({ id: "a1", result: "admin", at: Date.parse(later), detail: "STATUS_LOGON_FAILURE" })]);
+  });
+});
+
+describe("T6 fixes: every record fits the app's own rules", () => {
+  const bytes = (s: string) => new TextEncoder().encode(s).length;
+  const noteOf = (p: ReturnType<typeof plan>, owner: string) => p.notes.find((n) => n.ownerId === owner);
+
+  it("T6-R1: two hosts sharing an IP both keep their notes; the second loses the IP, which stays in its note", () => {
+    const p = plan(
+      bk([
+        lab(),
+        labBox({ id: "b1", name: "DC01", ip: "10.10.11.5", quickNotes: "first" }),
+        labBox({ id: "b2", name: "WS01", ip: "10.10.11.5", quickNotes: "second" }),
+      ]),
+      ["custom-lab-1"],
+    );
+    expect(p.hosts.map((h) => [h.id, h.ip])).toEqual([["b1", "10.10.11.5"], ["b2", null]]);
+    expect(p.skipped.duplicateIp).toBe(1);
+    expect(noteOf(p, "b1")!.body).toBe("first");
+    expect(noteOf(p, "b2")!.body).toBe("second\n\n## Imported values\n- ip: 10.10.11.5 (also the IP of DC01)");
+  });
+
+  it("T6-R1: a placeholder or range IP becomes null and is kept in the note; /32 is accepted", () => {
+    const p = plan(
+      bk([
+        lab(),
+        labBox({ id: "b1", ip: "10.10.11.x" }),
+        labBox({ id: "b2", ip: "10.10.11.0/24" }),
+        labBox({ id: "b3", ip: " 10.10.11.7/32 " }),
+        labBox({ id: "b4", ip: "10.10.11.x" }),
+      ]),
+      ["custom-lab-1"],
+    );
+    expect(p.hosts.map((h) => [h.id, h.ip])).toEqual([["b1", null], ["b2", null], ["b3", "10.10.11.7"], ["b4", null]]);
+    expect(p.skipped.invalidIp).toBe(3);
+    expect(p.skipped.duplicateIp).toBeUndefined();
+    expect(noteOf(p, "b1")!.body).toBe("## Imported values\n- ip: 10.10.11.x (not a single IPv4 address)");
+    expect(noteOf(p, "b2")!.body).toContain("- ip: 10.10.11.0/24 (not a single IPv4 address)");
+    expect(noteOf(p, "b3")).toBeUndefined();
+  });
+
+  it("a host name past 80 characters is cut, with the full name in the host note", () => {
+    const long = "H".repeat(70) + " 😀 tail of a very long box name";
+    const p = plan(bk([lab(), labBox({ id: "b1", name: long, ip: "10.10.11.5" })]), ["custom-lab-1"]);
+    const h = p.hosts[0]!;
+    expect(Array.from(h.name).length).toBeLessThanOrEqual(80);
+    expect(long.startsWith(h.name)).toBe(true);
+    expect(noteOf(p, "b1")!.body).toBe(`## Imported values\n- name: ${long}`);
+  });
+
+  it("an engagement name past 120 characters is cut, with the full name in the engagement note (lab and standalone)", () => {
+    const long = "Engagement ".repeat(15).trim();
+    const p = plan(
+      bk([lab({ name: long, quickNotes: "lab notes", os: "" }), standalone({ id: "custom-solo", name: long + " solo", ip: "10.10.11.9" })]),
+      ["custom-lab-1", "custom-solo"],
+    );
+    for (const e of p.engagements) expect(Array.from(e.name).length).toBeLessThanOrEqual(120);
+    expect(noteOf(p, "custom-lab-1")!.body).toBe(`lab notes\n\n## Imported values\n- name: ${long}`);
+    expect(noteOf(p, "custom-solo#e")!.body).toBe(`## Imported values\n- name: ${long} solo`);
+    // The standalone's host keeps a name that fits too.
+    expect(p.hosts.find((h) => h.id === "custom-solo")!.name.length).toBeLessThanOrEqual(80);
+  });
+
+  it("a short engagement name adds no engagement note for a standalone", () => {
+    const p = plan(bk([standalone({ id: "custom-solo", ip: "10.10.11.9" })]), ["custom-solo"]);
+    expect(noteOf(p, "custom-solo#e")).toBeUndefined();
+  });
+
+  it("a title is cut by characters and never splits an emoji", () => {
+    const title = "x".repeat(299) + "😀😀";
+    const p = plan(bk([standalone({ id: "custom-solo", ip: "10.10.11.9", logEntries: [logEntry(1, { id: "l", title })] as never })]), ["custom-solo"]);
+    const e = p.logEntries[0]!;
+    expect(Array.from(e.title)).toHaveLength(300);
+    expect(e.title.endsWith("😀")).toBe(true);
+    expect(e.observations).toBe(`Full title: ${title}`);
+  });
+
+  it("a host note past 1 MiB is split: the rest becomes a log note on that host", () => {
+    const line = "a".repeat(1023) + "\n";
+    const quick = line.repeat(1100);
+    const p = plan(bk([lab(), labBox({ id: "b1", ip: "10.10.11.5", quickNotes: quick })]), ["custom-lab-1"]);
+    const note = noteOf(p, "b1")!;
+    expect(bytes(note.body)).toBeLessThanOrEqual(1024 * 1024);
+    const over = p.logEntries.find((e) => e.id === "b1:notes-overflow")!;
+    expect(over).toMatchObject({ kind: "note", hostIds: ["b1"] });
+    const text = (over.content as { text: string }).text;
+    expect(note.body + "\n" + text).toBe(quick);
+    expect(p.skipped.noteOverflowToLog).toBe(1);
+  });
+
+  it("finding references past 100 go into the description; text past 1 MiB goes to a log note", () => {
+    const refs = Array.from({ length: 105 }, (_, i) => `CVE-2024-${1000 + i}`).join(", ");
+    const remediation = "r".repeat(1024 * 1024 + 10);
+    const p = plan(
+      bk([lab(), labBox({ id: "b1", ip: "10.10.11.5", findings: [{ id: "f1", title: "Big", cweCve: refs, remediation, createdAt: 1, updatedAt: 1 }] as never })]),
+      ["custom-lab-1"],
+    );
+    const f = p.findings[0]!;
+    expect(f.refs).toHaveLength(100);
+    expect(f.description).toBe(["More references:", ...[100, 101, 102, 103, 104].map((i) => `- CVE-2024-${1000 + i}`)].join("\n"));
+    expect(bytes(f.remediation)).toBe(1024 * 1024);
+    const over = p.logEntries.find((e) => e.id === "f1:remediation-overflow")!;
+    expect((over.content as { text: string }).text).toBe("r".repeat(10));
+    expect(over.hostIds).toEqual(["b1"]);
+  });
+
+  it("an image past 25 MiB is skipped and counted (Rust would refuse the whole import)", () => {
+    const huge = "A".repeat(Math.ceil((25 * 1024 * 1024 + 3) / 3) * 4);
+    const p = plan(
+      bk([standalone({ id: "custom-solo", ip: "10.10.11.9", screenshots: [screenshot("s1", "img-1")] })], {
+        indexedDb: { images: [image("img-1", { data: huge })] },
+      }),
+      ["custom-solo"],
+    );
+    expect(p.logEntries).toEqual([]);
+    expect(p.skipped.imageTooLarge).toBe(1);
+  });
+
+  it("splitAtBytes counts UTF-8 bytes, prefers a line break and never splits a character", () => {
+    expect(splitAtBytes("abc", 3)).toEqual(["abc", ""]);
+    expect(splitAtBytes("ab\ncd", 4)).toEqual(["ab", "cd"]);
+    expect(splitAtBytes("é😀", 4)).toEqual(["é", "😀"]);
   });
 });

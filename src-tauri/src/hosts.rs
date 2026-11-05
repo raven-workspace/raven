@@ -79,7 +79,7 @@ fn invalid(field: &str, message: &str) -> AppError {
 }
 
 /// A single IPv4 address (no prefix, or `/32`), returned without the `/32`.
-fn single_ip(s: &str) -> Option<String> {
+pub(crate) fn single_ip(s: &str) -> Option<String> {
     let bare = s.strip_suffix("/32").unwrap_or(s);
     (!bare.contains('/') && valid_cidr(bare)).then(|| bare.to_string())
 }

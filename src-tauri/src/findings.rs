@@ -7,8 +7,8 @@ use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-const MAX_CONTENT: usize = 1024 * 1024;
-const MAX_REFS: usize = 100;
+pub(crate) const MAX_CONTENT: usize = 1024 * 1024;
+pub(crate) const MAX_REFS: usize = 100;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]

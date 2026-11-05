@@ -195,7 +195,7 @@ fn cred_key(c: &Credential) -> (String, String, String, String, String) {
 }
 
 /// An existing credential (other than `except_id`) with the same key. Empty secrets never match.
-fn find_duplicate(conn: &Connection, probe: &Credential, except_id: &str) -> AppResult<Option<Credential>> {
+pub(crate) fn find_duplicate(conn: &Connection, probe: &Credential, except_id: &str) -> AppResult<Option<Credential>> {
     if clean_secret(&probe.kind, &probe.secret).is_empty() {
         return Ok(None);
     }

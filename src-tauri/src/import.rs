@@ -252,16 +252,34 @@ pub struct PlanCredAttempt {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub struct Counts {
     pub added: u32,
+    /// Already stored under the same id (or, for services, usernames and attempts, the same unique key).
     pub present: u32,
+    /// Matched to a different row the user already had (a host on its IP, a credential on its key);
+    /// the plan's references now point at that row.
+    pub merged: u32,
+}
+
+/// What happened to one planned record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Outcome {
+    Added,
+    Present,
+    Merged,
 }
 
 impl Counts {
-    fn count(&mut self, added: bool) {
-        if added {
-            self.added += 1;
-        } else {
-            self.present += 1;
+    fn count(&mut self, o: Outcome) {
+        match o {
+            Outcome::Added => self.added += 1,
+            Outcome::Present => self.present += 1,
+            Outcome::Merged => self.merged += 1,
         }
+    }
+}
+
+impl From<bool> for Outcome {
+    fn from(added: bool) -> Self {
+        if added { Outcome::Added } else { Outcome::Present }
     }
 }
 
@@ -296,7 +314,15 @@ pub fn apply(vault: &Vault, plan: &ImportPlanInput) -> AppResult<ImportSummary> 
 /// The transaction part of `apply` (no backup). All or nothing: the transaction rolls back on any error.
 pub(crate) fn apply_plan(conn: &Connection, plan: &ImportPlanInput, now: i64) -> AppResult<ImportSummary> {
     let tx = conn.unchecked_transaction()?;
-    let mut cx = Ctx { tx: &tx, now, hosts: HashMap::new(), services: HashMap::new(), usernames: HashMap::new() };
+    let mut cx = Ctx {
+        tx: &tx,
+        now,
+        hosts: HashMap::new(),
+        services: HashMap::new(),
+        usernames: HashMap::new(),
+        credentials: HashMap::new(),
+        added_hosts: HashSet::new(),
+    };
     let mut sum = ImportSummary::default();
     let mut added_engagements: HashSet<&str> = HashSet::new();
 
@@ -305,43 +331,43 @@ pub(crate) fn apply_plan(conn: &Connection, plan: &ImportPlanInput, now: i64) ->
         if added {
             added_engagements.insert(e.id.as_str());
         }
-        sum.engagements.count(added);
+        sum.engagements.count(added.into());
     }
     for h in &plan.hosts {
         sum.hosts.count(cx.host(h)?);
     }
     for s in &plan.services {
-        sum.services.count(cx.service(s)?);
+        sum.services.count(cx.service(s)?.into());
     }
     for e in &plan.log_entries {
-        sum.log_entries.count(cx.log_entry(e)?);
+        sum.log_entries.count(cx.log_entry(e)?.into());
     }
     for n in &plan.notes {
-        sum.notes.count(cx.note(n)?);
+        sum.notes.count(cx.note(n)?.into());
     }
     for i in &plan.checklist {
-        sum.checklist.count(cx.checklist_item(i)?);
+        sum.checklist.count(cx.checklist_item(i)?.into());
     }
     for t in &plan.tunnels {
-        sum.tunnels.count(cx.tunnel(t)?);
+        sum.tunnels.count(cx.tunnel(t)?.into());
     }
     for h in &plan.hops {
-        sum.hops.count(cx.hop(h)?);
+        sum.hops.count(cx.hop(h)?.into());
     }
     for f in &plan.findings {
-        sum.findings.count(cx.finding(f)?);
+        sum.findings.count(cx.finding(f)?.into());
     }
     for c in &plan.credentials {
         sum.credentials.count(cx.credential(c)?);
     }
     for u in &plan.usernames {
-        sum.usernames.count(cx.username(u)?);
+        sum.usernames.count(cx.username(u)?.into());
     }
     for g in &plan.access_grants {
-        sum.access_grants.count(cx.grant(g)?);
+        sum.access_grants.count(cx.grant(g)?.into());
     }
     for a in &plan.cred_attempts {
-        sum.cred_attempts.count(cx.attempt(a)?);
+        sum.cred_attempts.count(cx.attempt(a)?.into());
     }
     // Last, once the hosts exist: the msf lock, only for engagements this run added.
     for e in &plan.engagements {
@@ -378,6 +404,9 @@ struct Ctx<'a> {
     hosts: HashMap<String, String>,
     services: HashMap<String, String>,
     usernames: HashMap<String, String>,
+    credentials: HashMap<String, String>,
+    /// Hosts this run inserted: an IP collision with one of them is a plan bug, never a merge (Ruling T6-R1).
+    added_hosts: HashSet<String>,
 }
 
 impl Ctx<'_> {
@@ -421,6 +450,7 @@ impl Ctx<'_> {
     }
 
     fn cred_ref(&self, engagement_id: &str, id: &str, field: &str) -> AppResult<String> {
+        let id = self.credentials.get(id).map_or(id, String::as_str);
         self.scoped("credentials", engagement_id, id, field)
     }
 
@@ -443,6 +473,14 @@ impl Ctx<'_> {
     }
 
     fn engagement(&mut self, e: &PlanEngagement, plan: &ImportPlanInput) -> AppResult<bool> {
+        // The rules engagements.rs applies on every edit (Ruling T6-R2).
+        let name = e.name.trim();
+        if name.is_empty() || name.chars().count() > 120 {
+            return Err(invalid("name", format!("engagement {}: name must be 1-120 characters", e.id)));
+        }
+        if let Some(bad) = e.scope_cidrs.iter().find(|c| !crate::engagements::valid_cidr(c.trim())) {
+            return Err(invalid("scopeCidrs", format!("engagement {}: invalid IPv4 CIDR: {bad}", e.id)));
+        }
         if self.exists("engagements", &e.id)? {
             return Ok(false);
         }
@@ -454,34 +492,49 @@ impl Ctx<'_> {
              timebox_start, timebox_minutes, status, created_at, updated_at, last_activity_at) \
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?13,?14)",
             params![
-                e.id, e.name, e.kind, e.client, e.sub_label, cidrs, e.domain, e.starts_at, e.ends_at,
+                e.id, name, e.kind, e.client, e.sub_label, cidrs, e.domain, e.starts_at, e.ends_at,
                 e.timebox_start, e.timebox_minutes, e.status, self.now, last_activity
             ],
         )?;
         Ok(true)
     }
 
-    fn host(&mut self, h: &PlanHost) -> AppResult<bool> {
+    fn host(&mut self, h: &PlanHost) -> AppResult<Outcome> {
         self.engagement_ref(&h.engagement_id)?;
+        // The rules hosts.rs applies on every edit (Ruling T6-R2).
+        let name = h.name.trim();
+        if name.is_empty() || name.chars().count() > 80 {
+            return Err(invalid("name", format!("host {}: name must be 1-80 characters", h.id)));
+        }
+        if let Some(ip) = &h.ip
+            && crate::hosts::single_ip(ip).as_deref() != Some(ip.as_str())
+        {
+            return Err(invalid("ip", format!("host {}: {ip} is not a single IPv4 address", h.id)));
+        }
         if self.exists("hosts", &h.id)? {
-            return Ok(false);
+            return Ok(Outcome::Present);
         }
         if let Some(ip) = &h.ip
             && let Some(existing) =
                 self.find("SELECT id FROM hosts WHERE engagement_id = ?1 AND ip = ?2", params![h.engagement_id, ip])?
         {
+            // Ruling T6-R1: two planned hosts on one IP must never merge; only a host the user already had does.
+            if self.added_hosts.contains(&existing) {
+                return Err(invalid("ip", format!("hosts {existing} and {} in this import share the IP {ip}", h.id)));
+            }
             self.hosts.insert(h.id.clone(), existing);
-            return Ok(false);
+            return Ok(Outcome::Merged);
         }
         self.tx.execute(
             "INSERT INTO hosts (id, engagement_id, name, ip, os, board_column, board_manual, access, created_at, \
              updated_at, dual_homed, access_reviewed_at, ad_set) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9,?10,?11,?12)",
             params![
-                h.id, h.engagement_id, h.name, h.ip, h.os, h.board_column, h.board_manual, h.access, self.now,
+                h.id, h.engagement_id, name, h.ip, h.os, h.board_column, h.board_manual, h.access, self.now,
                 h.dual_homed, h.access_reviewed_at, h.ad_set
             ],
         )?;
-        Ok(true)
+        self.added_hosts.insert(h.id.clone());
+        Ok(Outcome::Added)
     }
 
     fn service(&mut self, s: &PlanService) -> AppResult<bool> {
@@ -520,6 +573,10 @@ impl Ctx<'_> {
             host_ids.push(self.host_ref(eng, h, "hostIds")?);
         }
         let host_ids = dedupe(host_ids);
+        // Before the decode: a re-import must not decode up to 25 MiB per stored screenshot for nothing.
+        if self.exists("log_entries", &e.id)? {
+            return Ok(false);
+        }
         let mut content = e.content.clone();
         let wants_attachment = matches!(content, LogContent::Screenshot { .. } | LogContent::Flag { .. });
         let upload = match (&e.attachment, &content) {
@@ -530,9 +587,6 @@ impl Ctx<'_> {
             (Some(_), _) => return Err(invalid("attachment", format!("entry {} takes no attachment", e.id))),
             _ => None,
         };
-        if self.exists("log_entries", &e.id)? {
-            return Ok(false);
-        }
         let att_id = upload.as_ref().map(|_| uuid::Uuid::new_v4().to_string());
         match &mut content {
             LogContent::Screenshot { attachment_id, .. } => *attachment_id = att_id.clone().unwrap_or_default(),
@@ -565,6 +619,9 @@ impl Ctx<'_> {
     fn note(&mut self, n: &PlanNote) -> AppResult<bool> {
         let eng = n.engagement_id.as_str();
         self.engagement_ref(eng)?;
+        if n.body.len() > crate::notes::MAX_BODY {
+            return Err(invalid("body", format!("note {} is longer than 1 MiB", n.owner_id)));
+        }
         let (owner, host_id) = match &n.host_id {
             None if n.owner_id == eng => (eng.to_string(), None),
             Some(h) if &n.owner_id == h => {
@@ -613,6 +670,17 @@ impl Ctx<'_> {
         let eng = t.engagement_id.as_str();
         self.engagement_ref(eng)?;
         let via = self.host_ref(eng, &t.via_host_id, "viaHostId")?;
+        // The rules network.rs applies on every edit.
+        if t.subnets.len() > crate::network::MAX_SUBNETS {
+            return Err(invalid("subnets", format!("tunnel {} has too many subnets", t.id)));
+        }
+        if let Some(bad) = t.subnets.iter().find(|c| !crate::engagements::valid_cidr(c.trim())) {
+            return Err(invalid("subnets", format!("tunnel {}: invalid IPv4 CIDR: {bad}", t.id)));
+        }
+        let cb = t.callback_ip.trim();
+        if !cb.is_empty() && (cb.contains('/') || !crate::engagements::valid_cidr(cb)) {
+            return Err(invalid("callbackIp", format!("tunnel {}: callback must be a single IPv4 address", t.id)));
+        }
         if self.exists("tunnels", &t.id)? {
             return Ok(false);
         }
@@ -651,8 +719,26 @@ impl Ctx<'_> {
     fn finding(&mut self, f: &PlanFinding) -> AppResult<bool> {
         let eng = f.engagement_id.as_str();
         self.engagement_ref(eng)?;
+        // The rules findings.rs applies on every edit.
+        if f.title.trim().is_empty() {
+            return Err(invalid("title", format!("finding {} has no title", f.id)));
+        }
         if f.cvss_score.is_some_and(|s| !(0.0..=10.0).contains(&s)) {
             return Err(invalid("cvssScore", format!("finding {} has a CVSS score outside 0-10", f.id)));
+        }
+        if f.refs.len() > crate::findings::MAX_REFS || f.refs.iter().any(|r| r.trim().is_empty()) {
+            return Err(invalid("refs", format!("finding {}: at most 100 non-blank references", f.id)));
+        }
+        for (field, text) in [
+            ("description", &f.description),
+            ("impact", &f.impact),
+            ("remediation", &f.remediation),
+            ("exploitNotes", &f.exploit_notes),
+            ("lessons", &f.lessons),
+        ] {
+            if text.len() > crate::findings::MAX_CONTENT {
+                return Err(invalid(field, format!("finding {}: {field} is longer than 1 MiB", f.id)));
+            }
         }
         let host_ids = dedupe(f.host_ids.iter().map(|h| self.host_ref(eng, h, "hostIds")).collect::<AppResult<_>>()?);
         let service_ids =
@@ -687,7 +773,7 @@ impl Ctx<'_> {
         Ok(true)
     }
 
-    fn credential(&mut self, c: &PlanCredential) -> AppResult<bool> {
+    fn credential(&mut self, c: &PlanCredential) -> AppResult<Outcome> {
         let eng = c.engagement_id.as_str();
         self.engagement_ref(eng)?;
         let local_host = self.opt_host_ref(eng, &c.local_host_id, "localHostId")?;
@@ -695,16 +781,44 @@ impl Ctx<'_> {
             return Err(invalid("localHostId", format!("credential {}: only a local credential has a host", c.id)));
         }
         let source_host = self.opt_host_ref(eng, &c.source_host_id, "sourceHostId")?;
-        for (field, link) in [("crackedFrom", &c.cracked_from), ("fromSecretId", &c.from_secret_id)] {
+        let mut links = [None, None];
+        for (slot, (field, link)) in links.iter_mut().zip([("crackedFrom", &c.cracked_from), ("fromSecretId", &c.from_secret_id)]) {
             if let Some(l) = link {
-                if l == &c.id {
+                let l = self.cred_ref(eng, l, field)?;
+                if l == c.id {
                     return Err(invalid(field, format!("credential {} links to itself", c.id)));
                 }
-                self.cred_ref(eng, l, field)?;
+                *slot = Some(l);
             }
         }
+        let [cracked_from, from_secret] = links;
         if self.exists("credentials", &c.id)? {
-            return Ok(false);
+            return Ok(Outcome::Present);
+        }
+        // A stored credential with the same key (type, username, secret, domain, local host): merge, so editing
+        // either never trips credentials.rs's "already exists" rule.
+        let probe = crate::credentials::Credential {
+            id: c.id.clone(),
+            engagement_id: eng.to_string(),
+            kind: c.kind.clone(),
+            username: c.username.clone(),
+            domain: c.domain.clone(),
+            secret: c.secret.clone(),
+            hash_type: None,
+            scope: c.scope.clone(),
+            local_host_id: local_host.clone(),
+            source_host_id: None,
+            source: None,
+            notes: None,
+            crack_status: None,
+            cracked_from: None,
+            from_secret_id: None,
+            created_at: 0,
+            updated_at: 0,
+        };
+        if let Some(existing) = crate::credentials::find_duplicate(self.tx, &probe, &c.id)? {
+            self.credentials.insert(c.id.clone(), existing.id);
+            return Ok(Outcome::Merged);
         }
         self.tx.execute(
             "INSERT INTO credentials (id, engagement_id, type, username, domain, secret, hash_type, scope, local_host_id, \
@@ -712,10 +826,10 @@ impl Ctx<'_> {
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
             params![
                 c.id, eng, c.kind, c.username, c.domain, c.secret, c.hash_type, c.scope, local_host, source_host,
-                c.source, c.notes, c.crack_status, c.cracked_from, c.from_secret_id, c.created_at, c.updated_at
+                c.source, c.notes, c.crack_status, cracked_from, from_secret, c.created_at, c.updated_at
             ],
         )?;
-        Ok(true)
+        Ok(Outcome::Added)
     }
 
     fn username(&mut self, u: &PlanUsername) -> AppResult<bool> {
@@ -932,7 +1046,7 @@ mod tests {
     }
 
     fn all_added() -> ImportSummary {
-        let c = |added| Counts { added, present: 0 };
+        let c = |added| Counts { added, present: 0, merged: 0 };
         ImportSummary {
             engagements: c(1),
             hosts: c(2),
@@ -952,7 +1066,7 @@ mod tests {
 
     fn all_present() -> ImportSummary {
         let a = all_added();
-        let p = |c: Counts| Counts { added: 0, present: c.added };
+        let p = |c: Counts| Counts { added: 0, present: c.added, merged: 0 };
         ImportSummary {
             engagements: p(a.engagements),
             hosts: p(a.hosts),
@@ -968,6 +1082,112 @@ mod tests {
             access_grants: p(a.access_grants),
             cred_attempts: p(a.cred_attempts),
         }
+    }
+
+    fn expect_validation(p: Value, name: &str) {
+        let (_d, v) = unlocked();
+        let r = apply(&v, &plan_of(p));
+        assert!(matches!(r, Err(AppError::Validation { .. })), "{name}: {r:?}");
+        assert_eq!(row_counts(v.conn().unwrap()).iter().sum::<i64>(), 0, "{name}: nothing written");
+    }
+
+    #[test]
+    fn a_duplicate_ip_within_one_plan_is_rejected_not_merged() {
+        let (_d, v) = unlocked();
+        let mut p = plan_json();
+        p["hosts"][1]["ip"] = json!("10.0.0.5");
+        let r = apply(&v, &plan_of(p));
+        assert!(matches!(&r, Err(AppError::Validation { field, .. }) if field == "ip"), "{r:?}");
+        assert_eq!(row_counts(v.conn().unwrap()).iter().sum::<i64>(), 0);
+    }
+
+    #[test]
+    fn a_host_merged_onto_a_user_made_host_counts_as_merged() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        c.execute_batch(
+            "INSERT INTO engagements (id,name,kind,created_at,updated_at) VALUES ('E1','mine','lab',7,7);
+             INSERT INTO hosts (id,engagement_id,name,ip,created_at,updated_at) VALUES ('mine','E1','by hand','10.0.0.5',7,7);",
+        )
+        .unwrap();
+        let sum = apply(&v, &plan_of(plan_json())).unwrap();
+        assert_eq!(sum.hosts, Counts { added: 1, present: 0, merged: 1 });
+        assert_eq!(n(c, "SELECT count(*) FROM hosts WHERE id='h1'"), 0);
+        assert_eq!(s(c, "SELECT name FROM hosts WHERE id='mine'").as_deref(), Some("by hand"));
+        assert_eq!(s(c, "SELECT host_id FROM finding_hosts WHERE finding_id='f1'").as_deref(), Some("mine"));
+    }
+
+    #[test]
+    fn a_credential_equal_to_a_stored_one_is_merged_so_edits_never_hit_the_duplicate_rule() {
+        let (_d, v) = unlocked();
+        apply(&v, &plan_of(plan_json())).unwrap();
+        let c = v.conn().unwrap();
+        // The user enters the same hash by hand under another id; a later backup brings it again as c9.
+        let mut p = plan_json();
+        for k in ["hosts", "services", "logEntries", "notes", "checklist", "hops", "tunnels", "findings", "usernames", "accessGrants"] {
+            p[k] = json!([]);
+        }
+        let mut c9 = p["credentials"][0].clone();
+        c9["id"] = json!("c9");
+        c9["secret"] = json!(" AAD3B435B51404EEAAD3B435B51404EE ");
+        p["credentials"] = json!([c9]);
+        p["credAttempts"] = json!([{ "id": "a9", "engagementId": "E1", "credId": "c9", "usernameId": null, "hostId": "h1",
+            "service": "winrm", "port": null, "result": "valid", "authMode": "domain", "detail": null, "logEntryId": null, "at": 5 }]);
+        let sum = apply(&v, &plan_of(p)).unwrap();
+        assert_eq!(sum.credentials, Counts { added: 0, present: 0, merged: 1 });
+        assert_eq!(n(c, "SELECT count(*) FROM credentials WHERE id='c9'"), 0);
+        assert_eq!(s(c, "SELECT cred_id FROM cred_attempts WHERE id='a9'").as_deref(), Some("c1"));
+        // The stored credential still passes the app's own update validation.
+        let cur = crate::credentials::get(c, "c1").unwrap();
+        let input = crate::credentials::CredentialInput {
+            kind: cur.kind, username: cur.username, domain: cur.domain, secret: cur.secret, hash_type: cur.hash_type,
+            scope: Some(cur.scope), local_host_id: cur.local_host_id, source_host_id: cur.source_host_id,
+            source: cur.source, notes: Some("edited".into()), crack_status: cur.crack_status,
+            cracked_from: cur.cracked_from, from_secret_id: cur.from_secret_id,
+        };
+        crate::credentials::update(c, "c1", input).unwrap();
+    }
+
+    #[test]
+    fn records_that_would_fail_the_apps_edit_rules_are_rejected() {
+        let cases: Vec<(&str, Breaker)> = vec![
+            ("host name > 80", Box::new(|p| p["hosts"][0]["name"] = json!("h".repeat(81)))),
+            ("blank host name", Box::new(|p| p["hosts"][0]["name"] = json!("  "))),
+            ("host ip range", Box::new(|p| p["hosts"][0]["ip"] = json!("10.0.0.0/24"))),
+            ("host ip placeholder", Box::new(|p| p["hosts"][0]["ip"] = json!("10.10.11.x"))),
+            ("engagement name > 120", Box::new(|p| p["engagements"][0]["name"] = json!("e".repeat(121)))),
+            ("engagement scope", Box::new(|p| p["engagements"][0]["scopeCidrs"] = json!(["dmz"]))),
+            ("note > 1 MiB", Box::new(|p| p["notes"][0]["body"] = json!("n".repeat(1024 * 1024 + 1)))),
+            ("finding refs > 100", Box::new(|p| p["findings"][0]["refs"] = json!(vec!["r"; 101]))),
+            ("blank finding ref", Box::new(|p| p["findings"][0]["refs"] = json!([" "]))),
+            ("blank finding title", Box::new(|p| p["findings"][0]["title"] = json!(" "))),
+            ("finding text > 1 MiB", Box::new(|p| p["findings"][0]["remediation"] = json!("r".repeat(1024 * 1024 + 1)))),
+            ("tunnel subnet", Box::new(|p| p["tunnels"][0]["subnets"] = json!(["dmz"]))),
+            ("tunnel callback", Box::new(|p| p["tunnels"][0]["callbackIp"] = json!("10.0.0.0/24"))),
+            ("blank username", Box::new(|p| p["usernames"][0]["username"] = json!(" "))),
+        ];
+        for (name, break_it) in cases {
+            let mut p = plan_json();
+            break_it(&mut p);
+            expect_validation(p, name);
+        }
+        // Names at the limit are fine, counted in characters (not bytes).
+        let (_d, v) = unlocked();
+        let mut p = plan_json();
+        p["hosts"][0]["name"] = json!("é".repeat(80));
+        p["engagements"][0]["name"] = json!("é".repeat(120));
+        apply(&v, &plan_of(p)).unwrap();
+    }
+
+    #[test]
+    fn a_present_entry_is_not_decoded_again() {
+        let (_d, v) = unlocked();
+        apply(&v, &plan_of(plan_json())).unwrap();
+        // A broken image on an entry that is already stored is never looked at.
+        let mut p = plan_json();
+        p["logEntries"][1]["attachment"]["dataBase64"] = json!("%%%");
+        let sum = apply(&v, &plan_of(p)).unwrap();
+        assert_eq!(sum.log_entries, Counts { added: 0, present: 4, merged: 0 });
     }
 
     #[test]
@@ -1008,8 +1228,8 @@ mod tests {
         assert_eq!(s(c, "SELECT evidence FROM checklist_items WHERE owner_id='h1'").unwrap(), r#"[{"entryId":"l1","commandId":null}]"#);
         // The summary serialises with camelCase keys.
         let j = serde_json::to_value(&sum).unwrap();
-        assert_eq!(j["logEntries"], json!({ "added": 4, "present": 0 }));
-        assert_eq!(j["credAttempts"], json!({ "added": 2, "present": 0 }));
+        assert_eq!(j["logEntries"], json!({ "added": 4, "present": 0, "merged": 0 }));
+        assert_eq!(j["credAttempts"], json!({ "added": 2, "present": 0, "merged": 0 }));
     }
 
     #[test]
@@ -1078,14 +1298,14 @@ mod tests {
               "port": null, "result": "valid", "authMode": "domain", "detail": null, "logEntryId": null, "at": 9 }
         ]);
         let sum = apply(&v, &plan_of(p)).unwrap();
-        assert_eq!(sum.engagements, Counts { added: 0, present: 1 });
-        assert_eq!(sum.hosts, Counts { added: 0, present: 1 });
-        assert_eq!(sum.services, Counts { added: 0, present: 1 });
-        assert_eq!(sum.notes, Counts { added: 0, present: 1 });
-        assert_eq!(sum.usernames, Counts { added: 0, present: 1 });
-        assert_eq!(sum.findings, Counts { added: 1, present: 0 });
-        assert_eq!(sum.access_grants, Counts { added: 1, present: 0 });
-        assert_eq!(sum.cred_attempts, Counts { added: 1, present: 1 });
+        assert_eq!(sum.engagements, Counts { added: 0, present: 1, merged: 0 });
+        assert_eq!(sum.hosts, Counts { added: 0, present: 0, merged: 1 });
+        assert_eq!(sum.services, Counts { added: 0, present: 1, merged: 0 });
+        assert_eq!(sum.notes, Counts { added: 0, present: 1, merged: 0 });
+        assert_eq!(sum.usernames, Counts { added: 0, present: 1, merged: 0 });
+        assert_eq!(sum.findings, Counts { added: 1, present: 0, merged: 0 });
+        assert_eq!(sum.access_grants, Counts { added: 1, present: 0, merged: 0 });
+        assert_eq!(sum.cred_attempts, Counts { added: 1, present: 1, merged: 0 });
         assert_eq!(n(c, "SELECT count(*) FROM hosts WHERE id='h9'"), 0);
         assert_eq!(n(c, "SELECT count(*) FROM usernames WHERE id='u9'"), 0);
         assert_eq!(s(c, "SELECT host_id FROM finding_hosts WHERE finding_id='f9'").as_deref(), Some("h1"));
@@ -1193,7 +1413,7 @@ mod tests {
         p["credAttempts"] = json!([{ "id": "a3", "engagementId": "E1", "credId": "c1", "usernameId": "u1", "hostId": "h1",
             "service": "winrm", "port": null, "result": "valid", "authMode": "domain", "detail": null, "logEntryId": "l4", "at": 5 }]);
         let sum = apply(&v, &plan_of(p)).unwrap();
-        assert_eq!(sum.cred_attempts, Counts { added: 1, present: 0 });
+        assert_eq!(sum.cred_attempts, Counts { added: 1, present: 0, merged: 0 });
         assert_eq!(n(c, "SELECT count(*) FROM cred_attempts"), 3);
     }
 
@@ -1210,10 +1430,10 @@ mod tests {
         )
         .unwrap();
         let sum = apply(&v, &plan_of(plan_json())).unwrap();
-        assert_eq!(sum.engagements, Counts { added: 0, present: 1 });
-        assert_eq!(sum.hosts, Counts { added: 1, present: 1 });
-        assert_eq!(sum.notes, Counts { added: 1, present: 1 });
-        assert_eq!(sum.checklist, Counts { added: 1, present: 1 });
+        assert_eq!(sum.engagements, Counts { added: 0, present: 1, merged: 0 });
+        assert_eq!(sum.hosts, Counts { added: 1, present: 1, merged: 0 });
+        assert_eq!(sum.notes, Counts { added: 1, present: 1, merged: 0 });
+        assert_eq!(sum.checklist, Counts { added: 1, present: 1, merged: 0 });
         let host: (String, Option<String>, Option<String>, String, i64) = c
             .query_row("SELECT name, ip, os, access, updated_at FROM hosts WHERE id='h1'", [], |r| {
                 Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
