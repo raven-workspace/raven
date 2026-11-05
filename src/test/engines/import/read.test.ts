@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readBackup } from "../../../engines/import/read";
-import { backupV3, canonicalJson, encryptedEnvelope, machine, toText, workspaceV2 } from "./fixtures";
+import { backupV3, canonicalJson, encryptedEnvelope, machine, sha256Hex, toText, workspaceV2 } from "./fixtures";
 
 const ENC = "This backup is encrypted. Export an unencrypted backup from old Raven and import that.";
 
@@ -53,5 +53,24 @@ describe("readBackup", () => {
     expect(Object.keys(m)).not.toContain("constructor");
     expect(m.nested).toEqual({ ok: 2 });
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it("deep nesting and non-string versions never throw", async () => {
+    const deep = '{"version":"2.0.0","machines":[],"x":' + "[".repeat(10000) + "]".repeat(10000) + "}";
+    expect(await readBackup(deep)).toEqual({ ok: false, error: "Not an old-Raven backup." });
+    const r = await readBackup(toText({ version: 3, machines: [machine()] }));
+    expect(r.ok && r.version).toBe("2.0.0");
+  });
+
+  it("read.ts verifies a signed payload with nesting and a literal __proto__ key", async () => {
+    const payload = JSON.parse(
+      '{"version":"3.0.0","machines":[{"id":"custom-1","name":"n","tags":["a"],"__proto__":{"k":[1,{"z":1,"a":2}]},"deep":{"b":[[1],{"y":null}]}}],"credentials":[]}',
+    );
+    payload.checksum = await sha256Hex(canonicalJson(payload));
+    const text = JSON.stringify(payload);
+    expect(text).toContain('"__proto__"');
+    expect((await readBackup(text)).ok).toBe(true);
+    const bad = text.replace('"y":null', '"y":0');
+    expect(await readBackup(bad)).toEqual({ ok: false, error: "This backup is damaged (checksum mismatch)." });
   });
 });

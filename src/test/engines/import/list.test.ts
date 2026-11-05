@@ -40,4 +40,18 @@ describe("listImportable", () => {
     expect(engagementKindFor("real")).toBe("client");
     expect(engagementKindFor("exam-sim")).toBe("exam-sim");
   });
+
+  it("malformed machines are skipped without throwing, duplicates collapse", () => {
+    const bad = [
+      { id: 5, name: "num id", platform: "Custom", tags: [] },
+      null,
+      machine({ id: "custom-a", name: "A", tags: "pro-lab" as never, logEntries: { x: 1 } as never }),
+      machine({ id: "custom-b", name: "B", logEntries: [null, 7, logEntry(10), { id: "x", at: "late" }] as never }),
+      machine({ id: "custom-b", name: "B dup" }),
+    ] as never;
+    const list = listImportable(bk(bad));
+    expect(list.map((c) => c.id)).toEqual(["custom-a", "custom-b"]);
+    expect(list[0]).toMatchObject({ kind: "standalone", logCount: 0, firstAt: null });
+    expect(list[1]).toMatchObject({ logCount: 2, firstAt: 10, lastAt: 10 });
+  });
 });

@@ -56,7 +56,29 @@ function strip(v: unknown): unknown {
   return v;
 }
 
+const MAX_DEPTH = 512;
+
+/** Iterative depth check so hostile nesting never overflows the stack in the recursive helpers. */
+function tooDeep(root: unknown): boolean {
+  const stack: Array<[unknown, number]> = [[root, 1]];
+  while (stack.length) {
+    const [v, d] = stack.pop() as [unknown, number];
+    if (d > MAX_DEPTH) return true;
+    if (Array.isArray(v)) for (const c of v) stack.push([c, d + 1]);
+    else if (isObj(v)) for (const k of Object.keys(v)) stack.push([v[k], d + 1]);
+  }
+  return false;
+}
+
 export async function readBackup(text: string): Promise<ReadResult> {
+  try {
+    return await readBackupInner(text);
+  } catch {
+    return { ok: false, error: NOT_BACKUP };
+  }
+}
+
+async function readBackupInner(text: string): Promise<ReadResult> {
   if (isEncrypted(text)) return { ok: false, error: ENCRYPTED_MSG };
   let raw: unknown;
   try {
@@ -65,6 +87,7 @@ export async function readBackup(text: string): Promise<ReadResult> {
     return { ok: false, error: NOT_BACKUP };
   }
 
+  if (tooDeep(raw)) return { ok: false, error: NOT_BACKUP };
   let root: Record<string, unknown>;
   if (Array.isArray(raw)) {
     root = { machines: raw };
