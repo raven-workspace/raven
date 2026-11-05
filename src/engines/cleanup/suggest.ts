@@ -144,7 +144,9 @@ function remoteScpPath(dest: string): string | null {
   return m[2];
 }
 
-const PS_WRAP = /^(?:powershell|pwsh)(?:\.exe)?\s.*?\s-(?:c|command)\s+(.+)$/is;
+const PS_WRAP = /^(?:powershell|pwsh)(?:\.exe)?(?:\s.*?)?\s-(?:c|command)\s+(.+)$/is;
+/** Writing to the null device leaves nothing on the target. */
+const NULL_DEVICE = /^(?:\/dev\/null|nul|\$null)$/i;
 const CMD_WRAP = /^cmd(?:\.exe)?\s+\/[ck]\s+(.+)$/is;
 const DOWNLOAD_FILE = /\.DownloadFile\(\s*(['"])(.*?)\1\s*,\s*(['"])(.*?)\3\s*\)/is;
 
@@ -166,7 +168,7 @@ function matchSegment(segment: string, inSmbclient: boolean, depth = 0): Match[]
   const cmd = t[0].toLowerCase().replace(/\.exe$/, '');
   const res: Match[] = [];
   const file = (target: string | null) => {
-    if (target && target !== '-') res.push({ kind: 'file', target, push: false });
+    if (target && target !== '-' && !NULL_DEVICE.test(target)) res.push({ kind: 'file', target, push: false });
   };
 
   switch (cmd) {

