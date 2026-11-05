@@ -3,6 +3,7 @@ import type { ChecklistState } from "../../../types/checklist";
 import type { Engagement } from "../../../types/engagement";
 import type { Host } from "../../../types/host";
 import type { LogEntry } from "../../../types/log";
+import type { LibraryCommand } from "../../../engines/library/types";
 import type { Service } from "../../../types/service";
 import { applicableGoals } from "../../../engines/checklist";
 import { hostStuck } from "../../../engines/stuck";
@@ -21,10 +22,10 @@ const cmd = (command: string, hostIds = ["h1"]): LogEntry =>
   ({ id: `l${n++}`, engagementId: "e1", kind: "command", title: "", titleEdited: false, ranOn: null, hostIds, observations: null,
     returnedNothing: false, private: false, content: { kind: "command", blocks: [{ command, output: "" }] }, at: 0, createdAt: 0, updatedAt: 0 }) as LogEntry;
 
-const run = (o: { host?: Host; services?: Service[]; state?: ChecklistState; entries?: LogEntry[]; note?: string } = {}) => {
+const run = (o: { host?: Host; services?: Service[]; state?: ChecklistState; entries?: LogEntry[]; note?: string; engagement?: Engagement; library?: LibraryCommand[] } = {}) => {
   const h = o.host ?? host();
   const servicesByHost = new Map([[h.id, o.services ?? []]]);
-  return hostStuck({ host: h, engagement, hosts: [h], servicesByHost, state: o.state ?? {}, entries: o.entries ?? [], hostNote: o.note ?? "" });
+  return hostStuck({ host: h, engagement: o.engagement ?? engagement, ...(o.library ? { library: o.library } : {}), hosts: [h], servicesByHost, state: o.state ?? {}, entries: o.entries ?? [], hostNote: o.note ?? "" });
 };
 const goalIds = (h: Host, services: Service[], stage: string) =>
   applicableGoals(h, engagement, [h], new Map([[h.id, services]])).find((s) => s.stage.id === stage)?.goals.map((g) => g.id) ?? [];
@@ -42,7 +43,7 @@ describe("hostStuck before a foothold", () => {
     expect(r.skipped.map((s) => s.goalId)).toEqual([enumGoal]);
     expect(r.unidentified.map((u) => [u.service.port, u.reason])).toEqual([[9999, "guess"], [7777, "no-version"]]);
     expect(r.unidentified[0]!.nudges).toEqual([
-      { label: "Talk to it", command: "nc -nv 10.10.10.5 9999  # then type help" },
+      { label: "Talk to it (then type help)", command: "nc -nv 10.10.10.5 9999" },
       { label: "Rescan just these ports", command: "nmap -sV --version-all -p 9999,7777 10.10.10.5" },
       { label: "Grab the banner", command: "echo | nc -nv -w 3 10.10.10.5 9999" },
     ]);
@@ -56,7 +57,7 @@ describe("hostStuck before a foothold", () => {
     const services = [svc(9999, { nmapVersion: null }), svc(1234, { nmapVersion: null, confirmedProduct: "Foo" }), svc(5555, { nmapVersion: null, state: "closed" })];
     const r = run({ host: host({ ip: null }), services });
     expect(r.unidentified.map((u) => u.service.port)).toEqual([9999]);
-    expect(r.unidentified[0]!.nudges[0]!.command).toBe("nc -nv BOX 9999  # then type help");
+    expect(r.unidentified[0]!.nudges[0]!.command).toBe("nc -nv BOX 9999");
   });
 
   it("does not list cover-marked items as skipped", () => {
@@ -116,5 +117,50 @@ describe("hostStuck hints", () => {
       ["privesc", "loot", "pivot"].flatMap((s) => goalIds(h, [svc(80)], s)).concat(priv).map((id) => [id, { status: "done" as const }]),
     );
     expect(run({ host: h, services: [svc(80)], state: all }).hints).toEqual(["Nothing obvious left on this host"]);
+  });
+
+  it("quotes the target and gives no nudges when there is neither IP nor name", () => {
+    const services = [svc(9999, { nmapVersion: null })];
+    expect(run({ host: host({ ip: null, name: "" }), services }).unidentified[0]!.nudges).toEqual([]);
+    const spaced = run({ host: host({ ip: null, name: "my box" }), services }).unidentified[0]!.nudges;
+    expect(spaced[0]!.command).toBe("nc -nv 'my box' 9999");
+    expect(spaced[1]!.command).toBe("nmap -sV --version-all -p 9999 'my box'");
+  });
+
+  it("a bare host with no services, OS, note or IP does not throw", () => {
+    const r = run({ host: host({ ip: null, name: "", os: null }) });
+    expect(r.unidentified).toEqual([]);
+    expect(r.hints).toHaveLength(2);
+  });
+});
+
+describe("hostStuck port ranges", () => {
+  const ports = [22, 80, 85, 8080];
+  const untouched = (command: string) => run({ services: ports.map((p) => svc(p)), entries: [cmd(command)] }).untouched.map((s) => s.port);
+  it("-p- touches every port", () => expect(untouched("nmap -p- 10.10.10.5")).toEqual([]));
+  it("-p 1-1000 touches 80 but not 8080", () => expect(untouched("nmap -p 1-1000 10.10.10.5")).toEqual([8080]));
+  it("-p 22,80-90 touches 22, 80 and 85", () => expect(untouched("nmap -p 22,80-90 10.10.10.5")).toEqual([8080]));
+  it("an IP octet range is not a port range", () => expect(untouched("nmap 10.10.10.1-100")).toEqual([22, 80, 85, 8080]));
+});
+
+describe("hostStuck exam bans", () => {
+  const h = host({ access: "user" });
+  const services = [svc(80)];
+  const [banned, free] = goalIds(h, services, "privesc");
+  const lib = (exam?: "banned" | "metasploit"): LibraryCommand[] => [
+    { id: "b", title: "b", tool: "t", template: "x", os: "any", runFrom: "attacker", goals: [banned!], ...(exam ? { exam } : {}), source: "raven" },
+  ];
+  const exam = { id: "e1", kind: "exam-sim", msfHostId: null } as Engagement;
+  it("drops a goal with only banned commands in exam sim, keeps it in lab", () => {
+    const inExam = run({ host: h, services, engagement: exam, library: lib("banned") }).commands.map((c) => c.goalId);
+    expect(inExam).not.toContain(banned);
+    expect(inExam).toContain(free);
+    expect(run({ host: h, services, library: lib("banned") }).commands.map((c) => c.goalId)).toContain(banned);
+  });
+  it("a metasploit-only goal stays legal on the locked host and is hidden elsewhere", () => {
+    const here = { ...exam, msfHostId: "h1" } as Engagement;
+    const other = { ...exam, msfHostId: "h2" } as Engagement;
+    expect(run({ host: h, services, engagement: here, library: lib("metasploit") }).commands.map((c) => c.goalId)).toContain(banned);
+    expect(run({ host: h, services, engagement: other, library: lib("metasploit") }).commands.map((c) => c.goalId)).not.toContain(banned);
   });
 });

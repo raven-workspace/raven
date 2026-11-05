@@ -4,6 +4,8 @@ import type { CredAttempt, Credential, Username } from "../../../types/credentia
 import type { Engagement } from "../../../types/engagement";
 import type { Host } from "../../../types/host";
 import type { Service } from "../../../types/service";
+import type { LibraryCommand } from "../../../engines/library/types";
+import { applicableGoals } from "../../../engines/checklist";
 import type { Tunnel } from "../../../types/network";
 import { engagementStuck } from "../../../engines/stuck";
 
@@ -29,14 +31,14 @@ const engagement = { id: "e1", kind: "lab", msfHostId: null } as Engagement;
 
 const run = (o: {
   hosts?: Host[]; services?: Record<string, Service[]>; byOwner?: Record<string, ChecklistState>; credentials?: Credential[];
-  attempts?: CredAttempt[]; usernames?: Username[]; tunnels?: Tunnel[]; engagement?: Engagement;
+  attempts?: CredAttempt[]; usernames?: Username[]; tunnels?: Tunnel[]; engagement?: Engagement; library?: LibraryCommand[];
 } = {}) => {
   const hosts = o.hosts ?? [];
   return engagementStuck({
     engagement: o.engagement ?? engagement, hosts,
     servicesByHost: new Map(hosts.map((h) => [h.id, o.services?.[h.id] ?? []])),
     byOwner: new Map(Object.entries(o.byOwner ?? {})), credentials: o.credentials ?? [], attempts: o.attempts ?? [],
-    usernames: o.usernames ?? [], tunnels: o.tunnels ?? [],
+    usernames: o.usernames ?? [], tunnels: o.tunnels ?? [], ...(o.library ? { library: o.library } : {}),
   });
 };
 const FOOT_DONE: ChecklistState = { "h-foot-shell": { status: "done" } };
@@ -107,7 +109,7 @@ describe("engagementStuck lines", () => {
     const hosts = [host("A", { dualHomed: true })];
     const l = run({ hosts, byOwner: { A: { ...FOOT_DONE, "h-pe-proof": { status: "done" } } } });
     expect(l).toEqual([{ area: "lateral", text: "A — dual-homed, no tunnel recorded", hostId: "A", goalId: "h-pivot-tunnel" }]);
-    const tunnel = { viaHostId: "A" } as Tunnel;
+    const tunnel = { viaHostId: "A", engagementId: "e1" } as Tunnel;
     expect(run({ hosts, byOwner: { A: { ...FOOT_DONE, "h-pe-proof": { status: "done" } } }, tunnels: [tunnel] })).toEqual([]);
   });
 
@@ -128,12 +130,46 @@ describe("engagementStuck lines", () => {
     expect([...areas].sort((a, b) => order.indexOf(a) - order.indexOf(b))).toEqual(areas);
   });
 
-  it("exam sim hides goals whose commands are all banned", () => {
+  it("a tunnel of another engagement does not count", () => {
+    const hosts = [host("A", { dualHomed: true })];
+    const l = run({ hosts, byOwner: { A: { ...FOOT_DONE, "h-pe-proof": { status: "done" } } }, tunnels: [{ viaHostId: "A", engagementId: "other" } as Tunnel] });
+    expect(l).toHaveLength(1);
+  });
+
+  it("a host with access set has a foothold even with no foothold goal done", () => {
+    const l = run({ hosts: [host("A", { access: "user" })], services: { A: [svc("A", 80)] } });
+    expect(l[0]).toMatchObject({ area: "privesc", hostId: "A" });
+  });
+
+  it("an ownerless secret is never sprayed, and an unknown subject is 'a credential'", () => {
+    const hosts = [host("A", { os: "windows", access: "root" })];
+    const l = run({
+      hosts, byOwner: { A: { "h-pe-proof": { status: "done" } } }, services: { A: [svc("A", 445, "microsoft-ds")] },
+      credentials: [cred({ username: "" })], usernames: [uname("u1")],
+    });
+    expect(l.find((x) => x.text.includes("never sprayed"))!.text).toBe("secret with no owner — never sprayed at the usernames");
+    const flag = run({
+      hosts: [host("A", { name: "WEB", access: "root" })], byOwner: { A: { "h-pe-proof": { status: "done" } } },
+      credentials: [cred({ id: "c9", username: "" })], attempts: [attempt({ credId: "c9" })],
+    });
+    expect(flag[0]!.text).toBe("WEB — a credential has ssh valid access you have not reviewed");
+  });
+
+  describe("exam bans", () => {
+    const h = host("A");
+    const services = { A: [svc("A", 80)] };
+    const goals = applicableGoals(h, engagement, [h], new Map([["A", services.A]]));
+    const enumId = goals.find((s) => s.stage.id === "enumerate")!.goals[0]!.id;
+    const lib: LibraryCommand[] = [
+      { id: "b", title: "b", tool: "t", template: "x", os: "any", runFrom: "attacker", goals: [enumId], exam: "banned", source: "raven" },
+    ];
     const exam = { ...engagement, kind: "exam-sim" } as Engagement;
-    const lab = run({ hosts: [host("A")], services: { A: [svc("A", 80)] } })[0]!;
-    const ex = run({ hosts: [host("A")], services: { A: [svc("A", 80)] }, engagement: exam })[0];
-    // never reports more steps than the lab does
-    const count = (t: string | undefined) => Number(/(\d+) enumeration/.exec(t ?? "")?.[1] ?? 0);
-    expect(count(ex?.text)).toBeLessThanOrEqual(count(lab.text));
+    const count = (l: ReturnType<typeof run>) => Number(/(\d+) enumeration/.exec(l[0]?.text ?? "")?.[1] ?? 0);
+    it("excludes a goal with only banned commands in exam sim but counts it in lab", () => {
+      const lab = run({ hosts: [h], services, library: lib });
+      const ex = run({ hosts: [h], services, library: lib, engagement: exam });
+      expect(count(lab)).toBe(count(ex) + 1);
+      expect(ex[0]?.goalId).not.toBe(enumId);
+    });
   });
 });

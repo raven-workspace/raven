@@ -4,8 +4,9 @@ import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
 import type { Tunnel } from "../../types/network";
-import { applicableGoals, adHosts, filterForKind } from "../checklist";
-import { BUILTIN_LIBRARY } from "../library/data";
+import { applicableGoals, adHosts } from "../checklist";
+import type { LibraryCommand } from "../library/types";
+import { hasFoothold, hasLegalCommand } from "./shared";
 import { ROUTINE_STEPS, accessFlags, cellFor, hostSprayServices, isSprayable, routineStepApplies } from "../credentials";
 
 export interface StuckLine {
@@ -19,8 +20,6 @@ export interface StuckLine {
 const AREA_ORDER: StuckLine["area"][] = ["foothold", "credentials", "privesc", "lateral"];
 /** The proof goal closes the privesc stage: once done the host is rooted, and it is an outcome, never a step to try. */
 const PROOF_GOAL = "h-pe-proof";
-/** Any of these done means the host has a foothold: a caught shell, a credential login, or a recorded arrival. */
-const FOOTHOLD_DONE_GOALS = ["h-foot-shell", "h-foot-creds", "h-foot-arrived"];
 const SPRAY_USERS_ITEM = ROUTINE_STEPS.find((s) => s.id === "spray-users")!.itemId;
 const ASREP_GOALS = ["e-ad-user-asrep", "e-ad-nocreds-asrep"];
 
@@ -40,6 +39,8 @@ export function engagementStuck(input: {
   attempts: CredAttempt[];
   usernames: Username[];
   tunnels: Tunnel[];
+  /** Defaults to the built-in library. */
+  library?: LibraryCommand[];
 }): StuckLine[] {
   const { engagement, hosts, servicesByHost, byOwner } = input;
   const credentials = input.credentials.filter((c) => c.engagementId === engagement.id);
@@ -48,22 +49,14 @@ export function engagementStuck(input: {
   const statusOf = (ownerId: string, goalId: string) => byOwner.get(ownerId)?.[goalId]?.status ?? "todo";
   const out: StuckLine[] = [];
 
-  /** In exam sim a goal whose library commands are all banned has nothing legal to run, so it is not "to do". */
-  const hasLegalCommand = (host: Host, goalId: string) => {
-    const cmds = BUILTIN_LIBRARY.filter((c) => c.goals.includes(goalId));
-    if (cmds.length === 0) return true;
-    return filterForKind(cmds, engagement.kind, { hostId: host.id, msfHostId: engagement.msfHostId }).shown.length > 0;
-  };
-
   // foothold: no shell yet and enumeration steps still open; privesc: shell, privesc steps still open
   for (const host of hosts) {
     const stages = applicableGoals(host, engagement, hosts, servicesByHost);
     const open = (stageId: string) =>
       (stages.find((s) => s.stage.id === stageId)?.goals ?? []).filter(
-        (g) => g.id !== PROOF_GOAL && statusOf(host.id, g.id) === "todo" && hasLegalCommand(host, g.id),
+        (g) => g.id !== PROOF_GOAL && statusOf(host.id, g.id) === "todo" && hasLegalCommand(g.id, engagement, host.id, input.library),
       );
-    const hasFoothold = FOOTHOLD_DONE_GOALS.some((id) => statusOf(host.id, id) === "done");
-    if (hasFoothold) {
+    if (hasFoothold(host, byOwner.get(host.id))) {
       if (statusOf(host.id, PROOF_GOAL) === "done") continue;
       const left = open("privesc");
       if (left.length > 0) {
@@ -142,7 +135,7 @@ export function engagementStuck(input: {
       hostId: host.id,
     });
   }
-  const tunnelled = new Set(input.tunnels.map((t) => t.viaHostId));
+  const tunnelled = new Set(input.tunnels.filter((t) => t.engagementId === engagement.id).map((t) => t.viaHostId));
   for (const host of hosts) {
     if (host.dualHomed !== true || tunnelled.has(host.id)) continue;
     out.push({
