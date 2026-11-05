@@ -20,7 +20,9 @@ export interface LibraryCommand {
   why?: string;
   exam?: ExamRule;
   match?: CommandMatcher;
-  source: 'oscp-notes' | 'raven' | 'operator';
+  source: 'oscp-notes' | 'raven' | 'operator' | 'field-manual';
+  /** Field-manual entries only: the card's frontmatter `id` in the Field-Manual vault. */
+  cardId?: string;
   tags?: string[];
   /** Built-ins only: lines that must / must not match `match` (tested). */
   matchExamples?: { hit: string[]; miss: string[] };

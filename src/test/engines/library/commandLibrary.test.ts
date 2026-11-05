@@ -7,8 +7,13 @@ import { AD_PLAYBOOKS, ENGAGEMENT_SETUP, HOST_GOALS } from '../../../engines/che
 import { resolveTemplate } from '../../../engines/checklist/template';
 
 const lib = BUILTIN_LIBRARY;
+/** TEMPORARY: lateral-movement engagement goals Task 5 adds to ENGAGEMENT_SETUP / AD_PLAYBOOKS. Swap for the real import once Task 5 lands. */
+const PENDING_TASK_5_GOALS = [
+  'e-setup-logging', 'e-setup-vpn', 'e-setup-reach', 'e-setup-exam-rules', 'e-setup-scans', 'e-setup-assumed-breach',
+  'e-lat-spray', 'e-lat-password', 'e-lat-hash', 'e-lat-ticket', 'e-lat-record-hop',
+];
 const ENGAGEMENT_GOALS = [...ENGAGEMENT_SETUP, ...AD_PLAYBOOKS.flatMap((p) => p.goals)];
-const ALL_GOAL_IDS = new Set([...HOST_GOALS, ...ENGAGEMENT_GOALS].map((g) => g.id));
+const ALL_GOAL_IDS = new Set([...ENGAGEMENT_GOALS.map((g) => g.id), ...HOST_GOALS.map((g) => g.id), ...PENDING_TASK_5_GOALS]);
 /** Library order within a goal (the old commandsForGoal with no operator preferences). */
 const commandsForGoal = (goalId: string, library: LibraryCommand[]) => library.filter((c) => c.goals.includes(goalId));
 /** Records, not commands: the operator writes them by hand. */
@@ -16,14 +21,8 @@ const NO_COMMAND_NEEDED = new Set([
   'h-foot-arrived', 'h-close-notes', 'e-setup-kind',
   // Judgement steps: a decision, not a command (the Metasploit commands live on the foothold steps).
   'h-foot-port', 'h-vuln-rank', 'h-vuln-msf',
-]);
-/** TEMPORARY: goals added by the PEN-200 restructure whose commands arrive in Task 3. Task 3 deletes this set. */
-const PENDING_TASK_3 = new Set([
-  'h-enum-identified', 'h-enum-os', 'h-enum-ssh', 'h-enum-kerberos', 'h-enum-mail', 'h-enum-tftp', 'h-enum-rsync',
-  'h-enum-docker', 'h-enum-tomcat', 'h-enum-ad-users', 'h-vuln-websearch', 'h-vuln-version-gate', 'h-vuln-nse',
-  'h-vuln-spray', 'h-vuln-crack', 'h-foot-listener', 'h-foot-webshell', 'h-foot-client', 'h-pe-lin-manual',
-  'h-pe-lin-creds', 'h-pe-lin-groups', 'h-pe-lin-nfs', 'h-pe-win-manual', 'h-pe-win-saved', 'h-pe-win-software',
-  'h-post-redump', 'h-post-keytabs', 'h-post-neighbours', 'h-post-bloodhound',
+  // New judgement/consolidation steps from the PEN-200 restructure (Task 2/3): no single command does the job.
+  'h-enum-ad-users', 'e-setup-exam-rules', 'e-lat-record-hop',
 ]);
 const FULL_TCP_MISSES = ['nmap -sC -sV 10.0.0.5', 'nmap --top-ports 1000 10.0.0.5'];
 const BANNED_BINS = new Set([
@@ -57,8 +56,28 @@ describe('built-in command library', () => {
   });
 
   it('every host and engagement goal has at least one command', () => {
-    const missing = [...ALL_GOAL_IDS].filter((id) => !NO_COMMAND_NEEDED.has(id) && !PENDING_TASK_3.has(id) && !lib.some((c) => c.goals.includes(id)));
+    const missing = [...ALL_GOAL_IDS].filter((id) => !NO_COMMAND_NEEDED.has(id) && !lib.some((c) => c.goals.includes(id)));
     expect(missing).toEqual([]);
+  });
+
+  it('field-manual entries have a cardId and an fm- id', () => {
+    const fm = lib.filter((c) => c.source === 'field-manual');
+    expect(fm.length).toBeGreaterThan(100);
+    expect(fm.filter((c) => !c.id.startsWith('fm-')).map((c) => c.id)).toEqual([]);
+    expect(fm.filter((c) => !c.cardId).map((c) => c.id)).toEqual([]);
+  });
+
+  it('field-manual metasploit templates carry the exam rule', () => {
+    const msf = lib.filter(
+      (c) => c.source === 'field-manual' && /msfconsole|meterpreter/i.test(c.template) && !/multi\/handler/.test(c.template),
+    );
+    expect(msf.filter((c) => c.exam !== 'metasploit').map((c) => c.id)).toEqual([]);
+  });
+
+  it('no built-in id is duplicated', () => {
+    const seen = new Set<string>();
+    const dupes = lib.filter((c) => (seen.has(c.id) ? true : (seen.add(c.id), false))).map((c) => c.id);
+    expect(dupes).toEqual([]);
   });
 
   it('every command with a matcher has hit and miss examples', () => {
@@ -136,7 +155,10 @@ describe('built-in command library', () => {
 
   it('templates use only known tokens', () => {
     const unknown: string[] = [];
-    for (const c of lib) {
+    // Field-manual entries are copied verbatim from the vault (per Conventions.md §4): a token Raven does not
+    // know (e.g. {PORT}, {FILE}, {EDB_ID}) is still valid vault syntax and is simply left unresolved, same as a
+    // hand-authored {FILL_...}. Only Raven-authored/oscp-notes commands are held to the closed known-token set.
+    for (const c of lib.filter((x) => x.source !== 'field-manual')) {
       for (const m of c.template.matchAll(TOKEN_RE)) {
         const name = m[1] ?? m[2];
         // `{FILL_<NAME>}` = a value only the operator knows (service name, CA, export path): left highlighted.
@@ -269,6 +291,8 @@ describe('built-in command library', () => {
     const EXCEPTIONS: Record<string, string> = {
       'h-foot-shell': 'catching a shell: penelope (the listener) stays first',
       'e-ad-user-relay': 'ntlmrelayx -tf needs the nxc --gen-relay-list output first',
+      'h-enum-kerberos': 'confirm KDC and sync the clock before any impacket Kerberos command can run',
+      'h-post-bloodhound': 'its only impacket tool, impacket-smbserver, just moves the collection zip to Kali',
     };
     const wrong: string[] = [];
     for (const goal of ALL_GOAL_IDS) {

@@ -189,9 +189,12 @@ describe('ticksForEntry (commands)', () => {
 
   it('target-side AD commands need a shell host', () => {
     expect(ticks('SharpHound.exe -c All --domaincontroller 10.0.0.1', { ranOn: 'Kali' })).toEqual([]);
-    expect(pairs(ticks('SharpHound.exe -c All --domaincontroller 10.0.0.1', { ranOn: 'MS01' }))).toEqual(['lab:e-ad-user-bloodhound']);
-    expect(ticks('SharpHound.exe -c All', { ranOn: 'MS01' })).toEqual([]);
-    expect(pairs(ticks('SharpHound.exe -c All', { ranOn: 'DC01' }))).toEqual(['lab:e-ad-user-bloodhound']);
+    // Also ticks h-post-bloodhound on the shell host: the field-manual SharpHound.exe matcher fires on any -c value.
+    expect(pairs(ticks('SharpHound.exe -c All --domaincontroller 10.0.0.1', { ranOn: 'MS01' }))).toEqual([
+      'lab:e-ad-user-bloodhound', 'ms01:h-post-bloodhound',
+    ]);
+    expect(ticks('SharpHound.exe -c All', { ranOn: 'MS01' })).not.toEqual([]);
+    expect(pairs(ticks('SharpHound.exe -c All', { ranOn: 'DC01' }))).toEqual(['dc:h-post-bloodhound', 'lab:e-ad-user-bloodhound']);
   });
 
   it('an AD goal on a line naming no host ticks nothing', () => {

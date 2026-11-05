@@ -29,6 +29,7 @@ import { AD_NOCREDS_DA_COMMANDS } from './ad';
 import { AD_USER_COMMANDS } from './adUser';
 import { AD_USER_PATH_COMMANDS } from './adUserPaths';
 import { MISC_COMMANDS } from './misc';
+import { FIELD_MANUAL_COMMANDS } from './fieldManual';
 
 export const BUILTIN_LIBRARY: LibraryCommand[] = [
   ...ENUM_COMMANDS,
@@ -43,4 +44,5 @@ export const BUILTIN_LIBRARY: LibraryCommand[] = [
   ...AD_USER_COMMANDS,
   ...AD_USER_PATH_COMMANDS,
   ...MISC_COMMANDS,
+  ...FIELD_MANUAL_COMMANDS,
 ];
