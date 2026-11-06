@@ -4,7 +4,8 @@ import { collectLayoutIssues } from "./checks/layout";
 import { collectA11yIssues } from "./checks/a11y";
 import { tabWalk } from "./checks/keyboard";
 import { collectUxIssues } from "./checks/ux";
-import type { RawIssue } from "./types";
+import { groupRows } from "./report";
+import type { Issue, RawIssue } from "./types";
 
 const FIXTURE = "file://" + fileURLToPath(new URL("./fixtures/selftest-layout.html", import.meta.url));
 
@@ -127,4 +128,14 @@ test("ux checks leave clean cases alone", async ({ page }) => {
   for (const c of cases) {
     expect(c.issues, `case ${c.name} should be clean`).toEqual([]);
   }
+});
+
+test("groupRows collapses nth variants and caps groups per check", () => {
+  const mk = (selector: string, width = 900): Issue => ({ screen: "s", width, check: "tiny-text", selector, detail: "d" });
+  const collapsed = groupRows([mk("ul > li:nth-of-type(1) > b"), mk("ul > li:nth-of-type(2) > b", 1024)]);
+  expect(collapsed.groups).toHaveLength(1);
+  expect(collapsed.groups[0]).toMatchObject({ selector: "ul > li > b", count: 2, widths: [900, 1024] });
+  const many = groupRows(Array.from({ length: 15 }, (_, n) => mk(`.c${n}`)));
+  expect(many.groups).toHaveLength(12);
+  expect(many.more).toEqual([{ check: "tiny-text", count: 3 }]);
 });

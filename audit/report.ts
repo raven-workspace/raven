@@ -17,6 +17,41 @@ export async function writeIssues(screen: string, width: number, issues: RawIssu
 
 const cmp = (a: string | number, b: string | number) => (a < b ? -1 : a > b ? 1 : 0);
 
+export const MAX_GROUPS_PER_CHECK = 12;
+
+export interface RowGroup {
+  check: string;
+  selector: string;
+  count: number;
+  widths: number[];
+  detail: string;
+}
+
+/** Groups one screen's issues by (check, selector without positional pseudo-classes). */
+export function groupRows(issues: Issue[]): { groups: RowGroup[]; more: { check: string; count: number }[] } {
+  const byKey = new Map<string, RowGroup>();
+  for (const i of issues) {
+    const selector = i.selector.replace(/:nth-(?:of-type|child)\([^)]*\)/g, "");
+    const key = `${i.check}\u0000${selector}`;
+    const g = byKey.get(key);
+    if (g) {
+      g.count++;
+      if (!g.widths.includes(i.width)) g.widths.push(i.width);
+    } else byKey.set(key, { check: i.check, selector, count: 1, widths: [i.width], detail: i.detail });
+  }
+  const perCheck = new Map<string, RowGroup[]>();
+  for (const g of byKey.values()) perCheck.set(g.check, [...(perCheck.get(g.check) ?? []), g]);
+  const groups: RowGroup[] = [];
+  const more: { check: string; count: number }[] = [];
+  for (const check of [...perCheck.keys()].sort(cmp)) {
+    const list = perCheck.get(check)!.sort((a, b) => b.count - a.count);
+    groups.push(...list.slice(0, MAX_GROUPS_PER_CHECK));
+    if (list.length > MAX_GROUPS_PER_CHECK) more.push({ check, count: list.length - MAX_GROUPS_PER_CHECK });
+  }
+  for (const g of groups) g.widths.sort((a, b) => a - b);
+  return { groups, more };
+}
+
 export function renderMarkdown(issues: Issue[], screenIds: string[], shots: Set<string>): string {
   const widths = [...new Set(issues.map((i) => i.width))].sort(cmp);
   const checks = [...new Set(issues.map((i) => i.check))].sort(cmp);
@@ -24,23 +59,19 @@ export function renderMarkdown(issues: Issue[], screenIds: string[], shots: Set<
   lines.push(`| check | ${widths.join(" | ")} | total |`, `|---|${widths.map(() => "---:").join("|")}|---:|`);
   for (const c of checks) {
     const counts = widths.map((w) => issues.filter((i) => i.check === c && i.width === w).length);
-    lines.push(`| ${c} | ${counts.join(" | ")} | ${counts.reduce((a, b) => a + b, 0)} |`);
+    const groupCount = new Set(issues.filter((i) => i.check === c).map((i) => `${i.screen}\u0000${i.selector.replace(/:nth-(?:of-type|child)\([^)]*\)/g, "")}`)).size;
+    lines.push(`| ${c} | ${counts.join(" | ")} | ${counts.reduce((a, b) => a + b, 0)} (${groupCount} groups) |`);
   }
   // Keyboard issues are filed under ids that are not screens (`<id>:kbd`, `shortcut:<id>`).
   const extra = [...new Set(issues.map((i) => i.screen))].filter((s) => !screenIds.includes(s));
   for (const s of [...screenIds, ...extra].sort(cmp)) {
     lines.push("", `## ${s}`, "");
-    const rows = new Map<string, { issue: Issue; widths: number[] }>();
-    for (const i of issues.filter((x) => x.screen === s)) {
-      const key = `${i.check}\u0000${i.selector}`;
-      const row = rows.get(key);
-      if (row) row.widths.push(i.width);
-      else rows.set(key, { issue: i, widths: [i.width] });
+    const { groups, more } = groupRows(issues.filter((x) => x.screen === s));
+    if (groups.length === 0) lines.push("No issues.");
+    for (const g of groups) {
+      lines.push(`- [${g.widths.join(", ")}] **${g.check}** \`${g.selector}\` ×${g.count} — ${g.detail}`);
     }
-    if (rows.size === 0) lines.push("No issues.");
-    for (const { issue, widths: ws } of rows.values()) {
-      lines.push(`- [${ws.join(", ")}] **${issue.check}** \`${issue.selector}\` — ${issue.detail}`);
-    }
+    for (const m of more) lines.push(`- …${m.count} more ${m.check} groups in report.json`);
     if (!screenIds.includes(s)) continue;
     const links = WIDTHS.filter((w) => shots.has(`${s}@${w}.png`)).map((w) => `[${s}@${w}](shots/${s}@${w}.png)`);
     lines.push("", links.length > 0 ? links.join(" · ") : "No screenshots: this screen did not run.");
