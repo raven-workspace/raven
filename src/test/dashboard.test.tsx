@@ -92,8 +92,8 @@ describe("format", () => {
     expect(timeLeft(start, 1425, now)).toBe("14h 10m left");
     expect(timeLeft(start, 1425, start + 1425 * MIN)).toBe("Time's up");
     expect(timeLeft(start, 1425, start + 2000 * MIN)).toBe("Time's up");
-    expect(timeLeft(null, 1425, now)).toBe("Timebox not started");
-    expect(timeLeft(start, 1425, start - MIN)).toBe("Timebox not started");
+    expect(timeLeft(null, 1425, now)).toBe("Not started");
+    expect(timeLeft(start, 1425, start - MIN)).toBe("Not started");
   });
 
   it("dateRange and relativeTime", () => {
