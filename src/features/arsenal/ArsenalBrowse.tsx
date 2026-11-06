@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 import { filterForKind, HOST_STAGES } from "../../engines/checklist";
 import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/store";
 import { useEscapeTo } from "../../lib/keys";
@@ -10,13 +11,16 @@ import { CardView } from "./CardView";
 import { useArsenalStore } from "./useArsenalStore";
 import { useFillScope, useLastEngagementStore } from "./useFillScope";
 
-function FilterButton({ on, onClick, children }: { on: boolean; onClick: () => void; children: string }) {
+const ON = "bg-accent/10 text-accent shadow-[inset_2px_0_0_var(--accent)]";
+
+/** A filter (aria-pressed) or the open card (aria-current): the selected one carries the accent. */
+function FilterButton({ on, onClick, current, children }: { on: boolean; onClick: () => void; current?: boolean; children: string }) {
   return (
     <button
       type="button"
-      aria-pressed={on}
+      {...(current ? { "aria-current": on ? "true" : undefined } : { "aria-pressed": on })}
       onClick={onClick}
-      className={cx("w-full cursor-default rounded-sm px-2 py-0.5 text-left text-[13px] hover:bg-surface-2", on ? "bg-surface-2 text-fg" : "text-fg-2")}
+      className={cx("w-full cursor-default rounded-sm px-2 py-0.5 text-left text-[13px]", on ? ON : "text-fg-2 hover:bg-surface-2")}
     >
       {children}
     </button>
@@ -74,12 +78,14 @@ export function ArsenalBrowse() {
         </label>
         <section className="flex flex-col gap-1" aria-label="Stage">
           <h2 className={`${labelClass} m-0`}>Stage</h2>
+          <FilterButton on={stage === null} onClick={() => setStage(null)}>All</FilterButton>
           {HOST_STAGES.map((s) => (
             <FilterButton key={s.id} on={stage === s.id} onClick={() => setStage(stage === s.id ? null : s.id)}>{s.title}</FilterButton>
           ))}
         </section>
         <section className="flex flex-col gap-1" aria-label="Category">
           <h2 className={`${labelClass} m-0`}>Category</h2>
+          <FilterButton on={category === null} onClick={() => setCategory(null)}>All</FilterButton>
           {categories.map((c) => (
             <FilterButton key={c} on={category === c} onClick={() => setCategory(category === c ? null : c)}>{c}</FilterButton>
           ))}
@@ -87,13 +93,17 @@ export function ArsenalBrowse() {
         <section className="flex flex-col gap-1" aria-label="Generators">
           <h2 className={`${labelClass} m-0`}>Generators</h2>
           {GENERATORS.length === 0 && <p className="m-0 px-2 text-xs text-muted">None yet</p>}
-          {GENERATORS.map((g) => <span key={g.id} className="px-2 text-[13px] text-fg-2">{g.title}</span>)}
+          {GENERATORS.map((g) => (
+            <Link key={g.id} to={`/arsenal?generator=${encodeURIComponent(g.id)}`} className="rounded-sm px-2 text-[13px] text-fg-2 underline decoration-line-2 underline-offset-2 hover:text-accent">
+              {g.title} ↗
+            </Link>
+          ))}
         </section>
         <section className="flex flex-col gap-1" aria-label="Cards">
           <h2 className={`${labelClass} m-0`}>Cards</h2>
           {shown.length === 0 && <p className="m-0 px-2 text-xs text-muted">No cards match</p>}
           {shown.map((c) => (
-            <FilterButton key={c.id} on={cardId === c.id} onClick={() => useArsenalStore.setState({ cardId: c.id })}>{c.title}</FilterButton>
+            <FilterButton key={c.id} current on={cardId === c.id} onClick={() => useArsenalStore.setState({ cardId: c.id })}>{c.title}</FilterButton>
           ))}
         </section>
       </nav>

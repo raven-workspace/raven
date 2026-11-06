@@ -18,6 +18,7 @@ import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 
 vi.mock("../lib/api");
+vi.mock("../features/palette/generators", () => ({ GENERATORS: [{ id: "g-zz", title: "Zzgen reverse shell" }] }));
 vi.mock("../features/checklist/ticks", async (orig) => ({
   ...(await orig<typeof import("../features/checklist/ticks")>()),
   resyncBoards: vi.fn().mockResolvedValue(undefined),
@@ -468,5 +469,31 @@ describe("drawer list grouped by category (U1)", () => {
     const cardLabels = labels.filter((l) => l !== "Commands");
     expect(cardLabels).toEqual([...cardLabels].sort((a, b) => a.localeCompare(b)));
     expect(labels.at(-1)).toBe("Commands");
+  });
+});
+
+describe("browse sidebar selection state (U2)", () => {
+  it("filters show which is selected, each group has All, and generators are links", async () => {
+    const user = userEvent.setup();
+    mount("/arsenal");
+    await screen.findByRole("region", { name: "Cards" });
+    const stage = within(screen.getByRole("region", { name: "Stage" }));
+    const category = within(screen.getByRole("region", { name: "Category" }));
+    expect(stage.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    expect(category.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(stage.getByRole("button", { name: "Reporting" }));
+    expect(stage.getByRole("button", { name: "Reporting" })).toHaveAttribute("aria-pressed", "true");
+    expect(stage.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "false");
+    await user.click(category.getByRole("button", { name: "Zz-Other-Cat" }));
+    expect(category.getByRole("button", { name: "Zz-Other-Cat" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(stage.getByRole("button", { name: "All" }));
+    expect(stage.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    expect(stage.getByRole("button", { name: "Reporting" })).toHaveAttribute("aria-pressed", "false");
+    await user.click(category.getByRole("button", { name: "All" }));
+    const cards = within(screen.getByRole("region", { name: "Cards" }));
+    await user.click(cards.getByRole("button", { name: "Zz Card" }));
+    expect(cards.getByRole("button", { name: "Zz Card" })).toHaveAttribute("aria-current", "true");
+    expect(cards.getByRole("button", { name: "Zz Other" })).not.toHaveAttribute("aria-current");
+    expect(within(screen.getByRole("region", { name: "Generators" })).getByRole("link", { name: /Zzgen reverse shell/ })).toBeInTheDocument();
   });
 });
