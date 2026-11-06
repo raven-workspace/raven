@@ -21,10 +21,27 @@ describe('classifyExam', () => {
     expect(classifyExam('sqlmap -u x', 'prohibited')).toBe('banned');
   });
 
-  it('classifyExam bans a block whose note says banned or prohibited in the exam', () => {
-    expect(classifyExam('x', undefined, 'Banned in the exam.')).toBe('banned');
-    expect(classifyExam('x', undefined, 'This is prohibited on the OSCP exam.')).toBe('banned');
-    expect(classifyExam('x', 'allowed', 'Often flagged by Defender.')).toBeUndefined();
+  it('classifyExam ignores note prose', () => {
+    expect(classifyExam('x', 'allowed', 'Banned in the exam.')).toBeUndefined();
+    expect(classifyExam('wpscan --url http://{TARGET_IP}', undefined, 'wpscan is not on the prohibited list')).toBeUndefined();
+  });
+
+  it('classifyExam bans prohibited automatic tools by command word', () => {
+    expect(classifyExam('sqlmap -u http://{TARGET_IP}/?id=1')).toBe('banned');
+    expect(classifyExam('sudo sqlmap -u x')).toBe('banned');
+    expect(classifyExam('nessuscli update')).toBe('banned');
+    expect(classifyExam('cd /tmp && python3 sqlmap.py -u x')).toBe('banned');
+  });
+
+  it('classifyExam bans responder without analyse mode and allows -A', () => {
+    expect(classifyExam('responder -I tun0')).toBe('banned');
+    expect(classifyExam('sudo responder -I tun0 -A')).toBeUndefined();
+    expect(classifyExam('responder -I tun0 --analyze')).toBeUndefined();
+  });
+
+  it('classifyExam does not ban wpscan or a sqlmap mention in a comment', () => {
+    expect(classifyExam('wpscan --url http://{TARGET_IP}')).toBeUndefined();
+    expect(classifyExam("# don't use sqlmap\nsqlmap_notes=1\nls")).toBeUndefined();
   });
 
   it('classifyExam lets banned win over metasploit', () => {

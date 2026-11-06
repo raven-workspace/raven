@@ -117,4 +117,26 @@ ls
     expect(c.blocks[0].runFrom).toBe('target');
     expect(c.blocks[0].group).toBeUndefined();
   });
+
+  it('parseCard attaches an Exam line to its block and collects ones before the first block', () => {
+    const c = parseCard('a.md', `---
+id: x-y
+title: T
+type: card
+category: Web
+stage: initial-foothold
+os: any
+---
+**Exam:** Card-level restriction.
+## Commands
+### One
+**Why:** w
+\`\`\`bash title:"Kali"
+ls
+\`\`\`
+**Exam:** Allowed, but not the scanner.
+`)!;
+    expect(c.blocks[0].exam).toBe('Allowed, but not the scanner.');
+    expect(c.examNotes).toEqual(['Card-level restriction.']);
+  });
 });

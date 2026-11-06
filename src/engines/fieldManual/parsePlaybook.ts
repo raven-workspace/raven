@@ -26,7 +26,7 @@ export function parsePlaybook(relPath: string, text: string): PlaybookItem[] {
     const item = /^\s*[-*]\s+\[[ xX]\]\s+(.*)$/.exec(line);
     if (!item) continue;
     const cleaned = item[1]
-      .replace(/\s*→.*$/, '')
+      .replace(/\s*→\s*\[\[.*$/, '')
       .replace(/\[\[([^\]|]*)\|([^\]]*)\]\]/g, '$2')
       .replace(/\[\[([^\]]*)\]\]/g, '$1')
       .replace(/\s+/g, ' ')

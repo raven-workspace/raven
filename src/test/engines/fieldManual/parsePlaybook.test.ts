@@ -43,4 +43,9 @@ describe('parsePlaybook', () => {
   it('parsePlaybook leaves heading unset before any heading', () => {
     expect(parsePlaybook('f.md', '- [ ] x')[0].heading).toBeUndefined();
   });
+
+  it('parsePlaybook keeps a prose arrow and strips only the link tail', () => {
+    expect(parsePlaybook('f.md', '- [ ] Connect the VPN → this is {LHOST}')[0].text).toBe('Connect the VPN → this is {LHOST}');
+    expect(parsePlaybook('f.md', '- [ ] A → B → [[C]]')[0].text).toBe('A → B');
+  });
 });

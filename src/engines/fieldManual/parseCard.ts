@@ -9,6 +9,8 @@ export interface ParsedBlock {
   /** The `**Sub-method: X**` label in force when the block appears. */
   group?: string;
   note?: string;
+  /** The `**Exam:**` line(s) that follow the block, for display only. */
+  exam?: string;
   /** Position among the card's parsed blocks. */
   index: number;
 }
@@ -16,6 +18,8 @@ export interface ParsedBlock {
 export interface ParsedCard {
   meta: CardMeta;
   blocks: ParsedBlock[];
+  /** `**Exam:**` lines that appear before the first block. */
+  examNotes?: string[];
 }
 
 const OSES = ['linux', 'windows', 'any'] as const;
@@ -40,9 +44,13 @@ export function parseCard(relPath: string, text: string): ParsedCard | null {
   let why: string | undefined;
   let last: ParsedBlock | undefined;
   let notes: string[] = [];
+  let exams: string[] = [];
+  const examNotes: string[] = [];
   const flushNotes = () => {
     if (last && notes.length) last.note = notes.join('\n');
+    if (last && exams.length) last.exam = exams.join('\n');
     notes = [];
+    exams = [];
   };
 
   let fence: { title?: string; lines: string[] } | null = null;
@@ -97,7 +105,12 @@ export function parseCard(relPath: string, text: string): ParsedCard | null {
     }
     const n = /^\*\*Note:\*\*\s*(.*?)\s*$/.exec(line);
     if (n && last) notes.push(n[1]);
+    const ex = /^\*\*Exam:\*\*\s*(.*?)\s*$/.exec(line);
+    if (ex) {
+      if (last) exams.push(ex[1]);
+      else if (blocks.length === 0) examNotes.push(ex[1]);
+    }
   }
   flushNotes();
-  return { meta, blocks };
+  return examNotes.length ? { meta, blocks, examNotes } : { meta, blocks };
 }
