@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { DA_COVER_LABEL, isCoverMarked, type ChecklistGoal } from "../../engines/checklist";
-import { getCards } from "../../engines/library/store";
+import { getCards, useLibraryVersion } from "../../engines/library/store";
 import type { ChecklistStatus, ItemState } from "../../types/checklist";
 import { cx } from "../../lib/cx";
 import { Chip, Textarea, labelClass } from "../../ui";
@@ -65,6 +65,8 @@ export interface GoalRowProps {
 
 /** One link per distinct Arsenal card behind a step's commands, and a way into the rest of the Arsenal. */
 function CardLinks({ commands }: { commands: FilledCommand[] }) {
+  // Re-render after an import so card titles follow the vault.
+  useLibraryVersion();
   const cards = getCards();
   const ids = [...new Set(commands.map((c) => c.cardId).filter((id): id is string => !!id))];
   if (ids.length === 0) return null;
