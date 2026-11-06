@@ -84,7 +84,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
   const fill = (cmds: NonNullable<typeof method>["kali"]) => cmds.map((c) => fillLibraryCommand(c, input, false));
 
   // The target half as typed at the shell: one block, so the cleanup list sees every line.
-  const targetText = method ? method.target.map((c) => fillCommand(c.template, input).text).join("\n") : "";
+  const targetText = method ? method.target.map((c) => fillCommand(c.template, input, { commandOs: c.os }).text).join("\n") : "";
   const logTarget = async () => {
     setStatus(undefined);
     if (!method || !host || !d.engagement || !targetText) return;

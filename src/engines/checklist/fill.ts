@@ -58,6 +58,8 @@ export interface FillOptions {
    * Never combine with `secretMask` (the mask is not a secret).
    */
   shellSafe?: boolean;
+  /** The command's own OS. Used for {DEST_DIR} only when the host's OS is unknown (dashboard, no host). */
+  commandOs?: string;
 }
 
 /**
@@ -142,6 +144,10 @@ export const COMPUTED_TOKENS = [
   'PIVOT_IP', 'PIVOT_NAME', 'KALI_USER', 'COMMUNITY', 'SOCKS_PORT', 'DEST_DIR', 'PORT',
 ] as const;
 
+const DEST_DIRS: Record<string, string> = { windows: 'C:\\Windows\\Temp', linux: '/tmp' };
+/** A writable temp dir for a known OS; never guessed (undefined leaves {DEST_DIR} for the user to fill). */
+const destDir = (os: string | null | undefined): string | undefined => (os ? DEST_DIRS[os] : undefined);
+
 export function commandContext(input: FillInput, opts: FillOptions = {}): SubstitutionContext {
   const { host, engagement, hosts, servicesByHost, tunnels } = input;
   const tunnel = tunnelFor(host, tunnels);
@@ -173,7 +179,7 @@ export function commandContext(input: FillInput, opts: FillOptions = {}): Substi
     KALI_USER: input.kaliUser?.trim() || undefined,
     COMMUNITY: 'public',
     SOCKS_PORT: '1080',
-    DEST_DIR: host.os === 'windows' ? 'C:\\Windows\\Temp' : '/tmp',
+    DEST_DIR: destDir(host.os === 'windows' || host.os === 'linux' ? host.os : opts.commandOs),
     PORT: input.portHint?.length ? String(input.portHint[0]) : undefined,
   };
   for (const [k, v] of Object.entries(input.overrides ?? {})) if (v) computed[k.toUpperCase()] = v;

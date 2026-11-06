@@ -14,10 +14,11 @@ import { filePickFor, pickOverrides } from "./filePick";
 
 /** One library command filled for this host: masked for display, real values (shell-escaped for Kali) for copy. */
 export function fillLibraryCommand(c: LibraryCommand, input: FillInput, msfMarker: boolean): FilledCommand {
-  const ctx = commandContext(input);
-  const filled = fillCommand(c.template, input, { secretMask: MASK });
+  const commandOs = c.os;
+  const ctx = commandContext(input, { commandOs });
+  const filled = fillCommand(c.template, input, { secretMask: MASK, commandOs });
   // Copy: real values, shell-escaped when the command runs in the Kali shell (see FillOptions.shellSafe).
-  const real = fillCommand(c.template, input, { shellSafe: c.runFrom === "attacker" });
+  const real = fillCommand(c.template, input, { shellSafe: c.runFrom === "attacker", commandOs });
   const tokens = resolveTemplate(c.template, ctx)
     .ranges.filter((r) => !r.resolved && r.canonical !== "interface")
     .map((r) => c.template.slice(r.start, r.end))

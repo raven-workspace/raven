@@ -118,7 +118,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
       if (log && host && text !== null && d.engagement) {
         const c = current.command;
         // The real values, as typed at the shell (not shell-escaped, not masked).
-        const typed = fillCommand(c.template, filled.input).text;
+        const typed = fillCommand(c.template, filled.input, { commandOs: c.os }).text;
         await logCommand(qc, {
           engagementId, host, hosts: d.hosts, command: typed,
           title: `${c.title} · ${host.ip ?? host.name}`,

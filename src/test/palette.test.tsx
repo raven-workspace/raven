@@ -142,6 +142,27 @@ describe("⌘K palette", () => {
     expect(m.logCreate).not.toHaveBeenCalled();
   });
 
+  it("on the dashboard {DEST_DIR} follows the command's own OS, and stays unfilled for an any-OS command", async () => {
+    setImported({
+      commands: [
+        { ...FETCH, id: "zz-cu", title: "Zzcertutil pull", template: "zzcertutil {DEST_DIR}\\x.exe", os: "windows" },
+        { ...PROBE, id: "zz-any", title: "Zzanycopy drop", template: "zzanycopy {DEST_DIR}", os: "any" },
+      ],
+      cards: [],
+    });
+    const user = userEvent.setup();
+    mount("/");
+    await screen.findByText("Mock exam A");
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzcertutil");
+    await user.keyboard("{Enter}");
+    expect(await navigator.clipboard.readText()).toBe("zzcertutil C:\\Windows\\Temp\\x.exe");
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzanycopy");
+    await user.keyboard("{Enter}");
+    expect(await navigator.clipboard.readText()).toBe("zzanycopy {DEST_DIR}");
+  });
+
   it("a staged toolkit file pre-fills FILE and Tab edits an unresolved token", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
