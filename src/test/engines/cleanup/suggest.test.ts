@@ -230,12 +230,13 @@ describe('transfer fetches', () => {
   });
 
   it('every generator method that writes to the target yields a cleanup suggestion when logged', () => {
-    const IN_MEMORY = /DownloadString|\|\s*bash\b|^chmod\s/m;
+    const IN_MEMORY = /DownloadString|\|\s*bash\b/;
     const cases = [
       { os: 'windows' as const, dir: 'C:\\Windows\\Temp', shell: onWin },
       { os: 'linux' as const, dir: '/tmp', shell: onWeb },
     ];
     let checked = 0;
+    const linuxTargets = new Map<string, string[]>();
     for (const { os, dir, shell } of cases) {
       for (const m of transferMethods(FIELD_MANUAL_CARDS, BUILTIN_LIBRARY, os)) {
         if (m.target.length === 0 || m.target.some((c) => IN_MEMORY.test(c.template))) continue;
@@ -245,11 +246,18 @@ describe('transfer fetches', () => {
         const found = suggestCleanup([cmd(text, shell)], hosts, '', []);
         // The suggestion names the file this method put in the folder (Windows ftp: its script).
         const targets = found.map((f) => f.target);
+        if (os === 'linux') linuxTargets.set(m.label, targets);
         const want = os === 'windows' ? [`${dir}\\x.exe`, `${dir}\\ftp.txt`] : [`${dir}/x.exe`];
         expect(targets.some((t) => want.includes(t)), `${m.group} / ${m.label}: ${targets.join(', ')}`).toBe(true);
         checked++;
       }
     }
     expect(checked).toBeGreaterThanOrEqual(10);
+    // The HTTP fetches that end in a chmod follow-up are still checked, by their fetch block.
+    for (const label of ['wget', 'curl', 'python3']) {
+      const hit = [...linuxTargets].find(([l]) => l === label || l.startsWith(`${label} `));
+      expect(hit, `linux ${label} was checked`).toBeDefined();
+      expect(hit![1]).toEqual(['/tmp/x.exe']);
+    }
   });
 });
