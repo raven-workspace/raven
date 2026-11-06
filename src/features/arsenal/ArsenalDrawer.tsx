@@ -3,13 +3,14 @@ import { useMatch, useNavigate } from "react-router";
 import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
-import { Button, Input, Kbd } from "../../ui";
+import { Button, Kbd } from "../../ui";
 import { useFillBase } from "../palette/fillData";
 import { searchPalette, type PaletteResult } from "../palette/search";
 import { CardView, CommandPane } from "./CardView";
 import { useArsenalStore } from "./useArsenalStore";
 import { useFillScope } from "./useFillScope";
 import { HostPicker, isHostPickKey, openPicker } from "./HostPicker";
+import { SearchBar } from "./SearchBar";
 
 /** Commands shown in the result list; cards are never capped. */
 const MAX_RESULTS = 40;
@@ -142,19 +143,18 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
             ← Back
           </Button>
         )}
-        <Input
-          ref={searchRef}
-          aria-label="Search the Arsenal"
+        <SearchBar
+          label="Search the Arsenal"
+          inputRef={searchRef}
           placeholder="Search cards and commands"
-          autoComplete="off"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
             setSelected(0);
           }}
           onKeyDown={onSearchKey}
+          trailing={engagementId ? <HostPicker ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} /> : undefined}
         />
-        {engagementId && <HostPicker ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} />}
         <Button
           size="sm"
           aria-label="Full screen"

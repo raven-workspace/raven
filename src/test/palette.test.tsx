@@ -88,6 +88,10 @@ beforeEach(() => {
 });
 afterEach(() => setImported({ commands: [], cards: [] }));
 
+/** What the host scope shows (its visible text, without the hidden native select's options). */
+const scopeText = (picker: HTMLElement): string =>
+  [...(picker.closest("label")?.childNodes ?? [])].filter((n) => n.nodeName !== "SELECT").map((n) => n.textContent).join(" ");
+
 describe("⌘K palette", () => {
   it("⌘K opens with the host chip and Enter copies the filled command", async () => {
     const user = userEvent.setup();
@@ -210,6 +214,35 @@ describe("⌘K palette", () => {
 
 describe("host picker in the palette (U3)", () => {
   const H2: Host = { ...H1, id: "h2", name: "web02", ip: "10.10.10.6" };
+
+  it("the search bar is one field with a leading glyph and the host scope at its right edge", async () => {
+    const user = userEvent.setup();
+    m.hostsList.mockResolvedValue([H1, H2]);
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Checklist" });
+    await user.keyboard(cmdK);
+    const bar = await screen.findByRole("search", { name: "Search" });
+    const b = within(bar);
+    expect(b.getByRole("combobox", { name: "Search" })).toBeInTheDocument();
+    expect(b.getByText("⌕")).toBeInTheDocument();
+    const picker = b.getByRole("combobox", { name: "Fill for host" });
+    expect(scopeText(picker)).toBe("for dc01 ⌄");
+    // The menu lists each host with its IP, plus No host.
+    const opts = within(picker).getAllByRole("option") as HTMLOptionElement[];
+    expect(opts.map((o) => o.label)).toEqual(["No host", "dc01  10.10.10.5", "web02  10.10.10.6"]);
+    await user.selectOptions(picker, "No host");
+    expect(scopeText(picker)).toBe("for no host ⌄");
+  });
+
+  it("on the dashboard the bar reads for no host", async () => {
+    const user = userEvent.setup();
+    mount("/");
+    await screen.findByText("Mock exam A");
+    await user.keyboard(cmdK);
+    const bar = await screen.findByRole("search", { name: "Search" });
+    expect(within(bar).getByText("for no host")).toBeInTheDocument();
+    expect(within(bar).queryByRole("combobox", { name: "Fill for host" })).not.toBeInTheDocument();
+  });
   const preview = () => screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent!.startsWith("zz"));
 
   it("⌥H picks another host or No host; fills update and the palette stays open", async () => {

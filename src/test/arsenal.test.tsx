@@ -104,6 +104,10 @@ const block = (root: { findByText: typeof screen.findByText }, text: string) =>
 
 const drawer = () => screen.findByRole("complementary", { name: "Arsenal" });
 
+/** What the host scope shows (its visible text, without the hidden native select's options). */
+const scopeText = (picker: HTMLElement): string =>
+  [...(picker.closest("label")?.childNodes ?? [])].filter((n) => n.nodeName !== "SELECT").map((n) => n.textContent).join(" ");
+
 describe("Arsenal", () => {
   it("A opens the drawer filled for the host in view and Esc closes it", async () => {
     const user = userEvent.setup();
@@ -274,8 +278,20 @@ describe("Arsenal", () => {
     await user.click(screen.getByRole("button", { name: "Arsenal" }));
     const d = within(await drawer());
     expect(d.queryByRole("combobox", { name: "Fill for host" })).not.toBeInTheDocument();
+    expect(within(d.getByRole("search", { name: "Search the Arsenal" })).getByText("for no host")).toBeInTheDocument();
     act(() => useArsenalStore.getState().openCard("zz-card"));
     expect(await block(d, "zzprobe {TARGET_IP} from 10.10.14.9")).toBeInTheDocument();
+  });
+
+  it("the drawer's search bar holds the host scope at its right edge", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Checklist" });
+    await user.keyboard("a");
+    const bar = within(within(await drawer()).getByRole("search", { name: "Search the Arsenal" }));
+    expect(bar.getByRole("textbox", { name: "Search the Arsenal" })).toBeInTheDocument();
+    expect(bar.getByText("⌕")).toBeInTheDocument();
+    expect(scopeText(bar.getByRole("combobox", { name: "Fill for host" }))).toBe("for dc01 ⌄");
   });
 
   it("search is keyboard-first: arrows pick, Enter opens the selection or the top result", async () => {

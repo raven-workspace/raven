@@ -7,13 +7,14 @@ import { getCards, getLibrary, getToolkit, useLibraryVersion } from "../../engin
 import { copyPlain, copySecret } from "../../lib/clipboard";
 import { reportError } from "../../lib/lockSignal";
 import type { Host } from "../../types/host";
-import { Chip, Dialog, Input, Kbd } from "../../ui";
+import { Chip, Dialog, Kbd } from "../../ui";
 import { logCommand } from "../capture/logCommand";
 import { fillLibraryCommand } from "../checklist/goalCommands";
 import { COMMAND_PRE } from "../checklist/CommandList";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useFillScope, useLastEngagementStore } from "../arsenal/useFillScope";
 import { HostPicker, isHostPickKey, openPicker } from "../arsenal/HostPicker";
+import { SearchBar } from "../arsenal/SearchBar";
 import { useFillBase } from "./fillData";
 import { GENERATORS } from "./generators";
 import { searchPalette, withoutSecrets, type EngagementItem, type PaletteResult } from "./search";
@@ -175,27 +176,26 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
 
   return (
     <div className="flex flex-col gap-3" onKeyDown={onKey}>
-      <div className="flex items-center gap-2">
-        <Input
-          ref={searchRef}
-          role="combobox"
-          aria-label="Search"
-          aria-expanded="true"
-          aria-controls="palette-results"
-          aria-activedescendant={current ? `palette-${current.type}-${current.id}` : undefined}
-          placeholder="Search commands, cards, this engagement"
-          autoComplete="off"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setSelected(0);
-          }}
-          onKeyDown={onSearchKey}
-        />
-        {engagementId && (
-          <HostPicker ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} {...(remembered && d.engagement ? { engagementName: d.engagement.name } : {})} />
-        )}
-      </div>
+      <SearchBar
+        label="Search"
+        inputRef={searchRef}
+        role="combobox"
+        aria-expanded="true"
+        aria-controls="palette-results"
+        aria-activedescendant={current ? `palette-${current.type}-${current.id}` : undefined}
+        placeholder="Search commands, cards, this engagement"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setSelected(0);
+        }}
+        onKeyDown={onSearchKey}
+        trailing={
+          engagementId ? (
+            <HostPicker ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} {...(remembered && d.engagement ? { engagementName: d.engagement.name } : {})} />
+          ) : undefined
+        }
+      />
       <ul id="palette-results" role="listbox" aria-label="Results" className="m-0 flex max-h-[44vh] list-none flex-col overflow-y-auto p-0">
         {results.length === 0 && <li role="presentation" className="px-1 py-2 text-xs text-muted">Nothing matches</li>}
         {results.map((r, i) => (

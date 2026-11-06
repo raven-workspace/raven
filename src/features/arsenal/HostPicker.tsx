@@ -2,26 +2,30 @@ import type { Ref } from "react";
 import type { Host } from "../../types/host";
 
 /**
- * The "for <host>" chip, as a picker: another host of the engagement, or No host. ⌥H focuses it (see `isHostPickKey`).
+ * The host scope at the right edge of the search bar: a compact muted "for <host> ⌄" over a native select (another
+ * host of the engagement, listed with its IP, or No host). ⌥H opens it (see `isHostPickKey`).
  * `engagementName` is shown when the engagement is not the route's (full-screen Arsenal).
  */
 export function HostPicker({ hosts, value, onChange, engagementName, ref }: {
   hosts: Host[]; value: string | null; onChange: (hostId: string | null) => void; engagementName?: string; ref?: Ref<HTMLSelectElement>;
 }) {
+  const current = value ? hosts.find((h) => h.id === value) : undefined;
   return (
-    <label className="inline-flex shrink-0 items-center gap-1 rounded-full border border-line-strong py-px pl-2 pr-1 text-[11px] leading-4 whitespace-nowrap text-fg-2">
+    <label className="relative inline-flex min-w-0 shrink-0 cursor-default items-center gap-1 rounded-md px-1.5 py-0.5 text-xs whitespace-nowrap text-muted hover:bg-surface-2 focus-within:bg-surface-2 focus-within:ring-1 focus-within:ring-line-strong">
       {engagementName ? `${engagementName} · for` : "for"}
+      <b className="max-w-36 truncate font-medium text-fg-2">{current?.name ?? "no host"}</b>
+      <span aria-hidden="true" className="text-[10px] opacity-70">⌄</span>
       <select
         ref={ref}
         aria-label="Fill for host"
         title="Fill for another host (⌥H)"
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
-        className="max-w-36 cursor-default bg-transparent text-[11px] text-fg outline-none"
+        className="absolute inset-0 h-full w-full cursor-default opacity-0"
       >
         <option value="">No host</option>
         {hosts.map((h) => (
-          <option key={h.id} value={h.id}>{h.name}</option>
+          <option key={h.id} value={h.id} label={h.ip ? `${h.name}  ${h.ip}` : h.name}>{h.name}</option>
         ))}
       </select>
     </label>
