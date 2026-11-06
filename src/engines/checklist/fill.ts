@@ -172,13 +172,15 @@ export function commandContext(input: FillInput, opts: FillOptions = {}): Substi
   const customVars: Record<string, string> = {};
   for (const [k, v] of Object.entries(computed)) if (v) customVars[k] = v;
 
+  // Explicit overrides also win over the global-field tokens (the Arsenal chips edit LHOST and TARGET_IP).
+  const o = (name: string) => computed[name];
   return {
-    rhost: host.ip?.trim() || undefined,
-    lhost: tunnel ? tunnelIp : input.attackerIp.trim() || undefined,
-    lport: input.listenerPort.trim() || undefined,
-    domain,
-    user: cred && !isOwnerless(cred) ? cred.username.trim() : undefined,
-    dcIp: dc?.ip?.trim() || undefined,
+    rhost: o('TARGET_IP') ?? (host.ip?.trim() || undefined),
+    lhost: o('LHOST') ?? (tunnel ? tunnelIp : input.attackerIp.trim() || undefined),
+    lport: o('LPORT') ?? (input.listenerPort.trim() || undefined),
+    domain: o('DOMAIN') ?? domain,
+    user: o('USER') ?? (cred && !isOwnerless(cred) ? cred.username.trim() : undefined),
+    dcIp: o('DC_IP') ?? (dc?.ip?.trim() || undefined),
     customVars,
   };
 }

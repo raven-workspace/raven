@@ -10,6 +10,7 @@ import { useLog } from "../log/queries";
 import { LogEntryRow } from "../log/LogEntryRow";
 import { OrderButton } from "../log/OrderButton";
 import { byOrder, usePersistedOrder } from "../log/usePersistedOrder";
+import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useNotesStore } from "../notes/useNotesStore";
 import { StuckView } from "../stuck/StuckView";
 import { HostHeader } from "./HostHeader";
@@ -45,9 +46,14 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
     setStuckOpen(false);
   }
   // The stuck view and the notes panel share the right edge: opening one closes the other.
+  // The Arsenal drawer shares that edge too.
   useEffect(() => useNotesStore.subscribe((s) => { if (s.open) setStuckOpen(false); }), []);
+  useEffect(() => useArsenalStore.subscribe((s) => { if (s.open) setStuckOpen(false); }), []);
   const toggleStuck = () => {
-    if (!stuckOpen) useNotesStore.getState().close();
+    if (!stuckOpen) {
+      useNotesStore.getState().close();
+      useArsenalStore.getState().close();
+    }
     setStuckOpen(!stuckOpen);
   };
   useKeydown((e) => {

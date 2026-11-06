@@ -25,6 +25,7 @@ export function fillLibraryCommand(c: LibraryCommand, input: FillInput, msfMarke
     id: c.id, title: c.title, text: filled.text, copyText: real.text, unresolved: filled.unresolved,
     msfMarker, tokens: [...new Set(tokens)],
   };
+  if (c.cardId) out.cardId = c.cardId;
   if (filled.viaTunnel) out.viaTunnel = { viaHostName: filled.viaTunnel.viaHostName, down: filled.viaTunnel.down };
   return out;
 }

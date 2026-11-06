@@ -1,37 +1,23 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useMatch, useNavigate } from "react-router";
-import { defaultCredFor, fillCommand, portChoices, type FillInput } from "../../engines/checklist";
+import { fillCommand } from "../../engines/checklist";
 import { credLabel } from "../../engines/credentials/labels";
 import { getCards, getLibrary, getToolkit, useLibraryVersion } from "../../engines/library/store";
-import { api } from "../../lib/api";
 import { copyPlain, copySecret } from "../../lib/clipboard";
 import { reportError } from "../../lib/lockSignal";
-import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
-import type { Service } from "../../types/service";
 import { Chip, Dialog, Input, Kbd } from "../../ui";
 import { logCommand } from "../capture/logCommand";
 import { fillLibraryCommand } from "../checklist/goalCommands";
-import { useCredPickStore } from "../checklist/credPick";
-import { engagementServicesKey, tunnelsKey } from "../checklist/queries";
-import { credAttemptsKey, credentialsKey } from "../credentials/queries";
+import { useArsenalStore } from "../arsenal/useArsenalStore";
+import { useFillBase } from "./fillData";
 import { GENERATORS } from "./generators";
 import { searchPalette, type EngagementItem, type PaletteResult } from "./search";
 import { usePaletteStore } from "./usePaletteStore";
 
 const MAX_RESULTS = 30;
 const GROUPS = { command: "Commands", generator: "Generators", card: "Cards", item: "This engagement" } as const;
-
-const NO_HOSTS: Host[] = [];
-const DASHBOARD_ENGAGEMENT: Engagement = {
-  id: "", name: "", kind: "lab", client: null, subLabel: null, scopeCidrs: [], domain: null, startsAt: null, endsAt: null,
-  timeboxStart: null, timeboxMinutes: null, status: "active", createdAt: 0, updatedAt: 0, lastActivityAt: null, lastRanOn: null, msfHostId: null,
-};
-const noHost = (engagementId: string): Host => ({
-  id: "", engagementId, name: "", ip: null, os: null, boardColumn: "information-gathering", boardManual: false, dualHomed: false,
-  boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 0, updatedAt: 0,
-});
 
 /** The best staged Toolkit file whose name contains a query word: it pre-fills {FILE}. */
 function toolPrefill(query: string, os: Host["os"]): Record<string, string> {
@@ -43,34 +29,17 @@ function toolPrefill(query: string, os: Host["os"]): Record<string, string> {
   return hits[0] ? { FILE: hits[0].file } : {};
 }
 
-function usePaletteData(engagementId: string) {
-  const enabled = engagementId !== "";
-  const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
-  const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId), enabled });
-  const hosts = useQuery({ queryKey: ["hosts", engagementId], queryFn: () => api.hostsList(engagementId), enabled });
-  const services = useQuery({ queryKey: engagementServicesKey(engagementId), queryFn: () => api.servicesListEngagement(engagementId), enabled });
-  const tunnels = useQuery({ queryKey: tunnelsKey(engagementId), queryFn: () => api.tunnelsList(engagementId), enabled });
-  const credentials = useQuery({ queryKey: credentialsKey(engagementId), queryFn: () => api.credentialsList(engagementId), enabled });
-  const attempts = useQuery({ queryKey: credAttemptsKey(engagementId), queryFn: () => api.credAttemptsList(engagementId), enabled });
-  const log = useQuery({ queryKey: ["log", engagementId], queryFn: () => api.logList(engagementId), enabled });
-  return { settings: settings.data, engagement: engagement.data, hosts: hosts.data ?? NO_HOSTS, services: services.data, tunnels: tunnels.data, credentials: credentials.data, attempts: attempts.data, log: log.data };
-}
-
 function PaletteBody({ engagementId, hostId, onClose }: { engagementId: string; hostId: string | null; onClose: () => void }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const libraryVersion = useLibraryVersion();
-  const d = usePaletteData(engagementId);
+  const { d, host, makeInput } = useFillBase(engagementId, hostId);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<string>();
   const searchRef = useRef<HTMLInputElement>(null);
   const tokenRefs = useRef<HTMLInputElement[]>([]);
-  const picked = useCredPickStore((s) => (hostId ? s.picks[hostId] : undefined));
-
-  const host = hostId ? d.hosts.find((h) => h.id === hostId) : undefined;
-  const engagement = d.engagement ?? DASHBOARD_ENGAGEMENT;
 
   const items = useMemo<EngagementItem[]>(() => {
     if (!engagementId) return [];
@@ -99,27 +68,11 @@ function PaletteBody({ engagementId, hostId, onClose }: { engagementId: string; 
   const index = Math.min(selected, Math.max(0, results.length - 1));
   const current: PaletteResult | undefined = results[index];
 
-  const cred = useMemo(() => {
-    if (!host || !d.credentials) return null;
-    if (picked === null) return null;
-    return d.credentials.find((c) => c.id === picked) ?? defaultCredFor(host, d.credentials, d.attempts ?? []);
-  }, [host, d.credentials, d.attempts, picked]);
-
   const filled = useMemo(() => {
     if (current?.type !== "command") return null;
-    const servicesByHost = new Map<string, Service[]>();
-    for (const s of d.services ?? []) servicesByHost.set(s.hostId, [...(servicesByHost.get(s.hostId) ?? []), s]);
-    const h = host ?? noHost(engagementId);
-    const input: FillInput = {
-      host: h, engagement, hosts: d.hosts, servicesByHost, tunnels: d.tunnels ?? [],
-      attackerIp: d.settings?.attackerIp ?? "", kaliUser: d.settings?.kaliUser, listenerPort: d.settings?.listenerPort ?? "",
-      cred: host ? cred : null,
-      overrides: { ...toolPrefill(query, h.os), ...Object.fromEntries(Object.entries(overrides).map(([k, v]) => [k.toUpperCase(), v])) },
-    };
-    const portHint = host ? portChoices(input) : [];
-    if (portHint.length) input.portHint = portHint;
+    const input = makeInput({ ...toolPrefill(query, host?.os ?? null), ...Object.fromEntries(Object.entries(overrides).map(([k, v]) => [k.toUpperCase(), v])) });
     return { cmd: fillLibraryCommand(current.command, input, current.msfMarker), input };
-  }, [current, host, engagementId, engagement, d.hosts, d.services, d.tunnels, d.settings, cred, query, overrides]);
+  }, [current, host, makeInput, query, overrides]);
 
   useEffect(() => searchRef.current?.focus(), []);
 
@@ -175,8 +128,12 @@ function PaletteBody({ engagementId, hostId, onClose }: { engagementId: string; 
       e.stopPropagation();
       tokenRefs.current[0]?.focus();
     } else if (e.key === "ArrowRight" && e.currentTarget.selectionStart === e.currentTarget.value.length && current?.type !== "item") {
-      // Opens the card in the Arsenal drawer once it exists; until then the key does nothing.
+      // Opens the card in the Arsenal drawer.
+      const cardId = current?.type === "card" ? current.id : current?.type === "command" ? current.command.cardId : undefined;
+      if (!cardId) return;
       e.preventDefault();
+      useArsenalStore.getState().openCard(cardId);
+      onClose();
     }
   };
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {

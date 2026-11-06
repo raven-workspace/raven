@@ -359,6 +359,15 @@ describe('arsenal tokens', () => {
     expect(r.unresolved).toEqual([]);
   });
 
+  it('overrides win over the global-field tokens too (LHOST, LPORT, TARGET_IP, USER, DOMAIN)', () => {
+    const r = text('{LHOST} {LPORT} {TARGET_IP} {DOMAIN}', {
+      overrides: { LHOST: '10.9.9.9', LPORT: '9001', TARGET_IP: '10.1.1.1', DOMAIN: 'x.local' },
+    });
+    expect(r.text).toBe('10.9.9.9 9001 10.1.1.1 x.local');
+    expect(r.unresolved).toEqual([]);
+    expect(text('{LHOST} {TARGET_IP}').text).toBe('10.10.14.3 172.16.1.5');
+  });
+
   it('portChoices filters open ports by the goal\'s applies, ascending', () => {
     const closed = { ...svc('h1', 25), state: 'closed' };
     const web = { ...svc('h1', 8080), nmapService: 'http' };

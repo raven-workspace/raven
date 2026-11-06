@@ -15,6 +15,8 @@ import { applySnapshot, FIELD_MANUAL_KEY, useVaultNewer } from "../fieldManual/q
 import { useAutoLock } from "./useAutoLock";
 import { clearSecretClipboard } from "../../lib/clipboard";
 import { isDialogOpen } from "../../lib/keys";
+import { ArsenalDrawer } from "../arsenal/ArsenalDrawer";
+import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { Palette } from "../palette/Palette";
 import { usePaletteStore } from "../palette/usePaletteStore";
 
@@ -220,6 +222,9 @@ export function VaultGate({ children }: { children: ReactNode }) {
         Settings
         {vaultNewer && <span aria-hidden="true" className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />}
       </Link>
+      <Button size="sm" onClick={() => useArsenalStore.getState().toggle()} aria-label="Arsenal">
+        Arsenal <Kbd>A</Kbd>
+      </Button>
       <Button size="sm" onClick={() => usePaletteStore.getState().open()} aria-label="Search">
         Search <Kbd>⌘K</Kbd>
       </Button>
@@ -254,6 +259,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
         )}
         {children}
         <Palette />
+        <ArsenalDrawer />
       </VaultContext.Provider>
     );
   }

@@ -13,6 +13,8 @@ export interface FilledCommand {
   /** Exam sim, no host locked yet: this command would spend the one Metasploit host. */
   msfMarker: boolean;
   viaTunnel?: { viaHostName: string; down: boolean };
+  /** Field-manual commands: the Arsenal card they came from. */
+  cardId?: string;
   /** The raw unresolved tokens as they appear in `text`, to mark. */
   tokens?: string[];
 }

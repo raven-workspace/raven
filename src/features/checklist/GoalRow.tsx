@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { DA_COVER_LABEL, isCoverMarked, type ChecklistGoal } from "../../engines/checklist";
+import { getCards } from "../../engines/library/store";
 import type { ChecklistStatus, ItemState } from "../../types/checklist";
 import { Chip, Textarea, Toggle, labelClass } from "../../ui";
+import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { CommandList, type FilledCommand } from "./CommandList";
 import { EvidenceLinks, type EvidenceLink } from "./EvidenceLinks";
 
@@ -29,6 +31,25 @@ export interface GoalRowProps {
   /** Changes each time the row is asked for: it expands and scrolls into view. */
   focus?: number;
   children?: ReactNode;
+}
+
+/** One link per distinct Arsenal card behind a step's commands, and a way into the rest of the Arsenal. */
+function CardLinks({ commands }: { commands: FilledCommand[] }) {
+  const cards = getCards();
+  const ids = [...new Set(commands.map((c) => c.cardId).filter((id): id is string => !!id))];
+  if (ids.length === 0) return null;
+  const linkClass = "cursor-default text-fg-2 hover:text-fg";
+  return (
+    <p className="m-0 flex flex-wrap items-center gap-x-2 text-xs text-muted">
+      {ids.map((id) => (
+        <button key={id} type="button" className={linkClass} onClick={() => useArsenalStore.getState().openCard(id)}>
+          From card {cards.find((c) => c.id === id)?.title ?? id} ↗
+        </button>
+      ))}
+      <span aria-hidden="true">·</span>
+      <button type="button" className={linkClass} onClick={() => useArsenalStore.getState().openCard()}>more in Arsenal</button>
+    </p>
+  );
 }
 
 export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, newCredLabels, onStatus, onNotes, onOpenEntry, focus, children }: GoalRowProps) {
@@ -76,7 +97,10 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
         <div className="mt-2 flex flex-col gap-3 pl-7">
           {goal.why && <p className="m-0 text-xs text-muted">{goal.why}</p>}
           {commands.length > 0 ? (
-            <CommandList commands={commands} />
+            <>
+              <CommandList commands={commands} />
+              <CardLinks commands={commands} />
+            </>
           ) : (
             emptyCommandsText && <p className="m-0 text-xs text-muted">{emptyCommandsText}</p>
           )}
