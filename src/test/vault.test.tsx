@@ -106,6 +106,44 @@ describe("vault gate", () => {
     expect(screen.getByText("Updated Raven's data (backup saved)")).toBeInTheDocument();
   });
 
+  it("the migration backup notice can be dismissed", async () => {
+    const user = userEvent.setup();
+    m.vaultStatus.mockResolvedValue({ exists: true, unlocked: false });
+    m.vaultUnlock.mockResolvedValue({ ...unlockOk, migratedFrom: 2, migratedTo: 3 });
+    mount();
+    await user.type(await screen.findByLabelText("Password"), "correct horse battery{Enter}");
+    expect(await screen.findByText("Updated Raven's data (backup saved)")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Dismiss notice" }));
+    expect(screen.queryByText("Updated Raven's data (backup saved)")).not.toBeInTheDocument();
+    expect(screen.getByTestId("inside")).toBeInTheDocument();
+  });
+
+  it("the migration backup notice clears by itself after a few seconds", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    m.vaultStatus.mockResolvedValue({ exists: true, unlocked: false });
+    m.vaultUnlock.mockResolvedValue({ ...unlockOk, migratedFrom: 2, migratedTo: 3 });
+    mount();
+    await user.type(await screen.findByLabelText("Password"), "correct horse battery{Enter}");
+    expect(await screen.findByText("Updated Raven's data (backup saved)")).toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTime(9000));
+    expect(screen.queryByText("Updated Raven's data (backup saved)")).not.toBeInTheDocument();
+  });
+
+  it("a daily backup failure stays until dismissed", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    m.vaultStatus.mockResolvedValue({ exists: true, unlocked: false });
+    m.vaultUnlock.mockResolvedValue({ ...unlockOk, dailyBackupError: "disk full" });
+    mount();
+    await user.type(await screen.findByLabelText("Password"), "correct horse battery{Enter}");
+    expect(await screen.findByText("Daily backup failed: disk full")).toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTime(60000));
+    expect(screen.getByText("Daily backup failed: disk full")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Dismiss notice" }));
+    expect(screen.queryByText("Daily backup failed: disk full")).not.toBeInTheDocument();
+  });
+
   it("shows Unlocking… while the unlock is pending", async () => {
     const user = userEvent.setup();
     m.vaultStatus.mockResolvedValue({ exists: true, unlocked: false });

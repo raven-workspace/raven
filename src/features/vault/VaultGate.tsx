@@ -37,6 +37,8 @@ export function useVault(): VaultContextValue {
 
 const DEFAULT_AUTO_LOCK_MINUTES = 30;
 const LOCK_RETRY_MS = 2000;
+/** How long the unlock notice (e.g. "backup saved") stays before it clears itself. A failure stays until dismissed. */
+const NOTICE_MS = 8000;
 
 /**
  * Setup when there is no vault, unlock when locked, children when unlocked.
@@ -201,6 +203,13 @@ export function VaultGate({ children }: { children: ReactNode }) {
     };
   }, [unlocked, qc]);
 
+  // The unlock notice is news, not state: it clears itself.
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), NOTICE_MS);
+    return () => clearTimeout(t);
+  }, [notice]);
+
   const ctx = useMemo(() => ({ lock, markLocked }), [lock, markLocked]);
 
   const onUnlocked = (r: UnlockResult) => {
@@ -252,9 +261,22 @@ export function VaultGate({ children }: { children: ReactNode }) {
     body = (
       <VaultContext.Provider value={ctx}>
         {(notice || backupError) && (
-          <div className="flex flex-col gap-0.5 border-b border-line px-4 py-1.5 text-xs text-muted">
-            {notice && <p className="m-0">{notice}</p>}
-            {backupError && <p className="m-0">Daily backup failed: {backupError}</p>}
+          <div className="flex items-start gap-2 border-b border-line px-4 py-1.5 text-xs text-muted">
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              {notice && <p className="m-0">{notice}</p>}
+              {backupError && <p className="m-0">Daily backup failed: {backupError}</p>}
+            </div>
+            <button
+              type="button"
+              aria-label="Dismiss notice"
+              onClick={() => {
+                setNotice(null);
+                setBackupError(null);
+              }}
+              className="shrink-0 cursor-default rounded-sm px-1 text-muted-2 hover:text-fg"
+            >
+              ×
+            </button>
           </div>
         )}
         {children}
