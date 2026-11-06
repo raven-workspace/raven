@@ -251,6 +251,42 @@ describe("token suggestions (U4)", () => {
   });
   const USERCMD: LibraryCommand = { ...PROBE, id: "zz-user", title: "Zzuser login", template: "zzuser {USER}@{TARGET_IP}" };
 
+  it("searching a credential's secret finds no log entry or note that contains it", async () => {
+    const user = userEvent.setup();
+    m.credentialsList.mockResolvedValue([
+      cred("c1", "alice", "Winter2024!"),
+      { ...cred("c2", "bob", "aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0"), type: "hash", hashType: "pwdump" },
+    ]);
+    const entry = (id: string, title: string, command: string) => ({
+      id, engagementId: "e1", kind: "command", title, hostIds: ["h1"], at: 1, createdAt: 1, updatedAt: 1,
+      content: { kind: "command", blocks: [{ command, output: "", shell: "" }] },
+    });
+    m.logList.mockResolvedValue([
+      entry("l1", "Zzspray alice", "nxc smb 10.10.10.5 -u alice -p 'Winter2024!'"),
+      entry("l2", "Zzpth bob", "nxc smb 10.10.10.5 -u bob -H 31D6CFE0D16AE931B73C59D7E0C089C0"),
+      { ...entry("l3", "Zznote", ""), kind: "note", content: { kind: "note", text: "alice uses Winter2024! everywhere" } },
+    ] as never);
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Checklist" });
+    await user.keyboard(cmdK);
+    const search = await screen.findByRole("combobox", { name: "Search" });
+    const dlg = within(screen.getByRole("dialog", { name: "Search" }));
+    // The entries are searchable by their other words.
+    await user.type(search, "zz");
+    expect(await dlg.findByText("Zzspray alice")).toBeInTheDocument();
+    expect(dlg.getByText("Zzpth bob")).toBeInTheDocument();
+    await user.clear(search);
+    await user.type(search, "everywhere");
+    expect(await dlg.findByText("Zznote")).toBeInTheDocument();
+    for (const q of ["winter2024", "31d6cfe0", "aad3b435"]) {
+      await user.clear(search);
+      await user.type(search, q);
+      expect(dlg.queryByText("Zzspray alice")).not.toBeInTheDocument();
+      expect(dlg.queryByText("Zzpth bob")).not.toBeInTheDocument();
+      expect(dlg.queryByText("Zznote")).not.toBeInTheDocument();
+    }
+  });
+
   it("a USER token offers the engagement's usernames (never secrets) and picking one fills the command, palette open", async () => {
     const user = userEvent.setup();
     m.credentialsList.mockResolvedValue([cred("c1", "alice", "Winter2024!"), cred("c2", "bob", "Summer2025!")]);

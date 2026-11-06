@@ -30,6 +30,26 @@ export type PaletteResult =
   | { type: "card"; id: string; title: string; card: CardMeta }
   | { type: "item"; id: string; title: string; item: EngagementItem };
 
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * `text` with every known credential secret cut out, so engagement search never matches on one. Each secret is
+ * removed whole and, for `LM:NT`-style pairs, part by part; case-insensitively, since hashes are typed in either case.
+ */
+export function withoutSecrets(text: string, secrets: string[]): string {
+  const pieces = new Set<string>();
+  for (const s of secrets) {
+    const t = s.trim();
+    if (!t) continue;
+    pieces.add(t);
+    for (const part of t.split(":")) if (part.length >= 6) pieces.add(part);
+  }
+  if (pieces.size === 0 || !text) return text;
+  // Longest first, so a whole pair goes before its halves.
+  const re = new RegExp([...pieces].sort((a, b) => b.length - a.length).map(escapeRe).join("|"), "gi");
+  return text.replace(re, " ");
+}
+
 const STAGE_OF_GOAL = new Map(HOST_GOALS.map((g) => [g.id, g.stage]));
 const STAGE_TITLE = new Map(HOST_STAGES.map((s) => [s.id, s.title]));
 

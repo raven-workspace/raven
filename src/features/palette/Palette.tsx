@@ -16,7 +16,7 @@ import { useFillScope, useLastEngagementStore } from "../arsenal/useFillScope";
 import { HostPicker, isHostPickKey, openPicker } from "../arsenal/HostPicker";
 import { useFillBase } from "./fillData";
 import { GENERATORS } from "./generators";
-import { searchPalette, type EngagementItem, type PaletteResult } from "./search";
+import { searchPalette, withoutSecrets, type EngagementItem, type PaletteResult } from "./search";
 import { usePaletteStore } from "./usePaletteStore";
 import { tokenSuggestions, type SuggestContext } from "./suggest";
 import { TokenInput } from "./TokenInput";
@@ -57,9 +57,11 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const items = useMemo<EngagementItem[]>(() => {
     if (!engagementId) return [];
     const out: EngagementItem[] = [];
+    // Log and note text is searched with the engagement's known secrets cut out: a password never finds anything.
+    const secrets = (d.credentials ?? []).map((c) => c.secret);
     for (const e of d.log ?? []) {
-      const text = e.content.kind === "command" ? e.content.blocks.map((b) => b.command).join("\n") : e.content.kind === "note" ? e.content.text : "";
-      out.push({ id: e.id, kind: e.kind === "note" ? "note" : "log", title: e.title, text });
+      const raw = e.content.kind === "command" ? e.content.blocks.map((b) => b.command).join("\n") : e.content.kind === "note" ? e.content.text : "";
+      out.push({ id: e.id, kind: e.kind === "note" ? "note" : "log", title: e.title, text: withoutSecrets(raw, secrets) });
     }
     // Credential labels only: a secret is never searched or shown.
     for (const c of d.credentials ?? []) out.push({ id: c.id, kind: "credential", title: credLabel(c), text: "" });

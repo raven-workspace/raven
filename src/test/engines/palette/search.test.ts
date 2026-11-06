@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LibraryCommand } from '../../../engines/library/types';
-import { searchPalette, type PaletteContext } from '../../../features/palette/search';
+import { searchPalette, withoutSecrets, type PaletteContext } from '../../../features/palette/search';
 
 const cmd = (id: string, over: Partial<LibraryCommand> = {}): LibraryCommand =>
   ({ id, title: id, tool: 'tool', template: id, os: 'any', runFrom: 'attacker', goals: [], source: 'raven', ...over }) as LibraryCommand;
@@ -50,5 +50,16 @@ describe('searchPalette', () => {
     expect(sim('h2').map((r) => r.id)).toEqual(['ok']);
     expect(sim('h1').map((r) => r.id)).toContain('msf');
     expect(searchPalette('run', ctx(lib)).map((r) => r.id)).toContain('ban');
+  });
+});
+
+describe('withoutSecrets', () => {
+  it('cuts out each secret, whole and per LM:NT half, in any case', () => {
+    const lm = 'aad3b435b51404eeaad3b435b51404ee';
+    const nt = '31d6cfe0d16ae931b73c59d7e0c089c0';
+    const out = withoutSecrets(`-p 'P@ss.w0rd(1)' -H ${nt.toUpperCase()} ${lm}:${nt}`, ['P@ss.w0rd(1)', `${lm}:${nt}`, '  ']);
+    expect(out).not.toMatch(/P@ss|31d6|aad3/i);
+    expect(out).toContain('-p');
+    expect(withoutSecrets('nothing here', [])).toBe('nothing here');
   });
 });
