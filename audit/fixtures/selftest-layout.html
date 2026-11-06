@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Raven audit self-test</title>
+<style>
+  html { width: 900px; }
+  body { margin: 0; width: 900px; font: 14px/20px sans-serif; background: #fff; color: #111; }
+  section { margin: 0 0 12px; padding: 8px; border: 1px solid #ccc; position: relative; }
+  .box { width: 200px; }
+</style>
+</head>
+<body>
+<section data-case="overflow" data-expect="overflow">
+  <div class="box" style="overflow:hidden;white-space:nowrap"><span style="display:inline-block;width:320px">fixed wide inner content</span></div>
+</section>
+
+<section data-case="truncated" data-expect="truncated">
+  <div class="box" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">This sentence is much too long for a 200px box and gets an ellipsis</div>
+</section>
+
+<section data-case="clipped" data-expect="clipped">
+  <div class="box" style="height:20px;overflow-y:hidden">Line one of text that wraps around inside a short box and the following lines are cut off by the fixed height</div>
+</section>
+
+<section data-case="offscreen" data-expect="offscreen" style="height:40px">
+  <button style="position:absolute;left:850px;top:8px;width:120px">Off the edge</button>
+</section>
+
+<section data-case="overlap" data-expect="overlap" style="height:50px">
+  <button style="position:absolute;left:20px;top:8px;width:120px;height:30px">First</button>
+  <button style="position:absolute;left:100px;top:14px;width:120px;height:30px">Second</button>
+</section>
+
+<section data-case="squeezed" data-expect="squeezed">
+  <p style="width:60px;margin:0">one two three four five six</p>
+</section>
+
+<section data-case="oversized-control" data-expect="oversized-control">
+  <div style="width:500px"><button style="width:260px">Copy</button></div>
+</section>
+
+<section data-case="mid-token-wrap" data-expect="mid-token-wrap">
+  <code style="display:block;width:100px;word-break:break-all">nmap-sT-p-10.10.10.5</code>
+</section>
+
+<section data-case="contrast" data-expect="contrast">
+  <p style="margin:0;color:#777;background:#888">Low contrast text</p>
+</section>
+
+<section data-case="label" data-expect="label">
+  <input type="text">
+</section>
+
+<section data-case="image-distorted" data-expect="image-distorted">
+  <img alt="distorted" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZAAAABkCAIAAAAnqfEgAAABrklEQVR4nO3OQQkAMQADsMqZpqk7qWehvzIIREBy7gfwhMwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApR8xkwrgXA3h2QAAAABJRU5ErkJggg==" style="width:200px;height:200px">
+</section>
+
+<section data-case="image-cropped" data-expect="image-cropped">
+  <img alt="cropped" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZAAAABkCAIAAAAnqfEgAAABrklEQVR4nO3OQQkAMQADsMqZpqk7qWehvzIIREBy7gfwhMwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApR8xkwrgXA3h2QAAAABJRU5ErkJggg==" style="width:200px;height:200px;object-fit:cover">
+</section>
+
+<section data-case="image-ok" data-expect="none">
+  <img alt="fine" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZAAAABkCAIAAAAnqfEgAAABrklEQVR4nO3OQQkAMQADsMqZpqk7qWehvzIIREBy7gfwhMwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApcwHAKXMBwClzAcApR8xkwrgXA3h2QAAAABJRU5ErkJggg==" style="max-width:100%;max-height:120px">
+</section>
+
+<section data-case="scroller-ok" data-expect="none">
+  <pre style="width:200px;margin:0;overflow-x:auto">a long line inside a scrolling pre block that is wider than its box</pre>
+</section>
+
+<section data-case="truncate-titled-ok" data-expect="none">
+  <div class="box" title="full text" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">This sentence is much too long for a 200px box but has a title</div>
+</section>
+
+<section data-case="allow-ok" data-expect="none">
+  <div data-audit-allow="truncate"><div class="box" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">This sentence is much too long for a 200px box but is allowed</div></div>
+</section>
+
+<section data-case="wrap-ok" data-expect="none">
+  <p style="width:300px;margin:0">Long text that wraps at spaces across several lines without any trouble at all, because it has plenty of room to breathe.</p>
+</section>
+</body>
+</html>
