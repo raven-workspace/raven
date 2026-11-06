@@ -18,6 +18,8 @@ export interface ParsedBlock {
 export interface ParsedCard {
   meta: CardMeta;
   blocks: ParsedBlock[];
+  /** The card's frontmatter `exam` (e.g. `prohibited`). */
+  exam?: string;
   /** `**Exam:**` lines that appear before the first block. */
   examNotes?: string[];
 }
@@ -112,5 +114,8 @@ export function parseCard(relPath: string, text: string): ParsedCard | null {
     }
   }
   flushNotes();
-  return examNotes.length ? { meta, blocks, examNotes } : { meta, blocks };
+  const out: ParsedCard = { meta, blocks };
+  if (fm.exam) out.exam = fm.exam;
+  if (examNotes.length) out.examNotes = examNotes;
+  return out;
 }

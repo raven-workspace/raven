@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { mergeImport, type FieldManualSnapshot } from "../../engines/fieldManual/merge";
+import { applyOverlay, mergeImport, normalizeSnapshot, type FieldManualSnapshot } from "../../engines/fieldManual/merge";
 import { parseCard, type ParsedCard } from "../../engines/fieldManual/parseCard";
 import { parsePlaybook, type PlaybookItem } from "../../engines/fieldManual/parsePlaybook";
 import { parseToolkit, type ToolkitEntry } from "../../engines/fieldManual/parseToolkit";
@@ -10,8 +10,9 @@ import { api } from "../../lib/api";
 export const FIELD_MANUAL_KEY = ["fieldManual"] as const;
 
 /** The stored snapshot of the last import, or null. */
-export function useFieldManual() {
+export function useFieldManual(enabled = true) {
   return useQuery({
+    enabled,
     queryKey: FIELD_MANUAL_KEY,
     queryFn: async () => (await api.fieldManualLoad()) ?? null,
   });
@@ -19,7 +20,11 @@ export function useFieldManual() {
 
 /** Applies a stored snapshot to the runtime library. */
 export function applySnapshot(s: FieldManualSnapshot): void {
-  setImported({ commands: s.commands, cards: s.cards, toolkit: s.toolkit });
+  setImported({
+    commands: applyOverlay(BUILTIN_LIBRARY, normalizeSnapshot(s, BUILTIN_LIBRARY)),
+    cards: s.cards,
+    toolkit: s.toolkit,
+  });
 }
 
 /**
@@ -39,11 +44,12 @@ export async function runImport(path: string, previous: FieldManualSnapshot | nu
       if (c && c.meta.id) cards.push(c);
     }
   }
-  const { commands, report } = mergeImport(BUILTIN_LIBRARY, cards, previous ?? undefined);
+  const { overlay, added, report } = mergeImport(BUILTIN_LIBRARY, cards, previous ?? undefined);
   const snapshot: FieldManualSnapshot = {
     importedAt: Date.now(),
     cards: cards.map((c) => c.meta),
-    commands,
+    overlay,
+    added,
     playbook,
     toolkit,
     report,
@@ -64,7 +70,7 @@ export function useImportFieldManual() {
 /** True when a vault file changed after the last import. Re-checked on window focus. */
 export function useVaultNewer(enabled: boolean): boolean {
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet, enabled });
-  const snap = useFieldManual();
+  const snap = useFieldManual(enabled);
   const path = settings.data?.fieldManualPath;
   const mtime = useQuery({
     queryKey: ["fieldManualMtime", path],

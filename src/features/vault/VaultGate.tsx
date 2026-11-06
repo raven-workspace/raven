@@ -10,6 +10,7 @@ import type { UnlockResult, VaultStatus } from "../../types/vault";
 import { Button, Kbd, TitleBar } from "../../ui";
 import { SetupScreen } from "./SetupScreen";
 import { UnlockScreen } from "./UnlockScreen";
+import { setImported } from "../../engines/library/store";
 import { applySnapshot, FIELD_MANUAL_KEY, useVaultNewer } from "../fieldManual/queries";
 import { useAutoLock } from "./useAutoLock";
 import { clearSecretClipboard } from "../../lib/clipboard";
@@ -182,7 +183,11 @@ export function VaultGate({ children }: { children: ReactNode }) {
     void (async () => {
       try {
         const snap = await api.fieldManualLoad();
-        if (!live || !snap) return;
+        if (!live) return;
+        if (!snap) {
+          if (snap === null) setImported({ commands: [], cards: [] }); // no stale imported layer after a restore
+          return;
+        }
         applySnapshot(snap);
         qc.setQueryData(FIELD_MANUAL_KEY, snap);
       } catch {

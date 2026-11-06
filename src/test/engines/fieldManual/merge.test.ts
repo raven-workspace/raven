@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeImport } from '../../../engines/fieldManual/merge';
+import { applyOverlay, mergeImport, normalizeSnapshot, type FieldManualSnapshot } from '../../../engines/fieldManual/merge';
 import type { ParsedBlock, ParsedCard } from '../../../engines/fieldManual/parseCard';
 import type { LibraryCommand } from '../../../engines/library/types';
 
@@ -82,20 +82,66 @@ describe('mergeImport', () => {
     expect(commands.find((c) => c.id === 'raven-1')).toEqual(raven);
   });
 
-  it('counts card changes and keeps cards missing from the vault out of the removed-kept command list', () => {
-    const prev = mergeImport([], [card([block()], 'zz')]);
-    expect(prev.report.cardsAdded).toBe(1);
+  it('counts a card new to the app as added', () => {
+    const r = mergeImport([], [card([block()], 'zz')]);
+    expect(r.report.cardsAdded).toBe(1);
   });
 
   it('is idempotent against its own previous result', () => {
     const builtins = [bi('fm-c1-2')];
     const parsed = [card([block({ why: 'w2' }), block({ title: 'N', template: 'n', index: 1 })])];
     const first = mergeImport(builtins, parsed);
-    const second = mergeImport(builtins, parsed, {
-      importedAt: 1, cards: parsed.map((p) => p.meta), commands: first.commands, playbook: [], toolkit: [], report: first.report,
-    });
+    const snap: FieldManualSnapshot = {
+      importedAt: 1, cards: parsed.map((p) => p.meta), overlay: first.overlay, added: first.added,
+      playbook: [], toolkit: [], report: first.report,
+    };
+    const second = mergeImport(builtins, parsed, snap);
     expect(second.commands).toEqual(first.commands);
     expect(second.report.commandsAdded).toBe(0);
     expect(second.report.commandsChanged).toBe(0);
+  });
+
+  it('stale built-in copies in a previous snapshot lose to the current built-ins, except the vault overlay', () => {
+    const current = [
+      bi('fm-c1-2', { goals: ['new-goal'], exam: 'banned', match: { bins: ['nmap', 'x'] }, tool: 'nmap2' }),
+      bi('rv-1', { source: 'raven', goals: ['rg'], exam: 'banned', cardId: undefined }),
+    ];
+    const stale = [
+      bi('fm-c1-2', { title: 'Vault title', goals: ['old'], exam: undefined, match: { bins: ['old'] }, tool: 'old' }),
+      bi('rv-1', { source: 'raven', goals: ['stale'], exam: undefined, cardId: undefined }),
+    ];
+    const prev = { importedAt: 1, cards: [], commands: stale, playbook: [], toolkit: [], report: {} as never };
+    const parsed = [card([block({ title: 'Vault title' })])];
+    const out = mergeImport(current, parsed, prev);
+    const fm = out.commands.find((c) => c.id === 'fm-c1-2')!;
+    expect(fm).toMatchObject({ title: 'Vault title', goals: ['new-goal'], exam: 'banned', tool: 'nmap2', match: { bins: ['nmap', 'x'] } });
+    expect(out.commands.find((c) => c.id === 'rv-1')).toEqual(current[1]);
+    const applied = applyOverlay(current, normalizeSnapshot(prev, current));
+    expect(applied.find((c) => c.id === 'fm-c1-2')).toMatchObject({ title: 'Vault title', goals: ['new-goal'], exam: 'banned' });
+    expect(applied.find((c) => c.id === 'rv-1')).toEqual(current[1]);
+  });
+
+  it('reads an old full-list snapshot: field-manual title/why/template and -v commands only', () => {
+    const builtins = [bi('fm-c1-2'), bi('rv-1', { source: 'raven', cardId: undefined })];
+    const added = bi('fm-c1-v3', { title: 'Added', source: 'field-manual' });
+    const n = normalizeSnapshot({ commands: [bi('fm-c1-2', { title: 'T', why: 'W', template: 'tt', goals: ['stale'] }), bi('rv-1', { source: 'raven', title: 'stale' }), added] }, builtins);
+    expect(n.overlay).toEqual({ 'fm-c1-2': { title: 'T', why: 'W', template: 'tt' } });
+    expect(n.added).toEqual([added]);
+  });
+
+  it('card-level exam: prohibited bans every new block', () => {
+    const c = { ...card([block({ title: 'A', template: 'x', index: 0 }), block({ title: 'B', template: 'y', index: 1 })], 'cz'), exam: 'prohibited' };
+    const { commands } = mergeImport([], [c]);
+    expect(commands.map((x) => x.exam)).toEqual(['banned', 'banned']);
+  });
+
+  it('a card missing from the vault keeps its commands and lists them; vault-added ones are listed separately', () => {
+    const builtins = [bi('fm-c1-2')];
+    const gone = bi('fm-c1-v5', { title: 'Added' });
+    const prev: FieldManualSnapshot = { importedAt: 1, cards: [], overlay: {}, added: [gone], playbook: [], toolkit: [], report: {} as never };
+    const { commands, report } = mergeImport(builtins, [card([block()], 'other')], prev);
+    expect(commands.map((c) => c.id)).toEqual(expect.arrayContaining(['fm-c1-2', 'fm-c1-v5']));
+    expect(report.commandsRemovedKept).toEqual(['fm-c1-2']);
+    expect(report.addedRemoved).toEqual(['fm-c1-v5']);
   });
 });

@@ -162,13 +162,14 @@ pub async fn import_apply(app: AppHandle, plan: ImportPlanInput) -> AppResult<Im
 
 /// Reads the Field-Manual vault's cards, playbooks and Toolkit. Read-only.
 #[tauri::command]
-pub async fn field_manual_scan(app: AppHandle, path: String) -> AppResult<Vec<VaultFile>> {
-    with_vault(app, move |_| field_manual::scan(&path)).await
+pub async fn field_manual_scan(path: String) -> AppResult<Vec<VaultFile>> {
+    // No vault guard: an iCloud read can stall and must not block other commands.
+    off_main(move || field_manual::scan(&path)).await
 }
 
 #[tauri::command]
-pub async fn field_manual_latest_mtime(app: AppHandle, path: String) -> AppResult<Option<i64>> {
-    with_vault(app, move |_| field_manual::latest_mtime(&path)).await
+pub async fn field_manual_latest_mtime(path: String) -> AppResult<Option<i64>> {
+    off_main(move || field_manual::latest_mtime(&path)).await
 }
 
 #[tauri::command]

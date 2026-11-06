@@ -16,14 +16,30 @@ export interface ImportReport {
   commandsRemovedKept: string[];
   /** Commands that gained an exam rule from classification. */
   classified: { id: string; exam: ExamRule }[];
+  /** Vault-added commands whose block (or whole card) is no longer in the vault; they stay. */
+  addedRemoved?: string[];
 }
 
-/** What an import stores, and what `mergeImport` reads back as `previous`. */
+/** What the vault changes about one built-in field-manual command. Everything else comes from the code. */
+export interface CommandOverlay {
+  title: string;
+  why?: string;
+  template: string;
+  /** Only present when stronger than the built-in's own rule. */
+  exam?: ExamRule;
+}
+
+/**
+ * What an import stores. Built-ins are never copied: `overlay` is the vault's change to each matched built-in and
+ * `added` the commands the vault introduced. `commands` is the old shape (a full merged list), read but never written.
+ */
 export interface FieldManualSnapshot {
   importedAt: number;
   cards: CardMeta[];
-  /** The full merged command list (built-ins included). */
-  commands: LibraryCommand[];
+  overlay?: Record<string, CommandOverlay>;
+  added?: LibraryCommand[];
+  /** @deprecated old full-list shape; see `normalizeSnapshot`. */
+  commands?: LibraryCommand[];
   playbook: PlaybookItem[];
   toolkit: ToolkitEntry[];
   report: ImportReport;
@@ -39,6 +55,49 @@ const toolOf = (template: string): string => {
   return line.trim().split(/\s+/)[0] ?? '';
 };
 
+/** Overlay and added commands of a snapshot in either shape. Old shape: only field-manual entries count. */
+export function normalizeSnapshot(
+  snap: Pick<FieldManualSnapshot, 'overlay' | 'added' | 'commands'> | undefined,
+  builtins: LibraryCommand[],
+): { overlay: Record<string, CommandOverlay>; added: LibraryCommand[] } {
+  if (!snap) return { overlay: {}, added: [] };
+  if (snap.overlay || snap.added) return { overlay: snap.overlay ?? {}, added: snap.added ?? [] };
+  const byId = new Map(builtins.map((b) => [b.id, b]));
+  const overlay: Record<string, CommandOverlay> = {};
+  const added: LibraryCommand[] = [];
+  for (const c of snap.commands ?? []) {
+    if (c.source !== 'field-manual') continue;
+    const b = byId.get(c.id);
+    if (!b) added.push(c);
+    else if (b.source === 'field-manual') {
+      const o: CommandOverlay = { title: c.title, template: c.template };
+      if (c.why !== undefined) o.why = c.why;
+      const exam = stronger(b.exam, c.exam);
+      if (exam && exam !== b.exam) o.exam = exam;
+      overlay[c.id] = o;
+    }
+  }
+  return { overlay, added };
+}
+
+/** The current built-ins with the vault's overlay and added commands applied. Only field-manual built-ins change. */
+export function applyOverlay(
+  builtins: LibraryCommand[],
+  snap: { overlay: Record<string, CommandOverlay>; added: LibraryCommand[] },
+): LibraryCommand[] {
+  const ids = new Set(builtins.map((b) => b.id));
+  const out = builtins.map((b) => {
+    const o = snap.overlay[b.id];
+    if (!o || b.source !== 'field-manual') return b;
+    const next: LibraryCommand = { ...b, title: o.title, template: o.template };
+    if (o.why !== undefined) next.why = o.why;
+    const exam = stronger(b.exam, o.exam);
+    if (exam) next.exam = exam;
+    return next;
+  });
+  return [...out, ...snap.added.filter((c) => !ids.has(c.id))];
+}
+
 const cardChanged = (a: CardMeta, b: CardMeta): boolean =>
   a.title !== b.title || a.stage !== b.stage || a.category !== b.category || a.os !== b.os || a.file !== b.file;
 
@@ -51,16 +110,14 @@ export function mergeImport(
   builtins: LibraryCommand[],
   parsed: ParsedCard[],
   previous?: FieldManualSnapshot,
-): { commands: LibraryCommand[]; report: ImportReport } {
+): { commands: LibraryCommand[]; overlay: Record<string, CommandOverlay>; added: LibraryCommand[]; report: ImportReport } {
   const builtinIds = new Set(builtins.map((b) => b.id));
-  const prevById = new Map((previous?.commands ?? []).map((c) => [c.id, c]));
-  const base: LibraryCommand[] = [
-    ...builtins.map((b) => prevById.get(b.id) ?? b),
-    ...(previous?.commands ?? []).filter((c) => !builtinIds.has(c.id)),
-  ];
+  const prev = normalizeSnapshot(previous, builtins);
+  const base = applyOverlay(builtins, prev);
   const usedIds = new Set(base.map((c) => c.id));
   const replaced = new Map<string, LibraryCommand>();
   const added: LibraryCommand[] = [];
+  const addedRemoved: string[] = [];
   const removedKept: string[] = [];
   const classified: ImportReport['classified'] = [];
   let commandsChanged = 0;
@@ -90,7 +147,7 @@ export function mergeImport(
       if (hit) {
         const next: LibraryCommand = { ...hit, title: b.title, template: b.template };
         if (b.why !== undefined) next.why = b.why;
-        const exam = stronger(hit.exam, classifyExam(b.template, undefined, b.note));
+        const exam = stronger(hit.exam, classifyExam(b.template, card.exam, b.note));
         if (exam) next.exam = exam;
         if (exam && exam !== hit.exam) classified.push({ id: hit.id, exam });
         if (next.title !== hit.title || next.template !== hit.template || next.why !== hit.why) {
@@ -103,7 +160,7 @@ export function mergeImport(
         let id = `fm-${cardId}-v${b.index}`;
         for (let n = 2; usedIds.has(id); n++) id = `fm-${cardId}-v${b.index}-${n}`;
         usedIds.add(id);
-        const exam = classifyExam(b.template, undefined, b.note);
+        const exam = classifyExam(b.template, card.exam, b.note);
         const cmd: LibraryCommand = {
           id,
           title: b.title,
@@ -123,12 +180,29 @@ export function mergeImport(
         added.push(cmd);
       }
     }
-    for (const c of pool) if (!taken.has(c.id)) removedKept.push(c.id);
+    for (const c of pool) if (!taken.has(c.id)) (builtinIds.has(c.id) ? removedKept : addedRemoved).push(c.id);
   }
 
   const knownCards = new Map<string, CardMeta>(FIELD_MANUAL_CARDS.map((c) => [c.id, c]));
   for (const c of previous?.cards ?? []) knownCards.set(c.id, c);
   const parsedIds = new Set(parsed.map((p) => p.meta.id));
+  // Cards missing from the vault entirely (e.g. iCloud-evicted placeholders): keep their commands, and say so.
+  for (const c of base) {
+    if (c.source !== 'field-manual' || !c.cardId || parsedIds.has(c.cardId)) continue;
+    (builtinIds.has(c.id) ? removedKept : addedRemoved).push(c.id);
+  }
+  const final = base.map((c) => replaced.get(c.id) ?? c);
+  const overlay: Record<string, CommandOverlay> = {};
+  for (const b of builtins) {
+    const f = final.find((c) => c.id === b.id);
+    if (!f || b.source !== 'field-manual') continue;
+    if (f.title === b.title && f.template === b.template && f.why === b.why && f.exam === b.exam) continue;
+    const o: CommandOverlay = { title: f.title, template: f.template };
+    if (f.why !== undefined) o.why = f.why;
+    if (f.exam && f.exam !== b.exam) o.exam = f.exam;
+    overlay[b.id] = o;
+  }
+  const allAdded = [...final.filter((c) => !builtinIds.has(c.id)), ...added];
   const report: ImportReport = {
     cardsAdded: parsed.filter((p) => !knownCards.has(p.meta.id)).length,
     cardsChanged: parsed.filter((p) => {
@@ -140,6 +214,7 @@ export function mergeImport(
     commandsChanged,
     commandsRemovedKept: removedKept,
     classified,
+    addedRemoved,
   };
-  return { commands: [...base.map((c) => replaced.get(c.id) ?? c), ...added], report };
+  return { commands: [...final, ...added], overlay, added: allAdded, report };
 }

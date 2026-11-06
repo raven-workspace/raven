@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 import { Button, Field, Input, Panel } from "../../ui";
 import { useFieldManual, useImportFieldManual } from "../fieldManual/queries";
@@ -10,6 +10,9 @@ export function FieldManualSection() {
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
   const snap = useFieldManual();
   const imp = useImportFieldManual();
+  useEffect(() => {
+    void qc.invalidateQueries({ queryKey: ["fieldManualMtime"] });
+  }, [qc]);
   const saved = settings.data?.fieldManualPath;
   const [draft, setPath] = useState<string | null>(null);
   const path = draft ?? saved ?? "";
@@ -55,7 +58,7 @@ export function FieldManualSection() {
       {s && (
         <p className="m-0 mt-3 text-xs text-fg-2">
           last: {new Date(s.importedAt).toLocaleString()} · {s.cards.length} cards ·{" "}
-          {s.commands.filter((c) => c.source === "field-manual").length} commands
+          {Object.keys(s.overlay ?? {}).length + (s.added?.length ?? 0)} commands
         </p>
       )}
       {r && (
@@ -64,6 +67,9 @@ export function FieldManualSection() {
           <li>Commands: {r.commandsAdded} added, {r.commandsChanged} changed</li>
           {r.commandsRemovedKept.length > 0 && (
             <li>{r.commandsRemovedKept.length} built-in commands no longer in the vault (kept)</li>
+          )}
+          {(r.addedRemoved?.length ?? 0) > 0 && (
+            <li>{r.addedRemoved?.length} added commands no longer in the vault (kept)</li>
           )}
           {r.classified.length > 0 && <li>{r.classified.length} given an exam rule</li>}
         </ul>
