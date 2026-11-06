@@ -94,7 +94,7 @@ export function EngagementChecklist() {
   };
   const input: FillInput = {
     host: stand, engagement: eng, hosts, servicesByHost, tunnels,
-    attackerIp: settings.data?.attackerIp ?? "", listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
+    attackerIp: settings.data?.attackerIp ?? "", kaliUser: settings.data?.kaliUser, listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
   };
   // The Log section has no deep link to one entry yet: open the section.
   const openEntry = () => void navigate(sectionPath(id, "log"));

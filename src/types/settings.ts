@@ -7,6 +7,12 @@ export interface Settings {
   attackerIp: string;
   /** Blank or 1-65535. */
   listenerPort: string;
+  /** Fills {KALI_USER}. */
+  kaliUser: string;
+  windowsToolsDir: string;
+  linuxToolsDir: string;
+  /** The Field-Manual vault Raven reads its library from. */
+  fieldManualPath: string;
 }
 
 export type SettingsPatch = Partial<Settings>;

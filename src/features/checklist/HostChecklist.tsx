@@ -83,7 +83,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal }: { 
   const entries = log.data ?? [];
   const input: FillInput = {
     host, engagement: eng, hosts, servicesByHost, tunnels,
-    attackerIp: settings.data?.attackerIp ?? "", listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
+    attackerIp: settings.data?.attackerIp ?? "", kaliUser: settings.data?.kaliUser, listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
   };
 
   const commandsFor = (goalId: string) => goalCommands(goalId, input, eng);

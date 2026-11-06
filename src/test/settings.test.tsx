@@ -23,7 +23,7 @@ function mount() {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
   m.backupsList.mockResolvedValue([
     { file: "a.bak", reason: "daily", createdAt: 1_700_000_000_000, sizeBytes: 1_258_291 },
   ]);
@@ -38,7 +38,7 @@ describe("settings", () => {
 
   it("saves auto-lock minutes on blur", async () => {
     const user = userEvent.setup();
-    m.settingsUpdate.mockResolvedValue({ autoLockMinutes: 10, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "" });
+    m.settingsUpdate.mockResolvedValue({ autoLockMinutes: 10, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
     mount();
     const input = await screen.findByLabelText("Auto-lock (minutes)");
     await user.clear(input);
@@ -145,10 +145,34 @@ describe("settings", () => {
 
   it("saves the listener port on blur", async () => {
     const user = userEvent.setup();
-    m.settingsUpdate.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "4444" });
+    m.settingsUpdate.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
     mount();
     await user.type(await screen.findByLabelText("Listener port"), "4444");
     await user.tab();
     expect(m.settingsUpdate).toHaveBeenCalledWith({ listenerPort: "4444" });
+  });
+
+  it("Kali user and tools folders save", async () => {
+    const user = userEvent.setup();
+    m.settingsUpdate.mockResolvedValue({
+      autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "",
+      kaliUser: "op", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm",
+    });
+    mount();
+    const ku = await screen.findByLabelText("Kali user");
+    await user.clear(ku);
+    await user.type(ku, "op");
+    await user.tab();
+    expect(m.settingsUpdate).toHaveBeenCalledWith({ kaliUser: "op" });
+    const wt = await screen.findByLabelText("Windows tools folder");
+    await user.clear(wt);
+    await user.type(wt, "/opt/win");
+    await user.tab();
+    expect(m.settingsUpdate).toHaveBeenCalledWith({ windowsToolsDir: "/opt/win" });
+    const lt = await screen.findByLabelText("Linux tools folder");
+    await user.clear(lt);
+    await user.type(lt, "/opt/lin");
+    await user.tab();
+    expect(m.settingsUpdate).toHaveBeenCalledWith({ linuxToolsDir: "/opt/lin" });
   });
 });

@@ -5,7 +5,8 @@ import type { Tunnel } from '../../types/network';
 import type { Service } from '../../types/service';
 import { ipInScope, parseScopeList } from '../parse/scope';
 import { isNtlmHash, isOwnerless } from '../credentials/matrix';
-import { findDcHost } from './facts';
+import { findDcHost, hostFacts, openPorts, serviceNames } from './facts';
+import type { ChecklistGoal } from './types';
 import { quoteContextAt, shellEscape } from './shellQuote';
 import { resolveTemplate, type SubstitutionContext } from './template';
 
@@ -21,6 +22,27 @@ export interface FillInput {
   listenerPort: string;
   /** The picked credential: the only source of USER, PASS and HASH. */
   cred?: Credential | null;
+  /** Settings.kaliUser: KALI_USER. */
+  kaliUser?: string;
+  /** The open ports to offer for {PORT}; the first is filled. */
+  portHint?: number[];
+  /** Explicit token values keyed by upper-case token name (FILE, DEST_DIR, PORT, COMMUNITY...). They win over everything. */
+  overrides?: Record<string, string>;
+}
+
+/**
+ * The host's open ports to offer for {PORT}, ascending. Under a goal: only those matching its `applies.ports` or
+ * `applies.services`; a goal with neither (or an empty `ports`) offers every open port.
+ */
+export function portChoices(input: FillInput, goal?: ChecklistGoal): number[] {
+  const services = (input.servicesByHost.get(input.host.id) ?? []).filter((s) => openPorts([s]).size > 0);
+  const a = goal?.applies;
+  const any = !a || (!a.ports && !a.services) || a.ports?.length === 0;
+  const out = new Set<number>();
+  for (const s of services) {
+    if (any || a.ports?.includes(s.port) || a.services?.some((n) => serviceNames([s]).has(n))) out.add(s.port);
+  }
+  return [...out].sort((x, y) => x - y);
 }
 
 export interface FillOptions {
@@ -123,6 +145,9 @@ export function commandContext(input: FillInput, opts: FillOptions = {}): Substi
   // Decided from the real credential; the mask only replaces the value.
   const pass = cred?.type === 'password' && secret ? (opts.secretMask ?? cred.secret) : undefined;
   const hash = cred && secret && isNtlmHash(cred) ? (opts.secretMask ?? secret.split(':').pop()) : undefined;
+  const facts = hostFacts(host, engagement, hosts, servicesByHost);
+  const hostName = host.name?.trim() || undefined;
+  const pivot = tunnel ? hosts.find((h) => h.id === tunnel.viaHostId) : undefined;
   const subnet = subnetFor(host, engagement, tunnels);
   const prefix = subnet?.match(/^(\d+\.\d+\.\d+)\.\d+\/24$/)?.[1];
 
@@ -133,7 +158,17 @@ export function commandContext(input: FillInput, opts: FillOptions = {}): Substi
     SUBNET: subnet,
     SUBNET_PREFIX: prefix,
     TUNNEL_IP: tunnelIp,
+    TARGET_HOST: facts.domainJoined && engagement.domain?.trim() && hostName ? `${hostName}.${engagement.domain.trim()}` : hostName,
+    HOSTNAME: hostName,
+    PIVOT_IP: pivot?.ip?.trim() || undefined,
+    PIVOT_NAME: pivot?.name?.trim() || undefined,
+    KALI_USER: input.kaliUser?.trim() || undefined,
+    COMMUNITY: 'public',
+    SOCKS_PORT: '1080',
+    DEST_DIR: host.os === 'windows' ? 'C:\\Windows\\Temp' : '/tmp',
+    PORT: input.portHint?.length ? String(input.portHint[0]) : undefined,
   };
+  for (const [k, v] of Object.entries(input.overrides ?? {})) if (v) computed[k.toUpperCase()] = v;
   const customVars: Record<string, string> = {};
   for (const [k, v] of Object.entries(computed)) if (v) customVars[k] = v;
 

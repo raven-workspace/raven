@@ -38,7 +38,7 @@ export function NowPanel({ engagementId, host, onOpenGoal }: { engagementId: str
   const stage = currentStage(state, applicable);
   const input: FillInput = {
     host, engagement: eng, hosts, servicesByHost, tunnels,
-    attackerIp: settings.data?.attackerIp ?? "", listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
+    attackerIp: settings.data?.attackerIp ?? "", kaliUser: settings.data?.kaliUser, listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
   };
   const open = (stage ? (applicable.find((a) => a.stage.id === stage.id)?.goals ?? []) : [])
     .filter((g) => {

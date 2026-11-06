@@ -4,7 +4,8 @@ import type { Host } from '../../../types/host';
 import type { Service } from '../../../types/service';
 import type { Tunnel } from '../../../types/network';
 import type { CredAttempt, Credential } from '../../../types/credentials';
-import { defaultCredFor, defaultDomainCred, fillCommand, hasUnmodelledQuoting, quoteContextAt, tunnelFor, type FillInput } from '../../../engines/checklist';
+import type { ChecklistGoal } from '../../../engines/checklist';
+import { defaultCredFor, defaultDomainCred, fillCommand, portChoices, hasUnmodelledQuoting, quoteContextAt, tunnelFor, type FillInput } from '../../../engines/checklist';
 
 const host = (p: Partial<Host> = {}): Host => ({
   id: 'h1', engagementId: 'e1', name: 'ms01', ip: '172.16.1.5', os: 'windows', boardColumn: 'information-gathering', boardManual: false,
@@ -302,5 +303,71 @@ describe('defaultDomainCred', () => {
     ];
     expect(defaultDomainCred(creds, attempts)?.id).toBe('c3');
     expect(defaultDomainCred(creds, [])).toBeNull();
+  });
+});
+
+describe('arsenal tokens', () => {
+  const text = (t: string, p: Partial<FillInput> = {}) => fillCommand(t, input(p));
+
+  it('TARGET_HOST is the FQDN for a domain-joined host and the name otherwise', () => {
+    const dc = host({ id: 'dc', name: 'dc01', ip: '172.16.1.2' });
+    const hosts = [dc, host({ name: 'ms01' })];
+    const servicesByHost = new Map([['dc', [svc('dc', 88), svc('dc', 389)]]]);
+    const joined = input({ engagement: eng({ domain: 'corp.local' }), hosts, servicesByHost });
+    expect(fillCommand('{TARGET_HOST}', joined).text).toBe('ms01.corp.local');
+    // no domain on the engagement: the bare name
+    expect(text('{TARGET_HOST}', { engagement: eng(), hosts, servicesByHost }).text).toBe('ms01');
+    // not domain-joined (Linux host, no AD hosts): the bare name
+    const lin = host({ os: 'linux', name: 'web01' });
+    expect(text('{TARGET_HOST} {HOSTNAME}', { host: lin, engagement: eng({ domain: 'corp.local' }) }).text).toBe('web01 web01');
+    expect(fillCommand('{HOSTNAME}', joined).text).toBe('ms01');
+  });
+
+  it('PIVOT_IP and PIVOT_NAME come from the tunnel via host', () => {
+    const pivot = host({ id: 'pivot', name: 'jump01', ip: '10.0.0.9' });
+    const r = text('{PIVOT_IP} {PIVOT_NAME}', { hosts: [pivot], tunnels: [tun()] });
+    expect(r.text).toBe('10.0.0.9 jump01');
+    expect(r.viaTunnel?.viaHostName).toBe('jump01');
+    const none = text('{PIVOT_IP} {PIVOT_NAME}', { hosts: [pivot] });
+    expect(none.unresolved.sort()).toEqual(['PIVOT_IP', 'PIVOT_NAME']);
+  });
+
+  it('KALI_USER, COMMUNITY and SOCKS_PORT fill from settings and defaults', () => {
+    const r = text('{KALI_USER} {COMMUNITY} {SOCKS_PORT}', { kaliUser: 'kali' });
+    expect(r.text).toBe('kali public 1080');
+    expect(r.unresolved).toEqual([]);
+    expect(text('{KALI_USER}').unresolved).toEqual(['KALI_USER']);
+  });
+
+  it('DEST_DIR follows the host OS', () => {
+    expect(text('{DEST_DIR}').text).toBe('C:\\Windows\\Temp');
+    expect(text('{DEST_DIR}', { host: host({ os: 'linux' }) }).text).toBe('/tmp');
+  });
+
+  it('PORT uses the first port hint and stays unresolved without one', () => {
+    expect(text('{PORT}', { portHint: [8080, 80] }).text).toBe('8080');
+    expect(text('{PORT}', { portHint: [] }).unresolved).toEqual(['PORT']);
+    expect(text('{PORT}').unresolved).toEqual(['PORT']);
+  });
+
+  it('overrides win over computed values', () => {
+    const r = text('{KALI_USER} {PORT} {DEST_DIR} {COMMUNITY} {FILE}', {
+      kaliUser: 'kali', portHint: [80],
+      overrides: { KALI_USER: 'op', PORT: '9000', DEST_DIR: 'D:\\x', COMMUNITY: 'private', FILE: 'a.exe' },
+    });
+    expect(r.text).toBe('op 9000 D:\\x private a.exe');
+    expect(r.unresolved).toEqual([]);
+  });
+
+  it('portChoices filters open ports by the goal\'s applies, ascending', () => {
+    const closed = { ...svc('h1', 25), state: 'closed' };
+    const web = { ...svc('h1', 8080), nmapService: 'http' };
+    const inp = input({ servicesByHost: new Map([['h1', [svc('h1', 445), web, svc('h1', 22), closed, { ...svc('h1', 80), nmapService: 'http' }]]]) });
+    expect(portChoices(inp)).toEqual([22, 80, 445, 8080]);
+    const goal = (applies: ChecklistGoal['applies']): ChecklistGoal => ({ id: 'g', stage: 's', title: 't', applies });
+    expect(portChoices(inp, goal({ ports: [445, 139] }))).toEqual([445]);
+    expect(portChoices(inp, goal({ services: ['http'] }))).toEqual([80, 8080]);
+    expect(portChoices(inp, goal({ ports: [22], services: ['http'] }))).toEqual([22, 80, 8080]);
+    expect(portChoices(inp, goal({ os: ['windows'] }))).toEqual([22, 80, 445, 8080]);
   });
 });
