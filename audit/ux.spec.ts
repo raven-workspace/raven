@@ -16,6 +16,8 @@ test.beforeAll(async () => { await mkdir(SHOTS, { recursive: true }); });
 
 for (const flow of FLOWS) {
   test(`flow:${flow.id}`, async ({ page, context }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
     // Copying goes through the browser clipboard, which headless Chromium denies unless asked.
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.setViewportSize({ width: WIDTH, height: 900 });
@@ -27,6 +29,7 @@ for (const flow of FLOWS) {
     // Keyboard shortcuts need focus on the page, not in a field; clicking the corner is not a counted action.
     await page.locator("body").click({ position: { x: 1, y: 1 } });
     await writeIssues(`flow:${flow.id}`, WIDTH, await runFlow(page, flow));
+    expect(errors, "page errors").toEqual([]);
   });
 }
 
@@ -39,6 +42,8 @@ const NEEDS_DATA = new Set([
 for (const screen of STATE_SCREENS) {
   for (const scenario of SCENARIOS) {
     test(`${screen.id}~${scenario}`, async ({ page }) => {
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(e.message));
       test.skip(scenario === "empty" && NEEDS_DATA.has(screen.id), "setup needs fixture data, which this scenario removes");
       // While loading or failing, a screen's setup may legitimately not find its controls: give up quickly and check what rendered.
       // With data (empty), a failing setup is a real error.
@@ -54,6 +59,7 @@ for (const screen of STATE_SCREENS) {
       const issues = await collectStateIssues(page, scenario);
       await writeIssues(`${screen.id}~${scenario}`, WIDTH, issues);
       await page.screenshot({ path: `${SHOTS}${screen.id}@${WIDTH}~${scenario}.png`, fullPage: true, animations: "disabled" });
+      expect(errors, "page errors").toEqual([]);
     });
   }
 }

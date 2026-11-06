@@ -22,7 +22,7 @@ describe("AttachmentImage", () => {
       </QueryClientProvider>,
     );
     const img = await screen.findByRole("img", { name: "shot" });
-    for (const cls of ["self-start", "h-auto", "w-auto", "object-contain", "max-h-[420px]", "max-w-full"]) {
+    for (const cls of ["self-start", "h-auto", "w-auto", "max-h-[420px]", "max-w-full"]) {
       expect(img).toHaveClass(cls);
     }
   });

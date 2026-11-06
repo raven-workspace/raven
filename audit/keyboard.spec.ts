@@ -10,6 +10,8 @@ const MAX_STOPS = 1500;
 
 for (const screen of SCREENS) {
   test(`${screen.id}:kbd`, async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
     await page.setViewportSize({ width: WIDTH, height: 900 });
     await page.clock.install({ time: AUDIT_NOW });
     await page.goto(screen.path);
@@ -18,11 +20,14 @@ for (const screen of SCREENS) {
     await expect(page.locator(screen.ready).first()).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
     await writeIssues(`${screen.id}:kbd`, WIDTH, await tabWalk(page, { maxStops: MAX_STOPS }));
+    expect(errors, "page errors").toEqual([]);
   });
 }
 
 for (const shortcut of SHORTCUTS) {
   test(`shortcut:${shortcut.id}`, async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
     const ready = SCREENS.find((s) => s.path === shortcut.path)?.ready;
     expect(ready, `a SCREENS entry for ${shortcut.path}`).toBeDefined();
     await page.setViewportSize({ width: WIDTH, height: 900 });
@@ -32,5 +37,6 @@ for (const shortcut of SHORTCUTS) {
     await expect(page.locator(ready!).first()).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
     await writeIssues(`shortcut:${shortcut.id}`, WIDTH, await checkShortcut(page, shortcut));
+    expect(errors, "page errors").toEqual([]);
   });
 }

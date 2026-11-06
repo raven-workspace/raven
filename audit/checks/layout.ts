@@ -153,7 +153,7 @@ export function collectLayoutIssues(): RawIssue[] {
       const ren = rw / rh;
       if (Math.abs(ren - nat) / nat > 0.02) {
         const detail = `natural ${el.naturalWidth}×${el.naturalHeight} (${nat.toFixed(2)}) rendered ${Math.round(rw)}×${Math.round(rh)} (${ren.toFixed(2)})`;
-        if (s.objectFit === "fill" || s.objectFit === "scale-down") add("image-distorted", el, detail);
+        if (s.objectFit === "fill" || s.objectFit === "scale-down" || s.objectFit === "contain") add("image-distorted", el, detail);
         else if (s.objectFit === "cover") add("image-cropped", el, detail);
       }
     }

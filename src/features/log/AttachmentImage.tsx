@@ -9,7 +9,7 @@ export function AttachmentImage({ id, alt }: { id: string; alt: string }) {
     <img
       src={`data:${data.mime};base64,${data.dataBase64}`}
       alt={alt}
-      className="h-auto w-auto max-h-[420px] max-w-full self-start rounded-sm border border-line-2 object-contain"
+      className="h-auto w-auto max-h-[420px] max-w-full self-start rounded-sm border border-line-2"
     />
   );
 }

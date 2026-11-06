@@ -52,7 +52,8 @@ export function groupRows(issues: Issue[]): { groups: RowGroup[]; more: { check:
   return { groups, more };
 }
 
-export function renderMarkdown(issues: Issue[], screenIds: string[], shots: Set<string>): string {
+/** `ran` holds the `<id>@<width>` of every issue file written: a file (even holding `[]`) means that id ran. */
+export function renderMarkdown(issues: Issue[], screenIds: string[], shots: Set<string>, ran: Set<string>): string {
   const widths = [...new Set(issues.map((i) => i.width))].sort(cmp);
   const checks = [...new Set(issues.map((i) => i.check))].sort(cmp);
   const lines: string[] = ["# Raven visual audit", "", `${issues.length} issues`, ""];
@@ -62,16 +63,23 @@ export function renderMarkdown(issues: Issue[], screenIds: string[], shots: Set<
     const groupCount = new Set(issues.filter((i) => i.check === c).map((i) => `${i.screen}\u0000${i.selector.replace(/:nth-(?:of-type|child)\([^)]*\)/g, "")}`)).size;
     lines.push(`| ${c} | ${counts.join(" | ")} | ${counts.reduce((a, b) => a + b, 0)} (${groupCount} groups) |`);
   }
-  // Keyboard issues are filed under ids that are not screens (`<id>:kbd`, `shortcut:<id>`).
-  const extra = [...new Set(issues.map((i) => i.screen))].filter((s) => !screenIds.includes(s));
+  // Keyboard, flow and state runs are filed under ids that are not screens (`<id>:kbd`, `shortcut:<id>`, `flow:<id>`, `<id>~state`).
+  const extra = [...new Set([...ran].map((r) => r.slice(0, r.lastIndexOf("@"))))].filter((s) => !screenIds.includes(s));
   for (const s of [...screenIds, ...extra].sort(cmp)) {
     lines.push("", `## ${s}`, "");
     const { groups, more } = groupRows(issues.filter((x) => x.screen === s));
-    if (groups.length === 0) lines.push("No issues.");
+    const ranAt = (w: number) => ran.has(`${s}@${w}`) || shots.has(`${s}@${w}.png`);
+    const didRun = screenIds.includes(s) ? WIDTHS.some(ranAt) : true;
+    if (!didRun) lines.push("Did not run.");
+    else if (groups.length === 0) lines.push("No issues.");
     for (const g of groups) {
       lines.push(`- [${g.widths.join(", ")}] **${g.check}** \`${g.selector}\` ×${g.count} — ${g.detail}`);
     }
     for (const m of more) lines.push(`- …${m.count} more ${m.check} groups in report.json`);
+    if (screenIds.includes(s) && didRun) {
+      const missing = WIDTHS.filter((w) => !ranAt(w));
+      if (missing.length > 0) lines.push("", `Did not run at: ${missing.join(", ")}`);
+    }
     const state = /^(.+)~(empty|loading|error)$/.exec(s);
     if (state) {
       const file = `${state[1]}@1280~${state[2]}.png`;
@@ -86,18 +94,18 @@ export function renderMarkdown(issues: Issue[], screenIds: string[], shots: Set<
 }
 
 export default async function globalTeardown(): Promise<void> {
-  let files: string[];
-  try {
-    files = (await readdir(ISSUES)).filter((f) => f.endsWith(".json"));
-  } catch {
+  const files = (await readdir(ISSUES).catch(() => [] as string[])).filter((f) => f.endsWith(".json"));
+  const shots = new Set(await readdir(SHOTS).catch(() => [] as string[]));
+  await mkdir(OUT, { recursive: true });
+  if (files.length === 0 && shots.size === 0) {
+    await writeFile(join(OUT, "report.json"), "[]");
+    await writeFile(join(OUT, "report.md"), "# Raven visual audit\n\nNo screens ran in this run.\n");
     return;
   }
-  if (files.length === 0) return;
-  const shots = new Set(await readdir(SHOTS).catch(() => [] as string[]));
   const issues: Issue[] = [];
   for (const f of files) issues.push(...(JSON.parse(await readFile(join(ISSUES, f), "utf8")) as Issue[]));
   issues.sort((a, b) => cmp(a.screen, b.screen) || cmp(a.width, b.width) || cmp(a.check, b.check) || cmp(a.selector, b.selector));
-  await mkdir(OUT, { recursive: true });
+  const ran = new Set(files.map((f) => f.slice(0, -".json".length)));
   await writeFile(join(OUT, "report.json"), JSON.stringify(issues, null, 2));
-  await writeFile(join(OUT, "report.md"), renderMarkdown(issues, SCREENS.map((x) => x.id), shots));
+  await writeFile(join(OUT, "report.md"), renderMarkdown(issues, SCREENS.map((x) => x.id), shots, ran));
 }
