@@ -16,6 +16,19 @@ const STATUSES: { value: ChecklistStatus; label: string }[] = [
   { value: "na", label: "N/A" },
 ];
 
+/** To do / Doing / Done / N/A for one step: the checklist's status control, shared with the Now panel. */
+export function StatusToggles({ label, status, onStatus }: { label: string; status: ChecklistStatus; onStatus: (status: ChecklistStatus) => void }) {
+  return (
+    <div role="group" aria-label={label} className="inline-flex shrink-0 gap-0.5">
+      {STATUSES.map((s) => (
+        <Toggle key={s.value} on={status === s.value} onChange={() => onStatus(s.value)}>
+          {s.label}
+        </Toggle>
+      ))}
+    </div>
+  );
+}
+
 export interface GoalRowProps {
   goal: Pick<ChecklistGoal, "id" | "title" | "why">;
   state: ItemState | undefined;
@@ -85,13 +98,7 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
           <Chip>New credential since: {newCredLabels.join(", ")}</Chip>
         )}
         {isCoverMarked(state) && <span className="shrink-0 text-xs text-muted">{DA_COVER_LABEL}</span>}
-        <div role="group" aria-label={`Status: ${goal.title}`} className="inline-flex shrink-0 gap-0.5">
-          {STATUSES.map((s) => (
-            <Toggle key={s.value} on={status === s.value} onChange={() => onStatus(goal.id, s.value)}>
-              {s.label}
-            </Toggle>
-          ))}
-        </div>
+        <StatusToggles label={`Status: ${goal.title}`} status={status} onStatus={(s) => onStatus(goal.id, s)} />
       </div>
       {open && (
         <div className="mt-2 flex flex-col gap-3 pl-7">

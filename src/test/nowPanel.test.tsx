@@ -115,6 +115,18 @@ describe("Now panel", () => {
     expect(panel.queryByRole("heading", { name: "Lateral movement" })).not.toBeInTheDocument();
   });
 
+  it("a step title is never truncated and the checklist's status control sits below it", async () => {
+    mount({ items: [item("h-enum-full-tcp", "done")] });
+    const panel = await now();
+    const title = await panel.findByRole("button", { name: "Check SMB shares and null/guest access" });
+    expect(title.className).not.toMatch(/truncate/);
+    const status = panel.getByRole("group", { name: "Now: Check SMB shares and null/guest access" });
+    // Same control as the checklist tab, on its own line under the title (not in the title's row).
+    expect(within(status).getAllByRole("button").map((b) => b.textContent)).toEqual(["To do", "Doing", "Done", "N/A"]);
+    expect(status.parentElement).not.toBe(title.parentElement);
+    expect(title.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("Doing toggles in progress", async () => {
     const user = userEvent.setup();
     mount();
