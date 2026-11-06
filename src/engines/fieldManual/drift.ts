@@ -27,9 +27,19 @@ export const MANUAL_TOKENS: ReadonlySet<string> = new Set([
   'LOCAL_PORT', 'LISTEN_PORT', 'BIND_PORT', 'TARGET_PORT', 'EDB_ID', 'DOMAIN_SID',
 ]);
 
+/** Manual list, or Raven's `FILL_<X>` prefix ("you fill this in"), or `FILL_` plus a manual name. */
+const isManual = (token: string): boolean => {
+  const t = token.toUpperCase();
+  return MANUAL_TOKENS.has(t) || t.startsWith('FILL_');
+};
+
 const COMPUTED = new Set<string>(COMPUTED_TOKENS);
 const norm = (s: string): string => s.replace(/\s+/g, ' ').trim();
 const base = (path: string): string => path.split('/').pop() ?? path;
+
+/** True when `file` appears in `text` as a whole name, not as part of a longer one (GodPotato-NET4.exe vs -NET40.exe). */
+const mentions = (text: string, file: string): boolean =>
+  new RegExp(`(?<![\\w.-])${file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-]|\\.\\w)`).test(text);
 
 /** `{TOKEN}`s in a template the fill engine neither knows nor computes. */
 function unfilledTokens(template: string): Set<string> {
@@ -53,7 +63,7 @@ export function computeDrift(
   toolkit: ToolkitEntry[],
 ): Drift {
   const key = (file: string, text: string) => `${base(file)}\n${norm(text)}`;
-  const mapped = new Set(goals.flatMap((g) => (g.playbook ? [key(g.playbook.file, g.playbook.text)] : [])));
+  const mapped = new Set(goals.flatMap((g) => (g.playbook ?? []).map((p) => key(p.file, p.text))));
   const inVault = new Set(playbook.map((i) => key(i.file, i.text)));
 
   const counts = new Map<string, number>();
@@ -66,13 +76,13 @@ export function computeDrift(
   return {
     noStep: playbook.filter((i) => !mapped.has(key(i.file, i.text))),
     reworded: goals.flatMap((g) =>
-      g.playbook && !inVault.has(key(g.playbook.file, g.playbook.text)) ? [{ goalId: g.id, text: g.playbook.text }] : [],
+      (g.playbook ?? []).filter((p) => !inVault.has(key(p.file, p.text))).map((p) => ({ goalId: g.id, text: p.text })),
     ),
-    ravenOnlySteps: goals.filter((g) => !g.playbook).map((g) => g.id),
+    ravenOnlySteps: goals.filter((g) => !g.playbook?.length).map((g) => g.id),
     unfillable: [...counts]
-      .map(([token, count]) => ({ token, count, manual: MANUAL_TOKENS.has(token.toUpperCase()) }))
+      .map(([token, count]) => ({ token, count, manual: isManual(token) }))
       .sort((a, b) => b.count - a.count || a.token.localeCompare(b.token)),
     ravenOnlyCommands: commands.filter((c) => c.source === 'raven' && !cardTemplates.has(norm(c.template))).map((c) => c.id),
-    toolkitUnused: [...new Set(toolkit.map((t) => t.file))].filter((f) => !blockText.includes(f)),
+    toolkitUnused: [...new Set(toolkit.map((t) => t.file))].filter((f) => !mentions(blockText, f)),
   };
 }

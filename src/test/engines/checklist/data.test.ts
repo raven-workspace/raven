@@ -83,8 +83,11 @@ describe('playbook mapping', () => {
     const mapped = all.filter((g) => g.playbook);
     expect(mapped.length).toBeGreaterThan(50);
     for (const g of mapped) {
-      expect(g.playbook?.file, g.id).toMatch(/^0[0-6] - .+\.md$/);
-      expect(g.playbook?.text.trim(), g.id).not.toBe('');
+      expect(g.playbook?.length, g.id).toBeGreaterThan(0);
+      for (const p of g.playbook ?? []) {
+        expect(p.file, g.id).toMatch(/^0[0-6] - .+\.md$/);
+        expect(p.text.trim(), g.id).not.toBe('');
+      }
     }
   });
 
@@ -95,7 +98,7 @@ describe('playbook mapping', () => {
 
   it('engagement goals map to 00 and 06 only', () => {
     for (const g of [...ENGAGEMENT_SETUP, ...LATERAL_MOVEMENT_GOALS]) {
-      if (g.playbook) expect(g.playbook.file, g.id).toMatch(/^0[06] - /);
+      for (const p of g.playbook ?? []) expect(p.file, g.id).toMatch(/^0[06] - /);
     }
   });
 });
