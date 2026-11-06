@@ -65,6 +65,29 @@ function DrawerBody({ engagementId, hostId }: { engagementId: string; hostId: st
   };
 
   const showing = query.trim() === "" ? (solo ? "solo" : cardId ? "card" : "results") : "results";
+
+  /** From a card (or one command) back to the list. */
+  const back = () => {
+    setSolo(null);
+    useArsenalStore.setState({ cardId: null });
+    searchRef.current?.focus();
+  };
+  // Capture phase: Esc reaches the drawer before the screen's own Esc handler. On a card it goes back; on the list it closes.
+  const onList = showing === "results";
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || isDialogOpen()) return;
+      e.preventDefault();
+      if (onList) useArsenalStore.getState().close();
+      else {
+        setSolo(null);
+        useArsenalStore.setState({ cardId: null });
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onList]);
   const index = Math.min(selected, Math.max(0, results.length - 1));
   const onSearchKey = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -81,6 +104,11 @@ function DrawerBody({ engagementId, hostId }: { engagementId: string; hostId: st
   return (
     <>
       <header className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-3">
+        {showing !== "results" && (
+          <Button size="sm" onClick={back}>
+            ← Back
+          </Button>
+        )}
         <Input
           ref={searchRef}
           aria-label="Search the Arsenal"
@@ -130,7 +158,7 @@ function DrawerBody({ engagementId, hostId }: { engagementId: string; hostId: st
         )}
       </div>
       <footer className="shrink-0 border-t border-line px-4 py-2 text-[11px] text-muted">
-        <Kbd>Esc</Kbd> close
+        <Kbd>Esc</Kbd> {showing === "results" ? "close" : "back"}
       </footer>
     </>
   );
@@ -168,14 +196,6 @@ export function ArsenalDrawer() {
     }
     const active = document.activeElement;
     returnFocus.current = active instanceof HTMLElement && active !== document.body ? active : null;
-    // Capture phase: Esc reaches the drawer before the screen's own Esc handler.
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented || isDialogOpen()) return;
-      e.preventDefault();
-      useArsenalStore.getState().close();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
   }, [open]);
 
   if (!open || onBrowse) return null;

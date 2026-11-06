@@ -115,6 +115,8 @@ describe("Arsenal", () => {
     await user.click(await d.findByRole("option", { name: /Zzprobe the target/ }));
     expect(await block(d, "zzprobe 10.10.10.5 from 10.10.14.9")).toBeInTheDocument();
     expect(d.getByText("Because probing.")).toBeInTheDocument();
+    // Esc backs out of the card first, then closes.
+    await user.keyboard("{Escape}");
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("complementary", { name: "Arsenal" })).not.toBeInTheDocument();
   });
@@ -246,6 +248,7 @@ describe("Arsenal", () => {
     await user.keyboard("{Enter}");
     d = within(await drawer());
     expect(await d.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("complementary", { name: "Arsenal" })).not.toBeInTheDocument();
   });
@@ -397,5 +400,34 @@ describe("full-screen Arsenal uses the engagement you came from (B4)", () => {
     await screen.findByRole("tab", { name: "Checklist" });
     act(() => nav.go("/arsenal"));
     expect(await screen.findByRole("option", { name: "web09" })).toBeInTheDocument();
+  });
+});
+
+describe("backing out of a card in the drawer (B5)", () => {
+  it("← Back returns from a card to the list", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Checklist" });
+    act(() => useArsenalStore.getState().openCard("zz-card"));
+    const d = within(await drawer());
+    expect(await d.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
+    await user.click(d.getByRole("button", { name: "← Back" }));
+    expect(d.queryByRole("heading", { name: "Zz Card" })).not.toBeInTheDocument();
+    expect(d.getByRole("listbox", { name: "Arsenal results" })).toBeInTheDocument();
+    expect(d.queryByRole("button", { name: "← Back" })).not.toBeInTheDocument();
+  });
+
+  it("Esc on a card goes back to the list; Esc on the list closes the drawer", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Checklist" });
+    act(() => useArsenalStore.getState().openCard("zz-card"));
+    const d = within(await drawer());
+    expect(await d.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(d.getByRole("listbox", { name: "Arsenal results" })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Arsenal" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("complementary", { name: "Arsenal" })).not.toBeInTheDocument();
   });
 });
