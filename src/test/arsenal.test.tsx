@@ -193,7 +193,8 @@ describe("Arsenal", () => {
     const user = userEvent.setup();
     mount("/arsenal");
     const cards = within(await screen.findByRole("region", { name: "Cards" }));
-    expect(cards.getByRole("button", { name: "Zz Card" })).toBeInTheDocument();
+    // Cards appear once the engagement's exam rules are known.
+    expect(await cards.findByRole("button", { name: "Zz Card" })).toBeInTheDocument();
     expect(cards.getByRole("button", { name: "Zz Other" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Reporting" }));
     expect(cards.queryByRole("button", { name: "Zz Card" })).not.toBeInTheDocument();
@@ -219,6 +220,51 @@ describe("Arsenal", () => {
     const user = userEvent.setup();
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zzbanned");
     expect(d.queryByRole("option", { name: /Zzbanned/ })).not.toBeInTheDocument();
+  });
+
+  it("exam filtering fails closed: no commands until the engagement kind is known", async () => {
+    let release!: (e: Engagement) => void;
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1", EXAM);
+    m.engagementGet.mockImplementation(() => new Promise<Engagement>((r) => (release = r)));
+    // Drawer.
+    await user.keyboard("a");
+    const d = within(await drawer());
+    const search = d.getByRole("textbox", { name: "Search the Arsenal" });
+    await user.type(search, "zz");
+    await d.findByRole("option", { name: /Zz Card/ });
+    expect(d.queryByRole("option", { name: /Zzbanned/ })).not.toBeInTheDocument();
+    expect(d.queryByRole("option", { name: /Zzprobe/ })).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    // Palette.
+    await user.keyboard("{Meta>}k{/Meta}");
+    const box = await screen.findByRole("combobox", { name: "Search" });
+    await user.type(box, "zzbanned");
+    expect(screen.queryByRole("option", { name: /Zzbanned/ })).not.toBeInTheDocument();
+    await user.clear(box);
+    await user.type(box, "zzprobe");
+    expect(screen.queryByRole("option", { name: /Zzprobe/ })).not.toBeInTheDocument();
+    // Once the kind is known, allowed commands appear and banned ones stay hidden.
+    await act(async () => release(EXAM));
+    expect(await screen.findByRole("option", { name: /Zzprobe the target/ })).toBeInTheDocument();
+    await user.clear(box);
+    await user.type(box, "zzbanned");
+    expect(screen.queryByRole("option", { name: /Zzbanned/ })).not.toBeInTheDocument();
+  });
+
+  it("browse shows no commands until the engagement kind is known", async () => {
+    let release!: (e: Engagement) => void;
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
+    useArsenalStore.setState({ cardId: "zz-card" });
+    mount("/arsenal", EXAM);
+    m.engagementGet.mockImplementation(() => new Promise<Engagement>((r) => (release = r)));
+    expect(await screen.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
+    await screen.findByRole("option", { name: "dc01" });
+    expect(screen.queryByText(/zzrelay/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/zzprobe/)).not.toBeInTheDocument();
+    await act(async () => release(EXAM));
+    expect(await block(screen, "zzprobe 10.10.10.5 from 10.10.14.9")).toBeInTheDocument();
+    expect(screen.queryByText(/zzrelay/)).not.toBeInTheDocument();
   });
 
   it("on the dashboard host tokens stay unfilled", async () => {

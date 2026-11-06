@@ -41,10 +41,12 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   /** Chip edits, owned by the screen so they can be dropped when the host changes. */
   overrides: Record<string, string>; onOverrides: (next: Record<string, string>) => void;
 }) {
-  const { d, host, makeInput } = useFillBase(engagementId, hostId);
+  const { d, host, makeInput, examReady } = useFillBase(engagementId, hostId);
   const kind = d.engagement?.kind;
 
   const visible = (list: LibraryCommand[]) => {
+    // Fail closed: nothing until the engagement's exam rules are known.
+    if (!examReady) return { shown: [], msfMarker: new Set<string>() };
     if (!kind) return { shown: list, msfMarker: new Set<string>() };
     return filterForKind(list, kind, { hostId: host?.id ?? "", msfHostId: d.engagement?.msfHostId ?? null });
   };

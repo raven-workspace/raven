@@ -22,6 +22,8 @@ export interface PaletteContext {
   engagementItems?: EngagementItem[];
   /** Exam rules; absent means no engagement kind applies. */
   exam?: { kind: EngagementKind; hostId: string; msfHostId?: string | null };
+  /** The engagement (so its exam rules) is not known yet: no commands are offered (fail closed). */
+  examPending?: boolean;
 }
 
 export type PaletteResult =
@@ -72,7 +74,7 @@ function score(c: LibraryCommand, ctx: PaletteContext): number {
 /** Commands, then generators, then cards, then engagement items; commands for the host's OS and stage first. */
 export function searchPalette(query: string, ctx: PaletteContext): PaletteResult[] {
   const q = wordsOf(query);
-  let pool = ctx.library;
+  let pool = ctx.examPending ? [] : ctx.library;
   let msfMarker = new Set<string>();
   if (ctx.exam) {
     const f = filterForKind(pool, ctx.exam.kind, { hostId: ctx.exam.hostId, msfHostId: ctx.exam.msfHostId ?? null });

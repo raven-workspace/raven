@@ -48,7 +48,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
     setSeenHost(viewHostId);
     setHostId(viewHostId);
   }
-  const { d, host, makeInput } = useFillBase(engagementId, hostId);
+  const { d, host, makeInput, examReady } = useFillBase(engagementId, hostId);
   const [osPick, setOsPick] = useState<Os>("windows");
   const os: Os = host?.os === "linux" || host?.os === "windows" ? host.os : osPick;
   const [dirs, setDirs] = useState<Record<Os, string>>(() => ({ windows: readDir("windows"), linux: readDir("linux") }));
@@ -66,10 +66,12 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
   const methods = useMemo(() => {
     const kind = d.engagement?.kind;
     const cardId = TRANSFER_CARD[os];
+    // Fail closed: no methods until the engagement's exam rules are known.
+    if (!examReady) return [];
     let pool = getLibrary().filter((c) => c.cardId === cardId);
     if (kind) pool = filterForKind(pool, kind, { hostId: host?.id ?? "", msfHostId: d.engagement?.msfHostId ?? null }).shown;
     return transferMethods(getCards(), pool, os).filter((m) => m.kali.length + m.target.length > 0);
-  }, [os, d.engagement, host, version]);
+  }, [os, d.engagement, examReady, host, version]);
   /* eslint-enable react-hooks/exhaustive-deps */
   const method = methods.find((m) => m.id === methodId) ?? methods[0];
 

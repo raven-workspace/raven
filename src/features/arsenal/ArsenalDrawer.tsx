@@ -28,13 +28,14 @@ export const categoryLabel = (category: string): string => category.replace(/[-_
  */
 function useArsenalSearch(query: string, engagementId: string, hostId: string | null): { groups: ResultGroup[]; results: PaletteResult[] } {
   const version = useLibraryVersion();
-  const { d, host } = useFillBase(engagementId, hostId);
+  const { d, host, examReady } = useFillBase(engagementId, hostId);
   return useMemo(() => {
     const all = searchPalette(query, {
       library: getLibrary(), cards: getCards(), generators: [],
       ...(host?.os === "linux" || host?.os === "windows" ? { os: host.os } : {}),
       ...(host ? { stageId: host.boardColumn } : {}),
       ...(d.engagement ? { exam: { kind: d.engagement.kind, hostId: host?.id ?? "", msfHostId: d.engagement.msfHostId } } : {}),
+      examPending: !examReady,
     });
     const byCategory = new Map<string, PaletteResult[]>();
     for (const r of all) {
@@ -49,7 +50,7 @@ function useArsenalSearch(query: string, engagementId: string, hostId: string | 
     return { groups, results: groups.flatMap((g) => g.results) };
     // getLibrary()/getCards() change only with the library version.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, host, d.engagement, version]);
+  }, [query, host, d.engagement, examReady, version]);
 }
 
 function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: string; hostId: string | null }) {

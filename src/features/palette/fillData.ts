@@ -8,6 +8,7 @@ import type { Service } from "../../types/service";
 import { useCredPickStore } from "../checklist/credPick";
 import { engagementServicesKey, tunnelsKey } from "../checklist/queries";
 import { credAttemptsKey, credentialsKey } from "../credentials/queries";
+import { useFillScope } from "../arsenal/useFillScope";
 
 const NO_HOSTS: Host[] = [];
 const DASHBOARD_ENGAGEMENT: Engagement = {
@@ -38,6 +39,7 @@ export function useEngagementFillData(engagementId: string) {
  */
 export function useFillBase(engagementId: string, hostId: string | null) {
   const d = useEngagementFillData(engagementId);
+  const scopePending = useFillScope().pending === true;
   const picked = useCredPickStore((s) => (hostId ? s.picks[hostId] : undefined));
   const host = hostId ? d.hosts.find((h) => h.id === hostId) : undefined;
   const engagement = d.engagement ?? DASHBOARD_ENGAGEMENT;
@@ -65,5 +67,7 @@ export function useFillBase(engagementId: string, hostId: string | null) {
     [host, engagementId, engagement, d.hosts, d.services, d.tunnels, d.settings, cred],
   );
 
-  return { d, host, engagement, loaded: d.engagement !== undefined, makeInput };
+  // Exam rules fail closed: until the engagement (so its kind) is known, nothing that could be banned is shown.
+  const examReady = !scopePending && (engagementId === "" || d.engagement !== undefined);
+  return { d, host, engagement, loaded: d.engagement !== undefined, examReady, makeInput };
 }

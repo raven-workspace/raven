@@ -42,12 +42,14 @@ export function ArsenalBrowse() {
   // The engagement (and host) you came from; picking a host here is remembered for ⌘K too.
   const { engagementId, hostId } = useFillScope();
   const setHostId = (id: string | null) => useLastEngagementStore.setState({ engagementId: engagementId || null, hostId: id });
-  const { d, host } = useFillBase(engagementId, hostId);
+  const { d, host, examReady } = useFillBase(engagementId, hostId);
 
   // getLibrary()/getCards() change only with the library version.
   /* eslint-disable react-hooks/exhaustive-deps */
   const cards = useMemo(() => {
     const kind = d.engagement?.kind;
+    // Fail closed: no cards until the engagement's exam rules are known.
+    if (!examReady) return [];
     return getCards().filter((c) => {
       if (kind) {
         // A card whose every command the exam bans has nothing to show.
@@ -56,7 +58,7 @@ export function ArsenalBrowse() {
       }
       return true;
     });
-  }, [d.engagement, host, version]);
+  }, [d.engagement, examReady, host, version]);
   /* eslint-enable react-hooks/exhaustive-deps */
   const categories = [...new Set(cards.map((c) => c.category))].sort();
   const shown = cards.filter((c) => (!stage || c.stage === stage) && (!category || c.category === category));

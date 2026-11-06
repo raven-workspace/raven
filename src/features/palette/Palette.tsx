@@ -41,7 +41,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const libraryVersion = useLibraryVersion();
   // The chip picks another host for this search only; typed values never carry over to it.
   const [hostId, setHostId] = useState(openedHostId);
-  const { d, host, makeInput } = useFillBase(engagementId, hostId);
+  const { d, host, makeInput, examReady } = useFillBase(engagementId, hostId);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
@@ -75,10 +75,11 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
         ...(host?.os === "linux" || host?.os === "windows" ? { os: host.os } : {}),
         ...(host ? { stageId: host.boardColumn } : {}),
         ...(d.engagement ? { exam: { kind: d.engagement.kind, hostId: host?.id ?? "", msfHostId: d.engagement.msfHostId } } : {}),
+        examPending: !examReady,
       }).slice(0, MAX_RESULTS),
     // getLibrary()/getCards() change only with the library version.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [query, items, host, d.engagement, libraryVersion],
+    [query, items, host, d.engagement, examReady, libraryVersion],
   );
   const index = Math.min(selected, Math.max(0, results.length - 1));
   const current: PaletteResult | undefined = results[index];

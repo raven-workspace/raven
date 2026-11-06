@@ -18,6 +18,8 @@ export interface FillScope {
   hostId: string | null;
   /** True on /arsenal: the engagement is the remembered one, not the route's, so the chip names it. */
   remembered: boolean;
+  /** True while the engagement is still being decided (on /arsenal, until the engagement list has loaded). */
+  pending?: boolean;
 }
 
 /**
@@ -41,7 +43,7 @@ export function useFillScope(): FillScope {
   if (routeEngagement) return { engagementId: routeEngagement, hostId: routeHost, remembered: false };
   if (!onArsenal) return { engagementId: "", hostId: null, remembered: false };
   // Wait for the list, so a remembered engagement that is gone (deleted, or replaced by a restore) is never queried.
-  if (!engagements.data) return { engagementId: "", hostId: null, remembered: true };
+  if (!engagements.data) return { engagementId: "", hostId: null, remembered: true, pending: true };
   if (last.engagementId && engagements.data.some((e) => e.id === last.engagementId)) {
     return { engagementId: last.engagementId, hostId: last.hostId, remembered: true };
   }
