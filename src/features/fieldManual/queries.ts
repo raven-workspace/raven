@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AD_PLAYBOOKS, ENGAGEMENT_SETUP, HOST_GOALS, LATERAL_MOVEMENT_GOALS } from "../../engines/checklist";
+import { computeDrift } from "../../engines/fieldManual/drift";
 import { applyOverlay, mergeImport, normalizeSnapshot, type FieldManualSnapshot } from "../../engines/fieldManual/merge";
 import { parseCard, type ParsedCard } from "../../engines/fieldManual/parseCard";
 import { parsePlaybook, type PlaybookItem } from "../../engines/fieldManual/parsePlaybook";
@@ -44,7 +46,9 @@ export async function runImport(path: string, previous: FieldManualSnapshot | nu
       if (c && c.meta.id) cards.push(c);
     }
   }
-  const { overlay, added, report } = mergeImport(BUILTIN_LIBRARY, cards, previous ?? undefined);
+  const { commands, overlay, added, report } = mergeImport(BUILTIN_LIBRARY, cards, previous ?? undefined);
+  const goals = [...HOST_GOALS, ...ENGAGEMENT_SETUP, ...LATERAL_MOVEMENT_GOALS, ...AD_PLAYBOOKS.flatMap((p) => p.goals)];
+  report.drift = computeDrift(goals, playbook, commands, cards, toolkit);
   const snapshot: FieldManualSnapshot = {
     importedAt: Date.now(),
     cards: cards.map((c) => c.meta),

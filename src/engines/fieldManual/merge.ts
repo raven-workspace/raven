@@ -2,6 +2,7 @@ import { FIELD_MANUAL_CARDS } from '../library/data/fieldManual';
 import type { CardMeta } from '../library/store';
 import type { ExamRule, LibraryCommand } from '../library/types';
 import { classifyExam } from './classifyExam';
+import type { Drift } from './drift';
 import type { ParsedBlock, ParsedCard } from './parseCard';
 import type { PlaybookItem } from './parsePlaybook';
 import type { ToolkitEntry } from './parseToolkit';
@@ -18,6 +19,8 @@ export interface ImportReport {
   classified: { id: string; exam: ExamRule }[];
   /** Vault-added commands whose block (or whole card) is no longer in the vault; they stay. */
   addedRemoved?: string[];
+  /** Vault vs Raven (spec §5). Absent on reports saved before the drift report existed. */
+  drift?: Drift;
 }
 
 /** What the vault changes about one built-in field-manual command. Everything else comes from the code. */

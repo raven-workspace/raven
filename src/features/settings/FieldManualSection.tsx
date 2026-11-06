@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 import { Button, Field, Input, Panel } from "../../ui";
+import type { Drift } from "../../engines/fieldManual/drift";
 import { useFieldManual, useImportFieldManual } from "../fieldManual/queries";
 
 /** Settings › Field Manual: where the vault is, import it now, and what the last import did. */
@@ -74,6 +75,47 @@ export function FieldManualSection() {
           {r.classified.length > 0 && <li>{r.classified.length} given an exam rule</li>}
         </ul>
       )}
+      {r?.drift && <DriftReport drift={r.drift} />}
     </Panel>
+  );
+}
+
+function Lines({ label, lines }: { label: string; lines: string[] }) {
+  if (lines.length === 0) return <li>{label}: 0</li>;
+  return (
+    <li>
+      <details>
+        <summary className="cursor-pointer">
+          {label}: {lines.length}
+        </summary>
+        <ul className="m-0 mt-1 flex list-none flex-col gap-0.5 p-0 pl-3 font-mono text-fg-2">
+          {lines.map((l, i) => (
+            <li key={`${i}-${l}`} className="break-words">
+              {l}
+            </li>
+          ))}
+        </ul>
+      </details>
+    </li>
+  );
+}
+
+/** Spec §5 drift: where the vault and Raven disagree. */
+function DriftReport({ drift: d }: { drift: Drift }) {
+  return (
+    <div className="mt-3">
+      <p className="m-0 text-xs text-fg-2">Drift</p>
+      <ul className="m-0 mt-1 flex list-none flex-col gap-0.5 p-0 text-xs text-muted">
+        <Lines label="Playbook items with no Raven step" lines={d.noStep.map((i) => `${i.file.split("/").pop()}: ${i.text}`)} />
+        <Lines label="Steps whose playbook item is gone or reworded" lines={d.reworded.map((x) => `${x.goalId}: ${x.text}`)} />
+        <Lines label="Raven-only steps" lines={d.ravenOnlySteps} />
+        <Lines
+          label="Placeholders Raven can't fill"
+          lines={d.unfillable.map((u) => `{${u.token}} ×${u.count}${u.manual ? " (fine: you type these)" : ""}`)}
+        />
+        <Lines label="Raven-only commands (in no card)" lines={d.ravenOnlyCommands} />
+        <Lines label="Toolkit files no card mentions" lines={d.toolkitUnused} />
+      </ul>
+    </div>
   );
 }

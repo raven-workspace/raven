@@ -134,6 +134,12 @@ function dcHostName(dc: Host, domain: string | undefined): string | undefined {
   return `${name}.${domain}`;
 }
 
+/** Tokens `commandContext` computes itself (as custom variables), on top of the template engine's built-in ones. */
+export const COMPUTED_TOKENS = [
+  'PASS', 'HASH', 'DC_HOST', 'SUBNET', 'SUBNET_PREFIX', 'TUNNEL_IP', 'TARGET_HOST', 'HOSTNAME',
+  'PIVOT_IP', 'PIVOT_NAME', 'KALI_USER', 'COMMUNITY', 'SOCKS_PORT', 'DEST_DIR', 'PORT',
+] as const;
+
 export function commandContext(input: FillInput, opts: FillOptions = {}): SubstitutionContext {
   const { host, engagement, hosts, servicesByHost, tunnels } = input;
   const tunnel = tunnelFor(host, tunnels);
@@ -151,7 +157,7 @@ export function commandContext(input: FillInput, opts: FillOptions = {}): Substi
   const subnet = subnetFor(host, engagement, tunnels);
   const prefix = subnet?.match(/^(\d+\.\d+\.\d+)\.\d+\/24$/)?.[1];
 
-  const computed: Record<string, string | undefined> = {
+  const computed: Record<(typeof COMPUTED_TOKENS)[number] | string, string | undefined> = {
     PASS: pass,
     HASH: hash,
     DC_HOST: dc ? dcHostName(dc, domain) : undefined,
