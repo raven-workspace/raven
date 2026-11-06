@@ -10,6 +10,7 @@ import type { Host } from "../../types/host";
 import { Chip, Dialog, Input, Kbd } from "../../ui";
 import { logCommand } from "../capture/logCommand";
 import { fillLibraryCommand } from "../checklist/goalCommands";
+import { COMMAND_PRE } from "../checklist/CommandList";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useFillScope } from "../arsenal/useFillScope";
 import { HostPicker, isHostPickKey, openPicker } from "../arsenal/HostPicker";
@@ -211,7 +212,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
       </ul>
       {filled && (
         <div className="flex flex-col gap-2 border-t border-line pt-3">
-          <pre className="m-0 overflow-x-auto whitespace-pre-wrap break-all rounded-sm border border-line bg-surface px-2.5 py-1.5 font-mono text-[12.5px] text-fg">{filled.cmd.text}</pre>
+          <pre className={COMMAND_PRE}>{filled.cmd.text}</pre>
           {filled.cmd.msfMarker && <Chip>uses your one Metasploit host</Chip>}
           {unresolved.length > 0 && (
             <div className="flex flex-wrap gap-2">

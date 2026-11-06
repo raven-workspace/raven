@@ -25,6 +25,8 @@ export interface SelectProps {
   "aria-label"?: string;
   "aria-invalid"?: boolean | "true" | "false";
   "aria-describedby"?: string;
+  /** Tooltip on the trigger, e.g. the full value when it is ellipsized. */
+  title?: string;
   ref?: Ref<HTMLButtonElement>;
 }
 
@@ -64,7 +66,10 @@ export function Select({
         )}
         {...triggerProps}
       >
-        <RS.Value placeholder={placeholder} />
+        {/* A long value ellipsizes instead of wrapping the trigger. */}
+        <span className="min-w-0 truncate">
+          <RS.Value placeholder={placeholder} />
+        </span>
         <RS.Icon className="text-muted text-[10px]" aria-hidden>
           ▾
         </RS.Icon>

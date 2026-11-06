@@ -32,7 +32,7 @@ export function LogEntryBody({ entry }: { entry: LogEntry }) {
       {c.kind === "command" &&
         c.blocks.map((b, i) => (
           <div key={i} className="flex flex-col gap-1">
-            <div className="font-mono text-[12.5px] text-fg break-all whitespace-pre-wrap">{`$ ${b.command}`}</div>
+            <div className="overflow-x-auto font-mono text-[12.5px] text-fg whitespace-pre-wrap">{`$ ${b.command}`}</div>
             <Output text={b.output} />
           </div>
         ))}

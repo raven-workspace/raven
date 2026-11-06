@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Button, Chip } from "../../ui";
 import { copyPlain, copySecret } from "../../lib/clipboard";
 
+/** A command block: wraps only at whitespace; a token longer than the width scrolls instead of breaking. */
+export const COMMAND_PRE = "m-0 overflow-x-auto whitespace-pre-wrap rounded-sm border border-line bg-surface px-2.5 py-1.5 font-mono text-[12.5px] text-fg";
+
 export interface FilledCommand {
   id: string;
   title: string;
@@ -57,13 +60,13 @@ export function CommandList({ commands }: { commands: FilledCommand[] }) {
     <ul className="m-0 flex list-none flex-col gap-2 p-0">
       {commands.map((c) => (
         <li key={c.id} className="flex flex-col gap-1">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-fg-2">{c.title}</span>
-            <Button size="sm" aria-label={`Copy command: ${c.title}`} onClick={() => copy(c)}>
+          <div className="flex items-start justify-between gap-2">
+            <span className="min-w-0 flex-1 text-xs text-fg-2">{c.title}</span>
+            <Button size="sm" className="shrink-0" aria-label={`Copy command: ${c.title}`} onClick={() => copy(c)}>
               {copied === c.id ? "Copied" : "Copy"}
             </Button>
           </div>
-          <pre className="m-0 overflow-x-auto whitespace-pre-wrap break-all rounded-sm border border-line bg-surface px-2.5 py-1.5 font-mono text-[12.5px] text-fg">
+          <pre className={COMMAND_PRE}>
             <Text text={c.text} tokens={c.tokens ?? []} />
           </pre>
           {(c.msfMarker || c.viaTunnel) && (

@@ -4,7 +4,7 @@ import { Select, labelClass } from "../../ui";
 
 const NONE = "none";
 
-/** "Commands use: <credential> ▾": which credential fills USER, PASS and HASH. */
+/** "Commands use:" above a full-width <credential> ▾: which credential fills USER, PASS and HASH. */
 export function CredentialPicker({ credentials, value, onChange }: { credentials: Credential[]; value: Credential | null; onChange: (credId: string | null) => void }) {
   // Two credentials can share a label (same user, different secret): number them so they can be told apart.
   const seen = new Map<string, number>();
@@ -19,12 +19,15 @@ export function CredentialPicker({ credentials, value, onChange }: { credentials
       return { value: c.id, label: (total.get(base) ?? 0) > 1 ? `${base} · #${n}` : base };
     }),
   ];
+  const selected = options.find((o) => o.value === (value?.id ?? NONE));
   return (
-    <div className="flex items-center gap-2">
+    // Label on its own line, the picker full width below: a long DOMAIN\user (hash) never wraps the label.
+    <div className="flex flex-col gap-1">
       <span className={labelClass}>Commands use:</span>
       <Select
         aria-label="Commands use"
-        className="min-w-48"
+        className="w-full min-w-0"
+        {...(selected ? { title: selected.label } : {})}
         options={options}
         value={value?.id ?? NONE}
         onValueChange={(v) => onChange(v === NONE ? null : v)}
