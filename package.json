@@ -11,6 +11,7 @@
     "test": "vitest run",
     "lint": "eslint .",
     "typecheck": "tsc -b",
+    "audit:visual": "playwright test -c audit/playwright.config.ts",
     "audit:selftest": "playwright test -c audit/playwright.config.ts selftest"
   },
   "dependencies": {
