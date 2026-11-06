@@ -36,6 +36,9 @@ const isManual = (token: string): boolean => {
 const COMPUTED = new Set<string>(COMPUTED_TOKENS);
 const norm = (s: string): string => s.replace(/\s+/g, ' ').trim();
 const base = (path: string): string => path.split('/').pop() ?? path;
+/** The numbered playbooks (00 - Off-the-Bat … 06 - Lateral Movement); `99 - Im Stuck`, routines and the rest are not steps. */
+const isStepPlaybook = (path: string): boolean => /^0\d /.test(base(path));
+const UPPER_SNAKE = /^[A-Z][A-Z0-9_]*$/;
 
 /** True when `file` appears in `text` as a whole name, not as part of a longer one (GodPotato-NET4.exe vs -NET40.exe). */
 const mentions = (text: string, file: string): boolean =>
@@ -46,7 +49,7 @@ function unfilledTokens(template: string): Set<string> {
   const out = new Set<string>();
   // With an empty context only built-in tokens get a canonical name; the rest are unknown.
   for (const r of resolveTemplate(template, {}).ranges) {
-    if (r.canonical === null && template[r.start] === '{' && !COMPUTED.has(r.raw.toUpperCase())) out.add(r.raw);
+    if (r.canonical === null && template[r.start] === '{' && UPPER_SNAKE.test(r.raw) && !COMPUTED.has(r.raw)) out.add(r.raw);
   }
   return out;
 }
@@ -63,8 +66,9 @@ export function computeDrift(
   toolkit: ToolkitEntry[],
 ): Drift {
   const key = (file: string, text: string) => `${base(file)}\n${norm(text)}`;
+  const steps = playbook.filter((i) => isStepPlaybook(i.file));
   const mapped = new Set(goals.flatMap((g) => (g.playbook ?? []).map((p) => key(p.file, p.text))));
-  const inVault = new Set(playbook.map((i) => key(i.file, i.text)));
+  const inVault = new Set(steps.map((i) => key(i.file, i.text)));
 
   const counts = new Map<string, number>();
   for (const c of commands) for (const t of unfilledTokens(c.template)) counts.set(t, (counts.get(t) ?? 0) + 1);
@@ -74,9 +78,11 @@ export function computeDrift(
   const cardTemplates = new Set(blocks);
 
   return {
-    noStep: playbook.filter((i) => !mapped.has(key(i.file, i.text))),
+    noStep: steps.filter((i) => !mapped.has(key(i.file, i.text))),
     reworded: goals.flatMap((g) =>
-      (g.playbook ?? []).filter((p) => !inVault.has(key(p.file, p.text))).map((p) => ({ goalId: g.id, text: p.text })),
+      (g.playbook ?? [])
+        .filter((p) => isStepPlaybook(p.file) && !inVault.has(key(p.file, p.text)))
+        .map((p) => ({ goalId: g.id, text: p.text })),
     ),
     ravenOnlySteps: goals.filter((g) => !g.playbook?.length).map((g) => g.id),
     unfillable: [...counts]

