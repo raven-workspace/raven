@@ -47,7 +47,7 @@ const CARD: CardMeta = { id: "zz-card", title: "Zz Card", stage: "initial-footho
 const CARD2: CardMeta = { id: "zz-card2", title: "Zz Other", stage: "reporting", category: "Zz-Other-Cat", os: "any", file: "02-Cards/Zz/Zz-Other.md" };
 const OTHER = cmd("zz-other", { title: "Zzother cmd", cardId: "zz-card2" });
 
-const nav = { go: (_path: string) => {} };
+const nav: { go: (path: string) => void } = { go: () => {} };
 function Nav() {
   const navigate = useNavigate();
   useEffect(() => {
