@@ -116,7 +116,7 @@ beforeEach(() => {
   m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30,
     backupRetention: 14,
-    machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "",
+    machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm",
   });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementGet.mockResolvedValue(E1);

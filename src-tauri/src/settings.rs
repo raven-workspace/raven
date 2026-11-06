@@ -14,6 +14,15 @@ const MAX_MACHINES: usize = 20;
 const MAX_MACHINE_LEN: usize = 40;
 const ATTACKER_IP_KEY: &str = "attacker_ip";
 const LISTENER_PORT_KEY: &str = "listener_port";
+const KALI_USER_KEY: &str = "kali_user";
+const WINDOWS_TOOLS_KEY: &str = "windows_tools_dir";
+const LINUX_TOOLS_KEY: &str = "linux_tools_dir";
+const FIELD_MANUAL_KEY: &str = "field_manual_path";
+const DEFAULT_KALI_USER: &str = "kali";
+const DEFAULT_WINDOWS_TOOLS: &str = "~/tools/windows";
+const DEFAULT_LINUX_TOOLS: &str = "~/tools/linux";
+const DEFAULT_FIELD_MANUAL: &str = "~/Documents/Field Manual";
+const MAX_PATH_LEN: usize = 500;
 const RETENTION_RANGE: std::ops::RangeInclusive<u32> = 1..=200;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -26,6 +35,14 @@ pub struct Settings {
     pub attacker_ip: String,
     /// Blank or 1-65535; fills `{LPORT}`.
     pub listener_port: String,
+    /// Fills `{KALI_USER}`; defaults to `kali`.
+    pub kali_user: String,
+    /// Where Windows / Linux tools live on Kali. Used only by the "Transfer a file" generator: its Kali serve
+    /// command's leading `cd ~/tools/windows` (or `~/tools/linux`) becomes this folder. No other command is rewritten.
+    pub windows_tools_dir: String,
+    pub linux_tools_dir: String,
+    /// The Field-Manual vault Raven reads its library from.
+    pub field_manual_path: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -36,6 +53,10 @@ pub struct SettingsPatch {
     pub machines: Option<Vec<String>>,
     pub attacker_ip: Option<String>,
     pub listener_port: Option<String>,
+    pub kali_user: Option<String>,
+    pub windows_tools_dir: Option<String>,
+    pub linux_tools_dir: Option<String>,
+    pub field_manual_path: Option<String>,
 }
 
 pub fn get(conn: &Connection) -> AppResult<Settings> {
@@ -59,7 +80,24 @@ pub fn get(conn: &Connection) -> AppResult<Settings> {
     };
     let attacker_ip = clean_ip(&text(ATTACKER_IP_KEY)).unwrap_or_default();
     let listener_port = clean_port(&text(LISTENER_PORT_KEY)).unwrap_or_default();
-    Ok(Settings { auto_lock_minutes, backup_retention, machines, attacker_ip, listener_port })
+    let kali_user = clean_kali_user(&text(KALI_USER_KEY)).ok().filter(|v| !v.is_empty()).unwrap_or_else(|| DEFAULT_KALI_USER.into());
+    let path_or = |key: &str, field: &str, default: &str| {
+        clean_path(field, &text(key)).ok().filter(|v| !v.is_empty()).unwrap_or_else(|| default.to_string())
+    };
+    let windows_tools_dir = path_or(WINDOWS_TOOLS_KEY, "windowsToolsDir", DEFAULT_WINDOWS_TOOLS);
+    let linux_tools_dir = path_or(LINUX_TOOLS_KEY, "linuxToolsDir", DEFAULT_LINUX_TOOLS);
+    let field_manual_path = path_or(FIELD_MANUAL_KEY, "fieldManualPath", DEFAULT_FIELD_MANUAL);
+    Ok(Settings {
+        auto_lock_minutes,
+        backup_retention,
+        machines,
+        attacker_ip,
+        listener_port,
+        kali_user,
+        windows_tools_dir,
+        linux_tools_dir,
+        field_manual_path,
+    })
 }
 
 fn check(field: &str, v: Option<u32>, range: &std::ops::RangeInclusive<u32>) -> AppResult<()> {
@@ -117,6 +155,27 @@ fn clean_port(s: &str) -> AppResult<String> {
     }
 }
 
+/// Blank (restores the default), or a unix-style account name of at most 32 characters.
+fn clean_kali_user(s: &str) -> AppResult<String> {
+    let s = s.trim();
+    let ok = s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.')) && s.chars().count() <= 32;
+    if ok {
+        Ok(s.to_string())
+    } else {
+        Err(bad("kaliUser", "use letters, digits, _ - . only (max 32)"))
+    }
+}
+
+/// Blank (restores the default), or a single-line path of at most 500 characters.
+fn clean_path(field: &str, s: &str) -> AppResult<String> {
+    let s = s.trim();
+    if s.chars().count() > MAX_PATH_LEN || s.chars().any(char::is_control) {
+        Err(bad(field, "must be a single-line path of at most 500 characters"))
+    } else {
+        Ok(s.to_string())
+    }
+}
+
 fn put(conn: &Connection, key: &str, v: u32) -> AppResult<()> {
     put_text(conn, key, &v.to_string())
 }
@@ -135,6 +194,20 @@ pub fn update(conn: &Connection, patch: SettingsPatch) -> AppResult<Settings> {
     let machines = patch.machines.map(clean_machines).transpose()?;
     let attacker_ip = patch.attacker_ip.as_deref().map(clean_ip).transpose()?;
     let listener_port = patch.listener_port.as_deref().map(clean_port).transpose()?;
+    let kali_user = patch.kali_user.as_deref().map(clean_kali_user).transpose()?;
+    let windows_tools = patch.windows_tools_dir.as_deref().map(|v| clean_path("windowsToolsDir", v)).transpose()?;
+    let linux_tools = patch.linux_tools_dir.as_deref().map(|v| clean_path("linuxToolsDir", v)).transpose()?;
+    let field_manual = patch.field_manual_path.as_deref().map(|v| clean_path("fieldManualPath", v)).transpose()?;
+    for (key, v) in [
+        (KALI_USER_KEY, kali_user),
+        (WINDOWS_TOOLS_KEY, windows_tools),
+        (LINUX_TOOLS_KEY, linux_tools),
+        (FIELD_MANUAL_KEY, field_manual),
+    ] {
+        if let Some(v) = v {
+            put_text(conn, key, &v)?;
+        }
+    }
     if let Some(v) = attacker_ip {
         put_text(conn, ATTACKER_IP_KEY, &v)?;
     }
@@ -255,5 +328,48 @@ mod tests {
         let s = update(c, SettingsPatch { attacker_ip: Some("  ".into()), listener_port: Some("".into()), ..Default::default() }).unwrap();
         assert_eq!((s.attacker_ip.as_str(), s.listener_port.as_str()), ("", ""));
         assert!(serde_json::to_value(&s).unwrap().get("attackerIp").is_some());
+    }
+
+    #[test]
+    fn settings_kali_user_and_tool_dirs_round_trip() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let s = get(c).unwrap();
+        assert_eq!((s.kali_user.as_str(), s.windows_tools_dir.as_str(), s.linux_tools_dir.as_str()), ("kali", "~/tools/windows", "~/tools/linux"));
+        let p = SettingsPatch {
+            kali_user: Some(" op ".into()),
+            windows_tools_dir: Some("/opt/win".into()),
+            linux_tools_dir: Some("/opt/lin".into()),
+            ..Default::default()
+        };
+        let s = update(c, p).unwrap();
+        assert_eq!((s.kali_user.as_str(), s.windows_tools_dir.as_str(), s.linux_tools_dir.as_str()), ("op", "/opt/win", "/opt/lin"));
+        // a patch without the keys keeps them
+        let s = update(c, SettingsPatch { auto_lock_minutes: Some(10), ..Default::default() }).unwrap();
+        assert_eq!(s.kali_user, "op");
+        // blank restores the default
+        let s = update(c, SettingsPatch { kali_user: Some("  ".into()), linux_tools_dir: Some("".into()), ..Default::default() }).unwrap();
+        assert_eq!((s.kali_user.as_str(), s.linux_tools_dir.as_str()), ("kali", "~/tools/linux"));
+        for bad in ["a b", "x;y", &"a".repeat(33)] {
+            match update(c, SettingsPatch { kali_user: Some(bad.into()), ..Default::default() }) {
+                Err(AppError::Validation { field, .. }) => assert_eq!(field, "kaliUser", "{bad}"),
+                o => panic!("{o:?}"),
+            }
+        }
+        let j = serde_json::to_value(&s).unwrap();
+        assert!(j.get("kaliUser").is_some() && j.get("windowsToolsDir").is_some() && j.get("linuxToolsDir").is_some());
+    }
+
+    #[test]
+    fn field_manual_path_defaults() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let def = "~/Documents/Field Manual";
+        assert_eq!(get(c).unwrap().field_manual_path, def);
+        let s = update(c, SettingsPatch { field_manual_path: Some("/Volumes/x/FM".into()), ..Default::default() }).unwrap();
+        assert_eq!(s.field_manual_path, "/Volumes/x/FM");
+        let s = update(c, SettingsPatch { field_manual_path: Some(" ".into()), ..Default::default() }).unwrap();
+        assert_eq!(s.field_manual_path, def);
+        assert!(serde_json::to_value(&s).unwrap().get("fieldManualPath").is_some());
     }
 }

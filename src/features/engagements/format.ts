@@ -20,9 +20,9 @@ export function formatDuration(minutes: number): string {
   return `${h}h ${m}m`;
 }
 
-/** Remaining time of a timebox: "14h 10m left", "Time's up" or "Timebox not started". */
+/** Remaining time of a timebox: "14h 10m left", "Time's up" or "Not started". */
 export function timeLeft(timeboxStart: number | null, timeboxMinutes: number, now: number): string {
-  if (timeboxStart === null || now < timeboxStart) return "Timebox not started";
+  if (timeboxStart === null || now < timeboxStart) return "Not started";
   const remaining = timeboxStart + timeboxMinutes * MIN - now;
   if (remaining <= 0) return "Time's up";
   const h = Math.floor(remaining / HOUR);

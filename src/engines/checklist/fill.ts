@@ -5,7 +5,8 @@ import type { Tunnel } from '../../types/network';
 import type { Service } from '../../types/service';
 import { ipInScope, parseScopeList } from '../parse/scope';
 import { isNtlmHash, isOwnerless } from '../credentials/matrix';
-import { findDcHost } from './facts';
+import { dcFillChoice, dcForFill, hostFacts, serviceNames } from './facts';
+import type { ChecklistGoal } from './types';
 import { quoteContextAt, shellEscape } from './shellQuote';
 import { resolveTemplate, type SubstitutionContext } from './template';
 
@@ -21,6 +22,28 @@ export interface FillInput {
   listenerPort: string;
   /** The picked credential: the only source of USER, PASS and HASH. */
   cred?: Credential | null;
+  /** Settings.kaliUser: KALI_USER. */
+  kaliUser?: string;
+  /** The open ports to offer for {PORT}; the first is filled. */
+  portHint?: number[];
+  /** Explicit token values keyed by upper-case token name (FILE, DEST_DIR, PORT, COMMUNITY...). They win over everything. */
+  overrides?: Record<string, string>;
+}
+
+/**
+ * The host's open ports to offer for {PORT}, ascending. Only state exactly `open` counts (a UDP scan's `open|filtered`
+ * is unconfirmed, like the Rust side). Under a goal: only those matching its `applies.ports` or
+ * `applies.services`; a goal with neither (or an empty `ports`) offers every open port.
+ */
+export function portChoices(input: FillInput, goal?: ChecklistGoal): number[] {
+  const services = (input.servicesByHost.get(input.host.id) ?? []).filter((s) => (s.state ?? '').trim().toLowerCase() === 'open');
+  const a = goal?.applies;
+  const any = !a || (!a.ports && !a.services) || a.ports?.length === 0;
+  const out = new Set<number>();
+  for (const s of services) {
+    if (any || a.ports?.includes(s.port) || a.services?.some((n) => serviceNames([s]).has(n))) out.add(s.port);
+  }
+  return [...out].sort((x, y) => x - y);
 }
 
 export interface FillOptions {
@@ -36,6 +59,8 @@ export interface FillOptions {
    * Never combine with `secretMask` (the mask is not a secret).
    */
   shellSafe?: boolean;
+  /** The command's own OS. Used for {DEST_DIR} only when the host's OS is unknown (dashboard, no host). */
+  commandOs?: string;
 }
 
 /**
@@ -67,6 +92,8 @@ export interface FillResult {
   text: string;
   unresolved: string[];
   viaTunnel?: { tunnel: Tunnel; viaHostName: string; down: boolean };
+  /** A DC token was filled from a host picked only by its name (no 88/389 seen): worth a glance. */
+  dcByName?: boolean;
 }
 
 /** True for a valid IPv4 or IPv4 CIDR (surrounding whitespace ignored). */
@@ -112,38 +139,63 @@ function dcHostName(dc: Host, domain: string | undefined): string | undefined {
   return `${name}.${domain}`;
 }
 
+/** Tokens `commandContext` computes itself (as custom variables), on top of the template engine's built-in ones. */
+export const COMPUTED_TOKENS = [
+  'PASS', 'HASH', 'DC_HOST', 'SUBNET', 'SUBNET_PREFIX', 'TUNNEL_IP', 'TARGET_HOST', 'HOSTNAME',
+  'PIVOT_IP', 'PIVOT_NAME', 'KALI_USER', 'COMMUNITY', 'SOCKS_PORT', 'DEST_DIR', 'PORT',
+] as const;
+
+const DEST_DIRS: Record<string, string> = { windows: 'C:\\Windows\\Temp', linux: '/tmp' };
+/** A writable temp dir for a known OS; never guessed (undefined leaves {DEST_DIR} for the user to fill). */
+const destDir = (os: string | null | undefined): string | undefined => (os ? DEST_DIRS[os] : undefined);
+
 export function commandContext(input: FillInput, opts: FillOptions = {}): SubstitutionContext {
   const { host, engagement, hosts, servicesByHost, tunnels } = input;
   const tunnel = tunnelFor(host, tunnels);
   const tunnelIp = tunnel?.callbackIp.trim() || undefined;
-  const dc = findDcHost(hosts, servicesByHost);
+  const dc = dcForFill(hosts, servicesByHost);
   const cred = input.cred ?? null;
   const domain = cred?.domain?.trim() || engagement.domain?.trim() || undefined;
   const secret = cred ? cred.secret.trim() : '';
   // Decided from the real credential; the mask only replaces the value.
   const pass = cred?.type === 'password' && secret ? (opts.secretMask ?? cred.secret) : undefined;
   const hash = cred && secret && isNtlmHash(cred) ? (opts.secretMask ?? secret.split(':').pop()) : undefined;
+  const facts = hostFacts(host, engagement, hosts, servicesByHost);
+  const hostName = host.name?.trim() || undefined;
+  const pivot = tunnel ? hosts.find((h) => h.id === tunnel.viaHostId) : undefined;
   const subnet = subnetFor(host, engagement, tunnels);
   const prefix = subnet?.match(/^(\d+\.\d+\.\d+)\.\d+\/24$/)?.[1];
 
-  const computed: Record<string, string | undefined> = {
+  const computed: Record<(typeof COMPUTED_TOKENS)[number] | string, string | undefined> = {
     PASS: pass,
     HASH: hash,
     DC_HOST: dc ? dcHostName(dc, domain) : undefined,
     SUBNET: subnet,
     SUBNET_PREFIX: prefix,
     TUNNEL_IP: tunnelIp,
+    TARGET_HOST: facts.domainJoined && engagement.domain?.trim() && hostName ? `${hostName}.${engagement.domain.trim()}` : hostName,
+    HOSTNAME: hostName,
+    PIVOT_IP: pivot?.ip?.trim() || undefined,
+    PIVOT_NAME: pivot?.name?.trim() || undefined,
+    KALI_USER: input.kaliUser?.trim() || undefined,
+    COMMUNITY: 'public',
+    SOCKS_PORT: '1080',
+    DEST_DIR: destDir(host.os === 'windows' || host.os === 'linux' ? host.os : opts.commandOs),
+    PORT: input.portHint?.length ? String(input.portHint[0]) : undefined,
   };
+  for (const [k, v] of Object.entries(input.overrides ?? {})) if (v) computed[k.toUpperCase()] = v;
   const customVars: Record<string, string> = {};
   for (const [k, v] of Object.entries(computed)) if (v) customVars[k] = v;
 
+  // Explicit overrides also win over the global-field tokens (the Arsenal chips edit LHOST and TARGET_IP).
+  const o = (name: string) => computed[name];
   return {
-    rhost: host.ip?.trim() || undefined,
-    lhost: tunnel ? tunnelIp : input.attackerIp.trim() || undefined,
-    lport: input.listenerPort.trim() || undefined,
-    domain,
-    user: cred && !isOwnerless(cred) ? cred.username.trim() : undefined,
-    dcIp: dc?.ip?.trim() || undefined,
+    rhost: o('TARGET_IP') ?? (host.ip?.trim() || undefined),
+    lhost: o('LHOST') ?? (tunnel ? tunnelIp : input.attackerIp.trim() || undefined),
+    lport: o('LPORT') ?? (input.listenerPort.trim() || undefined),
+    domain: o('DOMAIN') ?? domain,
+    user: o('USER') ?? (cred && !isOwnerless(cred) ? cred.username.trim() : undefined),
+    dcIp: o('DC_IP') ?? (dc?.ip?.trim() || undefined),
     customVars,
   };
 }
@@ -172,6 +224,8 @@ export function fillCommand(template: string, input: FillInput, opts: FillOption
 
   const tunnel = tunnelFor(input.host, input.tunnels);
   const result: FillResult = { text, unresolved: unresolved.filter((u) => u !== 'INTERFACE') };
+  const usesDc = ranges.some((r) => r.resolved && ['DC_IP', 'DC-IP', 'DC_HOST'].includes(r.raw.toUpperCase()));
+  if (usesDc && !input.overrides?.DC_IP && dcFillChoice(input.hosts, input.servicesByHost).byName) result.dcByName = true;
   if (tunnel) {
     result.viaTunnel = {
       tunnel,

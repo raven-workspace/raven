@@ -1,10 +1,11 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { GoalRow } from "../features/checklist/GoalRow";
+import { setImported } from "../engines/library/store";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { useCredPickStore } from "../features/checklist/credPick";
 import { api } from "../lib/api";
@@ -83,7 +84,7 @@ beforeEach(() => {
   useCredPickStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({
-    autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444",
+    autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm",
   });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementsProgress.mockResolvedValue({});
@@ -344,5 +345,23 @@ describe("GoalRow", () => {
       />,
     );
     expect(screen.getByText("Nothing allowed in an exam sim; do it by hand")).toBeInTheDocument();
+  });
+
+  it("the card links pick up a card title from a later import", () => {
+    setImported({ commands: [], cards: [] });
+    render(
+      <GoalRow
+        goal={{ id: "g", title: "Do it" }}
+        state={undefined}
+        commands={[{ id: "c", title: "C", text: "zz", unresolved: [], msfMarker: false, tokens: [], cardId: "zz-card" }]}
+        evidence={[]}
+        onStatus={() => {}}
+        onNotes={() => {}}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "From card zz-card ↗" })).toBeInTheDocument();
+    act(() => setImported({ commands: [], cards: [{ id: "zz-card", title: "Zz Imported", stage: "s", category: "c", os: "any", file: "02-Cards/zz.md" }] }));
+    expect(screen.getByRole("button", { name: "From card Zz Imported ↗" })).toBeInTheDocument();
+    act(() => setImported({ commands: [], cards: [] }));
   });
 });

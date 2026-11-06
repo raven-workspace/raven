@@ -4,6 +4,7 @@ import { api } from "../../lib/api";
 import type { BackupInfo } from "../../types/backup";
 import type { Settings } from "../../types/settings";
 import { Button, Chip, Dialog, EmptyState, Field, Input, Panel } from "../../ui";
+import { FieldManualSection } from "./FieldManualSection";
 import { ImportSection } from "./ImportSection";
 
 export function formatBytes(n: number): string {
@@ -184,6 +185,35 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
             />
           </div>
           <p className="m-0 mt-3 text-xs text-muted">Filled into checklist commands as LHOST and LPORT</p>
+          <div className="mt-4 flex gap-6">
+            <TextSetting
+              key={`ku-${settings.data.kaliUser}`}
+              label="Kali user"
+              value={settings.data.kaliUser}
+              placeholder="kali"
+              className="w-44"
+              error={fieldError?.field === "kaliUser" ? fieldError.msg : undefined}
+              onSave={(v) => update.mutate({ kaliUser: v })}
+            />
+            <TextSetting
+              key={`wt-${settings.data.windowsToolsDir}`}
+              label="Windows tools folder"
+              value={settings.data.windowsToolsDir}
+              placeholder="~/tools/windows"
+              className="w-64"
+              error={fieldError?.field === "windowsToolsDir" ? fieldError.msg : undefined}
+              onSave={(v) => update.mutate({ windowsToolsDir: v })}
+            />
+            <TextSetting
+              key={`lt-${settings.data.linuxToolsDir}`}
+              label="Linux tools folder"
+              value={settings.data.linuxToolsDir}
+              placeholder="~/tools/linux"
+              className="w-64"
+              error={fieldError?.field === "linuxToolsDir" ? fieldError.msg : undefined}
+              onSave={(v) => update.mutate({ linuxToolsDir: v })}
+            />
+          </div>
         </Panel>
       )}
       <Panel
@@ -215,6 +245,7 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
           ))}
         </ul>
       </Panel>
+      <FieldManualSection />
       <ImportSection />
       <Dialog
         open={restoreTarget !== null}

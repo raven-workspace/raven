@@ -19,6 +19,7 @@ use crate::notes::{self, Note, RuledOut, RuledOutInput};
 use crate::log::{self, Attachment, LogEntry, LogEntryInput};
 use std::collections::HashMap;
 use crate::hosts::{self, Host, HostInput};
+use crate::field_manual::{self, FieldManualSnapshot, VaultFile};
 use crate::import::{self, ImportPlanInput, ImportSummary};
 use crate::services::{self, ConfirmInput, ScanPort, Service, ServiceInput};
 use crate::error::{AppError, AppResult};
@@ -157,6 +158,28 @@ pub async fn backup_restore_locked(app: AppHandle, file: String, password: Strin
 #[tauri::command]
 pub async fn import_apply(app: AppHandle, plan: ImportPlanInput) -> AppResult<ImportSummary> {
     with_vault(app, move |v| import::apply(v, &plan)).await
+}
+
+/// Reads the Field-Manual vault's cards, playbooks and Toolkit. Read-only.
+#[tauri::command]
+pub async fn field_manual_scan(path: String) -> AppResult<Vec<VaultFile>> {
+    // No vault guard: an iCloud read can stall and must not block other commands.
+    off_main(move || field_manual::scan(&path)).await
+}
+
+#[tauri::command]
+pub async fn field_manual_latest_mtime(path: String) -> AppResult<Option<i64>> {
+    off_main(move || field_manual::latest_mtime(&path)).await
+}
+
+#[tauri::command]
+pub async fn field_manual_save(app: AppHandle, snapshot: FieldManualSnapshot) -> AppResult<()> {
+    with_vault(app, move |v| field_manual::save(v.conn()?, &snapshot)).await
+}
+
+#[tauri::command]
+pub async fn field_manual_load(app: AppHandle) -> AppResult<Option<FieldManualSnapshot>> {
+    with_vault(app, |v| field_manual::load(v.conn()?)).await
 }
 
 #[tauri::command]

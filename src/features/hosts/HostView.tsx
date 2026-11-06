@@ -10,6 +10,7 @@ import { useLog } from "../log/queries";
 import { LogEntryRow } from "../log/LogEntryRow";
 import { OrderButton } from "../log/OrderButton";
 import { byOrder, usePersistedOrder } from "../log/usePersistedOrder";
+import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useNotesStore } from "../notes/useNotesStore";
 import { StuckView } from "../stuck/StuckView";
 import { HostHeader } from "./HostHeader";
@@ -45,9 +46,14 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
     setStuckOpen(false);
   }
   // The stuck view and the notes panel share the right edge: opening one closes the other.
+  // The Arsenal drawer shares that edge too.
   useEffect(() => useNotesStore.subscribe((s) => { if (s.open) setStuckOpen(false); }), []);
+  useEffect(() => useArsenalStore.subscribe((s) => { if (s.open) setStuckOpen(false); }), []);
   const toggleStuck = () => {
-    if (!stuckOpen) useNotesStore.getState().close();
+    if (!stuckOpen) {
+      useNotesStore.getState().close();
+      useArsenalStore.getState().close();
+    }
     setStuckOpen(!stuckOpen);
   };
   useKeydown((e) => {
@@ -91,7 +97,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
         </div>
         <div className="flex min-h-0 min-w-0 flex-col">
           <div className="flex items-center justify-between gap-3">
-            <div role="tablist" className="inline-flex gap-0.5 rounded-[var(--radius)] border border-line-2 bg-surface p-0.5">
+            <div role="tablist" className="inline-flex gap-0.5 gap-x-2 min-w-3/4 rounded-[var(--radius)] p-0.5">
               {TABS.map((t) => (
                 <button
                   key={t.id}
@@ -102,8 +108,8 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
                     setTab(t.id);
                     setFocusGoal(undefined);
                   }}
-                  className={`h-7 cursor-default rounded-[var(--radius-sm)] px-3 text-[13px] ${
-                    tab === t.id ? "bg-surface-hi text-fg shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-muted hover:text-fg"
+                  className={`h-7 cursor-default rounded-[var(--radius-sm)] px-3 text-[13px] uppercase ${
+                    tab === t.id ? "bg-surface-hi text-fg shadow-[inset_0_-2px_0_var(--color-accent)] font-semibold" : "text-muted hover:text-fg"
                   }`}
                 >
                   {t.label}

@@ -102,7 +102,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   useCaptureStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementsProgress.mockResolvedValue({});
   m.servicesList.mockResolvedValue([]);
@@ -214,6 +214,12 @@ describe("credentials section", () => {
     const list = await screen.findByRole("region", { name: "Hashes" });
     expect(within(list).getByText(/hashcat -m 1000/)).toBeInTheDocument();
     expect(within(list).queryByText(new RegExp(hash))).not.toBeInTheDocument();
+    // Commands wrap at whitespace only; a long hash scrolls instead of breaking mid-token.
+    for (const re of [/hashcat -m 1000/, /^john /]) {
+      const code = within(list).getByText(re);
+      expect(code.className).not.toMatch(/break-all/);
+      expect(code.className).toMatch(/whitespace-pre-wrap/);
+    }
     await user.click(within(list).getByRole("button", { name: "Crack CORP\\jsmith (hash)" }));
     const dlg = await screen.findByRole("dialog");
     await user.type(within(dlg).getByLabelText("Plaintext"), "password");

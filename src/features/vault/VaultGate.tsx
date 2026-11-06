@@ -10,8 +10,16 @@ import type { UnlockResult, VaultStatus } from "../../types/vault";
 import { Button, Kbd, TitleBar } from "../../ui";
 import { SetupScreen } from "./SetupScreen";
 import { UnlockScreen } from "./UnlockScreen";
+import { setImported } from "../../engines/library/store";
+import { applySnapshot, FIELD_MANUAL_KEY, useVaultNewer } from "../fieldManual/queries";
 import { useAutoLock } from "./useAutoLock";
 import { clearSecretClipboard } from "../../lib/clipboard";
+import { isDialogOpen } from "../../lib/keys";
+import { ArsenalDrawer } from "../arsenal/ArsenalDrawer";
+import { useArsenalStore } from "../arsenal/useArsenalStore";
+import { useLastEngagementStore } from "../arsenal/useFillScope";
+import { Palette } from "../palette/Palette";
+import { usePaletteStore } from "../palette/usePaletteStore";
 
 interface VaultContextValue {
   /** Locks the vault now (same path as ⌘L and the idle timer). */
@@ -30,6 +38,8 @@ export function useVault(): VaultContextValue {
 
 const DEFAULT_AUTO_LOCK_MINUTES = 30;
 const LOCK_RETRY_MS = 2000;
+/** How long the unlock notice (e.g. "backup saved") stays before it clears itself. A failure stays until dismissed. */
+const NOTICE_MS = 8000;
 
 /**
  * Setup when there is no vault, unlock when locked, children when unlocked.
@@ -80,6 +90,8 @@ export function VaultGate({ children }: { children: ReactNode }) {
     useCaptureStore.getState().reset();
     // Which credential fills commands is session state too.
     useCredPickStore.getState().reset();
+    // So is the engagement full-screen Arsenal remembers.
+    useLastEngagementStore.setState({ engagementId: null, hostId: null });
     // Notes too: after a lock no note text stays in memory. `lock()` has already started the
     // flush, which works from a snapshot.
     discardNotes();
@@ -153,6 +165,54 @@ export function VaultGate({ children }: { children: ReactNode }) {
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet, enabled: unlocked });
   useAutoLock(settings.data?.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES, { enabled: unlocked, onLock: lock });
 
+  // ⌘K: the palette, from anywhere while unlocked (capture phase, like ⌘L). Never over another dialog.
+  useEffect(() => {
+    if (!unlocked) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.metaKey || e.altKey || e.shiftKey || e.key.toLowerCase() !== "k") return;
+      e.preventDefault();
+      const palette = usePaletteStore.getState();
+      if (palette.isOpen) palette.close();
+      else if (!isDialogOpen()) palette.open();
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+      usePaletteStore.getState().close();
+    };
+  }, [unlocked]);
+
+  const vaultNewer = useVaultNewer(unlocked);
+  // Layer the last import over the built-in library once the vault is open.
+  useEffect(() => {
+    if (!unlocked) return;
+    let live = true;
+    void (async () => {
+      try {
+        const snap = await api.fieldManualLoad();
+        if (!live) return;
+        if (!snap) {
+          if (snap === null) setImported({ commands: [], cards: [] }); // no stale imported layer after a restore
+          return;
+        }
+        applySnapshot(snap);
+        qc.setQueryData(FIELD_MANUAL_KEY, snap);
+      } catch {
+        /* the built-ins still work; Settings › Field Manual reports import problems */
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [unlocked, qc]);
+
+  // The unlock notice is news, not state: it clears itself.
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), NOTICE_MS);
+    return () => clearTimeout(t);
+  }, [notice]);
+
   const ctx = useMemo(() => ({ lock, markLocked }), [lock, markLocked]);
 
   const onUnlocked = (r: UnlockResult) => {
@@ -166,9 +226,20 @@ export function VaultGate({ children }: { children: ReactNode }) {
 
   const right = unlocked ? (
     <>
-      <Link to="/settings" className="rounded-sm px-2 py-1 text-xs text-muted-2 hover:text-fg">
+      <Link
+        to="/settings"
+        title={vaultNewer ? "The Field Manual has changes to import" : undefined}
+        className="relative rounded-sm px-2 py-1 text-xs text-muted-2 hover:text-fg"
+      >
         Settings
+        {vaultNewer && <span aria-hidden="true" className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />}
       </Link>
+      <Button size="sm" onClick={() => useArsenalStore.getState().toggle()} aria-label="Arsenal">
+        Arsenal <Kbd>A</Kbd>
+      </Button>
+      <Button size="sm" onClick={() => usePaletteStore.getState().open()} aria-label="Search">
+        Search <Kbd>⌘K</Kbd>
+      </Button>
       <Button size="sm" onClick={lock} aria-label="Lock">
         Lock <Kbd>⌘L</Kbd>
       </Button>
@@ -193,12 +264,27 @@ export function VaultGate({ children }: { children: ReactNode }) {
     body = (
       <VaultContext.Provider value={ctx}>
         {(notice || backupError) && (
-          <div className="flex flex-col gap-0.5 border-b border-line px-4 py-1.5 text-xs text-muted">
-            {notice && <p className="m-0">{notice}</p>}
-            {backupError && <p className="m-0">Daily backup failed: {backupError}</p>}
+          <div className="flex items-start gap-2 border-b border-line px-4 py-1.5 text-xs text-muted">
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              {notice && <p className="m-0">{notice}</p>}
+              {backupError && <p className="m-0">Daily backup failed: {backupError}</p>}
+            </div>
+            <button
+              type="button"
+              aria-label="Dismiss notice"
+              onClick={() => {
+                setNotice(null);
+                setBackupError(null);
+              }}
+              className="shrink-0 cursor-default rounded-sm px-1 text-muted-2 hover:text-fg"
+            >
+              ×
+            </button>
           </div>
         )}
         {children}
+        <Palette />
+        <ArsenalDrawer />
       </VaultContext.Provider>
     );
   }

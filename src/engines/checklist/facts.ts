@@ -100,6 +100,35 @@ export function findDcHost(hosts: Host[], servicesByHost: ServicesByHost): Host 
   return found.length === 1 ? found[0] : null;
 }
 
+/** `DC01`, `dc`, `corp-dc1` (first DNS label). Not `dc-web` or `dc_files`. */
+const DC_NAME = /^dc\d*$|[-_]dc\d*$/i;
+const namedLikeDc = (h: Host): boolean => DC_NAME.test((h.name ?? '').trim().split('.')[0] ?? '');
+const one = (hs: Host[]): Host | null => (hs.length === 1 ? hs[0] : null);
+
+/**
+ * The DC that fills `{DC_IP}` / `{DC_HOST}`. Wider than `findDcHost`, which needs exactly one host with 88 and 389
+ * open: an exam DC often sits behind a pivot and is never scanned from Kali. In order: the only 88+389 host; among
+ * several, the only one named like a DC; the only host with Kerberos (88) open; the only host named like a DC.
+ * Anything still ambiguous fills nothing.
+ */
+export function dcForFill(hosts: Host[], servicesByHost: ServicesByHost): Host | null {
+  return dcFillChoice(hosts, servicesByHost).dc;
+}
+
+/** `dcForFill` plus whether the host's name decided it (the UI shows "DC (by name)"). */
+export function dcFillChoice(hosts: Host[], servicesByHost: ServicesByHost): { dc: Host | null; byName: boolean } {
+  const ad = adHosts(hosts, servicesByHost);
+  if (ad.length === 1) return { dc: ad[0], byName: false };
+  if (ad.length > 1) {
+    const dc = one(ad.filter(namedLikeDc));
+    return { dc, byName: dc !== null };
+  }
+  const kerberos = one(hosts.filter((h) => openPorts(servicesByHost.get(h.id) ?? []).has(88)));
+  if (kerberos) return { dc: kerberos, byName: false };
+  const named = one(hosts.filter(namedLikeDc));
+  return { dc: named, byName: named !== null };
+}
+
 export function hostFacts(
   host: Host,
   engagement: Pick<Engagement, 'kind'> | null,

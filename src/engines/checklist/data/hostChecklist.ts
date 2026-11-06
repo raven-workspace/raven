@@ -1,4 +1,5 @@
 import type { ChecklistGoal, ChecklistStage, GoalApplies } from '../types';
+import { withPlaybook } from './playbookMap';
 
 const WEB: GoalApplies = { ports: [80, 443, 8000, 8080, 8443, 8888, 3000, 5000, 9000], services: ['http'] };
 const SMB: GoalApplies = { ports: [139, 445], services: ['smb'] };
@@ -65,7 +66,7 @@ const LM = 'lateral-movement';
 /** Goals whose answer the app can read from the host's own data (confirmed services, OS). */
 export const FACT_GOALS = ['h-enum-identified', 'h-enum-os'] as const;
 
-const informationGathering: ChecklistGoal[] = [
+const informationGathering: ChecklistGoal[] = withPlaybook([
   g(IG, 'Every host', 'h-enum-full-tcp', 'Scan all 65,535 TCP ports', 'The quick scan misses high ports; one forgotten port is the usual way in.'),
   g(IG, 'Every host', 'h-enum-versions', '-sV -sC on just the open ports', 'Versions feed the exploit search; scripts catch anonymous access for free.'),
   g(IG, 'Every host', 'h-enum-udp', 'Scan the top UDP ports', 'SNMP, TFTP and DNS live on UDP and nobody checks them.'),
@@ -93,9 +94,9 @@ const informationGathering: ChecklistGoal[] = [
   g(IG, 'Per service', 'h-enum-docker', 'Check the Docker API for unauthenticated access', 'An open Docker API is root on the host.', DOCKER),
   g(IG, 'Per service', 'h-enum-tomcat', 'Tomcat / Jenkins / NiFi', 'These management consoles often run code for anyone who logs in, and ship with default credentials.', TOMCAT),
   g(IG, "If there's a domain", 'h-enum-ad-users', 'Usernames from every source into users.txt', 'Every later spray and roast starts from this list.', { domainJoined: true }),
-];
+]);
 
-const vulnerabilityDetection: ChecklistGoal[] = [
+const vulnerabilityDetection: ChecklistGoal[] = withPlaybook([
   g(VD, 'Every product and version', 'h-enum-exploits', 'searchsploit every product and version', 'Decides whether to go straight to an exploit or keep enumerating.', SCANNED),
   g(VD, 'Every product and version', 'h-vuln-websearch', 'Web search for exploits and PoCs', 'Searchsploit misses recent CVEs and GitHub proofs of concept.', SCANNED),
   g(VD, 'Every product and version', 'h-vuln-version-gate', "Check the exploit's version gate against the real version", 'An exploit that wrongly treats your version as patched is a missed way in.', SCANNED),
@@ -107,9 +108,9 @@ const vulnerabilityDetection: ChecklistGoal[] = [
   g(VD, 'Credentials as a vulnerability', 'h-foot-brute', 'Guess or spray logins on exposed services (last resort)', 'Last resort: slow, noisy and can lock accounts; only with known usernames and a short list.', BRUTE),
   g(VD, 'Rank', 'h-vuln-rank', 'Order the candidates', 'Unauthenticated RCE first, then authenticated RCE, file read/write, and info leaks last.', SCANNED),
   g(VD, 'Rank', 'h-vuln-msf', 'Exam: decide whether a candidate needs Metasploit', 'Metasploit is allowed on one machine in the exam, so spend it on purpose.', { ...SCANNED, kinds: ['exam-sim'] }),
-];
+]);
 
-const initialFoothold: ChecklistGoal[] = [
+const initialFoothold: ChecklistGoal[] = withPlaybook([
   g(IF, 'Before firing', 'h-foot-listener', 'Listener running', 'Start the listener before sending anything, or the callback is lost.'),
   g(IF, 'Before firing', 'h-foot-payload', 'Build and deliver a payload', 'Whatever route runs code needs a payload that calls back and a way to get it onto the host.'),
   g(IF, 'Before firing', 'h-foot-port', 'Pick a port the target can reach out on', 'High ports are often blocked outbound; 443, 80 and 53 usually get through.'),
@@ -129,9 +130,9 @@ const initialFoothold: ChecklistGoal[] = [
     'From the stabilized interactive shell (web-shell proof does not count): local.txt or user.txt plus whoami, hostname and IP in one command. Take it even when the host has no local flag: it is the proof of access.',
   ),
   g(IF, 'Right after landing', 'h-foot-arrived', 'Log how you got in', 'The hop chain is what the report and the stuck check are built from.'),
-];
+]);
 
-const privilegeEscalation: ChecklistGoal[] = [
+const privilegeEscalation: ChecklistGoal[] = withPlaybook([
   g(PE, 'Linux', 'h-pe-lin-manual', 'Manual enumeration first', 'A hand-run list shows what a script buries and what it skips.', LIN),
   g(PE, 'Linux', 'h-pe-lin-sudo', 'Check sudo rights', 'sudo -l is the most common single-step root.', LIN),
   g(PE, 'Linux', 'h-pe-lin-suid', 'Check SUID and SGID binaries', 'A GTFOBins-listed SUID binary is root.', LIN),
@@ -163,9 +164,9 @@ const privilegeEscalation: ChecklistGoal[] = [
     'proof.txt (or root.txt) plus whoami, hostname and IP in one command from the root/SYSTEM shell: points only count with that frame.',
     { os: ['linux', 'windows'] },
   ),
-];
+]);
 
-const postExploitation: ChecklistGoal[] = [
+const postExploitation: ChecklistGoal[] = withPlaybook([
   g(PX, 'Credentials and files', 'h-loot-hashes', 'Dump hashes and secrets from the OS store', 'Every hash is a candidate for reuse on the next host.'),
   g(PX, 'Credentials and files', 'h-post-redump', 'No expected cred? Re-dump LSASS after a few minutes', 'LSASS caches logons late, so an empty first dump does not mean empty.', WIN),
   g(PX, 'Credentials and files', 'h-loot-domain', 'Collect domain material from this host', 'Cached creds and tickets on a joined host can be the way to the domain.', { os: ['windows'], domainJoined: true }),
@@ -175,17 +176,17 @@ const postExploitation: ChecklistGoal[] = [
   g(PX, 'Network', 'h-post-neighbours', 'ARP cache, hosts file, established connections', 'Neighbours and live connections name the next targets.'),
   g(PX, 'Domain', 'h-post-bloodhound', 'Collect BloodHound data from here', 'The graph shows the ACL path to Domain Admin that net user never will.', { domainJoined: true }),
   g(PX, 'Every new credential', 'h-loot-record', 'Add it to the creds list and run the New Credential Routine', 'Unrecorded creds never get sprayed or tried on other hosts.'),
-];
+]);
 
-const reporting: ChecklistGoal[] = [
+const reporting: ChecklistGoal[] = withPlaybook([
   g(RP, undefined, 'h-close-notes', 'Write the host notes', 'Notes written now save the report from guesswork.'),
   g(RP, undefined, 'h-close-cleanup', 'Remove the tools you uploaded', 'On a real engagement you leave nothing behind.', { kinds: ['client'] }),
-];
+]);
 
-const lateralMovement: ChecklistGoal[] = [
+const lateralMovement: ChecklistGoal[] = withPlaybook([
   g(LM, undefined, 'h-pivot-tunnel', 'Tunnel into the next network', 'Nothing past this host is reachable without it.', { dualHomed: true }),
   g(LM, undefined, 'h-pivot-sweep', 'Sweep the new network for hosts', 'New hosts go back through Information gathering.', { dualHomed: true }),
-];
+]);
 
 export const HOST_STAGES: ChecklistStage[] = [
   { id: IG, title: 'Information gathering', goals: informationGathering, emptyHint: 'Import a scan to see service steps' },

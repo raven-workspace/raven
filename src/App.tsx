@@ -3,6 +3,7 @@ import { Route, Routes } from "react-router";
 import { Dashboard } from "./features/engagements/Dashboard";
 import { SectionView } from "./features/engagements/sections";
 import { EngagementShell, HostRoute, SectionRoute } from "./features/engagements/EngagementShell";
+import { ArsenalBrowse } from "./features/arsenal/ArsenalBrowse";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { useEscapeTo } from "./lib/keys";
 import { useVault, VaultGate } from "./features/vault/VaultGate";
@@ -26,6 +27,7 @@ export default function App() {
           <Route path="s/:section" element={<SectionRoute />} />
           <Route path="h/:hostId" element={<HostRoute />} />
         </Route>
+        <Route path="arsenal" element={<ArsenalBrowse />} />
         <Route path="settings" element={<SettingsRoute />} />
         {UiGallery && (
           <Route

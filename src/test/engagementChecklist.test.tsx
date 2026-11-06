@@ -79,7 +79,7 @@ beforeEach(() => {
   useCaptureStore.getState().reset();
   useCredPickStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementsProgress.mockResolvedValue({});
   m.servicesList.mockResolvedValue([]);
@@ -233,14 +233,17 @@ describe("engagement checklist", () => {
     mount({ services: AD, items: [done], creds: [cred("c1", { createdAt: 50 })] });
     await screen.findAllByText("Sync the clock to the DC");
     const row = document.querySelector('li[data-goal-id="e-setup-clock"]') as HTMLElement;
-    expect(within(row).getByText(/New credential since/)).toHaveTextContent("CORP\\svc_sql");
+    const notice = within(row).getByRole("button", { name: /1 new credential since this was done/ });
+    expect(within(row).queryByText("CORP\\svc_sql")).toBeNull();
+    await userEvent.click(notice);
+    expect(within(row).getByText("CORP\\svc_sql")).toBeInTheDocument();
   });
 
   it("no new credential badge when the credential is older than the done goal", async () => {
     const done: ChecklistItem = { ownerId: "e1", goalId: "e-setup-clock", status: "done", notes: null, completedAt: 500, auto: false, autoFrom: null, evidence: [], updatedAt: 1 };
     mount({ services: AD, items: [done], creds: [cred("c1", { createdAt: 50 })] });
     await screen.findAllByText("Sync the clock to the DC");
-    expect(screen.queryByText(/New credential since/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/new credentials? since/)).not.toBeInTheDocument();
   });
 
   it("Tick from log re-derives a tick that was missing and reports the count", async () => {

@@ -10,3 +10,6 @@ src-tauri/target/
 raven_ctf_backup_*.json
 raven-workspace-*.json
 *backup*.json
+
+# macOS Finder metadata
+.DS_Store

@@ -129,7 +129,7 @@ function Body({ engagementId, host, onOpenGoal, skipRestoreRef }: { engagementId
     });
     const input: FillInput = {
       host, engagement: eng, hosts, servicesByHost, tunnels,
-      attackerIp: settings.data.attackerIp, listenerPort: settings.data.listenerPort, cred: creds.cred,
+      attackerIp: settings.data.attackerIp, kaliUser: settings.data.kaliUser, listenerPort: settings.data.listenerPort, cred: creds.cred,
     };
     const filled = s.commands
       .map((c) => ({ ...c, commands: goalCommands(c.goalId, input, eng).commands }))

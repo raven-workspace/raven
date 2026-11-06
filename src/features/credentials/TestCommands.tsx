@@ -39,7 +39,7 @@ export function TestCommands({ set, shown }: { set: CommandSet & { usersFile?: s
     <div className="flex flex-col gap-1">
       {set.commands.map((c, i) => (
         <div key={i} className="flex items-center gap-2">
-          <code className="min-w-0 flex-1 break-all font-mono text-xs text-fg-2">{shown.commands[i]?.command ?? ""}</code>
+          <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap font-mono text-xs text-fg-2">{shown.commands[i]?.command ?? ""}</code>
           <CopyButton text={c.command} label={`Copy ${c.service} ${c.authMode} command`} />
         </div>
       ))}

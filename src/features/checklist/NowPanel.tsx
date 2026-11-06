@@ -4,16 +4,24 @@ import { applicableGoals, currentStage, hostViewStages, type FillInput } from ".
 import { api } from "../../lib/api";
 import { cx } from "../../lib/cx";
 import type { Host } from "../../types/host";
-import { Panel, Toggle, labelClass } from "../../ui";
+import type { ChecklistStatus } from "../../types/checklist";
+import { Panel, labelClass } from "../../ui";
 import { useHosts } from "../hosts/queries";
 import { CommandList } from "./CommandList";
+import { FileChip } from "./FileChip";
+import { PortChip } from "./PortChip";
+import { useFilePickStore } from "./filePick";
+import { usePortPickStore } from "./portPick";
 import { CredentialPicker } from "./CredentialPicker";
+import { StatusToggles } from "./GoalRow";
 import { useCredFill } from "./credPick";
 import { goalCommands } from "./goalCommands";
 import { useChecklist, useChecklistMutations, useEngagementServices, useTunnels } from "./queries";
 
 /** The host's current stage: its open goals, one-click Done/Doing, and the first filled command of each. */
 export function NowPanel({ engagementId, host, onOpenGoal }: { engagementId: string; host: Host; onOpenGoal: (goalId: string) => void }) {
+  useFilePickStore((s) => s.file); // a chip pick refills this panel's commands
+  usePortPickStore((s) => s.picks); // a port pick refills them too
   const hostsQ = useHosts(engagementId);
   const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId) });
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
@@ -38,7 +46,7 @@ export function NowPanel({ engagementId, host, onOpenGoal }: { engagementId: str
   const stage = currentStage(state, applicable);
   const input: FillInput = {
     host, engagement: eng, hosts, servicesByHost, tunnels,
-    attackerIp: settings.data?.attackerIp ?? "", listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
+    attackerIp: settings.data?.attackerIp ?? "", kaliUser: settings.data?.kaliUser, listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
   };
   const open = (stage ? (applicable.find((a) => a.stage.id === stage.id)?.goals ?? []) : [])
     .filter((g) => {
@@ -67,22 +75,22 @@ export function NowPanel({ engagementId, host, onOpenGoal }: { engagementId: str
             <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">
               {open.map(({ goal, commands }) => {
                 const status = state[goal.id]?.status ?? "todo";
-                const set = (next: "done" | "in_progress" | "todo") => setStatus.mutate({ ownerId: host.id, goalId: goal.id, status: next });
+                const set = (next: ChecklistStatus) => setStatus.mutate({ ownerId: host.id, goalId: goal.id, status: next });
                 return (
                   <li key={goal.id} className="flex flex-col gap-2 py-3 last:pb-1">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onOpenGoal(goal.id)}
-                        className="min-w-0 flex-1 cursor-default truncate bg-transparent p-0 text-left text-[13px] text-fg hover:underline"
-                      >
-                        {goal.title}
-                      </button>
-                      <div role="group" aria-label={`Now: ${goal.title}`} className="inline-flex shrink-0 gap-0.5">
-                        <Toggle on={status === "in_progress"} onChange={(on) => set(on ? "in_progress" : "todo")}>Doing</Toggle>
-                        <Toggle on={false} onChange={() => set("done")}>Done</Toggle>
-                      </div>
+                    <button
+                      type="button"
+                      onClick={() => onOpenGoal(goal.id)}
+                      className="cursor-default bg-transparent p-0 text-left text-[13px] text-fg hover:underline"
+                    >
+                      {goal.title}
+                    </button>
+                    {/* The checklist's own status control, on its own line: the title gets the full width and wraps. */}
+                    <div className="mb-1 self-start">
+                      <StatusToggles label={`Now: ${goal.title}`} status={status} onStatus={set} />
                     </div>
+                    {commands[0] && <FileChip commands={[commands[0]]} />}
+                    {commands[0] && <PortChip commands={[commands[0]]} />}
                     {commands[0] && <CommandList commands={[commands[0]]} />}
                   </li>
                 );

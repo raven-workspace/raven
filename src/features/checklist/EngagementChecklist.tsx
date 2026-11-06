@@ -7,7 +7,7 @@ import {
   PIVOT_GOALS,
   LATERAL_MOVEMENT_GOALS,
   engagementFacts,
-  findDcHost,
+  dcForFill,
   goalApplies,
   type ChecklistGoal,
   type FillInput,
@@ -25,6 +25,8 @@ import { useLog } from "../log/queries";
 import { AccessFlags } from "./AccessFlags";
 import { CredentialPicker } from "./CredentialPicker";
 import { newCredLabels, useCredFill } from "./credPick";
+import { useFilePickStore } from "./filePick";
+import { usePortPickStore } from "./portPick";
 import { goalCommands } from "./goalCommands";
 import { GoalRow } from "./GoalRow";
 import { HopsPanel } from "./HopsPanel";
@@ -43,6 +45,8 @@ const GroupHeading = ({ children }: { children: ReactNode }) => (
 const EXAM_EMPTY = "Nothing allowed in an exam sim; do it by hand";
 
 export function EngagementChecklist() {
+  useFilePickStore((s) => s.file); // a chip pick refills the rows' commands
+  usePortPickStore((s) => s.picks); // a port pick refills them too
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -87,14 +91,14 @@ export function EngagementChecklist() {
   const entries = log.data ?? [];
 
   // Engagement goals have no host of their own: fill against the DC, else show each template unfilled.
-  const dc = findDcHost(hosts, servicesByHost);
+  const dc = dcForFill(hosts, servicesByHost);
   const stand: Host = {
     ...(dc ?? { name: "", ip: null, os: null, engagementId: eng.id, boardColumn: "information-gathering", boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 0, updatedAt: 0 }),
     id: eng.id,
   };
   const input: FillInput = {
     host: stand, engagement: eng, hosts, servicesByHost, tunnels,
-    attackerIp: settings.data?.attackerIp ?? "", listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
+    attackerIp: settings.data?.attackerIp ?? "", kaliUser: settings.data?.kaliUser, listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
   };
   // The Log section has no deep link to one entry yet: open the section.
   const openEntry = () => void navigate(sectionPath(id, "log"));

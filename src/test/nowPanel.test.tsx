@@ -67,7 +67,7 @@ beforeEach(() => {
   useCaptureStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({
-    autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444",
+    autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm",
   });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementsProgress.mockResolvedValue({});
@@ -113,6 +113,22 @@ describe("Now panel", () => {
     const panel = await now();
     await panel.findByText("All stages done");
     expect(panel.queryByRole("heading", { name: "Lateral movement" })).not.toBeInTheDocument();
+  });
+
+  it("a step title is never truncated and the checklist's status control sits below it", async () => {
+    mount({ items: [item("h-enum-full-tcp", "done")] });
+    const panel = await now();
+    const title = await panel.findByRole("button", { name: "Check SMB shares and null/guest access" });
+    expect(title.className).not.toMatch(/truncate/);
+    const status = panel.getByRole("group", { name: "Now: Check SMB shares and null/guest access" });
+    // Same control as the checklist tab, on its own line under the title (not in the title's row).
+    expect(within(status).getAllByRole("button").map((b) => b.textContent)).toEqual(["To do", "Doing", "Done", "N/A"]);
+    expect(status.parentElement).not.toBe(title.parentElement);
+    expect(title.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // One small group, one segment pressed, a little space below it.
+    expect(status.className).toMatch(/rounded-full/);
+    expect(within(status).getAllByRole("button").filter((b) => b.getAttribute("aria-pressed") === "true")).toHaveLength(1);
+    expect(status.parentElement!.className).toMatch(/mb-1/);
   });
 
   it("Doing toggles in progress", async () => {

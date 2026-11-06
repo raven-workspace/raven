@@ -8,6 +8,8 @@ import { useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
 import { CredentialPicker } from "./CredentialPicker";
 import { newCredLabels, useCredFill } from "./credPick";
+import { useFilePickStore } from "./filePick";
+import { usePortPickStore } from "./portPick";
 import { goalCommands } from "./goalCommands";
 import { GoalRow } from "./GoalRow";
 import { useChecklist, useChecklistMutations, useEngagementServices, useHopMutations, useTunnels } from "./queries";
@@ -55,6 +57,8 @@ function ArrivedFrom({ host, hosts, onSave }: { host: Host; hosts: Host[]; onSav
 }
 
 export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal }: { engagementId: string; host: Host; onOpenEntry: (entryId: string) => void; focusGoal?: { id: string; n: number } }) {
+  useFilePickStore((s) => s.file); // a chip pick refills the rows' commands
+  usePortPickStore((s) => s.picks); // a port pick refills them too
   const hostsQ = useHosts(engagementId);
   const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId) });
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
@@ -83,7 +87,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal }: { 
   const entries = log.data ?? [];
   const input: FillInput = {
     host, engagement: eng, hosts, servicesByHost, tunnels,
-    attackerIp: settings.data?.attackerIp ?? "", listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
+    attackerIp: settings.data?.attackerIp ?? "", kaliUser: settings.data?.kaliUser, listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
   };
 
   const commandsFor = (goalId: string) => goalCommands(goalId, input, eng);

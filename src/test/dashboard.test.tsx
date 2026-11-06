@@ -72,7 +72,7 @@ beforeEach(() => {
   list = fixtures();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.vaultLock.mockResolvedValue(null);
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
   m.backupsList.mockResolvedValue([]);
   m.engagementsProgress.mockResolvedValue({});
   m.hostsList.mockResolvedValue([]);
@@ -92,8 +92,8 @@ describe("format", () => {
     expect(timeLeft(start, 1425, now)).toBe("14h 10m left");
     expect(timeLeft(start, 1425, start + 1425 * MIN)).toBe("Time's up");
     expect(timeLeft(start, 1425, start + 2000 * MIN)).toBe("Time's up");
-    expect(timeLeft(null, 1425, now)).toBe("Timebox not started");
-    expect(timeLeft(start, 1425, start - MIN)).toBe("Timebox not started");
+    expect(timeLeft(null, 1425, now)).toBe("Not started");
+    expect(timeLeft(start, 1425, start - MIN)).toBe("Not started");
   });
 
   it("dateRange and relativeTime", () => {
@@ -276,7 +276,7 @@ describe("dashboard", () => {
   });
 
   it("autolock_with_open_dialog_discards_draft_cleanly", async () => {
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 1, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "" });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 1, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
     m.vaultUnlock.mockResolvedValue({ migratedFrom: 3, migratedTo: 3, dailyBackup: null, dailyBackupError: null });
     vi.useFakeTimers({ shouldAdvanceTime: false });
     mount();

@@ -30,7 +30,7 @@ function mount() {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
   m.vaultLock.mockResolvedValue(null);
 });
 afterEach(() => vi.useRealTimers());
@@ -104,6 +104,44 @@ describe("vault gate", () => {
     await user.type(await screen.findByLabelText("Password"), "correct horse battery{Enter}");
     expect(await screen.findByTestId("inside")).toBeInTheDocument();
     expect(screen.getByText("Updated Raven's data (backup saved)")).toBeInTheDocument();
+  });
+
+  it("the migration backup notice can be dismissed", async () => {
+    const user = userEvent.setup();
+    m.vaultStatus.mockResolvedValue({ exists: true, unlocked: false });
+    m.vaultUnlock.mockResolvedValue({ ...unlockOk, migratedFrom: 2, migratedTo: 3 });
+    mount();
+    await user.type(await screen.findByLabelText("Password"), "correct horse battery{Enter}");
+    expect(await screen.findByText("Updated Raven's data (backup saved)")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Dismiss notice" }));
+    expect(screen.queryByText("Updated Raven's data (backup saved)")).not.toBeInTheDocument();
+    expect(screen.getByTestId("inside")).toBeInTheDocument();
+  });
+
+  it("the migration backup notice clears by itself after a few seconds", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    m.vaultStatus.mockResolvedValue({ exists: true, unlocked: false });
+    m.vaultUnlock.mockResolvedValue({ ...unlockOk, migratedFrom: 2, migratedTo: 3 });
+    mount();
+    await user.type(await screen.findByLabelText("Password"), "correct horse battery{Enter}");
+    expect(await screen.findByText("Updated Raven's data (backup saved)")).toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTime(9000));
+    expect(screen.queryByText("Updated Raven's data (backup saved)")).not.toBeInTheDocument();
+  });
+
+  it("a daily backup failure stays until dismissed", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    m.vaultStatus.mockResolvedValue({ exists: true, unlocked: false });
+    m.vaultUnlock.mockResolvedValue({ ...unlockOk, dailyBackupError: "disk full" });
+    mount();
+    await user.type(await screen.findByLabelText("Password"), "correct horse battery{Enter}");
+    expect(await screen.findByText("Daily backup failed: disk full")).toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTime(60000));
+    expect(screen.getByText("Daily backup failed: disk full")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Dismiss notice" }));
+    expect(screen.queryByText("Daily backup failed: disk full")).not.toBeInTheDocument();
   });
 
   it("shows Unlocking… while the unlock is pending", async () => {
@@ -220,7 +258,7 @@ describe("vault gate", () => {
   ] as const) {
     it(`locks on ${label} when the idle time passed while timers were paused (sleep)`, async () => {
       m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-      m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "" });
+      m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
       vi.useFakeTimers({ shouldAdvanceTime: false });
       mount();
       await act(async () => {
@@ -237,7 +275,7 @@ describe("vault gate", () => {
 
   it("the first input after sleep locks instead of resetting the idle time", async () => {
     m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "" });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
     vi.useFakeTimers({ shouldAdvanceTime: false });
     mount();
     await act(async () => {
@@ -252,7 +290,7 @@ describe("vault gate", () => {
 
   it("focus before the idle time does not lock", async () => {
     m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "" });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
     vi.useFakeTimers({ shouldAdvanceTime: false });
     mount();
     await act(async () => {
@@ -267,7 +305,7 @@ describe("vault gate", () => {
 
   it("a huge auto-lock value does not lock immediately", async () => {
     m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 1_000_000, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "" });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 1_000_000, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
     vi.useFakeTimers();
     mount();
     await act(async () => {
@@ -279,7 +317,7 @@ describe("vault gate", () => {
 
   it("auto-locks after the idle time and activity resets the timer", async () => {
     m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 1, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "" });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 1, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
     vi.useFakeTimers({ shouldAdvanceTime: false });
     mount();
     await act(async () => {

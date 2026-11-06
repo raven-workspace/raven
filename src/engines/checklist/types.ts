@@ -26,6 +26,8 @@ export interface ChecklistGoal {
   /** Sub-heading inside its stage; every goal of a stage that uses groups carries one. */
   group?: string;
   applies?: GoalApplies;
+  /** The vault playbook items this step mirrors (usually one): the file (e.g. `04 - Privilege Escalation.md`) and `parsePlaybook`'s exact text. Raven-only steps have none. */
+  playbook?: { file: string; text: string }[];
 }
 
 export interface ChecklistStage {

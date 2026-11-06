@@ -75,3 +75,30 @@ describe('checklist data', () => {
     for (const k of kinds) expect(['exam-sim', 'lab', 'client']).toContain(k);
   });
 });
+
+describe('playbook mapping', () => {
+  const all = [...HOST_GOALS, ...ENGAGEMENT_SETUP, ...LATERAL_MOVEMENT_GOALS, ...AD_PLAYBOOKS.flatMap((p) => p.goals)];
+
+  it('every goal with playbook names a 0x playbook file and non-empty text', () => {
+    const mapped = all.filter((g) => g.playbook);
+    expect(mapped.length).toBeGreaterThan(50);
+    for (const g of mapped) {
+      expect(g.playbook?.length, g.id).toBeGreaterThan(0);
+      for (const p of g.playbook ?? []) {
+        expect(p.file, g.id).toMatch(/^0[0-6] - .+\.md$/);
+        expect(p.text.trim(), g.id).not.toBe('');
+      }
+    }
+  });
+
+  it('Raven-only goals carry no playbook', () => {
+    const noPb = ['h-enum-web-source', 'h-close-notes', 'h-close-cleanup', ...AD_PLAYBOOKS.flatMap((p) => p.goals.map((g) => g.id))];
+    for (const id of noPb) expect(all.find((g) => g.id === id)?.playbook, id).toBeUndefined();
+  });
+
+  it('engagement goals map to 00 and 06 only', () => {
+    for (const g of [...ENGAGEMENT_SETUP, ...LATERAL_MOVEMENT_GOALS]) {
+      for (const p of g.playbook ?? []) expect(p.file, g.id).toMatch(/^0[06] - /);
+    }
+  });
+});

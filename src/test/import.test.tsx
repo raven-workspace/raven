@@ -36,7 +36,7 @@ async function choose(user: ReturnType<typeof userEvent.setup>, content: unknown
 
 beforeEach(() => {
   vi.resetAllMocks();
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
   m.backupsList.mockResolvedValue([]);
 });
 

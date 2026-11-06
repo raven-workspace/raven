@@ -10,7 +10,7 @@ import {
   type Tick,
   type TickContext,
 } from "../../engines/checklist";
-import { BUILTIN_LIBRARY } from "../../engines/library/data";
+import { getLibrary } from "../../engines/library/store";
 import { api } from "../../lib/api";
 import type { ChecklistItemInput, ChecklistState } from "../../types/checklist";
 import type { LogEntry } from "../../types/log";
@@ -28,7 +28,7 @@ export async function loadTickContext(engagementId: string): Promise<TickContext
     api.hostsList(engagementId),
     api.servicesListEngagement(engagementId),
   ]);
-  return { engagement, hosts, servicesByHost: servicesByHostOf(services), library: BUILTIN_LIBRARY };
+  return { engagement, hosts, servicesByHost: servicesByHostOf(services), library: getLibrary() };
 }
 
 const hasEvidenceFrom = (state: ChecklistState | undefined, entryId: string) =>
