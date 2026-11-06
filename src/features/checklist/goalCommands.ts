@@ -10,6 +10,7 @@ import type { LibraryCommand } from "../../engines/library/types";
 import type { Engagement } from "../../types/engagement";
 import { MASK } from "../credentials/MaskedSecret";
 import type { FilledCommand } from "./CommandList";
+import { filePickFor, pickOverrides } from "./filePick";
 
 /** One library command filled for this host: masked for display, real values (shell-escaped for Kali) for copy. */
 export function fillLibraryCommand(c: LibraryCommand, input: FillInput, msfMarker: boolean): FilledCommand {
@@ -26,6 +27,8 @@ export function fillLibraryCommand(c: LibraryCommand, input: FillInput, msfMarke
     msfMarker, tokens: [...new Set(tokens)],
   };
   if (c.cardId) out.cardId = c.cardId;
+  const fileTok = /(?<![$%])\{(FILE|SCRIPT)\}/.exec(c.template);
+  if (fileTok) out.fileToken = { hostId: input.host.id, os: input.host.os === "windows" || input.host.os === "linux" ? input.host.os : null, token: fileTok[1] as "FILE" | "SCRIPT" };
   if (filled.dcByName) out.dcByName = true;
   if (filled.viaTunnel) out.viaTunnel = { viaHostName: filled.viaTunnel.viaHostName, down: filled.viaTunnel.down };
   return out;
@@ -34,6 +37,9 @@ export function fillLibraryCommand(c: LibraryCommand, input: FillInput, msfMarke
 /** The library commands for a goal, filled for this host and filtered by the engagement's exam rules. */
 export function goalCommands(goalId: string, input: FillInput, eng: Engagement): { commands: FilledCommand[]; hadAny: boolean } {
   const all = getLibrary().filter((c) => c.goals.includes(goalId));
+  // The step's {FILE} chip (per host) fills FILE and SCRIPT; without a pick the input is untouched.
+  const pick = pickOverrides(filePickFor(input.host.id));
+  if (Object.keys(pick).length > 0) input = { ...input, overrides: { ...pick, ...input.overrides } };
   const { shown, msfMarker } = filterForKind(all, eng.kind, { hostId: input.host.id, msfHostId: eng.msfHostId });
   const commands = shown.map((c) => fillLibraryCommand(c, input, msfMarker.has(c.id)));
   return { commands, hadAny: all.length > 0 };

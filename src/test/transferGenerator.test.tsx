@@ -165,3 +165,28 @@ describe("Transfer a file", () => {
     expect(await generator()).toBeInTheDocument();
   });
 });
+
+describe("Transfer a file: keyboard", () => {
+  it("focuses the File field and keeps the method tabs to one Tab stop with arrow keys", async () => {
+    const user = userEvent.setup();
+    mount("/arsenal?generator=transfer");
+    const g = within(await generator());
+    await vi.waitFor(() => expect(g.getByRole("combobox", { name: "Value for FILE" })).toHaveFocus());
+    const tabs = g.getAllByRole("tab");
+    expect(tabs.filter((t) => t.tabIndex === 0)).toHaveLength(1);
+    tabs[0]!.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(tabs[1]).toHaveFocus();
+    expect(tabs[1]).toHaveAttribute("aria-selected", "true");
+    expect(tabs[1]!.tabIndex).toBe(0);
+    expect(tabs[0]!.tabIndex).toBe(-1);
+    await user.keyboard("{End}");
+    expect(tabs.at(-1)).toHaveFocus();
+    await user.keyboard("{ArrowRight}");
+    expect(tabs[0]).toHaveFocus();
+    await user.keyboard("{ArrowLeft}");
+    expect(tabs.at(-1)).toHaveFocus();
+    await user.keyboard("{Home}");
+    expect(tabs[0]).toHaveFocus();
+  });
+});

@@ -23,6 +23,9 @@ const GROUP_TAG = 'group:';
 const groupOf = (c: LibraryCommand): string => c.tags?.find((t) => t.startsWith(GROUP_TAG))?.slice(GROUP_TAG.length).trim() || 'Other';
 const isHttp = (group: string): boolean => /^http\b/i.test(group);
 
+/** A Target block that works on the fetched file rather than fetching it. */
+const FOLLOW_UP = /^\s*(?:chmod|md5sum|sha1sum|sha256sum)\b/;
+
 /** "Download with certutil" → "certutil". */
 const labelOf = (title: string): string => title.replace(/^(?:Download|Pull|Fetch)\s+(?:with|using|via)\s+/i, '').trim() || title;
 
@@ -45,8 +48,11 @@ export function transferMethods(cards: CardMeta[], library: LibraryCommand[], os
   for (const [group, blocks] of groups) {
     const kali = blocks.filter((c) => c.runFrom === 'attacker');
     const target = blocks.filter((c) => c.runFrom === 'target');
-    if (isHttp(group) && target.length > 0) {
-      for (const t of target) out.push({ id: `${cardId}:${group}:${t.id}`, label: labelOf(t.title), group, kali, target: [t] });
+    const fetches = target.filter((t) => !FOLLOW_UP.test(t.template));
+    if (isHttp(group) && fetches.length > 0) {
+      // Target blocks that fetch nothing (chmod, a checksum) are the "then" step of every fetch method.
+      const then = target.filter((t) => FOLLOW_UP.test(t.template));
+      for (const t of fetches) out.push({ id: `${cardId}:${group}:${t.id}`, label: labelOf(t.title), group, kali, target: [t, ...then] });
     } else {
       out.push({ id: `${cardId}:${group}`, label: group, group, kali, target });
     }

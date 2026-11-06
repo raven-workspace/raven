@@ -8,6 +8,8 @@ import type { ChecklistStatus } from "../../types/checklist";
 import { Panel, labelClass } from "../../ui";
 import { useHosts } from "../hosts/queries";
 import { CommandList } from "./CommandList";
+import { FileChip } from "./FileChip";
+import { useFilePickStore } from "./filePick";
 import { CredentialPicker } from "./CredentialPicker";
 import { StatusToggles } from "./GoalRow";
 import { useCredFill } from "./credPick";
@@ -16,6 +18,7 @@ import { useChecklist, useChecklistMutations, useEngagementServices, useTunnels 
 
 /** The host's current stage: its open goals, one-click Done/Doing, and the first filled command of each. */
 export function NowPanel({ engagementId, host, onOpenGoal }: { engagementId: string; host: Host; onOpenGoal: (goalId: string) => void }) {
+  useFilePickStore((s) => s.file); // a chip pick refills this panel's commands
   const hostsQ = useHosts(engagementId);
   const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId) });
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
@@ -83,6 +86,7 @@ export function NowPanel({ engagementId, host, onOpenGoal }: { engagementId: str
                     <div className="mb-1 self-start">
                       <StatusToggles label={`Now: ${goal.title}`} status={status} onStatus={set} />
                     </div>
+                    {commands[0] && <FileChip commands={[commands[0]]} />}
                     {commands[0] && <CommandList commands={[commands[0]]} />}
                   </li>
                 );

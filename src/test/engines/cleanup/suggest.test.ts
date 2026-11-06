@@ -243,7 +243,10 @@ describe('transfer fetches', () => {
           .map((c) => c.template.replaceAll('{LHOST}', '10.10.14.9').replaceAll('{FILE}', 'x.exe').replaceAll('{DEST_DIR}', dir).replaceAll('{PORT}', '8000').replaceAll('{BASE64_PAYLOAD}', 'AAAA'))
           .join('\n');
         const found = suggestCleanup([cmd(text, shell)], hosts, '', []);
-        expect(found.length, `${m.group} / ${m.label}`).toBeGreaterThan(0);
+        // The suggestion names the file this method put in the folder (Windows ftp: its script).
+        const targets = found.map((f) => f.target);
+        const want = os === 'windows' ? [`${dir}\\x.exe`, `${dir}\\ftp.txt`] : [`${dir}/x.exe`];
+        expect(targets.some((t) => want.includes(t)), `${m.group} / ${m.label}: ${targets.join(', ')}`).toBe(true);
         checked++;
       }
     }

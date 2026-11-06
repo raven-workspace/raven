@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { fillCommand, filterForKind } from "../../engines/checklist";
 import { transferMethods, TRANSFER_CARD } from "../../engines/generators/transfer";
 import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/store";
@@ -57,6 +57,9 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
   const [port, setPort] = useState("9000");
   const [methodId, setMethodId] = useState<string>();
   const [status, setStatus] = useState<string>();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  useEffect(() => fileRef.current?.focus(), []);
 
   // getLibrary()/getCards() change only with the library version.
   /* eslint-disable react-hooks/exhaustive-deps */
@@ -104,6 +107,16 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
     void logTarget();
   });
 
+  /** ←/→ move between tabs (wrapping), Home/End jump; the tab list is one Tab stop. */
+  const onTabKey = (e: KeyboardEvent, i: number) => {
+    const last = methods.length - 1;
+    const next = e.key === "ArrowRight" ? (i === last ? 0 : i + 1) : e.key === "ArrowLeft" ? (i === 0 ? last : i - 1) : e.key === "Home" ? 0 : e.key === "End" ? last : -1;
+    if (next < 0) return;
+    e.preventDefault();
+    setMethodId(methods[next]!.id);
+    tabRefs.current[next]?.focus();
+  };
+
   const hostName = host?.name || "the target";
   const kali = method ? fill(method.kali) : [];
   const target = method ? fill(method.target) : [];
@@ -114,7 +127,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
       <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
         <label className="flex flex-col gap-1 text-xs text-muted">
           <span className={labelClass}>File</span>
-          <FilePicker name="FILE" os={os} className="h-7 w-64" value={file} onChange={setFile} />
+          <FilePicker ref={fileRef} name="FILE" os={os} className="h-7 w-64" value={file} onChange={setFile} />
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted">
           <span className={labelClass}>To host</span>
@@ -160,12 +173,17 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
       </div>
 
       <div role="tablist" aria-label="Method" className="flex flex-wrap gap-1">
-        {methods.map((m) => (
+        {methods.map((m, i) => (
           <button
             key={m.id}
+            ref={(el) => {
+              tabRefs.current[i] = el;
+            }}
             type="button"
             role="tab"
             aria-selected={m.id === method?.id}
+            tabIndex={m.id === method?.id ? 0 : -1}
+            onKeyDown={(e) => onTabKey(e, i)}
             onClick={() => setMethodId(m.id)}
             className={cx(
               "cursor-default rounded-sm px-2 py-0.5 text-[13px]",

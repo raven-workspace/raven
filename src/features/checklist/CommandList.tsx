@@ -20,6 +20,8 @@ export interface FilledCommand {
   dcByName?: boolean;
   /** Field-manual commands: the Arsenal card they came from. */
   cardId?: string;
+  /** Uses {FILE} or {SCRIPT}: the step shows the Toolkit picker for this host. */
+  fileToken?: { hostId: string; os: "windows" | "linux" | null; token: "FILE" | "SCRIPT" };
   /** The raw unresolved tokens as they appear in `text`, to mark. */
   tokens?: string[];
 }

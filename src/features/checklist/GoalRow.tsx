@@ -6,6 +6,7 @@ import { cx } from "../../lib/cx";
 import { Chip, Textarea, labelClass } from "../../ui";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { CommandList, type FilledCommand } from "./CommandList";
+import { FileChip } from "./FileChip";
 import { EvidenceLinks, type EvidenceLink } from "./EvidenceLinks";
 
 export type { FilledCommand, EvidenceLink };
@@ -121,6 +122,7 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
           {goal.why && <p className="m-0 text-xs text-muted">{goal.why}</p>}
           {commands.length > 0 ? (
             <>
+              <FileChip commands={commands} />
               <CommandList commands={commands} />
               <CardLinks commands={commands} />
             </>

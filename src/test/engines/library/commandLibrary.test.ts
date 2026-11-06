@@ -1,3 +1,4 @@
+import { TRANSFER_CARD } from '../../../engines/generators/transfer';
 import { describe, it, expect } from 'vitest';
 import { hasUnmodelledQuoting } from '../../../engines/checklist';
 import { BUILTIN_LIBRARY } from '../../../engines/library/data';
@@ -48,7 +49,7 @@ describe('built-in command library', () => {
     const unknown = lib.flatMap((c) => c.goals.filter((g) => !ALL_GOAL_IDS.has(g)).map((g) => `${c.id} -> ${g}`));
     expect(unknown).toEqual([]);
     // The transfer cards' blocks belong to the Transfer a file generator, not to a checklist step.
-    const GENERATOR_CARDS = new Set(['shell-file-transfer-to-windows', 'shell-file-transfer-to-linux']);
+    const GENERATOR_CARDS = new Set(Object.values(TRANSFER_CARD));
     expect(lib.filter((c) => c.goals.length === 0 && !GENERATOR_CARDS.has(c.cardId ?? '')).map((c) => c.id)).toEqual([]);
   });
 
