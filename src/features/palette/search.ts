@@ -1,4 +1,4 @@
-import { filterForKind, HOST_GOALS } from "../../engines/checklist";
+import { filterForKind, HOST_GOALS, HOST_STAGES } from "../../engines/checklist";
 import type { CardMeta } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
 import type { EngagementKind } from "../../types/engagement";
@@ -31,6 +31,7 @@ export type PaletteResult =
   | { type: "item"; id: string; title: string; item: EngagementItem };
 
 const STAGE_OF_GOAL = new Map(HOST_GOALS.map((g) => [g.id, g.stage]));
+const STAGE_TITLE = new Map(HOST_STAGES.map((s) => [s.id, s.title]));
 
 const wordsOf = (s: string): string[] => s.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 
@@ -67,7 +68,8 @@ export function searchPalette(query: string, ctx: PaletteContext): PaletteResult
     .filter((g) => matches(q, g.title))
     .map<PaletteResult>((g) => ({ type: "generator", id: g.id, title: g.title }));
   const cards = ctx.cards
-    .filter((c) => matches(q, c.title, c.file))
+    // A vault folder is a category, never a stage: the stage and category are searched too.
+    .filter((c) => matches(q, c.title, c.file, c.stage, STAGE_TITLE.get(c.stage), c.category))
     .map<PaletteResult>((c) => ({ type: "card", id: c.id, title: c.title, card: c }));
   const items = (ctx.engagementItems ?? [])
     .filter((it) => matches(q, it.title, it.text))

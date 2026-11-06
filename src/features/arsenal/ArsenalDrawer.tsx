@@ -9,6 +9,7 @@ import { searchPalette, type PaletteResult } from "../palette/search";
 import { CardView, CommandPane } from "./CardView";
 import { useArsenalStore } from "./useArsenalStore";
 
+/** Commands shown in the result list; cards are never capped. */
 const MAX_RESULTS = 40;
 
 /** Cards and commands only, filtered by the exam rules of the engagement in view. */
@@ -22,7 +23,8 @@ function useArsenalSearch(query: string, engagementId: string, hostId: string | 
       ...(host ? { stageId: host.boardColumn } : {}),
       ...(d.engagement ? { exam: { kind: d.engagement.kind, hostId: host?.id ?? "", msfHostId: d.engagement.msfHostId } } : {}),
     }).filter((r) => r.type === "card" || r.type === "command");
-    return [...all.filter((r) => r.type === "card"), ...all.filter((r) => r.type === "command")].slice(0, MAX_RESULTS);
+    // Every matching card (an import has well over a page of them); commands are capped.
+    return [...all.filter((r) => r.type === "card"), ...all.filter((r) => r.type === "command").slice(0, MAX_RESULTS)];
     // getLibrary()/getCards() change only with the library version.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, host, d.engagement, version]);

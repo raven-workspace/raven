@@ -294,3 +294,55 @@ describe("Arsenal", () => {
     expect(await d.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
   });
 });
+
+describe("Arsenal after a Field Manual import (B2)", () => {
+  const STAGES = [
+    ["information-gathering", "Information gathering"],
+    ["vulnerability-detection", "Vulnerability detection"],
+    ["initial-foothold", "Initial foothold"],
+    ["privilege-escalation", "Privilege escalation"],
+    ["post-exploitation", "Post-exploitation"],
+    ["reporting", "Reporting"],
+    ["lateral-movement", "Lateral movement"],
+  ] as const;
+  // One card per stage, filed under a folder that never names the stage, plus enough filler to pass a page of results.
+  const perStage: CardMeta[] = STAGES.map(([id], i) => ({
+    id: `st-${id}`, title: `Qq stage card ${i}`, stage: id, category: "Qq-Misc", os: "any", file: `02-Cards/Qq-Misc/Qq-${i}.md`,
+  }));
+  const filler: CardMeta[] = Array.from({ length: 45 }, (_, i) => ({
+    id: `fill-${i}`, title: `Filler ${i}`, stage: "initial-foothold", category: "Aa-Filler", os: "any", file: `02-Cards/Aa/F-${i}.md`,
+  }));
+  const cmds = [...perStage, ...filler].map((c) => cmd(`${c.id}-cmd`, { title: `${c.title} cmd`, cardId: c.id }));
+
+  beforeEach(() => setImported({ commands: cmds, cards: [...filler, ...perStage] }));
+
+  it("every imported card is listed in the drawer", async () => {
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Checklist" });
+    act(() => useArsenalStore.getState().openCard());
+    const d = within(await drawer());
+    for (const c of perStage) expect(await d.findByRole("option", { name: new RegExp(c.title) })).toBeInTheDocument();
+  });
+
+  it.each(STAGES)("searching the drawer for stage %s finds its card", async (id, title) => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Checklist" });
+    act(() => useArsenalStore.getState().openCard());
+    const d = within(await drawer());
+    await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), title);
+    const card = perStage.find((c) => c.stage === id)!;
+    expect(await d.findByRole("option", { name: new RegExp(card.title) })).toBeInTheDocument();
+  });
+
+  it("browse lists every imported card under its stage", async () => {
+    const user = userEvent.setup();
+    mount("/arsenal");
+    const cards = within(await screen.findByRole("region", { name: "Cards" }));
+    const stage = within(screen.getByRole("region", { name: "Stage" }));
+    for (const c of perStage) {
+      await user.click(stage.getByRole("button", { name: STAGES.find(([id]) => id === c.stage)![1] }));
+      expect(cards.getByRole("button", { name: c.title })).toBeInTheDocument();
+    }
+  });
+});
