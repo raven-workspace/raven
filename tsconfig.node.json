@@ -10,5 +10,5 @@
     "emitDeclarationOnly": true,
     "outDir": "node_modules/.tmp/tsc-node"
   },
-  "include": ["vite.config.ts", "vitest.config.ts"]
+  "include": ["vite.config.ts", "vitest.config.ts", "src/audit/vitePlugin.ts"]
 }
