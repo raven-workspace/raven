@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Raven UX audit self-test</title>
+<style>
+  body { margin: 0; font: 14px/20px monospace; }
+  iframe { display: block; width: 900px; height: 140px; border: 0; border-bottom: 1px solid #ccc; }
+</style>
+</head>
+<body>
+<!--
+  One iframe srcdoc per case, because the viewport-wide rules (color-noise,
+  primaries, off-scale) would otherwise bleed between cases. Sources live in
+  <script type="text/html"> blocks so they need no attribute escaping.
+-->
+<script type="text/html" data-case="hierarchy-flat" data-expect="hierarchy-flat">
+<div><h3 style="margin:0;font:400 13px/20px monospace">Scan results</h3><p style="margin:0;font:400 13px/20px monospace">Three hosts answered on port 445.</p></div>
+</script>
+
+<script type="text/html" data-case="tight-stack" data-expect="tight-stack">
+<pre style="margin:0 0 2px">nmap -sV 10.10.10.5</pre><pre style="margin:0">nmap -sC 10.10.10.5</pre>
+</script>
+
+<script type="text/html" data-case="off-scale-spacing" data-expect="off-scale-spacing">
+<div style="padding:7px">alpha</div><div style="padding:7px">bravo</div><div style="padding:7px">charlie</div>
+</script>
+
+<script type="text/html" data-case="tiny-text" data-expect="tiny-text">
+<p style="margin:0;font-size:10px">Tiny caption text</p>
+</script>
+
+<script type="text/html" data-case="long-lines" data-expect="long-lines">
+<div style="width:1200px"><p style="margin:0">Enumerate every share on the target host, record the readable ones, then pull anything that looks like a credential file before moving on to the next host in scope today.</p></div>
+</script>
+
+<script type="text/html" data-case="small-target" data-expect="small-target">
+<button aria-label="Close" style="width:16px;height:16px;padding:0;border:0;margin:0">x</button>
+</script>
+
+<script type="text/html" data-case="color-noise" data-expect="color-noise">
+<p style="margin:0;color:#e03131">red</p><p style="margin:0;color:#2f9e44">green</p><p style="margin:0;color:#1c7ed6">blue</p><p style="margin:0;color:#9c36b5">purple</p><p style="margin:0;color:var(--accent);background:#222">accent</p>
+</script>
+
+<script type="text/html" data-case="competing-primaries" data-expect="competing-primaries">
+<button data-variant="primary" style="padding:4px 12px;margin:0 8px 0 0">Save</button><button data-variant="primary" style="padding:4px 12px">Run</button>
+</script>
+
+<script type="text/html" data-case="unreduced-motion" data-expect="unreduced-motion">
+<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+<div style="width:20px;height:20px;background:#555;animation:spin 1s linear infinite"></div>
+</script>
+
+<script type="text/html" data-case="hierarchy-ok" data-expect="none">
+<div><h3 style="margin:0;font:600 15px/20px monospace">Scan results</h3><p style="margin:0;font:400 13px/20px monospace">Three hosts answered on port 445.</p></div>
+</script>
+
+<script type="text/html" data-case="stack-ok" data-expect="none">
+<pre style="margin:0 0 12px">nmap -sV 10.10.10.5</pre><pre style="margin:0">nmap -sC 10.10.10.5</pre>
+</script>
+
+<script type="text/html" data-case="target-inline-ok" data-expect="none">
+<p style="margin:0">See the <a href="#">Field Manual page</a> for the full walkthrough.</p>
+</script>
+
+<script type="text/html" data-case="motion-allowed-ok" data-expect="none">
+<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+<div data-audit-allow="motion" style="width:20px;height:20px;background:#555;animation:spin 1s linear infinite"></div>
+</script>
+
+<script>
+  const base = "<style>:root{--accent:#c6ff00} body{margin:8px;font:14px/20px monospace;color:#111;background:#fff}</style>";
+  for (const src of document.querySelectorAll('script[type="text/html"]')) {
+    const frame = document.createElement("iframe");
+    frame.dataset.case = src.dataset.case;
+    frame.dataset.expect = src.dataset.expect;
+    frame.srcdoc = "<!DOCTYPE html><html><head>" + base + "</head><body>" + src.textContent + "</body></html>";
+    document.body.append(frame);
+  }
+</script>
+</body>
+</html>

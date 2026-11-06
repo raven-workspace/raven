@@ -13,3 +13,8 @@ raven-workspace-*.json
 
 # macOS Finder metadata
 .DS_Store
+
+# Visual audit output
+audit-output/
+test-results/
+playwright-report/

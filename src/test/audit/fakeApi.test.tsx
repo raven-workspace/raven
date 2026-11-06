@@ -1,0 +1,125 @@
+import { QueryClientProvider } from "@tanstack/react-query";
+import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import App from "../../App";
+import { api, resetAuditState, scenarioFromSearch, setAuditScenario } from "../../audit/fakeApi";
+import { RavenError } from "../../types/errors";
+import { AUDIT_PNGS } from "../../audit/images";
+import { makeQueryClient } from "../../lib/queryClient";
+
+vi.mock("../../lib/api", () => import("../../audit/fakeApi"));
+
+afterEach(() => resetAuditState());
+
+describe("audit fake api", () => {
+  it("implements every Api command", async () => {
+    const real = await vi.importActual<typeof import("../../lib/api")>("../../lib/api");
+    expect(Object.keys(api).sort()).toEqual(Object.keys(real.api).sort());
+  });
+
+  it("stresses layouts", async () => {
+    expect((await api.engagementGet("e-lab")).name.length).toBeGreaterThanOrEqual(70);
+    expect(await api.credentialsList("e-lab")).toHaveLength(12);
+
+    const web = await api.servicesList("h-web");
+    expect(web.length).toBeGreaterThanOrEqual(20);
+    expect(web.filter((s) => s.protocol === "udp" && s.state === "open|filtered").length).toBeGreaterThanOrEqual(3);
+
+    const hosts = await api.hostsList("e-lab");
+    expect(hosts).toHaveLength(6);
+    expect(hosts.some((h) => h.name === "dc01" && h.os === "windows" && h.adSet === true)).toBe(true);
+    expect(hosts.find((h) => h.id === "h-web")!.name.length).toBeGreaterThanOrEqual(40);
+    expect(hosts.some((h) => h.dualHomed)).toBe(true);
+
+    const exam = await api.engagementGet("e-exam");
+    expect(exam.kind).toBe("exam-sim");
+    expect(exam.msfHostId).toBe("h-exam-ms01");
+    expect(await api.hostsList("e-exam")).toHaveLength(5);
+
+    const entries = await api.logList("e-lab");
+    expect(entries.length).toBeGreaterThanOrEqual(25);
+    const shots = entries.filter((e) => e.kind === "screenshot");
+    expect(shots).toHaveLength(4);
+    const declared = Object.values(AUDIT_PNGS).map((p) => `${p.width}x${p.height}`).sort();
+    const actual: string[] = [];
+    for (const s of shots) {
+      if (s.content.kind !== "screenshot") throw new Error("not a screenshot");
+      const att = await api.attachmentGet(s.content.attachmentId);
+      expect(att.mime).toBe("image/png");
+      const bytes = Uint8Array.from(atob(att.dataBase64), (c) => c.charCodeAt(0));
+      const view = new DataView(bytes.buffer);
+      actual.push(`${view.getUint32(16)}x${view.getUint32(20)}`);
+    }
+    expect(actual.sort()).toEqual(declared);
+
+    const commands = entries.flatMap((e) => (e.content.kind === "command" ? e.content.blocks.map((b) => b.command) : []));
+    expect(commands.some((c) => /[A-Za-z0-9+/]{200,}={0,2}/.test(c))).toBe(true);
+    expect(commands.some((c) => /C:\\Program Files \(x86\)\\/.test(c))).toBe(true);
+    expect(commands.some((c) => c.length < 40 && c.includes("--") && c.includes("="))).toBe(true);
+  });
+
+  it("makes the done-goal notice show 12 new credentials", async () => {
+    const goal = (await api.checklistList("e-lab")).find((i) => i.status === "done" && i.completedAt != null)!;
+    const creds = await api.credentialsList("e-lab");
+    expect(creds.every((c) => c.scope === "domain" && c.createdAt > goal.completedAt!)).toBe(true);
+    expect(new Set(creds.map((c) => `${c.domain}\\${c.username}${c.type === "hash" ? " (hash)" : ""}`)).size).toBe(12);
+  });
+
+  it("covers the archived engagement, rejects the inert commands", async () => {
+    expect((await api.engagementGet("e-old")).status).toBe("archived");
+    expect(await api.vaultStatus()).toEqual({ exists: true, unlocked: true });
+    expect(await api.fieldManualLoad()).toBeNull();
+    await expect(api.backupNow()).rejects.toMatchObject({ code: "unsupported" });
+    await expect(api.fieldManualScan()).rejects.toMatchObject({ code: "unsupported" });
+  });
+
+  it("mutations persist until reload", async () => {
+    await api.hostMove("h-web", "reporting");
+    expect((await api.hostsList("e-lab")).find((h) => h.id === "h-web")!.boardColumn).toBe("reporting");
+    resetAuditState();
+    expect((await api.hostsList("e-lab")).find((h) => h.id === "h-web")!.boardColumn).toBe("vulnerability-detection");
+  });
+
+  it("boots the app past the vault", async () => {
+    render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <MemoryRouter initialEntries={["/"]}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect((await screen.findAllByText(/Lumen Corp — internal segment B/)).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/unlock/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("audit scenarios", () => {
+  afterEach(() => setAuditScenario("full"));
+
+  it("parses ?audit=", () => {
+    expect(scenarioFromSearch("?audit=empty")).toBe("empty");
+    expect(scenarioFromSearch("")).toBe("full");
+    expect(scenarioFromSearch("?audit=bogus")).toBe("full");
+  });
+
+  it("empty: lists are empty but the engagement resolves", async () => {
+    setAuditScenario("empty");
+    expect(await api.credentialsList("e-lab")).toEqual([]);
+    expect((await api.engagementGet("e-lab")).id).toBe("e-lab");
+    expect((await api.engagementsList()).map((e) => e.id)).toEqual(["e-lab"]);
+  });
+
+  it("error: data commands reject, the shell commands do not", async () => {
+    setAuditScenario("error");
+    await expect(api.hostsList("e-lab")).rejects.toBeInstanceOf(RavenError);
+    expect(await api.vaultStatus()).toEqual({ exists: true, unlocked: true });
+  });
+
+  it("loading: data commands never settle", async () => {
+    setAuditScenario("loading");
+    const result = await Promise.race([api.hostsList("e-lab"), new Promise((r) => setTimeout(() => r("pending"), 50))]);
+    expect(result).toBe("pending");
+    expect((await api.engagementGet("e-lab")).id).toBe("e-lab");
+  });
+});

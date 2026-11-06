@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Raven keyboard self-test</title>
+<style>
+  body { margin: 0; width: 900px; font: 14px/20px sans-serif; background: #fff; color: #111; }
+  section { margin: 0 0 12px; padding: 8px; border: 1px solid #ccc; }
+  [role="tab"] { padding: 4px 8px; border: 1px solid #ccc; background: #fff; }
+  [role="tab"]:focus-visible, .ring:focus-visible { outline: 2px solid #06c; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<!-- Open this page with #trap to get only the trap case: it would stop the walk for the others. -->
+<section data-case="focus-invisible" data-expect="focus-invisible">
+  <button style="outline:none">No focus style</button>
+</section>
+
+<section data-case="unreachable" data-expect="unreachable">
+  <div role="button">Mouse only</div>
+</section>
+
+<section data-case="roving-ok" data-expect="none">
+  <div role="tablist">
+    <button role="tab" tabindex="0" aria-selected="true">One</button>
+    <button role="tab" tabindex="-1" aria-selected="false">Two</button>
+    <button role="tab" tabindex="-1" aria-selected="false">Three</button>
+  </div>
+</section>
+
+<section data-case="focus-ok" data-expect="none">
+  <button class="ring">Visible ring</button>
+</section>
+
+<section data-case="focus-trap" data-expect="focus-trap" id="trap">
+  <input aria-label="Trap" class="ring" id="trap-input">
+</section>
+
+<script>
+  const trapOnly = location.hash === "#trap";
+  for (const s of document.querySelectorAll("section")) {
+    if ((s.id === "trap") !== trapOnly) s.remove();
+  }
+  document.getElementById("trap-input")?.addEventListener("keydown", (e) => {
+    if (e.key === "Tab") {
+      e.preventDefault();
+      e.currentTarget.focus();
+    }
+  });
+</script>
+</body>
+</html>
