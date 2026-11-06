@@ -20,10 +20,29 @@ Inputs: `audit-output/report.md` / `report.json` (28,181 rows) and every screen 
 | 8 | **Keyboard gaps in core flows** | flows @1280; palette:kbd | report §flow | Reaching the next checklist step takes 13 Tabs (budget 2). In the Arsenal drawer, Enter opens the card instead of copying (the palette's Enter copies, so the two are inconsistent). The palette can't find hosts. Pasting `user:pass` into capture creates nothing. The focused "Fill for host" picker is invisible (opacity 0). | Add a "next step" key (e.g. `N`) that focuses the first To-do or Doing step. Make Enter in the drawer copy, as in the palette, with Tab or → to open. Add hosts to palette results. Have intake parse `user:pass` / `DOMAIN\user:pass`. Add a `:focus-within` ring to the host-picker wrapper. | Yes: `flow-over-budget`, `flow-needs-mouse`, `focus-hidden`. |
 | 9 | **Credential routine commands: cramped, detached Copy, mid-token wraps** | credentials @all | `credentials@1280.png` (lower half) | The two commands per protocol sit about 4px apart as bare text. Copy is pinned 600px+ to the right at 1280+, and filenames break mid-token (`nxc-smb-backup-\noperator.txt`). Spacing and hierarchy don't match the boxed command blocks used elsewhere. | `code.min-w-0.flex-1.overflow-x-auto.whitespace-pre-wrap`. Reuse the checklist CommandBlock (boxed, inline Copy, 8px gap). Wrap at spaces only by rendering each space-separated token as a `whitespace-nowrap` span (plain CSS cannot stop breaks at hyphens). | Yes: `mid-token-wrap` (28), `long-lines` (credentials li). |
 | 10 | **Error/loading states: silent, misleading, inconsistent** | board, exam-board, all `~loading` | `board@1280~error.png`, `host-story@1280~loading.png`, `credentials@1280~error.png`, `log@1280~error.png` | Board/exam-board errors render as an empty board with 0 counts, pixel-identical to loading. Loading shows a blank pane while the header claims "Rooted 0/0 · flags 0/0". There are three different error styles: a dashed card with Try again (log, which is good), a dashed card without retry (host), and a bare orange line (credentials/findings/eng-checklist). | Add one `<ErrorState title reason onRetry>` and use it everywhere. Hide the stats strip until it has loaded. Show a delayed skeleton or "Loading…" after ~150ms. | Yes: `silent-error` (4), `blank-loading` (14). The inconsistency and the misleading zeros are eye-only. |
-| 11 | **Finding editor: "Affected services" shows every service of every host** | findings @900/1280 | `findings@1280.png` | About 45 chips across 6 hosts even though only dc01 and sql01 are selected. Wrapped chips fall back under the host label instead of staying indented, and the host label is truncated ("web-finance-d…"). | Filter to the selected hosts' services. Use a 2-column grid (label \| wrapping chips) so continuation lines indent. | Partly: `truncated` on the w-24 label only. |
+| 11 | **Add/Edit finding: "Affected services" is a wall of chips** (also seen in real use, Mock exam A, 2026-11-06) | findings @900/1280; real app | `findings@1280.png` | About 45 chips across 6 hosts, and every port of every host is listed even when only some hosts are selected. Wrapped chips fall back under the host label instead of staying indented, and the host label is truncated ("web-finance-d…"). The chips show raw nmap names (`ldapssl?`, `globalcatLDAPssl?`, `5040/tcp unknown`) even where the real product and version have been confirmed. MS01 alone runs to 40+ chips, mostly Windows dynamic RPC and UDP noise. | Rebuild the field as follows. (a) Only list services of the **selected** hosts. (b) **Show the confirmed service and version** (`confirmedProduct`/`confirmedVersion`) in place of the nmap name when they are set. (c) **Collapse the noise**: show Windows dynamic RPC (49152–65535 `msrpc`) as one `msrpc ×7` chip that expands on click, and collapse UDP by default to "+N UDP". (d) **Sort by relevance, not port number**: confirmed or flagged first, unidentified `?` second, everything else last. (e) **Use a grid, not flex-wrap**: fixed columns (port/proto · service · version) with a selectable row per service, so a long list can be scanned. | Partly: `truncated` on the w-24 label only. The chip wall, the raw nmap names and the sort order are eye-only. |
 | 12 | **Sidebar host names truncated to 7 chars at every width** | all engagement screens | `host-story@1280.png` | `web-fin…` (62px visible of 306px) while the IP column takes the space. | Sidebar host row (`span.truncate`). Show the first DNS label (`web-finance-dmz-portal-01`), make the IP smaller or hide it on overflow, and use the full name as the tooltip. | Yes: `truncated` (64 rows, 306 > 62). |
 
 ---
+
+## 1b. Layout principle: grid over flexbox (user decision, 2026-11-06)
+
+Use **CSS grid as the default layout primitive** across Raven. Use flexbox only for single-line, one-dimensional runs that cannot wrap, such as an icon next to a label or a button group.
+
+**Why:** most of the bugs above come from flex items negotiating space with each other:
+- one-word-per-line squeezes (#3);
+- the 0px search field next to the host chip (fixed in PR #8);
+- the chip walls (#5, #11);
+- detached Copy buttons (#9).
+
+Grid tracks (`grid-cols-[auto_minmax(0,1fr)_auto]`, `minmax()`, named areas) make each column's size explicit, so content can't steal space from its neighbours.
+
+**How to apply when fixing the items above:**
+- Rows with a label, content and actions, such as checklist rows, credential rows, story and log rows, and command blocks with Copy, become grids with a fixed action track.
+- Lists of structured items, such as services, ports and credentials, become real columns. They should not be wrapped chips.
+- Keep flex only where the content is truly one line and the order can't overflow.
+
+The audit should get a matching check: flag `flex-wrap` containers whose children vary widely in width. Those are candidates for grid.
 
 ## 2. Automated findings grouped by root cause
 
