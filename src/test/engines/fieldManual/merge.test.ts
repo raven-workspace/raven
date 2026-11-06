@@ -49,7 +49,7 @@ describe('mergeImport', () => {
   it('a new block gets fm-<card>-v<n>, the card goals and a classified exam rule', () => {
     const { commands, report } = mergeImport(
       [bi('fm-c1-2'), bi('fm-c1-3', { title: 'B', template: 'x', goals: ['g2', 'g1'] })],
-      [card([block(), block({ title: 'B', template: 'x' }), block({ title: 'Brand new', template: 'msfconsole -q', index: 2 })])],
+      [card([block(), block({ title: 'B', template: 'x' }), block({ title: 'Brand new', template: 'msfconsole -q -x "use exploit/unix/ftp/vsftpd_234_backdoor"', index: 2 })])],
     );
     const n = commands.find((c) => c.id === 'fm-c1-v2')!;
     expect(n.goals.sort()).toEqual(['g1', 'g2']);
@@ -77,8 +77,32 @@ describe('mergeImport', () => {
       [card([block({ template: 'nmap -sC {TARGET_IP}' })])],
     );
     expect(commands[0].exam).toBe('banned');
+  });
+
+  it('a matched built-in keeps its own exam rule; classification never changes it', () => {
     const up = mergeImport([bi('fm-c1-2', { exam: 'metasploit' })], [card([block({ template: 'sqlmap -u {URL}' })])]);
-    expect(up.commands[0].exam).toBe('banned');
+    expect(up.commands[0].exam).toBe('metasploit');
+    expect(up.overlay['fm-c1-2'].exam).toBeUndefined();
+    expect(up.report.classified).toEqual([]);
+    const none = mergeImport([bi('fm-c1-2')], [card([block({ template: 'msfvenom -p windows/x64/meterpreter_reverse_tcp -f exe' })])]);
+    expect(none.commands[0].exam).toBeUndefined();
+    expect(none.report.classified).toEqual([]);
+  });
+
+  it('an overlay exam rule from an older snapshot is ignored', () => {
+    const builtins = [bi('fm-c1-2')];
+    const applied = applyOverlay(builtins, { overlay: { 'fm-c1-2': { title: 'T', template: 't', exam: 'metasploit' } }, added: [] });
+    expect(applied[0].exam).toBeUndefined();
+  });
+
+  it('a staged shell handler built-in stays unrestricted after import', () => {
+    const tpl = 'msfconsole -q -x "use exploit/multi/handler; set payload windows/x64/shell/reverse_tcp; set LHOST {LHOST}; set LPORT {LPORT}; set ExitOnSession false; run -j"';
+    const { commands, report } = mergeImport(
+      [bi('fm-shell-listeners-10', { template: tpl, title: 'multi/handler' })],
+      [card([block({ title: 'multi/handler', template: tpl })])],
+    );
+    expect(commands[0].exam).toBeUndefined();
+    expect(report.classified).toEqual([]);
   });
 
   it('raven-source commands are untouched', () => {

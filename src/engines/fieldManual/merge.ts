@@ -28,7 +28,7 @@ export interface CommandOverlay {
   title: string;
   why?: string;
   template: string;
-  /** Only present when stronger than the built-in's own rule. */
+  /** @deprecated written by older imports; ignored. A built-in's exam rule always comes from the code. */
   exam?: ExamRule;
 }
 
@@ -49,9 +49,6 @@ export interface FieldManualSnapshot {
 }
 
 const norm = (s: string): string => s.replace(/\s+/g, ' ').trim();
-const STRENGTH: Record<ExamRule, number> = { metasploit: 1, banned: 2 };
-const stronger = (a?: ExamRule, b?: ExamRule): ExamRule | undefined =>
-  !a ? b : !b ? a : STRENGTH[b] > STRENGTH[a] ? b : a;
 
 const toolOf = (template: string): string => {
   const line = template.split('\n').find((l) => l.trim() && !l.trim().startsWith('#')) ?? '';
@@ -75,8 +72,6 @@ export function normalizeSnapshot(
     else if (b.source === 'field-manual') {
       const o: CommandOverlay = { title: c.title, template: c.template };
       if (c.why !== undefined) o.why = c.why;
-      const exam = stronger(b.exam, c.exam);
-      if (exam && exam !== b.exam) o.exam = exam;
       overlay[c.id] = o;
     }
   }
@@ -94,8 +89,6 @@ export function applyOverlay(
     if (!o || b.source !== 'field-manual') return b;
     const next: LibraryCommand = { ...b, title: o.title, template: o.template };
     if (o.why !== undefined) next.why = o.why;
-    const exam = stronger(b.exam, o.exam);
-    if (exam) next.exam = exam;
     return next;
   });
   return [...out, ...snap.added.filter((c) => !ids.has(c.id))];
@@ -106,8 +99,8 @@ const cardChanged = (a: CardMeta, b: CardMeta): boolean =>
 
 /**
  * Merges parsed vault cards over the built-in library (spec §5). Nothing is ever dropped: a built-in whose block is
- * gone from the vault stays and is reported. A matched command keeps its id, matcher, goals, tool and exam rule;
- * only title, why and template follow the vault. `previous` is the last import, so re-importing is idempotent.
+ * gone from the vault stays and is reported. A matched built-in keeps its id, matcher, goals, tool and exam rule;
+ * only title, why and template follow the vault. Vault-added commands are (re)classified from their template. `previous` is the last import, so re-importing is idempotent.
  */
 export function mergeImport(
   builtins: LibraryCommand[],
@@ -150,9 +143,13 @@ export function mergeImport(
       if (hit) {
         const next: LibraryCommand = { ...hit, title: b.title, template: b.template };
         if (b.why !== undefined) next.why = b.why;
-        const exam = stronger(hit.exam, classifyExam(b.template, card.exam, b.note));
-        if (exam) next.exam = exam;
-        if (exam && exam !== hit.exam) classified.push({ id: hit.id, exam });
+        // A built-in's exam rule is authoritative; only vault-added commands are classified.
+        if (!builtinIds.has(hit.id)) {
+          const exam = classifyExam(b.template, card.exam, b.note);
+          if (exam) next.exam = exam;
+          else delete next.exam;
+          if (exam && exam !== hit.exam) classified.push({ id: hit.id, exam });
+        }
         if (next.title !== hit.title || next.template !== hit.template || next.why !== hit.why) {
           commandsChanged++;
           replaced.set(hit.id, next);
@@ -201,10 +198,9 @@ export function mergeImport(
   for (const b of builtins) {
     const f = final.find((c) => c.id === b.id);
     if (!f || b.source !== 'field-manual') continue;
-    if (f.title === b.title && f.template === b.template && f.why === b.why && f.exam === b.exam) continue;
+    if (f.title === b.title && f.template === b.template && f.why === b.why) continue;
     const o: CommandOverlay = { title: f.title, template: f.template };
     if (f.why !== undefined) o.why = f.why;
-    if (f.exam && f.exam !== b.exam) o.exam = f.exam;
     overlay[b.id] = o;
   }
   const allAdded = [...final.filter((c) => !builtinIds.has(c.id)), ...added];
