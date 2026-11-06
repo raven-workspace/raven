@@ -3,7 +3,8 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "../../App";
-import { api, resetAuditState } from "../../audit/fakeApi";
+import { api, resetAuditState, scenarioFromSearch, setAuditScenario } from "../../audit/fakeApi";
+import { RavenError } from "../../types/errors";
 import { AUDIT_PNGS } from "../../audit/images";
 import { makeQueryClient } from "../../lib/queryClient";
 
@@ -90,5 +91,35 @@ describe("audit fake api", () => {
     );
     expect((await screen.findAllByText(/Lumen Corp — internal segment B/)).length).toBeGreaterThan(0);
     expect(screen.queryByText(/unlock/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("audit scenarios", () => {
+  afterEach(() => setAuditScenario("full"));
+
+  it("parses ?audit=", () => {
+    expect(scenarioFromSearch("?audit=empty")).toBe("empty");
+    expect(scenarioFromSearch("")).toBe("full");
+    expect(scenarioFromSearch("?audit=bogus")).toBe("full");
+  });
+
+  it("empty: lists are empty but the engagement resolves", async () => {
+    setAuditScenario("empty");
+    expect(await api.credentialsList("e-lab")).toEqual([]);
+    expect((await api.engagementGet("e-lab")).id).toBe("e-lab");
+    expect((await api.engagementsList()).map((e) => e.id)).toEqual(["e-lab"]);
+  });
+
+  it("error: data commands reject, the shell commands do not", async () => {
+    setAuditScenario("error");
+    await expect(api.hostsList("e-lab")).rejects.toBeInstanceOf(RavenError);
+    expect(await api.vaultStatus()).toEqual({ exists: true, unlocked: true });
+  });
+
+  it("loading: data commands never settle", async () => {
+    setAuditScenario("loading");
+    const result = await Promise.race([api.hostsList("e-lab"), new Promise((r) => setTimeout(() => r("pending"), 50))]);
+    expect(result).toBe("pending");
+    expect((await api.engagementGet("e-lab")).id).toBe("e-lab");
   });
 });

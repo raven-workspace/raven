@@ -72,6 +72,12 @@ export function renderMarkdown(issues: Issue[], screenIds: string[], shots: Set<
       lines.push(`- [${g.widths.join(", ")}] **${g.check}** \`${g.selector}\` ×${g.count} — ${g.detail}`);
     }
     for (const m of more) lines.push(`- …${m.count} more ${m.check} groups in report.json`);
+    const state = /^(.+)~(empty|loading|error)$/.exec(s);
+    if (state) {
+      const file = `${state[1]}@1280~${state[2]}.png`;
+      lines.push("", shots.has(file) ? `[${s}](shots/${file})` : "No screenshot: this state did not run.");
+      continue;
+    }
     if (!screenIds.includes(s)) continue;
     const links = WIDTHS.filter((w) => shots.has(`${s}@${w}.png`)).map((w) => `[${s}@${w}](shots/${s}@${w}.png)`);
     lines.push("", links.length > 0 ? links.join(" · ") : "No screenshots: this screen did not run.");

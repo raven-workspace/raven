@@ -51,7 +51,7 @@ function listChecklist(engagementId: string): ChecklistItem[] {
   return clone(db.checklist.filter((c) => owners.has(c.ownerId)));
 }
 
-const api = {
+const base = {
   vaultStatus: async () => ({ exists: true, unlocked: true }),
   vaultCreate: async () => null,
   vaultUnlock: async () => ({ migratedFrom: 0, migratedTo: 0, dailyBackup: null, dailyBackupError: null }),
@@ -326,5 +326,47 @@ const api = {
   },
   engagementsProgress: async () => clone(progress),
 } satisfies Api;
+
+export type AuditScenario = "full" | "empty" | "loading" | "error";
+
+export function scenarioFromSearch(search: string): AuditScenario {
+  const v = new URLSearchParams(search).get("audit");
+  return v === "empty" || v === "loading" || v === "error" ? v : "full";
+}
+
+let scenario: AuditScenario = "full";
+
+/** Test/audit seam: picks the data state the fake serves, and restores the fixtures. */
+export function setAuditScenario(s: AuditScenario): void {
+  scenario = s;
+  resetAuditState();
+}
+
+// These stay real in every scenario so the shell and routes still resolve.
+const ALWAYS_REAL = new Set<string>(["vaultStatus", "settingsGet", "engagementsList", "engagementGet"]);
+const LISTS = /List(Engagement)?$/;
+const COUNT_MAPS = new Set<string>(["engagementsProgress", "cleanupCounts"]);
+
+function forScenario(name: string, fn: (...a: never[]) => Promise<unknown>): (...a: never[]) => Promise<unknown> {
+  if (ALWAYS_REAL.has(name)) {
+    if (name === "engagementsList") return async () => (scenario === "empty" ? [clone(find(db.engagements, "e-lab"))] : fn());
+    return fn;
+  }
+  return (...a) => {
+    if (scenario === "loading") return new Promise<never>(() => {});
+    if (scenario === "error") return Promise.reject(new RavenError("io", "Audit: simulated failure"));
+    if (scenario === "empty") {
+      if (LISTS.test(name)) return Promise.resolve([]);
+      if (COUNT_MAPS.has(name)) return Promise.resolve({});
+    }
+    return fn(...a);
+  };
+}
+
+const api = Object.fromEntries(
+  Object.entries(base).map(([name, fn]) => [name, forScenario(name, fn as (...a: never[]) => Promise<unknown>)]),
+) as unknown as typeof base;
+
+setAuditScenario(scenarioFromSearch(typeof window === "undefined" ? "" : window.location.search));
 
 export { api };
