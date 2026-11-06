@@ -26,7 +26,9 @@ export function renderMarkdown(issues: Issue[], screenIds: string[], shots: Set<
     const counts = widths.map((w) => issues.filter((i) => i.check === c && i.width === w).length);
     lines.push(`| ${c} | ${counts.join(" | ")} | ${counts.reduce((a, b) => a + b, 0)} |`);
   }
-  for (const s of [...screenIds].sort(cmp)) {
+  // Keyboard issues are filed under ids that are not screens (`<id>:kbd`, `shortcut:<id>`).
+  const extra = [...new Set(issues.map((i) => i.screen))].filter((s) => !screenIds.includes(s));
+  for (const s of [...screenIds, ...extra].sort(cmp)) {
     lines.push("", `## ${s}`, "");
     const rows = new Map<string, { issue: Issue; widths: number[] }>();
     for (const i of issues.filter((x) => x.screen === s)) {
@@ -39,6 +41,7 @@ export function renderMarkdown(issues: Issue[], screenIds: string[], shots: Set<
     for (const { issue, widths: ws } of rows.values()) {
       lines.push(`- [${ws.join(", ")}] **${issue.check}** \`${issue.selector}\` — ${issue.detail}`);
     }
+    if (!screenIds.includes(s)) continue;
     const links = WIDTHS.filter((w) => shots.has(`${s}@${w}.png`)).map((w) => `[${s}@${w}](shots/${s}@${w}.png)`);
     lines.push("", links.length > 0 ? links.join(" · ") : "No screenshots: this screen did not run.");
   }
