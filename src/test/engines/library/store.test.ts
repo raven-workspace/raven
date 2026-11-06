@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { BUILTIN_LIBRARY } from '../../../engines/library/data';
-import { getCards, getLibrary, setImported, useLibraryVersion } from '../../../engines/library/store';
+import { getCards, getLibrary, getToolkit, setImported, useLibraryVersion } from '../../../engines/library/store';
 import type { LibraryCommand } from '../../../engines/library/types';
 import { renderHook } from '@testing-library/react';
 
@@ -11,6 +11,15 @@ const cmd = (id: string, title = 't'): LibraryCommand => ({
 afterEach(() => setImported({ commands: [], cards: [] }));
 
 describe('library store', () => {
+  it('getToolkit is empty before an import and follows setImported', () => {
+    expect(getToolkit()).toEqual([]);
+    const t = { os: 'windows' as const, purpose: 'p', file: 'f.exe', note: '', where: '', staged: true };
+    setImported({ commands: [], cards: [], toolkit: [t] });
+    expect(getToolkit()).toEqual([t]);
+    setImported({ commands: [], cards: [] });
+    expect(getToolkit()).toEqual([]);
+  });
+
   it('getLibrary returns the built-ins before any import', () => {
     expect(getLibrary()).toEqual(BUILTIN_LIBRARY);
   });

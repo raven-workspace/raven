@@ -10,6 +10,7 @@ import type { UnlockResult, VaultStatus } from "../../types/vault";
 import { Button, Kbd, TitleBar } from "../../ui";
 import { SetupScreen } from "./SetupScreen";
 import { UnlockScreen } from "./UnlockScreen";
+import { applySnapshot, FIELD_MANUAL_KEY, useVaultNewer } from "../fieldManual/queries";
 import { useAutoLock } from "./useAutoLock";
 import { clearSecretClipboard } from "../../lib/clipboard";
 
@@ -153,6 +154,26 @@ export function VaultGate({ children }: { children: ReactNode }) {
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet, enabled: unlocked });
   useAutoLock(settings.data?.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES, { enabled: unlocked, onLock: lock });
 
+  const vaultNewer = useVaultNewer(unlocked);
+  // Layer the last import over the built-in library once the vault is open.
+  useEffect(() => {
+    if (!unlocked) return;
+    let live = true;
+    void (async () => {
+      try {
+        const snap = await api.fieldManualLoad();
+        if (!live || !snap) return;
+        applySnapshot(snap);
+        qc.setQueryData(FIELD_MANUAL_KEY, snap);
+      } catch {
+        /* the built-ins still work; Settings › Field Manual reports import problems */
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [unlocked, qc]);
+
   const ctx = useMemo(() => ({ lock, markLocked }), [lock, markLocked]);
 
   const onUnlocked = (r: UnlockResult) => {
@@ -166,8 +187,13 @@ export function VaultGate({ children }: { children: ReactNode }) {
 
   const right = unlocked ? (
     <>
-      <Link to="/settings" className="rounded-sm px-2 py-1 text-xs text-muted-2 hover:text-fg">
+      <Link
+        to="/settings"
+        title={vaultNewer ? "The Field Manual has changes to import" : undefined}
+        className="relative rounded-sm px-2 py-1 text-xs text-muted-2 hover:text-fg"
+      >
         Settings
+        {vaultNewer && <span aria-hidden="true" className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />}
       </Link>
       <Button size="sm" onClick={lock} aria-label="Lock">
         Lock <Kbd>⌘L</Kbd>

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { BUILTIN_LIBRARY } from './data';
 import { FIELD_MANUAL_CARDS } from './data/fieldManual';
+import type { ToolkitEntry } from '../fieldManual/parseToolkit';
 import type { LibraryCommand } from './types';
 
 export interface CardMeta {
@@ -15,6 +16,7 @@ export interface CardMeta {
 
 let library: LibraryCommand[] = BUILTIN_LIBRARY;
 let cards: CardMeta[] = FIELD_MANUAL_CARDS;
+let toolkit: ToolkitEntry[] = [];
 
 const useVersion = create<{ version: number }>(() => ({ version: 0 }));
 
@@ -23,6 +25,9 @@ export const getLibrary = (): LibraryCommand[] => library;
 
 /** Card metadata for the commands in the library. */
 export const getCards = (): CardMeta[] => cards;
+
+/** The Toolkit table from the last import (what to transfer, where it lives). Empty before any import. */
+export const getToolkit = (): ToolkitEntry[] => toolkit;
 
 /** Bumps on every `setImported`, so React views (and caches such as kind.ts's bins) know to recompute. */
 export const useLibraryVersion = (): number => useVersion((s) => s.version);
@@ -34,7 +39,8 @@ export const libraryVersion = (): number => useVersion.getState().version;
  * Replaces the imported layer. Imported commands replace built-ins with the same id; new ids are appended.
  * Always applied over the built-ins, so applying the same list twice gives the same library.
  */
-export function setImported(imported: { commands: LibraryCommand[]; cards: CardMeta[] }): void {
+export function setImported(imported: { commands: LibraryCommand[]; cards: CardMeta[]; toolkit?: ToolkitEntry[] }): void {
+  toolkit = imported.toolkit ?? [];
   const byId = new Map(imported.commands.map((c) => [c.id, c]));
   const builtinIds = new Set(BUILTIN_LIBRARY.map((c) => c.id));
   library = imported.commands.length === 0

@@ -4,6 +4,7 @@ import { api } from "../../lib/api";
 import type { BackupInfo } from "../../types/backup";
 import type { Settings } from "../../types/settings";
 import { Button, Chip, Dialog, EmptyState, Field, Input, Panel } from "../../ui";
+import { FieldManualSection } from "./FieldManualSection";
 import { ImportSection } from "./ImportSection";
 
 export function formatBytes(n: number): string {
@@ -244,6 +245,7 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
           ))}
         </ul>
       </Panel>
+      <FieldManualSection />
       <ImportSection />
       <Dialog
         open={restoreTarget !== null}
