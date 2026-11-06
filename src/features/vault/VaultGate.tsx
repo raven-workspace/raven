@@ -13,6 +13,9 @@ import { UnlockScreen } from "./UnlockScreen";
 import { applySnapshot, FIELD_MANUAL_KEY, useVaultNewer } from "../fieldManual/queries";
 import { useAutoLock } from "./useAutoLock";
 import { clearSecretClipboard } from "../../lib/clipboard";
+import { isDialogOpen } from "../../lib/keys";
+import { Palette } from "../palette/Palette";
+import { usePaletteStore } from "../palette/usePaletteStore";
 
 interface VaultContextValue {
   /** Locks the vault now (same path as ⌘L and the idle timer). */
@@ -154,6 +157,23 @@ export function VaultGate({ children }: { children: ReactNode }) {
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet, enabled: unlocked });
   useAutoLock(settings.data?.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES, { enabled: unlocked, onLock: lock });
 
+  // ⌘K: the palette, from anywhere while unlocked (capture phase, like ⌘L). Never over another dialog.
+  useEffect(() => {
+    if (!unlocked) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.metaKey || e.altKey || e.shiftKey || e.key.toLowerCase() !== "k") return;
+      e.preventDefault();
+      const palette = usePaletteStore.getState();
+      if (palette.isOpen) palette.close();
+      else if (!isDialogOpen()) palette.open();
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+      usePaletteStore.getState().close();
+    };
+  }, [unlocked]);
+
   const vaultNewer = useVaultNewer(unlocked);
   // Layer the last import over the built-in library once the vault is open.
   useEffect(() => {
@@ -195,6 +215,9 @@ export function VaultGate({ children }: { children: ReactNode }) {
         Settings
         {vaultNewer && <span aria-hidden="true" className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />}
       </Link>
+      <Button size="sm" onClick={() => usePaletteStore.getState().open()} aria-label="Search">
+        Search <Kbd>⌘K</Kbd>
+      </Button>
       <Button size="sm" onClick={lock} aria-label="Lock">
         Lock <Kbd>⌘L</Kbd>
       </Button>
@@ -225,6 +248,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
           </div>
         )}
         {children}
+        <Palette />
       </VaultContext.Provider>
     );
   }
