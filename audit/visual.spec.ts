@@ -26,6 +26,17 @@ for (const screen of SCREENS) {
       const layout = await page.evaluate(collectLayoutIssues);
       const a11y = await collectA11yIssues(page);
       await writeIssues(screen.id, width, [...layout, ...a11y]);
+      // Raven scrolls inside its own containers: grow the viewport so the shot shows the below-fold content.
+      const overflow = await page.evaluate(() => {
+        let max = document.documentElement.scrollHeight - window.innerHeight;
+        for (const el of document.querySelectorAll("*")) {
+          const oy = getComputedStyle(el).overflowY;
+          if (oy === "auto" || oy === "scroll") max = Math.max(max, el.scrollHeight - el.clientHeight);
+        }
+        return Math.max(0, max);
+      });
+      await page.setViewportSize({ width, height: Math.min(6000, 900 + overflow) });
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
       await page.screenshot({ path: `${SHOTS}${screen.id}@${width}.png`, fullPage: true, animations: "disabled" });
       expect(errors, "page errors").toEqual([]);
     });

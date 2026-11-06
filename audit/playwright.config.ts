@@ -5,6 +5,7 @@ export default defineConfig({
   outputDir: "../test-results",
   reporter: [["list"]],
   fullyParallel: true,
+  globalSetup: "./setup.ts",
   globalTeardown: "./report.ts",
   webServer: { command: "npm run dev:audit", url: "http://localhost:5199", reuseExistingServer: false },
   use: {

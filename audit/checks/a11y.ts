@@ -4,6 +4,10 @@ import type { RawIssue } from "../types";
 
 const RULES = ["color-contrast", "label", "button-name", "link-name", "aria-input-field-name", "select-name"];
 
+function summaryLine(summary: string | undefined): string | undefined {
+  return summary?.split("\n").map((l) => l.trim()).find((l) => l && !/^Fix (any|all) of the following:?$/i.test(l));
+}
+
 export async function collectA11yIssues(page: Page): Promise<RawIssue[]> {
   const results = await new AxeBuilder({ page }).withRules(RULES).analyze();
   const issues: RawIssue[] = [];
@@ -12,7 +16,7 @@ export async function collectA11yIssues(page: Page): Promise<RawIssue[]> {
       issues.push({
         check: v.id === "color-contrast" ? "contrast" : "label",
         selector: node.target.join(" "),
-        detail: (node.failureSummary ?? v.help).split("\n")[0],
+        detail: `${v.id}: ${summaryLine(node.failureSummary) ?? v.help}`,
       });
     }
   }
