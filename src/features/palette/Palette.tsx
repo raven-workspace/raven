@@ -17,6 +17,8 @@ import { useFillBase } from "./fillData";
 import { GENERATORS } from "./generators";
 import { searchPalette, type EngagementItem, type PaletteResult } from "./search";
 import { usePaletteStore } from "./usePaletteStore";
+import { tokenSuggestions, type SuggestContext } from "./suggest";
+import { TokenInput } from "./TokenInput";
 
 const MAX_RESULTS = 30;
 const GROUPS = { command: "Commands", generator: "Generators", card: "Cards", item: "This engagement" } as const;
@@ -121,6 +123,8 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     }
   };
 
+  const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit: getToolkit() };
+
   // A field stays once edited, even though filling it resolves the token.
   const tpl = current?.type === "command" ? current.command.template.toUpperCase() : "";
   const unresolved = filled
@@ -216,15 +220,15 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
                 return (
                   <label key={name} className="flex items-center gap-1.5 text-xs text-warn">
                     {name}
-                    <Input
-                      mono
-                      aria-label={`Value for ${name}`}
+                    <TokenInput
+                      name={name}
                       className="h-7 w-40"
                       value={overrides[key] ?? ""}
+                      suggestions={tokenSuggestions(name, suggestCtx)}
                       ref={(el) => {
                         if (el) tokenRefs.current[i] = el;
                       }}
-                      onChange={(e) => setOverrides((o) => ({ ...o, [key]: e.target.value }))}
+                      onChange={(v) => setOverrides((o) => ({ ...o, [key]: v }))}
                     />
                   </label>
                 );

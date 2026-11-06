@@ -1,11 +1,13 @@
 import { useMemo } from "react";
 import { fillCommand, filterForKind, HOST_STAGES } from "../../engines/checklist";
-import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/store";
+import { getCards, getLibrary, getToolkit, useLibraryVersion } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
-import { Chip, Input } from "../../ui";
+import { Chip } from "../../ui";
 import { fillLibraryCommand } from "../checklist/goalCommands";
 import { CommandList } from "../checklist/CommandList";
 import { useFillBase } from "../palette/fillData";
+import { tokenSuggestions, type SuggestContext } from "../palette/suggest";
+import { TokenInput } from "../palette/TokenInput";
 
 const STAGE_TITLE = new Map(HOST_STAGES.map((s) => [s.id, s.title]));
 export const stageTitle = (id: string) => STAGE_TITLE.get(id) ?? id;
@@ -49,6 +51,7 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   const extra = visible(also);
   const input = useMemo(() => makeInput(overrides), [makeInput, overrides]);
   const tokens = tokensOf([...main.shown, ...extra.shown]);
+  const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit: getToolkit() };
 
   const block = (c: LibraryCommand, msf: Set<string>) => (
     <div key={c.id} className="flex flex-col gap-1">
@@ -66,13 +69,13 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
             return (
               <label key={t} className={`flex items-center gap-1.5 text-xs ${auto.unresolved.length > 0 && !overrides[t] ? "text-warn" : "text-muted"}`}>
                 {t}
-                <Input
-                  mono
-                  aria-label={`Value for ${t}`}
+                <TokenInput
+                  name={t}
                   className="h-7 w-36"
                   placeholder={auto.unresolved.length > 0 ? "" : auto.text}
                   value={overrides[t] ?? ""}
-                  onChange={(e) => onOverrides({ ...overrides, [t]: e.target.value })}
+                  suggestions={tokenSuggestions(t, suggestCtx)}
+                  onChange={(v) => onOverrides({ ...overrides, [t]: v })}
                 />
               </label>
             );

@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,10 +8,12 @@ import { setImported } from "../engines/library/store";
 import type { LibraryCommand } from "../engines/library/types";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { usePaletteStore } from "../features/palette/usePaletteStore";
+import { useArsenalStore } from "../features/arsenal/useArsenalStore";
 import { useLastEngagementStore } from "../features/arsenal/useFillScope";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
+import type { Credential } from "../types/credentials";
 import type { Host } from "../types/host";
 import type { LogEntryInput } from "../types/log";
 
@@ -218,5 +220,59 @@ describe("host picker in the palette (U3)", () => {
     expect((await preview()).textContent).toBe("zzfetch http://10.10.14.9/x.exe");
     await user.selectOptions(screen.getByRole("combobox", { name: "Fill for host" }), "web02");
     expect((await preview()).textContent).toBe("zzfetch http://10.10.14.9/{FILE}");
+  });
+});
+
+describe("token suggestions (U4)", () => {
+  const cred = (id: string, username: string, secret: string): Credential => ({
+    id, engagementId: "e1", type: "password", username, domain: "CORP", secret, hashType: null, scope: "domain", localHostId: null,
+    sourceHostId: null, source: null, notes: null, crackStatus: null, crackedFrom: null, fromSecretId: null, createdAt: 1, updatedAt: 1,
+  });
+  const USERCMD: LibraryCommand = { ...PROBE, id: "zz-user", title: "Zzuser login", template: "zzuser {USER}@{TARGET_IP}" };
+
+  it("a USER token offers the engagement's usernames (never secrets) and picking one fills the command, palette open", async () => {
+    const user = userEvent.setup();
+    m.credentialsList.mockResolvedValue([cred("c1", "alice", "Winter2024!"), cred("c2", "bob", "Summer2025!")]);
+    setImported({ commands: [USERCMD], cards: [] });
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Checklist" });
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzuser");
+    await user.keyboard("{Tab}");
+    const field = screen.getByRole("textbox", { name: "Value for USER" });
+    expect(field).toHaveFocus();
+    const list = await screen.findByRole("listbox", { name: "Suggestions for USER" });
+    expect(within(list).getAllByRole("option").map((o) => o.firstChild?.textContent)).toEqual(["alice", "bob"]);
+    expect(screen.queryByText(/Winter2024!|Summer2025!/)).not.toBeInTheDocument();
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+    expect(field).toHaveValue("bob");
+    expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzuser bob@10.10.10.5")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Search" })).toBeInTheDocument();
+    expect(await navigator.clipboard.readText()).not.toContain("zzuser");
+    // Typing still works as free text.
+    await user.clear(field);
+    await user.type(field, "carol");
+    expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzuser carol@10.10.10.5")).toBeInTheDocument();
+  });
+
+  it("a FILE chip in the drawer offers Toolkit files, staged first", async () => {
+    const user = userEvent.setup();
+    setImported({
+      commands: [{ ...FETCH, cardId: "c-fetch", source: "field-manual" }],
+      cards: [{ id: "c-fetch", title: "Fetch card", stage: "initial-foothold", category: "Shells", os: "any", file: "02-Cards/S/F.md" }],
+      toolkit: [
+        { os: "windows", purpose: "Enumeration", file: "SharpHound.exe", note: "", where: "", staged: false },
+        { os: "windows", purpose: "Enumeration", file: "winPEASx64.exe", note: "", where: "", staged: true },
+      ],
+    });
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Checklist" });
+    act(() => useArsenalStore.getState().openCard("c-fetch"));
+    const d = within(await screen.findByRole("complementary", { name: "Arsenal" }));
+    await user.click(await d.findByRole("textbox", { name: "Value for FILE" }));
+    const list = await d.findByRole("listbox", { name: "Suggestions for FILE" });
+    expect(within(list).getAllByRole("option").map((o) => o.firstChild?.textContent)).toEqual(["winPEASx64.exe", "SharpHound.exe"]);
+    await user.click(within(list).getAllByRole("option")[0]!);
+    expect(await d.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzfetch http://10.10.14.9/winPEASx64.exe")).toBeInTheDocument();
   });
 });
