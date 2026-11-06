@@ -431,3 +431,42 @@ describe("backing out of a card in the drawer (B5)", () => {
     expect(screen.queryByRole("complementary", { name: "Arsenal" })).not.toBeInTheDocument();
   });
 });
+
+describe("drawer list grouped by category (U1)", () => {
+  it("cards sit under their category title, in a stable order, and arrows move across groups", async () => {
+    const user = userEvent.setup();
+    const qx = (id: string, title: string, category: string): CardMeta => ({ id, title, stage: "initial-foothold", category, os: "any", file: `02-Cards/Q/${id}.md` });
+    const cards = [qx("q-b", "Qx beta", "Zz-Other-Cat"), qx("q-shell", "Qx shell", "Shells-and-Transfers"), qx("q-a", "Qx alpha", "Zz-Cat"), qx("q-a2", "Qx alpha two", "Zz-Cat")];
+    setImported({ commands: cards.map((c) => cmd(`${c.id}-cmd`, { title: "Plain", cardId: c.id })), cards });
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Checklist" });
+    act(() => useArsenalStore.getState().openCard());
+    const d = within(await drawer());
+    await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "qx");
+    const groups = d.getAllByRole("group").map((g) => g.getAttribute("aria-label"));
+    expect(groups).toEqual(["Shells and Transfers", "Zz Cat", "Zz Other Cat"]);
+    expect(d.getByRole("heading", { name: "Shells and Transfers" })).toBeInTheDocument();
+    const zz = within(d.getByRole("group", { name: "Zz Cat" }));
+    expect(zz.getAllByRole("option").map((o) => o.textContent)).toEqual(["Qx alphacard", "Qx alpha twocard"]);
+    // ↓ crosses from one group into the next.
+    expect(d.getByRole("option", { name: /Qx shell/ })).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{ArrowDown}");
+    expect(d.getByRole("option", { name: /^Qx alpha(?! two)/ })).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{ArrowDown}{ArrowDown}");
+    expect(d.getByRole("option", { name: /Qx beta/ })).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{Enter}");
+    expect(await d.findByRole("heading", { name: "Qx beta" })).toBeInTheDocument();
+  });
+
+  it("with no query the list groups every card, built-in and imported", async () => {
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Checklist" });
+    act(() => useArsenalStore.getState().openCard());
+    const d = within(await drawer());
+    expect(within(d.getByRole("group", { name: "Zz Cat" })).getByRole("option", { name: /Zz Card/ })).toBeInTheDocument();
+    const labels = d.getAllByRole("group").map((g) => g.getAttribute("aria-label")!);
+    const cardLabels = labels.filter((l) => l !== "Commands");
+    expect(cardLabels).toEqual([...cardLabels].sort((a, b) => a.localeCompare(b)));
+    expect(labels.at(-1)).toBe("Commands");
+  });
+});

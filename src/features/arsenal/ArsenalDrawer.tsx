@@ -13,8 +13,19 @@ import { useFillScope } from "./useFillScope";
 /** Commands shown in the result list; cards are never capped. */
 const MAX_RESULTS = 40;
 
-/** Cards and commands only, filtered by the exam rules of the engagement in view. */
-function useArsenalSearch(query: string, engagementId: string, hostId: string | null): PaletteResult[] {
+export interface ResultGroup {
+  label: string;
+  results: PaletteResult[];
+}
+
+/** `Shells-and-Transfers` → `Shells and Transfers`. */
+export const categoryLabel = (category: string): string => category.replace(/[-_]+/g, " ").trim() || "Other";
+
+/**
+ * Cards and commands only, filtered by the exam rules of the engagement in view. Cards are grouped by category
+ * (alphabetical, rank order inside); matching commands follow in one "Commands" group.
+ */
+function useArsenalSearch(query: string, engagementId: string, hostId: string | null): { groups: ResultGroup[]; results: PaletteResult[] } {
   const version = useLibraryVersion();
   const { d, host } = useFillBase(engagementId, hostId);
   return useMemo(() => {
@@ -23,9 +34,18 @@ function useArsenalSearch(query: string, engagementId: string, hostId: string | 
       ...(host?.os === "linux" || host?.os === "windows" ? { os: host.os } : {}),
       ...(host ? { stageId: host.boardColumn } : {}),
       ...(d.engagement ? { exam: { kind: d.engagement.kind, hostId: host?.id ?? "", msfHostId: d.engagement.msfHostId } } : {}),
-    }).filter((r) => r.type === "card" || r.type === "command");
+    });
+    const byCategory = new Map<string, PaletteResult[]>();
+    for (const r of all) {
+      if (r.type !== "card") continue;
+      const label = categoryLabel(r.card.category);
+      byCategory.set(label, [...(byCategory.get(label) ?? []), r]);
+    }
+    const groups: ResultGroup[] = [...byCategory.keys()].sort((a, b) => a.localeCompare(b)).map((label) => ({ label, results: byCategory.get(label)! }));
     // Every matching card (an import has well over a page of them); commands are capped.
-    return [...all.filter((r) => r.type === "card"), ...all.filter((r) => r.type === "command").slice(0, MAX_RESULTS)];
+    const commands = all.filter((r) => r.type === "command").slice(0, MAX_RESULTS);
+    if (commands.length) groups.push({ label: "Commands", results: commands });
+    return { groups, results: groups.flatMap((g) => g.results) };
     // getLibrary()/getCards() change only with the library version.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, host, d.engagement, version]);
@@ -46,7 +66,7 @@ function DrawerBody({ engagementId, hostId }: { engagementId: string; hostId: st
   }
   const searchRef = useRef<HTMLInputElement>(null);
   const { host } = useFillBase(engagementId, hostId);
-  const results = useArsenalSearch(query, engagementId, hostId);
+  const { groups, results } = useArsenalSearch(query, engagementId, hostId);
 
   useEffect(() => searchRef.current?.focus(), []);
 
@@ -137,24 +157,31 @@ function DrawerBody({ engagementId, hostId }: { engagementId: string; hostId: st
         {showing === "card" && cardId && <CardView cardId={cardId} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} />}
         {showing === "solo" && solo && <CommandPane key={solo.id} commands={[solo]} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} />}
         {showing === "results" && (
-          <ul role="listbox" aria-label="Arsenal results" className="m-0 flex list-none flex-col p-0">
-            {results.length === 0 && <li role="presentation" className="px-1 py-2 text-xs text-muted">Nothing matches</li>}
-            {results.map((r, i) => (
-              <li key={`${r.type}-${r.id}`} role="presentation">
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={i === index}
-                  onClick={() => pick(r)}
-                  onMouseMove={() => setSelected(i)}
-                  className={`flex w-full cursor-default items-center justify-between gap-2 rounded-sm px-2 py-1 text-left text-[13px] ${i === index ? "bg-surface-2 text-fg" : "text-fg-2"}`}
-                >
-                  <span className="min-w-0 truncate">{r.title}</span>
-                  <span className="shrink-0 text-[11px] text-muted">{r.type === "card" ? "card" : r.type === "command" ? r.command.tool : ""}</span>
-                </button>
-              </li>
+          <div role="listbox" aria-label="Arsenal results" className="flex flex-col gap-2">
+            {results.length === 0 && <p className="m-0 px-1 py-2 text-xs text-muted">Nothing matches</p>}
+            {groups.map((g) => (
+              <div key={g.label} role="group" aria-label={g.label} className="flex flex-col border-t border-line pt-1.5 first:border-t-0 first:pt-0">
+                <h3 className="m-0 px-2 pb-0.5 text-[11px] font-semibold uppercase tracking-label text-muted">{g.label}</h3>
+                {g.results.map((r) => {
+                  const i = results.indexOf(r);
+                  return (
+                    <button
+                      key={`${r.type}-${r.id}`}
+                      type="button"
+                      role="option"
+                      aria-selected={i === index}
+                      onClick={() => pick(r)}
+                      onMouseMove={() => setSelected(i)}
+                      className={`flex w-full cursor-default items-center justify-between gap-2 rounded-sm px-2 py-1 text-left text-[13px] ${i === index ? "bg-surface-2 text-fg" : "text-fg-2"}`}
+                    >
+                      <span className="min-w-0 truncate">{r.title}</span>
+                      <span className="shrink-0 text-[11px] text-muted">{r.type === "card" ? "card" : r.type === "command" ? r.command.tool : ""}</span>
+                    </button>
+                  );
+                })}
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </div>
       <footer className="shrink-0 border-t border-line px-4 py-2 text-[11px] text-muted">
