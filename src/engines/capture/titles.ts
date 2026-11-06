@@ -1,15 +1,15 @@
 import type { BoardColumn } from '../../types/host';
 import type { CommandBlock, FlagKind } from '../../types/log';
 import { HOST_IP, namedHostsInLine, type HostRef } from '../attribution';
-import { BUILTIN_LIBRARY } from '../library/data';
 import { matchLine } from '../library/matcher';
+import { getLibrary } from '../library/store';
 
 const collapse = (s: string) => s.replace(/\s+/g, ' ').trim();
 
 export function commandTitle(blocks: CommandBlock[], hosts: HostRef[], domain: string): string {
   const command = blocks[0]?.command ?? '';
   const line = command.split('\n').find((l) => l.trim()) ?? '';
-  const match = matchLine(line, BUILTIN_LIBRARY)[0];
+  const match = matchLine(line, getLibrary())[0];
   if (!match) return collapse(line).slice(0, 200);
   const named = namedHostsInLine(line, hosts, domain)[0];
   const target = named ? (named.ip ?? named.name) : (line.match(HOST_IP)?.[0] ?? null);

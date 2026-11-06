@@ -5,14 +5,14 @@ import {
   type FillInput,
 } from "../../engines/checklist";
 import { resolveTemplate } from "../../engines/checklist/template";
-import { BUILTIN_LIBRARY } from "../../engines/library/data";
+import { getLibrary } from "../../engines/library/store";
 import type { Engagement } from "../../types/engagement";
 import { MASK } from "../credentials/MaskedSecret";
 import type { FilledCommand } from "./CommandList";
 
 /** The library commands for a goal, filled for this host and filtered by the engagement's exam rules. */
 export function goalCommands(goalId: string, input: FillInput, eng: Engagement): { commands: FilledCommand[]; hadAny: boolean } {
-  const all = BUILTIN_LIBRARY.filter((c) => c.goals.includes(goalId));
+  const all = getLibrary().filter((c) => c.goals.includes(goalId));
   const { shown, msfMarker } = filterForKind(all, eng.kind, { hostId: input.host.id, msfHostId: eng.msfHostId });
   const ctx = commandContext(input);
   const commands = shown.map((c) => {

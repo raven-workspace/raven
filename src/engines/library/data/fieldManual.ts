@@ -1,3 +1,4 @@
+import type { CardMeta } from '../store';
 import type { LibraryCommand } from '../types';
 
 /**
@@ -4817,4 +4818,39 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
       'Confirms routing to the target before any scan; a silent target may only be dropping ICMP.',
     source: 'raven',
   },
+];
+
+/** One entry per distinct cardId above, read from each card's frontmatter in the Field-Manual vault. */
+export const FIELD_MANUAL_CARDS: CardMeta[] = [
+  { id: 'ad-bloodhound-collection-and-analysis', title: "BloodHound Collection and Analysis", stage: 'information-gathering', category: 'Active-Directory', os: 'any', file: "02-Cards/Active-Directory/BloodHound-Collection-and-Analysis.md" },
+  { id: 'ad-lsass-dumping', title: "LSASS Credential Dumping", stage: 'post-exploitation', category: 'Active-Directory', os: 'windows', file: "02-Cards/Active-Directory/LSASS-Credential-Dumping.md" },
+  { id: 'ad-overpass-the-hash', title: "Overpass-the-Hash", stage: 'lateral-movement', category: 'Active-Directory', os: 'windows', file: "02-Cards/Active-Directory/Overpass-the-Hash.md" },
+  { id: 'ad-pass-the-hash', title: "Pass-the-Hash", stage: 'lateral-movement', category: 'Active-Directory', os: 'windows', file: "02-Cards/Active-Directory/Pass-the-Hash.md" },
+  { id: 'ad-pass-the-ticket', title: "Pass-the-Ticket", stage: 'lateral-movement', category: 'Active-Directory', os: 'windows', file: "02-Cards/Active-Directory/Pass-the-Ticket.md" },
+  { id: 'ad-remote-execution', title: "Remote Execution Methods", stage: 'lateral-movement', category: 'Active-Directory', os: 'windows', file: "02-Cards/Active-Directory/Remote-Execution-Methods.md" },
+  { id: 'cs-office-macro-payloads', title: "Office Macro Payloads", stage: 'initial-foothold', category: 'Client-Side-Attacks', os: 'windows', file: "02-Cards/Client-Side-Attacks/Office-Macro-Payloads.md" },
+  { id: 'cs-windows-library-file-attack', title: "Windows Library File Attack (.Library-ms + .lnk via WebDAV)", stage: 'initial-foothold', category: 'Client-Side-Attacks', os: 'windows', file: "02-Cards/Client-Side-Attacks/Windows-Library-File-Attack.md" },
+  { id: 'enum-docker-api', title: "Docker API Enumeration", stage: 'information-gathering', category: 'Enumeration', os: 'linux', file: "02-Cards/Enumeration/Docker-API-Enumeration.md" },
+  { id: 'enum-host-discovery', title: "Host Discovery", stage: 'information-gathering', category: 'Enumeration', os: 'any', file: "02-Cards/Enumeration/Host-Discovery.md" },
+  { id: 'enum-kerberos', title: "Kerberos Enumeration", stage: 'information-gathering', category: 'Enumeration', os: 'windows', file: "02-Cards/Enumeration/Kerberos-Enumeration.md" },
+  { id: 'enum-pop3-imap', title: "POP3 and IMAP Enumeration", stage: 'information-gathering', category: 'Enumeration', os: 'any', file: "02-Cards/Enumeration/POP3-IMAP-Enumeration.md" },
+  { id: 'enum-port-scanning', title: "Port Scanning", stage: 'information-gathering', category: 'Enumeration', os: 'any', file: "02-Cards/Enumeration/Port-Scanning.md" },
+  { id: 'enum-rsync', title: "Rsync Enumeration", stage: 'information-gathering', category: 'Enumeration', os: 'linux', file: "02-Cards/Enumeration/Rsync-Enumeration.md" },
+  { id: 'enum-ssh', title: "SSH Enumeration", stage: 'information-gathering', category: 'Enumeration', os: 'any', file: "02-Cards/Enumeration/SSH-Enumeration.md" },
+  { id: 'enum-tftp', title: "TFTP Enumeration", stage: 'information-gathering', category: 'Enumeration', os: 'any', file: "02-Cards/Enumeration/TFTP-Enumeration.md" },
+  { id: 'enum-unknown-port-identification', title: "Unknown Port Identification", stage: 'information-gathering', category: 'Enumeration', os: 'any', file: "02-Cards/Enumeration/Unknown-Port-Identification.md" },
+  { id: 'enum-vulnerability-scanning', title: "Vulnerability Scanning", stage: 'vulnerability-detection', category: 'Enumeration', os: 'any', file: "02-Cards/Enumeration/Vulnerability-Scanning.md" },
+  { id: 'exp-apache-nifi-rce', title: "Apache NiFi RCE (ExecuteProcess)", stage: 'initial-foothold', category: 'Exploitation', os: 'any', file: "02-Cards/Exploitation/Apache-NiFi-RCE.md" },
+  { id: 'exp-public-exploit-research', title: "Public Exploit Research", stage: 'vulnerability-detection', category: 'Exploitation', os: 'any', file: "02-Cards/Exploitation/Public-Exploit-Research.md" },
+  { id: 'lpe-container-escape', title: "Container Escape (Docker / LXD)", stage: 'privilege-escalation', category: 'PrivEsc-Linux', os: 'linux', file: "02-Cards/PrivEsc-Linux/Container-Escape.md" },
+  { id: 'lpe-credential-hunting', title: "Credential Hunting (Linux)", stage: 'privilege-escalation', category: 'PrivEsc-Linux', os: 'linux', file: "02-Cards/PrivEsc-Linux/Credential-Hunting-Linux.md" },
+  { id: 'lpe-enumeration', title: "Linux PrivEsc Enumeration", stage: 'privilege-escalation', category: 'PrivEsc-Linux', os: 'linux', file: "02-Cards/PrivEsc-Linux/Linux-PrivEsc-Enumeration.md" },
+  { id: 'lpe-nfs-no-root-squash', title: "NFS no_root_squash", stage: 'privilege-escalation', category: 'PrivEsc-Linux', os: 'linux', file: "02-Cards/PrivEsc-Linux/NFS-No-Root-Squash.md" },
+  { id: 'pw-hash-cracking-hashcat', title: "Hash Cracking with hashcat", stage: 'post-exploitation', category: 'Password-Attacks', os: 'any', file: "02-Cards/Password-Attacks/Hash-Cracking-Hashcat.md" },
+  { id: 'shell-listeners', title: "Listeners", stage: 'initial-foothold', category: 'Shells-and-Transfers', os: 'any', file: "02-Cards/Shells-and-Transfers/Listeners.md" },
+  { id: 'shell-web-shells', title: "Web Shells", stage: 'initial-foothold', category: 'Shells-and-Transfers', os: 'any', file: "02-Cards/Shells-and-Transfers/Web-Shells.md" },
+  { id: 'web-jenkins', title: "Jenkins Attacks", stage: 'initial-foothold', category: 'Web', os: 'any', file: "02-Cards/Web/Jenkins-Attacks.md" },
+  { id: 'web-tomcat', title: "Tomcat Attacks", stage: 'initial-foothold', category: 'Web', os: 'any', file: "02-Cards/Web/Tomcat-Attacks.md" },
+  { id: 'wpe-enumeration', title: "Windows PrivEsc Enumeration", stage: 'privilege-escalation', category: 'PrivEsc-Windows', os: 'windows', file: "02-Cards/PrivEsc-Windows/Windows-PrivEsc-Enumeration.md" },
+  { id: 'wpe-saved-credentials-runas', title: "Saved Credentials and Runas", stage: 'privilege-escalation', category: 'PrivEsc-Windows', os: 'windows', file: "02-Cards/PrivEsc-Windows/Saved-Credentials-and-Runas.md" },
 ];
