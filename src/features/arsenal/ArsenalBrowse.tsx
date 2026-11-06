@@ -32,6 +32,7 @@ export function ArsenalBrowse() {
   const [stage, setStage] = useState<string | null>(null);
   const [category, setCategory] = useState<string | null>(null);
   const [hostId, setHostId] = useState<string | null>(null);
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
 
   const engagements = useQuery({ queryKey: ["engagements"], queryFn: api.engagementsList });
   const active = (engagements.data ?? [])
@@ -65,7 +66,10 @@ export function ArsenalBrowse() {
           <select
             aria-label="Host"
             value={hostId ?? ""}
-            onChange={(e) => setHostId(e.target.value || null)}
+            onChange={(e) => {
+              setHostId(e.target.value || null);
+              setOverrides({});
+            }}
             className="h-7 min-w-0 flex-1 rounded-sm border border-line-2 bg-bg px-1 text-xs text-fg-2"
           >
             <option value="">{active ? "No host" : "No active engagement"}</option>
@@ -97,9 +101,9 @@ export function ArsenalBrowse() {
           ))}
         </section>
       </nav>
-      <main className="min-h-0 overflow-y-auto">
+      <main id="arsenal-browse" tabIndex={-1} className="min-h-0 overflow-y-auto outline-none">
         {cardId ? (
-          <CardView key={`${cardId}:${hostId ?? ""}`} cardId={cardId} engagementId={engagementId} hostId={hostId} />
+          <CardView key={cardId} cardId={cardId} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} />
         ) : (
           <p className="m-0 text-[13px] text-muted">Pick a card.</p>
         )}

@@ -12,7 +12,6 @@ import { autoTickFromLog } from "../checklist/ticks";
 import { HostView } from "../hosts/HostView";
 import { CapturePanel } from "../capture/CapturePanel";
 import { NotesPanel } from "../notes/NotesPanel";
-import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useNotesStore } from "../notes/useNotesStore";
 import { useCaptureStore } from "../capture/useCaptureStore";
 import { EngagementHeader } from "./EngagementHeader";
@@ -61,12 +60,6 @@ export function EngagementShell() {
       // N: field notes. In a host view they open on that host.
       e.preventDefault();
       useNotesStore.getState().toggle(hostId ? "host" : "engagement");
-      return;
-    }
-    if (e.key === "a" || e.key === "A") {
-      // A: the Arsenal drawer, filled for the host in view.
-      e.preventDefault();
-      useArsenalStore.getState().toggle();
       return;
     }
     const n = Number(e.key);

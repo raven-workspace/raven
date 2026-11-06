@@ -1,7 +1,8 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { useEffect } from "react";
+import { MemoryRouter, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { setImported, type CardMeta } from "../engines/library/store";
@@ -46,12 +47,22 @@ const CARD: CardMeta = { id: "zz-card", title: "Zz Card", stage: "initial-footho
 const CARD2: CardMeta = { id: "zz-card2", title: "Zz Other", stage: "reporting", category: "Zz-Other-Cat", os: "any", file: "02-Cards/Zz/Zz-Other.md" };
 const OTHER = cmd("zz-other", { title: "Zzother cmd", cardId: "zz-card2" });
 
+const nav = { go: (_path: string) => {} };
+function Nav() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    nav.go = (p) => void navigate(p);
+  }, [navigate]);
+  return null;
+}
+
 function mount(path: string, engagement = E1) {
   m.engagementGet.mockResolvedValue(engagement);
   m.engagementsList.mockResolvedValue([engagement]);
   return render(
     <QueryClientProvider client={makeQueryClient()}>
       <MemoryRouter initialEntries={[path]}>
+        <Nav />
         <App />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -214,6 +225,62 @@ describe("Arsenal", () => {
     expect(d.queryByText(/^for /)).not.toBeInTheDocument();
     act(() => useArsenalStore.getState().openCard("zz-card"));
     expect(await block(d, "zzprobe {TARGET_IP} from 10.10.14.9")).toBeInTheDocument();
+  });
+
+  it("search is keyboard-first: arrows pick, Enter opens the selection or the top result", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Checklist" });
+    await user.keyboard("a");
+    let d = within(await drawer());
+    const box = d.getByRole("textbox", { name: "Search the Arsenal" });
+    await user.type(box, "zz");
+    expect(await d.findByRole("option", { name: /Zz Card/ })).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{ArrowDown}");
+    expect(d.getByRole("option", { name: /Zz Other/ })).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{Enter}");
+    expect(await d.findByRole("heading", { name: "Zz Other" })).toBeInTheDocument();
+    await user.type(box, "zz");
+    await user.keyboard("{Enter}");
+    d = within(await drawer());
+    expect(await d.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("complementary", { name: "Arsenal" })).not.toBeInTheDocument();
+  });
+
+  it("A opens a hostless drawer on the dashboard and is ignored while typing", async () => {
+    const user = userEvent.setup();
+    mount("/");
+    await screen.findByText("Mock exam A");
+    await user.keyboard("a");
+    const d = within(await drawer());
+    expect(d.queryByText(/^for /)).not.toBeInTheDocument();
+    await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "a");
+    expect(screen.getByRole("complementary", { name: "Arsenal" })).toBeInTheDocument();
+    expect(d.getByRole("textbox", { name: "Search the Arsenal" })).toHaveValue("a");
+  });
+
+  it("A on the browse screen focuses it instead of opening a drawer", async () => {
+    const user = userEvent.setup();
+    mount("/arsenal");
+    await screen.findByRole("region", { name: "Cards" });
+    await user.keyboard("a");
+    expect(screen.queryByRole("complementary", { name: "Arsenal" })).not.toBeInTheDocument();
+    expect(useArsenalStore.getState().open).toBe(false);
+  });
+
+  it("a chip override never fills another host", async () => {
+    const user = userEvent.setup();
+    const H2: Host = { ...H1, id: "h2", name: "web02", ip: "10.10.10.6" };
+    m.hostsList.mockResolvedValue([H1, H2]);
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Checklist" });
+    act(() => useArsenalStore.getState().openCard("zz-card"));
+    const d = within(await drawer());
+    await user.type(await d.findByRole("textbox", { name: "Value for TARGET_IP" }), "1.1.1.1");
+    expect(await block(d, "zzprobe 1.1.1.1 from 10.10.14.9")).toBeInTheDocument();
+    act(() => nav.go("/e/e1/h/h2"));
+    expect(await block(d, "zzprobe 10.10.10.6 from 10.10.14.9")).toBeInTheDocument();
   });
 
   it("→ in the palette opens the card in the drawer", async () => {

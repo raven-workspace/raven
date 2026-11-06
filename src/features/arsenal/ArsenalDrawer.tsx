@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useMatch, useNavigate } from "react-router";
 import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
-import { isDialogOpen } from "../../lib/keys";
+import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
 import { Button, Input, Kbd } from "../../ui";
 import { useFillBase } from "../palette/fillData";
 import { searchPalette, type PaletteResult } from "../palette/search";
@@ -11,8 +11,8 @@ import { useArsenalStore } from "./useArsenalStore";
 
 const MAX_RESULTS = 40;
 
-/** Cards and commands only, filtered by the exam rules of the engagement in view. Shared with browse's search. */
-export function useArsenalSearch(query: string, engagementId: string, hostId: string | null): PaletteResult[] {
+/** Cards and commands only, filtered by the exam rules of the engagement in view. */
+function useArsenalSearch(query: string, engagementId: string, hostId: string | null): PaletteResult[] {
   const version = useLibraryVersion();
   const { d, host } = useFillBase(engagementId, hostId);
   return useMemo(() => {
@@ -33,6 +33,14 @@ function DrawerBody({ engagementId, hostId }: { engagementId: string; hostId: st
   const cardId = useArsenalStore((s) => s.cardId);
   const [query, setQuery] = useState("");
   const [solo, setSolo] = useState<LibraryCommand | null>(null);
+  const [selected, setSelected] = useState(0);
+  // Fill chips apply across the whole drawer, but never carry over to another host.
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const [seenHost, setSeenHost] = useState(hostId);
+  if (seenHost !== hostId) {
+    setSeenHost(hostId);
+    setOverrides({});
+  }
   const searchRef = useRef<HTMLInputElement>(null);
   const { host } = useFillBase(engagementId, hostId);
   const results = useArsenalSearch(query, engagementId, hostId);
@@ -41,6 +49,7 @@ function DrawerBody({ engagementId, hostId }: { engagementId: string; hostId: st
 
   const pick = (r: PaletteResult) => {
     setQuery("");
+    setSelected(0);
     if (r.type === "card") {
       setSolo(null);
       useArsenalStore.getState().openCard(r.id);
@@ -53,6 +62,18 @@ function DrawerBody({ engagementId, hostId }: { engagementId: string; hostId: st
   };
 
   const showing = query.trim() === "" ? (solo ? "solo" : cardId ? "card" : "results") : "results";
+  const index = Math.min(selected, Math.max(0, results.length - 1));
+  const onSearchKey = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      setSelected(Math.max(0, Math.min(results.length - 1, index + (e.key === "ArrowDown" ? 1 : -1))));
+    } else if (e.key === "Enter" && !e.nativeEvent.isComposing && showing === "results") {
+      const r = results[index];
+      if (!r) return;
+      e.preventDefault();
+      pick(r);
+    }
+  };
 
   return (
     <>
@@ -63,7 +84,11 @@ function DrawerBody({ engagementId, hostId }: { engagementId: string; hostId: st
           placeholder="Search cards and commands"
           autoComplete="off"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setSelected(0);
+          }}
+          onKeyDown={onSearchKey}
         />
         {host && <span className="shrink-0 text-xs text-muted">for {host.name}</span>}
         <Button
@@ -78,19 +103,20 @@ function DrawerBody({ engagementId, hostId }: { engagementId: string; hostId: st
         </Button>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-        {showing === "card" && cardId && <CardView cardId={cardId} engagementId={engagementId} hostId={hostId} />}
-        {showing === "solo" && solo && <CommandPane key={solo.id} commands={[solo]} engagementId={engagementId} hostId={hostId} />}
+        {showing === "card" && cardId && <CardView cardId={cardId} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} />}
+        {showing === "solo" && solo && <CommandPane key={solo.id} commands={[solo]} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} />}
         {showing === "results" && (
           <ul role="listbox" aria-label="Arsenal results" className="m-0 flex list-none flex-col p-0">
             {results.length === 0 && <li role="presentation" className="px-1 py-2 text-xs text-muted">Nothing matches</li>}
-            {results.map((r) => (
+            {results.map((r, i) => (
               <li key={`${r.type}-${r.id}`} role="presentation">
                 <button
                   type="button"
                   role="option"
-                  aria-selected={false}
+                  aria-selected={i === index}
                   onClick={() => pick(r)}
-                  className="flex w-full cursor-default items-center justify-between gap-2 rounded-sm px-2 py-1 text-left text-[13px] text-fg-2 hover:bg-surface-2 hover:text-fg"
+                  onMouseMove={() => setSelected(i)}
+                  className={`flex w-full cursor-default items-center justify-between gap-2 rounded-sm px-2 py-1 text-left text-[13px] ${i === index ? "bg-surface-2 text-fg" : "text-fg-2"}`}
                 >
                   <span className="min-w-0 truncate">{r.title}</span>
                   <span className="shrink-0 text-[11px] text-muted">{r.type === "card" ? "card" : r.type === "command" ? r.command.tool : ""}</span>
@@ -116,6 +142,21 @@ export function ArsenalDrawer() {
   const hostId = hostMatch?.params.hostId ?? null;
   const returnFocus = useRef<HTMLElement | null>(null);
 
+  // A: toggles the drawer from any unlocked screen. The browse screen is the full-screen Arsenal: there it takes focus instead.
+  const onBrowse = useMatch("/arsenal") !== null;
+  useKeydown((e) => {
+    if (!isFreeKey(e) || (e.key !== "a" && e.key !== "A")) return;
+    e.preventDefault();
+    if (onBrowse) document.getElementById("arsenal-browse")?.focus();
+    else useArsenalStore.getState().toggle();
+  });
+  useEffect(() => {
+    if (onBrowse && open) {
+      useArsenalStore.getState().close();
+      document.getElementById("arsenal-browse")?.focus();
+    }
+  }, [onBrowse, open]);
+
   // A lock unmounts this; the next unlock must not find it open.
   useEffect(() => () => useArsenalStore.getState().close(), []);
 
@@ -137,7 +178,7 @@ export function ArsenalDrawer() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [open]);
 
-  if (!open) return null;
+  if (!open || onBrowse) return null;
   return (
     <aside aria-label="Arsenal" className="fixed inset-y-0 right-0 z-30 flex w-[440px] max-w-[70vw] flex-col border-l border-line-2 bg-surface text-fg-2">
       <DrawerBody engagementId={engagementId} hostId={hostId} />

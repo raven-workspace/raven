@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { fillCommand, filterForKind, HOST_STAGES } from "../../engines/checklist";
 import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
@@ -33,9 +33,12 @@ function tokensOf(commands: LibraryCommand[]): string[] {
  * Fill chips plus filled blocks for a list of commands. `engagementId` and `hostId` decide what fills; the exam rules
  * of that engagement hide banned commands. Edits to a chip are `overrides` for every command shown.
  */
-export function CommandPane({ commands, also = [], engagementId, hostId }: { commands: LibraryCommand[]; also?: LibraryCommand[]; engagementId: string; hostId: string | null }) {
+export function CommandPane({ commands, also = [], engagementId, hostId, overrides, onOverrides }: {
+  commands: LibraryCommand[]; also?: LibraryCommand[]; engagementId: string; hostId: string | null;
+  /** Chip edits, owned by the screen so they can be dropped when the host changes. */
+  overrides: Record<string, string>; onOverrides: (next: Record<string, string>) => void;
+}) {
   const { d, host, makeInput } = useFillBase(engagementId, hostId);
-  const [overrides, setOverrides] = useState<Record<string, string>>({});
   const kind = d.engagement?.kind;
 
   const visible = (list: LibraryCommand[]) => {
@@ -69,7 +72,7 @@ export function CommandPane({ commands, also = [], engagementId, hostId }: { com
                   className="h-7 w-36"
                   placeholder={auto.unresolved.length > 0 ? "" : auto.text}
                   value={overrides[t] ?? ""}
-                  onChange={(e) => setOverrides((o) => ({ ...o, [t]: e.target.value }))}
+                  onChange={(e) => onOverrides({ ...overrides, [t]: e.target.value })}
                 />
               </label>
             );
@@ -89,7 +92,9 @@ export function CommandPane({ commands, also = [], engagementId, hostId }: { com
 }
 
 /** One Field-Manual card: title, where it sits, then its blocks in vault order, filled for the host. */
-export function CardView({ cardId, engagementId, hostId }: { cardId: string; engagementId: string; hostId: string | null }) {
+export function CardView({ cardId, engagementId, hostId, overrides, onOverrides }: {
+  cardId: string; engagementId: string; hostId: string | null; overrides: Record<string, string>; onOverrides: (next: Record<string, string>) => void;
+}) {
   const version = useLibraryVersion();
   const card = getCards().find((c) => c.id === cardId);
   // getLibrary() changes only with the library version.
@@ -114,7 +119,7 @@ export function CardView({ cardId, engagementId, hostId }: { cardId: string; eng
           <Chip>{card.os}</Chip>
         </div>
       </header>
-      <CommandPane key={cardId} commands={commands} also={also} engagementId={engagementId} hostId={hostId} />
+      <CommandPane key={cardId} commands={commands} also={also} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={onOverrides} />
     </article>
   );
 }
