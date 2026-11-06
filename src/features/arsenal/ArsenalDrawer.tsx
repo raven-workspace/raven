@@ -9,6 +9,7 @@ import { searchPalette, type PaletteResult } from "../palette/search";
 import { CardView, CommandPane } from "./CardView";
 import { useArsenalStore } from "./useArsenalStore";
 import { useFillScope } from "./useFillScope";
+import { HostPicker, isHostPickKey, openPicker } from "./HostPicker";
 
 /** Commands shown in the result list; cards are never capped. */
 const MAX_RESULTS = 40;
@@ -51,7 +52,7 @@ function useArsenalSearch(query: string, engagementId: string, hostId: string | 
   }, [query, host, d.engagement, version]);
 }
 
-function DrawerBody({ engagementId, hostId }: { engagementId: string; hostId: string | null }) {
+function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: string; hostId: string | null }) {
   const navigate = useNavigate();
   const cardId = useArsenalStore((s) => s.cardId);
   const [query, setQuery] = useState("");
@@ -59,13 +60,26 @@ function DrawerBody({ engagementId, hostId }: { engagementId: string; hostId: st
   const [selected, setSelected] = useState(0);
   // Fill chips apply across the whole drawer, but never carry over to another host.
   const [overrides, setOverrides] = useState<Record<string, string>>({});
-  const [seenHost, setSeenHost] = useState(hostId);
-  if (seenHost !== hostId) {
-    setSeenHost(hostId);
+  // The chip can pick another host; moving to another host in the route follows the route again.
+  const [hostId, setHostId] = useState(routeHostId);
+  const [seenHost, setSeenHost] = useState(routeHostId);
+  if (seenHost !== routeHostId) {
+    setSeenHost(routeHostId);
+    setHostId(routeHostId);
     setOverrides({});
   }
+  const pickHost = (id: string | null) => {
+    setHostId(id);
+    setOverrides({});
+  };
+  const pickerRef = useRef<HTMLSelectElement>(null);
+  useKeydown((e) => {
+    if (!engagementId || e.defaultPrevented || isDialogOpen() || !isHostPickKey(e)) return;
+    e.preventDefault();
+    openPicker(pickerRef.current);
+  });
   const searchRef = useRef<HTMLInputElement>(null);
-  const { host } = useFillBase(engagementId, hostId);
+  const { d, host } = useFillBase(engagementId, hostId);
   const { groups, results } = useArsenalSearch(query, engagementId, hostId);
 
   useEffect(() => searchRef.current?.focus(), []);
@@ -141,7 +155,7 @@ function DrawerBody({ engagementId, hostId }: { engagementId: string; hostId: st
           }}
           onKeyDown={onSearchKey}
         />
-        {host && <span className="shrink-0 text-xs text-muted">for {host.name}</span>}
+        {engagementId && <HostPicker ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} />}
         <Button
           size="sm"
           aria-label="Full screen"
@@ -186,6 +200,7 @@ function DrawerBody({ engagementId, hostId }: { engagementId: string; hostId: st
       </div>
       <footer className="shrink-0 border-t border-line px-4 py-2 text-[11px] text-muted">
         <Kbd>Esc</Kbd> {showing === "results" ? "close" : "back"}
+        {engagementId && <span className="ml-3"><Kbd>⌥H</Kbd> host</span>}
       </footer>
     </>
   );

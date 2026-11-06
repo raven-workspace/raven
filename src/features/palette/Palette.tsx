@@ -12,6 +12,7 @@ import { logCommand } from "../capture/logCommand";
 import { fillLibraryCommand } from "../checklist/goalCommands";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useFillScope } from "../arsenal/useFillScope";
+import { HostPicker, isHostPickKey, openPicker } from "../arsenal/HostPicker";
 import { useFillBase } from "./fillData";
 import { GENERATORS } from "./generators";
 import { searchPalette, type EngagementItem, type PaletteResult } from "./search";
@@ -30,14 +31,21 @@ function toolPrefill(query: string, os: Host["os"]): Record<string, string> {
   return hits[0] ? { FILE: hits[0].file } : {};
 }
 
-function PaletteBody({ engagementId, hostId, remembered, onClose }: { engagementId: string; hostId: string | null; remembered: boolean; onClose: () => void }) {
+function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }: { engagementId: string; hostId: string | null; remembered: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const libraryVersion = useLibraryVersion();
+  // The chip picks another host for this search only; typed values never carry over to it.
+  const [hostId, setHostId] = useState(openedHostId);
   const { d, host, makeInput } = useFillBase(engagementId, hostId);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const pickerRef = useRef<HTMLSelectElement>(null);
+  const pickHost = (id: string | null) => {
+    setHostId(id);
+    setOverrides({});
+  };
   const [status, setStatus] = useState<string>();
   const searchRef = useRef<HTMLInputElement>(null);
   const tokenRefs = useRef<HTMLInputElement[]>([]);
@@ -138,7 +146,13 @@ function PaletteBody({ engagementId, hostId, remembered, onClose }: { engagement
     }
   };
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+    if (engagementId && isHostPickKey(e)) {
+      e.preventDefault();
+      openPicker(pickerRef.current);
+      return;
+    }
+    // Enter on the host picker chooses a host, never copies.
+    if (e.key !== "Enter" || e.nativeEvent.isComposing || e.target instanceof HTMLSelectElement) return;
     e.preventDefault();
     void run(e.metaKey || e.ctrlKey);
   };
@@ -162,10 +176,9 @@ function PaletteBody({ engagementId, hostId, remembered, onClose }: { engagement
           }}
           onKeyDown={onSearchKey}
         />
-        {engagementId && remembered && d.engagement && (
-          <Chip className="shrink-0">{d.engagement.name}{host ? ` · ${host.name}` : ""}</Chip>
+        {engagementId && (
+          <HostPicker ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} {...(remembered && d.engagement ? { engagementName: d.engagement.name } : {})} />
         )}
-        {engagementId && !remembered && host && <Chip className="shrink-0">for {host.name}</Chip>}
       </div>
       <ul id="palette-results" role="listbox" aria-label="Results" className="m-0 flex max-h-[44vh] list-none flex-col overflow-y-auto p-0">
         {results.length === 0 && <li role="presentation" className="px-1 py-2 text-xs text-muted">Nothing matches</li>}
@@ -226,6 +239,7 @@ function PaletteBody({ engagementId, hostId, remembered, onClose }: { engagement
         <span><Kbd>⌘↵</Kbd> copy and log{host ? "" : " (open a host)"}</span>
         <span><Kbd>→</Kbd> card</span>
         <span><Kbd>⇥</Kbd> edit a value</span>
+        {engagementId && <span><Kbd>⌥H</Kbd> host</span>}
       </p>
     </div>
   );

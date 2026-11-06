@@ -93,7 +93,7 @@ describe("⌘K palette", () => {
     await screen.findByRole("tab", { name: "Checklist" });
     await user.keyboard(cmdK);
     const box = await screen.findByRole("combobox", { name: "Search" });
-    expect(screen.getByText("for dc01")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Fill for host" })).toHaveDisplayValue("dc01");
     await user.type(box, "zzprobe");
     await user.keyboard("{Enter}");
     expect(await navigator.clipboard.readText()).toBe("zzprobe 10.10.10.5 from 10.10.14.9");
@@ -133,7 +133,7 @@ describe("⌘K palette", () => {
     mount("/");
     await screen.findByText("Mock exam A");
     await user.keyboard(cmdK);
-    expect(screen.queryByText(/^for /)).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Fill for host" })).not.toBeInTheDocument();
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzprobe");
     await user.keyboard("{Enter}");
     expect(await navigator.clipboard.readText()).toBe("zzprobe {TARGET_IP} from 10.10.14.9");
@@ -182,5 +182,41 @@ describe("⌘K palette", () => {
     await user.keyboard("k");
     expect(screen.queryByRole("combobox", { name: "Search" })).not.toBeInTheDocument();
     input.remove();
+  });
+});
+
+describe("host picker in the palette (U3)", () => {
+  const H2: Host = { ...H1, id: "h2", name: "web02", ip: "10.10.10.6" };
+  const preview = () => screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent!.startsWith("zz"));
+
+  it("⌥H picks another host or No host; fills update and the palette stays open", async () => {
+    const user = userEvent.setup();
+    m.hostsList.mockResolvedValue([H1, H2]);
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Checklist" });
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzprobe");
+    expect((await preview()).textContent).toBe("zzprobe 10.10.10.5 from 10.10.14.9");
+    await user.keyboard("{Alt>}h{/Alt}");
+    const picker = screen.getByRole("combobox", { name: "Fill for host" });
+    expect(picker).toHaveFocus();
+    await user.selectOptions(picker, "web02");
+    expect((await preview()).textContent).toBe("zzprobe 10.10.10.6 from 10.10.14.9");
+    await user.selectOptions(picker, "No host");
+    expect((await preview()).textContent).toBe("zzprobe {TARGET_IP} from 10.10.14.9");
+    expect(screen.getByRole("dialog", { name: "Search" })).toBeInTheDocument();
+  });
+
+  it("changing host clears typed values", async () => {
+    const user = userEvent.setup();
+    m.hostsList.mockResolvedValue([H1, H2]);
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Checklist" });
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzfetch");
+    await user.type(await screen.findByRole("textbox", { name: "Value for FILE" }), "x.exe");
+    expect((await preview()).textContent).toBe("zzfetch http://10.10.14.9/x.exe");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Fill for host" }), "web02");
+    expect((await preview()).textContent).toBe("zzfetch http://10.10.14.9/{FILE}");
   });
 });

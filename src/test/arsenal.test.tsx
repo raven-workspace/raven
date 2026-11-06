@@ -111,7 +111,7 @@ describe("Arsenal", () => {
     await screen.findByRole("tab", { name: "Checklist" });
     await user.keyboard("a");
     const d = within(await drawer());
-    expect(d.getByText("for dc01")).toBeInTheDocument();
+    expect(d.getByRole("combobox", { name: "Fill for host" })).toHaveDisplayValue("dc01");
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zzprobe");
     await user.click(await d.findByRole("option", { name: /Zzprobe the target/ }));
     expect(await block(d, "zzprobe 10.10.10.5 from 10.10.14.9")).toBeInTheDocument();
@@ -227,7 +227,7 @@ describe("Arsenal", () => {
     await screen.findByText("Mock exam A");
     await user.click(screen.getByRole("button", { name: "Arsenal" }));
     const d = within(await drawer());
-    expect(d.queryByText(/^for /)).not.toBeInTheDocument();
+    expect(d.queryByRole("combobox", { name: "Fill for host" })).not.toBeInTheDocument();
     act(() => useArsenalStore.getState().openCard("zz-card"));
     expect(await block(d, "zzprobe {TARGET_IP} from 10.10.14.9")).toBeInTheDocument();
   });
@@ -260,7 +260,7 @@ describe("Arsenal", () => {
     await screen.findByText("Mock exam A");
     await user.keyboard("a");
     const d = within(await drawer());
-    expect(d.queryByText(/^for /)).not.toBeInTheDocument();
+    expect(d.queryByRole("combobox", { name: "Fill for host" })).not.toBeInTheDocument();
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "a");
     expect(screen.getByRole("complementary", { name: "Arsenal" })).toBeInTheDocument();
     expect(d.getByRole("textbox", { name: "Search the Arsenal" })).toHaveValue("a");
@@ -495,5 +495,27 @@ describe("browse sidebar selection state (U2)", () => {
     expect(cards.getByRole("button", { name: "Zz Card" })).toHaveAttribute("aria-current", "true");
     expect(cards.getByRole("button", { name: "Zz Other" })).not.toHaveAttribute("aria-current");
     expect(within(screen.getByRole("region", { name: "Generators" })).getByRole("link", { name: /Zzgen reverse shell/ })).toBeInTheDocument();
+  });
+});
+
+describe("host picker in the drawer (U3)", () => {
+  it("picking another host refills the card and clears chip edits", async () => {
+    const user = userEvent.setup();
+    const H2: Host = { ...H1, id: "h2", name: "web02", ip: "10.10.10.6" };
+    m.hostsList.mockResolvedValue([H1, H2]);
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Checklist" });
+    act(() => useArsenalStore.getState().openCard("zz-card"));
+    const d = within(await drawer());
+    await user.type(await d.findByRole("textbox", { name: "Value for FILE" }), "a.exe");
+    expect(await block(d, "zzcopy a.exe C:\\Windows\\Temp")).toBeInTheDocument();
+    await user.keyboard("{Alt>}h{/Alt}");
+    const picker = d.getByRole("combobox", { name: "Fill for host" });
+    expect(picker).toHaveFocus();
+    await user.selectOptions(picker, "web02");
+    expect(await block(d, "zzprobe 10.10.10.6 from 10.10.14.9")).toBeInTheDocument();
+    expect(d.getByRole("textbox", { name: "Value for FILE" })).toHaveValue("");
+    await user.selectOptions(picker, "No host");
+    expect(await block(d, "zzprobe {TARGET_IP} from 10.10.14.9")).toBeInTheDocument();
   });
 });
