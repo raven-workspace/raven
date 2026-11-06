@@ -97,6 +97,19 @@ describe("⌘K palette", () => {
     expect(await navigator.clipboard.readText()).toBe("zzprobe 10.10.10.5 from 10.10.14.9");
   });
 
+  it("{DC_IP} fills from the engagement's DC even when its ports were never scanned", async () => {
+    const user = userEvent.setup();
+    const MS: Host = { ...H1, id: "h2", name: "ms01", ip: "10.10.10.6" };
+    m.hostsList.mockResolvedValue([H1, MS]);
+    setImported({ commands: [{ ...PROBE, id: "zz-dc", title: "Zzdc sync time", template: "zzdc {DC_IP}" }], cards: [] });
+    mount("/e/e1/h/h2");
+    await screen.findByRole("tab", { name: "Checklist" });
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzdc");
+    await user.keyboard("{Enter}");
+    expect(await navigator.clipboard.readText()).toBe("zzdc 10.10.10.5");
+  });
+
   it("⌘↵ copies and logs an entry for the host", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");

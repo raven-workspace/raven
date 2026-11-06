@@ -7,7 +7,7 @@ import {
   PIVOT_GOALS,
   LATERAL_MOVEMENT_GOALS,
   engagementFacts,
-  findDcHost,
+  dcForFill,
   goalApplies,
   type ChecklistGoal,
   type FillInput,
@@ -87,7 +87,7 @@ export function EngagementChecklist() {
   const entries = log.data ?? [];
 
   // Engagement goals have no host of their own: fill against the DC, else show each template unfilled.
-  const dc = findDcHost(hosts, servicesByHost);
+  const dc = dcForFill(hosts, servicesByHost);
   const stand: Host = {
     ...(dc ?? { name: "", ip: null, os: null, engagementId: eng.id, boardColumn: "information-gathering", boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 0, updatedAt: 0 }),
     id: eng.id,

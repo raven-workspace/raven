@@ -5,7 +5,7 @@ import type { Tunnel } from '../../types/network';
 import type { Service } from '../../types/service';
 import { ipInScope, parseScopeList } from '../parse/scope';
 import { isNtlmHash, isOwnerless } from '../credentials/matrix';
-import { findDcHost, hostFacts, openPorts, serviceNames } from './facts';
+import { dcForFill, hostFacts, openPorts, serviceNames } from './facts';
 import type { ChecklistGoal } from './types';
 import { quoteContextAt, shellEscape } from './shellQuote';
 import { resolveTemplate, type SubstitutionContext } from './template';
@@ -138,7 +138,7 @@ export function commandContext(input: FillInput, opts: FillOptions = {}): Substi
   const { host, engagement, hosts, servicesByHost, tunnels } = input;
   const tunnel = tunnelFor(host, tunnels);
   const tunnelIp = tunnel?.callbackIp.trim() || undefined;
-  const dc = findDcHost(hosts, servicesByHost);
+  const dc = dcForFill(hosts, servicesByHost);
   const cred = input.cred ?? null;
   const domain = cred?.domain?.trim() || engagement.domain?.trim() || undefined;
   const secret = cred ? cred.secret.trim() : '';

@@ -134,6 +134,32 @@ describe('fillCommand', () => {
     expect(r.unresolved).toEqual(['SUBNET_PREFIX']);
   });
 
+  it('DC_IP fills from the DC-named host when its ports were never scanned (it sits behind a pivot)', () => {
+    const dc = host({ id: 'dc', name: 'DC01', ip: '172.16.5.10' });
+    const ms = host({ id: 'ms', name: 'MS01', ip: '172.16.5.11' });
+    const r = fillCommand('{DC_IP} {DC_HOST}', input({ host: ms, engagement: eng({ domain: 'corp.local' }), hosts: [ms, dc] }));
+    expect(r.text).toBe('172.16.5.10 DC01.corp.local');
+    expect(r.unresolved).toEqual([]);
+  });
+
+  it('DC_IP fills from the only Kerberos host when LDAP was not seen', () => {
+    const dc = host({ id: 'dc', name: 'core', ip: '10.0.0.10' });
+    const r = fillCommand('{DC_IP}', input({ hosts: [host(), dc], servicesByHost: new Map([['dc', [svc('dc', 88)]]]) }));
+    expect(r.text).toBe('10.0.0.10');
+  });
+
+  it('with two AD hosts the one named like a DC fills DC_IP', () => {
+    const a = host({ id: 'a', name: 'files01', ip: '10.0.0.4' });
+    const b = host({ id: 'b', name: 'dc02', ip: '10.0.0.5' });
+    const r = fillCommand('{DC_IP}', input({ hosts: [a, b], servicesByHost: new Map([...adServices('a'), ...adServices('b')]) }));
+    expect(r.text).toBe('10.0.0.5');
+  });
+
+  it('two unscanned DC-named hosts stay ambiguous', () => {
+    const r = fillCommand('{DC_IP}', input({ hosts: [host({ id: 'a', name: 'dc01', ip: '10.0.0.4' }), host({ id: 'b', name: 'dc02', ip: '10.0.0.5' })] }));
+    expect(r.unresolved).toEqual(['DC_IP']);
+  });
+
   it('DC fields stay unresolved when two hosts are AD', () => {
     const a = host({ id: 'a' });
     const b = host({ id: 'b' });
