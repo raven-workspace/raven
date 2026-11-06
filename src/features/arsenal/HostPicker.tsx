@@ -11,9 +11,15 @@ export function HostPicker({ hosts, value, onChange, engagementName, ref }: {
 }) {
   const current = value ? hosts.find((h) => h.id === value) : undefined;
   return (
-    <label className="relative inline-flex min-w-0 shrink-0 cursor-default items-center gap-1 rounded-md px-1.5 py-0.5 text-xs whitespace-nowrap text-muted hover:bg-surface-2 focus-within:bg-surface-2 focus-within:ring-1 focus-within:ring-line-strong">
-      {engagementName ? `${engagementName} · for` : "for"}
-      <b className="max-w-36 truncate font-medium text-fg-2">{current?.name ?? "no host"}</b>
+    // At most 2/5 of the search bar, so the field always stays wide enough to type in and the invisible select
+    // (which covers this chip) can never sit over the field. A long engagement name truncates; `title` has it whole.
+    <label
+      {...(engagementName ? { title: engagementName } : {})}
+      className="relative inline-flex min-w-0 max-w-2/5 shrink cursor-default items-center gap-1 rounded-md px-1.5 py-0.5 text-xs whitespace-nowrap text-muted hover:bg-surface-2 focus-within:bg-surface-2 focus-within:ring-1 focus-within:ring-line-strong"
+    >
+      {engagementName ? <span className="min-w-0 truncate">{engagementName} ·</span> : null}
+      <span className="shrink-0">for</span>
+      <b className="max-w-36 shrink-0 truncate font-medium text-fg-2">{current?.name ?? "no host"}</b>
       <span aria-hidden="true" className="text-[10px] opacity-70">⌄</span>
       <select
         ref={ref}
