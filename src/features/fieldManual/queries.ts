@@ -31,7 +31,7 @@ export function applySnapshot(s: FieldManualSnapshot): void {
 
 /**
  * Scan, parse, merge, save, then (only once everything succeeded) update the library. A failure at any step
- * leaves the library and the stored snapshot as they were.
+ * leaves the library and the stored snapshot as they were. A scan that yields no cards is a failure.
  */
 export async function runImport(path: string, previous: FieldManualSnapshot | null): Promise<FieldManualSnapshot> {
   const files = await api.fieldManualScan(path);
@@ -45,6 +45,10 @@ export async function runImport(path: string, previous: FieldManualSnapshot | nu
       const c = parseCard(f.relPath, f.text);
       if (c && c.meta.id) cards.push(c);
     }
+  }
+  // A wrong folder or an iCloud-evicted vault parses to nothing: never save that over a good import.
+  if (cards.length === 0) {
+    throw new Error(`No cards found in ${path}. Check the folder, and that iCloud has downloaded the vault.`);
   }
   const { commands, overlay, added, report } = mergeImport(BUILTIN_LIBRARY, cards, previous ?? undefined);
   const goals = [...HOST_GOALS, ...ENGAGEMENT_SETUP, ...LATERAL_MOVEMENT_GOALS, ...AD_PLAYBOOKS.flatMap((p) => p.goals)];

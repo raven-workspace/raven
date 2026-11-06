@@ -72,6 +72,19 @@ describe("Field Manual import", () => {
     expect(getLibrary()).toBe(before);
   });
 
+  it("an import that finds no cards shows an error and saves nothing", async () => {
+    const user = userEvent.setup();
+    const before = getLibrary();
+    // A wrong folder or an evicted iCloud vault: files come back, but no card parses.
+    m.fieldManualScan.mockResolvedValue([{ relPath: "01-Playbook/00 - Off-the-Bat.md", mtimeMs: 5, text: "# Off\n- [ ] x" }]);
+    m.fieldManualSave.mockResolvedValue(null);
+    mount(<FieldManualSection />);
+    await user.click(await screen.findByRole("button", { name: "Import now" }));
+    expect(await screen.findByText(/No cards found/)).toBeInTheDocument();
+    expect(m.fieldManualSave).not.toHaveBeenCalled();
+    expect(getLibrary()).toBe(before);
+  });
+
   it("the Settings link shows a dot when the vault is newer than the last import", async () => {
     m.fieldManualLoad.mockResolvedValue({ importedAt: 100, cards: [], commands: [], playbook: [], toolkit: [], report: {} } as never);
     m.fieldManualLatestMtime.mockResolvedValue(200);
