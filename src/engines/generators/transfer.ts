@@ -59,3 +59,24 @@ export function transferMethods(cards: CardMeta[], library: LibraryCommand[], os
   }
   return out;
 }
+
+const DEFAULT_TOOLS_DIRS = { windows: '~/tools/windows', linux: '~/tools/linux' } as const;
+const LEADING_CD = /^(\s*cd\s+)~\/tools\/(windows|linux)(?=$|[\s;&|])/;
+
+/** A folder as a shell word: bare when safe, a leading `~/` kept outside the quotes so it still expands. */
+function shellPath(dir: string): string {
+  if (/^[\w~/.+@:,=-]+$/.test(dir)) return dir;
+  const q = (s: string) => `'${s.replaceAll("'", "'\\''")}'`;
+  return dir.startsWith('~/') ? `~/${q(dir.slice(2))}` : q(dir);
+}
+
+/**
+ * A Kali command's leading `cd ~/tools/windows` / `cd ~/tools/linux` with the tool folders from Settings, when they
+ * differ from those defaults. Anything else in the template is left as written.
+ */
+export function withToolsDirs(template: string, dirs: { windows?: string; linux?: string }): string {
+  return template.replace(LEADING_CD, (whole, cd: string, os: 'windows' | 'linux') => {
+    const dir = dirs[os]?.trim();
+    return !dir || dir === DEFAULT_TOOLS_DIRS[os] ? whole : `${cd}${shellPath(dir)}`;
+  });
+}

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { transferMethods } from '../../../engines/generators/transfer';
+import { transferMethods, withToolsDirs } from '../../../engines/generators/transfer';
 import { BUILTIN_LIBRARY } from '../../../engines/library/data';
 import { FIELD_MANUAL_CARDS } from '../../../engines/library/data/fieldManual';
 import { getCards, getLibrary, setImported } from '../../../engines/library/store';
@@ -70,5 +70,22 @@ describe('transferMethods', () => {
     const m = transferMethods(FIELD_MANUAL_CARDS, [c('a', 'attacker'), c('b', 'target')], 'linux');
     expect(m).toHaveLength(1);
     expect(m[0]).toMatchObject({ group: 'Other', target: [{ id: 'b' }], kali: [{ id: 'a' }] });
+  });
+});
+
+describe('withToolsDirs', () => {
+  const dirs = { windows: '~/tools/windows', linux: '~/tools/linux' };
+  it('leaves the default folders alone', () => {
+    expect(withToolsDirs('cd ~/tools/windows && python3 -m http.server 80', dirs)).toBe('cd ~/tools/windows && python3 -m http.server 80');
+  });
+  it('swaps a leading cd for the configured folder, quoting it when needed', () => {
+    expect(withToolsDirs('cd ~/tools/windows && x', { ...dirs, windows: '/opt/win' })).toBe('cd /opt/win && x');
+    expect(withToolsDirs('cd ~/tools/linux && x', { ...dirs, linux: '~/my tools' })).toBe("cd ~/'my tools' && x");
+    expect(withToolsDirs('cd ~/tools/windows && x', { ...dirs, windows: "/o'k" })).toBe("cd '/o'\\''k' && x");
+    expect(withToolsDirs('cd ~/tools/windows && x', { ...dirs, windows: '  ' })).toBe('cd ~/tools/windows && x');
+  });
+  it('only touches a leading cd', () => {
+    expect(withToolsDirs('ls ~/tools/windows', { ...dirs, windows: '/opt/win' })).toBe('ls ~/tools/windows');
+    expect(withToolsDirs('cd ~/tools/windowsX && x', { ...dirs, windows: '/opt/win' })).toBe('cd ~/tools/windowsX && x');
   });
 });

@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { fillCommand, filterForKind } from "../../engines/checklist";
-import { transferMethods, TRANSFER_CARD } from "../../engines/generators/transfer";
+import { transferMethods, TRANSFER_CARD, withToolsDirs } from "../../engines/generators/transfer";
 import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/store";
 import { copyPlain } from "../../lib/clipboard";
 import { cx } from "../../lib/cx";
@@ -118,7 +118,9 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
   };
 
   const hostName = host?.name || "the target";
-  const kali = method ? fill(method.kali) : [];
+  // The serve command runs from the tool folders set in Settings.
+  const toolsDirs = { windows: d.settings?.windowsToolsDir, linux: d.settings?.linuxToolsDir };
+  const kali = method ? fill(method.kali.map((c) => ({ ...c, template: withToolsDirs(c.template, toolsDirs) }))) : [];
   const target = method ? fill(method.target) : [];
 
   return (

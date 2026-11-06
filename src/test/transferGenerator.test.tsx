@@ -112,6 +112,18 @@ describe("Transfer a file", () => {
     expect(g.getByText("cd ~/tools/windows && python3 -m http.server 80")).toBeInTheDocument();
   });
 
+  it("the Kali half serves from the tool folders set in Settings", async () => {
+    m.settingsGet.mockResolvedValue({
+      autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali",
+      windowsToolsDir: "/opt/win tools", linuxToolsDir: "/opt/lin", fieldManualPath: "~/fm",
+    });
+    const user = userEvent.setup();
+    mount("/arsenal?generator=transfer");
+    const g = within(await generator());
+    await user.type(g.getByRole("combobox", { name: "Value for FILE" }), "winPEASx64_ofs.exe");
+    expect(await pre(g, "cd '/opt/win tools' && python3 -m http.server 80")).toBeInTheDocument();
+  });
+
   it("an unstaged tool shows where to get it", async () => {
     const user = userEvent.setup();
     mount("/arsenal?generator=transfer");

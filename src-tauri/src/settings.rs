@@ -37,7 +37,8 @@ pub struct Settings {
     pub listener_port: String,
     /// Fills `{KALI_USER}`; defaults to `kali`.
     pub kali_user: String,
-    /// Where Windows tools live on Kali; fills tool paths in the Arsenal.
+    /// Where Windows / Linux tools live on Kali. Used only by the "Transfer a file" generator: its Kali serve
+    /// command's leading `cd ~/tools/windows` (or `~/tools/linux`) becomes this folder. No other command is rewritten.
     pub windows_tools_dir: String,
     pub linux_tools_dir: String,
     /// The Field-Manual vault Raven reads its library from.
