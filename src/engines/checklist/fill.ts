@@ -5,7 +5,7 @@ import type { Tunnel } from '../../types/network';
 import type { Service } from '../../types/service';
 import { ipInScope, parseScopeList } from '../parse/scope';
 import { isNtlmHash, isOwnerless } from '../credentials/matrix';
-import { dcFillChoice, dcForFill, hostFacts, openPorts, serviceNames } from './facts';
+import { dcFillChoice, dcForFill, hostFacts, serviceNames } from './facts';
 import type { ChecklistGoal } from './types';
 import { quoteContextAt, shellEscape } from './shellQuote';
 import { resolveTemplate, type SubstitutionContext } from './template';
@@ -31,11 +31,12 @@ export interface FillInput {
 }
 
 /**
- * The host's open ports to offer for {PORT}, ascending. Under a goal: only those matching its `applies.ports` or
+ * The host's open ports to offer for {PORT}, ascending. Only state exactly `open` counts (a UDP scan's `open|filtered`
+ * is unconfirmed, like the Rust side). Under a goal: only those matching its `applies.ports` or
  * `applies.services`; a goal with neither (or an empty `ports`) offers every open port.
  */
 export function portChoices(input: FillInput, goal?: ChecklistGoal): number[] {
-  const services = (input.servicesByHost.get(input.host.id) ?? []).filter((s) => openPorts([s]).size > 0);
+  const services = (input.servicesByHost.get(input.host.id) ?? []).filter((s) => (s.state ?? '').trim().toLowerCase() === 'open');
   const a = goal?.applies;
   const any = !a || (!a.ports && !a.services) || a.ports?.length === 0;
   const out = new Set<number>();

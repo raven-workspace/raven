@@ -420,6 +420,16 @@ describe('arsenal tokens', () => {
     expect(text('{LHOST} {TARGET_IP}').text).toBe('10.10.14.3 172.16.1.5');
   });
 
+  it('portChoices offers only ports whose state is exactly open (never open|filtered, closed, filtered, or another host\'s)', () => {
+    const udp = { ...svc('h1', 7), protocol: 'udp' as const, state: 'open|filtered' };
+    const other = svc('h2', 9);
+    const inp = input({ servicesByHost: new Map([['h1', [udp, { ...svc('h1', 53), state: 'closed|filtered' }, { ...svc('h1', 25), state: 'filtered' }, { ...svc('h1', 80), state: ' Open ' }]], ['h2', [other]]]) });
+    expect(portChoices(inp)).toEqual([80]);
+    const none = input({ servicesByHost: new Map([['h1', [udp]]]) });
+    expect(portChoices(none)).toEqual([]);
+    expect(fillCommand('nc {TARGET_IP} {PORT}', none).unresolved).toEqual(['PORT']);
+  });
+
   it('portChoices filters open ports by the goal\'s applies, ascending', () => {
     const closed = { ...svc('h1', 25), state: 'closed' };
     const web = { ...svc('h1', 8080), nmapService: 'http' };

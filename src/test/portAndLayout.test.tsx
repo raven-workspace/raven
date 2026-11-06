@@ -73,4 +73,30 @@ describe("{PORT} on checklist steps", () => {
     expect(c.text).toContain("10.0.0.5 8080");
     void within;
   });
+  it("offers no fake port: a UDP open|filtered port makes no chip and leaves {PORT} unresolved", () => {
+    setImported({ cards: [], commands: [{ id: "nc", title: "Banner", template: "nc -nv {TARGET_IP} {PORT}", goals: ["h-enum-identified"], os: "any", runFrom: "attacker" } as never] });
+    usePortPickStore.setState({ picks: {} });
+    const eng = { id: "e1", kind: "pentest" } as unknown as Engagement;
+    const base = input();
+    const udp = { id: "s7", hostId: "h1", port: 7, protocol: "udp", state: "open|filtered", name: "echo" } as never;
+    const inp = { ...base, servicesByHost: new Map([["h1", [udp, svc(80), svc(22)]], ["h2", [svc(9)]]]) } as FillInput;
+    const c = goalCommands("h-enum-identified", inp, eng).commands.find((x) => x.id === "nc")!;
+    expect(c.portToken?.choices).toEqual([22, 80]);
+    const none = { ...base, servicesByHost: new Map([["h1", [udp]]]) } as FillInput;
+    const n = goalCommands("h-enum-identified", none, eng).commands.find((x) => x.id === "nc")!;
+    expect(n.portToken).toBeUndefined();
+    expect(n.text).toContain("{PORT}");
+    expect(n.unresolved).toContain("PORT");
+    const { container } = render(<PortChip commands={[n]} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+  it("shows no chip when no displayed command uses {PORT}", () => {
+    setImported({ cards: [], commands: [{ id: "snmp", title: "SNMP", template: "snmpwalk -v2c -c public {TARGET_IP}", goals: ["h-enum-identified"], os: "any", runFrom: "attacker" } as never] });
+    const eng = { id: "e1", kind: "pentest" } as unknown as Engagement;
+    const cmds = goalCommands("h-enum-identified", input(), eng).commands.filter((x) => x.id === "snmp");
+    expect(cmds).toHaveLength(1);
+    expect(cmds[0].portToken).toBeUndefined();
+    const { container } = render(<PortChip commands={cmds} />);
+    expect(container).toBeEmptyDOMElement();
+  });
 });
