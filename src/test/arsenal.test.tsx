@@ -11,6 +11,7 @@ import { useArsenalStore } from "../features/arsenal/useArsenalStore";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { useNotesStore } from "../features/notes/useNotesStore";
 import { usePaletteStore } from "../features/palette/usePaletteStore";
+import { useLastEngagementStore } from "../features/arsenal/useFillScope";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
@@ -74,6 +75,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   useCaptureStore.getState().reset();
   usePaletteStore.getState().close();
+  useLastEngagementStore.setState({ engagementId: null, hostId: null });
   useArsenalStore.setState({ open: false, cardId: null });
   useNotesStore.setState({ open: false });
   setImported({ commands: [PROBE, FETCH, FETCH2, BANNED, RAVEN, OTHER], cards: [CARD, CARD2] });
@@ -344,5 +346,56 @@ describe("Arsenal after a Field Manual import (B2)", () => {
       await user.click(stage.getByRole("button", { name: STAGES.find(([id]) => id === c.stage)![1] }));
       expect(cards.getByRole("button", { name: c.title })).toBeInTheDocument();
     }
+  });
+});
+
+describe("full-screen Arsenal uses the engagement you came from (B4)", () => {
+  const E2: Engagement = { ...E1, id: "e2", name: "Client Beta", lastActivityAt: 1 };
+  const NEWER: Engagement = { ...E1, id: "e1", name: "Mock exam A", lastActivityAt: 99 };
+  const H9: Host = { ...H1, id: "h9", engagementId: "e2", name: "web09", ip: "10.20.0.9" };
+  const NOTE = {
+    id: "l9", engagementId: "e2", kind: "note" as const, title: "Qqnote about the portal", titleEdited: false, ranOn: null, hostIds: [],
+    observations: null, returnedNothing: false, private: false, content: { kind: "note" as const, text: "creds in config" }, at: 1, createdAt: 1, updatedAt: 1,
+  };
+
+  beforeEach(() => {
+    m.engagementGet.mockImplementation(async (id: string) => (id === "e2" ? E2 : NEWER));
+    m.engagementsList.mockResolvedValue([NEWER, E2]);
+    m.hostsList.mockImplementation(async (id: string) => (id === "e2" ? [H9] : [H1]));
+    m.logList.mockImplementation(async (id: string) => (id === "e2" ? [NOTE] : []));
+  });
+
+  function mountAt(path: string) {
+    return render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <MemoryRouter initialEntries={[path]}>
+          <Nav />
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("⌘K on /arsenal searches and fills for the engagement and host you left", async () => {
+    const user = userEvent.setup();
+    mountAt("/e/e2/h/h9");
+    await screen.findByRole("tab", { name: "Checklist" });
+    act(() => nav.go("/arsenal"));
+    await screen.findByRole("region", { name: "Cards" });
+    await user.keyboard("{Meta>}k{/Meta}");
+    const box = await screen.findByRole("combobox", { name: "Search" });
+    expect(await within(screen.getByRole("dialog")).findByText(/Client Beta/)).toBeInTheDocument();
+    await user.type(box, "qqnote");
+    expect(await screen.findByRole("option", { name: /Qqnote about the portal/ })).toBeInTheDocument();
+    await user.clear(box);
+    await user.type(box, "zzprobe");
+    expect(await screen.findByText("zzprobe 10.20.0.9 from 10.10.14.9")).toBeInTheDocument();
+  });
+
+  it("browse fills for the engagement you came from", async () => {
+    mountAt("/e/e2/h/h9");
+    await screen.findByRole("tab", { name: "Checklist" });
+    act(() => nav.go("/arsenal"));
+    expect(await screen.findByRole("option", { name: "web09" })).toBeInTheDocument();
   });
 });

@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { useMatch, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 import { fillCommand } from "../../engines/checklist";
 import { credLabel } from "../../engines/credentials/labels";
 import { getCards, getLibrary, getToolkit, useLibraryVersion } from "../../engines/library/store";
@@ -11,6 +11,7 @@ import { Chip, Dialog, Input, Kbd } from "../../ui";
 import { logCommand } from "../capture/logCommand";
 import { fillLibraryCommand } from "../checklist/goalCommands";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
+import { useFillScope } from "../arsenal/useFillScope";
 import { useFillBase } from "./fillData";
 import { GENERATORS } from "./generators";
 import { searchPalette, type EngagementItem, type PaletteResult } from "./search";
@@ -29,7 +30,7 @@ function toolPrefill(query: string, os: Host["os"]): Record<string, string> {
   return hits[0] ? { FILE: hits[0].file } : {};
 }
 
-function PaletteBody({ engagementId, hostId, onClose }: { engagementId: string; hostId: string | null; onClose: () => void }) {
+function PaletteBody({ engagementId, hostId, remembered, onClose }: { engagementId: string; hostId: string | null; remembered: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const libraryVersion = useLibraryVersion();
@@ -161,7 +162,10 @@ function PaletteBody({ engagementId, hostId, onClose }: { engagementId: string; 
           }}
           onKeyDown={onSearchKey}
         />
-        {engagementId && host && <Chip className="shrink-0">for {host.name}</Chip>}
+        {engagementId && remembered && d.engagement && (
+          <Chip className="shrink-0">{d.engagement.name}{host ? ` · ${host.name}` : ""}</Chip>
+        )}
+        {engagementId && !remembered && host && <Chip className="shrink-0">for {host.name}</Chip>}
       </div>
       <ul id="palette-results" role="listbox" aria-label="Results" className="m-0 flex max-h-[44vh] list-none flex-col overflow-y-auto p-0">
         {results.length === 0 && <li role="presentation" className="px-1 py-2 text-xs text-muted">Nothing matches</li>}
@@ -230,10 +234,9 @@ function PaletteBody({ engagementId, hostId, onClose }: { engagementId: string; 
 /** ⌘K: search commands, generators, cards and this engagement, and copy the filled command. Mounted while unlocked. */
 export function Palette() {
   const { isOpen, hostId: openedFor, returnFocus, close } = usePaletteStore();
-  const hostMatch = useMatch("/e/:id/h/:hostId");
-  const engMatch = useMatch("/e/:id/*");
-  const engagementId = hostMatch?.params.id ?? engMatch?.params.id ?? "";
-  const hostId = openedFor ?? hostMatch?.params.hostId ?? null;
+  const scope = useFillScope();
+  const engagementId = scope.engagementId;
+  const hostId = openedFor ?? scope.hostId;
 
   // Give focus back to what had it (Radix does too when it can; this covers an element it can't restore).
   const wasOpen = useRef(false);
@@ -244,7 +247,7 @@ export function Palette() {
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => !o && close()} title="Search" size="lg">
-      {isOpen && <PaletteBody engagementId={engagementId} hostId={hostId} onClose={close} />}
+      {isOpen && <PaletteBody engagementId={engagementId} hostId={hostId} remembered={scope.remembered} onClose={close} />}
     </Dialog>
   );
 }

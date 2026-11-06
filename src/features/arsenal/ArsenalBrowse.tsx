@@ -1,8 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { filterForKind, HOST_STAGES } from "../../engines/checklist";
 import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/store";
-import { api } from "../../lib/api";
 import { useEscapeTo } from "../../lib/keys";
 import { cx } from "../../lib/cx";
 import { labelClass } from "../../ui";
@@ -10,6 +8,7 @@ import { useFillBase } from "../palette/fillData";
 import { GENERATORS } from "../palette/generators";
 import { CardView } from "./CardView";
 import { useArsenalStore } from "./useArsenalStore";
+import { useFillScope, useLastEngagementStore } from "./useFillScope";
 
 function FilterButton({ on, onClick, children }: { on: boolean; onClick: () => void; children: string }) {
   return (
@@ -31,14 +30,10 @@ export function ArsenalBrowse() {
   const cardId = useArsenalStore((s) => s.cardId);
   const [stage, setStage] = useState<string | null>(null);
   const [category, setCategory] = useState<string | null>(null);
-  const [hostId, setHostId] = useState<string | null>(null);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
-
-  const engagements = useQuery({ queryKey: ["engagements"], queryFn: api.engagementsList });
-  const active = (engagements.data ?? [])
-    .filter((e) => e.status === "active")
-    .sort((a, b) => (b.lastActivityAt ?? b.updatedAt) - (a.lastActivityAt ?? a.updatedAt))[0];
-  const engagementId = active?.id ?? "";
+  // The engagement (and host) you came from; picking a host here is remembered for ⌘K too.
+  const { engagementId, hostId } = useFillScope();
+  const setHostId = (id: string | null) => useLastEngagementStore.setState({ engagementId: engagementId || null, hostId: id });
   const { d, host } = useFillBase(engagementId, hostId);
 
   // getLibrary()/getCards() change only with the library version.
@@ -61,6 +56,7 @@ export function ArsenalBrowse() {
   return (
     <div className="grid h-full min-h-0 grid-cols-[280px_1fr] gap-6 px-6 py-5">
       <nav aria-label="Arsenal" className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
+        {d.engagement && <p className="m-0 truncate text-xs text-fg-2">{d.engagement.name}</p>}
         <label className="flex items-center gap-2 text-xs text-muted">
           Host
           <select
@@ -72,7 +68,7 @@ export function ArsenalBrowse() {
             }}
             className="h-7 min-w-0 flex-1 rounded-sm border border-line-2 bg-bg px-1 text-xs text-fg-2"
           >
-            <option value="">{active ? "No host" : "No active engagement"}</option>
+            <option value="">{engagementId ? "No host" : "No active engagement"}</option>
             {d.hosts.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
           </select>
         </label>

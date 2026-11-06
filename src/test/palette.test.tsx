@@ -8,6 +8,7 @@ import { setImported } from "../engines/library/store";
 import type { LibraryCommand } from "../engines/library/types";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { usePaletteStore } from "../features/palette/usePaletteStore";
+import { useLastEngagementStore } from "../features/arsenal/useFillScope";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
@@ -55,6 +56,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   useCaptureStore.getState().reset();
   usePaletteStore.getState().close();
+  useLastEngagementStore.setState({ engagementId: null, hostId: null });
   setImported({
     commands: [PROBE, FETCH],
     cards: [],

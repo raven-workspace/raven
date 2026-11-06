@@ -8,6 +8,7 @@ import { useFillBase } from "../palette/fillData";
 import { searchPalette, type PaletteResult } from "../palette/search";
 import { CardView, CommandPane } from "./CardView";
 import { useArsenalStore } from "./useArsenalStore";
+import { useFillScope } from "./useFillScope";
 
 /** Commands shown in the result list; cards are never capped. */
 const MAX_RESULTS = 40;
@@ -138,10 +139,7 @@ function DrawerBody({ engagementId, hostId }: { engagementId: string; hostId: st
 /** The Arsenal (`A`): a drawer on the right edge, filled for the host in view. Mounted while unlocked. */
 export function ArsenalDrawer() {
   const open = useArsenalStore((s) => s.open);
-  const hostMatch = useMatch("/e/:id/h/:hostId");
-  const engMatch = useMatch("/e/:id/*");
-  const engagementId = hostMatch?.params.id ?? engMatch?.params.id ?? "";
-  const hostId = hostMatch?.params.hostId ?? null;
+  const { engagementId, hostId } = useFillScope();
   const returnFocus = useRef<HTMLElement | null>(null);
 
   // A: toggles the drawer from any unlocked screen. The browse screen is the full-screen Arsenal: there it takes focus instead.

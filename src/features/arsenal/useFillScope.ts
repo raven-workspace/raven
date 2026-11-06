@@ -1,0 +1,48 @@
+import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useMatch } from "react-router";
+import { create } from "zustand";
+import { api } from "../../lib/api";
+
+interface LastEngagement {
+  /** The engagement last open in the route, so full-screen Arsenal can keep filling for it. */
+  engagementId: string | null;
+  hostId: string | null;
+}
+
+export const useLastEngagementStore = create<LastEngagement>()(() => ({ engagementId: null, hostId: null }));
+
+export interface FillScope {
+  /** "" when nothing applies (the dashboard, settings). */
+  engagementId: string;
+  hostId: string | null;
+  /** True on /arsenal: the engagement is the remembered one, not the route's, so the chip names it. */
+  remembered: boolean;
+}
+
+/**
+ * Which engagement and host the palette, drawer and browse fill for. In an engagement: the route's. On `/arsenal`:
+ * the engagement (and host) you came from, else the most recently active one. Elsewhere: none.
+ */
+export function useFillScope(): FillScope {
+  const hostMatch = useMatch("/e/:id/h/:hostId");
+  const engMatch = useMatch("/e/:id/*");
+  const onArsenal = useMatch("/arsenal") !== null;
+  const routeEngagement = hostMatch?.params.id ?? engMatch?.params.id ?? "";
+  const routeHost = hostMatch?.params.hostId ?? null;
+  const last = useLastEngagementStore();
+
+  useEffect(() => {
+    if (routeEngagement) useLastEngagementStore.setState({ engagementId: routeEngagement, hostId: routeHost });
+  }, [routeEngagement, routeHost]);
+
+  const engagements = useQuery({ queryKey: ["engagements"], queryFn: api.engagementsList, enabled: onArsenal && !last.engagementId });
+
+  if (routeEngagement) return { engagementId: routeEngagement, hostId: routeHost, remembered: false };
+  if (!onArsenal) return { engagementId: "", hostId: null, remembered: false };
+  if (last.engagementId) return { engagementId: last.engagementId, hostId: last.hostId, remembered: true };
+  const active = (engagements.data ?? [])
+    .filter((e) => e.status === "active")
+    .sort((a, b) => (b.lastActivityAt ?? b.updatedAt) - (a.lastActivityAt ?? a.updatedAt))[0];
+  return { engagementId: active?.id ?? "", hostId: null, remembered: true };
+}
