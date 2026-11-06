@@ -26,6 +26,7 @@ import { AccessFlags } from "./AccessFlags";
 import { CredentialPicker } from "./CredentialPicker";
 import { newCredLabels, useCredFill } from "./credPick";
 import { useFilePickStore } from "./filePick";
+import { usePortPickStore } from "./portPick";
 import { goalCommands } from "./goalCommands";
 import { GoalRow } from "./GoalRow";
 import { HopsPanel } from "./HopsPanel";
@@ -45,6 +46,7 @@ const EXAM_EMPTY = "Nothing allowed in an exam sim; do it by hand";
 
 export function EngagementChecklist() {
   useFilePickStore((s) => s.file); // a chip pick refills the rows' commands
+  usePortPickStore((s) => s.picks); // a port pick refills them too
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();

@@ -3,10 +3,11 @@ import { DA_COVER_LABEL, isCoverMarked, type ChecklistGoal } from "../../engines
 import { getCards, useLibraryVersion } from "../../engines/library/store";
 import type { ChecklistStatus, ItemState } from "../../types/checklist";
 import { cx } from "../../lib/cx";
-import { Chip, Textarea, labelClass } from "../../ui";
+import { Textarea, labelClass } from "../../ui";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { CommandList, type FilledCommand } from "./CommandList";
 import { FileChip } from "./FileChip";
+import { PortChip } from "./PortChip";
 import { EvidenceLinks, type EvidenceLink } from "./EvidenceLinks";
 
 export type { FilledCommand, EvidenceLink };
@@ -84,6 +85,25 @@ function CardLinks({ commands }: { commands: FilledCommand[] }) {
   );
 }
 
+/** "N new credentials since this was done", collapsed; the labels (never secrets) list one per line when opened. */
+function NewCredNotice({ labels }: { labels: string[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="min-w-0 text-xs text-muted">
+      <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="cursor-default bg-transparent p-0 text-left text-xs text-fg-2 hover:text-fg">
+        {labels.length} new credential{labels.length === 1 ? "" : "s"} since this was done {open ? "▾" : "▸"}
+      </button>
+      {open && (
+        <ul className="m-0 mt-1 flex min-w-0 list-none flex-col gap-0.5 p-0">
+          {labels.map((l) => (
+            <li key={l} className="min-w-0 break-words">{l}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, newCredLabels, onStatus, onNotes, onOpenEntry, focus, children }: GoalRowProps) {
   const status = state?.status ?? "todo";
   const [open, setOpen] = useState(focus !== undefined || status === "todo" || status === "in_progress");
@@ -102,7 +122,7 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
 
   return (
     <li ref={root} data-goal-id={goal.id} className="border-b border-line py-3">
-      <div className="flex items-center gap-3">
+      <div data-testid="goal-head" className="flex min-w-0 items-center gap-3">
         <button
           type="button"
           aria-expanded={open}
@@ -112,10 +132,10 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
         >
           {open ? "▾" : "▸"}
         </button>
-        <span className={`min-w-0 flex-1 text-[13px] ${titleClass}`}>{goal.title}</span>
-        {status === "done" && newCredLabels && newCredLabels.length > 0 && (
-          <Chip>New credential since: {newCredLabels.join(", ")}</Chip>
-        )}
+        <div data-testid="goal-title-col" className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className={`min-w-0 text-[13px] ${titleClass}`}>{goal.title}</span>
+          {status === "done" && newCredLabels && newCredLabels.length > 0 && <NewCredNotice labels={newCredLabels} />}
+        </div>
         {isCoverMarked(state) && <span className="shrink-0 text-xs text-muted">{DA_COVER_LABEL}</span>}
         <StatusToggles label={`Status: ${goal.title}`} status={status} onStatus={(s) => onStatus(goal.id, s)} />
       </div>
@@ -125,6 +145,7 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
           {commands.length > 0 ? (
             <>
               <FileChip commands={commands} />
+              <PortChip commands={commands} />
               <CommandList commands={commands} />
               <CardLinks commands={commands} />
             </>

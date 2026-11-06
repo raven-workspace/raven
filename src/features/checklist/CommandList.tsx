@@ -22,6 +22,8 @@ export interface FilledCommand {
   cardId?: string;
   /** Uses {FILE} or {SCRIPT}: the step shows the Toolkit picker for this host. */
   fileToken?: { hostId: string; os: "windows" | "linux" | null; token: "FILE" | "SCRIPT" };
+  /** Uses {PORT} and the host has several matching open ports: the step shows a port chip. */
+  portToken?: { key: string; choices: number[]; picked: number };
   /** The raw unresolved tokens as they appear in `text`, to mark. */
   tokens?: string[];
 }
@@ -61,10 +63,10 @@ export function CommandList({ commands }: { commands: FilledCommand[] }) {
   };
 
   return (
-    <ul className="m-0 flex list-none flex-col gap-2 p-0">
+    <ul className="m-0 flex list-none flex-col gap-4 p-0">
       {commands.map((c) => (
         <li key={c.id} className="flex flex-col gap-1">
-          <span className="text-xs text-fg-2">{c.title}</span>
+          <span data-testid="command-desc" className="text-xs text-muted">{c.title}</span>
           {/* Copy sits small in the block's top-right corner; the block keeps room on its right so text never runs under it. */}
           <div data-testid="command-block" className="relative">
             <pre className={`${COMMAND_PRE} pr-16`}>

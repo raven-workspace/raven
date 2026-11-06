@@ -2,6 +2,12 @@ import {
   commandContext,
   fillCommand,
   filterForKind,
+  portChoices,
+  HOST_GOALS,
+  ENGAGEMENT_SETUP,
+  AD_PLAYBOOKS,
+  LATERAL_MOVEMENT_GOALS,
+  type ChecklistGoal,
   type FillInput,
 } from "../../engines/checklist";
 import { resolveTemplate } from "../../engines/checklist/template";
@@ -11,6 +17,11 @@ import type { Engagement } from "../../types/engagement";
 import { MASK } from "../credentials/MaskedSecret";
 import type { FilledCommand } from "./CommandList";
 import { filePickFor, pickOverrides } from "./filePick";
+import { portPickKey, usePortPickStore } from "./portPick";
+
+const GOAL_BY_ID = new Map<string, ChecklistGoal>(
+  [...HOST_GOALS, ...ENGAGEMENT_SETUP, ...LATERAL_MOVEMENT_GOALS, ...AD_PLAYBOOKS.flatMap((p) => p.goals)].map((g) => [g.id, g]),
+);
 
 /** One library command filled for this host: masked for display, real values (shell-escaped for Kali) for copy. */
 export function fillLibraryCommand(c: LibraryCommand, input: FillInput, msfMarker: boolean): FilledCommand {
@@ -41,7 +52,17 @@ export function goalCommands(goalId: string, input: FillInput, eng: Engagement):
   // The step's {FILE} chip (per host) fills FILE and SCRIPT; without a pick the input is untouched.
   const pick = pickOverrides(filePickFor(input.host.id));
   if (Object.keys(pick).length > 0) input = { ...input, overrides: { ...pick, ...input.overrides } };
+  // {PORT}: the host's open ports matching the step's `applies`, the picked one (default the lowest) first.
+  const choices = portChoices(input, GOAL_BY_ID.get(goalId));
+  const key = portPickKey(input.host.id, goalId);
+  const pickedPort = usePortPickStore.getState().picks[key];
+  const picked = pickedPort !== undefined && choices.includes(pickedPort) ? pickedPort : choices[0];
+  if (choices.length > 0) input = { ...input, portHint: [picked, ...choices.filter((p) => p !== picked)] };
   const { shown, msfMarker } = filterForKind(all, eng.kind, { hostId: input.host.id, msfHostId: eng.msfHostId });
-  const commands = shown.map((c) => fillLibraryCommand(c, input, msfMarker.has(c.id)));
+  const commands = shown.map((c) => {
+    const f = fillLibraryCommand(c, input, msfMarker.has(c.id));
+    if (choices.length > 1 && /(?<![$%])\{PORT\}/.test(c.template)) f.portToken = { key, choices, picked };
+    return f;
+  });
   return { commands, hadAny: all.length > 0 };
 }

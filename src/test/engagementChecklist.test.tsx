@@ -233,14 +233,17 @@ describe("engagement checklist", () => {
     mount({ services: AD, items: [done], creds: [cred("c1", { createdAt: 50 })] });
     await screen.findAllByText("Sync the clock to the DC");
     const row = document.querySelector('li[data-goal-id="e-setup-clock"]') as HTMLElement;
-    expect(within(row).getByText(/New credential since/)).toHaveTextContent("CORP\\svc_sql");
+    const notice = within(row).getByRole("button", { name: /1 new credential since this was done/ });
+    expect(within(row).queryByText("CORP\\svc_sql")).toBeNull();
+    await userEvent.click(notice);
+    expect(within(row).getByText("CORP\\svc_sql")).toBeInTheDocument();
   });
 
   it("no new credential badge when the credential is older than the done goal", async () => {
     const done: ChecklistItem = { ownerId: "e1", goalId: "e-setup-clock", status: "done", notes: null, completedAt: 500, auto: false, autoFrom: null, evidence: [], updatedAt: 1 };
     mount({ services: AD, items: [done], creds: [cred("c1", { createdAt: 50 })] });
     await screen.findAllByText("Sync the clock to the DC");
-    expect(screen.queryByText(/New credential since/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/new credentials? since/)).not.toBeInTheDocument();
   });
 
   it("Tick from log re-derives a tick that was missing and reports the count", async () => {
