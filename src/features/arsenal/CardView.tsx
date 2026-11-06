@@ -8,6 +8,7 @@ import { CommandList } from "../checklist/CommandList";
 import { useFillBase } from "../palette/fillData";
 import { tokenSuggestions, type SuggestContext } from "../palette/suggest";
 import { TokenInput } from "../palette/TokenInput";
+import { FilePicker, isFileToken } from "../generators/FilePicker";
 
 const STAGE_TITLE = new Map(HOST_STAGES.map((s) => [s.id, s.title]));
 export const stageTitle = (id: string) => STAGE_TITLE.get(id) ?? id;
@@ -74,14 +75,25 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
               >
                 {t}
                 {auto.dcByName && !overrides[t] && <span className="text-[11px] text-muted-2">(by name)</span>}
-                <TokenInput
-                  name={t}
-                  className="h-7 w-36"
-                  placeholder={auto.unresolved.length > 0 ? "" : auto.text}
-                  value={overrides[t] ?? ""}
-                  suggestions={tokenSuggestions(t, suggestCtx)}
-                  onChange={(v) => onOverrides({ ...overrides, [t]: v })}
-                />
+                {isFileToken(t) ? (
+                  <FilePicker
+                    name={t}
+                    os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
+                    className="h-7 w-36"
+                    placeholder={auto.unresolved.length > 0 ? "" : auto.text}
+                    value={overrides[t] ?? ""}
+                    onChange={(v) => onOverrides({ ...overrides, [t]: v })}
+                  />
+                ) : (
+                  <TokenInput
+                    name={t}
+                    className="h-7 w-36"
+                    placeholder={auto.unresolved.length > 0 ? "" : auto.text}
+                    value={overrides[t] ?? ""}
+                    suggestions={tokenSuggestions(t, suggestCtx)}
+                    onChange={(v) => onOverrides({ ...overrides, [t]: v })}
+                  />
+                )}
               </label>
             );
           })}

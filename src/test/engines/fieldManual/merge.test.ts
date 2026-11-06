@@ -60,6 +60,11 @@ describe('mergeImport', () => {
     expect(report.classified).toEqual([{ id: 'fm-c1-v2', exam: 'metasploit' }]);
   });
 
+  it('a new block keeps its Sub-method group as a tag', () => {
+    const { commands } = mergeImport([bi('fm-c1-1')], [card([block(), block({ title: 'New', template: 'x', index: 1, group: 'SMB share on Kali' })])]);
+    expect(commands.find((c) => c.id === 'fm-c1-v1')!.tags).toEqual(['group:SMB share on Kali']);
+  });
+
   it('a block deleted in the vault keeps the built-in and is listed as removed-kept', () => {
     const { commands, report } = mergeImport([bi('fm-c1-2'), bi('fm-c1-3', { title: 'Gone', template: 'gone' })], [card([block()])]);
     expect(commands.map((c) => c.id)).toContain('fm-c1-3');

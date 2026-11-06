@@ -12,7 +12,7 @@ import { logCommand } from "../capture/logCommand";
 import { fillLibraryCommand } from "../checklist/goalCommands";
 import { COMMAND_PRE } from "../checklist/CommandList";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
-import { useFillScope } from "../arsenal/useFillScope";
+import { useFillScope, useLastEngagementStore } from "../arsenal/useFillScope";
 import { HostPicker, isHostPickKey, openPicker } from "../arsenal/HostPicker";
 import { useFillBase } from "./fillData";
 import { GENERATORS } from "./generators";
@@ -20,6 +20,7 @@ import { searchPalette, type EngagementItem, type PaletteResult } from "./search
 import { usePaletteStore } from "./usePaletteStore";
 import { tokenSuggestions, type SuggestContext } from "./suggest";
 import { TokenInput } from "./TokenInput";
+import { FilePicker, isFileToken } from "../generators/FilePicker";
 
 const MAX_RESULTS = 30;
 const GROUPS = { command: "Commands", generator: "Generators", card: "Cards", item: "This engagement" } as const;
@@ -101,6 +102,13 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     if (current?.type === "item") {
       const section = current.item.kind === "credential" ? "credentials" : "log";
       void navigate(`/e/${engagementId}/s/${section}`);
+      onClose();
+      return;
+    }
+    if (current?.type === "generator") {
+      // The generator lives in full-screen Arsenal, for the engagement and host in view here.
+      if (engagementId) useLastEngagementStore.setState({ engagementId, hostId: host?.id ?? null });
+      void navigate(`/arsenal?generator=${encodeURIComponent(current.id)}`);
       onClose();
       return;
     }
@@ -221,16 +229,29 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
                 return (
                   <label key={name} className="flex items-center gap-1.5 text-xs text-warn">
                     {name}
-                    <TokenInput
-                      name={name}
-                      className="h-7 w-40"
-                      value={overrides[key] ?? ""}
-                      suggestions={tokenSuggestions(name, suggestCtx)}
-                      ref={(el) => {
-                        if (el) tokenRefs.current[i] = el;
-                      }}
-                      onChange={(v) => setOverrides((o) => ({ ...o, [key]: v }))}
-                    />
+                    {isFileToken(name) ? (
+                      <FilePicker
+                        name={name}
+                        os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
+                        className="h-7 w-40"
+                        value={overrides[key] ?? ""}
+                        ref={(el) => {
+                          if (el) tokenRefs.current[i] = el;
+                        }}
+                        onChange={(v) => setOverrides((o) => ({ ...o, [key]: v }))}
+                      />
+                    ) : (
+                      <TokenInput
+                        name={name}
+                        className="h-7 w-40"
+                        value={overrides[key] ?? ""}
+                        suggestions={tokenSuggestions(name, suggestCtx)}
+                        ref={(el) => {
+                          if (el) tokenRefs.current[i] = el;
+                        }}
+                        onChange={(v) => setOverrides((o) => ({ ...o, [key]: v }))}
+                      />
+                    )}
                   </label>
                 );
               })}

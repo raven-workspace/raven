@@ -47,7 +47,9 @@ describe('built-in command library', () => {
   it('every goal id referenced exists in HOST_GOALS, ENGAGEMENT_SETUP or AD_PLAYBOOKS', () => {
     const unknown = lib.flatMap((c) => c.goals.filter((g) => !ALL_GOAL_IDS.has(g)).map((g) => `${c.id} -> ${g}`));
     expect(unknown).toEqual([]);
-    expect(lib.filter((c) => c.goals.length === 0).map((c) => c.id)).toEqual([]);
+    // The transfer cards' blocks belong to the Transfer a file generator, not to a checklist step.
+    const GENERATOR_CARDS = new Set(['shell-file-transfer-to-windows', 'shell-file-transfer-to-linux']);
+    expect(lib.filter((c) => c.goals.length === 0 && !GENERATOR_CARDS.has(c.cardId ?? '')).map((c) => c.id)).toEqual([]);
   });
 
   it('every host and engagement goal has at least one command', () => {

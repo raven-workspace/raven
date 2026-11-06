@@ -176,6 +176,8 @@ export function mergeImport(
           cardId,
         };
         if (b.why !== undefined) cmd.why = b.why;
+        // The Sub-method group drives the Transfer a file generator's methods.
+        if (b.group) cmd.tags = [`group:${b.group}`];
         if (exam) {
           cmd.exam = exam;
           classified.push({ id, exam });

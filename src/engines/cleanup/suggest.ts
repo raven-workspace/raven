@@ -148,6 +148,9 @@ const PS_WRAP = /^(?:powershell|pwsh)(?:\.exe)?(?:\s.*?)?\s-(?:c|command)\s+(.+)
 /** Writing to the null device leaves nothing on the target. */
 const NULL_DEVICE = /^(?:\/dev\/null|nul|\$null)$/i;
 const CMD_WRAP = /^cmd(?:\.exe)?\s+\/[ck]\s+(.+)$/is;
+const URLRETRIEVE = /\burlretrieve\(\s*(['"])(.*?)\1\s*,\s*(['"])(.*?)\3\s*\)/is;
+/** `(echo a& echo b) > script.txt`: a script file built on the target. */
+const ECHO_GROUP_REDIRECT = /^\(\s*echo\b.*\)\s*>>?\s*("[^"]+"|[^\s&]+)/is;
 const DOWNLOAD_FILE = /\.DownloadFile\(\s*(['"])(.*?)\1\s*,\s*(['"])(.*?)\3\s*\)/is;
 
 function unquote(text: string): string {
@@ -161,6 +164,10 @@ function matchSegment(segment: string, inSmbclient: boolean, depth = 0): Match[]
   if (wrap) return splitSegments(unquote(wrap[1])).flatMap((inner) => matchSegment(inner, inSmbclient, 1));
   const dl = DOWNLOAD_FILE.exec(segment);
   if (dl && dl[4]) return [{ kind: 'file', target: dl[4], push: false }];
+  const urlretrieve = URLRETRIEVE.exec(segment);
+  if (urlretrieve && urlretrieve[4]) return [{ kind: 'file', target: urlretrieve[4], push: false }];
+  const echoFile = ECHO_GROUP_REDIRECT.exec(segment);
+  if (echoFile) return [{ kind: 'file', target: unquote(echoFile[1]), push: false }];
   const t = tokenize(segment);
   if (t.length === 0) return [];
   if (eq(t[0], 'sudo')) t.shift();
@@ -186,6 +193,31 @@ function matchSegment(segment: string, inSmbclient: boolean, depth = 0): Match[]
       break;
     case 'certutil':
       if (t.some((a) => /^[-/]urlcache$/i.test(a)) && t.length > 2) file(t[t.length - 1]);
+      break;
+    case 'bitsadmin':
+      if (t.some((a) => /^[-/]transfer$/i.test(a)) && t.length > 3) file(t[t.length - 1]);
+      break;
+    case 'start-bitstransfer': {
+      const i = t.findIndex((a) => eq(a, '-Destination'));
+      if (i > 0) file(t[i + 1] ?? null);
+      break;
+    }
+    case 'copy':
+    case 'xcopy': {
+      // Only a pull from a share (UNC source) writes something new here.
+      const args = t.slice(1).filter((a) => !/^\/[A-Za-z]/.test(a) || a.startsWith('//'));
+      if (args[0]?.startsWith('\\\\') && args[1]) file(destTarget(args[1], args[0]));
+      break;
+    }
+    case 'nc':
+    case 'ncat':
+      file(redirectTarget(t));
+      break;
+    case 'cat':
+      if (t.some((a) => a.startsWith('/dev/tcp/'))) file(redirectTarget(t));
+      break;
+    case 'base64':
+      if (t.some((a) => a === '-d' || a === '-D' || a === '--decode')) file(redirectTarget(t));
       break;
     case 'net':
     case 'net1':

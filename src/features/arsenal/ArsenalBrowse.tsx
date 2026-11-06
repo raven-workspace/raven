@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { filterForKind, HOST_STAGES } from "../../engines/checklist";
 import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/store";
 import { useEscapeTo } from "../../lib/keys";
@@ -7,6 +7,7 @@ import { cx } from "../../lib/cx";
 import { labelClass } from "../../ui";
 import { useFillBase } from "../palette/fillData";
 import { GENERATORS } from "../palette/generators";
+import { TransferGenerator } from "../generators/TransferGenerator";
 import { CardView } from "./CardView";
 import { useArsenalStore } from "./useArsenalStore";
 import { useFillScope, useLastEngagementStore } from "./useFillScope";
@@ -32,6 +33,9 @@ export function ArsenalBrowse() {
   useEscapeTo("/");
   const version = useLibraryVersion();
   const cardId = useArsenalStore((s) => s.cardId);
+  const [params, setParams] = useSearchParams();
+  // `?generator=<id>` opens that generator in place of a card (the palette and the Generators list link here).
+  const generatorId = GENERATORS.find((g) => g.id === params.get("generator"))?.id ?? null;
   const [stage, setStage] = useState<string | null>(null);
   const [category, setCategory] = useState<string | null>(null);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
@@ -94,7 +98,7 @@ export function ArsenalBrowse() {
           <h2 className={`${labelClass} m-0`}>Generators</h2>
           {GENERATORS.length === 0 && <p className="m-0 px-2 text-xs text-muted">None yet</p>}
           {GENERATORS.map((g) => (
-            <Link key={g.id} to={`/arsenal?generator=${encodeURIComponent(g.id)}`} className="rounded-sm px-2 text-[13px] text-fg-2 underline decoration-line-2 underline-offset-2 hover:text-accent">
+            <Link key={g.id} to={`/arsenal?generator=${encodeURIComponent(g.id)}`} aria-current={generatorId === g.id ? "true" : undefined} className={cx("rounded-sm px-2 text-[13px] underline decoration-line-2 underline-offset-2 hover:text-accent", generatorId === g.id ? "text-accent" : "text-fg-2")}>
               {g.title} ↗
             </Link>
           ))}
@@ -103,12 +107,17 @@ export function ArsenalBrowse() {
           <h2 className={`${labelClass} m-0`}>Cards</h2>
           {shown.length === 0 && <p className="m-0 px-2 text-xs text-muted">No cards match</p>}
           {shown.map((c) => (
-            <FilterButton key={c.id} current on={cardId === c.id} onClick={() => useArsenalStore.setState({ cardId: c.id })}>{c.title}</FilterButton>
+            <FilterButton key={c.id} current on={!generatorId && cardId === c.id} onClick={() => {
+              setParams({}, { replace: true });
+              useArsenalStore.setState({ cardId: c.id });
+            }}>{c.title}</FilterButton>
           ))}
         </section>
       </nav>
       <main id="arsenal-browse" tabIndex={-1} className="min-h-0 overflow-y-auto outline-none">
-        {cardId ? (
+        {generatorId === "transfer" ? (
+          <TransferGenerator key={`${engagementId}`} engagementId={engagementId} hostId={hostId} />
+        ) : cardId ? (
           <CardView key={cardId} cardId={cardId} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} />
         ) : (
           <p className="m-0 text-[13px] text-muted">Pick a card.</p>

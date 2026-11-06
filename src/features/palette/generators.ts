@@ -1,2 +1,2 @@
-/** Generators the palette offers next to commands and cards. Starts empty; the generator task adds the first. */
-export const GENERATORS: { id: string; title: string }[] = [];
+/** Generators the palette and Arsenal browse offer next to commands and cards. */
+export const GENERATORS: { id: string; title: string }[] = [{ id: "transfer", title: "Transfer a file" }];
