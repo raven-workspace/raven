@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { CommandList } from "../features/checklist/CommandList";
 import { CredentialPicker } from "../features/checklist/CredentialPicker";
+import { GoalRow } from "../features/checklist/GoalRow";
 import type { Credential } from "../types/credentials";
 
 // jsdom has no layout: these check the classes that decide wrapping (U5–U7).
@@ -31,11 +32,38 @@ describe("layout (U5–U7)", () => {
     expect(pre.className).toMatch(/overflow-x-auto/);
   });
 
-  it("U7: a command's description wraps beside a top-aligned Copy that never shrinks", () => {
+  it("Copy is a small button in the command block's top-right corner; the description is full width above", () => {
     render(<CommandList commands={[{ id: "a", title: "A long description of what this command does on the target", text: "id", unresolved: [], msfMarker: false }]} />);
-    const copy = screen.getByRole("button", { name: /Copy command/ });
-    expect(copy.parentElement!.className).toMatch(/items-start/);
+    const copy = screen.getByRole("button", { name: /Copy command: A long description/ });
+    const block = screen.getByTestId("command-block");
+    expect(block).toContainElement(copy);
+    expect(block.className).toMatch(/relative/);
+    expect(copy.className).toMatch(/absolute/);
     expect(copy.className).toMatch(/shrink-0/);
-    expect(screen.getByText(/A long description/).className).not.toMatch(/truncate/);
+    expect(copy.className).not.toMatch(/w-full|flex-1/);
+    expect(block.querySelector("pre")!.className).toMatch(/pr-16/);
+    const desc = screen.getByText(/A long description/);
+    expect(block).not.toContainElement(desc);
+    expect(desc.className).not.toMatch(/truncate/);
+    expect(desc.parentElement).toBe(block.parentElement);
+  });
+  it("status is one small button group: four segments, exactly one pressed, a little space below", () => {
+    render(
+      <ul>
+        <GoalRow goal={{ id: "g", title: "Scan it", why: "Because." }} state={{ status: "in_progress" }} commands={[]} evidence={[]} onStatus={vi.fn()} onNotes={vi.fn()} />
+      </ul>,
+    );
+    const group = screen.getByRole("group", { name: "Status: Scan it" });
+    const segs = within(group).getAllByRole("button");
+    expect(segs.map((b) => b.textContent)).toEqual(["To do", "Doing", "Done", "N/A"]);
+    expect(segs.filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.textContent)).toEqual(["Doing"]);
+    expect(group.className).toMatch(/rounded-full/);
+    expect(group.className).toMatch(/divide-x/);
+    expect(screen.getByText("Because.").parentElement!.className).toMatch(/mt-3/);
+  });
+
+  it("a DC picked by name is flagged on the command", () => {
+    render(<CommandList commands={[{ id: "a", title: "Sync", text: "ntpdate 10.0.0.10", unresolved: [], msfMarker: false, dcByName: true }]} />);
+    expect(screen.getByText("DC (by name)")).toBeInTheDocument();
   });
 });

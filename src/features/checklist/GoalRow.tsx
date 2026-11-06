@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { DA_COVER_LABEL, isCoverMarked, type ChecklistGoal } from "../../engines/checklist";
 import { getCards } from "../../engines/library/store";
 import type { ChecklistStatus, ItemState } from "../../types/checklist";
-import { Chip, Textarea, Toggle, labelClass } from "../../ui";
+import { cx } from "../../lib/cx";
+import { Chip, Textarea, labelClass } from "../../ui";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { CommandList, type FilledCommand } from "./CommandList";
 import { EvidenceLinks, type EvidenceLink } from "./EvidenceLinks";
@@ -16,15 +17,30 @@ const STATUSES: { value: ChecklistStatus; label: string }[] = [
   { value: "na", label: "N/A" },
 ];
 
-/** To do / Doing / Done / N/A for one step: the checklist's status control, shared with the Now panel. */
+/**
+ * To do / Doing / Done / N/A for one step, as one small button group: a rounded hairline pill with thin dividers,
+ * the selected segment in accent. The checklist's status control, shared with the Now panel.
+ */
 export function StatusToggles({ label, status, onStatus }: { label: string; status: ChecklistStatus; onStatus: (status: ChecklistStatus) => void }) {
   return (
-    <div role="group" aria-label={label} className="inline-flex shrink-0 gap-0.5">
-      {STATUSES.map((s) => (
-        <Toggle key={s.value} on={status === s.value} onChange={() => onStatus(s.value)}>
-          {s.label}
-        </Toggle>
-      ))}
+    <div role="group" aria-label={label} className="inline-flex shrink-0 divide-x divide-line-2 overflow-hidden rounded-full border border-line-2">
+      {STATUSES.map((s) => {
+        const on = status === s.value;
+        return (
+          <button
+            key={s.value}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onStatus(s.value)}
+            className={cx(
+              "inline-flex h-5 cursor-default items-center px-2 text-[11px] leading-none",
+              on ? "bg-accent/10 text-accent" : "text-fg-2 hover:bg-surface-2 hover:text-fg",
+            )}
+          >
+            {s.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -101,7 +117,7 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
         <StatusToggles label={`Status: ${goal.title}`} status={status} onStatus={(s) => onStatus(goal.id, s)} />
       </div>
       {open && (
-        <div className="mt-2 flex flex-col gap-3 pl-7">
+        <div className="mt-3 flex flex-col gap-3 pl-7">
           {goal.why && <p className="m-0 text-xs text-muted">{goal.why}</p>}
           {commands.length > 0 ? (
             <>

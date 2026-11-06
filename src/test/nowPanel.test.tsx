@@ -125,6 +125,10 @@ describe("Now panel", () => {
     expect(within(status).getAllByRole("button").map((b) => b.textContent)).toEqual(["To do", "Doing", "Done", "N/A"]);
     expect(status.parentElement).not.toBe(title.parentElement);
     expect(title.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // One small group, one segment pressed, a little space below it.
+    expect(status.className).toMatch(/rounded-full/);
+    expect(within(status).getAllByRole("button").filter((b) => b.getAttribute("aria-pressed") === "true")).toHaveLength(1);
+    expect(status.parentElement!.className).toMatch(/mb-1/);
   });
 
   it("Doing toggles in progress", async () => {

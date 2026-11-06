@@ -80,7 +80,7 @@ export function NowPanel({ engagementId, host, onOpenGoal }: { engagementId: str
                       {goal.title}
                     </button>
                     {/* The checklist's own status control, on its own line: the title gets the full width and wraps. */}
-                    <div className="self-start">
+                    <div className="mb-1 self-start">
                       <StatusToggles label={`Now: ${goal.title}`} status={status} onStatus={set} />
                     </div>
                     {commands[0] && <CommandList commands={[commands[0]]} />}
