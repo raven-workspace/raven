@@ -30,16 +30,26 @@ for (const flow of FLOWS) {
   });
 }
 
+// Under `empty` these screens' setups act on fixture rows or a host (a tab, a finding, a log entry, a host option) that
+// the scenario removes by definition, so there is nothing to set up. Skipped explicitly, not swallowed.
+const NEEDS_DATA = new Set([
+  "host-checklist", "host-credentials", "host-findings", "exam-host-locked", "findings", "log-images", "transfer-generator",
+]);
+
 for (const screen of STATE_SCREENS) {
   for (const scenario of SCENARIOS) {
     test(`${screen.id}~${scenario}`, async ({ page }) => {
-      // A state can hide the controls a screen's setup needs; give up on it quickly and check what rendered.
+      test.skip(scenario === "empty" && NEEDS_DATA.has(screen.id), "setup needs fixture data, which this scenario removes");
+      // While loading or failing, a screen's setup may legitimately not find its controls: give up quickly and check what rendered.
+      // With data (empty), a failing setup is a real error.
       page.setDefaultTimeout(2000);
       await page.setViewportSize({ width: WIDTH, height: 900 });
       await page.clock.install({ time: AUDIT_NOW });
       await page.goto(`${screen.path}${screen.path.includes("?") ? "&" : "?"}audit=${scenario}`);
       await page.locator("body").waitFor();
-      await screen.setup?.(page).catch(() => undefined);
+      const setup = screen.setup?.(page);
+      if (scenario === "empty") await setup;
+      else await setup?.catch(() => undefined);
       await page.evaluate(() => document.fonts.ready);
       const issues = await collectStateIssues(page, scenario);
       await writeIssues(`${screen.id}~${scenario}`, WIDTH, issues);

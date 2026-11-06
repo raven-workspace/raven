@@ -6,29 +6,43 @@ export type FlowStep =
   | { press: string } // 1 action
   | { type: string } // 1 action (one field fill = one action)
   | { click: string; why: string } // 1 action, and reported as flow-needs-mouse
-  | { expect: string }; // 0 actions: waits for the selector, timed
+  | { expect: string } // 0 actions: waits for the selector, timed
+  | { tabTo: string }; // N actions: presses Tab until the focused element matches the selector (cap 40) // 0 actions: waits for the selector, timed
 
 export interface Flow {
   id: string;
   path: string;
   budget: number;
   steps: FlowStep[];
-  /** Appears when the flow has achieved its goal. Never appearing means the flow is broken. */
-  done: string;
+  /** Selector that appears, or a wait that resolves, when the flow has achieved its goal. Never happening means the flow is broken. */
+  done: string | ((page: Page) => Promise<void>);
+  /** Runs before the first action; not counted. */
+  prepare?: (page: Page) => Promise<void>;
+  /** Runs after `done`; not counted. Reports what the flow did not actually achieve. */
+  verify?: (page: Page) => Promise<RawIssue[]>;
 }
 
 const E = `/e/${AUDIT_IDS.labEngagement}`;
 const H = `${E}/h/${AUDIT_IDS.webHost}`;
+const H_DC = `${E}/h/${AUDIT_IDS.dcHost}`;
 const SLOW_MS = 200;
 const DONE_TIMEOUT_MS = 5000;
 
-// Nothing else in the app uses a dialog while these flows run, so "no dialog" is a visible-selector for "it closed".
 const NO_DIALOG = "body:not(:has([role='dialog']))";
+const SENTINEL = "audit-clipboard-sentinel";
+const MAX_TABS = 40;
+const CRED_PASTE = "administrator:Password123!";
 const STUCK = "aside[aria-label^='Stuck on']";
 
-// The shortest keyboard path to a host from the board today: Tab through the top bar, the section tabs and the
-// sidebar until the first host link. The board's own cards are 11 Tabs further on.
-const TABS_TO_FIRST_HOST = 12;
+// Rows mentioning the pasted user on the host's Credentials tab (not a counted action: it observes the outcome).
+const credRowsBefore = new WeakMap<Page, number>();
+async function countCredRows(page: Page): Promise<number> {
+  await page.getByRole("tab", { name: "Credentials" }).dispatchEvent("click");
+  await page.getByRole("tab", { name: "Credentials", selected: true }).waitFor({ timeout: DONE_TIMEOUT_MS });
+  const n = await page.locator("main").getByText(/administrator/i).count();
+  await page.getByRole("tab", { name: "Story" }).dispatchEvent("click");
+  return n;
+}
 
 export const FLOWS: Flow[] = [
   {
@@ -37,14 +51,38 @@ export const FLOWS: Flow[] = [
   },
   {
     id: "add-credential", path: H, budget: 3, done: NO_DIALOG,
-    steps: [{ press: "l" }, { expect: "[role='dialog']" }, { type: "administrator:Password123!" }, { press: "Meta+Enter" }],
+    steps: [{ press: "l" }, { expect: "[role='dialog']" }, { type: CRED_PASTE }, { press: "Meta+Enter" }],
+    // Intake only reads tool output (nxc, secretsdump, ...). A bare user:pass is saved as a log entry, not a credential.
+    prepare: async (page) => {
+      credRowsBefore.set(page, await countCredRows(page));
+    },
+    verify: async (page) => {
+      const created = (await countCredRows(page)) > (credRowsBefore.get(page) ?? 0);
+      return created
+        ? []
+        : [{
+            check: "flow-needs-mouse",
+            selector: "role=tab[name='Credentials']",
+            detail: `pasting \`${CRED_PASTE}\` and saving created no credential (intake only parses tool output); adding one takes the Credentials tab form`,
+          }];
+    },
   },
   {
-    id: "next-step", path: E, budget: 2, done: "[aria-label='Now']",
-    steps: [...Array.from({ length: TABS_TO_FIRST_HOST }, () => ({ press: "Tab" })), { press: "Enter" }],
+    id: "next-step", path: E, budget: 2, done: async (page) => {
+      await page.waitForURL(`**${H}`, { timeout: DONE_TIMEOUT_MS });
+      await page.locator("[aria-label='Now']").first().waitFor({ state: "visible", timeout: DONE_TIMEOUT_MS });
+    },
+    // The shortest keyboard path from the board to a host today is the first sidebar host link; board cards come later.
+    steps: [{ tabTo: "nav[aria-label='Engagement'] a[href*='/h/']" }, { press: "Enter" }],
   },
   {
-    id: "palette-run", path: H, budget: 3, done: NO_DIALOG,
+    id: "palette-run", path: H, budget: 3,
+    // Enter copies the top result: the clipboard must change from the sentinel.
+    prepare: (page) => page.evaluate((v) => navigator.clipboard.writeText(v), SENTINEL),
+    done: async (page) => {
+      await page.waitForFunction((v) => navigator.clipboard.readText().then((t) => t !== v && t.length > 0), SENTINEL, { timeout: DONE_TIMEOUT_MS });
+      await page.locator(NO_DIALOG).waitFor({ state: "visible", timeout: DONE_TIMEOUT_MS });
+    },
     steps: [{ press: "Meta+K" }, { expect: "role=combobox" }, { type: "smb" }, { expect: "role=listbox[name='Results']" }, { press: "Enter" }],
   },
   {
@@ -62,7 +100,10 @@ export const FLOWS: Flow[] = [
     ],
   },
   {
-    id: "switch-host", path: H, budget: 3, done: `${"role=tab[name='Story']"} >> visible=true`,
+    id: "switch-host", path: H, budget: 3, done: async (page) => {
+      await page.waitForURL(`**${H_DC}`, { timeout: DONE_TIMEOUT_MS });
+      await page.locator("role=heading[level=1][name='dc01']").waitFor({ state: "visible", timeout: DONE_TIMEOUT_MS });
+    },
     steps: [
       {
         click: `nav[aria-label='Engagement'] a[href$='/h/${AUDIT_IDS.dcHost}']`,
@@ -93,7 +134,20 @@ export async function runFlow(page: Page, flow: Flow): Promise<RawIssue[]> {
     }
   };
 
+  await flow.prepare?.(page);
   for (const step of flow.steps) {
+    if ("tabTo" in step) {
+      let reached = false;
+      for (let n = 0; n < MAX_TABS && !reached; n++) {
+        await page.keyboard.press("Tab");
+        actions.push("Tab");
+        reached = await page.evaluate((sel) => document.activeElement?.matches(sel) ?? false, step.tabTo);
+      }
+      if (!reached) throw new Error(`flow ${flow.id}: Tab did not reach ${step.tabTo} within ${MAX_TABS} presses`);
+      lastAction = "Tab";
+      lastAt = Date.now();
+      continue;
+    }
     if ("expect" in step) {
       await timed(step.expect, DONE_TIMEOUT_MS);
       continue;
@@ -108,7 +162,13 @@ export async function runFlow(page: Page, flow: Flow): Promise<RawIssue[]> {
     lastAction = label(step)!;
     lastAt = Date.now();
   }
-  await timed(flow.done, DONE_TIMEOUT_MS);
+  if (typeof flow.done === "string") await timed(flow.done, DONE_TIMEOUT_MS);
+  else {
+    await flow.done(page);
+    const ms = Date.now() - lastAt;
+    if (ms > SLOW_MS) issues.push({ check: "flow-slow", selector: `flow:${flow.id}`, detail: `${ms}ms from ${lastAction} until done (> ${SLOW_MS}ms)` });
+  }
+  issues.push(...((await flow.verify?.(page)) ?? []));
 
   if (actions.length > flow.budget) {
     issues.push({
