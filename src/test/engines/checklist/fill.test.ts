@@ -142,6 +142,20 @@ describe('fillCommand', () => {
     expect(r.unresolved).toEqual([]);
   });
 
+  it('a DC picked by name is marked; a scanned DC is not', () => {
+    const dc = host({ id: 'dc', name: 'DC01', ip: '172.16.5.10' });
+    expect(fillCommand('{DC_IP}', input({ hosts: [host(), dc] })).dcByName).toBe(true);
+    expect(fillCommand('{DC_IP}', input({ hosts: [dc], servicesByHost: adServices('dc') })).dcByName).toBeUndefined();
+    expect(fillCommand('{TARGET_IP}', input({ hosts: [host(), dc] })).dcByName).toBeUndefined();
+  });
+
+  it('dc-web or dc_files alone is not a DC name', () => {
+    for (const name of ['dc-web', 'dc_files', 'DC-WEB.corp.local']) {
+      const r = fillCommand('{DC_IP}', input({ hosts: [host(), host({ id: 'x', name, ip: '10.0.0.9' })] }));
+      expect(r.unresolved).toEqual(['DC_IP']);
+    }
+  });
+
   it('DC_IP fills from the only Kerberos host when LDAP was not seen', () => {
     const dc = host({ id: 'dc', name: 'core', ip: '10.0.0.10' });
     const r = fillCommand('{DC_IP}', input({ hosts: [host(), dc], servicesByHost: new Map([['dc', [svc('dc', 88)]]]) }));

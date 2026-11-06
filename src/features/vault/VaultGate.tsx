@@ -17,6 +17,7 @@ import { clearSecretClipboard } from "../../lib/clipboard";
 import { isDialogOpen } from "../../lib/keys";
 import { ArsenalDrawer } from "../arsenal/ArsenalDrawer";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
+import { useLastEngagementStore } from "../arsenal/useFillScope";
 import { Palette } from "../palette/Palette";
 import { usePaletteStore } from "../palette/usePaletteStore";
 
@@ -89,6 +90,8 @@ export function VaultGate({ children }: { children: ReactNode }) {
     useCaptureStore.getState().reset();
     // Which credential fills commands is session state too.
     useCredPickStore.getState().reset();
+    // So is the engagement full-screen Arsenal remembers.
+    useLastEngagementStore.setState({ engagementId: null, hostId: null });
     // Notes too: after a lock no note text stays in memory. `lock()` has already started the
     // flush, which works from a snapshot.
     discardNotes();

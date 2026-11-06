@@ -16,6 +16,8 @@ export interface FilledCommand {
   /** Exam sim, no host locked yet: this command would spend the one Metasploit host. */
   msfMarker: boolean;
   viaTunnel?: { viaHostName: string; down: boolean };
+  /** The DC in this command was picked by host name only. */
+  dcByName?: boolean;
   /** Field-manual commands: the Arsenal card they came from. */
   cardId?: string;
   /** The raw unresolved tokens as they appear in `text`, to mark. */
@@ -60,17 +62,24 @@ export function CommandList({ commands }: { commands: FilledCommand[] }) {
     <ul className="m-0 flex list-none flex-col gap-2 p-0">
       {commands.map((c) => (
         <li key={c.id} className="flex flex-col gap-1">
-          <div className="flex items-start justify-between gap-2">
-            <span className="min-w-0 flex-1 text-xs text-fg-2">{c.title}</span>
-            <Button size="sm" className="shrink-0" aria-label={`Copy command: ${c.title}`} onClick={() => copy(c)}>
+          <span className="text-xs text-fg-2">{c.title}</span>
+          {/* Copy sits small in the block's top-right corner; the block keeps room on its right so text never runs under it. */}
+          <div data-testid="command-block" className="relative">
+            <pre className={`${COMMAND_PRE} pr-16`}>
+              <Text text={c.text} tokens={c.tokens ?? []} />
+            </pre>
+            <Button
+              size="sm"
+              className="absolute top-1 right-1 h-5 w-auto shrink-0 bg-surface px-1.5 text-[11px]"
+              aria-label={`Copy command: ${c.title}`}
+              onClick={() => copy(c)}
+            >
               {copied === c.id ? "Copied" : "Copy"}
             </Button>
           </div>
-          <pre className={COMMAND_PRE}>
-            <Text text={c.text} tokens={c.tokens ?? []} />
-          </pre>
-          {(c.msfMarker || c.viaTunnel) && (
+          {(c.msfMarker || c.viaTunnel || c.dcByName) && (
             <div className="flex flex-wrap gap-1.5">
+              {c.dcByName && <Chip title="No Kerberos/LDAP seen: the DC was picked by its host name">DC (by name)</Chip>}
               {c.msfMarker && <Chip>uses your one Metasploit host</Chip>}
               {c.viaTunnel && (
                 <Chip className={c.viaTunnel.down ? "border-warn text-warn" : undefined}>

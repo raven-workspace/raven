@@ -154,7 +154,7 @@ describe("⌘K palette", () => {
     await user.type(box, "fetch");
     expect(await screen.findByText("zzfetch http://10.10.14.9/{FILE}")).toBeInTheDocument();
     await user.tab();
-    expect(screen.getByRole("textbox", { name: "Value for FILE" })).toHaveFocus();
+    expect(screen.getByRole("combobox", { name: "Value for FILE" })).toHaveFocus();
     await user.keyboard("x.exe{Enter}");
     expect(await navigator.clipboard.readText()).toBe("zzfetch http://10.10.14.9/x.exe");
   });
@@ -216,7 +216,7 @@ describe("host picker in the palette (U3)", () => {
     await screen.findByRole("tab", { name: "Checklist" });
     await user.keyboard(cmdK);
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzfetch");
-    await user.type(await screen.findByRole("textbox", { name: "Value for FILE" }), "x.exe");
+    await user.type(await screen.findByRole("combobox", { name: "Value for FILE" }), "x.exe");
     expect((await preview()).textContent).toBe("zzfetch http://10.10.14.9/x.exe");
     await user.selectOptions(screen.getByRole("combobox", { name: "Fill for host" }), "web02");
     expect((await preview()).textContent).toBe("zzfetch http://10.10.14.9/{FILE}");
@@ -239,7 +239,7 @@ describe("token suggestions (U4)", () => {
     await user.keyboard(cmdK);
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzuser");
     await user.keyboard("{Tab}");
-    const field = screen.getByRole("textbox", { name: "Value for USER" });
+    const field = screen.getByRole("combobox", { name: "Value for USER" });
     expect(field).toHaveFocus();
     const list = await screen.findByRole("listbox", { name: "Suggestions for USER" });
     expect(within(list).getAllByRole("option").map((o) => o.firstChild?.textContent)).toEqual(["alice", "bob"]);
@@ -253,6 +253,48 @@ describe("token suggestions (U4)", () => {
     await user.clear(field);
     await user.type(field, "carol");
     expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzuser carol@10.10.10.5")).toBeInTheDocument();
+  });
+
+  it("Esc with the suggestion list open closes only the list; the next Esc closes the palette", async () => {
+    const user = userEvent.setup();
+    m.credentialsList.mockResolvedValue([cred("c1", "alice", "Winter2024!")]);
+    setImported({ commands: [USERCMD], cards: [] });
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Checklist" });
+    await user.keyboard(cmdK);
+    const box = await screen.findByRole("combobox", { name: "Search" });
+    await user.type(box, "zzuser");
+    await user.keyboard("{Tab}");
+    await user.type(screen.getByRole("combobox", { name: "Value for USER" }), "a");
+    expect(await screen.findByRole("listbox", { name: "Suggestions for USER" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("listbox", { name: "Suggestions for USER" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Search" })).toBeInTheDocument();
+    expect(box).toHaveValue("zzuser");
+    expect(screen.getByRole("combobox", { name: "Value for USER" })).toHaveValue("a");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Search" })).not.toBeInTheDocument();
+  });
+
+  it("Esc with the suggestion list open in the drawer closes only the list; the next Esc goes back", async () => {
+    const user = userEvent.setup();
+    setImported({
+      commands: [{ ...FETCH, cardId: "c-fetch", source: "field-manual" }],
+      cards: [{ id: "c-fetch", title: "Fetch card", stage: "initial-foothold", category: "Shells", os: "any", file: "02-Cards/S/F.md" }],
+      toolkit: [{ os: "windows", purpose: "Enumeration", file: "winPEASx64.exe", note: "", where: "", staged: true }],
+    });
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Checklist" });
+    act(() => useArsenalStore.getState().openCard("c-fetch"));
+    const d = within(await screen.findByRole("complementary", { name: "Arsenal" }));
+    await user.click(await d.findByRole("combobox", { name: "Value for FILE" }));
+    expect(await d.findByRole("listbox", { name: "Suggestions for FILE" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(d.queryByRole("listbox", { name: "Suggestions for FILE" })).not.toBeInTheDocument();
+    expect(d.getByRole("heading", { name: "Fetch card" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(d.queryByRole("heading", { name: "Fetch card" })).not.toBeInTheDocument();
+    expect(d.getByRole("listbox", { name: "Arsenal results" })).toBeInTheDocument();
   });
 
   it("a FILE chip in the drawer offers Toolkit files, staged first", async () => {
@@ -269,7 +311,7 @@ describe("token suggestions (U4)", () => {
     await screen.findByRole("tab", { name: "Checklist" });
     act(() => useArsenalStore.getState().openCard("c-fetch"));
     const d = within(await screen.findByRole("complementary", { name: "Arsenal" }));
-    await user.click(await d.findByRole("textbox", { name: "Value for FILE" }));
+    await user.click(await d.findByRole("combobox", { name: "Value for FILE" }));
     const list = await d.findByRole("listbox", { name: "Suggestions for FILE" });
     expect(within(list).getAllByRole("option").map((o) => o.firstChild?.textContent)).toEqual(["winPEASx64.exe", "SharpHound.exe"]);
     await user.click(within(list).getAllByRole("option")[0]!);

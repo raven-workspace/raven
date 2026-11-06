@@ -172,11 +172,11 @@ describe("Arsenal", () => {
     act(() => useArsenalStore.getState().openCard("zz-card"));
     const d = within(await drawer());
     expect(await block(d, "zzfetch http://10.10.14.9/{FILE}")).toBeInTheDocument();
-    await user.type(d.getByRole("textbox", { name: "Value for FILE" }), "a.exe");
+    await user.type(d.getByRole("combobox", { name: "Value for FILE" }), "a.exe");
     expect(await block(d, "zzfetch http://10.10.14.9/a.exe")).toBeInTheDocument();
     expect(await block(d, "zzcopy a.exe C:\\Windows\\Temp")).toBeInTheDocument();
     // The chips edit LHOST too.
-    await user.type(d.getByRole("textbox", { name: "Value for LHOST" }), "10.9.9.9");
+    await user.type(d.getByRole("combobox", { name: "Value for LHOST" }), "10.9.9.9");
     expect(await block(d, "zzprobe 10.10.10.5 from 10.9.9.9")).toBeInTheDocument();
   });
 
@@ -283,7 +283,7 @@ describe("Arsenal", () => {
     await screen.findByRole("tab", { name: "Checklist" });
     act(() => useArsenalStore.getState().openCard("zz-card"));
     const d = within(await drawer());
-    await user.type(await d.findByRole("textbox", { name: "Value for TARGET_IP" }), "1.1.1.1");
+    await user.type(await d.findByRole("combobox", { name: "Value for TARGET_IP" }), "1.1.1.1");
     expect(await block(d, "zzprobe 1.1.1.1 from 10.10.14.9")).toBeInTheDocument();
     act(() => nav.go("/e/e1/h/h2"));
     expect(await block(d, "zzprobe 10.10.10.6 from 10.10.14.9")).toBeInTheDocument();
@@ -394,6 +394,24 @@ describe("full-screen Arsenal uses the engagement you came from (B4)", () => {
     await user.clear(box);
     await user.type(box, "zzprobe");
     expect(await screen.findByText("zzprobe 10.20.0.9 from 10.10.14.9")).toBeInTheDocument();
+  });
+
+  it("a remembered engagement that no longer exists falls back to the most recently active one", async () => {
+    useLastEngagementStore.setState({ engagementId: "gone", hostId: "hx" });
+    mountAt("/arsenal");
+    expect(await screen.findByRole("option", { name: "dc01" })).toBeInTheDocument();
+    expect(screen.getByText("Mock exam A")).toBeInTheDocument();
+    expect(m.engagementGet).not.toHaveBeenCalledWith("gone");
+  });
+
+  it("locking forgets the remembered engagement", async () => {
+    const user = userEvent.setup();
+    mountAt("/e/e2/h/h9");
+    await screen.findByRole("tab", { name: "Checklist" });
+    expect(useLastEngagementStore.getState().engagementId).toBe("e2");
+    m.vaultLock.mockResolvedValue(null);
+    await user.keyboard("{Meta>}l{/Meta}");
+    expect(useLastEngagementStore.getState()).toMatchObject({ engagementId: null, hostId: null });
   });
 
   it("browse fills for the engagement you came from", async () => {
@@ -507,14 +525,14 @@ describe("host picker in the drawer (U3)", () => {
     await screen.findByRole("tab", { name: "Checklist" });
     act(() => useArsenalStore.getState().openCard("zz-card"));
     const d = within(await drawer());
-    await user.type(await d.findByRole("textbox", { name: "Value for FILE" }), "a.exe");
+    await user.type(await d.findByRole("combobox", { name: "Value for FILE" }), "a.exe");
     expect(await block(d, "zzcopy a.exe C:\\Windows\\Temp")).toBeInTheDocument();
     await user.keyboard("{Alt>}h{/Alt}");
     const picker = d.getByRole("combobox", { name: "Fill for host" });
     expect(picker).toHaveFocus();
     await user.selectOptions(picker, "web02");
     expect(await block(d, "zzprobe 10.10.10.6 from 10.10.14.9")).toBeInTheDocument();
-    expect(d.getByRole("textbox", { name: "Value for FILE" })).toHaveValue("");
+    expect(d.getByRole("combobox", { name: "Value for FILE" })).toHaveValue("");
     await user.selectOptions(picker, "No host");
     expect(await block(d, "zzprobe {TARGET_IP} from 10.10.14.9")).toBeInTheDocument();
   });

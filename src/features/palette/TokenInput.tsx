@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent, type Ref } from "react";
+import { useEffect, useId, useState, type KeyboardEvent, type Ref } from "react";
 import { Input } from "../../ui";
 import type { Suggestion } from "./suggest";
 
@@ -17,6 +17,19 @@ export function TokenInput({ name, value, onChange, suggestions, placeholder, cl
   const shown = suggestions.filter((s) => s.value !== value && (!typed || s.value.toLowerCase().includes(typed))).slice(0, 8);
   const expanded = open && shown.length > 0;
 
+  // Esc with the list open closes only the list. Window capture runs before Radix's document-level Esc (which
+  // dismisses the palette unless the event is already defaultPrevented); the drawer skips an expanded combobox.
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      setOpen(false);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [expanded]);
+
   const pick = (s: Suggestion) => {
     onChange(s.value);
     setOpen(false);
@@ -33,10 +46,6 @@ export function TokenInput({ name, value, onChange, suggestions, placeholder, cl
       e.preventDefault();
       e.stopPropagation();
       pick(shown[active]);
-    } else if (e.key === "Escape" && expanded) {
-      e.preventDefault();
-      e.stopPropagation();
-      setOpen(false);
     }
   };
 
@@ -45,9 +54,11 @@ export function TokenInput({ name, value, onChange, suggestions, placeholder, cl
       <Input
         ref={ref}
         mono
+        role="combobox"
         aria-label={`Value for ${name}`}
         aria-autocomplete="list"
-        aria-controls={listId}
+        aria-expanded={expanded}
+        {...(expanded ? { "aria-controls": listId } : {})}
         {...(expanded && shown[active] ? { "aria-activedescendant": `${listId}-${active}` } : {})}
         autoComplete="off"
         className={className}

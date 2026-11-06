@@ -36,12 +36,16 @@ export function useFillScope(): FillScope {
     if (routeEngagement) useLastEngagementStore.setState({ engagementId: routeEngagement, hostId: routeHost });
   }, [routeEngagement, routeHost]);
 
-  const engagements = useQuery({ queryKey: ["engagements"], queryFn: api.engagementsList, enabled: onArsenal && !last.engagementId });
+  const engagements = useQuery({ queryKey: ["engagements"], queryFn: api.engagementsList, enabled: onArsenal });
 
   if (routeEngagement) return { engagementId: routeEngagement, hostId: routeHost, remembered: false };
   if (!onArsenal) return { engagementId: "", hostId: null, remembered: false };
-  if (last.engagementId) return { engagementId: last.engagementId, hostId: last.hostId, remembered: true };
-  const active = (engagements.data ?? [])
+  // Wait for the list, so a remembered engagement that is gone (deleted, or replaced by a restore) is never queried.
+  if (!engagements.data) return { engagementId: "", hostId: null, remembered: true };
+  if (last.engagementId && engagements.data.some((e) => e.id === last.engagementId)) {
+    return { engagementId: last.engagementId, hostId: last.hostId, remembered: true };
+  }
+  const active = engagements.data
     .filter((e) => e.status === "active")
     .sort((a, b) => (b.lastActivityAt ?? b.updatedAt) - (a.lastActivityAt ?? a.updatedAt))[0];
   return { engagementId: active?.id ?? "", hostId: null, remembered: true };

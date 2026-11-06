@@ -67,8 +67,13 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
           {tokens.map((t) => {
             const auto = fillCommand(`{${t}}`, { ...input, overrides: {} });
             return (
-              <label key={t} className={`flex items-center gap-1.5 text-xs ${auto.unresolved.length > 0 && !overrides[t] ? "text-warn" : "text-muted"}`}>
+              <label
+                key={t}
+                {...(auto.dcByName && !overrides[t] ? { title: "DC (by name): no Kerberos/LDAP seen, picked by its host name" } : {})}
+                className={`flex items-center gap-1.5 text-xs ${auto.unresolved.length > 0 && !overrides[t] ? "text-warn" : "text-muted"}`}
+              >
                 {t}
+                {auto.dcByName && !overrides[t] && <span className="text-[11px] text-muted-2">(by name)</span>}
                 <TokenInput
                   name={t}
                   className="h-7 w-36"

@@ -86,13 +86,13 @@ function HashRow({ eid, hash, onCrack }: { eid: string; hash: Credential; onCrac
         <div className="flex flex-col gap-1">
           {cmds.hashcat && (
             <div className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 break-all font-mono text-xs text-fg-2">{shown.hashcat}</code>
+              <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap font-mono text-xs text-fg-2">{shown.hashcat}</code>
               <CopyCommand label="hashcat" text={cmds.hashcat} />
             </div>
           )}
           {cmds.john && (
             <div className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 break-all font-mono text-xs text-fg-2">{cmds.john}</code>
+              <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap font-mono text-xs text-fg-2">{cmds.john}</code>
               <CopyCommand label="john" text={cmds.john} />
             </div>
           )}

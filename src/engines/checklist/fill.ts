@@ -5,7 +5,7 @@ import type { Tunnel } from '../../types/network';
 import type { Service } from '../../types/service';
 import { ipInScope, parseScopeList } from '../parse/scope';
 import { isNtlmHash, isOwnerless } from '../credentials/matrix';
-import { dcForFill, hostFacts, openPorts, serviceNames } from './facts';
+import { dcFillChoice, dcForFill, hostFacts, openPorts, serviceNames } from './facts';
 import type { ChecklistGoal } from './types';
 import { quoteContextAt, shellEscape } from './shellQuote';
 import { resolveTemplate, type SubstitutionContext } from './template';
@@ -89,6 +89,8 @@ export interface FillResult {
   text: string;
   unresolved: string[];
   viaTunnel?: { tunnel: Tunnel; viaHostName: string; down: boolean };
+  /** A DC token was filled from a host picked only by its name (no 88/389 seen): worth a glance. */
+  dcByName?: boolean;
 }
 
 /** True for a valid IPv4 or IPv4 CIDR (surrounding whitespace ignored). */
@@ -215,6 +217,8 @@ export function fillCommand(template: string, input: FillInput, opts: FillOption
 
   const tunnel = tunnelFor(input.host, input.tunnels);
   const result: FillResult = { text, unresolved: unresolved.filter((u) => u !== 'INTERFACE') };
+  const usesDc = ranges.some((r) => r.resolved && ['DC_IP', 'DC-IP', 'DC_HOST'].includes(r.raw.toUpperCase()));
+  if (usesDc && !input.overrides?.DC_IP && dcFillChoice(input.hosts, input.servicesByHost).byName) result.dcByName = true;
   if (tunnel) {
     result.viaTunnel = {
       tunnel,

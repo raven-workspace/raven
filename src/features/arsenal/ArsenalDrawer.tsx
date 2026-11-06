@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useMatch, useNavigate } from "react-router";
 import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
@@ -101,27 +101,25 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
   const showing = query.trim() === "" ? (solo ? "solo" : cardId ? "card" : "results") : "results";
 
   /** From a card (or one command) back to the list. */
-  const back = () => {
+  const back = useCallback(() => {
     setSolo(null);
     useArsenalStore.setState({ cardId: null });
     searchRef.current?.focus();
-  };
-  // Capture phase: Esc reaches the drawer before the screen's own Esc handler. On a card it goes back; on the list it closes.
+  }, []);
+  // Capture phase: Esc reaches the drawer before the screen's own Esc handler. On a card it goes back; on the list it
+  // closes. A field with its suggestion list open keeps this Esc to close just the list.
   const onList = showing === "results";
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented || isDialogOpen()) return;
+      if (document.activeElement?.getAttribute("aria-expanded") === "true") return;
       e.preventDefault();
       if (onList) useArsenalStore.getState().close();
-      else {
-        setSolo(null);
-        useArsenalStore.setState({ cardId: null });
-        searchRef.current?.focus();
-      }
+      else back();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [onList]);
+  }, [onList, back]);
   const index = Math.min(selected, Math.max(0, results.length - 1));
   const onSearchKey = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
