@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { collectLayoutIssues } from "./checks/layout";
 import { collectA11yIssues } from "./checks/a11y";
 import { tabWalk } from "./checks/keyboard";
+import { collectUxIssues } from "./checks/ux";
 import type { RawIssue } from "./types";
 
 const FIXTURE = "file://" + fileURLToPath(new URL("./fixtures/selftest-layout.html", import.meta.url));
@@ -82,4 +83,48 @@ test("tabWalk leaves roving and styled cases alone", async ({ page }) => {
     }
   }
   expect(issues.map((i) => i.check)).not.toContain("focus-trap");
+});
+
+const UX_FIXTURE = "file://" + fileURLToPath(new URL("./fixtures/selftest-ux.html", import.meta.url));
+
+/** Runs the UX collector inside each case's iframe. */
+async function uxCases(page: Page) {
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.goto(UX_FIXTURE);
+  const out: { name: string; expect: string; issues: RawIssue[]; frame: import("@playwright/test").Frame }[] = [];
+  for (const handle of await page.locator("iframe[data-case]").elementHandles()) {
+    const frame = (await handle.contentFrame())!;
+    await frame.waitForLoadState();
+    await frame.evaluate(() => document.fonts.ready);
+    out.push({
+      name: (await handle.getAttribute("data-case"))!,
+      expect: (await handle.getAttribute("data-expect"))!,
+      issues: await frame.evaluate(collectUxIssues),
+      frame,
+    });
+  }
+  return out;
+}
+
+test("ux checks flag each case", async ({ page }) => {
+  const cases = (await uxCases(page)).filter((c) => c.expect !== "none");
+  expect(cases.length).toBeGreaterThan(0);
+  for (const c of cases) {
+    const hits = c.issues.filter((i) => i.check === c.expect);
+    expect(hits.length, `case ${c.name} should be flagged as ${c.expect}`).toBeGreaterThan(0);
+    for (const h of hits) {
+      expect(h.selector, `${c.name} names its element`).not.toBe("");
+      if (h.selector !== "(page)") {
+        expect(await c.frame.locator(h.selector).count(), `${c.name} selector ${h.selector} resolves`).toBeGreaterThan(0);
+      }
+    }
+  }
+});
+
+test("ux checks leave clean cases alone", async ({ page }) => {
+  const cases = (await uxCases(page)).filter((c) => c.expect === "none");
+  expect(cases.length).toBeGreaterThan(0);
+  for (const c of cases) {
+    expect(c.issues, `case ${c.name} should be clean`).toEqual([]);
+  }
 });

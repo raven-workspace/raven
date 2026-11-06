@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { AUDIT_NOW } from "../src/audit/fixtures";
 import { collectLayoutIssues } from "./checks/layout";
 import { collectA11yIssues } from "./checks/a11y";
+import { collectUxIssues } from "./checks/ux";
 import { writeIssues } from "./report";
 import { SCREENS, WIDTHS } from "./screens";
 
@@ -25,7 +26,8 @@ for (const screen of SCREENS) {
       await page.evaluate(() => document.fonts.ready);
       const layout = await page.evaluate(collectLayoutIssues);
       const a11y = await collectA11yIssues(page);
-      await writeIssues(screen.id, width, [...layout, ...a11y]);
+      const ux = await page.evaluate(collectUxIssues);
+      await writeIssues(screen.id, width, [...layout, ...a11y, ...ux]);
       // Raven scrolls inside its own containers: grow the viewport so the shot shows the below-fold content.
       const overflow = await page.evaluate(() => {
         let max = document.documentElement.scrollHeight - window.innerHeight;
