@@ -97,7 +97,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
         </div>
         <div className="flex min-h-0 min-w-0 flex-col">
           <div className="flex items-center justify-between gap-3">
-            <div role="tablist" className="inline-flex gap-0.5 rounded-[var(--radius)] border border-line-2 bg-surface p-0.5">
+            <div role="tablist" className="inline-flex gap-0.5 gap-x-2 min-w-3/4 rounded-[var(--radius)] p-0.5">
               {TABS.map((t) => (
                 <button
                   key={t.id}
@@ -108,8 +108,8 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
                     setTab(t.id);
                     setFocusGoal(undefined);
                   }}
-                  className={`h-7 cursor-default rounded-[var(--radius-sm)] px-3 text-[13px] ${
-                    tab === t.id ? "bg-surface-hi text-fg shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-muted hover:text-fg"
+                  className={`h-7 cursor-default rounded-[var(--radius-sm)] px-3 text-[13px] uppercase ${
+                    tab === t.id ? "bg-surface-hi text-fg shadow-[inset_0_-2px_0_var(--color-accent)] font-semibold" : "text-muted hover:text-fg"
                   }`}
                 >
                   {t.label}
