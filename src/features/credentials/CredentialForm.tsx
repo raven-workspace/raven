@@ -4,6 +4,7 @@ import {
   findDuplicateCredential,
   identifyHash,
   defaultHashType,
+  parseCredentialPaste,
   usernameKey,
 } from "../../engines/credentials";
 import type { Credential, CredentialInput, CredentialScope, CredentialType } from "../../types/credentials";
@@ -159,7 +160,23 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose }: {
         {!ownerless && (
           <div className="grid grid-cols-2 gap-3">
             <Field label="Username" error={errors.username}>
-              <Input autoFocus mono value={username} onChange={(e) => setUsername(e.target.value)} placeholder={mode === "username" ? "CORP\\jsmith" : "jsmith"} />
+              <Input
+                autoFocus
+                mono
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                onPaste={(e) => {
+                  // A pasted user:pass line fills the whole credential; anything else pastes as text.
+                  const parsed = parseCredentialPaste(e.clipboardData.getData("text"));
+                  if (!parsed) return;
+                  e.preventDefault();
+                  setUsername(parsed.username);
+                  setDomain(parsed.domain ?? "");
+                  setSecret(parsed.secret);
+                  setType(parsed.type);
+                }}
+                placeholder={mode === "username" ? "CORP\\jsmith" : "jsmith"}
+              />
             </Field>
             <Field label="Domain">
               <Input mono value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="CORP" />

@@ -6,4 +6,5 @@ export * from "./hashes";
 export * from "./labels";
 export * from "./nxc";
 export * from "./intake";
+export * from "./paste";
 export * from "./state";
