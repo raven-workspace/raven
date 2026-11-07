@@ -1,3 +1,4 @@
+import { withCategory } from '../categories';
 import type { CommandMatcher, LibraryCommand } from '../types';
 import { EMPTY_PASS, NULL_USER, NXC_LDAP, NXC_MSSQL, NXC_SMB, impacket } from './patterns';
 
@@ -9,7 +10,7 @@ const NXC_SMB_NULL_EXAMPLES = {
   miss: ["nxc smb 10.0.0.5 -u 'jace' -p 'Pw1!' --shares", "nxc ldap 10.0.0.5 -u '' -p ''", 'nxc smb 10.0.0.5'],
 };
 
-export const ENUM_SERVICE_COMMANDS: LibraryCommand[] = [
+const COMMANDS: LibraryCommand[] = [
   // ---------------------------------------------------------------- SMB
   {
     id: 'enum-smb-nxc-null',
@@ -593,3 +594,5 @@ export const ENUM_SERVICE_COMMANDS: LibraryCommand[] = [
     source: 'oscp-notes',
   },
 ];
+
+export const ENUM_SERVICE_COMMANDS: LibraryCommand[] = withCategory(COMMANDS, 'Enumeration');

@@ -1,3 +1,4 @@
+import { withCategory } from '../categories';
 import type { LibraryCommand } from '../types';
 
 /**
@@ -8,7 +9,7 @@ import type { LibraryCommand } from '../types';
  * stuck check. Listener preference: penelope > nc.
  */
 
-export const FOOTHOLD_COMMANDS: LibraryCommand[] = [
+const COMMANDS: LibraryCommand[] = [
   // ---------------------------------------------------------------- log in with a credential
   {
     id: 'shell-psexec',
@@ -504,3 +505,8 @@ export const FOOTHOLD_COMMANDS: LibraryCommand[] = [
     source: 'oscp-notes',
   },
 ];
+
+export const FOOTHOLD_COMMANDS: LibraryCommand[] = withCategory(COMMANDS, 'Exploitation', {
+  'Shells-and-Transfers': ['shell-msfvenom-exe', 'shell-msfvenom-elf', 'shell-msfvenom-aspx', 'shell-powershell-rev', 'shell-nc-exe', 'shell-bash-rev', 'shell-mkfifo-nc', 'shell-python-rev', 'shell-php-rev', 'foot-serve-payload', 'foot-fetch-payload-win', 'foot-fetch-payload-lin', 'shell-penelope', 'shell-nc-listener', 'shell-multi-handler', 'stab-python-pty', 'stab-script', 'stab-conpty-listener', 'stab-conptyshell', 'stab-rlwrap'],
+  'Password-Attacks': ['foot-nxc-spray', 'foot-nxc-user-as-pass', 'enum-remote-hydra-ssh'],
+});

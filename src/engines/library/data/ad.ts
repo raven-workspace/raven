@@ -1,3 +1,4 @@
+import { withCategory } from '../categories';
 import type { CommandMatcher, LibraryCommand } from '../types';
 import { EMPTY_PASS, NULL_USER, NXC_LDAP, NXC_SMB, exe, impacket } from './patterns';
 
@@ -10,7 +11,7 @@ import { EMPTY_PASS, NULL_USER, NXC_LDAP, NXC_SMB, exe, impacket } from './patte
 const NXC = ['nxc', 'netexec'];
 const NXC_SMB_NULL: CommandMatcher = { bins: NXC, all: [NXC_SMB, NULL_USER, EMPTY_PASS] };
 
-export const AD_NOCREDS_DA_COMMANDS: LibraryCommand[] = [
+const COMMANDS: LibraryCommand[] = [
   // ---------------------------------------------------------------- null SMB
   {
     id: 'ad-nocreds-smb-null',
@@ -438,3 +439,7 @@ export const AD_NOCREDS_DA_COMMANDS: LibraryCommand[] = [
     source: 'oscp-notes',
   },
 ];
+
+export const AD_NOCREDS_DA_COMMANDS: LibraryCommand[] = withCategory(COMMANDS, 'Active-Directory', {
+  'Password-Attacks': ['ad-nocreds-asrep-crack', 'ad-nocreds-spray-user-as-pass', 'ad-nocreds-spray-season', 'ad-nocreds-kerbrute-spray'],
+});

@@ -1,3 +1,4 @@
+import { withCategory } from '../categories';
 import type { LibraryCommand } from '../types';
 import { NMAP_UDP } from './patterns';
 
@@ -5,7 +6,7 @@ import { NMAP_UDP } from './patterns';
 
 const FULL_TCP_MISSES = ['nmap -sC -sV 10.0.0.5', 'nmap --top-ports 1000 10.0.0.5'];
 
-export const ENUM_COMMANDS: LibraryCommand[] = [
+const COMMANDS: LibraryCommand[] = [
   // ---------------------------------------------------------------- full TCP
   {
     id: 'enum-nmap-full-tcp',
@@ -204,3 +205,5 @@ export const ENUM_COMMANDS: LibraryCommand[] = [
     source: 'raven',
   },
 ];
+
+export const ENUM_COMMANDS: LibraryCommand[] = withCategory(COMMANDS, 'Enumeration');

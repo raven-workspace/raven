@@ -527,8 +527,8 @@ describe("drawer list grouped by category (U1)", () => {
     const d = within(await drawer());
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "qx");
     const groups = d.getAllByRole("group").map((g) => g.getAttribute("aria-label"));
-    expect(groups).toEqual(["Shells and Transfers", "Zz Cat", "Zz Other Cat"]);
-    expect(d.getByRole("heading", { name: "Shells and Transfers" })).toBeInTheDocument();
+    expect(groups).toEqual(["Shells & transfers", "Zz Cat", "Zz Other Cat"]);
+    expect(d.getByRole("heading", { name: "Shells & transfers" })).toBeInTheDocument();
     const zz = within(d.getByRole("group", { name: "Zz Cat" }));
     expect(zz.getAllByRole("option").map((o) => o.textContent)).toEqual(["Qx alphacard", "Qx alpha twocard"]);
     // ↓ crosses from one group into the next.

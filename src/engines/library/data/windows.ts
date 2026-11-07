@@ -1,3 +1,4 @@
+import { withCategory } from '../categories';
 import type { LibraryCommand } from '../types';
 import { exe } from './patterns';
 
@@ -9,7 +10,7 @@ import { exe } from './patterns';
 
 const WHOAMI = exe('whoami');
 
-export const WINDOWS_COMMANDS: LibraryCommand[] = [
+const COMMANDS: LibraryCommand[] = [
   // ---------------------------------------------------------------- orient
   {
     id: 'orient-whoami-all',
@@ -494,3 +495,5 @@ export const WINDOWS_COMMANDS: LibraryCommand[] = [
     source: 'oscp-notes',
   },
 ];
+
+export const WINDOWS_COMMANDS: LibraryCommand[] = withCategory(COMMANDS, 'PrivEsc-Windows');

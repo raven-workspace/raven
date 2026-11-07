@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useMatch, useNavigate } from "react-router";
+import { categoryLabel } from "../../engines/library/categories";
 import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
@@ -20,8 +21,8 @@ export interface ResultGroup {
   results: PaletteResult[];
 }
 
-/** `Shells-and-Transfers` → `Shells and Transfers`. */
-export const categoryLabel = (category: string): string => category.replace(/[-_]+/g, " ").trim() || "Other";
+/** Moved to engines/library/categories; re-exported until the drawer goes. */
+export { categoryLabel };
 
 /**
  * Cards and commands only, filtered by the exam rules of the engagement in view. Cards are grouped by category
