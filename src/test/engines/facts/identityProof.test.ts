@@ -72,3 +72,28 @@ describe("parseIdentity on chains led by whoami / id", () => {
     expect(usableIdentity({ command: "whoami & hostname", output: "'whoami' is not recognized as an internal or external command" })).toBeNull();
   });
 });
+
+describe("Kali shell blocks", () => {
+  const KALI_HDR = "┌──(kali㉿kali)-[~]\n└─# ";
+  it("a root prompt under a Kali header with Ran on blank yields no identity", () => {
+    const e = flag(`${KALI_HDR}id\nuid=0(root) gid=0(root) groups=0(root)\n${KALI_HDR}cat /root/proof.txt\n918eef4c77a6e2903e0a3f4ff8554182`, "");
+    expect(identityBlocksOf(e).some((b) => b.shell === "kali@kali")).toBe(true);
+    expect(usernames(e, VEGA)).toEqual([]);
+  });
+  it("Windows-only whoami /all under a Kali shell is rejected too", () => {
+    const out = "USER INFORMATION\n----------------\n\nUser Name  SID\n========== ====\nonyx\\administrator S-1-5-21";
+    const e = flag(`${KALI_HDR}whoami /all\n${out}`, "");
+    expect(usernames(e, ONYX)).toEqual([]);
+  });
+  it("identityBlocksOf does not mutate a deep-frozen flag entry", () => {
+    const e = flag(AERO_PROOF, "Vega");
+    Object.freeze(e.content);
+    Object.freeze(e);
+    expect(() => identityBlocksOf(e)).not.toThrow();
+    expect(e.content.kind === "flag" && e.content.proof).toBe(AERO_PROOF);
+  });
+  it("a cat'ed file with a literal `# whoami` line is read as a prompt: its following text becomes whoami output (current behaviour)", () => {
+    const proof = "# cat notes.txt\n# whoami\nnot-a-user\n# cat /root/proof.txt\n918eef4c77a6e2903e0a3f4ff8554182";
+    expect(usernames(flag(proof, "Vega"), VEGA)).toEqual(["not-a-user"]);
+  });
+});

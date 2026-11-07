@@ -212,6 +212,8 @@ export function isIdentityEntryFor(entry: LogEntry, host: Host): boolean {
  */
 export function isIdentityBlockFor(entry: LogEntry, host: Host, block: Pick<CommandBlock, "command"> & Partial<CommandBlock>): boolean {
   if (!isIdentityEntryFor(entry, host)) return false;
+  // A block that ran in an attacker (Kali) shell never speaks for the target, whatever its command or Ran on.
+  if (block.shell && isKaliLabel(block.shell)) return false;
   const cmd = normalizeCommand(block.command);
   if (WINDOWS_ONLY.has(cmd) && (host.os === "windows" || host.os == null)) return true;
   if ((block.shell && TARGET_SHELLS.has(block.shell)) || LEADING_PROMPT.test(block.command.trim())) return true;
