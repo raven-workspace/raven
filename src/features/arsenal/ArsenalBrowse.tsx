@@ -1,133 +1,342 @@
-import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router";
-import { filterForKind, HOST_STAGES } from "../../engines/checklist";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useSearchParams } from "react-router";
+import { filterForKind } from "../../engines/checklist";
+import { searchArsenal, type ArsenalHit } from "../../engines/library/arsenalSearch";
+import { allCategories, categoryLabel, categoryOf } from "../../engines/library/categories";
 import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/store";
-import { useEscapeTo } from "../../lib/keys";
 import { cx } from "../../lib/cx";
-import { labelClass } from "../../ui";
+import { isDialogOpen, isTypingTarget, useEscapeTo, useKeydown } from "../../lib/keys";
+import { Button } from "../../ui";
+import { useCredPickStore } from "../checklist/credPick";
 import { useFillBase } from "../palette/fillData";
 import { GENERATORS } from "../palette/generators";
 import { TransferGenerator } from "../generators/TransferGenerator";
-import { CardView } from "./CardView";
-import { HostChip } from "./HostChip";
-import { useArsenalStore } from "./useArsenalStore";
+import { browseList, type BrowseSection } from "./browseList";
+import { CardView, CommandPane } from "./CardView";
+import { CredChip, isCredPickKey } from "./CredChip";
+import type { CredChipHandle } from "./CredChip";
+import { HostChip, isHostPickKey } from "./HostChip";
+import type { HostChipHandle } from "./HostChip";
+import { ResultList } from "./ResultList";
+import type { ResultGroup, ResultRow } from "./ResultList";
+import { SearchBar } from "./SearchBar";
 import { ON } from "./styles";
+import { useArsenalStore } from "./useArsenalStore";
 import { useFillScope, useLastEngagementStore } from "./useFillScope";
 
+type Row = ResultRow & { hit: ArsenalHit };
+type Kind = "card" | "command" | "generator";
+type Pick = { kind: Kind; id: string };
 
+const hitRow = (hit: ArsenalHit, searching: boolean): Row => ({
+  hit, id: `browse-${hit.type}-${hit.id}`, title: hit.title,
+  tag: searching ? (hit.type === "command" ? hit.command.tool : hit.type) : hit.type === "generator" ? "generator" : "",
+  mono: searching && hit.type === "command",
+});
+const sameHit = (h: ArsenalHit, p: Pick | null): boolean => p !== null && h.type === p.kind && h.id === p.id;
+const hitCategory = (h: ArsenalHit, cards: ReturnType<typeof getCards>): string =>
+  h.type === "card" ? h.card.category : h.type === "generator" ? h.category : categoryOf(h.command, cards);
+const SEARCH_ID = "arsenal-search";
+const READING_ID = "arsenal-reading";
 
-/** A filter (aria-pressed) or the open card (aria-current): the selected one carries the accent. */
-function FilterButton({ on, onClick, current, children }: { on: boolean; onClick: () => void; current?: boolean; children: string }) {
-  return (
-    <button
-      type="button"
-      {...(current ? { "aria-current": on ? "true" : undefined } : { "aria-pressed": on })}
-      onClick={onClick}
-      className={cx("w-full cursor-default rounded-sm px-2 py-0.5 text-left text-[13px]", on ? ON : "text-fg-2 hover:bg-surface-2")}
-    >
-      {children}
-    </button>
-  );
-}
-
-/** `/arsenal`: every card by stage and category, and one card in full. No host until one is picked from the active engagement. */
+/** `/arsenal`: categories | the category's list | the open item in full. Fills for the engagement and host you came from. */
 export function ArsenalBrowse() {
-  useEscapeTo("/");
   const version = useLibraryVersion();
-  const cardId = useArsenalStore((s) => s.cardId);
-  const [params, setParams] = useSearchParams();
-  // `?generator=<id>` opens that generator in place of a card (the palette and the Generators list link here).
-  const generatorId = GENERATORS.find((g) => g.id === params.get("generator"))?.id ?? null;
-  const [stage, setStage] = useState<string | null>(null);
-  const [category, setCategory] = useState<string | null>(null);
-  const [overrides, setOverrides] = useState<Record<string, string>>({});
-  // The engagement (and host) you came from; picking a host here is remembered for ⌘K too.
+  const [params] = useSearchParams();
+  const [query, setQuery] = useState("");
   const { engagementId, hostId } = useFillScope();
   const setHostId = (id: string | null) => useLastEngagementStore.setState({ engagementId: engagementId || null, hostId: id });
-  const { d, host, examReady } = useFillBase(engagementId, hostId);
+  const { d, host, cred, credOwnerId, examReady } = useFillBase(engagementId, hostId);
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const hostRef = useRef<HostChipHandle>(null);
+  const credRef = useRef<CredChipHandle>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const readingRef = useRef<HTMLElement>(null);
+  const catsRef = useRef<HTMLDivElement>(null);
+  // A category picked by arrow keeps focus on its button once the list has re-rendered.
+  const focusAfter = useRef<string | null>(null);
+  useEffect(() => {
+    if (focusAfter.current === null) return;
+    catsRef.current?.querySelector<HTMLElement>(`button[data-category="${focusAfter.current}"]`)?.focus();
+    focusAfter.current = null;
+  });
 
-  // getLibrary()/getCards() change only with the library version.
+  const [category, setCategory] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Pick | null>(() => {
+    const generator = GENERATORS.find((g) => g.id === params.get("generator"));
+    if (generator) return { kind: "generator", id: generator.id };
+    const { cardId, lastRead } = useArsenalStore.getState();
+    return cardId ? { kind: "card", id: cardId } : lastRead;
+  });
+
+  useKeydown((e) => {
+    if (!engagementId || e.defaultPrevented || isDialogOpen()) return;
+    if (isHostPickKey(e)) {
+      e.preventDefault();
+      hostRef.current?.open();
+    } else if (isCredPickKey(e)) {
+      e.preventDefault();
+      credRef.current?.open();
+    } else if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey && !isTypingTarget(e.target)) {
+      e.preventDefault();
+      searchRef.current?.focus();
+    }
+  });
+
+  // What the exam rules leave: until they are known, nothing at all (fail closed).
   /* eslint-disable react-hooks/exhaustive-deps */
-  const cards = useMemo(() => {
+  const { cards, library } = useMemo(() => {
+    if (!examReady) return { cards: [], library: [] };
     const kind = d.engagement?.kind;
-    // Fail closed: no cards until the engagement's exam rules are known.
-    if (!examReady) return [];
-    return getCards().filter((c) => {
-      if (kind) {
+    const scope = { hostId: host?.id ?? "", msfHostId: d.engagement?.msfHostId ?? null };
+    const all = getLibrary();
+    return {
+      library: kind ? filterForKind(all, kind, scope).shown : all,
+      cards: getCards().filter((c) => {
+        if (!kind) return true;
         // A card whose every command the exam bans has nothing to show.
-        const cmds = getLibrary().filter((x) => x.cardId === c.id);
-        if (cmds.length > 0 && filterForKind(cmds, kind, { hostId: host?.id ?? "", msfHostId: d.engagement?.msfHostId ?? null }).shown.length === 0) return false;
-      }
-      return true;
-    });
+        const cmds = all.filter((x) => x.cardId === c.id);
+        return cmds.length === 0 || filterForKind(cmds, kind, scope).shown.length > 0;
+      }),
+    };
   }, [d.engagement, examReady, host, version]);
+  const lists = useMemo(() => {
+    const out = new Map<string, BrowseSection[]>();
+    for (const c of allCategories(cards)) {
+      const sections = browseList(c, library, cards, examReady ? GENERATORS : []);
+      if (sections.length > 0) out.set(c, sections);
+    }
+    return out;
+  }, [cards, library, examReady]);
+  const groups = useMemo(
+    () =>
+      examReady && query.trim() !== ""
+        ? searchArsenal(query, {
+            library: getLibrary(), cards: getCards(), generators: GENERATORS,
+            ...(d.engagement ? { exam: { kind: d.engagement.kind, hostId: host?.id ?? "", msfHostId: d.engagement.msfHostId } } : {}),
+          })
+        : [],
+    [query, host, d.engagement, examReady, version],
+  );
   /* eslint-enable react-hooks/exhaustive-deps */
-  const categories = [...new Set(cards.map((c) => c.category))].sort();
-  const shown = cards.filter((c) => (!stage || c.stage === stage) && (!category || c.category === category));
+  const searching = query.trim() !== "";
+
+  const counts = new Map<string, number>([...lists].map(([c, s]) => [c, s.reduce((n, x) => n + x.rows.length, 0)]));
+  const visible = [...counts.keys()];
+  const hits = new Map(groups.map((g) => [g.category, g.hits.length]));
+
+  // Which category pane 2 lists: the one picked, else the open item's, else the first.
+  const selectedCategory = (() => {
+    if (!selected) return null;
+    if (selected.kind === "card") return cards.find((c) => c.id === selected.id)?.category ?? null;
+    if (selected.kind === "generator") return GENERATORS.find((g) => g.id === selected.id)?.category ?? null;
+    const c = library.find((x) => x.id === selected.id);
+    return c ? categoryOf(c, cards) : null;
+  })();
+  const current = [category, selectedCategory].find((c): c is string => c !== null && visible.includes(c)) ?? visible[0] ?? null;
+
+  const resultGroups: ResultGroup<Row>[] = searching
+    ? groups.map((g) => ({ key: g.category, label: g.label, rows: g.hits.map((h) => hitRow(h, true)) }))
+    : (lists.get(current ?? "") ?? []).map((s, i) => ({
+        key: s.heading ?? `top${i}`, ...(s.heading === null ? {} : { label: s.heading }), rows: s.rows.map((h) => hitRow(h, false)),
+      }));
+  const rows = resultGroups.flatMap((g) => g.rows);
+  const found = rows.findIndex((r) => sameHit(r.hit, selected));
+  const index = found >= 0 ? found : 0;
+  const open = rows[index]?.hit ?? null;
+
+  const pick = (hit: ArsenalHit) => {
+    const next = { kind: hit.type, id: hit.id };
+    setSelected(next);
+    useArsenalStore.setState({ lastRead: next, cardId: hit.type === "card" ? hit.id : null });
+  };
+  const clearSearch = () => {
+    // The category of what was open stays listed.
+    if (open) setCategory(hitCategory(open, getCards()));
+    setQuery("");
+  };
+  // Esc clears a typed search first; registered before the leave-Esc, which then sees it handled.
+  useKeydown((e) => {
+    if (e.key !== "Escape" || e.defaultPrevented || isDialogOpen() || query === "") return;
+    e.preventDefault();
+    clearSearch();
+  });
+  useEscapeTo("/");
+  const openCategory = (c: string, move: boolean) => {
+    setCategory(c);
+    setQuery("");
+    const first = lists.get(c)?.[0]?.rows[0];
+    if (first) pick(first);
+    if (move) listRef.current?.focus();
+  };
+  const fromCard = (cardId: string) => {
+    const card = cards.find((c) => c.id === cardId);
+    if (!card) return;
+    setQuery("");
+    setCategory(card.category);
+    pick({ type: "card", id: card.id, title: card.title, card });
+  };
+
+  const focusReading = () => (readingRef.current?.querySelector<HTMLElement>("[data-block]") ?? readingRef.current)?.focus();
+  const focusCategory = () => catsRef.current?.querySelector<HTMLElement>('button[tabindex="0"]')?.focus();
+  const modified = (e: ReactKeyboardEvent) => e.metaKey || e.ctrlKey || e.altKey || e.nativeEvent.isComposing;
+
+  const onSearchKey = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (modified(e)) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      listRef.current?.focus();
+    } else if (e.key === "Enter" && open) {
+      e.preventDefault();
+      focusReading();
+    }
+  };
+  const onCategoryKey = (e: ReactKeyboardEvent<HTMLElement>) => {
+    if (modified(e)) return;
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      listRef.current?.focus();
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const at = visible.indexOf(current ?? "");
+      const next = visible[Math.max(0, Math.min(visible.length - 1, at + (e.key === "ArrowDown" ? 1 : -1)))];
+      if (!next) return;
+      // While searching the arrows only move; Enter or a click picks (and ends the search).
+      if (searching) {
+        const buttons = [...(catsRef.current?.querySelectorAll<HTMLElement>("button") ?? [])];
+        buttons[visible.indexOf(next)]?.focus();
+      } else {
+        openCategory(next, false);
+        focusAfter.current = next;
+      }
+    }
+  };
+  const onListKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (modified(e)) return;
+    if (e.key === "/" || e.key === "a" || e.key === "A") {
+      e.preventDefault();
+      searchRef.current?.focus();
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const next = rows[Math.max(0, Math.min(rows.length - 1, index + (e.key === "ArrowDown" ? 1 : -1)))];
+      if (next) pick(next.hit);
+      requestAnimationFrame(() => listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: "nearest" }));
+    } else if (e.key === "ArrowRight" || e.key === "Enter") {
+      e.preventDefault();
+      focusReading();
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      focusCategory();
+    }
+  };
+  const onReadingKey = (e: ReactKeyboardEvent<HTMLElement>) => {
+    if (modified(e) || e.defaultPrevented || isTypingTarget(e.target) || e.key !== "ArrowLeft") return;
+    e.preventDefault();
+    listRef.current?.focus();
+  };
+
+  const focusCred = () => credRef.current?.focus();
+  const reading = (() => {
+    if (!open) return null;
+    const common = { engagementId, hostId, overrides, onOverrides: setOverrides, focusCred, autoFocus: false };
+    if (open.type === "generator") return open.id === "transfer" ? <TransferGenerator key={`${engagementId}`} engagementId={engagementId} hostId={hostId} /> : null;
+    if (open.type === "card") return <CardView key={open.id} cardId={open.id} {...common} />;
+    const c = open.command;
+    const card = c.cardId ? cards.find((k) => k.id === c.cardId) : undefined;
+    return (
+      <article aria-label={c.title} className="grid grid-cols-[minmax(0,1fr)] gap-3">
+        <header className="grid gap-0.5">
+          <h2 className="m-0 text-[15px] font-semibold text-fg">{c.title}</h2>
+          <p className="m-0 text-xs text-muted"><span className="font-mono">{c.tool}</span> · {categoryLabel(categoryOf(c, cards))}</p>
+        </header>
+        <CommandPane key={c.id} commands={[c]} {...common} />
+        {card && (
+          <div className="grid justify-items-start">
+            <Button size="sm" onClick={() => fromCard(card.id)}>From card {card.title}</Button>
+          </div>
+        )}
+      </article>
+    );
+  })();
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[280px_1fr] gap-6 px-6 py-5">
-      <nav aria-label="Arsenal" className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
-        {d.engagement && <p className="m-0 truncate text-xs text-fg-2">{d.engagement.name}</p>}
-        <div className="grid grid-cols-[auto_1fr] items-center justify-items-start gap-2 text-xs text-muted">
-          Host
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 px-6 py-5">
+      <header className="grid grid-cols-[minmax(200px,320px)_minmax(0,1fr)] items-center gap-x-4 gap-y-2">
+        <SearchBar
+          label="Search the Arsenal" id={SEARCH_ID} inputRef={searchRef} placeholder="Search cards and commands" trailing={null}
+          value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onSearchKey}
+        />
+        <div className="grid grid-flow-col items-center justify-start gap-3 text-xs text-muted">
+          {d.engagement && <span className="min-w-0 max-w-48 truncate text-fg-2">{d.engagement.name}</span>}
           {engagementId ? (
-            <HostChip
-              align="start"
-              hosts={d.hosts}
-              value={host?.id ?? null}
-              onChange={(id) => {
-                setHostId(id);
-                setOverrides({});
-              }}
-            />
+            <>
+              <HostChip
+                ref={hostRef} align="start" hosts={d.hosts} value={host?.id ?? null} className="max-w-64"
+                onChange={(id) => {
+                  setHostId(id);
+                  setOverrides({});
+                }}
+              />
+              <CredChip
+                ref={credRef} align="start" credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred}
+                onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} className="max-w-72"
+              />
+            </>
           ) : (
             <span>no active engagement</span>
           )}
         </div>
-        <section className="flex flex-col gap-1" aria-label="Stage">
-          <h2 className={`${labelClass} m-0`}>Stage</h2>
-          <FilterButton on={stage === null} onClick={() => setStage(null)}>All</FilterButton>
-          {HOST_STAGES.map((s) => (
-            <FilterButton key={s.id} on={stage === s.id} onClick={() => setStage(stage === s.id ? null : s.id)}>{s.title}</FilterButton>
-          ))}
+      </header>
+      <div className="grid min-h-0 grid-cols-[minmax(220px,260px)_minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-x-5 gap-y-3 min-[1100px]:grid-cols-[minmax(150px,180px)_minmax(220px,260px)_minmax(0,1fr)] min-[1100px]:grid-rows-[minmax(0,1fr)]">
+        <nav aria-label="Categories" className="col-start-1 row-start-1 min-h-0 min-[1100px]:overflow-y-auto">
+          <select
+            aria-label="Category" value={current ?? ""} onChange={(e) => openCategory(e.target.value, false)}
+            className="h-8 w-full rounded-sm border border-line-2 bg-bg px-2 text-[13px] text-fg-2 min-[1100px]:hidden"
+          >
+            {visible.map((c) => (
+              <option key={c} value={c}>{categoryLabel(c)} ({searching ? (hits.get(c) ?? 0) : counts.get(c)})</option>
+            ))}
+          </select>
+          <div ref={catsRef} onKeyDown={onCategoryKey} className="hidden gap-0.5 min-[1100px]:grid">
+            {visible.map((c) => {
+              const n = searching ? (hits.get(c) ?? 0) : (counts.get(c) ?? 0);
+              const on = c === current;
+              return (
+                <button
+                  key={c} type="button" data-category={c} data-dim={searching && n === 0 ? "true" : undefined}
+                  tabIndex={on ? 0 : -1} aria-current={on ? "true" : undefined} onClick={() => openCategory(c, true)}
+                  className={cx(
+                    "grid w-full cursor-default grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-sm border-0 bg-transparent px-2 py-1 text-left text-[13px]",
+                    on ? ON : "text-fg-2 hover:bg-surface-2", searching && n === 0 && "opacity-40",
+                  )}
+                >
+                  <span className="truncate">{categoryLabel(c)}</span>
+                  <span className="text-[11px] text-muted">{n}</span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+        <div className="col-start-1 row-start-2 min-h-0 overflow-y-auto min-[1100px]:col-start-2 min-[1100px]:row-start-1">
+          {examReady && rows.length === 0 && <p className="m-0 px-2 py-1 text-xs text-muted">Nothing matches</p>}
+          <ResultList
+            id="arsenal-results" label="Arsenal results" groups={resultGroups} selected={index} onSelect={() => {}}
+            onActivate={(r) => {
+              pick(r.hit);
+              listRef.current?.focus();
+            }}
+            listRef={listRef}
+            listProps={{ tabIndex: 0, onKeyDown: onListKey, "aria-activedescendant": rows[index]?.id }}
+          />
+        </div>
+        <section
+          id={READING_ID} ref={readingRef} tabIndex={-1} aria-label="Reading" onKeyDown={onReadingKey}
+          className="min-h-0 overflow-y-auto outline-none min-[1100px]:col-start-3 max-[1099px]:col-start-2 max-[1099px]:row-span-2 max-[1099px]:row-start-1"
+        >
+          {reading}
         </section>
-        <section className="flex flex-col gap-1" aria-label="Category">
-          <h2 className={`${labelClass} m-0`}>Category</h2>
-          <FilterButton on={category === null} onClick={() => setCategory(null)}>All</FilterButton>
-          {categories.map((c) => (
-            <FilterButton key={c} on={category === c} onClick={() => setCategory(category === c ? null : c)}>{c}</FilterButton>
-          ))}
-        </section>
-        <section className="flex flex-col gap-1" aria-label="Generators">
-          <h2 className={`${labelClass} m-0`}>Generators</h2>
-          {GENERATORS.length === 0 && <p className="m-0 px-2 text-xs text-muted">None yet</p>}
-          {GENERATORS.map((g) => (
-            <Link key={g.id} to={`/arsenal?generator=${encodeURIComponent(g.id)}`} aria-current={generatorId === g.id ? "true" : undefined} className={cx("rounded-sm px-2 text-[13px] underline decoration-line-2 underline-offset-2 hover:text-accent", generatorId === g.id ? "text-accent" : "text-fg-2")}>
-              {g.title} ↗
-            </Link>
-          ))}
-        </section>
-        <section className="flex flex-col gap-1" aria-label="Cards">
-          <h2 className={`${labelClass} m-0`}>Cards</h2>
-          {shown.length === 0 && <p className="m-0 px-2 text-xs text-muted">No cards match</p>}
-          {shown.map((c) => (
-            <FilterButton key={c.id} current on={!generatorId && cardId === c.id} onClick={() => {
-              setParams({}, { replace: true });
-              useArsenalStore.setState({ cardId: c.id });
-            }}>{c.title}</FilterButton>
-          ))}
-        </section>
-      </nav>
-      <main id="arsenal-browse" tabIndex={-1} className="min-h-0 overflow-y-auto outline-none">
-        {generatorId === "transfer" ? (
-          <TransferGenerator key={`${engagementId}`} engagementId={engagementId} hostId={hostId} />
-        ) : cardId ? (
-          <CardView key={cardId} cardId={cardId} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} />
-        ) : (
-          <p className="m-0 text-[13px] text-muted">Pick a card.</p>
-        )}
-      </main>
+      </div>
     </div>
   );
 }

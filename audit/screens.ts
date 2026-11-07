@@ -128,11 +128,11 @@ export const SCREENS: Screen[] = [
       await page.locator("input[aria-label='Search the Arsenal']").fill("kerberos");
     },
   },
-  { id: "arsenal-browse", path: "/arsenal", ready: "nav[aria-label='Arsenal']" },
+  { id: "arsenal-browse", path: "/arsenal", ready: "nav[aria-label='Categories']" },
   {
     id: "transfer-generator", path: "/arsenal", ready: "role=region[name='Transfer a file']",
     setup: async (page) => {
-      await page.getByRole("link", { name: "Transfer a file" }).click();
+      await page.getByRole("option", { name: /Transfer a file/ }).click();
       const host = page.getByRole("combobox", { name: "Host", exact: true });
       await host.waitFor();
       await host.selectOption(AUDIT_IDS.webHost);

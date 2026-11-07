@@ -195,20 +195,14 @@ describe("Arsenal", () => {
     expect(also.queryByText(/zzprobe/)).not.toBeInTheDocument();
   });
 
-  it("browse filters by stage and category", async () => {
+  it("browse picks a category, opens its card, and fills for a host picked here", async () => {
     const user = userEvent.setup();
     mount("/arsenal");
-    const cards = within(await screen.findByRole("region", { name: "Cards" }));
-    // Cards appear once the engagement's exam rules are known.
-    expect(await cards.findByRole("button", { name: "Zz Card" })).toBeInTheDocument();
-    expect(cards.getByRole("button", { name: "Zz Other" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Reporting" }));
-    expect(cards.queryByRole("button", { name: "Zz Card" })).not.toBeInTheDocument();
-    expect(cards.getByRole("button", { name: "Zz Other" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Reporting" }));
-    await user.click(screen.getByRole("button", { name: "Zz-Cat" }));
-    expect(cards.queryByRole("button", { name: "Zz Other" })).not.toBeInTheDocument();
-    await user.click(cards.getByRole("button", { name: "Zz Card" }));
+    const cats = within(await screen.findByRole("navigation", { name: "Categories" }));
+    await user.click(await cats.findByRole("button", { name: /^Zz Cat/ }));
+    const list = within(screen.getByRole("listbox", { name: "Arsenal results" }));
+    expect(list.getAllByRole("option")).toHaveLength(1);
+    expect(list.queryByRole("option", { name: /Zz Other/ })).not.toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
     // No host until one is picked.
     expect(await block(screen, "zzprobe {TARGET_IP} from 10.10.14.9")).toBeInTheDocument();
@@ -263,11 +257,14 @@ describe("Arsenal", () => {
     useArsenalStore.setState({ cardId: "zz-card" });
     mount("/arsenal", EXAM);
     m.engagementGet.mockImplementation(() => new Promise<Engagement>((r) => (release = r)));
-    expect(await screen.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
     await screen.findByRole("button", { name: "Fill for host: dc01" });
+    // Not even categories or cards until the exam rules are known.
+    expect(screen.queryByRole("heading", { name: "Zz Card" })).not.toBeInTheDocument();
+    expect(within(screen.getByRole("navigation", { name: "Categories" })).queryAllByRole("button")).toHaveLength(0);
     expect(screen.queryByText(/zzrelay/)).not.toBeInTheDocument();
     expect(screen.queryByText(/zzprobe/)).not.toBeInTheDocument();
     await act(async () => release(EXAM));
+    expect(await screen.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
     expect(await block(screen, "zzprobe 10.10.10.5 from 10.10.14.9")).toBeInTheDocument();
     expect(screen.queryByText(/zzrelay/)).not.toBeInTheDocument();
   });
@@ -338,11 +335,12 @@ describe("Arsenal", () => {
     expect(d.getByRole("textbox", { name: "Search the Arsenal" })).toHaveValue("a");
   });
 
-  it("A on the browse screen focuses it instead of opening a drawer", async () => {
+  it("A on the browse screen focuses the search instead of opening a drawer", async () => {
     const user = userEvent.setup();
     mount("/arsenal");
-    await screen.findByRole("region", { name: "Cards" });
+    await screen.findByRole("navigation", { name: "Categories" });
     await user.keyboard("a");
+    expect(screen.getByRole("textbox", { name: "Search the Arsenal" })).toHaveFocus();
     expect(screen.queryByRole("complementary", { name: "Arsenal" })).not.toBeInTheDocument();
     expect(useArsenalStore.getState().open).toBe(false);
   });
@@ -419,15 +417,12 @@ describe("Arsenal after a Field Manual import (B2)", () => {
     expect(await d.findByRole("option", { name: new RegExp(card.title) })).toBeInTheDocument();
   });
 
-  it("browse lists every imported card under its stage", async () => {
+  it("browse lists every imported card under its category", async () => {
     const user = userEvent.setup();
     mount("/arsenal");
-    const cards = within(await screen.findByRole("region", { name: "Cards" }));
-    const stage = within(screen.getByRole("region", { name: "Stage" }));
-    for (const c of perStage) {
-      await user.click(stage.getByRole("button", { name: STAGES.find(([id]) => id === c.stage)![1] }));
-      expect(cards.getByRole("button", { name: c.title })).toBeInTheDocument();
-    }
+    const cats = within(await screen.findByRole("navigation", { name: "Categories" }));
+    await user.click(await cats.findByRole("button", { name: /^Qq Misc/ }));
+    for (const c of perStage) expect(within(screen.getByRole("listbox", { name: "Arsenal results" })).getByRole("option", { name: new RegExp(`^${c.title}`) })).toBeInTheDocument();
   });
 });
 
@@ -463,7 +458,7 @@ describe("full-screen Arsenal uses the engagement you came from (B4)", () => {
     mountAt("/e/e2/h/h9");
     await screen.findByRole("tab", { name: "Next" });
     act(() => nav.go("/arsenal"));
-    await screen.findByRole("region", { name: "Cards" });
+    await screen.findByRole("navigation", { name: "Categories" });
     await user.keyboard("{Meta>}k{/Meta}");
     const box = await screen.findByRole("combobox", { name: "Search" });
     expect(await within(screen.getByRole("dialog")).findByText(/Client Beta/)).toBeInTheDocument();
@@ -759,7 +754,7 @@ describe("drawer list grouped by category (U1)", () => {
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zzgen");
     await d.findByRole("option", { name: /Zzgen reverse shell/ });
     await user.keyboard("{Enter}");
-    expect(await screen.findByRole("region", { name: "Cards" })).toBeInTheDocument();
+    expect(await screen.findByRole("navigation", { name: "Categories" })).toBeInTheDocument();
     expect(screen.queryByRole("complementary", { name: "Arsenal" })).not.toBeInTheDocument();
   });
 
@@ -814,29 +809,18 @@ describe("drawer list grouped by category (U1)", () => {
   });
 });
 
-describe("browse sidebar selection state (U2)", () => {
-  it("filters show which is selected, each group has All, and generators are links", async () => {
+describe("browse selection state (U2)", () => {
+  it("the open category and the open row show which is selected, and generators are rows", async () => {
     const user = userEvent.setup();
     mount("/arsenal");
-    await screen.findByRole("region", { name: "Cards" });
-    const stage = within(screen.getByRole("region", { name: "Stage" }));
-    const category = within(screen.getByRole("region", { name: "Category" }));
-    expect(stage.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
-    expect(category.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
-    await user.click(stage.getByRole("button", { name: "Reporting" }));
-    expect(stage.getByRole("button", { name: "Reporting" })).toHaveAttribute("aria-pressed", "true");
-    expect(stage.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "false");
-    await user.click(category.getByRole("button", { name: "Zz-Other-Cat" }));
-    expect(category.getByRole("button", { name: "Zz-Other-Cat" })).toHaveAttribute("aria-pressed", "true");
-    await user.click(stage.getByRole("button", { name: "All" }));
-    expect(stage.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
-    expect(stage.getByRole("button", { name: "Reporting" })).toHaveAttribute("aria-pressed", "false");
-    await user.click(category.getByRole("button", { name: "All" }));
-    const cards = within(screen.getByRole("region", { name: "Cards" }));
-    await user.click(cards.getByRole("button", { name: "Zz Card" }));
-    expect(cards.getByRole("button", { name: "Zz Card" })).toHaveAttribute("aria-current", "true");
-    expect(cards.getByRole("button", { name: "Zz Other" })).not.toHaveAttribute("aria-current");
-    expect(within(screen.getByRole("region", { name: "Generators" })).getByRole("link", { name: /Zzgen reverse shell/ })).toBeInTheDocument();
+    const cats = within(await screen.findByRole("navigation", { name: "Categories" }));
+    await user.click(await cats.findByRole("button", { name: /^Zz Other Cat/ }));
+    expect(cats.getByRole("button", { name: /^Zz Other Cat/ })).toHaveAttribute("aria-current", "true");
+    expect(cats.getByRole("button", { name: /^Zz Cat/ })).not.toHaveAttribute("aria-current");
+    const results = within(screen.getByRole("listbox", { name: "Arsenal results" }));
+    expect(await results.findByRole("option", { name: /Zz Other/ })).toHaveAttribute("aria-selected", "true");
+    await user.click(cats.getByRole("button", { name: /^Shells & transfers/ }));
+    expect(await results.findByRole("option", { name: /Zzgen reverse shell/ })).toBeInTheDocument();
   });
 });
 

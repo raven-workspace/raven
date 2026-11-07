@@ -350,13 +350,13 @@ export function ArsenalDrawer() {
   useKeydown((e) => {
     if (!isFreeKey(e) || (e.key !== "a" && e.key !== "A")) return;
     e.preventDefault();
-    if (onBrowse) document.getElementById("arsenal-browse")?.focus();
+    if (onBrowse) document.getElementById("arsenal-search")?.focus();
     else useArsenalStore.getState().toggle();
   });
   useEffect(() => {
     if (onBrowse && open) {
       useArsenalStore.getState().close();
-      document.getElementById("arsenal-browse")?.focus();
+      document.getElementById("arsenal-search")?.focus();
     }
   }, [onBrowse, open]);
 

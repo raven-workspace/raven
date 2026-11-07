@@ -1,3 +1,4 @@
+import type { HTMLAttributes, Ref } from "react";
 import { ON } from "./styles";
 
 /** What a result row shows: a title and a small tag at its right (a count, a card/tool, an engagement item's kind). */
@@ -21,7 +22,9 @@ export interface ResultGroup<R extends ResultRow> {
  * holding `role=option` rows. Rows are numbered across the groups in order; `selected` is the row number on `ON`.
  * Focus stays in the search field, which points at the row with `aria-activedescendant`.
  */
-export function ResultList<R extends ResultRow>({ id, label, groups, selected, onSelect, onActivate }: {
+export function ResultList<R extends ResultRow>({ id, label, groups, selected, onSelect, onActivate, listRef, listProps }: {
+  /** For a list that takes focus itself (browse's middle pane): its ref and tabindex, key and `aria-activedescendant` props. */
+  listRef?: Ref<HTMLDivElement>; listProps?: HTMLAttributes<HTMLDivElement>;
   id: string; label: string; groups: ResultGroup<R>[]; selected: number;
   onSelect: (index: number) => void; onActivate: (row: R, index: number) => void;
 }) {
@@ -44,7 +47,7 @@ export function ResultList<R extends ResultRow>({ id, label, groups, selected, o
     );
   };
   return (
-    <div id={id} role="listbox" aria-label={label} className="grid gap-2">
+    <div ref={listRef} id={id} role="listbox" aria-label={label} className="grid gap-2 outline-none" {...listProps}>
       {groups.map((g) => {
         if (g.label === undefined) return g.rows.map(option);
         const headingId = `${id}-group-${g.key}`;

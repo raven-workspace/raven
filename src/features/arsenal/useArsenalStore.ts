@@ -11,6 +11,8 @@ interface ArsenalState {
   blockId: string | null;
   /** A card-less command shown alone in the drawer (the reading view); null when none. */
   solo: LibraryCommand | null;
+  /** What full-screen browse showed last, so it opens where you stopped. */
+  lastRead: { kind: "card" | "command" | "generator"; id: string } | null;
   /** Opens the drawer on one command shown alone (a built-in command has no card). Closes Notes. */
   openSolo: (command: LibraryCommand) => void;
   /** Leaves the solo view (the drawer stays as it is). */
@@ -28,6 +30,7 @@ export const useArsenalStore = create<ArsenalState>()((set, get) => ({
   cardId: null,
   blockId: null,
   solo: null,
+  lastRead: null,
   openSolo: (command) => {
     if (useNotesStore.getState().open) useNotesStore.getState().close();
     set({ open: true, cardId: null, blockId: null, solo: command });

@@ -27,7 +27,7 @@ const CRED_CHIP = '[aria-label^="Fill with credential"]';
  * Keys, with focus in the pane: `j`/`k` move between blocks, `c` (or Enter on a block) copies the focused one
  * through the copy guard. `focusBlockId` scrolls to a block and outlines it until the next keypress.
  */
-export function CommandPane({ commands, also = [], engagementId, hostId, overrides, onOverrides, focusCred: focusCredChip, focusBlockId = null, contents = false }: {
+export function CommandPane({ commands, also = [], engagementId, hostId, overrides, onOverrides, focusCred: focusCredChip, focusBlockId = null, contents = false, autoFocus = true }: {
   commands: LibraryCommand[]; also?: LibraryCommand[]; engagementId: string; hostId: string | null;
   /** Chip edits, owned by the screen so they can be dropped when the host changes. */
   overrides: Record<string, string>; onOverrides: (next: Record<string, string>) => void;
@@ -35,6 +35,8 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   focusBlockId?: string | null;
   /** Shows the sticky strip of block titles (a card, not one command). */
   contents?: boolean;
+  /** Take focus on mount so j/k/c work at once (off where focus belongs to a list beside the pane). */
+  autoFocus?: boolean;
 }) {
   const { d, host, cred, makeInput, examReady } = useFillBase(engagementId, hostId);
   const kind = d.engagement?.kind;
@@ -72,7 +74,7 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   useEffect(() => {
     // The pane takes focus so j/k/c work at once; a block to open at takes it instead (once its block is on screen).
     if (!focusBlockId) {
-      root.current?.focus({ preventScroll: true });
+      if (autoFocus) root.current?.focus({ preventScroll: true });
       return;
     }
     const el = scrolledTo.current === focusBlockId ? null : blockEl(focusBlockId);
@@ -80,7 +82,7 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
     scrolledTo.current = focusBlockId;
     el.focus({ preventScroll: true });
     el.scrollIntoView?.({ block: "start" });
-  }, [focusBlockId, shownIds]);
+  }, [focusBlockId, shownIds, autoFocus]);
 
   // The strip highlights the block in view while scrolling.
   const [inView, setInView] = useState<string | null>(null);
@@ -216,11 +218,12 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
 }
 
 /** One Field-Manual card: title and where it sits, a strip of its blocks, then the blocks in vault order, filled for the host. */
-export function CardView({ cardId, engagementId, hostId, overrides, onOverrides, focusCred, focusBlockId = null }: {
+export function CardView({ cardId, engagementId, hostId, overrides, onOverrides, focusCred, focusBlockId = null, autoFocus = true }: {
   cardId: string; engagementId: string; hostId: string | null; overrides: Record<string, string>; onOverrides: (next: Record<string, string>) => void;
   focusCred?: () => void;
   /** The block to open at: scrolled into view and outlined until the next keypress. */
   focusBlockId?: string | null;
+  autoFocus?: boolean;
 }) {
   const version = useLibraryVersion();
   const card = getCards().find((c) => c.id === cardId);
@@ -251,7 +254,7 @@ export function CardView({ cardId, engagementId, hostId, overrides, onOverrides,
       </header>
       <CommandPane
         key={cardId} commands={commands} also={also} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={onOverrides}
-        focusCred={focusCred} focusBlockId={focusBlockId} contents
+        focusCred={focusCred} focusBlockId={focusBlockId} autoFocus={autoFocus} contents
       />
       <div className="grid justify-items-start gap-1">
         <Button size="sm" onClick={openInObsidian}>Open in Obsidian</Button>
