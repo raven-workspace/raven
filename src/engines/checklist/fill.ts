@@ -63,29 +63,39 @@ export interface FillOptions {
   commandOs?: string;
 }
 
+/** Passwords beat other secret types, then the newest attempt: a password works everywhere a hash does not. */
+function preferred(best: { a: CredAttempt; c: Credential } | null, a: CredAttempt, c: Credential): { a: CredAttempt; c: Credential } {
+  if (!best) return { a, c };
+  const pw = (x: Credential) => (x.type === 'password' ? 1 : 0);
+  if (pw(c) !== pw(best.c)) return pw(c) > pw(best.c) ? { a, c } : best;
+  return a.at > best.a.at ? { a, c } : best;
+}
+
 /**
- * Engagement-level default: the newest domain-scope credential with a valid or admin `domain` attempt anywhere
- * in the engagement.
+ * Engagement-level default: among domain-scope credentials with a valid or admin `domain` attempt anywhere in the
+ * engagement, a password first, then the newest attempt.
  */
 export function defaultDomainCred(credentials: Credential[], attempts: CredAttempt[]): Credential | null {
   const byId = new Map(credentials.filter((c) => c.scope === 'domain').map((c) => [c.id, c]));
-  let best: CredAttempt | null = null;
+  let best: { a: CredAttempt; c: Credential } | null = null;
   for (const a of attempts) {
-    if (a.authMode !== 'domain' || (a.result !== 'valid' && a.result !== 'admin') || !byId.has(a.credId)) continue;
-    if (!best || a.at > best.at) best = a;
+    const c = byId.get(a.credId);
+    if (a.authMode !== 'domain' || (a.result !== 'valid' && a.result !== 'admin') || !c) continue;
+    best = preferred(best, a, c);
   }
-  return best ? byId.get(best.credId)! : null;
+  return best?.c ?? null;
 }
 
-/** The newest credential with a valid or admin attempt on this host. */
+/** Among credentials with a valid or admin attempt on this host: a password first, then the newest attempt. */
 export function defaultCredFor(host: Pick<Host, 'id'>, credentials: Credential[], attempts: CredAttempt[]): Credential | null {
   const byId = new Map(credentials.map((c) => [c.id, c]));
-  let best: CredAttempt | null = null;
+  let best: { a: CredAttempt; c: Credential } | null = null;
   for (const a of attempts) {
-    if (a.hostId !== host.id || (a.result !== 'valid' && a.result !== 'admin') || !byId.has(a.credId)) continue;
-    if (!best || a.at > best.at) best = a;
+    const c = byId.get(a.credId);
+    if (a.hostId !== host.id || (a.result !== 'valid' && a.result !== 'admin') || !c) continue;
+    best = preferred(best, a, c);
   }
-  return best ? byId.get(best.credId)! : null;
+  return best?.c ?? null;
 }
 
 export interface FillResult {
