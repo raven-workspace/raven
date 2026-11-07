@@ -1,3 +1,4 @@
+import { Copy } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Chip } from "../../ui";
 import { copyPlain, copySecret } from "../../lib/clipboard";
@@ -66,19 +67,23 @@ export function CommandList({ commands }: { commands: FilledCommand[] }) {
     <ul className="m-0 flex list-none flex-col gap-4 p-0">
       {commands.map((c) => (
         <li key={c.id} className="flex flex-col gap-1">
-          <span data-testid="command-desc" className="text-xs text-muted">{c.title}</span>
-          {/* Copy sits small in the block's top-right corner; the block keeps room on its right so text never runs under it. */}
-          <div data-testid="command-block" className="relative">
-            <pre className={`${COMMAND_PRE} pr-16`}>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2">
+            <span data-testid="command-desc" className="text-xs text-muted">{c.title}</span>
+            {copied === c.id && <span role="status" className="text-[11px] text-accent">Copied</span>}
+          </div>
+          {/* Copy has its own fixed track beside the block, so command text never runs under it. */}
+          <div data-testid="command-block" className="grid grid-cols-[minmax(0,1fr)_1.5rem] items-start gap-2">
+            <pre className={COMMAND_PRE}>
               <Text text={c.text} tokens={c.tokens ?? []} />
             </pre>
             <Button
               size="sm"
-              className="absolute top-1 right-1 h-5 w-auto shrink-0 bg-surface px-1.5 text-[11px]"
+              className="mt-1 h-6 w-6 px-0!"
               aria-label={`Copy command: ${c.title}`}
+              title="Copy command"
               onClick={() => copy(c)}
             >
-              {copied === c.id ? "Copied" : "Copy"}
+              <Copy size={14} weight={copied === c.id ? "fill" : "light"} aria-hidden className={copied === c.id ? "text-accent" : undefined} />
             </Button>
           </div>
           {(c.msfMarker || c.viaTunnel || c.dcByName) && (

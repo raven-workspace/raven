@@ -6,7 +6,9 @@ import { cleanupCountsKey, cleanupKey } from "../cleanup/queries";
 import { findingsKey } from "../findings/queries";
 import { resyncAndRefresh } from "../checklist/resync";
 import { dropPendingNotes } from "../notes/useNotesStore";
+import { invalidateRuledOut } from "../services/queries";
 import type { BoardColumn, HostInput } from "../../types/host";
+import type { HostIdentity, VectorInput, VectorStatus } from "../../types/hostFacts";
 
 export function useHosts(engagementId: string) {
   return useQuery({ queryKey: ["hosts", engagementId], queryFn: () => api.hostsList(engagementId) });
@@ -78,6 +80,52 @@ export function useHostMutations(engagementId: string) {
         void qc.invalidateQueries({ queryKey: cleanupCountsKey });
         // A deleted DC changes which hosts are AD hosts, and so other hosts' columns.
         resync();
+      },
+    }),
+  };
+}
+
+export const hostIdentityKey = (hostId: string) => ["hostIdentity", hostId] as const;
+export const vectorsKey = (hostId: string) => ["vectors", hostId] as const;
+
+/** Who the user is on the host: the latest identity, or null before any is known. */
+export function useHostIdentity(hostId: string) {
+  return useQuery({ queryKey: hostIdentityKey(hostId), queryFn: () => api.hostIdentityGet(hostId) });
+}
+
+export function useVectors(hostId: string) {
+  return useQuery({ queryKey: vectorsKey(hostId), queryFn: () => api.vectorsList(hostId) });
+}
+
+/** Identity and privesc vectors of one host. Ruling a vector out (or reopening it) writes or removes a ruled-out item. */
+export function useHostFactsMutations(engagementId: string, hostId: string) {
+  const qc = useQueryClient();
+  const vectorsChanged = () => void qc.invalidateQueries({ queryKey: vectorsKey(hostId) });
+  return {
+    setIdentity: useMutation({
+      mutationFn: (input: Omit<HostIdentity, "updatedAt">) => api.hostIdentitySet(input),
+      onSuccess: () => void qc.invalidateQueries({ queryKey: hostIdentityKey(hostId) }),
+    }),
+    upsertVector: useMutation({
+      mutationFn: (input: VectorInput) => api.vectorUpsert(hostId, input),
+      onSuccess: () => {
+        vectorsChanged();
+        // Re-adding a ruled-out vector by hand reopens it, which removes its ruled-out item.
+        invalidateRuledOut(qc, engagementId);
+      },
+    }),
+    setVectorStatus: useMutation({
+      mutationFn: (v: { id: string; status: VectorStatus; reason?: string }) => api.vectorSetStatus(v.id, v.status, v.reason),
+      onSuccess: () => {
+        vectorsChanged();
+        invalidateRuledOut(qc, engagementId);
+      },
+    }),
+    removeVector: useMutation({
+      mutationFn: (id: string) => api.vectorDelete(id),
+      onSuccess: () => {
+        vectorsChanged();
+        invalidateRuledOut(qc, engagementId);
       },
     }),
   };

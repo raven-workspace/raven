@@ -123,7 +123,7 @@ describe("dual-homed flag", () => {
       return hosts[0]!;
     });
     mount("/e/e1/h/h1", lab);
-    await user.click(await screen.findByRole("tab", { name: "Checklist" }));
+    await user.click(await screen.findByRole("button", { name: "Full checklist" }));
     await within(await screen.findByRole("tabpanel")).findByText("Check SMB shares and null/guest access");
     expect(screen.queryByText("Tunnel into the next network")).not.toBeInTheDocument();
 

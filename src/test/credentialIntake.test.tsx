@@ -543,8 +543,8 @@ describe("nxc intake in Add to log", () => {
   });
 });
 
-describe("host Credentials tab", () => {
-  it("host Credentials tab lists grants and results with proof links", async () => {
+describe("Host Credentials fact group", () => {
+  it("Host Credentials lists grants and results with proof links", async () => {
     const proof: LogEntry = {
       id: "l9", engagementId: "e1", kind: "command", title: "nxc smb spray", titleEdited: false, ranOn: null, hostIds: ["h1"],
       observations: null, returnedNothing: false, private: false,
@@ -578,8 +578,9 @@ describe("host Credentials tab", () => {
     });
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
-    await user.click(await screen.findByRole("tab", { name: "Credentials" }));
-    const panel = screen.getByRole("tabpanel");
+    const panel = await screen.findByRole("region", { name: "Host Credentials" });
+    // Before a foothold the group is open, and its folded summary would read the same counts.
+    expect(screen.queryByRole("tab", { name: "Credentials" })).not.toBeInTheDocument();
 
     // the matrix shows only this host's column
     expect(await within(panel).findByRole("button", { name: "corp.local\\bob on dc01 SMB: admin" })).toBeInTheDocument();
@@ -609,7 +610,7 @@ describe("host Credentials tab", () => {
 
     // results against this host, with proof
     const results = within(panel).getByRole("region", { name: "Results against this host" });
-    const rows = within(results).getAllByRole("row").slice(1);
+    const rows = within(results).getAllByRole("listitem");
     expect(rows).toHaveLength(3);
     expect(within(rows[0]!).getByText("corp.local\\bob")).toBeInTheDocument();
     expect(within(rows[0]!).getByText("admin")).toBeInTheDocument();

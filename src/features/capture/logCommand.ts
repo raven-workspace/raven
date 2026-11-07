@@ -24,7 +24,7 @@ export async function logCommand(
       draft: { kind: "command", title: args.title, hostIds: [host.id], ranOn: args.ranOn, content, unknownScopeIps: [], scan: null },
     });
   } finally {
-    for (const key of [["log", id], ["hosts", id], ["services"], ["services", "engagement", id], ["checklist", id], ["progress"], ["engagement", id], ["engagements"], credentialsKey(id), usernamesKey(id), credAttemptsKey(id)]) {
+    for (const key of [["log", id], ["hosts", id], ["services"], ["services", "engagement", id], ["checklist", id], ["progress"], ["engagement", id], ["engagements"], credentialsKey(id), usernamesKey(id), credAttemptsKey(id), ["hostIdentity"], ["vectors"]]) {
       void qc.invalidateQueries({ queryKey: key });
     }
   }

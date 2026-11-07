@@ -74,7 +74,7 @@ function mount(opts: { engagement?: Engagement; hosts?: Host[]; items?: Checklis
   );
 }
 async function openChecklist(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole("tab", { name: "Checklist" }));
+  await user.click(await screen.findByRole("button", { name: "Full checklist" }));
 }
 
 beforeEach(() => {
@@ -284,12 +284,13 @@ describe("credential fill on the checklist", () => {
     await openChecklist(user);
     expect(await pickerOf()).toHaveTextContent("CORP\\bob");
     expect((await tab()).getAllByText(/-u bob/).length).toBeGreaterThan(0);
-    // The choice is remembered per host, so Now follows it.
+    // The choice is remembered per host, so the Next steps follow it.
     await user.click(await pickerOf());
     await user.click(await screen.findByRole("option", { name: "None" }));
     expect(await pickerOf()).toHaveTextContent("None");
     expect((await tab()).queryByText(/-u bob/)).not.toBeInTheDocument();
-    expect(within(screen.getByRole("region", { name: "Now" })).getByRole("combobox", { name: "Commands use" })).toHaveTextContent("None");
+    await user.click(screen.getByRole("button", { name: "Full checklist" }));
+    expect(await pickerOf()).toHaveTextContent("None");
   });
 
   it("two credentials with the same label get a distinguishing suffix", async () => {

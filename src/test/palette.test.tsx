@@ -96,7 +96,7 @@ describe("⌘K palette", () => {
   it("⌘K opens with the host chip and Enter copies the filled command", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     await user.keyboard(cmdK);
     const box = await screen.findByRole("combobox", { name: "Search" });
     expect(screen.getByRole("combobox", { name: "Fill for host" })).toHaveDisplayValue("dc01");
@@ -111,7 +111,7 @@ describe("⌘K palette", () => {
     m.hostsList.mockResolvedValue([H1, MS]);
     setImported({ commands: [{ ...PROBE, id: "zz-dc", title: "Zzdc sync time", template: "zzdc {DC_IP}" }], cards: [] });
     mount("/e/e1/h/h2");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     await user.keyboard(cmdK);
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzdc");
     await user.keyboard("{Enter}");
@@ -121,7 +121,7 @@ describe("⌘K palette", () => {
   it("⌘↵ copies and logs an entry for the host", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     await user.keyboard(cmdK);
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzprobe");
     await user.keyboard("{Meta>}{Enter}{/Meta}");
@@ -170,7 +170,7 @@ describe("⌘K palette", () => {
   it("a staged toolkit file pre-fills FILE and Tab edits an unresolved token", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     await user.keyboard(cmdK);
     const box = await screen.findByRole("combobox", { name: "Search" });
     await user.type(box, "fetch winpeas");
@@ -219,7 +219,7 @@ describe("host picker in the palette (U3)", () => {
     const user = userEvent.setup();
     m.hostsList.mockResolvedValue([H1, H2]);
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     await user.keyboard(cmdK);
     const bar = await screen.findByRole("search", { name: "Search" });
     const b = within(bar);
@@ -249,7 +249,7 @@ describe("host picker in the palette (U3)", () => {
     const user = userEvent.setup();
     m.hostsList.mockResolvedValue([H1, H2]);
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     await user.keyboard(cmdK);
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzprobe");
     expect((await preview()).textContent).toBe("zzprobe 10.10.10.5 from 10.10.14.9");
@@ -267,7 +267,7 @@ describe("host picker in the palette (U3)", () => {
     const user = userEvent.setup();
     m.hostsList.mockResolvedValue([H1, H2]);
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     await user.keyboard(cmdK);
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzfetch");
     await user.type(await screen.findByRole("combobox", { name: "Value for FILE" }), "x.exe");
@@ -300,7 +300,7 @@ describe("token suggestions (U4)", () => {
       { ...entry("l3", "Zznote", ""), kind: "note", content: { kind: "note", text: "alice uses Winter2024! everywhere" } },
     ] as never);
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     await user.keyboard(cmdK);
     const search = await screen.findByRole("combobox", { name: "Search" });
     const dlg = within(screen.getByRole("dialog", { name: "Search" }));
@@ -325,7 +325,7 @@ describe("token suggestions (U4)", () => {
     m.credentialsList.mockResolvedValue([cred("c1", "alice", "Winter2024!"), cred("c2", "bob", "Summer2025!")]);
     setImported({ commands: [USERCMD], cards: [] });
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     await user.keyboard(cmdK);
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzuser");
     await user.keyboard("{Tab}");
@@ -350,7 +350,7 @@ describe("token suggestions (U4)", () => {
     m.credentialsList.mockResolvedValue([cred("c1", "alice", "Winter2024!")]);
     setImported({ commands: [USERCMD], cards: [] });
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     await user.keyboard(cmdK);
     const box = await screen.findByRole("combobox", { name: "Search" });
     await user.type(box, "zzuser");
@@ -374,7 +374,7 @@ describe("token suggestions (U4)", () => {
       toolkit: [{ os: "windows", purpose: "Enumeration", file: "winPEASx64.exe", note: "", where: "", staged: true }],
     });
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     act(() => useArsenalStore.getState().openCard("c-fetch"));
     const d = within(await screen.findByRole("complementary", { name: "Arsenal" }));
     await user.click(await d.findByRole("combobox", { name: "Value for FILE" }));
@@ -398,7 +398,7 @@ describe("token suggestions (U4)", () => {
       ],
     });
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     act(() => useArsenalStore.getState().openCard("c-fetch"));
     const d = within(await screen.findByRole("complementary", { name: "Arsenal" }));
     await user.click(await d.findByRole("combobox", { name: "Value for FILE" }));

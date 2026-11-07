@@ -21,7 +21,7 @@ const STATUSES: { value: ChecklistStatus; label: string }[] = [
 
 /**
  * To do / Doing / Done / N/A for one step, as one small button group: a rounded hairline pill with thin dividers,
- * the selected segment in accent. The checklist's status control, shared with the Now panel.
+ * the selected segment in accent. The checklist's status control.
  */
 export function StatusToggles({ label, status, onStatus }: { label: string; status: ChecklistStatus; onStatus: (status: ChecklistStatus) => void }) {
   return (
@@ -85,13 +85,21 @@ function CardLinks({ commands }: { commands: FilledCommand[] }) {
   );
 }
 
-/** "N new credentials since this was done", collapsed; the labels (never secrets) list one per line when opened. */
+/**
+ * "12 new creds since done · re-check ▸" on one line, so the title track keeps its width; the labels (never secrets)
+ * list one per line in the disclosure underneath.
+ */
 function NewCredNotice({ labels }: { labels: string[] }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="min-w-0 text-xs text-muted">
-      <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="cursor-default bg-transparent p-0 text-left text-xs text-fg-2 hover:text-fg">
-        {labels.length} new credential{labels.length === 1 ? "" : "s"} since this was done {open ? "▾" : "▸"}
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="block max-w-full cursor-default truncate bg-transparent p-0 text-left text-xs text-fg-2 hover:text-fg"
+      >
+        {labels.length} new cred{labels.length === 1 ? "" : "s"} since done · re-check {open ? "▾" : "▸"}
       </button>
       {open && (
         <ul className="m-0 mt-1 flex min-w-0 list-none flex-col gap-0.5 p-0">

@@ -170,7 +170,7 @@ describe("stuck view", () => {
     const skipped = within(await within(panel).findByRole("region", { name: "Skipped steps" }));
     await user.click(skipped.getByRole("button"));
     expect(screen.queryByRole("complementary", { name: /Stuck on/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Checklist" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Next" })).toHaveAttribute("aria-selected", "true");
     const row = document.querySelector('li[data-goal-id="h-foot-arrived"]')!;
     expect(within(row as HTMLElement).getByRole("button", { name: /^Collapse/ })).toBeInTheDocument();
   });

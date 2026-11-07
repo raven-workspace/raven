@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
+import { GoalRow } from "../features/checklist/GoalRow";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { applicableGoals } from "../engines/checklist";
 import { api } from "../lib/api";
@@ -59,7 +60,7 @@ function mount(opts: { engagement?: Engagement; services?: Service[]; items?: Ch
     </QueryClientProvider>,
   );
 }
-const now = async () => within(await screen.findByRole("region", { name: "Now" }));
+const next = async () => within(await screen.findByRole("tabpanel", { name: "Next" }));
 
 beforeEach(() => {
   localStorage.clear();
@@ -77,95 +78,115 @@ beforeEach(() => {
   m.hostSyncBoard.mockResolvedValue(H1);
   m.credentialsList.mockResolvedValue([]);
   m.credAttemptsList.mockResolvedValue([]);
+  m.usernamesList.mockResolvedValue([]);
+  m.accessGrantsList.mockResolvedValue([]);
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
+  m.notesList.mockResolvedValue([]);
 });
 
-describe("Now panel", () => {
-  it("now lists the open goals of the first stage with open work", async () => {
+describe("Next tab", () => {
+  it("is the default tab and lists the open steps of the first stage with open work, commands filled", async () => {
     mount({ items: [item("h-enum-full-tcp", "done")] });
-    const panel = await now();
-    expect(await panel.findByRole("heading", { name: "Information gathering" })).toBeInTheDocument();
-    expect(panel.getByText("Check SMB shares and null/guest access")).toBeInTheDocument();
-    expect(panel.queryByText("Scan all 65,535 TCP ports")).not.toBeInTheDocument();
-    // The first open goal's first command, filled with the host IP, with Copy.
-    expect(panel.getByRole("button", { name: "Copy command: Versions and default scripts on the open ports" })).toBeInTheDocument();
-    expect(panel.getAllByText(/10\.10\.10\.5/).length).toBeGreaterThan(0);
+    const tab = await next();
+    expect(screen.getByRole("tab", { name: "Next" })).toHaveAttribute("aria-selected", "true");
+    expect(await tab.findByRole("heading", { name: "Information gathering" })).toBeInTheDocument();
+    expect(tab.getByText("Check SMB shares and null/guest access")).toBeInTheDocument();
+    expect(tab.queryByText("Scan all 65,535 TCP ports")).not.toBeInTheDocument();
+    expect(tab.queryByRole("heading", { name: "Vulnerability detection" })).not.toBeInTheDocument();
+    // Each open step with its filled, ready-to-copy commands.
+    expect(tab.getByRole("button", { name: "Copy command: Versions and default scripts on the open ports" })).toBeInTheDocument();
+    expect(tab.getAllByText(/10\.10\.10\.5/).length).toBeGreaterThan(0);
   });
 
-  it("marking the last open enumerate goal done moves Now to Vulnerability detection and calls hostSyncBoard with vulnerability-detection", async () => {
+  it("marking the last open enumerate step done moves Next to Vulnerability detection and calls hostSyncBoard", async () => {
     const user = userEvent.setup();
     const ids = enumerateIds([SMB]);
     const last = ids[ids.length - 1];
     mount({ items: ids.slice(0, -1).map((id) => item(id, "done")) });
-    const panel = await now();
-    await panel.findByRole("heading", { name: "Information gathering" });
-    const group = panel.getByRole("group", { name: /^Now: / });
-    await user.click(within(group).getByRole("button", { name: "Done" }));
+    const tab = await next();
+    await tab.findByRole("heading", { name: "Information gathering" });
+    await user.click(within(tab.getByRole("group", { name: /^Status: / })).getByRole("button", { name: "Done" }));
     expect(m.checklistPut).toHaveBeenCalledWith("e1", [expect.objectContaining({ goalId: last, status: "done" })]);
-    expect(await panel.findByRole("heading", { name: "Vulnerability detection" })).toBeInTheDocument();
+    expect(await tab.findByRole("heading", { name: "Vulnerability detection" })).toBeInTheDocument();
     await waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h1", "vulnerability-detection"));
   });
 
-  it("Now shows the first open host-view stage, never lateral-movement", async () => {
+  it("shows the first open host-view stage, never lateral-movement", async () => {
     const ids = applicableGoals(H1, E1, [H1], new Map([["h1", [SMB]]]))
       .filter((a) => a.stage.id !== "lateral-movement")
       .flatMap((a) => a.goals.map((g) => g.id));
     mount({ items: ids.map((id) => item(id, "done")) });
-    const panel = await now();
-    await panel.findByText("All stages done");
-    expect(panel.queryByRole("heading", { name: "Lateral movement" })).not.toBeInTheDocument();
+    const tab = await next();
+    await tab.findByText("All stages done");
+    expect(tab.queryByRole("heading", { name: "Lateral movement" })).not.toBeInTheDocument();
   });
 
-  it("a step title is never truncated and the checklist's status control sits below it", async () => {
+  it("says All stages done when every applicable step is closed", async () => {
+    const all = applicableGoals(H1, E1, [H1], new Map([["h1", [SMB]]])).flatMap((a) => a.goals);
+    mount({ items: all.map((g) => item(g.id, "done")) });
+    expect(await (await next()).findByText("All stages done")).toBeInTheDocument();
+  });
+
+  it("a step title is never truncated", async () => {
     mount({ items: [item("h-enum-full-tcp", "done")] });
-    const panel = await now();
-    const title = await panel.findByRole("button", { name: "Check SMB shares and null/guest access" });
+    const title = await (await next()).findByText("Check SMB shares and null/guest access");
     expect(title.className).not.toMatch(/truncate/);
-    const status = panel.getByRole("group", { name: "Now: Check SMB shares and null/guest access" });
-    // Same control as the checklist tab, on its own line under the title (not in the title's row).
-    expect(within(status).getAllByRole("button").map((b) => b.textContent)).toEqual(["To do", "Doing", "Done", "N/A"]);
-    expect(status.parentElement).not.toBe(title.parentElement);
-    expect(title.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // One small group, one segment pressed, a little space below it.
-    expect(status.className).toMatch(/rounded-full/);
-    expect(within(status).getAllByRole("button").filter((b) => b.getAttribute("aria-pressed") === "true")).toHaveLength(1);
-    expect(status.parentElement!.className).toMatch(/mb-1/);
   });
 
-  it("Doing toggles in progress", async () => {
+  it("Doing sets in progress", async () => {
     const user = userEvent.setup();
     mount();
-    const panel = await now();
-    await panel.findByRole("heading", { name: "Information gathering" });
-    await user.click(within(panel.getAllByRole("group", { name: /^Now: / })[0]).getByRole("button", { name: "Doing" }));
+    const tab = await next();
+    await tab.findByRole("heading", { name: "Information gathering" });
+    await user.click(within(tab.getAllByRole("group", { name: /^Status: / })[0]).getByRole("button", { name: "Doing" }));
     await waitFor(() => expect(m.checklistPut).toHaveBeenCalledWith("e1", [expect.objectContaining({ status: "in_progress" })]));
   });
 
-  it("says All stages done when every applicable goal is closed", async () => {
-    const all = applicableGoals(H1, E1, [H1], new Map([["h1", [SMB]]])).flatMap((a) => a.goals);
-    mount({ items: all.map((g) => item(g.id, "done")) });
-    expect(await (await now()).findByText("All stages done")).toBeInTheDocument();
-  });
-
-  it("exam-sim Now never shows a banned command", async () => {
+  it("exam-sim never shows a banned command", async () => {
     const exam = { ...E1, kind: "exam-sim" as const };
     const ids = enumerateIds([WEB], exam);
     mount({ engagement: exam, services: [WEB], items: ids.map((id) => item(id, "done")) });
-    const panel = await now();
-    expect(await panel.findByRole("heading", { name: "Vulnerability detection" })).toBeInTheDocument();
-    expect(panel.getByText("Test the web app for injection and upload flaws")).toBeInTheDocument();
-    expect(panel.queryByText(/sqlmap/)).not.toBeInTheDocument();
+    const tab = await next();
+    expect(await tab.findByRole("heading", { name: "Vulnerability detection" })).toBeInTheDocument();
+    expect(tab.getByText("Test the web app for injection and upload flaws")).toBeInTheDocument();
+    expect(tab.queryByText(/sqlmap/)).not.toBeInTheDocument();
   });
 
-  it("clicking a goal opens the Checklist tab at it", async () => {
+  it("Full checklist expands every stage in place, done steps included, and folds back", async () => {
     const user = userEvent.setup();
-    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
     mount({ items: [item("h-enum-full-tcp", "done")] });
-    const panel = await now();
-    await user.click(await panel.findByRole("button", { name: "Check SMB shares and null/guest access" }));
-    expect(screen.getByRole("tab", { name: "Checklist", selected: true })).toBeInTheDocument();
-    await waitFor(() => expect(scroll).toHaveBeenCalled());
-    const row = document.querySelector('[data-goal-id="h-enum-smb"]')!;
-    expect(scroll.mock.contexts).toContain(row);
-    scroll.mockRestore();
+    const tab = await next();
+    await tab.findByText("Check SMB shares and null/guest access");
+    const toggle = screen.getByRole("button", { name: "Full checklist" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(await tab.findByText("Scan all 65,535 TCP ports")).toBeInTheDocument();
+    expect(tab.getByRole("heading", { name: "Vulnerability detection" })).toBeInTheDocument();
+    // One row per step: the open steps are not listed twice.
+    expect(tab.getAllByText("Check SMB shares and null/guest access")).toHaveLength(1);
+    await user.click(toggle);
+    expect(tab.queryByText("Scan all 65,535 TCP ports")).not.toBeInTheDocument();
+  });
+});
+
+describe("new credentials notice", () => {
+  it("is one line, `12 new creds since done · re-check`, with the labels only in its disclosure", async () => {
+    const labels = Array.from({ length: 12 }, (_, i) => `CORP\\user_${i}`);
+    render(
+      <ul>
+        <GoalRow goal={{ id: "g", title: "Spray the domain" }} state={{ status: "done" }} commands={[]} evidence={[]} newCredLabels={labels} onStatus={vi.fn()} onNotes={vi.fn()} />
+      </ul>,
+    );
+    const notice = screen.getByText(/12 new creds since done/);
+    expect(notice).toHaveTextContent("12 new creds since done · re-check ▸");
+    expect(notice.tagName).toBe("BUTTON");
+    expect(notice.className).toMatch(/truncate/);
+    expect(screen.queryByText("CORP\\user_0")).not.toBeInTheDocument();
+    await userEvent.click(notice);
+    expect(notice).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("CORP\\user_0")).toBeInTheDocument();
+    expect(screen.getByText("CORP\\user_11")).toBeInTheDocument();
   });
 });

@@ -233,7 +233,7 @@ describe("engagement checklist", () => {
     mount({ services: AD, items: [done], creds: [cred("c1", { createdAt: 50 })] });
     await screen.findAllByText("Sync the clock to the DC");
     const row = document.querySelector('li[data-goal-id="e-setup-clock"]') as HTMLElement;
-    const notice = within(row).getByRole("button", { name: /1 new credential since this was done/ });
+    const notice = within(row).getByRole("button", { name: /1 new cred since done · re-check/ });
     expect(within(row).queryByText("CORP\\svc_sql")).toBeNull();
     await userEvent.click(notice);
     expect(within(row).getByText("CORP\\svc_sql")).toBeInTheDocument();

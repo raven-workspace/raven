@@ -156,7 +156,7 @@ describe("domain admin cover", () => {
       ownerId: "ws", goalId: "h-pe-win-privs", status: "na", notes: null, completedAt: null, auto: true, autoFrom: null, evidence: [], updatedAt: 1,
     };
     mount("/e/e1/h/ws", [ADMIN], [covered]);
-    await user.click(await screen.findByRole("tab", { name: "Checklist" }));
+    await user.click(await screen.findByRole("button", { name: "Full checklist" }));
     const group = await screen.findByRole("group", { name: "Status: Check token privileges for potato attacks" });
     const row = group.closest("li") as HTMLElement;
     expect(within(row).getByText("Covered by domain admin")).toBeInTheDocument();

@@ -88,7 +88,7 @@ describe("{FILE} chip on checklist steps", () => {
   it("a step with {FILE} shows the chip; picking a Toolkit file fills its text and copy", async () => {
     const user = userEvent.setup();
     mount({ hosts: [H1, H2] });
-    await user.click(await screen.findByRole("tab", { name: "Checklist" }));
+    await user.click(await screen.findByRole("button", { name: "Full checklist" }));
     const panel = within(await screen.findByRole("tabpanel"));
     const row = within((await panel.findByText("Scan all 65,535 TCP ports")).closest("li")!);
     const text = (t: string) => row.findByText((_, el) => el?.tagName === "PRE" && el.textContent === t);
@@ -100,15 +100,15 @@ describe("{FILE} chip on checklist steps", () => {
     await user.click(within(list).getByRole("option", { name: /winPEASx64_ofs/ }));
     expect(await text("zzrun winPEASx64_ofs.exe on 10.10.10.5")).toBeInTheDocument();
     expect(await copyOf(user, row)).toBe("zzrun winPEASx64_ofs.exe on 10.10.10.5");
-    // The Now panel shows the same pick.
-    const now = within(await screen.findByRole("region", { name: "Now" }));
-    expect(await now.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzrun winPEASx64_ofs.exe on 10.10.10.5")).toBeInTheDocument();
+    // Back on the current stage's steps, the same pick holds.
+    await user.click(screen.getByRole("button", { name: "Full checklist" }));
+    expect(await panel.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzrun winPEASx64_ofs.exe on 10.10.10.5")).toBeInTheDocument();
   });
 
   it("a pick is for one host: another host starts unfilled", async () => {
     const user = userEvent.setup();
     mount({ hosts: [H1, H2] });
-    await user.click(await screen.findByRole("tab", { name: "Checklist" }));
+    await user.click(await screen.findByRole("button", { name: "Full checklist" }));
     const row = within((await within(await screen.findByRole("tabpanel")).findByText("Scan all 65,535 TCP ports")).closest("li")!);
     await user.type(row.getByRole("combobox", { name: "Value for FILE" }), "a.exe");
     expect(await row.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzrun a.exe on 10.10.10.5")).toBeInTheDocument();

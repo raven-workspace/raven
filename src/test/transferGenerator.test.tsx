@@ -168,7 +168,7 @@ describe("Transfer a file", () => {
   it("the palette opens the generator in Arsenal", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/ms02");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     await user.keyboard("{Meta>}k{/Meta}");
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "transfer a file");
     const opt = await screen.findByRole("option", { name: "Transfer a file" });

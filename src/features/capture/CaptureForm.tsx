@@ -95,7 +95,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
   }, [pd.image]);
 
   function refresh() {
-    for (const key of [["log", id], ["hosts", id], ["services"], ["services", "engagement", id], ["checklist", id], ["progress"], ["engagement", id], ["engagements"], credentialsKey(id), usernamesKey(id), credAttemptsKey(id)]) {
+    for (const key of [["log", id], ["hosts", id], ["services"], ["services", "engagement", id], ["checklist", id], ["progress"], ["engagement", id], ["engagements"], credentialsKey(id), usernamesKey(id), credAttemptsKey(id), ["hostIdentity"], ["vectors"]]) {
       void qc.invalidateQueries({ queryKey: key });
     }
   }

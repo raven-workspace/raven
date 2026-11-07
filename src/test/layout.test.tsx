@@ -32,20 +32,20 @@ describe("layout (U5–U7)", () => {
     expect(pre.className).toMatch(/overflow-x-auto/);
   });
 
-  it("Copy is a small button in the command block's top-right corner; the description is full width above", () => {
+  it("Copy is an icon button in its own fixed grid track beside the block; the description is full width above", () => {
     render(<CommandList commands={[{ id: "a", title: "A long description of what this command does on the target", text: "id", unresolved: [], msfMarker: false }]} />);
     const copy = screen.getByRole("button", { name: /Copy command: A long description/ });
     const block = screen.getByTestId("command-block");
     expect(block).toContainElement(copy);
-    expect(block.className).toMatch(/relative/);
-    expect(copy.className).toMatch(/absolute/);
-    expect(copy.className).toMatch(/shrink-0/);
-    expect(copy.className).not.toMatch(/w-full|flex-1/);
-    expect(block.querySelector("pre")!.className).toMatch(/pr-16/);
+    // A fixed track for Copy, at least 8px from the text: the text never runs under it.
+    expect(block.className).toMatch(/grid-cols-\[minmax\(0,1fr\)_1\.5rem\]/);
+    expect(block.className).toMatch(/\bgap-2\b/);
+    expect(copy.className).not.toMatch(/absolute/);
+    expect(copy).toHaveAttribute("title", "Copy command");
+    expect(copy.querySelector("svg")).not.toBeNull();
     const desc = screen.getByText(/A long description/);
     expect(block).not.toContainElement(desc);
     expect(desc.className).not.toMatch(/truncate/);
-    expect(desc.parentElement).toBe(block.parentElement);
   });
   it("status is one small button group: four segments, exactly one pressed, a little space below", () => {
     render(

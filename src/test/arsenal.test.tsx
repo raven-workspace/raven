@@ -112,7 +112,7 @@ describe("Arsenal", () => {
   it("A opens the drawer filled for the host in view and Esc closes it", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     await user.keyboard("a");
     const d = within(await drawer());
     expect(d.getByRole("combobox", { name: "Fill for host" })).toHaveDisplayValue("dc01");
@@ -129,7 +129,7 @@ describe("Arsenal", () => {
   it("A does nothing while typing", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
-    await user.click(await screen.findByRole("tab", { name: "Checklist" }));
+    await user.click(await screen.findByRole("button", { name: "Full checklist" }));
     const notes = await screen.findByRole("textbox", { name: "Notes: Scan all 65,535 TCP ports" });
     await user.click(notes);
     await user.keyboard("a");
@@ -140,7 +140,7 @@ describe("Arsenal", () => {
   it("opening the drawer closes Notes and Stuck", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     act(() => useNotesStore.setState({ open: true }));
     act(() => useArsenalStore.getState().openCard());
     await drawer();
@@ -160,7 +160,7 @@ describe("Arsenal", () => {
   it('a step\'s "From card" link opens the drawer on that card', async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
-    await user.click(await screen.findByRole("tab", { name: "Checklist" }));
+    await user.click(await screen.findByRole("button", { name: "Full checklist" }));
     await user.click(await screen.findByRole("button", { name: "From card Zz Card ↗" }));
     const d = within(await drawer());
     expect(await d.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
@@ -172,7 +172,7 @@ describe("Arsenal", () => {
   it("a FILE chip edit refills every command on the card", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     act(() => useArsenalStore.getState().openCard("zz-card"));
     const d = within(await drawer());
     expect(await block(d, "zzfetch http://10.10.14.9/{FILE}")).toBeInTheDocument();
@@ -186,7 +186,7 @@ describe("Arsenal", () => {
 
   it("Also in Raven lists raven-source commands for the card's goals", async () => {
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     act(() => useArsenalStore.getState().openCard("zz-card"));
     const also = within(await screen.findByRole("region", { name: "Also in Raven" }));
     expect(await block(also, "zzhelper 10.10.10.5")).toBeInTheDocument();
@@ -216,7 +216,7 @@ describe("Arsenal", () => {
 
   it("banned commands are hidden in exam-sim", async () => {
     mount("/e/e1/h/h1", EXAM);
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     act(() => useArsenalStore.getState().openCard("zz-card"));
     const d = within(await drawer());
     expect(await block(d, "zzprobe 10.10.10.5 from 10.10.14.9")).toBeInTheDocument();
@@ -286,7 +286,7 @@ describe("Arsenal", () => {
   it("the drawer's search bar holds the host scope at its right edge", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     await user.keyboard("a");
     const bar = within(within(await drawer()).getByRole("search", { name: "Search the Arsenal" }));
     expect(bar.getByRole("textbox", { name: "Search the Arsenal" })).toBeInTheDocument();
@@ -297,7 +297,7 @@ describe("Arsenal", () => {
   it("search is keyboard-first: arrows pick, Enter opens the selection or the top result", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     await user.keyboard("a");
     let d = within(await drawer());
     const box = d.getByRole("textbox", { name: "Search the Arsenal" });
@@ -342,7 +342,7 @@ describe("Arsenal", () => {
     const H2: Host = { ...H1, id: "h2", name: "web02", ip: "10.10.10.6" };
     m.hostsList.mockResolvedValue([H1, H2]);
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     act(() => useArsenalStore.getState().openCard("zz-card"));
     const d = within(await drawer());
     await user.type(await d.findByRole("combobox", { name: "Value for TARGET_IP" }), "1.1.1.1");
@@ -354,7 +354,7 @@ describe("Arsenal", () => {
   it("→ in the palette opens the card in the drawer", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     await user.keyboard("{Meta>}k{/Meta}");
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzprobe");
     await user.keyboard("{ArrowRight}");
@@ -386,7 +386,7 @@ describe("Arsenal after a Field Manual import (B2)", () => {
 
   it("every imported card is listed in the drawer", async () => {
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     act(() => useArsenalStore.getState().openCard());
     const d = within(await drawer());
     for (const c of perStage) expect(await d.findByRole("option", { name: new RegExp(c.title) })).toBeInTheDocument();
@@ -395,7 +395,7 @@ describe("Arsenal after a Field Manual import (B2)", () => {
   it.each(STAGES)("searching the drawer for stage %s finds its card", async (id, title) => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     act(() => useArsenalStore.getState().openCard());
     const d = within(await drawer());
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), title);
@@ -445,7 +445,7 @@ describe("full-screen Arsenal uses the engagement you came from (B4)", () => {
   it("⌘K on /arsenal searches and fills for the engagement and host you left", async () => {
     const user = userEvent.setup();
     mountAt("/e/e2/h/h9");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     act(() => nav.go("/arsenal"));
     await screen.findByRole("region", { name: "Cards" });
     await user.keyboard("{Meta>}k{/Meta}");
@@ -469,7 +469,7 @@ describe("full-screen Arsenal uses the engagement you came from (B4)", () => {
   it("locking forgets the remembered engagement", async () => {
     const user = userEvent.setup();
     mountAt("/e/e2/h/h9");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     expect(useLastEngagementStore.getState().engagementId).toBe("e2");
     m.vaultLock.mockResolvedValue(null);
     await user.keyboard("{Meta>}l{/Meta}");
@@ -478,7 +478,7 @@ describe("full-screen Arsenal uses the engagement you came from (B4)", () => {
 
   it("browse fills for the engagement you came from", async () => {
     mountAt("/e/e2/h/h9");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     act(() => nav.go("/arsenal"));
     expect(await screen.findByRole("option", { name: "web09" })).toBeInTheDocument();
   });
@@ -488,7 +488,7 @@ describe("backing out of a card in the drawer (B5)", () => {
   it("← Back returns from a card to the list", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     act(() => useArsenalStore.getState().openCard("zz-card"));
     const d = within(await drawer());
     expect(await d.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
@@ -501,7 +501,7 @@ describe("backing out of a card in the drawer (B5)", () => {
   it("Esc on a card goes back to the list; Esc on the list closes the drawer", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     act(() => useArsenalStore.getState().openCard("zz-card"));
     const d = within(await drawer());
     expect(await d.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
@@ -520,7 +520,7 @@ describe("drawer list grouped by category (U1)", () => {
     const cards = [qx("q-b", "Qx beta", "Zz-Other-Cat"), qx("q-shell", "Qx shell", "Shells-and-Transfers"), qx("q-a", "Qx alpha", "Zz-Cat"), qx("q-a2", "Qx alpha two", "Zz-Cat")];
     setImported({ commands: cards.map((c) => cmd(`${c.id}-cmd`, { title: "Plain", cardId: c.id })), cards });
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     act(() => useArsenalStore.getState().openCard());
     const d = within(await drawer());
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "qx");
@@ -541,7 +541,7 @@ describe("drawer list grouped by category (U1)", () => {
 
   it("with no query the list groups every card, built-in and imported", async () => {
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     act(() => useArsenalStore.getState().openCard());
     const d = within(await drawer());
     expect(within(d.getByRole("group", { name: "Zz Cat" })).getByRole("option", { name: /Zz Card/ })).toBeInTheDocument();
@@ -584,7 +584,7 @@ describe("host picker in the drawer (U3)", () => {
     const H2: Host = { ...H1, id: "h2", name: "web02", ip: "10.10.10.6" };
     m.hostsList.mockResolvedValue([H1, H2]);
     mount("/e/e1/h/h1");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     act(() => useArsenalStore.getState().openCard("zz-card"));
     const d = within(await drawer());
     await user.type(await d.findByRole("combobox", { name: "Value for FILE" }), "a.exe");
