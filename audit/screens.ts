@@ -113,7 +113,7 @@ export const SCREENS: Screen[] = [
     },
   },
   {
-    id: "palette-hostmenu", path: H, ready: "select[aria-label='Fill for host']:focus",
+    id: "palette-hostmenu", path: H, ready: "role=listbox[name='Fill for host']",
     setup: async (page) => {
       await page.keyboard.press("Meta+K");
       await page.getByRole("combobox").first().waitFor();

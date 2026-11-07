@@ -275,7 +275,7 @@ async function tabSwitch(page: Page): Promise<RawIssue[]> {
 
 export const SHORTCUTS: ShortcutCase[] = [
   { id: "palette", path: H, keys: ["Meta+K"], opens: 'role=dialog[name="Search"]', focusInside: true, closesWithEscape: true },
-  { id: "palette-hostpick", path: H, keys: ["Meta+K", "Alt+H"], opens: "select[aria-label='Fill for host']", focusInside: true, closesWithEscape: true },
+  { id: "palette-hostpick", path: H, keys: ["Meta+K", "Alt+H"], opens: "role=listbox[name='Fill for host']", focusInside: true, closesWithEscape: true },
   { id: "arsenal", path: H, keys: ["a"], opens: "aside[aria-label='Arsenal']", focusInside: true, closesWithEscape: true },
   { id: "stuck", path: H, keys: ["h"], opens: "aside[aria-label^='Stuck on']", focusInside: false, closesWithEscape: true },
   { id: "capture", path: H, keys: ["l"], opens: "[role='dialog']", focusInside: true, closesWithEscape: true },

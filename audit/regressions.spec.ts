@@ -21,7 +21,7 @@ for (const path of ["/arsenal", "/"]) {
     const inputBox = (await input.boundingBox())!;
     expect(inputBox.width).toBeGreaterThan(barBox.width * 0.5);
 
-    // Clicking where you type lands in the search field, not the hidden host select.
+    // Clicking where you type lands in the search field, not the host chip (which has no overlay and no Tab stop).
     await page.mouse.click(inputBox.x + inputBox.width / 2, inputBox.y + inputBox.height / 2);
     await expect(input).toBeFocused();
 

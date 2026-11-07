@@ -56,3 +56,13 @@
 .hljs-title, .hljs-function .hljs-title, .hljs-class .hljs-title { color: var(--fg); }
 .hljs-variable, .hljs-attr, .hljs-attribute, .hljs-params, .hljs-property { color: var(--muted-2); }
 .hljs-meta, .hljs-doctag, .hljs-subst { color: var(--muted); }
+
+/* One accent outline fade when a host pick changes the fill (chip, filled preview). */
+@keyframes raven-flash {
+  from { outline: 1px solid var(--accent); outline-offset: 1px; }
+  to { outline: 1px solid transparent; outline-offset: 1px; }
+}
+[data-flash] { animation: raven-flash 600ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  [data-flash] { animation: none; }
+}

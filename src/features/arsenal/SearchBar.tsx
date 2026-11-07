@@ -2,7 +2,7 @@ import type { InputHTMLAttributes, ReactNode, Ref } from "react";
 
 /**
  * The palette's and the drawer's search field: one rounded field with a leading search glyph and the host scope
- * (`trailing`, usually a `HostPicker`) built in at its right edge.
+ * (`trailing`, usually a `HostChip`) built in at its right edge.
  */
 export function SearchBar({ label, trailing, inputRef, ...input }: InputHTMLAttributes<HTMLInputElement> & {
   /** The field's accessible name; also names the search region. */

@@ -107,8 +107,8 @@ const block = (root: { findByText: typeof screen.findByText }, text: string) =>
 const drawer = () => screen.findByRole("complementary", { name: "Arsenal" });
 
 /** What the host scope shows (its visible text, without the hidden native select's options). */
-const scopeText = (picker: HTMLElement): string =>
-  [...(picker.closest("label")?.childNodes ?? [])].filter((n) => n.nodeName !== "SELECT").map((n) => n.textContent).join(" ");
+const scopeText = (chip: HTMLElement): string => [...chip.children].map((n) => n.textContent).join(" ");
+const hostChip = (scope: { getByRole: typeof screen.getByRole }) => scope.getByRole("button", { name: /^Fill for host/ });
 
 describe("Arsenal", () => {
   it("A opens the drawer filled for the host in view and Esc closes it", async () => {
@@ -117,7 +117,7 @@ describe("Arsenal", () => {
     await screen.findByRole("tab", { name: "Next" });
     await user.keyboard("a");
     const d = within(await drawer());
-    expect(d.getByRole("combobox", { name: "Fill for host" })).toHaveDisplayValue("dc01");
+    expect(hostChip(d)).toHaveAccessibleName("Fill for host: dc01");
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zzprobe");
     await user.click(await d.findByRole("option", { name: /Zzprobe the target/ }));
     expect(await block(d, "zzprobe 10.10.10.5 from 10.10.14.9")).toBeInTheDocument();
@@ -212,7 +212,8 @@ describe("Arsenal", () => {
     expect(await screen.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
     // No host until one is picked.
     expect(await block(screen, "zzprobe {TARGET_IP} from 10.10.14.9")).toBeInTheDocument();
-    await user.selectOptions(screen.getByRole("combobox", { name: "Host" }), "dc01");
+    await user.click(screen.getByRole("button", { name: /^Fill for host/ }));
+    await user.click(screen.getByRole("option", { name: /dc01/ }));
     expect(await block(screen, "zzprobe 10.10.10.5 from 10.10.14.9")).toBeInTheDocument();
   });
 
@@ -265,7 +266,7 @@ describe("Arsenal", () => {
     mount("/arsenal", EXAM);
     m.engagementGet.mockImplementation(() => new Promise<Engagement>((r) => (release = r)));
     expect(await screen.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
-    await screen.findByRole("option", { name: "dc01" });
+    await screen.findByRole("button", { name: "Fill for host: dc01" });
     expect(screen.queryByText(/zzrelay/)).not.toBeInTheDocument();
     expect(screen.queryByText(/zzprobe/)).not.toBeInTheDocument();
     await act(async () => release(EXAM));
@@ -279,7 +280,7 @@ describe("Arsenal", () => {
     await screen.findByText("Mock exam A");
     await user.click(screen.getByRole("button", { name: "Arsenal" }));
     const d = within(await drawer());
-    expect(d.queryByRole("combobox", { name: "Fill for host" })).not.toBeInTheDocument();
+    expect(d.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
     expect(within(d.getByRole("search", { name: "Search the Arsenal" })).getByText("for no host")).toBeInTheDocument();
     act(() => useArsenalStore.getState().openCard("zz-card"));
     expect(await block(d, "zzprobe {TARGET_IP} from 10.10.14.9")).toBeInTheDocument();
@@ -293,7 +294,7 @@ describe("Arsenal", () => {
     const bar = within(within(await drawer()).getByRole("search", { name: "Search the Arsenal" }));
     expect(bar.getByRole("textbox", { name: "Search the Arsenal" })).toBeInTheDocument();
     expect(bar.getByText("⌕")).toBeInTheDocument();
-    expect(scopeText(bar.getByRole("combobox", { name: "Fill for host" }))).toBe("for dc01 ⌄");
+    expect(scopeText(hostChip(bar))).toBe("for dc01 ⌄");
   });
 
   it("search is keyboard-first: arrows pick, Enter opens the selection or the top result", async () => {
@@ -324,7 +325,7 @@ describe("Arsenal", () => {
     await screen.findByText("Mock exam A");
     await user.keyboard("a");
     const d = within(await drawer());
-    expect(d.queryByRole("combobox", { name: "Fill for host" })).not.toBeInTheDocument();
+    expect(d.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "a");
     expect(screen.getByRole("complementary", { name: "Arsenal" })).toBeInTheDocument();
     expect(d.getByRole("textbox", { name: "Search the Arsenal" })).toHaveValue("a");
@@ -463,7 +464,8 @@ describe("full-screen Arsenal uses the engagement you came from (B4)", () => {
   it("a remembered engagement that no longer exists falls back to the most recently active one", async () => {
     useLastEngagementStore.setState({ engagementId: "gone", hostId: "hx" });
     mountAt("/arsenal");
-    expect(await screen.findByRole("option", { name: "dc01" })).toBeInTheDocument();
+    await userEvent.setup().click(await screen.findByRole("button", { name: /^Fill for host/ }));
+    expect(await screen.findByRole("option", { name: /dc01/ })).toBeInTheDocument();
     expect(screen.getByText("Mock exam A")).toBeInTheDocument();
     expect(m.engagementGet).not.toHaveBeenCalledWith("gone");
   });
@@ -482,7 +484,8 @@ describe("full-screen Arsenal uses the engagement you came from (B4)", () => {
     mountAt("/e/e2/h/h9");
     await screen.findByRole("tab", { name: "Next" });
     act(() => nav.go("/arsenal"));
-    expect(await screen.findByRole("option", { name: "web09" })).toBeInTheDocument();
+    await userEvent.setup().click(await screen.findByRole("button", { name: /^Fill for host/ }));
+    expect(await screen.findByRole("option", { name: /web09/ })).toBeInTheDocument();
   });
 });
 
@@ -592,12 +595,12 @@ describe("host picker in the drawer (U3)", () => {
     await user.type(await d.findByRole("combobox", { name: "Value for FILE" }), "a.exe");
     expect(await block(d, "zzcopy a.exe C:\\Windows\\Temp")).toBeInTheDocument();
     await user.keyboard("{Alt>}h{/Alt}");
-    const picker = d.getByRole("combobox", { name: "Fill for host" });
-    expect(picker).toHaveFocus();
-    await user.selectOptions(picker, "web02");
+    expect(hostChip(d)).toHaveFocus();
+    await user.click(d.getByRole("option", { name: /web02/ }));
     expect(await block(d, "zzprobe 10.10.10.6 from 10.10.14.9")).toBeInTheDocument();
     expect(d.getByRole("combobox", { name: "Value for FILE" })).toHaveValue("");
-    await user.selectOptions(picker, "No host");
+    await user.keyboard("{Alt>}h{/Alt}");
+    await user.click(d.getByRole("option", { name: "No host" }));
     expect(await block(d, "zzprobe {TARGET_IP} from 10.10.14.9")).toBeInTheDocument();
   });
 });

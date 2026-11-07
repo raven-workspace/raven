@@ -10,7 +10,8 @@ import { flattenGroups, searchPalette, type PaletteResult } from "../palette/sea
 import { CardView, CommandPane } from "./CardView";
 import { useArsenalStore } from "./useArsenalStore";
 import { useFillScope } from "./useFillScope";
-import { HostPicker, isHostPickKey, openPicker } from "./HostPicker";
+import { HostChip, isHostPickKey } from "./HostChip";
+import type { HostChipHandle } from "./HostChip";
 import { SearchBar } from "./SearchBar";
 
 /** Commands shown in the result list; cards are never capped. */
@@ -73,11 +74,11 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
     setHostId(id);
     setOverrides({});
   };
-  const pickerRef = useRef<HTMLSelectElement>(null);
+  const pickerRef = useRef<HostChipHandle>(null);
   useKeydown((e) => {
     if (!engagementId || e.defaultPrevented || isDialogOpen() || !isHostPickKey(e)) return;
     e.preventDefault();
-    openPicker(pickerRef.current);
+    pickerRef.current?.open();
   });
   const searchRef = useRef<HTMLInputElement>(null);
   const { d, host } = useFillBase(engagementId, hostId);
@@ -152,7 +153,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
             setSelected(0);
           }}
           onKeyDown={onSearchKey}
-          trailing={engagementId ? <HostPicker ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} /> : undefined}
+          trailing={engagementId ? <HostChip ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} /> : undefined}
         />
         <Button
           size="sm"

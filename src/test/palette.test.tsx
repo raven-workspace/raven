@@ -91,8 +91,8 @@ beforeEach(() => {
 afterEach(() => setImported({ commands: [], cards: [] }));
 
 /** What the host scope shows (its visible text, without the hidden native select's options). */
-const scopeText = (picker: HTMLElement): string =>
-  [...(picker.closest("label")?.childNodes ?? [])].filter((n) => n.nodeName !== "SELECT").map((n) => n.textContent).join(" ");
+const scopeText = (chip: HTMLElement): string => [...chip.children].map((n) => n.textContent).join(" ");
+const hostChip = (scope: { getByRole: typeof screen.getByRole }) => scope.getByRole("button", { name: /^Fill for host/ });
 
 describe("⌘K palette", () => {
   it("⌘K opens with the host chip and Enter copies the filled command", async () => {
@@ -101,7 +101,7 @@ describe("⌘K palette", () => {
     await screen.findByRole("tab", { name: "Next" });
     await user.keyboard(cmdK);
     const box = await screen.findByRole("combobox", { name: "Search" });
-    expect(screen.getByRole("combobox", { name: "Fill for host" })).toHaveDisplayValue("dc01");
+    expect(hostChip(screen)).toHaveAccessibleName("Fill for host: dc01");
     await user.type(box, "zzprobe");
     await user.keyboard("{Enter}");
     expect(await navigator.clipboard.readText()).toBe("zzprobe 10.10.10.5 from 10.10.14.9");
@@ -141,7 +141,7 @@ describe("⌘K palette", () => {
     mount("/");
     await screen.findByText("Mock exam A");
     await user.keyboard(cmdK);
-    expect(screen.queryByRole("combobox", { name: "Fill for host" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzprobe");
     await user.keyboard("{Enter}");
     expect(await navigator.clipboard.readText()).toBe("zzprobe {TARGET_IP} from 10.10.14.9");
@@ -227,13 +227,14 @@ describe("host picker in the palette (U3)", () => {
     const b = within(bar);
     expect(b.getByRole("combobox", { name: "Search" })).toBeInTheDocument();
     expect(b.getByText("⌕")).toBeInTheDocument();
-    const picker = b.getByRole("combobox", { name: "Fill for host" });
-    expect(scopeText(picker)).toBe("for dc01 ⌄");
+    const chip = hostChip(b);
+    expect(scopeText(chip)).toBe("for dc01 ⌄");
     // The menu lists each host with its IP, plus No host.
-    const opts = within(picker).getAllByRole("option") as HTMLOptionElement[];
-    expect(opts.map((o) => o.label)).toEqual(["No host", "dc01  10.10.10.5", "web02  10.10.10.6"]);
-    await user.selectOptions(picker, "No host");
-    expect(scopeText(picker)).toBe("for no host ⌄");
+    await user.click(chip);
+    const opts = within(screen.getByRole("listbox", { name: "Fill for host" })).getAllByRole("option");
+    expect(opts.map((o) => o.textContent)).toEqual(["No host", "dc0110.10.10.5", "web0210.10.10.6"]);
+    await user.click(opts[0]!);
+    expect(scopeText(chip)).toBe("for no host ⌄");
   });
 
   it("on the dashboard the bar reads for no host", async () => {
@@ -243,7 +244,7 @@ describe("host picker in the palette (U3)", () => {
     await user.keyboard(cmdK);
     const bar = await screen.findByRole("search", { name: "Search" });
     expect(within(bar).getByText("for no host")).toBeInTheDocument();
-    expect(within(bar).queryByRole("combobox", { name: "Fill for host" })).not.toBeInTheDocument();
+    expect(within(bar).queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
   });
   const preview = () => screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent!.startsWith("zz"));
 
@@ -256,11 +257,11 @@ describe("host picker in the palette (U3)", () => {
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzprobe");
     expect((await preview()).textContent).toBe("zzprobe 10.10.10.5 from 10.10.14.9");
     await user.keyboard("{Alt>}h{/Alt}");
-    const picker = screen.getByRole("combobox", { name: "Fill for host" });
-    expect(picker).toHaveFocus();
-    await user.selectOptions(picker, "web02");
+    expect(hostChip(screen)).toHaveFocus();
+    await user.click(screen.getByRole("option", { name: /web02/ }));
     expect((await preview()).textContent).toBe("zzprobe 10.10.10.6 from 10.10.14.9");
-    await user.selectOptions(picker, "No host");
+    await user.keyboard("{Alt>}h{/Alt}");
+    await user.click(screen.getByRole("option", { name: "No host" }));
     expect((await preview()).textContent).toBe("zzprobe {TARGET_IP} from 10.10.14.9");
     expect(screen.getByRole("dialog", { name: "Search" })).toBeInTheDocument();
   });
@@ -274,7 +275,8 @@ describe("host picker in the palette (U3)", () => {
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzfetch");
     await user.type(await screen.findByRole("combobox", { name: "Value for FILE" }), "x.exe");
     expect((await preview()).textContent).toBe("zzfetch http://10.10.14.9/x.exe");
-    await user.selectOptions(screen.getByRole("combobox", { name: "Fill for host" }), "web02");
+    await user.click(hostChip(screen));
+    await user.click(screen.getByRole("option", { name: /web02/ }));
     expect((await preview()).textContent).toBe("zzfetch http://10.10.14.9/{FILE}");
   });
 });

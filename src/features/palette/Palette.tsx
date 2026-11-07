@@ -13,7 +13,8 @@ import { fillLibraryCommand } from "../checklist/goalCommands";
 import { COMMAND_PRE } from "../checklist/CommandList";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useFillScope, useLastEngagementStore } from "../arsenal/useFillScope";
-import { HostPicker, isHostPickKey, openPicker } from "../arsenal/HostPicker";
+import { HostChip, isHostPickKey } from "../arsenal/HostChip";
+import type { HostChipHandle } from "../arsenal/HostChip";
 import { SearchBar } from "../arsenal/SearchBar";
 import { useFillBase } from "./fillData";
 import { GENERATORS } from "./generators";
@@ -46,7 +47,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
-  const pickerRef = useRef<HTMLSelectElement>(null);
+  const pickerRef = useRef<HostChipHandle>(null);
   const pickHost = (id: string | null) => {
     setHostId(id);
     setOverrides({});
@@ -163,11 +164,11 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (engagementId && isHostPickKey(e)) {
       e.preventDefault();
-      openPicker(pickerRef.current);
+      pickerRef.current?.open();
       return;
     }
-    // Enter on the host picker chooses a host, never copies.
-    if (e.key !== "Enter" || e.nativeEvent.isComposing || e.target instanceof HTMLSelectElement) return;
+    // Enter on the host chip chooses a host, never copies (the chip stops it; this is a backstop).
+    if (e.key !== "Enter" || e.nativeEvent.isComposing || (e.target instanceof HTMLElement && e.target.getAttribute("aria-haspopup") === "listbox")) return;
     e.preventDefault();
     void run(e.metaKey || e.ctrlKey);
   };
@@ -190,7 +191,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
         onKeyDown={onSearchKey}
         trailing={
           engagementId ? (
-            <HostPicker ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} {...(remembered && d.engagement ? { engagementName: d.engagement.name } : {})} />
+            <HostChip ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} {...(remembered && d.engagement ? { engagementName: d.engagement.name } : {})} />
           ) : undefined
         }
       />

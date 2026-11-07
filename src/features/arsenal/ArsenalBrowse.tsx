@@ -9,6 +9,7 @@ import { useFillBase } from "../palette/fillData";
 import { GENERATORS } from "../palette/generators";
 import { TransferGenerator } from "../generators/TransferGenerator";
 import { CardView } from "./CardView";
+import { HostChip } from "./HostChip";
 import { useArsenalStore } from "./useArsenalStore";
 import { useFillScope, useLastEngagementStore } from "./useFillScope";
 
@@ -67,21 +68,22 @@ export function ArsenalBrowse() {
     <div className="grid h-full min-h-0 grid-cols-[280px_1fr] gap-6 px-6 py-5">
       <nav aria-label="Arsenal" className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
         {d.engagement && <p className="m-0 truncate text-xs text-fg-2">{d.engagement.name}</p>}
-        <label className="flex items-center gap-2 text-xs text-muted">
+        <div className="grid grid-cols-[auto_1fr] items-center justify-items-start gap-2 text-xs text-muted">
           Host
-          <select
-            aria-label="Host"
-            value={hostId ?? ""}
-            onChange={(e) => {
-              setHostId(e.target.value || null);
-              setOverrides({});
-            }}
-            className="h-7 min-w-0 flex-1 rounded-sm border border-line-2 bg-bg px-1 text-xs text-fg-2"
-          >
-            <option value="">{engagementId ? "No host" : "No active engagement"}</option>
-            {d.hosts.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
-          </select>
-        </label>
+          {engagementId ? (
+            <HostChip
+              align="start"
+              hosts={d.hosts}
+              value={host?.id ?? null}
+              onChange={(id) => {
+                setHostId(id);
+                setOverrides({});
+              }}
+            />
+          ) : (
+            <span>no active engagement</span>
+          )}
+        </div>
         <section className="flex flex-col gap-1" aria-label="Stage">
           <h2 className={`${labelClass} m-0`}>Stage</h2>
           <FilterButton on={stage === null} onClick={() => setStage(null)}>All</FilterButton>
