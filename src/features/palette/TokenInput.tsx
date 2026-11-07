@@ -6,15 +6,17 @@ import type { Suggestion } from "./suggest";
  * A fill-value field with suggestions from what Raven knows. ↓/↑ move through them, ↵ picks one (and is kept from
  * the surrounding palette, which would copy), anything typed is still free text.
  */
-export function TokenInput({ name, value, onChange, suggestions, placeholder, className, ref }: {
+export function TokenInput({ name, value, onChange, suggestions, placeholder, className, autoValue, ref }: {
   name: string; value: string; onChange: (value: string) => void; suggestions: Suggestion[];
+  /** The value is an auto-fill, not something typed: offer every suggestion, and select it on focus so typing replaces it. */
+  autoValue?: boolean;
   placeholder?: string; className?: string; ref?: Ref<HTMLInputElement>;
 }) {
   const listId = useId();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const typed = value.trim().toLowerCase();
-  const shown = suggestions.filter((s) => s.value !== value && (!typed || s.value.toLowerCase().includes(typed))).slice(0, 8);
+  const shown = suggestions.filter((s) => s.value !== value && (autoValue || !typed || s.value.toLowerCase().includes(typed))).slice(0, 8);
   const expanded = open && shown.length > 0;
 
   // Esc with the list open closes only the list. Window capture runs before Radix's document-level Esc (which
@@ -64,7 +66,10 @@ export function TokenInput({ name, value, onChange, suggestions, placeholder, cl
         className={className}
         placeholder={placeholder}
         value={value}
-        onFocus={() => setOpen(true)}
+        onFocus={(e) => {
+          setOpen(true);
+          if (autoValue) e.currentTarget.select();
+        }}
         onBlur={() => setOpen(false)}
         onChange={(e) => {
           onChange(e.target.value);

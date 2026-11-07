@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { setImported } from "../engines/library/store";
 import type { LibraryCommand } from "../engines/library/types";
+import { useCredPickStore } from "../features/checklist/credPick";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { usePaletteStore } from "../features/palette/usePaletteStore";
 import { useArsenalStore } from "../features/arsenal/useArsenalStore";
@@ -347,6 +348,25 @@ describe("token suggestions (U4)", () => {
     await user.clear(field);
     await user.type(field, "carol");
     expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzuser carol@10.10.10.5")).toBeInTheDocument();
+  });
+
+  it("⌥C opens the credential chip; picking a credential fills USER and PASS and is shared with the host", async () => {
+    const user = userEvent.setup();
+    m.credentialsList.mockResolvedValue([cred("c1", "alice", "Winter2024!"), cred("c2", "bob", "Summer2025!")]);
+    setImported({ commands: [{ ...USERCMD, template: "zzuser {USER}@{TARGET_IP} {PASS}" }], cards: [] });
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzuser");
+    await user.keyboard("{Alt>}c{/Alt}");
+    const chip = screen.getByRole("button", { name: /^Fill with credential/ });
+    expect(chip).toHaveFocus();
+    await user.click(screen.getByRole("option", { name: /bob/ }));
+    expect(useCredPickStore.getState().picks.h1).toBe("c2");
+    expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzuser bob@10.10.10.5 ••••••••")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Value for USER" })).toHaveValue("bob");
+    expect(screen.queryByRole("combobox", { name: "Value for PASS" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Summer2025!/)).not.toBeInTheDocument();
   });
 
   it("Esc with the suggestion list open closes only the list; the next Esc closes the palette", async () => {

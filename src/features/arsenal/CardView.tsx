@@ -1,36 +1,19 @@
 import { useMemo } from "react";
-import { fillCommand, filterForKind, HOST_STAGES } from "../../engines/checklist";
+import { filterForKind, HOST_STAGES } from "../../engines/checklist";
 import { getCards, getLibrary, getToolkit, useLibraryVersion } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
 import { Chip } from "../../ui";
 import { fillLibraryCommand } from "../checklist/goalCommands";
 import { CommandList } from "../checklist/CommandList";
 import { useFillBase } from "../palette/fillData";
-import { tokenSuggestions, type SuggestContext } from "../palette/suggest";
-import { TokenInput } from "../palette/TokenInput";
-import { FilePicker, isFileToken } from "../generators/FilePicker";
+import type { SuggestContext } from "../palette/suggest";
+import { useCredPickStore } from "../checklist/credPick";
+import { CredChip } from "./CredChip";
+import { FillBar } from "./FillBar";
+import { autoFill, tokensOf, usesCred } from "./fillTokens";
 
 const STAGE_TITLE = new Map(HOST_STAGES.map((s) => [s.id, s.title]));
 export const stageTitle = (id: string) => STAGE_TITLE.get(id) ?? id;
-
-const TOKEN_RE = /(?<![$%])\{([A-Z][A-Z0-9_-]+)\}|<([A-Z][A-Z0-9_]+)>/g;
-const TARGET_ALIASES = new Set(["TARGET", "IP", "TARGET-IP"]);
-/** Never a chip: they come from the picked credential and stay masked. */
-const SECRET_TOKENS = new Set(["PASS", "HASH", "CRED"]);
-
-/** The editable fill tokens a set of templates uses, in first-seen order, aliases folded onto their canonical name. */
-function tokensOf(commands: LibraryCommand[]): string[] {
-  const out = new Set<string>();
-  for (const c of commands) {
-    for (const m of c.template.matchAll(TOKEN_RE)) {
-      let t = m[1] ?? m[2] ?? "";
-      if (TARGET_ALIASES.has(t)) t = "TARGET_IP";
-      if (t === "DC-IP") t = "DC_IP";
-      if (!SECRET_TOKENS.has(t)) out.add(t);
-    }
-  }
-  return [...out];
-}
 
 /**
  * Fill chips plus filled blocks for a list of commands. `engagementId` and `hostId` decide what fills; the exam rules
@@ -41,7 +24,7 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   /** Chip edits, owned by the screen so they can be dropped when the host changes. */
   overrides: Record<string, string>; onOverrides: (next: Record<string, string>) => void;
 }) {
-  const { d, host, makeInput, examReady } = useFillBase(engagementId, hostId);
+  const { d, host, cred, credOwnerId, makeInput, examReady } = useFillBase(engagementId, hostId);
   const kind = d.engagement?.kind;
 
   const visible = (list: LibraryCommand[]) => {
@@ -53,7 +36,9 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   const main = visible(commands);
   const extra = visible(also);
   const input = useMemo(() => makeInput(overrides), [makeInput, overrides]);
-  const tokens = tokensOf([...main.shown, ...extra.shown]);
+  const templates = [...main.shown, ...extra.shown].map((c) => c.template);
+  const tokens = tokensOf(templates);
+  const auto = autoFill(tokens, makeInput({}));
   const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit: getToolkit() };
 
   const block = (c: LibraryCommand, msf: Set<string>) => (
@@ -65,42 +50,18 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
 
   return (
     <div className="flex flex-col gap-4">
-      {tokens.length > 0 && (
-        <div className="flex flex-wrap gap-2" aria-label="Fill values">
-          {tokens.map((t) => {
-            const auto = fillCommand(`{${t}}`, { ...input, overrides: {} });
-            return (
-              <label
-                key={t}
-                {...(auto.dcByName && !overrides[t] ? { title: "DC (by name): no Kerberos/LDAP seen, picked by its host name" } : {})}
-                className={`flex items-center gap-1.5 text-xs ${auto.unresolved.length > 0 && !overrides[t] ? "text-warn" : "text-muted"}`}
-              >
-                {t}
-                {auto.dcByName && !overrides[t] && <span className="text-[11px] text-muted-2">(by name)</span>}
-                {isFileToken(t) ? (
-                  <FilePicker
-                    name={t}
-                    os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
-                    className="h-7 w-36"
-                    placeholder={auto.unresolved.length > 0 ? "" : auto.text}
-                    value={overrides[t] ?? ""}
-                    onChange={(v) => onOverrides({ ...overrides, [t]: v })}
-                  />
-                ) : (
-                  <TokenInput
-                    name={t}
-                    className="h-7 w-36"
-                    placeholder={auto.unresolved.length > 0 ? "" : auto.text}
-                    value={overrides[t] ?? ""}
-                    suggestions={tokenSuggestions(t, suggestCtx)}
-                    onChange={(v) => onOverrides({ ...overrides, [t]: v })}
-                  />
-                )}
-              </label>
-            );
-          })}
+      {engagementId && usesCred(templates) && (
+        <div className="grid justify-items-start">
+          <CredChip
+            credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred} align="start"
+            onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)}
+          />
         </div>
       )}
+      <FillBar
+        tokens={tokens} auto={auto} overrides={overrides} onOverrides={onOverrides} suggest={suggestCtx}
+        os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
+      />
       <div className="flex flex-col gap-3">{main.shown.map((c) => block(c, main.msfMarker))}</div>
       {main.shown.length === 0 && commands.length > 0 && <p className="m-0 text-xs text-muted">Nothing here is allowed in this exam.</p>}
       {extra.shown.length > 0 && (

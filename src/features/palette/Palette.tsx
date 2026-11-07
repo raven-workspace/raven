@@ -13,16 +13,19 @@ import { fillLibraryCommand } from "../checklist/goalCommands";
 import { COMMAND_PRE } from "../checklist/CommandList";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useFillScope, useLastEngagementStore } from "../arsenal/useFillScope";
+import { CredChip, isCredPickKey } from "../arsenal/CredChip";
+import type { CredChipHandle } from "../arsenal/CredChip";
+import { FillBar } from "../arsenal/FillBar";
+import { autoFill, tokensOf } from "../arsenal/fillTokens";
 import { HostChip, isHostPickKey } from "../arsenal/HostChip";
 import type { HostChipHandle } from "../arsenal/HostChip";
+import { useCredPickStore } from "../checklist/credPick";
 import { SearchBar } from "../arsenal/SearchBar";
 import { useFillBase } from "./fillData";
 import { GENERATORS } from "./generators";
 import { flattenGroups, searchPalette, withoutSecrets, type EngagementItem, type PaletteResult } from "./search";
 import { usePaletteStore } from "./usePaletteStore";
-import { tokenSuggestions, type SuggestContext } from "./suggest";
-import { TokenInput } from "./TokenInput";
-import { FilePicker, isFileToken } from "../generators/FilePicker";
+import type { SuggestContext } from "./suggest";
 
 const MAX_RESULTS = 30;
 const GROUPS = { command: "Commands", generator: "Generators", card: "Cards", item: "This engagement" } as const;
@@ -43,18 +46,19 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const libraryVersion = useLibraryVersion();
   // The chip picks another host for this search only; typed values never carry over to it.
   const [hostId, setHostId] = useState(openedHostId);
-  const { d, host, makeInput, examReady } = useFillBase(engagementId, hostId);
+  const { d, host, cred, credOwnerId, makeInput, examReady } = useFillBase(engagementId, hostId);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const pickerRef = useRef<HostChipHandle>(null);
+  const credRef = useRef<CredChipHandle>(null);
   const pickHost = (id: string | null) => {
     setHostId(id);
     setOverrides({});
   };
   const [status, setStatus] = useState<string>();
   const searchRef = useRef<HTMLInputElement>(null);
-  const tokenRefs = useRef<HTMLInputElement[]>([]);
+  const fieldEls = useRef(new Map<string, HTMLInputElement>());
 
   const items = useMemo<EngagementItem[]>(() => {
     if (!engagementId) return [];
@@ -87,8 +91,11 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
 
   const filled = useMemo(() => {
     if (current?.type !== "command") return null;
-    const input = makeInput({ ...toolPrefill(query, host?.os ?? null), ...Object.fromEntries(Object.entries(overrides).map(([k, v]) => [k.toUpperCase(), v])) });
-    return { cmd: fillLibraryCommand(current.command, input, current.msfMarker), input };
+    const prefill = toolPrefill(query, host?.os ?? null);
+    const input = makeInput({ ...prefill, ...Object.fromEntries(Object.entries(overrides).map(([k, v]) => [k.toUpperCase(), v])) });
+    // What each field fills with before anything is typed (a staged Toolkit file counts).
+    const tokens = tokensOf([current.command.template]);
+    return { cmd: fillLibraryCommand(current.command, input, current.msfMarker), input, tokens, auto: autoFill(tokens, makeInput(prefill)) };
   }, [current, host, makeInput, query, overrides]);
 
   useEffect(() => searchRef.current?.focus(), []);
@@ -137,21 +144,21 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
 
   const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit: getToolkit() };
 
-  // A field stays once edited, even though filling it resolves the token.
-  const tpl = current?.type === "command" ? current.command.template.toUpperCase() : "";
-  const unresolved = filled
-    ? [...new Set([...filled.cmd.unresolved, ...Object.keys(overrides).filter((k) => tpl.includes(k.toUpperCase()))])]
-    : [];
+  // Tab goes to the first field still empty, else the first field.
+  const firstUnfilled = (): HTMLInputElement | undefined => {
+    const t = filled?.tokens.find((n) => filled.auto[n]?.unresolved && !overrides[n]) ?? filled?.tokens[0];
+    return t ? fieldEls.current.get(t) : undefined;
+  };
 
   const onSearchKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       setSelected(Math.max(0, Math.min(results.length - 1, index + (e.key === "ArrowDown" ? 1 : -1))));
-    } else if (e.key === "Tab" && !e.shiftKey && unresolved.length > 0) {
+    } else if (e.key === "Tab" && !e.shiftKey && (filled?.tokens.length ?? 0) > 0) {
       e.preventDefault();
       // The dialog's focus trap would otherwise see Tab leave its last field and loop back to the top.
       e.stopPropagation();
-      tokenRefs.current[0]?.focus();
+      firstUnfilled()?.focus();
     } else if (e.key === "ArrowRight" && e.currentTarget.selectionStart === e.currentTarget.value.length && current?.type !== "item") {
       // Opens the card in the Arsenal drawer.
       const cardId = current?.type === "card" ? current.id : current?.type === "command" ? current.command.cardId : undefined;
@@ -165,6 +172,11 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     if (engagementId && isHostPickKey(e)) {
       e.preventDefault();
       pickerRef.current?.open();
+      return;
+    }
+    if (engagementId && isCredPickKey(e)) {
+      e.preventDefault();
+      credRef.current?.open();
       return;
     }
     // Enter on the host chip chooses a host, never copies (the chip stops it; this is a backstop).
@@ -191,7 +203,13 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
         onKeyDown={onSearchKey}
         trailing={
           engagementId ? (
-            <HostChip ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} {...(remembered && d.engagement ? { engagementName: d.engagement.name } : {})} />
+            <>
+              <CredChip
+                ref={credRef} credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred}
+                onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)}
+              />
+              <HostChip ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} {...(remembered && d.engagement ? { engagementName: d.engagement.name } : {})} />
+            </>
           ) : undefined
         }
       />
@@ -224,41 +242,11 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
         <div className="flex flex-col gap-2 border-t border-line pt-3">
           <pre className={COMMAND_PRE}>{filled.cmd.text}</pre>
           {filled.cmd.msfMarker && <Chip>uses your one Metasploit host</Chip>}
-          {unresolved.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {unresolved.map((name, i) => {
-                const key = name;
-                return (
-                  <label key={name} className="flex items-center gap-1.5 text-xs text-warn">
-                    {name}
-                    {isFileToken(name) ? (
-                      <FilePicker
-                        name={name}
-                        os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
-                        className="h-7 w-40"
-                        value={overrides[key] ?? ""}
-                        ref={(el) => {
-                          if (el) tokenRefs.current[i] = el;
-                        }}
-                        onChange={(v) => setOverrides((o) => ({ ...o, [key]: v }))}
-                      />
-                    ) : (
-                      <TokenInput
-                        name={name}
-                        className="h-7 w-40"
-                        value={overrides[key] ?? ""}
-                        suggestions={tokenSuggestions(name, suggestCtx)}
-                        ref={(el) => {
-                          if (el) tokenRefs.current[i] = el;
-                        }}
-                        onChange={(v) => setOverrides((o) => ({ ...o, [key]: v }))}
-                      />
-                    )}
-                  </label>
-                );
-              })}
-            </div>
-          )}
+          <FillBar
+            tokens={filled.tokens} auto={filled.auto} suggest={suggestCtx} os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
+            overrides={overrides} onOverrides={setOverrides}
+            fieldRef={(t, el) => (el ? fieldEls.current.set(t, el) : fieldEls.current.delete(t))}
+          />
         </div>
       )}
       {status && <p role="alert" className="m-0 text-xs text-warn">{status}</p>}
@@ -268,6 +256,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
         <span><Kbd>→</Kbd> card</span>
         <span><Kbd>⇥</Kbd> edit a value</span>
         {engagementId && <span><Kbd>⌥H</Kbd> host</span>}
+        {engagementId && <span><Kbd>⌥C</Kbd> credential</span>}
       </p>
     </div>
   );
