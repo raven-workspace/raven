@@ -221,7 +221,7 @@ describe("⌘K palette", () => {
 describe("host picker in the palette (U3)", () => {
   const H2: Host = { ...H1, id: "h2", name: "web02", ip: "10.10.10.6" };
 
-  it("the search bar is one field with a leading glyph and the host scope at its right edge", async () => {
+  it("the search bar is one field with a leading glyph; the host chip sits on the row under it", async () => {
     const user = userEvent.setup();
     m.hostsList.mockResolvedValue([H1, H2]);
     mount("/e/e1/h/h1");
@@ -231,7 +231,8 @@ describe("host picker in the palette (U3)", () => {
     const b = within(bar);
     expect(b.getByRole("combobox", { name: "Search" })).toBeInTheDocument();
     expect(b.getByText("⌕")).toBeInTheDocument();
-    const chip = hostChip(b);
+    const chip = hostChip(screen);
+    expect(bar).not.toContainElement(chip);
     expect(scopeText(chip)).toBe("for dc01 ⌄");
     // The menu lists each host with its IP, plus No host.
     await user.click(chip);
@@ -433,5 +434,187 @@ describe("token suggestions (U4)", () => {
     expect(within(list).getAllByRole("option").map((o) => o.firstChild?.textContent)).toEqual(["winPEASx64.exe", "SharpHound.exe"]);
     await user.click(within(list).getAllByRole("option")[0]!);
     expect(await d.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzfetch http://10.10.14.9/winPEASx64.exe")).toBeInTheDocument();
+  });
+});
+
+describe("⌘K groups, hosts and contained suggestions", () => {
+  const H2: Host = { ...H1, id: "h2", name: "web02", ip: "10.10.10.66" };
+  const CARD_CMD: LibraryCommand = { ...PROBE, id: "zz-card-cmd", title: "Zzcard step", cardId: "c-zz", source: "field-manual" };
+  const ZZCARD = { id: "c-zz", title: "Zzcard", stage: "initial-foothold", category: "Shells", os: "any", file: "02-Cards/S/Z.md" } as const;
+
+  it("finds a host by IP and Enter opens it", async () => {
+    const user = userEvent.setup();
+    m.hostsList.mockResolvedValue([H1, H2]);
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "10.10.10.66");
+    const list = screen.getByRole("listbox", { name: "Results" });
+    expect(await within(list).findByRole("group", { name: "This engagement" })).toBeInTheDocument();
+    expect(within(list).getAllByRole("option").map((o) => o.textContent)).toEqual(["web02host"]);
+    await user.keyboard("{Enter}");
+    expect(screen.queryByRole("dialog", { name: "Search" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /web02/ })).toBeInTheDocument();
+  });
+
+  it("Arsenal groups come first, then This engagement with hosts before log entries", async () => {
+    const user = userEvent.setup();
+    m.hostsList.mockResolvedValue([H1, H2]);
+    m.logList.mockResolvedValue([{
+      id: "l1", engagementId: "e1", kind: "command", title: "Zzprobe ran", hostIds: ["h1"], at: 1, createdAt: 1, updatedAt: 1,
+      content: { kind: "command", blocks: [{ command: "zzprobe", output: "", shell: "" }] },
+    }] as never);
+    setImported({ commands: [PROBE], cards: [] });
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "zz");
+    const list = screen.getByRole("listbox", { name: "Results" });
+    await within(list).findByRole("group", { name: "This engagement" });
+    const groups = within(list).getAllByRole("group");
+    expect(groups.length).toBeGreaterThanOrEqual(2);
+    expect(groups.at(-1)).toHaveAccessibleName("This engagement");
+    expect(within(groups.at(-1)!).getAllByRole("option").map((o) => o.textContent)).toEqual(["Zzprobe ranlog"]);
+    expect(within(groups[0]!).getAllByRole("option").map((o) => o.textContent)).toEqual(["Zzprobe the targetzzprobe"]);
+    await user.clear(screen.getByRole("combobox", { name: "Search" }));
+    await user.type(screen.getByRole("combobox", { name: "Search" }), "10");
+    const eng = within(await screen.findByRole("group", { name: "This engagement" })).getAllByRole("option");
+    expect(eng.map((o) => o.textContent)).toEqual(["dc01host", "web02host"]);
+  });
+
+  it("→ on a raven command opens the drawer solo view", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzprobe");
+    await user.keyboard("{ArrowRight}");
+    expect(screen.queryByRole("dialog", { name: "Search" })).not.toBeInTheDocument();
+    const d = within(await screen.findByRole("complementary", { name: "Arsenal" }));
+    expect(await d.findByText("Zzprobe the target")).toBeInTheDocument();
+    expect(d.getByRole("button", { name: "← Back" })).toBeInTheDocument();
+    expect(d.queryByRole("listbox", { name: "Arsenal results" })).not.toBeInTheDocument();
+  });
+
+  it("→ on a Field Manual command opens its card at that block", async () => {
+    const user = userEvent.setup();
+    setImported({ commands: [CARD_CMD], cards: [ZZCARD] });
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzcard step");
+    await user.keyboard("{ArrowRight}");
+    expect(useArsenalStore.getState()).toMatchObject({ open: true, cardId: "c-zz", blockId: "zz-card-cmd", solo: null });
+  });
+
+  it("results listbox contains no headings", async () => {
+    const user = userEvent.setup();
+    setImported({ commands: [PROBE, CARD_CMD], cards: [ZZCARD] });
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "zz");
+    const list = screen.getByRole("listbox", { name: "Results" });
+    expect(list.querySelector("h1,h2,h3,h4,h5,h6,ul,li")).toBeNull();
+    expect(within(list).queryAllByRole("heading")).toHaveLength(0);
+    for (const g of within(list).getAllByRole("group")) expect(g).toHaveAccessibleName();
+    expect(within(list).getAllByRole("option").length).toBeGreaterThan(0);
+  });
+
+  it("the footer says → in card and lists ⌥C credential", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    const dlg = within(await screen.findByRole("dialog", { name: "Search" }));
+    expect(dlg.getByText("in card")).toBeInTheDocument();
+    expect(dlg.getByText("credential")).toBeInTheDocument();
+  });
+
+  it("the host and credential chips sit on their own row under the search field", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    const bar = within(await screen.findByRole("search", { name: "Search" }));
+    expect(bar.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
+    expect(hostChip(screen)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Fill with credential/ })).toBeInTheDocument();
+  });
+
+  it("Esc with the host chip list open closes only the list; the palette stays open", async () => {
+    const user = userEvent.setup();
+    m.hostsList.mockResolvedValue([H1, H2]);
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    await screen.findByRole("combobox", { name: "Search" });
+    await user.keyboard("{Alt>}h{/Alt}");
+    expect(await screen.findByRole("listbox", { name: "Fill for host" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("listbox", { name: "Fill for host" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Search" })).toBeInTheDocument();
+  });
+
+  it("changing host flashes the preview", async () => {
+    const user = userEvent.setup();
+    m.hostsList.mockResolvedValue([H1, H2]);
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzprobe");
+    const pre = await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent!.startsWith("zz"));
+    expect(pre).not.toHaveAttribute("data-flash");
+    await user.keyboard("{Alt>}h{/Alt}");
+    await user.click(screen.getByRole("option", { name: /web02/ }));
+    expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzprobe 10.10.10.66 from 10.10.14.9")).toHaveAttribute("data-flash");
+  });
+
+  describe("suggestion list placement", () => {
+    const rect = (top: number, bottom: number) => ({ top, bottom, left: 0, right: 100, width: 100, height: bottom - top, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+    afterEach(() => vi.restoreAllMocks());
+
+    /** Lays the dialog body out at 0-400, its hint line at 360-380 and the USER field at `field`; the list is 150 tall. */
+    async function open(field: [number, number]) {
+      const user = userEvent.setup();
+      m.credentialsList.mockResolvedValue([{
+        id: "c1", engagementId: "e1", type: "password", username: "alice", domain: "CORP", secret: "Winter2024!", hashType: null, scope: "domain", localHostId: null,
+        sourceHostId: null, source: null, notes: null, crackStatus: null, crackedFrom: null, fromSecretId: null, createdAt: 1, updatedAt: 1,
+      }]);
+      setImported({ commands: [{ ...PROBE, id: "zz-user", title: "Zzuser login", template: "zzuser {USER}@{TARGET_IP}" }], cards: [] });
+      mount("/e/e1/h/h1");
+      await screen.findByRole("tab", { name: "Next" });
+      await user.keyboard(cmdK);
+      await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzuser");
+      vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(150);
+      vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+        if (this.hasAttribute("data-popup-bounds")) return rect(0, 400);
+        if (this.hasAttribute("data-hint-line")) return rect(360, 380);
+        // The field is the span around the input.
+        if (this.tagName === "SPAN" && this.querySelector(":scope > input[aria-label='Value for USER']")) return rect(...field);
+        return rect(0, 0);
+      });
+      await user.keyboard("{Tab}");
+      await user.type(screen.getByRole("combobox", { name: "Value for USER" }), "a");
+      return screen.findByRole("listbox", { name: "Suggestions for USER" });
+    }
+
+    it("flips above the field when the room below, down to the hint line, is too small", async () => {
+      const list = await open([300, 330]);
+      expect(list).toHaveAttribute("data-placement", "above");
+      expect(list.style.maxHeight).toBe("224px");
+    });
+
+    it("stays below when the list fits above the hint line", async () => {
+      const list = await open([100, 130]);
+      expect(list).toHaveAttribute("data-placement", "below");
+    });
+
+    it("never grows past the room on the side it takes", async () => {
+      const list = await open([200, 230]);
+      // Below: 360 - 230 - 4 = 126 is short of 150; above: 200 - 4 = 196 holds it.
+      expect(list).toHaveAttribute("data-placement", "above");
+      expect(list.style.maxHeight).toBe("196px");
+    });
   });
 });

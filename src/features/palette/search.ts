@@ -47,12 +47,20 @@ export function withoutSecrets(text: string, secrets: string[]): string {
   return text.replace(re, " ");
 }
 
-const TYPE_ORDER = ["generator", "command", "card"];
+/** Hosts first, then log entries, notes and credential labels. */
+const ITEM_RANK: Record<EngagementItem["kind"], number> = { host: 0, log: 1, note: 2, credential: 3 };
 
-/** Groups flattened to one list: generators, then commands, then cards; relevance order kept inside each type. */
-export function flattenGroups(groups: ArsenalGroup[]): ArsenalHit[] {
-  const all = groups.flatMap((g) => g.hits);
-  return TYPE_ORDER.flatMap((t) => all.filter((h) => h.type === t));
+/** The first `max` hits across the groups in order: the cap trims the tail and drops groups it empties; groups are never folded. */
+export function capGroups(groups: ArsenalGroup[], max: number): ArsenalGroup[] {
+  let left = max;
+  const out: ArsenalGroup[] = [];
+  for (const g of groups) {
+    if (left <= 0) break;
+    const hits = g.hits.slice(0, left);
+    left -= hits.length;
+    out.push({ ...g, hits });
+  }
+  return out;
 }
 
 /** Arsenal hits grouped by category, plus matching engagement items (log, notes, credential labels, hosts). */
@@ -61,6 +69,7 @@ export function searchPalette(query: string, ctx: PaletteContext): { groups: Ars
   const q = wordsOf(query);
   const items = (ctx.engagementItems ?? [])
     .filter((it) => matches(q, it.title, it.text))
+    .sort((a, b) => ITEM_RANK[a.kind] - ITEM_RANK[b.kind])
     .map<PaletteResult>((it) => ({ type: "item", id: it.id, title: it.title, item: it }));
   return { groups, items };
 }

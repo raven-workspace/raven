@@ -20,6 +20,11 @@ describe("searchArsenal", () => {
     expect(hits[0]!.id).toBe(PSEXEC.id);
     expect(hits.map((h) => h.id)).toContain(FIND_CREDS.id);
   });
+  it("at equal weight a title that starts with the typed words comes first", () => {
+    const other = cmd("other", { title: "Aaa transfer all files", category: "Shells-and-Transfers" });
+    const t = { id: "transfer", title: "Transfer a file", category: "Shells-and-Transfers" };
+    expect(searchArsenal("transfer a file", { library: [other], cards: [], generators: [t] })[0]!.hits.map((h) => h.id)).toEqual(["transfer", "other"]);
+  });
   it("cards and commands share a category group", () => {
     const g = searchArsenal("kerberos", { library: [KERBRUTE], cards: [KERB_CARD], generators: [] });
     expect(g).toHaveLength(1);

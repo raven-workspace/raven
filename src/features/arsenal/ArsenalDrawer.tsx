@@ -5,7 +5,6 @@ import { useMatch, useNavigate } from "react-router";
 import { fillCommand } from "../../engines/checklist";
 import { searchArsenal, type ArsenalHit } from "../../engines/library/arsenalSearch";
 import { getCards, getLibrary, getToolkit, useLibraryVersion } from "../../engines/library/store";
-import type { LibraryCommand } from "../../engines/library/types";
 import { copyPlain, copySecret } from "../../lib/clipboard";
 import { shortHostName } from "../../lib/hostName";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
@@ -24,21 +23,17 @@ import type { CredChipHandle } from "./CredChip";
 import { HostChip, isHostPickKey } from "./HostChip";
 import type { HostChipHandle } from "./HostChip";
 import { SearchBar } from "./SearchBar";
-import { ON } from "./styles";
+import { ResultList } from "./ResultList";
+import type { ResultGroup, ResultRow } from "./ResultList";
 import { useArsenalStore } from "./useArsenalStore";
 import { useFillScope, useLastEngagementStore } from "./useFillScope";
 
-type Row =
-  | { kind: "category"; id: string; category: string; label: string; count: number }
-  | { kind: "hit"; id: string; hit: ArsenalHit };
+type Row = ResultRow & ({ kind: "category"; category: string } | { kind: "hit"; hit: ArsenalHit });
 
-interface RowGroup {
-  key: string;
-  label: string;
-  rows: Row[];
-}
-
-const hitRow = (hit: ArsenalHit): Row => ({ kind: "hit", id: `arsenal-${hit.type}-${hit.id}`, hit });
+const hitRow = (hit: ArsenalHit): Row => ({
+  kind: "hit", id: `arsenal-${hit.type}-${hit.id}`, hit, title: hit.title,
+  tag: hit.type === "command" ? hit.command.tool : hit.type, mono: hit.type === "command",
+});
 
 function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: string; hostId: string | null }) {
   const navigate = useNavigate();
@@ -48,7 +43,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
   const [query, setQuery] = useState("");
   // With no query: the category being listed, else the category list.
   const [category, setCategory] = useState<string | null>(null);
-  const [solo, setSolo] = useState<LibraryCommand | null>(null);
+  const solo = useArsenalStore((s) => s.solo);
   const [selected, setSelected] = useState(0);
   const [status, setStatus] = useState<string>();
   // Fill chips apply across the whole drawer, but never carry over to another host.
@@ -96,7 +91,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
   );
   const searching = query.trim() !== "";
   const listing = searching || category !== null;
-  const rowGroups = useMemo<RowGroup[]>(() => {
+  const rowGroups = useMemo<ResultGroup<Row>[]>(() => {
     if (!listing) return [];
     return groups
       .filter((g) => searching || g.category === category)
@@ -106,10 +101,9 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
     () =>
       listing
         ? rowGroups.flatMap((g) => g.rows)
-        : groups.map((g) => ({ kind: "category", id: `arsenal-category-${g.category}`, category: g.category, label: g.label, count: g.hits.length })),
+        : groups.map((g): Row => ({ kind: "category", id: `arsenal-category-${g.category}`, category: g.category, title: g.label, tag: String(g.hits.length) })),
     [listing, rowGroups, groups],
   );
-  const rowIndex = useMemo(() => new Map(rows.map((r, i) => [r, i])), [rows]);
   const index = Math.min(selected, Math.max(0, rows.length - 1));
   const current: Row | undefined = rows[index];
 
@@ -175,20 +169,17 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
       if (engagementId) useLastEngagementStore.setState({ engagementId, hostId: host?.id ?? null });
       void navigate(`/arsenal?generator=${encodeURIComponent(hit.id)}`);
     } else if (hit.type === "card") {
-      setSolo(null);
       useArsenalStore.getState().openCard(hit.id);
     } else if (hit.command.cardId) {
-      setSolo(null);
       useArsenalStore.getState().openCard(hit.command.cardId, atBlock ? hit.command.id : undefined);
     } else {
-      setSolo(hit.command);
+      useArsenalStore.getState().openSolo(hit.command);
     }
   };
 
   /** From a card (or one command) back to the list. */
   const back = useCallback(() => {
-    setSolo(null);
-    useArsenalStore.setState({ cardId: null, blockId: null });
+    useArsenalStore.setState({ cardId: null, blockId: null, solo: null });
     searchRef.current?.focus();
   }, []);
   // Capture phase: Esc reaches the drawer before the screen's own Esc handler. On a card it goes back; in a category
@@ -257,32 +248,6 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
   const hints: [string, string][] = onList
     ? [["↵", "copy"], ["⌘↵", host ? "copy and log" : "copy and log (open a host)"], ["→", "in card"], ...(engagementId ? [["⌥H", "host"], ["⌥C", "credential"]] as [string, string][] : []), ["Esc", inCategory ? "back" : "close"]]
     : [["Esc", "back"], ...(engagementId ? [["⌥H", "host"]] as [string, string][] : [])];
-  const option = (r: Row, i: number) => (
-    <div
-      key={r.id}
-      id={r.id}
-      role="option"
-      aria-selected={i === index}
-      onClick={() => activate(r, i)}
-      onMouseMove={() => setSelected(i)}
-      className={`grid cursor-default grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-sm px-2 py-1 text-left text-[13px] ${i === index ? ON : "text-fg-2"}`}
-    >
-      {r.kind === "category" ? (
-        <>
-          <span className="min-w-0 truncate">{r.label}</span>
-          <span className="text-[11px] text-muted">{r.count}</span>
-        </>
-      ) : (
-        <>
-          <span className="min-w-0 truncate">{r.hit.title}</span>
-          <span className={`text-[11px] text-muted ${r.hit.type === "command" ? "font-mono" : ""}`}>
-            {r.hit.type === "command" ? r.hit.command.tool : r.hit.type}
-          </span>
-        </>
-      )}
-    </div>
-  );
-
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" onKeyDownCapture={onKeyCapture}>
       <header className="grid shrink-0 gap-2 border-b border-line px-4 py-3">
@@ -335,20 +300,13 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
         {showing === "card" && cardId && <CardView cardId={cardId} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} />}
         {showing === "solo" && solo && <CommandPane key={solo.id} commands={[solo]} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} />}
         {onList && (
-          <div id="arsenal-results" role="listbox" aria-label="Arsenal results" className="grid gap-2">
+          <>
             {examReady && rows.length === 0 && <p className="m-0 px-1 py-2 text-xs text-muted">Nothing matches</p>}
-            {listing
-              ? rowGroups.map((g, gi) => {
-                  const headingId = `arsenal-group-${gi}`;
-                  return (
-                    <div key={g.key} role="group" aria-labelledby={headingId} className="grid border-t border-line pt-1.5 first:border-t-0 first:pt-0">
-                      <div id={headingId} className="px-2 pb-0.5 text-[11px] font-semibold uppercase tracking-label text-muted">{g.label}</div>
-                      {g.rows.map((r) => option(r, rowIndex.get(r) ?? 0))}
-                    </div>
-                  );
-                })
-              : rows.map((r, i) => option(r, i))}
-          </div>
+            <ResultList
+              id="arsenal-results" label="Arsenal results" groups={listing ? rowGroups : [{ key: "categories", rows }]}
+              selected={index} onSelect={setSelected} onActivate={activate}
+            />
+          </>
         )}
       </div>
       <div className="grid">
@@ -363,7 +321,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
             {status && <p role="alert" className="m-0 text-xs text-warn">{status}</p>}
           </div>
         )}
-        <footer className="border-t border-line px-4 py-2 text-[11px] text-muted">
+        <footer data-hint-line="" className="border-t border-line px-4 py-2 text-[11px] text-muted">
           {hints.map(([key, label], i) => (
             <span key={key}>
               {i > 0 && " · "}

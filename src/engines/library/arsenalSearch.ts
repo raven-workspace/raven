@@ -87,7 +87,9 @@ export function searchArsenal(query: string, ctx: ArsenalContext): ArsenalGroup[
   for (const s of scored) byCategory.set(s.category, [...(byCategory.get(s.category) ?? []), s]);
   return [...byCategory.entries()]
     .map(([category, list]) => {
-      list.sort((a, b) => b.score - a.score || a.hit.title.localeCompare(b.hit.title));
+      // Equal weight: a title that starts with the typed words first (the thing named), then alphabetical.
+      const lead = (h: ArsenalHit) => (q.length > 0 && wordsOf(h.title).join(" ").startsWith(q.join(" ")) ? 1 : 0);
+      list.sort((a, b) => b.score - a.score || lead(b.hit) - lead(a.hit) || a.hit.title.localeCompare(b.hit.title));
       return { category, label: categoryLabel(category), best: list[0]!.score, hits: list.map((l) => l.hit) };
     })
     .sort((a, b) => b.best - a.best || a.label.localeCompare(b.label))

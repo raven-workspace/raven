@@ -174,7 +174,7 @@ describe("Transfer a file", () => {
     await screen.findByRole("tab", { name: "Next" });
     await user.keyboard("{Meta>}k{/Meta}");
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "transfer a file");
-    const opt = await screen.findByRole("option", { name: "Transfer a file" });
+    const opt = await screen.findByRole("option", { name: /^Transfer a file/ });
     expect(opt).toBeInTheDocument();
     await user.keyboard("{Enter}");
     expect(await generator()).toBeInTheDocument();

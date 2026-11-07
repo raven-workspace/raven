@@ -18,15 +18,23 @@ import { CommandPreview, fillPreview, toolPrefill } from "../arsenal/CommandPrev
 import { HostChip, isHostPickKey } from "../arsenal/HostChip";
 import type { HostChipHandle } from "../arsenal/HostChip";
 import { useCredPickStore } from "../checklist/credPick";
+import { ResultList } from "../arsenal/ResultList";
+import type { ResultGroup, ResultRow } from "../arsenal/ResultList";
 import { SearchBar } from "../arsenal/SearchBar";
 import { useFillBase } from "./fillData";
 import { GENERATORS } from "./generators";
-import { flattenGroups, searchPalette, withoutSecrets, type EngagementItem, type PaletteResult } from "./search";
+import { capGroups, searchPalette, withoutSecrets, type EngagementItem, type PaletteResult } from "./search";
 import { usePaletteStore } from "./usePaletteStore";
 import type { SuggestContext } from "./suggest";
 
 const MAX_RESULTS = 30;
-const GROUPS = { command: "Commands", generator: "Generators", card: "Cards", item: "This engagement" } as const;
+
+type PaletteRow = ResultRow & { result: PaletteResult };
+const paletteRow = (result: PaletteResult): PaletteRow => ({
+  result, id: `palette-${result.type}-${result.id}`, title: result.title,
+  tag: result.type === "command" ? result.command.tool : result.type === "item" ? result.item.kind : result.type,
+  mono: result.type === "command",
+});
 
 function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }: { engagementId: string; hostId: string | null; remembered: boolean; onClose: () => void }) {
   const qc = useQueryClient();
@@ -63,17 +71,25 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     return out;
   }, [engagementId, d.log, d.credentials, d.hosts]);
 
-  const results = useMemo(
+  const found = useMemo(
     () =>
-      searchPaletteFlat(query, {
+      searchPalette(query, {
         library: getLibrary(), cards: getCards(), generators: GENERATORS, engagementItems: items,
         ...(d.engagement ? { exam: { kind: d.engagement.kind, hostId: host?.id ?? "", msfHostId: d.engagement.msfHostId } } : {}),
         examPending: !examReady,
-      }).slice(0, MAX_RESULTS),
+      }),
     // getLibrary()/getCards() change only with the library version.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [query, items, host, d.engagement, examReady, libraryVersion],
   );
+  // Arsenal categories first (the drawer's rows), then one group for the engagement. Each list stops at MAX_RESULTS.
+  const rowGroups = useMemo<ResultGroup<PaletteRow>[]>(() => {
+    const out: ResultGroup<PaletteRow>[] = capGroups(found.groups, MAX_RESULTS)
+      .map((g) => ({ key: g.category, label: g.label, rows: g.hits.map(paletteRow) }));
+    if (found.items.length > 0) out.push({ key: "engagement", label: "This engagement", rows: found.items.slice(0, MAX_RESULTS).map(paletteRow) });
+    return out;
+  }, [found]);
+  const results = useMemo(() => rowGroups.flatMap((g) => g.rows.map((r) => r.result)), [rowGroups]);
   const index = Math.min(selected, Math.max(0, results.length - 1));
   const current: PaletteResult | undefined = results[index];
 
@@ -83,6 +99,9 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   );
 
   useEffect(() => searchRef.current?.focus(), []);
+  useEffect(() => {
+    if (current) document.getElementById(`palette-${current.type}-${current.id}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [current]);
 
   const focusToken = useCallback((t: string) => fieldEls.current.get(t)?.focus(), []);
   const focusCred = useCallback(() => credRef.current?.focus(), []);
@@ -151,11 +170,16 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
       e.stopPropagation();
       firstUnfilled()?.focus();
     } else if (e.key === "ArrowRight" && e.currentTarget.selectionStart === e.currentTarget.value.length && current?.type !== "item") {
-      // Opens the card in the Arsenal drawer.
-      const cardId = current?.type === "card" ? current.id : current?.type === "command" ? current.command.cardId : undefined;
-      if (!cardId) return;
+      // Goes in: a card opens in the Arsenal drawer, a command at its block, or alone when it has no card. Never a no-op.
+      if (!current) return;
       e.preventDefault();
-      useArsenalStore.getState().openCard(cardId);
+      if (current.type === "generator") {
+        void run(false);
+        return;
+      }
+      if (current.type === "card") useArsenalStore.getState().openCard(current.id);
+      else if (current.command.cardId) useArsenalStore.getState().openCard(current.command.cardId, current.command.id);
+      else useArsenalStore.getState().openSolo(current.command);
       onClose();
     }
   };
@@ -186,58 +210,47 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   };
 
   return (
-    <div className="flex flex-col gap-3" onKeyDown={onKey} onKeyDownCapture={onKeyCapture}>
-      <SearchBar
-        label="Search"
-        inputRef={searchRef}
-        role="combobox"
-        aria-expanded="true"
-        aria-controls="palette-results"
-        aria-activedescendant={current ? `palette-${current.type}-${current.id}` : undefined}
-        placeholder="Search commands, cards, this engagement"
-        value={query}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          setSelected(0);
-        }}
-        onKeyDown={onSearchKey}
-        trailing={
-          engagementId ? (
-            <>
-              <CredChip
-                ref={credRef} credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred}
-                onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)}
-              />
-              <HostChip ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} {...(remembered && d.engagement ? { engagementName: d.engagement.name } : {})} />
-            </>
-          ) : undefined
-        }
-      />
-      <ul id="palette-results" role="listbox" aria-label="Results" className="m-0 flex max-h-[44vh] list-none flex-col overflow-y-auto p-0">
-        {results.length === 0 && <li role="presentation" className="px-1 py-2 text-xs text-muted">Nothing matches</li>}
-        {results.map((r, i) => (
-          <li key={`${r.type}-${r.id}`} role="presentation">
-            {(i === 0 || results[i - 1]!.type !== r.type) && (
-              <h3 className="m-0 px-1 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-label text-muted">{GROUPS[r.type]}</h3>
-            )}
-            <div
-              id={`palette-${r.type}-${r.id}`}
-              role="option"
-              aria-selected={i === index}
-              onMouseMove={() => setSelected(i)}
-              onClick={() => {
-                setSelected(i);
-                searchRef.current?.focus();
-              }}
-              className={`flex cursor-default items-center justify-between gap-2 rounded-sm px-2 py-1 text-[13px] ${i === index ? "bg-surface-2 text-fg" : "text-fg-2"}`}
-            >
-              <span className="min-w-0 truncate">{r.title}</span>
-              {r.type === "command" && <span className="shrink-0 font-mono text-[11px] text-muted">{r.command.tool}</span>}
-              {r.type === "item" && <span className="shrink-0 text-[11px] text-muted">{r.item.kind}</span>}
-            </div>
-          </li>
-        ))}
-      </ul>
+    <div className="grid gap-3" onKeyDown={onKey} onKeyDownCapture={onKeyCapture}>
+      <header className="grid gap-2">
+        <SearchBar
+          label="Search"
+          inputRef={searchRef}
+          role="combobox"
+          aria-expanded="true"
+          aria-controls="palette-results"
+          aria-activedescendant={current ? `palette-${current.type}-${current.id}` : undefined}
+          placeholder="Search commands, cards, this engagement"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setSelected(0);
+          }}
+          onKeyDown={onSearchKey}
+          {...(engagementId ? { trailing: null } : {})}
+        />
+        {engagementId && (
+          <div className="grid grid-cols-[auto_minmax(0,1fr)] justify-items-start gap-3">
+            <HostChip
+              ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} className="max-w-full"
+              {...(remembered && d.engagement ? { engagementName: d.engagement.name } : {})}
+            />
+            <CredChip
+              ref={credRef} credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred}
+              onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} className="max-w-full"
+            />
+          </div>
+        )}
+      </header>
+      <div className="grid max-h-[44vh] overflow-y-auto">
+        {results.length === 0 && <p className="m-0 px-1 py-2 text-xs text-muted">Nothing matches</p>}
+        <ResultList
+          id="palette-results" label="Results" groups={rowGroups} selected={index} onSelect={setSelected}
+          onActivate={(_, i) => {
+            setSelected(i);
+            searchRef.current?.focus();
+          }}
+        />
+      </div>
       {filled && (
         <CommandPreview
           filled={filled} hasCred={cred !== null} hostKey={host?.id ?? null} suggest={suggestCtx} os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
@@ -247,22 +260,16 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
       )}
       {guard.hint && filled && guard.forKey === copyKey(filled.cmd) && <p role="status" className="m-0 text-xs text-warn">{guard.hint}</p>}
       {status && <p role="alert" className="m-0 text-xs text-warn">{status}</p>}
-      <p className="m-0 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
+      <p data-hint-line="" className="m-0 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
         <span><Kbd>↵</Kbd> copy</span>
         <span><Kbd>⌘↵</Kbd> copy and log{host ? "" : " (open a host)"}</span>
-        <span><Kbd>→</Kbd> card</span>
+        <span><Kbd>→</Kbd> in card</span>
         <span><Kbd>⇥</Kbd> edit a value</span>
         {engagementId && <span><Kbd>⌥H</Kbd> host</span>}
         {engagementId && <span><Kbd>⌥C</Kbd> credential</span>}
       </p>
     </div>
   );
-}
-
-/** Arsenal hits flattened (relevance order inside each type), then engagement items. Task 8 renders the groups. */
-function searchPaletteFlat(q: string, c: Parameters<typeof searchPalette>[1]): PaletteResult[] {
-  const r = searchPalette(q, c);
-  return [...flattenGroups(r.groups), ...r.items];
 }
 
 /** ⌘K: search commands, generators, cards and this engagement, and copy the filled command. Mounted while unlocked. */
