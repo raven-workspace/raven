@@ -13,6 +13,7 @@ import { CommandList } from "../checklist/CommandList";
 import { useFillBase } from "../palette/fillData";
 import type { SuggestContext } from "../palette/suggest";
 import { shortHostName } from "../../lib/hostName";
+import { WikiText } from "./WikiText";
 import { FillBar } from "./FillBar";
 import { autoFill, tokensOf } from "./fillTokens";
 
@@ -28,7 +29,7 @@ const FILL_VALUES = '[aria-label="Fill values"]';
  * Keys, with focus in the pane: `j`/`k` move between blocks, `c` (or Enter on a block) copies the focused one
  * through the copy guard. `focusBlockId` scrolls to a block and outlines it until the next keypress.
  */
-export function CommandPane({ commands, also = [], engagementId, hostId, overrides, onOverrides, focusCred: focusCredChip, focusBlockId = null, contents = false, autoFocus = true }: {
+export function CommandPane({ commands, also = [], engagementId, hostId, overrides, onOverrides, focusCred: focusCredChip, focusBlockId = null, contents = false, autoFocus = true, onOpenCard }: {
   commands: LibraryCommand[]; also?: LibraryCommand[]; engagementId: string; hostId: string | null;
   /** Chip edits, owned by the screen so they can be dropped when the host changes. */
   overrides: Record<string, string>; onOverrides: (next: Record<string, string>) => void;
@@ -38,6 +39,8 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   contents?: boolean;
   /** Take focus on mount so j/k/c work at once (off where focus belongs to a list beside the pane). */
   autoFocus?: boolean;
+  /** Opens a card a `[[link]]` in a note points at; without it, links show as plain text. */
+  onOpenCard?: (cardId: string) => void;
 }) {
   const { d, host, cred, makeInput, examReady } = useFillBase(engagementId, hostId);
   const kind = d.engagement?.kind;
@@ -210,10 +213,10 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   const block = (c: LibraryCommand, msf: Set<string>) => (
     <div
       key={c.id} id={`block-${c.id}`} data-block="" data-block-id={c.id} tabIndex={-1}
-      className={cx("-m-1.5 grid scroll-mt-10 gap-1 rounded-sm p-1.5 outline-none focus:ring-1 focus:ring-accent", marked === c.id && "ring-1 ring-accent")}
+      className={cx("-m-1.5 grid scroll-mt-14 gap-1 rounded-sm p-1.5 outline-none focus:ring-1 focus:ring-accent", marked === c.id && "ring-1 ring-accent")}
     >
       <CommandList
-        commands={[fillLibraryCommand(c, input, msf.has(c.id))]} hostName={hostName} hideDcNote
+        commands={[fillLibraryCommand(c, input, msf.has(c.id))]} hostName={hostName} hideDcNote strongTitles
         focusToken={(t) => {
           waitingBlock.current = c.id;
           focusToken(t);
@@ -223,7 +226,7 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
           focusCredChip?.();
         }}
       />
-      {c.why && <p className="m-0 text-xs text-muted">{c.why}</p>}
+      {c.why && <p className="m-0 text-xs text-muted"><WikiText text={c.why} onOpenCard={onOpenCard} /></p>}
     </div>
   );
 
@@ -251,12 +254,12 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
         os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
         fieldRef={(t, el) => (el ? fieldEls.current.set(t, el) : fieldEls.current.delete(t))}
       />
-      <div className="grid gap-3">{main.shown.map((c) => block(c, main.msfMarker))}</div>
+      <div className="grid gap-5">{main.shown.map((c) => block(c, main.msfMarker))}</div>
       {main.shown.length === 0 && commands.length > 0 && <p className="m-0 text-xs text-muted">Nothing here is allowed in this exam.</p>}
       {extra.shown.length > 0 && (
         <details className="grid gap-3">
           <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-label text-muted">Also in Raven</summary>
-          <div className="grid gap-3 pt-3">{extra.shown.map((c) => block(c, extra.msfMarker))}</div>
+          <div className="grid gap-5 pt-3">{extra.shown.map((c) => block(c, extra.msfMarker))}</div>
         </details>
       )}
     </div>
@@ -264,12 +267,13 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
 }
 
 /** One Field-Manual card: title and where it sits, a strip of its blocks, then the blocks in vault order, filled for the host. */
-export function CardView({ cardId, engagementId, hostId, overrides, onOverrides, focusCred, focusBlockId = null, autoFocus = true }: {
+export function CardView({ cardId, engagementId, hostId, overrides, onOverrides, focusCred, focusBlockId = null, autoFocus = true, onOpenCard }: {
   cardId: string; engagementId: string; hostId: string | null; overrides: Record<string, string>; onOverrides: (next: Record<string, string>) => void;
   focusCred?: () => void;
   /** The block to open at: scrolled into view and outlined until the next keypress. */
   focusBlockId?: string | null;
   autoFocus?: boolean;
+  onOpenCard?: (cardId: string) => void;
 }) {
   const version = useLibraryVersion();
   const card = getCards().find((c) => c.id === cardId);
@@ -300,7 +304,7 @@ export function CardView({ cardId, engagementId, hostId, overrides, onOverrides,
       </header>
       <CommandPane
         key={cardId} commands={commands} also={also} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={onOverrides}
-        focusCred={focusCred} focusBlockId={focusBlockId} autoFocus={autoFocus} contents
+        focusCred={focusCred} focusBlockId={focusBlockId} autoFocus={autoFocus} onOpenCard={onOpenCard} contents
       />
       <div className="grid justify-items-start gap-1">
         <Button size="sm" onClick={openInObsidian}>Open in Obsidian</Button>

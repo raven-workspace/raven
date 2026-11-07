@@ -242,7 +242,7 @@ export function ArsenalBrowse() {
   const focusCred = () => credRef.current?.focus();
   const reading = (() => {
     if (!open) return null;
-    const common = { engagementId, hostId, overrides, onOverrides: setOverrides, focusCred, autoFocus: false };
+    const common = { engagementId, hostId, overrides, onOverrides: setOverrides, focusCred, autoFocus: false, onOpenCard: fromCard };
     if (open.type === "generator") return open.id === "transfer" ? <TransferGenerator key={`${engagementId}`} engagementId={engagementId} hostId={hostId} /> : null;
     if (open.type === "card") return <CardView key={open.id} cardId={open.id} {...common} />;
     const c = open.command;

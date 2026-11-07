@@ -479,3 +479,46 @@ test("browse: no pane scrolls sideways or clips focus, and the contents strip si
     expect(await strip.locator("div").first().evaluate((el) => getComputedStyle(el).scrollbarWidth), `strip scrollbar at ${width}`).toBe("none");
   }
 });
+
+test("a [[link]] in a note opens its card, in browse and in the drawer", async ({ page }) => {
+  await open(page, "/arsenal", 1280);
+  const reading = page.getByRole("region", { name: "Reading" });
+  await page.locator("input[aria-label='Search the Arsenal']").fill("full tcp scan of a target list");
+  await page.getByRole("option", { name: /Full TCP scan of a target list/ }).first().click();
+  const link = reading.getByRole("button", { name: "Host-Discovery" });
+  await expect(link).toBeVisible();
+  await expect(reading.getByText(/\[\[/)).toHaveCount(0);
+  await link.click();
+  await expect(reading.getByRole("heading", { name: "Host Discovery" })).toBeVisible();
+
+  await open(page, FS01, 1280);
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press("a");
+  await page.locator("input[aria-label='Search the Arsenal']").fill("full tcp scan of a target list");
+  await page.getByRole("option", { name: /Full TCP scan of a target list/ }).first().waitFor();
+  await page.keyboard.press("ArrowRight");
+  const aside = page.locator("aside[aria-label='Arsenal']");
+  await aside.getByRole("button", { name: "Host-Discovery" }).click();
+  await expect(aside.getByRole("heading", { name: "Host Discovery" })).toBeVisible();
+});
+
+test("jumping to a block from the contents strip leaves its outline clear of the strip", async ({ page }) => {
+  for (const width of [1280, 900]) {
+    await open(page, "/arsenal", width);
+    const reading = page.getByRole("region", { name: "Reading" });
+    await page.locator("input[aria-label='Search the Arsenal']").fill("library");
+    await page.getByRole("option", { name: /Library-ms/ }).first().click();
+    await reading.getByRole("button", { name: /^From card / }).click();
+    const strip = reading.getByRole("navigation", { name: "On this card" });
+    await strip.waitFor();
+    for (const i of [1, 3]) {
+      await strip.getByRole("button").nth(i).click();
+      await page.waitForTimeout(600);
+      const block = reading.locator("[data-block]:focus");
+      await expect(block).toHaveCount(1);
+      const [s, b] = await Promise.all([strip.boundingBox(), block.boundingBox()]);
+      // The outline is a 1px ring at the block's edge: it must start below the strip.
+      expect(b!.y - 1, `block ${i} at ${width}`).toBeGreaterThanOrEqual(s!.y + s!.height);
+    }
+  }
+});

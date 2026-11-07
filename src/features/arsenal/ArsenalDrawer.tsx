@@ -131,6 +131,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
   useEffect(() => resetGuard(), [currentId, resetGuard]);
 
   const showing = searching ? "results" : solo ? "solo" : cardId ? "card" : category !== null ? "results" : "categories";
+  const openLinkedCard = (id: string) => useArsenalStore.getState().openCard(id);
   const onList = showing === "categories" || showing === "results";
   const previewRow = onList && listing;
 
@@ -311,8 +312,8 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
         )}
       </header>
       <div className="min-h-0 overflow-y-auto overflow-x-hidden px-4 py-3">
-        {showing === "card" && cardId && <CardView cardId={cardId} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} focusCred={focusCred} focusBlockId={blockId} />}
-        {showing === "solo" && solo && <CommandPane key={solo.id} commands={[solo]} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} focusCred={focusCred} />}
+        {showing === "card" && cardId && <CardView onOpenCard={openLinkedCard} cardId={cardId} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} focusCred={focusCred} focusBlockId={blockId} />}
+        {showing === "solo" && solo && <CommandPane key={solo.id} commands={[solo]} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} focusCred={focusCred} onOpenCard={openLinkedCard} />}
         {onList && (
           <>
             {examReady && rows.length === 0 && <p className="m-0 px-1 py-2 text-xs text-muted">Nothing matches</p>}

@@ -76,13 +76,15 @@ const noCred = () => {};
  * Filled command blocks with a Copy button each. Copy goes through the copy guard: a command with an unresolved token
  * focuses it first (`focusToken` / `focusCred`; a surface with no such field passes nothing and the hint still shows).
  */
-export function CommandList({ commands, hostName = null, focusToken = noToken, focusCred = noCred, hideDcNote = false }: {
+export function CommandList({ commands, hostName = null, focusToken = noToken, focusCred = noCred, hideDcNote = false, strongTitles = false }: {
   commands: FilledCommand[];
   /** The short name of the host in view, for "Copied for <host>". */
   hostName?: string | null;
   focusToken?: (token: string) => void; focusCred?: () => void;
   /** A fill bar above already notes "(by name)" once, on DC_IP: no chip per block. */
   hideDcNote?: boolean;
+  /** Titles read as headings over their blocks (the Arsenal), not as quiet labels (a checklist goal's commands). */
+  strongTitles?: boolean;
 }) {
   const guard = useCopyGuard({ focusToken, focusCred, hostName });
 
@@ -101,7 +103,7 @@ export function CommandList({ commands, hostName = null, focusToken = noToken, f
       {commands.map((c) => (
         <li key={c.id} className="flex flex-col gap-1">
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2">
-            <span data-testid="command-desc" className="text-xs text-muted">{c.title}</span>
+            <span data-testid="command-desc" className={strongTitles ? "text-[13px] font-medium text-fg" : "text-xs text-muted"}>{c.title}</span>
             {guard.forKey === copyKey(c) && (guard.hint || guard.confirm) && (
               <span role="status" className={`text-[11px] ${guard.hint || c.unresolved.length > 0 ? "text-warn" : "text-accent"}`}>
                 {guard.hint ?? guard.confirm}
