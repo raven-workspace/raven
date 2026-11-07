@@ -147,7 +147,7 @@ The layout mirrors the Arsenal: a drawer for quick use and a full-screen view.
   - Generator tabs across the top: Reverse shell · Transfer · SQL · msfvenom · Encode · Upgrade.
   - Context chips: host, "where you paste it", port. Each says where it came from ("From nmap (IIS 10) and your 14:02 log entry").
   - Then: best fit, listener, payload, "what each part does", and "also fits / N don't fit here: show".
-  - Hint line: ↵ copy payload · `L` copy listener · ⇥ next fit · generator switch · Esc.
+  - Hint line: ↵ copy payload · `⌥L` copy listener · ⇥ next fit · generator switch · Esc.
 - **Workbench (full screen).**
   - **Left column, "Raven's read":** target, OS, where you paste it (as buttons), LHOST/LPORT, exam rules, and the generator list.
   - **Right column:** best fit as numbered steps (1 listener on Kali, 2 the payload with its context named), what each part does, and the folded "doesn't fit" line.
@@ -235,7 +235,7 @@ Payload content (templates, wrapping rules, explanations and the SQL walkthrough
 
 - **`P`:** opens or closes the drawer from any unlocked screen. In the Workbench it focuses the generator list.
 - **↵:** copies the payload.
-- **`L`:** copies the listener.
+- **`⌥L`:** copies the listener. (`L` is capture; `⌥L` matches `⌥H` and `⌥C`.) Single-letter keys inside Payloads must never shadow global keys (`L`, `N`, `A`, `H`, number keys).
 - **⇥:** next fit.
 - **⌥H / ⌥C:** host and credential pickers, as in the Arsenal.
 - **Generator switch:** the builder chooses the keys, without clashing with existing bindings.
