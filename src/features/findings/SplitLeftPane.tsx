@@ -95,7 +95,7 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
       <div
         role="tabpanel"
         aria-label={TABS.find((t) => t.id === tab)!.label}
-        className="@container/ctx mt-3 flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-line pl-1 pr-3 pt-1 [scrollbar-gutter:stable]"
+        className="@container/ctx mt-3 flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-line p-1 pr-3 [scrollbar-gutter:stable]"
       >
         {tab === "log" ? (
           log.isError ? (

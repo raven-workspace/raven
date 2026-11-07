@@ -141,7 +141,7 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
       </section>
       <section
         aria-label="Finding"
-        className={cx("min-h-0 min-w-0 overflow-y-auto pr-3 [scrollbar-gutter:stable]", pane === "editor" ? "block" : "hidden", "@min-[760px]/host:block")}
+        className={cx("min-h-0 min-w-0 overflow-y-auto p-1 pr-3 [scrollbar-gutter:stable]", pane === "editor" ? "block" : "hidden", "@min-[760px]/host:block")}
       >
         <FindingEditor
           eid={eid}

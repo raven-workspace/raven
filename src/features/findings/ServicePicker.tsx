@@ -77,7 +77,7 @@ export function ServicePicker({ hosts, servicesByHost, error, value, onChange }:
         <span className="text-xs text-muted">No services on {hosts.length === 1 ? "this host" : "these hosts"} yet.</span>
       ) : (
         // Its own scroll past ~10 rows, so a host with many ports doesn't push the rest of the form away.
-        <div className="flex max-h-[17rem] flex-col gap-2 overflow-y-auto pr-1">
+        <div className="flex max-h-[17rem] flex-col gap-2 overflow-y-auto p-1 [scrollbar-gutter:stable]">
           {withServices.map((h) => {
             const { rows, rpc, udp } = foldServices(servicesByHost.get(h.id) ?? []);
             const has = (list: Service[]) => list.some((s) => value.includes(s.id));
