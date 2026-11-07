@@ -40,6 +40,13 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
     .map(shortHostName);
   const picking = onPick !== undefined;
   const hasExtras = names.length > 0 || entry.private || entry.returnedNothing || picking;
+  // In the finding split's narrow pane the title keeps priority: at least 7rem, the kind label only from 30rem of
+  // pane (the `ctx` container), and the extras shrink and clip instead of squeezing the title out.
+  const cols = picking
+    ? "grid-cols-[2.75rem_minmax(7rem,1fr)_minmax(0,auto)] @min-[30rem]/ctx:grid-cols-[2.75rem_6rem_minmax(7rem,1fr)_minmax(0,auto)]"
+    : hasExtras
+      ? "grid-cols-[2.75rem_6rem_minmax(0,1fr)_auto]"
+      : "grid-cols-[2.75rem_6rem_minmax(0,1fr)]";
   const Caret = open ? CaretDown : CaretRight;
 
   const row = (
@@ -52,24 +59,27 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
         if (!picking) setOpen((o) => !o);
         else if (!stepNumber) onPick(entry.id);
       }}
-      className={`grid w-full items-center gap-3 px-1 py-2 text-left cursor-default hover:bg-surface focus-visible:bg-surface ${
-        hasExtras ? "grid-cols-[2.75rem_6rem_minmax(0,1fr)_auto]" : "grid-cols-[2.75rem_6rem_minmax(0,1fr)]"
-      }`}
+      className={`grid w-full items-center gap-3 px-1 py-2 text-left cursor-default hover:bg-surface focus-visible:bg-surface ${cols}`}
     >
       <time dateTime={d.toISOString()} title={d.toLocaleString()} className="font-mono text-xs text-muted">
         {`${pad(d.getHours())}:${pad(d.getMinutes())}`}
       </time>
-      <span className={`${labelClass} truncate`}>{KIND_LABELS[entry.kind]}</span>
-      <span className="truncate text-[13px] text-fg">{entry.title}</span>
+      <span className={`${labelClass} truncate ${picking ? "hidden @min-[30rem]/ctx:block" : ""}`}>{KIND_LABELS[entry.kind]}</span>
+      <span data-testid="entry-title" className="truncate text-[13px] text-fg">{entry.title}</span>
       {hasExtras && (
-        <span className="flex items-center gap-2">
+        <span className={`flex items-center gap-2 ${picking ? "min-w-0 justify-end overflow-hidden" : ""}`}>
           {names.map((n) => (
-            <Chip key={n} className="max-w-[16ch] truncate">
+            <Chip key={n} className={`${picking ? "max-w-[10ch]" : "max-w-[16ch]"} truncate`}>
               <span className="truncate">{n}</span>
             </Chip>
           ))}
           {entry.private && <Chip>private</Chip>}
-          {entry.returnedNothing && <span className="whitespace-nowrap text-xs text-faint">returned nothing</span>}
+          {entry.returnedNothing &&
+            (picking ? (
+              <span title="Returned nothing" className="font-mono text-xs text-faint">∅</span>
+            ) : (
+              <span className="whitespace-nowrap text-xs text-faint">returned nothing</span>
+            ))}
           {picking &&
             (stepNumber ? (
               <span className="whitespace-nowrap font-mono text-xs text-accent">step {stepNumber}</span>

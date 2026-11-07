@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { isCveId, nvdFill, scoreCvss, scoreToSeverity, type NvdFillResult } from "../../engines/findings";
 import { api } from "../../lib/api";
 import { copyPlain } from "../../lib/clipboard";
+import { shortHostName } from "../../lib/hostName";
 import { isDialogOpen } from "../../lib/keys";
 import { reportError } from "../../lib/lockSignal";
 import { RavenError } from "../../types/errors";
@@ -13,7 +14,7 @@ import { Button, Chip, Dialog, Field, Input, Select, Textarea, Toggle, labelClas
 import { hostLabel } from "../credentials/AccessGrants";
 import { useLog } from "../log/queries";
 import { CvssBuilder } from "./CvssBuilder";
-import { FindingFiles } from "./FindingFiles";
+import { FindingFiles, type FileFormDraft } from "./FindingFiles";
 import { FindingSteps, liveSteps } from "./FindingSteps";
 import { useFindingMutations } from "./queries";
 import { RefSuggestions } from "./RefSuggestions";
@@ -39,6 +40,20 @@ export interface Draft {
   exploitNotes: string;
   lessons: string;
   stepEntryIds: string[];
+  /** Typed into "Add reference" but not added yet. */
+  newRef: string;
+  /** The file form while open (a file is saved on its own, not with the finding): kept so no close path loses it. */
+  fileForm: FileFormDraft | null;
+  /** The finding's `updatedAt` when this draft was opened; null for a new finding. */
+  baseUpdatedAt: number | null;
+}
+
+/**
+ * True when the draft holds something the user typed. An open file form counts only while it holds unsaved
+ * input (`fileDirty`, reported by the form itself).
+ */
+export function draftChanged(d: Draft, base: Draft, fileDirty: boolean): boolean {
+  return fileDirty || JSON.stringify({ ...d, fileForm: null }) !== JSON.stringify({ ...base, fileForm: null });
 }
 
 /** The draft for `f`, or a new one on `hostId` (the host page it was opened from). */
@@ -56,6 +71,9 @@ export const toDraft = (f?: Finding, hostId?: string | null): Draft => ({
   exploitNotes: f?.exploitNotes ?? "",
   lessons: f?.lessons ?? "",
   stepEntryIds: f?.stepEntryIds ?? [],
+  newRef: "",
+  fileForm: null,
+  baseUpdatedAt: f?.updatedAt ?? null,
 });
 
 const isUrl = (s: string) => /^https?:\/\//i.test(s);
@@ -109,8 +127,9 @@ function useNvdLookup(draft: Draft, update: (fn: (d: Draft) => Draft) => void) {
   const records = useRef(new Map<string, NvdRecord>());
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const live = useRef(true);
-  const [diffs, setDiffs] = useState<NvdFillResult["diffs"]>([]);
-  const [line, setLine] = useState<string>();
+  // Each result remembers the CVEs it came from, so removing one of them from the refs removes it from view.
+  const [diffs, setDiffs] = useState<{ cves: string[]; items: NvdFillResult["diffs"] }>({ cves: [], items: [] });
+  const [line, setLine] = useState<{ cve: string; text: string }>();
   const [looking, setLooking] = useState<string>();
   useEffect(() => {
     live.current = true;
@@ -129,17 +148,18 @@ function useNvdLookup(draft: Draft, update: (fn: (d: Draft) => Draft) => void) {
         records.current.set(cve, rec);
         const d = latest.current;
         // Only CVEs still in the references count (one removed meanwhile no longer competes for the vector).
-        const kept = [...records.current].filter(([id]) => d.refs.includes(id)).map(([, r]) => r);
+        const keptIds = [...records.current.keys()].filter((id) => d.refs.includes(id));
+        const kept = keptIds.flatMap((id) => records.current.get(id) ?? []);
         const { apply, diffs: next } = nvdFill({ cvssVector: d.cvssVector, description: d.description, refs: d.refs }, kept);
         update((p) => ({ ...p, ...apply, refs: apply.refs ? [...p.refs, ...apply.refs.filter((r) => !p.refs.includes(r))] : p.refs }));
-        setDiffs(next);
+        setDiffs({ cves: keptIds, items: next });
         setLine(undefined);
         setLooking((c) => (c === cve ? undefined : c));
       },
       (e: unknown) => {
         reportError(e);
         if (!live.current) return;
-        setLine(lookupLine(cve, e));
+        setLine({ cve, text: lookupLine(cve, e) });
         setLooking((c) => (c === cve ? undefined : c));
       },
     );
@@ -149,9 +169,15 @@ function useNvdLookup(draft: Draft, update: (fn: (d: Draft) => Draft) => void) {
     clearTimeout(timers.current.get(cve));
     timers.current.set(cve, setTimeout(() => run(cve), NVD_DEBOUNCE_MS));
   };
-  // A diff whose field now holds NVD's text (taken, or typed the same) is settled.
-  const open = diffs.filter((df) => draft[df.field].trim() !== df.nvd.trim());
-  return { lookup, diffs: open, line, looking };
+  const present = (cve: string) => draft.refs.includes(cve);
+  // A diff whose field now holds NVD's text (taken, or typed the same) is settled; one from a removed CVE is gone.
+  const open = diffs.cves.every(present) ? diffs.items.filter((df) => draft[df.field].trim() !== df.nvd.trim()) : [];
+  return {
+    lookup,
+    diffs: open,
+    line: line && present(line.cve) ? line.text : undefined,
+    looking: looking && present(looking) ? looking : undefined,
+  };
 }
 
 /**
@@ -179,7 +205,8 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
 }) {
   const { create, update: updateFinding } = useFindingMutations(eid);
   const log = useLog(eid);
-  const [newRef, setNewRef] = useState("");
+  const newRef = d.newRef;
+  const setNewRef = (v: string) => update((p) => ({ ...p, newRef: v }));
   const [titleError, setTitleError] = useState<string>();
   const [formError, setFormError] = useState<string>();
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -197,7 +224,7 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => update((p) => ({ ...p, [k]: v }));
   const nvd = useNvdLookup(d, update);
 
-  const dirty = JSON.stringify(d) !== JSON.stringify(base) || newRef.trim() !== "" || fileDirty;
+  const dirty = draftChanged(d, base, fileDirty);
   const vector = d.cvssVector.trim();
   const score = vector === "" ? null : scoreCvss(vector);
   const suggested = score === null ? null : scoreToSeverity(score);
@@ -330,8 +357,8 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
           <span className={labelClass}>Affected hosts</span>
           <div className="flex flex-wrap gap-1.5">
             {hosts.map((h) => (
-              <Toggle key={h.id} on={d.hostIds.includes(h.id)} onChange={() => toggleHost(h.id)}>
-                {hostLabel(h)}
+              <Toggle key={h.id} on={d.hostIds.includes(h.id)} title={hostLabel(h)} onChange={() => toggleHost(h.id)}>
+                {shortHostName(hostLabel(h))}
               </Toggle>
             ))}
             {hosts.length === 0 && <span className="text-xs text-muted">No hosts yet</span>}
@@ -423,7 +450,13 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
 
         <FindingSteps eid={eid} hostIds={d.hostIds} value={d.stepEntryIds} onChange={(ids) => set("stepEntryIds", ids)} />
         {edit ? (
-          <FindingFiles findingId={edit.id} onDirty={setFileDirty} register={registerFlush} />
+          <FindingFiles
+            findingId={edit.id}
+            form={d.fileForm}
+            onForm={(f) => set("fileForm", f)}
+            onDirty={setFileDirty}
+            register={registerFlush}
+          />
         ) : (
           <p className="m-0 text-xs text-muted">Save the finding to attach files.</p>
         )}

@@ -216,21 +216,26 @@ describe("unsaved file drafts", () => {
     expect(m.findingUpdate).not.toHaveBeenCalled();
   });
 
-  it("cancelling with a pending file asks before discarding", async () => {
+  it("closing with a pending file keeps it with the draft; Discard changes drops it", async () => {
     const user = userEvent.setup();
     mount(SECTION, [finding({ id: "f1", title: "Shell upload" })]);
-    const dlg = await openEdit(user, "Shell upload");
+    let dlg = await openEdit(user, "Shell upload");
     await pasteDraft(user, dlg);
     await user.click(within(dlg).getByRole("button", { name: "Close" }));
-    expect(await screen.findByText("Discard the unsaved file?")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Keep editing" }));
-    expect(screen.getByLabelText("File content")).toHaveValue("print(1)");
-    // Esc asks the same.
+    await waitFor(() => expect(screen.queryByRole("form")).not.toBeInTheDocument());
+    expect(m.findingFileCreate).not.toHaveBeenCalled();
+    dlg = await openEdit(user, "Shell upload");
+    expect(await within(dlg).findByLabelText("File content")).toHaveValue("print(1)");
+    expect(within(dlg).getByLabelText("File name")).toHaveValue("poc.lua");
+    // Esc keeps it too.
     await user.click(document.body);
     await user.keyboard("{Escape}");
-    expect(await screen.findByText("Discard the unsaved file?")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Discard file" }));
-    await waitFor(() => expect(screen.queryByRole("form")).not.toBeInTheDocument());
+    dlg = await openEdit(user, "Shell upload");
+    expect(await within(dlg).findByLabelText("File content")).toHaveValue("print(1)");
+    await user.click(within(dlg).getByRole("button", { name: "Discard changes" }));
+    await user.click(await screen.findByRole("button", { name: "Discard" }));
+    dlg = await openEdit(user, "Shell upload");
+    expect(within(dlg).queryByLabelText("File content")).not.toBeInTheDocument();
     expect(m.findingFileCreate).not.toHaveBeenCalled();
   });
 

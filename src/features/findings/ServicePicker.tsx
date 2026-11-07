@@ -1,11 +1,11 @@
-import { CaretDown, CaretRight } from "@phosphor-icons/react";
-import { useState, type ReactNode } from "react";
 import { foldServices, serviceIdentity, sortServices } from "../../engines/facts";
 import { cx } from "../../lib/cx";
+import { shortHostName } from "../../lib/hostName";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
 import { labelClass } from "../../ui";
 import { hostLabel } from "../credentials/AccessGrants";
+import { FoldedRows } from "../hosts/facts/ServicesFacts";
 
 // The services grid of the Facts column (port, identity), with a checkbox track in front.
 const GRID = "grid grid-cols-[auto_6ch_minmax(0,1fr)] gap-x-2";
@@ -48,35 +48,6 @@ function PickRow({ s, on, onChange }: { s: Service; on: boolean; onChange: () =>
   );
 }
 
-/** A folded run (msrpc on high ports, UDP), open from the start when one of its services is picked. */
-function FoldedRows({ label, services, picked, render }: {
-  label: string;
-  services: Service[];
-  picked: boolean;
-  render: (s: Service) => ReactNode;
-}) {
-  const [open, setOpen] = useState(picked);
-  if (services.length === 0) return null;
-  const Caret = open ? CaretDown : CaretRight;
-  return (
-    <>
-      <li className={ROW}>
-        <button
-          type="button"
-          aria-expanded={open}
-          title={open ? `Fold ${label}` : `Show ${label}`}
-          onClick={() => setOpen(!open)}
-          className="col-span-3 grid cursor-default grid-cols-subgrid items-center py-1 text-left text-[13px] text-muted hover:text-fg"
-        >
-          <Caret size={12} weight="light" aria-hidden />
-          <span className="col-span-2">{label}</span>
-        </button>
-      </li>
-      {open && sortServices(services).map(render)}
-    </>
-  );
-}
-
 /**
  * Affected services, offered from the finding's hosts only: the same identity (confirmed beats nmap's guess),
  * sort and folding as the Facts column's services, one checkbox per row.
@@ -112,11 +83,11 @@ export function ServicePicker({ hosts, servicesByHost, error, value, onChange }:
             const has = (list: Service[]) => list.some((s) => value.includes(s.id));
             return (
               <div key={h.id} className="flex flex-col gap-0.5">
-                {hosts.length > 1 && <span className="text-xs text-fg-2">{hostLabel(h)}</span>}
+                {hosts.length > 1 && <span title={hostLabel(h)} className="text-xs text-fg-2">{shortHostName(hostLabel(h))}</span>}
                 <ul className={cx(GRID, "m-0 list-none p-0")}>
                   {sortServices(rows).map(row)}
-                  <FoldedRows label={`msrpc ×${rpc.length}`} services={rpc} picked={has(rpc)} render={row} />
-                  <FoldedRows label={`${udp.length} UDP`} services={udp} picked={has(udp)} render={row} />
+                  <FoldedRows label={`msrpc ×${rpc.length}`} services={rpc} defaultOpen={has(rpc)} render={row} />
+                  <FoldedRows label={`${udp.length} UDP`} services={udp} defaultOpen={has(udp)} render={row} />
                 </ul>
               </div>
             );

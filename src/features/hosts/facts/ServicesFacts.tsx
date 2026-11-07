@@ -156,9 +156,18 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
   );
 }
 
-/** "msrpc ×7" or "17 UDP": a folded run of services that opens in place. */
-function FoldedRows({ label, services, render }: { label: string; services: Service[]; render: (s: Service) => ReactNode }) {
-  const [open, setOpen] = useState(false);
+/**
+ * "msrpc ×7" or "17 UDP": a folded run of services that opens in place. Shared by the Facts column and the
+ * finding's service picker; the grid's first track holds the caret and the label spans the next two.
+ */
+export function FoldedRows({ label, services, render, defaultOpen = false }: {
+  label: string;
+  services: Service[];
+  render: (s: Service) => ReactNode;
+  /** Open from the start (the picker opens a run that holds a picked service). */
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   if (services.length === 0) return null;
   const Caret = open ? CaretDown : CaretRight;
   return (
@@ -172,7 +181,7 @@ function FoldedRows({ label, services, render }: { label: string; services: Serv
           className="col-span-3 grid cursor-default grid-cols-subgrid items-center py-1 text-left text-[13px] text-muted hover:text-fg"
         >
           <Caret size={12} weight="light" aria-hidden />
-          <span>{label}</span>
+          <span className="col-span-2">{label}</span>
         </button>
       </li>
       {open && sortServices(services).map(render)}

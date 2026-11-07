@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { cx } from "../../lib/cx";
 import type { Host } from "../../types/host";
+import { shortHostName } from "../../lib/hostName";
 import { hostLabel } from "../credentials/AccessGrants";
 import { FactsColumn } from "../hosts/facts/FactsColumn";
 import { LogEntryRow } from "../log/LogEntryRow";
@@ -57,13 +58,14 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
               key={h.id}
               type="button"
               aria-pressed={h.id === activeId}
+              title={hostLabel(h)}
               onClick={() => setChosen(h.id)}
               className={cx(
                 "inline-flex h-6 cursor-default items-center rounded-sm border px-2 text-xs",
                 h.id === activeId ? "border-accent text-accent" : "border-line-2 text-fg-2 hover:text-fg",
               )}
             >
-              {hostLabel(h)}
+              {shortHostName(hostLabel(h))}
             </button>
           ))}
         </div>
@@ -93,7 +95,7 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
       <div
         role="tabpanel"
         aria-label={TABS.find((t) => t.id === tab)!.label}
-        className="mt-3 flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-line pl-1 pr-3 pt-1 [scrollbar-gutter:stable]"
+        className="@container/ctx mt-3 flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-line pl-1 pr-3 pt-1 [scrollbar-gutter:stable]"
       >
         {tab === "log" ? (
           log.isError ? (

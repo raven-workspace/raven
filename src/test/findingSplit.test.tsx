@@ -4,7 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
+import { useArsenalStore } from "../features/arsenal/useArsenalStore";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { toDraft } from "../features/findings/FindingEditor";
 import { useFindingDraftStore } from "../features/findings/useFindingDraftStore";
 import { resetNotesStore } from "../features/notes/useNotesStore";
 import { api } from "../lib/api";
@@ -45,6 +47,7 @@ const entry = (id: string, title: string, hostIds: string[], text = "body", at =
 const L1 = entry("l1", "nmap sweep", ["h1"], "Apache looks like CVE-2021-41773");
 const L2 = entry("l2", "upload the shell", ["h1"], "see EDB-ID: 50383", T + 1000);
 const L3 = entry("l3", "web probe", ["h2"], "nothing");
+const L4 = { ...entry("l4", "Anonymous FTP check", ["h1"], "ftp", T + 2000), returnedNothing: true };
 const finding = (o: Partial<Finding> & { id: string; title: string }): Finding => ({
   engagementId: "e1", severity: null, cvssVector: null, cvssScore: null, status: "draft", description: "", impact: "",
   remediation: "", exploitNotes: "", lessons: "", refs: [], hostIds: [], serviceIds: [], stepEntryIds: [],
@@ -83,7 +86,7 @@ beforeEach(() => {
   m.hostsList.mockResolvedValue([H1, H2]);
   m.servicesList.mockImplementation(async (hostId) => [S1, S2].filter((s) => s.hostId === hostId));
   m.servicesListEngagement.mockResolvedValue([S1, S2]);
-  m.logList.mockResolvedValue([L1, L2, L3]);
+  m.logList.mockResolvedValue([L1, L2, L3, L4]);
   m.hostIdentityGet.mockResolvedValue(null);
   m.vectorsList.mockResolvedValue([]);
   m.checklistList.mockResolvedValue([]);
@@ -98,6 +101,7 @@ beforeEach(() => {
   m.notesGet.mockImplementation(async (_e, hostId) => ({ ownerId: hostId ?? "e1", engagementId: "e1", hostId, body: "", private: false, updatedAt: 0 }));
   m.noteSave.mockImplementation(async (_e, hostId, body, isPrivate) => ({ ownerId: hostId ?? "e1", engagementId: "e1", hostId, body, private: isPrivate, updatedAt: 9 }));
   m.findingFilesList.mockResolvedValue([]);
+  useArsenalStore.setState({ open: false });
   m.findingCreate.mockImplementation(async (_e, input) => finding({ id: "f9", ...input, title: input.title }));
   m.findingUpdate.mockImplementation(async (id, input) => finding({ id, ...input, title: input.title }));
 });
@@ -354,5 +358,136 @@ describe("finding split editor", () => {
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("form", { name: "New finding" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Findings" })).toBeInTheDocument();
+  });
+});
+
+describe("finding split: drafts on every close path (review round 1)", () => {
+  async function openOnHost(user: User, title: string) {
+    await user.click(await screen.findByRole("tab", { name: "Findings" }));
+    await user.click(await screen.findByRole("button", { name: `Open ${title}` }));
+    return await screen.findByRole("form", { name: "Edit finding" });
+  }
+
+  it("pasted file text survives H and comes back on reopen; a lock clears it", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1", [finding({ id: "f1", title: "Open share", hostIds: ["h1"] })]);
+    let form = await openOnHost(user, "Open share");
+    await user.click(await within(form).findByRole("button", { name: "Add file" }));
+    await user.type(within(form).getByLabelText("File name"), "poc.py");
+    await user.click(within(form).getByLabelText("File content"));
+    await user.paste("print(1)");
+    await user.click(document.body);
+    await user.keyboard("h");
+    expect(await screen.findByRole("complementary", { name: /Stuck on dc01/ })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    form = await openOnHost(user, "Open share");
+    expect(await within(form).findByLabelText("File content")).toHaveValue("print(1)");
+    expect(m.findingFileCreate).not.toHaveBeenCalled();
+
+    await user.keyboard("{Meta>}l{/Meta}");
+    await user.type(await screen.findByLabelText("Password"), "correct horse battery{Enter}");
+    form = await openOnHost(user, "Open share");
+    expect(within(form).queryByLabelText("File content")).not.toBeInTheDocument();
+  });
+
+  it("a typed but not added reference survives Esc", async () => {
+    const user = userEvent.setup();
+    mount();
+    let form = await openSplit(user);
+    await user.type(within(form).getByLabelText("Add reference"), "https://example.test/adv");
+    await user.keyboard("{Escape}");
+    form = await openSplit(user);
+    expect(within(form).getByLabelText("Add reference")).toHaveValue("https://example.test/adv");
+  });
+
+  it("saving a finding from the Findings section drops its draft kept on a host page", async () => {
+    let list = [finding({ id: "f1", title: "Open share", hostIds: ["h1", "h2"] })];
+    m.findingUpdate.mockImplementation(async (id, input) => {
+      const saved = finding({ id, ...input, title: input.title, updatedAt: 50 });
+      list = list.map((f) => (f.id === id ? saved : f));
+      return saved;
+    });
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1", list);
+    m.findingsList.mockImplementation(async () => list);
+    let form = await openOnHost(user, "Open share");
+    await user.clear(within(form).getByLabelText("Title"));
+    await user.type(within(form).getByLabelText("Title"), "host page draft");
+    await user.keyboard("{Escape}");
+    expect(useFindingDraftStore.getState().drafts["e1:h1:f1"]?.title).toBe("host page draft");
+
+    await user.click(screen.getByRole("link", { name: /^Findings/ }));
+    await user.click(await screen.findByRole("button", { name: "Edit Open share" }));
+    form = await screen.findByRole("form", { name: "Edit finding" });
+    await user.clear(within(form).getByLabelText("Title"));
+    await user.type(within(form).getByLabelText("Title"), "saved title");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("form")).not.toBeInTheDocument());
+    expect(useFindingDraftStore.getState().drafts).toEqual({});
+
+    await user.click(screen.getByRole("link", { name: /dc01/ }));
+    form = await openOnHost(user, "saved title");
+    expect(within(form).getByLabelText("Title")).toHaveValue("saved title");
+  });
+
+  it("an edit draft older than the finding's last save is dropped on open", async () => {
+    const user = userEvent.setup();
+    const current = finding({ id: "f1", title: "Saved elsewhere", hostIds: ["h1"], updatedAt: 9 });
+    useFindingDraftStore.getState().set("e1:h1:f1", { ...toDraft(finding({ id: "f1", title: "Old", hostIds: ["h1"], updatedAt: 3 })), title: "stale draft" });
+    mount("/e/e1/h/h1", [current]);
+    const form = await openOnHost(user, "Saved elsewhere");
+    expect(within(form).getByLabelText("Title")).toHaveValue("Saved elsewhere");
+    expect(useFindingDraftStore.getState().drafts["e1:h1:f1"]).toBeUndefined();
+  });
+});
+
+describe("finding split: layout and keys (review round 1)", () => {
+  it("a returned-nothing entry keeps its title in the split's Log; the marker is compact", async () => {
+    const user = userEvent.setup();
+    mount();
+    await openSplit(user);
+    const row = await screen.findByRole("button", { name: "Add Anonymous FTP check as a step" });
+    expect(within(row).getByTestId("entry-title")).toHaveTextContent("Anonymous FTP check");
+    expect(within(row).getByTitle("Returned nothing")).toHaveTextContent("∅");
+    expect(within(row).queryByText("returned nothing")).not.toBeInTheDocument();
+  });
+
+  it("host chips use the short name, with the full name in the title", async () => {
+    const user = userEvent.setup();
+    m.hostsList.mockResolvedValue([{ ...H1, name: "dc01.corp.lumen.local" }, H2]);
+    mount();
+    const form = await openSplit(user);
+    const chip = within(form).getByRole("button", { name: "dc01" });
+    expect(chip).toHaveAttribute("title", "dc01.corp.lumen.local");
+    expect(chip).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("N is left alone while the Arsenal drawer is open", async () => {
+    const user = userEvent.setup();
+    mount();
+    await openSplit(user);
+    act(() => useArsenalStore.setState({ open: true }));
+    await user.click(document.body);
+    await user.keyboard("n");
+    expect(within(contextTabs()).getByRole("tab", { name: "Log" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("NVD diffs and the error line go when their CVE is removed", async () => {
+    const user = userEvent.setup();
+    m.nvdLookup.mockImplementation(async (id) => {
+      if (id === "CVE-2021-41773") return record();
+      throw new RavenError("not_found", "missing");
+    });
+    mount();
+    const form = await openSplit(user);
+    await user.type(within(form).getByLabelText("Description"), "Mine.");
+    await addRef(user, form, "CVE-2021-41773");
+    expect(await within(form).findByText(/NVD has a different description/)).toBeInTheDocument();
+    await user.click(within(form).getByRole("button", { name: "Remove CVE-2021-41773" }));
+    expect(within(form).queryByText(/NVD has a different/)).not.toBeInTheDocument();
+    await addRef(user, form, "CVE-2020-9999");
+    expect(await within(form).findByText("CVE not found on NVD")).toBeInTheDocument();
+    await user.click(within(form).getByRole("button", { name: "Remove CVE-2020-9999" }));
+    expect(within(form).queryByText("CVE not found on NVD")).not.toBeInTheDocument();
   });
 });

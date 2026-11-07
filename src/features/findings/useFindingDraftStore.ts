@@ -10,6 +10,8 @@ interface FindingDraftState {
   get: (key: string) => Draft | undefined;
   set: (key: string, d: Draft) => void;
   drop: (key: string) => void;
+  /** Drops every draft of one finding, whichever host page it was opened from (after it is saved). */
+  dropFinding: (findingId: string) => void;
   clearAll: () => void;
 }
 
@@ -26,6 +28,14 @@ export const useFindingDraftStore = create<FindingDraftState>()((set, get) => ({
       if (!(key in s.drafts)) return s;
       const drafts = { ...s.drafts };
       delete drafts[key];
+      return { drafts };
+    }),
+  dropFinding: (findingId) =>
+    set((s) => {
+      const keys = Object.keys(s.drafts).filter((k) => k.endsWith(`:${findingId}`));
+      if (keys.length === 0) return s;
+      const drafts = { ...s.drafts };
+      for (const k of keys) delete drafts[k];
       return { drafts };
     }),
   clearAll: () => set({ drafts: {} }),

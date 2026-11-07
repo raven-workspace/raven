@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { cx } from "../../lib/cx";
+import { shortHostName } from "../../lib/hostName";
 import { isDialogOpen, isFreeKey, isTypingTarget } from "../../lib/keys";
 import type { Finding } from "../../types/findings";
-import { Button, Dialog } from "../../ui";
+import { Button } from "../../ui";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useEngagementServices } from "../checklist/queries";
 import { hostLabel } from "../credentials/AccessGrants";
 import { useHosts } from "../hosts/queries";
 import { useNotesStore } from "../notes/useNotesStore";
-import { FindingEditor, toDraft, type Draft } from "./FindingEditor";
+import { draftChanged, FindingEditor, toDraft, type Draft } from "./FindingEditor";
 import { SplitLeftPane, type ContextTab } from "./SplitLeftPane";
 import { draftKey, useFindingDraftStore } from "./useFindingDraftStore";
 
@@ -35,25 +36,34 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
   const finding = edit === "new" ? undefined : edit;
   const key = draftKey(eid, hostId, finding?.id ?? null);
   const [base] = useState(() => toDraft(finding, hostId));
-  const [d, setD] = useState<Draft>(() => useFindingDraftStore.getState().get(key) ?? base);
+  // A kept draft comes back, unless the finding was saved since it was opened (from another host page, say):
+  // then the saved finding wins and the stale draft is dropped.
+  const [restored] = useState(() => {
+    const store = useFindingDraftStore.getState();
+    const kept = store.get(key);
+    if (kept && finding && (kept.baseUpdatedAt ?? 0) < finding.updatedAt) {
+      store.drop(key);
+      return undefined;
+    }
+    return kept;
+  });
+  const [d, setD] = useState<Draft>(() => restored ?? base);
   const [pane, setPane] = useState<Pane>("editor");
   const [tab, setTab] = useState<ContextTab>("log");
   const rootRef = useRef<HTMLDivElement>(null);
-  // A pasted file is not part of the draft: closing with one unsaved asks first.
-  const [fileDirty, setFileDirty] = useState(false);
-  const [confirmFile, setConfirmFile] = useState(false);
-  const requestClose = () => (fileDirty ? setConfirmFile(true) : onClose());
+  // Whether the open file form holds unsaved text (only kept drafts with such a form are stored with it).
+  const [fileDirty, setFileDirty] = useState(() => restored?.fileForm != null);
 
   // Keep the draft while it differs from what was opened; an untouched one leaves nothing behind.
   useEffect(() => {
     const store = useFindingDraftStore.getState();
-    if (JSON.stringify(d) === JSON.stringify(base)) store.drop(key);
-    else store.set(key, d);
-  }, [d, base, key]);
+    if (!draftChanged(d, base, fileDirty)) store.drop(key);
+    else store.set(key, fileDirty ? d : { ...d, fileForm: null });
+  }, [d, base, key, fileDirty]);
 
-  const closeRef = useRef(requestClose);
+  const closeRef = useRef(onClose);
   useEffect(() => {
-    closeRef.current = requestClose;
+    closeRef.current = onClose;
   });
 
   // Capture phase, so these win over the shell's own N and Esc whatever the mount order.
@@ -63,8 +73,8 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
       if (isFlipChord(e)) {
         e.preventDefault();
         setPane((p) => (p === "editor" ? "context" : "editor"));
-      } else if ((e.key === "n" || e.key === "N") && isFreeKey(e)) {
-        // N: the left pane's notes, not the notes panel.
+      } else if ((e.key === "n" || e.key === "N") && isFreeKey(e) && !useArsenalStore.getState().open) {
+        // N: the left pane's notes, not the notes panel (left alone while the Arsenal drawer is up).
         e.preventDefault();
         setTab("notes");
         setPane("context");
@@ -85,7 +95,7 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
     // An open select list closes first.
     if ((e.target as Element).closest('[role="listbox"]')) return;
     e.preventDefault();
-    requestClose();
+    onClose();
   };
 
   const allHosts = hosts.data ?? [];
@@ -93,6 +103,11 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
   const discard = () => {
     useFindingDraftStore.getState().drop(key);
     onClose();
+  };
+  const saved = () => {
+    // Every kept draft of this finding is now older than what was saved.
+    if (finding) useFindingDraftStore.getState().dropFinding(finding.id);
+    discard();
   };
 
   if (!hosts.data) return null;
@@ -134,30 +149,16 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
           servicesByHost={servicesByHost}
           servicesError={servicesQ.error?.message}
           edit={finding}
-          hostName={pageHost ? hostLabel(pageHost) : undefined}
+          hostName={pageHost ? shortHostName(hostLabel(pageHost)) : undefined}
           draft={d}
           base={base}
           update={setD}
-          onSaved={discard}
-          onClose={requestClose}
+          onSaved={saved}
+          onClose={onClose}
           onDiscard={discard}
           onFileDirty={setFileDirty}
         />
       </section>
-      {confirmFile && (
-        <Dialog
-          open
-          onOpenChange={(o) => !o && setConfirmFile(false)}
-          title="Discard the unsaved file?"
-          description="The finding's draft is kept; the file you pasted is not saved yet."
-          footer={
-            <>
-              <Button onClick={() => setConfirmFile(false)}>Keep editing</Button>
-              <Button variant="danger" onClick={onClose}>Discard file</Button>
-            </>
-          }
-        />
-      )}
     </div>
   );
 }
