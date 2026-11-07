@@ -22,29 +22,42 @@ const focusBody = (page: Page) => page.locator("body").click({ position: { x: 1,
 export const SCREENS: Screen[] = [
   { id: "dashboard", path: "/", ready: "role=heading[name='Engagements']" },
   { id: "board", path: E, ready: "section[aria-label='Information gathering']" },
-  { id: "host-story", path: H, ready: "role=tablist >> visible=true" },
+  { id: "host-next", path: H, ready: "role=tab[name='Next'][selected]" },
+  { id: "host-log", path: H, ready: "role=tablist >> visible=true", setup: tab("Log") },
   {
-    id: "host-checklist", path: H, ready: "role=tab[name='Checklist'][selected]",
+    id: "host-checklist", path: H, ready: "role=button[name='Full checklist'][expanded]",
     setup: async (page) => {
-      await tab("Checklist")(page);
-      const notice = page.getByRole("button", { name: /new credentials? since this was done/ }).first();
+      await page.getByRole("button", { name: "Full checklist" }).click();
+      const notice = page.getByRole("button", { name: /new creds? since done/ }).first();
       if (await notice.count()) await notice.click();
     },
   },
-  { id: "host-credentials", path: H, ready: "role=tab[name='Credentials'][selected]", setup: tab("Credentials") },
   { id: "host-findings", path: H, ready: "role=tab[name='Findings'][selected]", setup: tab("Findings") },
+  { id: "host-postfoothold", path: `/e/${AUDIT_IDS.examEngagement}/h/${AUDIT_IDS.msfHost}`, ready: "role=button[name='Edit who am I']" },
+  {
+    id: "finding-split", path: H, ready: "role=region[name='Finding']",
+    setup: async (page) => { await focusBody(page); await page.keyboard.press("f"); },
+  },
+  {
+    id: "sidebar-collapsed", path: H, ready: "role=button[name='Expand sidebar']",
+    // The sidebar starts collapsed below 1000px, so only press ⌘B when it is open.
+    setup: async (page) => {
+      await focusBody(page);
+      if (await page.getByRole("button", { name: "Collapse sidebar" }).isVisible()) await page.keyboard.press("Meta+B");
+    },
+  },
   { id: "host-stuck", path: H, ready: "aside[aria-label^='Stuck on']", setup: async (page) => { await focusBody(page); await page.keyboard.press("h"); } },
-  { id: "dc-story", path: `${E}/h/${AUDIT_IDS.dcHost}`, ready: "role=tablist >> visible=true" },
+  { id: "dc-next", path: `${E}/h/${AUDIT_IDS.dcHost}`, ready: "role=tablist >> visible=true" },
   {
     id: "eng-checklist", path: `${E}/s/checklist`, ready: "role=region[name='Engagement checklist']",
     setup: async (page) => { await page.locator("section[aria-label='Lateral movement']").scrollIntoViewIfNeeded(); },
   },
   { id: "credentials", path: `${E}/s/credentials`, ready: "role=heading[name=/credentials/i]" },
   {
-    id: "findings", path: `${E}/s/findings`, ready: "role=dialog",
+    id: "findings", path: `${E}/s/findings`, ready: "role=region[name='Finding']",
     setup: async (page) => {
       await page.getByRole("button", { name: /^Edit Domain compromise via Kerberoastable/ }).click();
-      await page.getByRole("dialog").waitFor();
+      await page.getByRole("region", { name: "Finding" }).waitFor();
     },
   },
   { id: "log", path: `${E}/s/log`, ready: "role=region[name='Log']" },
@@ -85,8 +98,8 @@ export const SCREENS: Screen[] = [
   },
   { id: "exam-board", path: `/e/${AUDIT_IDS.examEngagement}`, ready: "role=button[name=/Metasploit|MSF/i]" },
   {
-    id: "exam-host-locked", path: `/e/${AUDIT_IDS.examEngagement}/h/${AUDIT_IDS.msfHost}`, ready: "role=tab[name='Checklist'][selected]",
-    setup: tab("Checklist"),
+    id: "exam-host-locked", path: `/e/${AUDIT_IDS.examEngagement}/h/${AUDIT_IDS.msfHost}`, ready: "role=button[name='Full checklist'][expanded]",
+    setup: async (page) => { await page.getByRole("button", { name: "Full checklist" }).click(); },
   },
   {
     id: "settings", path: "/settings", ready: "role=heading[name='Field Manual']",

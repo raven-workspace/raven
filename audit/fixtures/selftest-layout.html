@@ -36,6 +36,10 @@
   <p style="width:60px;margin:0">one two three four five six</p>
 </section>
 
+<section data-case="narrow-wrap" data-expect="narrow-wrap">
+  <p style="width:40px;margin:0">one two six ten odd red big dog cat sky fox hen</p>
+</section>
+
 <section data-case="oversized-control" data-expect="oversized-control">
   <div style="width:500px"><button style="width:260px">Copy</button></div>
 </section>
@@ -78,6 +82,10 @@
 
 <section data-case="allow-ok" data-expect="none">
   <div data-audit-allow="truncate"><div class="box" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">This sentence is much too long for a 200px box but is allowed</div></div>
+</section>
+
+<section data-case="narrow-wrap-ok" data-expect="none">
+  <p style="width:120px;margin:0">Some words wrap over a few lines in a modest column without trouble.</p>
 </section>
 
 <section data-case="wrap-ok" data-expect="none">

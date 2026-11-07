@@ -34,19 +34,25 @@ const MAX_TABS = 40;
 const CRED_PASTE = "administrator:Password123!";
 const STUCK = "aside[aria-label^='Stuck on']";
 
-// Rows mentioning the pasted user on the host's Credentials tab (not a counted action: it observes the outcome).
+// Rows mentioning the pasted user in the host's "Host Credentials" fact group (not a counted action: it observes the outcome).
 const credRowsBefore = new WeakMap<Page, number>();
 async function countCredRows(page: Page): Promise<number> {
-  await page.getByRole("tab", { name: "Credentials" }).dispatchEvent("click");
-  await page.getByRole("tab", { name: "Credentials", selected: true }).waitFor({ timeout: DONE_TIMEOUT_MS });
-  const n = await page.locator("main").getByText(/administrator/i).count();
-  await page.getByRole("tab", { name: "Story" }).dispatchEvent("click");
-  return n;
+  const group = page.locator("section[aria-label='Host Credentials']");
+  await group.waitFor({ timeout: DONE_TIMEOUT_MS });
+  const folded = group.locator("button[aria-expanded='false']");
+  if (await folded.count()) await folded.first().click();
+  await group.getByRole("heading", { name: "Host Credentials" }).waitFor({ timeout: DONE_TIMEOUT_MS });
+  return group.getByText(/administrator/i).count();
 }
 
 export const FLOWS: Flow[] = [
   {
-    id: "log-command", path: H, budget: 3, done: "text=nmap -sV 10.10.20.15",
+    id: "log-command", path: H, budget: 3,
+    // The host page opens on Next; the new entry shows in the Log tab.
+    done: async (page) => {
+      await page.getByRole("tab", { name: "Log", exact: true }).dispatchEvent("click");
+      await page.locator("text=nmap -sV 10.10.20.15").first().waitFor({ state: "visible", timeout: DONE_TIMEOUT_MS });
+    },
     steps: [{ press: "l" }, { expect: "[role='dialog']" }, { type: "nmap -sV 10.10.20.15" }, { press: "Meta+Enter" }],
   },
   {
@@ -62,15 +68,15 @@ export const FLOWS: Flow[] = [
         ? []
         : [{
             check: "flow-needs-mouse",
-            selector: "role=tab[name='Credentials']",
-            detail: `pasting \`${CRED_PASTE}\` and saving created no credential (intake only parses tool output); adding one takes the Credentials tab form`,
+            selector: "section[aria-label='Host Credentials']",
+            detail: `pasting \`${CRED_PASTE}\` and saving created no credential (intake only parses tool output); adding one takes the Add access form in the Host Credentials group`,
           }];
     },
   },
   {
     id: "next-step", path: E, budget: 2, done: async (page) => {
       await page.waitForURL(`**${H}`, { timeout: DONE_TIMEOUT_MS });
-      await page.locator("[aria-label='Now']").first().waitFor({ state: "visible", timeout: DONE_TIMEOUT_MS });
+      await page.getByRole("tab", { name: "Next", selected: true }).waitFor({ state: "visible", timeout: DONE_TIMEOUT_MS });
     },
     // The shortest keyboard path from the board to a host today is the first sidebar host link; board cards come later.
     steps: [{ tabTo: "nav[aria-label='Engagement'] a[href*='/h/']" }, { press: "Enter" }],

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { AUDIT_NOW } from "../src/audit/fixtures";
 
 // Hard regressions: unlike the audit checks, these fail the run.
@@ -91,4 +91,136 @@ test("scroll panes never clip focus or hide controls under the scrollbar", async
   await page.keyboard.press("f");
   await page.getByRole("region", { name: "Finding" }).waitFor();
   expect(await page.evaluate(PANE_CHECK), "finding split").toEqual([]);
+
+  // The step picker's list is a scroll pane too.
+  await page.getByRole("button", { name: "Add step" }).click();
+  await page.getByRole("button", { name: /^Add / }).first().waitFor();
+  expect(await page.evaluate(PANE_CHECK), "finding split with the step picker open").toEqual([]);
+});
+
+// Host page, finding split and sidebar (redesign).
+
+const LAB_HOST = "/e/e-lab/h/h-web";
+const WEB_SHORT = "web-finance-dmz-portal-01";
+
+/** Opens a path at a width with a frozen clock and waits for the app shell. */
+async function open(page: Page, path: string, width: number, height = 900) {
+  await page.clock.install({ time: AUDIT_NOW });
+  await page.setViewportSize({ width, height });
+  await page.goto(path);
+  await page.getByRole("button", { name: /Search/ }).waitFor();
+}
+
+test("host page never scrolls sideways", async ({ page }) => {
+  for (const width of [800, 900, 1024, 1280, 1440]) {
+    await open(page, LAB_HOST, width);
+    await page.getByRole("tab", { name: "Next" }).waitFor();
+    const r = await page.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth,
+      inner: window.innerWidth,
+      outside: [...document.querySelectorAll('[role="tab"]')]
+        .map((t) => ({ name: (t.textContent ?? "").trim(), r: t.getBoundingClientRect() }))
+        .filter(({ r }) => r.width > 0 && (r.left < 0 || r.right > window.innerWidth))
+        .map(({ name }) => name),
+    }));
+    expect(r.scroll, `scrollWidth at ${width}`).toBeLessThanOrEqual(r.inner);
+    expect(r.outside, `tabs outside the viewport at ${width}`).toEqual([]);
+  }
+});
+
+test("credentials notice stays one line", async ({ page }) => {
+  await open(page, LAB_HOST, 900);
+  await page.getByRole("tab", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Full checklist" }).click();
+  const notice = page.getByText(/new creds since done/).first();
+  await notice.waitFor();
+  const { height, lineHeight } = await notice.evaluate((el) => {
+    const s = getComputedStyle(el);
+    const fs = parseFloat(s.fontSize);
+    return { height: el.getBoundingClientRect().height, lineHeight: s.lineHeight === "normal" ? fs * 1.2 : parseFloat(s.lineHeight) };
+  });
+  expect(height).toBeLessThanOrEqual(2 * lineHeight);
+});
+
+test("add finding opens beside the log", async ({ page }) => {
+  await open(page, LAB_HOST, 1280);
+  await page.getByRole("tab", { name: "Next" }).waitFor();
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press("f");
+  const finding = page.getByRole("region", { name: "Finding" });
+  await finding.waitFor();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const logTab = page.getByRole("tab", { name: "Log" });
+  await expect(logTab).toBeVisible();
+  await logTab.click();
+
+  const steps = page.getByRole("list", { name: "Reproduction steps" }).getByRole("listitem");
+  await expect(steps).toHaveCount(0);
+  await page.getByRole("tabpanel", { name: "Log" }).getByRole("button", { name: /^Add .* as a step$/ }).first().click();
+  await expect(steps).toHaveCount(1);
+
+  await finding.getByRole("textbox", { name: "Title" }).fill("Kept title");
+  await page.keyboard.press("Escape");
+  await expect(finding).toHaveCount(0);
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press("f");
+  await expect(page.getByRole("region", { name: "Finding" }).getByRole("textbox", { name: "Title" })).toHaveValue("Kept title");
+});
+
+test("finding services are the selected hosts' only", async ({ page }) => {
+  await open(page, LAB_HOST, 1280);
+  await page.getByRole("tab", { name: "Next" }).waitFor();
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press("f");
+  const finding = page.getByRole("region", { name: "Finding" });
+  await finding.waitFor();
+  const services = finding.getByRole("group", { name: "Affected services" });
+  await services.waitFor();
+  await expect(services.getByText(/dc01/i)).toHaveCount(0);
+  await expect(services.getByRole("button").first()).toBeVisible();
+});
+
+test("sidebar collapses without sideways scroll and shows IPs", async ({ page }) => {
+  await open(page, LAB_HOST, 1280);
+  await page.getByRole("tab", { name: "Next" }).waitFor();
+  const fits = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+  const hostRows = page.locator('nav a[href*="/h/"]');
+
+  await page.keyboard.press("Meta+B");
+  await page.getByRole("button", { name: "Expand sidebar" }).waitFor();
+  expect(await fits(), "collapsed").toBe(true);
+
+  await page.keyboard.press("Meta+B");
+  await page.getByRole("button", { name: "Collapse sidebar" }).waitFor();
+  expect(await fits(), "expanded").toBe(true);
+  const rows = await hostRows.evaluateAll((els) =>
+    els.map((a) => ({ text: (a.textContent ?? "").trim(), title: a.getAttribute("title") ?? "" })),
+  );
+  expect(rows.length).toBeGreaterThan(1);
+  const ips: Record<string, string> = { "web-finance-dmz-portal-01.dmz.finance.lumen.corp": "10.10.20.15", dc01: "10.10.20.10" };
+  for (const r of rows) {
+    if (ips[r.title]) expect(r.text, `row ${r.title} shows its IP`).toContain(ips[r.title]);
+    expect(r.text, "no clipped host name").not.toMatch(/^web-fin…/);
+    expect(r.text, "short name, not the FQDN").not.toContain(".dmz.finance");
+  }
+  expect(rows.some((r) => r.text.includes(WEB_SHORT))).toBe(true);
+});
+
+test("log rows on a host page have no chip for that host", async ({ page }) => {
+  await open(page, LAB_HOST, 1280);
+  await page.getByRole("tab", { name: "Log" }).click();
+  const rows = page.getByRole("tabpanel", { name: "Log" }).locator("button[aria-expanded]");
+  await expect(rows.first()).toBeVisible();
+  expect(await rows.count()).toBeGreaterThan(3);
+  await expect(rows.filter({ hasText: WEB_SHORT })).toHaveCount(0);
+});
+
+test("post-foothold facts show without scrolling", async ({ page }) => {
+  await open(page, "/e/e-exam/h/h-exam-ms01", 1280);
+  for (const text of ["Who am I", "SeImpersonatePrivilege (potato)"]) {
+    const el = page.getByText(text).first();
+    await el.waitFor();
+    const box = await el.boundingBox();
+    expect(box && box.y >= 0 && box.y + box.height <= 900, `${text} is inside the 900px viewport`).toBe(true);
+  }
 });

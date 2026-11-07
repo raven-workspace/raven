@@ -1,6 +1,6 @@
 export type CheckId =
   | "page-overflow" | "overflow" | "truncated" | "clipped" | "offscreen" | "overlap"
-  | "squeezed" | "oversized-control" | "mid-token-wrap"
+  | "squeezed" | "oversized-control" | "mid-token-wrap" | "narrow-wrap"
   | "contrast" | "label"
   | "focus-invisible" | "focus-hidden" | "unreachable" | "focus-trap" | "shortcut"
   // UX (Tasks 5–6 implement these; declared here so the union lives in one place)
