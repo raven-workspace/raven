@@ -117,7 +117,7 @@ Groups are ordered by phase. The current phase's groups come first and are open.
   - The verdict is one of: **candidate**, **untested**, **dead end**, or **identify** (automatic for unidentified services).
   - Windows dynamic RPC (`msrpc` on 49152–65535) folds into one `msrpc ×N` row, and UDP folds into `N UDP`. Both open on click.
   - Rows sort by verdict: candidate, then identify, then untested, then dead end. Port number breaks ties.
-- **Credentials here:** this replaces the host's Credentials tab. Everything that tab does today stays, inside this group:
+- **Host Credentials:** this replaces the host's Credentials tab. Everything that tab does today stays, inside this group:
   - what works here, with each result linked to its proof log entry;
   - engagement credentials not yet tested against this host's services;
   - access without a secret, added and removed in place.
@@ -280,7 +280,7 @@ Add `narrow-wrap` to the audit's checks: text blocks of 4 or more lines averagin
 ## 10. Calls I made (the user should check these)
 
 - **The full checklist moves inside the Next tab** ("Full checklist ▸") instead of keeping a separate Checklist tab.
-- **The host's Credentials tab is removed** and replaced by the "Credentials here" fact. The full matrix stays at engagement level.
+- **The host's Credentials tab is removed** and replaced by the "Host Credentials" fact. The full matrix stays at engagement level.
 - **About 1000px is the switch point** between the stacked and the two-column layout.
 - **Finding drafts live in app memory only,** never on disk, so they don't survive an app restart or a lock.
 - **The local CVSS builder defaults to 4.0.**
@@ -289,7 +289,7 @@ Add `narrow-wrap` to the audit's checks: text blocks of 4 or more lines averagin
 - **Marking a service a dead end or a vector ruled out asks for one line** and creates a ruled-out item.
 - **The engagement Findings section uses the same split editor,** and the modal is removed everywhere.
 - **The host Facts switch on `access`**, not on the board column.
-- **The host's Credentials tab moves into the "Credentials here" fact** with all of its features kept (results with proof links, access without a secret). "How access was gained" comes from access grants.
+- **The host's Credentials tab moves into the "Host Credentials" fact** with all of its features kept (results with proof links, access without a secret). "How access was gained" comes from access grants.
 - **The split's left pane has three tabs: Log · Facts · Notes.** Several affected hosts get a host switcher. Narrow windows flip between the panes. `N` opens the Notes tab, and `H` closes the split with the draft kept.
 - **NVD fills an empty CVSS** with NVD's own score (the CNA's if NVD has none), and the highest-scoring CVE wins.
 - **Unprefixed stored vectors are read as 3.1** at runtime, with no data rewrite.
