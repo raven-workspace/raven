@@ -392,3 +392,90 @@ test("the credential list in ⌘K stays inside the dialog", async ({ page }) => 
     await page.keyboard.press("Escape");
   }
 });
+
+// Arsenal layout: the drawer keeps a steady split, and no Arsenal pane scrolls sideways or clips focus.
+
+/** Every scroll pane under `root` with its sideways overflow, and focusables (plus a 2px outline) outside their pane. */
+const ARSENAL_PANES = (root: string) => `(() => {
+  const bad = [];
+  const scope = document.querySelector(${JSON.stringify(root)});
+  const panes = [...scope.querySelectorAll("*")].filter((e) => /auto|scroll/.test(getComputedStyle(e).overflowY) || /auto|scroll/.test(getComputedStyle(e).overflowX));
+  // A [data-scroll-x] row scrolls sideways on purpose (the card's contents strip).
+  for (const p of panes) if (!p.hasAttribute("data-scroll-x") && p.scrollWidth > p.clientWidth + 1) bad.push("sideways: " + (p.getAttribute("aria-label") || p.className.slice(0, 40)) + " " + p.scrollWidth + ">" + p.clientWidth);
+  for (const p of panes) {
+    if (!/auto|scroll/.test(getComputedStyle(p).overflowY)) continue;
+    // Overlay scrollbars (macOS WKWebView) reserve no gutter: a pane with controls pads its right edge.
+    if (p.scrollHeight > p.clientHeight + 1 && p.querySelector("button, input") && parseFloat(getComputedStyle(p).paddingRight) < 12) bad.push("padding-right < 12px: " + (p.getAttribute("aria-label") || p.className.slice(0, 40)));
+  }
+  const focusables = scope.querySelectorAll('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
+  for (const el of focusables) {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0 || el.closest("[data-scroll-x]")) continue;
+    let pane = el.parentElement;
+    while (pane && pane !== scope.parentElement && !/auto|scroll/.test(getComputedStyle(pane).overflowY)) pane = pane.parentElement;
+    if (!pane || pane === scope.parentElement) continue;
+    const p = pane.getBoundingClientRect();
+    const left = p.left + pane.clientLeft;
+    const right = left + pane.clientWidth;
+    if (r.left - 2 < left - 0.5 || r.right + 2 > right + 0.5) bad.push("clipped: " + (el.getAttribute("aria-label") || el.textContent || el.tagName).trim().slice(0, 40));
+  }
+  return bad;
+})()`;
+
+test("drawer: a long command never squeezes the list or hides its fields, and the split never moves", async ({ page }) => {
+  await open(page, FS01, 1280);
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press("a");
+  const aside = page.locator("aside[aria-label='Arsenal']");
+  await page.locator("input[aria-label='Search the Arsenal']").fill("library");
+  const options = aside.getByRole("listbox", { name: "Arsenal results" }).getByRole("option");
+  await options.first().waitFor();
+  const listPane = aside.locator("#arsenal-results").locator("..");
+  const heights = new Set<number>();
+  const n = Math.min(await options.count(), 8);
+  let sawLong = false;
+  for (let i = 0; i < n; i++) {
+    if (i > 0) await page.keyboard.press("ArrowDown");
+    heights.add(Math.round((await listPane.boundingBox())!.height));
+    if (/Create the \.Library-ms file/.test((await options.nth(i).textContent()) ?? "")) {
+      sawLong = true;
+      // Every field of the long command can be scrolled to and seen inside the drawer.
+      const fields = aside.getByRole("combobox", { name: /^Value for / });
+      for (let f = 0; f < (await fields.count()); f++) {
+        await fields.nth(f).scrollIntoViewIfNeeded();
+        await expect(fields.nth(f)).toBeInViewport();
+      }
+    }
+  }
+  expect(sawLong, "the long command was among the results").toBe(true);
+  expect([...heights], "list height is the same for every selection").toHaveLength(1);
+  expect([...heights][0]).toBeGreaterThanOrEqual(300);
+  expect(await page.evaluate(ARSENAL_PANES("aside[aria-label='Arsenal']"))).toEqual([]);
+});
+
+test("browse: no pane scrolls sideways or clips focus, and the contents strip sits the same stuck or not", async ({ page }) => {
+  for (const width of [1280, 1100, 900]) {
+    await open(page, "/arsenal", width);
+    const reading = page.getByRole("region", { name: "Reading" });
+    await reading.getByRole("heading").first().waitFor();
+    await page.locator("input[aria-label='Search the Arsenal']").fill("library");
+    await page.getByRole("option", { name: /Library-ms/ }).first().click();
+    await reading.getByRole("heading", { name: /Library/ }).first().waitFor();
+    expect(await page.evaluate(ARSENAL_PANES("[data-arsenal-browse]")), `panes at ${width}`).toEqual([]);
+
+    // The whole card: blocks, fill fields and the contents strip.
+    await reading.getByRole("button", { name: /^From card / }).click();
+    const strip = reading.getByRole("navigation", { name: "On this card" });
+    await strip.waitFor();
+    expect(await page.evaluate(ARSENAL_PANES("[data-arsenal-browse]")), `card panes at ${width}`).toEqual([]);
+    // Stuck, the strip is flush with the pane's top (nothing shows above it) and its labels sit in its middle.
+    await reading.evaluate((el) => el.scrollTo(0, 400));
+    const [pane, nav, label] = await Promise.all([reading.boundingBox(), strip.boundingBox(), strip.getByRole("button").first().boundingBox()]);
+    expect(Math.abs(nav!.y - pane!.y), `strip flush at ${width}`).toBeLessThanOrEqual(1);
+    const above = label!.y - nav!.y;
+    const below = nav!.y + nav!.height - 1 - (label!.y + label!.height);
+    expect(Math.abs(above - below), `strip labels centred at ${width}: ${above} vs ${below}`).toBeLessThanOrEqual(1);
+    // The strip's own sideways scrollbar never sits over its labels.
+    expect(await strip.locator("div").first().evaluate((el) => getComputedStyle(el).scrollbarWidth), `strip scrollbar at ${width}`).toBe("none");
+  }
+});

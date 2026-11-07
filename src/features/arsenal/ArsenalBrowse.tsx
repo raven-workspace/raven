@@ -264,7 +264,7 @@ export function ArsenalBrowse() {
   })();
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 px-6 py-5">
+    <div data-arsenal-browse="" className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 px-6 py-5">
       <header className="grid grid-cols-[minmax(200px,320px)_minmax(0,1fr)] items-center gap-x-4 gap-y-2">
         <SearchBar
           label="Search the Arsenal" id={SEARCH_ID} inputRef={searchRef} placeholder="Search cards and commands" trailing={null}
@@ -292,7 +292,7 @@ export function ArsenalBrowse() {
         </div>
       </header>
       <div className="grid min-h-0 grid-cols-[minmax(220px,260px)_minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-x-5 gap-y-3 min-[1100px]:grid-cols-[minmax(150px,180px)_minmax(220px,260px)_minmax(0,1fr)] min-[1280px]:grid-cols-[minmax(150px,180px)_minmax(260px,320px)_minmax(0,1fr)] min-[1100px]:grid-rows-[minmax(0,1fr)]">
-        <nav aria-label="Categories" className="col-start-1 row-start-1 min-h-0 min-[1100px]:overflow-y-auto">
+        <nav aria-label="Categories" className="col-start-1 row-start-1 min-h-0 min-[1100px]:overflow-y-auto min-[1100px]:overflow-x-hidden min-[1100px]:py-1 min-[1100px]:pl-1 min-[1100px]:pr-3">
           <div className="grid min-[1100px]:hidden">
             <Select
               aria-label="Category" value={current ?? undefined} onValueChange={(c) => openCategory(c, false)}
@@ -320,7 +320,7 @@ export function ArsenalBrowse() {
             })}
           </div>
         </nav>
-        <div className="col-start-1 row-start-2 min-h-0 overflow-y-auto min-[1100px]:col-start-2 min-[1100px]:row-start-1">
+        <div className="col-start-1 row-start-2 min-h-0 overflow-y-auto overflow-x-hidden p-1 min-[1100px]:col-start-2 min-[1100px]:row-start-1">
           {examReady && rows.length === 0 && <p className="m-0 px-2 py-1 text-xs text-muted">Nothing matches</p>}
           <ResultList
             id="arsenal-results" label="Arsenal results" groups={resultGroups} selected={index} onSelect={() => {}}
@@ -334,7 +334,7 @@ export function ArsenalBrowse() {
         </div>
         <section
           id={READING_ID} ref={readingRef} tabIndex={-1} aria-label="Reading" onKeyDown={onReadingKey}
-          className="min-h-0 overflow-y-auto outline-none min-[1100px]:col-start-3 max-[1099px]:col-start-2 max-[1099px]:row-span-2 max-[1099px]:row-start-1"
+          className="min-h-0 overflow-y-auto overflow-x-hidden pb-4 pl-2 pr-4 pt-3 outline-none [--pane-bg:var(--bg)] min-[1100px]:col-start-3 max-[1099px]:col-start-2 max-[1099px]:row-span-2 max-[1099px]:row-start-1"
         >
           {reading}
         </section>

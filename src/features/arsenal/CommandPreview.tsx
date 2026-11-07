@@ -60,7 +60,7 @@ export function CommandPreview({ filled, hasCred, hostKey, suggest, os, override
   }, [hostKey]);
   return (
     <div className="flex flex-col gap-2 border-t border-line pt-3">
-      <pre className={COMMAND_PRE} tabIndex={0} role="group" aria-label={`Command: ${filled.cmd.title}`} {...(flash ? { "data-flash": "" } : {})}><MarkedText text={filled.cmd.text} tokens={filled.cmd.tokens ?? []} /></pre>
+      <pre className={`${COMMAND_PRE} max-h-48 overflow-y-auto`} tabIndex={0} role="group" aria-label={`Command: ${filled.cmd.title}`} {...(flash ? { "data-flash": "" } : {})}><MarkedText text={filled.cmd.text} tokens={filled.cmd.tokens ?? []} /></pre>
       {filled.cmd.msfMarker && <Chip>uses your one Metasploit host</Chip>}
       <FillBar tokens={filled.tokens} hasCred={hasCred} auto={filled.auto} suggest={suggest} os={os} overrides={overrides} onOverrides={onOverrides} fieldRef={fieldRef} />
     </div>

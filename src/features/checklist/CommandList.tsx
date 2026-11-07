@@ -3,8 +3,8 @@ import { Button, Chip } from "../../ui";
 import { copyPlain, copySecret } from "../../lib/clipboard";
 import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
 
-/** A command block: wraps only at whitespace; a token longer than the width scrolls instead of breaking. */
-export const COMMAND_PRE = "m-0 overflow-x-auto whitespace-pre-wrap rounded-sm border border-line bg-surface px-2.5 py-1.5 font-mono text-[12.5px] text-fg";
+/** A command block: wraps at whitespace; only a word longer than the whole line breaks, so it never scrolls sideways. */
+export const COMMAND_PRE = "m-0 overflow-x-hidden whitespace-pre-wrap rounded-sm border border-line bg-surface px-2.5 py-1.5 font-mono text-[12.5px] text-fg";
 
 export interface FilledCommand {
   id: string;
@@ -48,8 +48,9 @@ function Marked({ word, re, tokens }: { word: string; re: RegExp | null; tokens:
 }
 
 /**
- * The command text, one unbreakable span per whitespace-separated word, so a line wraps only at spaces (never inside
- * `-sV` or an IP); a word longer than the block scrolls. The spaces stay plain text, so copying the text is unchanged.
+ * The command text, one span per whitespace-separated word, so a line wraps only at spaces (never inside `-sV` or an
+ * IP). A word longer than the whole line breaks inside its own span rather than scrolling the block sideways. The spaces
+ * stay plain text, so copying the text is unchanged.
  */
 export function MarkedText({ text, tokens }: { text: string; tokens: string[] }) {
   const re = tokens.length > 0 ? new RegExp(`(${tokens.map(escape).join("|")})`) : null;
@@ -59,7 +60,7 @@ export function MarkedText({ text, tokens }: { text: string; tokens: string[] })
         part === "" ? null : /^\s+$/.test(part) ? (
           part
         ) : (
-          <span key={i} data-testid="command-word" className="inline-block whitespace-nowrap">
+          <span key={i} data-testid="command-word" className="inline-block max-w-full [overflow-wrap:anywhere]">
             <Marked word={part} re={re} tokens={tokens} />
           </span>
         ),

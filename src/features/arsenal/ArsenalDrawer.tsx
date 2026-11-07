@@ -132,6 +132,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
 
   const showing = searching ? "results" : solo ? "solo" : cardId ? "card" : category !== null ? "results" : "categories";
   const onList = showing === "categories" || showing === "results";
+  const previewRow = onList && listing;
 
   const openCategory = (c: string) => {
     setCategory(c);
@@ -258,7 +259,11 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
     ? [["↵", "copy"], ["⌘↵", host ? "copy and log" : "copy and log (open a host)"], ["→", "in card"], ...(engagementId ? [["⌥H", "host"], ["⌥C", "credential"]] as [string, string][] : []), ["Esc", inCategory ? "back" : "close"]]
     : [["Esc", "back"], ...(engagementId ? [["⌥H", "host"], ["⌥C", "credential"]] as [string, string][] : [])];
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" onKeyDownCapture={onKeyCapture}>
+    <div
+      // A results list keeps a fixed preview row under it: picking a longer or shorter command never moves the list.
+      className={`grid h-full min-h-0 ${previewRow ? "grid-rows-[auto_minmax(0,1fr)_minmax(0,40%)_auto]" : "grid-rows-[auto_minmax(0,1fr)_auto]"}`}
+      onKeyDownCapture={onKeyCapture}
+    >
       <header className="grid shrink-0 gap-2 border-b border-line px-4 py-3">
         <div className={`grid items-center gap-2 ${onList ? "grid-cols-[1fr_auto]" : "grid-cols-[auto_1fr_auto]"}`}>
           {!onList && (
@@ -305,7 +310,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
           </div>
         )}
       </header>
-      <div className="min-h-0 overflow-y-auto px-4 py-3">
+      <div className="min-h-0 overflow-y-auto overflow-x-hidden px-4 py-3">
         {showing === "card" && cardId && <CardView cardId={cardId} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} focusCred={focusCred} focusBlockId={blockId} />}
         {showing === "solo" && solo && <CommandPane key={solo.id} commands={[solo]} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} focusCred={focusCred} />}
         {onList && (
@@ -318,9 +323,10 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
           </>
         )}
       </div>
-      <div className="grid">
-        {onList && filled && (
-          <div className="grid gap-1 border-t border-line px-4 py-3" onKeyDown={onPreviewKey}>
+      {previewRow && (
+        <div className="grid min-h-0 content-start gap-1 overflow-y-auto overflow-x-hidden border-t border-line px-4 py-3" onKeyDown={onPreviewKey}>
+          {filled ? (
+            <>
             <CommandPreview
               filled={filled} hasCred={cred !== null} hostKey={host?.id ?? null} suggest={suggestCtx} os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
               overrides={overrides} onOverrides={setOverrides}
@@ -328,8 +334,12 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
             />
             {note && <p role="status" className={`m-0 text-xs ${guard.hint ? "text-warn" : "text-muted"}`}>{note}</p>}
             {status && <p role="alert" className="m-0 text-xs text-warn">{status}</p>}
-          </div>
-        )}
+            </>
+          ) : (
+            current && <p className="m-0 text-xs text-muted">↵ opens this {current.kind === "category" ? "category" : current.hit.type}</p>
+          )}
+        </div>
+      )}
         <footer data-hint-line="" className="border-t border-line px-4 py-2 text-[11px] text-muted">
           {hints.map(([key, label], i) => (
             <span key={key}>
@@ -338,7 +348,6 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
             </span>
           ))}
         </footer>
-      </div>
     </div>
   );
 }

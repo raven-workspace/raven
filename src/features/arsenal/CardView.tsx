@@ -177,6 +177,29 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
     if (el.offsetLeft < row.scrollLeft || el.offsetLeft + el.offsetWidth > row.scrollLeft + row.clientWidth) row.scrollLeft = el.offsetLeft - 8;
   }, [inView]);
 
+  // The strip hides its scrollbar (an overlay one sat over the labels); a faded edge says there is more that way.
+  const [edges, setEdges] = useState({ start: false, end: false });
+  const measureStrip = useCallback(() => {
+    const r = stripRow.current;
+    if (!r) return;
+    const start = r.scrollLeft > 1;
+    const end = r.scrollLeft + r.clientWidth < r.scrollWidth - 1;
+    setEdges((e) => (e.start === start && e.end === end ? e : { start, end }));
+  }, []);
+  const hasStrip = !!contents && main.shown.length > 1;
+  useEffect(() => {
+    const r = stripRow.current;
+    if (!hasStrip || !r) return;
+    measureStrip();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measureStrip);
+    ro.observe(r);
+    return () => ro.disconnect();
+  }, [hasStrip, measureStrip]);
+  const fade = edges.start || edges.end
+    ? `linear-gradient(to right, ${edges.start ? "transparent 0, #000 32px" : "#000 0"}, ${edges.end ? "#000 calc(100% - 32px), transparent 100%" : "#000 100%"})`
+    : undefined;
+
   const jump = (id: string) => {
     setInView(id);
     const el = blockEl(id);
@@ -206,9 +229,12 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
 
   return (
     <div ref={root} tabIndex={-1} onKeyDown={onKeyDown} className="grid grid-cols-[minmax(0,1fr)] gap-4 outline-none">
-      {contents && main.shown.length > 1 && (
-        <nav aria-label="On this card" className="sticky -top-3 z-10 border-b border-line bg-surface pt-3">
-          <div ref={stripRow} className="relative grid auto-cols-max grid-flow-col gap-4 overflow-x-auto py-1.5 text-xs">
+      {hasStrip && (
+        <nav aria-label="On this card" className="sticky -top-3 z-10 border-b border-line bg-(--pane-bg,var(--surface)) pt-2">
+          <div
+            ref={stripRow} data-scroll-x="" onScroll={measureStrip} style={fade ? { maskImage: fade, WebkitMaskImage: fade } : undefined}
+            className="relative grid auto-cols-max grid-flow-col gap-4 overflow-x-auto px-1 pb-3 pt-1 text-xs [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
             {main.shown.map((c) => (
               <button
                 key={c.id} type="button" data-for={c.id} onClick={() => jump(c.id)} aria-current={inView === c.id ? "location" : undefined}

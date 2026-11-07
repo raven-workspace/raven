@@ -45,17 +45,17 @@ export function ResultList<R extends ResultRow>({ id, label, groups, selected, o
         className={`grid cursor-default ${r.stack ? "grid-cols-[minmax(0,1fr)] gap-0" : "grid-cols-[minmax(0,1fr)_auto] items-center gap-2"} rounded-sm px-2 py-1 text-left text-[13px] ${i === selected ? ON : "text-fg-2"}`}
       >
         <span className="min-w-0 truncate">{r.title}</span>
-        {r.tag && <span className={`text-[11px] text-muted ${r.mono ? "font-mono" : ""} ${r.stack ? "min-w-0 truncate" : ""}`}>{r.tag}</span>}
+        {r.tag && <span className={`min-w-0 truncate text-[11px] text-muted ${r.mono ? "font-mono" : ""} ${r.stack ? "" : "max-w-40"}`}>{r.tag}</span>}
       </div>
     );
   };
   return (
-    <div ref={listRef} id={id} role="listbox" aria-label={label} className="grid gap-2 outline-none" {...listProps}>
+    <div ref={listRef} id={id} role="listbox" aria-label={label} className="grid grid-cols-[minmax(0,1fr)] gap-2 outline-none" {...listProps}>
       {groups.map((g) => {
         if (g.label === undefined) return g.rows.map(option);
         const headingId = `${id}-group-${g.key}`;
         return (
-          <div key={g.key} role="group" aria-labelledby={headingId} className="grid border-t border-line pt-1.5 first:border-t-0 first:pt-0">
+          <div key={g.key} role="group" aria-labelledby={headingId} className="grid grid-cols-[minmax(0,1fr)] border-t border-line pt-1.5 first:border-t-0 first:pt-0">
             <div id={headingId} className="px-2 pb-0.5 text-[11px] font-semibold uppercase tracking-label text-muted">{g.label}</div>
             {g.rows.map(option)}
           </div>
