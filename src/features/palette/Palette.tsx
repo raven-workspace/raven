@@ -231,12 +231,12 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
         {engagementId && (
           <div className="grid grid-cols-[auto_minmax(0,1fr)] justify-items-start gap-3">
             <HostChip
-              ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} className="max-w-full"
+              ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} align="start" className="max-w-full"
               {...(remembered && d.engagement ? { engagementName: d.engagement.name } : {})}
             />
             <CredChip
               ref={credRef} credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred}
-              onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} className="max-w-full"
+              onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} align="start" className="max-w-full"
             />
           </div>
         )}

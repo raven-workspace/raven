@@ -17,6 +17,9 @@ const H = `${E}/h/${AUDIT_IDS.webHost}`;
 
 // dispatchEvent, not click(): at 900 the Findings tab sits under the Order button, which swallows a real click.
 const tab = (name: string) => (page: Page) => page.getByRole("tab", { name, exact: true }).dispatchEvent("click");
+const FS01 = `${E}/h/${AUDIT_IDS.fileHost}`;
+/** A command with a fill field the host does not answer, so the first Enter is held back by the copy guard. */
+const GUARD_QUERY = "several ports";
 const focusBody = (page: Page) => page.locator("body").click({ position: { x: 1, y: 1 } });
 
 export const SCREENS: Screen[] = [
@@ -113,6 +116,31 @@ export const SCREENS: Screen[] = [
     },
   },
   {
+    id: "palette-credmenu", path: FS01, ready: "role=listbox[name^='Fill with credential']",
+    setup: async (page) => {
+      await page.keyboard.press("Meta+K");
+      await page.getByRole("combobox").first().waitFor();
+      await page.keyboard.press("Alt+KeyC");
+    },
+  },
+  {
+    id: "palette-guard", path: FS01, ready: "text=/not filled · ↵ again to copy anyway/",
+    setup: async (page) => {
+      await page.keyboard.press("Meta+K");
+      await page.getByRole("combobox", { name: "Search" }).fill(GUARD_QUERY);
+      await page.keyboard.press("Enter");
+    },
+  },
+  {
+    id: "palette-suggest", path: FS01, ready: "role=listbox[name^='Suggestions for']",
+    setup: async (page) => {
+      await page.keyboard.press("Meta+K");
+      await page.getByRole("combobox", { name: "Search" }).fill("psexec");
+      // TARGET_IP is filled from the host and offers every host's address as a suggestion.
+      await page.getByRole("combobox", { name: "Value for TARGET_IP" }).focus();
+    },
+  },
+  {
     id: "palette-hostmenu", path: H, ready: "role=listbox[name='Fill for host']",
     setup: async (page) => {
       await page.keyboard.press("Meta+K");
@@ -128,10 +156,52 @@ export const SCREENS: Screen[] = [
       await page.locator("input[aria-label='Search the Arsenal']").fill("kerberos");
     },
   },
+  {
+    id: "arsenal-drawer-empty", path: H, ready: "role=listbox[name='Arsenal results']",
+    setup: async (page) => { await focusBody(page); await page.keyboard.press("a"); },
+  },
+  {
+    id: "arsenal-drawer-smb", path: FS01, ready: "role=listbox[name='Arsenal results']",
+    setup: async (page) => {
+      await focusBody(page);
+      await page.keyboard.press("a");
+      await page.locator("input[aria-label='Search the Arsenal']").fill("smb");
+    },
+  },
   { id: "arsenal-browse", path: "/arsenal", ready: "nav[aria-label='Categories']" },
+  {
+    id: "arsenal-browse-search", path: "/arsenal", ready: "role=listbox",
+    setup: async (page) => { await page.locator("input[aria-label='Search the Arsenal']").fill("lateral movement"); },
+  },
+  {
+    id: "arsenal-card-long", path: "/arsenal", ready: "nav[aria-label='On this card'] button[aria-current='location']",
+    setup: async (page) => {
+      await page.locator("input[aria-label='Search the Arsenal']").fill("Windows PrivEsc Enumeration");
+      await page.getByRole("option", { name: /Windows PrivEsc Enumeration/ }).first().click();
+      await page.getByRole("article", { name: "Windows PrivEsc Enumeration" }).waitFor();
+      // Scroll the reading pane so the "On this card" strip is stuck and has an active entry.
+      await page.getByRole("region", { name: "Reading" }).evaluate((el) => { el.scrollTop = el.scrollHeight / 2; });
+      // The strip follows the scroll through an IntersectionObserver: wait until the active entry is no longer the first one.
+      await page.waitForFunction(() => {
+        const nav = document.querySelector("nav[aria-label='On this card']");
+        const buttons = [...(nav?.querySelectorAll("button") ?? [])];
+        const at = buttons.findIndex((b) => b.getAttribute("aria-current") === "location");
+        return at > 0;
+      });
+    },
+  },
   {
     id: "transfer-generator", path: "/arsenal", ready: "role=region[name='Transfer a file']",
     setup: async (page) => {
+      // Below 1100px the category column becomes a select.
+      const side = page.locator("button[data-category]", { hasText: "Shells & transfers" });
+      const select = page.getByRole("combobox", { name: "Category" });
+      await side.or(select).first().waitFor();
+      if (await side.isVisible()) await side.click();
+      else {
+        await select.click();
+        await page.getByRole("option", { name: /Shells & transfers/ }).click();
+      }
       await page.getByRole("option", { name: /Transfer a file/ }).click();
       await page.getByRole("button", { name: /^Fill for host/ }).click();
       await page.getByRole("listbox", { name: "Fill for host" }).getByRole("option").nth(1).click();

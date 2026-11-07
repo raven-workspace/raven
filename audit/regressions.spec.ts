@@ -263,3 +263,103 @@ test("post-foothold facts show without scrolling", async ({ page }) => {
     expect(inPane.ok, `${text} is inside its scroll pane: ${JSON.stringify(inPane)}`).toBe(true);
   }
 });
+
+// Arsenal reference round.
+
+const FS01 = "/e/e-lab/h/h-fs01";
+
+test("host chip is never a Tab stop", async ({ page }) => {
+  await open(page, FS01, 1280);
+  await page.keyboard.press("Meta+K");
+  const search = page.getByRole("dialog").getByRole("combobox", { name: "Search" });
+  await search.waitFor();
+  await search.fill("smb");
+  const chip = page.getByRole("button", { name: /^Fill for host/ });
+  await expect(chip).toHaveAttribute("tabindex", "-1");
+  for (let i = 0; i < 8; i++) {
+    await page.keyboard.press("Tab");
+    await expect(chip).not.toBeFocused();
+  }
+});
+
+test("Enter in the drawer copies", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await open(page, FS01, 1280);
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press("a");
+  const input = page.locator("input[aria-label='Search the Arsenal']");
+  await input.fill("smb");
+  await page.getByRole("listbox", { name: "Arsenal results" }).getByRole("option").first().waitFor();
+  await page.keyboard.press("Enter");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("10.10.20.21");
+  await expect(page.getByText(/^Copied for fs01/)).toBeVisible();
+});
+
+test("copy guard focuses the first unfilled field", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await open(page, FS01, 1280);
+  await page.keyboard.press("Meta+K");
+  await page.getByRole("combobox", { name: "Search" }).fill("several ports");
+  await page.getByRole("option", { name: /Listen on several ports at once/ }).waitFor();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("{SECOND_LPORT} not filled · ↵ again to copy anyway")).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Value for SECOND_LPORT" })).toBeFocused();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).not.toContain("SECOND_LPORT");
+  // Typing a value and pressing Enter copies the filled command.
+  await page.keyboard.type("5555");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("4444,5555");
+});
+
+test("lateral movement finds Pivoting", async ({ page }) => {
+  await open(page, "/arsenal", 1280);
+  await page.locator("input[aria-label='Search the Arsenal']").fill("lateral movement");
+  await expect(page.getByRole("button", { name: /^Pivoting/ })).toBeVisible();
+  await page.getByRole("button", { name: /^Pivoting/ }).click();
+  await expect(page.getByRole("option").first()).toBeVisible();
+});
+
+test("browse never shows 'Pick a card.'", async ({ page }) => {
+  await page.goto("/arsenal");
+  await page.getByRole("navigation", { name: "Categories" }).waitFor();
+  await expect(page.getByText("Pick a card.")).toHaveCount(0);
+});
+
+test("TokenInput suggestions stay inside the dialog and above the hint line", async ({ page }) => {
+  for (const width of [900, 1280]) {
+    await open(page, FS01, width);
+    await page.keyboard.press("Meta+K");
+    const dialog = page.getByRole("dialog");
+    await page.getByRole("combobox", { name: "Search" }).fill("psexec");
+    await page.getByRole("combobox", { name: "Value for TARGET_IP" }).focus();
+    const list = dialog.getByRole("listbox", { name: "Suggestions for TARGET_IP" });
+    await list.waitFor();
+    const box = (await list.boundingBox())!;
+    const dlg = (await dialog.boundingBox())!;
+    const hint = (await dialog.locator("[data-hint-line]").boundingBox())!;
+    expect(box.x, `list left edge at ${width}`).toBeGreaterThanOrEqual(dlg.x);
+    expect(box.x + box.width, `list right edge at ${width}`).toBeLessThanOrEqual(dlg.x + dlg.width);
+    expect(box.y, `list top at ${width}`).toBeGreaterThanOrEqual(dlg.y);
+    expect(box.y + box.height, `list above the hint line at ${width}`).toBeLessThanOrEqual(hint.y);
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+  }
+});
+
+test("the credential list in ⌘K stays inside the dialog", async ({ page }) => {
+  for (const width of [900, 1280]) {
+    await open(page, FS01, width);
+    await page.keyboard.press("Meta+K");
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("combobox", { name: "Search" }).waitFor();
+    await page.keyboard.press("Alt+KeyC");
+    const list = dialog.getByRole("listbox", { name: /Fill with credential/ });
+    await list.waitFor();
+    const box = (await list.boundingBox())!;
+    const dlg = (await dialog.boundingBox())!;
+    expect(box.x, `list left edge at ${width}`).toBeGreaterThanOrEqual(dlg.x);
+    expect(box.x + box.width, `list right edge at ${width}`).toBeLessThanOrEqual(dlg.x + dlg.width);
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+  }
+});

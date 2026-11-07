@@ -99,10 +99,6 @@ export const FLOWS: Flow[] = [
       { type: "kerberoast" },
       { expect: "role=listbox[name='Arsenal results']" },
       { press: "Enter" },
-      {
-        click: "aside[aria-label='Arsenal'] button[aria-label^='Copy command'] >> nth=0",
-        why: "Enter in the Arsenal drawer opens the card but does not copy; its Copy button has no keyboard shortcut",
-      },
     ],
   },
   {

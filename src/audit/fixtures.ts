@@ -21,6 +21,7 @@ export const AUDIT_IDS = {
   archivedEngagement: "e-old",
   webHost: "h-web",
   dcHost: "h-dc01",
+  fileHost: "h-fs01",
   msfHost: "h-exam-ms01",
 } as const;
 
@@ -303,6 +304,8 @@ const credAttempts: CredAttempt[] = [
   { id: "ca-2", engagementId: "e-lab", credId: "c-3", usernameId: null, hostId: "h-dc01", service: "winrm", port: 5985, result: "admin", authMode: "domain", detail: "Pwn3d!", logEntryId: "l-14", at: ago(40 * MIN) },
   { id: "ca-3", engagementId: "e-lab", credId: "c-6", usernameId: null, hostId: "h-sql01", service: "mssql", port: 1433, result: "valid", authMode: "domain", detail: null, logEntryId: "l-13", at: ago(45 * MIN) },
   { id: "ca-4", engagementId: "e-lab", credId: "c-2", usernameId: null, hostId: "h-fs01", service: "smb", port: 445, result: "failed", authMode: "domain", detail: "STATUS_LOGON_FAILURE", logEntryId: null, at: ago(60 * MIN) },
+  // A password that works on fs01: the Arsenal's credential chip should offer it first there.
+  { id: "ca-5", engagementId: "e-lab", credId: "c-9", usernameId: null, hostId: "h-fs01", service: "smb", port: 445, result: "valid", authMode: "domain", detail: null, logEntryId: null, at: ago(30 * MIN) },
 ];
 
 const accessGrants: AccessGrant[] = [
