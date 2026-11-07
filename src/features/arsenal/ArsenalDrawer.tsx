@@ -6,7 +6,7 @@ import type { LibraryCommand } from "../../engines/library/types";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
 import { Button, Kbd } from "../../ui";
 import { useFillBase } from "../palette/fillData";
-import { searchPalette, type PaletteResult } from "../palette/search";
+import { flattenGroups, searchPalette, type PaletteResult } from "../palette/search";
 import { CardView, CommandPane } from "./CardView";
 import { useArsenalStore } from "./useArsenalStore";
 import { useFillScope } from "./useFillScope";
@@ -32,13 +32,11 @@ function useArsenalSearch(query: string, engagementId: string, hostId: string | 
   const version = useLibraryVersion();
   const { d, host, examReady } = useFillBase(engagementId, hostId);
   return useMemo(() => {
-    const all = searchPalette(query, {
+    const all = flattenGroups(searchPalette(query, {
       library: getLibrary(), cards: getCards(), generators: [],
-      ...(host?.os === "linux" || host?.os === "windows" ? { os: host.os } : {}),
-      ...(host ? { stageId: host.boardColumn } : {}),
       ...(d.engagement ? { exam: { kind: d.engagement.kind, hostId: host?.id ?? "", msfHostId: d.engagement.msfHostId } } : {}),
       examPending: !examReady,
-    });
+    }).groups);
     const byCategory = new Map<string, PaletteResult[]>();
     for (const r of all) {
       if (r.type !== "card") continue;

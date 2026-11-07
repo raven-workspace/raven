@@ -17,7 +17,7 @@ import { HostPicker, isHostPickKey, openPicker } from "../arsenal/HostPicker";
 import { SearchBar } from "../arsenal/SearchBar";
 import { useFillBase } from "./fillData";
 import { GENERATORS } from "./generators";
-import { searchPalette, withoutSecrets, type EngagementItem, type PaletteResult } from "./search";
+import { flattenGroups, searchPalette, withoutSecrets, type EngagementItem, type PaletteResult } from "./search";
 import { usePaletteStore } from "./usePaletteStore";
 import { tokenSuggestions, type SuggestContext } from "./suggest";
 import { TokenInput } from "./TokenInput";
@@ -66,15 +66,14 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     }
     // Credential labels only: a secret is never searched or shown.
     for (const c of d.credentials ?? []) out.push({ id: c.id, kind: "credential", title: credLabel(c), text: "" });
+    for (const h of d.hosts) out.push({ id: h.id, kind: "host", title: h.name, text: h.ip ?? "" });
     return out;
-  }, [engagementId, d.log, d.credentials]);
+  }, [engagementId, d.log, d.credentials, d.hosts]);
 
   const results = useMemo(
     () =>
-      searchPalette(query, {
+      searchPaletteFlat(query, {
         library: getLibrary(), cards: getCards(), generators: GENERATORS, engagementItems: items,
-        ...(host?.os === "linux" || host?.os === "windows" ? { os: host.os } : {}),
-        ...(host ? { stageId: host.boardColumn } : {}),
         ...(d.engagement ? { exam: { kind: d.engagement.kind, hostId: host?.id ?? "", msfHostId: d.engagement.msfHostId } } : {}),
         examPending: !examReady,
       }).slice(0, MAX_RESULTS),
@@ -104,8 +103,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const run = async (log: boolean) => {
     setStatus(undefined);
     if (current?.type === "item") {
-      const section = current.item.kind === "credential" ? "credentials" : "log";
-      void navigate(`/e/${engagementId}/s/${section}`);
+      void navigate(current.item.kind === "host" ? `/e/${engagementId}/h/${current.item.id}` : `/e/${engagementId}/s/${current.item.kind === "credential" ? "credentials" : "log"}`);
       onClose();
       return;
     }
@@ -272,6 +270,12 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
       </p>
     </div>
   );
+}
+
+/** Arsenal hits flattened (relevance order inside each type), then engagement items. Task 8 renders the groups. */
+function searchPaletteFlat(q: string, c: Parameters<typeof searchPalette>[1]): PaletteResult[] {
+  const r = searchPalette(q, c);
+  return [...flattenGroups(r.groups), ...r.items];
 }
 
 /** ⌘K: search commands, generators, cards and this engagement, and copy the filled command. Mounted while unlocked. */

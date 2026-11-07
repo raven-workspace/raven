@@ -18,7 +18,7 @@ import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 
 vi.mock("../lib/api");
-vi.mock("../features/palette/generators", () => ({ GENERATORS: [{ id: "g-zz", title: "Zzgen reverse shell" }] }));
+vi.mock("../features/palette/generators", () => ({ GENERATORS: [{ id: "g-zz", title: "Zzgen reverse shell", category: "Shells-and-Transfers" }] }));
 vi.mock("../features/checklist/ticks", async (orig) => ({
   ...(await orig<typeof import("../features/checklist/ticks")>()),
   resyncBoards: vi.fn().mockResolvedValue(undefined),
