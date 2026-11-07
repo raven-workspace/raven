@@ -1,40 +1,40 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router";
 import { fillCommand } from "../../engines/checklist";
 import { credLabel } from "../../engines/credentials/labels";
 import { getCards, getLibrary, getToolkit, useLibraryVersion } from "../../engines/library/store";
 import { copyPlain, copySecret } from "../../lib/clipboard";
 import { reportError } from "../../lib/lockSignal";
-import type { Host } from "../../types/host";
-import { Chip, Dialog, Kbd } from "../../ui";
+import { Dialog, Kbd } from "../../ui";
 import { logCommand } from "../capture/logCommand";
-import { fillLibraryCommand } from "../checklist/goalCommands";
-import { COMMAND_PRE } from "../checklist/CommandList";
+import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
+import { shortHostName } from "../../lib/hostName";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useFillScope, useLastEngagementStore } from "../arsenal/useFillScope";
-import { HostPicker, isHostPickKey, openPicker } from "../arsenal/HostPicker";
+import { CredChip, isCredPickKey } from "../arsenal/CredChip";
+import type { CredChipHandle } from "../arsenal/CredChip";
+import { CommandPreview, fillPreview, toolPrefill } from "../arsenal/CommandPreview";
+import { HostChip, isHostPickKey } from "../arsenal/HostChip";
+import type { HostChipHandle } from "../arsenal/HostChip";
+import { useCredPickStore } from "../checklist/credPick";
+import { ResultList } from "../arsenal/ResultList";
+import type { ResultGroup, ResultRow } from "../arsenal/ResultList";
 import { SearchBar } from "../arsenal/SearchBar";
 import { useFillBase } from "./fillData";
 import { GENERATORS } from "./generators";
-import { searchPalette, withoutSecrets, type EngagementItem, type PaletteResult } from "./search";
+import { capGroups, searchPalette, withoutSecrets, type EngagementItem, type PaletteResult } from "./search";
 import { usePaletteStore } from "./usePaletteStore";
-import { tokenSuggestions, type SuggestContext } from "./suggest";
-import { TokenInput } from "./TokenInput";
-import { FilePicker, isFileToken } from "../generators/FilePicker";
+import type { SuggestContext } from "./suggest";
 
 const MAX_RESULTS = 30;
-const GROUPS = { command: "Commands", generator: "Generators", card: "Cards", item: "This engagement" } as const;
 
-/** The best staged Toolkit file whose name contains a query word: it pre-fills {FILE}. */
-function toolPrefill(query: string, os: Host["os"]): Record<string, string> {
-  const words = query.toLowerCase().split(/\s+/).filter((w) => w.length >= 2);
-  if (words.length === 0) return {};
-  const hits = getToolkit()
-    .filter((t) => t.staged && words.some((w) => t.file.toLowerCase().includes(w)))
-    .sort((a, b) => Number(b.os === os) - Number(a.os === os));
-  return hits[0] ? { FILE: hits[0].file } : {};
-}
+type PaletteRow = ResultRow & { result: PaletteResult };
+const paletteRow = (result: PaletteResult): PaletteRow => ({
+  result, id: `palette-${result.type}-${result.id}`, title: result.title,
+  tag: result.type === "command" ? result.command.tool : result.type === "item" ? result.item.kind : result.type === "more" ? "" : result.type,
+  mono: result.type === "command",
+});
 
 function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }: { engagementId: string; hostId: string | null; remembered: boolean; onClose: () => void }) {
   const qc = useQueryClient();
@@ -42,18 +42,19 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const libraryVersion = useLibraryVersion();
   // The chip picks another host for this search only; typed values never carry over to it.
   const [hostId, setHostId] = useState(openedHostId);
-  const { d, host, makeInput, examReady } = useFillBase(engagementId, hostId);
+  const { d, host, cred, credOwnerId, makeInput, examReady } = useFillBase(engagementId, hostId);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
-  const pickerRef = useRef<HTMLSelectElement>(null);
+  const pickerRef = useRef<HostChipHandle>(null);
+  const credRef = useRef<CredChipHandle>(null);
   const pickHost = (id: string | null) => {
     setHostId(id);
     setOverrides({});
   };
   const [status, setStatus] = useState<string>();
   const searchRef = useRef<HTMLInputElement>(null);
-  const tokenRefs = useRef<HTMLInputElement[]>([]);
+  const fieldEls = useRef(new Map<string, HTMLInputElement>());
 
   const items = useMemo<EngagementItem[]>(() => {
     if (!engagementId) return [];
@@ -66,46 +67,72 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     }
     // Credential labels only: a secret is never searched or shown.
     for (const c of d.credentials ?? []) out.push({ id: c.id, kind: "credential", title: credLabel(c), text: "" });
+    for (const h of d.hosts) out.push({ id: h.id, kind: "host", title: h.name, text: h.ip ?? "" });
     return out;
-  }, [engagementId, d.log, d.credentials]);
+  }, [engagementId, d.log, d.credentials, d.hosts]);
 
-  const results = useMemo(
+  const found = useMemo(
     () =>
       searchPalette(query, {
         library: getLibrary(), cards: getCards(), generators: GENERATORS, engagementItems: items,
-        ...(host?.os === "linux" || host?.os === "windows" ? { os: host.os } : {}),
-        ...(host ? { stageId: host.boardColumn } : {}),
         ...(d.engagement ? { exam: { kind: d.engagement.kind, hostId: host?.id ?? "", msfHostId: d.engagement.msfHostId } } : {}),
         examPending: !examReady,
-      }).slice(0, MAX_RESULTS),
+      }),
     // getLibrary()/getCards() change only with the library version.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [query, items, host, d.engagement, examReady, libraryVersion],
   );
+  // Arsenal categories first (the drawer's rows), then one group for the engagement. Each list stops at MAX_RESULTS.
+  const rowGroups = useMemo<ResultGroup<PaletteRow>[]>(() => {
+    const out: ResultGroup<PaletteRow>[] = capGroups(found.groups, MAX_RESULTS)
+      .map((g) => ({ key: g.category, label: g.label, rows: g.hits.map(paletteRow) }));
+    // The cap only keeps the dialog short: what it left out is one row away in the Arsenal, never silently dropped.
+    const left = found.groups.reduce((n, g) => n + g.hits.length, 0) - out.reduce((n, g) => n + g.rows.length, 0);
+    if (left > 0) out.push({ key: "more", rows: [paletteRow({ type: "more", id: "more", count: left, title: `${left} more — open in Arsenal` })] });
+    if (found.items.length > 0) out.push({ key: "engagement", label: "This engagement", rows: found.items.slice(0, MAX_RESULTS).map(paletteRow) });
+    return out;
+  }, [found]);
+  const results = useMemo(() => rowGroups.flatMap((g) => g.rows.map((r) => r.result)), [rowGroups]);
   const index = Math.min(selected, Math.max(0, results.length - 1));
   const current: PaletteResult | undefined = results[index];
 
-  const filled = useMemo(() => {
-    if (current?.type !== "command") return null;
-    const input = makeInput({ ...toolPrefill(query, host?.os ?? null), ...Object.fromEntries(Object.entries(overrides).map(([k, v]) => [k.toUpperCase(), v])) });
-    return { cmd: fillLibraryCommand(current.command, input, current.msfMarker), input };
-  }, [current, host, makeInput, query, overrides]);
+  const filled = useMemo(
+    () => (current?.type === "command" ? fillPreview(current.command, current.msfMarker, makeInput, overrides, toolPrefill(query, host?.os ?? null)) : null),
+    [current, host, makeInput, query, overrides],
+  );
 
   useEffect(() => searchRef.current?.focus(), []);
+  useEffect(() => {
+    if (current) document.getElementById(`palette-${current.type}-${current.id}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [current]);
 
+  const focusToken = useCallback((t: string) => fieldEls.current.get(t)?.focus(), []);
+  const focusCred = useCallback(() => credRef.current?.focus(), []);
+  const guard = useCopyGuard({ focusToken, focusCred, hostName: host ? shortHostName(host.name) : null });
+  // Moving to another row ends a held-back copy: coming back to the first one holds it back again.
+  const { reset: resetGuard } = guard;
+  const currentKey = current ? `${current.type}-${current.id}` : "";
+  useEffect(() => resetGuard(), [currentKey, resetGuard]);
+
+  /** Copies the filled command through the copy guard: null when it was held back for an unfilled token. */
   const copy = async (): Promise<string | null> => {
     if (!filled) return null;
     const c = filled.cmd;
     const text = c.copyText ?? c.text;
-    await (text !== c.text ? copySecret : copyPlain)(text);
-    return text;
+    const r = await guard.attempt(c, () => (text !== c.text ? copySecret : copyPlain)(text));
+    return r === "copied" ? text : null;
   };
 
   const run = async (log: boolean) => {
     setStatus(undefined);
     if (current?.type === "item") {
-      const section = current.item.kind === "credential" ? "credentials" : "log";
-      void navigate(`/e/${engagementId}/s/${section}`);
+      void navigate(current.item.kind === "host" ? `/e/${engagementId}/h/${current.item.id}` : `/e/${engagementId}/s/${current.item.kind === "credential" ? "credentials" : "log"}`);
+      onClose();
+      return;
+    }
+    if (current?.type === "more") {
+      if (engagementId) useLastEngagementStore.setState({ engagementId, hostId: host?.id ?? null });
+      void navigate(`/arsenal?q=${encodeURIComponent(query.trim())}`);
       onClose();
       return;
     }
@@ -119,7 +146,9 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     if (!filled || current?.type !== "command") return;
     try {
       const text = await copy();
-      if (log && host && text !== null && d.engagement) {
+      // Held back for an unfilled token: the field has focus and the hint says why. Nothing is copied, logged or closed.
+      if (text === null) return;
+      if (log && host && d.engagement) {
         const c = current.command;
         // The real values, as typed at the shell (not shell-escaped, not masked).
         const typed = fillCommand(c.template, filled.input, { commandOs: c.os }).text;
@@ -138,137 +167,119 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
 
   const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit: getToolkit() };
 
-  // A field stays once edited, even though filling it resolves the token.
-  const tpl = current?.type === "command" ? current.command.template.toUpperCase() : "";
-  const unresolved = filled
-    ? [...new Set([...filled.cmd.unresolved, ...Object.keys(overrides).filter((k) => tpl.includes(k.toUpperCase()))])]
-    : [];
+  // Tab goes to the first field still empty, else the first field.
+  const firstUnfilled = (): HTMLInputElement | undefined => {
+    const t = filled?.tokens.find((n) => filled.auto[n]?.unresolved && !overrides[n]) ?? filled?.tokens[0];
+    return t ? fieldEls.current.get(t) : undefined;
+  };
 
   const onSearchKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       setSelected(Math.max(0, Math.min(results.length - 1, index + (e.key === "ArrowDown" ? 1 : -1))));
-    } else if (e.key === "Tab" && !e.shiftKey && unresolved.length > 0) {
+    } else if (e.key === "Tab" && !e.shiftKey && (filled?.tokens.length ?? 0) > 0) {
       e.preventDefault();
       // The dialog's focus trap would otherwise see Tab leave its last field and loop back to the top.
       e.stopPropagation();
-      tokenRefs.current[0]?.focus();
-    } else if (e.key === "ArrowRight" && e.currentTarget.selectionStart === e.currentTarget.value.length && current?.type !== "item") {
-      // Opens the card in the Arsenal drawer.
-      const cardId = current?.type === "card" ? current.id : current?.type === "command" ? current.command.cardId : undefined;
-      if (!cardId) return;
+      firstUnfilled()?.focus();
+    } else if (e.key === "ArrowRight" && e.currentTarget.selectionStart === e.currentTarget.value.length && current?.type !== "item" && current?.type !== "more") {
+      // Goes in: a card opens in the Arsenal drawer, a command at its block, or alone when it has no card. Never a no-op.
+      if (!current) return;
       e.preventDefault();
-      useArsenalStore.getState().openCard(cardId);
+      if (current.type === "generator") {
+        void run(false);
+        return;
+      }
+      if (current.type === "card") useArsenalStore.getState().openCard(current.id);
+      else if (current.command.cardId) useArsenalStore.getState().openCard(current.command.cardId, current.command.id);
+      else useArsenalStore.getState().openSolo(current.command);
       onClose();
     }
   };
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (engagementId && isHostPickKey(e)) {
       e.preventDefault();
-      openPicker(pickerRef.current);
+      pickerRef.current?.open();
       return;
     }
-    // Enter on the host picker chooses a host, never copies.
-    if (e.key !== "Enter" || e.nativeEvent.isComposing || e.target instanceof HTMLSelectElement) return;
+    if (engagementId && isCredPickKey(e)) {
+      e.preventDefault();
+      credRef.current?.open();
+      return;
+    }
+    // Enter on the host chip chooses a host, never copies (the chip stops it; this is a backstop).
+    if (e.key !== "Enter" || e.nativeEvent.isComposing || (e.target instanceof HTMLElement && e.target.getAttribute("aria-haspopup") === "listbox")) return;
     e.preventDefault();
     void run(e.metaKey || e.ctrlKey);
   };
 
+  // The copy guard put focus on the credential chip: Enter there copies anyway (the chip would open its list).
+  const onKeyCapture = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Enter" || e.nativeEvent.isComposing || !filled || !guard.hint || guard.forKey !== copyKey(filled.cmd)) return;
+    if (!(e.target instanceof HTMLElement && e.target.getAttribute("aria-label")?.startsWith("Fill with credential"))) return;
+    e.preventDefault();
+    e.stopPropagation();
+    void run(e.metaKey || e.ctrlKey);
+  };
+
   return (
-    <div className="flex flex-col gap-3" onKeyDown={onKey}>
-      <SearchBar
-        label="Search"
-        inputRef={searchRef}
-        role="combobox"
-        aria-expanded="true"
-        aria-controls="palette-results"
-        aria-activedescendant={current ? `palette-${current.type}-${current.id}` : undefined}
-        placeholder="Search commands, cards, this engagement"
-        value={query}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          setSelected(0);
-        }}
-        onKeyDown={onSearchKey}
-        trailing={
-          engagementId ? (
-            <HostPicker ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} {...(remembered && d.engagement ? { engagementName: d.engagement.name } : {})} />
-          ) : undefined
-        }
-      />
-      <ul id="palette-results" role="listbox" aria-label="Results" className="m-0 flex max-h-[44vh] list-none flex-col overflow-y-auto p-0">
-        {results.length === 0 && <li role="presentation" className="px-1 py-2 text-xs text-muted">Nothing matches</li>}
-        {results.map((r, i) => (
-          <li key={`${r.type}-${r.id}`} role="presentation">
-            {(i === 0 || results[i - 1]!.type !== r.type) && (
-              <h3 className="m-0 px-1 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-label text-muted">{GROUPS[r.type]}</h3>
-            )}
-            <div
-              id={`palette-${r.type}-${r.id}`}
-              role="option"
-              aria-selected={i === index}
-              onMouseMove={() => setSelected(i)}
-              onClick={() => {
-                setSelected(i);
-                searchRef.current?.focus();
-              }}
-              className={`flex cursor-default items-center justify-between gap-2 rounded-sm px-2 py-1 text-[13px] ${i === index ? "bg-surface-2 text-fg" : "text-fg-2"}`}
-            >
-              <span className="min-w-0 truncate">{r.title}</span>
-              {r.type === "command" && <span className="shrink-0 font-mono text-[11px] text-muted">{r.command.tool}</span>}
-              {r.type === "item" && <span className="shrink-0 text-[11px] text-muted">{r.item.kind}</span>}
-            </div>
-          </li>
-        ))}
-      </ul>
+    <div className="grid gap-3" onKeyDown={onKey} onKeyDownCapture={onKeyCapture}>
+      <header className="grid gap-2">
+        <SearchBar
+          label="Search"
+          inputRef={searchRef}
+          role="combobox"
+          aria-expanded="true"
+          aria-controls="palette-results"
+          aria-activedescendant={current ? `palette-${current.type}-${current.id}` : undefined}
+          placeholder="Search commands, cards, this engagement"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setSelected(0);
+          }}
+          onKeyDown={onSearchKey}
+          {...(engagementId ? { trailing: null } : {})}
+        />
+        {engagementId && (
+          <div className="grid grid-cols-[auto_minmax(0,1fr)] justify-items-start gap-3">
+            <HostChip
+              ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} align="start" className="max-w-full"
+              {...(remembered && d.engagement ? { engagementName: d.engagement.name } : {})}
+            />
+            <CredChip
+              ref={credRef} credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred}
+              onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} align="start" className="max-w-full"
+            />
+          </div>
+        )}
+      </header>
+      <div className="grid max-h-[44vh] overflow-y-auto">
+        {results.length === 0 && <p className="m-0 px-1 py-2 text-xs text-muted">Nothing matches</p>}
+        <ResultList
+          id="palette-results" label="Results" groups={rowGroups} selected={index} onSelect={setSelected}
+          onActivate={(_, i) => {
+            setSelected(i);
+            searchRef.current?.focus();
+          }}
+        />
+      </div>
       {filled && (
-        <div className="flex flex-col gap-2 border-t border-line pt-3">
-          <pre className={COMMAND_PRE}>{filled.cmd.text}</pre>
-          {filled.cmd.msfMarker && <Chip>uses your one Metasploit host</Chip>}
-          {unresolved.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {unresolved.map((name, i) => {
-                const key = name;
-                return (
-                  <label key={name} className="flex items-center gap-1.5 text-xs text-warn">
-                    {name}
-                    {isFileToken(name) ? (
-                      <FilePicker
-                        name={name}
-                        os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
-                        className="h-7 w-40"
-                        value={overrides[key] ?? ""}
-                        ref={(el) => {
-                          if (el) tokenRefs.current[i] = el;
-                        }}
-                        onChange={(v) => setOverrides((o) => ({ ...o, [key]: v }))}
-                      />
-                    ) : (
-                      <TokenInput
-                        name={name}
-                        className="h-7 w-40"
-                        value={overrides[key] ?? ""}
-                        suggestions={tokenSuggestions(name, suggestCtx)}
-                        ref={(el) => {
-                          if (el) tokenRefs.current[i] = el;
-                        }}
-                        onChange={(v) => setOverrides((o) => ({ ...o, [key]: v }))}
-                      />
-                    )}
-                  </label>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <CommandPreview
+          filled={filled} hasCred={cred !== null} hostKey={host?.id ?? null} suggest={suggestCtx} os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
+          overrides={overrides} onOverrides={setOverrides}
+          fieldRef={(t, el) => (el ? fieldEls.current.set(t, el) : fieldEls.current.delete(t))}
+        />
       )}
+      {guard.hint && filled && guard.forKey === copyKey(filled.cmd) && <p role="status" className="m-0 text-xs text-warn">{guard.hint}</p>}
       {status && <p role="alert" className="m-0 text-xs text-warn">{status}</p>}
-      <p className="m-0 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
+      <p data-hint-line="" className="m-0 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
         <span><Kbd>↵</Kbd> copy</span>
         <span><Kbd>⌘↵</Kbd> copy and log{host ? "" : " (open a host)"}</span>
-        <span><Kbd>→</Kbd> card</span>
+        <span><Kbd>→</Kbd> in card</span>
         <span><Kbd>⇥</Kbd> edit a value</span>
         {engagementId && <span><Kbd>⌥H</Kbd> host</span>}
+        {engagementId && <span><Kbd>⌥C</Kbd> credential</span>}
       </p>
     </div>
   );

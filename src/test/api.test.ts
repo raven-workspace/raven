@@ -3,8 +3,28 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
 
-import { api } from "../lib/api";
+const openUrl = vi.fn();
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: (...args: unknown[]) => openUrl(...args) }));
+
+import { api, obsidianUrl } from "../lib/api";
 import { RavenError } from "../types/errors";
+
+describe("openObsidian", () => {
+  it("names the vault by the last folder of the Field Manual path and drops .md from the file", () => {
+    expect(obsidianUrl("/Users/k/Vaults/Field Manual/", "02-Cards/AD/Kerberos & Co.md")).toBe(
+      "obsidian://open?vault=Field%20Manual&file=02-Cards%2FAD%2FKerberos%20%26%20Co",
+    );
+    expect(obsidianUrl("C:\\Vaults\\fm", "a.md")).toBe("obsidian://open?vault=fm&file=a");
+  });
+
+  it("reads the setting and opens the obsidian URL", async () => {
+    invoke.mockResolvedValueOnce({ fieldManualPath: "/v/fm" });
+    openUrl.mockResolvedValueOnce(undefined);
+    await api.openObsidian("x/y.md");
+    expect(invoke).toHaveBeenCalledWith("settings_get", undefined);
+    expect(openUrl).toHaveBeenCalledWith("obsidian://open?vault=fm&file=x%2Fy");
+  });
+});
 
 describe("api", () => {
   beforeEach(() => invoke.mockReset());

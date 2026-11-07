@@ -1,20 +1,43 @@
-import { useEffect, useId, useState, type KeyboardEvent, type Ref } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type Ref } from "react";
 import { Input } from "../../ui";
 import type { Suggestion } from "./suggest";
+
+const LIST_MAX = 224;
+const GAP = 4;
+
+/**
+ * Where the suggestion list goes so it stays inside what clips it: below the field, or above when the room below
+ * (down to the hint line, which it must never cover) is smaller than the list and smaller than the room above.
+ */
+function placeList(field: HTMLElement, list: HTMLElement): { placement: "below" | "above"; maxHeight: number } {
+  const bounds = field.closest("[data-popup-bounds]") ?? field.closest("aside,[role=dialog]");
+  if (!bounds) return { placement: "below", maxHeight: LIST_MAX };
+  const box = bounds.getBoundingClientRect();
+  const f = field.getBoundingClientRect();
+  const hint = bounds.querySelector("[data-hint-line]")?.getBoundingClientRect();
+  const floor = hint && hint.top >= f.bottom ? Math.min(box.bottom, hint.top) : box.bottom;
+  const below = floor - f.bottom - GAP;
+  const above = f.top - box.top - GAP;
+  const want = Math.min(LIST_MAX, list.scrollHeight);
+  const placement = below >= want || below >= above ? "below" : "above";
+  return { placement, maxHeight: Math.max(0, Math.min(LIST_MAX, placement === "below" ? below : above)) };
+}
 
 /**
  * A fill-value field with suggestions from what Raven knows. ↓/↑ move through them, ↵ picks one (and is kept from
  * the surrounding palette, which would copy), anything typed is still free text.
  */
-export function TokenInput({ name, value, onChange, suggestions, placeholder, className, ref }: {
+export function TokenInput({ name, value, onChange, suggestions, placeholder, className, autoValue, ref }: {
   name: string; value: string; onChange: (value: string) => void; suggestions: Suggestion[];
+  /** The value is an auto-fill, not something typed: offer every suggestion, and select it on focus so typing replaces it. */
+  autoValue?: boolean;
   placeholder?: string; className?: string; ref?: Ref<HTMLInputElement>;
 }) {
   const listId = useId();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const typed = value.trim().toLowerCase();
-  const shown = suggestions.filter((s) => s.value !== value && (!typed || s.value.toLowerCase().includes(typed))).slice(0, 8);
+  const shown = suggestions.filter((s) => s.value !== value && (autoValue || !typed || s.value.toLowerCase().includes(typed))).slice(0, 8);
   const expanded = open && shown.length > 0;
 
   // Esc with the list open closes only the list. Window capture runs before Radix's document-level Esc (which
@@ -29,6 +52,14 @@ export function TokenInput({ name, value, onChange, suggestions, placeholder, cl
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [expanded]);
+
+  const fieldRef = useRef<HTMLSpanElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const [place, setPlace] = useState<{ placement: "below" | "above"; maxHeight: number }>({ placement: "below", maxHeight: LIST_MAX });
+  useLayoutEffect(() => {
+    if (!expanded || !fieldRef.current || !listRef.current) return;
+    setPlace(placeList(fieldRef.current, listRef.current));
+  }, [expanded, shown.length]);
 
   const pick = (s: Suggestion) => {
     onChange(s.value);
@@ -50,7 +81,7 @@ export function TokenInput({ name, value, onChange, suggestions, placeholder, cl
   };
 
   return (
-    <span className="relative inline-flex">
+    <span ref={fieldRef} className="relative inline-flex">
       <Input
         ref={ref}
         mono
@@ -64,7 +95,10 @@ export function TokenInput({ name, value, onChange, suggestions, placeholder, cl
         className={className}
         placeholder={placeholder}
         value={value}
-        onFocus={() => setOpen(true)}
+        onFocus={(e) => {
+          setOpen(true);
+          if (autoValue) e.currentTarget.select();
+        }}
         onBlur={() => setOpen(false)}
         onChange={(e) => {
           onChange(e.target.value);
@@ -75,10 +109,13 @@ export function TokenInput({ name, value, onChange, suggestions, placeholder, cl
       />
       {expanded && (
         <ul
+          ref={listRef}
           id={listId}
           role="listbox"
+          data-placement={place.placement}
+          style={{ maxHeight: place.maxHeight }}
           aria-label={`Suggestions for ${name}`}
-          className="absolute left-0 top-full z-50 mt-1 flex max-h-56 min-w-full list-none flex-col overflow-y-auto rounded-sm border border-line-2 bg-surface p-0.5 shadow-lg"
+          className={`absolute left-0 z-50 flex min-w-full ${place.placement === "above" ? "bottom-full mb-1" : "top-full mt-1"} list-none flex-col overflow-y-auto rounded-sm border border-line-2 bg-surface p-0.5 shadow-lg`}
         >
           {shown.map((s, i) => (
             <li

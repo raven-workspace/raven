@@ -49,7 +49,7 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
               <Kbd>esc</Kbd>
             </RD.Close>
           </header>
-          {children !== undefined && <div className="min-h-0 overflow-y-auto px-4 py-3.5">{children}</div>}
+          {children !== undefined && <div data-popup-bounds="" className="min-h-0 overflow-y-auto px-4 py-3.5">{children}</div>}
           {footer && <footer className="flex shrink-0 justify-end gap-2 border-t border-line px-4 py-3">{footer}</footer>}
         </RD.Content>
       </RD.Portal>

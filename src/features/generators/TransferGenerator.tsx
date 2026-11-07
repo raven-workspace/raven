@@ -1,11 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { fillCommand, filterForKind } from "../../engines/checklist";
-import { transferMethods, TRANSFER_CARD, withToolsDirs } from "../../engines/generators/transfer";
+import { isHttp, transferMethods, TRANSFER_CARD, withToolsDirs } from "../../engines/generators/transfer";
 import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/store";
 import { copyPlain } from "../../lib/clipboard";
 import { cx } from "../../lib/cx";
 import { isDialogOpen, useKeydown } from "../../lib/keys";
+import { shortHostName } from "../../lib/hostName";
 import { reportError } from "../../lib/lockSignal";
 import { Input, Kbd, labelClass } from "../../ui";
 import { logCommand } from "../capture/logCommand";
@@ -16,6 +17,11 @@ import { FilePicker } from "./FilePicker";
 
 type Os = "windows" | "linux";
 const DEFAULT_DIR: Record<Os, string> = { windows: "C:\\Windows\\Temp", linux: "/tmp" };
+/** Method pills sit under two plain labels so no row is a long run of mixed tools. */
+const METHOD_GROUPS = [
+  { label: "HTTP", test: isHttp },
+  { label: "Other", test: (g: string) => !isHttp(g) },
+];
 const dirKey = (os: Os) => `raven.transfer.dir.${os}`;
 const readDir = (os: Os): string => {
   try {
@@ -41,13 +47,8 @@ const saveDir = (os: Os, dir: string) => {
 export function TransferGenerator({ engagementId, hostId: viewHostId }: { engagementId: string; hostId: string | null }) {
   const qc = useQueryClient();
   const version = useLibraryVersion();
-  // The host in view by default; this screen can pick another without moving the screen's own host.
-  const [hostId, setHostId] = useState(viewHostId);
-  const [seenHost, setSeenHost] = useState(viewHostId);
-  if (seenHost !== viewHostId) {
-    setSeenHost(viewHostId);
-    setHostId(viewHostId);
-  }
+  // The host is the screen's own (the browse bar's HostChip); there is no second host control here.
+  const hostId = viewHostId;
   const { d, host, makeInput, examReady } = useFillBase(engagementId, hostId);
   const [osPick, setOsPick] = useState<Os>("windows");
   const os: Os = host?.os === "linux" || host?.os === "windows" ? host.os : osPick;
@@ -70,7 +71,9 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
     if (!examReady) return [];
     let pool = getLibrary().filter((c) => c.cardId === cardId);
     if (kind) pool = filterForKind(pool, kind, { hostId: host?.id ?? "", msfHostId: d.engagement?.msfHostId ?? null }).shown;
-    return transferMethods(getCards(), pool, os).filter((m) => m.kali.length + m.target.length > 0);
+    // HTTP first, so arrow keys follow the order the pills are drawn in.
+    const all = transferMethods(getCards(), pool, os).filter((m) => m.kali.length + m.target.length > 0);
+    return [...all.filter((m) => isHttp(m.group)), ...all.filter((m) => !isHttp(m.group))];
   }, [os, d.engagement, examReady, host, version]);
   /* eslint-enable react-hooks/exhaustive-deps */
   const method = methods.find((m) => m.id === methodId) ?? methods[0];
@@ -120,6 +123,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
   };
 
   const hostName = host?.name || "the target";
+  const shortName = host ? shortHostName(host.name) : null;
   // The serve command runs from the tool folders set in Settings.
   const toolsDirs = { windows: d.settings?.windowsToolsDir, linux: d.settings?.linuxToolsDir };
   const kali = method ? fill(method.kali.map((c) => ({ ...c, template: withToolsDirs(c.template, toolsDirs) }))) : [];
@@ -132,18 +136,6 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
         <label className="flex flex-col gap-1 text-xs text-muted">
           <span className={labelClass}>File</span>
           <FilePicker ref={fileRef} name="FILE" os={os} className="h-7 w-64" value={file} onChange={setFile} />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-muted">
-          <span className={labelClass}>To host</span>
-          <select
-            aria-label="To host"
-            value={hostId ?? ""}
-            onChange={(e) => setHostId(e.target.value || null)}
-            className="h-7 rounded-sm border border-line-2 bg-bg px-1 text-xs text-fg-2"
-          >
-            <option value="">{engagementId ? "No host" : "No active engagement"}</option>
-            {d.hosts.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
-          </select>
         </label>
         {!host?.os && (
           <label className="flex flex-col gap-1 text-xs text-muted">
@@ -176,27 +168,38 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
         )}
       </div>
 
-      <div role="tablist" aria-label="Method" className="flex flex-wrap gap-1">
-        {methods.map((m, i) => (
-          <button
-            key={m.id}
-            ref={(el) => {
-              tabRefs.current[i] = el;
-            }}
-            type="button"
-            role="tab"
-            aria-selected={m.id === method?.id}
-            tabIndex={m.id === method?.id ? 0 : -1}
-            onKeyDown={(e) => onTabKey(e, i)}
-            onClick={() => setMethodId(m.id)}
-            className={cx(
-              "cursor-default rounded-sm px-2 py-0.5 text-[13px]",
-              m.id === method?.id ? "bg-accent/10 text-accent" : "text-fg-2 hover:bg-surface-2",
-            )}
-          >
-            {m.group.toLowerCase().startsWith("http") ? `HTTP · ${m.label}` : m.label}
-          </button>
-        ))}
+      <div className="grid gap-2">
+        {METHOD_GROUPS.map(({ label, test }) => {
+          const group = methods.map((m, i) => ({ m, i })).filter(({ m }) => test(m.group));
+          if (group.length === 0) return null;
+          return (
+            <div key={label} className="grid grid-cols-[3.5rem_1fr] items-baseline gap-x-2">
+              <span className="text-[11px] font-semibold uppercase tracking-label text-muted">{label}</span>
+              <div role="tablist" aria-label={`${label} methods`} className="flex flex-wrap gap-1">
+                {group.map(({ m, i }) => (
+                  <button
+                    key={m.id}
+                    ref={(el) => {
+                      tabRefs.current[i] = el;
+                    }}
+                    type="button"
+                    role="tab"
+                    aria-selected={m.id === method?.id}
+                    tabIndex={m.id === method?.id ? 0 : -1}
+                    onKeyDown={(e) => onTabKey(e, i)}
+                    onClick={() => setMethodId(m.id)}
+                    className={cx(
+                      "cursor-default rounded-sm px-2 py-0.5 text-[13px]",
+                      m.id === method?.id ? "bg-accent/10 text-accent" : "text-fg-2 hover:bg-surface-2",
+                    )}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
       {methods.length === 0 && <p className="m-0 text-xs text-muted">No transfer methods are allowed here.</p>}
 
@@ -205,15 +208,15 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
           {kali.length > 0 && (
             <div className="flex flex-col gap-2">
               <h3 className="m-0 text-[11px] font-semibold uppercase tracking-label text-muted">1 · On Kali</h3>
-              <CommandList commands={kali} />
+              <CommandList commands={kali} hostName={shortName} />
             </div>
           )}
           {target.length > 0 && (
             <div className="flex flex-col gap-2">
               <h3 className="m-0 text-[11px] font-semibold uppercase tracking-label text-muted">{kali.length > 0 ? "2" : "1"} · On {hostName}</h3>
-              <CommandList commands={target} />
+              <CommandList commands={target} hostName={shortName} />
               <p className="m-0 text-[11px] text-muted">
-                <Kbd>⌘↵</Kbd> copies the {hostName} half and logs it{host ? "" : " (pick a host)"}.
+                <Kbd>⌘↵</Kbd> copies the {host ? hostName : "target"} half and logs it{host ? "" : " (pick a host)"}.
               </p>
             </div>
           )}

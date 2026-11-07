@@ -208,6 +208,19 @@ fn clean_path(field: &str, s: &str) -> AppResult<String> {
     }
 }
 
+/// A `clean_path` that is also a folder on Kali: a Windows drive path or a backslash is rejected on the way in.
+/// Reads stay lenient, so an already-stored bad value still loads and can be fixed.
+fn clean_tools_dir(field: &str, s: &str) -> AppResult<String> {
+    let s = clean_path(field, s)?;
+    let b = s.as_bytes();
+    let drive = b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && matches!(b[2], b'\\' | b'/');
+    if drive || s.contains('\\') {
+        Err(bad(field, "must be a folder on Kali, like ~/tools/windows"))
+    } else {
+        Ok(s)
+    }
+}
+
 /// Blank (clears it), or 1-128 printable ASCII characters with no spaces: it is sent as an HTTP header.
 fn clean_nvd_key(s: &str) -> AppResult<String> {
     let s = s.trim();
@@ -237,8 +250,8 @@ pub fn update(conn: &Connection, patch: SettingsPatch) -> AppResult<Settings> {
     let attacker_ip = patch.attacker_ip.as_deref().map(clean_ip).transpose()?;
     let listener_port = patch.listener_port.as_deref().map(clean_port).transpose()?;
     let kali_user = patch.kali_user.as_deref().map(clean_kali_user).transpose()?;
-    let windows_tools = patch.windows_tools_dir.as_deref().map(|v| clean_path("windowsToolsDir", v)).transpose()?;
-    let linux_tools = patch.linux_tools_dir.as_deref().map(|v| clean_path("linuxToolsDir", v)).transpose()?;
+    let windows_tools = patch.windows_tools_dir.as_deref().map(|v| clean_tools_dir("windowsToolsDir", v)).transpose()?;
+    let linux_tools = patch.linux_tools_dir.as_deref().map(|v| clean_tools_dir("linuxToolsDir", v)).transpose()?;
     let field_manual = patch.field_manual_path.as_deref().map(|v| clean_path("fieldManualPath", v)).transpose()?;
     let nvd_key = patch.nvd_api_key.as_deref().map(clean_nvd_key).transpose()?;
     for (key, v) in [
@@ -288,6 +301,22 @@ mod tests {
         let mut v = Vault::new(DataPaths::for_root(dir.path().to_path_buf()));
         v.create_for_test("correct horse battery").unwrap();
         (dir, v)
+    }
+
+    #[test]
+    fn tools_dir_rejects_windows_paths() {
+        assert!(clean_tools_dir("windowsToolsDir", r"C:\Tools").is_err());
+        assert!(clean_tools_dir("linuxToolsDir", "d:/tools").is_err());
+        assert!(clean_tools_dir("windowsToolsDir", r"~/tools\win").is_err());
+        assert!(clean_tools_dir("windowsToolsDir", "~/tools/windows").is_ok());
+        assert!(clean_tools_dir("windowsToolsDir", "").is_ok());
+        match clean_tools_dir("windowsToolsDir", r"C:\Tools") {
+            Err(AppError::Validation { field, message }) => {
+                assert_eq!(field, "windowsToolsDir");
+                assert_eq!(message, "must be a folder on Kali, like ~/tools/windows");
+            }
+            other => panic!("expected a validation error, got {other:?}"),
+        }
     }
 
     #[test]

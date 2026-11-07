@@ -7,9 +7,9 @@
   --bg: #000;
   --fg: #ffffff;
   --fg-2: #e8e8e8;
-  --muted: #8a8a8a;
-  --muted-2: #a8a8a8;
-  --faint: #5c5c5c;
+  --muted: #a8a8a8;
+  --muted-2: #c4c4c4;
+  --faint: #8a8a8a;
 
   --line: #1f1f1f;
   --line-2: #2a2a2a;
@@ -60,8 +60,18 @@
   --radius-full: 9999px;
 
   --font-*: initial;
-  --font-ui: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  --font-ui: "Instrument Sans Variable", "Instrument Sans Fallback", -apple-system, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
 
   --tracking-label: 0.12em;
+}
+
+/* Metric-compatible stand-in while Instrument Sans loads: Arial scaled to its widths and vertical metrics, so swapping fonts does not reflow text. */
+@font-face {
+  font-family: "Instrument Sans Fallback";
+  src: local("Arial");
+  size-adjust: 101.7%;
+  ascent-override: 95.4%;
+  descent-override: 24.6%;
+  line-gap-override: 0%;
 }

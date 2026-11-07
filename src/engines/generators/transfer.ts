@@ -21,7 +21,7 @@ export const TRANSFER_CARD: Record<'windows' | 'linux', string> = {
 
 const GROUP_TAG = 'group:';
 const groupOf = (c: LibraryCommand): string => c.tags?.find((t) => t.startsWith(GROUP_TAG))?.slice(GROUP_TAG.length).trim() || 'Other';
-const isHttp = (group: string): boolean => /^http\b/i.test(group);
+export const isHttp = (group: string): boolean => /^http\b/i.test(group);
 
 /** A Target block that works on the fetched file rather than fetching it. */
 const FOLLOW_UP = /^\s*(?:chmod|md5sum|sha1sum|sha256sum)\b/;

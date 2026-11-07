@@ -27,6 +27,7 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let paths = paths::DataPaths::resolve(app.handle())?;
             app.manage(Mutex::new(vault::Vault::new(paths)));

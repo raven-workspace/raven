@@ -158,7 +158,7 @@ The checklist (what they've done, what their options are next) and the host fact
 ## Brand Commitments
 
 - The name is Raven.
-- The theme is called **Ink**: dark, with a single accent colour and no red. Destructive actions use the warning amber. The font is JetBrains Mono.
+- The theme is called **Ink**: dark, with a single accent colour and no red. Destructive actions use the warning amber. The interface font is Instrument Sans; commands, code and data use JetBrains Mono.
 - The incumbent visual system is the design authority for refinements.
 
 ## Evidence on Hand

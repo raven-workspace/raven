@@ -1,3 +1,4 @@
+import { withCategory } from '../categories';
 import type { LibraryCommand } from '../types';
 import { exe } from './patterns';
 
@@ -7,7 +8,7 @@ import { exe } from './patterns';
  * naming the pivot. Sweeps of the new subnet name no host IP, so they never tick and carry no matcher.
  */
 
-export const PIVOT_COMMANDS: LibraryCommand[] = [
+const COMMANDS: LibraryCommand[] = [
   // ---------------------------------------------------------------- ligolo-ng
   {
     id: 'pivot-ligolo-proxy',
@@ -241,3 +242,5 @@ export const PIVOT_COMMANDS: LibraryCommand[] = [
     source: 'oscp-notes',
   },
 ];
+
+export const PIVOT_COMMANDS: LibraryCommand[] = withCategory(COMMANDS, 'Pivoting');

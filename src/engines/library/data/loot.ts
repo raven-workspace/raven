@@ -1,3 +1,4 @@
+import { withCategory } from '../categories';
 import type { LibraryCommand } from '../types';
 import { NXC_SMB, exe, impacket } from './patterns';
 
@@ -6,7 +7,7 @@ import { NXC_SMB, exe, impacket } from './patterns';
 const MIMIKATZ = exe('mimikatz');
 const RUBEUS = exe('rubeus');
 
-export const LOOT_COMMANDS: LibraryCommand[] = [
+const COMMANDS: LibraryCommand[] = [
   // ---------------------------------------------------------------- OS hash stores
   {
     id: 'loot-secretsdump-remote',
@@ -436,3 +437,7 @@ export const LOOT_COMMANDS: LibraryCommand[] = [
     source: 'raven',
   },
 ];
+
+export const LOOT_COMMANDS: LibraryCommand[] = withCategory(COMMANDS, 'Post-Exploitation', {
+  'Password-Attacks': ['loot-hashcat-ntlm', 'loot-hashcat-netntlmv2', 'loot-hashcat-shadow', 'loot-keepass-crack', 'loot-ssh-key-crack'],
+});

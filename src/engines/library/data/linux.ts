@@ -1,3 +1,4 @@
+import { withCategory } from '../categories';
 import type { LibraryCommand } from '../types';
 
 /**
@@ -5,7 +6,7 @@ import type { LibraryCommand } from '../types';
  * (sudo, SUID, capabilities, cron, writable files, internal services, automated sweep, kernel last).
  */
 
-export const LINUX_COMMANDS: LibraryCommand[] = [
+const COMMANDS: LibraryCommand[] = [
   // ---------------------------------------------------------------- orient
   {
     id: 'orient-id',
@@ -406,3 +407,5 @@ export const LINUX_COMMANDS: LibraryCommand[] = [
     source: 'oscp-notes',
   },
 ];
+
+export const LINUX_COMMANDS: LibraryCommand[] = withCategory(COMMANDS, 'PrivEsc-Linux');

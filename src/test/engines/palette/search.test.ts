@@ -15,9 +15,9 @@ describe('searchPalette', () => {
       cmd('a', { title: 'Enumerate SMB shares', tool: 'smbclient' }),
       cmd('b', { title: 'Enumerate LDAP', tool: 'ldapsearch' }),
     ];
-    const ids = (q: string) => searchPalette(q, ctx(lib)).map((r) => r.id);
+    const ids = (q: string) => searchPalette(q, ctx(lib)).groups.flatMap((g) => g.hits).map((r) => r.id);
     expect(ids('enum smb')).toEqual(['a']);
-    expect(ids('enum')).toEqual(['a', 'b']);
+    expect(ids('enum')).toEqual(['b', 'a']);
     expect(ids('num smb')).toEqual([]); // prefix of a word, not a substring
     expect(ids('enum zzz')).toEqual([]);
   });
@@ -25,31 +25,26 @@ describe('searchPalette', () => {
   it('matches cards by title and file name and groups results', () => {
     const r = searchPalette('kerb', ctx([cmd('c1', { title: 'Kerberoast' })], {
       cards: [{ id: 'k', title: 'Kerberos notes', stage: 'x', category: 'ad', os: 'windows', file: '03-AD/kerb-cheatsheet.md' }],
-      generators: [{ id: 'g1', title: 'Kerberos ticket helper' }],
+      generators: [{ id: 'g1', title: 'Kerberos ticket helper', category: 'Active-Directory' }],
       engagementItems: [{ id: 'i1', kind: 'log', title: 'kerbrute run', text: '' }],
     }));
-    expect(r.map((x) => x.type)).toEqual(['command', 'generator', 'card', 'item']);
+    expect(r.groups.flatMap((g) => g.hits).map((x) => x.type).sort()).toEqual(['card', 'command', 'generator']);
+    expect(r.items.map((x) => x.type)).toEqual(['item']);
   });
 
-  it('host OS and stage commands rank first', () => {
-    const lib = [
-      cmd('lin', { title: 'Run enum linux', os: 'linux', goals: ['h-pe-win-auto'] }),
-      cmd('win-other', { title: 'Run enum win other', os: 'windows', goals: [] }),
-      cmd('win-stage', { title: 'Run enum win stage', os: 'windows', goals: ['h-pe-win-auto'] }),
-      cmd('any', { title: 'Run enum any' }),
-    ];
-    const ids = searchPalette('run', ctx(lib, { os: 'windows', stageId: 'privilege-escalation' })).map((r) => r.id);
-    expect(ids.slice(0, 2)).toEqual(['win-stage', 'win-other']);
-    expect(ids.indexOf('lin')).toBeGreaterThan(ids.indexOf('win-other'));
+  it('hosts are found by name and IP', () => {
+    const items = [{ id: 'h1', kind: 'host' as const, title: 'fs01', text: '10.10.20.21' }];
+    expect(searchPalette('10.10.20.21', ctx([], { engagementItems: items })).items[0]!.id).toBe('h1');
+    expect(searchPalette('fs0', ctx([], { engagementItems: items })).items[0]!.id).toBe('h1');
   });
 
   it('banned commands are excluded in exam-sim and msf is locked to its host', () => {
     const lib = [cmd('ok', { title: 'Run ok' }), cmd('ban', { title: 'Run ban', exam: 'banned' }), cmd('msf', { title: 'Run msf', exam: 'metasploit' })];
-    const sim = (msfHostId: string | null) => searchPalette('run', ctx(lib, { exam: { kind: 'exam-sim', hostId: 'h1', msfHostId } }));
-    expect(sim(null).map((r) => r.id)).toEqual(['ok', 'msf']);
+    const sim = (msfHostId: string | null) => searchPalette('run', ctx(lib, { exam: { kind: 'exam-sim', hostId: 'h1', msfHostId } })).groups.flatMap((g) => g.hits);
+    expect(sim(null).map((r) => r.id)).toEqual(['msf', 'ok']);
     expect(sim('h2').map((r) => r.id)).toEqual(['ok']);
     expect(sim('h1').map((r) => r.id)).toContain('msf');
-    expect(searchPalette('run', ctx(lib)).map((r) => r.id)).toContain('ban');
+    expect(searchPalette('run', ctx(lib)).groups.flatMap((g) => g.hits).map((r) => r.id)).toContain('ban');
   });
 });
 

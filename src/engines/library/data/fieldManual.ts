@@ -5090,6 +5090,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
   // ---------------------------------------------------------------- Raven-authored (steps the cards do not cover)
   {
     id: 'raven-neigh-lin',
+    category: 'Post-Exploitation',
     title: 'Neighbours: ARP cache',
     tool: 'ip',
     template: 'ip neigh',
@@ -5102,6 +5103,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
   },
   {
     id: 'raven-hosts-lin',
+    category: 'Post-Exploitation',
     title: 'Hosts file',
     tool: 'cat',
     template: 'cat /etc/hosts',
@@ -5113,6 +5115,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
   },
   {
     id: 'raven-conns-lin',
+    category: 'Post-Exploitation',
     title: 'Established connections',
     tool: 'ss',
     template: 'ss -tnp',
@@ -5124,6 +5127,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
   },
   {
     id: 'raven-neigh-win',
+    category: 'Post-Exploitation',
     title: 'Neighbours: ARP cache',
     tool: 'arp',
     template: 'arp -a',
@@ -5135,6 +5139,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
   },
   {
     id: 'raven-hosts-win',
+    category: 'Post-Exploitation',
     title: 'Hosts file',
     tool: 'type',
     template: 'type C:\\Windows\\System32\\drivers\\etc\\hosts',
@@ -5146,6 +5151,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
   },
   {
     id: 'raven-conns-win',
+    category: 'Post-Exploitation',
     title: 'Established connections',
     tool: 'netstat',
     template: 'netstat -ano',
@@ -5157,6 +5163,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
   },
   {
     id: 'raven-keytabs-find',
+    category: 'Post-Exploitation',
     title: 'Find keytab and ccache files',
     tool: 'find',
     template: 'find / \\( -name \'*.keytab\' -o -name \'krb5cc_*\' \\) 2>/dev/null',
@@ -5168,6 +5175,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
   },
   {
     id: 'raven-keytabs-klist',
+    category: 'Post-Exploitation',
     title: 'List the tickets in the current cache',
     tool: 'klist',
     template: 'klist',
@@ -5179,6 +5187,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
   },
   {
     id: 'raven-websearch',
+    category: 'Enumeration',
     title: 'Search the web for a version',
     tool: 'web search',
     template: '{FILL_PRODUCT} {FILL_VERSION} exploit',
@@ -5190,6 +5199,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
   },
   {
     id: 'raven-users-merge',
+    category: 'Active-Directory',
     title: 'Merge every username list into users.txt',
     tool: 'sort',
     template: 'sort -u *users*.txt -o users.txt',
@@ -5204,6 +5214,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
   },
   {
     id: 'raven-logging',
+    category: 'Enumeration',
     title: 'Log the whole terminal session',
     tool: 'script',
     template: 'script -a session.log',
@@ -5215,6 +5226,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
   },
   {
     id: 'raven-vpn',
+    category: 'Enumeration',
     title: 'Check the VPN interface is up',
     tool: 'ip',
     template: 'ip -4 addr show tun0',
@@ -5226,6 +5238,7 @@ export const FIELD_MANUAL_COMMANDS: LibraryCommand[] = [
   },
   {
     id: 'raven-reach',
+    category: 'Enumeration',
     title: 'Check the target answers',
     tool: 'ping',
     template: 'ping -c 2 {TARGET_IP}',

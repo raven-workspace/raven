@@ -1,8 +1,9 @@
+import { withCategory } from '../categories';
 import type { LibraryCommand } from '../types';
 
 /** Web enumeration (Information gathering) and web foothold attempts (Initial foothold). Preferred: gobuster > ffuf > feroxbuster. */
 
-export const WEB_COMMANDS: LibraryCommand[] = [
+const COMMANDS: LibraryCommand[] = [
   // ---------------------------------------------------------------- stack
   {
     id: 'web-whatweb',
@@ -388,3 +389,7 @@ export const WEB_COMMANDS: LibraryCommand[] = [
     matchExamples: { hit: ['sqlmap -r request.txt --batch --dbs', 'sqlmap -u "http://10.0.0.5/?id=1" --batch'], miss: ['curl http://10.0.0.5/?id=1'] },
   },
 ];
+
+export const WEB_COMMANDS: LibraryCommand[] = withCategory(COMMANDS, 'Web', {
+  'Password-Attacks': ['web-hydra-form', 'web-wpscan-brute', 'web-jwt-crack'],
+});

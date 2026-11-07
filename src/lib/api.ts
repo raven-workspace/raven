@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type { FieldManualSnapshot } from "../engines/fieldManual/merge";
 import type { VaultFile } from "../types/fieldManual";
 import type { BackupInfo } from "../types/backup";
@@ -47,6 +48,12 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
   }
 }
 
+/** `obsidian://open` for a vault file: the vault is named by the last part of its folder, the file has no `.md`. */
+export function obsidianUrl(vaultPath: string, file: string): string {
+  const vault = vaultPath.split(/[\\/]/).filter(Boolean).pop() ?? "";
+  return `obsidian://open?vault=${encodeURIComponent(vault)}&file=${encodeURIComponent(file.replace(/\.md$/, ""))}`;
+}
+
 /** One function per Tauri command. Args are camelCase, as Tauri expects. */
 export const api = {
   vaultStatus: () => call<VaultStatus>("vault_status"),
@@ -71,6 +78,15 @@ export const api = {
   fieldManualLatestMtime: (path: string) => call<number | null>("field_manual_latest_mtime", { path }),
   /** Replaces the stored snapshot of the last import. */
   fieldManualSave: (snapshot: FieldManualSnapshot) => call<null>("field_manual_save", { snapshot }),
+  /** Opens a Field-Manual file in Obsidian; the opener plugin allows only `obsidian://` URLs. */
+  openObsidian: async (file: string): Promise<void> => {
+    const settings = await call<Settings>("settings_get");
+    try {
+      await openUrl(obsidianUrl(settings.fieldManualPath, file));
+    } catch (raw) {
+      throw RavenError.from(raw);
+    }
+  },
   fieldManualLoad: () => call<FieldManualSnapshot | null>("field_manual_load"),
   /** Restores a backup. The vault is left locked afterwards. */
   backupRestore: (file: string) => call<null>("backup_restore", { file }),

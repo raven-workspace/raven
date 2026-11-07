@@ -76,6 +76,13 @@ const base = {
   settingsUpdate: async (patch) => {
     // The key itself is never stored or returned here either: only whether one is set.
     const { nvdApiKey, ...rest } = patch;
+    // Same rule as the backend: the tools folders are folders on Kali.
+    for (const field of ["windowsToolsDir", "linuxToolsDir"] as const) {
+      const v = rest[field]?.trim();
+      if (v && (/^[A-Za-z]:[\\/]/.test(v) || v.includes("\\"))) {
+        throw new RavenError("validation", "must be a folder on Kali, like ~/tools/windows", field);
+      }
+    }
     Object.assign(db.settings, rest);
     if (nvdApiKey !== undefined) db.settings.nvdKeySet = nvdApiKey.trim() !== "";
     return clone(db.settings);
@@ -95,6 +102,7 @@ const base = {
   fieldManualLatestMtime: async () => null,
   fieldManualSave: async () => null,
   fieldManualLoad: async () => null,
+  openObsidian: async () => {},
   backupRestore: async () => unsupported("Restore"),
   backupRestoreLocked: async () => unsupported("Restore"),
 

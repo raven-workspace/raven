@@ -24,12 +24,12 @@ describe("layout (U5–U7)", () => {
     expect(picker.querySelector(".truncate")).not.toBeNull();
   });
 
-  it("U6: command blocks wrap at whitespace only and scroll a long token", () => {
+  it("U6: command blocks wrap at whitespace and never scroll sideways", () => {
     render(<CommandList commands={[{ id: "a", title: "Run it", text: "nxc smb 10.10.130.140 -u tom", unresolved: [], msfMarker: false }]} />);
     const pre = screen.getByText((_, el) => el?.tagName === "PRE");
     expect(pre.className).not.toMatch(/break-all|break-words|wrap-anywhere|wrap-break-word/);
     expect(pre.className).toMatch(/whitespace-pre-wrap/);
-    expect(pre.className).toMatch(/overflow-x-auto/);
+    expect(pre.className).toMatch(/overflow-x-hidden/);
   });
 
   it("Copy is an icon button in its own fixed grid track beside the block; the description is full width above", () => {
@@ -62,11 +62,11 @@ describe("layout (U5–U7)", () => {
     expect(screen.getByText("Because.").parentElement!.className).toMatch(/mt-3/);
   });
 
-  it("a command wraps only at spaces: each word is an unbreakable span, the text and copy unchanged", () => {
+  it("a command wraps only at spaces: each word is a span that breaks only when longer than the line, the text and copy unchanged", () => {
     render(<CommandList commands={[{ id: "a", title: "Scan", text: "rustscan -a 10.10.20.15 -- -sC -sV", unresolved: [], msfMarker: false }]} />);
     const words = screen.getAllByTestId("command-word");
     expect(words.map((w) => w.textContent)).toEqual(["rustscan", "-a", "10.10.20.15", "--", "-sC", "-sV"]);
-    for (const w of words) expect(w.className.split(" ")).toEqual(expect.arrayContaining(["inline-block", "whitespace-nowrap"]));
+    for (const w of words) expect(w.className.split(" ")).toEqual(expect.arrayContaining(["inline-block", "max-w-full", "[overflow-wrap:anywhere]"]));
     expect(screen.getByTestId("command-block").querySelector("pre")!.textContent).toBe("rustscan -a 10.10.20.15 -- -sC -sV");
   });
 

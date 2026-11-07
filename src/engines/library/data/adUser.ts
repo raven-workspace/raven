@@ -1,3 +1,4 @@
+import { withCategory } from '../categories';
 import type { LibraryCommand } from '../types';
 import { EMPTY_PASS, NULL_USER, NXC_LDAP, NXC_SMB, exe, impacket } from './patterns';
 
@@ -13,7 +14,7 @@ const NOT_NULL = [NULL_USER, EMPTY_PASS];
 const DOMAIN_ONLY = [...NOT_NULL, String.raw`--local-auth`];
 const LOCAL_RID = 'nxc smb 10.0.0.7 -u administrator -H aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0 --local-auth --rid-brute';
 
-export const AD_USER_COMMANDS: LibraryCommand[] = [
+const COMMANDS: LibraryCommand[] = [
   // ---------------------------------------------------------------- RID cycle
   {
     id: 'ad-user-rid-lookupsid',
@@ -394,3 +395,7 @@ export const AD_USER_COMMANDS: LibraryCommand[] = [
     source: 'oscp-notes',
   },
 ];
+
+export const AD_USER_COMMANDS: LibraryCommand[] = withCategory(COMMANDS, 'Active-Directory', {
+  'Password-Attacks': ['ad-user-kerberoast-crack', 'ad-user-asrep-crack', 'ad-user-targeted-crack'],
+});

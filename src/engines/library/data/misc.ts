@@ -1,8 +1,9 @@
+import { withCategory } from '../categories';
 import type { LibraryCommand } from '../types';
 
 /** Engagement setup (e-setup-*), file transfer helpers for the automated sweeps, and closeout. */
 
-export const MISC_COMMANDS: LibraryCommand[] = [
+const COMMANDS: LibraryCommand[] = [
   // ---------------------------------------------------------------- setup
   {
     id: 'setup-vpn-address',
@@ -217,3 +218,26 @@ export const MISC_COMMANDS: LibraryCommand[] = [
     source: 'raven',
   },
 ];
+
+/** Setup is enumeration groundwork, transfers are shells-and-transfers, closeout is post-exploitation. */
+export const MISC_COMMANDS: LibraryCommand[] = withCategory(COMMANDS, 'Post-Exploitation', {
+  Enumeration: [
+    'setup-vpn-address',
+    'setup-live-hosts',
+    'setup-hosts-line',
+    'setup-hosts-nxc',
+    'setup-clock-ntpdate',
+    'setup-clock-rdate',
+    'setup-clock-faketime',
+  ],
+  'Shells-and-Transfers': [
+    'xfer-http-server',
+    'xfer-iwr',
+    'xfer-certutil',
+    'xfer-wget',
+    'xfer-smb-copy-out',
+    'xfer-nc-file',
+    'xfer-scp-down',
+  ],
+  Pivoting: ['close-cleanup-portproxy'],
+});

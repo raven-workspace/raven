@@ -12,6 +12,7 @@ import { newCredLabels, useCredFill } from "./credPick";
 import { useFilePickStore } from "./filePick";
 import { usePortPickStore } from "./portPick";
 import { goalCommands } from "./goalCommands";
+import { shortHostName } from "../../lib/hostName";
 import { GoalRow } from "./GoalRow";
 import { useChecklist, useChecklistMutations, useEngagementServices, useHopMutations, useTunnels } from "./queries";
 
@@ -184,6 +185,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
                     onStatus={(goalId, status) => setStatus.mutate({ ownerId: host.id, goalId, status })}
                     onNotes={(goalId, notes) => setNotes.mutate({ ownerId: host.id, goalId, notes })}
                     onOpenEntry={onOpenEntry}
+                    hostName={shortHostName(host.name)}
                   >
                     {g.id === "h-foot-arrived" && <ArrivedFrom host={host} hosts={hosts} onSave={recordHop} />}
                   </GoalRow>

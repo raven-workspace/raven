@@ -21,7 +21,7 @@ for (const path of ["/arsenal", "/"]) {
     const inputBox = (await input.boundingBox())!;
     expect(inputBox.width).toBeGreaterThan(barBox.width * 0.5);
 
-    // Clicking where you type lands in the search field, not the hidden host select.
+    // Clicking where you type lands in the search field, not the host chip (which has no overlay and no Tab stop).
     await page.mouse.click(inputBox.x + inputBox.width / 2, inputBox.y + inputBox.height / 2);
     await expect(input).toBeFocused();
 
@@ -261,5 +261,264 @@ test("post-foothold facts show without scrolling", async ({ page }) => {
       return { ok: true, pane: null, el: null };
     });
     expect(inPane.ok, `${text} is inside its scroll pane: ${JSON.stringify(inPane)}`).toBe(true);
+  }
+});
+
+// Arsenal reference round.
+
+const FS01 = "/e/e-lab/h/h-fs01";
+
+test("host chip is never a Tab stop", async ({ page }) => {
+  await open(page, FS01, 1280);
+  await page.keyboard.press("Meta+K");
+  const search = page.getByRole("dialog").getByRole("combobox", { name: "Search" });
+  await search.waitFor();
+  await search.fill("smb");
+  const chip = page.getByRole("button", { name: /^Fill for host/ });
+  await expect(chip).toHaveAttribute("tabindex", "-1");
+  for (let i = 0; i < 8; i++) {
+    await page.keyboard.press("Tab");
+    await expect(chip).not.toBeFocused();
+  }
+});
+
+test("Enter in the drawer copies", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await open(page, FS01, 1280);
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press("a");
+  const input = page.locator("input[aria-label='Search the Arsenal']");
+  await input.fill("smb");
+  await page.getByRole("listbox", { name: "Arsenal results" }).getByRole("option").first().waitFor();
+  await page.keyboard.press("Enter");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("10.10.20.21");
+  await expect(page.getByText(/^Copied for fs01/)).toBeVisible();
+});
+
+async function holdBack(page: Page, context: import("@playwright/test").BrowserContext) {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await open(page, FS01, 1280);
+  await page.keyboard.press("Meta+K");
+  await page.getByRole("combobox", { name: "Search" }).fill("several ports");
+  await page.getByRole("option", { name: /Listen on several ports at once/ }).waitFor();
+  // A sentinel, so "not copied" cannot pass on an empty or stale clipboard.
+  await page.evaluate(() => navigator.clipboard.writeText("SENTINEL"));
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("{SECOND_LPORT} not filled · ↵ again to copy anyway")).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Value for SECOND_LPORT" })).toBeFocused();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("SENTINEL");
+}
+
+test("copy guard focuses the first unfilled field, and a second Enter copies anyway", async ({ page, context }) => {
+  await holdBack(page, context);
+  await page.keyboard.press("Enter");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("{SECOND_LPORT}");
+});
+
+test("copy guard: filling the field then Enter copies the filled command", async ({ page, context }) => {
+  await holdBack(page, context);
+  await page.keyboard.type("5555");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("4444,5555");
+});
+
+test("browse pane 3: a held-back copy focuses the field, and Enter copies the filled command", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await open(page, "/arsenal", 1280);
+  await page.locator("input[aria-label='Search the Arsenal']").fill("several ports");
+  await page.getByRole("option", { name: /Listen on several ports at once/ }).first().waitFor();
+  await page.keyboard.press("Enter");
+  await page.evaluate(() => navigator.clipboard.writeText("SENTINEL"));
+  await page.keyboard.press("c");
+  const field = page.getByRole("combobox", { name: "Value for SECOND_LPORT" });
+  await expect(field).toBeFocused();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("SENTINEL");
+  await page.keyboard.type("5555");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(",5555");
+});
+
+test("lateral movement finds Pivoting", async ({ page }) => {
+  await open(page, "/arsenal", 1280);
+  await page.locator("input[aria-label='Search the Arsenal']").fill("lateral movement");
+  await expect(page.getByRole("button", { name: /^Pivoting/ })).toBeVisible();
+  await page.getByRole("button", { name: /^Pivoting/ }).click();
+  await expect(page.getByRole("option").first()).toBeVisible();
+});
+
+test("browse never shows 'Pick a card.'", async ({ page }) => {
+  await page.goto("/arsenal");
+  await page.getByRole("navigation", { name: "Categories" }).waitFor();
+  // Wait for the reading pane to show a card before asserting the empty-state text is absent.
+  await expect(page.getByRole("region", { name: "Reading" }).getByRole("heading").first()).toBeVisible();
+  await expect(page.getByText("Pick a card.")).toHaveCount(0);
+});
+
+test("TokenInput suggestions stay inside the dialog and above the hint line", async ({ page }) => {
+  for (const width of [900, 1280]) {
+    await open(page, FS01, width);
+    await page.keyboard.press("Meta+K");
+    const dialog = page.getByRole("dialog");
+    await page.getByRole("combobox", { name: "Search" }).fill("psexec");
+    await page.getByRole("combobox", { name: "Value for TARGET_IP" }).focus();
+    const list = dialog.getByRole("listbox", { name: "Suggestions for TARGET_IP" });
+    await list.waitFor();
+    const box = (await list.boundingBox())!;
+    const dlg = (await dialog.boundingBox())!;
+    const hint = (await dialog.locator("[data-hint-line]").boundingBox())!;
+    expect(box.x, `list left edge at ${width}`).toBeGreaterThanOrEqual(dlg.x);
+    expect(box.x + box.width, `list right edge at ${width}`).toBeLessThanOrEqual(dlg.x + dlg.width);
+    expect(box.y, `list top at ${width}`).toBeGreaterThanOrEqual(dlg.y);
+    expect(box.y + box.height, `list above the hint line at ${width}`).toBeLessThanOrEqual(hint.y);
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+  }
+});
+
+test("the credential list in ⌘K stays inside the dialog", async ({ page }) => {
+  for (const width of [900, 1280]) {
+    await open(page, FS01, width);
+    await page.keyboard.press("Meta+K");
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("combobox", { name: "Search" }).waitFor();
+    await page.keyboard.press("Alt+KeyC");
+    const list = dialog.getByRole("listbox", { name: /Fill with credential/ });
+    await list.waitFor();
+    const box = (await list.boundingBox())!;
+    const dlg = (await dialog.boundingBox())!;
+    expect(box.x, `list left edge at ${width}`).toBeGreaterThanOrEqual(dlg.x);
+    expect(box.x + box.width, `list right edge at ${width}`).toBeLessThanOrEqual(dlg.x + dlg.width);
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+  }
+});
+
+// Arsenal layout: the drawer keeps a steady split, and no Arsenal pane scrolls sideways or clips focus.
+
+/** Every scroll pane under `root` with its sideways overflow, and focusables (plus a 2px outline) outside their pane. */
+const ARSENAL_PANES = (root: string) => `(() => {
+  const bad = [];
+  const scope = document.querySelector(${JSON.stringify(root)});
+  const panes = [...scope.querySelectorAll("*")].filter((e) => /auto|scroll/.test(getComputedStyle(e).overflowY) || /auto|scroll/.test(getComputedStyle(e).overflowX));
+  // A [data-scroll-x] row scrolls sideways on purpose (the card's contents strip).
+  for (const p of panes) if (!p.hasAttribute("data-scroll-x") && p.scrollWidth > p.clientWidth + 1) bad.push("sideways: " + (p.getAttribute("aria-label") || p.className.slice(0, 40)) + " " + p.scrollWidth + ">" + p.clientWidth);
+  for (const p of panes) {
+    if (!/auto|scroll/.test(getComputedStyle(p).overflowY)) continue;
+    // Overlay scrollbars (macOS WKWebView) reserve no gutter: a pane with controls pads its right edge.
+    if (p.scrollHeight > p.clientHeight + 1 && p.querySelector("button, input") && parseFloat(getComputedStyle(p).paddingRight) < 12) bad.push("padding-right < 12px: " + (p.getAttribute("aria-label") || p.className.slice(0, 40)));
+  }
+  const focusables = scope.querySelectorAll('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
+  for (const el of focusables) {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0 || el.closest("[data-scroll-x]")) continue;
+    let pane = el.parentElement;
+    while (pane && pane !== scope.parentElement && !/auto|scroll/.test(getComputedStyle(pane).overflowY)) pane = pane.parentElement;
+    if (!pane || pane === scope.parentElement) continue;
+    const p = pane.getBoundingClientRect();
+    const left = p.left + pane.clientLeft;
+    const right = left + pane.clientWidth;
+    if (r.left - 2 < left - 0.5 || r.right + 2 > right + 0.5) bad.push("clipped: " + (el.getAttribute("aria-label") || el.textContent || el.tagName).trim().slice(0, 40));
+  }
+  return bad;
+})()`;
+
+test("drawer: a long command never squeezes the list or hides its fields, and the split never moves", async ({ page }) => {
+  await open(page, FS01, 1280);
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press("a");
+  const aside = page.locator("aside[aria-label='Arsenal']");
+  await page.locator("input[aria-label='Search the Arsenal']").fill("library");
+  const options = aside.getByRole("listbox", { name: "Arsenal results" }).getByRole("option");
+  await options.first().waitFor();
+  const listPane = aside.locator("#arsenal-results").locator("..");
+  const heights = new Set<number>();
+  const n = Math.min(await options.count(), 8);
+  let sawLong = false;
+  for (let i = 0; i < n; i++) {
+    if (i > 0) await page.keyboard.press("ArrowDown");
+    heights.add(Math.round((await listPane.boundingBox())!.height));
+    if (/Create the \.Library-ms file/.test((await options.nth(i).textContent()) ?? "")) {
+      sawLong = true;
+      // Every field of the long command can be scrolled to and seen inside the drawer.
+      const fields = aside.getByRole("combobox", { name: /^Value for / });
+      for (let f = 0; f < (await fields.count()); f++) {
+        await fields.nth(f).scrollIntoViewIfNeeded();
+        await expect(fields.nth(f)).toBeInViewport();
+      }
+    }
+  }
+  expect(sawLong, "the long command was among the results").toBe(true);
+  expect([...heights], "list height is the same for every selection").toHaveLength(1);
+  expect([...heights][0]).toBeGreaterThanOrEqual(300);
+  expect(await page.evaluate(ARSENAL_PANES("aside[aria-label='Arsenal']"))).toEqual([]);
+});
+
+test("browse: no pane scrolls sideways or clips focus, and the contents strip sits the same stuck or not", async ({ page }) => {
+  for (const width of [1280, 1100, 900]) {
+    await open(page, "/arsenal", width);
+    const reading = page.getByRole("region", { name: "Reading" });
+    await reading.getByRole("heading").first().waitFor();
+    await page.locator("input[aria-label='Search the Arsenal']").fill("library");
+    await page.getByRole("option", { name: /Library-ms/ }).first().click();
+    await reading.getByRole("heading", { name: /Library/ }).first().waitFor();
+    expect(await page.evaluate(ARSENAL_PANES("[data-arsenal-browse]")), `panes at ${width}`).toEqual([]);
+
+    // The whole card: blocks, fill fields and the contents strip.
+    await reading.getByRole("button", { name: /^From card / }).click();
+    const strip = reading.getByRole("navigation", { name: "On this card" });
+    await strip.waitFor();
+    expect(await page.evaluate(ARSENAL_PANES("[data-arsenal-browse]")), `card panes at ${width}`).toEqual([]);
+    // Stuck, the strip is flush with the pane's top (nothing shows above it) and its labels sit in its middle.
+    await reading.evaluate((el) => el.scrollTo(0, 400));
+    const [pane, nav, label] = await Promise.all([reading.boundingBox(), strip.boundingBox(), strip.getByRole("button").first().boundingBox()]);
+    expect(Math.abs(nav!.y - pane!.y), `strip flush at ${width}`).toBeLessThanOrEqual(1);
+    const above = label!.y - nav!.y;
+    const below = nav!.y + nav!.height - 1 - (label!.y + label!.height);
+    expect(Math.abs(above - below), `strip labels centred at ${width}: ${above} vs ${below}`).toBeLessThanOrEqual(1);
+    // The strip's own sideways scrollbar never sits over its labels.
+    expect(await strip.locator("div").first().evaluate((el) => getComputedStyle(el).scrollbarWidth), `strip scrollbar at ${width}`).toBe("none");
+  }
+});
+
+test("a [[link]] in a note opens its card, in browse and in the drawer", async ({ page }) => {
+  await open(page, "/arsenal", 1280);
+  const reading = page.getByRole("region", { name: "Reading" });
+  await page.locator("input[aria-label='Search the Arsenal']").fill("full tcp scan of a target list");
+  await page.getByRole("option", { name: /Full TCP scan of a target list/ }).first().click();
+  const link = reading.getByRole("button", { name: "Host-Discovery" });
+  await expect(link).toBeVisible();
+  await expect(reading.getByText(/\[\[/)).toHaveCount(0);
+  await link.click();
+  await expect(reading.getByRole("heading", { name: "Host Discovery" })).toBeVisible();
+
+  await open(page, FS01, 1280);
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press("a");
+  await page.locator("input[aria-label='Search the Arsenal']").fill("full tcp scan of a target list");
+  await page.getByRole("option", { name: /Full TCP scan of a target list/ }).first().waitFor();
+  await page.keyboard.press("ArrowRight");
+  const aside = page.locator("aside[aria-label='Arsenal']");
+  await aside.getByRole("button", { name: "Host-Discovery" }).click();
+  await expect(aside.getByRole("heading", { name: "Host Discovery" })).toBeVisible();
+});
+
+test("jumping to a block from the contents strip leaves its outline clear of the strip", async ({ page }) => {
+  for (const width of [1280, 900]) {
+    await open(page, "/arsenal", width);
+    const reading = page.getByRole("region", { name: "Reading" });
+    await page.locator("input[aria-label='Search the Arsenal']").fill("library");
+    await page.getByRole("option", { name: /Library-ms/ }).first().click();
+    await reading.getByRole("button", { name: /^From card / }).click();
+    const strip = reading.getByRole("navigation", { name: "On this card" });
+    await strip.waitFor();
+    for (const i of [1, 3]) {
+      await strip.getByRole("button").nth(i).click();
+      await page.waitForTimeout(600);
+      const block = reading.locator("[data-block]:focus");
+      await expect(block).toHaveCount(1);
+      const [s, b] = await Promise.all([strip.boundingBox(), block.boundingBox()]);
+      // The outline is a 1px ring at the block's edge: it must start below the strip.
+      expect(b!.y - 1, `block ${i} at ${width}`).toBeGreaterThanOrEqual(s!.y + s!.height);
+    }
   }
 });

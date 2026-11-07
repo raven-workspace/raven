@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import { defaultCredFor, portChoices, type FillInput } from "../../engines/checklist";
+import { portChoices, resolveCred, type FillInput } from "../../engines/checklist";
 import { api } from "../../lib/api";
 import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
@@ -40,15 +40,16 @@ export function useEngagementFillData(engagementId: string) {
 export function useFillBase(engagementId: string, hostId: string | null) {
   const d = useEngagementFillData(engagementId);
   const scopePending = useFillScope().pending === true;
-  const picked = useCredPickStore((s) => (hostId ? s.picks[hostId] : undefined));
+  // The pick is keyed by the host, or by the engagement when there is no host (shared with the engagement checklist).
+  const credOwnerId = hostId ?? engagementId;
+  const picked = useCredPickStore((s) => s.picks[credOwnerId]);
   const host = hostId ? d.hosts.find((h) => h.id === hostId) : undefined;
   const engagement = d.engagement ?? DASHBOARD_ENGAGEMENT;
 
   const cred = useMemo(() => {
-    if (!host || !d.credentials) return null;
-    if (picked === null) return null;
-    return d.credentials.find((c) => c.id === picked) ?? defaultCredFor(host, d.credentials, d.attempts ?? []);
-  }, [host, d.credentials, d.attempts, picked]);
+    if (!d.credentials || (!host && !engagementId)) return null;
+    return resolveCred(picked, d.credentials, d.attempts ?? [], host ?? null);
+  }, [host, engagementId, d.credentials, d.attempts, picked]);
 
   const makeInput = useCallback(
     (overrides: Record<string, string>): FillInput => {
@@ -57,7 +58,7 @@ export function useFillBase(engagementId: string, hostId: string | null) {
       const input: FillInput = {
         host: host ?? noHost(engagementId), engagement, hosts: d.hosts, servicesByHost, tunnels: d.tunnels ?? [],
         attackerIp: d.settings?.attackerIp ?? "", kaliUser: d.settings?.kaliUser, listenerPort: d.settings?.listenerPort ?? "",
-        cred: host ? cred : null,
+        cred,
         overrides,
       };
       const portHint = host ? portChoices(input) : [];
@@ -69,5 +70,5 @@ export function useFillBase(engagementId: string, hostId: string | null) {
 
   // Exam rules fail closed: until the engagement (so its kind) is known, nothing that could be banned is shown.
   const examReady = !scopePending && (engagementId === "" || d.engagement !== undefined);
-  return { d, host, engagement, loaded: d.engagement !== undefined, examReady, makeInput };
+  return { d, host, engagement, cred, credOwnerId, loaded: d.engagement !== undefined, examReady, makeInput };
 }
