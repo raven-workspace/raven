@@ -47,7 +47,7 @@ export function CredChip({ credentials, value, onPick, attempts = [], hostId = n
         <span>as</span>
         {value ? (
           <>
-            <b className="max-w-40 truncate font-medium text-fg-2">{who(value)}</b>
+            <b title={who(value)} className="max-w-40 truncate font-medium text-fg-2">{who(value)}</b>
             <span>· {kind(value)}</span>
           </>
         ) : (

@@ -66,7 +66,7 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
         </div>
       )}
       <FillBar
-        tokens={tokens} auto={auto} overrides={overrides} onOverrides={onOverrides} suggest={suggestCtx}
+        tokens={tokens} hasCred={cred !== null} auto={auto} overrides={overrides} onOverrides={onOverrides} suggest={suggestCtx}
         os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
         fieldRef={(t, el) => (el ? fieldEls.current.set(t, el) : fieldEls.current.delete(t))}
       />

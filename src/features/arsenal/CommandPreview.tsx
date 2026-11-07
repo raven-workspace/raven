@@ -44,8 +44,8 @@ const FLASH_MS = 600;
  * The filled command under a result list, with its fill fields (⌘K and the drawer). `hostKey` is the host it is filled
  * for: when it changes, the block flashes once (`data-flash`).
  */
-export function CommandPreview({ filled, hostKey, suggest, os, overrides, onOverrides, fieldRef }: {
-  filled: FilledPreview; hostKey: string | null; suggest: SuggestContext; os: "linux" | "windows" | null;
+export function CommandPreview({ filled, hasCred, hostKey, suggest, os, overrides, onOverrides, fieldRef }: {
+  filled: FilledPreview; hasCred: boolean; hostKey: string | null; suggest: SuggestContext; os: "linux" | "windows" | null;
   overrides: Record<string, string>; onOverrides: (next: Record<string, string>) => void;
   fieldRef: (token: string, el: HTMLInputElement | null) => void;
 }) {
@@ -62,7 +62,7 @@ export function CommandPreview({ filled, hostKey, suggest, os, overrides, onOver
     <div className="flex flex-col gap-2 border-t border-line pt-3">
       <pre className={COMMAND_PRE} {...(flash ? { "data-flash": "" } : {})}><MarkedText text={filled.cmd.text} tokens={filled.cmd.tokens ?? []} /></pre>
       {filled.cmd.msfMarker && <Chip>uses your one Metasploit host</Chip>}
-      <FillBar tokens={filled.tokens} auto={filled.auto} suggest={suggest} os={os} overrides={overrides} onOverrides={onOverrides} fieldRef={fieldRef} />
+      <FillBar tokens={filled.tokens} hasCred={hasCred} auto={filled.auto} suggest={suggest} os={os} overrides={overrides} onOverrides={onOverrides} fieldRef={fieldRef} />
     </div>
   );
 }

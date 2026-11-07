@@ -16,7 +16,6 @@ import { useCredPickStore } from "../checklist/credPick";
 import { useFillBase } from "../palette/fillData";
 import { GENERATORS } from "../palette/generators";
 import type { SuggestContext } from "../palette/suggest";
-import { ON } from "./ArsenalBrowse";
 import { CardView, CommandPane } from "./CardView";
 import { CommandPreview, fillPreview } from "./CommandPreview";
 import { copyKey, useCopyGuard } from "./copyGuard";
@@ -25,6 +24,7 @@ import type { CredChipHandle } from "./CredChip";
 import { HostChip, isHostPickKey } from "./HostChip";
 import type { HostChipHandle } from "./HostChip";
 import { SearchBar } from "./SearchBar";
+import { ON } from "./styles";
 import { useArsenalStore } from "./useArsenalStore";
 import { useFillScope, useLastEngagementStore } from "./useFillScope";
 
@@ -109,6 +109,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
         : groups.map((g) => ({ kind: "category", id: `arsenal-category-${g.category}`, category: g.category, label: g.label, count: g.hits.length })),
     [listing, rowGroups, groups],
   );
+  const rowIndex = useMemo(() => new Map(rows.map((r, i) => [r, i])), [rows]);
   const index = Math.min(selected, Math.max(0, rows.length - 1));
   const current: Row | undefined = rows[index];
 
@@ -254,7 +255,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
     else openHit(r.hit, false);
   };
   const hints: [string, string][] = onList
-    ? [["↵", "copy"], ["⌘↵", "copy and log"], ["→", "in card"], ...(engagementId ? [["⌥H", "host"], ["⌥C", "credential"]] as [string, string][] : []), ["Esc", inCategory ? "back" : "close"]]
+    ? [["↵", "copy"], ["⌘↵", host ? "copy and log" : "copy and log (open a host)"], ["→", "in card"], ...(engagementId ? [["⌥H", "host"], ["⌥C", "credential"]] as [string, string][] : []), ["Esc", inCategory ? "back" : "close"]]
     : [["Esc", "back"], ...(engagementId ? [["⌥H", "host"]] as [string, string][] : [])];
   const option = (r: Row, i: number) => (
     <div
@@ -284,50 +285,51 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
 
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" onKeyDownCapture={onKeyCapture}>
-      <header className={`grid shrink-0 items-center gap-2 border-b border-line px-4 py-3 ${engagementId ? (onList ? "grid-cols-[1fr_auto_auto_auto]" : "grid-cols-[auto_1fr_auto_auto_auto]") : onList ? "grid-cols-[1fr_auto]" : "grid-cols-[auto_1fr_auto]"}`}>
-        {!onList && (
-          <Button size="sm" onClick={back}>
-            ← Back
-          </Button>
-        )}
-        <div className="grid min-w-28">
-          <SearchBar
-            label="Search the Arsenal"
-            inputRef={searchRef}
-            placeholder="Search cards and commands"
-            aria-controls="arsenal-results"
-            aria-activedescendant={onList ? current?.id : undefined}
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setCategory(null);
-              setSelected(0);
+      <header className="grid shrink-0 gap-2 border-b border-line px-4 py-3">
+        <div className={`grid items-center gap-2 ${onList ? "grid-cols-[1fr_auto]" : "grid-cols-[auto_1fr_auto]"}`}>
+          {!onList && (
+            <Button size="sm" onClick={back}>
+              ← Back
+            </Button>
+          )}
+          <div className="grid min-w-28">
+            <SearchBar
+              label="Search the Arsenal"
+              inputRef={searchRef}
+              placeholder="Search cards and commands"
+              aria-controls="arsenal-results"
+              aria-activedescendant={onList ? current?.id : undefined}
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setCategory(null);
+                setSelected(0);
+              }}
+              onKeyDown={onSearchKey}
+              {...(engagementId ? { trailing: null } : {})}
+            />
+          </div>
+          <Button
+            size="sm"
+            aria-label="Full screen"
+            title="Full screen"
+            onClick={() => {
+              useArsenalStore.getState().fullScreen();
+              void navigate("/arsenal");
             }}
-            onKeyDown={onSearchKey}
-            {...(engagementId ? { trailing: null } : {})}
-          />
+          >
+            <ArrowsOut size={14} aria-hidden="true" />
+          </Button>
         </div>
         {engagementId && (
-          <>
-            {/* Capped, so a long host or credential name truncates instead of squeezing the search field. */}
-            <HostChip ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} className="max-w-28" />
+          <div className="grid grid-cols-[auto_minmax(0,1fr)] justify-items-start gap-3">
+            <HostChip ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} className="max-w-full" />
             <CredChip
               ref={credRef} credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred}
-              onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} className="max-w-40"
+              onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} className="max-w-full"
             />
-          </>
+          </div>
         )}
-        <Button
-          size="sm"
-          aria-label="Full screen"
-          title="Full screen"
-          onClick={() => {
-            useArsenalStore.getState().fullScreen();
-            void navigate("/arsenal");
-          }}
-        >
-          <ArrowsOut size={14} aria-hidden="true" />
-        </Button>
       </header>
       <div className="min-h-0 overflow-y-auto px-4 py-3">
         {showing === "card" && cardId && <CardView cardId={cardId} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} />}
@@ -341,7 +343,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
                   return (
                     <div key={g.key} role="group" aria-labelledby={headingId} className="grid border-t border-line pt-1.5 first:border-t-0 first:pt-0">
                       <div id={headingId} className="px-2 pb-0.5 text-[11px] font-semibold uppercase tracking-label text-muted">{g.label}</div>
-                      {g.rows.map((r) => option(r, rows.indexOf(r)))}
+                      {g.rows.map((r) => option(r, rowIndex.get(r) ?? 0))}
                     </div>
                   );
                 })
@@ -353,7 +355,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
         {onList && filled && (
           <div className="grid gap-1 border-t border-line px-4 py-3" onKeyDown={onPreviewKey}>
             <CommandPreview
-              filled={filled} hostKey={host?.id ?? null} suggest={suggestCtx} os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
+              filled={filled} hasCred={cred !== null} hostKey={host?.id ?? null} suggest={suggestCtx} os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
               overrides={overrides} onOverrides={setOverrides}
               fieldRef={(t, el) => (el ? fieldEls.current.set(t, el) : fieldEls.current.delete(t))}
             />

@@ -298,7 +298,6 @@ describe("Arsenal", () => {
     expect(bar.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
     expect(scopeText(hostChip(d))).toBe("for dc01 ⌄");
     const header = d.getByRole("banner");
-    expect(header).toHaveClass("grid-cols-[1fr_auto_auto_auto]");
     for (const el of [bar.getByRole("textbox"), hostChip(d), d.getByRole("button", { name: /^Fill with credential/ }), d.getByRole("button", { name: "Full screen" })]) {
       expect(header.contains(el)).toBe(true);
     }
@@ -673,6 +672,31 @@ describe("drawer list grouped by category (U1)", () => {
     expect(await d.findByText(/^Copied for dc01/)).toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toBe("zzpass -p {PASS}");
     expect(d.queryByRole("listbox", { name: "Fill with credential" })).not.toBeInTheDocument();
+  });
+
+  it("a picked credential supplies USER and DOMAIN, so they are not fields; with none they are", async () => {
+    const user = userEvent.setup();
+    setImported({ commands: [cmd("zz-login", { title: "Zzlogin as user", template: "zzlogin -u {USER} -d {DOMAIN} {TARGET_IP}", cardId: undefined, source: "raven" })], cards: [] });
+    m.credentialsList.mockResolvedValue([{
+      id: "c2", engagementId: "e1", type: "password", username: "svc", domain: "LUMEN", secret: "pw", hashType: null,
+      scope: "domain", localHostId: null, sourceHostId: null, source: null, notes: null, crackStatus: null, crackedFrom: null, fromSecretId: null,
+      createdAt: 1, updatedAt: 1,
+    }]);
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("a");
+    const d = within(await drawer());
+    await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zzlogin");
+    expect(await d.findByRole("combobox", { name: "Value for USER" })).toBeInTheDocument();
+    await user.keyboard("{Alt>}c{/Alt}");
+    await user.click(await d.findByRole("option", { name: /svc/ }));
+    expect(await d.findByRole("combobox", { name: "Value for TARGET_IP" })).toBeInTheDocument();
+    await vi.waitFor(() => expect(d.queryByRole("combobox", { name: "Value for USER" })).not.toBeInTheDocument());
+    expect(d.queryByRole("combobox", { name: "Value for DOMAIN" })).not.toBeInTheDocument();
+    await user.keyboard("{Alt>}c{/Alt}");
+    await user.click(await d.findByRole("option", { name: /No credential/ }));
+    expect(await d.findByRole("combobox", { name: "Value for USER" })).toBeInTheDocument();
+    expect(d.getByRole("combobox", { name: "Value for DOMAIN" })).toBeInTheDocument();
   });
 
   it("→ on a field-manual command opens its card at that block", async () => {

@@ -35,7 +35,7 @@ export function HostChip({ hosts, value, onChange, engagementName, align = "end"
       >
         {engagementName ? <span className="min-w-0 truncate">{engagementName} ·</span> : null}
         <span>for</span>
-        <b className="max-w-36 truncate font-medium text-fg-2">{shortName}</b>
+        <b title={shortName} className="max-w-36 truncate font-medium text-fg-2">{shortName}</b>
         <span aria-hidden="true" className="text-[10px] opacity-70">⌄</span>
       </ChipPicker>
     </div>

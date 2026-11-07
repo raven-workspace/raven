@@ -173,6 +173,7 @@ describe("credential pick is shared with the host checklist", () => {
     await user.click(chip);
     await user.click(screen.getByRole("option", { name: /bob/ }));
     expect(useCredPickStore.getState().picks.h1).toBe("c2");
-    expect(await screen.findByRole("combobox", { name: "Value for USER" })).toHaveValue("bob");
+    // The credential supplies USER: it is not a field.
+    await vi.waitFor(() => expect(screen.queryByRole("combobox", { name: "Value for USER" })).not.toBeInTheDocument());
   });
 });

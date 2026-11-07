@@ -367,7 +367,7 @@ describe("token suggestions (U4)", () => {
     await user.click(screen.getByRole("option", { name: /bob/ }));
     expect(useCredPickStore.getState().picks.h1).toBe("c2");
     expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzuser bob@10.10.10.5 ••••••••")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Value for USER" })).toHaveValue("bob");
+    expect(screen.queryByRole("combobox", { name: "Value for USER" })).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Value for PASS" })).not.toBeInTheDocument();
     expect(screen.queryByText(/Summer2025!/)).not.toBeInTheDocument();
   });

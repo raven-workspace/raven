@@ -240,7 +240,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
       </ul>
       {filled && (
         <CommandPreview
-          filled={filled} hostKey={host?.id ?? null} suggest={suggestCtx} os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
+          filled={filled} hasCred={cred !== null} hostKey={host?.id ?? null} suggest={suggestCtx} os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
           overrides={overrides} onOverrides={setOverrides}
           fieldRef={(t, el) => (el ? fieldEls.current.set(t, el) : fieldEls.current.delete(t))}
         />
