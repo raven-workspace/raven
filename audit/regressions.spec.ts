@@ -295,17 +295,28 @@ test("Enter in the drawer copies", async ({ page, context }) => {
   await expect(page.getByText(/^Copied for fs01/)).toBeVisible();
 });
 
-test("copy guard focuses the first unfilled field", async ({ page, context }) => {
+async function holdBack(page: Page, context: import("@playwright/test").BrowserContext) {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await open(page, FS01, 1280);
   await page.keyboard.press("Meta+K");
   await page.getByRole("combobox", { name: "Search" }).fill("several ports");
   await page.getByRole("option", { name: /Listen on several ports at once/ }).waitFor();
+  // A sentinel, so "not copied" cannot pass on an empty or stale clipboard.
+  await page.evaluate(() => navigator.clipboard.writeText("SENTINEL"));
   await page.keyboard.press("Enter");
   await expect(page.getByText("{SECOND_LPORT} not filled · ↵ again to copy anyway")).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Value for SECOND_LPORT" })).toBeFocused();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).not.toContain("SECOND_LPORT");
-  // Typing a value and pressing Enter copies the filled command.
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("SENTINEL");
+}
+
+test("copy guard focuses the first unfilled field, and a second Enter copies anyway", async ({ page, context }) => {
+  await holdBack(page, context);
+  await page.keyboard.press("Enter");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("{SECOND_LPORT}");
+});
+
+test("copy guard: filling the field then Enter copies the filled command", async ({ page, context }) => {
+  await holdBack(page, context);
   await page.keyboard.type("5555");
   await page.keyboard.press("Enter");
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("4444,5555");
@@ -322,6 +333,8 @@ test("lateral movement finds Pivoting", async ({ page }) => {
 test("browse never shows 'Pick a card.'", async ({ page }) => {
   await page.goto("/arsenal");
   await page.getByRole("navigation", { name: "Categories" }).waitFor();
+  // Wait for the reading pane to show a card before asserting the empty-state text is absent.
+  await expect(page.getByRole("region", { name: "Reading" }).getByRole("heading").first()).toBeVisible();
   await expect(page.getByText("Pick a card.")).toHaveCount(0);
 });
 
