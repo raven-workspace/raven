@@ -164,3 +164,5 @@ Each item was reviewed and judged not to block the merge. Source: the round-1 re
 - (T8) (bbox clipping check fixed in final wave) no ThreadsList pane test
 - (T8b) dead hostIdentityGet fallback; write-timing test doesn't assert vectorUpsert
 - (user) Log titles include the Evil-WinRM prompt (`*Evil-WinRM* PS C:\…> whoami /priv`). The title should be the command only.
+- (identity) In a proof pasted with bare `#`/`$` prompts, a line inside `cat` output that starts with `# whoami` is read as a command, so the next line can be taken as a username (only when Ran on is that host). Pinned by a test in identityProof.test.ts.
+- (identity) A Linux target reached by SSH and logged with Ran on = Kali is not read automatically. This is safe but manual; splitPaste could name the host from a `user@host` prompt.
