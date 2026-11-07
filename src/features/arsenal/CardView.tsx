@@ -18,6 +18,7 @@ import { autoFill, tokensOf } from "./fillTokens";
 
 const COPY_BUTTON = 'button[aria-label^="Copy command"]';
 const CRED_CHIP = '[aria-label^="Fill with credential"]';
+const FILL_VALUES = '[aria-label="Fill values"]';
 
 /**
  * Fill chips plus filled blocks for a list of commands. `engagementId` and `hostId` decide what fills; the exam rules
@@ -42,8 +43,8 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   const kind = d.engagement?.kind;
   const fieldEls = useRef(new Map<string, HTMLInputElement>());
   const root = useRef<HTMLDivElement>(null);
-  // The block whose copy was held back for the credential chip: Enter or c there copies it anyway.
-  const waitingOnCred = useRef<string | null>(null);
+  // The block whose copy was held back (focus went to a fill field or the credential chip): Enter there copies it anyway.
+  const waitingBlock = useRef<string | null>(null);
   const focusToken = useCallback((t: string) => fieldEls.current.get(t)?.focus(), []);
   const hostName = host ? shortHostName(host.name) : null;
   const blockEl = (id: string) => document.getElementById(`block-${id}`);
@@ -112,18 +113,19 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   }, [contents, shownIds]);
 
   // A held-back copy that sent focus to the credential chip: a second Enter or c on the chip copies anyway.
+  // (A fill field is handled in `onKeyDown`, after its suggestion list has had the key.)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const id = waitingOnCred.current;
+      const id = waitingBlock.current;
       if (!id || (e.key !== "Enter" && e.key !== "c") || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
       if (!(e.target instanceof HTMLElement && e.target.closest(CRED_CHIP))) return;
       e.preventDefault();
       e.stopPropagation();
-      waitingOnCred.current = null;
+      waitingBlock.current = null;
       blockEl(id)?.querySelector<HTMLElement>(COPY_BUTTON)?.click();
     };
     const onFocus = (e: FocusEvent) => {
-      if (!(e.target instanceof HTMLElement && e.target.closest(CRED_CHIP))) waitingOnCred.current = null;
+      if (!(e.target instanceof HTMLElement && e.target.closest(`${CRED_CHIP},${FILL_VALUES}`))) waitingBlock.current = null;
     };
     window.addEventListener("keydown", onKey, true);
     window.addEventListener("focusin", onFocus);
@@ -135,6 +137,15 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
 
   const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     setMarked(null);
+    // Enter in a fill field the copy guard sent focus to: copy that block anyway (a picked suggestion kept the key).
+    const waiting = waitingBlock.current;
+    if (waiting && e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.nativeEvent.isComposing && !e.defaultPrevented
+      && e.target instanceof HTMLElement && e.target.closest(FILL_VALUES)) {
+      e.preventDefault();
+      waitingBlock.current = null;
+      blockEl(waiting)?.querySelector<HTMLElement>(COPY_BUTTON)?.click();
+      return;
+    }
     if (e.metaKey || e.ctrlKey || e.altKey || e.nativeEvent.isComposing || e.defaultPrevented || isTypingTarget(e.target)) return;
     const cur = e.target instanceof HTMLElement ? e.target.closest<HTMLElement>("[data-block]") : null;
     if (e.key === "j" || e.key === "k") {
@@ -174,9 +185,13 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
       className={cx("-m-1.5 grid scroll-mt-10 gap-1 rounded-sm p-1.5 outline-none focus:ring-1 focus:ring-accent", marked === c.id && "ring-1 ring-accent")}
     >
       <CommandList
-        commands={[fillLibraryCommand(c, input, msf.has(c.id))]} hostName={hostName} focusToken={focusToken} hideDcNote
+        commands={[fillLibraryCommand(c, input, msf.has(c.id))]} hostName={hostName} hideDcNote
+        focusToken={(t) => {
+          waitingBlock.current = c.id;
+          focusToken(t);
+        }}
         focusCred={() => {
-          waitingOnCred.current = c.id;
+          waitingBlock.current = c.id;
           focusCredChip?.();
         }}
       />

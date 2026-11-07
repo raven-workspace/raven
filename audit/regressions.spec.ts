@@ -322,6 +322,22 @@ test("copy guard: filling the field then Enter copies the filled command", async
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("4444,5555");
 });
 
+test("browse pane 3: a held-back copy focuses the field, and Enter copies the filled command", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await open(page, "/arsenal", 1280);
+  await page.locator("input[aria-label='Search the Arsenal']").fill("several ports");
+  await page.getByRole("option", { name: /Listen on several ports at once/ }).first().waitFor();
+  await page.keyboard.press("Enter");
+  await page.evaluate(() => navigator.clipboard.writeText("SENTINEL"));
+  await page.keyboard.press("c");
+  const field = page.getByRole("combobox", { name: "Value for SECOND_LPORT" });
+  await expect(field).toBeFocused();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("SENTINEL");
+  await page.keyboard.type("5555");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(",5555");
+});
+
 test("lateral movement finds Pivoting", async ({ page }) => {
   await open(page, "/arsenal", 1280);
   await page.locator("input[aria-label='Search the Arsenal']").fill("lateral movement");

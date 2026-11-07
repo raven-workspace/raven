@@ -1,6 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setImported, type CardMeta } from "../engines/library/store";
@@ -29,15 +30,20 @@ const cmd = (id: string, over: Partial<LibraryCommand>): LibraryCommand => ({
 const A = cmd("zz-a", { title: "Alpha step", template: "zza {TARGET_IP}" });
 const B = cmd("zz-b", { title: "Bravo step", template: "zzb {TARGET_IP}" });
 const C = cmd("zz-c", { title: "Charlie step", template: "zzc {TARGET_IP}" });
+const GUARDED = cmd("zz-guard", { title: "Delta step", template: "zzd {TARGET_IP} {SECOND_LPORT}" });
 const NOTE = cmd("zz-note", { title: "Oscp note helper", template: "zznote {TARGET_IP}", source: "oscp-notes", cardId: undefined });
 const RAVEN = cmd("zz-raven", { title: "Raven helper", template: "zzraven {TARGET_IP}", source: "raven", cardId: undefined });
 const CARD: CardMeta = { id: "zz-card", title: "Zz Card", stage: "initial-foothold", category: "Active-Directory", os: "windows", file: "02-Cards/Zz/Zz Card.md" };
 
+function Card({ focusBlockId }: { focusBlockId?: string }) {
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
+  return <CardView cardId="zz-card" engagementId="e1" hostId="h1" overrides={overrides} onOverrides={setOverrides} focusBlockId={focusBlockId} />;
+}
 function mount(focusBlockId?: string) {
   return render(
     <QueryClientProvider client={makeQueryClient()}>
       <MemoryRouter>
-        <CardView cardId="zz-card" engagementId="e1" hostId="h1" overrides={{}} onOverrides={() => {}} focusBlockId={focusBlockId} />
+        <Card focusBlockId={focusBlockId} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -47,7 +53,7 @@ const blockEl = (id: string) => document.getElementById(`block-${id}`)!;
 
 beforeEach(() => {
   vi.resetAllMocks();
-  setImported({ commands: [A, B, C, NOTE, RAVEN], cards: [CARD] });
+  setImported({ commands: [A, B, C, GUARDED, NOTE, RAVEN], cards: [CARD] });
   m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali",
     windowsToolsDir: "", linuxToolsDir: "", fieldManualPath: "/v/fm", nvdKeySet: false,
@@ -76,7 +82,7 @@ describe("CardView reading view", () => {
     mount();
     await pre("zza 10.10.10.5");
     const strip = within(screen.getByRole("navigation", { name: "On this card" }));
-    expect(strip.getAllByRole("button").map((b) => b.textContent)).toEqual(["Alpha step", "Bravo step", "Charlie step"]);
+    expect(strip.getAllByRole("button").map((b) => b.textContent)).toEqual(["Alpha step", "Bravo step", "Charlie step", "Delta step"]);
     jump.mockClear();
     await user.click(strip.getByRole("button", { name: "Charlie step" }));
     expect(jump.mock.instances).toContain(blockEl("zz-c"));
@@ -108,6 +114,42 @@ describe("CardView reading view", () => {
     await navigator.clipboard.writeText("untouched");
     await user.keyboard("k{Enter}");
     await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("zzb 10.10.10.5"));
+  });
+
+  it("a held-back copy focuses the field; typing then Enter copies the filled command", async () => {
+    const user = userEvent.setup();
+    mount();
+    await pre("zzd 10.10.10.5 {SECOND_LPORT}");
+    await navigator.clipboard.writeText("untouched");
+    blockEl("zz-guard").focus();
+    await user.keyboard("c");
+    const field = await screen.findByRole("combobox", { name: "Value for SECOND_LPORT" });
+    await waitFor(() => expect(field).toHaveFocus());
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    await user.keyboard("5555{Enter}");
+    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("zzd 10.10.10.5 5555"));
+  });
+
+  it("a held-back copy then Enter without typing copies the literal token", async () => {
+    const user = userEvent.setup();
+    mount();
+    await pre("zzd 10.10.10.5 {SECOND_LPORT}");
+    await navigator.clipboard.writeText("untouched");
+    blockEl("zz-guard").focus();
+    await user.keyboard("c");
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Value for SECOND_LPORT" })).toHaveFocus());
+    await user.keyboard("{Enter}");
+    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("zzd 10.10.10.5 {SECOND_LPORT}"));
+  });
+
+  it("Enter in a field that was not the guard's target does nothing", async () => {
+    const user = userEvent.setup();
+    mount();
+    await pre("zzd 10.10.10.5 {SECOND_LPORT}");
+    await navigator.clipboard.writeText("untouched");
+    await user.click(await screen.findByRole("combobox", { name: "Value for SECOND_LPORT" }));
+    await user.keyboard("5{Enter}");
+    expect(await navigator.clipboard.readText()).toBe("untouched");
   });
 
   it("Also in Raven is folded and includes oscp-notes commands", async () => {
