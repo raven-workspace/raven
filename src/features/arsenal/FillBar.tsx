@@ -9,14 +9,14 @@ import { TokenInput } from "../palette/TokenInput";
  */
 export function FillBar({ tokens: all, hasCred = false, auto, overrides, onOverrides, suggest, os, fieldRef }: {
   tokens: string[];
-  /** A credential is picked: it supplies USER and DOMAIN, so they are not fields. */
+  /** A credential is picked: USER and DOMAIN are not fields while it supplies them (an ownerless one supplies no USER). */
   hasCred?: boolean;
   auto: Record<string, { text: string; unresolved: boolean; dcByName?: boolean }>;
   overrides: Record<string, string>; onOverrides: (next: Record<string, string>) => void;
   suggest: SuggestContext; os: "linux" | "windows" | null;
   fieldRef?: (token: string, el: HTMLInputElement | null) => void;
 }) {
-  const tokens = hasCred ? all.filter((t) => t !== "USER" && t !== "DOMAIN") : all;
+  const tokens = hasCred ? all.filter((t) => !((t === "USER" || t === "DOMAIN") && auto[t] && !auto[t].unresolved)) : all;
   if (tokens.length === 0) return null;
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-x-3 gap-y-1.5" aria-label="Fill values">

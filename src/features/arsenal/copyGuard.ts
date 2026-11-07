@@ -19,8 +19,8 @@ export function guardCopy(cmd: { id: string; unresolved: string[] }, armed: Arme
   return { action: "focus", token: first };
 }
 
-/** These come from the credential chip, not from a fill field. */
-const CRED_TOKENS = new Set(["PASS", "HASH", "CRED", "USER"]);
+/** These come from the credential chip, not from a fill field (USER and DOMAIN are fields when the credential does not supply them). */
+const CRED_TOKENS = new Set(["PASS", "HASH", "CRED"]);
 const CONFIRM_MS = 2500;
 
 /**

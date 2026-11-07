@@ -173,4 +173,36 @@ describe("credential pick is shared with the host checklist", () => {
     expect(screen.queryByRole("button", { name: /Fill with credential/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: /Value for (USER|PASS|HASH|CRED)/ })).not.toBeInTheDocument();
   });
+
+  const mountPane = () =>
+    render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <MemoryRouter>
+          <CommandPane commands={[USERCMD]} engagementId="e1" hostId="h1" overrides={{}} onOverrides={() => {}} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+  it("an ownerless credential supplies no USER: the field stays", async () => {
+    m.credentialsList.mockResolvedValue([{ ...cred("c3", ""), domain: null }]);
+    useCredPickStore.getState().set("h1", "c3");
+    mountPane();
+    expect(await screen.findByRole("combobox", { name: "Value for USER" })).toBeInTheDocument();
+  });
+
+  it("a credential with no domain on a domainless engagement leaves DOMAIN a field, and USER hidden", async () => {
+    const DOMCMD: LibraryCommand = { ...USERCMD, id: "zz-dom", template: "zzdom -u {USER} -d {DOMAIN} {TARGET_IP}" };
+    setImported({ commands: [DOMCMD], cards: [] });
+    m.credentialsList.mockResolvedValue([{ ...cred("c4", "alice"), domain: null }]);
+    useCredPickStore.getState().set("h1", "c4");
+    render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <MemoryRouter>
+          <CommandPane commands={[DOMCMD]} engagementId="e1" hostId="h1" overrides={{}} onOverrides={() => {}} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByRole("combobox", { name: "Value for DOMAIN" })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Value for USER" })).not.toBeInTheDocument();
+  });
 });
