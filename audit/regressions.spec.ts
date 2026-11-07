@@ -94,7 +94,17 @@ test("scroll panes never clip focus or hide controls under the scrollbar", async
 
   // The step picker's list is a scroll pane too.
   await page.getByRole("button", { name: "Add step" }).click();
-  await page.getByRole("button", { name: /^Add / }).first().waitFor();
+  const picker = page.getByRole("group", { name: "Reproduction steps section" });
+  const candidate = picker.locator("ul button[aria-label^='Add ']").first();
+  await candidate.waitFor();
+  // The candidate list is its own scroll pane inside the picker, and PANE_CHECK covers its rows.
+  const pane = await candidate.evaluate((el, group) => {
+    let p = el.parentElement;
+    while (p && !/auto|scroll/.test(getComputedStyle(p).overflowY)) p = p.parentElement;
+    return { found: !!p && document.querySelector(group)!.contains(p), padRight: p ? parseFloat(getComputedStyle(p).paddingRight) : 0 };
+  }, "[aria-label='Reproduction steps section']");
+  expect(pane, "step picker list is a scroll pane").toEqual({ found: true, padRight: expect.any(Number) });
+  expect(pane.padRight).toBeGreaterThanOrEqual(12);
   expect(await page.evaluate(PANE_CHECK), "finding split with the step picker open").toEqual([]);
 });
 
@@ -196,10 +206,15 @@ test("sidebar collapses without sideways scroll and shows IPs", async ({ page })
   const rows = await hostRows.evaluateAll((els) =>
     els.map((a) => ({ text: (a.textContent ?? "").trim(), title: a.getAttribute("title") ?? "" })),
   );
-  expect(rows.length).toBeGreaterThan(1);
-  const ips: Record<string, string> = { "web-finance-dmz-portal-01.dmz.finance.lumen.corp": "10.10.20.15", dc01: "10.10.20.10" };
+  // e-lab has exactly these six hosts in the fixtures; every row must show its own IP.
+  const ips: Record<string, string> = {
+    [WEB_SHORT]: "10.10.20.15", dc01: "10.10.20.10", fs01: "10.10.20.21", sql01: "10.10.20.22", "pivot-gw": "10.10.20.30", ws07: "10.10.20.57",
+  };
+  expect(rows).toHaveLength(Object.keys(ips).length);
   for (const r of rows) {
-    if (ips[r.title]) expect(r.text, `row ${r.title} shows its IP`).toContain(ips[r.title]);
+    const short = Object.keys(ips).find((n) => r.text.includes(n));
+    expect(short, `row "${r.text}" shows a known short name`).toBeDefined();
+    expect(r.text, `row ${short} shows its IP`).toContain(ips[short!]);
     expect(r.text, "no clipped host name").not.toMatch(/^web-fin…/);
     expect(r.text, "short name, not the FQDN").not.toContain(".dmz.finance");
   }
@@ -213,6 +228,12 @@ test("log rows on a host page have no chip for that host", async ({ page }) => {
   await expect(rows.first()).toBeVisible();
   expect(await rows.count()).toBeGreaterThan(3);
   await expect(rows.filter({ hasText: WEB_SHORT })).toHaveCount(0);
+
+  // Positive control: the engagement Log shows that host's chip on the same entries.
+  await page.goto("/e/e-lab/s/log");
+  const all = page.getByRole("region", { name: "Log" }).locator("button[aria-expanded]");
+  await expect(all.first()).toBeVisible();
+  expect(await all.filter({ hasText: WEB_SHORT }).count(), "engagement Log has chips for the web host").toBeGreaterThan(0);
 });
 
 test("post-foothold facts show without scrolling", async ({ page }) => {
