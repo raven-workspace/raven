@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { SCROLL_PANE } from "../../ui/controlStyles";
 import { Link, useLocation, useNavigate } from "react-router";
 import { isDialogOpen, isFreeKey, isTypingTarget, useKeydown } from "../../lib/keys";
 import { EmptyState } from "../../ui";
@@ -146,7 +147,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
         />
       ) : (
         <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 @min-[760px]/host:grid-cols-[minmax(16rem,1fr)_minmax(0,1.4fr)] @min-[760px]/host:grid-rows-1 @min-[760px]/host:gap-6">
-          <div className="max-h-[40vh] min-h-0 overflow-y-auto p-1 [scrollbar-gutter:stable] @min-[760px]/host:max-h-none">{facts}</div>
+          <div className={`max-h-[40vh] ${SCROLL_PANE} @min-[760px]/host:max-h-none`}>{facts}</div>
           <div className="flex min-h-0 min-w-0 flex-col">
             <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
               <div role="tablist" aria-label="Host work" className="flex gap-2">
@@ -172,7 +173,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
               {tab === "log" && <OrderButton order={order} onChange={setOrder} />}
               {tab === "next" && <FullChecklistToggle full={fullChecklist} onChange={setFullChecklist} />}
             </div>
-            <div role="tabpanel" aria-label={TABS.find((t) => t.id === tab)!.label} className="mt-3 min-h-0 flex-1 overflow-y-auto border-t border-line p-1 pr-3 [scrollbar-gutter:stable]">
+            <div role="tabpanel" aria-label={TABS.find((t) => t.id === tab)!.label} className={`mt-3 flex-1 border-t border-line ${SCROLL_PANE}`}>
               {tab === "log" ? (
                 log.isError ? (
                   <p role="alert" className="text-xs text-warn">Couldn't load the log: {log.error.message}</p>

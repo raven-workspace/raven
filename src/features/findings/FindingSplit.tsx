@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { SCROLL_PANE } from "../../ui/controlStyles";
 import { cx } from "../../lib/cx";
 import { shortHostName } from "../../lib/hostName";
 import { isDialogOpen, isFreeKey, isTypingTarget } from "../../lib/keys";
@@ -141,7 +142,7 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
       </section>
       <section
         aria-label="Finding"
-        className={cx("min-h-0 min-w-0 overflow-y-auto p-1 pr-3 [scrollbar-gutter:stable]", pane === "editor" ? "block" : "hidden", "@min-[760px]/host:block")}
+        className={cx(SCROLL_PANE, "min-w-0", pane === "editor" ? "block" : "hidden", "@min-[760px]/host:block")}
       >
         <FindingEditor
           eid={eid}

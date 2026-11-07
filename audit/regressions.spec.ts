@@ -47,6 +47,8 @@ const PANE_CHECK = `(() => {
     let pane = el.parentElement;
     while (pane && !/auto|scroll/.test(getComputedStyle(pane).overflowY)) pane = pane.parentElement;
     if (!pane || pane === document.body) continue;
+    // Overlay scrollbars (macOS WKWebView) reserve no gutter: the pane itself must pad the right edge.
+    if (pane.closest('[class*="@container/host"]') && parseFloat(getComputedStyle(pane).paddingRight) < 12) bad.push("padding-right < 12px: " + (pane.getAttribute("aria-label") || pane.className.slice(0, 40)));
     const p = pane.getBoundingClientRect();
     const r = el.getBoundingClientRect();
     const left = p.left + pane.clientLeft;
