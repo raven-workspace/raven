@@ -51,7 +51,7 @@ function moveFocus(from: HTMLElement, by: 1 | -1) {
 function ServiceRow({ s, onOpen, onVerdict, pending }: {
   s: Service;
   onOpen: () => void;
-  onVerdict: (verdict: ServiceVerdict | null, reason?: string) => void;
+  onVerdict: (verdict: ServiceVerdict | null, reason?: string, onSuccess?: () => void) => void;
   pending: boolean;
 }) {
   const [asking, setAsking] = useState<"reason" | "menu">();
@@ -133,8 +133,8 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
           onSubmit={(e) => {
             e.preventDefault();
             if (pending || reason.trim() === "") return;
-            onVerdict("dead_end", reason.trim());
-            setAsking(undefined);
+            // Closes once saved: on an error the reason stays for a retry.
+            onVerdict("dead_end", reason.trim(), () => setAsking(undefined));
           }}
         >
           <Input
@@ -231,14 +231,14 @@ export function ServicesFacts({ engagementId, hostId, entries, open, onToggle }:
       s={s}
       pending={setVerdict.isPending}
       onOpen={() => setDialog({ id: s.id, mode: "confirm" })}
-      onVerdict={(verdict, reason) => setVerdict.mutate({ id: s.id, verdict, reason })}
+      onVerdict={(verdict, reason, onSuccess) => setVerdict.mutate({ id: s.id, verdict, reason }, { onSuccess })}
     />
   );
 
   return (
     <FactGroup
       title="Services"
-      summary={services.isError ? "Services · couldn't load" : servicesSummary(list)}
+      summary={services.isError ? "Services · couldn't load" : services.data ? servicesSummary(services.data) : "Services"}
       open={open}
       onToggle={onToggle}
       shortcut="S"

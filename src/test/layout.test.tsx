@@ -62,6 +62,21 @@ describe("layout (U5–U7)", () => {
     expect(screen.getByText("Because.").parentElement!.className).toMatch(/mt-3/);
   });
 
+  it("a command wraps only at spaces: each word is an unbreakable span, the text and copy unchanged", () => {
+    render(<CommandList commands={[{ id: "a", title: "Scan", text: "rustscan -a 10.10.20.15 -- -sC -sV", unresolved: [], msfMarker: false }]} />);
+    const words = screen.getAllByTestId("command-word");
+    expect(words.map((w) => w.textContent)).toEqual(["rustscan", "-a", "10.10.20.15", "--", "-sC", "-sV"]);
+    for (const w of words) expect(w.className.split(" ")).toEqual(expect.arrayContaining(["inline-block", "whitespace-nowrap"]));
+    expect(screen.getByTestId("command-block").querySelector("pre")!.textContent).toBe("rustscan -a 10.10.20.15 -- -sC -sV");
+  });
+
+  it("unresolved tokens stay marked inside their word", () => {
+    render(<CommandList commands={[{ id: "a", title: "Get", text: "wget http://LHOST/x", unresolved: ["LHOST"], tokens: ["LHOST"], msfMarker: false }]} />);
+    const mark = screen.getByText("LHOST");
+    expect(mark.tagName).toBe("MARK");
+    expect(mark.closest("[data-testid='command-word']")!.textContent).toBe("http://LHOST/x");
+  });
+
   it("a DC picked by name is flagged on the command", () => {
     render(<CommandList commands={[{ id: "a", title: "Sync", text: "ntpdate 10.0.0.10", unresolved: [], msfMarker: false, dcByName: true }]} />);
     expect(screen.getByText("DC (by name)")).toBeInTheDocument();

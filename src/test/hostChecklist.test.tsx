@@ -9,6 +9,7 @@ import { setImported } from "../engines/library/store";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { useCredPickStore } from "../features/checklist/credPick";
 import { api } from "../lib/api";
+import { commandText } from "./support/commandText";
 import { makeQueryClient } from "../lib/queryClient";
 import type { ChecklistItem } from "../types/checklist";
 import type { CredAttempt, Credential } from "../types/credentials";
@@ -80,6 +81,8 @@ async function openChecklist(user: ReturnType<typeof userEvent.setup>) {
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   useCaptureStore.getState().reset();
   useCredPickStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
@@ -139,7 +142,7 @@ describe("host checklist tab", () => {
     const user = userEvent.setup();
     mount();
     await openChecklist(user);
-    expect(await screen.findByText("smbclient -N -L //10.10.10.5")).toBeInTheDocument();
+    expect(await screen.findByText(commandText("smbclient -N -L //10.10.10.5"))).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: /^Copy command: / })[0]);
     expect(await screen.findByText("Copied")).toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toContain("10.10.10.5");
@@ -283,12 +286,12 @@ describe("credential fill on the checklist", () => {
     });
     await openChecklist(user);
     expect(await pickerOf()).toHaveTextContent("CORP\\bob");
-    expect((await tab()).getAllByText(/-u bob/).length).toBeGreaterThan(0);
+    expect((await tab()).getAllByText(commandText(/-u bob/)).length).toBeGreaterThan(0);
     // The choice is remembered per host, so the Next steps follow it.
     await user.click(await pickerOf());
     await user.click(await screen.findByRole("option", { name: "None" }));
     expect(await pickerOf()).toHaveTextContent("None");
-    expect((await tab()).queryByText(/-u bob/)).not.toBeInTheDocument();
+    expect((await tab()).queryByText(commandText(/-u bob/))).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Full checklist" }));
     expect(await pickerOf()).toHaveTextContent("None");
   });
@@ -323,8 +326,8 @@ describe("credential fill on the checklist", () => {
     mount({ creds: [cred("c1", "alice", { secret: "Pa'ss-W0rd" })], attempts: [attempt("a1", "c1", 10)] });
     await openChecklist(user);
     const panel = await tab();
-    await panel.findAllByText(/-u alice/);
-    expect(screen.queryByText(/Pa'ss-W0rd/)).not.toBeInTheDocument();
+    await panel.findAllByText(commandText(/-u alice/));
+    expect(document.body.textContent).not.toContain("Pa'ss-W0rd");
     const pre = [...document.querySelectorAll("pre")].find((p) => p.textContent?.includes("••••••••"));
     expect(pre).toBeDefined();
     await user.click(within(pre!.closest("li")!).getByRole("button", { name: /^Copy command: / }));

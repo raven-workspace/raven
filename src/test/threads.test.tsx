@@ -51,6 +51,8 @@ function mount(path: string) {
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   resetNotesStore();
   useCaptureStore.getState().reset();
   for (const key of Object.keys(stored)) delete stored[key];

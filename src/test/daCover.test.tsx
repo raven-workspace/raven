@@ -101,6 +101,8 @@ function mount(path: string, attempts: CredAttempt[], items: ChecklistItem[] = [
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   useCaptureStore.getState().reset();
   // The store's conditional fact write, as the Rust command does it.
   m.checklistApplyFacts.mockImplementation(async (_e, done, revert) => {

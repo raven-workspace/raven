@@ -61,6 +61,8 @@ function mount(opts: {
   usernames?: Username[];
   grants?: AccessGrant[];
   attempts?: CredAttempt[];
+  /** Services, identity, vectors and credentials never arrive. */
+  pending?: boolean;
 } = {}) {
   const h = opts.host ?? host();
   const services = opts.services ?? [NGINX, SMB, SSH];
@@ -73,6 +75,13 @@ function mount(opts: {
   m.usernamesList.mockResolvedValue(opts.usernames ?? []);
   m.accessGrantsList.mockResolvedValue(opts.grants ?? []);
   m.credAttemptsList.mockResolvedValue(opts.attempts ?? []);
+  if (opts.pending) {
+    const never = new Promise<never>(() => {});
+    m.servicesList.mockReturnValue(never);
+    m.hostIdentityGet.mockReturnValue(never);
+    m.vectorsList.mockReturnValue(never);
+    m.credentialsList.mockReturnValue(never);
+  }
   return render(
     <QueryClientProvider client={makeQueryClient()}>
       <MemoryRouter initialEntries={["/e/e1/h/h1"]}>
@@ -143,7 +152,7 @@ describe("facts by phase", () => {
   it("the summaries: Services, Coverage and Host Credentials", async () => {
     mount({ host: host({ access: "root" }) });
     expect(await summaryOf("Services")).toBe("Services · 1 ✓ · entry nginx 80 · 1 ?");
-    expect(await summaryOf("Coverage")).toMatch(/^Coverage · Information gathering 0\/\d+$/);
+    expect(await summaryOf("Coverage")).toMatch(/^Coverage · Vulnerability detection 0\/\d+$/);
     await waitFor(async () => expect(await summaryOf("Host Credentials")).toBe("Host Credentials · 0 work · 0 untested"));
   });
 
@@ -156,6 +165,18 @@ describe("facts by phase", () => {
     first.unmount();
     mount({ host: host({ access: "user" }) });
     expect(await isOpen("Services")).toBe(true);
+  });
+});
+
+describe("summaries while loading", () => {
+  it("before a foothold, the folded identity groups show only their titles until their data arrives", async () => {
+    mount({ pending: true });
+    for (const name of ["Who am I", "Privesc vectors", "Other accounts"]) expect(await summaryOf(name)).toBe(name);
+  });
+
+  it("after a foothold, folded Services shows only its title until its data arrives", async () => {
+    mount({ host: host({ access: "user" }), pending: true });
+    expect(await summaryOf("Services")).toBe("Services");
   });
 });
 
@@ -213,6 +234,21 @@ describe("services grid", () => {
     expect(reason).toHaveFocus();
     await user.keyboard("patched{Enter}");
     expect(m.serviceSetVerdict).toHaveBeenCalledWith("s2", "dead_end", "patched");
+  });
+
+  it("a failed dead end keeps the reason input and its text for a retry", async () => {
+    const user = userEvent.setup();
+    m.serviceSetVerdict.mockRejectedValueOnce(new Error("vault locked"));
+    mount();
+    const row = await (await group("Services")).findByRole("button", { name: /^445\/tcp/ });
+    row.focus();
+    await user.keyboard("d");
+    await user.keyboard("patched{Enter}");
+    expect(await screen.findByText(/Couldn't set the verdict: vault locked/)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Why is 445/tcp a dead end?" })).toHaveValue("patched");
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Why is 445/tcp a dead end?" })).not.toBeInTheDocument());
+    expect(m.serviceSetVerdict).toHaveBeenCalledTimes(2);
   });
 
   it("C and U on a focused row set candidate and untested without asking", async () => {
@@ -366,24 +402,56 @@ describe("who am I and privesc vectors", () => {
     expect(m.vectorDelete).toHaveBeenCalledWith("v1");
   });
 
-  it("Other accounts lists uncracked hashes and other users' credentials, never this identity's", async () => {
+  it("Other accounts: uncracked hashes once per capture and credentials found on this host, never the identity's own", async () => {
+    const tgs = (id: string, tail: string) =>
+      cred(id, "svc_sql", { type: "hash", hashType: "krb5tgs", secret: `$krb5tgs$23$*svc_sql$CORP*$${tail}`, crackStatus: "uncracked" });
     mount({
       host: after(),
       identity: IDENTITY,
       creds: [
-        cred("c1", "svc_sql", { type: "hash", secret: "aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0", crackStatus: "uncracked" }),
-        cred("c2", "bob"),
-        cred("c3", "iis_apppool", { domain: "ms01" }),
+        tgs("c1", "aaaa"),
+        tgs("c1b", "bbbb"), // the same account re-roasted: one row
+        cred("c2", "bob", { sourceHostId: "h1" }),
+        cred("c3", "carol"), // found elsewhere: not this host's business
+        cred("c4", "iis_apppool", { domain: "ms01", sourceHostId: "h1" }), // the account held here
       ],
     });
     const g = await group("Other accounts");
     expect(await g.findByText("CORP\\svc_sql (hash)")).toBeInTheDocument();
+    expect(g.getAllByText(/svc_sql/)).toHaveLength(1);
     expect(g.getByText("uncracked")).toBeInTheDocument();
     expect(g.getByText("CORP\\bob")).toBeInTheDocument();
+    expect(g.queryByText(/carol/)).not.toBeInTheDocument();
     expect(g.queryByText(/iis_apppool/)).not.toBeInTheDocument();
     expect(g.queryByText(/Winter2024/)).not.toBeInTheDocument();
     const user = userEvent.setup();
     await user.click(await toggleOf("Other accounts"));
     expect(await summaryOf("Other accounts")).toBe("Other accounts · 2");
+  });
+
+  it("Other accounts shows at most six rows, then +N more; the summary counts them all", async () => {
+    const hashes = Array.from({ length: 9 }, (_, i) =>
+      cred(`h${i}`, `user${i}`, { type: "hash", hashType: "krb5tgs", secret: `$krb5tgs$23$*user${i}$CORP*$${i}`, crackStatus: "uncracked" }),
+    );
+    mount({ host: after(), identity: IDENTITY, creds: hashes });
+    const g = await group("Other accounts");
+    expect(await g.findByText("+3 more on the Credentials page")).toBeInTheDocument();
+    expect(g.getAllByText(/\(hash\)$/)).toHaveLength(6);
+    const user = userEvent.setup();
+    await user.click(await toggleOf("Other accounts"));
+    expect(await summaryOf("Other accounts")).toBe("Other accounts · 9");
+  });
+
+  it("saving an identity edit adds vectors only for newly added privileges, keeping the user's status on the rest", async () => {
+    const user = userEvent.setup();
+    m.hostIdentitySet.mockImplementation(async (input) => ({ ...input, updatedAt: 2 }));
+    m.vectorUpsert.mockResolvedValue(vector("v9", "SeBackupPrivilege abuse", "try"));
+    mount({ host: after(), identity: IDENTITY, vectors: [vector("v1", "SeImpersonatePrivilege abuse", "untested")] });
+    const who = await group("Who am I");
+    await user.click(await who.findByRole("button", { name: "Edit who am I" }));
+    await user.type(who.getByRole("textbox", { name: "Privileges" }), " SeBackupPrivilege");
+    await user.click(who.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.vectorUpsert).toHaveBeenCalledWith("h1", { title: "SeBackupPrivilege abuse", status: "try", source: "auto" }));
+    expect(m.vectorUpsert).toHaveBeenCalledTimes(1);
   });
 });

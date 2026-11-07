@@ -127,7 +127,9 @@ export function VectorsFacts({ engagementId, host, open, onToggle }: {
   const parts = [count("try") && `${count("try")} try`, count("untested") && `${count("untested")} untested`].filter(Boolean);
   const summary = vectorsQ.isError
     ? "Privesc vectors · couldn't load"
-    : `Privesc vectors · ${parts.length > 0 ? parts.join(" · ") : vectors.length > 0 ? "all ruled out" : "none yet"}`;
+    : !vectorsQ.data
+      ? "Privesc vectors"
+      : `Privesc vectors · ${parts.length > 0 ? parts.join(" · ") : vectors.length > 0 ? "all ruled out" : "none yet"}`;
 
   return (
     <FactGroup

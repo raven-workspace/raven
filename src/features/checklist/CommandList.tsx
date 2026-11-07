@@ -31,17 +31,37 @@ export interface FilledCommand {
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** The command text with unresolved tokens wrapped in a warn-coloured mark (no background). */
-function Text({ text, tokens }: { text: string; tokens: string[] }) {
-  if (tokens.length === 0) return <>{text}</>;
-  const re = new RegExp(`(${tokens.map(escape).join("|")})`);
+/** One word with its unresolved tokens wrapped in a warn-coloured mark (no background). */
+function Marked({ word, re, tokens }: { word: string; re: RegExp | null; tokens: string[] }) {
+  if (!re) return <>{word}</>;
   return (
     <>
-      {text.split(re).map((part, i) =>
+      {word.split(re).map((part, i) =>
         tokens.includes(part) ? (
           <mark key={i} className="bg-transparent text-warn">{part}</mark>
         ) : (
-          <span key={i}>{part}</span>
+          part
+        ),
+      )}
+    </>
+  );
+}
+
+/**
+ * The command text, one unbreakable span per whitespace-separated word, so a line wraps only at spaces (never inside
+ * `-sV` or an IP); a word longer than the block scrolls. The spaces stay plain text, so copying the text is unchanged.
+ */
+function Text({ text, tokens }: { text: string; tokens: string[] }) {
+  const re = tokens.length > 0 ? new RegExp(`(${tokens.map(escape).join("|")})`) : null;
+  return (
+    <>
+      {text.split(/(\s+)/).map((part, i) =>
+        part === "" ? null : /^\s+$/.test(part) ? (
+          part
+        ) : (
+          <span key={i} data-testid="command-word" className="inline-block whitespace-nowrap">
+            <Marked word={part} re={re} tokens={tokens} />
+          </span>
         ),
       )}
     </>

@@ -1,12 +1,12 @@
 import { PencilSimple } from "@phosphor-icons/react";
-import { useState, type FormEvent } from "react";
-import { credLabel, usernameLabel } from "../../../engines/credentials";
+import { useMemo, useState, type FormEvent } from "react";
+import { credLabel, dedupeHashCaptures, foldCrackedHashes, usernameLabel } from "../../../engines/credentials";
 import { vectorsFromIdentity } from "../../../engines/facts";
 import { cx } from "../../../lib/cx";
 import type { HostIdentity } from "../../../types/hostFacts";
 import type { Host } from "../../../types/host";
 import { Button, Chip, Input } from "../../../ui";
-import { useAccessGrants, useCredentials, useUsernames } from "../../credentials/queries";
+import { useAccessGrants, useCredAttempts, useCredentials, useUsernames } from "../../credentials/queries";
 import { useLog } from "../../log/queries";
 import { useHostFactsMutations, useHostIdentity } from "../queries";
 import { FactGroup } from "./FactGroup";
@@ -39,8 +39,12 @@ function IdentityForm({ engagementId, host, identity, onDone }: {
     const next = { hostId: host.id, username: username.trim(), privileges: splitList(privileges), groups: splitList(groups), entryId: identity?.entryId ?? null };
     try {
       await setIdentity.mutateAsync(next);
-      // Same as a captured whoami: a notable privilege or group is a vector to try.
-      for (const title of vectorsFromIdentity(next)) await upsertVector.mutateAsync({ title, status: "try", source: "auto" });
+      // Same as a captured whoami: a newly added notable privilege or group is a vector to try. Vectors from what was
+      // already there keep the status the user gave them.
+      const before = new Set(identity ? vectorsFromIdentity(identity) : []);
+      for (const title of vectorsFromIdentity(next)) {
+        if (!before.has(title)) await upsertVector.mutateAsync({ title, status: "try", source: "auto" });
+      }
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -94,7 +98,11 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
   const source = identity?.entryId ? logQ.data?.find((e) => e.id === identity.entryId) : undefined;
   const groups = identity?.groups.filter(isNotableGroup) ?? [];
   const otherGroups = (identity?.groups.length ?? 0) - groups.length;
-  const summary = identityQ.isError ? "Who am I · couldn't load" : `Who am I · ${identity?.username ?? "not known yet"}`;
+  const summary = identityQ.isError
+    ? "Who am I · couldn't load"
+    : identityQ.isPending
+      ? "Who am I"
+      : `Who am I · ${identity?.username ?? "not known yet"}`;
 
   return (
     <FactGroup
@@ -161,7 +169,12 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
   );
 }
 
-/** Accounts that might get further: hashes not cracked yet, and credentials for users other than the one held here. */
+const OTHER_ACCOUNTS_SHOWN = 6;
+
+/**
+ * Accounts that might get further: hashes not cracked yet (captures deduplicated, cracked ones folded) and
+ * credentials found on this host, never the account held here. At most six rows, then "+N more".
+ */
 export function OtherAccountsFacts({ engagementId, host, open, onToggle }: {
   engagementId: string;
   host: Host;
@@ -169,34 +182,38 @@ export function OtherAccountsFacts({ engagementId, host, open, onToggle }: {
   onToggle: () => void;
 }) {
   const credsQ = useCredentials(engagementId);
+  const attemptsQ = useCredAttempts(engagementId);
   const identityQ = useHostIdentity(host.id);
-  const me = identityQ.data ? bareName(identityQ.data.username) : undefined;
-  const creds = credsQ.data ?? [];
-  const hashes = creds.filter((c) => c.type === "hash" && c.crackStatus !== "cracked" && c.crackStatus !== "uncrackable");
-  const others = creds.filter((c) => c.type !== "hash" && c.username.trim() !== "" && bareName(c.username) !== me);
-  const rows = [
-    ...hashes.map((c) => ({ id: c.id, label: credLabel(c), kind: "uncracked" })),
-    ...others.map((c) => ({ id: c.id, label: credLabel(c), kind: c.type })),
-  ];
+  const ready = credsQ.data !== undefined && attemptsQ.data !== undefined && !identityQ.isPending;
+  const rows = useMemo(() => {
+    if (!credsQ.data || !attemptsQ.data) return [];
+    const me = identityQ.data ? bareName(identityQ.data.username) : undefined;
+    const shown = foldCrackedHashes(dedupeHashCaptures(credsQ.data), attemptsQ.data).creds;
+    return shown
+      .filter((c) => c.username.trim() === "" || bareName(c.username) !== me)
+      .filter((c) =>
+        c.type === "hash" ? c.crackStatus !== "cracked" && c.crackStatus !== "uncrackable" : c.sourceHostId === host.id,
+      )
+      .map((c) => ({ id: c.id, label: credLabel(c), kind: c.type === "hash" ? "uncracked" : `${c.type}, found here` }));
+  }, [credsQ.data, attemptsQ.data, identityQ.data, host.id]);
+  const failed = credsQ.error ?? attemptsQ.error;
+  const summary = failed ? "Other accounts · couldn't load" : ready ? `Other accounts · ${rows.length}` : "Other accounts";
+  const more = rows.length - OTHER_ACCOUNTS_SHOWN;
   return (
-    <FactGroup
-      title="Other accounts"
-      summary={credsQ.isError ? "Other accounts · couldn't load" : `Other accounts · ${rows.length}`}
-      open={open}
-      onToggle={onToggle}
-    >
-      {credsQ.isError ? (
-        <p role="alert" className="m-0 text-xs text-warn">Couldn't load credentials: {credsQ.error.message}</p>
-      ) : rows.length === 0 ? (
-        <p className="m-0 text-xs text-muted">None yet. Uncracked hashes and other users' credentials show here.</p>
+    <FactGroup title="Other accounts" summary={summary} open={open} onToggle={onToggle}>
+      {failed ? (
+        <p role="alert" className="m-0 text-xs text-warn">Couldn't load credentials: {failed.message}</p>
+      ) : !ready ? null : rows.length === 0 ? (
+        <p className="m-0 text-xs text-muted">None yet. Uncracked hashes and credentials found on this host show here.</p>
       ) : (
         <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 p-0 text-[13px]">
-          {rows.map((r) => (
+          {rows.slice(0, OTHER_ACCOUNTS_SHOWN).map((r) => (
             <li key={r.id} className="col-span-2 grid grid-cols-subgrid items-baseline">
               <span className="truncate font-mono text-fg" title={r.label}>{r.label}</span>
               <span className="text-xs text-muted">{r.kind}</span>
             </li>
           ))}
+          {more > 0 && <li className="col-span-2 text-xs text-muted">+{more} more on the Credentials page</li>}
         </ul>
       )}
     </FactGroup>

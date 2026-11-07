@@ -4,6 +4,7 @@ import { applicableGoals, currentStage, hostViewStages, type FillInput } from ".
 import { api } from "../../lib/api";
 import type { Host } from "../../types/host";
 import { Button, Input, Select } from "../../ui";
+import { COLUMN_LABELS } from "../hosts/columns";
 import { useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
 import { CredentialPicker } from "./CredentialPicker";
@@ -101,15 +102,20 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
   };
 
   const commandsFor = (goalId: string) => goalCommands(goalId, input, eng);
-  const nextStage = scope === "next" ? currentStage(state, groups) : undefined;
   const isOpen = (goalId: string) => {
     const s = state[goalId]?.status;
     return s === undefined || s === "todo" || s === "in_progress";
   };
-  const shown =
-    scope === "all"
-      ? groups
-      : groups.filter((g) => g.stage.id === nextStage?.id).map((g) => ({ ...g, goals: g.goals.filter((goal) => isOpen(goal.id)) }));
+  // Next is the host's current stage, its board column: earlier stages' open steps stay in the full checklist.
+  const boardGroup = groups.find((g) => g.stage.id === host.boardColumn);
+  const openHere = boardGroup ? boardGroup.goals.filter((g) => isOpen(g.id)) : [];
+  const shown = scope === "all" ? groups : boardGroup && openHere.length > 0 ? [{ ...boardGroup, goals: openHere }] : [];
+  const nothingNext =
+    scope === "next" && shown.length === 0
+      ? currentStage(state, groups)
+        ? `Nothing open in ${boardGroup?.stage.title ?? COLUMN_LABELS[host.boardColumn]}. Earlier steps are in the full checklist.`
+        : "All stages done"
+      : undefined;
 
   const recordHop = async (fromHostId: string | null, via: string) => {
     const key = `${fromHostId ?? KALI}|${via}`;
@@ -124,7 +130,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
   return (
     <div className="flex flex-col gap-6 py-3">
       <CredentialPicker credentials={creds.credentials} value={creds.cred} onChange={creds.pick} />
-      {scope === "next" && !nextStage && <p className="m-0 text-xs text-muted">All stages done</p>}
+      {nothingNext && <p className="m-0 text-xs text-muted">{nothingNext}</p>}
       {shown.map(({ stage, goals, hint }) => (
         <section key={stage.id} aria-label={stage.title} className="flex flex-col gap-2 border-t border-line-2 pt-5 first:border-t-0 first:pt-0">
           <h3 className="m-0 text-[11px] font-semibold uppercase tracking-label text-muted">{stage.title}</h3>

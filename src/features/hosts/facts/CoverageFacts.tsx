@@ -6,6 +6,7 @@ import { cx } from "../../../lib/cx";
 import type { ItemState } from "../../../types/checklist";
 import type { Host } from "../../../types/host";
 import { useChecklist, useEngagementServices } from "../../checklist/queries";
+import { COLUMN_LABELS } from "../columns";
 import { useHosts } from "../queries";
 import { FactGroup } from "./FactGroup";
 
@@ -34,7 +35,8 @@ export function CoverageFacts({ engagementId, host, open, onToggle }: {
   );
   const failed = hostsQ.error ?? engagement.error ?? servicesQ.error ?? checklistQ.error;
   const state = byOwner.get(host.id) ?? {};
-  const current = currentStage(state, stages);
+  // The current stage is the board column, as on the Next tab.
+  const current = currentStage(state, stages) ? stages.find((s) => s.stage.id === host.boardColumn)?.stage : undefined;
   const rows = stages
     .filter((s) => s.goals.length > 0)
     .map((s) => ({ stage: s.stage, ...tally(s.goals.map((g) => g.id), state) }));
@@ -45,7 +47,9 @@ export function CoverageFacts({ engagementId, host, open, onToggle }: {
       ? "Coverage"
       : now
         ? `Coverage · ${now.stage.title} ${now.done}/${now.applicable}`
-        : "Coverage · all stages done";
+        : currentStage(state, stages)
+          ? `Coverage · ${current?.title ?? COLUMN_LABELS[host.boardColumn]}`
+          : "Coverage · all stages done";
 
   return (
     <FactGroup title="Coverage" summary={summary} open={open} onToggle={onToggle}>

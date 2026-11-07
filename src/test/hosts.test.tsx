@@ -64,6 +64,8 @@ function mount(path = "/e/e1") {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   hosts = [
     host({ id: "h1", name: "dc01", ip: "10.10.10.5", boardColumn: "vulnerability-detection" }),
     host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "reporting" }),

@@ -40,10 +40,16 @@ const enumerateIds = (services: Service[], engagement = E1) =>
   applicableGoals(H1, engagement, [H1], new Map([["h1", services]])).find((a) => a.stage.id === "information-gathering")!.goals.map((g) => g.id);
 
 /** A checklist store that behaves like the backend: puts persist, lists read them back. */
-function mount(opts: { engagement?: Engagement; services?: Service[]; items?: ChecklistItem[] } = {}) {
+function mount(opts: { engagement?: Engagement; services?: Service[]; items?: ChecklistItem[]; host?: Host } = {}) {
   let store = opts.items ?? [];
+  // The board column moves like the backend's: hostSyncBoard stores it, the host list reads it back.
+  let current = opts.host ?? H1;
   m.engagementGet.mockResolvedValue(opts.engagement ?? E1);
-  m.hostsList.mockResolvedValue([H1]);
+  m.hostsList.mockImplementation(async () => [current]);
+  m.hostSyncBoard.mockImplementation(async (_id, column) => {
+    current = { ...current, boardColumn: column, boardDerived: column };
+    return current;
+  });
   m.servicesListEngagement.mockResolvedValue(opts.services ?? [SMB]);
   m.checklistList.mockImplementation(async () => store);
   m.checklistPut.mockImplementation(async (_e, inputs) => {
@@ -75,7 +81,6 @@ beforeEach(() => {
   m.servicesList.mockResolvedValue([]);
   m.logList.mockResolvedValue([]);
   m.tunnelsList.mockResolvedValue([]);
-  m.hostSyncBoard.mockResolvedValue(H1);
   m.credentialsList.mockResolvedValue([]);
   m.credAttemptsList.mockResolvedValue([]);
   m.usernamesList.mockResolvedValue([]);
@@ -146,7 +151,7 @@ describe("Next tab", () => {
   it("exam-sim never shows a banned command", async () => {
     const exam = { ...E1, kind: "exam-sim" as const };
     const ids = enumerateIds([WEB], exam);
-    mount({ engagement: exam, services: [WEB], items: ids.map((id) => item(id, "done")) });
+    mount({ engagement: exam, services: [WEB], items: ids.map((id) => item(id, "done")), host: { ...H1, boardColumn: "vulnerability-detection" } });
     const tab = await next();
     expect(await tab.findByRole("heading", { name: "Vulnerability detection" })).toBeInTheDocument();
     expect(tab.getByText("Test the web app for injection and upload flaws")).toBeInTheDocument();
@@ -168,6 +173,25 @@ describe("Next tab", () => {
     expect(tab.getAllByText("Check SMB shares and null/guest access")).toHaveLength(1);
     await user.click(toggle);
     expect(tab.queryByText("Scan all 65,535 TCP ports")).not.toBeInTheDocument();
+  });
+});
+
+describe("Next follows the board column", () => {
+  it("a host in Initial foothold with open Information gathering steps shows only Initial foothold steps", async () => {
+    mount({ host: { ...H1, boardColumn: "initial-foothold", access: "user" } });
+    const tab = await next();
+    expect(await tab.findByRole("heading", { name: "Initial foothold" })).toBeInTheDocument();
+    expect(tab.queryByRole("heading", { name: "Information gathering" })).not.toBeInTheDocument();
+    expect(tab.queryByText("Scan all 65,535 TCP ports")).not.toBeInTheDocument();
+    // The earlier stage's open steps are one click away.
+    await userEvent.click(screen.getByRole("button", { name: "Full checklist" }));
+    expect(await tab.findByText("Scan all 65,535 TCP ports")).toBeInTheDocument();
+  });
+
+  it("says so when the current stage has nothing open but an earlier one does", async () => {
+    const vd = applicableGoals(H1, E1, [H1], new Map([["h1", [SMB]]])).find((a) => a.stage.id === "vulnerability-detection")!.goals;
+    mount({ host: { ...H1, boardColumn: "vulnerability-detection" }, items: vd.map((g) => item(g.id, "done")) });
+    expect(await (await next()).findByText("Nothing open in Vulnerability detection. Earlier steps are in the full checklist.")).toBeInTheDocument();
   });
 });
 

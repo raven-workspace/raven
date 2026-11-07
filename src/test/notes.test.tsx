@@ -67,6 +67,8 @@ const panel = () => screen.findByRole("complementary", { name: /Notes/ });
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   resetNotesStore();
   useCaptureStore.getState().reset();
   for (const k of Object.keys(stored)) delete stored[k];

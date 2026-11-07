@@ -50,6 +50,8 @@ function mount(opts: { hosts?: Host[] } = {}) {
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   useCaptureStore.getState().reset();
   useCredPickStore.getState().reset();
   useFilePickStore.setState({ hostId: "", file: "" });
