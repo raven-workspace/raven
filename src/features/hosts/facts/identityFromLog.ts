@@ -1,4 +1,4 @@
-import { identityFieldsOf, isIdentityBlockFor, isIdentityEntryFor, mergeIdentity, usableIdentity, type IdentityFields } from "../../../engines/facts";
+import { identityBlocksOf, identityFieldsOf, isIdentityBlockFor, isIdentityEntryFor, mergeIdentity, usableIdentity, type IdentityFields } from "../../../engines/facts";
 import type { Host } from "../../../types/host";
 import type { LogEntry } from "../../../types/log";
 
@@ -21,8 +21,7 @@ export function identityFromLog(entries: LogEntry[], host: Host): IdentityFromLo
   // Which entry last set each field.
   const setBy: Partial<Record<Field, LogEntry>> = {};
   for (const entry of oldestFirst) {
-    if (entry.content.kind !== "command") continue;
-    for (const block of entry.content.blocks) {
+    for (const block of identityBlocksOf(entry)) {
       if (!isIdentityBlockFor(entry, host, block)) continue;
       const parsed = usableIdentity(block);
       if (!parsed) continue;

@@ -1,4 +1,5 @@
 import { isKaliLabel } from "../attribution";
+import { detectPrompt, splitPaste } from "../parse/logPaste";
 import type { Host } from "../../types/host";
 import type { CommandBlock, LogEntry } from "../../types/log";
 
@@ -66,11 +67,28 @@ function normalizeCommand(command: string): string {
   return command.trim().replace(LEADING_PROMPT, "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
-export function parseIdentity(command: string, output: string): ParsedIdentity | null {
-  const cmd = normalizeCommand(command);
-  // Piped or filtered output is partial: it must never replace stored privileges or groups.
+/**
+ * The bare command a chain starts with: `whoami & hostname`, `id; cat proof.txt`, `whoami && x` give "whoami"/"id".
+ * Anything else (not led by bare whoami/id, or a pipe anywhere) gives null. A non-chain returns the command itself.
+ */
+function leadingCommand(cmd: string): string | null {
   if (cmd.includes("|")) return null;
-  if (cmd === "id") return parseId(output);
+  const parts = cmd.split(/\s*(?:;|&&|&)\s*/);
+  if (parts.length === 1) return cmd;
+  return parts[0] === "whoami" || parts[0] === "id" ? parts[0] : null;
+}
+
+/** The first output line of a chained `id`: the one with `uid=`. */
+function firstUidLine(output: string): string {
+  return output.split(/\r?\n/).find((l) => /uid=\d+\(/.test(l)) ?? "";
+}
+
+export function parseIdentity(command: string, output: string): ParsedIdentity | null {
+  const full = normalizeCommand(command);
+  const cmd = leadingCommand(full);
+  // Piped or filtered output is partial: it must never replace stored privileges or groups.
+  if (cmd === null) return null;
+  if (cmd === "id") return parseId(cmd === full ? output : firstUidLine(output));
   if (cmd === "whoami") {
     const name = output.split(/\r?\n/).find((l) => l.trim())?.trim();
     return name ? { username: name, privileges: [], groups: [] } : null;
@@ -98,7 +116,7 @@ export interface IdentityFields {
 
 /** Which fields an identity command speaks for. `whoami /priv` says nothing about groups, so it must not clear them. */
 export function identityFieldsOf(command: string): { username: boolean; privileges: boolean; groups: boolean } {
-  const cmd = normalizeCommand(command);
+  const cmd = leadingCommand(normalizeCommand(command)) ?? normalizeCommand(command);
   if (cmd === "whoami /priv") return { username: false, privileges: true, groups: false };
   if (cmd === "whoami /groups") return { username: false, privileges: false, groups: true };
   if (cmd === "whoami") return { username: true, privileges: false, groups: false };
@@ -148,9 +166,43 @@ export function usableIdentity(block: Pick<CommandBlock, "command" | "output">):
 const TARGET_SHELLS = new Set(["evil-winrm", "powershell", "cmd"]);
 const WINDOWS_ONLY = new Set(["whoami /priv", "whoami /groups", "whoami /all"]);
 
-/** A command entry linked to exactly this host (its blocks are judged one by one with `isIdentityBlockFor`). */
+/** Blocks of a bare-prompt transcript (`# id`, `$ whoami`), which `splitPaste` leaves whole without a distinctive prompt. */
+function splitBarePrompts(text: string): CommandBlock[] {
+  const blocks: CommandBlock[] = [];
+  let cur: { command: string; out: string[] } | null = null;
+  const close = () => {
+    if (cur) blocks.push({ command: cur.command, output: cur.out.join("\n").trim(), shell: "sh" });
+    cur = null;
+  };
+  for (const line of text.replace(/\r\n?/g, "\n").split("\n")) {
+    const p = detectPrompt(line);
+    if (p) {
+      close();
+      if (p.command) cur = { command: p.command, out: [] };
+    } else if (cur) cur.out.push(line);
+  }
+  close();
+  return blocks;
+}
+
+/** A flag entry's proof read as a terminal transcript: the blocks of whatever the user ran before printing the flag. */
+function proofBlocks(proof: string): CommandBlock[] {
+  const blocks = splitPaste(proof);
+  if (blocks.length === 1 && !blocks[0].shell && /^[$#]\s/.test(blocks[0].command)) return splitBarePrompts(proof);
+  return blocks;
+}
+
+/** The command blocks an entry speaks through: its own for a command, the parsed proof transcript for a flag, else none. */
+export function identityBlocksOf(entry: LogEntry): CommandBlock[] {
+  if (entry.content.kind === "command") return entry.content.blocks;
+  if (entry.content.kind === "flag" && entry.content.proof?.trim()) return proofBlocks(entry.content.proof);
+  return [];
+}
+
+/** A command entry, or a flag entry with a proof, linked to exactly this host (its blocks are judged one by one with `isIdentityBlockFor`). */
 export function isIdentityEntryFor(entry: LogEntry, host: Host): boolean {
-  return entry.content.kind === "command" && entry.hostIds.length === 1 && entry.hostIds[0] === host.id;
+  const readable = entry.content.kind === "command" || (entry.content.kind === "flag" && !!entry.content.proof?.trim());
+  return readable && entry.hostIds.length === 1 && entry.hostIds[0] === host.id;
 }
 
 /**

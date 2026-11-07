@@ -449,6 +449,24 @@ describe("saveCapture", () => {
       expect(stored()).toMatchObject({ username: "unknown", privileges: ["SeImpersonatePrivilege"], groups: ["BUILTIN\\Users"] });
     });
 
+    it("a flag capture whose proof holds id output sets the identity and keeps the proof as pasted", async () => {
+      m.hostIdentityGet.mockResolvedValue(null);
+      const paste = "# id\nuid=0(root) gid=0(root) groups=0(root)\n# cat /root/proof.txt\n918eef4c77a6e2903e0a3f4ff8554182";
+      const c = { kind: "flag" as const, flagKind: "proof" as const, value: "918eef4c77a6e2903e0a3f4ff8554182", proof: paste };
+      const vega = host({ id: "h1", name: "Vega", os: "linux" });
+      const saved = await saveCapture({
+        engagementId: "e1",
+        draft: draft({ kind: "flag", content: c }),
+        edits: edits({ kind: "flag", content: c, ranOn: "Vega" }),
+        addIps: [],
+        image: null,
+        hosts: [vega],
+      });
+      expect(m.hostIdentitySet).toHaveBeenCalledWith(expect.objectContaining({ hostId: "h1", username: "root", entryId: "l1" }));
+      expect(saved.content).toEqual(c);
+      expect(m.logCreate).toHaveBeenCalledWith("e1", expect.objectContaining({ content: expect.objectContaining({ proof: paste }) }));
+    });
+
     it("a bare whoami changes only the username", async () => {
       const stored = storeLikeTheDb({ hostId: "h1", username: "unknown", privileges: ["SeImpersonatePrivilege"], groups: ["docker"], entryId: "l0", updatedAt: 1 });
       await capture("whoami", "dc01\\svc_web");

@@ -86,4 +86,22 @@ describe("identityFromLog", () => {
     const bad = entry("l1", [{ command: "whoami", output: "'whoami' is not recognized as an internal or external command," }]);
     expect(identityFromLog([bad], MS02)).toEqual({ identity: null, sources: 0 });
   });
+
+  describe("flag proof entries", () => {
+    const VEGA = { id: "h2", name: "Vega", os: "linux" } as Host;
+    const flagEntry = (proof: string | null, over: Partial<LogEntry> = {}): LogEntry =>
+      entry("f1", [], { kind: "flag", ranOn: "Vega", content: { kind: "flag", flagKind: "proof", value: "x", proof }, ...over });
+    const PROOF = "# id\nuid=0(root) gid=0(root) groups=0(root)\n# cat /root/proof.txt\n918eef4c77a6e2903e0a3f4ff8554182";
+
+    it("counts a flag entry whose proof holds id output as a source", () => {
+      const r = identityFromLog([flagEntry(PROOF)], VEGA);
+      expect(r.sources).toBe(1);
+      expect(r.identity?.username).toBe("root");
+      expect(r.identity?.entryId).toBe("f1");
+    });
+
+    it("ignores a flag entry with proof null", () => {
+      expect(identityFromLog([flagEntry(null)], VEGA)).toEqual({ identity: null, sources: 0 });
+    });
+  });
 });
