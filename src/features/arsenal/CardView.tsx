@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { filterForKind, HOST_STAGES } from "../../engines/checklist";
 import { getCards, getLibrary, getToolkit, useLibraryVersion } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
@@ -8,7 +8,9 @@ import { CommandList } from "../checklist/CommandList";
 import { useFillBase } from "../palette/fillData";
 import type { SuggestContext } from "../palette/suggest";
 import { useCredPickStore } from "../checklist/credPick";
+import { shortHostName } from "../../lib/hostName";
 import { CredChip } from "./CredChip";
+import type { CredChipHandle } from "./CredChip";
 import { FillBar } from "./FillBar";
 import { autoFill, tokensOf, usesCred } from "./fillTokens";
 
@@ -26,6 +28,11 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
 }) {
   const { d, host, cred, credOwnerId, makeInput, examReady } = useFillBase(engagementId, hostId);
   const kind = d.engagement?.kind;
+  const fieldEls = useRef(new Map<string, HTMLInputElement>());
+  const credRef = useRef<CredChipHandle>(null);
+  const focusToken = useCallback((t: string) => fieldEls.current.get(t)?.focus(), []);
+  const focusCred = useCallback(() => credRef.current?.focus(), []);
+  const hostName = host ? shortHostName(host.name) : null;
 
   const visible = (list: LibraryCommand[]) => {
     // Fail closed: nothing until the engagement's exam rules are known.
@@ -43,7 +50,7 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
 
   const block = (c: LibraryCommand, msf: Set<string>) => (
     <div key={c.id} className="flex flex-col gap-1">
-      <CommandList commands={[fillLibraryCommand(c, input, msf.has(c.id))]} />
+      <CommandList commands={[fillLibraryCommand(c, input, msf.has(c.id))]} hostName={hostName} focusToken={focusToken} focusCred={focusCred} />
       {c.why && <p className="m-0 text-xs text-muted">{c.why}</p>}
     </div>
   );
@@ -53,7 +60,7 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
       {engagementId && usesCred(templates) && (
         <div className="grid justify-items-start">
           <CredChip
-            credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred} align="start"
+            ref={credRef} credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred} align="start"
             onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)}
           />
         </div>
@@ -61,6 +68,7 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
       <FillBar
         tokens={tokens} auto={auto} overrides={overrides} onOverrides={onOverrides} suggest={suggestCtx}
         os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
+        fieldRef={(t, el) => (el ? fieldEls.current.set(t, el) : fieldEls.current.delete(t))}
       />
       <div className="flex flex-col gap-3">{main.shown.map((c) => block(c, main.msfMarker))}</div>
       {main.shown.length === 0 && commands.length > 0 && <p className="m-0 text-xs text-muted">Nothing here is allowed in this exam.</p>}

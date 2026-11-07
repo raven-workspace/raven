@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router";
 import { fillCommand } from "../../engines/checklist";
 import { credLabel } from "../../engines/credentials/labels";
@@ -10,7 +10,9 @@ import type { Host } from "../../types/host";
 import { Chip, Dialog, Kbd } from "../../ui";
 import { logCommand } from "../capture/logCommand";
 import { fillLibraryCommand } from "../checklist/goalCommands";
-import { COMMAND_PRE } from "../checklist/CommandList";
+import { COMMAND_PRE, MarkedText } from "../checklist/CommandList";
+import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
+import { shortHostName } from "../../lib/hostName";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useFillScope, useLastEngagementStore } from "../arsenal/useFillScope";
 import { CredChip, isCredPickKey } from "../arsenal/CredChip";
@@ -100,12 +102,17 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
 
   useEffect(() => searchRef.current?.focus(), []);
 
+  const focusToken = useCallback((t: string) => fieldEls.current.get(t)?.focus(), []);
+  const focusCred = useCallback(() => credRef.current?.focus(), []);
+  const guard = useCopyGuard({ focusToken, focusCred, hostName: host ? shortHostName(host.name) : null });
+
+  /** Copies the filled command through the copy guard: null when it was held back for an unfilled token. */
   const copy = async (): Promise<string | null> => {
     if (!filled) return null;
     const c = filled.cmd;
     const text = c.copyText ?? c.text;
-    await (text !== c.text ? copySecret : copyPlain)(text);
-    return text;
+    const r = await guard.attempt(c, () => (text !== c.text ? copySecret : copyPlain)(text));
+    return r === "copied" ? text : null;
   };
 
   const run = async (log: boolean) => {
@@ -125,7 +132,9 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     if (!filled || current?.type !== "command") return;
     try {
       const text = await copy();
-      if (log && host && text !== null && d.engagement) {
+      // Held back for an unfilled token: the field has focus and the hint says why. Nothing is copied, logged or closed.
+      if (text === null) return;
+      if (log && host && d.engagement) {
         const c = current.command;
         // The real values, as typed at the shell (not shell-escaped, not masked).
         const typed = fillCommand(c.template, filled.input, { commandOs: c.os }).text;
@@ -185,8 +194,17 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     void run(e.metaKey || e.ctrlKey);
   };
 
+  // The copy guard put focus on the credential chip: Enter there copies anyway (the chip would open its list).
+  const onKeyCapture = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Enter" || e.nativeEvent.isComposing || !filled || !guard.hint || guard.forKey !== copyKey(filled.cmd)) return;
+    if (!(e.target instanceof HTMLElement && e.target.getAttribute("aria-label")?.startsWith("Fill with credential"))) return;
+    e.preventDefault();
+    e.stopPropagation();
+    void run(e.metaKey || e.ctrlKey);
+  };
+
   return (
-    <div className="flex flex-col gap-3" onKeyDown={onKey}>
+    <div className="flex flex-col gap-3" onKeyDown={onKey} onKeyDownCapture={onKeyCapture}>
       <SearchBar
         label="Search"
         inputRef={searchRef}
@@ -240,7 +258,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
       </ul>
       {filled && (
         <div className="flex flex-col gap-2 border-t border-line pt-3">
-          <pre className={COMMAND_PRE}>{filled.cmd.text}</pre>
+          <pre className={COMMAND_PRE}><MarkedText text={filled.cmd.text} tokens={filled.cmd.tokens ?? []} /></pre>
           {filled.cmd.msfMarker && <Chip>uses your one Metasploit host</Chip>}
           <FillBar
             tokens={filled.tokens} auto={filled.auto} suggest={suggestCtx} os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
@@ -249,6 +267,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
           />
         </div>
       )}
+      {guard.hint && filled && guard.forKey === copyKey(filled.cmd) && <p role="status" className="m-0 text-xs text-warn">{guard.hint}</p>}
       {status && <p role="alert" className="m-0 text-xs text-warn">{status}</p>}
       <p className="m-0 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
         <span><Kbd>↵</Kbd> copy</span>

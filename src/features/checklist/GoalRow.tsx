@@ -59,6 +59,8 @@ export interface GoalRowProps {
   onStatus: (goalId: string, status: ChecklistStatus) => void;
   onNotes: (goalId: string, notes: string) => void;
   onOpenEntry?: (entryId: string) => void;
+  /** The short name of the host the commands are filled for, for "Copied for <host>". */
+  hostName?: string;
   /** Changes each time the row is asked for: it expands and scrolls into view. */
   focus?: number;
   children?: ReactNode;
@@ -112,7 +114,7 @@ function NewCredNotice({ labels }: { labels: string[] }) {
   );
 }
 
-export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, newCredLabels, onStatus, onNotes, onOpenEntry, focus, children }: GoalRowProps) {
+export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, newCredLabels, onStatus, onNotes, onOpenEntry, hostName, focus, children }: GoalRowProps) {
   const status = state?.status ?? "todo";
   const [open, setOpen] = useState(focus !== undefined || status === "todo" || status === "in_progress");
   const [seenFocus, setSeenFocus] = useState(focus);
@@ -154,7 +156,7 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
             <>
               <FileChip commands={commands} />
               <PortChip commands={commands} />
-              <CommandList commands={commands} />
+              <CommandList commands={commands} hostName={hostName ?? null} />
               <CardLinks commands={commands} />
             </>
           ) : (

@@ -145,7 +145,10 @@ describe("⌘K palette", () => {
     expect(screen.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzprobe");
     await user.keyboard("{Enter}");
-    expect(await navigator.clipboard.readText()).toBe("zzprobe {TARGET_IP} from 10.10.14.9");
+    // The unfilled {TARGET_IP} holds the first Enter back; the second copies anyway.
+    expect(await screen.findByText("{TARGET_IP} not filled · ↵ again to copy anyway")).toBeInTheDocument();
+    await user.keyboard("{Enter}");
+    await vi.waitFor(async () => expect(await navigator.clipboard.readText()).toBe("zzprobe {TARGET_IP} from 10.10.14.9"));
     expect(m.logCreate).not.toHaveBeenCalled();
   });
 
@@ -166,7 +169,7 @@ describe("⌘K palette", () => {
     expect(await navigator.clipboard.readText()).toBe("zzcertutil C:\\Windows\\Temp\\x.exe");
     await user.keyboard(cmdK);
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzanycopy");
-    await user.keyboard("{Enter}");
+    await user.keyboard("{Enter}{Enter}");
     expect(await navigator.clipboard.readText()).toBe("zzanycopy {DEST_DIR}");
   });
 
@@ -177,10 +180,10 @@ describe("⌘K palette", () => {
     await user.keyboard(cmdK);
     const box = await screen.findByRole("combobox", { name: "Search" });
     await user.type(box, "fetch winpeas");
-    expect(await screen.findByText("zzfetch http://10.10.14.9/winPEASx64.exe")).toBeInTheDocument();
+    expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzfetch http://10.10.14.9/winPEASx64.exe")).toBeInTheDocument();
     await user.clear(box);
     await user.type(box, "fetch");
-    expect(await screen.findByText("zzfetch http://10.10.14.9/{FILE}")).toBeInTheDocument();
+    expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzfetch http://10.10.14.9/{FILE}")).toBeInTheDocument();
     await user.tab();
     expect(screen.getByRole("combobox", { name: "Value for FILE" })).toHaveFocus();
     await user.keyboard("x.exe{Enter}");

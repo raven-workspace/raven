@@ -6,6 +6,7 @@ import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/s
 import { copyPlain } from "../../lib/clipboard";
 import { cx } from "../../lib/cx";
 import { isDialogOpen, useKeydown } from "../../lib/keys";
+import { shortHostName } from "../../lib/hostName";
 import { reportError } from "../../lib/lockSignal";
 import { Input, Kbd, labelClass } from "../../ui";
 import { logCommand } from "../capture/logCommand";
@@ -120,6 +121,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
   };
 
   const hostName = host?.name || "the target";
+  const shortName = host ? shortHostName(host.name) : null;
   // The serve command runs from the tool folders set in Settings.
   const toolsDirs = { windows: d.settings?.windowsToolsDir, linux: d.settings?.linuxToolsDir };
   const kali = method ? fill(method.kali.map((c) => ({ ...c, template: withToolsDirs(c.template, toolsDirs) }))) : [];
@@ -205,13 +207,13 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
           {kali.length > 0 && (
             <div className="flex flex-col gap-2">
               <h3 className="m-0 text-[11px] font-semibold uppercase tracking-label text-muted">1 · On Kali</h3>
-              <CommandList commands={kali} />
+              <CommandList commands={kali} hostName={shortName} />
             </div>
           )}
           {target.length > 0 && (
             <div className="flex flex-col gap-2">
               <h3 className="m-0 text-[11px] font-semibold uppercase tracking-label text-muted">{kali.length > 0 ? "2" : "1"} · On {hostName}</h3>
-              <CommandList commands={target} />
+              <CommandList commands={target} hostName={shortName} />
               <p className="m-0 text-[11px] text-muted">
                 <Kbd>⌘↵</Kbd> copies the {hostName} half and logs it{host ? "" : " (pick a host)"}.
               </p>

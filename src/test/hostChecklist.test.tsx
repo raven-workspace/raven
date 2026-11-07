@@ -144,7 +144,7 @@ describe("host checklist tab", () => {
     await openChecklist(user);
     expect(await screen.findByText(commandText("smbclient -N -L //10.10.10.5"))).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: /^Copy command: / })[0]);
-    expect(await screen.findByText("Copied")).toBeInTheDocument();
+    expect(await screen.findByText(/^Copied for /)).toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toContain("10.10.10.5");
   });
 

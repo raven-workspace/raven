@@ -458,7 +458,7 @@ describe("full-screen Arsenal uses the engagement you came from (B4)", () => {
     expect(await screen.findByRole("option", { name: /Qqnote about the portal/ })).toBeInTheDocument();
     await user.clear(box);
     await user.type(box, "zzprobe");
-    expect(await screen.findByText("zzprobe 10.20.0.9 from 10.10.14.9")).toBeInTheDocument();
+    expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzprobe 10.20.0.9 from 10.10.14.9")).toBeInTheDocument();
   });
 
   it("a remembered engagement that no longer exists falls back to the most recently active one", async () => {

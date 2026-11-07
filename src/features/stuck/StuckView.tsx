@@ -7,6 +7,7 @@ import { api } from "../../lib/api";
 import { cx } from "../../lib/cx";
 import { isDialogOpen } from "../../lib/keys";
 import type { Host } from "../../types/host";
+import { shortHostName } from "../../lib/hostName";
 import { Kbd, labelClass } from "../../ui";
 import { useCredFill } from "../checklist/credPick";
 import { CommandList, type FilledCommand } from "../checklist/CommandList";
@@ -167,7 +168,7 @@ function Body({ engagementId, host, onOpenGoal, skipRestoreRef }: { engagementId
                       {u.service.port}/{u.service.protocol} {u.service.nmapService ?? ""}
                       <span className="ml-2 font-sans text-muted">{u.reason === "guess" ? "nmap is guessing" : "no version"}</span>
                     </p>
-                    <CommandList commands={nudgeCommands(u.service.id, u.nudges)} />
+                    <CommandList commands={nudgeCommands(u.service.id, u.nudges)} hostName={shortHostName(host.name)} />
                   </div>
                 ))}
               </Section>
@@ -191,7 +192,7 @@ function Body({ engagementId, host, onOpenGoal, skipRestoreRef }: { engagementId
                 {filled.map((c) => (
                   <div key={c.goalId} className="flex flex-col gap-1.5">
                     <p className="m-0 text-[13px] text-fg">{c.title}</p>
-                    <CommandList commands={c.commands} />
+                    <CommandList commands={c.commands} hostName={shortHostName(host.name)} />
                   </div>
                 ))}
               </Section>

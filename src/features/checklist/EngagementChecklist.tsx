@@ -28,6 +28,7 @@ import { newCredLabels, useCredFill } from "./credPick";
 import { useFilePickStore } from "./filePick";
 import { usePortPickStore } from "./portPick";
 import { goalCommands } from "./goalCommands";
+import { shortHostName } from "../../lib/hostName";
 import { GoalRow } from "./GoalRow";
 import { HopsPanel } from "./HopsPanel";
 import { PlaybookSection } from "./PlaybookSection";
@@ -126,6 +127,7 @@ export function EngagementChecklist() {
         onStatus={(goalId, status) => setStatus.mutate({ ownerId, goalId, status })}
         onNotes={(goalId, notes) => setNotes.mutate({ ownerId, goalId, notes })}
         onOpenEntry={openEntry}
+        {...(owner ? { hostName: shortHostName(owner.name) } : {})}
       />
     );
   };
