@@ -7,6 +7,7 @@ pub mod commands;
 pub mod credentials;
 pub mod engagements;
 pub mod error;
+pub mod host_facts;
 pub mod hosts;
 pub mod field_manual;
 pub mod import;
@@ -68,6 +69,13 @@ pub fn run() {
             commands::service_confirm,
             commands::service_unconfirm,
             commands::service_delete,
+            commands::service_set_verdict,
+            commands::host_identity_get,
+            commands::host_identity_set,
+            commands::vectors_list,
+            commands::vector_upsert,
+            commands::vector_set_status,
+            commands::vector_delete,
             commands::log_list,
             commands::log_create,
             commands::log_update,

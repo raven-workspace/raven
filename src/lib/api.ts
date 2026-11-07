@@ -17,6 +17,7 @@ import type {
   FindingInput,
 } from "../types/findings";
 import type { CleanupInput, CleanupItem } from "../types/cleanup";
+import type { HostIdentity, PrivescVector, ServiceVerdict, VectorInput, VectorStatus } from "../types/hostFacts";
 import type { Note, RuledOut, RuledOutInput } from "../types/notes";
 import type {
   AccessGrant,
@@ -105,6 +106,18 @@ export const api = {
     call<Service>("service_confirm", { id, input }),
   serviceUnconfirm: (id: string) => call<Service>("service_unconfirm", { id }),
   serviceDelete: (id: string) => call<null>("service_delete", { id }),
+  /** `dead_end` needs a non-empty `reason` and adds a linked ruled-out item; leaving it removes that item. */
+  serviceSetVerdict: (id: string, verdict: ServiceVerdict | null, reason?: string) =>
+    call<Service>("service_set_verdict", { id, verdict, reason: reason ?? null }),
+  hostIdentityGet: (hostId: string) => call<HostIdentity | null>("host_identity_get", { hostId }),
+  hostIdentitySet: (input: Omit<HostIdentity, "updatedAt">) =>
+    call<HostIdentity>("host_identity_set", { input: { ...input, updatedAt: 0 } }),
+  vectorsList: (hostId: string) => call<PrivescVector[]>("vectors_list", { hostId }),
+  /** An `auto` upsert never changes a vector the user set by hand. */
+  vectorUpsert: (hostId: string, input: VectorInput) => call<PrivescVector>("vector_upsert", { hostId, input }),
+  vectorSetStatus: (id: string, status: VectorStatus, reason?: string) =>
+    call<PrivescVector>("vector_set_status", { id, status, reason: reason ?? null }),
+  vectorDelete: (id: string) => call<null>("vector_delete", { id }),
 
   logList: (engagementId: string) => call<LogEntry[]>("log_list", { engagementId }),
   logCreate: (engagementId: string, input: LogEntryInput) =>

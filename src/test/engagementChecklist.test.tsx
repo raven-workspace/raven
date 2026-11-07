@@ -32,7 +32,7 @@ const H1 = host("h1", "dc01", "10.10.10.5", "windows");
 const H2 = host("h2", "web02", "10.10.10.6", "linux");
 const svc = (id: string, port: number): Service => ({
   id, hostId: "h1", port, protocol: "tcp", state: "open", nmapService: null, nmapVersion: null,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1,
+  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
 });
 const AD = [svc("s88", 88), svc("s389", 389)];
 const hop = (): Hop => ({ id: "hp1", engagementId: "e1", fromHostId: null, toHostId: "h1", via: "creds", logEntryId: null, at: 1, updatedAt: 1 });

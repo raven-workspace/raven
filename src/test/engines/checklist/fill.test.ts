@@ -23,7 +23,7 @@ const tun = (p: Partial<Tunnel> = {}): Tunnel => ({
 let n = 0;
 const svc = (hostId: string, port: number): Service => ({
   id: `s${n++}`, hostId, port, protocol: 'tcp', state: 'open', nmapService: null, nmapVersion: null,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 0, updatedAt: 0,
+  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 0, updatedAt: 0,
 });
 const input = (p: Partial<FillInput> = {}): FillInput => ({
   host: host(), engagement: eng(), hosts: [], servicesByHost: new Map(), tunnels: [], attackerIp: '10.10.14.3',

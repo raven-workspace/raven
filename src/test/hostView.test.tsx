@@ -26,7 +26,7 @@ const H1: Host = {
 };
 const svc = (id: string, port: number, over: Partial<Service> = {}): Service => ({
   id, hostId: "h1", port, protocol: "tcp", state: "open", nmapService: null, nmapVersion: null,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1, ...over,
+  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1, ...over,
 });
 const T = new Date(2026, 10, 4, 9, 5).getTime();
 const entry = (id: string, title: string, at: number, hostIds: string[]): LogEntry => ({

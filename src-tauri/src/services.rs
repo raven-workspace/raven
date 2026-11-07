@@ -18,6 +18,8 @@ pub struct Service {
     pub confirmed_product: Option<String>,
     pub confirmed_version: Option<String>,
     pub confirmed_entry_id: Option<String>,
+    /// `candidate`, `untested` or `dead_end`; `None` = no call made yet.
+    pub verdict: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -55,7 +57,7 @@ pub struct ConfirmInput {
 }
 
 const COLS: &str = "id, host_id, port, protocol, state, nmap_service, nmap_version, \
-    confirmed_product, confirmed_version, confirmed_entry_id, created_at, updated_at";
+    confirmed_product, confirmed_version, confirmed_entry_id, verdict, created_at, updated_at";
 
 fn invalid(field: &str, message: &str) -> AppError {
     AppError::Validation { field: field.into(), message: message.into() }
@@ -73,8 +75,9 @@ fn from_row(r: &Row) -> rusqlite::Result<Service> {
         confirmed_product: r.get(7)?,
         confirmed_version: r.get(8)?,
         confirmed_entry_id: r.get(9)?,
-        created_at: r.get(10)?,
-        updated_at: r.get(11)?,
+        verdict: r.get(10)?,
+        created_at: r.get(11)?,
+        updated_at: r.get(12)?,
     })
 }
 
@@ -241,6 +244,44 @@ pub fn unconfirm(conn: &Connection, id: &str) -> AppResult<Service> {
     if n == 0 {
         return Err(AppError::NotFound);
     }
+    get(conn, id)
+}
+
+/// How a service reads in the ruled-out list: `445/tcp Samba smbd 4.6.2`.
+fn service_label(s: &Service) -> String {
+    let ident = match &s.confirmed_product {
+        Some(p) => match &s.confirmed_version {
+            Some(v) => format!("{p} {v}"),
+            None => p.clone(),
+        },
+        None => s.nmap_version.clone().or_else(|| s.nmap_service.clone()).unwrap_or_default(),
+    };
+    format!("{}/{} {}", s.port, s.protocol, ident).trim().to_string()
+}
+
+/// Sets or clears the user's call on a service. `dead_end` needs a reason and creates a linked
+/// ruled-out item; leaving `dead_end` (or changing the reason) removes only that linked item.
+/// One transaction.
+pub fn set_verdict(conn: &Connection, id: &str, verdict: Option<&str>, reason: Option<&str>) -> AppResult<Service> {
+    if let Some(v) = verdict {
+        if !matches!(v, "candidate" | "untested" | "dead_end") {
+            return Err(invalid("verdict", "verdict must be candidate, untested or dead_end"));
+        }
+    }
+    let reason = blank_to_none(reason);
+    if verdict == Some("dead_end") && reason.is_none() {
+        return Err(invalid("reason", "a dead end needs a reason"));
+    }
+    let svc = get(conn, id)?;
+    let tx = conn.unchecked_transaction()?;
+    crate::notes::unlink_ruled_out(&tx, "service", id)?;
+    if let (Some("dead_end"), Some(reason)) = (verdict, reason.as_deref()) {
+        let engagement_id: String =
+            tx.query_row("SELECT engagement_id FROM hosts WHERE id = ?1", [&svc.host_id], |r| r.get(0))?;
+        crate::notes::link_ruled_out(&tx, &engagement_id, &svc.host_id, "service", id, &service_label(&svc), reason)?;
+    }
+    tx.execute("UPDATE services SET verdict = ?2, updated_at = ?3 WHERE id = ?1", params![id, verdict, system_now_ms()])?;
+    tx.commit()?;
     get(conn, id)
 }
 
@@ -470,5 +511,68 @@ mod tests {
         hosts::delete(c, &h).unwrap();
         let n: i64 = c.query_row("SELECT count(*) FROM services", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 0);
+    }
+
+    fn ruled(c: &Connection, h: &str) -> Vec<crate::notes::RuledOut> {
+        let e: String = c.query_row("SELECT engagement_id FROM hosts WHERE id=?1", [h], |r| r.get(0)).unwrap();
+        crate::notes::ruled_out_list(c, &e).unwrap().into_iter().filter(|r| r.host_id.as_deref() == Some(h)).collect()
+    }
+
+    #[test]
+    fn dead_end_requires_reason() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let h = host(c, &eng(c), "web");
+        let s = create(c, &h, sin(445)).unwrap();
+        assert_eq!(field(set_verdict(c, &s.id, Some("dead_end"), None)).0, "reason");
+        assert_eq!(field(set_verdict(c, &s.id, Some("dead_end"), Some("   "))).0, "reason");
+        assert_eq!(field(set_verdict(c, &s.id, Some("maybe"), None)).0, "verdict");
+        assert_eq!(get(c, &s.id).unwrap().verdict, None);
+        assert!(ruled(c, &h).is_empty());
+        assert_eq!(set_verdict(c, "nope", Some("candidate"), None), Err(AppError::NotFound));
+    }
+
+    #[test]
+    fn dead_end_creates_linked_ruled_out() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let h = host(c, &eng(c), "web");
+        let s = upsert_scan(c, &h, &[sp(445, "tcp", "open", "netbios-ssn", "Samba smbd 4.6.2")]).unwrap().remove(0);
+        let got = set_verdict(c, &s.id, Some("dead_end"), Some(" signing required ")).unwrap();
+        assert_eq!(got.verdict.as_deref(), Some("dead_end"));
+        let r = ruled(c, &h);
+        assert_eq!(r.len(), 1);
+        assert_eq!((r[0].text.as_str(), r[0].reason.as_str(), r[0].private), ("445/tcp Samba smbd 4.6.2", "signing required", false));
+        assert_eq!((r[0].source_kind.as_deref(), r[0].source_id.as_deref()), (Some("service"), Some(s.id.as_str())));
+        // Confirmed identity wins over the nmap guess in the label.
+        confirm(c, &s.id, cin("Samba")).unwrap();
+        set_verdict(c, &s.id, Some("dead_end"), Some("patched")).unwrap();
+        let r = ruled(c, &h);
+        assert_eq!((r.len(), r[0].text.as_str(), r[0].reason.as_str()), (1, "445/tcp Samba", "patched"));
+    }
+
+    #[test]
+    fn unset_verdict_removes_only_its_own_ruled_out_item() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let h = host(c, &e, "web");
+        let s = create(c, &h, sin(21)).unwrap();
+        let other = create(c, &h, sin(22)).unwrap();
+        crate::notes::ruled_out_create(
+            c,
+            crate::notes::RuledOutInput { engagement_id: e, host_id: Some(h.clone()), text: "21/tcp ftp".into(), reason: "by hand".into(), private: false },
+        )
+        .unwrap();
+        set_verdict(c, &s.id, Some("dead_end"), Some("anon off")).unwrap();
+        set_verdict(c, &other.id, Some("dead_end"), Some("closed")).unwrap();
+        assert_eq!(ruled(c, &h).len(), 3);
+        let back = set_verdict(c, &s.id, Some("candidate"), None).unwrap();
+        assert_eq!(back.verdict.as_deref(), Some("candidate"));
+        let left = ruled(c, &h);
+        assert_eq!(left.len(), 2);
+        assert!(left.iter().any(|r| r.reason == "by hand" && r.source_id.is_none()));
+        assert!(left.iter().any(|r| r.source_id.as_deref() == Some(other.id.as_str())));
+        assert_eq!(set_verdict(c, &s.id, None, None).unwrap().verdict, None);
     }
 }

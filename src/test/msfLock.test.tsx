@@ -32,7 +32,7 @@ const VEGA = host("h1", "VEGA");
 const WEB = host("h2", "web02", { os: "linux" });
 const svc: Service = {
   id: "s1", hostId: "h1", port: 445, protocol: "tcp", state: "open", nmapService: "microsoft-ds", nmapVersion: null,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1,
+  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
 };
 
 function mount(path: string, eng: Engagement) {

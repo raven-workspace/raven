@@ -27,7 +27,7 @@ const H1: Host = {
 };
 const svc = (id: string, port: number, nmapService: string): Service => ({
   id, hostId: "h1", port, protocol: "tcp", state: "open", nmapService, nmapVersion: null,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1,
+  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
 });
 const item = (goalId: string, status: ChecklistItem["status"]): ChecklistItem => ({
   ownerId: "h1", goalId, status, notes: null, completedAt: null, auto: false, autoFrom: null, evidence: [], updatedAt: 1,

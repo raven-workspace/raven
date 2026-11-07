@@ -4,6 +4,7 @@ import type { Api } from "../lib/api";
 import type { ChecklistItem } from "../types/checklist";
 import type { ErrorCode } from "../types/errors";
 import { RavenError } from "../types/errors";
+import type { ServiceVerdict } from "../types/hostFacts";
 import type { Progress } from "../types/log";
 import { AUDIT_NOW, FIXTURES, FIXTURE_PROGRESS, type AuditFixtures } from "./fixtures";
 
@@ -120,12 +121,12 @@ const base = {
       const existing = db.services.find((s) => s.hostId === hostId && s.port === p.port && s.protocol === p.protocol);
       const guess = { state: p.state, nmapService: p.service || null, nmapVersion: p.version || null, updatedAt: now() };
       if (existing) Object.assign(existing, guess);
-      else db.services.push({ id: nid("s"), hostId, port: p.port, protocol: p.protocol, confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: now(), ...guess });
+      else db.services.push({ id: nid("s"), hostId, port: p.port, protocol: p.protocol, confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: now(), ...guess });
     }
     return clone(db.services.filter((s) => s.hostId === hostId));
   },
   serviceCreate: async (hostId: string, input) => {
-    const s = { id: nid("s"), hostId, port: input.port, protocol: input.protocol ?? "tcp", state: "open", nmapService: input.nmapService ?? null, nmapVersion: input.nmapVersion ?? null, confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: now(), updatedAt: now() };
+    const s = { id: nid("s"), hostId, port: input.port, protocol: input.protocol ?? "tcp", state: "open", nmapService: input.nmapService ?? null, nmapVersion: input.nmapVersion ?? null, confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: now(), updatedAt: now() };
     db.services.push(s);
     return clone(s);
   },
@@ -135,6 +136,51 @@ const base = {
   serviceUnconfirm: async (id: string) =>
     clone(assign(find(db.services, id), {}, { confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, updatedAt: now() })),
   serviceDelete: async (id: string) => remove(db.services, id),
+  serviceSetVerdict: async (id: string, verdict: ServiceVerdict | null, reason?: string) => {
+    const s = find(db.services, id);
+    if (verdict === "dead_end" && !reason?.trim()) throw new RavenError("validation", "a dead end needs a reason");
+    db.ruledOut = db.ruledOut.filter((r) => !(r.sourceKind === "service" && r.sourceId === id));
+    if (verdict === "dead_end") {
+      const host = find(db.hosts, s.hostId);
+      const label = s.confirmedProduct ? `${s.confirmedProduct} ${s.confirmedVersion ?? ""}` : (s.nmapVersion ?? s.nmapService ?? "");
+      db.ruledOut.push({
+        id: nid("r"), engagementId: host.engagementId, hostId: s.hostId, text: `${s.port}/${s.protocol} ${label}`.trim(),
+        reason: reason!.trim(), private: false, sourceKind: "service", sourceId: id, createdAt: now(),
+      });
+    }
+    return clone(assign(s, {}, { verdict, updatedAt: now() }));
+  },
+  hostIdentityGet: async (hostId: string) => clone(db.hostIdentity.find((i) => i.hostId === hostId) ?? null),
+  hostIdentitySet: async (input) => {
+    const row = { ...input, updatedAt: now() };
+    db.hostIdentity = [...db.hostIdentity.filter((i) => i.hostId !== input.hostId), row];
+    return clone(row);
+  },
+  vectorsList: async (hostId: string) => clone(db.vectors.filter((v) => v.hostId === hostId)),
+  vectorUpsert: async (hostId: string, input) => {
+    const existing = db.vectors.find((v) => v.hostId === hostId && v.title === input.title.trim());
+    if (existing) {
+      if (input.source === "auto" && (existing.status === "ruled_out" || existing.source === "manual")) return clone(existing);
+      return clone(assign(existing, {}, { status: input.status, source: input.source, updatedAt: now() }));
+    }
+    const v = { id: nid("pv"), hostId, title: input.title.trim(), status: input.status, source: input.source, createdAt: now(), updatedAt: now() };
+    db.vectors.push(v);
+    return clone(v);
+  },
+  vectorSetStatus: async (id: string, status, reason) => {
+    const v = find(db.vectors, id);
+    if (status === "ruled_out" && !reason?.trim()) throw new RavenError("validation", "a ruled-out vector needs a reason");
+    db.ruledOut = db.ruledOut.filter((r) => !(r.sourceKind === "vector" && r.sourceId === id));
+    if (status === "ruled_out") {
+      const host = find(db.hosts, v.hostId);
+      db.ruledOut.push({
+        id: nid("r"), engagementId: host.engagementId, hostId: v.hostId, text: v.title, reason: reason!.trim(),
+        private: false, sourceKind: "vector", sourceId: id, createdAt: now(),
+      });
+    }
+    return clone(assign(v, {}, { status, source: "manual", updatedAt: now() }));
+  },
+  vectorDelete: async (id: string) => remove(db.vectors, id),
 
   logList: async (engagementId: string) => clone(db.log.filter((e) => e.engagementId === engagementId)),
   logCreate: async (engagementId: string, input) => {
@@ -186,7 +232,7 @@ const base = {
   },
   ruledOutList: async (engagementId: string) => clone(db.ruledOut.filter((r) => r.engagementId === engagementId)),
   ruledOutCreate: async (input) => {
-    const r = { id: nid("r"), hostId: null, private: false, ...input, createdAt: now() };
+    const r = { id: nid("r"), hostId: null, private: false, sourceKind: null, sourceId: null, ...input, createdAt: now() };
     db.ruledOut.push(r);
     return clone(r);
   },

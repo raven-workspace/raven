@@ -32,7 +32,7 @@ const DC = host("dc", "dc01", "10.10.10.5");
 const WS = host("ws", "ws01", "10.10.10.6");
 const svc = (id: string, hostId: string, port: number, nmapService: string): Service => ({
   id, hostId, port, protocol: "tcp", state: "open", nmapService, nmapVersion: null, confirmedProduct: null,
-  confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1,
+  confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
 });
 const SERVICES = [svc("s1", "dc", 88, "kerberos-sec"), svc("s2", "dc", 389, "ldap"), svc("s3", "dc", 445, "microsoft-ds"), svc("s4", "ws", 445, "microsoft-ds")];
 const PW: Credential = {

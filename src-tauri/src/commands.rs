@@ -21,6 +21,7 @@ use std::collections::HashMap;
 use crate::hosts::{self, Host, HostInput};
 use crate::field_manual::{self, FieldManualSnapshot, VaultFile};
 use crate::import::{self, ImportPlanInput, ImportSummary};
+use crate::host_facts::{self, HostIdentity, PrivescVector, VectorInput};
 use crate::services::{self, ConfirmInput, ScanPort, Service, ServiceInput};
 use crate::error::{AppError, AppResult};
 use crate::settings::{self, Settings, SettingsPatch};
@@ -290,6 +291,51 @@ pub async fn service_confirm(app: AppHandle, id: String, input: ConfirmInput) ->
 #[tauri::command]
 pub async fn service_unconfirm(app: AppHandle, id: String) -> AppResult<Service> {
     with_vault(app, move |v| services::unconfirm(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn service_set_verdict(
+    app: AppHandle,
+    id: String,
+    verdict: Option<String>,
+    reason: Option<String>,
+) -> AppResult<Service> {
+    with_vault(app, move |v| services::set_verdict(v.conn()?, &id, verdict.as_deref(), reason.as_deref())).await
+}
+
+#[tauri::command]
+pub async fn host_identity_get(app: AppHandle, host_id: String) -> AppResult<Option<HostIdentity>> {
+    with_vault(app, move |v| host_facts::identity_get(v.conn()?, &host_id)).await
+}
+
+#[tauri::command]
+pub async fn host_identity_set(app: AppHandle, input: HostIdentity) -> AppResult<HostIdentity> {
+    with_vault(app, move |v| host_facts::identity_set(v.conn()?, input)).await
+}
+
+#[tauri::command]
+pub async fn vectors_list(app: AppHandle, host_id: String) -> AppResult<Vec<PrivescVector>> {
+    with_vault(app, move |v| host_facts::vectors_list(v.conn()?, &host_id)).await
+}
+
+#[tauri::command]
+pub async fn vector_upsert(app: AppHandle, host_id: String, input: VectorInput) -> AppResult<PrivescVector> {
+    with_vault(app, move |v| host_facts::vector_upsert(v.conn()?, &host_id, input)).await
+}
+
+#[tauri::command]
+pub async fn vector_set_status(
+    app: AppHandle,
+    id: String,
+    status: String,
+    reason: Option<String>,
+) -> AppResult<PrivescVector> {
+    with_vault(app, move |v| host_facts::vector_set_status(v.conn()?, &id, &status, reason.as_deref())).await
+}
+
+#[tauri::command]
+pub async fn vector_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| host_facts::vector_delete(v.conn()?, &id)).await
 }
 
 #[tauri::command]

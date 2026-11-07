@@ -12,7 +12,7 @@ const host = (p: Partial<Host>): Host => ({
 let n = 0;
 const svc = (hostId: string, port: number, nmapService: string | null = null): Service => ({
   id: `s${n++}`, hostId, port, protocol: 'tcp', state: 'open', nmapService, nmapVersion: null, confirmedProduct: null, confirmedVersion: null,
-  confirmedEntryId: null, createdAt: 0, updatedAt: 0,
+  confirmedEntryId: null, verdict: null, createdAt: 0, updatedAt: 0,
 });
 const eng = { id: 'e1', domain: 'corp.local' } as Engagement;
 const dc = host({ id: 'dc', name: 'dc01', ip: '10.0.0.10' });

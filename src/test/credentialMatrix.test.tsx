@@ -27,7 +27,7 @@ const H1: Host = {
 };
 const svc = (id: string, port: number, nmapService: string): Service => ({
   id, hostId: "h1", port, protocol: "tcp", state: "open", nmapService, nmapVersion: null, confirmedProduct: null,
-  confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1,
+  confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
 });
 const SERVICES = [svc("s1", 445, "microsoft-ds"), svc("s2", 22, "ssh")];
 

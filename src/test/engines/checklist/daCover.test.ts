@@ -23,7 +23,7 @@ const host = (id: string, os: Host['os'], p: Partial<Host> = {}): Host => ({
 let n = 0;
 const svc = (hostId: string, port: number): Service => ({
   id: `s${n++}`, hostId, port, protocol: 'tcp', state: 'open', nmapService: null, nmapVersion: null,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 0, updatedAt: 0,
+  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 0, updatedAt: 0,
 });
 const attempt = (hostId: string, result: CredAttempt['result']): CredAttempt => ({
   id: `a-${hostId}-${result}`, engagementId: 'e1', credId: 'c1', usernameId: null, hostId, service: 'smb', port: 445,

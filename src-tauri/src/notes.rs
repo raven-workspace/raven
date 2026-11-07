@@ -29,6 +29,9 @@ pub struct RuledOut {
     pub text: String,
     pub reason: String,
     pub private: bool,
+    /// Set when the item was created by a dead-end verdict: `service` or `vector`.
+    pub source_kind: Option<String>,
+    pub source_id: Option<String>,
     pub created_at: i64,
 }
 
@@ -121,10 +124,12 @@ fn ruled_row(r: &Row) -> rusqlite::Result<RuledOut> {
         reason: r.get(4)?,
         private: r.get::<_, i64>(5)? != 0,
         created_at: r.get(6)?,
+        source_kind: r.get(7)?,
+        source_id: r.get(8)?,
     })
 }
 
-const RULED_COLS: &str = "id, engagement_id, host_id, text, reason, private, created_at";
+const RULED_COLS: &str = "id, engagement_id, host_id, text, reason, private, created_at, source_kind, source_id";
 
 pub fn ruled_out_list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<RuledOut>> {
     let mut st = conn.prepare(&format!("SELECT {RULED_COLS} FROM ruled_out WHERE engagement_id = ?1 ORDER BY created_at, rowid"))?;
@@ -154,6 +159,31 @@ pub fn ruled_out_create(conn: &Connection, input: RuledOutInput) -> AppResult<Ru
         params![id, input.engagement_id, input.host_id, text, reason, input.private, system_now_ms()],
     )?;
     Ok(conn.query_row(&format!("SELECT {RULED_COLS} FROM ruled_out WHERE id = ?1"), [&id], ruled_row)?)
+}
+
+/// Creates the ruled-out item behind a dead-end verdict, linked to its source so that undoing
+/// the verdict removes exactly this item. Callers run it inside their own transaction.
+pub(crate) fn link_ruled_out(
+    conn: &Connection,
+    engagement_id: &str,
+    host_id: &str,
+    source_kind: &str,
+    source_id: &str,
+    text: &str,
+    reason: &str,
+) -> AppResult<()> {
+    conn.execute(
+        "INSERT INTO ruled_out (id, engagement_id, host_id, text, reason, private, created_at, source_kind, source_id) \
+         VALUES (?1,?2,?3,?4,?5,0,?6,?7,?8)",
+        params![uuid::Uuid::new_v4().to_string(), engagement_id, host_id, text, reason, system_now_ms(), source_kind, source_id],
+    )?;
+    Ok(())
+}
+
+/// Deletes only the ruled-out items created by this source; hand-written ones stay.
+pub(crate) fn unlink_ruled_out(conn: &Connection, source_kind: &str, source_id: &str) -> AppResult<()> {
+    conn.execute("DELETE FROM ruled_out WHERE source_kind = ?1 AND source_id = ?2", params![source_kind, source_id])?;
+    Ok(())
 }
 
 pub fn ruled_out_delete(conn: &Connection, id: &str) -> AppResult<()> {

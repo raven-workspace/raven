@@ -29,7 +29,7 @@ const H1 = host("h1", "dc01", "10.10.10.5");
 const H2 = host("h2", "web01", "10.10.10.6");
 const svc = (id: string, hostId: string, port: number, nmapService: string): Service => ({
   id, hostId, port, protocol: "tcp", state: "open", nmapService, nmapVersion: null, confirmedProduct: null,
-  confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1,
+  confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
 });
 const S1 = svc("s1", "h1", 445, "microsoft-ds");
 const S2 = svc("s2", "h2", 80, "http");

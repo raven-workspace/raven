@@ -37,7 +37,7 @@ const H1 = host("h1", "dc01", "10.10.10.5");
 const H2 = host("h2", "web02", "10.10.10.6", { os: "linux" });
 const svc = (id: string, port: number, over: Partial<Service> = {}): Service => ({
   id, hostId: "h1", port, protocol: "tcp", state: "open", nmapService: null, nmapVersion: null,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1, ...over,
+  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1, ...over,
 });
 const entry = (id: string, title: string): LogEntry => ({
   id, engagementId: "e1", kind: "note", title, titleEdited: false, ranOn: null, hostIds: ["h1"], observations: null,

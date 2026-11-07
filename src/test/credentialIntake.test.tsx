@@ -30,7 +30,7 @@ const H1 = host({ id: "h1", name: "dc01", ip: "10.10.10.5" });
 const H2 = host({ id: "h2", name: "web02", ip: "10.10.10.6" });
 const smb = (id: string, hostId: string): Service => ({
   id, hostId, port: 445, protocol: "tcp", state: "open", nmapService: "microsoft-ds", nmapVersion: null,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1,
+  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
 });
 const cred = (o: Partial<Credential> & { id: string }): Credential => ({
   engagementId: "e1", type: "password", username: "", domain: null, secret: "", hashType: null, scope: "domain",

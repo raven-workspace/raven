@@ -74,7 +74,7 @@ beforeEach(() => {
   });
   m.ruledOutCreate.mockImplementation(async (input) => ({
     id: "r1", engagementId: input.engagementId, hostId: input.hostId ?? null, text: input.text, reason: input.reason,
-    private: input.private ?? false, createdAt: 1,
+    private: input.private ?? false, sourceKind: null, sourceId: null, createdAt: 1,
   }));
 });
 
