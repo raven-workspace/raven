@@ -1,3 +1,4 @@
+import { CaretDown, CaretRight } from "@phosphor-icons/react";
 import { useState } from "react";
 import { shortHostName } from "../../lib/hostName";
 import type { Host } from "../../types/host";
@@ -16,9 +17,16 @@ interface LogEntryRowProps {
   defaultOpen?: boolean;
   /** The host whose page this row is on; it gets no chip, since every row there is about it. */
   currentHostId?: string;
+  /**
+   * Pick mode (the finding split): a click or Enter adds the entry as a reproduction step, and a caret
+   * button beside it opens the body instead.
+   */
+  onPick?: (entryId: string) => void;
+  /** In pick mode, the entry's place in the steps (1-based), once it is one. */
+  stepNumber?: number;
 }
 
-export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId }: LogEntryRowProps) {
+export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, onPick, stepNumber }: LogEntryRowProps) {
   const [open, setOpen] = useState(defaultOpen);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -30,35 +38,68 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId }
     .map((id) => hosts.find((h) => h.id === id)?.name)
     .filter((n): n is string => !!n)
     .map(shortHostName);
-  const hasExtras = names.length > 0 || entry.private || entry.returnedNothing;
+  const picking = onPick !== undefined;
+  const hasExtras = names.length > 0 || entry.private || entry.returnedNothing || picking;
+  const Caret = open ? CaretDown : CaretRight;
+
+  const row = (
+    <button
+      type="button"
+      aria-expanded={picking ? undefined : open}
+      aria-label={picking ? (stepNumber ? `${entry.title}, step ${stepNumber}` : `Add ${entry.title} as a step`) : undefined}
+      title={picking ? (stepNumber ? `Step ${stepNumber}` : "Add as a step (Enter)") : undefined}
+      onClick={() => {
+        if (!picking) setOpen((o) => !o);
+        else if (!stepNumber) onPick(entry.id);
+      }}
+      className={`grid w-full items-center gap-3 px-1 py-2 text-left cursor-default hover:bg-surface focus-visible:bg-surface ${
+        hasExtras ? "grid-cols-[2.75rem_6rem_minmax(0,1fr)_auto]" : "grid-cols-[2.75rem_6rem_minmax(0,1fr)]"
+      }`}
+    >
+      <time dateTime={d.toISOString()} title={d.toLocaleString()} className="font-mono text-xs text-muted">
+        {`${pad(d.getHours())}:${pad(d.getMinutes())}`}
+      </time>
+      <span className={`${labelClass} truncate`}>{KIND_LABELS[entry.kind]}</span>
+      <span className="truncate text-[13px] text-fg">{entry.title}</span>
+      {hasExtras && (
+        <span className="flex items-center gap-2">
+          {names.map((n) => (
+            <Chip key={n} className="max-w-[16ch] truncate">
+              <span className="truncate">{n}</span>
+            </Chip>
+          ))}
+          {entry.private && <Chip>private</Chip>}
+          {entry.returnedNothing && <span className="whitespace-nowrap text-xs text-faint">returned nothing</span>}
+          {picking &&
+            (stepNumber ? (
+              <span className="whitespace-nowrap font-mono text-xs text-accent">step {stepNumber}</span>
+            ) : (
+              <span className="whitespace-nowrap text-xs text-muted">+ step</span>
+            ))}
+        </span>
+      )}
+    </button>
+  );
 
   return (
     <li className="border-b border-line">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className={`grid w-full items-center gap-3 px-1 py-2 text-left cursor-default hover:bg-surface ${
-          hasExtras ? "grid-cols-[2.75rem_6rem_minmax(0,1fr)_auto]" : "grid-cols-[2.75rem_6rem_minmax(0,1fr)]"
-        }`}
-      >
-        <time dateTime={d.toISOString()} title={d.toLocaleString()} className="font-mono text-xs text-muted">
-          {`${pad(d.getHours())}:${pad(d.getMinutes())}`}
-        </time>
-        <span className={`${labelClass} truncate`}>{KIND_LABELS[entry.kind]}</span>
-        <span className="truncate text-[13px] text-fg">{entry.title}</span>
-        {hasExtras && (
-          <span className="flex items-center gap-2">
-            {names.map((n) => (
-              <Chip key={n} className="max-w-[16ch] truncate">
-                <span className="truncate">{n}</span>
-              </Chip>
-            ))}
-            {entry.private && <Chip>private</Chip>}
-            {entry.returnedNothing && <span className="whitespace-nowrap text-xs text-faint">returned nothing</span>}
-          </span>
-        )}
-      </button>
+      {picking ? (
+        <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center">
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-label={open ? `Hide ${entry.title}` : `Show ${entry.title}`}
+            title={open ? "Hide the entry" : "Show the entry"}
+            onClick={() => setOpen((o) => !o)}
+            className="grid h-7 w-6 cursor-default place-items-center text-muted hover:text-fg"
+          >
+            <Caret size={12} weight="light" aria-hidden />
+          </button>
+          {row}
+        </div>
+      ) : (
+        row
+      )}
       {open && (
         <div className="flex flex-col gap-3 pb-3 pl-[60px] pr-1">
           <LogEntryBody entry={entry} />

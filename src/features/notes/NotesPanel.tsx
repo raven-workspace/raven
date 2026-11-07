@@ -1,14 +1,10 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
-import { toggleThreadPrefix } from "../../engines/notes/threads";
+import { useEffect, useRef, type MouseEvent } from "react";
 import { isDialogOpen } from "../../lib/keys";
-import { RavenError } from "../../types/errors";
 import type { Engagement } from "../../types/engagement";
-import { Kbd, labelClass, Textarea, Toggle } from "../../ui";
+import { Kbd, labelClass } from "../../ui";
 import { cx } from "../../lib/cx";
 import { useHosts } from "../hosts/queries";
-import { CloseThreadDialog, type ClosingThread } from "./CloseThreadDialog";
-import { ThreadsList } from "./ThreadsList";
-import { useNote } from "./queries";
+import { NoteEditor } from "./NoteEditor";
 import { flushQuietly, MIN_WIDTH, maxWidth, noteKey, useNotesStore, type NotesScope } from "./useNotesStore";
 
 /**
@@ -30,7 +26,6 @@ export function NotesPanel({ engagement, hostId }: { engagement: Engagement; hos
   // Leaving the engagement closes the panel (its text is flushed by the effect above).
   useEffect(() => () => useNotesStore.setState({ open: false }), []);
 
-  const privateRef = useRef(false);
   const returnFocus = useRef<HTMLElement | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -53,20 +48,6 @@ export function NotesPanel({ engagement, hostId }: { engagement: Engagement; hos
       if (e.key === "Escape") {
         e.preventDefault();
         close();
-      } else if ((e.metaKey || e.ctrlKey) && !e.altKey && isSlashChord(e)) {
-        const ta = textRef.current;
-        if (!ta || e.target !== ta || ta.readOnly) return;
-        e.preventDefault();
-        const text = ta.value;
-        const line = text.slice(0, ta.selectionStart).split("\n").length - 1;
-        const next = toggleThreadPrefix(text, line);
-        const delta = next.length - text.length;
-        const lineStart = text.split("\n").slice(0, line).reduce((n, l) => n + l.length + 1, 0);
-        const caret = Math.max(lineStart, ta.selectionStart + delta);
-        useNotesStore.getState().edit(target, next, privateRef.current);
-        // Set the DOM value too so the caret survives the controlled re-render (same value, no reset).
-        ta.value = next;
-        ta.setSelectionRange(caret, caret);
       } else if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "e" && hostId) {
         e.preventDefault();
         setScope(scope === "host" ? "engagement" : "host");
@@ -80,7 +61,7 @@ export function NotesPanel({ engagement, hostId }: { engagement: Engagement; hos
   }, []);
 
   if (!open) return null;
-  return <PanelBody engagement={engagement} hostId={hostId} scope={scope} width={width} textRef={textRef} privateRef={privateRef} />;
+  return <PanelBody engagement={engagement} hostId={hostId} scope={scope} width={width} textRef={textRef} />;
 }
 
 function PanelBody({
@@ -89,32 +70,17 @@ function PanelBody({
   scope,
   width,
   textRef,
-  privateRef,
 }: {
   engagement: Engagement;
   hostId: string | null;
   scope: NotesScope;
   width: number;
   textRef: React.RefObject<HTMLTextAreaElement | null>;
-  privateRef: React.RefObject<boolean>;
 }) {
   const hosts = useHosts(engagement.id);
   const hostName = hosts.data?.find((h) => h.id === hostId)?.name;
   const target = { engagementId: engagement.id, hostId: scope === "host" ? hostId : null };
-  const key = noteKey(target);
-  const note = useNote(target.engagementId, target.hostId);
-  const pending = useNotesStore((s) => s.pending[key]);
-  const error = useNotesStore((s) => s.errors[key]);
-  const edit = useNotesStore((s) => s.edit);
   const setScope = useNotesStore((s) => s.setScope);
-
-  const body = pending?.body ?? note.data?.body ?? "";
-  const isPrivate = pending?.private ?? note.data?.private ?? false;
-  useEffect(() => {
-    privateRef.current = isPrivate;
-  });
-  const [closing, setClosing] = useState<ClosingThread | null>(null);
-  const ready = note.data !== undefined || pending !== undefined;
   const scopeName = scope === "host" ? hostName : engagement.name;
   const title = scopeName ? `Notes · ${scopeName}` : "Notes";
 
@@ -169,59 +135,10 @@ function PanelBody({
           <Kbd aria-hidden>⌘E</Kbd>
         </div>
       </header>
-      <div className="flex min-h-0 flex-1 flex-col gap-2 px-4 py-3">
-        <ThreadsList body={body} onClose={(line, text) => setClosing({ line, text })} />
-        <Textarea
-          ref={textRef}
-          mono
-          aria-label="Notes"
-          placeholder="Raw Markdown. Start a line with ? to open a thread."
-          value={body}
-          readOnly={!ready}
-          {...NO_TEXT_SERVICES}
-          onChange={(e) => edit(target, e.target.value, isPrivate)}
-          className="min-h-0 flex-1 resize-none"
-        />
-        {note.isError && !pending && (
-          <p role="alert" className="m-0 text-xs text-warn">
-            Couldn't load these notes: {RavenError.from(note.error).message}
-          </p>
-        )}
-        {error && (
-          <p role="alert" className="m-0 text-xs text-warn">
-            {error}. Your text is still here; it saves again when you type or close.
-          </p>
-        )}
-        <div className="flex items-center justify-between">
-          <Toggle on={isPrivate} onChange={(on) => edit(target, body, on)} disabled={!ready}>
-            Private
-          </Toggle>
-          <span className="text-xs text-muted" aria-live="polite">
-            {error ? "" : pending ? "Saving…" : note.data && note.data.updatedAt > 0 ? "Saved" : ""}
-          </span>
-        </div>
-      </div>
-      <CloseThreadDialog
-        thread={closing}
-        target={target}
-        saved={{ body: note.data?.body ?? "", private: note.data?.private ?? false }}
-        onClose={() => setClosing(null)}
-      />
+      <NoteEditor target={target} textRef={textRef} className="flex-1 px-4 py-3" />
     </aside>
   );
 }
-
-/**
- * Raw Markdown, typed fast: no macOS text services in WKWebView (autocapitalised lines, inline writing
- * suggestions that Return or "-" interact with, substitutions). `writingsuggestions` (Safari 18+) has no React type.
- */
-const NO_TEXT_SERVICES = {
-  spellCheck: false,
-  autoCorrect: "off",
-  autoCapitalize: "off",
-  autoComplete: "off",
-  writingsuggestions: "false",
-} as const;
 
 function Segment({ on, disabled, onClick, children }: { on: boolean; disabled?: boolean; onClick: () => void; children: string }) {
   return (
@@ -238,13 +155,4 @@ function Segment({ on, disabled, onClick, children }: { on: boolean; disabled?: 
       {children}
     </button>
   );
-}
-
-/**
- * ⌘/ on any layout: the character "/" (some layouts need Shift for it), or the physical key where US
- * keyboards have "/" (Canadian CSA types "é" there). Shift on that physical key is ⌘?, left to macOS Help.
- */
-function isSlashChord(e: KeyboardEvent): boolean {
-  if (e.key === "/") return true;
-  return e.code === "Slash" && !e.shiftKey;
 }

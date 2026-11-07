@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
+import { useFindingDraftStore } from "../features/findings/useFindingDraftStore";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
@@ -81,6 +82,7 @@ beforeEach(() => {
   m.hostIdentityGet.mockResolvedValue(null);
   m.vectorsList.mockResolvedValue([]);
   useCaptureStore.getState().reset();
+  useFindingDraftStore.getState().clearAll();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
   m.engagementsList.mockResolvedValue([E1]);
@@ -90,7 +92,7 @@ beforeEach(() => {
 const SECTION = "/e/e1/s/findings";
 async function openEdit(user: ReturnType<typeof userEvent.setup>, title: string) {
   await user.click(await screen.findByRole("button", { name: `Edit ${title}` }));
-  return await screen.findByRole("dialog");
+  return await screen.findByRole("form", { name: "Edit finding" });
 }
 const stepTitles = (dlg: HTMLElement) =>
   within(within(dlg).getByRole("list", { name: "Reproduction steps" })).getAllByTestId("step-title").map((e) => e.textContent);
@@ -219,10 +221,16 @@ describe("unsaved file drafts", () => {
     mount(SECTION, [finding({ id: "f1", title: "Shell upload" })]);
     const dlg = await openEdit(user, "Shell upload");
     await pasteDraft(user, dlg);
-    await user.click(within(dlg).getByRole("button", { name: "Cancel" }));
-    expect(await screen.findByText("Discard unsaved changes?")).toBeInTheDocument();
+    await user.click(within(dlg).getByRole("button", { name: "Close" }));
+    expect(await screen.findByText("Discard the unsaved file?")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Keep editing" }));
     expect(screen.getByLabelText("File content")).toHaveValue("print(1)");
+    // Esc asks the same.
+    await user.click(document.body);
+    await user.keyboard("{Escape}");
+    expect(await screen.findByText("Discard the unsaved file?")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Discard file" }));
+    await waitFor(() => expect(screen.queryByRole("form")).not.toBeInTheDocument());
     expect(m.findingFileCreate).not.toHaveBeenCalled();
   });
 
@@ -232,7 +240,8 @@ describe("unsaved file drafts", () => {
     const dlg = await openEdit(user, "Shell upload");
     await user.click(await within(dlg).findByRole("button", { name: "Add file" }));
     await user.click(within(dlg).getByRole("button", { name: "Cancel file" }));
-    await user.click(within(dlg).getByRole("button", { name: "Cancel" }));
+    await user.click(within(dlg).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("form")).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -342,7 +351,7 @@ describe("finding files", () => {
     const user = userEvent.setup();
     mount(SECTION, []);
     await user.click(await screen.findByRole("button", { name: "Add finding" }));
-    const dlg = await screen.findByRole("dialog");
+    const dlg = await screen.findByRole("form", { name: "New finding" });
     expect(within(dlg).queryByRole("button", { name: "Add file" })).not.toBeInTheDocument();
     expect(within(dlg).getByText("Save the finding to attach files.")).toBeInTheDocument();
   });
@@ -362,14 +371,28 @@ describe("host findings tab", () => {
     expect(within(panel).getByText("On both")).toBeInTheDocument();
     expect(within(panel).queryByText("On web01")).not.toBeInTheDocument();
     await user.click(within(panel).getByRole("button", { name: "Open On dc01" }));
-    expect(await screen.findByRole("dialog", { name: "Edit finding" })).toBeInTheDocument();
+    expect(await screen.findByRole("form", { name: "Edit finding" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("shows an error line when the hosts fail to load", async () => {
+  it("services that fail to load show an error line in the split, and the finding still saves", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1", [], [], [L1], new Error("services down"));
     await user.click(await screen.findByRole("tab", { name: "Findings" }));
-    expect(await screen.findByText(/Couldn.t load findings: services down/)).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Add finding" }));
+    const form = await screen.findByRole("form", { name: "New finding" });
+    expect(await within(form).findByText(/Couldn.t load services: services down/)).toBeInTheDocument();
+    await user.type(within(form).getByLabelText("Title"), "Still saves");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.findingCreate).toHaveBeenCalledWith("e1", expect.objectContaining({ title: "Still saves", hostIds: ["h1"] })));
+  });
+
+  it("shows an error line when the findings fail to load", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1", []);
+    m.findingsList.mockRejectedValue(new Error("findings down"));
+    await user.click(await screen.findByRole("tab", { name: "Findings" }));
+    expect(await screen.findByText(/Couldn.t load findings: findings down/)).toBeInTheDocument();
   });
 
   it("shows an empty message when the host has no findings", async () => {

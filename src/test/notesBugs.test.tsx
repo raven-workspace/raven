@@ -149,6 +149,37 @@ describe("notes panel: multi-line typing (bug 1)", () => {
   });
 });
 
+describe("notes in the finding split (same editor as the panel)", () => {
+  it("N on an open split edits the host's note inline, keeps every line and opts out of text services", async () => {
+    m.findingsList.mockResolvedValue([]);
+    m.hostIdentityGet.mockResolvedValue(null);
+    m.credentialsList.mockResolvedValue([]);
+    m.credAttemptsList.mockResolvedValue([]);
+    m.usernamesList.mockResolvedValue([]);
+    m.accessGrantsList.mockResolvedValue([]);
+    m.tunnelsList.mockResolvedValue([]);
+    m.hopsList.mockResolvedValue([]);
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("f");
+    await screen.findByRole("form", { name: "New finding" });
+    await user.click(document.body);
+    await user.keyboard("n");
+    expect(screen.queryByRole("complementary", { name: /Notes/ })).not.toBeInTheDocument();
+    const ta = (await screen.findByRole("textbox", { name: "Notes" })) as HTMLTextAreaElement;
+    await vi.waitFor(() => expect(ta).not.toHaveAttribute("readonly"));
+    expect(ta).toHaveAttribute("spellcheck", "false");
+    expect(ta).toHaveAttribute("writingsuggestions", "false");
+    await user.type(ta, "line one");
+    await pause();
+    await user.type(ta, "{Enter}- item");
+    await pause();
+    expect(ta.value).toBe("line one\n- item");
+    expect(stored["h1"]?.body).toBe("line one\n- item");
+  }, 15000);
+});
+
 describe("closing a thread clears every count (bug 2)", () => {
   for (const outcome of ["Panned out", "Dead end"] as const) {
     it(`${outcome}: the strip count, board dot and sidebar dot disappear`, async () => {
