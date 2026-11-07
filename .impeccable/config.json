@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "low-contrast",
+        "value": "*",
+        "files": [
+          ".superpowers/brainstorm/20740-1794003145/content/finding-placement.html"
+        ],
+        "createdAt": "2026-11-06T22:13:05.256Z",
+        "reason": "Claude: throwaway brainstorm wireframe; dimmed panels intentionally show content behind an overlay"
+      },
+      {
+        "rule": "undersized-ui-text",
+        "value": "*",
+        "files": [
+          ".superpowers/brainstorm/20740-1794003145/content/finding-placement.html"
+        ],
+        "createdAt": "2026-11-06T22:13:20.153Z",
+        "reason": "Claude: throwaway brainstorm wireframe scaled down to fit three side-by-side cards; not product UI"
+      }
+    ]
+  }
+}
