@@ -227,13 +227,15 @@ test("log rows on a host page have no chip for that host", async ({ page }) => {
   const rows = page.getByRole("tabpanel", { name: "Log" }).locator("button[aria-expanded]");
   await expect(rows.first()).toBeVisible();
   expect(await rows.count()).toBeGreaterThan(3);
+  // Host names load after the rows; wait for the sidebar host row before asserting zero.
+  await expect(page.getByRole("navigation", { name: "Engagement" }).getByText(WEB_SHORT).first()).toBeVisible();
   await expect(rows.filter({ hasText: WEB_SHORT })).toHaveCount(0);
 
   // Positive control: the engagement Log shows that host's chip on the same entries.
   await page.goto("/e/e-lab/s/log");
   const all = page.getByRole("region", { name: "Log" }).locator("button[aria-expanded]");
   await expect(all.first()).toBeVisible();
-  expect(await all.filter({ hasText: WEB_SHORT }).count(), "engagement Log has chips for the web host").toBeGreaterThan(0);
+  await expect(all.filter({ hasText: WEB_SHORT }).first(), "engagement Log has chips for the web host").toBeVisible();
 });
 
 test("post-foothold facts show without scrolling", async ({ page }) => {
