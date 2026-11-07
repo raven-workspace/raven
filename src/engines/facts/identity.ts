@@ -1,3 +1,6 @@
+import type { Host } from "../../types/host";
+import type { CommandBlock, LogEntry } from "../../types/log";
+
 export interface ParsedIdentity {
   username?: string;
   privileges: string[];
@@ -79,4 +82,27 @@ export function vectorsFromIdentity(id: { privileges: string[]; groups: string[]
   const privs = PRIV_VECTORS.filter((p) => id.privileges.includes(p)).map((p) => `${p} abuse`);
   const groups = GROUP_VECTORS.filter((g) => id.groups.includes(g)).map((g) => `${g} group`);
   return [...privs, ...groups];
+}
+
+/** A parsed username that is really a shell error (or prose), not an account name. */
+function looksLikeErrorOutput(username: string): boolean {
+  if (/not recognized|ERROR|command not found/.test(username)) return true;
+  return /\s/.test(username) && !username.includes("\\");
+}
+
+/**
+ * What a command block says about who the user is, or null when it says nothing usable: not an identity command,
+ * empty, or error output. The one guard shared by capture-time recording and reading an existing log.
+ */
+export function usableIdentity(block: Pick<CommandBlock, "command" | "output">): ParsedIdentity | null {
+  const parsed = parseIdentity(block.command, block.output);
+  if (!parsed) return null;
+  if (!parsed.username && parsed.privileges.length === 0 && parsed.groups.length === 0) return null;
+  if (parsed.username && looksLikeErrorOutput(parsed.username)) return null;
+  return parsed;
+}
+
+/** A command entry linked to exactly this host and run on it (`ranOn` is the host's name). */
+export function isIdentityEntryFor(entry: LogEntry, host: Host): boolean {
+  return entry.content.kind === "command" && entry.hostIds.length === 1 && entry.hostIds[0] === host.id && entry.ranOn === host.name;
 }

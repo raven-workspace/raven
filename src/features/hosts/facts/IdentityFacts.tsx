@@ -1,7 +1,8 @@
 import { PencilSimple } from "@phosphor-icons/react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useId, useMemo, useState, type FormEvent } from "react";
 import { credLabel, dedupeHashCaptures, foldCrackedHashes, usernameLabel } from "../../../engines/credentials";
 import { vectorsFromIdentity } from "../../../engines/facts";
+import { api } from "../../../lib/api";
 import { cx } from "../../../lib/cx";
 import type { HostIdentity } from "../../../types/hostFacts";
 import type { Host } from "../../../types/host";
@@ -10,6 +11,7 @@ import { useAccessGrants, useCredAttempts, useCredentials, useUsernames } from "
 import { useLog } from "../../log/queries";
 import { useHostFactsMutations, useHostIdentity } from "../queries";
 import { FactGroup } from "./FactGroup";
+import { identityFromLog } from "./identityFromLog";
 
 /** `MS01\iis`, `iis@corp` and `iis` are the same account name. */
 export const bareName = (name: string) => (name.split("\\").pop() ?? name).split("@")[0].trim().toLowerCase();
@@ -31,6 +33,7 @@ function IdentityForm({ engagementId, host, identity, onDone }: {
   const [privileges, setPrivileges] = useState(identity?.privileges.join(" ") ?? "");
   const [groups, setGroups] = useState(identity?.groups.join(" ") ?? "");
   const [error, setError] = useState<string>();
+  const idBase = useId();
   const pending = setIdentity.isPending || upsertVector.isPending;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -61,9 +64,20 @@ function IdentityForm({ engagementId, host, identity, onDone }: {
         onDone();
       }}
     >
-      <Input autoFocus mono aria-label="User" placeholder="ms01\iis_apppool" value={username} onChange={(e) => setUsername(e.target.value)} />
-      <Input mono aria-label="Privileges" placeholder="SeImpersonatePrivilege …" value={privileges} onChange={(e) => setPrivileges(e.target.value)} />
-      <Input mono aria-label="Groups" placeholder="docker sudo …" value={groups} onChange={(e) => setGroups(e.target.value)} />
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-2 gap-y-2 text-[13px]">
+        <label htmlFor={`${idBase}-user`} className="text-muted">User</label>
+        <Input id={`${idBase}-user`} autoFocus mono placeholder="e.g. corp\svc_web" value={username} onChange={(e) => setUsername(e.target.value)} />
+        <label htmlFor={`${idBase}-privs`} className="text-muted">Privileges</label>
+        <div className="grid min-w-0 gap-0.5">
+          <Input id={`${idBase}-privs`} mono aria-describedby={`${idBase}-privs-hint`} placeholder="e.g. SeImpersonatePrivilege SeBackupPrivilege" value={privileges} onChange={(e) => setPrivileges(e.target.value)} />
+          <p id={`${idBase}-privs-hint`} className="m-0 text-xs text-muted">Separate with spaces</p>
+        </div>
+        <label htmlFor={`${idBase}-groups`} className="text-muted">Groups</label>
+        <div className="grid min-w-0 gap-0.5">
+          <Input id={`${idBase}-groups`} mono aria-describedby={`${idBase}-groups-hint`} placeholder="e.g. docker sudo" value={groups} onChange={(e) => setGroups(e.target.value)} />
+          <p id={`${idBase}-groups-hint`} className="m-0 text-xs text-muted">Separate with spaces</p>
+        </div>
+      </div>
       {error && <p role="alert" className="m-0 text-xs text-warn">{error}</p>}
       <div className="flex gap-1.5">
         <Button size="sm" variant="primary" type="submit" disabled={pending}>Save</Button>
@@ -86,7 +100,25 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
   const usersQ = useUsernames(engagementId);
   const logQ = useLog(engagementId);
   const [editing, setEditing] = useState(false);
+  const [readError, setReadError] = useState<string>();
+  const { setIdentity, upsertVector } = useHostFactsMutations(engagementId, host.id);
   const identity = identityQ.data ?? null;
+  const fromLog = useMemo(() => (logQ.data ? identityFromLog(logQ.data, host) : null), [logQ.data, host]);
+  const readFromLog = async () => {
+    if (!fromLog?.identity || setIdentity.isPending) return;
+    setReadError(undefined);
+    const { username, privileges, groups, entryId } = fromLog.identity;
+    try {
+      // Same fallback as capture: a log with only `whoami /priv` has no name, so keep the stored one.
+      const name = username ?? (await api.hostIdentityGet(host.id))?.username ?? "unknown";
+      await setIdentity.mutateAsync({ hostId: host.id, username: name, privileges, groups, entryId });
+      for (const title of vectorsFromIdentity({ privileges, groups })) {
+        await upsertVector.mutateAsync({ title, status: "try", source: "auto" });
+      }
+    } catch (err) {
+      setReadError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   // "How access was gained" is the matching access grant's via, never stored twice.
   const grant = identity
@@ -123,7 +155,17 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
       ) : editing ? (
         <IdentityForm engagementId={engagementId} host={host} identity={identity} onDone={() => setEditing(false)} />
       ) : !identity ? (
-        <p className="m-0 text-xs text-muted">Not known yet. Log whoami /all or id output on this host.</p>
+        <div className="grid gap-2">
+          <p className="m-0 text-xs text-muted">Not known yet. Log whoami /all or id output on this host.</p>
+          {fromLog && fromLog.sources > 0 && (
+            <div>
+              <Button size="sm" onClick={() => void readFromLog()} disabled={setIdentity.isPending || upsertVector.isPending}>
+                Read from log ({fromLog.sources} found)
+              </Button>
+            </div>
+          )}
+          {readError && <p role="alert" className="m-0 text-xs text-warn">{readError}</p>}
+        </div>
       ) : (
         <dl className={cx(KV, "m-0")}>
           <dt className="text-muted">user</dt>

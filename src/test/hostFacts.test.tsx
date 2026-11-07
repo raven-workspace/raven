@@ -357,6 +357,50 @@ describe("who am I and privesc vectors", () => {
     await waitFor(() => expect(m.vectorUpsert).toHaveBeenCalledWith("h1", { title: "SeBackupPrivilege abuse", status: "try", source: "auto" }));
   });
 
+  it("the edit form labels User, Privileges and Groups", async () => {
+    const user = userEvent.setup();
+    mount({ host: after() });
+    const who = await group("Who am I");
+    await user.click(await who.findByRole("button", { name: "Edit who am I" }));
+    expect(who.getByLabelText("User")).toHaveAttribute("placeholder", expect.stringMatching(/^e\.g\. /));
+    expect(who.getByLabelText("Privileges")).toHaveAttribute("placeholder", expect.stringMatching(/^e\.g\. /));
+    expect(who.getByLabelText("Groups")).toBeInTheDocument();
+    expect(who.getAllByText("Separate with spaces")).toHaveLength(2);
+  });
+
+  describe("read from log", () => {
+    const winrm = (id: string, command: string, output: string, over: Partial<LogEntry> = {}): LogEntry => ({
+      ...entry(id, command), kind: "command", ranOn: "ms01", content: { kind: "command", blocks: [{ command, output }] }, ...over,
+    });
+    const PRIV_OUT = "Privilege Name  Description  State\n=== === ===\nSeImpersonatePrivilege  Impersonate a client after authentication  Enabled";
+    const GROUP_OUT = "Group Name  Type  SID  Attributes\n=== === === ===\nEveryone  Well-known group  S-1-1-0  Mandatory group";
+
+    it("offers the button, and writes the identity and vectors only when clicked", async () => {
+      const user = userEvent.setup();
+      m.logList.mockResolvedValue([winrm("l1", "whoami /priv", PRIV_OUT), winrm("l2", "whoami /groups", GROUP_OUT, { at: 2000 })]);
+      m.hostIdentitySet.mockImplementation(async (input) => ({ ...input, updatedAt: 2 }));
+      m.vectorUpsert.mockResolvedValue(vector("v9", "SeImpersonatePrivilege abuse", "try"));
+      mount({ host: after() });
+      const who = await group("Who am I");
+      const button = await who.findByRole("button", { name: "Read from log (2 found)" });
+      expect(m.hostIdentitySet).not.toHaveBeenCalled();
+      await user.click(button);
+      await waitFor(() => expect(m.hostIdentitySet).toHaveBeenCalledTimes(1));
+      expect(m.hostIdentitySet).toHaveBeenCalledWith({
+        hostId: "h1", username: "unknown", privileges: ["SeImpersonatePrivilege"], groups: ["Everyone"], entryId: "l2",
+      });
+      await waitFor(() => expect(m.vectorUpsert).toHaveBeenCalledWith("h1", { title: "SeImpersonatePrivilege abuse", status: "try", source: "auto" }));
+    });
+
+    it("shows no button when no entry qualifies", async () => {
+      m.logList.mockResolvedValue([winrm("l1", "whoami /priv", PRIV_OUT, { ranOn: "kali" })]);
+      mount({ host: after() });
+      const who = await group("Who am I");
+      expect(await who.findByText(/Not known yet/)).toBeInTheDocument();
+      expect(who.queryByRole("button", { name: /Read from log/ })).not.toBeInTheDocument();
+    });
+  });
+
   it("shows how access was gained from the matching access grant", async () => {
     mount({
       host: after(),
