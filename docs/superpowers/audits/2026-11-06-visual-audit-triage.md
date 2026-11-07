@@ -155,12 +155,12 @@ Each item was reviewed and judged not to block the merge. Source: the round-1 re
 - (T2) deleting service/vector orphans linked ruled_out; hand-deleting linked item leaves dead_end — consider clearing source on delete
 - (T2) api.ts hostIdentitySet sends updatedAt:0; no cascade test for host delete
 - (T3) id matched only as exact "id" (not id -a / sudo id); no test for serviceIdentity with unconfirmed version, whoami /groups CRLF
-- (T4) no tests for error-output skip, empty no-op, ranOn mismatch, username fallback; vector failure reported as identity failure; "unknown" literal username
-- (T5) Host Credentials "works" can double-count grant+attempt; services/queries.ts dead ruledOut invalidation; no stacked-variant test; ⌥2 typing test misnamed; new-creds notice only visible in Full checklist (done steps hidden in Next)
+- (T4) no tests for error-output skip, empty no-op, ranOn mismatch, username fallback; "unknown" literal username
+- (T5) Host Credentials "works" can double-count grant+attempt; services/queries.ts dead ruledOut invalidation; no stacked-variant test; ⌥2 typing test misnamed; (new-creds signal added to Next in final wave)
 - (T6) 3.0 vector's version button is inert (no 3.0→3.1 switch)
 - (T7) in-flight save error after close not surfaced; NVD state not in draft (closing within 400ms cancels lookup); nvdFill applied over snapshot; RefSuggestions fake Note objects; FindingEditor ~450 lines (extract useNvdLookup); no debounce test
 - (T7) split log/host-chip/N tests assert DOM not layout (Playwright covers)
 - (T7b) ServicePicker list double right padding inside editor pane; regression scoping via class-string match
-- (T8) post-foothold "without scrolling" bbox check can't see inner clipping; no ThreadsList pane test
-- (T8b) readFromLog partial failure (identity set, vector upsert throws) error hidden once identity exists; dead hostIdentityGet fallback; write-timing test doesn't assert vectorUpsert
+- (T8) (bbox clipping check fixed in final wave) no ThreadsList pane test
+- (T8b) dead hostIdentityGet fallback; write-timing test doesn't assert vectorUpsert
 - (user) Log titles include the Evil-WinRM prompt (`*Evil-WinRM* PS C:\…> whoami /priv`). The title should be the command only.
