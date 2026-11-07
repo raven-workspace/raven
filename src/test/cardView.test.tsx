@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { MemoryRouter } from "react-router";
@@ -150,6 +150,18 @@ describe("CardView reading view", () => {
     await user.click(await screen.findByRole("combobox", { name: "Value for SECOND_LPORT" }));
     await user.keyboard("5{Enter}");
     expect(await navigator.clipboard.readText()).toBe("untouched");
+  });
+
+  it("the pane takes focus once: a later change to the list does not pull it back from a field", async () => {
+    const user = userEvent.setup();
+    mount();
+    await pre("zza 10.10.10.5");
+    const field = await screen.findByRole("combobox", { name: "Value for SECOND_LPORT" });
+    await user.click(field);
+    expect(field).toHaveFocus();
+    act(() => setImported({ commands: [A, B, GUARDED], cards: [CARD] }));
+    await waitFor(() => expect(screen.queryByText("Charlie step")).not.toBeInTheDocument());
+    expect(field).toHaveFocus();
   });
 
   it("Also in Raven is folded and includes oscp-notes commands", async () => {

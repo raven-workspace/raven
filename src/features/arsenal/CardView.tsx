@@ -72,10 +72,15 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   }
   const shownIds = main.shown.map((c) => c.id).join(",");
   const scrolledTo = useRef<string | null>(null);
+  const didAutoFocus = useRef(false);
   useEffect(() => {
     // The pane takes focus so j/k/c work at once; a block to open at takes it instead (once its block is on screen).
     if (!focusBlockId) {
-      if (autoFocus) root.current?.focus({ preventScroll: true });
+      // Once, when the first block shows: later changes (exam rules, a re-import) must not pull focus back from a field.
+      if (autoFocus && shownIds !== "" && !didAutoFocus.current) {
+        didAutoFocus.current = true;
+        root.current?.focus({ preventScroll: true });
+      }
       return;
     }
     const el = scrolledTo.current === focusBlockId ? null : blockEl(focusBlockId);
