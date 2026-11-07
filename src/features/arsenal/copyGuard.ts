@@ -59,5 +59,12 @@ export function useCopyGuard({ focusToken, focusCred, hostName }: {
     [focusToken, focusCred, hostName],
   );
 
-  return { attempt, hint: state?.hint ?? null, confirm: state?.confirm ?? null, forKey: state?.key ?? null };
+  /** Drops the arm and the notes: the command in view changed, so a held-back copy no longer applies. */
+  const reset = useCallback(() => {
+    armed.current = null;
+    clearTimeout(timer.current);
+    setState(null);
+  }, []);
+
+  return { attempt, reset, hint: state?.hint ?? null, confirm: state?.confirm ?? null, forKey: state?.key ?? null };
 }

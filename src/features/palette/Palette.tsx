@@ -32,7 +32,7 @@ const MAX_RESULTS = 30;
 type PaletteRow = ResultRow & { result: PaletteResult };
 const paletteRow = (result: PaletteResult): PaletteRow => ({
   result, id: `palette-${result.type}-${result.id}`, title: result.title,
-  tag: result.type === "command" ? result.command.tool : result.type === "item" ? result.item.kind : result.type,
+  tag: result.type === "command" ? result.command.tool : result.type === "item" ? result.item.kind : result.type === "more" ? "" : result.type,
   mono: result.type === "command",
 });
 
@@ -86,6 +86,9 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const rowGroups = useMemo<ResultGroup<PaletteRow>[]>(() => {
     const out: ResultGroup<PaletteRow>[] = capGroups(found.groups, MAX_RESULTS)
       .map((g) => ({ key: g.category, label: g.label, rows: g.hits.map(paletteRow) }));
+    // The cap only keeps the dialog short: what it left out is one row away in the Arsenal, never silently dropped.
+    const left = found.groups.reduce((n, g) => n + g.hits.length, 0) - out.reduce((n, g) => n + g.rows.length, 0);
+    if (left > 0) out.push({ key: "more", rows: [paletteRow({ type: "more", id: "more", count: left, title: `${left} more — open in Arsenal` })] });
     if (found.items.length > 0) out.push({ key: "engagement", label: "This engagement", rows: found.items.slice(0, MAX_RESULTS).map(paletteRow) });
     return out;
   }, [found]);
@@ -106,6 +109,10 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const focusToken = useCallback((t: string) => fieldEls.current.get(t)?.focus(), []);
   const focusCred = useCallback(() => credRef.current?.focus(), []);
   const guard = useCopyGuard({ focusToken, focusCred, hostName: host ? shortHostName(host.name) : null });
+  // Moving to another row ends a held-back copy: coming back to the first one holds it back again.
+  const { reset: resetGuard } = guard;
+  const currentKey = current ? `${current.type}-${current.id}` : "";
+  useEffect(() => resetGuard(), [currentKey, resetGuard]);
 
   /** Copies the filled command through the copy guard: null when it was held back for an unfilled token. */
   const copy = async (): Promise<string | null> => {
@@ -120,6 +127,12 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     setStatus(undefined);
     if (current?.type === "item") {
       void navigate(current.item.kind === "host" ? `/e/${engagementId}/h/${current.item.id}` : `/e/${engagementId}/s/${current.item.kind === "credential" ? "credentials" : "log"}`);
+      onClose();
+      return;
+    }
+    if (current?.type === "more") {
+      if (engagementId) useLastEngagementStore.setState({ engagementId, hostId: host?.id ?? null });
+      void navigate(`/arsenal?q=${encodeURIComponent(query.trim())}`);
       onClose();
       return;
     }
@@ -169,7 +182,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
       // The dialog's focus trap would otherwise see Tab leave its last field and loop back to the top.
       e.stopPropagation();
       firstUnfilled()?.focus();
-    } else if (e.key === "ArrowRight" && e.currentTarget.selectionStart === e.currentTarget.value.length && current?.type !== "item") {
+    } else if (e.key === "ArrowRight" && e.currentTarget.selectionStart === e.currentTarget.value.length && current?.type !== "item" && current?.type !== "more") {
       // Goes in: a card opens in the Arsenal drawer, a command at its block, or alone when it has no card. Never a no-op.
       if (!current) return;
       e.preventDefault();

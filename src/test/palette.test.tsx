@@ -618,3 +618,57 @@ describe("⌘K groups, hosts and contained suggestions", () => {
     });
   });
 });
+
+describe("⌘K cap and copy-guard arm", () => {
+  const many = (n: number): LibraryCommand[] =>
+    Array.from({ length: n }, (_, i) => ({ ...PROBE, id: `zz-many-${i}`, title: `Zzmany ${String(i).padStart(2, "0")}`, template: `zzmany${i} {TARGET_IP}` }));
+
+  it("past the cap the last row says how many more there are, and Enter on it opens them in the Arsenal", async () => {
+    const user = userEvent.setup();
+    setImported({ commands: many(40), cards: [] });
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzmany");
+    const options = within(screen.getByRole("listbox", { name: "Results" })).getAllByRole("option");
+    expect(options).toHaveLength(31);
+    expect(options[30]).toHaveTextContent("10 more — open in Arsenal");
+    await user.keyboard("{ArrowDown}".repeat(30));
+    expect(options[30]).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{Enter}");
+    expect(screen.queryByRole("dialog", { name: "Search" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("textbox", { name: "Search the Arsenal" })).toHaveValue("zzmany");
+  });
+
+  it("no extra row while everything fits", async () => {
+    const user = userEvent.setup();
+    setImported({ commands: many(30), cards: [] });
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzmany");
+    expect(within(screen.getByRole("listbox", { name: "Results" })).getAllByRole("option")).toHaveLength(30);
+  });
+
+  it("a held-back copy does not stay armed after moving to another row and back", async () => {
+    const user = userEvent.setup();
+    const two = [
+      { ...PROBE, id: "zz-ga", title: "Zzguard alpha", template: "zzga {FILE}" },
+      { ...PROBE, id: "zz-gb", title: "Zzguard beta", template: "zzgb {FILE}" },
+    ];
+    setImported({ commands: two, cards: [] });
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    const box = await screen.findByRole("combobox", { name: "Search" });
+    await user.type(box, "zzguard");
+    await navigator.clipboard.writeText("untouched");
+    await user.keyboard("{Enter}");
+    expect(await screen.findByText(/not filled · ↵ again to copy anyway/)).toBeInTheDocument();
+    box.focus();
+    await user.keyboard("{ArrowDown}{ArrowUp}");
+    await user.keyboard("{Enter}");
+    expect(await screen.findByText(/not filled · ↵ again to copy anyway/)).toBeInTheDocument();
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+  });
+});

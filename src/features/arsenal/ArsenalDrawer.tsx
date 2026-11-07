@@ -125,6 +125,10 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
   const focusToken = useCallback((t: string) => fieldEls.current.get(t)?.focus(), []);
   const focusCred = useCallback(() => credRef.current?.focus(), []);
   const guard = useCopyGuard({ focusToken, focusCred, hostName: host ? shortHostName(host.name) : null });
+  // Moving to another row ends a held-back copy: coming back to the first one holds it back again.
+  const { reset: resetGuard } = guard;
+  const currentId = current?.id;
+  useEffect(() => resetGuard(), [currentId, resetGuard]);
 
   const showing = searching ? "results" : solo ? "solo" : cardId ? "card" : category !== null ? "results" : "categories";
   const onList = showing === "categories" || showing === "results";
@@ -252,7 +256,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
   };
   const hints: [string, string][] = onList
     ? [["↵", "copy"], ["⌘↵", host ? "copy and log" : "copy and log (open a host)"], ["→", "in card"], ...(engagementId ? [["⌥H", "host"], ["⌥C", "credential"]] as [string, string][] : []), ["Esc", inCategory ? "back" : "close"]]
-    : [["Esc", "back"], ...(engagementId ? [["⌥H", "host"]] as [string, string][] : [])];
+    : [["Esc", "back"], ...(engagementId ? [["⌥H", "host"], ["⌥C", "credential"]] as [string, string][] : [])];
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" onKeyDownCapture={onKeyCapture}>
       <header className="grid shrink-0 gap-2 border-b border-line px-4 py-3">

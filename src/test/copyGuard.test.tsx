@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, renderHook, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import { MemoryRouter, useNavigate } from "react-router";
@@ -17,7 +17,7 @@ import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 import type { Credential } from "../types/credentials";
-import { guardCopy } from "../features/arsenal/copyGuard";
+import { guardCopy, useCopyGuard } from "../features/arsenal/copyGuard";
 
 vi.mock("../lib/api");
 vi.mock("../features/checklist/ticks", async (orig) => ({
@@ -110,6 +110,32 @@ describe("guardCopy", () => {
   it("arm resets when the command or its unresolved set changes", () => {
     expect(guardCopy({ id: "a", unresolved: ["PORT"] }, { id: "a", key: "a|LHOST,PORT" }).action).toBe("focus");
     expect(guardCopy({ id: "b", unresolved: ["LHOST"] }, { id: "a", key: "a|LHOST" }).action).toBe("focus");
+  });
+});
+
+describe("useCopyGuard", () => {
+  const filled = (unresolved: string[], id = "a") => ({ id, unresolved }) as never;
+  function setup() {
+    const focusToken = vi.fn();
+    const focusCred = vi.fn();
+    const hook = renderHook(() => useCopyGuard({ focusToken, focusCred, hostName: null }));
+    return { focusToken, focusCred, ...hook };
+  }
+  it("sends USER and DOMAIN to their field, and PASS, HASH and CRED to the credential chip", async () => {
+    const { result, focusToken, focusCred } = setup();
+    for (const t of ["USER", "DOMAIN"]) await act(() => result.current.attempt(filled([t]), async () => {}));
+    expect(focusToken.mock.calls).toEqual([["USER"], ["DOMAIN"]]);
+    for (const t of ["PASS", "HASH", "CRED"]) await act(() => result.current.attempt(filled([t]), async () => {}));
+    expect(focusCred).toHaveBeenCalledTimes(3);
+  });
+  it("reset() drops the arm: the next try is held back again", async () => {
+    const { result } = setup();
+    const doCopy = vi.fn(async () => {});
+    await act(() => result.current.attempt(filled(["LHOST"]), doCopy));
+    act(() => result.current.reset());
+    expect(await act(() => result.current.attempt(filled(["LHOST"]), doCopy))).toBe("guarded");
+    expect(await act(() => result.current.attempt(filled(["LHOST"]), doCopy))).toBe("copied");
+    expect(doCopy).toHaveBeenCalledTimes(1);
   });
 });
 

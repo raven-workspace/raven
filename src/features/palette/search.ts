@@ -25,7 +25,9 @@ export interface PaletteContext {
 
 export type PaletteResult =
   | ArsenalHit
-  | { type: "item"; id: string; title: string; item: EngagementItem };
+  | { type: "item"; id: string; title: string; item: EngagementItem }
+  /** The matches the dialog's height cap left out: opens the same search in the full Arsenal. */
+  | { type: "more"; id: string; title: string; count: number };
 
 const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 

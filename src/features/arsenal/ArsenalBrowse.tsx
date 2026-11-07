@@ -46,7 +46,7 @@ const READING_ID = "arsenal-reading";
 export function ArsenalBrowse() {
   const version = useLibraryVersion();
   const [params] = useSearchParams();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => params.get("q") ?? "");
   const { engagementId, hostId } = useFillScope();
   const setHostId = (id: string | null) => useLastEngagementStore.setState({ engagementId: engagementId || null, hostId: id });
   const { d, host, cred, credOwnerId, examReady } = useFillBase(engagementId, hostId);
