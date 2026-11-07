@@ -8,6 +8,8 @@ export interface ResultRow {
   tag: string;
   /** The tag is a tool name. */
   mono?: boolean;
+  /** The tag goes on its own line under the title, so a narrow list keeps the whole title. */
+  stack?: boolean;
 }
 
 /** A labelled group of rows; without a label the rows are listed plain. */
@@ -39,10 +41,11 @@ export function ResultList<R extends ResultRow>({ id, label, groups, selected, o
         aria-selected={i === selected}
         onClick={() => onActivate(r, i)}
         onMouseMove={() => onSelect(i)}
-        className={`grid cursor-default grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-sm px-2 py-1 text-left text-[13px] ${i === selected ? ON : "text-fg-2"}`}
+        title={r.title}
+        className={`grid cursor-default ${r.stack ? "grid-cols-[minmax(0,1fr)] gap-0" : "grid-cols-[minmax(0,1fr)_auto] items-center gap-2"} rounded-sm px-2 py-1 text-left text-[13px] ${i === selected ? ON : "text-fg-2"}`}
       >
         <span className="min-w-0 truncate">{r.title}</span>
-        <span className={`text-[11px] text-muted ${r.mono ? "font-mono" : ""}`}>{r.tag}</span>
+        {r.tag && <span className={`text-[11px] text-muted ${r.mono ? "font-mono" : ""} ${r.stack ? "min-w-0 truncate" : ""}`}>{r.tag}</span>}
       </div>
     );
   };

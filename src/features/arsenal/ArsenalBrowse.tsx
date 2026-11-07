@@ -33,6 +33,8 @@ const hitRow = (hit: ArsenalHit, searching: boolean, withTool = searching): Row 
   hit, id: `browse-${hit.type}-${hit.id}`, title: hit.title,
   tag: withTool && hit.type === "command" ? hit.command.tool : searching ? hit.type : hit.type === "generator" ? "generator" : "",
   mono: withTool && hit.type === "command",
+  // Pane 2 is narrow: the tool goes under the title instead of eating its width.
+  stack: withTool && hit.type === "command",
 });
 const sameHit = (h: ArsenalHit, p: Pick | null): boolean => p !== null && h.type === p.kind && h.id === p.id;
 const hitCategory = (h: ArsenalHit, cards: ReturnType<typeof getCards>): string =>
@@ -289,7 +291,7 @@ export function ArsenalBrowse() {
           )}
         </div>
       </header>
-      <div className="grid min-h-0 grid-cols-[minmax(220px,260px)_minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-x-5 gap-y-3 min-[1100px]:grid-cols-[minmax(150px,180px)_minmax(220px,260px)_minmax(0,1fr)] min-[1100px]:grid-rows-[minmax(0,1fr)]">
+      <div className="grid min-h-0 grid-cols-[minmax(220px,260px)_minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-x-5 gap-y-3 min-[1100px]:grid-cols-[minmax(150px,180px)_minmax(220px,260px)_minmax(0,1fr)] min-[1280px]:grid-cols-[minmax(150px,180px)_minmax(260px,320px)_minmax(0,1fr)] min-[1100px]:grid-rows-[minmax(0,1fr)]">
         <nav aria-label="Categories" className="col-start-1 row-start-1 min-h-0 min-[1100px]:overflow-y-auto">
           <div className="grid min-[1100px]:hidden">
             <Select
