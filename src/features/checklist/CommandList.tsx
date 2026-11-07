@@ -83,10 +83,14 @@ export function CommandList({ commands, hostName = null, focusToken = noToken, f
 }) {
   const guard = useCopyGuard({ focusToken, focusCred, hostName });
 
-  const copy = (c: FilledCommand) => {
+  const copy = (c: FilledCommand, button: HTMLElement) => {
     // A filled command carries a real credential: that copy is a secret.
     const write = c.copyText !== undefined && c.copyText !== c.text ? copySecret : copyPlain;
-    void guard.attempt(c, () => write(c.copyText ?? c.text));
+    void guard.attempt(c, () => write(c.copyText ?? c.text)).then((r) => {
+      // Held back with no field or chip to take focus here: the Copy button keeps it, so Enter is the second press.
+      const a = document.activeElement;
+      if (r === "guarded" && (!a || a === document.body || a === button)) button.focus();
+    });
   };
 
   return (
@@ -111,7 +115,7 @@ export function CommandList({ commands, hostName = null, focusToken = noToken, f
               className="mt-1 h-6 w-6 px-0!"
               aria-label={`Copy command: ${c.title}`}
               title="Copy command"
-              onClick={() => copy(c)}
+              onClick={(e) => copy(c, e.currentTarget)}
             >
               <Copy size={14} weight={guard.forKey === copyKey(c) && guard.confirm ? "fill" : "light"} aria-hidden className={guard.forKey === copyKey(c) && guard.confirm ? "text-accent" : undefined} />
             </Button>

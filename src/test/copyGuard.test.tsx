@@ -158,6 +158,22 @@ describe("copy guard in the app", () => {
     expect(await navigator.clipboard.readText()).toBe("zzfetch http://10.10.14.9/{FILE}");
   });
 
+  it("a checklist row with no field to focus keeps focus on Copy, and Enter copies anyway", async () => {
+    const user = userEvent.setup();
+    setImported({ commands: [{ ...PROBE, id: "zz-row", title: "Zzrow user", template: "zzrow {USER}", goals: ["h-enum-full-tcp"], cardId: undefined }], cards: [] });
+    mount("/e/e1/h/h1");
+    await user.click(await screen.findByRole("button", { name: "Full checklist" }));
+    await navigator.clipboard.writeText("untouched");
+    const btn = await screen.findByRole("button", { name: "Copy command: Zzrow user" });
+    await user.click(btn);
+    expect(await screen.findByText("{USER} not filled · ↵ again to copy anyway")).toBeInTheDocument();
+    expect(btn).toHaveFocus();
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    await user.keyboard("{Enter}");
+    expect(await screen.findByText(/^Copied for dc01 · 1 placeholder left/)).toBeInTheDocument();
+    expect(await navigator.clipboard.readText()).toBe("zzrow {USER}");
+  });
+
   it("⌘K preview marks unresolved tokens amber", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
