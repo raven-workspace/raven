@@ -24,7 +24,7 @@ pub enum AppError {
     NoKey,
     #[error("{0}")]
     Offline(String),
-    #[error("NVD rejected the API key")]
+    #[error("NVD refused the request (key rejected or rate-limited)")]
     KeyRejected,
 }
 
@@ -105,7 +105,9 @@ mod tests {
     fn nvd_error_codes() {
         assert_eq!(serde_json::to_value(AppError::NoKey).unwrap()["code"], "no_key");
         assert_eq!(serde_json::to_value(AppError::Offline("no connection to NVD".into())).unwrap()["code"], "offline");
-        assert_eq!(serde_json::to_value(AppError::KeyRejected).unwrap()["code"], "key_rejected");
+        let v = serde_json::to_value(AppError::KeyRejected).unwrap();
+        assert_eq!(v["code"], "key_rejected");
+        assert_eq!(v["message"], "NVD refused the request (key rejected or rate-limited)");
     }
 
     #[test]

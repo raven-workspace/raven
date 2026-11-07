@@ -62,6 +62,30 @@ describe("CvssBuilder", () => {
     );
   });
 
+  it("clearing the value clears the picks: no stale score, no old vector back", async () => {
+    const user = userEvent.setup();
+    const onEmit = vi.fn();
+    const { rerender } = render(
+      <CvssBuilder value="CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N" onChange={onEmit} />,
+    );
+    expect(screen.getByLabelText("CVSS score")).toHaveTextContent("9.3");
+    rerender(<CvssBuilder value="" onChange={onEmit} />);
+    expect(screen.getByLabelText("CVSS score")).toHaveTextContent("0 of 11 picked");
+    expect(screen.getByRole("button", { name: "CVSS 4.0" })).toHaveAttribute("aria-pressed", "true");
+    await pick(user, "Attack Vector (AV)", "Network");
+    expect(onEmit).not.toHaveBeenCalled();
+  });
+
+  it("a 3.0 vector shows CVSS 3.0 pressed and keeps its prefix", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial="CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H" />);
+    expect(screen.getByRole("button", { name: "CVSS 3.0" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: "CVSS 3.1" })).toBeNull();
+    expect(screen.getByRole("status", { name: "CVSS score" })).toHaveTextContent("9.8");
+    await pick(user, "Availability (A)", "None");
+    expect(screen.getByLabelText("vector")).toHaveTextContent("CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N");
+  });
+
   it("an unprefixed 3.x vector opens in 3.1 mode", () => {
     render(<Harness initial="AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H" />);
     expect(screen.getByRole("button", { name: "CVSS 3.1" })).toHaveAttribute("aria-pressed", "true");

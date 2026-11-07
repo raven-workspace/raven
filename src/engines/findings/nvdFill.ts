@@ -5,13 +5,26 @@
  */
 
 import type { NvdRecord } from '../../types/findings';
-import { scoreCvss } from './cvss4';
+import { parseCvssAny, scoreCvss } from './cvss4';
 
 export type NvdFillable = { cvssVector: string; description: string; refs: string[] };
 
 export interface NvdFillResult {
   apply: Partial<NvdFillable>;
   diffs: { field: 'cvssVector' | 'description'; nvd: string }[];
+}
+
+/** Same version and same metrics, whatever the prefix, order or case. Unparseable vectors compare as text. */
+function sameVector(a: string, b: string): boolean {
+  const pa = parseCvssAny(a);
+  const pb = parseCvssAny(b);
+  if (!pa || !pb) return a.trim() === b.trim();
+  const ka = Object.keys(pa.metrics);
+  return (
+    pa.version === pb.version &&
+    ka.length === Object.keys(pb.metrics).length &&
+    ka.every((k) => pa.metrics[k] === pb.metrics[k])
+  );
 }
 
 const EDB = /exploit-db\.com\/exploits\/(\d+)/i;
@@ -31,7 +44,7 @@ export function nvdFill(current: NvdFillable, records: NvdRecord[]): NvdFillResu
   if (best?.vector) {
     const mine = current.cvssVector.trim();
     if (mine === '') apply.cvssVector = best.vector;
-    else if (mine !== best.vector) diffs.push({ field: 'cvssVector', nvd: best.vector });
+    else if (!sameVector(mine, best.vector)) diffs.push({ field: 'cvssVector', nvd: best.vector });
   }
 
   // The description follows the chosen vector's CVE when it has one, else the first that does.

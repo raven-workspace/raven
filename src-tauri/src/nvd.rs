@@ -149,7 +149,7 @@ pub fn store(conn: &Connection, cve: &str, raw: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// Maps an HTTP error status: 401/403 is `key_rejected`, 404 `not_found`, anything else `offline`.
+/// Maps an HTTP error status: 401/403 is `key_rejected` (NVD also answers 403 when rate-limited), 404 `not_found`, anything else `offline`.
 pub fn status_error(code: u16) -> AppError {
     match code {
         401 | 403 => AppError::KeyRejected,

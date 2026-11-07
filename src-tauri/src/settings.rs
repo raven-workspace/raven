@@ -128,7 +128,7 @@ pub fn get(conn: &Connection) -> AppResult<Settings> {
         windows_tools_dir,
         linux_tools_dir,
         field_manual_path,
-        nvd_key_set: !nvd_api_key(conn).is_empty(),
+        nvd_key_set: !zeroize::Zeroizing::new(nvd_api_key(conn)).is_empty(),
     })
 }
 

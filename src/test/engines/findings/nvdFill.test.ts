@@ -49,6 +49,14 @@ describe('nvdFill', () => {
     expect(r.diffs).toEqual([]);
   });
 
+  it('compares vectors by meaning, not text', () => {
+    const nvd = [rec({ vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H', score: 9.8 })];
+    expect(nvdFill({ ...empty, cvssVector: 'av:n/ac:l/pr:n/ui:n/s:u/c:h/i:h/a:h' }, nvd).diffs).toEqual([]);
+    expect(nvdFill({ ...empty, cvssVector: 'AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:L' }, nvd).diffs).toEqual([
+      { field: 'cvssVector', nvd: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H' },
+    ]);
+  });
+
   it('an empty description fills', () => {
     const r = nvdFill(empty, [rec({ description: 'Stored XSS in the comment field.' })]);
     expect(r.apply.description).toBe('Stored XSS in the comment field.');

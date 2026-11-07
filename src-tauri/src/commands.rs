@@ -145,7 +145,8 @@ pub async fn settings_update(app: AppHandle, patch: SettingsPatch) -> AppResult<
 pub async fn nvd_lookup(app: AppHandle, cve_id: String) -> AppResult<NvdRecord> {
     let (step, key) = with_vault(app.clone(), move |v| {
         let c = v.conn()?;
-        let key = settings::nvd_api_key(c);
+        // Zeroized when dropped, after the request.
+        let key = zeroize::Zeroizing::new(settings::nvd_api_key(c));
         Ok((nvd::begin(c, &key, &cve_id)?, key))
     })
     .await?;

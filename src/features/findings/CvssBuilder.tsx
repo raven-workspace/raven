@@ -98,6 +98,9 @@ export function CvssBuilder({ value, onChange }: { value: string; onChange(vecto
     if (parsed) {
       setVersion(parsed.version);
       setPicks(parsed.metrics);
+    } else if (value.trim() === "") {
+      // A cleared vector clears the picks, so no stale score shows and no old vector comes back.
+      setPicks({});
     }
   }
 
@@ -131,14 +134,16 @@ export function CvssBuilder({ value, onChange }: { value: string; onChange(vecto
         <div role="group" aria-label="CVSS version" className="grid grid-flow-col auto-cols-max gap-1">
           {(["4.0", "3.1"] as const).map((v) => {
             const on = v === "4.0" ? version === "4.0" : version !== "4.0";
+            // A stored 3.0 vector keeps its version, and the 3.x button says so.
+            const label = v === "3.1" && version === "3.0" ? "3.0" : v;
             return (
               <button key={v} type="button" aria-pressed={on} onClick={() => switchTo(v)} className={cx(segment, on ? segmentOn : segmentOff)}>
-                CVSS {v}
+                CVSS {label}
               </button>
             );
           })}
         </div>
-        <span aria-label="CVSS score" className="justify-self-end font-mono text-xs tabular-nums text-fg-2">
+        <output aria-label="CVSS score" className="justify-self-end font-mono text-xs tabular-nums text-fg-2">
           {score !== null ? (
             <>
               <span className="text-fg">{score.toFixed(1)}</span> {scoreToSeverity(score)}
@@ -146,7 +151,7 @@ export function CvssBuilder({ value, onChange }: { value: string; onChange(vecto
           ) : (
             `${picked} of ${base.length} picked`
           )}
-        </span>
+        </output>
       </div>
       {groupsFor(version).map((g) => (
         <section key={g.heading} aria-label={g.heading} className="grid gap-1.5">
