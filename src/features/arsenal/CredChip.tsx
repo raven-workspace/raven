@@ -21,16 +21,18 @@ export function testedState(credId: string, hostId: string | null | undefined, a
  * The credential in use, as a muted "as <cred> · password ⌄" chip with no Tab stop (same interaction as `HostChip`).
  * The list shows each credential's kind and how it has fared on `hostId`. Callers write the pick to `useCredPickStore`.
  */
-export function CredChip({ credentials, value, onPick, attempts = [], hostId = null, align = "end", ref }: {
+export function CredChip({ credentials, value, onPick, attempts = [], hostId = null, align = "end", className = "max-w-1/2", ref }: {
   credentials: Credential[]; value: Credential | null; onPick: (credId: string | null) => void;
-  attempts?: CredAttempt[]; hostId?: string | null; align?: "start" | "end"; ref?: Ref<CredChipHandle>;
+  attempts?: CredAttempt[]; hostId?: string | null; align?: "start" | "end";
+  /** Width limits for the chip as a whole (a share of its row by default). */
+  className?: string; ref?: Ref<CredChipHandle>;
 }) {
   const options: ChipOption[] = [
     { id: null, name: "No credential" },
     ...credentials.map((c) => ({ id: c.id, name: who(c), detail: `${kind(c)} · ${testedState(c.id, hostId, attempts)}` })),
   ];
   return (
-    <div className="grid min-w-0 max-w-1/2">
+    <div className={`grid min-w-0 ${className}`}>
       <ChipPicker
         ref={ref}
         options={options}

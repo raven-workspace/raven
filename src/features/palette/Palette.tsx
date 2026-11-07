@@ -6,19 +6,15 @@ import { credLabel } from "../../engines/credentials/labels";
 import { getCards, getLibrary, getToolkit, useLibraryVersion } from "../../engines/library/store";
 import { copyPlain, copySecret } from "../../lib/clipboard";
 import { reportError } from "../../lib/lockSignal";
-import type { Host } from "../../types/host";
-import { Chip, Dialog, Kbd } from "../../ui";
+import { Dialog, Kbd } from "../../ui";
 import { logCommand } from "../capture/logCommand";
-import { fillLibraryCommand } from "../checklist/goalCommands";
-import { COMMAND_PRE, MarkedText } from "../checklist/CommandList";
 import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
 import { shortHostName } from "../../lib/hostName";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useFillScope, useLastEngagementStore } from "../arsenal/useFillScope";
 import { CredChip, isCredPickKey } from "../arsenal/CredChip";
 import type { CredChipHandle } from "../arsenal/CredChip";
-import { FillBar } from "../arsenal/FillBar";
-import { autoFill, tokensOf } from "../arsenal/fillTokens";
+import { CommandPreview, fillPreview, toolPrefill } from "../arsenal/CommandPreview";
 import { HostChip, isHostPickKey } from "../arsenal/HostChip";
 import type { HostChipHandle } from "../arsenal/HostChip";
 import { useCredPickStore } from "../checklist/credPick";
@@ -31,16 +27,6 @@ import type { SuggestContext } from "./suggest";
 
 const MAX_RESULTS = 30;
 const GROUPS = { command: "Commands", generator: "Generators", card: "Cards", item: "This engagement" } as const;
-
-/** The best staged Toolkit file whose name contains a query word: it pre-fills {FILE}. */
-function toolPrefill(query: string, os: Host["os"]): Record<string, string> {
-  const words = query.toLowerCase().split(/\s+/).filter((w) => w.length >= 2);
-  if (words.length === 0) return {};
-  const hits = getToolkit()
-    .filter((t) => t.staged && words.some((w) => t.file.toLowerCase().includes(w)))
-    .sort((a, b) => Number(b.os === os) - Number(a.os === os));
-  return hits[0] ? { FILE: hits[0].file } : {};
-}
 
 function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }: { engagementId: string; hostId: string | null; remembered: boolean; onClose: () => void }) {
   const qc = useQueryClient();
@@ -91,14 +77,10 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const index = Math.min(selected, Math.max(0, results.length - 1));
   const current: PaletteResult | undefined = results[index];
 
-  const filled = useMemo(() => {
-    if (current?.type !== "command") return null;
-    const prefill = toolPrefill(query, host?.os ?? null);
-    const input = makeInput({ ...prefill, ...Object.fromEntries(Object.entries(overrides).map(([k, v]) => [k.toUpperCase(), v])) });
-    // What each field fills with before anything is typed (a staged Toolkit file counts).
-    const tokens = tokensOf([current.command.template]);
-    return { cmd: fillLibraryCommand(current.command, input, current.msfMarker), input, tokens, auto: autoFill(tokens, makeInput(prefill)) };
-  }, [current, host, makeInput, query, overrides]);
+  const filled = useMemo(
+    () => (current?.type === "command" ? fillPreview(current.command, current.msfMarker, makeInput, overrides, toolPrefill(query, host?.os ?? null)) : null),
+    [current, host, makeInput, query, overrides],
+  );
 
   useEffect(() => searchRef.current?.focus(), []);
 
@@ -257,15 +239,11 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
         ))}
       </ul>
       {filled && (
-        <div className="flex flex-col gap-2 border-t border-line pt-3">
-          <pre className={COMMAND_PRE}><MarkedText text={filled.cmd.text} tokens={filled.cmd.tokens ?? []} /></pre>
-          {filled.cmd.msfMarker && <Chip>uses your one Metasploit host</Chip>}
-          <FillBar
-            tokens={filled.tokens} auto={filled.auto} suggest={suggestCtx} os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
-            overrides={overrides} onOverrides={setOverrides}
-            fieldRef={(t, el) => (el ? fieldEls.current.set(t, el) : fieldEls.current.delete(t))}
-          />
-        </div>
+        <CommandPreview
+          filled={filled} hostKey={host?.id ?? null} suggest={suggestCtx} os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
+          overrides={overrides} onOverrides={setOverrides}
+          fieldRef={(t, el) => (el ? fieldEls.current.set(t, el) : fieldEls.current.delete(t))}
+        />
       )}
       {guard.hint && filled && guard.forKey === copyKey(filled.cmd) && <p role="status" className="m-0 text-xs text-warn">{guard.hint}</p>}
       {status && <p role="alert" className="m-0 text-xs text-warn">{status}</p>}

@@ -7,6 +7,7 @@ import type { InputHTMLAttributes, ReactNode, Ref } from "react";
 export function SearchBar({ label, trailing, inputRef, ...input }: InputHTMLAttributes<HTMLInputElement> & {
   /** The field's accessible name; also names the search region. */
   label: string;
+  /** Undefined shows "for no host"; null shows nothing (the host chips sit outside the field). */
   trailing?: ReactNode;
   inputRef?: Ref<HTMLInputElement>;
 }) {
@@ -25,7 +26,7 @@ export function SearchBar({ label, trailing, inputRef, ...input }: InputHTMLAttr
         className="h-full min-w-0 flex-1 bg-transparent text-[14px] text-fg outline-none placeholder:text-muted"
         {...input}
       />
-      {trailing ?? <span className="shrink-0 px-1.5 text-xs whitespace-nowrap text-muted">for no host</span>}
+      {trailing === undefined ? <span className="shrink-0 px-1.5 text-xs whitespace-nowrap text-muted">for no host</span> : trailing}
     </div>
   );
 }

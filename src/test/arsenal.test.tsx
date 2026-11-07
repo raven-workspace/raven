@@ -79,7 +79,7 @@ beforeEach(() => {
   useCaptureStore.getState().reset();
   usePaletteStore.getState().close();
   useLastEngagementStore.setState({ engagementId: null, hostId: null });
-  useArsenalStore.setState({ open: false, cardId: null });
+  useArsenalStore.setState({ open: false, cardId: null, blockId: null });
   useNotesStore.setState({ open: false });
   setImported({ commands: [PROBE, FETCH, FETCH2, BANNED, RAVEN, OTHER], cards: [CARD, CARD2] });
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
@@ -119,7 +119,9 @@ describe("Arsenal", () => {
     const d = within(await drawer());
     expect(hostChip(d)).toHaveAccessibleName("Fill for host: dc01");
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zzprobe");
-    await user.click(await d.findByRole("option", { name: /Zzprobe the target/ }));
+    await d.findByRole("option", { name: /Zzprobe the target/ });
+    await user.keyboard("{ArrowRight}");
+    expect(await d.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
     expect(await block(d, "zzprobe 10.10.10.5 from 10.10.14.9")).toBeInTheDocument();
     expect(d.getByText("Because probing.")).toBeInTheDocument();
     // Esc backs out of the card first, then closes.
@@ -239,9 +241,7 @@ describe("Arsenal", () => {
     const d = within(await drawer());
     const search = d.getByRole("textbox", { name: "Search the Arsenal" });
     await user.type(search, "zz");
-    await d.findByRole("option", { name: /Zz Card/ });
-    expect(d.queryByRole("option", { name: /Zzbanned/ })).not.toBeInTheDocument();
-    expect(d.queryByRole("option", { name: /Zzprobe/ })).not.toBeInTheDocument();
+    expect(d.queryAllByRole("option")).toHaveLength(0);
     await user.keyboard("{Escape}");
     // Palette.
     await user.keyboard("{Meta>}k{/Meta}");
@@ -286,33 +286,43 @@ describe("Arsenal", () => {
     expect(await block(d, "zzprobe {TARGET_IP} from 10.10.14.9")).toBeInTheDocument();
   });
 
-  it("the drawer's search bar holds the host scope at its right edge", async () => {
+  it("the header gives search, host chip, credential chip and full screen their own tracks", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
     await screen.findByRole("tab", { name: "Next" });
     await user.keyboard("a");
-    const bar = within(within(await drawer()).getByRole("search", { name: "Search the Arsenal" }));
+    const d = within(await drawer());
+    const bar = within(d.getByRole("search", { name: "Search the Arsenal" }));
     expect(bar.getByRole("textbox", { name: "Search the Arsenal" })).toBeInTheDocument();
     expect(bar.getByText("⌕")).toBeInTheDocument();
-    expect(scopeText(hostChip(bar))).toBe("for dc01 ⌄");
+    expect(bar.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
+    expect(scopeText(hostChip(d))).toBe("for dc01 ⌄");
+    const header = d.getByRole("banner");
+    expect(header).toHaveClass("grid-cols-[1fr_auto_auto_auto]");
+    for (const el of [bar.getByRole("textbox"), hostChip(d), d.getByRole("button", { name: /^Fill with credential/ }), d.getByRole("button", { name: "Full screen" })]) {
+      expect(header.contains(el)).toBe(true);
+    }
   });
 
-  it("search is keyboard-first: arrows pick, Enter opens the selection or the top result", async () => {
+  it("search is keyboard-first: arrows pick, Enter opens the selected card", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
     await screen.findByRole("tab", { name: "Next" });
     await user.keyboard("a");
     let d = within(await drawer());
     const box = d.getByRole("textbox", { name: "Search the Arsenal" });
-    await user.type(box, "zz");
-    expect(await d.findByRole("option", { name: /Zz Card/ })).toHaveAttribute("aria-selected", "true");
+    await user.type(box, "other cat");
+    const card = await d.findByRole("option", { name: /^Zz Other/ });
+    expect(card).toHaveAttribute("aria-selected", "true");
+    expect(box).toHaveAttribute("aria-activedescendant", card.id);
     await user.keyboard("{ArrowDown}");
-    expect(d.getByRole("option", { name: /Zz Other/ })).toHaveAttribute("aria-selected", "true");
-    await user.keyboard("{Enter}");
+    expect(d.getByRole("option", { name: /Zzother cmd/ })).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{ArrowUp}{Enter}");
     expect(await d.findByRole("heading", { name: "Zz Other" })).toBeInTheDocument();
-    await user.type(box, "zz");
-    await user.keyboard("{Enter}");
+    await user.keyboard("{Escape}");
     d = within(await drawer());
+    await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zz card");
+    await user.keyboard("{Enter}");
     expect(await d.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
     await user.keyboard("{Escape}");
     await user.keyboard("{Escape}");
@@ -388,11 +398,17 @@ describe("Arsenal after a Field Manual import (B2)", () => {
   beforeEach(() => setImported({ commands: cmds, cards: [...filler, ...perStage] }));
 
   it("every imported card is listed in the drawer", async () => {
+    const user = userEvent.setup();
     mount("/e/e1/h/h1");
     await screen.findByRole("tab", { name: "Next" });
     act(() => useArsenalStore.getState().openCard());
     const d = within(await drawer());
-    for (const c of perStage) expect(await d.findByRole("option", { name: new RegExp(c.title) })).toBeInTheDocument();
+    // With no query: the categories, then Enter lists everything in one, uncapped.
+    await user.click(await d.findByRole("option", { name: /^Qq Misc/ }));
+    for (const c of perStage) expect(await d.findByRole("option", { name: new RegExp(`^${c.title}(?! cmd)`) })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(await d.findByRole("option", { name: /^Aa Filler/ }));
+    expect(await d.findAllByRole("option")).toHaveLength(filler.length * 2);
   });
 
   it.each(STAGES)("searching the drawer for stage %s finds its card", async (id, title) => {
@@ -529,9 +545,8 @@ describe("drawer list grouped by category (U1)", () => {
     act(() => useArsenalStore.getState().openCard());
     const d = within(await drawer());
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "qx");
-    const groups = d.getAllByRole("group").map((g) => g.getAttribute("aria-label"));
-    expect(groups).toEqual(["Shells & transfers", "Zz Cat", "Zz Other Cat"]);
-    expect(d.getByRole("heading", { name: "Shells & transfers" })).toBeInTheDocument();
+    expect(d.getAllByRole("group").map((g) => g.getAttribute("aria-labelledby")).map((id) => document.getElementById(id!)?.textContent))
+      .toEqual(["Shells & transfers", "Zz Cat", "Zz Other Cat"]);
     const zz = within(d.getByRole("group", { name: "Zz Cat" }));
     expect(zz.getAllByRole("option").map((o) => o.textContent)).toEqual(["Qx alphacard", "Qx alpha twocard"]);
     // ↓ crosses from one group into the next.
@@ -544,16 +559,212 @@ describe("drawer list grouped by category (U1)", () => {
     expect(await d.findByRole("heading", { name: "Qx beta" })).toBeInTheDocument();
   });
 
-  it("with no query the list groups every card, built-in and imported", async () => {
+  it("empty query lists categories with counts", async () => {
+    const user = userEvent.setup();
     mount("/e/e1/h/h1");
     await screen.findByRole("tab", { name: "Next" });
     act(() => useArsenalStore.getState().openCard());
     const d = within(await drawer());
-    expect(within(d.getByRole("group", { name: "Zz Cat" })).getByRole("option", { name: /Zz Card/ })).toBeInTheDocument();
-    const labels = d.getAllByRole("group").map((g) => g.getAttribute("aria-label")!);
-    const cardLabels = labels.filter((l) => l !== "Commands");
-    expect(cardLabels).toEqual([...cardLabels].sort((a, b) => a.localeCompare(b)));
-    expect(labels.at(-1)).toBe("Commands");
+    // Zz-Cat: the card and four commands on it; Zz-Other-Cat: its card and one command.
+    const cat = await d.findByRole("option", { name: /^Zz Cat/ });
+    expect(cat).toHaveTextContent(/Zz Cat\s*5$/);
+    expect(d.getByRole("option", { name: /^Zz Other Cat/ })).toHaveTextContent(/Zz Other Cat\s*2$/);
+    expect(d.queryByRole("option", { name: /^Zz Card/ })).not.toBeInTheDocument();
+    // Enter lists that category's hits; Esc goes back to the categories (the drawer stays open).
+    const box = d.getByRole("textbox", { name: "Search the Arsenal" });
+    const arrowTo = async (el: HTMLElement) => {
+      for (let i = 0; i < 40 && box.getAttribute("aria-activedescendant") !== el.id; i++) await user.keyboard("{ArrowDown}");
+      expect(el).toHaveAttribute("aria-selected", "true");
+    };
+    await arrowTo(cat);
+    await user.keyboard("{Enter}");
+    expect(await d.findByRole("option", { name: /^Zz Card/ })).toBeInTheDocument();
+    expect(d.queryByRole("option", { name: /^Zz Other/ })).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(await d.findByRole("option", { name: /^Zz Other Cat/ })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Arsenal" })).toBeInTheDocument();
+    // → does the same as Enter on a category.
+    await arrowTo(d.getByRole("option", { name: /^Zz Other Cat/ }));
+    await user.keyboard("{ArrowRight}");
+    expect(await d.findByRole("option", { name: /^Zz Other/ })).toBeInTheDocument();
+  });
+
+  it("results are grouped by category with cards and commands together", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("a");
+    const d = within(await drawer());
+    await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "other cat");
+    const group = within(await d.findByRole("group", { name: "Zz Other Cat" }));
+    expect(group.getAllByRole("option").map((o) => o.textContent)).toEqual(["Zz Othercard", "Zzother cmdzz"]);
+    expect(d.getAllByRole("group")).toHaveLength(1);
+  });
+
+  it("listbox has no heading children", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("a");
+    const d = within(await drawer());
+    await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zz");
+    const box = await d.findByRole("listbox", { name: "Arsenal results" });
+    expect(box.querySelectorAll("h3")).toHaveLength(0);
+    expect(box.querySelectorAll('[role="group"]').length).toBeGreaterThan(0);
+  });
+
+  it("Enter on a command copies the filled command and keeps the drawer open", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await navigator.clipboard.writeText("untouched");
+    await user.keyboard("a");
+    const d = within(await drawer());
+    await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zzprobe");
+    // The selected command is previewed filled, under the list.
+    expect(await block(d, "zzprobe 10.10.10.5 from 10.10.14.9")).toBeInTheDocument();
+    await user.keyboard("{Enter}");
+    expect(await d.findByRole("status")).toHaveTextContent("Copied for dc01");
+    expect(await navigator.clipboard.readText()).toBe("zzprobe 10.10.10.5 from 10.10.14.9");
+    expect(screen.getByRole("complementary", { name: "Arsenal" })).toBeInTheDocument();
+    expect(d.getByRole("option", { name: /Zzprobe the target/ })).toBeInTheDocument();
+    expect(d.getByRole("contentinfo")).toHaveTextContent("↵ copy · ⌘↵ copy and log · → in card · ⌥H host · ⌥C credential · Esc close");
+  });
+
+  it("an unfilled field holds the copy back once, then Enter copies anyway", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("a");
+    const d = within(await drawer());
+    await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zzfetch the");
+    await navigator.clipboard.writeText("untouched");
+    await d.findByRole("option", { name: /Zzfetch the file/ });
+    await user.keyboard("{Enter}");
+    expect(await d.findByText("{FILE} not filled · ↵ again to copy anyway")).toBeInTheDocument();
+    expect(d.getByRole("combobox", { name: "Value for FILE" })).toHaveFocus();
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    await user.keyboard("{Enter}");
+    expect(await d.findByText("Copied for dc01 · 1 placeholder left")).toBeInTheDocument();
+    expect(await navigator.clipboard.readText()).toBe("zzfetch http://10.10.14.9/{FILE}");
+  });
+
+  it("with only a hash on file the guard focuses the credential chip and a second Enter there copies", async () => {
+    const user = userEvent.setup();
+    setImported({ commands: [cmd("zz-pass", { title: "Zzpass login", template: "zzpass -p {PASS}", cardId: undefined, source: "raven" })], cards: [] });
+    m.credentialsList.mockResolvedValue([{
+      id: "c1", engagementId: "e1", type: "hash", username: "admin", domain: null, secret: "8846f7eaee8fb117ad06bdd830b7586c", hashType: "NTLM",
+      scope: "domain", localHostId: null, sourceHostId: null, source: null, notes: null, crackStatus: null, crackedFrom: null, fromSecretId: null,
+      createdAt: 1, updatedAt: 1,
+    }]);
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await navigator.clipboard.writeText("untouched");
+    await user.keyboard("a");
+    const d = within(await drawer());
+    await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zzpass");
+    await d.findByRole("option", { name: /Zzpass login/ });
+    await user.keyboard("{Enter}");
+    const chip = await d.findByRole("button", { name: /^Fill with credential/ });
+    expect(chip).toHaveFocus();
+    expect(d.queryByRole("listbox", { name: "Fill with credential" })).not.toBeInTheDocument();
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    await user.keyboard("{Enter}");
+    expect(await d.findByText(/^Copied for dc01/)).toBeInTheDocument();
+    expect(await navigator.clipboard.readText()).toBe("zzpass -p {PASS}");
+    expect(d.queryByRole("listbox", { name: "Fill with credential" })).not.toBeInTheDocument();
+  });
+
+  it("→ on a field-manual command opens its card at that block", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("a");
+    const d = within(await drawer());
+    await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zzprobe");
+    await d.findByRole("option", { name: /Zzprobe the target/ });
+    await user.keyboard("{ArrowRight}");
+    expect(await d.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
+    expect(useArsenalStore.getState().cardId).toBe("zz-card");
+    expect(useArsenalStore.getState().blockId).toBe("zz-probe");
+  });
+
+  it("→ on a built-in command opens it alone, and ← Back returns to the list", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("a");
+    const d = within(await drawer());
+    await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zzraven");
+    await d.findByRole("option", { name: /Zzraven helper/ });
+    await user.keyboard("{ArrowRight}");
+    expect(await block(d, "zzhelper 10.10.10.5")).toBeInTheDocument();
+    expect(useArsenalStore.getState().cardId).toBeNull();
+    await user.click(d.getByRole("button", { name: "← Back" }));
+    expect(d.getByRole("listbox", { name: "Arsenal results" })).toBeInTheDocument();
+  });
+
+  it("Enter on a generator opens it in full-screen Arsenal", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("a");
+    const d = within(await drawer());
+    await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zzgen");
+    await d.findByRole("option", { name: /Zzgen reverse shell/ });
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("region", { name: "Cards" })).toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: "Arsenal" })).not.toBeInTheDocument();
+  });
+
+  it("route host change resets chip and overrides", async () => {
+    const user = userEvent.setup();
+    const H2: Host = { ...H1, id: "h2", name: "web02", ip: "10.10.10.6" };
+    m.hostsList.mockResolvedValue([H1, H2]);
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("a");
+    const d = within(await drawer());
+    await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zzprobe");
+    await user.type(await d.findByRole("combobox", { name: "Value for TARGET_IP" }), "1.1.1.1");
+    const pre = await block(d, "zzprobe 1.1.1.1 from 10.10.14.9");
+    expect(pre).not.toHaveAttribute("data-flash");
+    act(() => nav.go("/e/e1/h/h2"));
+    const after = await block(d, "zzprobe 10.10.10.6 from 10.10.14.9");
+    expect(after).toHaveAttribute("data-flash");
+    expect(d.getByRole("combobox", { name: "Value for TARGET_IP" })).toHaveValue("10.10.10.6");
+    expect(hostChip(d)).toHaveAccessibleName("Fill for host: web02");
+  });
+
+  it("Esc with the host list open closes only the list", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("a");
+    const d = within(await drawer());
+    await user.keyboard("{Alt>}h{/Alt}");
+    expect(await d.findByRole("listbox", { name: /host/i })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(d.queryByRole("listbox", { name: /host/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Arsenal" })).toBeInTheDocument();
+  });
+
+  it("fails closed while the engagement loads", async () => {
+    const user = userEvent.setup();
+    m.engagementGet.mockImplementation(() => new Promise<Engagement>(() => {}));
+    m.engagementsList.mockResolvedValue([EXAM]);
+    render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <MemoryRouter initialEntries={["/e/e1/h/h1"]}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await user.keyboard("a");
+    const d = within(await drawer());
+    expect(d.queryAllByRole("option")).toHaveLength(0);
+    await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zz");
+    expect(d.queryAllByRole("option")).toHaveLength(0);
   });
 });
 

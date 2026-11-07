@@ -13,7 +13,7 @@ import { HostChip } from "./HostChip";
 import { useArsenalStore } from "./useArsenalStore";
 import { useFillScope, useLastEngagementStore } from "./useFillScope";
 
-const ON = "bg-accent/10 text-accent shadow-[inset_2px_0_0_var(--accent)]";
+export const ON = "bg-accent/10 text-accent shadow-[inset_2px_0_0_var(--accent)]";
 
 /** A filter (aria-pressed) or the open card (aria-current): the selected one carries the accent. */
 function FilterButton({ on, onClick, current, children }: { on: boolean; onClick: () => void; current?: boolean; children: string }) {
