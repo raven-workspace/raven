@@ -382,4 +382,42 @@ describe("saveCapture", () => {
       reason: cause,
     });
   });
+
+  describe("identity capture", () => {
+    const priv = "PRIVILEGES INFORMATION\n----------------------\n\nPrivilege Name                Description                    State\n============================= ============================== ========\nSeImpersonatePrivilege        Impersonate a client after authentication Enabled\n";
+    const run = (hostIds: string[], hosts: Host[]) => {
+      const c = { kind: "command" as const, blocks: [{ command: "whoami /priv", output: priv }] };
+      return saveCapture({
+        engagementId: "e1",
+        draft: draft({ content: c, hostIds }),
+        edits: edits({ content: c, hostIds, ranOn: "dc01" }),
+        addIps: [],
+        image: null,
+        hosts,
+      });
+    };
+
+    it("sets identity and upserts auto vectors for a single linked host", async () => {
+      m.hostIdentityGet.mockResolvedValue(null);
+      await run(["h1"], [DC]);
+      expect(m.hostIdentitySet).toHaveBeenCalledWith(
+        expect.objectContaining({ hostId: "h1", username: "unknown", entryId: "l1", privileges: expect.arrayContaining(["SeImpersonatePrivilege"]) }),
+      );
+      expect(m.vectorUpsert).toHaveBeenCalledWith("h1", { title: "SeImpersonatePrivilege abuse", status: "try", source: "auto" });
+    });
+
+    it("does nothing with two linked hosts", async () => {
+      await run(["h1", "h2"], [DC, host({ id: "h2", name: "ws01" })]);
+      expect(m.hostIdentitySet).not.toHaveBeenCalled();
+      expect(m.vectorUpsert).not.toHaveBeenCalled();
+    });
+
+    it("keeps the saved entry and reports a partial save when hostIdentitySet rejects", async () => {
+      m.hostIdentityGet.mockResolvedValue(null);
+      m.hostIdentitySet.mockRejectedValue(new Error("db down"));
+      const err = await run(["h1"], [DC]).catch((e) => e);
+      expect(err).toBeInstanceOf(PartialSaveError);
+      expect(err.entry.id).toBe("l1");
+    });
+  });
 });

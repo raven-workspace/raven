@@ -1,3 +1,4 @@
+import { parseIdentity, vectorsFromIdentity } from "../../engines/facts";
 import { buildDraft, type CaptureDraft, type DraftInput } from "../../engines/capture";
 import { api } from "../../lib/api";
 import { afterEntrySaved, CHECKLIST_FAILED, FollowUpError } from "../checklist/ticks";
@@ -20,6 +21,32 @@ export interface CaptureEdits {
   returnedNothing: boolean;
   private: boolean;
   content: LogContent;
+}
+
+export const IDENTITY_FAILED = "Saved the entry, but the host's identity didn't update. Paste the output again to retry.";
+
+/** A parsed username that is really a shell error (or prose), not an account name. */
+function looksLikeErrorOutput(username: string): boolean {
+  if (/not recognized|ERROR|command not found/.test(username)) return true;
+  return /\s/.test(username) && !username.includes("\\");
+}
+
+/** Records who the user is on the host and the privesc vectors their whoami/id output points to. */
+async function recordIdentity(entry: LogEntry, hosts: Host[]): Promise<void> {
+  if (entry.content.kind !== "command" || entry.hostIds.length !== 1) return;
+  const host = hosts.find((h) => h.id === entry.hostIds[0]);
+  if (!host || entry.ranOn !== host.name) return;
+  for (const block of entry.content.blocks) {
+    const parsed = parseIdentity(block.command, block.output);
+    if (!parsed) continue;
+    if (!parsed.username && parsed.privileges.length === 0 && parsed.groups.length === 0) continue;
+    if (parsed.username && looksLikeErrorOutput(parsed.username)) continue;
+    const username = parsed.username ?? (await api.hostIdentityGet(host.id))?.username ?? "unknown";
+    await api.hostIdentitySet({ hostId: host.id, username, privileges: parsed.privileges, groups: parsed.groups, entryId: entry.id });
+    for (const title of vectorsFromIdentity(parsed)) {
+      await api.vectorUpsert(host.id, { title, status: "try", source: "auto" });
+    }
+  }
 }
 
 export const INTAKE_FAILED = "Saved the entry, but the credentials didn't update. Paste the output again to retry.";
@@ -147,6 +174,11 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<LogEntry> {
         failures.push({ reason: e, message: INTAKE_FAILED, also: "The credentials didn't update either: paste the output again to retry." });
       }
     }
+  }
+  try {
+    await recordIdentity(entry, hosts);
+  } catch (e) {
+    failures.push({ reason: e, message: IDENTITY_FAILED, also: "The host's identity didn't update either: paste the output again to retry." });
   }
   try {
     await afterEntrySaved(engagementId, entry, entry.id);
