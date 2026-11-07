@@ -142,3 +142,25 @@ The audit should get a matching check: flag `flex-wrap` containers whose childre
 11. **Screenshots:** the full-page captures stretch fixed overlays. The palette renders at y≈407, the capture footer at the bottom of a 5,000px page, and inner scrollers start mid-content. Take a viewport-sized shot (scroll reset to top) plus the full-page shot.
 12. **palette-hostmenu scenario:** the host menu never appears in the shot because native `<select>` popups don't render in Playwright, so this screen adds no coverage. Assert that the menu is open, or drop the screen.
 13. **States:** for `silent-error`, require that the failed command's data is what the screen renders, since bundled Arsenal content isn't. For `blank-loading`, use a realistic delay and also flag "zero counts while loading" (e.g. `Rooted 0/0`) as misleading.
+
+## 6. Deferred from UX round 1 (host page redesign, 2026-11-06)
+
+Each item was reviewed and judged not to block the merge. Source: the round-1 review ledger.
+
+- (T1) collapsed rail drops ThreadDot
+- (T1) no tests for <1000px default, legacy story.order fallback, ⌘B under dialog, rail render
+- (T1) log row chip track unbounded count
+- (T2) vectorUpsert rejects ruled_out (use vectorSetStatus) — document in api.ts JSDoc
+- (T2) fakeApi drift (manual upsert over ruled_out doesn't unlink; identity not trimmed/deduped)
+- (T2) deleting service/vector orphans linked ruled_out; hand-deleting linked item leaves dead_end — consider clearing source on delete
+- (T2) api.ts hostIdentitySet sends updatedAt:0; no cascade test for host delete
+- (T3) id matched only as exact "id" (not id -a / sudo id); no test for serviceIdentity with unconfirmed version, whoami /groups CRLF
+- (T4) no tests for error-output skip, empty no-op, ranOn mismatch, username fallback; vector failure reported as identity failure; "unknown" literal username
+- (T5) Host Credentials "works" can double-count grant+attempt; services/queries.ts dead ruledOut invalidation; no stacked-variant test; ⌥2 typing test misnamed; new-creds notice only visible in Full checklist (done steps hidden in Next)
+- (T6) 3.0 vector's version button is inert (no 3.0→3.1 switch)
+- (T7) in-flight save error after close not surfaced; NVD state not in draft (closing within 400ms cancels lookup); nvdFill applied over snapshot; RefSuggestions fake Note objects; FindingEditor ~450 lines (extract useNvdLookup); no debounce test
+- (T7) split log/host-chip/N tests assert DOM not layout (Playwright covers)
+- (T7b) ServicePicker list double right padding inside editor pane; regression scoping via class-string match
+- (T8) post-foothold "without scrolling" bbox check can't see inner clipping; no ThreadsList pane test
+- (T8b) readFromLog partial failure (identity set, vector upsert throws) error hidden once identity exists; dead hostIdentityGet fallback; write-timing test doesn't assert vectorUpsert
+- (user) Log titles include the Evil-WinRM prompt (`*Evil-WinRM* PS C:\…> whoami /priv`). The title should be the command only.
