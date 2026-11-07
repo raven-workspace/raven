@@ -98,6 +98,22 @@ export function defaultCredFor(host: Pick<Host, 'id'>, credentials: Credential[]
   return best?.c ?? null;
 }
 
+/**
+ * The credential commands fill with. `picked`: a credential id, null for "none", undefined for no pick. A missing
+ * (deleted) pick falls back to the default: the host's own, else the engagement's domain default. No host: the latter.
+ */
+export function resolveCred(
+  picked: string | null | undefined,
+  credentials: Credential[],
+  attempts: CredAttempt[],
+  host: Pick<Host, 'id'> | null,
+): Credential | null {
+  if (picked === null) return null;
+  const chosen = picked ? credentials.find((c) => c.id === picked) : undefined;
+  if (chosen) return chosen;
+  return (host ? defaultCredFor(host, credentials, attempts) : null) ?? defaultDomainCred(credentials, attempts);
+}
+
 export interface FillResult {
   text: string;
   unresolved: string[];

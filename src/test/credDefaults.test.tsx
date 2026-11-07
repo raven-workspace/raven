@@ -3,8 +3,8 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { defaultCredFor, defaultDomainCred, fillCommand } from "../engines/checklist";
-import { useCredPickStore } from "../features/checklist/credPick";
+import { defaultCredFor, defaultDomainCred, fillCommand, resolveCred } from "../engines/checklist";
+import { useCredFill, useCredPickStore } from "../features/checklist/credPick";
 import { useFillBase } from "../features/palette/fillData";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
@@ -59,19 +59,21 @@ function wrapper({ children }: { children: ReactNode }) {
   );
 }
 
+function setupApi() {
+  useCredPickStore.getState().reset();
+  m.settingsGet.mockResolvedValue({ attackerIp: "10.0.0.1", kaliUser: "kali", listenerPort: "4444" } as never);
+  m.engagementGet.mockResolvedValue(E1);
+  m.engagementsList.mockResolvedValue([E1]);
+  m.hostsList.mockResolvedValue([H]);
+  m.servicesListEngagement.mockResolvedValue([]);
+  m.tunnelsList.mockResolvedValue([]);
+  m.credentialsList.mockResolvedValue([HASH_ADMIN, PW_SVC]);
+  m.credAttemptsList.mockResolvedValue([att(HASH_ADMIN, "h", 20), att(PW_SVC, "h", 10)]);
+  m.logList.mockResolvedValue([]);
+}
+
 describe("useFillBase credential", () => {
-  beforeEach(() => {
-    useCredPickStore.getState().reset();
-    m.settingsGet.mockResolvedValue({ attackerIp: "10.0.0.1", kaliUser: "kali", listenerPort: "4444" } as never);
-    m.engagementGet.mockResolvedValue(E1);
-    m.engagementsList.mockResolvedValue([E1]);
-    m.hostsList.mockResolvedValue([H]);
-    m.servicesListEngagement.mockResolvedValue([]);
-    m.tunnelsList.mockResolvedValue([]);
-    m.credentialsList.mockResolvedValue([HASH_ADMIN, PW_SVC]);
-    m.credAttemptsList.mockResolvedValue([att(HASH_ADMIN, "h", 20), att(PW_SVC, "h", 10)]);
-    m.logList.mockResolvedValue([]);
-  });
+  beforeEach(setupApi);
 
   it("a deleted pick falls back to the default", async () => {
     useCredPickStore.setState({ picks: { h: "gone" } });
@@ -91,5 +93,30 @@ describe("useFillBase credential", () => {
     useCredPickStore.setState({ picks: { e1: "ha" } });
     const { result } = renderHook(() => useFillBase("e1", null), { wrapper });
     await waitFor(() => expect(result.current.cred?.id).toBe("ha"));
+  });
+});
+
+describe("host with no attempts falls back to the domain default", () => {
+  beforeEach(setupApi);
+
+  it("resolveCred", () => {
+    const other = att(PW_SVC, "elsewhere", 5);
+    expect(resolveCred(undefined, [PW_SVC], [other], { id: "fs01" })!.id).toBe("pw");
+    expect(resolveCred(null, [PW_SVC], [other], { id: "fs01" })).toBeNull();
+    expect(resolveCred("gone", [PW_SVC], [other], { id: "fs01" })!.id).toBe("pw");
+  });
+
+  it("useCredFill (host scope)", async () => {
+    m.credentialsList.mockResolvedValue([PW_SVC]);
+    m.credAttemptsList.mockResolvedValue([att(PW_SVC, "elsewhere", 5)]);
+    const { result } = renderHook(() => useCredFill("e1", { id: "fs01" }), { wrapper });
+    await waitFor(() => expect(result.current.cred?.id).toBe("pw"));
+  });
+
+  it("useFillBase (host with no attempts)", async () => {
+    m.credentialsList.mockResolvedValue([PW_SVC]);
+    m.credAttemptsList.mockResolvedValue([att(PW_SVC, "elsewhere", 5)]);
+    const { result } = renderHook(() => useFillBase("e1", "h"), { wrapper });
+    await waitFor(() => expect(result.current.cred?.id).toBe("pw"));
   });
 });

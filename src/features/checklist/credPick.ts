@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { defaultCredFor, defaultDomainCred } from "../../engines/checklist";
+import { resolveCred } from "../../engines/checklist";
 import { credLabel } from "../../engines/credentials/labels";
 import { newCredSince } from "../../engines/credentials/state";
 import type { CredAttempt, Credential } from "../../types/credentials";
@@ -37,9 +37,7 @@ export function useCredFill(engagementId: string, owner: Pick<Host, "id">, scope
   const attempts = useCredAttempts(engagementId).data ?? [];
   const picked = useCredPickStore((s) => s.picks[owner.id]);
   const set = useCredPickStore((s) => s.set);
-  const chosen = picked ? credentials.find((c) => c.id === picked) : undefined;
-  // A picked credential that was deleted falls back to the default.
-  const cred = picked === null ? null : (chosen ?? (scope === "host" ? defaultCredFor(owner, credentials, attempts) : defaultDomainCred(credentials, attempts)));
+  const cred = resolveCred(picked, credentials, attempts, scope === "host" ? owner : null);
   return { credentials, attempts, cred, pick: (credId) => set(owner.id, credId) };
 }
 

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import { defaultCredFor, defaultDomainCred, portChoices, type FillInput } from "../../engines/checklist";
+import { portChoices, resolveCred, type FillInput } from "../../engines/checklist";
 import { api } from "../../lib/api";
 import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
@@ -47,11 +47,8 @@ export function useFillBase(engagementId: string, hostId: string | null) {
   const engagement = d.engagement ?? DASHBOARD_ENGAGEMENT;
 
   const cred = useMemo(() => {
-    if (!d.credentials || picked === null) return null;
-    const chosen = picked ? d.credentials.find((c) => c.id === picked) : undefined;
-    if (chosen) return chosen;
-    if (host) return defaultCredFor(host, d.credentials, d.attempts ?? []);
-    return engagementId ? defaultDomainCred(d.credentials, d.attempts ?? []) : null;
+    if (!d.credentials || (!host && !engagementId)) return null;
+    return resolveCred(picked, d.credentials, d.attempts ?? [], host ?? null);
   }, [host, engagementId, d.credentials, d.attempts, picked]);
 
   const makeInput = useCallback(
