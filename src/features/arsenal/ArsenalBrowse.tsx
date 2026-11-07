@@ -6,12 +6,12 @@ import { allCategories, categoryLabel, categoryOf } from "../../engines/library/
 import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/store";
 import { cx } from "../../lib/cx";
 import { isDialogOpen, isTypingTarget, useEscapeTo, useKeydown } from "../../lib/keys";
-import { Button } from "../../ui";
+import { Button, Select } from "../../ui";
 import { useCredPickStore } from "../checklist/credPick";
 import { useFillBase } from "../palette/fillData";
 import { GENERATORS } from "../palette/generators";
 import { TransferGenerator } from "../generators/TransferGenerator";
-import { browseList, type BrowseSection } from "./browseList";
+import { browseList, OTHER_TOOLS, type BrowseSection } from "./browseList";
 import { CardView, CommandPane } from "./CardView";
 import { CredChip, isCredPickKey } from "./CredChip";
 import type { CredChipHandle } from "./CredChip";
@@ -28,10 +28,11 @@ type Row = ResultRow & { hit: ArsenalHit };
 type Kind = "card" | "command" | "generator";
 type Pick = { kind: Kind; id: string };
 
-const hitRow = (hit: ArsenalHit, searching: boolean): Row => ({
+/** `withTool`: a command row shows its tool at the right (search results, and the "Other tools" block). */
+const hitRow = (hit: ArsenalHit, searching: boolean, withTool = searching): Row => ({
   hit, id: `browse-${hit.type}-${hit.id}`, title: hit.title,
-  tag: searching ? (hit.type === "command" ? hit.command.tool : hit.type) : hit.type === "generator" ? "generator" : "",
-  mono: searching && hit.type === "command",
+  tag: withTool && hit.type === "command" ? hit.command.tool : searching ? hit.type : hit.type === "generator" ? "generator" : "",
+  mono: withTool && hit.type === "command",
 });
 const sameHit = (h: ArsenalHit, p: Pick | null): boolean => p !== null && h.type === p.kind && h.id === p.id;
 const hitCategory = (h: ArsenalHit, cards: ReturnType<typeof getCards>): string =>
@@ -71,11 +72,11 @@ export function ArsenalBrowse() {
   });
 
   useKeydown((e) => {
-    if (!engagementId || e.defaultPrevented || isDialogOpen()) return;
-    if (isHostPickKey(e)) {
+    if (e.defaultPrevented || isDialogOpen()) return;
+    if (engagementId && isHostPickKey(e)) {
       e.preventDefault();
       hostRef.current?.open();
-    } else if (isCredPickKey(e)) {
+    } else if (engagementId && isCredPickKey(e)) {
       e.preventDefault();
       credRef.current?.open();
     } else if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey && !isTypingTarget(e.target)) {
@@ -139,7 +140,7 @@ export function ArsenalBrowse() {
   const resultGroups: ResultGroup<Row>[] = searching
     ? groups.map((g) => ({ key: g.category, label: g.label, rows: g.hits.map((h) => hitRow(h, true)) }))
     : (lists.get(current ?? "") ?? []).map((s, i) => ({
-        key: s.heading ?? `top${i}`, ...(s.heading === null ? {} : { label: s.heading }), rows: s.rows.map((h) => hitRow(h, false)),
+        key: s.heading ?? `top${i}`, ...(s.heading === null ? {} : { label: s.heading }), rows: s.rows.map((h) => hitRow(h, false, s.heading === OTHER_TOOLS)),
       }));
   const rows = resultGroups.flatMap((g) => g.rows);
   const found = rows.findIndex((r) => sameHit(r.hit, selected));
@@ -149,7 +150,7 @@ export function ArsenalBrowse() {
   const pick = (hit: ArsenalHit) => {
     const next = { kind: hit.type, id: hit.id };
     setSelected(next);
-    useArsenalStore.setState({ lastRead: next, cardId: hit.type === "card" ? hit.id : null });
+    useArsenalStore.setState({ lastRead: next, ...(hit.type === "card" ? { cardId: hit.id } : {}) });
   };
   const clearSearch = () => {
     // The category of what was open stays listed.
@@ -290,14 +291,13 @@ export function ArsenalBrowse() {
       </header>
       <div className="grid min-h-0 grid-cols-[minmax(220px,260px)_minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-x-5 gap-y-3 min-[1100px]:grid-cols-[minmax(150px,180px)_minmax(220px,260px)_minmax(0,1fr)] min-[1100px]:grid-rows-[minmax(0,1fr)]">
         <nav aria-label="Categories" className="col-start-1 row-start-1 min-h-0 min-[1100px]:overflow-y-auto">
-          <select
-            aria-label="Category" value={current ?? ""} onChange={(e) => openCategory(e.target.value, false)}
-            className="h-8 w-full rounded-sm border border-line-2 bg-bg px-2 text-[13px] text-fg-2 min-[1100px]:hidden"
-          >
-            {visible.map((c) => (
-              <option key={c} value={c}>{categoryLabel(c)} ({searching ? (hits.get(c) ?? 0) : counts.get(c)})</option>
-            ))}
-          </select>
+          <div className="grid min-[1100px]:hidden">
+            <Select
+              aria-label="Category" value={current ?? undefined} onValueChange={(c) => openCategory(c, false)}
+              options={visible.map((c) => ({ value: c, label: `${categoryLabel(c)} (${searching ? (hits.get(c) ?? 0) : counts.get(c)})` }))}
+              className="w-full"
+            />
+          </div>
           <div ref={catsRef} onKeyDown={onCategoryKey} className="hidden gap-0.5 min-[1100px]:grid">
             {visible.map((c) => {
               const n = searching ? (hits.get(c) ?? 0) : (counts.get(c) ?? 0);

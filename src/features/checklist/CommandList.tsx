@@ -75,11 +75,13 @@ const noCred = () => {};
  * Filled command blocks with a Copy button each. Copy goes through the copy guard: a command with an unresolved token
  * focuses it first (`focusToken` / `focusCred`; a surface with no such field passes nothing and the hint still shows).
  */
-export function CommandList({ commands, hostName = null, focusToken = noToken, focusCred = noCred }: {
+export function CommandList({ commands, hostName = null, focusToken = noToken, focusCred = noCred, hideDcNote = false }: {
   commands: FilledCommand[];
   /** The short name of the host in view, for "Copied for <host>". */
   hostName?: string | null;
   focusToken?: (token: string) => void; focusCred?: () => void;
+  /** A fill bar above already notes "(by name)" once, on DC_IP: no chip per block. */
+  hideDcNote?: boolean;
 }) {
   const guard = useCopyGuard({ focusToken, focusCred, hostName });
 
@@ -120,9 +122,9 @@ export function CommandList({ commands, hostName = null, focusToken = noToken, f
               <Copy size={14} weight={guard.forKey === copyKey(c) && guard.confirm ? "fill" : "light"} aria-hidden className={guard.forKey === copyKey(c) && guard.confirm ? "text-accent" : undefined} />
             </Button>
           </div>
-          {(c.msfMarker || c.viaTunnel || c.dcByName) && (
+          {(c.msfMarker || c.viaTunnel || (c.dcByName && !hideDcNote)) && (
             <div className="flex flex-wrap gap-1.5">
-              {c.dcByName && <Chip title="No Kerberos/LDAP seen: the DC was picked by its host name">DC (by name)</Chip>}
+              {c.dcByName && !hideDcNote && <Chip title="No Kerberos/LDAP seen: the DC was picked by its host name">DC (by name)</Chip>}
               {c.msfMarker && <Chip>uses your one Metasploit host</Chip>}
               {c.viaTunnel && (
                 <Chip className={c.viaTunnel.down ? "border-warn text-warn" : undefined}>

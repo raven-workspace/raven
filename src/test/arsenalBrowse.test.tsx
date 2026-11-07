@@ -38,7 +38,9 @@ const CARD_B: CardMeta = { id: "web-card", title: "Zz Web card", stage: "initial
 
 describe("browseList", () => {
   it("cards first, then card-less commands under tool headings", () => {
-    const s = browseList("Active-Directory", [KERBRUTE_RAVEN, NXC_RAVEN, FM_CMD_IN_CARD], [KERB_CARD], []);
+    const NXC_2 = cmd("nxc-2", { title: "Second nxc", tool: "aanxc", category: "Active-Directory" });
+    const KERB_2 = cmd("kerbrute-2", { title: "Kerbrute password spray", tool: "aakerbrute", category: "Active-Directory" });
+    const s = browseList("Active-Directory", [KERBRUTE_RAVEN, KERB_2, NXC_RAVEN, NXC_2, FM_CMD_IN_CARD], [KERB_CARD], []);
     expect(s[0]).toEqual({ heading: null, rows: [expect.objectContaining({ type: "card", id: KERB_CARD.id })] });
     expect(s.slice(1).map((x) => x.heading)).toEqual(["aakerbrute", "aanxc"]);
     expect(s.flatMap((x) => x.rows).some((r) => r.id === FM_CMD_IN_CARD.id)).toBe(false);
@@ -90,6 +92,15 @@ beforeEach(() => {
   nav.current = "/arsenal";
 });
 afterEach(() => setImported({ commands: [], cards: [] }));
+
+describe("browseList tools", () => {
+  it("single-command tools share one closing 'Other tools' heading with their tool tag", () => {
+    const solo = cmd("solo-dig", { title: "DC SRV records", tool: "dig", category: "Active-Directory" });
+    const s = browseList("Active-Directory", [KERBRUTE_RAVEN, solo, NXC_RAVEN, cmd("nxc-2", { title: "Second nxc", tool: "aanxc", category: "Active-Directory" })], [], []);
+    expect(s.map((x) => x.heading)).toEqual(["aanxc", "Other tools"]);
+    expect(s[1]!.rows.map((r) => r.id)).toEqual(["kerbrute-userenum", "solo-dig"]);
+  });
+});
 
 describe("three-pane browse", () => {
   it("opens on the first category's first item, never 'Pick a card.'", async () => {
@@ -161,6 +172,34 @@ describe("three-pane browse", () => {
     await screen.findByRole("heading", { name: "Aardvark roasting" });
     await user.type(screen.getByRole("textbox", { name: "Search the Arsenal" }), "lateral movement");
     expect(await screen.findByRole("option", { name: /Zzchisel socks proxy/ })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Pivoting" })).toBeInTheDocument();
+    expect(categories().getByRole("button", { name: /Pivoting/ })).not.toHaveAttribute("data-dim");
+    expect(categories().getByRole("button", { name: /Client Side Attacks/ })).toHaveAttribute("data-dim", "true");
+  });
+
+  it("/ focuses the search with no engagement", async () => {
+    m.engagementsList.mockResolvedValue([]);
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <MemoryRouter initialEntries={["/arsenal"]}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await screen.findByText("no active engagement");
+    await user.keyboard("/");
+    expect(screen.getByRole("textbox", { name: "Search the Arsenal" })).toHaveFocus();
+  });
+
+  it("browsing a command or generator leaves the drawer's open card alone", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByRole("heading", { name: "Aardvark roasting" });
+    act(() => useArsenalStore.setState({ cardId: "web-card" }));
+    await user.click(screen.getByRole("option", { name: /Aakerbrute user enum/ }));
+    expect(await screen.findByRole("heading", { name: "Aakerbrute user enum" })).toBeInTheDocument();
+    expect(useArsenalStore.getState().cardId).toBe("web-card");
   });
 
   it("Esc clears the search before it leaves", async () => {

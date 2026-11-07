@@ -19,7 +19,7 @@ export function FillBar({ tokens: all, hasCred = false, auto, overrides, onOverr
   const tokens = hasCred ? all.filter((t) => t !== "USER" && t !== "DOMAIN") : all;
   if (tokens.length === 0) return null;
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-x-3 gap-y-1.5" aria-label="Fill values">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-x-3 gap-y-1.5" aria-label="Fill values">
       {tokens.map((t) => {
         const a = auto[t] ?? { text: "", unresolved: true };
         const typed = overrides[t] ?? "";

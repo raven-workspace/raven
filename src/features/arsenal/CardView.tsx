@@ -174,7 +174,7 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
       className={cx("-m-1.5 grid scroll-mt-10 gap-1 rounded-sm p-1.5 outline-none focus:ring-1 focus:ring-accent", marked === c.id && "ring-1 ring-accent")}
     >
       <CommandList
-        commands={[fillLibraryCommand(c, input, msf.has(c.id))]} hostName={hostName} focusToken={focusToken}
+        commands={[fillLibraryCommand(c, input, msf.has(c.id))]} hostName={hostName} focusToken={focusToken} hideDcNote
         focusCred={() => {
           waitingOnCred.current = c.id;
           focusCredChip?.();
