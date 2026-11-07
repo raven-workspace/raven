@@ -159,8 +159,8 @@ describe("credential pick is shared with the host checklist", () => {
     m.credAttemptsList.mockResolvedValue([]);
   });
 
-  it("picking in the chip writes the host's pick, fills USER, and never shows PASS as a field", async () => {
-    const user = userEvent.setup();
+  it("the credential picked for the host supplies USER, and PASS is never a field", async () => {
+    useCredPickStore.getState().set("h1", "c2");
     render(
       <QueryClientProvider client={makeQueryClient()}>
         <MemoryRouter>
@@ -168,12 +168,9 @@ describe("credential pick is shared with the host checklist", () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
-    const chip = await screen.findByRole("button", { name: /Fill with credential/ });
-    expect(screen.queryByRole("combobox", { name: /Value for (PASS|HASH|CRED)/ })).not.toBeInTheDocument();
-    await user.click(chip);
-    await user.click(screen.getByRole("option", { name: /bob/ }));
-    expect(useCredPickStore.getState().picks.h1).toBe("c2");
-    // The credential supplies USER: it is not a field.
-    await vi.waitFor(() => expect(screen.queryByRole("combobox", { name: "Value for USER" })).not.toBeInTheDocument());
+    await screen.findByRole("combobox", { name: "Value for TARGET_IP" });
+    // The pane has no credential chip of its own: the surface's header holds it.
+    expect(screen.queryByRole("button", { name: /Fill with credential/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /Value for (USER|PASS|HASH|CRED)/ })).not.toBeInTheDocument();
   });
 });

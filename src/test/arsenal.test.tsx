@@ -168,9 +168,7 @@ describe("Arsenal", () => {
     await user.click(await screen.findByRole("button", { name: "From card Zz Card ↗" }));
     const d = within(await drawer());
     expect(await d.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
-    expect(d.getByText("Field Manual")).toBeInTheDocument();
-    expect(d.getByText("Initial foothold")).toBeInTheDocument();
-    expect(d.getByText("Zz-Cat")).toBeInTheDocument();
+    expect(d.getByText("Zz Cat · any")).toBeInTheDocument();
   });
 
   it("a FILE chip edit refills every command on the card", async () => {
@@ -192,7 +190,7 @@ describe("Arsenal", () => {
     mount("/e/e1/h/h1");
     await screen.findByRole("tab", { name: "Next" });
     act(() => useArsenalStore.getState().openCard("zz-card"));
-    const also = within(await screen.findByRole("region", { name: "Also in Raven" }));
+    const also = within((await screen.findByText("Also in Raven")).closest("details")!);
     expect(await block(also, "zzhelper 10.10.10.5")).toBeInTheDocument();
     expect(also.queryByText(/zzprobe/)).not.toBeInTheDocument();
   });
@@ -672,6 +670,30 @@ describe("drawer list grouped by category (U1)", () => {
     expect(await d.findByText(/^Copied for dc01/)).toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toBe("zzpass -p {PASS}");
     expect(d.queryByRole("listbox", { name: "Fill with credential" })).not.toBeInTheDocument();
+  });
+
+  it("on a card, c on a block with only a hash on file focuses the header credential chip and a second Enter there copies", async () => {
+    const user = userEvent.setup();
+    setImported({ commands: [cmd("zz-pass", { title: "Zzpass login", template: "zzpass -p {PASS}" })], cards: [CARD] });
+    m.credentialsList.mockResolvedValue([{
+      id: "c1", engagementId: "e1", type: "hash", username: "admin", domain: null, secret: "8846f7eaee8fb117ad06bdd830b7586c", hashType: "NTLM",
+      scope: "domain", localHostId: null, sourceHostId: null, source: null, notes: null, crackStatus: null, crackedFrom: null, fromSecretId: null,
+      createdAt: 1, updatedAt: 1,
+    }]);
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    act(() => useArsenalStore.getState().openCard("zz-card", "zz-pass"));
+    const d = within(await drawer());
+    await block(d, "zzpass -p {PASS}");
+    const chips = await d.findAllByRole("button", { name: /^Fill with credential/ });
+    expect(chips).toHaveLength(1);
+    await navigator.clipboard.writeText("untouched");
+    await user.keyboard("c");
+    expect(chips[0]).toHaveFocus();
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    await user.keyboard("{Enter}");
+    expect(await d.findByText(/^Copied for dc01/)).toBeInTheDocument();
+    expect(await navigator.clipboard.readText()).toBe("zzpass -p {PASS}");
   });
 
   it("a picked credential supplies USER and DOMAIN, so they are not fields; with none they are", async () => {

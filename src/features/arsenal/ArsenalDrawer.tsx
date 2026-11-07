@@ -40,6 +40,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
   const qc = useQueryClient();
   const libraryVersion = useLibraryVersion();
   const cardId = useArsenalStore((s) => s.cardId);
+  const blockId = useArsenalStore((s) => s.blockId);
   const [query, setQuery] = useState("");
   // With no query: the category being listed, else the category list.
   const [category, setCategory] = useState<string | null>(null);
@@ -107,7 +108,11 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
   const index = Math.min(selected, Math.max(0, rows.length - 1));
   const current: Row | undefined = rows[index];
 
-  useEffect(() => searchRef.current?.focus(), []);
+  // Opened on a card (or one command), the reading pane takes focus (j/k/c); otherwise the search field does.
+  useEffect(() => {
+    const { cardId: card, solo: alone } = useArsenalStore.getState();
+    if (!card && !alone) searchRef.current?.focus();
+  }, []);
   useEffect(() => {
     if (current) document.getElementById(current.id)?.scrollIntoView?.({ block: "nearest" });
   }, [current]);
@@ -297,8 +302,8 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
         )}
       </header>
       <div className="min-h-0 overflow-y-auto px-4 py-3">
-        {showing === "card" && cardId && <CardView cardId={cardId} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} />}
-        {showing === "solo" && solo && <CommandPane key={solo.id} commands={[solo]} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} />}
+        {showing === "card" && cardId && <CardView cardId={cardId} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} focusCred={focusCred} focusBlockId={blockId} />}
+        {showing === "solo" && solo && <CommandPane key={solo.id} commands={[solo]} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} focusCred={focusCred} />}
         {onList && (
           <>
             {examReady && rows.length === 0 && <p className="m-0 px-1 py-2 text-xs text-muted">Nothing matches</p>}

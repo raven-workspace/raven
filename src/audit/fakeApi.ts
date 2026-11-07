@@ -95,6 +95,7 @@ const base = {
   fieldManualLatestMtime: async () => null,
   fieldManualSave: async () => null,
   fieldManualLoad: async () => null,
+  openObsidian: async () => {},
   backupRestore: async () => unsupported("Restore"),
   backupRestoreLocked: async () => unsupported("Restore"),
 
