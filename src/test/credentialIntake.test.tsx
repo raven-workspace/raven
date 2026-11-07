@@ -623,7 +623,7 @@ describe("host Credentials tab", () => {
     expect(errored).toHaveClass("border-warn", "text-warn");
     expect(errored).not.toHaveClass("text-fg-2");
     await user.click(within(rows[0]!).getByRole("button", { name: /nxc smb spray/ }));
-    expect(screen.getByRole("tab", { name: "Story" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Log" })).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByRole("button", { name: /nxc smb spray/, expanded: true })).toBeInTheDocument();
   });
 });

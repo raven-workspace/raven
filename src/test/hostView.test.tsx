@@ -73,6 +73,12 @@ beforeEach(() => {
 });
 
 describe("host view", () => {
+  it("has a Log tab and no Story tab", async () => {
+    mount();
+    expect(await screen.findByRole("tab", { name: "Log" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Story" })).not.toBeInTheDocument();
+  });
+
   it("header shows ip os access and stage", async () => {
     mount();
     const header = within(await screen.findByRole("region", { name: "Host" }));
@@ -179,7 +185,7 @@ describe("host view", () => {
     expect(within(http).queryByText("open")).not.toBeInTheDocument();
   });
 
-  it("story tab lists host entries oldest first", async () => {
+  it("log tab lists host entries oldest first", async () => {
     mount();
     await screen.findByText("older on dc01");
     const items = screen.getAllByRole("listitem").filter((li) => li.textContent?.includes("on dc01"));
@@ -190,7 +196,7 @@ describe("host view", () => {
     expect(screen.queryByText("other host")).not.toBeInTheDocument();
   });
 
-  it("story order flips to newest first", async () => {
+  it("log order flips to newest first", async () => {
     const user = userEvent.setup();
     mount();
     await screen.findByText("older on dc01");

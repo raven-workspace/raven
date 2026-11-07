@@ -219,9 +219,9 @@ describe("attempts", () => {
     expect(within(dlg).getByRole("combobox", { name: "Host" })).toHaveTextContent("dc01");
     await user.click(within(dlg).getByRole("button", { name: "Cancel" }));
 
-    // The linked log entry opens in the Story tab.
+    // The linked log entry opens in the Log tab.
     await user.click(within(list).getByRole("button", { name: "Open log entry for Relay to the DC" }));
-    expect(await screen.findByRole("tab", { name: "Story", selected: true })).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: "Log", selected: true })).toBeInTheDocument();
   });
 
   it("deleting a finding reloads the attempts, which lose the link", async () => {

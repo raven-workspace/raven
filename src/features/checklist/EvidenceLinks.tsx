@@ -8,7 +8,7 @@ export interface EvidenceLink {
   exists: boolean;
 }
 
-/** Evidence chips: a live entry opens in the Story tab; a deleted one just says so. */
+/** Evidence chips: a live entry opens in the Log tab; a deleted one just says so. */
 export function EvidenceLinks({ evidence, onOpen }: { evidence: EvidenceLink[]; onOpen: (entryId: string) => void }) {
   if (evidence.length === 0) return null;
   return (

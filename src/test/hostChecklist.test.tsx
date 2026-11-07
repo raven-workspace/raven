@@ -247,13 +247,13 @@ describe("host checklist tab", () => {
     expect(sent).toMatchObject({ ownerId: "h1", goalId: "h-enum-smb", status: "done", auto: false });
   });
 
-  it("evidence chip opens the Story tab with the entry expanded", async () => {
+  it("evidence chip opens the Log tab with the entry expanded", async () => {
     const user = userEvent.setup();
     mount({ items: [item("h-enum-smb", { evidence: [{ entryId: "en1" }, { entryId: "gone" }] })] });
     await openChecklist(user);
     expect(await screen.findByText("log entry removed")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /nmap sweep/ }));
-    expect(screen.getByRole("tab", { name: "Story" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Log" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("button", { name: /nmap sweep/ })).toHaveAttribute("aria-expanded", "true");
   });
 

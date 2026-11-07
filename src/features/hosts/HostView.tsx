@@ -18,7 +18,7 @@ import { ServicesColumn } from "./ServicesColumn";
 import { useHosts } from "./queries";
 
 const TABS = [
-  { id: "story", label: "Story" },
+  { id: "log", label: "Log" },
   { id: "checklist", label: "Checklist" },
   { id: "credentials", label: "Credentials" },
   { id: "findings", label: "Findings" },
@@ -32,8 +32,8 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   const navigate = useNavigate();
   // A Stuck check line arrives with the goal to open; the state is cleared below so back/forward does not repeat it.
   const arrivedGoal = (location.state as { goalId?: string } | null)?.goalId;
-  const [tab, setTab] = useState<TabId>(arrivedGoal ? "checklist" : "story");
-  const [order, setOrder] = usePersistedOrder("raven.story.order", "oldest");
+  const [tab, setTab] = useState<TabId>(arrivedGoal ? "checklist" : "log");
+  const [order, setOrder] = usePersistedOrder("raven.log.order", "oldest", "raven.story.order");
   const [openEntry, setOpenEntry] = useState<string>();
   const [focusGoal, setFocusGoal] = useState<{ id: string; n: number } | undefined>(arrivedGoal ? { id: arrivedGoal, n: 1 } : undefined);
   useEffect(() => {
@@ -61,9 +61,9 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
     e.preventDefault();
     toggleStuck();
   });
-  const openInStory = (id: string) => {
+  const openInLog = (id: string) => {
     setOpenEntry(id);
-    setTab("story");
+    setTab("log");
   };
   const host = hosts.data?.find((h) => h.id === hostId);
 
@@ -116,17 +116,17 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
                 </button>
               ))}
             </div>
-            {tab === "story" && <OrderButton order={order} onChange={setOrder} />}
+            {tab === "log" && <OrderButton order={order} onChange={setOrder} />}
           </div>
           <div role="tabpanel" className="mt-3 min-h-0 flex-1 overflow-y-auto border-t border-line pl-1 pr-3 pt-1 [scrollbar-gutter:stable]">
-            {tab === "story" ? (
+            {tab === "log" ? (
               log.isError ? (
                 <p role="alert" className="text-xs text-warn">Couldn't load the log: {log.error.message}</p>
               ) : entries.length === 0 && log.data ? (
                 <p className="text-[13px] text-muted">Nothing logged on this host yet. Press L to capture.</p>
               ) : (
                 <ul className="m-0 list-none p-0">
-                  {entries.map((e) => <LogEntryRow key={e.id} entry={e} hosts={hosts.data} defaultOpen={e.id === openEntry} />)}
+                  {entries.map((e) => <LogEntryRow key={e.id} entry={e} hosts={hosts.data} currentHostId={hostId} defaultOpen={e.id === openEntry} />)}
                 </ul>
               )
             ) : tab === "checklist" ? (
@@ -134,12 +134,12 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
                 engagementId={engagementId}
                 host={host}
                 focusGoal={focusGoal}
-                onOpenEntry={openInStory}
+                onOpenEntry={openInLog}
               />
             ) : tab === "credentials" ? (
-              <HostCredentials engagementId={engagementId} host={host} onOpenEntry={openInStory} />
+              <HostCredentials engagementId={engagementId} host={host} onOpenEntry={openInLog} />
             ) : (
-              <HostFindings engagementId={engagementId} host={host} onOpenEntry={openInStory} />
+              <HostFindings engagementId={engagementId} host={host} onOpenEntry={openInLog} />
             )}
           </div>
         </div>
