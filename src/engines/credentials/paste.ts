@@ -12,6 +12,10 @@ export interface ParsedCredentialPaste {
 
 const NTLM_RE = /^[0-9a-f]{32}$/i;
 const LM_NT_RE = /^[0-9a-f]{32}:[0-9a-f]{32}$/i;
+/** `user:RID:LM:NT:::`, the line secretsdump and pwdump print. */
+const DUMP_RE = /^(.+?):\d+:([0-9a-f]{32}):([0-9a-f]{32}):::?$/i;
+/** An IPv4 address or a dotted host name: what `host:port` has before its colon. */
+const HOSTLIKE_RE = /^(\d{1,3}(\.\d{1,3}){3}|[^\s\\@]*\.[^\s\\@]*)$/;
 
 export function parseCredentialPaste(text: string): ParsedCredentialPaste | null {
   const line = text.trim();
@@ -19,12 +23,16 @@ export function parseCredentialPaste(text: string): ParsedCredentialPaste | null
   // A URL, not a credential.
   if (line.includes("://")) return null;
 
-  const colon = line.indexOf(":");
+  const dump = DUMP_RE.exec(line);
+  const colon = dump ? dump[1]!.length : line.indexOf(":");
   if (colon < 0) return null;
   const account = line.slice(0, colon).trim();
-  const secret = line.slice(colon + 1);
-  // host:port, not a credential.
-  if (secret === "" || /^\d+$/.test(secret)) return null;
+  const secret = dump ? `${dump[2]}:${dump[3]}` : line.slice(colon + 1);
+  // "Note: remember this" and "Some note: x" are sentences, not credentials: no whitespace in the account, none opening the secret.
+  if (/\s/.test(account) || /^\s/.test(secret)) return null;
+  if (secret === "") return null;
+  // host:port, not a credential (an all-digit password is one when its account is a plain account name).
+  if (/^\d+$/.test(secret) && HOSTLIKE_RE.test(account) && Number(secret) <= 65535) return null;
 
   let username = account;
   let domain: string | null = null;
