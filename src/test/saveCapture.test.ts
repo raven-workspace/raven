@@ -4,6 +4,7 @@ import { PartialSaveError, saveCapture, type CaptureEdits } from "../features/ca
 import { api } from "../lib/api";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
+import type { HostIdentity } from "../types/hostFacts";
 import type { LogEntry, LogEntryInput } from "../types/log";
 
 vi.mock("../lib/api");
@@ -380,6 +381,124 @@ describe("saveCapture", () => {
       message: "Saved the entry, but the checklist didn't update. Use Tick from log on the Engagement checklist.",
       entry: { id: "l1" },
       reason: cause,
+    });
+  });
+
+  describe("identity capture", () => {
+    const priv = "PRIVILEGES INFORMATION\n----------------------\n\nPrivilege Name                Description                    State\n============================= ============================== ========\nSeImpersonatePrivilege        Impersonate a client after authentication Enabled\n";
+    const run = (hostIds: string[], hosts: Host[]) => {
+      const c = { kind: "command" as const, blocks: [{ command: "whoami /priv", output: priv }] };
+      return saveCapture({
+        engagementId: "e1",
+        draft: draft({ content: c, hostIds }),
+        edits: edits({ content: c, hostIds, ranOn: "dc01" }),
+        addIps: [],
+        image: null,
+        hosts,
+      });
+    };
+
+    it("sets identity and upserts auto vectors for a single linked host", async () => {
+      m.hostIdentityGet.mockResolvedValue(null);
+      await run(["h1"], [DC]);
+      expect(m.hostIdentitySet).toHaveBeenCalledWith(
+        expect.objectContaining({ hostId: "h1", username: "unknown", entryId: "l1", privileges: expect.arrayContaining(["SeImpersonatePrivilege"]) }),
+      );
+      expect(m.vectorUpsert).toHaveBeenCalledWith("h1", { title: "SeImpersonatePrivilege abuse", status: "try", source: "auto" });
+    });
+
+    it("records privileges from an Evil-WinRM whoami /priv even when Ran on is Kali", async () => {
+      m.hostIdentityGet.mockResolvedValue(null);
+      const c = { kind: "command" as const, blocks: [{ command: "whoami /priv", output: priv, shell: "evil-winrm" }] };
+      const win = host({ id: "h1", name: "onyx", os: "windows" });
+      await saveCapture({
+        engagementId: "e1",
+        draft: draft({ content: c }),
+        edits: edits({ content: c, ranOn: "Kali (VM)" }),
+        addIps: [],
+        image: null,
+        hosts: [win],
+      });
+      expect(m.hostIdentitySet).toHaveBeenCalledWith(expect.objectContaining({ hostId: "h1", privileges: expect.arrayContaining(["SeImpersonatePrivilege"]) }));
+    });
+
+    const groupsOut = "GROUP INFORMATION\n-----------------\n\nGroup Name   Type   SID   Attributes\n============ ====== ===== ==========\nBUILTIN\\Users   Alias   S-1-5-32-545   Enabled group\n";
+    const capture = (command: string, output: string) => {
+      const c = { kind: "command" as const, blocks: [{ command, output }] };
+      return saveCapture({
+        engagementId: "e1",
+        draft: draft({ content: c }),
+        edits: edits({ content: c, ranOn: "dc01" }),
+        addIps: [],
+        image: null,
+        hosts: [DC],
+      });
+    };
+    /** hostIdentityGet returns whatever hostIdentitySet last stored, like the real table. */
+    const storeLikeTheDb = (initial: HostIdentity | null) => {
+      let stored = initial;
+      m.hostIdentityGet.mockImplementation(async () => stored);
+      m.hostIdentitySet.mockImplementation(async (input) => (stored = { ...input, updatedAt: 2 }));
+      return () => stored;
+    };
+
+    it("whoami /priv then whoami /groups keeps both the privileges and the groups", async () => {
+      const stored = storeLikeTheDb(null);
+      await capture("whoami /priv", priv);
+      await capture("whoami /groups", groupsOut);
+      expect(stored()).toMatchObject({ username: "unknown", privileges: ["SeImpersonatePrivilege"], groups: ["BUILTIN\\Users"] });
+    });
+
+    it("a flag capture whose proof holds id output sets the identity and keeps the proof as pasted", async () => {
+      m.hostIdentityGet.mockResolvedValue(null);
+      const paste = "# id\nuid=0(root) gid=0(root) groups=0(root)\n# cat /root/proof.txt\n918eef4c77a6e2903e0a3f4ff8554182";
+      const c = { kind: "flag" as const, flagKind: "proof" as const, value: "918eef4c77a6e2903e0a3f4ff8554182", proof: paste };
+      const vega = host({ id: "h1", name: "Vega", os: "linux" });
+      const saved = await saveCapture({
+        engagementId: "e1",
+        draft: draft({ kind: "flag", content: c }),
+        edits: edits({ kind: "flag", content: c, ranOn: "Vega" }),
+        addIps: [],
+        image: null,
+        hosts: [vega],
+      });
+      expect(m.hostIdentitySet).toHaveBeenCalledWith(expect.objectContaining({ hostId: "h1", username: "root", entryId: "l1" }));
+      expect(saved.content).toEqual(c);
+      expect(m.logCreate).toHaveBeenCalledWith("e1", expect.objectContaining({ content: expect.objectContaining({ proof: paste }) }));
+    });
+
+    it("a bare whoami changes only the username", async () => {
+      const stored = storeLikeTheDb({ hostId: "h1", username: "unknown", privileges: ["SeImpersonatePrivilege"], groups: ["docker"], entryId: "l0", updatedAt: 1 });
+      await capture("whoami", "dc01\\svc_web");
+      expect(stored()).toMatchObject({ username: "dc01\\svc_web", privileges: ["SeImpersonatePrivilege"], groups: ["docker"] });
+    });
+
+    it("a hand edit keeps everything but its groups when whoami /groups is captured later", async () => {
+      const stored = storeLikeTheDb({ hostId: "h1", username: "corp\\sam", privileges: ["SeBackupPrivilege"], groups: ["typed-by-hand"], entryId: null, updatedAt: 1 });
+      await capture("whoami /groups", groupsOut);
+      expect(stored()).toMatchObject({ username: "corp\\sam", privileges: ["SeBackupPrivilege"], groups: ["BUILTIN\\Users"] });
+    });
+
+    it("a vector that fails to save is reported as the vectors, not the identity", async () => {
+      storeLikeTheDb(null);
+      m.vectorUpsert.mockRejectedValue(new Error("db down"));
+      const err = await run(["h1"], [DC]).catch((e) => e);
+      expect(err).toBeInstanceOf(PartialSaveError);
+      expect(err.message).toBe("Saved the entry, but the privesc vectors didn't update. Paste the output again to retry.");
+    });
+
+    it("does nothing with two linked hosts", async () => {
+      await run(["h1", "h2"], [DC, host({ id: "h2", name: "ws01" })]);
+      expect(m.hostIdentitySet).not.toHaveBeenCalled();
+      expect(m.vectorUpsert).not.toHaveBeenCalled();
+    });
+
+    it("keeps the saved entry and reports a partial save when hostIdentitySet rejects", async () => {
+      m.hostIdentityGet.mockResolvedValue(null);
+      m.hostIdentitySet.mockRejectedValue(new Error("db down"));
+      const err = await run(["h1"], [DC]).catch((e) => e);
+      expect(err).toBeInstanceOf(PartialSaveError);
+      expect(err.entry.id).toBe("l1");
     });
   });
 });

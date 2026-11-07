@@ -20,11 +20,12 @@ const row = (cmds = []) => (
 describe("new credential notice", () => {
   it("is a collapsed count; opening lists labels one per line; never widens the row", async () => {
     render(row());
-    const btn = screen.getByRole("button", { name: /7 new credentials since this was done/ });
+    const btn = screen.getByRole("button", { name: /7 new creds since done · re-check/ });
     expect(btn).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("CORP\\svc_3")).toBeNull();
+    // One line that truncates inside its own min-w-0 box: it never widens the row.
     expect(btn.closest("div")!.className).toMatch(/min-w-0/);
-    expect(btn.closest("div")!.className).not.toMatch(/whitespace-nowrap/);
+    expect(btn.className).toMatch(/truncate/);
     await userEvent.click(btn);
     const items = screen.getAllByRole("listitem").filter((li) => li.textContent?.startsWith("CORP"));
     expect(items).toHaveLength(7);

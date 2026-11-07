@@ -108,6 +108,8 @@ async function openCapture(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   useCaptureStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.servicesListEngagement.mockResolvedValue([]);
@@ -116,7 +118,7 @@ beforeEach(() => {
   m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30,
     backupRetention: 14,
-    machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm",
+    machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false,
   });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementGet.mockResolvedValue(E1);

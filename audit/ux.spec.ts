@@ -36,7 +36,7 @@ for (const flow of FLOWS) {
 // Under `empty` these screens' setups act on fixture rows or a host (a tab, a finding, a log entry, a host option) that
 // the scenario removes by definition, so there is nothing to set up. Skipped explicitly, not swallowed.
 const NEEDS_DATA = new Set([
-  "host-checklist", "host-credentials", "host-findings", "exam-host-locked", "findings", "log-images", "transfer-generator",
+  "host-checklist", "host-findings", "host-log", "finding-split", "exam-host-locked", "findings", "log-images", "transfer-generator",
 ]);
 
 for (const screen of STATE_SCREENS) {

@@ -26,7 +26,7 @@ const H1: Host = {
 };
 const svc = (id: string, port: number, over: Partial<Service> = {}): Service => ({
   id, hostId: "h1", port, protocol: "tcp", state: "open", nmapService: null, nmapVersion: null,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1, ...over,
+  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1, ...over,
 });
 const T = new Date(2026, 10, 4, 9, 5).getTime();
 const entry = (id: string, title: string, at: number, hostIds: string[]): LogEntry => ({
@@ -53,7 +53,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   useCaptureStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementGet.mockResolvedValue(E1);
   m.engagementsProgress.mockResolvedValue({});
@@ -68,11 +68,77 @@ beforeEach(() => {
     entry("o", "older on dc01", T, ["h1"]),
     entry("x", "other host", T + 1000, ["h2"]),
   ]);
-  m.serviceConfirm.mockResolvedValue(svc("s3", 22));
   m.hostDelete.mockResolvedValue(null);
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
+  m.checklistList.mockResolvedValue([]);
+  m.servicesListEngagement.mockResolvedValue([]);
+  m.tunnelsList.mockResolvedValue([]);
+  m.credentialsList.mockResolvedValue([]);
+  m.usernamesList.mockResolvedValue([]);
+  m.accessGrantsList.mockResolvedValue([]);
+  m.credAttemptsList.mockResolvedValue([]);
+  m.notesList.mockResolvedValue([]);
 });
 
+async function openLog(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("tab", { name: "Log" }));
+  await screen.findByText("older on dc01");
+}
+
 describe("host view", () => {
+  it("has exactly the tabs Next, Log and Findings, Next first and selected", async () => {
+    mount();
+    await screen.findByRole("tab", { name: "Next" });
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Next", "Log", "Findings"]);
+    expect(screen.getByRole("tab", { name: "Next" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("tab", { name: "Story" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Credentials" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Checklist" })).not.toBeInTheDocument();
+  });
+
+  it("⌥2 selects Log, ⌥3 Findings and ⌥1 Next", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("{Alt>}2{/Alt}");
+    expect(screen.getByRole("tab", { name: "Log" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("older on dc01")).toBeInTheDocument();
+    await user.keyboard("{Alt>}3{/Alt}");
+    expect(screen.getByRole("tab", { name: "Findings" })).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{Alt>}1{/Alt}");
+    expect(screen.getByRole("tab", { name: "Next" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("⌥2 does nothing while typing in a field", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("l");
+    const dialog = await screen.findByRole("dialog", { name: "Add to log" });
+    await user.keyboard("{Alt>}2{/Alt}");
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Next", hidden: true })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("has no Now panel", async () => {
+    mount();
+    await screen.findByRole("region", { name: "Facts" });
+    expect(screen.queryByText("Now")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Now" })).not.toBeInTheDocument();
+  });
+
+  it("the page is a host container: Facts beside the work column from 760px, stacked below", async () => {
+    mount();
+    const facts = await screen.findByRole("region", { name: "Facts" });
+    const root = screen.getByRole("region", { name: "Host" }).parentElement!;
+    expect(root.className).toMatch(/@container\/host/);
+    expect(root.className).toMatch(/grid-rows-\[auto_minmax\(0,1fr\)\]/);
+    const body = facts.parentElement!.parentElement!;
+    expect(body.className).toContain("@min-[760px]/host:grid-cols-[minmax(16rem,1fr)_minmax(0,1.4fr)]");
+    expect(body).toContainElement(screen.getByRole("tablist"));
+  });
+
   it("header shows ip os access and stage", async () => {
     mount();
     const header = within(await screen.findByRole("region", { name: "Host" }));
@@ -81,68 +147,6 @@ describe("host view", () => {
     expect(header.getByText("Windows")).toBeInTheDocument();
     expect(header.getByText("user")).toHaveAttribute("data-variant", "accent");
     expect(header.getByText("Vulnerability detection")).toBeInTheDocument();
-  });
-
-  it("confirmed service shows identity with nmap guess dimmed", async () => {
-    mount();
-    const row = (await screen.findByRole("button", { name: /80\/tcp/ })).closest("li")!;
-    expect(within(row).getByText("nginx 1.18")).toBeInTheDocument();
-    expect(within(row).getByText("✓")).toHaveClass("text-accent");
-    expect(within(row).getByText("http Apache 2.4")).toHaveClass("text-faint");
-  });
-
-  it("unidentified service flagged", async () => {
-    mount();
-    const row = (await screen.findByRole("button", { name: /445\/tcp/ })).closest("li")!;
-    expect(within(row).getByText("unidentified")).toHaveClass("text-warn");
-    const ssh = (await screen.findByRole("button", { name: /22\/tcp/ })).closest("li")!;
-    expect(within(ssh).getByText("ssh OpenSSH 8.2")).toHaveClass("text-muted");
-  });
-
-  it("confirm dialog sends product version and proving entry", async () => {
-    const user = userEvent.setup();
-    mount();
-    await user.click(await screen.findByRole("button", { name: /22\/tcp/ }));
-    const dialog = await screen.findByRole("dialog");
-    await user.type(within(dialog).getByLabelText("Product"), "OpenSSH");
-    await user.type(within(dialog).getByLabelText("Version"), "8.2p1");
-    await user.click(within(dialog).getByRole("combobox", { name: "Proved by" }));
-    await user.click(await screen.findByRole("option", { name: "older on dc01" }));
-    await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
-    expect(m.serviceConfirm).toHaveBeenCalledWith("s3", { product: "OpenSSH", version: "8.2p1", entryId: "o" });
-  });
-
-  it("service dialog edits port, protocol and nmap guess (I5)", async () => {
-    m.serviceUpdate.mockResolvedValue(svc("s3", 2222));
-    const user = userEvent.setup();
-    mount();
-    await user.click(await screen.findByRole("button", { name: /22\/tcp/ }));
-    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Edit" }));
-    const dialog = await screen.findByRole("dialog", { name: "Edit 22/tcp" });
-    const port = within(dialog).getByLabelText("Port");
-    expect(port).toHaveValue("22");
-    expect(within(dialog).getByLabelText("Service")).toHaveValue("ssh");
-    expect(within(dialog).getByLabelText("Version")).toHaveValue("OpenSSH 8.2");
-    await user.clear(port);
-    await user.type(port, "2222");
-    await user.clear(within(dialog).getByLabelText("Version"));
-    await user.type(within(dialog).getByLabelText("Version"), "OpenSSH 9.6");
-    await user.click(within(dialog).getByRole("button", { name: "Save" }));
-    expect(m.serviceUpdate).toHaveBeenCalledWith("s3", { port: 2222, protocol: "tcp", nmapService: "ssh", nmapVersion: "OpenSSH 9.6" });
-    await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-  });
-
-  it("service dialog deletes after a confirm (I5)", async () => {
-    m.serviceDelete.mockResolvedValue(null);
-    const user = userEvent.setup();
-    mount();
-    await user.click(await screen.findByRole("button", { name: /445\/tcp/ }));
-    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete" }));
-    const confirm = await screen.findByRole("dialog", { name: "Delete 445/tcp?" });
-    expect(m.serviceDelete).not.toHaveBeenCalled();
-    await user.click(within(confirm).getByRole("button", { name: "Delete service" }));
-    expect(m.serviceDelete).toHaveBeenCalledWith("s2");
-    await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
   it("host delete confirm says what goes with it and what stays", async () => {
@@ -170,18 +174,10 @@ describe("host view", () => {
     for (const part of ["field notes", "ruled-out items", "tunnels", "hops"]) expect(text).toContain(part);
   });
 
-  it("a service that is not open shows its state (M1)", async () => {
-    m.servicesList.mockResolvedValue([svc("s1", 80, { nmapService: "http" }), svc("s4", 161, { protocol: "udp", state: "open|filtered", nmapService: "snmp" })]);
+  it("log tab lists host entries oldest first", async () => {
+    const user = userEvent.setup();
     mount();
-    const snmp = (await screen.findByRole("button", { name: /161\/udp/ })).closest("li")!;
-    expect(within(snmp).getByText("open|filtered")).toBeInTheDocument();
-    const http = screen.getByRole("button", { name: /80\/tcp/ }).closest("li")!;
-    expect(within(http).queryByText("open")).not.toBeInTheDocument();
-  });
-
-  it("story tab lists host entries oldest first", async () => {
-    mount();
-    await screen.findByText("older on dc01");
+    await openLog(user);
     const items = screen.getAllByRole("listitem").filter((li) => li.textContent?.includes("on dc01"));
     expect(items.map((li) => within(li).getAllByRole("button")[0]!.textContent)).toEqual([
       expect.stringContaining("older on dc01"),
@@ -190,10 +186,10 @@ describe("host view", () => {
     expect(screen.queryByText("other host")).not.toBeInTheDocument();
   });
 
-  it("story order flips to newest first", async () => {
+  it("log order flips to newest first", async () => {
     const user = userEvent.setup();
     mount();
-    await screen.findByText("older on dc01");
+    await openLog(user);
     await user.click(screen.getByRole("button", { name: /Switch to newest first/ }));
     const items = screen.getAllByRole("listitem").filter((li) => li.textContent?.includes("on dc01"));
     expect(items.map((li) => within(li).getAllByRole("button")[0]!.textContent)).toEqual([
@@ -205,7 +201,7 @@ describe("host view", () => {
   it("capture from host view preselects the host", async () => {
     const user = userEvent.setup();
     mount();
-    await screen.findByText("older on dc01");
+    await screen.findByRole("tab", { name: "Next" });
     await user.keyboard("l");
     const dialog = await screen.findByRole("dialog", { name: "Add to log" });
     expect(within(within(dialog).getByRole("group", { name: "Hosts" })).getByText("dc01")).toBeInTheDocument();
@@ -214,7 +210,7 @@ describe("host view", () => {
   it("esc goes back to board", async () => {
     const user = userEvent.setup();
     mount();
-    await screen.findByText("older on dc01");
+    await screen.findByRole("tab", { name: "Next" });
     await user.keyboard("{Escape}");
     expect(screen.getByTestId("where")).toHaveTextContent(/^\/e\/e1$/);
   });

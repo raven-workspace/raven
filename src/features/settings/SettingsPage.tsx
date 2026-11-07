@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../../lib/api";
 import type { BackupInfo } from "../../types/backup";
-import type { Settings } from "../../types/settings";
+import type { SettingsPatch } from "../../types/settings";
 import { Button, Chip, Dialog, EmptyState, Field, Input, Panel } from "../../ui";
 import { FieldManualSection } from "./FieldManualSection";
 import { ImportSection } from "./ImportSection";
@@ -90,6 +90,58 @@ function TextSetting({
   );
 }
 
+/** The NVD API key: write-only. The stored key is never shown; only whether one is set. */
+function NvdKeySetting({
+  set,
+  error,
+  pending,
+  onSave,
+}: {
+  set: boolean;
+  error?: string | undefined;
+  pending: boolean;
+  onSave: (key: string, done: () => void) => void;
+}) {
+  const [text, setText] = useState("");
+  const save = () => {
+    const v = text.trim();
+    if (v !== "") onSave(v, () => setText(""));
+  };
+  return (
+    <div className="grid grid-cols-[minmax(0,22rem)_auto_auto] items-end gap-3">
+      <Field label="NVD API key" error={error}>
+        <Input
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          mono
+          value={text}
+          placeholder={set ? "Paste a new key to replace it" : "Paste your key"}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              save();
+            }
+          }}
+        />
+      </Field>
+      <Button size="sm" className="mb-1" disabled={pending || text.trim() === ""} onClick={save}>
+        Save key
+      </Button>
+      <Button size="sm" className="mb-1" disabled={pending || !set} onClick={() => onSave("", () => setText(""))}>
+        Clear key
+      </Button>
+      <p className="col-span-3 m-0 text-xs text-muted">
+        <span className={set ? "text-fg" : undefined}>{set ? "Set" : "Not set"}</span>
+        {" · "}
+        Looks up CVEs you add to findings. Only the CVE ID and this key are sent, to NIST NVD. Without a key, use the
+        CVSS builder.
+      </p>
+    </div>
+  );
+}
+
 /** `onRestored` runs whenever the backend ends up locked (after a restore, or a failed one). */
 export function SettingsPage({ onRestored }: { onRestored: () => void }) {
   const qc = useQueryClient();
@@ -100,7 +152,7 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
   const [fieldError, setFieldError] = useState<{ field: string; msg: string } | null>(null);
 
   const update = useMutation({
-    mutationFn: (patch: Partial<Settings>) => {
+    mutationFn: (patch: SettingsPatch) => {
       setFieldError(null);
       return api.settingsUpdate(patch);
     },
@@ -214,6 +266,16 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
               onSave={(v) => update.mutate({ linuxToolsDir: v })}
             />
           </div>
+        </Panel>
+      )}
+      {settings.data && (
+        <Panel title="CVE lookup">
+          <NvdKeySetting
+            set={settings.data.nvdKeySet}
+            pending={update.isPending}
+            error={fieldError?.field === "nvdApiKey" ? fieldError.msg : undefined}
+            onSave={(key, done) => update.mutate({ nvdApiKey: key }, { onSuccess: done })}
+          />
         </Panel>
       )}
       <Panel

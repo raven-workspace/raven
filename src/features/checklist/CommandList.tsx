@@ -1,3 +1,4 @@
+import { Copy } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Chip } from "../../ui";
 import { copyPlain, copySecret } from "../../lib/clipboard";
@@ -30,17 +31,37 @@ export interface FilledCommand {
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** The command text with unresolved tokens wrapped in a warn-coloured mark (no background). */
-function Text({ text, tokens }: { text: string; tokens: string[] }) {
-  if (tokens.length === 0) return <>{text}</>;
-  const re = new RegExp(`(${tokens.map(escape).join("|")})`);
+/** One word with its unresolved tokens wrapped in a warn-coloured mark (no background). */
+function Marked({ word, re, tokens }: { word: string; re: RegExp | null; tokens: string[] }) {
+  if (!re) return <>{word}</>;
   return (
     <>
-      {text.split(re).map((part, i) =>
+      {word.split(re).map((part, i) =>
         tokens.includes(part) ? (
           <mark key={i} className="bg-transparent text-warn">{part}</mark>
         ) : (
-          <span key={i}>{part}</span>
+          part
+        ),
+      )}
+    </>
+  );
+}
+
+/**
+ * The command text, one unbreakable span per whitespace-separated word, so a line wraps only at spaces (never inside
+ * `-sV` or an IP); a word longer than the block scrolls. The spaces stay plain text, so copying the text is unchanged.
+ */
+function Text({ text, tokens }: { text: string; tokens: string[] }) {
+  const re = tokens.length > 0 ? new RegExp(`(${tokens.map(escape).join("|")})`) : null;
+  return (
+    <>
+      {text.split(/(\s+)/).map((part, i) =>
+        part === "" ? null : /^\s+$/.test(part) ? (
+          part
+        ) : (
+          <span key={i} data-testid="command-word" className="inline-block whitespace-nowrap">
+            <Marked word={part} re={re} tokens={tokens} />
+          </span>
         ),
       )}
     </>
@@ -66,19 +87,23 @@ export function CommandList({ commands }: { commands: FilledCommand[] }) {
     <ul className="m-0 flex list-none flex-col gap-4 p-0">
       {commands.map((c) => (
         <li key={c.id} className="flex flex-col gap-1">
-          <span data-testid="command-desc" className="text-xs text-muted">{c.title}</span>
-          {/* Copy sits small in the block's top-right corner; the block keeps room on its right so text never runs under it. */}
-          <div data-testid="command-block" className="relative">
-            <pre className={`${COMMAND_PRE} pr-16`}>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2">
+            <span data-testid="command-desc" className="text-xs text-muted">{c.title}</span>
+            {copied === c.id && <span role="status" className="text-[11px] text-accent">Copied</span>}
+          </div>
+          {/* Copy has its own fixed track beside the block, so command text never runs under it. */}
+          <div data-testid="command-block" className="grid grid-cols-[minmax(0,1fr)_1.5rem] items-start gap-2">
+            <pre className={COMMAND_PRE}>
               <Text text={c.text} tokens={c.tokens ?? []} />
             </pre>
             <Button
               size="sm"
-              className="absolute top-1 right-1 h-5 w-auto shrink-0 bg-surface px-1.5 text-[11px]"
+              className="mt-1 h-6 w-6 px-0!"
               aria-label={`Copy command: ${c.title}`}
+              title="Copy command"
               onClick={() => copy(c)}
             >
-              {copied === c.id ? "Copied" : "Copy"}
+              <Copy size={14} weight={copied === c.id ? "fill" : "light"} aria-hidden className={copied === c.id ? "text-accent" : undefined} />
             </Button>
           </div>
           {(c.msfMarker || c.viaTunnel || c.dcByName) && (

@@ -18,10 +18,27 @@ interface Draft {
   content: string;
 }
 
+/** The open file form, held by the finding's draft so closing the split never loses pasted text. */
+export interface FileFormDraft extends Draft {
+  /** The file being edited; null while adding one. */
+  fileId: string | null;
+}
+
+/** The form's fields as they start for `file` (or a new one). */
+function initialFields(file?: FindingFile): Draft {
+  return {
+    name: file?.name ?? "",
+    language: file?.language && file.language !== guessLanguage(file.name) ? file.language : AUTO,
+    content: file?.content ?? "",
+  };
+}
+
 /** Add or edit one file: paste its text, or choose a local text file. */
-function FileForm({ findingId, file, onDone, onDirty, register }: {
+function FileForm({ findingId, file, value, onChange, onDone, onDirty, register }: {
   findingId: string;
   file?: FindingFile;
+  value: Draft;
+  onChange: (d: Draft) => void;
   onDone: () => void;
   /** Reports whether the form holds unsaved changes. */
   onDirty: (dirty: boolean) => void;
@@ -29,12 +46,13 @@ function FileForm({ findingId, file, onDone, onDirty, register }: {
   register: (flush: (() => Promise<boolean>) | null) => void;
 }) {
   const { create, update } = useFindingFileMutations(findingId);
-  const [initial] = useState<Draft>(() => ({
-    name: file?.name ?? "",
-    language: file?.language && file.language !== guessLanguage(file.name) ? file.language : AUTO,
-    content: file?.content ?? "",
-  }));
-  const [d, setD] = useState<Draft>(initial);
+  const [initial] = useState<Draft>(() => initialFields(file));
+  const d = value;
+  const latest = useRef(value);
+  useEffect(() => {
+    latest.current = value;
+  });
+  const setD = (next: Draft) => onChange(next);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
@@ -56,7 +74,8 @@ function FileForm({ findingId, file, onDone, onDirty, register }: {
       setError(`${f.name}: text files only`);
       return;
     }
-    setD((p) => ({ ...p, name: p.name.trim() === "" ? f.name : p.name, content: text }));
+    const p = latest.current;
+    setD({ ...p, name: p.name.trim() === "" ? f.name : p.name, content: text });
   }
 
   async function submit(): Promise<boolean> {
@@ -81,7 +100,7 @@ function FileForm({ findingId, file, onDone, onDirty, register }: {
     return false;
   }
 
-  const dirty = JSON.stringify(d) !== JSON.stringify(initial);
+  const dirty = d.name !== initial.name || d.language !== initial.language || d.content !== initial.content;
   // An untouched form has nothing to save: the finding's Save must not be blocked by it.
   const flush = async () => (dirty ? submit() : true);
   const submitRef = useRef(flush);
@@ -179,25 +198,42 @@ function FileRow({ findingId, file, onEdit }: { findingId: string; file: Finding
 }
 
 /** A saved finding's files (exploit code and the like). They save on their own, not with the finding form. */
-export function FindingFiles({ findingId, onDirty, register }: {
+export function FindingFiles({ findingId, form, onForm, onDirty, register }: {
   findingId: string;
+  /** The open file form, or null; owned by the finding's draft. */
+  form: FileFormDraft | null;
+  onForm: (form: FileFormDraft | null) => void;
   onDirty: (dirty: boolean) => void;
   register: (flush: (() => Promise<boolean>) | null) => void;
 }) {
   const files = useFindingFiles(findingId);
-  const [form, setForm] = useState<{ file?: FindingFile } | null>(null);
+  const formFile = form?.fileId ? files.data?.find((f) => f.id === form.fileId) : undefined;
+  // Editing a file: wait for the list, so the form knows what "unchanged" means. A file deleted meanwhile becomes a new one.
+  const formReady = form !== null && (form.fileId === null || files.data !== undefined);
+  const open = (file?: FindingFile) => onForm({ fileId: file?.id ?? null, ...initialFields(file) });
   return (
     <div role="group" aria-label="Finding files" className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-2">
         <span className={labelClass}>Files</span>
-        {!form && <Button size="sm" onClick={() => setForm({})}>Add file</Button>}
+        {!form && <Button size="sm" onClick={() => open()}>Add file</Button>}
       </div>
       {files.isError && <p role="alert" className="m-0 text-xs text-warn">Couldn't load files: {files.error.message}</p>}
-      {form && <FileForm key={form.file?.id ?? "new"} findingId={findingId} file={form.file} onDone={() => setForm(null)} onDirty={onDirty} register={register} />}
+      {formReady && (
+        <FileForm
+          key={formFile?.id ?? "new"}
+          findingId={findingId}
+          file={formFile}
+          value={form}
+          onChange={(d) => onForm({ ...d, fileId: formFile?.id ?? null })}
+          onDone={() => onForm(null)}
+          onDirty={onDirty}
+          register={register}
+        />
+      )}
       {files.data && files.data.length === 0 && !form && <p className="m-0 text-xs text-muted">No files yet. Paste exploit code or choose a file.</p>}
       {files.data && files.data.length > 0 && (
         <ul className="m-0 flex list-none flex-col p-0">
-          {files.data.map((f) => <FileRow key={f.id} findingId={findingId} file={f} onEdit={() => setForm({ file: f })} />)}
+          {files.data.map((f) => <FileRow key={f.id} findingId={findingId} file={f} onEdit={() => open(f)} />)}
         </ul>
       )}
     </div>

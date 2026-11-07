@@ -32,7 +32,7 @@ const DC = host("dc", "dc01", "10.10.10.5");
 const WS = host("ws", "ws01", "10.10.10.6");
 const svc = (id: string, hostId: string, port: number, nmapService: string): Service => ({
   id, hostId, port, protocol: "tcp", state: "open", nmapService, nmapVersion: null, confirmedProduct: null,
-  confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1,
+  confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
 });
 const SERVICES = [svc("s1", "dc", 88, "kerberos-sec"), svc("s2", "dc", 389, "ldap"), svc("s3", "dc", 445, "microsoft-ds"), svc("s4", "ws", 445, "microsoft-ds")];
 const PW: Credential = {
@@ -101,6 +101,8 @@ function mount(path: string, attempts: CredAttempt[], items: ChecklistItem[] = [
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   useCaptureStore.getState().reset();
   // The store's conditional fact write, as the Rust command does it.
   m.checklistApplyFacts.mockImplementation(async (_e, done, revert) => {
@@ -122,7 +124,7 @@ beforeEach(() => {
     return store;
   });
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementsProgress.mockResolvedValue({});
   m.servicesList.mockResolvedValue([]);
@@ -156,7 +158,7 @@ describe("domain admin cover", () => {
       ownerId: "ws", goalId: "h-pe-win-privs", status: "na", notes: null, completedAt: null, auto: true, autoFrom: null, evidence: [], updatedAt: 1,
     };
     mount("/e/e1/h/ws", [ADMIN], [covered]);
-    await user.click(await screen.findByRole("tab", { name: "Checklist" }));
+    await user.click(await screen.findByRole("button", { name: "Full checklist" }));
     const group = await screen.findByRole("group", { name: "Status: Check token privileges for potato attacks" });
     const row = group.closest("li") as HTMLElement;
     expect(within(row).getByText("Covered by domain admin")).toBeInTheDocument();

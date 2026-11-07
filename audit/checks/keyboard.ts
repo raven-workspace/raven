@@ -233,6 +233,46 @@ async function boardMove(page: Page): Promise<RawIssue[]> {
   return [{ check: "shortcut", selector: `a[data-host-id="${pick.id}"]`, detail: `] did not move the card out of "${pick.from}" (still in "${await where(pick.id)}")` }];
 }
 
+/** Presses `key` on a neutral focus and checks that `target`'s aria-expanded (or presence) flips, then flips back. */
+function toggles(key: string, target: string, label: string) {
+  return async (page: Page): Promise<RawIssue[]> => {
+    await page.locator("body").click({ position: { x: 1, y: 1 } });
+    const state = () => page.locator(target).first().getAttribute("aria-expanded");
+    const before = await state();
+    await page.keyboard.press(key);
+    const flipped = await page.waitForFunction(
+      ({ sel, was }) => document.querySelector(sel)?.getAttribute("aria-expanded") !== was,
+      { sel: target, was: before },
+      { timeout: 1000 },
+    ).then(() => true, () => false);
+    if (!flipped) return [{ check: "shortcut", selector: target, detail: `${key} did not toggle ${label}` }];
+    await page.keyboard.press(key);
+    const back = await page.waitForFunction(
+      ({ sel, was }) => document.querySelector(sel)?.getAttribute("aria-expanded") === was,
+      { sel: target, was: before },
+      { timeout: 1000 },
+    ).then(() => true, () => false);
+    return back ? [] : [{ check: "shortcut", selector: target, detail: `a second ${key} did not toggle ${label} back` }];
+  };
+}
+
+async function sidebarToggle(page: Page): Promise<RawIssue[]> {
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  const collapse = page.getByRole("button", { name: "Collapse sidebar" });
+  const expand = page.getByRole("button", { name: "Expand sidebar" });
+  const startsOpen = await collapse.isVisible();
+  await page.keyboard.press("Meta+B");
+  const flipped = await (startsOpen ? expand : collapse).waitFor({ state: "visible", timeout: 1000 }).then(() => true, () => false);
+  return flipped ? [] : [{ check: "shortcut", selector: "role=button[name=/sidebar/]", detail: "⌘B did not toggle the sidebar" }];
+}
+
+async function tabSwitch(page: Page): Promise<RawIssue[]> {
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press("Alt+2");
+  const ok = await page.getByRole("tab", { name: "Log", selected: true }).waitFor({ timeout: 1000 }).then(() => true, () => false);
+  return ok ? [] : [{ check: "shortcut", selector: "role=tab[name='Log']", detail: "⌥2 did not select the Log tab" }];
+}
+
 export const SHORTCUTS: ShortcutCase[] = [
   { id: "palette", path: H, keys: ["Meta+K"], opens: 'role=dialog[name="Search"]', focusInside: true, closesWithEscape: true },
   { id: "palette-hostpick", path: H, keys: ["Meta+K", "Alt+H"], opens: "select[aria-label='Fill for host']", focusInside: true, closesWithEscape: true },
@@ -241,6 +281,13 @@ export const SHORTCUTS: ShortcutCase[] = [
   { id: "capture", path: H, keys: ["l"], opens: "[role='dialog']", focusInside: true, closesWithEscape: true },
   { id: "notes", path: H, keys: ["n"], opens: "aside[aria-label^='Notes']", focusInside: true, closesWithEscape: true },
   { id: "new-engagement", path: "/", keys: ["Meta+N"], opens: "[role='dialog']", focusInside: true, closesWithEscape: true },
+  {
+    id: "services-toggle", path: H, keys: ["s"], opens: "the Services fact group",
+    focusInside: false, closesWithEscape: false, custom: toggles("s", "section[aria-label='Services'] button[aria-expanded]", "the Services group"),
+  },
+  { id: "finding-split", path: H, keys: ["f"], opens: "role=region[name='Finding']", focusInside: true, closesWithEscape: true },
+  { id: "sidebar-toggle", path: H, keys: ["Meta+B"], opens: "the sidebar", focusInside: false, closesWithEscape: false, custom: sidebarToggle },
+  { id: "tab-log", path: H, keys: ["Alt+2"], opens: "the Log tab", focusInside: false, closesWithEscape: false, custom: tabSwitch },
   {
     id: "board-move", path: E, keys: ["focus first board card", "]"], opens: "the moved board card",
     focusInside: false, closesWithEscape: false, custom: boardMove,

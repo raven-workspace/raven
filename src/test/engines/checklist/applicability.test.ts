@@ -25,7 +25,7 @@ const host = (p: Partial<Host> = {}): Host => ({
 let n = 0;
 const svc = (port: number, nmapService: string | null = null, extra: Partial<Service> = {}): Service => ({
   id: `s${n++}`, hostId: 'h1', port, protocol: 'tcp', state: 'open', nmapService, nmapVersion: null,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 0, updatedAt: 0, ...extra,
+  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 0, updatedAt: 0, ...extra,
 });
 const onPorts = (...ports: number[]) => ports.map((p) => svc(p));
 

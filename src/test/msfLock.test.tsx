@@ -32,7 +32,7 @@ const VEGA = host("h1", "VEGA");
 const WEB = host("h2", "web02", { os: "linux" });
 const svc: Service = {
   id: "s1", hostId: "h1", port: 445, protocol: "tcp", state: "open", nmapService: "microsoft-ds", nmapVersion: null,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1,
+  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
 };
 
 function mount(path: string, eng: Engagement) {
@@ -50,10 +50,12 @@ function mount(path: string, eng: Engagement) {
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   vi.mocked(resyncBoards).mockResolvedValue(undefined);
   useCaptureStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
   m.engagementsProgress.mockResolvedValue({});
   m.hostsList.mockResolvedValue([VEGA, WEB]);
   m.servicesList.mockResolvedValue([]);
@@ -123,7 +125,7 @@ describe("dual-homed flag", () => {
       return hosts[0]!;
     });
     mount("/e/e1/h/h1", lab);
-    await user.click(await screen.findByRole("tab", { name: "Checklist" }));
+    await user.click(await screen.findByRole("button", { name: "Full checklist" }));
     await within(await screen.findByRole("tabpanel")).findByText("Check SMB shares and null/guest access");
     expect(screen.queryByText("Tunnel into the next network")).not.toBeInTheDocument();
 
@@ -147,7 +149,7 @@ describe("dual-homed flag", () => {
 
 describe("listener on the strip", () => {
   it("shows LHOST:LPORT from settings, and links to Settings", async () => {
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "172.31.45.160", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "172.31.45.160", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
     const user = userEvent.setup();
     mount("/e/e1", { ...E1, kind: "lab" });
     const link = await screen.findByRole("link", { name: /LHOST 192\.168\.45\.160:4444/ });
@@ -159,7 +161,7 @@ describe("listener on the strip", () => {
     const view = mount("/e/e1", E1);
     expect(await screen.findByRole("link", { name: /LHOST not set/ })).toBeInTheDocument();
     view.unmount();
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "443", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "443", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
     mount("/e/e1", E1);
     expect(await screen.findByRole("link", { name: /LHOST not set · LPORT 443/ })).toBeInTheDocument();
   });

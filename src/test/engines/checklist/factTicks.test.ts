@@ -12,7 +12,7 @@ const host = (p: Partial<Host> = {}): Host => ({
 let n = 0;
 const svc = (p: Partial<Service> = {}): Service => ({
   id: `s${n++}`, hostId: 'h1', port: 80, protocol: 'tcp', state: 'open', nmapService: 'http', nmapVersion: null,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 0, updatedAt: 0, ...p,
+  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 0, updatedAt: 0, ...p,
 });
 const engagement = { id: 'e1', kind: 'lab' } as Engagement;
 const run = (hosts: Host[], services: Service[], byOwner: Map<string, ChecklistState> = new Map()) =>

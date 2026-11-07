@@ -9,6 +9,7 @@ import { setImported } from "../engines/library/store";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { useCredPickStore } from "../features/checklist/credPick";
 import { api } from "../lib/api";
+import { commandText } from "./support/commandText";
 import { makeQueryClient } from "../lib/queryClient";
 import type { ChecklistItem } from "../types/checklist";
 import type { CredAttempt, Credential } from "../types/credentials";
@@ -37,7 +38,7 @@ const H1 = host("h1", "dc01", "10.10.10.5");
 const H2 = host("h2", "web02", "10.10.10.6", { os: "linux" });
 const svc = (id: string, port: number, over: Partial<Service> = {}): Service => ({
   id, hostId: "h1", port, protocol: "tcp", state: "open", nmapService: null, nmapVersion: null,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1, ...over,
+  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1, ...over,
 });
 const entry = (id: string, title: string): LogEntry => ({
   id, engagementId: "e1", kind: "note", title, titleEdited: false, ranOn: null, hostIds: ["h1"], observations: null,
@@ -74,17 +75,19 @@ function mount(opts: { engagement?: Engagement; hosts?: Host[]; items?: Checklis
   );
 }
 async function openChecklist(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole("tab", { name: "Checklist" }));
+  await user.click(await screen.findByRole("button", { name: "Full checklist" }));
 }
 
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   useCaptureStore.getState().reset();
   useCredPickStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({
-    autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm",
+    autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false,
   });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementsProgress.mockResolvedValue({});
@@ -139,7 +142,7 @@ describe("host checklist tab", () => {
     const user = userEvent.setup();
     mount();
     await openChecklist(user);
-    expect(await screen.findByText("smbclient -N -L //10.10.10.5")).toBeInTheDocument();
+    expect(await screen.findByText(commandText("smbclient -N -L //10.10.10.5"))).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: /^Copy command: / })[0]);
     expect(await screen.findByText("Copied")).toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toContain("10.10.10.5");
@@ -247,13 +250,13 @@ describe("host checklist tab", () => {
     expect(sent).toMatchObject({ ownerId: "h1", goalId: "h-enum-smb", status: "done", auto: false });
   });
 
-  it("evidence chip opens the Story tab with the entry expanded", async () => {
+  it("evidence chip opens the Log tab with the entry expanded", async () => {
     const user = userEvent.setup();
     mount({ items: [item("h-enum-smb", { evidence: [{ entryId: "en1" }, { entryId: "gone" }] })] });
     await openChecklist(user);
     expect(await screen.findByText("log entry removed")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /nmap sweep/ }));
-    expect(screen.getByRole("tab", { name: "Story" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Log" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("button", { name: /nmap sweep/ })).toHaveAttribute("aria-expanded", "true");
   });
 
@@ -283,13 +286,14 @@ describe("credential fill on the checklist", () => {
     });
     await openChecklist(user);
     expect(await pickerOf()).toHaveTextContent("CORP\\bob");
-    expect((await tab()).getAllByText(/-u bob/).length).toBeGreaterThan(0);
-    // The choice is remembered per host, so Now follows it.
+    expect((await tab()).getAllByText(commandText(/-u bob/)).length).toBeGreaterThan(0);
+    // The choice is remembered per host, so the Next steps follow it.
     await user.click(await pickerOf());
     await user.click(await screen.findByRole("option", { name: "None" }));
     expect(await pickerOf()).toHaveTextContent("None");
-    expect((await tab()).queryByText(/-u bob/)).not.toBeInTheDocument();
-    expect(within(screen.getByRole("region", { name: "Now" })).getByRole("combobox", { name: "Commands use" })).toHaveTextContent("None");
+    expect((await tab()).queryByText(commandText(/-u bob/))).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Full checklist" }));
+    expect(await pickerOf()).toHaveTextContent("None");
   });
 
   it("two credentials with the same label get a distinguishing suffix", async () => {
@@ -322,8 +326,8 @@ describe("credential fill on the checklist", () => {
     mount({ creds: [cred("c1", "alice", { secret: "Pa'ss-W0rd" })], attempts: [attempt("a1", "c1", 10)] });
     await openChecklist(user);
     const panel = await tab();
-    await panel.findAllByText(/-u alice/);
-    expect(screen.queryByText(/Pa'ss-W0rd/)).not.toBeInTheDocument();
+    await panel.findAllByText(commandText(/-u alice/));
+    expect(document.body.textContent).not.toContain("Pa'ss-W0rd");
     const pre = [...document.querySelectorAll("pre")].find((p) => p.textContent?.includes("••••••••"));
     expect(pre).toBeDefined();
     await user.click(within(pre!.closest("li")!).getByRole("button", { name: /^Copy command: / }));

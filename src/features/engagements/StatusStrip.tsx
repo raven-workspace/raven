@@ -34,12 +34,12 @@ export function StatusStrip({ engagement: e }: { engagement: Engagement }) {
       ) : (
         <span>{dateRange(e.startsAt, e.endsAt, now)}</span>
       )}
-      <span className="text-fg-2">{progressLine(progress)}</span>
-      {threads > 0 && <span className="text-fg-2">Threads {threads}</span>}
-      {cleanup > 0 && <span className="text-fg-2">Cleanup {cleanup}</span>}
+      <span className="shrink-0 whitespace-nowrap text-fg-2">{progressLine(progress)}</span>
+      {threads > 0 && <span className="shrink-0 whitespace-nowrap text-fg-2">Threads {threads}</span>}
+      {cleanup > 0 && <span className="shrink-0 whitespace-nowrap text-fg-2">Cleanup {cleanup}</span>}
       {e.kind === "exam-sim" && <MsfLock engagement={e} />}
       <Listener />
-      <span className="ml-auto flex items-center gap-1.5 text-faint">
+      <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap text-faint max-[1100px]:hidden">
         <Kbd>1</Kbd>–<Kbd>6</Kbd> sections <Kbd className="ml-2">esc</Kbd> engagements
       </span>
     </div>

@@ -89,7 +89,7 @@ export function EngagementShell() {
   const e = query.data;
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[200px_1fr]">
+    <div className="grid h-full min-h-0 grid-cols-[auto_minmax(0,1fr)]">
       <Sidebar engagementId={id} />
       <div className="flex min-h-0 min-w-0 flex-col">
         <EngagementHeader engagement={e} />

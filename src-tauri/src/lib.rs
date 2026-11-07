@@ -7,12 +7,14 @@ pub mod commands;
 pub mod credentials;
 pub mod engagements;
 pub mod error;
+pub mod host_facts;
 pub mod hosts;
 pub mod field_manual;
 pub mod import;
 pub mod log;
 pub mod network;
 pub mod notes;
+pub mod nvd;
 pub mod migrations;
 pub mod paths;
 pub mod services;
@@ -37,6 +39,7 @@ pub fn run() {
             commands::vault_lock,
             commands::settings_get,
             commands::settings_update,
+            commands::nvd_lookup,
             commands::backup_now,
             commands::backups_list,
             commands::backup_restore,
@@ -68,6 +71,13 @@ pub fn run() {
             commands::service_confirm,
             commands::service_unconfirm,
             commands::service_delete,
+            commands::service_set_verdict,
+            commands::host_identity_get,
+            commands::host_identity_set,
+            commands::vectors_list,
+            commands::vector_upsert,
+            commands::vector_set_status,
+            commands::vector_delete,
             commands::log_list,
             commands::log_create,
             commands::log_update,

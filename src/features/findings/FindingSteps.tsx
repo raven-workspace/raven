@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LogEntry } from "../../types/log";
 import { Button, Input, Toggle, labelClass } from "../../ui";
+import { SCROLL_PANE } from "../../ui/controlStyles";
 import { KIND_LABELS } from "../log/kindLabels";
 import { LogEntryBody } from "../log/LogEntryBody";
 import { useLog } from "../log/queries";
@@ -134,7 +135,7 @@ export function FindingSteps({ eid, hostIds, value, onChange }: {
           ) : candidates.length === 0 ? (
             <p className="m-0 text-xs text-muted">{log.data ? "No matching entries." : "Loading the log."}</p>
           ) : (
-            <ul className="m-0 flex max-h-[200px] list-none flex-col overflow-y-auto p-0">
+            <ul className={`m-0 flex max-h-[200px] list-none flex-col ${SCROLL_PANE}`}>
               {candidates.map((e) => (
                 <li key={e.id}>
                   <button

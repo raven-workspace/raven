@@ -1,3 +1,5 @@
+import type { ServiceVerdict } from "./hostFacts";
+
 export type ServiceProtocol = "tcp" | "udp";
 
 /** Mirrors the Rust `Service`. `nmap*` are scan guesses; `confirmed*` are only ever set by the user. */
@@ -12,6 +14,8 @@ export interface Service {
   confirmedProduct: string | null;
   confirmedVersion: string | null;
   confirmedEntryId: string | null;
+  /** The user's call on this service; `null` = no call yet. */
+  verdict: ServiceVerdict | null;
   createdAt: number;
   updatedAt: number;
 }

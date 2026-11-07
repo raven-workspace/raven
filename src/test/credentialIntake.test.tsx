@@ -30,7 +30,7 @@ const H1 = host({ id: "h1", name: "dc01", ip: "10.10.10.5" });
 const H2 = host({ id: "h2", name: "web02", ip: "10.10.10.6" });
 const smb = (id: string, hostId: string): Service => ({
   id, hostId, port: 445, protocol: "tcp", state: "open", nmapService: "microsoft-ds", nmapVersion: null,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1,
+  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
 });
 const cred = (o: Partial<Credential> & { id: string }): Credential => ({
   engagementId: "e1", type: "password", username: "", domain: null, secret: "", hashType: null, scope: "domain",
@@ -189,9 +189,11 @@ function setupBackend(seed: Partial<Db> = {}) {
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   useCaptureStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementGet.mockResolvedValue(E1);
   m.engagementsProgress.mockResolvedValue({});
@@ -543,8 +545,8 @@ describe("nxc intake in Add to log", () => {
   });
 });
 
-describe("host Credentials tab", () => {
-  it("host Credentials tab lists grants and results with proof links", async () => {
+describe("Host Credentials fact group", () => {
+  it("Host Credentials lists grants and results with proof links", async () => {
     const proof: LogEntry = {
       id: "l9", engagementId: "e1", kind: "command", title: "nxc smb spray", titleEdited: false, ranOn: null, hostIds: ["h1"],
       observations: null, returnedNothing: false, private: false,
@@ -578,8 +580,9 @@ describe("host Credentials tab", () => {
     });
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
-    await user.click(await screen.findByRole("tab", { name: "Credentials" }));
-    const panel = screen.getByRole("tabpanel");
+    const panel = await screen.findByRole("region", { name: "Host Credentials" });
+    // Before a foothold the group is open, and its folded summary would read the same counts.
+    expect(screen.queryByRole("tab", { name: "Credentials" })).not.toBeInTheDocument();
 
     // the matrix shows only this host's column
     expect(await within(panel).findByRole("button", { name: "corp.local\\bob on dc01 SMB: admin" })).toBeInTheDocument();
@@ -609,7 +612,7 @@ describe("host Credentials tab", () => {
 
     // results against this host, with proof
     const results = within(panel).getByRole("region", { name: "Results against this host" });
-    const rows = within(results).getAllByRole("row").slice(1);
+    const rows = within(results).getAllByRole("listitem");
     expect(rows).toHaveLength(3);
     expect(within(rows[0]!).getByText("corp.local\\bob")).toBeInTheDocument();
     expect(within(rows[0]!).getByText("admin")).toBeInTheDocument();
@@ -623,7 +626,7 @@ describe("host Credentials tab", () => {
     expect(errored).toHaveClass("border-warn", "text-warn");
     expect(errored).not.toHaveClass("text-fg-2");
     await user.click(within(rows[0]!).getByRole("button", { name: /nxc smb spray/ }));
-    expect(screen.getByRole("tab", { name: "Story" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Log" })).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByRole("button", { name: /nxc smb spray/, expanded: true })).toBeInTheDocument();
   });
 });

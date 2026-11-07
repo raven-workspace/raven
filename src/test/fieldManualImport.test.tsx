@@ -30,7 +30,7 @@ echo zz
 \`\`\`
 `;
 
-const settings = { autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "", linuxToolsDir: "", fieldManualPath: "~/fm" };
+const settings = { autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "", linuxToolsDir: "", fieldManualPath: "~/fm", nvdKeySet: false };
 
 function mount(ui: React.ReactNode) {
   return render(

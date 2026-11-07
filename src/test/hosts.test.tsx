@@ -64,12 +64,14 @@ function mount(path = "/e/e1") {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   hosts = [
     host({ id: "h1", name: "dc01", ip: "10.10.10.5", boardColumn: "vulnerability-detection" }),
     host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "reporting" }),
   ];
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementGet.mockResolvedValue(E1);
   m.hostsList.mockImplementation(async () => hosts);

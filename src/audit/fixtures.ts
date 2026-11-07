@@ -8,6 +8,7 @@ import type { Engagement } from "../types/engagement";
 import type { FailedAttempt, Finding, FindingFile } from "../types/findings";
 import type { Host } from "../types/host";
 import type { Attachment, LogEntry, Progress } from "../types/log";
+import type { HostIdentity, PrivescVector } from "../types/hostFacts";
 import type { Hop, Tunnel } from "../types/network";
 import type { Note, RuledOut } from "../types/notes";
 import type { Service } from "../types/service";
@@ -39,6 +40,8 @@ export interface AuditFixtures {
   checklist: ChecklistItem[];
   notes: Note[];
   ruledOut: RuledOut[];
+  hostIdentity: HostIdentity[];
+  vectors: PrivescVector[];
   tunnels: Tunnel[];
   hops: Hop[];
   credentials: Credential[];
@@ -108,7 +111,7 @@ const hosts: Host[] = [
 let svcN = 0;
 const svc = (hostId: string, port: number, nmapService: string | null, nmapVersion: string | null, over: Partial<Service> = {}): Service => ({
   id: `s-${++svcN}`, hostId, port, protocol: "tcp", state: "open", nmapService, nmapVersion,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: ago(50 * HOUR), updatedAt: ago(50 * HOUR), ...over,
+  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: ago(50 * HOUR), updatedAt: ago(50 * HOUR), ...over,
 });
 const confirmed = (product: string, version: string | null): Partial<Service> => ({ confirmedProduct: product, confirmedVersion: version });
 const udp = (hostId: string, port: number, name: string | null): Service =>
@@ -116,16 +119,16 @@ const udp = (hostId: string, port: number, name: string | null): Service =>
 
 const services: Service[] = [
   // 24 on the long-named web host: 19 TCP, 5 UDP open|filtered.
-  svc("h-web", 21, "ftp", "vsftpd 3.0.3"),
+  svc("h-web", 21, "ftp", "vsftpd 3.0.3", { verdict: "dead_end" }),
   svc("h-web", 22, "ssh", "OpenSSH 8.9p1 Ubuntu 3ubuntu0.6", confirmed("OpenSSH", "8.9p1")),
   svc("h-web", 25, "smtp", "Postfix smtpd"),
   svc("h-web", 53, "domain", "ISC BIND 9.18.18"),
-  svc("h-web", 80, "http", "Apache httpd 2.4.52 ((Ubuntu))", confirmed("Apache httpd", "2.4.52")),
+  svc("h-web", 80, "http", "Apache httpd 2.4.52 ((Ubuntu))", { ...confirmed("Apache httpd", "2.4.52"), verdict: "candidate" }),
   svc("h-web", 110, "pop3", "Dovecot pop3d"),
   svc("h-web", 111, "rpcbind", "2-4 (RPC #100000)"),
   svc("h-web", 143, "imap", "Dovecot imapd (Ubuntu)"),
   svc("h-web", 443, "ssl/http", "nginx 1.18.0 (Ubuntu)", confirmed("nginx", "1.18.0")),
-  svc("h-web", 445, "netbios-ssn", "Samba smbd 4.6.2"),
+  svc("h-web", 445, "netbios-ssn", "Samba smbd 4.6.2", { verdict: "untested" }),
   svc("h-web", 993, "ssl/imap", "Dovecot imapd (Ubuntu)"),
   svc("h-web", 995, "ssl/pop3", "Dovecot pop3d"),
   svc("h-web", 2049, "nfs", "3-4 (RPC #100003)"),
@@ -343,7 +346,20 @@ const failedAttempts: FailedAttempt[] = [
 ];
 
 const ruledOut: RuledOut[] = [
-  { id: "r-1", engagementId: "e-lab", hostId: "h-web", text: "vsftpd 3.0.3 backdoor", reason: "Backdoor was in 2.3.4 only.", private: false, createdAt: ago(90 * MIN) },
+  { id: "r-1", engagementId: "e-lab", hostId: "h-web", text: "vsftpd 3.0.3 backdoor", reason: "Backdoor was in 2.3.4 only.", private: false, sourceKind: null, sourceId: null, createdAt: ago(90 * MIN) },
+  // Created by the dead-end verdict on h-web's 21/tcp.
+  { id: "r-2", engagementId: "e-lab", hostId: "h-web", text: "21/tcp vsftpd 3.0.3", reason: "Anonymous login is disabled.", private: false, sourceKind: "service", sourceId: services.find((s) => s.hostId === "h-web" && s.port === 21)!.id, createdAt: ago(80 * MIN) },
+];
+
+// ---------------------------------------------------------------- host identity and privesc vectors
+
+const hostIdentity: HostIdentity[] = [
+  { hostId: "h-exam-ms01", username: "ms01\\iis_apppool", privileges: ["SeImpersonatePrivilege"], groups: ["BUILTIN\\IIS_IUSRS"], entryId: null, updatedAt: ago(30 * MIN) },
+];
+
+const vectors: PrivescVector[] = [
+  { id: "pv-1", hostId: "h-exam-ms01", title: "SeImpersonatePrivilege (potato)", status: "try", source: "auto", createdAt: ago(30 * MIN), updatedAt: ago(30 * MIN) },
+  { id: "pv-2", hostId: "h-exam-ms01", title: "Unquoted service path", status: "untested", source: "manual", createdAt: ago(25 * MIN), updatedAt: ago(25 * MIN) },
 ];
 
 // ---------------------------------------------------------------- network, notes, cleanup
@@ -397,11 +413,11 @@ const backups: BackupInfo[] = [
 const settings: Settings = {
   autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Windows 11 (VM)"], attackerIp: "10.10.14.7",
   listenerPort: "4444", kaliUser: "audit", windowsToolsDir: "C:\\Tools", linuxToolsDir: "/opt/tools",
-  fieldManualPath: "/Users/audit/Documents/Field-Manual",
+  fieldManualPath: "/Users/audit/Documents/Field-Manual", nvdKeySet: true,
 };
 
 export const FIXTURES: AuditFixtures = {
-  engagements, hosts, services, log, attachments, checklist, notes, ruledOut, tunnels, hops, credentials, usernames,
+  engagements, hosts, services, log, attachments, checklist, notes, ruledOut, hostIdentity, vectors, tunnels, hops, credentials, usernames,
   credAttempts, accessGrants, findings, findingFiles, failedAttempts, cleanup, backups, settings,
 };
 

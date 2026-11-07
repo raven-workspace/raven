@@ -17,6 +17,9 @@ export interface RuledOut {
   text: string;
   reason: string;
   private: boolean;
+  /** Set when a dead-end verdict created the item; undoing the verdict removes it. */
+  sourceKind: "service" | "vector" | null;
+  sourceId: string | null;
   createdAt: number;
 }
 

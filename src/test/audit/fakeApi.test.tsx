@@ -18,6 +18,24 @@ describe("audit fake api", () => {
     expect(Object.keys(api).sort()).toEqual(Object.keys(real.api).sort());
   });
 
+  it("serves verdicts, identity and vectors, and links dead ends to ruled-out items", async () => {
+    const web = await api.servicesList("h-web");
+    expect(web.filter((s) => s.verdict !== null).map((s) => s.verdict).sort()).toEqual(["candidate", "dead_end", "untested"]);
+    const dead = web.find((s) => s.verdict === "dead_end")!;
+    expect((await api.ruledOutList("e-lab")).some((r) => r.sourceKind === "service" && r.sourceId === dead.id)).toBe(true);
+    await expect(api.serviceSetVerdict(dead.id, "dead_end", " ")).rejects.toBeInstanceOf(RavenError);
+    await api.serviceSetVerdict(dead.id, "candidate");
+    const left = await api.ruledOutList("e-lab");
+    expect(left.some((r) => r.sourceId === dead.id)).toBe(false);
+    expect(left.some((r) => r.id === "r-1")).toBe(true);
+
+    const id = await api.hostIdentityGet("h-exam-ms01");
+    expect(id?.username).toBe("ms01\\iis_apppool");
+    expect(id?.privileges).toContain("SeImpersonatePrivilege");
+    expect(await api.hostIdentityGet("h-web")).toBeNull();
+    expect(await api.vectorsList("h-exam-ms01")).toHaveLength(2);
+  });
+
   it("stresses layouts", async () => {
     expect((await api.engagementGet("e-lab")).name.length).toBeGreaterThanOrEqual(70);
     expect(await api.credentialsList("e-lab")).toHaveLength(12);

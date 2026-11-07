@@ -16,11 +16,13 @@ use crate::checklist::{self, ChecklistItem, ChecklistItemInput, GoalRef};
 use crate::engagements::{self, Engagement, EngagementInput, Progress};
 use crate::network::{self, Hop, HopInput, Tunnel, TunnelInput};
 use crate::notes::{self, Note, RuledOut, RuledOutInput};
+use crate::nvd::{self, NvdRecord};
 use crate::log::{self, Attachment, LogEntry, LogEntryInput};
 use std::collections::HashMap;
 use crate::hosts::{self, Host, HostInput};
 use crate::field_manual::{self, FieldManualSnapshot, VaultFile};
 use crate::import::{self, ImportPlanInput, ImportSummary};
+use crate::host_facts::{self, HostIdentity, PrivescVector, VectorInput};
 use crate::services::{self, ConfirmInput, ScanPort, Service, ServiceInput};
 use crate::error::{AppError, AppResult};
 use crate::settings::{self, Settings, SettingsPatch};
@@ -135,6 +137,29 @@ pub async fn settings_get(app: AppHandle) -> AppResult<Settings> {
 #[tauri::command]
 pub async fn settings_update(app: AppHandle, patch: SettingsPatch) -> AppResult<Settings> {
     with_vault(app, move |v| settings::update(v.conn()?, patch)).await
+}
+
+/// The NVD lookup: the cache check and the key read happen under the vault lock; the HTTP request
+/// (10s timeout) runs without it, so a slow network never stalls other commands. The key stays in Rust.
+#[tauri::command]
+pub async fn nvd_lookup(app: AppHandle, cve_id: String) -> AppResult<NvdRecord> {
+    let (step, key) = with_vault(app.clone(), move |v| {
+        let c = v.conn()?;
+        // Zeroized when dropped, after the request.
+        let key = zeroize::Zeroizing::new(settings::nvd_api_key(c));
+        Ok((nvd::begin(c, &key, &cve_id)?, key))
+    })
+    .await?;
+    let cve = match step {
+        nvd::Step::Cached(rec) => return Ok(rec),
+        nvd::Step::Fetch { cve } => cve,
+    };
+    let fetch_cve = cve.clone();
+    let raw = off_main(move || nvd::fetch(&key, &fetch_cve)).await?;
+    let rec = nvd::read_answer(&raw)?;
+    // Caching is best effort: the vault may have locked while the request ran.
+    let _ = with_vault(app, move |v| nvd::store(v.conn()?, &cve, &raw)).await;
+    Ok(rec)
 }
 
 #[tauri::command]
@@ -290,6 +315,51 @@ pub async fn service_confirm(app: AppHandle, id: String, input: ConfirmInput) ->
 #[tauri::command]
 pub async fn service_unconfirm(app: AppHandle, id: String) -> AppResult<Service> {
     with_vault(app, move |v| services::unconfirm(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn service_set_verdict(
+    app: AppHandle,
+    id: String,
+    verdict: Option<String>,
+    reason: Option<String>,
+) -> AppResult<Service> {
+    with_vault(app, move |v| services::set_verdict(v.conn()?, &id, verdict.as_deref(), reason.as_deref())).await
+}
+
+#[tauri::command]
+pub async fn host_identity_get(app: AppHandle, host_id: String) -> AppResult<Option<HostIdentity>> {
+    with_vault(app, move |v| host_facts::identity_get(v.conn()?, &host_id)).await
+}
+
+#[tauri::command]
+pub async fn host_identity_set(app: AppHandle, input: HostIdentity) -> AppResult<HostIdentity> {
+    with_vault(app, move |v| host_facts::identity_set(v.conn()?, input)).await
+}
+
+#[tauri::command]
+pub async fn vectors_list(app: AppHandle, host_id: String) -> AppResult<Vec<PrivescVector>> {
+    with_vault(app, move |v| host_facts::vectors_list(v.conn()?, &host_id)).await
+}
+
+#[tauri::command]
+pub async fn vector_upsert(app: AppHandle, host_id: String, input: VectorInput) -> AppResult<PrivescVector> {
+    with_vault(app, move |v| host_facts::vector_upsert(v.conn()?, &host_id, input)).await
+}
+
+#[tauri::command]
+pub async fn vector_set_status(
+    app: AppHandle,
+    id: String,
+    status: String,
+    reason: Option<String>,
+) -> AppResult<PrivescVector> {
+    with_vault(app, move |v| host_facts::vector_set_status(v.conn()?, &id, &status, reason.as_deref())).await
+}
+
+#[tauri::command]
+pub async fn vector_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| host_facts::vector_delete(v.conn()?, &id)).await
 }
 
 #[tauri::command]

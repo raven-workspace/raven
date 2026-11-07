@@ -1,21 +1,32 @@
+import { CaretDown, CaretRight, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { calculateCvssScore, scoreToSeverity } from "../../engines/findings";
+import { isCveId, nvdFill, scoreCvss, scoreToSeverity, type NvdFillResult } from "../../engines/findings";
+import { api } from "../../lib/api";
+import { copyPlain } from "../../lib/clipboard";
+import { shortHostName } from "../../lib/hostName";
+import { isDialogOpen } from "../../lib/keys";
+import { reportError } from "../../lib/lockSignal";
+import { RavenError } from "../../types/errors";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
-import type { Finding, FindingInput, FindingStatus, Severity } from "../../types/findings";
-import { Button, Chip, Dialog, Field, Input, Select, Textarea, Toggle } from "../../ui";
+import type { Finding, FindingInput, FindingStatus, NvdRecord, Severity } from "../../types/findings";
+import { Button, Chip, Dialog, Field, Input, Select, Textarea, Toggle, labelClass } from "../../ui";
 import { hostLabel } from "../credentials/AccessGrants";
-import { FindingFiles } from "./FindingFiles";
+import { useLog } from "../log/queries";
+import { CvssBuilder } from "./CvssBuilder";
+import { FindingFiles, type FileFormDraft } from "./FindingFiles";
 import { FindingSteps, liveSteps } from "./FindingSteps";
 import { useFindingMutations } from "./queries";
-import { useLog } from "../log/queries";
-import { copyPlain } from "../../lib/clipboard";
+import { RefSuggestions } from "./RefSuggestions";
+import { ServicePicker } from "./ServicePicker";
 
 const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"];
 const SEVERITY_OPTIONS = [{ value: "none", label: "Unrated" }, ...SEVERITIES.map((s) => ({ value: s, label: s }))];
 const STATUSES: FindingStatus[] = ["draft", "confirmed", "reported"];
+/** A CVE added to the references is looked up once typing settles. */
+const NVD_DEBOUNCE_MS = 400;
 
-interface Draft {
+export interface Draft {
   title: string;
   severity: Severity | null;
   status: FindingStatus;
@@ -29,14 +40,29 @@ interface Draft {
   exploitNotes: string;
   lessons: string;
   stepEntryIds: string[];
+  /** Typed into "Add reference" but not added yet. */
+  newRef: string;
+  /** The file form while open (a file is saved on its own, not with the finding): kept so no close path loses it. */
+  fileForm: FileFormDraft | null;
+  /** The finding's `updatedAt` when this draft was opened; null for a new finding. */
+  baseUpdatedAt: number | null;
 }
 
-const toDraft = (f?: Finding): Draft => ({
+/**
+ * True when the draft holds something the user typed. An open file form counts only while it holds unsaved
+ * input (`fileDirty`, reported by the form itself).
+ */
+export function draftChanged(d: Draft, base: Draft, fileDirty: boolean): boolean {
+  return fileDirty || JSON.stringify({ ...d, fileForm: null }) !== JSON.stringify({ ...base, fileForm: null });
+}
+
+/** The draft for `f`, or a new one on `hostId` (the host page it was opened from). */
+export const toDraft = (f?: Finding, hostId?: string | null): Draft => ({
   title: f?.title ?? "",
   severity: f?.severity ?? null,
   status: f?.status ?? "draft",
   cvssVector: f?.cvssVector ?? "",
-  hostIds: f?.hostIds ?? [],
+  hostIds: f?.hostIds ?? (hostId ? [hostId] : []),
   serviceIds: f?.serviceIds ?? [],
   refs: f?.refs ?? [],
   description: f?.description ?? "",
@@ -45,10 +71,34 @@ const toDraft = (f?: Finding): Draft => ({
   exploitNotes: f?.exploitNotes ?? "",
   lessons: f?.lessons ?? "",
   stepEntryIds: f?.stepEntryIds ?? [],
+  newRef: "",
+  fileForm: null,
+  baseUpdatedAt: f?.updatedAt ?? null,
 });
 
-const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
 const isUrl = (s: string) => /^https?:\/\//i.test(s);
+
+const FIELD_NAME: Record<NvdFillResult["diffs"][number]["field"], string> = {
+  cvssVector: "CVSS vector",
+  description: "description",
+};
+
+/** One quiet line for a failed lookup. Saving is never blocked by it. */
+function lookupLine(cve: string, e: unknown): string {
+  const err = RavenError.from(e);
+  switch (err.code) {
+    case "no_key":
+      return "Add an NVD API key in Settings to look up CVEs · use the builder";
+    case "offline":
+      return "No connection · use the builder";
+    case "key_rejected":
+      return err.message || "NVD rejected the key";
+    case "not_found":
+      return "CVE not found on NVD";
+    default:
+      return `Couldn't look up ${cve}: ${err.message}`;
+  }
+}
 
 /** Copies a reference URL (there is no opener plugin to open it in a browser). */
 function CopyRef({ value }: { value: string }) {
@@ -65,36 +115,130 @@ function CopyRef({ value }: { value: string }) {
   return <Button size="sm" aria-label={`Copy ${value}`} onClick={copy}>{copied ? "Copied" : "Copy"}</Button>;
 }
 
-export function FindingEditor({ eid, hosts, servicesByHost, edit, onClose }: {
+/**
+ * NVD lookups for CVEs added in this editing session: debounced, merged through `nvdFill` (empty fields fill,
+ * typed ones get a diff), failures reduced to one line. A stale answer after the editor closes is dropped.
+ */
+function useNvdLookup(draft: Draft, update: (fn: (d: Draft) => Draft) => void) {
+  const latest = useRef(draft);
+  useEffect(() => {
+    latest.current = draft;
+  });
+  const records = useRef(new Map<string, NvdRecord>());
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const live = useRef(true);
+  // Each result remembers the CVEs it came from, so removing one of them from the refs removes it from view.
+  const [diffs, setDiffs] = useState<{ cves: string[]; items: NvdFillResult["diffs"] }>({ cves: [], items: [] });
+  const [line, setLine] = useState<{ cve: string; text: string }>();
+  const [looking, setLooking] = useState<string>();
+  useEffect(() => {
+    live.current = true;
+    const t = timers.current;
+    return () => {
+      live.current = false;
+      for (const id of t.values()) clearTimeout(id);
+    };
+  }, []);
+
+  const run = (cve: string) => {
+    setLooking(cve);
+    api.nvdLookup(cve).then(
+      (rec) => {
+        if (!live.current) return;
+        records.current.set(cve, rec);
+        const d = latest.current;
+        // Only CVEs still in the references count (one removed meanwhile no longer competes for the vector).
+        const keptIds = [...records.current.keys()].filter((id) => d.refs.includes(id));
+        const kept = keptIds.flatMap((id) => records.current.get(id) ?? []);
+        const { apply, diffs: next } = nvdFill({ cvssVector: d.cvssVector, description: d.description, refs: d.refs }, kept);
+        update((p) => ({ ...p, ...apply, refs: apply.refs ? [...p.refs, ...apply.refs.filter((r) => !p.refs.includes(r))] : p.refs }));
+        setDiffs({ cves: keptIds, items: next });
+        setLine(undefined);
+        setLooking((c) => (c === cve ? undefined : c));
+      },
+      (e: unknown) => {
+        reportError(e);
+        if (!live.current) return;
+        setLine({ cve, text: lookupLine(cve, e) });
+        setLooking((c) => (c === cve ? undefined : c));
+      },
+    );
+  };
+
+  const lookup = (cve: string) => {
+    clearTimeout(timers.current.get(cve));
+    timers.current.set(cve, setTimeout(() => run(cve), NVD_DEBOUNCE_MS));
+  };
+  const present = (cve: string) => draft.refs.includes(cve);
+  // A diff whose field now holds NVD's text (taken, or typed the same) is settled; one from a removed CVE is gone.
+  const open = diffs.cves.every(present) ? diffs.items.filter((df) => draft[df.field].trim() !== df.nvd.trim()) : [];
+  return {
+    lookup,
+    diffs: open,
+    line: line && present(line.cve) ? line.text : undefined,
+    looking: looking && present(looking) ? looking : undefined,
+  };
+}
+
+/**
+ * The finding form, inline in the split. The draft is owned by the split (it outlives the form); this edits it.
+ * ⌘↵ saves; the split's Esc closes and keeps the draft.
+ */
+export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit, hostName, draft: d, base, update, onSaved, onClose, onDiscard, onFileDirty, draftKey, onBusy, notice }: {
   eid: string;
   hosts: Host[];
   servicesByHost: Map<string, Service[]>;
-  /** Edit this finding; add when absent. */
+  servicesError?: string;
+  /** The finding being edited; undefined for a new one. */
   edit?: Finding;
+  /** The host page it was opened from, for the heading. */
+  hostName?: string;
+  draft: Draft;
+  /** The draft as opened, to tell whether anything changed. */
+  base: Draft;
+  update: (fn: (d: Draft) => Draft) => void;
+  onSaved: () => void;
   onClose: () => void;
+  onDiscard: () => void;
+  /** A file is pasted or typed but not saved yet (it is not part of the draft). */
+  onFileDirty: (dirty: boolean) => void;
+  /** The kept draft this form edits; a save drops it even if the form is gone by then. */
+  draftKey?: string;
+  /** A save is in flight (or has finished). */
+  onBusy?: (busy: boolean) => void;
+  /** One quiet line above the form, e.g. why a kept draft did not come back. */
+  notice?: string;
 }) {
-  const { create, update } = useFindingMutations(eid);
+  const { create, update: updateFinding } = useFindingMutations(eid, { draftKey });
   const log = useLog(eid);
-  const [initial] = useState(() => JSON.stringify(toDraft(edit)));
-  const [d, setD] = useState<Draft>(() => toDraft(edit));
-  const [newRef, setNewRef] = useState("");
+  const newRef = d.newRef;
+  const setNewRef = (v: string) => update((p) => ({ ...p, newRef: v }));
   const [titleError, setTitleError] = useState<string>();
   const [formError, setFormError] = useState<string>();
-  const [confirmClose, setConfirmClose] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [builder, setBuilder] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [fileDirty, setFileDirty] = useState(false);
+  useEffect(() => {
+    onBusy?.(busy);
+  }, [busy, onBusy]);
+  const [fileDirty, setFileDirtyState] = useState(false);
+  const setFileDirty = useCallback((dirty: boolean) => {
+    setFileDirtyState(dirty);
+    onFileDirty(dirty);
+  }, [onFileDirty]);
   const flushFile = useRef<(() => Promise<boolean>) | null>(null);
   const registerFlush = useCallback((fn: (() => Promise<boolean>) | null) => {
     flushFile.current = fn;
   }, []);
-  const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
+  const set = <K extends keyof Draft>(k: K, v: Draft[K]) => update((p) => ({ ...p, [k]: v }));
+  const nvd = useNvdLookup(d, update);
 
-  const dirty = JSON.stringify(d) !== initial || newRef.trim() !== "" || fileDirty;
+  const dirty = draftChanged(d, base, fileDirty);
   const vector = d.cvssVector.trim();
-  const score = vector === "" ? null : calculateCvssScore(vector);
+  const score = vector === "" ? null : scoreCvss(vector);
   const suggested = score === null ? null : scoreToSeverity(score);
-
-  const requestClose = () => (dirty ? setConfirmClose(true) : onClose());
+  const affected = d.hostIds.flatMap((id) => hosts.find((h) => h.id === id) ?? []);
+  const title = edit ? "Edit finding" : "New finding";
 
   function save() {
     if (busy) return;
@@ -126,7 +270,7 @@ export function FindingEditor({ eid, hosts, servicesByHost, edit, onClose }: {
     };
     setBusy(true);
     const opts = {
-      onSuccess: onClose,
+      onSuccess: onSaved,
       onError: (e: Error) => {
         const field = (e as { field?: string }).field;
         if (field === "title") setTitleError(e.message);
@@ -140,7 +284,7 @@ export function FindingEditor({ eid, hosts, servicesByHost, edit, onClose }: {
         setBusy(false);
         return;
       }
-      if (edit) update.mutate({ id: edit.id, input }, opts);
+      if (edit) updateFinding.mutate({ id: edit.id, input }, opts);
       else create.mutate(input, opts);
     })();
   }
@@ -150,63 +294,138 @@ export function FindingEditor({ eid, hosts, servicesByHost, edit, onClose }: {
     saveRef.current = save;
   });
   useEffect(() => {
-    if (confirmClose) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        saveRef.current();
-      }
+      // Not while a dialog (capture, a confirmation) is up: its own ⌘↵ is meant.
+      if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey) || e.defaultPrevented || isDialogOpen()) return;
+      e.preventDefault();
+      saveRef.current();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [confirmClose]);
+  }, []);
 
-  function addRef() {
-    const r = newRef.trim();
+  function addRef(raw: string) {
+    const r = isCveId(raw) ? raw.trim().toUpperCase() : raw.trim();
     if (r === "") return;
-    if (!d.refs.includes(r)) set("refs", [...d.refs, r]);
-    setNewRef("");
+    if (!d.refs.includes(r)) {
+      set("refs", [...d.refs, r]);
+      if (isCveId(r)) nvd.lookup(r);
+    }
   }
 
-  const hostsWithServices = hosts.filter((h) => (servicesByHost.get(h.id) ?? []).length > 0);
+  const toggleHost = (id: string) =>
+    update((p) => {
+      if (p.hostIds.includes(id)) {
+        // The host's services go with it.
+        const gone = new Set((servicesByHost.get(id) ?? []).map((s) => s.id));
+        return { ...p, hostIds: p.hostIds.filter((x) => x !== id), serviceIds: p.serviceIds.filter((s) => !gone.has(s)) };
+      }
+      return { ...p, hostIds: [...p.hostIds, id] };
+    });
 
   return (
-    <>
-      <Dialog
-        open
-        onOpenChange={(o) => !o && requestClose()}
-        size="xl"
-        title={edit ? "Edit finding" : "Add finding"}
-        footer={
-          <>
-            <Button onClick={requestClose}>Cancel</Button>
-            <Button variant="primary" disabled={busy} onClick={save}>Save</Button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-3.5">
-          <Field label="Title" error={titleError}>
-            <Input autoFocus value={d.title} onChange={(e) => set("title", e.target.value)} />
+    <form aria-label={title} onSubmit={(e) => e.preventDefault()} className="flex flex-col">
+      <header className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-line bg-bg pb-2">
+        <h2 className={`m-0 truncate ${labelClass}`}>
+          {title}
+          {hostName && <span className="font-normal normal-case tracking-normal text-muted"> · {hostName}</span>}
+        </h2>
+        <span className="flex items-center gap-1.5">
+          {dirty && (
+            <Button size="sm" onClick={() => setConfirmDiscard(true)}>Discard changes</Button>
+          )}
+          <Button size="sm" variant="primary" disabled={busy} title="Save (⌘↵)" onClick={save}>Save</Button>
+          <Button size="sm" aria-label="Close" title="Close, keeping the draft (Esc)" disabled={busy} onClick={onClose}>
+            <X size={14} weight="light" aria-hidden />
+          </Button>
+        </span>
+      </header>
+
+      <div className="flex flex-col gap-3.5 pt-3">
+        {notice && <p role="status" className="m-0 text-xs text-muted">{notice}</p>}
+        <Field label="Title" error={titleError}>
+          <Input autoFocus value={d.title} onChange={(e) => set("title", e.target.value)} />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Severity">
+            <Select
+              options={SEVERITY_OPTIONS}
+              value={d.severity ?? "none"}
+              onValueChange={(v) => set("severity", v === "none" ? null : (v as Severity))}
+            />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Severity">
-              <Select
-                options={SEVERITY_OPTIONS}
-                value={d.severity ?? "none"}
-                onValueChange={(v) => set("severity", v === "none" ? null : (v as Severity))}
-              />
-            </Field>
-            <Field label="Status">
-              <Select
-                options={STATUSES.map((s) => ({ value: s, label: s }))}
-                value={d.status}
-                onValueChange={(v) => set("status", v as FindingStatus)}
-              />
-            </Field>
+          <Field label="Status">
+            <Select
+              options={STATUSES.map((s) => ({ value: s, label: s }))}
+              value={d.status}
+              onValueChange={(v) => set("status", v as FindingStatus)}
+            />
+          </Field>
+        </div>
+
+        <div role="group" aria-label="Affected hosts" className="flex flex-col gap-1.5">
+          <span className={labelClass}>Affected hosts</span>
+          <div className="flex flex-wrap gap-1.5">
+            {hosts.map((h) => (
+              <Toggle key={h.id} on={d.hostIds.includes(h.id)} title={hostLabel(h)} onChange={() => toggleHost(h.id)}>
+                {shortHostName(hostLabel(h))}
+              </Toggle>
+            ))}
+            {hosts.length === 0 && <span className="text-xs text-muted">No hosts yet</span>}
           </div>
+        </div>
+
+        <ServicePicker hosts={affected} servicesByHost={servicesByHost} error={servicesError} value={d.serviceIds} onChange={(ids) => set("serviceIds", ids)} />
+
+        <div className="flex flex-col gap-1.5">
+          <span className={labelClass}>References</span>
+          {d.refs.length > 0 && (
+            <ul className="m-0 flex list-none flex-col gap-1 p-0">
+              {d.refs.map((r) => (
+                <li key={r} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-[13px]">
+                  {/* No opener plugin: a link would be a dead click in the desktop app, so a URL is copied instead. */}
+                  <span className="truncate font-mono text-xs text-fg">{r}</span>
+                  <span className="flex gap-1.5">
+                    {isUrl(r) && <CopyRef value={r} />}
+                    <Button size="sm" aria-label={`Remove ${r}`} onClick={() => set("refs", d.refs.filter((x) => x !== r))}>Remove</Button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+            <Input
+              mono
+              aria-label="Add reference"
+              value={newRef}
+              placeholder="CVE-2017-0144, EDB-42315 or a URL"
+              onChange={(e) => setNewRef(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.metaKey && !e.ctrlKey) {
+                  e.preventDefault();
+                  addRef(newRef);
+                  setNewRef("");
+                }
+              }}
+            />
+            <Button onClick={() => { addRef(newRef); setNewRef(""); }}>Add</Button>
+          </div>
+          <RefSuggestions eid={eid} hostIds={d.hostIds} added={d.refs} onAdd={addRef} />
+          <span aria-live="polite" className="text-xs text-muted">
+            {nvd.looking ? `Looking up ${nvd.looking} on NVD…` : nvd.line ?? ""}
+          </span>
+          {nvd.diffs.map((df) => (
+            <p key={df.field} className="m-0 flex flex-wrap items-center gap-2 text-xs text-fg-2">
+              NVD has a different {FIELD_NAME[df.field]} ·
+              <Button size="sm" onClick={() => set(df.field, df.nvd)}>use NVD</Button>
+            </p>
+          ))}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
           <Field
             label="CVSS vector"
-            error={vector !== "" && score === null ? "Not a valid CVSS v3.1 base vector" : undefined}
+            error={vector !== "" && score === null ? "Not a valid CVSS 3.1 or 4.0 vector" : undefined}
             hint={
               score !== null && suggested ? (
                 <span className="inline-flex flex-wrap items-center gap-2">
@@ -219,102 +438,58 @@ export function FindingEditor({ eid, hosts, servicesByHost, edit, onClose }: {
               ) : undefined
             }
           >
-            <Input mono value={d.cvssVector} onChange={(e) => set("cvssVector", e.target.value)} placeholder="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H" />
+            <Input mono value={d.cvssVector} onChange={(e) => set("cvssVector", e.target.value)} placeholder="CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N" />
           </Field>
-
-          <div role="group" aria-label="Affected hosts" className="flex flex-col gap-1.5">
-            <span className="text-[10.5px] font-semibold uppercase tracking-label text-muted">Affected hosts</span>
-            <div className="flex flex-wrap gap-1.5">
-              {hosts.map((h) => (
-                <Toggle key={h.id} on={d.hostIds.includes(h.id)} onChange={() => set("hostIds", toggle(d.hostIds, h.id))}>
-                  {hostLabel(h)}
-                </Toggle>
-              ))}
-              {hosts.length === 0 && <span className="text-xs text-muted">No hosts yet</span>}
-            </div>
-          </div>
-
-          <div role="group" aria-label="Affected services" className="flex flex-col gap-1.5">
-            <span className="text-[10.5px] font-semibold uppercase tracking-label text-muted">Affected services</span>
-            {hostsWithServices.length === 0 && <span className="text-xs text-muted">No services yet</span>}
-            {hostsWithServices.map((h) => (
-              <div key={h.id} className="flex flex-wrap items-center gap-1.5">
-                <span className="w-24 shrink-0 truncate text-xs text-muted">{hostLabel(h)}</span>
-                {(servicesByHost.get(h.id) ?? []).map((s) => (
-                  <Toggle key={s.id} on={d.serviceIds.includes(s.id)} onChange={() => set("serviceIds", toggle(d.serviceIds, s.id))}>
-                    {`${s.port}/${s.protocol}${s.nmapService ? ` ${s.nmapService}` : ""}`}
-                  </Toggle>
-                ))}
-              </div>
-            ))}
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[10.5px] font-semibold uppercase tracking-label text-muted">References</span>
-            {d.refs.length > 0 && (
-              <ul className="m-0 flex list-none flex-col gap-1 p-0">
-                {d.refs.map((r) => (
-                  <li key={r} className="flex items-center justify-between gap-2 text-[13px]">
-                    {/* No opener plugin: a link would be a dead click in the desktop app, so a URL is copied instead. */}
-                    <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg">{r}</span>
-                    <span className="flex shrink-0 gap-1.5">
-                      {isUrl(r) && <CopyRef value={r} />}
-                      <Button size="sm" aria-label={`Remove ${r}`} onClick={() => set("refs", d.refs.filter((x) => x !== r))}>Remove</Button>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="flex gap-2">
-              <Input
-                mono
-                aria-label="Add reference"
-                value={newRef}
-                placeholder="CVE-2017-0144, EDB-42315 or a URL"
-                onChange={(e) => setNewRef(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.metaKey && !e.ctrlKey) {
-                    e.preventDefault();
-                    addRef();
-                  }
-                }}
-              />
-              <Button onClick={addRef}>Add</Button>
-            </div>
-          </div>
-
-          <Field label="Description"><Textarea rows={4} value={d.description} onChange={(e) => set("description", e.target.value)} /></Field>
-          <Field label="Impact"><Textarea rows={3} value={d.impact} onChange={(e) => set("impact", e.target.value)} /></Field>
-          <Field label="Remediation"><Textarea rows={3} value={d.remediation} onChange={(e) => set("remediation", e.target.value)} /></Field>
-          <Field label="Exploit notes"><Textarea mono rows={4} value={d.exploitNotes} onChange={(e) => set("exploitNotes", e.target.value)} /></Field>
-
-          <FindingSteps eid={eid} hostIds={d.hostIds} value={d.stepEntryIds} onChange={(ids) => set("stepEntryIds", ids)} />
-          {edit ? (
-            <FindingFiles findingId={edit.id} onDirty={setFileDirty} register={registerFlush} />
-          ) : (
-            <p className="m-0 text-xs text-muted">Save the finding to attach files.</p>
-          )}
-
-          <Field label={<span className="inline-flex items-center gap-2">Lessons <Chip>Private</Chip></span>} hint="Never included in an export or report.">
-            <Textarea rows={3} value={d.lessons} onChange={(e) => set("lessons", e.target.value)} />
-          </Field>
-
-          {formError && <p role="alert" className="m-0 text-xs text-warn">{formError}</p>}
+          <button
+            type="button"
+            aria-expanded={builder}
+            title={builder ? "Fold the CVSS builder" : "Build the vector metric by metric"}
+            onClick={() => setBuilder(!builder)}
+            className="inline-flex cursor-default items-center gap-1 self-start text-xs text-fg-2 hover:text-fg"
+          >
+            {builder ? <CaretDown size={12} weight="light" aria-hidden /> : <CaretRight size={12} weight="light" aria-hidden />}
+            CVSS builder
+          </button>
+          {builder && <CvssBuilder value={d.cvssVector} onChange={(v) => set("cvssVector", v)} />}
         </div>
-      </Dialog>
-      {confirmClose && (
+
+        <Field label="Description"><Textarea rows={4} value={d.description} onChange={(e) => set("description", e.target.value)} /></Field>
+        <Field label="Impact"><Textarea rows={3} value={d.impact} onChange={(e) => set("impact", e.target.value)} /></Field>
+        <Field label="Remediation"><Textarea rows={3} value={d.remediation} onChange={(e) => set("remediation", e.target.value)} /></Field>
+        <Field label="Exploit notes"><Textarea mono rows={4} value={d.exploitNotes} onChange={(e) => set("exploitNotes", e.target.value)} /></Field>
+
+        <FindingSteps eid={eid} hostIds={d.hostIds} value={d.stepEntryIds} onChange={(ids) => set("stepEntryIds", ids)} />
+        {edit ? (
+          <FindingFiles
+            findingId={edit.id}
+            form={d.fileForm}
+            onForm={(f) => set("fileForm", f)}
+            onDirty={setFileDirty}
+            register={registerFlush}
+          />
+        ) : (
+          <p className="m-0 text-xs text-muted">Save the finding to attach files.</p>
+        )}
+
+        <Field label={<span className="inline-flex items-center gap-2">Lessons <Chip>Private</Chip></span>} hint="Never included in an export or report.">
+          <Textarea rows={3} value={d.lessons} onChange={(e) => set("lessons", e.target.value)} />
+        </Field>
+
+        {formError && <p role="alert" className="m-0 text-xs text-warn">{formError}</p>}
+      </div>
+      {confirmDiscard && (
         <Dialog
           open
-          onOpenChange={(o) => !o && setConfirmClose(false)}
+          onOpenChange={(o) => !o && setConfirmDiscard(false)}
           title="Discard unsaved changes?"
           footer={
             <>
-              <Button onClick={() => setConfirmClose(false)}>Keep editing</Button>
-              <Button variant="danger" onClick={onClose}>Discard</Button>
+              <Button onClick={() => setConfirmDiscard(false)}>Keep editing</Button>
+              <Button variant="danger" onClick={onDiscard}>Discard</Button>
             </>
           }
         />
       )}
-    </>
+    </form>
   );
 }

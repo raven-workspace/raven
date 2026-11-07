@@ -32,7 +32,7 @@ const H1 = host("h1", "dc01", "10.10.10.5", "windows");
 const H2 = host("h2", "web02", "10.10.10.6", "linux");
 const svc = (id: string, port: number): Service => ({
   id, hostId: "h1", port, protocol: "tcp", state: "open", nmapService: null, nmapVersion: null,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1,
+  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
 });
 const AD = [svc("s88", 88), svc("s389", 389)];
 const hop = (): Hop => ({ id: "hp1", engagementId: "e1", fromHostId: null, toHostId: "h1", via: "creds", logEntryId: null, at: 1, updatedAt: 1 });
@@ -79,7 +79,7 @@ beforeEach(() => {
   useCaptureStore.getState().reset();
   useCredPickStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementsProgress.mockResolvedValue({});
   m.servicesList.mockResolvedValue([]);
@@ -233,7 +233,7 @@ describe("engagement checklist", () => {
     mount({ services: AD, items: [done], creds: [cred("c1", { createdAt: 50 })] });
     await screen.findAllByText("Sync the clock to the DC");
     const row = document.querySelector('li[data-goal-id="e-setup-clock"]') as HTMLElement;
-    const notice = within(row).getByRole("button", { name: /1 new credential since this was done/ });
+    const notice = within(row).getByRole("button", { name: /1 new cred since done · re-check/ });
     expect(within(row).queryByText("CORP\\svc_sql")).toBeNull();
     await userEvent.click(notice);
     expect(within(row).getByText("CORP\\svc_sql")).toBeInTheDocument();

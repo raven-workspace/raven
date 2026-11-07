@@ -27,7 +27,7 @@ const H1: Host = {
 };
 const svc = (id: string, port: number, nmapService: string): Service => ({
   id, hostId: "h1", port, protocol: "tcp", state: "open", nmapService, nmapVersion: null, confirmedProduct: null,
-  confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1,
+  confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
 });
 const SERVICES = [svc("s1", 445, "microsoft-ds"), svc("s2", 22, "ssh")];
 
@@ -75,7 +75,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   useCaptureStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementsProgress.mockResolvedValue({});
   m.servicesList.mockResolvedValue([]);

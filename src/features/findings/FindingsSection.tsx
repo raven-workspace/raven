@@ -4,12 +4,11 @@ import { sortFindingsBySeverity } from "../../engines/findings";
 import type { Finding } from "../../types/findings";
 import { Button, Chip, EmptyState, labelClass } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
-import { useEngagementServices } from "../checklist/queries";
 import { hostLabel } from "../credentials/AccessGrants";
 import { useHosts } from "../hosts/queries";
 import { sectionPath } from "../engagements/sections";
 import { AttemptsList } from "./AttemptsList";
-import { FindingEditor } from "./FindingEditor";
+import { FindingSplit } from "./FindingSplit";
 import { useFindingMutations, useFindings } from "./queries";
 
 /** Critical and high use the warn colour; the rest stay neutral. */
@@ -23,16 +22,24 @@ export function FindingsSection() {
   const navigate = useNavigate();
   const hostsQ = useHosts(id);
   const findingsQ = useFindings(id);
-  const { servicesByHost, query: servicesQ } = useEngagementServices(id);
   const { remove } = useFindingMutations(id);
   const [editor, setEditor] = useState<{ edit?: Finding } | null>(null);
   const [deleting, setDeleting] = useState<Finding>();
   const sorted = useMemo(() => sortFindingsBySeverity(findingsQ.data ?? []), [findingsQ.data]);
 
-  const failed = hostsQ.error ?? findingsQ.error ?? servicesQ.error;
+  const failed = hostsQ.error ?? findingsQ.error;
   if (failed) return <p role="alert" className="py-3 text-xs text-warn">Couldn't load findings: {failed.message}</p>;
-  if (!hostsQ.data || !findingsQ.data || !servicesQ.data) return null;
+  if (!hostsQ.data || !findingsQ.data) return null;
   const hosts = hostsQ.data;
+  if (editor) {
+    // The same split as the host page: with one affected host its context shows; otherwise the switcher or the engagement's.
+    const only = editor.edit?.hostIds.length === 1 ? editor.edit.hostIds[0]! : null;
+    return (
+      <div className="@container/host h-full min-h-0">
+        <FindingSplit key={editor.edit?.id ?? "new"} eid={id} hostId={only} edit={editor.edit ?? "new"} onClose={() => setEditor(null)} />
+      </div>
+    );
+  }
   const names = (f: Finding) => f.hostIds.map((hid) => hostLabel(hosts.find((h) => h.id === hid))).join(", ");
 
   return (
@@ -64,9 +71,6 @@ export function FindingsSection() {
         </ul>
       )}
 
-      {editor && (
-        <FindingEditor eid={id} hosts={hosts} servicesByHost={servicesByHost} edit={editor.edit} onClose={() => setEditor(null)} />
-      )}
       {deleting && (
         <ConfirmDelete
           title={`Delete ${deleting.title}?`}

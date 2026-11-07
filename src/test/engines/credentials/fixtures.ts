@@ -12,7 +12,7 @@ export const host = (id: string, extra: Partial<Host> = {}): Host => ({
 
 export const svc = (hostId: string, port: number, nmapService = "", state = "open"): Service => ({
   id: `${hostId}:${port}`, hostId, port, protocol: "tcp", state, nmapService: nmapService || null,
-  nmapVersion: null, confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 0, updatedAt: 0,
+  nmapVersion: null, confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 0, updatedAt: 0,
 });
 
 /** A host with an ip and open services on the given ports. */

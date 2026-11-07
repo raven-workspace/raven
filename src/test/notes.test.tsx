@@ -67,12 +67,14 @@ const panel = () => screen.findByRole("complementary", { name: /Notes/ });
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   resetNotesStore();
   useCaptureStore.getState().reset();
   for (const k of Object.keys(stored)) delete stored[k];
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.vaultLock.mockResolvedValue(null);
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementGet.mockResolvedValue(E1);
   m.engagementsProgress.mockResolvedValue({});

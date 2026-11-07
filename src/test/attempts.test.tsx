@@ -87,9 +87,11 @@ function mount(path: string, initial: FailedAttempt[] = []) {
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   useCaptureStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementsProgress.mockResolvedValue({});
 });
@@ -219,9 +221,9 @@ describe("attempts", () => {
     expect(within(dlg).getByRole("combobox", { name: "Host" })).toHaveTextContent("dc01");
     await user.click(within(dlg).getByRole("button", { name: "Cancel" }));
 
-    // The linked log entry opens in the Story tab.
+    // The linked log entry opens in the Log tab.
     await user.click(within(list).getByRole("button", { name: "Open log entry for Relay to the DC" }));
-    expect(await screen.findByRole("tab", { name: "Story", selected: true })).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: "Log", selected: true })).toBeInTheDocument();
   });
 
   it("deleting a finding reloads the attempts, which lose the link", async () => {

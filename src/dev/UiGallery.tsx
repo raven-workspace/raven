@@ -170,7 +170,7 @@ function MockupA() {
           </Panel>
           <Panel>
             <div className="mb-2.5 flex gap-[18px]">
-              <span className="border-b border-accent pb-1 text-fg">Story</span>
+              <span className="border-b border-accent pb-1 text-fg">Log</span>
               <span className="text-muted">Checklist</span>
               <span className="text-muted">Credentials</span>
               <span className="text-muted">Findings</span>

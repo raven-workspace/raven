@@ -23,6 +23,9 @@ const DEFAULT_WINDOWS_TOOLS: &str = "~/tools/windows";
 const DEFAULT_LINUX_TOOLS: &str = "~/tools/linux";
 const DEFAULT_FIELD_MANUAL: &str = "~/Documents/Field Manual";
 const MAX_PATH_LEN: usize = 500;
+/// The NIST NVD API key. Stored in the encrypted vault; never sent to the frontend.
+const NVD_KEY_KEY: &str = "nvd_api_key";
+const MAX_NVD_KEY_LEN: usize = 128;
 const RETENTION_RANGE: std::ops::RangeInclusive<u32> = 1..=200;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -43,9 +46,11 @@ pub struct Settings {
     pub linux_tools_dir: String,
     /// The Field-Manual vault Raven reads its library from.
     pub field_manual_path: String,
+    /// Whether an NVD API key is stored. The key itself is never returned.
+    pub nvd_key_set: bool,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct SettingsPatch {
     pub auto_lock_minutes: Option<u32>,
@@ -57,6 +62,32 @@ pub struct SettingsPatch {
     pub windows_tools_dir: Option<String>,
     pub linux_tools_dir: Option<String>,
     pub field_manual_path: Option<String>,
+    /// Sets the NVD API key; an empty string clears it.
+    pub nvd_api_key: Option<String>,
+}
+
+/// Debug output never shows the NVD API key, only whether the patch sets one.
+impl std::fmt::Debug for SettingsPatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SettingsPatch")
+            .field("auto_lock_minutes", &self.auto_lock_minutes)
+            .field("backup_retention", &self.backup_retention)
+            .field("machines", &self.machines)
+            .field("attacker_ip", &self.attacker_ip)
+            .field("listener_port", &self.listener_port)
+            .field("kali_user", &self.kali_user)
+            .field("windows_tools_dir", &self.windows_tools_dir)
+            .field("linux_tools_dir", &self.linux_tools_dir)
+            .field("field_manual_path", &self.field_manual_path)
+            .field("nvd_api_key", &self.nvd_api_key.as_ref().map(|_| "<redacted>"))
+            .finish()
+    }
+}
+
+/// The stored NVD API key, or "" when none is set. For the NVD lookup only.
+pub fn nvd_api_key(conn: &Connection) -> String {
+    conn.query_row("SELECT value FROM settings WHERE key = ?1", [NVD_KEY_KEY], |r| r.get::<_, String>(0))
+        .unwrap_or_default()
 }
 
 pub fn get(conn: &Connection) -> AppResult<Settings> {
@@ -97,6 +128,7 @@ pub fn get(conn: &Connection) -> AppResult<Settings> {
         windows_tools_dir,
         linux_tools_dir,
         field_manual_path,
+        nvd_key_set: !zeroize::Zeroizing::new(nvd_api_key(conn)).is_empty(),
     })
 }
 
@@ -176,6 +208,16 @@ fn clean_path(field: &str, s: &str) -> AppResult<String> {
     }
 }
 
+/// Blank (clears it), or 1-128 printable ASCII characters with no spaces: it is sent as an HTTP header.
+fn clean_nvd_key(s: &str) -> AppResult<String> {
+    let s = s.trim();
+    if s.len() <= MAX_NVD_KEY_LEN && s.bytes().all(|b| b.is_ascii_graphic()) {
+        Ok(s.to_string())
+    } else {
+        Err(bad("nvdApiKey", "paste the key exactly as NVD sent it"))
+    }
+}
+
 fn put(conn: &Connection, key: &str, v: u32) -> AppResult<()> {
     put_text(conn, key, &v.to_string())
 }
@@ -198,6 +240,7 @@ pub fn update(conn: &Connection, patch: SettingsPatch) -> AppResult<Settings> {
     let windows_tools = patch.windows_tools_dir.as_deref().map(|v| clean_path("windowsToolsDir", v)).transpose()?;
     let linux_tools = patch.linux_tools_dir.as_deref().map(|v| clean_path("linuxToolsDir", v)).transpose()?;
     let field_manual = patch.field_manual_path.as_deref().map(|v| clean_path("fieldManualPath", v)).transpose()?;
+    let nvd_key = patch.nvd_api_key.as_deref().map(clean_nvd_key).transpose()?;
     for (key, v) in [
         (KALI_USER_KEY, kali_user),
         (WINDOWS_TOOLS_KEY, windows_tools),
@@ -219,6 +262,13 @@ pub fn update(conn: &Connection, patch: SettingsPatch) -> AppResult<Settings> {
     }
     if let Some(n) = patch.backup_retention {
         put(conn, RETENTION_KEY, n)?;
+    }
+    match nvd_key.as_deref() {
+        Some("") => {
+            conn.execute("DELETE FROM settings WHERE key = ?1", [NVD_KEY_KEY])?;
+        }
+        Some(k) => put_text(conn, NVD_KEY_KEY, k)?,
+        None => {}
     }
     if let Some(m) = machines {
         let json = serde_json::to_string(&m).map_err(|e| AppError::Db(e.to_string()))?;
@@ -371,5 +421,41 @@ mod tests {
         let s = update(c, SettingsPatch { field_manual_path: Some(" ".into()), ..Default::default() }).unwrap();
         assert_eq!(s.field_manual_path, def);
         assert!(serde_json::to_value(&s).unwrap().get("fieldManualPath").is_some());
+    }
+
+    #[test]
+    fn settings_nvd_key_is_stored_but_never_returned() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        assert!(!get(c).unwrap().nvd_key_set);
+        assert_eq!(nvd_api_key(c), "");
+        let key = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0";
+        let s = update(c, SettingsPatch { nvd_api_key: Some(format!(" {key} ")), ..Default::default() }).unwrap();
+        assert!(s.nvd_key_set);
+        assert_eq!(nvd_api_key(c), key);
+        let p = SettingsPatch { nvd_api_key: Some(key.into()), ..Default::default() };
+        assert!(!format!("{p:?}").contains(key));
+        // settings_get never carries the key, under any field name
+        let j = serde_json::to_string(&crate::commands::settings_get_inner(&v).unwrap()).unwrap();
+        assert!(!j.contains(key), "{j}");
+        assert!(j.contains("\"nvdKeySet\":true"), "{j}");
+        assert!(!j.contains("nvdApiKey"), "{j}");
+        // a patch without the key keeps it
+        let s = update(c, SettingsPatch { auto_lock_minutes: Some(10), ..Default::default() }).unwrap();
+        assert!(s.nvd_key_set);
+        // a key with whitespace or control characters inside is refused
+        for bad in ["a b", "a\r\nX-Evil: 1", &"k".repeat(129)] {
+            match update(c, SettingsPatch { nvd_api_key: Some(bad.into()), ..Default::default() }) {
+                Err(AppError::Validation { field, .. }) => assert_eq!(field, "nvdApiKey", "{bad}"),
+                o => panic!("{o:?}"),
+            }
+        }
+        assert_eq!(nvd_api_key(c), key);
+        // an empty string clears it
+        let s = update(c, SettingsPatch { nvd_api_key: Some("  ".into()), ..Default::default() }).unwrap();
+        assert!(!s.nvd_key_set);
+        assert_eq!(nvd_api_key(c), "");
+        let n: i64 = c.query_row("SELECT COUNT(*) FROM settings WHERE key='nvd_api_key'", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0);
     }
 }

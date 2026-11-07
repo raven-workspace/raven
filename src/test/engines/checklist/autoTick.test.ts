@@ -26,7 +26,7 @@ const host = (id: string, name: string, ip: string, os: Host['os']): Host => ({
 let n = 0;
 const svc = (hostId: string, port: number): Service => ({
   id: `s${n++}`, hostId, port, protocol: 'tcp', state: 'open', nmapService: null, nmapVersion: null,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 0, updatedAt: 0,
+  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 0, updatedAt: 0,
 });
 
 const dc = host('dc', 'DC01', '10.0.0.1', 'windows');

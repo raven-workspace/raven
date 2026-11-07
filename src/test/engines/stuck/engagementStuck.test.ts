@@ -16,7 +16,7 @@ const host = (id: string, p: Partial<Host> = {}): Host => ({
 let n = 0;
 const svc = (hostId: string, port: number, nmapService = "http"): Service => ({
   id: `s${n++}`, hostId, port, protocol: "tcp", state: "open", nmapService, nmapVersion: "x", confirmedProduct: null,
-  confirmedVersion: null, confirmedEntryId: null, createdAt: 0, updatedAt: 0,
+  confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 0, updatedAt: 0,
 });
 const cred = (p: Partial<Credential> = {}): Credential => ({
   id: "c1", engagementId: "e1", type: "password", username: "alice", domain: null, secret: "pw", hashType: null, scope: "domain",

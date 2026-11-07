@@ -8,6 +8,7 @@ import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { useCredPickStore } from "../features/checklist/credPick";
 import { resetNotesStore, useNotesStore } from "../features/notes/useNotesStore";
 import { api } from "../lib/api";
+import { commandText } from "./support/commandText";
 import { makeQueryClient } from "../lib/queryClient";
 import type { ChecklistItem } from "../types/checklist";
 import type { Engagement } from "../types/engagement";
@@ -29,7 +30,7 @@ const host = (over: Partial<Host> = {}): Host => ({
 });
 const svc = (id: string, port: number, over: Partial<Service> = {}): Service => ({
   id, hostId: "h1", port, protocol: "tcp", state: "open", nmapService: null, nmapVersion: null,
-  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1, ...over,
+  confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1, ...over,
 });
 
 function mount(opts: { hosts?: Host[]; services?: Service[]; path?: string } = {}) {
@@ -47,11 +48,13 @@ function mount(opts: { hosts?: Host[]; services?: Service[]; path?: string } = {
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   useCaptureStore.getState().reset();
   useCredPickStore.getState().reset();
   resetNotesStore();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementGet.mockResolvedValue(E1);
   m.engagementsProgress.mockResolvedValue({});
@@ -133,7 +136,7 @@ describe("stuck view", () => {
     await screen.findByRole("region", { name: "Host" });
     await user.keyboard("h");
     const panel = await screen.findByRole("complementary", { name: /Stuck on web01/ });
-    expect(await within(panel).findByText("nc -nv 10.0.0.5 9999")).toBeInTheDocument();
+    expect(await within(panel).findByText(commandText("nc -nv 10.0.0.5 9999"))).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: "Copy command: Talk to it (then type help)" })).toBeInTheDocument();
   });
 
@@ -170,7 +173,7 @@ describe("stuck view", () => {
     const skipped = within(await within(panel).findByRole("region", { name: "Skipped steps" }));
     await user.click(skipped.getByRole("button"));
     expect(screen.queryByRole("complementary", { name: /Stuck on/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Checklist" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Next" })).toHaveAttribute("aria-selected", "true");
     const row = document.querySelector('li[data-goal-id="h-foot-arrived"]')!;
     expect(within(row as HTMLElement).getByRole("button", { name: /^Collapse/ })).toBeInTheDocument();
   });

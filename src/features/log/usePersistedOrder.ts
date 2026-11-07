@@ -4,9 +4,10 @@ import type { LogEntry } from "../../types/log";
 export type LogOrder = "newest" | "oldest";
 
 /** A list's sort order, remembered across launches (a view preference, not engagement data). */
-export function usePersistedOrder(key: string, fallback: LogOrder): [LogOrder, (o: LogOrder) => void] {
+export function usePersistedOrder(key: string, fallback: LogOrder, legacyKey?: string): [LogOrder, (o: LogOrder) => void] {
   const [order, setOrder] = useState<LogOrder>(() => {
-    const v = localStorage.getItem(key);
+    // `legacyKey` is read once, when nothing is stored under `key` yet (a renamed preference).
+    const v = localStorage.getItem(key) ?? (legacyKey ? localStorage.getItem(legacyKey) : null);
     return v === "newest" || v === "oldest" ? v : fallback;
   });
   return [

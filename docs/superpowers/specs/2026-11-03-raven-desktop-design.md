@@ -51,7 +51,7 @@ This design builds a **new app in a new repo** (this repo), not a rework of the 
 - Sync between machines and multiple users.
 - A browser build. The UI is only viewed in the desktop dev window and the built app.
 - Windows and Linux builds, for now.
-- Any network calls, telemetry or cloud features.
+- Any network calls, telemetry or cloud features. Exception: NIST NVD CVE lookups, user decision 2026-11-06.
 - The old CPTS field manual content, the Writeup Studio, the exam simulator's extras (burndown, bio breaks, quick-action drawer), and the old global variables bar.
 
 **Anti-goals (failure even if it "works")**

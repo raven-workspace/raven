@@ -226,5 +226,22 @@ export function collectLayoutIssues(): RawIssue[] {
     }
   }
 
+  // narrow-wrap: a text block squeezed into a sliver, so it stacks a few characters per line
+  for (const el of all) {
+    if (el.closest("pre, code")) continue;
+    const text = ownText(el).replace(/\s+/g, " ");
+    if (text.length < 4) continue;
+    const range = document.createRange();
+    const tops = new Set<number>();
+    for (const n of Array.from(el.childNodes)) {
+      if (n.nodeType !== Node.TEXT_NODE || (n.textContent ?? "").trim() === "") continue;
+      range.selectNodeContents(n);
+      for (const r of Array.from(range.getClientRects())) if (r.width > 0) tops.add(Math.round(r.top));
+    }
+    if (tops.size >= 4 && text.length / tops.size <= 6) {
+      add("narrow-wrap", el, `${text.length} characters over ${tops.size} lines (${(text.length / tops.size).toFixed(1)} per line), width ${Math.round(el.getBoundingClientRect().width)}`);
+    }
+  }
+
   return issues;
 }

@@ -99,7 +99,7 @@ beforeEach(() => {
   store = [];
   nextId = 1;
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
   m.engagementsList.mockImplementation(async () => [engagement]);
   m.engagementGet.mockImplementation(async () => engagement);
   m.engagementsProgress.mockResolvedValue({});
@@ -532,7 +532,7 @@ describe("ticks.ts", () => {
   it("Tick from log keeps fact ticks and DA cover marks", async () => {
     hosts = hosts.map((h) => (h.id === "h1" ? { ...h, os: "linux" as const } : h));
     m.servicesListEngagement.mockResolvedValue([
-      { id: "s1", hostId: "h1", port: 22, protocol: "tcp", state: "open", nmapService: "ssh", nmapVersion: "OpenSSH 8.9", confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1 },
+      { id: "s1", hostId: "h1", port: 22, protocol: "tcp", state: "open", nmapService: "ssh", nmapVersion: "OpenSSH 8.9", confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1 },
     ]);
     entries = [entry({ id: "s1", kind: "command", at: T, content: { kind: "command", blocks: [{ command: FULL_SCAN, output: "" }] } })];
     store = [
@@ -559,7 +559,7 @@ describe("ticks.ts", () => {
     m.servicesUpsertScan.mockImplementation(async (hostId, ports) => {
       services = ports.map((p, i) => ({
         id: `s${i}`, hostId, port: p.port, protocol: p.protocol, state: p.state, nmapService: p.service, nmapVersion: p.version || null,
-        confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1,
+        confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
       }));
       return services;
     });
@@ -638,7 +638,7 @@ describe("service mutations", () => {
     // The enumerate goals that apply with only 3000/tcp seen as http are all closed except the web ones.
     const svc = (over: Partial<Service>): Service => ({
       id: "s1", hostId: "h1", port: 3000, protocol: "tcp", state: "open", nmapService: "http", nmapVersion: null,
-      confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, createdAt: 1, updatedAt: 1, ...over,
+      confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1, ...over,
     });
     let services = [svc({})];
     m.servicesListEngagement.mockImplementation(async () => services);

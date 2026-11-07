@@ -51,12 +51,14 @@ function mount(path: string) {
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   resetNotesStore();
   useCaptureStore.getState().reset();
   for (const key of Object.keys(stored)) delete stored[key];
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.vaultLock.mockResolvedValue(null);
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementGet.mockResolvedValue(E1);
   m.engagementsProgress.mockResolvedValue({});
@@ -73,7 +75,7 @@ beforeEach(() => {
   });
   m.ruledOutCreate.mockImplementation(async (input) => ({
     id: "r1", engagementId: input.engagementId, hostId: input.hostId ?? null, text: input.text, reason: input.reason,
-    private: input.private ?? false, createdAt: 1,
+    private: input.private ?? false, sourceKind: null, sourceId: null, createdAt: 1,
   }));
 });
 

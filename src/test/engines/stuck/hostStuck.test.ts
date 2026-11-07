@@ -15,7 +15,7 @@ const host = (p: Partial<Host> = {}): Host => ({
 let n = 0;
 const svc = (port: number, p: Partial<Service> = {}): Service => ({
   id: `s${n++}`, hostId: "h1", port, protocol: "tcp", state: "open", nmapService: "http", nmapVersion: "Apache 2.4", confirmedProduct: null,
-  confirmedVersion: null, confirmedEntryId: null, createdAt: 0, updatedAt: 0, ...p,
+  confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 0, updatedAt: 0, ...p,
 });
 const engagement = { id: "e1", kind: "lab" } as Engagement;
 const cmd = (command: string, hostIds = ["h1"]): LogEntry =>

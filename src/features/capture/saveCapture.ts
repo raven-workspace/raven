@@ -1,3 +1,4 @@
+import { identityBlocksOf, isIdentityBlockFor, mergeIdentity, usableIdentity, vectorsFromIdentity, type IdentityFields } from "../../engines/facts";
 import { buildDraft, type CaptureDraft, type DraftInput } from "../../engines/capture";
 import { api } from "../../lib/api";
 import { afterEntrySaved, CHECKLIST_FAILED, FollowUpError } from "../checklist/ticks";
@@ -20,6 +21,31 @@ export interface CaptureEdits {
   returnedNothing: boolean;
   private: boolean;
   content: LogContent;
+}
+
+export const IDENTITY_FAILED = "Saved the entry, but the host's identity didn't update. Paste the output again to retry.";
+export const VECTORS_FAILED = "Saved the entry, but the privesc vectors didn't update. Paste the output again to retry.";
+
+/**
+ * Records who the user is on the host from its whoami/id output, merged by kind into what is stored (`whoami /priv`
+ * changes only the privileges, and so on). Returns the host and the privesc vectors the output points to, or null.
+ */
+async function recordIdentity(entry: LogEntry, hosts: Host[]): Promise<{ hostId: string; vectors: string[] } | null> {
+  const host = hosts.find((h) => h.id === entry.hostIds[0]);
+  if (!host) return null;
+  const parsedBlocks = identityBlocksOf(entry).flatMap((block) => {
+    const parsed = isIdentityBlockFor(entry, host, block) ? usableIdentity(block) : null;
+    return parsed ? [{ parsed, command: block.command }] : [];
+  });
+  if (parsedBlocks.length === 0) return null;
+  let stored: IdentityFields | null = (await api.hostIdentityGet(host.id)) ?? null;
+  const vectors: string[] = [];
+  for (const { parsed, command } of parsedBlocks) {
+    stored = mergeIdentity(stored, parsed, command);
+    await api.hostIdentitySet({ hostId: host.id, username: stored.username ?? "unknown", privileges: stored.privileges, groups: stored.groups, entryId: entry.id });
+    for (const title of vectorsFromIdentity(parsed)) if (!vectors.includes(title)) vectors.push(title);
+  }
+  return { hostId: host.id, vectors };
 }
 
 export const INTAKE_FAILED = "Saved the entry, but the credentials didn't update. Paste the output again to retry.";
@@ -146,6 +172,19 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<LogEntry> {
       } catch (e) {
         failures.push({ reason: e, message: INTAKE_FAILED, also: "The credentials didn't update either: paste the output again to retry." });
       }
+    }
+  }
+  let identity: Awaited<ReturnType<typeof recordIdentity>> = null;
+  try {
+    identity = await recordIdentity(entry, hosts);
+  } catch (e) {
+    failures.push({ reason: e, message: IDENTITY_FAILED, also: "The host's identity didn't update either: paste the output again to retry." });
+  }
+  if (identity) {
+    try {
+      for (const title of identity.vectors) await api.vectorUpsert(identity.hostId, { title, status: "try", source: "auto" });
+    } catch (e) {
+      failures.push({ reason: e, message: VECTORS_FAILED, also: "The privesc vectors didn't update either: paste the output again to retry." });
     }
   }
   try {

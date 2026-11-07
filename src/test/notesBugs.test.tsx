@@ -52,12 +52,14 @@ function mount(path: string) {
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
   resetNotesStore();
   useCaptureStore.getState().reset();
   for (const key of Object.keys(stored)) delete stored[key];
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.vaultLock.mockResolvedValue(null);
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementGet.mockResolvedValue(E1);
   m.engagementsProgress.mockResolvedValue({});
@@ -74,7 +76,7 @@ beforeEach(() => {
   });
   m.ruledOutCreate.mockImplementation(async (input) => ({
     id: "r1", engagementId: input.engagementId, hostId: input.hostId ?? null, text: input.text, reason: input.reason,
-    private: input.private ?? false, createdAt: 1,
+    private: input.private ?? false, sourceKind: null, sourceId: null, createdAt: 1,
   }));
 });
 
@@ -145,6 +147,37 @@ describe("notes panel: multi-line typing (bug 1)", () => {
     expect(ta).toHaveAttribute("autocomplete", "off");
     expect(ta).toHaveAttribute("writingsuggestions", "false");
   });
+});
+
+describe("notes in the finding split (same editor as the panel)", () => {
+  it("N on an open split edits the host's note inline, keeps every line and opts out of text services", async () => {
+    m.findingsList.mockResolvedValue([]);
+    m.hostIdentityGet.mockResolvedValue(null);
+    m.credentialsList.mockResolvedValue([]);
+    m.credAttemptsList.mockResolvedValue([]);
+    m.usernamesList.mockResolvedValue([]);
+    m.accessGrantsList.mockResolvedValue([]);
+    m.tunnelsList.mockResolvedValue([]);
+    m.hopsList.mockResolvedValue([]);
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("f");
+    await screen.findByRole("form", { name: "New finding" });
+    await user.click(document.body);
+    await user.keyboard("n");
+    expect(screen.queryByRole("complementary", { name: /Notes/ })).not.toBeInTheDocument();
+    const ta = (await screen.findByRole("textbox", { name: "Notes" })) as HTMLTextAreaElement;
+    await vi.waitFor(() => expect(ta).not.toHaveAttribute("readonly"));
+    expect(ta).toHaveAttribute("spellcheck", "false");
+    expect(ta).toHaveAttribute("writingsuggestions", "false");
+    await user.type(ta, "line one");
+    await pause();
+    await user.type(ta, "{Enter}- item");
+    await pause();
+    expect(ta.value).toBe("line one\n- item");
+    expect(stored["h1"]?.body).toBe("line one\n- item");
+  }, 15000);
 });
 
 describe("closing a thread clears every count (bug 2)", () => {

@@ -1,6 +1,7 @@
 import { openThreads } from "../../engines/notes/threads";
 import { cx } from "../../lib/cx";
 import { Button, labelClass } from "../../ui";
+import { SCROLL_PANE } from "../../ui/controlStyles";
 import { openThreadsLabel } from "./useThreadCounts";
 
 /** Open threads of the note shown in the panel, each with a Close button. */
@@ -8,7 +9,7 @@ export function ThreadsList({ body, onClose }: { body: string; onClose: (line: n
   const threads = openThreads(body);
   if (threads.length === 0) return null;
   return (
-    <section aria-label={openThreadsLabel(threads.length)} className="flex max-h-40 shrink-0 flex-col gap-1 overflow-y-auto">
+    <section aria-label={openThreadsLabel(threads.length)} className={cx("flex max-h-40 shrink-0 flex-col gap-1", SCROLL_PANE)}>
       <h3 className={cx(labelClass, "m-0")}>Open threads · {threads.length}</h3>
       <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
         {threads.map((t) => (
