@@ -78,6 +78,38 @@ export function parseIdentity(command: string, output: string): ParsedIdentity |
   return null;
 }
 
+/** Who the user is on a host as far as a merge is concerned; `username` is null when nothing has named the user. */
+export interface IdentityFields {
+  username: string | null;
+  privileges: string[];
+  groups: string[];
+}
+
+/** Which fields an identity command speaks for. `whoami /priv` says nothing about groups, so it must not clear them. */
+export function identityFieldsOf(command: string): { username: boolean; privileges: boolean; groups: boolean } {
+  const cmd = command.trim().replace(/\s+/g, " ").toLowerCase();
+  if (cmd === "whoami /priv") return { username: false, privileges: true, groups: false };
+  if (cmd === "whoami /groups") return { username: false, privileges: false, groups: true };
+  if (cmd === "whoami") return { username: true, privileges: false, groups: false };
+  // `whoami /all` and `id` speak for everything.
+  return { username: true, privileges: true, groups: true };
+}
+
+/**
+ * Folds one parsed identity command into what is already known: `whoami /priv` replaces only the privileges,
+ * `whoami /groups` only the groups, bare `whoami` only the username, `whoami /all` and `id` replace all three (a
+ * missing username keeps the stored one). The one merge rule shared by capture and reading an existing log.
+ */
+export function mergeIdentity(stored: IdentityFields | null, parsed: ParsedIdentity, command: string): IdentityFields {
+  const covers = identityFieldsOf(command);
+  const base: IdentityFields = stored ?? { username: null, privileges: [], groups: [] };
+  return {
+    username: covers.username && parsed.username ? parsed.username : base.username,
+    privileges: covers.privileges ? [...parsed.privileges] : [...base.privileges],
+    groups: covers.groups ? [...parsed.groups] : [...base.groups],
+  };
+}
+
 export function vectorsFromIdentity(id: { privileges: string[]; groups: string[] }): string[] {
   const privs = PRIV_VECTORS.filter((p) => id.privileges.includes(p)).map((p) => `${p} abuse`);
   const groups = GROUP_VECTORS.filter((g) => id.groups.includes(g)).map((g) => `${g} group`);

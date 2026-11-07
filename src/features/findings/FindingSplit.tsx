@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { SCROLL_PANE } from "../../ui/controlStyles";
 import { cx } from "../../lib/cx";
 import { shortHostName } from "../../lib/hostName";
@@ -39,14 +39,14 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
   const [base] = useState(() => toDraft(finding, hostId));
   // A kept draft comes back, unless the finding was saved since it was opened (from another host page, say):
   // then the saved finding wins and the stale draft is dropped.
-  const [restored] = useState(() => {
+  const [{ restored, replaced }] = useState(() => {
     const store = useFindingDraftStore.getState();
     const kept = store.get(key);
     if (kept && finding && (kept.baseUpdatedAt ?? 0) < finding.updatedAt) {
       store.drop(key);
-      return undefined;
+      return { restored: undefined, replaced: true };
     }
-    return kept;
+    return { restored: kept, replaced: false };
   });
   const [d, setD] = useState<Draft>(() => restored ?? base);
   const [pane, setPane] = useState<Pane>("editor");
@@ -62,9 +62,17 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
     else store.set(key, fileDirty ? d : { ...d, fileForm: null });
   }, [d, base, key, fileDirty]);
 
-  const closeRef = useRef(onClose);
+  // While a save is in flight the split stays open: closing then would leave the draft behind its own save.
+  const savingRef = useRef(false);
+  const onBusy = useCallback((busy: boolean) => {
+    savingRef.current = busy;
+  }, []);
+  const close = () => {
+    if (!savingRef.current) onClose();
+  };
+  const closeRef = useRef(close);
   useEffect(() => {
-    closeRef.current = onClose;
+    closeRef.current = close;
   });
 
   // Capture phase, so these win over the shell's own N and Esc whatever the mount order.
@@ -96,7 +104,7 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
     // An open select list closes first.
     if ((e.target as Element).closest('[role="listbox"]')) return;
     e.preventDefault();
-    onClose();
+    close();
   };
 
   const allHosts = hosts.data ?? [];
@@ -155,9 +163,12 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
           base={base}
           update={setD}
           onSaved={saved}
-          onClose={onClose}
+          onClose={close}
           onDiscard={discard}
           onFileDirty={setFileDirty}
+          draftKey={key}
+          onBusy={onBusy}
+          notice={replaced ? "Your unsaved draft was replaced by a newer save." : undefined}
         />
       </section>
     </div>

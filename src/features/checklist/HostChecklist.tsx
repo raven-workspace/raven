@@ -59,14 +59,16 @@ function ArrivedFrom({ host, hosts, onSave }: { host: Host; hosts: Host[]; onSav
 
 /**
  * The host's checklist. `scope: "next"` shows only the current stage's open steps (the Next tab); `"all"` every
- * stage, done steps included.
+ * stage, done steps included. Next hides done steps, so it says when any of them, in any stage, has new
+ * credentials since it was done; `onShowFull` opens the full checklist where they are.
  */
-export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scope = "all" }: {
+export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scope = "all", onShowFull }: {
   engagementId: string;
   host: Host;
   onOpenEntry: (entryId: string) => void;
   focusGoal?: { id: string; n: number };
   scope?: "all" | "next";
+  onShowFull?: () => void;
 }) {
   useFilePickStore((s) => s.file); // a chip pick refills the rows' commands
   usePortPickStore((s) => s.picks); // a port pick refills them too
@@ -117,6 +119,16 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
         : "All stages done"
       : undefined;
 
+  const doneWithNewCreds =
+    scope === "next"
+      ? new Set(
+          groups
+            .flatMap((g) => g.goals)
+            .filter((g) => state[g.id]?.status === "done" && newCredLabels(state[g.id]?.completedAt, creds.credentials).length > 0)
+            .map((g) => g.id),
+        ).size
+      : 0;
+
   const recordHop = async (fromHostId: string | null, via: string) => {
     const key = `${fromHostId ?? KALI}|${via}`;
     if (createdHop.current !== key) {
@@ -131,6 +143,15 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
     <div className="flex flex-col gap-6 py-3">
       <CredentialPicker credentials={creds.credentials} value={creds.cred} onChange={creds.pick} />
       {nothingNext && <p className="m-0 text-xs text-muted">{nothingNext}</p>}
+      {doneWithNewCreds > 0 && onShowFull && (
+        <button
+          type="button"
+          onClick={onShowFull}
+          className="block max-w-full cursor-default truncate bg-transparent p-0 text-left text-xs text-fg-2 hover:text-fg"
+        >
+          {doneWithNewCreds} done step{doneWithNewCreds === 1 ? " has" : "s have"} new creds · show ▸
+        </button>
+      )}
       {shown.map(({ stage, goals, hint }) => (
         <section key={stage.id} aria-label={stage.title} className="flex flex-col gap-2 border-t border-line-2 pt-5 first:border-t-0 first:pt-0">
           <h3 className="m-0 text-[11px] font-semibold uppercase tracking-label text-muted">{stage.title}</h3>

@@ -438,6 +438,53 @@ describe("finding split: drafts on every close path (review round 1)", () => {
     const form = await openOnHost(user, "Saved elsewhere");
     expect(within(form).getByLabelText("Title")).toHaveValue("Saved elsewhere");
     expect(useFindingDraftStore.getState().drafts["e1:h1:f1"]).toBeUndefined();
+    expect(within(form).getByRole("status")).toHaveTextContent("Your unsaved draft was replaced by a newer save.");
+  });
+
+  it("a kept draft that comes back shows no replaced line", async () => {
+    const user = userEvent.setup();
+    mount();
+    let form = await openSplit(user);
+    expect(within(form).queryByText(/replaced by a newer save/)).not.toBeInTheDocument();
+    await user.type(within(form).getByLabelText("Title"), "keep me");
+    await user.keyboard("{Escape}");
+    form = await openSplit(user);
+    expect(within(form).getByLabelText("Title")).toHaveValue("keep me");
+    expect(within(form).queryByText(/replaced by a newer save/)).not.toBeInTheDocument();
+  });
+
+  it("Esc while a new finding is saving keeps the split open, and F + Save afterwards creates no duplicate", async () => {
+    const user = userEvent.setup();
+    let resolve!: () => void;
+    m.findingCreate.mockImplementationOnce((_e, input) => new Promise((r) => (resolve = () => r(finding({ id: "f9", ...input, title: input.title })))));
+    mount();
+    const form = await openSplit(user);
+    await user.type(within(form).getByLabelText("Title"), "Kerberoastable svc_sql");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.findingCreate).toHaveBeenCalledTimes(1));
+    await user.keyboard("{Escape}");
+    await user.click(document.body);
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("form", { name: "New finding" })).toBeInTheDocument();
+    await act(async () => resolve());
+    await waitFor(() => expect(screen.queryByRole("form", { name: "New finding" })).not.toBeInTheDocument());
+    const again = await openSplit(user);
+    expect(within(again).getByLabelText("Title")).toHaveValue("");
+  });
+
+  it("a new finding's draft is dropped when its save lands after the split is gone", async () => {
+    const user = userEvent.setup();
+    let resolve!: () => void;
+    m.findingCreate.mockImplementationOnce((_e, input) => new Promise((r) => (resolve = () => r(finding({ id: "f9", ...input, title: input.title })))));
+    const { unmount } = mount();
+    const form = await openSplit(user);
+    await user.type(within(form).getByLabelText("Title"), "Kerberoastable svc_sql");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.findingCreate).toHaveBeenCalledTimes(1));
+    expect(useFindingDraftStore.getState().drafts["e1:h1:new"]?.title).toBe("Kerberoastable svc_sql");
+    unmount();
+    await act(async () => resolve());
+    await waitFor(() => expect(useFindingDraftStore.getState().drafts["e1:h1:new"]).toBeUndefined());
   });
 });
 

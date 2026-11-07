@@ -10,6 +10,7 @@ import { applicableGoals } from "../engines/checklist";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { ChecklistItem } from "../types/checklist";
+import type { Credential } from "../types/credentials";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 import type { Service } from "../types/service";
@@ -192,6 +193,36 @@ describe("Next follows the board column", () => {
     const vd = applicableGoals(H1, E1, [H1], new Map([["h1", [SMB]]])).find((a) => a.stage.id === "vulnerability-detection")!.goals;
     mount({ host: { ...H1, boardColumn: "vulnerability-detection" }, items: vd.map((g) => item(g.id, "done")) });
     expect(await (await next()).findByText("Nothing open in Vulnerability detection. Earlier steps are in the full checklist.")).toBeInTheDocument();
+  });
+});
+
+describe("Next: done steps with new credentials", () => {
+  const domainCred = (id: string, createdAt: number): Credential => ({
+    id, engagementId: "e1", type: "password", username: `svc_${id}`, domain: "CORP", secret: "Winter2024!", hashType: null,
+    scope: "domain", localHostId: null, sourceHostId: null, source: null, notes: null, crackStatus: null, crackedFrom: null,
+    fromSecretId: null, createdAt, updatedAt: createdAt,
+  });
+  const doneAt = (goalId: string, completedAt: number): ChecklistItem => ({ ...item(goalId, "done"), completedAt });
+
+  it("says how many done steps (any stage) have new creds, and the line opens the full checklist", async () => {
+    const user = userEvent.setup();
+    m.credentialsList.mockResolvedValue([domainCred("c1", 50)]);
+    mount({ items: [doneAt("h-enum-full-tcp", 5)] });
+    const tab = await next();
+    const line = await tab.findByRole("button", { name: "1 done step has new creds · show ▸" });
+    expect(tab.queryByText("Scan all 65,535 TCP ports")).not.toBeInTheDocument();
+    await user.click(line);
+    expect(await tab.findByText("Scan all 65,535 TCP ports")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Full checklist" })).toHaveAttribute("aria-expanded", "true");
+    expect(tab.queryByRole("button", { name: /done steps? ha(s|ve) new creds/ })).not.toBeInTheDocument();
+  });
+
+  it("shows nothing when every credential is older than the done steps", async () => {
+    m.credentialsList.mockResolvedValue([domainCred("c1", 2)]);
+    mount({ items: [doneAt("h-enum-full-tcp", 5)] });
+    const tab = await next();
+    await tab.findByRole("heading", { name: "Information gathering" });
+    expect(tab.queryByText(/new creds · show/)).not.toBeInTheDocument();
   });
 });
 

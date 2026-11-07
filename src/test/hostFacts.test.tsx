@@ -262,6 +262,17 @@ describe("services grid", () => {
     expect(m.serviceSetVerdict).toHaveBeenCalledWith("s3", "untested", undefined);
   });
 
+  it("C and U do nothing on a dead-end row, so its typed reason is never deleted by a stray key", async () => {
+    const user = userEvent.setup();
+    mount({ services: [svc("s4", 21, { nmapService: "ftp", verdict: "dead_end" })] });
+    const row = await (await group("Services")).findByRole("button", { name: /^21\/tcp/ });
+    row.focus();
+    await user.keyboard("c");
+    await user.keyboard("u");
+    expect(m.serviceSetVerdict).not.toHaveBeenCalled();
+    expect(row).toHaveAccessibleName("21/tcp ftp, dead end");
+  });
+
   it("the verdict tag opens a menu with the same choices", async () => {
     const user = userEvent.setup();
     mount();
@@ -390,6 +401,21 @@ describe("who am I and privesc vectors", () => {
         hostId: "h1", username: "unknown", privileges: ["SeImpersonatePrivilege"], groups: ["Everyone"], entryId: "l2",
       });
       await waitFor(() => expect(m.vectorUpsert).toHaveBeenCalledWith("h1", { title: "SeImpersonatePrivilege abuse", status: "try", source: "auto" }));
+    });
+
+    it("a vector that fails to save still shows its error once the identity exists", async () => {
+      const user = userEvent.setup();
+      m.logList.mockResolvedValue([winrm("l1", "whoami /priv", PRIV_OUT)]);
+      m.hostIdentitySet.mockImplementation(async (input) => ({ ...input, updatedAt: 2 }));
+      m.vectorUpsert.mockRejectedValue(new Error("vault locked"));
+      mount({ host: after() });
+      const who = await group("Who am I");
+      const button = await who.findByRole("button", { name: "Read from log (1 found)" });
+      // Once saved, the identity reloads and the group switches to showing it.
+      m.hostIdentityGet.mockResolvedValue({ ...IDENTITY, username: "unknown", privileges: ["SeImpersonatePrivilege"], entryId: "l1" });
+      await user.click(button);
+      expect(await who.findByText("unknown")).toBeInTheDocument();
+      expect(await who.findByRole("alert")).toHaveTextContent("vault locked");
     });
 
     it("shows no button when no entry qualifies", async () => {

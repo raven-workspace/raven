@@ -185,7 +185,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
                   </ul>
                 )
               ) : tab === "next" ? (
-                <NextTab engagementId={engagementId} host={host} full={fullChecklist} focusGoal={focusGoal} onOpenEntry={openInLog} />
+                <NextTab engagementId={engagementId} host={host} full={fullChecklist} onShowFull={() => setFullChecklist(true)} focusGoal={focusGoal} onOpenEntry={openInLog} />
               ) : (
                 <HostFindings engagementId={engagementId} host={host} onOpenEntry={openInLog} onOpenFinding={openFinding} />
               )}

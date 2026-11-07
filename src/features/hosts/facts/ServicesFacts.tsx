@@ -73,6 +73,11 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
     }
     if (!isFreeKey(e.nativeEvent)) return;
     const key = e.key.toLowerCase();
+    // A dead end holds the user's typed reason: a stray C or U must not delete it. Leave it from the verdict menu.
+    if (verdict === "dead_end" && (key === "c" || key === "u")) {
+      e.preventDefault();
+      return;
+    }
     if (key === "c") onVerdict("candidate");
     else if (key === "u") onVerdict("untested");
     else if (key === "d") askReason();
@@ -86,7 +91,7 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
         type="button"
         data-service-row
         aria-label={`${proto} ${id.label || "unidentified"}, ${VERDICT_LABEL[verdict]}`}
-        title={`${proto}: C candidate · U untested · D dead end`}
+        title={verdict === "dead_end" ? `${proto}: dead end. Change it from the verdict menu` : `${proto}: C candidate · U untested · D dead end`}
         onClick={onOpen}
         onKeyDown={onKeyDown}
         className="col-span-2 grid cursor-default grid-cols-subgrid items-baseline py-1 text-left hover:bg-surface focus-visible:bg-surface"

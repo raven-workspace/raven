@@ -58,6 +58,16 @@ describe("identityFromLog", () => {
     expect(r.sources).toBe(2);
   });
 
+  it("folds by kind like capture: a newer id replaces privileges and groups, a later /groups only the groups", () => {
+    const priv = entry("l1", splitPaste(PRIV), { at: 1 });
+    const all = entry("l2", [{ command: "id", output: "uid=1000(sam) gid=1000(sam) groups=1000(sam),27(sudo)" }], { at: 2 });
+    const groups = entry("l3", splitPaste(GROUPS), { at: 3 });
+    const r = identityFromLog([groups, priv, all], MS02);
+    expect(r.identity).toEqual({ username: "sam", privileges: [], groups: ["Everyone", "BUILTIN\\Remote Management Users"], entryId: "l3" });
+    // The /priv entry was replaced by id; id still names the user and its (empty) privileges.
+    expect(r.sources).toBe(2);
+  });
+
   it("ignores entries linked to two hosts or run on another machine", () => {
     const two = entry("l1", splitPaste(PRIV), { hostIds: ["h2", "h3"] });
     const other = entry("l2", splitPaste(GROUPS), { ranOn: "Kali (VM)" });

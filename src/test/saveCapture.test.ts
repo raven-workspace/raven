@@ -4,6 +4,7 @@ import { PartialSaveError, saveCapture, type CaptureEdits } from "../features/ca
 import { api } from "../lib/api";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
+import type { HostIdentity } from "../types/hostFacts";
 import type { LogEntry, LogEntryInput } from "../types/log";
 
 vi.mock("../lib/api");
@@ -404,6 +405,53 @@ describe("saveCapture", () => {
         expect.objectContaining({ hostId: "h1", username: "unknown", entryId: "l1", privileges: expect.arrayContaining(["SeImpersonatePrivilege"]) }),
       );
       expect(m.vectorUpsert).toHaveBeenCalledWith("h1", { title: "SeImpersonatePrivilege abuse", status: "try", source: "auto" });
+    });
+
+    const groupsOut = "GROUP INFORMATION\n-----------------\n\nGroup Name   Type   SID   Attributes\n============ ====== ===== ==========\nBUILTIN\\Users   Alias   S-1-5-32-545   Enabled group\n";
+    const capture = (command: string, output: string) => {
+      const c = { kind: "command" as const, blocks: [{ command, output }] };
+      return saveCapture({
+        engagementId: "e1",
+        draft: draft({ content: c }),
+        edits: edits({ content: c, ranOn: "dc01" }),
+        addIps: [],
+        image: null,
+        hosts: [DC],
+      });
+    };
+    /** hostIdentityGet returns whatever hostIdentitySet last stored, like the real table. */
+    const storeLikeTheDb = (initial: HostIdentity | null) => {
+      let stored = initial;
+      m.hostIdentityGet.mockImplementation(async () => stored);
+      m.hostIdentitySet.mockImplementation(async (input) => (stored = { ...input, updatedAt: 2 }));
+      return () => stored;
+    };
+
+    it("whoami /priv then whoami /groups keeps both the privileges and the groups", async () => {
+      const stored = storeLikeTheDb(null);
+      await capture("whoami /priv", priv);
+      await capture("whoami /groups", groupsOut);
+      expect(stored()).toMatchObject({ username: "unknown", privileges: ["SeImpersonatePrivilege"], groups: ["BUILTIN\\Users"] });
+    });
+
+    it("a bare whoami changes only the username", async () => {
+      const stored = storeLikeTheDb({ hostId: "h1", username: "unknown", privileges: ["SeImpersonatePrivilege"], groups: ["docker"], entryId: "l0", updatedAt: 1 });
+      await capture("whoami", "dc01\\svc_web");
+      expect(stored()).toMatchObject({ username: "dc01\\svc_web", privileges: ["SeImpersonatePrivilege"], groups: ["docker"] });
+    });
+
+    it("a hand edit keeps everything but its groups when whoami /groups is captured later", async () => {
+      const stored = storeLikeTheDb({ hostId: "h1", username: "corp\\sam", privileges: ["SeBackupPrivilege"], groups: ["typed-by-hand"], entryId: null, updatedAt: 1 });
+      await capture("whoami /groups", groupsOut);
+      expect(stored()).toMatchObject({ username: "corp\\sam", privileges: ["SeBackupPrivilege"], groups: ["BUILTIN\\Users"] });
+    });
+
+    it("a vector that fails to save is reported as the vectors, not the identity", async () => {
+      storeLikeTheDb(null);
+      m.vectorUpsert.mockRejectedValue(new Error("db down"));
+      const err = await run(["h1"], [DC]).catch((e) => e);
+      expect(err).toBeInstanceOf(PartialSaveError);
+      expect(err.message).toBe("Saved the entry, but the privesc vectors didn't update. Paste the output again to retry.");
     });
 
     it("does nothing with two linked hosts", async () => {

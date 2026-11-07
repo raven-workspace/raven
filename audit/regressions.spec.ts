@@ -243,5 +243,21 @@ test("post-foothold facts show without scrolling", async ({ page }) => {
     await el.waitFor();
     const box = await el.boundingBox();
     expect(box && box.y >= 0 && box.y + box.height <= 900, `${text} is inside the 900px viewport`).toBe(true);
+    // In the viewport is not enough: it must not be clipped inside a scroll pane either.
+    const inPane = await el.evaluate((node) => {
+      const r = node.getBoundingClientRect();
+      for (let a = node.parentElement; a; a = a.parentElement) {
+        if (!/^(auto|scroll)$/.test(getComputedStyle(a).overflowY)) continue;
+        const p = a.getBoundingClientRect();
+        // The client rect: inside the borders, without a horizontal scrollbar.
+        const top = p.top + a.clientTop;
+        const bottom = top + a.clientHeight;
+        const left = p.left + a.clientLeft;
+        const right = left + a.clientWidth;
+        return { ok: r.top >= top && r.bottom <= bottom && r.left >= left && r.right <= right, pane: { top, bottom, left, right }, el: { top: r.top, bottom: r.bottom, left: r.left, right: r.right } };
+      }
+      return { ok: true, pane: null, el: null };
+    });
+    expect(inPane.ok, `${text} is inside its scroll pane: ${JSON.stringify(inPane)}`).toBe(true);
   }
 });

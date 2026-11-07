@@ -150,6 +150,8 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
         )
       }
     >
+      {/* Shown whatever the branch: identity can be saved and a vector upsert still fail. */}
+      {readError && <p role="alert" className="m-0 text-xs text-warn">{readError}</p>}
       {identityQ.isError ? (
         <p role="alert" className="m-0 text-xs text-warn">Couldn't load who you are here: {identityQ.error.message}</p>
       ) : editing ? (
@@ -164,7 +166,6 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
               </Button>
             </div>
           )}
-          {readError && <p role="alert" className="m-0 text-xs text-warn">{readError}</p>}
         </div>
       ) : (
         <dl className={cx(KV, "m-0")}>

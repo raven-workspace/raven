@@ -21,12 +21,23 @@ export function FullChecklistToggle({ full, onChange }: { full: boolean; onChang
  * The host's next steps: the current stage's open steps with their filled, ready-to-copy commands. With `full`,
  * every stage (today's checklist) in place, done steps included.
  */
-export function NextTab({ engagementId, host, full, onOpenEntry, focusGoal }: {
+export function NextTab({ engagementId, host, full, onShowFull, onOpenEntry, focusGoal }: {
   engagementId: string;
   host: Host;
   full: boolean;
+  /** Opens the full checklist (from the "done steps have new creds" line). */
+  onShowFull: () => void;
   onOpenEntry: (entryId: string) => void;
   focusGoal?: { id: string; n: number };
 }) {
-  return <HostChecklist engagementId={engagementId} host={host} scope={full ? "all" : "next"} focusGoal={focusGoal} onOpenEntry={onOpenEntry} />;
+  return (
+    <HostChecklist
+      engagementId={engagementId}
+      host={host}
+      scope={full ? "all" : "next"}
+      onShowFull={onShowFull}
+      focusGoal={focusGoal}
+      onOpenEntry={onOpenEntry}
+    />
+  );
 }

@@ -184,7 +184,7 @@ function useNvdLookup(draft: Draft, update: (fn: (d: Draft) => Draft) => void) {
  * The finding form, inline in the split. The draft is owned by the split (it outlives the form); this edits it.
  * ⌘↵ saves; the split's Esc closes and keeps the draft.
  */
-export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit, hostName, draft: d, base, update, onSaved, onClose, onDiscard, onFileDirty }: {
+export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit, hostName, draft: d, base, update, onSaved, onClose, onDiscard, onFileDirty, draftKey, onBusy, notice }: {
   eid: string;
   hosts: Host[];
   servicesByHost: Map<string, Service[]>;
@@ -202,8 +202,14 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
   onDiscard: () => void;
   /** A file is pasted or typed but not saved yet (it is not part of the draft). */
   onFileDirty: (dirty: boolean) => void;
+  /** The kept draft this form edits; a save drops it even if the form is gone by then. */
+  draftKey?: string;
+  /** A save is in flight (or has finished). */
+  onBusy?: (busy: boolean) => void;
+  /** One quiet line above the form, e.g. why a kept draft did not come back. */
+  notice?: string;
 }) {
-  const { create, update: updateFinding } = useFindingMutations(eid);
+  const { create, update: updateFinding } = useFindingMutations(eid, { draftKey });
   const log = useLog(eid);
   const newRef = d.newRef;
   const setNewRef = (v: string) => update((p) => ({ ...p, newRef: v }));
@@ -212,6 +218,9 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [builder, setBuilder] = useState(false);
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    onBusy?.(busy);
+  }, [busy, onBusy]);
   const [fileDirty, setFileDirtyState] = useState(false);
   const setFileDirty = useCallback((dirty: boolean) => {
     setFileDirtyState(dirty);
@@ -326,13 +335,14 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
             <Button size="sm" onClick={() => setConfirmDiscard(true)}>Discard changes</Button>
           )}
           <Button size="sm" variant="primary" disabled={busy} title="Save (⌘↵)" onClick={save}>Save</Button>
-          <Button size="sm" aria-label="Close" title="Close, keeping the draft (Esc)" onClick={onClose}>
+          <Button size="sm" aria-label="Close" title="Close, keeping the draft (Esc)" disabled={busy} onClick={onClose}>
             <X size={14} weight="light" aria-hidden />
           </Button>
         </span>
       </header>
 
       <div className="flex flex-col gap-3.5 pt-3">
+        {notice && <p role="status" className="m-0 text-xs text-muted">{notice}</p>}
         <Field label="Title" error={titleError}>
           <Input autoFocus value={d.title} onChange={(e) => set("title", e.target.value)} />
         </Field>
