@@ -206,8 +206,8 @@ describe("Transfer a file: layout", () => {
     mount("/arsenal?generator=transfer");
     const g = within(await generator());
     await g.findAllByRole("tab");
-    const groups = g.getAllByRole("group");
-    expect(groups.map((x) => x.getAttribute("aria-label"))).toEqual(["HTTP", "Other"]);
+    const groups = g.getAllByRole("tablist");
+    expect(groups.map((x) => x.getAttribute("aria-label"))).toEqual(["HTTP methods", "Other methods"]);
     for (const grp of groups) expect(within(grp).getAllByRole("tab").length).toBeLessThanOrEqual(7);
     expect(within(groups[0]!).getByRole("tab", { name: "certutil" })).toBeInTheDocument();
     expect(g.getByText("HTTP")).toBeInTheDocument();

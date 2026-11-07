@@ -168,14 +168,14 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
         )}
       </div>
 
-      <div role="tablist" aria-label="Method" className="grid gap-2">
+      <div className="grid gap-2">
         {METHOD_GROUPS.map(({ label, test }) => {
           const group = methods.map((m, i) => ({ m, i })).filter(({ m }) => test(m.group));
           if (group.length === 0) return null;
           return (
-            <div key={label} role="group" aria-label={label} className="grid grid-cols-[3.5rem_1fr] items-baseline gap-x-2">
+            <div key={label} className="grid grid-cols-[3.5rem_1fr] items-baseline gap-x-2">
               <span className="text-[11px] font-semibold uppercase tracking-label text-muted">{label}</span>
-              <div className="flex flex-wrap gap-1">
+              <div role="tablist" aria-label={`${label} methods`} className="flex flex-wrap gap-1">
                 {group.map(({ m, i }) => (
                   <button
                     key={m.id}

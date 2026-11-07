@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { cx } from "../lib/cx";
+import { Button } from "./Button";
+import { Kbd } from "./Kbd";
 
 export interface TitleBarProps {
   /** Interactive content at the far left, after the traffic lights (e.g. the home link). */
@@ -29,5 +31,14 @@ export function TitleBar({ left, title, right, className }: TitleBarProps) {
       <span className="pointer-events-none truncate">{title}</span>
       <div className="ml-auto flex items-center gap-1.5">{right}</div>
     </div>
+  );
+}
+
+/** A title-bar action: the accessible name is the visible word; the key hint is decoration. */
+export function TitleBarButton({ children, hint, onClick }: { children: ReactNode; hint: string; onClick?: () => void }) {
+  return (
+    <Button size="sm" onClick={onClick}>
+      {children} <Kbd aria-hidden="true">{hint}</Kbd>
+    </Button>
   );
 }

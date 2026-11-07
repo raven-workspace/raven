@@ -109,7 +109,7 @@ export function CommandList({ commands, hostName = null, focusToken = noToken, f
           </div>
           {/* Copy has its own fixed track beside the block, so command text never runs under it. */}
           <div data-testid="command-block" className="grid grid-cols-[minmax(0,1fr)_1.5rem] items-start gap-2">
-            <pre className={COMMAND_PRE}>
+            <pre className={COMMAND_PRE} tabIndex={0} role="group" aria-label={`Command: ${c.title}`}>
               <MarkedText text={c.text} tokens={c.tokens ?? []} />
             </pre>
             <Button

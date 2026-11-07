@@ -8,7 +8,7 @@ import { useCredPickStore } from "../checklist/credPick";
 import { useFindingDraftStore } from "../findings/useFindingDraftStore";
 import { discardNotes, flushNotes, hasPendingNotes, sessionGeneration, setNotesQueryClient, startNotesSession } from "../notes/useNotesStore";
 import type { UnlockResult, VaultStatus } from "../../types/vault";
-import { Button, Kbd, TitleBar } from "../../ui";
+import { Button, TitleBar, TitleBarButton } from "../../ui";
 import { SetupScreen } from "./SetupScreen";
 import { UnlockScreen } from "./UnlockScreen";
 import { setImported } from "../../engines/library/store";
@@ -237,15 +237,9 @@ export function VaultGate({ children }: { children: ReactNode }) {
         Settings
         {vaultNewer && <span aria-hidden="true" className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />}
       </Link>
-      <Button size="sm" onClick={() => useArsenalStore.getState().toggle()} aria-label="Arsenal">
-        Arsenal <Kbd>A</Kbd>
-      </Button>
-      <Button size="sm" onClick={() => usePaletteStore.getState().open()} aria-label="Search">
-        Search <Kbd>⌘K</Kbd>
-      </Button>
-      <Button size="sm" onClick={lock} aria-label="Lock">
-        Lock <Kbd>⌘L</Kbd>
-      </Button>
+      <TitleBarButton hint="A" onClick={() => useArsenalStore.getState().toggle()}>Arsenal</TitleBarButton>
+      <TitleBarButton hint="⌘K" onClick={() => usePaletteStore.getState().open()}>Search</TitleBarButton>
+      <TitleBarButton hint="⌘L" onClick={lock}>Lock</TitleBarButton>
     </>
   ) : undefined;
 
