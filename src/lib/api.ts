@@ -15,6 +15,7 @@ import type {
   FindingFile,
   FindingFileInput,
   FindingInput,
+  NvdRecord,
 } from "../types/findings";
 import type { CleanupInput, CleanupItem } from "../types/cleanup";
 import type { HostIdentity, PrivescVector, ServiceVerdict, VectorInput, VectorStatus } from "../types/hostFacts";
@@ -55,6 +56,9 @@ export const api = {
 
   settingsGet: () => call<Settings>("settings_get"),
   settingsUpdate: (patch: SettingsPatch) => call<Settings>("settings_update", { patch }),
+  /** NIST NVD lookup, the one network call (runs in Rust; the key never reaches the webview).
+   *  Rejects with `no_key`, `offline`, `key_rejected`, `not_found` or `validation`. */
+  nvdLookup: (cveId: string) => call<NvdRecord>("nvd_lookup", { cveId }),
 
   backupNow: () => call<BackupInfo>("backup_now"),
   backupsList: () => call<BackupInfo[]>("backups_list"),

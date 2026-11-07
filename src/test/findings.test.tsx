@@ -71,7 +71,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   useCaptureStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementsProgress.mockResolvedValue({});
   m.servicesList.mockResolvedValue([]);
@@ -122,7 +122,7 @@ describe("findings section", () => {
     const dlg2 = await openNew(user);
     await user.type(within(dlg2).getByLabelText("Title"), "Bad vector");
     await user.type(within(dlg2).getByLabelText("CVSS vector"), "AV:N/nonsense");
-    expect(within(dlg2).getByText("Not a valid CVSS v3.1 base vector")).toBeInTheDocument();
+    expect(within(dlg2).getByText("Not a valid CVSS 3.1 or 4.0 vector")).toBeInTheDocument();
     await user.click(within(dlg2).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(m.findingCreate).toHaveBeenCalledTimes(2));
     expect(m.findingCreate).toHaveBeenLastCalledWith("e1", expect.objectContaining({ title: "Bad vector", cvssScore: null }));

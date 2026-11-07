@@ -1,6 +1,8 @@
 /**
  * cvss.ts
  * Pure CVSS v3.1 base-score calculator (FIRST specification, section 7) and severity mapping.
+ * For any stored vector (3.0, 3.1 or 4.0) use `scoreCvss` / `parseCvssAny` from cvss4.ts; `calculateCvssScore`
+ * stays as the 3.x-only scorer they delegate to.
  */
 
 import type { Finding, Severity } from '../../types/findings';

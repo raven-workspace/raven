@@ -23,7 +23,7 @@ function mount() {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
   m.backupsList.mockResolvedValue([
     { file: "a.bak", reason: "daily", createdAt: 1_700_000_000_000, sizeBytes: 1_258_291 },
   ]);
@@ -38,7 +38,7 @@ describe("settings", () => {
 
   it("saves auto-lock minutes on blur", async () => {
     const user = userEvent.setup();
-    m.settingsUpdate.mockResolvedValue({ autoLockMinutes: 10, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+    m.settingsUpdate.mockResolvedValue({ autoLockMinutes: 10, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
     mount();
     const input = await screen.findByLabelText("Auto-lock (minutes)");
     await user.clear(input);
@@ -61,6 +61,22 @@ describe("settings", () => {
     await user.type(input, "999");
     await user.tab();
     expect(m.settingsUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("NVD API key: shows set / not set, saves from the password field and never displays the key", async () => {
+    const user = userEvent.setup();
+    m.settingsUpdate.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: true });
+    mount();
+    const input = await screen.findByLabelText("NVD API key");
+    expect(input).toHaveAttribute("type", "password");
+    expect(screen.getByText("Not set")).toBeInTheDocument();
+    await user.type(input, "0f1e2d3c-key{Enter}");
+    expect(m.settingsUpdate).toHaveBeenCalledWith({ nvdApiKey: "0f1e2d3c-key" });
+    expect(await screen.findByText("Set")).toBeInTheDocument();
+    expect(input).toHaveValue("");
+    // Clearing sends an empty string.
+    await user.click(screen.getByRole("button", { name: "Clear key" }));
+    expect(m.settingsUpdate).toHaveBeenLastCalledWith({ nvdApiKey: "" });
   });
 
   it("Back up now creates a backup", async () => {
@@ -145,7 +161,7 @@ describe("settings", () => {
 
   it("saves the listener port on blur", async () => {
     const user = userEvent.setup();
-    m.settingsUpdate.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm" });
+    m.settingsUpdate.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
     mount();
     await user.type(await screen.findByLabelText("Listener port"), "4444");
     await user.tab();
@@ -156,7 +172,7 @@ describe("settings", () => {
     const user = userEvent.setup();
     m.settingsUpdate.mockResolvedValue({
       autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "",
-      kaliUser: "op", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm",
+      kaliUser: "op", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false,
     });
     mount();
     const ku = await screen.findByLabelText("Kali user");

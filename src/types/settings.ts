@@ -13,6 +13,11 @@ export interface Settings {
   linuxToolsDir: string;
   /** The Field-Manual vault Raven reads its library from. */
   fieldManualPath: string;
+  /** Whether an NVD API key is stored. The key itself never leaves Rust. */
+  nvdKeySet: boolean;
 }
 
-export type SettingsPatch = Partial<Settings>;
+export type SettingsPatch = Partial<Omit<Settings, "nvdKeySet">> & {
+  /** Sets the NVD API key; an empty string clears it. */
+  nvdApiKey?: string;
+};

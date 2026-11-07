@@ -67,7 +67,7 @@ beforeEach(() => {
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali",
-    windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm",
+    windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false,
   });
   m.engagementsProgress.mockResolvedValue({});
   m.hostsList.mockResolvedValue([MS02]);
@@ -118,7 +118,7 @@ describe("Transfer a file", () => {
   it("the Kali half serves from the tool folders set in Settings", async () => {
     m.settingsGet.mockResolvedValue({
       autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali",
-      windowsToolsDir: "/opt/win tools", linuxToolsDir: "/opt/lin", fieldManualPath: "~/fm",
+      windowsToolsDir: "/opt/win tools", linuxToolsDir: "/opt/lin", fieldManualPath: "~/fm", nvdKeySet: false,
     });
     const user = userEvent.setup();
     mount("/arsenal?generator=transfer");

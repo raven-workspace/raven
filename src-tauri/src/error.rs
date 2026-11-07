@@ -20,6 +20,12 @@ pub enum AppError {
     Io(String),
     #[error("database error: {0}")]
     Db(String),
+    #[error("no NVD API key is set")]
+    NoKey,
+    #[error("{0}")]
+    Offline(String),
+    #[error("NVD rejected the API key")]
+    KeyRejected,
 }
 
 pub type AppResult<T> = Result<T, AppError>;
@@ -36,6 +42,9 @@ impl AppError {
             AppError::Validation { .. } => "validation",
             AppError::Io(_) => "io",
             AppError::Db(_) => "db",
+            AppError::NoKey => "no_key",
+            AppError::Offline(_) => "offline",
+            AppError::KeyRejected => "key_rejected",
         }
     }
 }
@@ -90,6 +99,13 @@ mod tests {
         let v = serde_json::to_value(AppError::Damaged).unwrap();
         assert_eq!(v["code"], "damaged");
         assert_eq!(v["message"], "the database file is damaged");
+    }
+
+    #[test]
+    fn nvd_error_codes() {
+        assert_eq!(serde_json::to_value(AppError::NoKey).unwrap()["code"], "no_key");
+        assert_eq!(serde_json::to_value(AppError::Offline("no connection to NVD".into())).unwrap()["code"], "offline");
+        assert_eq!(serde_json::to_value(AppError::KeyRejected).unwrap()["code"], "key_rejected");
     }
 
     #[test]

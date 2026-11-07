@@ -3,6 +3,7 @@
 import type { Api } from "../lib/api";
 import type { ChecklistItem } from "../types/checklist";
 import type { ErrorCode } from "../types/errors";
+import type { NvdRecord } from "../types/findings";
 import { RavenError } from "../types/errors";
 import type { ServiceVerdict } from "../types/hostFacts";
 import type { Progress } from "../types/log";
@@ -52,6 +53,19 @@ function listChecklist(engagementId: string): ChecklistItem[] {
   return clone(db.checklist.filter((c) => owners.has(c.ownerId)));
 }
 
+/** The one CVE the audit fake knows; any other ID is `not_found`. */
+const AUDIT_NVD_RECORD: NvdRecord = {
+  cveId: "CVE-2021-44228",
+  description:
+    "Apache Log4j2 2.0-beta9 through 2.15.0 JNDI features used in configuration, log messages, and parameters do not protect against attacker controlled LDAP and other JNDI related endpoints.",
+  vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+  score: 10,
+  cwes: ["CWE-917", "CWE-502"],
+  references: ["https://logging.apache.org/log4j/2.x/security.html", "https://www.exploit-db.com/exploits/50592"],
+  published: "2021-12-10T10:15:09.143",
+  lastModified: "2025-02-04T15:15:13.773",
+};
+
 const base = {
   vaultStatus: async () => ({ exists: true, unlocked: true }),
   vaultCreate: async () => null,
@@ -59,7 +73,20 @@ const base = {
   vaultLock: async () => null,
 
   settingsGet: async () => clone(db.settings),
-  settingsUpdate: async (patch) => clone(Object.assign(db.settings, patch)),
+  settingsUpdate: async (patch) => {
+    // The key itself is never stored or returned here either: only whether one is set.
+    const { nvdApiKey, ...rest } = patch;
+    Object.assign(db.settings, rest);
+    if (nvdApiKey !== undefined) db.settings.nvdKeySet = nvdApiKey.trim() !== "";
+    return clone(db.settings);
+  },
+  nvdLookup: async (cveId) => {
+    const id = cveId.trim().toUpperCase();
+    if (!/^CVE-\d{4}-\d{4,}$/.test(id)) throw new RavenError("validation", "use a CVE ID like CVE-2021-44228", "cveId");
+    if (!db.settings.nvdKeySet) throw new RavenError("no_key", "no NVD API key is set");
+    if (id !== AUDIT_NVD_RECORD.cveId) throw new RavenError("not_found", "not found");
+    return clone(AUDIT_NVD_RECORD);
+  },
 
   backupNow: async () => unsupported("Backup"),
   backupsList: async () => clone(db.backups),

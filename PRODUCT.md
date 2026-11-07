@@ -104,13 +104,14 @@ The checklist (what they've done, what their options are next) and the host fact
 
 **Findings**
 - **Findings.** Each holds:
-  - title, severity, CVSS, status;
+  - title, severity, CVSS (3.0, 3.1 or 4.0, with a local metric builder), status;
   - affected hosts and services;
   - references;
   - description, impact and remediation;
   - exploit notes and files;
   - ordered steps linked to log entries;
   - private lessons.
+- **CVE lookup.** A CVE in a finding's references is looked up in NIST NVD (the one network call: only the CVE ID and the user's API key leave the machine, from Rust). Empty fields fill in; filled ones get a "use NVD" diff. Answers are cached in the vault.
 - **Attempts.** Failed attempts are recorded with reported or private reasons.
 
 **Cleanup**
@@ -149,7 +150,7 @@ The checklist (what they've done, what their options are next) and the host fact
   - Field Manual path, import and drift report;
   - backups and restore;
   - import from old Raven.
-- **Vault.** Local-only. The encrypted database is unlocked by a vault password, auto-locks, and makes no network calls at runtime.
+- **Vault.** Local-only. The encrypted database is unlocked by a vault password, auto-locks, and makes no network calls at runtime except NIST NVD CVE lookups.
 - **Data safety.** Since 2026-10-25, stored data is real lab data. Changes need migrations and must take a backup first.
 - **Stack:** Tauri 2, React 19, TypeScript, Tailwind 4 and Vite.
 - **Visual audit.** `npm run audit:visual` runs the UI against synthetic stress data for layout, accessibility, keyboard and UX checks.

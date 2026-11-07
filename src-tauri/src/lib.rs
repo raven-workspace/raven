@@ -14,6 +14,7 @@ pub mod import;
 pub mod log;
 pub mod network;
 pub mod notes;
+pub mod nvd;
 pub mod migrations;
 pub mod paths;
 pub mod services;
@@ -38,6 +39,7 @@ pub fn run() {
             commands::vault_lock,
             commands::settings_get,
             commands::settings_update,
+            commands::nvd_lookup,
             commands::backup_now,
             commands::backups_list,
             commands::backup_restore,

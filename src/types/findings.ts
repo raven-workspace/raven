@@ -45,6 +45,20 @@ export interface FindingInput {
   stepEntryIds?: string[];
 }
 
+/** Mirrors the Rust `NvdRecord`: what the NIST NVD lookup returns for one CVE. */
+export interface NvdRecord {
+  cveId: string;
+  description: string | null;
+  /** 4.0 preferred, then 3.1, then 3.0; NVD's Primary entry, else the CNA's. */
+  vector: string | null;
+  score: number | null;
+  /** `CWE-<n>` IDs. */
+  cwes: string[];
+  references: string[];
+  published: string | null;
+  lastModified: string | null;
+}
+
 /** Content is limited to 1 MiB. */
 export interface FindingFile {
   id: string;

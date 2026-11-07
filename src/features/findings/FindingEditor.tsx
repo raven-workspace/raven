@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { calculateCvssScore, scoreToSeverity } from "../../engines/findings";
+import { scoreCvss, scoreToSeverity } from "../../engines/findings";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
 import type { Finding, FindingInput, FindingStatus, Severity } from "../../types/findings";
@@ -91,7 +91,7 @@ export function FindingEditor({ eid, hosts, servicesByHost, edit, onClose }: {
 
   const dirty = JSON.stringify(d) !== initial || newRef.trim() !== "" || fileDirty;
   const vector = d.cvssVector.trim();
-  const score = vector === "" ? null : calculateCvssScore(vector);
+  const score = vector === "" ? null : scoreCvss(vector);
   const suggested = score === null ? null : scoreToSeverity(score);
 
   const requestClose = () => (dirty ? setConfirmClose(true) : onClose());
@@ -206,7 +206,7 @@ export function FindingEditor({ eid, hosts, servicesByHost, edit, onClose }: {
           </div>
           <Field
             label="CVSS vector"
-            error={vector !== "" && score === null ? "Not a valid CVSS v3.1 base vector" : undefined}
+            error={vector !== "" && score === null ? "Not a valid CVSS 3.1 or 4.0 vector" : undefined}
             hint={
               score !== null && suggested ? (
                 <span className="inline-flex flex-wrap items-center gap-2">
