@@ -412,7 +412,7 @@ const backups: BackupInfo[] = [
 
 const settings: Settings = {
   autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Windows 11 (VM)"], attackerIp: "10.10.14.7",
-  listenerPort: "4444", kaliUser: "audit", windowsToolsDir: "C:\\Tools", linuxToolsDir: "/opt/tools",
+  listenerPort: "4444", kaliUser: "audit", windowsToolsDir: "~/tools/windows", linuxToolsDir: "/opt/tools",
   fieldManualPath: "/Users/audit/Documents/Field-Manual", nvdKeySet: true,
 };
 

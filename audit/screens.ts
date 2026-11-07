@@ -133,9 +133,8 @@ export const SCREENS: Screen[] = [
     id: "transfer-generator", path: "/arsenal", ready: "role=region[name='Transfer a file']",
     setup: async (page) => {
       await page.getByRole("option", { name: /Transfer a file/ }).click();
-      const host = page.getByRole("combobox", { name: "Host", exact: true });
-      await host.waitFor();
-      await host.selectOption(AUDIT_IDS.webHost);
+      await page.getByRole("button", { name: /^Fill for host/ }).click();
+      await page.getByRole("listbox", { name: "Fill for host" }).getByRole("option").nth(1).click();
     },
   },
 ];

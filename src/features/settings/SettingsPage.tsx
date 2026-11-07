@@ -249,7 +249,7 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
             />
             <TextSetting
               key={`wt-${settings.data.windowsToolsDir}`}
-              label="Windows tools folder"
+              label="Windows tools folder (on Kali)"
               value={settings.data.windowsToolsDir}
               placeholder="~/tools/windows"
               className="w-64"
@@ -258,7 +258,7 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
             />
             <TextSetting
               key={`lt-${settings.data.linuxToolsDir}`}
-              label="Linux tools folder"
+              label="Linux tools folder (on Kali)"
               value={settings.data.linuxToolsDir}
               placeholder="~/tools/linux"
               className="w-64"
