@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   effectiveVerdict,
   foldServices,
+  isIdentityBlockFor,
   parseIdentity,
   phaseOf,
   serviceIdentity,
   sortServices,
   vectorsFromIdentity,
 } from "../../../engines/facts";
+import type { Host } from "../../../types/host";
+import type { LogEntry } from "../../../types/log";
 import type { Service } from "../../../types/service";
 
 function svc(over: Partial<Service>): Service {
@@ -139,6 +142,44 @@ describe("parseIdentity", () => {
   });
   it("returns null for other commands", () => {
     expect(parseIdentity("ls -la", "total 0\ndrwxr-xr-x 2 tom tom 40 .")).toBeNull();
+  });
+});
+
+describe("parseIdentity prompts and filters", () => {
+  it("tolerates a leading PowerShell, Evil-WinRM or cmd prompt in the command text", () => {
+    const out = "Privilege Name  Description  State\n=== === ===\nSeDebugPrivilege  Debug programs  Enabled";
+    for (const prefix of ["PS C:\\WINDOWS\\system32> ", "*Evil-WinRM* PS C:\\Users\\x\\Documents> ", "C:\\Windows\\system32>"]) {
+      expect(parseIdentity(`${prefix}whoami /priv`, out)?.privileges).toEqual(["SeDebugPrivilege"]);
+    }
+  });
+  it("returns null for piped or filtered commands", () => {
+    expect(parseIdentity('whoami /groups | findstr /i "High"', "Mandatory Label\\High Mandatory Level  Label  S-1-16-12288")).toBeNull();
+    expect(parseIdentity('PS C:\\WINDOWS\\system32> whoami /groups | findstr /i "High"', "x")).toBeNull();
+  });
+});
+
+describe("isIdentityBlockFor", () => {
+  const win = { id: "h1", name: "Onyx", os: "windows" } as Host;
+  const unknownOs = { id: "h1", name: "Onyx", os: null } as Host;
+  const lin = { id: "h1", name: "web01", os: "linux" } as Host;
+  const e = (ranOn: string, hostIds = ["h1"]) => ({ kind: "command", hostIds, ranOn, content: { kind: "command", blocks: [] } }) as unknown as LogEntry;
+  it("accepts Windows-only forms whatever Ran on says, on a windows or unknown-OS host", () => {
+    expect(isIdentityBlockFor(e("Kali (VM)"), win, { command: "whoami /all", output: "" })).toBe(true);
+    expect(isIdentityBlockFor(e("Kali (VM)"), unknownOs, { command: "whoami /priv", output: "" })).toBe(true);
+    expect(isIdentityBlockFor(e("Kali (VM)"), lin, { command: "whoami /all", output: "" })).toBe(false);
+  });
+  it("accepts a block from a target-side shell", () => {
+    expect(isIdentityBlockFor(e("Kali (VM)"), win, { command: "whoami", output: "", shell: "evil-winrm" })).toBe(true);
+    expect(isIdentityBlockFor(e("Kali (VM)"), win, { command: "*Evil-WinRM* PS C:\\Users\\x> whoami", output: "" })).toBe(true);
+  });
+  it("bare whoami/id depend on Ran on", () => {
+    expect(isIdentityBlockFor(e("Kali (VM)"), win, { command: "whoami", output: "" })).toBe(false);
+    expect(isIdentityBlockFor(e(""), win, { command: "whoami", output: "" })).toBe(true);
+    expect(isIdentityBlockFor(e("Onyx"), win, { command: "whoami", output: "" })).toBe(true);
+    expect(isIdentityBlockFor(e("web01"), win, { command: "id", output: "" })).toBe(false);
+  });
+  it("needs exactly this one host", () => {
+    expect(isIdentityBlockFor(e("", ["h1", "h2"]), win, { command: "whoami /all", output: "" })).toBe(false);
   });
 });
 

@@ -70,8 +70,16 @@ describe("identityFromLog", () => {
 
   it("ignores entries linked to two hosts or run on another machine", () => {
     const two = entry("l1", splitPaste(PRIV), { hostIds: ["h2", "h3"] });
-    const other = entry("l2", splitPaste(GROUPS), { ranOn: "Kali (VM)" });
+    const other = entry("l2", [{ command: "whoami", output: "kali" }], { ranOn: "Kali (VM)" });
     expect(identityFromLog([two, other], MS02)).toEqual({ identity: null, sources: 0 });
+  });
+
+  it("reads a Windows-only whoami /all whose Ran on is Kali, for a windows host", () => {
+    const onyx = { id: "h2", name: "Onyx", os: "windows" } as Host;
+    const all = entry("l1", [{ command: "whoami /all", output: "PRIVILEGES INFORMATION\n----\n\nPrivilege Name  Description  State\n=== === ===\nSeImpersonatePrivilege  Impersonate  Enabled" }], { ranOn: "Kali (VM)" });
+    const r = identityFromLog([all], onyx);
+    expect(r.sources).toBeGreaterThanOrEqual(1);
+    expect(r.identity?.privileges).toContain("SeImpersonatePrivilege");
   });
 
   it("ignores error output", () => {

@@ -1,4 +1,4 @@
-import { identityFieldsOf, isIdentityEntryFor, mergeIdentity, usableIdentity, type IdentityFields } from "../../../engines/facts";
+import { identityFieldsOf, isIdentityBlockFor, isIdentityEntryFor, mergeIdentity, usableIdentity, type IdentityFields } from "../../../engines/facts";
 import type { Host } from "../../../types/host";
 import type { LogEntry } from "../../../types/log";
 
@@ -12,8 +12,8 @@ type Field = keyof IdentityFields;
 
 /**
  * What the host's existing log already says about who the user is: each identity command folded in oldest first with
- * `mergeIdentity`, the same rule capture uses, so `whoami /priv` then `whoami /groups` keeps both. Same entry rule and
- * error guard as capture-time recording. An entry counts as a source when a field it set is still in the result.
+ * `mergeIdentity`, the same rule capture uses, so `whoami /priv` then `whoami /groups` keeps both. Same block rule
+ * (`isIdentityBlockFor`) and error guard as capture-time recording. An entry counts as a source when a field it set is still in the result.
  */
 export function identityFromLog(entries: LogEntry[], host: Host): IdentityFromLog {
   const oldestFirst = entries.filter((e) => isIdentityEntryFor(e, host)).sort((a, b) => a.at - b.at || a.createdAt - b.createdAt);
@@ -23,6 +23,7 @@ export function identityFromLog(entries: LogEntry[], host: Host): IdentityFromLo
   for (const entry of oldestFirst) {
     if (entry.content.kind !== "command") continue;
     for (const block of entry.content.blocks) {
+      if (!isIdentityBlockFor(entry, host, block)) continue;
       const parsed = usableIdentity(block);
       if (!parsed) continue;
       identity = mergeIdentity(identity, parsed, block.command);

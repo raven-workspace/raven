@@ -1,4 +1,4 @@
-import { isIdentityEntryFor, mergeIdentity, usableIdentity, vectorsFromIdentity, type IdentityFields } from "../../engines/facts";
+import { isIdentityBlockFor, mergeIdentity, usableIdentity, vectorsFromIdentity, type IdentityFields } from "../../engines/facts";
 import { buildDraft, type CaptureDraft, type DraftInput } from "../../engines/capture";
 import { api } from "../../lib/api";
 import { afterEntrySaved, CHECKLIST_FAILED, FollowUpError } from "../checklist/ticks";
@@ -33,9 +33,9 @@ export const VECTORS_FAILED = "Saved the entry, but the privesc vectors didn't u
 async function recordIdentity(entry: LogEntry, hosts: Host[]): Promise<{ hostId: string; vectors: string[] } | null> {
   if (entry.content.kind !== "command") return null;
   const host = hosts.find((h) => h.id === entry.hostIds[0]);
-  if (!host || !isIdentityEntryFor(entry, host)) return null;
+  if (!host) return null;
   const parsedBlocks = entry.content.blocks.flatMap((block) => {
-    const parsed = usableIdentity(block);
+    const parsed = isIdentityBlockFor(entry, host, block) ? usableIdentity(block) : null;
     return parsed ? [{ parsed, command: block.command }] : [];
   });
   if (parsedBlocks.length === 0) return null;

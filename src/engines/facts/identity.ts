@@ -1,3 +1,4 @@
+import { isKaliLabel } from "../attribution";
 import type { Host } from "../../types/host";
 import type { CommandBlock, LogEntry } from "../../types/log";
 
@@ -57,8 +58,18 @@ function parseId(output: string): ParsedIdentity | null {
   return { username: uid[1], privileges: [], groups };
 }
 
+/** A target-side prompt left at the front of command text: Evil-WinRM, PowerShell or cmd. */
+const LEADING_PROMPT = /^(?:\*Evil-WinRM\* PS [^>]*>|PS [^>]*>|[A-Za-z]:\\[^>]*>)\s*/;
+
+/** The command with any leading target-side prompt removed, whitespace collapsed and lowercased. */
+function normalizeCommand(command: string): string {
+  return command.trim().replace(LEADING_PROMPT, "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 export function parseIdentity(command: string, output: string): ParsedIdentity | null {
-  const cmd = command.trim().replace(/\s+/g, " ").toLowerCase();
+  const cmd = normalizeCommand(command);
+  // Piped or filtered output is partial: it must never replace stored privileges or groups.
+  if (cmd.includes("|")) return null;
   if (cmd === "id") return parseId(output);
   if (cmd === "whoami") {
     const name = output.split(/\r?\n/).find((l) => l.trim())?.trim();
@@ -87,7 +98,7 @@ export interface IdentityFields {
 
 /** Which fields an identity command speaks for. `whoami /priv` says nothing about groups, so it must not clear them. */
 export function identityFieldsOf(command: string): { username: boolean; privileges: boolean; groups: boolean } {
-  const cmd = command.trim().replace(/\s+/g, " ").toLowerCase();
+  const cmd = normalizeCommand(command);
   if (cmd === "whoami /priv") return { username: false, privileges: true, groups: false };
   if (cmd === "whoami /groups") return { username: false, privileges: false, groups: true };
   if (cmd === "whoami") return { username: true, privileges: false, groups: false };
@@ -134,7 +145,25 @@ export function usableIdentity(block: Pick<CommandBlock, "command" | "output">):
   return parsed;
 }
 
-/** A command entry linked to exactly this host and run on it (`ranOn` is the host's name). */
+const TARGET_SHELLS = new Set(["evil-winrm", "powershell", "cmd"]);
+const WINDOWS_ONLY = new Set(["whoami /priv", "whoami /groups", "whoami /all"]);
+
+/** A command entry linked to exactly this host (its blocks are judged one by one with `isIdentityBlockFor`). */
 export function isIdentityEntryFor(entry: LogEntry, host: Host): boolean {
-  return entry.content.kind === "command" && entry.hostIds.length === 1 && entry.hostIds[0] === host.id && entry.ranOn === host.name;
+  return entry.content.kind === "command" && entry.hostIds.length === 1 && entry.hostIds[0] === host.id;
+}
+
+/**
+ * Whether one command block of an entry speaks for this host's identity. Windows-only `whoami` forms cannot have run on
+ * Kali, so they count on a windows or unknown-OS host; a block from a target-side shell (Evil-WinRM, PowerShell, cmd)
+ * counts; anything else (bare `whoami`, `id`) counts only when Ran on is unknown or this host, never an attacker box.
+ */
+export function isIdentityBlockFor(entry: LogEntry, host: Host, block: Pick<CommandBlock, "command"> & Partial<CommandBlock>): boolean {
+  if (!isIdentityEntryFor(entry, host)) return false;
+  const cmd = normalizeCommand(block.command);
+  if (WINDOWS_ONLY.has(cmd) && (host.os === "windows" || host.os == null)) return true;
+  if ((block.shell && TARGET_SHELLS.has(block.shell)) || LEADING_PROMPT.test(block.command.trim())) return true;
+  const ranOn = entry.ranOn?.trim() ?? "";
+  if (!ranOn) return true;
+  return !isKaliLabel(ranOn) && ranOn.toLowerCase() === host.name.toLowerCase();
 }

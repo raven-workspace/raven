@@ -418,8 +418,15 @@ describe("who am I and privesc vectors", () => {
       expect(await who.findByRole("alert")).toHaveTextContent("vault locked");
     });
 
+    it("offers the button for a Windows-only whoami /all logged with Ran on Kali", async () => {
+      m.logList.mockResolvedValue([winrm("l1", "whoami /all", `PRIVILEGES INFORMATION\n---\n\n${PRIV_OUT}`, { ranOn: "Kali (VM)" })]);
+      mount({ host: after() });
+      const who = await group("Who am I");
+      expect(await who.findByRole("button", { name: "Read from log (1 found)" })).toBeInTheDocument();
+    });
+
     it("shows no button when no entry qualifies", async () => {
-      m.logList.mockResolvedValue([winrm("l1", "whoami /priv", PRIV_OUT, { ranOn: "kali" })]);
+      m.logList.mockResolvedValue([winrm("l1", "whoami", "kali", { ranOn: "kali" })]);
       mount({ host: after() });
       const who = await group("Who am I");
       expect(await who.findByText(/Not known yet/)).toBeInTheDocument();

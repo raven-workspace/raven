@@ -407,6 +407,21 @@ describe("saveCapture", () => {
       expect(m.vectorUpsert).toHaveBeenCalledWith("h1", { title: "SeImpersonatePrivilege abuse", status: "try", source: "auto" });
     });
 
+    it("records privileges from an Evil-WinRM whoami /priv even when Ran on is Kali", async () => {
+      m.hostIdentityGet.mockResolvedValue(null);
+      const c = { kind: "command" as const, blocks: [{ command: "whoami /priv", output: priv, shell: "evil-winrm" }] };
+      const win = host({ id: "h1", name: "onyx", os: "windows" });
+      await saveCapture({
+        engagementId: "e1",
+        draft: draft({ content: c }),
+        edits: edits({ content: c, ranOn: "Kali (VM)" }),
+        addIps: [],
+        image: null,
+        hosts: [win],
+      });
+      expect(m.hostIdentitySet).toHaveBeenCalledWith(expect.objectContaining({ hostId: "h1", privileges: expect.arrayContaining(["SeImpersonatePrivilege"]) }));
+    });
+
     const groupsOut = "GROUP INFORMATION\n-----------------\n\nGroup Name   Type   SID   Attributes\n============ ====== ===== ==========\nBUILTIN\\Users   Alias   S-1-5-32-545   Enabled group\n";
     const capture = (command: string, output: string) => {
       const c = { kind: "command" as const, blocks: [{ command, output }] };
