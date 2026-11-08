@@ -305,8 +305,12 @@ Each table declares its column policy; automatic layout never decides.
 
 ### Navigation
 
-- The collapsed sidebar rail centres every icon in a fixed box, including the Add host `Plus`.
-- Hosts in the rail stay identifiable: a short name (or last octet) under the state glyph, the current host marked, and name and IP in the tooltip.
+- **Collapsed rail (56px):**
+  - Section icons only, each centred in a fixed box. The key number is in the icon's tooltip ("Board · 1"), not on the rail; the expanded sidebar shows the numbers.
+  - Hosts stay listed: the state glyph with a short name (first 4 characters, or the last octet) under it, and name and IP in the tooltip.
+  - The current host is lit with a `--surface-hi` background and the accent bar.
+  - Add host is a `Plus` icon button at the end of the host list.
+- **Expanded sidebar:** Add host is an icon-only `Plus` button on its own, below the host list, aligned in the glyph column.
 
 ### States
 
