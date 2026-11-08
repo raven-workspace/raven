@@ -94,6 +94,24 @@ describe("HintLine", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("? key ignored in a textarea and in contenteditable text", async () => {
+    render(
+      <div data-hint-surface>
+        <textarea aria-label="Notes" />
+        <div contentEditable suppressContentEditableWarning aria-label="Editor" tabIndex={0}>
+          <p>text</p>
+        </div>
+        <HintLine hints={hints} ariaLabel="Keys" />
+      </div>,
+    );
+    screen.getByLabelText("Notes").focus();
+    await userEvent.keyboard("?");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    screen.getByLabelText("Editor").focus();
+    await userEvent.keyboard("?");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   it("nested surfaces: only the innermost opens", async () => {
     render(
       <div data-hint-surface>

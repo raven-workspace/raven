@@ -51,7 +51,7 @@ export function MsfLock({ engagement: e, step }: { engagement: Engagement; step?
         footer={
           <>
             {locked && (
-              <Button variant="danger" onClick={() => setDialog("release")}>
+              <Button variant="quiet-danger" onClick={() => setDialog("release")}>
                 Release lock
               </Button>
             )}

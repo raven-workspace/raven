@@ -106,7 +106,11 @@ describe("metasploit lock", () => {
     m.engagementSetMsfHost.mockResolvedValue({ ...E1, msfHostId: null });
     mount("/e/e1", { ...E1, msfHostId: "h1" });
     await user.click(await screen.findByRole("button", { name: /Metasploit SRV11/ }));
-    await user.click(await screen.findByRole("button", { name: "Release lock" }));
+    const release = await screen.findByRole("button", { name: "Release lock" });
+    // Neutral at rest (the locked host's name is the screen's amber); amber only on hover, focus and in the confirm.
+    expect(release).not.toHaveClass("text-warn");
+    expect(release).toHaveClass("enabled:hover:text-warn");
+    await user.click(release);
     expect(m.engagementSetMsfHost).not.toHaveBeenCalled();
     const confirm = await screen.findByRole("dialog", { name: /Release the Metasploit lock/ });
     await user.click(within(confirm).getByRole("button", { name: "Release" }));

@@ -1,5 +1,6 @@
 import * as Popover from "@radix-ui/react-popover";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { isTypingTarget } from "../lib/keys";
 import { Kbd } from "./Kbd";
 
 export interface Hint {
@@ -7,13 +8,6 @@ export interface Hint {
   label: string;
   /** 1 = always shown; higher numbers drop out first. */
   priority: number;
-}
-
-function isTyping(el: Element | null): boolean {
-  if (!el) return false;
-  const tag = el.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  return (el as HTMLElement).isContentEditable || el.closest("[contenteditable='true'], [contenteditable='']") !== null;
 }
 
 function HintUnit({ hint }: { hint: Hint }) {
@@ -90,7 +84,7 @@ export function HintLine({ hints, max = 5, ariaLabel }: { hints: Hint[]; max?: n
       const surface = ref.current?.closest("[data-hint-surface]");
       const active = document.activeElement;
       // Innermost surface wins, so nested surfaces never open two lists.
-      if (!surface || !active || active.closest("[data-hint-surface]") !== surface || isTyping(active)) return;
+      if (!surface || !active || active.closest("[data-hint-surface]") !== surface || isTypingTarget(active)) return;
       e.preventDefault();
       setOpen(true);
     };

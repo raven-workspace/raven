@@ -179,7 +179,8 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
           <Input
             mono
             aria-label="Folder"
-            className="w-48 max-w-full"
+            width="w-48"
+            className="max-w-full"
             placeholder={DEFAULT_DIR[os]}
             value={dir}
             onChange={(e) => {
@@ -191,7 +192,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
         {usesPort && (
           <label className="grid gap-2 text-meta text-muted-2">
             <span>Port</span>
-            <Input mono aria-label="Port" className="w-20" value={port} onChange={(e) => setPort(e.target.value)} />
+            <Input mono aria-label="Port" width="w-20" value={port} onChange={(e) => setPort(e.target.value)} />
           </label>
         )}
       </div>

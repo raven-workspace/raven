@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 import { collectLayoutIssues } from "./checks/layout";
 import { collectA11yIssues } from "./checks/a11y";
-import { tabWalk } from "./checks/keyboard";
+import { checkShortcut, tabWalk } from "./checks/keyboard";
 import { collectOptOuts } from "./checks/optouts";
 import { collectUxIssues } from "./checks/ux";
 import { groupRows, renderMarkdown } from "./report";
@@ -196,4 +196,28 @@ test("report.md lists every opt-out with its reason", () => {
   const section = md.slice(md.indexOf("## Opt-outs"));
   expect(md).toContain("## Opt-outs");
   expect(section).toMatch(/`p\.x`.*tiny-text: synthetic fixture.*a, b/);
+});
+
+/** A host picker like ChipPicker: K opens a listbox; focus either stays on the trigger (active descendant) or goes nowhere near it. */
+const PICKER = (activeDescendant: boolean) => `
+  <button id="t" aria-haspopup="listbox">Host</button><button id="other">Other</button>
+  <ul role="listbox" aria-label="Fill for host" id="l" hidden><li role="option" id="l-0">dc01</li></ul>
+  <script>
+    document.addEventListener("keydown", (e) => {
+      const t = document.getElementById("t"), l = document.getElementById("l");
+      if (e.key === "k") {
+        l.hidden = false;
+        ${activeDescendant ? `t.setAttribute("aria-controls", "l"); t.setAttribute("aria-activedescendant", "l-0"); t.focus();` : `document.getElementById("other").focus();`}
+      }
+      if (e.key === "Escape") { l.hidden = true; t.removeAttribute("aria-activedescendant"); t.focus(); }
+    });
+  </script>`;
+
+test("an active-descendant listbox counts as focus inside it; focus elsewhere does not", async ({ page }) => {
+  const s = { id: "picker", path: "/", keys: ["k"], opens: "role=listbox[name='Fill for host']", focusInside: true, closesWithEscape: true };
+  await page.setContent(PICKER(true));
+  expect(await checkShortcut(page, s)).toEqual([]);
+  await page.setContent(PICKER(false));
+  const issues = await checkShortcut(page, s);
+  expect(issues.map((i) => i.detail).join("\n")).toMatch(/focus is not inside it/);
 });

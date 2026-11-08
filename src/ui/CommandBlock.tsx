@@ -73,16 +73,16 @@ export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, 
           icon={copied ? Check : Copy}
           label={copyLabel ?? "Copy"}
           onClick={(e) => {
+            // A failed copy (a locked vault included) goes to the shared error path, never an unhandled rejection, and
+            // the done check shows only once the copy succeeded.
             if (onCopyAction) {
               void Promise.resolve(onCopyAction(e.currentTarget)).then((r) => {
                 if (r !== "guarded") flashDone();
-              });
+              }, reportError);
               return;
             }
-            // A failed copy (a locked vault included) goes to the shared error path, never an unhandled rejection.
-            (copyText === undefined ? copyPlain(text) : copySecret(copyText)).catch(reportError);
+            (copyText === undefined ? copyPlain(text) : copySecret(copyText)).then(flashDone, reportError);
             onCopy?.();
-            flashDone();
           }}
         />
       </div>

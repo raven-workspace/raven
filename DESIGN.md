@@ -62,7 +62,7 @@ components:
   icon-button:
     size: "28px"
     rounded: "{rounded.sm}"
-    textColor: "{colors.muted-2}"
+    textColor: "{colors.fg-2}"
   icon-button-hover:
     backgroundColor: "{colors.surface-hi}"
     textColor: "{colors.fg}"

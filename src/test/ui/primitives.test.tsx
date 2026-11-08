@@ -1,6 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as ui from "../../ui";
 import { CommandBlock, Dialog, Disclosure, ErrorState, LoadingState, PickerTrigger } from "../../ui";
 
 describe("Dialog close", () => {
@@ -138,5 +139,28 @@ describe("CommandBlock placeholders inside a token", () => {
     const word = [...container.querySelectorAll("[data-token]")][1];
     expect(word.textContent).toBe("http://LHOST/x");
     expect([...word.querySelectorAll("mark")].map((m) => m.textContent)).toEqual(["LHOST"]);
+  });
+});
+
+describe("labels", () => {
+  it("there is no uppercase Label component: field labels are sentence case (Field), sections use labelClass", () => {
+    expect("Label" in ui).toBe(false);
+    expect(ui.labelClass).toMatch(/\btext-label\b/);
+    expect(ui.fieldLabelClass).toMatch(/\btext-meta\b/);
+  });
+});
+
+describe("Input width", () => {
+  it("fills its track by default; an explicit width replaces w-full instead of losing to it", () => {
+    render(
+      <>
+        <ui.Input aria-label="Full" />
+        <ui.Input aria-label="Port" width="w-20" />
+      </>,
+    );
+    expect(screen.getByLabelText("Full")).toHaveClass("w-full");
+    const port = screen.getByLabelText("Port");
+    expect(port).toHaveClass("w-20");
+    expect(port).not.toHaveClass("w-full");
   });
 });
