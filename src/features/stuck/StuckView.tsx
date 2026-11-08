@@ -305,8 +305,8 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
               if (group.length === 0) return null;
               return (
                 <section key={id} aria-label={label} className="grid gap-1">
-                  <h4 className="m-0 text-meta text-fg-2">{label} <span className="font-mono text-code text-faint">{group.length}</span></h4>
-                  <ul className="m-0 grid list-none gap-1 p-0">
+                  <h4 className="m-0 px-1 text-meta text-fg-2">{label} <span className="font-mono text-code text-faint">{group.length}</span></h4>
+                  <ul className="m-0 grid list-none p-0">
                     {group.map((l, i) => {
                       // The subject (host or credential) and its state are two elements, never one dashed string.
                       const parts = (
@@ -319,11 +319,12 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
                           <span className={l.subject !== null ? undefined : "col-span-2"}>{l.text}</span>
                         </>
                       );
-                      const cols = "grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-2 text-left text-meta text-fg-2";
+                      // A selectable list row (DESIGN.md: no grey text links for actions), at least 28px tall.
+                      const cols = "grid min-h-7 w-full grid-cols-[auto_minmax(0,1fr)] content-center items-baseline gap-2 rounded-sm px-1 py-1 text-left text-meta text-fg-2";
                       return (
                         <li key={i}>
                           {l.hostId || l.goalId ? (
-                            <button type="button" onClick={() => go(l)} className={`${cols} cursor-default underline-offset-2 hover:text-fg hover:underline`}>
+                            <button type="button" onClick={() => go(l)} className={`${cols} cursor-default hover:bg-surface-hi hover:text-fg`}>
                               {parts}
                             </button>
                           ) : (

@@ -69,6 +69,20 @@ export const SCREENS: Screen[] = [
       if (await page.getByRole("button", { name: "Collapse sidebar" }).isVisible()) await page.keyboard.press("Meta+B");
     },
   },
+  {
+    id: "sidebar-rail-tip", path: H, ready: "role=tooltip",
+    // The collapsed rail's host tooltip (name and IP), opened by keyboard focus.
+    setup: async (page) => {
+      await focusBody(page);
+      if (await page.getByRole("button", { name: "Collapse sidebar" }).isVisible()) await page.keyboard.press("Meta+B");
+      await page.locator(`nav[aria-label='Engagement'] a[href$='/h/${AUDIT_IDS.webHost}']`).focus();
+    },
+  },
+  {
+    id: "eng-stuck", path: `${E}/s/checklist`, ready: "role=region[name='Engagement checklist']",
+    // The engagement stuck check, open: subject and state are separate elements.
+    setup: async (page) => { await page.getByRole("button", { name: /Stuck check/ }).click(); },
+  },
   { id: "host-stuck", path: H, ready: "aside[aria-label^='Stuck on']", setup: async (page) => { await focusBody(page); await page.keyboard.press("h"); } },
   { id: "dc-next", path: `${E}/h/${AUDIT_IDS.dcHost}`, ready: "role=tablist >> visible=true" },
   {
