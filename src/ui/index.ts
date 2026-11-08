@@ -18,3 +18,4 @@ export { Toolbar } from "./Toolbar";
 export { ChipSet } from "./ChipSet";
 export { Row } from "./Row";
 export { ActionCell } from "./ActionCell";
+export { HintLine, type Hint } from "./HintLine";
