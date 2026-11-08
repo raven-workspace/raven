@@ -127,7 +127,7 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
         <div className="col-start-2 col-end-[-1] min-w-0"><NewCredNotice labels={newCredLabels} /></div>
       )}
       {open && (
-        <div className="col-start-2 col-end-[-1] grid min-w-0 gap-3">
+        <div className="col-start-2 col-end-[-1] grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
           {goal.why && <p className="m-0 text-meta text-muted">{goal.why}</p>}
           {commands.length > 0 ? (
             <>
