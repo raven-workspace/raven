@@ -128,8 +128,8 @@ export function VectorsFacts({ engagementId, host, open, onToggle }: {
     <span>couldn't load</span>
   ) : !vectorsQ.data ? undefined : count("try") + count("untested") > 0 ? (
     <>
-      {count("try") > 0 && <SummaryCell label="try">{count("try")}</SummaryCell>}
-      {count("untested") > 0 && <SummaryCell label="untested">{count("untested")}</SummaryCell>}
+      {count("try") > 0 && <SummaryCell count={count("try")} label="to try" tone="accent" />}
+      {count("untested") > 0 && <SummaryCell count={count("untested")} label="untested" />}
     </>
   ) : (
     <span>{vectors.length > 0 ? "all ruled out" : "none yet"}</span>

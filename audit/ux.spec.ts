@@ -43,6 +43,8 @@ const NEEDS_DATA = new Set([
   "host-checklist", "host-findings", "host-log", "finding-split", "exam-host-locked", "findings", "log-images", "transfer-generator",
   // No host under `empty`, so OS is unknown and every payload fits: there is no misfit fold to open.
   "payloads-drawer-misfits",
+  // The rail tip is a host's tooltip; with no hosts there is nothing to focus.
+  "sidebar-rail-tip",
 ]);
 
 for (const screen of STATE_SCREENS) {

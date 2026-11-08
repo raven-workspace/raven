@@ -1,38 +1,41 @@
-import { ArrowUpRightIcon, CaretDownIcon, CaretRightIcon, type Icon } from "@phosphor-icons/react";
+import { ArrowUpRightIcon, CaretRightIcon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { Toolbar, labelClass } from "../../../ui";
 
 /**
- * One cell of a folded group's summary. With an `icon` it is a count (the label is its accessible name and tooltip);
- * without one it reads as a small labelled pair, e.g. "entry  nginx 80".
+ * One phrase of a folded group's summary, written so it reads on its own: a count before its noun ("3 confirmed"),
+ * or a labelled value ("entry: CouchDB on 3003").
  */
-export function SummaryCell({ label, icon: Glyph, tone, shrink = "value", children }: {
+export function SummaryCell({ label, count, tone, shrink = "value", children }: {
   label: string;
+  /** A count: shown before the label, e.g. "12 untested". */
+  count?: number;
   /** Which part gives way when the line is narrow: the value (default) or the label (a long stage name). */
   shrink?: "label" | "value";
-  icon?: Icon;
   tone?: "accent" | "warn";
-  children: ReactNode;
+  children?: ReactNode;
 }) {
   const colour = tone === "accent" ? "text-accent" : tone === "warn" ? "text-warn" : "text-fg-2";
+  if (count !== undefined) {
+    return (
+      <span data-summary-cell={label} className="mr-4 inline-block whitespace-nowrap last:mr-0">
+        <span className={colour}>{count}</span> <span className="text-muted-2">{label}</span>
+      </span>
+    );
+  }
   return (
-    <span data-summary-cell title={label} className={`inline-grid min-w-0 items-center gap-1 whitespace-nowrap ${shrink === "label" ? "grid-cols-[minmax(0,1fr)_auto]" : "grid-cols-[auto_minmax(0,1fr)]"}`}>
-      {Glyph ? (
-        <>
-          <Glyph size={16} weight="regular" aria-hidden className={colour} />
-          <span className="sr-only">{label}</span>
-        </>
-      ) : (
-        <span className={`text-muted-2 ${shrink === "label" ? "min-w-0 truncate" : ""}`}>{label}</span>
-      )}
-      <span className={`min-w-0 text-fg-2 ${shrink === "label" ? "" : "truncate"}`}>{children}</span>
+    <span data-summary-cell={label} className={`mr-4 inline-grid max-w-full min-w-0 items-center gap-1 whitespace-nowrap align-bottom last:mr-0 ${shrink === "label" ? "grid-cols-[minmax(0,1fr)_auto]" : "grid-cols-[auto_minmax(0,1fr)]"}`}>
+      <span className={`text-muted-2 ${shrink === "label" ? "min-w-0 truncate" : ""}`}>{label}:</span>
+      <span className={`min-w-0 ${colour} ${shrink === "label" ? "" : "truncate"}`}>{children}</span>
     </span>
   );
 }
 
 /**
- * One fact group. Folded, it is a single line (the title and its summary cells) that opens in place; open, a labelled
- * header (which folds it again) over the group's content. `shortcut` is named in the toggle's tooltip.
+ * One fact group. Its header looks the same open or folded: the caret on the left (it only rotates), then the title as
+ * a section label. Folded, the summary sits on the line under the title (it wraps in a narrow column); open, the
+ * header carries the group's actions over the content.
+ * `shortcut` is named in the toggle's tooltip.
  */
 export function FactGroup({ title, summary, open, onToggle, shortcut, actions, children }: {
   title: string;
@@ -46,39 +49,23 @@ export function FactGroup({ title, summary, open, onToggle, shortcut, actions, c
   children: ReactNode;
 }) {
   const hint = shortcut ? ` (${shortcut})` : "";
-  if (!open) {
-    return (
-      <section aria-label={title}>
-        <button
-          type="button"
-          aria-expanded={false}
-          title={`Open ${title}${hint}`}
-          onClick={onToggle}
-          className="grid min-h-8 w-full cursor-default grid-cols-[18ch_minmax(0,1fr)_16px] items-center gap-3 border-b border-line py-1 text-left text-meta text-fg-2 hover:text-fg"
-        >
-          <span>{title}</span>
-          <span className="grid min-w-0 auto-cols-[minmax(0,max-content)] grid-flow-col items-center justify-start gap-3 overflow-hidden text-muted">{summary}</span>
-          <CaretRightIcon size={16} weight="regular" aria-hidden />
-        </button>
-      </section>
-    );
-  }
   return (
-    <section aria-label={title} className="grid gap-2 pb-4">
-      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-line pb-1">
+    <section aria-label={title} className={open ? "grid gap-2 pb-4" : undefined}>
+      <header className="grid min-h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-line">
         <button
           type="button"
-          aria-expanded
-          title={`Fold ${title}${hint}`}
+          aria-expanded={open}
+          title={`${open ? "Fold" : "Open"} ${title}${hint}`}
           onClick={onToggle}
-          className="grid min-h-7 min-w-0 cursor-default grid-cols-[16px_minmax(0,1fr)] items-center gap-2 text-left hover:text-fg"
+          className="group grid min-h-7 w-full min-w-0 cursor-default grid-cols-[16px_minmax(0,1fr)] items-center gap-x-2 gap-y-1 py-1 text-left"
         >
-          <CaretDownIcon size={16} weight="regular" aria-hidden className="text-muted" />
-          <h2 className={`${labelClass} m-0 truncate`}>{title}</h2>
+          <CaretRightIcon size={16} weight="regular" aria-hidden className={`text-muted transition-transform duration-150 group-hover:text-fg motion-reduce:transition-none ${open ? "rotate-90" : ""}`} />
+          <h2 className={`${labelClass} m-0 truncate group-hover:text-fg`}>{title}</h2>
+          {!open && summary && <span className="col-start-2 min-w-0 text-meta text-muted">{summary}</span>}
         </button>
-        {actions && <Toolbar>{actions}</Toolbar>}
+        {open && actions && <Toolbar>{actions}</Toolbar>}
       </header>
-      {children}
+      {open && children}
     </section>
   );
 }

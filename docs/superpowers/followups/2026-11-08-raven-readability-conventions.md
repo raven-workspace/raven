@@ -28,7 +28,7 @@ routine and the hashes) changes the information architecture, so it's a round of
 - It should be easy to see at a glance what we have: passwords, hashes, tickets and so on.
 - Look at shadcn's components and blocks for patterns before designing.
 
-## Host page feedback (owner screenshot, 2026-11-08)
+## Host page feedback (owner screenshot, 2026-11-08) — fixed 2026-11-08
 
 - **Disclosure headers don't match.** Open sections ("WHO AM I", "PRIVESC VECTORS", "OTHER ACCOUNTS") use big uppercase
   headings with the caret on the left. Closed rows ("Services", "Coverage", "Host Credentials") use small sentence-case

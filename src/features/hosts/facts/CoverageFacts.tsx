@@ -44,7 +44,7 @@ export function CoverageFacts({ engagementId, host, open, onToggle }: {
   const summary = failed ? (
     <span>couldn't load</span>
   ) : !hosts || !eng || !servicesQ.data ? undefined : now ? (
-    <SummaryCell label={now.stage.title} shrink="label">{now.done}/{now.applicable}</SummaryCell>
+    <SummaryCell label={now.stage.title} shrink="label">{now.done}/{now.applicable} done</SummaryCell>
   ) : currentStage(state, stages) ? (
     <span>{current?.title ?? COLUMN_LABELS[host.boardColumn]}</span>
   ) : (

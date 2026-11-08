@@ -64,8 +64,8 @@ export function HostCredentialsFacts({ engagementId: eid, host, open, onToggle, 
     <span>couldn't load</span>
   ) : counts ? (
     <>
-      <SummaryCell label="work">{counts.works}</SummaryCell>
-      <SummaryCell label="untested">{counts.untested}</SummaryCell>
+      <SummaryCell count={counts.works} label="working" tone={counts.works > 0 ? "accent" : undefined} />
+      <SummaryCell count={counts.untested} label="untested" />
     </>
   ) : undefined;
 

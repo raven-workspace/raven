@@ -36,21 +36,21 @@ export function servicesSummaryParts(services: Service[]) {
   return {
     confirmed,
     unknown,
-    entry: entry ? `${entry.confirmedProduct?.trim() || entry.nmapService || "?"} ${entry.port}` : undefined,
+    entry: entry ? `${entry.confirmedProduct?.trim() || entry.nmapService || "unknown"} on ${entry.port}` : undefined,
     total: services.length,
   };
 }
 
-/** The folded Services line as labelled cells: confirmed, entry, unidentified (or the open count). */
+/** The folded Services line: how many, how many confirmed, the entry point, how many unidentified. */
 function ServicesSummary({ services }: { services: Service[] }) {
   if (services.length === 0) return <span>none yet</span>;
   const { confirmed, unknown, entry, total } = servicesSummaryParts(services);
-  if (confirmed === 0 && !entry && unknown === 0) return <SummaryCell label="open">{total}</SummaryCell>;
   return (
     <>
-      {confirmed > 0 && <SummaryCell label="confirmed" icon={CheckIcon} tone="accent">{confirmed}</SummaryCell>}
+      <SummaryCell count={total} label={total === 1 ? "service" : "services"} />
+      {confirmed > 0 && <SummaryCell count={confirmed} label="confirmed" tone="accent" />}
       {entry && <SummaryCell label="entry">{entry}</SummaryCell>}
-      {unknown > 0 && <SummaryCell label="unidentified" icon={QuestionIcon}>{unknown}</SummaryCell>}
+      {unknown > 0 && <SummaryCell count={unknown} label="unidentified" />}
     </>
   );
 }

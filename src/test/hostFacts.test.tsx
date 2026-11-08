@@ -123,7 +123,7 @@ describe("facts by phase", () => {
     for (const name of ["Coverage", "Services", "Host Credentials"]) expect(await isOpen(name)).toBe(true);
     expect(await summaryOf("Who am I")).toMatch(/^Who am I.*not known yet/);
     expect(await summaryOf("Privesc vectors")).toMatch(/^Privesc vectors.*none yet/);
-    expect(await summaryOf("Other accounts")).toMatch(/^Other accounts.*0$/);
+    expect(await summaryOf("Other accounts")).toMatch(/^Other accounts.*none yet$/);
     const order = [...screen.getByRole("region", { name: "Facts" }).children].map((r) => r.getAttribute("aria-label"));
     expect(order).toEqual(["Coverage", "Services", "Host Credentials", "Who am I", "Privesc vectors", "Other accounts"]);
   });
@@ -152,11 +152,11 @@ describe("facts by phase", () => {
   it("the summaries: Services, Coverage and Host Credentials, as labelled cells", async () => {
     mount({ host: host({ access: "root" }) });
     const services = await group("Services");
-    const cells = await services.findAllByTitle(/^(confirmed|entry|unidentified)$/);
-    expect(cells.map((c) => c.getAttribute("title"))).toEqual(["confirmed", "entry", "unidentified"]);
-    expect(cells.map((c) => c.textContent)).toEqual(["confirmed1", "entrynginx 80", "unidentified1"]);
-    expect(await summaryOf("Coverage")).toMatch(/^Coverage.*Vulnerability detection.*0\/\d+$/);
-    await waitFor(async () => expect(await summaryOf("Host Credentials")).toBe("Host Credentialswork0untested0"));
+    await services.findByRole("button", { expanded: false });
+    const cells = [...services.getByRole("button", { expanded: false }).querySelectorAll("[data-summary-cell]")];
+    expect(cells.map((c) => c.textContent)).toEqual(["3 services", "1 confirmed", "entry:nginx on 80", "1 unidentified"]);
+    expect(await summaryOf("Coverage")).toMatch(/^Coverage.*Vulnerability detection:0\/\d+ done$/);
+    await waitFor(async () => expect(await summaryOf("Host Credentials")).toBe("Host Credentials0 working0 untested"));
   });
 
   it("services summary has no middot string", async () => {
@@ -557,7 +557,7 @@ describe("who am I and privesc vectors", () => {
     expect(g.queryByText(/Winter2024/)).not.toBeInTheDocument();
     const user = userEvent.setup();
     await user.click(await toggleOf("Other accounts"));
-    expect(await summaryOf("Other accounts")).toMatch(/^Other accounts.*2$/);
+    expect(await summaryOf("Other accounts")).toMatch(/^Other accounts.*2 accounts$/);
   });
 
   it("Other accounts shows at most six rows, then +N more; the summary counts them all", async () => {
@@ -570,7 +570,7 @@ describe("who am I and privesc vectors", () => {
     expect(g.getAllByText(/\(hash\)$/)).toHaveLength(6);
     const user = userEvent.setup();
     await user.click(await toggleOf("Other accounts"));
-    expect(await summaryOf("Other accounts")).toMatch(/^Other accounts.*9$/);
+    expect(await summaryOf("Other accounts")).toMatch(/^Other accounts.*9 accounts$/);
   });
 
   it("saving an identity edit adds vectors only for newly added privileges, keeping the user's status on the rest", async () => {

@@ -240,7 +240,7 @@ export function OtherAccountsFacts({ engagementId, host, open, onToggle }: {
       .map((c) => ({ id: c.id, label: credLabel(c), kind: c.type === "hash" ? "uncracked" : "found here" }));
   }, [credsQ.data, attemptsQ.data, identityQ.data, host.id]);
   const failed = credsQ.error ?? attemptsQ.error;
-  const summary = failed ? <span>couldn't load</span> : ready ? <span>{rows.length}</span> : undefined;
+  const summary = failed ? <span>couldn't load</span> : ready ? rows.length === 0 ? <span>none yet</span> : <SummaryCell count={rows.length} label={rows.length === 1 ? "account" : "accounts"} /> : undefined;
   const more = rows.length - OTHER_ACCOUNTS_SHOWN;
   return (
     <FactGroup title="Other accounts" summary={summary} open={open} onToggle={onToggle}>

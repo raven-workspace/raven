@@ -291,6 +291,7 @@ Each table declares its column policy; automatic layout never decides.
 
   Underlined text is only for a link to another place, inside prose.
 - **`Disclosure`:** a full-width row at least 28px tall, with a caret icon, the label in `text-body` with its count ("Don't fit here (6)"), and `aria-expanded`. Space and Enter toggle it.
+- **Fact groups** (host page) keep one header open or folded: the caret on the left (it only rotates), then the title as a section label. Folded, the summary sits on the line below the title. Each summary phrase reads on its own: a count before its noun ("3 services", "0 working") or a labelled value ("entry: CouchDB on 3003"). Never a bare number or an icon standing in for a word.
 - **Alternatives** (other payloads that fit, other choices) are a visible list of selectable rows. They are never a middot-joined sentence.
 - **Context pickers** (host, credential, OS, paste context, port) are bordered Select triggers:
   - 28px tall;
