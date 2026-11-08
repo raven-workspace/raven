@@ -254,16 +254,16 @@ Each table declares its column policy; automatic layout never decides.
 
 | Column | Width | Overflow |
 |---|---|---|
-| Identifier (credential, host, path) | `minmax(16ch, 2fr)` | One line, truncated with an ellipsis and a `title` |
+| Identifier (credential, host, path) | `minmax(16ch, 3fr)` | One line, truncated with an ellipsis and a `title` |
 | Short value (type, scope, kind, state) | `max-content` | Never wraps |
 | Composite (scope + host) | n/a | Never a "·" string. Two lines in one cell (value, then meta), or two columns |
-| Free text (source, notes, title) | `minmax(0, 3fr)` | The only column that may wrap, to 2 lines at most |
+| Free text (source, notes, title) | `minmax(0, 2fr)` | The only column that may wrap, to 2 lines at most |
 | Secret | `max-content` | A fixed 8-dot mask, never wraps. Reveal and Copy are icon buttons in their own tracks |
 | Actions | Fixed | Never wraps; see Row actions |
 | Number / time | `max-content` | `tabular-nums` |
 
 - Header text is `text-label` and never wraps. A column is never narrower than its header.
-- Under 1000px a table drops its lowest-priority columns, in an order declared per table, or switches to a stacked list. It never squeezes every column.
+- When its pane is narrow, a table drops its lowest-priority columns, in an order declared per table, or switches to a stacked list. It never squeezes every column. Drops use container queries on the pane, not the window, because the sidebar makes the pane narrower than the window.
 
 ### Chips
 
