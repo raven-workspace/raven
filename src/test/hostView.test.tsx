@@ -149,11 +149,39 @@ describe("host view", () => {
     expect(header.getByText("Vulnerability detection")).toBeInTheDocument();
   });
 
+  it("host header has no Delete button", async () => {
+    mount();
+    const header = within(await screen.findByRole("region", { name: "Host" }));
+    expect(header.queryByRole("button", { name: /^Delete/ })).not.toBeInTheDocument();
+  });
+
+  it("Delete host is in the edit dialog and still confirms from the keyboard", async () => {
+    const user = userEvent.setup();
+    mount();
+    const header = within(await screen.findByRole("region", { name: "Host" }));
+    await user.click(header.getByRole("button", { name: "Edit" }));
+    const edit = await screen.findByRole("dialog", { name: "Edit host" });
+    within(edit).getByRole("button", { name: "Delete host" }).focus();
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("dialog", { name: "Delete dc01?" })).toBeInTheDocument();
+    expect(m.hostDelete).not.toHaveBeenCalled();
+  });
+
+  it("a 255-character host name truncates and keeps its title", async () => {
+    const long = "h".repeat(255);
+    m.hostsList.mockResolvedValue([{ ...H1, name: long }]);
+    mount();
+    const title = within(await screen.findByRole("region", { name: "Host" })).getByRole("heading", { level: 1 });
+    expect(title).toHaveAttribute("title", long);
+    expect(title).toHaveClass("truncate");
+  });
+
   it("host delete confirm says what goes with it and what stays", async () => {
     const user = userEvent.setup();
     mount();
     const header = within(await screen.findByRole("region", { name: "Host" }));
-    await user.click(header.getByRole("button", { name: "Delete" }));
+    await user.click(header.getByRole("button", { name: "Edit" }));
+    await user.click(await screen.findByRole("button", { name: "Delete host" }));
     const confirm = await screen.findByRole("dialog", { name: "Delete dc01?" });
     expect(confirm).toHaveAccessibleDescription(
       "Its services, checklist items, credential test results, access grants on it, finding links, field notes, " +
@@ -168,7 +196,8 @@ describe("host view", () => {
     const user = userEvent.setup();
     mount();
     const header = within(await screen.findByRole("region", { name: "Host" }));
-    await user.click(header.getByRole("button", { name: "Delete" }));
+    await user.click(header.getByRole("button", { name: "Edit" }));
+    await user.click(await screen.findByRole("button", { name: "Delete host" }));
     const confirm = await screen.findByRole("dialog", { name: "Delete dc01?" });
     const text = confirm.getAttribute("aria-describedby") ? document.getElementById(confirm.getAttribute("aria-describedby")!)!.textContent! : "";
     for (const part of ["field notes", "ruled-out items", "tunnels", "hops"]) expect(text).toContain(part);

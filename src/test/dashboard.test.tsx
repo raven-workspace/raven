@@ -369,6 +369,30 @@ describe("engagement shell", () => {
     expect(m.engagementSetStatus).toHaveBeenLastCalledWith("e1", "active");
   });
 
+  async function openDeleteConfirm(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.click(await screen.findByRole("button", { name: "Delete engagement" }));
+  }
+
+  it("engagement header has no Delete button", async () => {
+    mount("/e/e1");
+    await screen.findByRole("button", { name: "Edit" });
+    expect(screen.queryByRole("button", { name: /^Delete/ })).not.toBeInTheDocument();
+  });
+
+  it("Delete engagement is in the edit dialog and still confirms", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1");
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    const edit = await screen.findByRole("dialog", { name: "Edit engagement" });
+    const del = within(edit).getByRole("button", { name: "Delete engagement" });
+    // Name field has initial focus; Tab walks the form to the footer, where Delete comes first.
+    del.focus();
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("dialog", { name: "Delete engagement" })).toBeInTheDocument();
+    expect(m.engagementDelete).not.toHaveBeenCalled();
+  });
+
   it("delete requires typing the name", async () => {
     const user = userEvent.setup();
     m.engagementDelete.mockImplementation(async (id) => {
@@ -376,7 +400,7 @@ describe("engagement shell", () => {
       return null;
     });
     mount("/e/e1");
-    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    await openDeleteConfirm(user);
     const dialog = await screen.findByRole("dialog", { name: "Delete engagement" });
     const confirm = within(dialog).getByRole("button", { name: "Delete engagement" });
     expect(confirm).toBeDisabled();
@@ -400,7 +424,7 @@ describe("engagement shell", () => {
       ownerId: hostId ?? engagementId, engagementId, hostId, body, private: isPrivate, updatedAt: 1,
     }));
     mount("/e/e1");
-    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    await openDeleteConfirm(user);
     useNotesStore.setState({
       pending: {
         "e1:": { engagementId: "e1", hostId: null, body: "? gone", private: false },
