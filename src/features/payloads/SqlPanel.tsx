@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
 import { buildSql, SQL_ENGINES, SQL_EXEC, SQL_STEPS, sqlExecIds, type SqlEngine, type SqlPoint, type SqlValues } from "../../engines/payloads/sql";
 import type { BuiltPayload } from "../../engines/payloads/types";
 import { copyPlain } from "../../lib/clipboard";
@@ -26,6 +26,10 @@ const STEP_INPUT: Partial<Record<(typeof SQL_STEPS)[number]["id"], { key: CarryK
   tables: { key: "table", label: "Table", placeholder: "users" },
   columns: { key: "column", label: "Column", placeholder: "username,password" },
 };
+/** The input each unfilled token lives in, when it lives in this panel. */
+const TOKEN_INPUT: Record<string, string> = { COLUMNS: "columns", TABLE: "table", COLUMN: "column", PATH: "path" };
+/** Armed for one exact payload: any change to it (engine, point, values) needs a fresh confirm. */
+const armKey = (id: string, b: BuiltPayload) => `${id}|${b.text}`;
 const PRE = "m-0 max-h-40 overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-all rounded-sm border border-line bg-bg px-3 py-2 font-mono text-[12.5px] leading-relaxed text-fg";
 
 /** buildSql, with its refusals (a step that has no client-session form, a bad name) as a line to show, not a crash. */
@@ -38,11 +42,12 @@ function tryBuild(id: string, title: string, engine: SqlEngine, point: SqlPoint,
 }
 
 /** One step or exec payload: its text with a Copy button, the listener if it calls back, what each part does, notes. */
-function SqlPayload({ title, result, armed, onCopy }: {
-  title: string; result: ReturnType<typeof tryBuild>; armed: boolean; onCopy: (b: BuiltPayload) => void;
+function SqlPayload({ id, title, result, armedKey, onCopy }: {
+  id: string; title: string; result: ReturnType<typeof tryBuild>; armedKey: string | null; onCopy: (b: BuiltPayload) => void;
 }) {
   if ("error" in result) return <p className="m-0 text-xs text-muted">Skip here: {result.error}.</p>;
   const b = result.built;
+  const armed = armedKey === armKey(id, b);
   return (
     <div className="grid gap-1.5">
       {b.listener && <pre aria-label={`${title} listener`} className={PRE}>{b.listener}</pre>}
@@ -74,7 +79,11 @@ function SqlPayload({ title, result, armed, onCopy }: {
  * inject, then the ten steps in order. Each step builds from what earlier steps found (column count, shown column,
  * table, column), typed once in the step that finds it. The engine's exec payloads follow. Choices stick per host.
  */
-export function SqlPanel({ fit }: { fit: PayloadFit }) {
+export function SqlPanel({ fit, onFocusToken }: {
+  fit: PayloadFit;
+  /** Focus the field for a token this panel has no input for (LHOST, LPORT): the view's own. */
+  onFocusToken?: (token: string) => void;
+}) {
   const ov = usePayloadsStore((s) => s.overrides[fit.hostKey]);
   const set = (patch: PayloadOverride) => usePayloadsStore.getState().override(fit.hostKey, patch);
   const engine: SqlEngine = fit.dbEngine ?? "mysql";
@@ -84,9 +93,20 @@ export function SqlPanel({ fit }: { fit: PayloadFit }) {
   const [armed, setArmed] = useState<string | null>(null);
   const [status, setStatus] = useState<string>();
 
-  const copy = (key: string, b: BuiltPayload) => {
+  const inputs = useRef(new Map<string, HTMLInputElement>());
+  const setInput = (key: string, el: HTMLInputElement | null) => {
+    if (el) inputs.current.set(key, el);
+    else inputs.current.delete(key);
+  };
+  /** Copies; an unfilled token first jumps to its field and arms, and a second copy of the same payload goes through. */
+  const copy = (id: string, b: BuiltPayload) => {
+    const key = armKey(id, b);
     if (b.unresolved.length > 0 && armed !== key) {
       setArmed(key);
+      const t = b.unresolved[0]!;
+      const el = TOKEN_INPUT[t] ? inputs.current.get(TOKEN_INPUT[t]) : undefined;
+      if (el) el.focus();
+      else onFocusToken?.(t);
       return;
     }
     setArmed(null);
@@ -139,16 +159,24 @@ export function SqlPanel({ fit }: { fit: PayloadFit }) {
       <ol aria-label="SQL steps" className="m-0 grid list-none gap-4 p-0">
         {SQL_STEPS.map((step, i) => {
           const input = STEP_INPUT[step.id];
+          const result = tryBuild(step.id, step.title, engine, point, values);
+          // ↵ in the step's own field copies the step.
+          const onKey = (e: KeyboardEvent<HTMLLIElement>) => {
+            if (e.key !== "Enter" || e.metaKey || e.ctrlKey || e.altKey || e.nativeEvent.isComposing) return;
+            if (!(e.target instanceof HTMLInputElement) || !("built" in result)) return;
+            e.preventDefault();
+            copy(step.id, result.built);
+          };
           return (
-            <li key={step.id} className="grid gap-1.5 border-t border-line pt-3">
+            <li key={step.id} onKeyDown={onKey} className="grid gap-1.5 border-t border-line pt-3">
               <h3 className="m-0 text-[13px] font-semibold text-fg">{i + 1}. {step.title}</h3>
               <p className="m-0 text-xs text-muted">{step.explain}</p>
-              <SqlPayload title={step.title} result={tryBuild(step.id, step.title, engine, point, values)} armed={armed === step.id} onCopy={(b) => copy(step.id, b)} />
+              <SqlPayload id={step.id} title={step.title} result={result} armedKey={armed} onCopy={(b) => copy(step.id, b)} />
               {input && (
                 <label className="grid grid-cols-[auto_minmax(0,14rem)] items-center gap-2">
                   <span className="text-xs text-fg-2">{input.label} found</span>
                   <Input
-                    mono aria-label={input.label} className="h-7" placeholder={input.placeholder}
+                    mono aria-label={input.label} className="h-7" placeholder={input.placeholder} ref={(el) => setInput(input.key, el)}
                     inputMode={input.numeric ? "numeric" : undefined}
                     value={values[input.key] === undefined ? "" : String(values[input.key])}
                     onChange={(e) => carry(input.key, input.numeric, e.target.value)}
@@ -165,7 +193,7 @@ export function SqlPanel({ fit }: { fit: PayloadFit }) {
         {(engine === "mysql" || engine === "mssql") && (
           <label className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
             <span className="text-xs text-fg-2">File path</span>
-            <Input mono aria-label="File path" className="h-7" value={values.path ?? ""} placeholder={engine === "mysql" ? "/var/www/html/zz.php" : "C:\\Windows\\win.ini"} onChange={(e) => setValues({ path: e.target.value })} />
+            <Input mono aria-label="File path" ref={(el) => setInput("path", el)} className="h-7" value={values.path ?? ""} placeholder={engine === "mysql" ? "/var/www/html/zz.php" : "C:\\Windows\\win.ini"} onChange={(e) => setValues({ path: e.target.value })} />
           </label>
         )}
         {engine === "mssql" && (
@@ -187,7 +215,7 @@ export function SqlPanel({ fit }: { fit: PayloadFit }) {
               return (
                 <li key={id} className="grid gap-1.5">
                   <h4 className="m-0 text-[13px] font-semibold text-fg">{x.title}</h4>
-                  <SqlPayload title={x.title} result={tryBuild(id, x.title, engine, point, execValues)} armed={armed === id} onCopy={(b) => copy(id, b)} />
+                  <SqlPayload id={id} title={x.title} result={tryBuild(id, x.title, engine, point, execValues)} armedKey={armed} onCopy={(b) => copy(id, b)} />
                 </li>
               );
             })}

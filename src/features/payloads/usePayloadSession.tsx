@@ -10,7 +10,9 @@ import { Input } from "../../ui";
 import type { ChipPickerHandle } from "../arsenal/ChipPicker";
 import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
 import { isHostPickKey, type HostChipHandle } from "../arsenal/HostChip";
+import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { logCommand } from "../capture/logCommand";
+import { useNotesStore } from "../notes/useNotesStore";
 import { contextLabel, isRanked, OS_LABEL, usePayloadFit } from "./usePayloadFit";
 import { usePayloadsStore } from "./usePayloadsStore";
 
@@ -23,10 +25,20 @@ export const GENERATORS: { id: GeneratorId; label: string }[] = [
   { id: "encode", label: "Encode" },
   { id: "upgrade", label: "Upgrade" },
 ];
-/** The key hint line; the last entry is what Esc does. */
+/** The key hint line for the ranked generators; the last entry is what Esc does. */
 export const HINTS: [string, string][] = [
   ["↵", "copy payload"], ["⌥L", "copy listener"], ["⇥", "next fit"], ["⌥1-6", "generator"], ["⌘↵", "copy and log"], ["Esc", "close"],
 ];
+/** The hint line for one generator: only the keys that work there. `esc` names what Esc does in this view. */
+export function hintsFor(g: GeneratorId, esc: string, extra: [string, string][] = []): [string, string][] {
+  const tail: [string, string][] = [...extra, ["Esc", esc]];
+  if (g === "transfer") return [["⌘↵", "copy and log"], ["⌥1-6", "generator"], ...tail];
+  if (g === "sql") return [["↵", "copy step"], ["⌥1-6", "generator"], ...tail];
+  if (g === "encode") return [["↵", "copy payload"], ["⌥1-6", "generator"], ["⌘↵", "copy and log"], ...tail];
+  return [...HINTS.slice(0, -1), ...tail];
+}
+/** The Arsenal or Notes drawer is open over this view: its keys win. */
+export const otherDrawerOpen = () => useArsenalStore.getState().open || useNotesStore.getState().open;
 /** The Workbench's generator list (`P` focuses it). */
 export const GENERATOR_LIST_ID = "payloads-generators";
 export const inGeneratorList = () => document.activeElement?.closest(`#${GENERATOR_LIST_ID}`) != null;
@@ -123,7 +135,8 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
   // ⌥1–⌥6, ⌥L and ⌥H, wherever focus is. Capture phase, so the host view's own ⌥1–⌥3 tabs never see them.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || isDialogOpen()) return;
+      // The Workbench stays mounted under an Arsenal or Notes drawer: ⌥H ⌥L ⌥1–⌥6 then belong to that drawer.
+      if (e.defaultPrevented || isDialogOpen() || otherDrawerOpen()) return;
       const code = altCode(e);
       const n = code?.startsWith("Digit") ? Number(code.slice(5)) : NaN;
       if (n >= 1 && n <= GENERATORS.length) {
@@ -185,7 +198,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
 
   return {
     generator, hostId, setHostId, fit, ranked, index, setIndex, def, built, guard, note, copy, copyListener, onKeyDown,
-    status, psCommand, setPsCommand, pasteLabel, fitsLine, fields, hostRef, portRef, psRef, fieldEls,
+    status, psCommand, setPsCommand, pasteLabel, fitsLine, fields, focusToken, hostRef, portRef, psRef, fieldEls,
   };
 }
 

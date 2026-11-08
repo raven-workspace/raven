@@ -10,10 +10,8 @@ import { PayloadBlock, PayloadView } from "./PayloadView";
 import { SqlPanel } from "./SqlPanel";
 import { TransferPanel } from "./TransferPanel";
 import { OS_LABEL } from "./usePayloadFit";
-import { GENERATOR_LIST_ID, GENERATORS, HINTS, inGeneratorList, isGenerator, usePayloadSession } from "./usePayloadSession";
+import { GENERATOR_LIST_ID, GENERATORS, hintsFor, inGeneratorList, isGenerator, otherDrawerOpen, usePayloadSession } from "./usePayloadSession";
 import { usePayloadsStore, type PayloadOverride } from "./usePayloadsStore";
-
-const WB_HINTS: [string, string][] = [...HINTS.slice(0, -1), ["P", "generators"], ["Esc", "back"]];
 
 /** One labelled block of the left column, with the line saying where the value came from (amber when unknown). */
 function ReadItem({ label, why, unknown, children }: { label: string; why?: string | null; unknown?: string; children: ReactNode }) {
@@ -156,11 +154,11 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
             </div>
           )}
           {generator === "transfer" && <TransferPanel engagementId={engagementId} hostId={s.hostId} autoFocus={!inGeneratorList()} />}
-          {generator === "sql" && <SqlPanel fit={fit} />}
+          {generator === "sql" && <SqlPanel fit={fit} onFocusToken={s.focusToken} />}
           {s.status && <p role="alert" className="m-0 mt-2 text-xs text-warn">{s.status}</p>}
         </div>
         <footer data-hint-line="" className="border-t border-line px-6 py-2 text-[11px] text-muted">
-          {WB_HINTS.map(([key, label], i) => (
+          {hintsFor(generator, "back", [["P", "generators"]]).map(([key, label], i) => (
             <span key={key}>
               {i > 0 && " · "}
               <span className="whitespace-nowrap"><Kbd>{key}</Kbd> {label}</span>
@@ -188,8 +186,10 @@ export function PayloadsWorkbench() {
   }, [asked]);
 
   useKeydown((e) => {
-    if (e.key !== "Escape" || e.defaultPrevented || isDialogOpen()) return;
-    if (isTypingTarget(e.target)) {
+    // An Arsenal or Notes drawer over the Workbench takes Esc first.
+    if (e.key !== "Escape" || e.defaultPrevented || isDialogOpen() || otherDrawerOpen()) return;
+    // The generator list is a listbox, which isTypingTarget counts as typing; from there Esc leaves at once.
+    if (isTypingTarget(e.target) && !inGeneratorList()) {
       (e.target as HTMLElement).blur();
       return;
     }

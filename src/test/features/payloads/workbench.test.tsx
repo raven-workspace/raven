@@ -232,6 +232,67 @@ describe("Payloads Workbench", () => {
     expect(copy).not.toHaveFocus();
   });
 
+  it("an Arsenal drawer over the Workbench gets ⌥H and ⌥1-6; the Workbench host and generator stay", async () => {
+    const user = userEvent.setup();
+    mount(["/payloads"]);
+    const w = within(await workbench());
+    await w.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    await user.keyboard("a");
+    const a = within(await screen.findByRole("complementary", { name: "Arsenal" }));
+    await user.keyboard("{Alt>}h{/Alt}");
+    expect(a.getByRole("button", { name: /^Fill for host/ })).toHaveAttribute("aria-expanded", "true");
+    expect(read().getByRole("button", { name: "Fill for host: zzweb01" })).not.toHaveAttribute("aria-expanded", "true");
+    await user.keyboard("{Escape}");
+    await user.keyboard("{Alt>}3{/Alt}");
+    expect(usePayloadsStore.getState().generator).toBe("shell");
+    expect(read().getByRole("button", { name: "Fill for host: zzweb01" })).toBeInTheDocument();
+  });
+
+  it("SQL copy guard: an unfilled token jumps to its field, and a changed payload needs a fresh confirm", async () => {
+    const user = userEvent.setup();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h2" });
+    mount(["/payloads?generator=sql"]);
+    const sql = within(await within(await workbench()).findByRole("region", { name: "SQL injection" }));
+    await navigator.clipboard.writeText("untouched");
+    await user.click(sql.getByRole("button", { name: "Copy Version" }));
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    expect(sql.getByRole("textbox", { name: "Columns" })).toHaveFocus();
+    expect(sql.getByText("{COLUMNS} not filled · Copy again to copy anyway")).toHaveClass("text-warn");
+    // Another injection point is another payload: the old confirm does not carry over.
+    await user.click(sql.getByRole("button", { name: "Form field" }));
+    await user.click(sql.getByRole("button", { name: "Copy Version" }));
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    await user.click(sql.getByRole("button", { name: "Copy Version" }));
+    expect(await navigator.clipboard.readText()).toBe(buildSql("version", "postgres", "form-field", {}).text);
+    // ↵ in a step's field copies that step.
+    await user.type(sql.getByRole("textbox", { name: "Columns" }), "3{Enter}");
+    expect(await navigator.clipboard.readText()).toBe(buildSql("column-count", "postgres", "form-field", { columns: 3 }).text);
+  });
+
+  it("the hint line lists only the keys that work for the generator", async () => {
+    const user = userEvent.setup();
+    mount(["/payloads"]);
+    const w = within(await workbench());
+    await w.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    const hint = () => screen.getByRole("main", { name: "Payloads" }).querySelector("[data-hint-line]")?.textContent;
+    expect(hint()).toBe("↵ copy payload · ⌥L copy listener · ⇥ next fit · ⌥1-6 generator · ⌘↵ copy and log · P generators · Esc back");
+    await user.keyboard("{Alt>}3{/Alt}");
+    expect(hint()).toBe("↵ copy step · ⌥1-6 generator · P generators · Esc back");
+    await user.keyboard("{Alt>}2{/Alt}");
+    expect(hint()).toBe("⌘↵ copy and log · ⌥1-6 generator · P generators · Esc back");
+  });
+
+  it("P then Esc leaves the Workbench in one press", async () => {
+    const user = userEvent.setup();
+    mount(["/e/e1/h/h1", "/payloads"]);
+    const w = within(await workbench());
+    await w.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    await user.keyboard("p");
+    expect(read().getByRole("listbox", { name: "Generator" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(await screen.findByRole("tab", { name: "Next" })).toBeInTheDocument();
+  });
+
   it("Esc leaves the Workbench", async () => {
     const user = userEvent.setup();
     mount(["/e/e1/h/h1", "/payloads"]);

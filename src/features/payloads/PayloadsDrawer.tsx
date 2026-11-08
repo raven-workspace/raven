@@ -8,7 +8,7 @@ import { ContextChips } from "./ContextChips";
 import { PayloadBlock, PayloadView } from "./PayloadView";
 import { SqlPanel } from "./SqlPanel";
 import { TransferPanel } from "./TransferPanel";
-import { GENERATOR_LIST_ID, GENERATORS, HINTS, usePayloadSession } from "./usePayloadSession";
+import { GENERATOR_LIST_ID, GENERATORS, hintsFor, usePayloadSession } from "./usePayloadSession";
 import { usePayloadsStore } from "./usePayloadsStore";
 
 function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: string; hostId: string | null }) {
@@ -60,11 +60,11 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
           </div>
         )}
         {generator === "transfer" && <TransferPanel engagementId={engagementId} hostId={s.hostId} />}
-        {generator === "sql" && <SqlPanel fit={fit} />}
+        {generator === "sql" && <SqlPanel fit={fit} onFocusToken={s.focusToken} />}
         {s.status && <p role="alert" className="m-0 mt-2 text-xs text-warn">{s.status}</p>}
       </div>
       <footer data-hint-line="" className="border-t border-line px-4 py-2 text-[11px] text-muted">
-        {HINTS.map(([key, label], i) => (
+        {hintsFor(generator, "close").map(([key, label], i) => (
           <span key={key}>
             {i > 0 && " · "}
             <span className="whitespace-nowrap"><Kbd>{key}</Kbd> {label}</span>
