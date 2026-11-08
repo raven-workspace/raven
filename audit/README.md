@@ -16,15 +16,18 @@ Drives the real UI against the in-memory fake backend (`npm run dev:audit`, port
   A screen that can't reach its ready state, a page error, or a failed self-test also fails the run.
 - How the failing checks judge what shows, and what each still can't see:
   - Screen-reader-only text is recognised by its pattern (absolutely placed with `clip-path: inset(50%)` or a zero `clip`
-    rect) and skipped. A box that collapsed to 1px around real text is still judged. Blind spot: sr-only text built some
-    other way is judged as visible text.
+    rect) and skipped. A box that collapsed to 1px around its own text is still judged. Blind spots: sr-only text built
+    some other way is judged as visible text; `clipped` reads only an element's own text, so a collapsed box whose text sits
+    in a child span is missed, and a box collapsed to 0px height is skipped as invisible.
   - `overlap`: two controls in the same scroll container are compared by plain geometry, scrolled into view or not. In
     different containers, each is first clipped by the clipping ancestors the other is not inside. Where both are on
-    screen, the middle of the overlap is hit-tested. A control counts as covered, not overlapping, only under a real
-    overlay: it is aria-hidden or inert (an open Radix modal), or a fixed or sticky layer, or a dialog, menu, listbox or
-    tooltip, sits over it. A control that ignores the pointer is judged by geometry. Blind spots: a collision under a
-    fixed or sticky layer (for example two controls both hidden under a sticky header) is not reported; overlaps between a
-    control and plain text are never checked.
+    screen, the middle of the overlap is hit-tested. A control counts as covered, not overlapping, only when it is
+    aria-hidden or inert (an open Radix modal), or when something painted over it belongs to an overlay layer (its nearest
+    fixed or sticky ancestor, or dialog, menu, listbox, tooltip or popper) that the control is not inside. Inside one
+    drawer, dialog, palette, sticky header or fixed shell, controls are judged against each other as usual. A control that
+    ignores the pointer is judged by geometry. Blind spots: a control on the page covered by a separate drawer or sticky
+    layer is not reported, even if that layering is itself a bug; overlaps between a control and plain text are never
+    checked.
   - `overflow`: an absolutely placed popup (listbox, menu, dialog, tooltip, Radix popper) may reach past an anchor that
     doesn't clip it. Anything else hanging out, or a popup cut off by a clipping box, fails. Blind spot: a popup reaching
     past an unclipped anchor and off the window is only caught by `offscreen` (reported) and `page-overflow`.
