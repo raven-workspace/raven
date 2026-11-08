@@ -59,7 +59,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
             {built && <PayloadBlock built={built} pasteLabel="Paste into cmd.exe or PowerShell" note={note} noteWarn={guard.hint !== null} />}
           </div>
         )}
-        {generator === "transfer" && <TransferPanel engagementId={engagementId} hostId={s.hostId} />}
+        {generator === "transfer" && <TransferPanel engagementId={engagementId} hostId={s.hostId} fit={fit} lhostField focusToken={s.focusToken} />}
         {generator === "sql" && <SqlPanel fit={fit} onFocusToken={s.focusToken} />}
         {s.status && <p role="alert" className="m-0 mt-2 text-xs text-warn">{s.status}</p>}
       </div>

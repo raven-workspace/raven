@@ -160,7 +160,7 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
               )}
             </div>
           )}
-          {generator === "transfer" && <TransferPanel engagementId={engagementId} hostId={s.hostId} autoFocus={!inGeneratorList()} />}
+          {generator === "transfer" && <TransferPanel engagementId={engagementId} hostId={s.hostId} fit={fit} focusToken={s.focusToken} autoFocus={!inGeneratorList()} />}
           {generator === "sql" && <SqlPanel fit={fit} onFocusToken={s.focusToken} />}
           {s.status && <p role="alert" className="m-0 mt-2 text-xs text-warn">{s.status}</p>}
         </div>

