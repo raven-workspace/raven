@@ -257,15 +257,16 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
     else if (r.hit.type === "command") searchRef.current?.focus();
     else openHit(r.hit, false);
   };
+  // One hint for both pickers, so they show or drop together; it is the first to go when the drawer is narrow.
   const hints = useMemo<Hint[]>(() => {
-    const pickers: Hint[] = engagementId ? [{ keys: "⌥H", label: "host", priority: 3 }, { keys: "⌥C", label: "credential", priority: 3 }] : [];
+    const pickers: Hint[] = engagementId ? [{ keys: "⌥H ⌥C", label: "host, credential", priority: 3 }] : [];
     return onList
       ? [
           { keys: "↵", label: "copy", priority: 1 },
-          { keys: "⌘↵", label: host ? "copy and log" : "copy and log (open a host)", priority: 2 },
-          { keys: "→", label: "in card", priority: 4 },
+          { keys: "⌘↵", label: host ? "copy and log" : "copy and log (open a host)", priority: 1 },
+          { keys: "→", label: "in card", priority: 2 },
           ...pickers,
-          { keys: "Esc", label: inCategory ? "back" : "close", priority: 1 },
+          { keys: "Esc", label: inCategory ? "back" : "close", priority: 2 },
         ]
       : [{ keys: "Esc", label: "back", priority: 1 }, ...pickers];
   }, [engagementId, onList, host, inCategory]);

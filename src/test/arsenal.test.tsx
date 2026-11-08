@@ -629,7 +629,7 @@ describe("drawer list grouped by category (U1)", () => {
     expect(screen.getByRole("complementary", { name: "Arsenal" })).toBeInTheDocument();
     expect(d.getByRole("option", { name: /Zzprobe the target/ })).toBeInTheDocument();
     const hints = [...d.getByRole("group", { name: "Arsenal shortcuts" }).querySelectorAll("[data-hint]")].map((h) => h.textContent);
-    expect(hints).toEqual(["↵copy", "⌘↵copy and log", "⌥Hhost", "⌥Ccredential", "Escclose"]);
+    expect(hints).toEqual(["↵copy", "⌘↵copy and log", "→in card", "⌥H ⌥Chost, credential", "Escclose"]);
   });
 
   it("hovering another row keeps the clicked row selected and its fill fields reachable", async () => {
@@ -703,8 +703,7 @@ describe("drawer list grouped by category (U1)", () => {
     await d.findByRole("heading", { name: "Zz Card" });
     const keys = within(d.getByRole("group", { name: "Arsenal shortcuts" }));
     expect(keys.getByText("back")).toBeInTheDocument();
-    expect(keys.getByText("host")).toBeInTheDocument();
-    expect(keys.getByText("credential")).toBeInTheDocument();
+    expect(keys.getByText("host, credential")).toBeInTheDocument();
   });
 
   it("arsenal drawer footer is a HintLine with at most 5 hints", async () => {
@@ -721,6 +720,20 @@ describe("drawer list grouped by category (U1)", () => {
     expect(shown).toBeGreaterThan(0);
     expect(shown).toBeLessThanOrEqual(5);
     expect(within(line).getByRole("button", { name: "All shortcuts" })).toBeInTheDocument();
+  });
+
+  it("drawer hints: ⌥H and ⌥C are one hint (shown or dropped together) and drop before →", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("a");
+    const aside = await drawer();
+    await within(aside).findByRole("listbox", { name: "Arsenal results" });
+    const units = [...within(aside).getByRole("group", { name: "Arsenal shortcuts" }).querySelectorAll("[data-hint]")];
+    const pickers = units.filter((u) => /⌥/.test(u.textContent ?? ""));
+    expect(pickers).toHaveLength(1);
+    expect(pickers[0]).toHaveTextContent("⌥H ⌥C");
+    expect(units.some((u) => u.textContent?.startsWith("→"))).toBe(true);
   });
 
   it("with only a hash on file the guard focuses the credential chip and a second Enter there copies", async () => {
