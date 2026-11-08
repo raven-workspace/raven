@@ -48,14 +48,16 @@ describe("engagementStuck lines", () => {
     const l = run({ hosts: [host("A")], services: { A: [svc("A", 80)] } });
     expect(l).toHaveLength(1);
     expect(l[0]).toMatchObject({ area: "foothold", hostId: "A" });
-    expect(l[0]!.text).toMatch(/^A — no foothold; \d+ enumeration steps? still to do$/);
+    expect(l[0]!.subject).toBe("A");
+    expect(l[0]!.text).toMatch(/^no foothold; \d+ enumeration steps? still to do$/);
     expect(l[0]!.goalId).toBeTruthy();
   });
 
   it("a host with foothold and privesc left is a privesc line; rooted hosts are silent", () => {
     const l = run({ hosts: [host("A")], services: { A: [svc("A", 80)] }, byOwner: { A: FOOT_DONE } });
     expect(l[0]).toMatchObject({ area: "privesc", hostId: "A" });
-    expect(l[0]!.text).toMatch(/^A — \d+ privesc steps? still to do$/);
+    expect(l[0]!.subject).toBe("A");
+    expect(l[0]!.text).toMatch(/^\d+ privesc steps? still to do$/);
     expect(l[0]!.goalId).not.toBe("h-pe-proof");
     expect(run({ hosts: [host("A")], services: { A: [svc("A", 80)] }, byOwner: { A: { ...FOOT_DONE, "h-pe-proof": { status: "done" } } } })).toEqual([]);
   });
@@ -66,20 +68,20 @@ describe("engagementStuck lines", () => {
       hosts, byOwner: { A: FOOT_DONE, B: FOOT_DONE, e1: { "cred-routine-spray-users": { status: "done" } } },
       services: { A: [svc("A", 22, "ssh")], B: [svc("B", 22, "ssh")] }, credentials: [cred()],
     }).filter((x) => x.area === "credentials");
-    expect(l).toEqual([{ area: "credentials", text: "alice — 2 host/service cells untested", hostId: "A" }]);
+    expect(l).toEqual([{ area: "credentials", subject: "alice", text: "2 host/service cells untested", hostId: "A" }]);
     // one tested: singular
     const one = run({
       hosts, byOwner: { A: FOOT_DONE, B: FOOT_DONE }, services: { A: [svc("A", 22, "ssh")], B: [svc("B", 22, "ssh")] },
       credentials: [cred()], attempts: [attempt({ hostId: "A", result: "failed" })],
     }).filter((x) => x.text.includes("untested"));
-    expect(one[0]!.text).toBe("alice — 1 host/service cell untested");
+    expect(one[0]).toMatchObject({ subject: "alice", text: "1 host/service cell untested" });
   });
 
   it("never sprayed at the usernames", () => {
     const hosts = [host("A", { os: "windows" })];
     const base = { hosts, byOwner: { A: FOOT_DONE }, services: { A: [svc("A", 445, "microsoft-ds")] }, credentials: [cred()], usernames: [uname("u1")], attempts: [attempt({ hostId: "A", service: "smb", port: 445 })] };
     const l = run(base).filter((x) => x.text.includes("never sprayed"));
-    expect(l).toEqual([{ area: "credentials", text: "alice — never sprayed at the usernames", hostId: null, goalId: "cred-routine-spray-users" }]);
+    expect(l).toEqual([{ area: "credentials", subject: "alice", text: "never sprayed at the usernames", hostId: null, goalId: "cred-routine-spray-users" }]);
     const done = run({ ...base, byOwner: { ...base.byOwner, e1: { "cred-routine-spray-users": { status: "done" } } } });
     expect(done.filter((x) => x.text.includes("never sprayed"))).toEqual([]);
   });
@@ -88,7 +90,7 @@ describe("engagementStuck lines", () => {
     const hosts = [host("DC", { os: "windows" })];
     const base = { hosts, byOwner: { DC: FOOT_DONE }, services: { DC: [svc("DC", 88, "kerberos-sec"), svc("DC", 389, "ldap")] }, usernames: [uname("u1"), uname("u2")] };
     const l = run(base).filter((x) => x.text.includes("AS-REP"));
-    expect(l).toEqual([{ area: "credentials", text: "2 usernames not yet AS-REP-checked", hostId: null, goalId: "e-ad-user-asrep" }]);
+    expect(l).toEqual([{ area: "credentials", subject: null, text: "2 usernames not yet AS-REP-checked", hostId: null, goalId: "e-ad-user-asrep" }]);
     const nocreds = run({ ...base, usernames: [uname("u1")], byOwner: { ...base.byOwner, e1: { "e-ad-nocreds-asrep": { status: "in_progress" } } } });
     expect(nocreds.find((x) => x.text.includes("AS-REP"))).toMatchObject({ text: "1 username not yet AS-REP-checked", goalId: "e-ad-nocreds-asrep" });
     const done = run({ ...base, byOwner: { ...base.byOwner, e1: { "e-ad-user-asrep": { status: "done" } } } });
@@ -99,16 +101,16 @@ describe("engagementStuck lines", () => {
     const hosts = [host("A", { name: "WEB" })];
     const common = { hosts, byOwner: { A: { ...FOOT_DONE, "h-pe-proof": { status: "done" as const } } }, services: { A: [] }, credentials: [cred()] };
     const l = run({ ...common, attempts: [attempt({ result: "admin" })] });
-    expect(l).toEqual([{ area: "lateral", text: "WEB — alice has ssh admin access you have not reviewed", hostId: "A" }]);
+    expect(l).toEqual([{ area: "lateral", subject: "WEB", text: "alice has ssh admin access you have not reviewed", hostId: "A" }]);
     expect(run({ ...common, hosts: [host("A", { accessReviewedAt: 99 })], attempts: [attempt({ result: "admin" })] })).toEqual([]);
     const byName = run({ ...common, credentials: [], usernames: [uname("u1")], attempts: [attempt({ usernameId: "u1", credId: "c9" })] });
-    expect(byName[0]!.text).toBe("WEB — u-u1 has ssh valid access you have not reviewed");
+    expect(byName[0]).toMatchObject({ subject: "WEB", text: "u-u1 has ssh valid access you have not reviewed" });
   });
 
   it("dual-homed without a tunnel", () => {
     const hosts = [host("A", { dualHomed: true })];
     const l = run({ hosts, byOwner: { A: { ...FOOT_DONE, "h-pe-proof": { status: "done" } } } });
-    expect(l).toEqual([{ area: "lateral", text: "A — dual-homed, no tunnel recorded", hostId: "A", goalId: "h-pivot-tunnel" }]);
+    expect(l).toEqual([{ area: "lateral", subject: "A", text: "dual-homed, no tunnel recorded", hostId: "A", goalId: "h-pivot-tunnel" }]);
     const tunnel = { viaHostId: "A", engagementId: "e1" } as Tunnel;
     expect(run({ hosts, byOwner: { A: { ...FOOT_DONE, "h-pe-proof": { status: "done" } } }, tunnels: [tunnel] })).toEqual([]);
   });
@@ -130,6 +132,13 @@ describe("engagementStuck lines", () => {
     expect([...areas].sort((a, b) => order.indexOf(a) - order.indexOf(b))).toEqual(areas);
   });
 
+  it("the subject is its own field: no line joins it to the state with a dash", () => {
+    const hosts = [host("A", { dualHomed: true }), host("B")];
+    const l = run({ hosts, byOwner: { B: FOOT_DONE }, services: { A: [svc("A", 80)], B: [svc("B", 80), svc("B", 22, "ssh")] }, credentials: [cred()] });
+    expect(l.length).toBeGreaterThan(3);
+    for (const x of l) expect(x.text).not.toMatch(/ (—|·|→) /);
+  });
+
   it("a tunnel of another engagement does not count", () => {
     const hosts = [host("A", { dualHomed: true })];
     const l = run({ hosts, byOwner: { A: { ...FOOT_DONE, "h-pe-proof": { status: "done" } } }, tunnels: [{ viaHostId: "A", engagementId: "other" } as Tunnel] });
@@ -147,12 +156,12 @@ describe("engagementStuck lines", () => {
       hosts, byOwner: { A: { "h-pe-proof": { status: "done" } } }, services: { A: [svc("A", 445, "microsoft-ds")] },
       credentials: [cred({ username: "" })], usernames: [uname("u1")],
     });
-    expect(l.find((x) => x.text.includes("never sprayed"))!.text).toBe("secret with no owner — never sprayed at the usernames");
+    expect(l.find((x) => x.text.includes("never sprayed"))).toMatchObject({ subject: "secret with no owner", text: "never sprayed at the usernames" });
     const flag = run({
       hosts: [host("A", { name: "WEB", access: "root" })], byOwner: { A: { "h-pe-proof": { status: "done" } } },
       credentials: [cred({ id: "c9", username: "" })], attempts: [attempt({ credId: "c9" })],
     });
-    expect(flag[0]!.text).toBe("WEB — a credential has ssh valid access you have not reviewed");
+    expect(flag[0]).toMatchObject({ subject: "WEB", text: "a credential has ssh valid access you have not reviewed" });
   });
 
   describe("exam bans", () => {

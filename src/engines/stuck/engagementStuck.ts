@@ -11,6 +11,9 @@ import { ROUTINE_STEPS, accessFlags, cellFor, hostSprayServices, isSprayable, ro
 
 export interface StuckLine {
   area: "foothold" | "credentials" | "privesc" | "lateral";
+  /** What the line is about (a host or credential name), shown as its own element; null for engagement-wide lines. */
+  subject: string | null;
+  /** The state, without the subject. */
   text: string;
   /** Null for engagement-level lines. */
   hostId: string | null;
@@ -62,7 +65,8 @@ export function engagementStuck(input: {
       if (left.length > 0) {
         out.push({
           area: "privesc",
-          text: `${nameOf(host)} — ${left.length} privesc step${left.length === 1 ? "" : "s"} still to do`,
+          subject: nameOf(host),
+          text: `${left.length} privesc step${left.length === 1 ? "" : "s"} still to do`,
           hostId: host.id,
           goalId: left[0]!.id,
         });
@@ -73,7 +77,8 @@ export function engagementStuck(input: {
     if (todo.length === 0) continue;
     out.push({
       area: "foothold",
-      text: `${nameOf(host)} — no foothold; ${todo.length} enumeration step${todo.length === 1 ? "" : "s"} still to do`,
+      subject: nameOf(host),
+      text: `no foothold; ${todo.length} enumeration step${todo.length === 1 ? "" : "s"} still to do`,
       hostId: host.id,
       goalId: todo[0]!.id,
     });
@@ -94,7 +99,8 @@ export function engagementStuck(input: {
     if (cells > 0 && firstHost) {
       out.push({
         area: "credentials",
-        text: `${cred.username} — ${cells} host/service cell${cells === 1 ? "" : "s"} untested`,
+        subject: cred.username,
+        text: `${cells} host/service cell${cells === 1 ? "" : "s"} untested`,
         hostId: firstHost.id,
       });
     }
@@ -104,7 +110,8 @@ export function engagementStuck(input: {
       if (!routineStepApplies("spray-users", cred, hosts, servicesByHost, usernames)) continue;
       out.push({
         area: "credentials",
-        text: `${cred.username || "secret with no owner"} — never sprayed at the usernames`,
+        subject: cred.username || "secret with no owner",
+        text: "never sprayed at the usernames",
         hostId: null,
         goalId: SPRAY_USERS_ITEM,
       });
@@ -114,6 +121,7 @@ export function engagementStuck(input: {
     const id = ASREP_GOALS.find((g) => byOwner.get(engagement.id)?.[g]) ?? ASREP_GOALS[0]!;
     out.push({
       area: "credentials",
+      subject: null,
       text: `${usernames.length} username${usernames.length === 1 ? "" : "s"} not yet AS-REP-checked`,
       hostId: null,
       goalId: id,
@@ -131,7 +139,8 @@ export function engagementStuck(input: {
       "a credential";
     out.push({
       area: "lateral",
-      text: `${nameOf(host)} — ${who} has ${flag.service} ${flag.result} access you have not reviewed`,
+      subject: nameOf(host),
+      text: `${who} has ${flag.service} ${flag.result} access you have not reviewed`,
       hostId: host.id,
     });
   }
@@ -140,7 +149,8 @@ export function engagementStuck(input: {
     if (host.dualHomed !== true || tunnelled.has(host.id)) continue;
     out.push({
       area: "lateral",
-      text: `${nameOf(host)} — dual-homed, no tunnel recorded`,
+      subject: nameOf(host),
+      text: "dual-homed, no tunnel recorded",
       hostId: host.id,
       goalId: "h-pivot-tunnel",
     });

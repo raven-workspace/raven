@@ -307,17 +307,31 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
                 <section key={id} aria-label={label} className="grid gap-1">
                   <h4 className="m-0 text-meta text-fg-2">{label} <span className="font-mono text-code text-faint">{group.length}</span></h4>
                   <ul className="m-0 grid list-none gap-1 p-0">
-                    {group.map((l, i) => (
-                      <li key={i}>
-                        {l.hostId || l.goalId ? (
-                          <button type="button" onClick={() => go(l)} className="cursor-default text-left text-meta text-fg-2 underline-offset-2 hover:text-fg hover:underline">
-                            {l.text}
-                          </button>
-                        ) : (
-                          <span className="text-meta text-fg-2">{l.text}</span>
-                        )}
-                      </li>
-                    ))}
+                    {group.map((l, i) => {
+                      // The subject (host or credential) and its state are two elements, never one dashed string.
+                      const parts = (
+                        <>
+                          {l.subject !== null && (
+                            <>
+                              <span className="max-w-[24ch] truncate text-fg" title={l.subject}>{l.subject}</span>{" "}
+                            </>
+                          )}
+                          <span className={l.subject !== null ? undefined : "col-span-2"}>{l.text}</span>
+                        </>
+                      );
+                      const cols = "grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-2 text-left text-meta text-fg-2";
+                      return (
+                        <li key={i}>
+                          {l.hostId || l.goalId ? (
+                            <button type="button" onClick={() => go(l)} className={`${cols} cursor-default underline-offset-2 hover:text-fg hover:underline`}>
+                              {parts}
+                            </button>
+                          ) : (
+                            <span className={cols}>{parts}</span>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </section>
               );
