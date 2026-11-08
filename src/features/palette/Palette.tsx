@@ -169,9 +169,10 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
 
   const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit: getToolkit() };
 
-  // Tab goes to the first field still empty, else the first field.
+  // Tab goes to the first field still empty. With every value filled there is nothing to jump to: Tab moves on as usual,
+  // to the host picker. Only tokens that have a field count (a credential's USER and PASS have none once it is picked).
   const firstUnfilled = (): HTMLInputElement | undefined => {
-    const t = filled?.tokens.find((n) => filled.auto[n]?.unresolved && !overrides[n]) ?? filled?.tokens[0];
+    const t = filled?.tokens.find((n) => filled.auto[n]?.unresolved && !overrides[n] && fieldEls.current.has(n));
     return t ? fieldEls.current.get(t) : undefined;
   };
 
@@ -179,7 +180,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       setSelected(Math.max(0, Math.min(results.length - 1, index + (e.key === "ArrowDown" ? 1 : -1))));
-    } else if (e.key === "Tab" && !e.shiftKey && (filled?.tokens.length ?? 0) > 0) {
+    } else if (e.key === "Tab" && !e.shiftKey && firstUnfilled()) {
       e.preventDefault();
       // The dialog's focus trap would otherwise see Tab leave its last field and loop back to the top.
       e.stopPropagation();

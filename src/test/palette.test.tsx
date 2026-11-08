@@ -398,6 +398,24 @@ describe("token suggestions (U4)", () => {
     expect(screen.queryByText(/Summer2025!/)).not.toBeInTheDocument();
   });
 
+  it("Tab with every value filled is never swallowed: it moves on to the host picker", async () => {
+    const user = userEvent.setup();
+    // An id no other test lists, so the shared credential pick it leaves behind fills nothing elsewhere.
+    m.credentialsList.mockResolvedValue([cred("c9", "carol", "Autumn2026!")]);
+    setImported({ commands: [{ ...USERCMD, template: "zzuser {USER}@{TARGET_IP} {PASS}" }], cards: [] });
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    const box = await screen.findByRole("combobox", { name: "Search" });
+    await user.type(box, "zzuser");
+    await user.keyboard("{Alt>}c{/Alt}");
+    await user.click(screen.getByRole("option", { name: /carol/ }));
+    expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzuser carol@10.10.10.5 ••••••••")).toBeInTheDocument();
+    box.focus();
+    await user.keyboard("{Tab}");
+    expect(screen.getByRole("button", { name: /^Fill for host/ })).toHaveFocus();
+  });
+
   it("Esc with the suggestion list open closes only the list; the next Esc closes the palette", async () => {
     const user = userEvent.setup();
     m.credentialsList.mockResolvedValue([cred("c1", "alice", "Winter2024!")]);
