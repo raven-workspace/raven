@@ -36,7 +36,7 @@ function NumberSetting({
 }) {
   const [text, setText] = useState(String(value));
   return (
-    <Field label={label} error={error} className="w-40">
+    <Field label={label} error={error} className="w-44">
       <Input
         type="number"
         inputMode="numeric"
