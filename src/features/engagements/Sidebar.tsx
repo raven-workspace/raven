@@ -5,7 +5,7 @@ import {
   FileText,
   Flag,
   Plus,
-  SquaresFour,
+  Kanban,
   SidebarSimple,
   type Icon,
 } from "@phosphor-icons/react";
@@ -24,7 +24,7 @@ import { SECTIONS, sectionPath, type SectionId } from "./sections";
 import { useSidebarStore } from "./useSidebarStore";
 
 const SECTION_ICONS: Record<SectionId, Icon> = {
-  board: SquaresFour,
+  board: Kanban,
   log: ListBullets,
   credentials: Key,
   findings: Flag,
@@ -33,7 +33,7 @@ const SECTION_ICONS: Record<SectionId, Icon> = {
 };
 
 const row =
-  "grid h-[30px] cursor-default items-center rounded-sm text-left text-body no-underline transition-colors duration-100";
+  "grid cursor-default items-center rounded-sm text-left text-body no-underline transition-colors duration-100";
 const rowState = (on: boolean) =>
   on ? "bg-surface-hi text-fg shadow-[inset_2px_0_0_var(--accent)]" : "text-muted-2 hover:bg-surface hover:text-fg";
 const heading = "m-0 text-label text-faint";
@@ -69,12 +69,12 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
     <nav
       aria-label="Engagement"
       className={cx(
-        "grid min-h-0 grid-cols-1 content-start gap-px overflow-y-auto overflow-x-hidden border-r border-line py-3.5",
+        "grid min-h-0 grid-cols-1 content-start gap-1 overflow-y-auto overflow-x-hidden border-r border-line py-4",
         "transition-[width] duration-200 ease-out motion-reduce:transition-none",
-        collapsed ? "w-12 px-1.5" : "w-[200px] px-3",
+        collapsed ? "w-12 px-2" : "w-[200px] px-3",
       )}
     >
-      <div className={cx("mb-1.5 grid items-center", collapsed ? "grid-cols-1 justify-items-center" : "grid-cols-[minmax(0,1fr)_28px] pl-2")}>
+      <div className={cx("mb-2 grid items-center", collapsed ? "grid-cols-1 justify-items-center" : "grid-cols-[minmax(0,1fr)_28px] pl-2")}>
         <h2 className={cx(heading, collapsed && "sr-only")}>Engagement</h2>
         <IconButton
           icon={SidebarSimple}
@@ -96,29 +96,22 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
             className={({ isActive }) =>
               cx(
                 row,
-                collapsed ? "grid-cols-[16px] justify-center" : "grid-cols-[16px_minmax(0,1fr)_auto] gap-2 px-2",
+                collapsed ? "min-h-[44px] grid-cols-[minmax(0,1fr)] justify-items-center gap-1 py-1" : "h-[30px] grid-cols-[16px_minmax(0,1fr)_auto] gap-2 px-2",
                 rowState(isActive),
               )
             }
           >
             <SectionIcon size={16} weight="light" aria-hidden />
-            {!collapsed && (
-              <>
-                <span className="truncate">{s.label}</span>
-                <span aria-hidden className="font-mono text-meta text-faint">
-                  {i + 1}
-                </span>
-              </>
-            )}
+            {!collapsed && <span className="truncate">{s.label}</span>}
+            <span aria-hidden className="font-mono text-meta text-faint">
+              {i + 1}
+            </span>
           </NavLink>
         );
       })}
-      <div className={cx("mt-5 mb-1.5 grid items-center", collapsed ? "grid-cols-1 justify-items-center" : "grid-cols-[minmax(0,1fr)_28px] pl-2")}>
-        <h2 id={hostsId} className={cx(heading, collapsed && "sr-only")}>
-          Hosts
-        </h2>
-        <IconButton icon={Plus} label="Add host" onClick={() => setAdding(true)} />
-      </div>
+      <h2 id={hostsId} className={cx(heading, "mt-6 mb-2 px-2", collapsed && "sr-only")}>
+        Hosts
+      </h2>
       {hosts.isSuccess && list.length === 0 && !collapsed && (
         <p aria-labelledby={hostsId} className="m-0 px-2 text-meta text-faint">
           No hosts yet
@@ -135,7 +128,7 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
               cx(
                 "grid cursor-default items-center rounded-sm text-left text-body no-underline transition-colors duration-100",
                 collapsed
-                  ? "min-h-[44px] grid-cols-[minmax(0,1fr)] justify-items-center gap-0.5 px-0 py-1"
+                  ? "min-h-[44px] grid-cols-[minmax(0,1fr)] justify-items-center gap-1 px-0 py-1"
                   : "min-h-[44px] grid-cols-[16px_minmax(0,1fr)_auto] gap-2 px-2 py-1",
                 rowState(isActive),
               )
@@ -161,6 +154,9 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
           </NavLink>
         );
       })}
+      <div className={cx("grid", collapsed ? "justify-items-center" : "justify-items-start pl-1")}>
+        <IconButton icon={Plus} label="Add host" onClick={() => setAdding(true)} />
+      </div>
       <HostDialog open={adding} onOpenChange={setAdding} engagementId={engagementId} />
     </nav>
   );
