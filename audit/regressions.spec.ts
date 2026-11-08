@@ -344,7 +344,7 @@ async function holdBack(page: Page, context: import("@playwright/test").BrowserC
   // A sentinel, so "not copied" cannot pass on an empty or stale clipboard.
   await page.evaluate(() => navigator.clipboard.writeText("SENTINEL"));
   await page.keyboard.press("Enter");
-  await expect(page.getByText("{SECOND_LPORT} not filled · ↵ again to copy anyway")).toBeVisible();
+  await expect(page.getByText("{SECOND_LPORT} not filled. Press ↵ again to copy anyway")).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Value for SECOND_LPORT" })).toBeFocused();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("SENTINEL");
 }

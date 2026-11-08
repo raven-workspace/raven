@@ -130,7 +130,7 @@ export const SCREENS: Screen[] = [
     },
   },
   {
-    id: "palette-guard", path: FS01, ready: "text=/not filled · ↵ again to copy anyway/",
+    id: "palette-guard", path: FS01, ready: "text=/not filled. Press ↵ again to copy anyway/",
     setup: async (page) => {
       await page.keyboard.press("Meta+K");
       await page.getByRole("combobox", { name: "Search" }).fill(GUARD_QUERY);
