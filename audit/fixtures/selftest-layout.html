@@ -11,6 +11,12 @@
 </style>
 </head>
 <body>
+<!-- Hit-testing only works inside the viewport: this case stays first. -->
+<section data-case="covered-ok" data-expect="none" style="height:60px">
+  <button style="position:absolute;left:20px;top:8px;width:120px;height:30px">Under the panel</button>
+  <div style="position:absolute;left:80px;top:0;width:300px;height:58px;background:#fff;z-index:2"><button style="position:absolute;left:10px;top:12px;width:120px;height:30px">On the panel</button></div>
+</section>
+
 <section data-case="overflow" data-expect="overflow">
   <div class="box" style="overflow:hidden;white-space:nowrap"><span style="display:inline-block;width:320px">fixed wide inner content</span></div>
 </section>
@@ -81,7 +87,7 @@
 </section>
 
 <section data-case="allow-ok" data-expect="none">
-  <div data-audit-allow="truncate"><div class="box" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">This sentence is much too long for a 200px box but is allowed</div></div>
+  <div data-audit-allow="truncated" data-audit-reason="self-test: allowed truncation"><div class="box" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">This sentence is much too long for a 200px box but is allowed</div></div>
 </section>
 
 <section data-case="narrow-wrap-ok" data-expect="none">
@@ -90,6 +96,16 @@
 
 <section data-case="wrap-ok" data-expect="none">
   <p style="width:300px;margin:0">Long text that wraps at spaces across several lines without any trouble at all, because it has plenty of room to breathe.</p>
+</section>
+<section data-case="sr-only-ok" data-expect="none">
+  <button style="width:120px;height:30px">Copy<span style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap">Copy the command to the clipboard</span></button>
+</section>
+
+<section data-case="clamp-titled-ok" data-expect="none">
+  <span class="box" title="A long card title that is clamped to two lines on purpose and carries its full text in a title" style="display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden">A long card title that is clamped to two lines on purpose and carries its full text in a title</span>
+</section>
+<section data-case="popup-ok" data-expect="none" style="height:90px">
+  <span class="box" style="position:relative;display:inline-grid"><input aria-label="Value" style="width:180px"><ul role="listbox" aria-label="Suggestions" style="position:absolute;left:0;top:100%;width:320px;margin:0;padding:0;list-style:none;background:#fff"><li role="option">10.10.20.21 fs01.acme.corp (this host)</li></ul></span>
 </section>
 </body>
 </html>

@@ -4,9 +4,11 @@ import { fileURLToPath } from "node:url";
 import { AUDIT_NOW } from "../src/audit/fixtures";
 import { collectLayoutIssues } from "./checks/layout";
 import { collectA11yIssues } from "./checks/a11y";
+import { collectOptOuts } from "./checks/optouts";
 import { collectUxIssues } from "./checks/ux";
 import { writeIssues } from "./report";
 import { SCREENS, WIDTHS } from "./screens";
+import { gateFailures } from "./types";
 
 const SHOTS = fileURLToPath(new URL("../audit-output/shots/", import.meta.url));
 
@@ -27,7 +29,8 @@ for (const screen of SCREENS) {
       const layout = await page.evaluate(collectLayoutIssues);
       const a11y = await collectA11yIssues(page);
       const ux = await page.evaluate(collectUxIssues);
-      await writeIssues(screen.id, width, [...layout, ...a11y, ...ux]);
+      const issues = [...layout, ...a11y, ...ux, ...(await page.evaluate(collectOptOuts))];
+      await writeIssues(screen.id, width, issues);
       // Raven scrolls inside its own containers: grow the viewport so the shot shows the below-fold content.
       const overflow = await page.evaluate(() => {
         let max = document.documentElement.scrollHeight - window.innerHeight;
@@ -41,6 +44,8 @@ for (const screen of SCREENS) {
       await page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
       await page.screenshot({ path: `${SHOTS}${screen.id}@${width}.png`, fullPage: true, animations: "disabled" });
       expect(errors, "page errors").toEqual([]);
+      // Convention breaks fail the run (after the shot, so the report can show them).
+      expect(gateFailures(issues), "convention breaks").toEqual([]);
     });
   }
 }
