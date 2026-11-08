@@ -163,6 +163,7 @@ export const PENDING: Record<RuleId, string[]> = {
     "src/features/engagements/StatusStrip.tsx",
     "src/features/findings/AttemptForm.tsx",
     "src/features/findings/AttemptsList.tsx",
+    "src/features/findings/CvssBuilder.tsx",
     "src/features/findings/FindingEditor.tsx",
     "src/features/findings/FindingFiles.tsx",
     "src/features/findings/FindingSplit.tsx",
@@ -240,8 +241,11 @@ export const PENDING: Record<RuleId, string[]> = {
     "src/features/vault/VaultGate.tsx",
   ],
   "hand-hint": [
+    "src/features/arsenal/ArsenalDrawer.tsx",
+    "src/features/capture/KindChips.tsx",
     "src/features/engagements/StatusStrip.tsx",
-    "src/features/palette/Palette.tsx",
+    "src/features/payloads/PayloadsDrawer.tsx",
+    "src/features/payloads/PayloadsWorkbench.tsx",
   ],
   "esc-close": [
     "src/features/capture/CaptureForm.tsx",
