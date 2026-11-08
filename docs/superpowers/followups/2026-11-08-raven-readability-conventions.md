@@ -50,3 +50,13 @@ The owner deferred a right-click context menu (spec non-goals). Row actions stay
     collapsed to 0px height is skipped as invisible.
 - **The save summary under the capture sheet at 900px.** The 400px toast runs under the 580px sheet, so its Undo and close
   button are hidden while the sheet is open (the sheet is a modal; the toast waits). The sheet's Discard and Save stay clear.
+
+## From the final review (left for later)
+
+- **Merge-aware class joining.** `src/lib/cx.ts` only concatenates, so a className override that conflicts with a component's own class can silently lose (the shrunken Settings gear was this). Point `cx` at the configured `cn` in `src/lib/utils.ts` (it knows the six type roles), remove the workarounds that exist because of it (Select's width check, the explicit-width "+ Host" trigger, Input's `width` prop), add a unit test for key merges (`text-body` + `text-code`, `w-full` + `w-20`, `text-meta` + `text-muted`), and re-run the full audit and screenshot review. Do this before new screen work.
+- **Native `title` is still the only label on some controls**, against DESIGN's tooltip rule (it doesn't show on keyboard focus): PayloadsDrawer ⌥N tabs, FactGroup and ServicesFacts fold buttons, LogEntryRow's pick row ("Add as a step"), ArsenalBrowse, WikiText, RefSuggestions, SplitLeftPane and TestGrid. Move them to the Raven `Tooltip`.
+- **Stuck view credential subjects** show the username only, so the same name can appear twice with different counts. Show the domain too.
+- **Unreachable controls** (29 reported by the audit): Arsenal browse Copy buttons, the `?` "All shortcuts" button, "Open in Obsidian". Decide whether ↵ on the selected block is enough or they need Tab stops.
+- **Conventions gaps** (none violated today): the engine joined-strings check misses `a + " — " + b` and `.join(" · ")`; `plan.ts` and `loot.ts` are exempt as whole files (a per-line marker would be tighter); the lint rule doesn't block `@radix-ui/react-tooltip` directly in features or `.tsx`-suffixed shadcn paths.
+- **The `shadcn` CLI devDependency** brings in about 215 lockfile packages for ~250 lines of CSS. Consider inlining the CSS Raven uses and running `npx shadcn@4` only when adding components.
+- **Owner questions:** the no-host ⌘↵ hint reads "log (no host)"; imported flag titles keep their old "file · host" form; with every value filled, Tab from ⌘K search now goes to the host picker.
