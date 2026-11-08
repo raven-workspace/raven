@@ -334,6 +334,7 @@ One `CommandBlock` everywhere a command appears:
   - selection: `--surface-hi` plus a 2px accent left bar;
   - current navigation item: the left bar only.
 - Every interactive control is reachable with Tab, or belongs to a composite widget with documented arrow keys.
+- **Selection never follows the mouse.** A click or the keyboard sets the selection, and it stays put. Hover gives only a light highlight. It never changes what's selected or what the detail pane shows, so the mouse can travel over other items to reach the selected item's fields.
 
 ## Do's and Don'ts
 
