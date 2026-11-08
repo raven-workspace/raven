@@ -227,7 +227,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const hints = useMemo<Hint[]>(
     () => [
       { keys: "↵", label: "copy", priority: 1 },
-      { keys: "⌘↵", label: host ? "copy and log" : "copy and log (open a host)", priority: 2 },
+      { keys: "⌘↵", label: host ? "copy and log" : "log (no host)", priority: 2 },
       ...(engagementId ? [{ keys: "⌥H", label: "host", priority: 3 }, { keys: "⌥C", label: "credential", priority: 3 }] : []),
       { keys: "→", label: "in card", priority: 4 },
       { keys: "⇥", label: "edit a value", priority: 5 },

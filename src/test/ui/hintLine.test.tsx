@@ -20,6 +20,13 @@ const inLine = () => within(line());
 afterEach(() => vi.restoreAllMocks());
 
 describe("HintLine", () => {
+  it("renders a two-key hint as two caps in one unit", () => {
+    render(<HintLine hints={[{ keys: "⌥H ⌥C", label: "host, credential", priority: 1 }]} ariaLabel="Keys" />);
+    const unit = line().querySelector("[data-hint]")!;
+    expect(unit.querySelectorAll("kbd")).toHaveLength(2);
+    expect(unit).toHaveTextContent("host, credential");
+  });
+
   it("shows at most 5 hints", () => {
     render(<HintLine hints={hints} ariaLabel="Keys" />);
     expect(line().querySelectorAll("[data-hint]")).toHaveLength(5);

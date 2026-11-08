@@ -182,6 +182,11 @@ export const SCREENS: Screen[] = [
     setup: async (page) => { await focusBody(page); await page.keyboard.press("a"); },
   },
   {
+    // No host in view: the "log (no host)" label; ↵, ⌘↵, → and Esc must all still show.
+    id: "arsenal-drawer-nohost", path: E, ready: "role=listbox[name='Arsenal results']",
+    setup: async (page) => { await focusBody(page); await page.keyboard.press("a"); },
+  },
+  {
     id: "arsenal-drawer-smb", path: FS01, ready: "role=listbox[name='Arsenal results']",
     setup: async (page) => {
       await focusBody(page);

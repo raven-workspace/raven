@@ -19,7 +19,12 @@ function isTyping(el: Element | null): boolean {
 function HintUnit({ hint }: { hint: Hint }) {
   return (
     <span data-hint className="inline-grid grid-flow-col items-center gap-[6px] whitespace-nowrap text-meta text-muted-2">
-      <Kbd>{hint.keys}</Kbd>
+      {/* "⌥H ⌥C" is two caps side by side in one unit. */}
+      <span className="inline-grid grid-flow-col items-center gap-1">
+        {hint.keys.split(" ").map((k) => (
+          <Kbd key={k}>{k}</Kbd>
+        ))}
+      </span>
       <span>{hint.label}</span>
     </span>
   );

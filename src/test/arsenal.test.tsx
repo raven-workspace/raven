@@ -629,7 +629,7 @@ describe("drawer list grouped by category (U1)", () => {
     expect(screen.getByRole("complementary", { name: "Arsenal" })).toBeInTheDocument();
     expect(d.getByRole("option", { name: /Zzprobe the target/ })).toBeInTheDocument();
     const hints = [...d.getByRole("group", { name: "Arsenal shortcuts" }).querySelectorAll("[data-hint]")].map((h) => h.textContent);
-    expect(hints).toEqual(["↵copy", "⌘↵copy and log", "→in card", "⌥H ⌥Chost, credential", "Escclose"]);
+    expect(hints).toEqual(["↵copy", "⌘↵copy and log", "→in card", "⌥H⌥Chost, credential", "Escclose"]);
   });
 
   it("hovering another row keeps the clicked row selected and its fill fields reachable", async () => {
@@ -732,8 +732,9 @@ describe("drawer list grouped by category (U1)", () => {
     const units = [...within(aside).getByRole("group", { name: "Arsenal shortcuts" }).querySelectorAll("[data-hint]")];
     const pickers = units.filter((u) => /⌥/.test(u.textContent ?? ""));
     expect(pickers).toHaveLength(1);
-    expect(pickers[0]).toHaveTextContent("⌥H ⌥C");
+    expect(pickers[0]!.querySelectorAll("kbd")).toHaveLength(2);
     expect(units.some((u) => u.textContent?.startsWith("→"))).toBe(true);
+    expect(units.some((u) => u.textContent?.startsWith("Esc"))).toBe(true);
   });
 
   it("with only a hash on file the guard focuses the credential chip and a second Enter there copies", async () => {
