@@ -21,7 +21,7 @@ export function Chip({ variant = "default", mono, className, ...rest }: ChipProp
     <span
       data-variant={variant}
       className={cx(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-px text-[11px] leading-4 whitespace-nowrap",
+        "inline-flex items-center gap-1 rounded-full border h-[22px] px-2 text-label whitespace-nowrap",
         mono && "font-mono",
         variants[variant],
         className,

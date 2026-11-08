@@ -105,12 +105,7 @@ export const PENDING: Record<RuleId, string[]> = {
     "src/features/vault/SetupScreen.tsx",
     "src/features/vault/UnlockScreen.tsx",
     "src/features/vault/VaultGate.tsx",
-    "src/ui/Chip.tsx",
-    "src/ui/Dialog.tsx",
-    "src/ui/EmptyState.tsx",
-    "src/ui/Field.tsx",
     "src/ui/Input.tsx",
-    "src/ui/Select.tsx",
     "src/ui/Textarea.tsx",
     "src/ui/TitleBar.tsx",
     "src/ui/Toggle.tsx",
@@ -249,6 +244,5 @@ export const PENDING: Record<RuleId, string[]> = {
   "esc-close": [
     "src/features/capture/CaptureForm.tsx",
     "src/features/engagements/StatusStrip.tsx",
-    "src/ui/Dialog.tsx",
   ],
 };

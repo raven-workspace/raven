@@ -18,8 +18,8 @@ export function EmptyState({ title, body, action, className }: EmptyStateProps) 
         className,
       )}
     >
-      <p className="m-0 text-sm font-semibold text-fg">{title}</p>
-      {body && <p className="m-0 max-w-[52ch] text-[13px] text-muted-2">{body}</p>}
+      <p className="m-0 text-body font-semibold text-fg">{title}</p>
+      {body && <p className="m-0 max-w-[52ch] text-meta text-muted-2">{body}</p>}
       {action && <div className="mt-1.5">{action}</div>}
     </div>
   );

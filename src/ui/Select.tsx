@@ -1,4 +1,5 @@
 import * as RS from "@radix-ui/react-select";
+import { CaretDown } from "@phosphor-icons/react";
 import type { Ref } from "react";
 import { cx } from "../lib/cx";
 import { controlBase } from "./controlStyles";
@@ -70,8 +71,8 @@ export function Select({
         <span className="min-w-0 truncate">
           <RS.Value placeholder={placeholder} />
         </span>
-        <RS.Icon className="text-muted text-[10px]" aria-hidden>
-          ▾
+        <RS.Icon className="text-muted" aria-hidden>
+          <CaretDown size={12} />
         </RS.Icon>
       </RS.Trigger>
       <RS.Portal>
@@ -87,7 +88,7 @@ export function Select({
                 value={o.value}
                 disabled={o.disabled}
                 className={cx(
-                  "relative flex h-7 items-center rounded-[4px] pl-3 pr-2 text-[13px] text-fg-2 select-none cursor-default",
+                  "relative flex h-7 items-center rounded-[4px] pl-3 pr-2 text-meta text-fg-2 select-none cursor-default",
                   // Radix moves real focus onto the highlighted item, so that item carries the
                   // Ink focus ring: 1px accent outline drawn inside the item's edge.
                   "data-highlighted:bg-surface-hi data-highlighted:text-fg",
