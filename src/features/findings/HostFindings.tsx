@@ -30,17 +30,17 @@ export function HostFindings({ engagementId, host, onOpenEntry, onOpenFinding }:
         </Button>
       </div>
       {mine.length > 0 && (
-        <ul className="m-0 grid list-none p-0">
+        <ul className="m-0 grid list-none grid-cols-[72px_minmax(0,1fr)_max-content_max-content] gap-x-3 p-0">
           {mine.map((f) => (
-            <li key={f.id} className="border-b border-line">
+            <li key={f.id} className="col-span-full grid grid-cols-subgrid border-b border-line">
               <button
                 type="button"
                 aria-label={`Open ${f.title}`}
                 onClick={() => onOpenFinding(f)}
-                className="grid w-full cursor-default grid-cols-[72px_minmax(0,1fr)_88px_32px] items-center gap-3 px-1 py-2 text-left hover:bg-surface"
+                className="-mx-1 col-span-full grid cursor-default grid-cols-subgrid items-start px-1 py-2 text-left hover:bg-surface"
               >
-                <span className="justify-self-start"><SeverityChip severity={f.severity} /></span>
-                <span className="truncate text-body text-fg" title={f.title}>{f.title}</span>
+                <span className="grid h-5 content-center justify-self-start"><SeverityChip severity={f.severity} /></span>
+                <span className="line-clamp-2 break-words text-body text-fg" title={f.title}>{f.title}</span>
                 <span className="text-meta text-fg-2">{f.status}</span>
                 <span className="text-right font-mono text-code tabular-nums text-fg-2">{f.cvssScore !== null ? f.cvssScore.toFixed(1) : ""}</span>
               </button>

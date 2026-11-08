@@ -66,6 +66,9 @@ export const SCREENS: Screen[] = [
       await page.getByRole("region", { name: "Finding" }).waitFor();
     },
   },
+  {
+    id: "findings-list", path: `/e/${AUDIT_IDS.findingsListEngagement}/s/findings`, ready: "role=region[name='Findings']",
+  },
   { id: "log", path: `${E}/s/log`, ready: "role=region[name='Log']" },
   {
     id: "log-images", path: `${E}/s/log`, ready: "role=region[name='Log']",

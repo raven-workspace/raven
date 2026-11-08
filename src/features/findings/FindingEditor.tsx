@@ -335,7 +335,7 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
             <Button size="sm" onClick={() => setConfirmDiscard(true)}>Discard changes</Button>
           )}
           <Button size="sm" variant="primary" disabled={busy} title="Save (⌘↵)" onClick={save}>Save</Button>
-          <IconButton icon={X} label="Close" shortcut="Esc" disabled={busy} onClick={onClose} />
+          <IconButton icon={X} label="Close, keeping the draft" aria-label="Close" shortcut="Esc" disabled={busy} onClick={onClose} />
         </ActionCell>
       </header>
 

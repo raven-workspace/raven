@@ -75,7 +75,7 @@ export function FindingSteps({ eid, hostIds, value, onChange }: {
     .sort((a, b) => a.at - b.at);
 
   return (
-    <div role="group" aria-label="Reproduction steps section" className="grid gap-2">
+    <div role="group" aria-label="Reproduction steps section" className="@container/steps grid gap-2">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
         <span className={fieldLabelClass}>Reproduction steps</span>
         <Button size="sm" aria-expanded={picking} onClick={() => setPicking((p) => !p)}>
@@ -97,10 +97,15 @@ export function FindingSteps({ eid, hostIds, value, onChange }: {
               <li
                 key={s.id}
                 data-step={s.id}
-                className="grid grid-cols-[24px_88px_minmax(0,1fr)_max-content_max-content] items-center gap-x-3 border-b border-line py-2"
+                className="grid grid-cols-[24px_minmax(0,1fr)_max-content_max-content] items-start gap-x-3 border-b border-line py-2 @min-[480px]/steps:grid-cols-[24px_88px_minmax(0,1fr)_max-content_max-content]"
               >
-                <span className="text-right font-mono text-code tabular-nums text-muted">{i + 1}</span>
-                <span className="truncate text-meta text-muted" title={KIND_LABELS[s.kind]}>{KIND_LABELS[s.kind]}</span>
+                <span className="col-start-1 row-start-1 mt-1 text-right font-mono text-code tabular-nums text-muted">{i + 1}</span>
+                <span
+                  className="col-start-2 row-start-2 truncate text-meta text-muted @min-[480px]/steps:row-start-1 @min-[480px]/steps:mt-1"
+                  title={KIND_LABELS[s.kind]}
+                >
+                  {KIND_LABELS[s.kind]}
+                </span>
                 <button
                   type="button"
                   data-expand
@@ -112,17 +117,25 @@ export function FindingSteps({ eid, hostIds, value, onChange }: {
                       reorder(s.id, e.key === "ArrowUp" ? -1 : 1);
                     }
                   }}
-                  className="min-w-0 cursor-default truncate text-left text-body text-fg hover:underline"
+                  title={s.title}
+                  className="col-start-2 row-start-1 mt-1 block min-w-0 cursor-default line-clamp-2 break-words text-left text-body text-fg hover:underline @min-[480px]/steps:col-start-3"
                 >
-                  <span data-testid="step-title" title={s.title}>{s.title}</span>
+                  <span data-testid="step-title">{s.title}</span>
                 </button>
-                <time dateTime={new Date(s.at).toISOString()} className="font-mono text-code text-muted">{clock(s.at)}</time>
-                <ActionCell>
-                  <IconButton icon={ArrowUp} label={`Move up ${s.title}`} disabled={i === 0} onClick={() => reorder(s.id, -1)} />
-                  <IconButton icon={ArrowDown} label={`Move down ${s.title}`} disabled={i === steps.length - 1} onClick={() => reorder(s.id, 1)} />
-                  <IconButton icon={X} tone="destructive" label={`Remove step ${s.title}`} onClick={() => onChange(ids.filter((x) => x !== s.id))} />
-                </ActionCell>
-                {open && <div className="col-span-4 col-start-2 mt-2"><LogEntryBody entry={s} /></div>}
+                <time
+                  dateTime={new Date(s.at).toISOString()}
+                  className="col-start-3 row-start-1 mt-1 font-mono text-code text-muted @min-[480px]/steps:col-start-4"
+                >
+                  {clock(s.at)}
+                </time>
+                <div className="col-start-4 row-start-1 @min-[480px]/steps:col-start-5">
+                  <ActionCell>
+                    <IconButton icon={ArrowUp} label={`Move up ${s.title}`} disabled={i === 0} onClick={() => reorder(s.id, -1)} />
+                    <IconButton icon={ArrowDown} label={`Move down ${s.title}`} disabled={i === steps.length - 1} onClick={() => reorder(s.id, 1)} />
+                    <IconButton icon={X} tone="destructive" label={`Remove step ${s.title}`} onClick={() => onChange(ids.filter((x) => x !== s.id))} />
+                  </ActionCell>
+                </div>
+                {open && <div className="col-span-3 col-start-2 row-start-3 mt-2 @min-[480px]/steps:col-span-4"><LogEntryBody entry={s} /></div>}
               </li>
             );
           })}

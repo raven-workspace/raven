@@ -55,13 +55,14 @@ export function FindingsSection() {
       ) : (
         <ul className="m-0 grid list-none grid-cols-[max-content_minmax(0,1fr)_max-content_max-content_max-content] gap-x-3 p-0">
           {sorted.map((f) => (
-            <li key={f.id} className="col-span-full grid grid-cols-subgrid items-center border-b border-line py-2">
-              <SeverityChip severity={f.severity} />
+            <li key={f.id} className="col-span-full grid grid-cols-subgrid items-start border-b border-line py-2">
+              <span className="grid h-5 content-center justify-self-start"><SeverityChip severity={f.severity} /></span>
               <span className="grid min-w-0 gap-1">
-                <span data-testid="finding-title" className="truncate text-body text-fg" title={f.title}>{f.title}</span>
+                <span data-testid="finding-title" className="line-clamp-2 break-words text-body text-fg" title={f.title}>{f.title}</span>
                 {f.hostIds.length > 0 && (
-                  <span className="grid grid-flow-col auto-cols-max justify-start gap-2 overflow-hidden text-meta text-muted" title={names(f)}>
-                    {f.hostIds.map((hid) => <span key={hid}>{hostLabel(hosts.find((h) => h.id === hid))}</span>)}
+                  <span className="grid grid-cols-[minmax(0,max-content)_max-content] justify-start gap-2 text-meta text-muted" title={names(f)}>
+                    <span className="truncate">{hostLabel(hosts.find((h) => h.id === f.hostIds[0]))}</span>
+                    {f.hostIds.length > 1 && <span>{`+${f.hostIds.length - 1}`}</span>}
                   </span>
                 )}
               </span>
