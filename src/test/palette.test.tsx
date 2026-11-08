@@ -398,6 +398,28 @@ describe("token suggestions (U4)", () => {
     expect(screen.queryByText(/Summer2025!/)).not.toBeInTheDocument();
   });
 
+  it("the ⇥ edit-a-value hint shows only while a value is missing", async () => {
+    const user = userEvent.setup();
+    m.credentialsList.mockResolvedValue([cred("c9", "carol", "Autumn2026!")]);
+    setImported({ commands: [{ ...USERCMD, template: "zzuser {USER}@{TARGET_IP} {PASS}" }], cards: [] });
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    const dlg = within(await screen.findByRole("dialog", { name: "Search" }));
+    await user.type(dlg.getByRole("combobox", { name: "Search" }), "zzuser");
+    const allHints = async () => {
+      await user.click(within(dlg.getByRole("group", { name: "Search shortcuts" })).getByRole("button", { name: "All shortcuts" }));
+      const shown = screen.queryByText("edit a value") !== null;
+      await user.keyboard("{Escape}");
+      return shown;
+    };
+    expect(await allHints()).toBe(true);
+    await user.keyboard("{Alt>}c{/Alt}");
+    await user.click(screen.getByRole("option", { name: /carol/ }));
+    expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzuser carol@10.10.10.5 ••••••••")).toBeInTheDocument();
+    expect(await allHints()).toBe(false);
+  });
+
   it("Tab with every value filled is never swallowed: it moves on to the host picker", async () => {
     const user = userEvent.setup();
     // An id no other test lists, so the shared credential pick it leaves behind fills nothing elsewhere.

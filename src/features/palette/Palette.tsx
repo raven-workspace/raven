@@ -225,15 +225,17 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     void run(e.metaKey || e.ctrlKey);
   };
 
+  const hasUnfilled = filled?.tokens.some((n) => filled.auto[n]?.unresolved && !overrides[n]) ?? false;
   const hints = useMemo<Hint[]>(
     () => [
       { keys: "↵", label: "copy", priority: 1 },
       { keys: "⌘↵", label: host ? "copy and log" : "log (no host)", priority: 2 },
       ...(engagementId ? [{ keys: "⌥H", label: "host", priority: 3 }, { keys: "⌥C", label: "credential", priority: 3 }] : []),
       { keys: "→", label: "in card", priority: 4 },
-      { keys: "⇥", label: "edit a value", priority: 5 },
+      // ⇥ jumps only to a value still missing; with every value filled Tab moves on to the host picker, so no hint.
+      ...(hasUnfilled ? [{ keys: "⇥", label: "edit a value", priority: 5 }] : []),
     ],
-    [engagementId, host],
+    [engagementId, host, hasUnfilled],
   );
   return (
     <div data-hint-surface="" className="grid gap-3" onKeyDown={onKey} onKeyDownCapture={onKeyCapture}>
