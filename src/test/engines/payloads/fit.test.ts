@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { inferContext, inferSituation, rankPayloads, type PayloadSituation } from "../../../engines/payloads/fit";
+import { MSFVENOM } from "../../../engines/payloads/msfvenom";
 import { REVERSE_SHELLS } from "../../../engines/payloads/reverseShells";
 import type { PayloadDef } from "../../../engines/payloads/types";
 import type { Host } from "../../../types/host";
@@ -193,6 +194,39 @@ describe("fit engine", () => {
     expect(ids(rankPayloads([meter], base, null).fits)).toEqual(["meter"]);
     const noted: PayloadDef = { ...stageless, id: "noted", title: "Staged? no", notes: ["never meterpreter"] };
     expect(ids(rankPayloads([noted], { ...base, exam: true }, null).fits)).toEqual(["noted"]);
+  });
+});
+
+describe("service preference (spec §4.2): a soft sort key, never a fold", () => {
+  const situationFor = (services: Service[]) => inferSituation({ host: host(), services, entries: [], examKind: false }).situation;
+
+  it("IIS puts the ASPX first; the rest keep catalogue order", () => {
+    const s = situationFor([svc(80, "http", "Microsoft IIS httpd 10.0")]);
+    const r = rankPayloads(MSFVENOM, s, null);
+    const windows = ids(MSFVENOM.filter((d) => d.os === "windows"));
+    expect(ids(r.fits)).toEqual(["msf-win-x64-aspx", ...windows.filter((id) => id !== "msf-win-x64-aspx")]);
+    expect(r.misfits.map((m) => m.def.id)).toEqual(ids(MSFVENOM.filter((d) => d.os === "linux")));
+  });
+
+  it("Tomcat puts the WAR first", () => {
+    const s = situationFor([svc(22, "ssh", "OpenSSH 8.9p1 Ubuntu 3"), svc(8080, "http", "Apache Tomcat/Coyote JSP engine 1.1")]);
+    expect(s.os).toBe("linux");
+    expect(ids(rankPayloads(MSFVENOM, s, null).fits)).toEqual(["msf-java-war-linux", "msf-linux-x64-elf"]);
+  });
+
+  it("Apache/PHP leaves msfvenom alone and puts php-exec first among the reverse shells", () => {
+    const s = situationFor([svc(80, "http", "Apache httpd 2.4.52 ((Ubuntu))")]);
+    expect(ids(rankPayloads(MSFVENOM, s, null).fits)).toEqual(["msf-linux-x64-elf", "msf-java-war-linux"]);
+    const linux = ids(REVERSE_SHELLS.filter((d) => d.os === "linux"));
+    expect(ids(rankPayloads(REVERSE_SHELLS, s, null).fits)).toEqual(["php-exec", ...linux.filter((id) => id !== "php-exec")]);
+    // Tomcat's "Apache" is not Apache httpd.
+    const tomcat = situationFor([svc(8080, "http", "Apache Tomcat/Coyote JSP engine 1.1")]);
+    expect(rankPayloads(REVERSE_SHELLS, tomcat, null).fits[0]!.id).toBe("bash-tcp");
+  });
+
+  it("no services: catalogue order", () => {
+    expect(ids(rankPayloads(MSFVENOM, base, null).fits)).toEqual(ids(MSFVENOM));
+    expect(ids(rankPayloads(REVERSE_SHELLS, base, null).fits)).toEqual(ids(REVERSE_SHELLS));
   });
 });
 

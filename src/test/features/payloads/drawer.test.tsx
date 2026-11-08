@@ -317,6 +317,18 @@ describe("Payloads drawer", () => {
     expect(d.getByRole("button", { name: "Copy prepare on kali" })).toBeInTheDocument();
   });
 
+  it("msfvenom opens on the ASPX for an IIS host and on the WAR for a Tomcat host", async () => {
+    const tomcat: Service = { ...IIS_SERVICE, id: "s2", hostId: "h2", port: 8080, nmapVersion: "Apache Tomcat/Coyote JSP engine 1.1" };
+    m.servicesList.mockResolvedValue([IIS_SERVICE, tomcat]);
+    m.servicesListEngagement.mockResolvedValue([IIS_SERVICE, tomcat]);
+    usePayloadsStore.setState({ generator: "msfvenom", overrides: { h2: { os: "windows" } } });
+    const { user, d } = await openOn("/e/e1/h/h1");
+    expect(await d.findByRole("heading", { name: "Windows x64 ASPX" })).toBeInTheDocument();
+    await user.click(d.getByRole("button", { name: /^Fill for host/ }));
+    await user.click(d.getByRole("option", { name: /zzbare02/ }));
+    expect(await d.findByRole("heading", { name: "Java WAR (Tomcat on Windows)" })).toBeInTheDocument();
+  });
+
   it("⌥1-6 switches the generator", async () => {
     const { user, d } = await openOn("/e/e1/h/h1");
     await d.findByRole("heading", { name: "PowerShell base64 (-e)" });

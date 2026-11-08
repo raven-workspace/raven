@@ -203,11 +203,30 @@ function misfitReason(d: PayloadDef, s: PayloadSituation, ctx: PasteContext | nu
   return null;
 }
 
+/**
+ * Spec §4.2, the open services' payload: IIS → the ASPX, Tomcat → the WAR, Apache httpd or PHP → php-exec among the
+ * reverse shells (no msfvenom change). Tomcat's "Apache Tomcat" is not Apache httpd.
+ */
+const SERVICE_PREFERENCE: { test: RegExp; ids: string[] }[] = [
+  { test: /\bIIS\b/i, ids: ["msf-win-x64-aspx"] },
+  { test: /Tomcat|Coyote/i, ids: ["msf-java-war-linux", "msf-java-war-windows"] },
+  { test: /Apache httpd|\bPHP\b/i, ids: ["php-exec"] },
+];
+function preferredIds(s: PayloadSituation): Set<string> {
+  const out = new Set<string>();
+  for (const svc of s.services) {
+    const text = `${svc.name} ${svc.product}`;
+    for (const p of SERVICE_PREFERENCE) if (p.test.test(text)) for (const id of p.ids) out.add(id);
+  }
+  return out;
+}
+
 export function rankPayloads(
   defs: PayloadDef[], s: PayloadSituation, ctx: PasteContext | null,
 ): { fits: PayloadDef[]; misfits: { def: PayloadDef; reason: string }[] } {
-  // Catalogue order. Context and absent-tool keys would be dead: with a context set, every def that
-  // lacks it is already a misfit, and absent-tool defs are misfits too, so all remaining fits tie.
+  // Catalogue order, with the open services' preferred payload first (a soft key: it never folds anything).
+  // Context and absent-tool keys would be dead: with a context set, every def that lacks it is already a misfit,
+  // and absent-tool defs are misfits too, so all remaining fits tie.
   const fits: PayloadDef[] = [];
   const misfits: { def: PayloadDef; reason: string }[] = [];
   for (const def of defs) {
@@ -215,5 +234,6 @@ export function rankPayloads(
     if (reason) misfits.push({ def, reason });
     else fits.push(def);
   }
-  return { fits, misfits };
+  const preferred = preferredIds(s);
+  return { fits: [...fits.filter((d) => preferred.has(d.id)), ...fits.filter((d) => !preferred.has(d.id))], misfits };
 }
