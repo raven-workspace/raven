@@ -10,11 +10,25 @@ import {
   type Icon,
 } from "@phosphor-icons/react";
 import { useId, useState } from "react";
-import { NavLink } from "react-router";
+import { NavLink, useMatch } from "react-router";
 import { cx } from "../../lib/cx";
 import { shortHostName } from "../../lib/hostName";
-import { IconButton, Tooltip } from "../../ui";
+import { IconButton } from "../../ui";
+import {
+  Sidebar as ShadSidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarSeparator,
+} from "../../ui/shadcn/sidebar";
+import { TooltipProvider } from "../../ui/shadcn/tooltip";
 import { isDialogOpen, useKeydown } from "../../lib/keys";
+import type { Host } from "../../types/host";
 import { HostDialog } from "../hosts/HostDialog";
 import { HostGlyph } from "../hosts/HostGlyph";
 import { useHosts } from "../hosts/queries";
@@ -32,11 +46,9 @@ const SECTION_ICONS: Record<SectionId, Icon> = {
   report: FileText,
 };
 
-const row =
-  "grid cursor-default items-center rounded-sm text-left text-body no-underline transition-colors duration-100";
-const rowState = (on: boolean) =>
-  on ? "bg-surface-hi text-fg shadow-[inset_2px_0_0_var(--accent)]" : "text-muted-2 hover:bg-surface hover:text-fg";
 const heading = "m-0 text-label text-faint";
+/** Both menus centre their items in the rail, so section boxes and host glyphs share one centre line. */
+const menu = "gap-1 group-data-[collapsible=icon]:items-center";
 
 const LAST_OCTET = /(\d{1,3})$/;
 
@@ -47,6 +59,89 @@ function railName(name: string, ip: string | null): string {
   return ip?.match(LAST_OCTET)?.[1] ?? "?";
 }
 
+function SectionItem({ engagementId, id, label, n, collapsed }: {
+  engagementId: string; id: SectionId; label: string; n: number; collapsed: boolean;
+}) {
+  const to = sectionPath(engagementId, id);
+  const active = useMatch({ path: to, end: true }) !== null;
+  const SectionIcon = SECTION_ICONS[id];
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        asChild
+        isActive={active}
+        // The key number lives in the rail tooltip ("Board" then "1"); the tooltip shows only when collapsed.
+        tooltip={{
+          children: (
+            <>
+              <span>{label}</span>
+              <span className="ml-2 font-mono text-muted">{n}</span>
+            </>
+          ),
+        }}
+        className={collapsed ? undefined : "grid h-[30px] grid-cols-[16px_minmax(0,1fr)_auto] px-2"}
+      >
+        <NavLink to={to} end aria-label={collapsed ? label : undefined}>
+          <SectionIcon aria-hidden />
+          {!collapsed && (
+            <>
+              <span>{label}</span>
+              <span aria-hidden className="font-mono text-meta text-faint">
+                {n}
+              </span>
+            </>
+          )}
+        </NavLink>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
+function HostItem({ engagementId, host: h, threads, collapsed }: {
+  engagementId: string; host: Host; threads: number; collapsed: boolean;
+}) {
+  const to = `/e/${engagementId}/h/${h.id}`;
+  const active = useMatch(to) !== null;
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        asChild
+        size="lg"
+        isActive={active}
+        className={
+          collapsed
+            ? "grid grid-cols-[minmax(0,1fr)] justify-items-center gap-1"
+            : "grid grid-cols-[16px_minmax(0,1fr)_auto] gap-2 px-2"
+        }
+      >
+        <NavLink to={to} title={collapsed ? [h.name, h.ip].filter(Boolean).join("\n") : h.name}>
+          <HostGlyph column={h.boardColumn} />
+          {collapsed ? (
+            <>
+              <span className="sr-only">{h.name}</span>
+              <span aria-hidden className="font-mono text-meta">
+                {railName(h.name, h.ip)}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="grid min-w-0 grid-cols-1">
+                <span className="truncate">{shortHostName(h.name)}</span>
+                {h.ip && <span className="truncate font-mono text-meta text-faint">{h.ip}</span>}
+              </span>
+              <ThreadDot count={threads} />
+            </>
+          )}
+        </NavLink>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
+/**
+ * The engagement sidebar on shadcn's Sidebar (collapsible="icon"): 240px expanded, a 56px rail
+ * collapsed (DESIGN.md Navigation). Collapsed state is persisted by useSidebarStore; ⌘B toggles.
+ */
 export function Sidebar({ engagementId }: { engagementId: string }) {
   const hostsId = useId();
   const hosts = useHosts(engagementId);
@@ -64,121 +159,65 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
   });
 
   const label = collapsed ? "Expand sidebar" : "Collapse sidebar";
+  const group = collapsed ? "px-1 py-0" : "px-3 py-0";
 
   return (
-    <nav
-      aria-label="Engagement"
-      className={cx(
-        "grid min-h-0 grid-cols-1 content-start gap-1 overflow-y-auto overflow-x-hidden border-r border-line py-4",
-        "transition-[width] duration-200 ease-out motion-reduce:transition-none",
-        collapsed ? "w-14 px-1" : "w-[240px] px-3",
-      )}
-    >
-      <div className={cx("mb-2 grid items-center", collapsed ? "grid-cols-1 justify-items-center" : "grid-cols-[minmax(0,1fr)_28px] pl-2")}>
-        <h2 className={cx(heading, collapsed && "sr-only")}>Engagement</h2>
-        <IconButton
-          icon={SidebarSimple}
-          label={label}
-          shortcut="⌘B"
-          aria-expanded={!collapsed}
-          onClick={toggle}
-        />
-      </div>
-      {SECTIONS.map((s, i) => {
-        const SectionIcon = SECTION_ICONS[s.id];
-        const link = (
-          <NavLink
-            key={s.id}
-            to={sectionPath(engagementId, s.id)}
-            end
-            aria-label={collapsed ? s.label : undefined}
-            className={({ isActive }) =>
-              cx(
-                row,
-                collapsed
-                  ? "size-8 grid-cols-[16px] justify-center justify-self-center"
-                  : "h-[30px] grid-cols-[16px_minmax(0,1fr)_auto] gap-2 px-2",
-                rowState(isActive),
-              )
-            }
-          >
-            <SectionIcon size={16} weight="light" aria-hidden />
-            {!collapsed && (
-              <>
-                <span>{s.label}</span>
-                <span aria-hidden className="font-mono text-meta text-faint">
-                  {i + 1}
-                </span>
-              </>
-            )}
-          </NavLink>
-        );
-        return collapsed ? (
-          <Tooltip
-            key={s.id}
-            content={
-              <>
-                <span>{s.label}</span>
-                <span className="ml-2 font-mono text-muted">{i + 1}</span>
-              </>
-            }
-          >
-            {link}
-          </Tooltip>
-        ) : (
-          link
-        );
-      })}
-      {collapsed && <div aria-hidden className="mx-2 my-2 h-px bg-line" />}
-      <h2 id={hostsId} className={cx(heading, collapsed ? "sr-only" : "mt-6 mb-2 px-2")}>
-        Hosts
-      </h2>
-      {hosts.isSuccess && list.length === 0 && !collapsed && (
-        <p aria-labelledby={hostsId} className="m-0 px-2 text-meta text-faint">
-          No hosts yet
-        </p>
-      )}
-      {list.map((h) => {
-        const dot = <ThreadDot count={threads.get(h.id) ?? 0} />;
-        return (
-          <NavLink
-            key={h.id}
-            to={`/e/${engagementId}/h/${h.id}`}
-            title={collapsed ? [h.name, h.ip].filter(Boolean).join("\n") : h.name}
-            className={({ isActive }) =>
-              cx(
-                "grid cursor-default items-center rounded-sm text-left text-body no-underline transition-colors duration-100",
-                collapsed
-                  ? "min-h-[44px] w-full grid-cols-[minmax(0,1fr)] justify-items-center gap-1 px-0 py-1"
-                  : "min-h-[44px] grid-cols-[16px_minmax(0,1fr)_auto] gap-2 px-2 py-1",
-                rowState(isActive),
-              )
-            }
-          >
-            <HostGlyph column={h.boardColumn} />
-            {collapsed ? (
-              <>
-                <span className="sr-only">{h.name}</span>
-                <span aria-hidden className="font-mono text-meta">
-                  {railName(h.name, h.ip)}
-                </span>
-              </>
-            ) : (
-              <>
-                <span className="grid min-w-0 grid-cols-1">
-                  <span className="truncate">{shortHostName(h.name)}</span>
-                  {h.ip && <span className="truncate font-mono text-meta text-faint">{h.ip}</span>}
-                </span>
-                {dot}
-              </>
-            )}
-          </NavLink>
-        );
-      })}
-      <div className={cx("grid", collapsed ? "justify-items-center" : "grid-cols-[16px] justify-items-center px-2")}>
-        <IconButton icon={Plus} label="Add host" onClick={() => setAdding(true)} />
-      </div>
+    <TooltipProvider>
+      <SidebarProvider
+        open={!collapsed}
+        onOpenChange={(open) => open === collapsed && toggle()}
+        className="relative h-full min-h-0 w-auto"
+      >
+        {/* In the shell's grid column, not fixed to the window: the gap div sizes the column, the panel fills it. */}
+        <ShadSidebar collapsible="icon" className="absolute h-full border-sidebar-border">
+          <nav aria-label="Engagement" className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)]">
+            <SidebarHeader
+              className={cx(
+                "grid items-center gap-0 pt-4 pb-2",
+                collapsed ? "grid-cols-[28px] justify-center px-1" : "grid-cols-[minmax(0,1fr)_28px] pr-3 pl-5",
+              )}
+            >
+              <h2 className={cx(heading, collapsed && "sr-only")}>Engagement</h2>
+              <IconButton
+                icon={SidebarSimple}
+                label={label}
+                shortcut="⌘B"
+                aria-expanded={!collapsed}
+                onClick={toggle}
+              />
+            </SidebarHeader>
+            <SidebarContent className="overflow-x-hidden pb-4 group-data-[collapsible=icon]:overflow-y-auto">
+              <SidebarGroup className={group}>
+                <SidebarMenu className={menu}>
+                  {SECTIONS.map((s, i) => (
+                    <SectionItem key={s.id} engagementId={engagementId} id={s.id} label={s.label} n={i + 1} collapsed={collapsed} />
+                  ))}
+                </SidebarMenu>
+              </SidebarGroup>
+              {collapsed && <SidebarSeparator className="mx-auto my-2 data-horizontal:w-6" />}
+              <SidebarGroup className={group}>
+                <SidebarGroupLabel asChild className={cx(heading, collapsed ? "sr-only" : "mt-4 h-auto px-2 pb-2")}>
+                  <h2 id={hostsId}>Hosts</h2>
+                </SidebarGroupLabel>
+                {hosts.isSuccess && list.length === 0 && !collapsed && (
+                  <p aria-labelledby={hostsId} className="m-0 px-2 text-meta text-faint">
+                    No hosts yet
+                  </p>
+                )}
+                <SidebarMenu className={menu}>
+                  {list.map((h) => (
+                    <HostItem key={h.id} engagementId={engagementId} host={h} threads={threads.get(h.id) ?? 0} collapsed={collapsed} />
+                  ))}
+                </SidebarMenu>
+                <div className={cx("mt-1 grid", collapsed ? "justify-items-center" : "grid-cols-[16px] justify-items-center px-2")}>
+                  <IconButton icon={Plus} label="Add host" onClick={() => setAdding(true)} />
+                </div>
+              </SidebarGroup>
+            </SidebarContent>
+          </nav>
+        </ShadSidebar>
+      </SidebarProvider>
       <HostDialog open={adding} onOpenChange={setAdding} engagementId={engagementId} />
-    </nav>
+    </TooltipProvider>
   );
 }

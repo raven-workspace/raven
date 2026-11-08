@@ -221,6 +221,46 @@ test("sidebar collapses without sideways scroll and shows IPs", async ({ page })
   expect(rows.some((r) => r.text.includes(WEB_SHORT))).toBe(true);
 });
 
+test("rail: 32px section boxes on the host glyphs' centre line, names inside the rail", async ({ page }) => {
+  for (const width of [900, 1280]) {
+    await open(page, LAB_HOST, width);
+    await page.getByRole("tab", { name: "Next" }).waitFor();
+    if (await page.getByRole("button", { name: "Collapse sidebar" }).isVisible()) await page.keyboard.press("Meta+B");
+    await page.getByRole("button", { name: "Expand sidebar" }).waitFor();
+    const nav = page.getByRole("navigation", { name: "Engagement" });
+    // The rail is 56px including its 1px hairline; let the width transition settle.
+    await expect.poll(async () => (await nav.boundingBox())!.width).toBe(55);
+    const geo = await nav.evaluate((el) => {
+      const rail = el.getBoundingClientRect();
+      const box = (e: Element) => e.getBoundingClientRect();
+      const cx = (r: DOMRect) => r.left + r.width / 2;
+      const sections = [...el.querySelectorAll('a:not([href*="/h/"])')].map(box);
+      const hosts = [...el.querySelectorAll('a[href*="/h/"]')];
+      const glyphs = hosts.map((a) => box(a.firstElementChild!));
+      const labels = hosts.map((a) => a.querySelector("span[aria-hidden]")!);
+      return {
+        railCx: cx(rail), railRight: rail.right,
+        sections: sections.map((r) => ({ w: r.width, h: r.height, cx: cx(r), top: r.top })),
+        glyphCx: glyphs.map(cx),
+        hostRight: hosts.map((a) => box(a).right),
+        labelFits: labels.map((l) => l.scrollWidth <= l.clientWidth + 0.5 && box(l).right <= rail.right),
+      };
+    });
+    expect(geo.sections).toHaveLength(6);
+    for (const s of geo.sections) {
+      expect(s.w, `${width}: section box width`).toBe(32);
+      expect(s.h, `${width}: section box height`).toBe(32);
+      expect(Math.abs(s.cx - geo.railCx), `${width}: section centred in the rail`).toBeLessThanOrEqual(0.5);
+    }
+    for (let i = 1; i < geo.sections.length; i++)
+      expect(geo.sections[i].top - geo.sections[i - 1].top, `${width}: section pitch`).toBeGreaterThanOrEqual(36);
+    expect(geo.glyphCx.length).toBeGreaterThan(0);
+    for (const g of geo.glyphCx) expect(Math.abs(g - geo.sections[0].cx), `${width}: host glyph on the section centre line`).toBeLessThanOrEqual(0.5);
+    for (const r of geo.hostRight) expect(r, `${width}: host row inside the rail`).toBeLessThanOrEqual(geo.railRight);
+    expect(geo.labelFits.every(Boolean), `${width}: rail host names fit`).toBe(true);
+  }
+});
+
 test("log rows on a host page have no chip for that host", async ({ page }) => {
   await open(page, LAB_HOST, 1280);
   await page.getByRole("tab", { name: "Log" }).click();

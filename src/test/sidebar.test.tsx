@@ -116,9 +116,52 @@ describe("sidebar", () => {
     expect(dc).not.toHaveClass("truncate");
     const a = dc.closest("a")!;
     expect(a).toHaveClass("w-full");
-    expect(a).toHaveClass("bg-surface-hi");
-    expect(a.className).toContain("inset_2px_0_0_var(--accent)");
-    expect(screen.getByText("web-").closest("a")).not.toHaveClass("bg-surface-hi");
+    // Lit = shadcn's active state, styled --surface-hi (sidebar-accent) plus the 2px accent bar (sidebar-primary).
+    expect(a).toHaveAttribute("data-active", "true");
+    expect(a).toHaveClass("data-active:bg-sidebar-accent");
+    expect(a.className).toContain("data-active:shadow-[inset_2px_0_0_var(--sidebar-primary)]");
+    expect(screen.getByText("web-").closest("a")).toHaveAttribute("data-active", "false");
+  });
+
+  it("rail section links are 32px boxes centred on the host glyphs' centre line", async () => {
+    useSidebarStore.setState({ collapsed: true });
+    mount();
+    const host = (await screen.findByText("dc01", { selector: "[aria-hidden]" })).closest("a")!;
+    const board = screen.getByRole("link", { name: "Board" });
+    // Section links: a fixed 32px box on the rail, the 16px icon centred by 8px padding.
+    expect(board.className).toContain("group-data-[collapsible=icon]:size-8!");
+    expect(board.className).toContain("group-data-[collapsible=icon]:p-2!");
+    // Host rows: 48px wide, glyph centred in a single track.
+    expect(host.className).toContain("group-data-[collapsible=icon]:w-12!");
+    expect(host).toHaveClass("justify-items-center", "grid-cols-[minmax(0,1fr)]");
+    // Both lists centre their items in the same rail column, so the centres share one line.
+    const sections = board.closest("ul")!;
+    const hosts = host.closest("ul")!;
+    expect(sections).not.toBe(hosts);
+    for (const ul of [sections, hosts]) expect(ul).toHaveClass("group-data-[collapsible=icon]:items-center");
+    expect(sections.closest("[data-sidebar=group]")!.className).toBe(hosts.closest("[data-sidebar=group]")!.className);
+  });
+
+  it("the rail shows no section numbers", async () => {
+    useSidebarStore.setState({ collapsed: true });
+    mount();
+    await screen.findByText("dc01", { selector: "[aria-hidden]" });
+    const nav = screen.getByRole("navigation", { name: "Engagement" });
+    for (const label of ["Board", "Log", "Credentials", "Findings", "Engagement checklist", "Report"]) {
+      const link = within(nav).getByRole("link", { name: label });
+      expect(link.textContent, label).not.toMatch(/\d/);
+    }
+  });
+
+  it("expanded section labels are never the truncating last span", async () => {
+    mount();
+    await screen.findByText("dc01");
+    for (const label of ["Board", "Engagement checklist"]) {
+      const span = screen.getByText(label);
+      expect(span).not.toHaveClass("truncate");
+      // shadcn truncates a menu button's last span; the key number comes after the label.
+      expect(span.nextElementSibling?.textContent).toMatch(/^\d$/);
+    }
   });
 
   it("expanded Add host sits in the same 16px glyph track as the host rows", async () => {
