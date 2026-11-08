@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { SCROLL_PANE } from "../../ui/controlStyles";
-import { Link, useLocation, useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { isDialogOpen, isFreeKey, isTypingTarget, useKeydown } from "../../lib/keys";
-import { EmptyState } from "../../ui";
+import { Button, EmptyState, queryState } from "../../ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/shadcn/tabs";
 import type { Finding } from "../../types/findings";
 import { FindingSplit } from "../findings/FindingSplit";
@@ -128,14 +128,14 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   };
   const host = hosts.data?.find((h) => h.id === hostId);
 
-  if (hosts.isError) return <EmptyState title="Couldn't load this host" body={hosts.error.message} />;
-  if (!hosts.data) return null;
+  const hostsState = queryState([hosts], "this host");
+  if (hostsState || !hosts.data) return hostsState;
   if (!host) {
     return (
       <EmptyState
         title="Host not found"
         body="It may have been deleted."
-        action={<Link to={`/e/${engagementId}`} className="text-meta text-fg-2 hover:text-fg">Back to the board</Link>}
+        action={<Button onClick={() => void navigate(`/e/${engagementId}`)}>Back to the board</Button>}
       />
     );
   }
@@ -176,7 +176,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
             <TabsContent value={tab} aria-label={TABS.find((t) => t.id === tab)!.label} className={`border-t border-line ${SCROLL_PANE}`}>
               {tab === "log" ? (
                 log.isError ? (
-                  <p role="alert" className="text-meta text-warn">Couldn't load the log: {log.error.message}</p>
+                  queryState([log], "the log")
                 ) : entries.length === 0 && log.data ? (
                   <p className="text-meta text-muted">Nothing logged on this host yet. Press L to capture.</p>
                 ) : (
