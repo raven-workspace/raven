@@ -1,5 +1,5 @@
 import { ArrowsOut } from "@phosphor-icons/react";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useMatch, useNavigate } from "react-router";
 import { isFreeKey, useKeydown } from "../../lib/keys";
 import { Button, Input, Kbd } from "../../ui";
@@ -96,7 +96,8 @@ export function PayloadsDrawer() {
   // A lock unmounts this; the next unlock must not find it open.
   useEffect(() => () => usePayloadsStore.getState().close(), []);
 
-  useEffect(() => {
+  // A layout effect: it runs before the body's own (passive) effect takes focus, so it sees where focus was before P.
+  useLayoutEffect(() => {
     if (!open) {
       if (returnFocus.current?.isConnected) returnFocus.current.focus();
       returnFocus.current = null;

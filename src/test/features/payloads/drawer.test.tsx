@@ -129,6 +129,20 @@ describe("Payloads drawer", () => {
     expect(screen.queryByRole("complementary", { name: "Arsenal" })).not.toBeInTheDocument();
   });
 
+  it("closing the drawer gives focus back to where it was before P", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    const next = await screen.findByRole("tab", { name: "Next" });
+    next.focus();
+    await user.keyboard("p");
+    const d = within(await drawer());
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    expect(next).not.toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("complementary", { name: "Payloads" })).not.toBeInTheDocument();
+    expect(next).toHaveFocus();
+  });
+
   it("opens on the best fit for an IIS host with a logged ?cmd= entry", async () => {
     const { d } = await openOn("/e/e1/h/h1");
     expect(await d.findByRole("heading", { name: "PowerShell base64 (-e)" })).toBeInTheDocument();
