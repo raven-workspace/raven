@@ -8,7 +8,7 @@ import { collectOptOuts } from "./checks/optouts";
 import { collectUxIssues } from "./checks/ux";
 import { writeIssues } from "./report";
 import { SCREENS, WIDTHS } from "./screens";
-import { gateFailures } from "./types";
+import { CHECK_IDS, gateFailures } from "./types";
 
 const SHOTS = fileURLToPath(new URL("../audit-output/shots/", import.meta.url));
 
@@ -29,7 +29,7 @@ for (const screen of SCREENS) {
       const layout = await page.evaluate(collectLayoutIssues);
       const a11y = await collectA11yIssues(page);
       const ux = await page.evaluate(collectUxIssues);
-      const issues = [...layout, ...a11y, ...ux, ...(await page.evaluate(collectOptOuts))];
+      const issues = [...layout, ...a11y, ...ux, ...(await page.evaluate(collectOptOuts, CHECK_IDS))];
       await writeIssues(screen.id, width, issues);
       // Raven scrolls inside its own containers: grow the viewport so the shot shows the below-fold content.
       const overflow = await page.evaluate(() => {

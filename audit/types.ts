@@ -1,16 +1,19 @@
-export type CheckId =
-  | "page-overflow" | "overflow" | "truncated" | "clipped" | "offscreen" | "overlap"
-  | "squeezed" | "oversized-control" | "mid-token-wrap" | "narrow-wrap"
-  | "contrast" | "label"
-  | "focus-invisible" | "focus-hidden" | "unreachable" | "focus-trap" | "shortcut"
-  // UX (Tasks 5–6 implement these; declared here so the union lives in one place)
-  | "hierarchy-flat" | "tight-stack" | "off-scale-spacing" | "tiny-text" | "long-lines"
-  | "image-distorted" | "image-cropped"
-  | "small-target" | "color-noise" | "competing-primaries" | "unreduced-motion"
-  | "missing-empty-state" | "blank-loading" | "silent-error"
-  | "flow-over-budget" | "flow-needs-mouse" | "flow-slow"
-  // Opt-outs: every `data-audit-allow` is listed; one without a `data-audit-reason` is an error.
-  | "opt-out" | "opt-out-unreasoned";
+/** Every check id, at runtime too (an opt-out naming an id that is not here is an error). */
+export const CHECK_IDS = [
+  "page-overflow", "overflow", "truncated", "clipped", "offscreen", "overlap",
+  "squeezed", "oversized-control", "mid-token-wrap", "narrow-wrap",
+  "contrast", "label",
+  "focus-invisible", "focus-hidden", "unreachable", "focus-trap", "shortcut",
+  "hierarchy-flat", "tight-stack", "off-scale-spacing", "tiny-text", "long-lines",
+  "image-distorted", "image-cropped",
+  "small-target", "color-noise", "competing-primaries", "unreduced-motion",
+  "missing-empty-state", "blank-loading", "silent-error",
+  "flow-over-budget", "flow-needs-mouse", "flow-slow",
+  // Opt-outs: every `data-audit-allow` is listed; one without a `data-audit-reason`, or naming no real check, is an error.
+  "opt-out", "opt-out-unreasoned", "opt-out-invalid",
+] as const;
+
+export type CheckId = (typeof CHECK_IDS)[number];
 
 export interface RawIssue {
   check: CheckId;
@@ -28,7 +31,7 @@ export interface Issue extends RawIssue {
  * An element opts out of one check with `data-audit-allow="<check>"` plus a `data-audit-reason`.
  */
 export const FAILING_CHECKS: ReadonlySet<CheckId> = new Set<CheckId>([
-  "tiny-text", "small-target", "overlap", "page-overflow", "overflow", "clipped", "mid-token-wrap", "opt-out-unreasoned",
+  "tiny-text", "small-target", "overlap", "page-overflow", "overflow", "clipped", "mid-token-wrap", "opt-out-unreasoned", "opt-out-invalid",
 ]);
 
 /** The issues that fail the run, one line each, for the test's failure message. */

@@ -2,9 +2,9 @@ import type { RawIssue } from "../types";
 
 /**
  * In-page: every `data-audit-allow` opt-out on the page, so the report can list them. One without a non-empty
- * `data-audit-reason` is an error. Passed to `page.evaluate`, so it stays self-contained.
+ * `data-audit-reason`, or one naming a check that doesn't exist, is an error. Passed to `page.evaluate`, so it stays self-contained.
  */
-export function collectOptOuts(): RawIssue[] {
+export function collectOptOuts(known: readonly string[]): RawIssue[] {
   const describe = (el: Element): string => {
     const testId = el.getAttribute("data-testid");
     if (testId) return `[data-testid="${testId}"]`;
@@ -18,6 +18,10 @@ export function collectOptOuts(): RawIssue[] {
   for (const el of Array.from(document.querySelectorAll("[data-audit-allow]"))) {
     const checks = (el.getAttribute("data-audit-allow") ?? "").trim();
     const reason = (el.getAttribute("data-audit-reason") ?? "").trim();
+    const unknown = checks.split(/\s+/).filter((c) => c !== "" && !known.includes(c));
+    if (checks === "" || unknown.length > 0) {
+      out.push({ check: "opt-out-invalid", selector: describe(el), detail: `allows ${checks === "" ? "nothing" : `unknown check "${unknown.join(" ")}"`}: a typo would opt out of nothing` });
+    }
     if (reason === "") out.push({ check: "opt-out-unreasoned", selector: describe(el), detail: `allows "${checks}" without a data-audit-reason` });
     else out.push({ check: "opt-out", selector: describe(el), detail: `${checks}: ${reason}` });
   }

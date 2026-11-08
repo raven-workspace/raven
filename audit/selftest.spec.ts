@@ -6,7 +6,7 @@ import { tabWalk } from "./checks/keyboard";
 import { collectOptOuts } from "./checks/optouts";
 import { collectUxIssues } from "./checks/ux";
 import { groupRows, renderMarkdown } from "./report";
-import { gateFailures, type Issue, type RawIssue } from "./types";
+import { CHECK_IDS, gateFailures, type Issue, type RawIssue } from "./types";
 
 const FIXTURE = "file://" + fileURLToPath(new URL("./fixtures/selftest-layout.html", import.meta.url));
 
@@ -147,7 +147,7 @@ test("groupRows collapses nth variants and caps groups per check", () => {
 async function gateRun(page: Page, html: string): Promise<RawIssue[]> {
   await page.setViewportSize({ width: 900, height: 800 });
   await page.setContent(`<!DOCTYPE html><html><body style="margin:0;font:14px/20px sans-serif">${html}</body></html>`);
-  return [...(await page.evaluate(collectLayoutIssues)), ...(await page.evaluate(collectUxIssues)), ...(await page.evaluate(collectOptOuts))];
+  return [...(await page.evaluate(collectLayoutIssues)), ...(await page.evaluate(collectUxIssues)), ...(await page.evaluate(collectOptOuts, CHECK_IDS))];
 }
 
 test("a 10px text fixture fails the run", async ({ page }) => {
@@ -171,6 +171,13 @@ test("data-audit-allow without a reason is itself an error", async ({ page }) =>
   const issues = await gateRun(page, `<p data-audit-allow="tiny-text" style="margin:0;font-size:10px">Tiny but allowed</p>`);
   expect(issues.some((i) => i.check === "tiny-text")).toBe(false);
   expect(gateFailures(issues).some((f) => f.startsWith("opt-out-unreasoned "))).toBe(true);
+});
+
+test("a data-audit-allow naming no real check is an error", async ({ page }) => {
+  const issues = await gateRun(page, `<p data-audit-allow="tiny-txt" data-audit-reason="typo" style="margin:0;font-size:10px">Tiny text with a typo'd opt-out</p>`);
+  expect(gateFailures(issues).some((f) => f.startsWith("opt-out-invalid "))).toBe(true);
+  // The typo opts out of nothing: the text is still flagged.
+  expect(issues.some((i) => i.check === "tiny-text")).toBe(true);
 });
 
 test("an opt-out with a reason skips only its check and is listed", async ({ page }) => {
