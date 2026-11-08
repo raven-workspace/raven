@@ -1,3 +1,4 @@
+// Stock shadcn styling: restyle to Ink before using in features.
 import { cn } from "@/lib/utils"
 
 function Skeleton({ className, ...props }: React.ComponentProps<"div">) {

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WEDGE } from "../features/hosts/HostGlyph";
-import { Sidebar } from "../features/engagements/Sidebar";
+import { Sidebar, railName } from "../features/engagements/Sidebar";
 import { useSidebarStore } from "../features/engagements/useSidebarStore";
 import { LogEntryRow } from "../features/log/LogEntryRow";
 import { api } from "../lib/api";
@@ -74,7 +74,7 @@ describe("sidebar", () => {
     useSidebarStore.setState({ collapsed: true });
     m.hostsList.mockResolvedValue([host("h1", FULL, "10.10.20.15"), host("h2", "dc01", null), host("h3", "", "192.0.2.77")]);
     mount();
-    const web = (await screen.findByText("web-")).closest("a")!;
+    const web = (await screen.findByText("web")).closest("a")!;
     expect(web).toHaveAttribute("title", `${FULL}\n10.10.20.15`);
     expect(screen.getByRole("link", { name: /dc01/ })).toHaveAttribute("title", "dc01");
     expect(screen.getByText("77").closest("a")).toHaveAttribute("title", "192.0.2.77");
@@ -120,7 +120,7 @@ describe("sidebar", () => {
     expect(a).toHaveAttribute("data-active", "true");
     expect(a).toHaveClass("data-active:bg-sidebar-accent");
     expect(a.className).toContain("data-active:shadow-[inset_2px_0_0_var(--sidebar-primary)]");
-    expect(screen.getByText("web-").closest("a")).toHaveAttribute("data-active", "false");
+    expect(screen.getByText("web").closest("a")).toHaveAttribute("data-active", "false");
   });
 
   it("rail section links are 32px boxes centred on the host glyphs' centre line", async () => {
@@ -219,5 +219,16 @@ describe("log row chip", () => {
   it("shows a short chip for other hosts", () => {
     renderRow(<LogEntryRow entry={e} hosts={hosts} />);
     expect(screen.getByText("web-portal-dmz-frontend-01")).toBeInTheDocument();
+  });
+});
+
+describe("railName", () => {
+  it("trims trailing separators and falls back to the last octet", () => {
+    expect(railName("web-fin", null)).toBe("web");
+    expect(railName("sql01", null)).toBe("sql0");
+    expect(railName("a.b", "10.0.0.57")).toBe("a.b");
+    expect(railName("w-", "10.0.0.57")).toBe("57");
+    expect(railName("-", "10.0.0.57")).toBe("57");
+    expect(railName("", "10.0.0.7")).toBe("7");
   });
 });

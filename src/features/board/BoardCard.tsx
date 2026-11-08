@@ -2,7 +2,7 @@ import type { DragEvent, KeyboardEvent } from "react";
 import { Link } from "react-router";
 import type { Host } from "../../types/host";
 import { cx } from "../../lib/cx";
-import { BrandIcon, Chip, ChipSet } from "../../ui";
+import { BrandIcon, Chip } from "../../ui";
 import { OS_LABELS } from "../hosts/columns";
 import { ThreadDot } from "../notes/ThreadDot";
 import { useThreadCounts } from "../notes/useThreadCounts";
@@ -37,13 +37,14 @@ export function BoardCard({ host, onShift }: BoardCardProps) {
       onKeyDown={onKeyDown}
       className="grid min-w-0 gap-1 rounded border border-line bg-bg px-2 py-2 text-fg no-underline hover:border-line-strong focus-visible:outline-1 focus-visible:outline-accent"
     >
-      <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_8px] items-center gap-1">
-        <span className="truncate text-body font-semibold">{host.name}</span>
+      <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_8px] items-start gap-1">
+        <span title={host.name} className="line-clamp-2 break-words text-body font-semibold">{host.name}</span>
         <ThreadDot count={threads} />
       </span>
       {host.ip && <span className="truncate font-mono text-code text-muted-2">{host.ip}</span>}
       {(host.os || host.access !== "none") && (
-        <ChipSet className="min-w-0 items-center gap-x-2 gap-y-1">
+        // OS on its own row, the access chip on its own row: every card has the same shape, whatever the widths.
+        <div className="grid min-w-0 justify-items-start gap-1">
           {host.os && (
             // OS is metadata, not state: the brand icon and its name as text (DESIGN.md Chips).
             <span
@@ -57,7 +58,7 @@ export function BoardCard({ host, onShift }: BoardCardProps) {
             </span>
           )}
           {host.access !== "none" && <Chip variant="accent">{host.access}</Chip>}
-        </ChipSet>
+        </div>
       )}
     </Link>
   );

@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Gear, Lock, MagnifyingGlass, Package, Stack } from "@phosphor-icons/react";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { api } from "../../lib/api";
 import { onLockedError, reportError } from "../../lib/lockSignal";
 import { useSaveSummaryStore } from "../capture/useSaveSummaryStore";
@@ -10,7 +10,7 @@ import { useCredPickStore } from "../checklist/credPick";
 import { useFindingDraftStore } from "../findings/useFindingDraftStore";
 import { discardNotes, flushNotes, hasPendingNotes, sessionGeneration, setNotesQueryClient, startNotesSession } from "../notes/useNotesStore";
 import type { UnlockResult, VaultStatus } from "../../types/vault";
-import { Button, IconButton, TitleBar, TitleBarButton, Wordmark } from "../../ui";
+import { Button, TitleBar, TitleBarButton, TitleBarIconButton, Wordmark } from "../../ui";
 import { SetupScreen } from "./SetupScreen";
 import { UnlockScreen } from "./UnlockScreen";
 import { setImported } from "../../engines/library/store";
@@ -234,6 +234,10 @@ export function VaultGate({ children }: { children: ReactNode }) {
   };
 
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // Dashboard and Settings are centred max-width columns (Dashboard max-w-[1120px] px-8, Settings max-w-[640px] px-6):
+  // the bar's content follows that column. Engagement screens keep the window-edge bar.
+  const column = pathname === "/" ? { max: 1120, inset: 32 } : pathname === "/settings" ? { max: 640, inset: 24 } : undefined;
   const right = unlocked ? (
     <>
       <TitleBarButton hint="A" icon={Stack} onClick={() => useArsenalStore.getState().toggle()}>Arsenal</TitleBarButton>
@@ -244,7 +248,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
         title={vaultNewer ? "The Field Manual has changes to import" : undefined}
         className="relative grid"
       >
-        <IconButton icon={Gear} label="Settings" onClick={() => navigate("/settings")} />
+        <TitleBarIconButton icon={Gear} label="Settings" current={pathname === "/settings"} onClick={() => navigate("/settings")} />
         {vaultNewer && <span aria-hidden="true" className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />}
       </span>
     </>
@@ -300,13 +304,14 @@ export function VaultGate({ children }: { children: ReactNode }) {
       <TitleBar
         left={
           unlocked ? (
-            <Link to="/" className="grid rounded-sm px-1 py-1 opacity-90 hover:opacity-100">
+            <Link to="/" className="-ml-1 grid rounded-sm px-1 py-1 opacity-90 hover:opacity-100">
               <Wordmark className="h-3" />
             </Link>
           ) : undefined
         }
         title={unlocked ? undefined : <Wordmark className="h-3" />}
         right={right}
+        {...(column ? { column } : {})}
       />
       <div className="min-h-0 overflow-auto">{body}</div>
     </div>

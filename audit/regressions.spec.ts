@@ -829,3 +829,54 @@ test("board: first cards share a top line at 900/1100/1280/1440", async ({ page 
     }
   }
 });
+
+test("status strip drops by its own free space: LHOST stays while it fits", async ({ page }) => {
+  for (const path of ["/e/e-lab", "/e/e-lab/h/h-web", "/e/e-exam"]) {
+    await open(page, path, 900);
+    await page.getByRole("tab", { name: "Next" }).or(page.getByRole("status", { name: "Engagement status" })).first().waitFor();
+    // Below 1000px the sidebar starts as the 56px rail, so the strip is ~844px wide.
+    await page.getByRole("button", { name: "Expand sidebar" }).waitFor();
+    const strip = page.getByRole("status", { name: "Engagement status" });
+    await expect(strip.getByRole("link", { name: /LHOST/ }), `${path}: LHOST on an 844px strip`).toBeVisible();
+    // Nothing hidden that would have fit: un-hide the first hidden part and it must overflow.
+    const wasteful = await strip.evaluate((el) => {
+      const box = el.firstElementChild as HTMLElement;
+      const hidden = [...box.querySelectorAll<HTMLElement>("[data-drop]")]
+        .filter((p) => p.style.display === "none")
+        .sort((a, b) => Number(a.dataset.drop) - Number(b.dataset.drop));
+      if (!hidden.length) return false;
+      hidden[hidden.length - 1].style.display = "";
+      const fits = box.scrollWidth <= box.clientWidth;
+      hidden[hidden.length - 1].style.display = "none";
+      return fits;
+    });
+    expect(wasteful, `${path}: the last dropped part would still fit`).toBe(false);
+  }
+});
+
+test("headers: actions are icon buttons under 1000px, so the title keeps its room", async ({ page }) => {
+  await open(page, LAB_HOST, 900);
+  await page.getByRole("tab", { name: "Next" }).waitFor();
+  await expect(page.getByRole("button", { name: "Edit host" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stuck?" })).toBeVisible();
+  await open(page, "/e/e-lab", 900);
+  await expect(page.getByRole("button", { name: "Edit engagement" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Archive" })).toBeVisible();
+  await open(page, "/e/e-lab", 1440);
+  if (await page.getByRole("button", { name: "Expand sidebar" }).isVisible()) await page.keyboard.press("Meta+B");
+  await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
+});
+
+test("title bar controls end where the centred page column ends (dashboard, settings)", async ({ page }) => {
+  for (const [path, right] of [["/", 1440], ["/settings", 1280]] as const) {
+    await open(page, path, right);
+    const gear = await page.getByRole("button", { name: "Settings" }).evaluate((el) => el.getBoundingClientRect().right);
+    const col = await page.evaluate(() => {
+      const root = document.querySelector("[data-testid=app-root], div.max-w-\\[640px\\]");
+      const r = (root as HTMLElement).getBoundingClientRect();
+      const cs = getComputedStyle(root as HTMLElement);
+      return r.right - parseFloat(cs.paddingRight);
+    });
+    expect(Math.abs(gear - col), `${path}: gear right edge vs content right edge`).toBeLessThanOrEqual(1);
+  }
+});

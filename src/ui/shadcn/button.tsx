@@ -1,3 +1,4 @@
+// Stock shadcn styling: restyle to Ink before using in features.
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"

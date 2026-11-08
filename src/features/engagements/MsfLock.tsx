@@ -8,7 +8,7 @@ import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { useHosts } from "../hosts/queries";
 
 /** Exam-sim only: the one host allowed to use Metasploit. Click to change or release it. */
-export function MsfLock({ engagement: e, className }: { engagement: Engagement; className?: string }) {
+export function MsfLock({ engagement: e, step }: { engagement: Engagement; step?: number }) {
   const qc = useQueryClient();
   const hosts = useHosts(e.id).data ?? [];
   const [dialog, setDialog] = useState<"pick" | "release" | null>(null);
@@ -34,10 +34,8 @@ export function MsfLock({ engagement: e, className }: { engagement: Engagement; 
       <button
         type="button"
         onClick={() => setDialog("pick")}
-        className={cx(
-          "grid grid-flow-col items-center gap-2 cursor-default rounded-sm text-fg-2 hover:text-fg focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent",
-          className,
-        )}
+        data-drop={step}
+        className="grid grid-flow-col items-center gap-2 cursor-default rounded-sm text-fg-2 hover:text-fg focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
       >
         <BrandIcon brand="metasploit" />
         <span className={labelClass}>Metasploit</span>{" "}

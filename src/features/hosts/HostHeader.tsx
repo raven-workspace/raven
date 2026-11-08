@@ -1,20 +1,25 @@
 import { useQuery } from "@tanstack/react-query";
+import { Lifebuoy, PencilSimple } from "@phosphor-icons/react";
 import { useState } from "react";
 import { api } from "../../lib/api";
+import { useNarrow } from "../../lib/useNarrow";
 import type { Host } from "../../types/host";
-import { BrandIcon, Button, Chip, ChipSet, Kbd, Toolbar } from "../../ui";
+import { BrandIcon, Button, Chip, ChipSet, IconButton, Kbd, Toolbar } from "../../ui";
 import { threadsLabel, useThreadCounts } from "../notes/useThreadCounts";
 import { HostDialog } from "./HostDialog";
 import { COLUMN_LABELS, OS_LABELS } from "./columns";
 
 export function HostHeader({ host, onStuck }: { host: Host; onStuck?: () => void }) {
   const [editing, setEditing] = useState(false);
+  // Under 1000px the actions become icons before the title has to truncate (DESIGN.md Status strip and headers).
+  const [headerRef, narrow] = useNarrow<HTMLElement>(1000);
   const threads = useThreadCounts(host.engagementId).byHost.get(host.id) ?? 0;
   // The AD set only means something in an exam sim (it counts as one target there).
   const engagement = useQuery({ queryKey: ["engagement", host.engagementId], queryFn: () => api.engagementGet(host.engagementId) });
   const examSim = engagement.data?.kind === "exam-sim";
   return (
     <section
+      ref={headerRef}
       aria-label="Host"
       className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 border-b border-line pb-3"
     >
@@ -22,14 +27,23 @@ export function HostHeader({ host, onStuck }: { host: Host; onStuck?: () => void
         {host.name}
       </h1>
       <Toolbar>
-        {onStuck && (
-          <Button size="sm" onClick={onStuck}>
-            Stuck? <Kbd variant="inline" aria-hidden>H</Kbd>
-          </Button>
+        {narrow ? (
+          <>
+            {onStuck && <IconButton icon={Lifebuoy} label="Stuck?" shortcut="H" onClick={onStuck} />}
+            <IconButton icon={PencilSimple} label="Edit host" onClick={() => setEditing(true)} />
+          </>
+        ) : (
+          <>
+            {onStuck && (
+              <Button size="sm" onClick={onStuck}>
+                Stuck? <Kbd variant="inline" aria-hidden>H</Kbd>
+              </Button>
+            )}
+            <Button size="sm" onClick={() => setEditing(true)}>
+              Edit
+            </Button>
+          </>
         )}
-        <Button size="sm" onClick={() => setEditing(true)}>
-          Edit
-        </Button>
       </Toolbar>
       <ChipSet className="col-span-2 items-center gap-x-4 gap-y-1.5">
         {host.ip && <span className="font-mono text-code text-fg-2">{host.ip}</span>}

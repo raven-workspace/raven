@@ -8,7 +8,7 @@ import { labelClass } from "../../ui";
  * Your listener (Settings → Your IP / Listener port) on the strip, as filled into checklist commands.
  * Links to Settings; "not set" is in the warn colour because commands then show LHOST unresolved.
  */
-export function Listener({ className }: { className?: string }) {
+export function Listener({ step }: { step?: number }) {
   const s = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet }).data;
   if (!s) return null;
   const ip = s.attackerIp.trim();
@@ -19,10 +19,8 @@ export function Listener({ className }: { className?: string }) {
       to="/settings"
       aria-label={`LHOST ${value}`}
       title="Filled into checklist commands as LHOST and LPORT. Change it in Settings."
-      className={cx(
-        "grid grid-flow-col items-center gap-2 rounded-sm cursor-default hover:text-fg focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent",
-        className,
-      )}
+      data-drop={step}
+      className="grid grid-flow-col items-center gap-2 rounded-sm cursor-default hover:text-fg focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
     >
       <span className={labelClass}>LHOST</span>
       <span className={cx(ip ? "font-mono text-meta text-fg" : "text-warn")}>{value}</span>

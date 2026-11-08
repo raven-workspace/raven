@@ -10,7 +10,7 @@ export { Panel, type PanelProps } from "./Panel";
 export { Dialog, type DialogProps } from "./Dialog";
 export { Kbd, type KbdProps } from "./Kbd";
 export { EmptyState, type EmptyStateProps } from "./EmptyState";
-export { TitleBar, TitleBarButton, type TitleBarProps } from "./TitleBar";
+export { TitleBar, TitleBarButton, TitleBarIconButton, type TitleBarProps } from "./TitleBar";
 export { Toggle, type ToggleProps } from "./Toggle";
 export { Wordmark } from "./Wordmark";
 export { Tooltip, TooltipProvider } from "./Tooltip";

@@ -52,11 +52,11 @@ const menu = "gap-1 group-data-[collapsible=icon]:items-center";
 
 const LAST_OCTET = /(\d{1,3})$/;
 
-/** Rail label: the first 4 characters of the name, or the last octet when there is no name. */
-function railName(name: string, ip: string | null): string {
-  const n = name.trim();
-  if (n) return n.slice(0, 4);
-  return ip?.match(LAST_OCTET)?.[1] ?? "?";
+/** Rail label: the first 4 characters of the name without trailing - _ . ("web-" is "web"), or the last octet when that leaves under 2 characters. */
+export function railName(name: string, ip: string | null): string {
+  const n = name.trim().slice(0, 4).replace(/[-_.]+$/, "");
+  if (n.length >= 2) return n;
+  return ip?.match(LAST_OCTET)?.[1] ?? (n || "?");
 }
 
 function SectionItem({ engagementId, id, label, n, collapsed }: {
@@ -79,7 +79,7 @@ function SectionItem({ engagementId, id, label, n, collapsed }: {
             </>
           ),
         }}
-        className={collapsed ? undefined : "grid h-[30px] grid-cols-[16px_minmax(0,1fr)_auto] px-2"}
+        className={cx("cursor-default transition-colors", !collapsed && "grid h-[30px] grid-cols-[16px_minmax(0,1fr)_auto] px-2")}
       >
         <NavLink to={to} end aria-label={collapsed ? label : undefined}>
           <SectionIcon aria-hidden />
@@ -108,11 +108,12 @@ function HostItem({ engagementId, host: h, threads, collapsed }: {
         asChild
         size="lg"
         isActive={active}
-        className={
+        className={cx(
+          "cursor-default transition-colors",
           collapsed
             ? "grid grid-cols-[minmax(0,1fr)] justify-items-center gap-1"
-            : "grid grid-cols-[16px_minmax(0,1fr)_auto] gap-2 px-2"
-        }
+            : "grid grid-cols-[16px_minmax(0,1fr)_auto] gap-2 px-2",
+        )}
       >
         <NavLink to={to} title={collapsed ? [h.name, h.ip].filter(Boolean).join("\n") : h.name}>
           <HostGlyph column={h.boardColumn} />
@@ -187,6 +188,7 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
               />
             </SidebarHeader>
             <SidebarContent className="overflow-x-hidden pb-4 group-data-[collapsible=icon]:overflow-y-auto">
+              {collapsed && <SidebarSeparator className="mx-auto mb-2 data-horizontal:w-6" />}
               <SidebarGroup className={group}>
                 <SidebarMenu className={menu}>
                   {SECTIONS.map((s, i) => (

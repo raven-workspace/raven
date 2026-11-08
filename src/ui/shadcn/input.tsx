@@ -1,3 +1,4 @@
+// Stock shadcn styling: restyle to Ink before using in features.
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
