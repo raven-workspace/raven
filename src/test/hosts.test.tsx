@@ -100,7 +100,7 @@ describe("hosts", () => {
     const user = userEvent.setup();
     m.hostCreate.mockRejectedValueOnce(new RavenError("validation", "A host with this IP already exists", "ip"));
     mount();
-    await user.click(await screen.findByRole("button", { name: "+ Add host" }));
+    await user.click(await screen.findByRole("button", { name: "Add host" }));
     const dialog = await screen.findByRole("dialog", { name: "Add host" });
     await user.type(within(dialog).getByLabelText("Name"), "dc03");
     await user.type(within(dialog).getByLabelText("IP"), "10.10.10.5");

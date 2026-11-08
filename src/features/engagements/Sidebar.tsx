@@ -4,6 +4,7 @@ import {
   ListChecks,
   FileText,
   Flag,
+  Plus,
   SquaresFour,
   SidebarSimple,
   type Icon,
@@ -12,6 +13,7 @@ import { useId, useState } from "react";
 import { NavLink } from "react-router";
 import { cx } from "../../lib/cx";
 import { shortHostName } from "../../lib/hostName";
+import { IconButton } from "../../ui";
 import { isDialogOpen, useKeydown } from "../../lib/keys";
 import { HostDialog } from "../hosts/HostDialog";
 import { HostGlyph } from "../hosts/HostGlyph";
@@ -31,10 +33,19 @@ const SECTION_ICONS: Record<SectionId, Icon> = {
 };
 
 const row =
-  "flex h-[30px] cursor-default items-center justify-between rounded-sm px-2 text-left text-[13px] no-underline transition-colors duration-100";
+  "grid h-[30px] cursor-default items-center rounded-sm text-left text-body no-underline transition-colors duration-100";
 const rowState = (on: boolean) =>
   on ? "bg-surface-hi text-fg shadow-[inset_2px_0_0_var(--accent)]" : "text-muted-2 hover:bg-surface hover:text-fg";
-const heading = "m-0 text-[10.5px] font-semibold uppercase tracking-label text-faint";
+const heading = "m-0 text-label text-faint";
+
+const LAST_OCTET = /(\d{1,3})$/;
+
+/** Rail label: the first 4 characters of the name, or the last octet when there is no name. */
+function railName(name: string, ip: string | null): string {
+  const n = name.trim();
+  if (n) return n.slice(0, 4);
+  return ip?.match(LAST_OCTET)?.[1] ?? "?";
+}
 
 export function Sidebar({ engagementId }: { engagementId: string }) {
   const hostsId = useId();
@@ -58,23 +69,20 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
     <nav
       aria-label="Engagement"
       className={cx(
-        "flex min-h-0 flex-col gap-px overflow-y-auto overflow-x-hidden border-r border-line py-3.5",
+        "grid min-h-0 grid-cols-1 content-start gap-px overflow-y-auto overflow-x-hidden border-r border-line py-3.5",
         "transition-[width] duration-200 ease-out motion-reduce:transition-none",
         collapsed ? "w-12 px-1.5" : "w-[200px] px-3",
       )}
     >
-      <div className={cx("mb-1.5 grid items-center", collapsed ? "grid-cols-1 justify-items-center" : "grid-cols-[minmax(0,1fr)_auto] px-2")}>
+      <div className={cx("mb-1.5 grid items-center", collapsed ? "grid-cols-1 justify-items-center" : "grid-cols-[minmax(0,1fr)_28px] pl-2")}>
         <h2 className={cx(heading, collapsed && "sr-only")}>Engagement</h2>
-        <button
-          type="button"
-          aria-label={label}
-          title={`${label} (⌘B)`}
+        <IconButton
+          icon={SidebarSimple}
+          label={label}
+          shortcut="⌘B"
           aria-expanded={!collapsed}
           onClick={toggle}
-          className="grid size-6 cursor-default place-items-center rounded-sm text-muted-2 hover:bg-surface hover:text-fg"
-        >
-          <SidebarSimple size={16} weight="light" aria-hidden />
-        </button>
+        />
       </div>
       {SECTIONS.map((s, i) => {
         const SectionIcon = SECTION_ICONS[s.id];
@@ -85,19 +93,19 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
             end
             title={collapsed ? `${s.label} (${i + 1})` : undefined}
             aria-label={collapsed ? s.label : undefined}
-            className={({ isActive }) => cx(row, collapsed && "justify-center px-0", rowState(isActive))}
+            className={({ isActive }) =>
+              cx(
+                row,
+                collapsed ? "grid-cols-[16px] justify-center" : "grid-cols-[16px_minmax(0,1fr)_auto] gap-2 px-2",
+                rowState(isActive),
+              )
+            }
           >
-            {collapsed ? (
-              <span className="grid grid-cols-[auto_auto] items-end gap-0.5">
-                <SectionIcon size={16} weight="light" aria-hidden />
-                <span aria-hidden className="font-mono text-[9px] text-faint">
-                  {i + 1}
-                </span>
-              </span>
-            ) : (
+            <SectionIcon size={16} weight="light" aria-hidden />
+            {!collapsed && (
               <>
                 <span className="truncate">{s.label}</span>
-                <span aria-hidden className="font-mono text-[10.5px] text-faint">
+                <span aria-hidden className="font-mono text-meta text-faint">
                   {i + 1}
                 </span>
               </>
@@ -105,11 +113,14 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
           </NavLink>
         );
       })}
-      <h2 id={hostsId} className={cx(heading, "mt-5 mb-1.5 px-2", collapsed && "sr-only")}>
-        Hosts
-      </h2>
+      <div className={cx("mt-5 mb-1.5 grid items-center", collapsed ? "grid-cols-1 justify-items-center" : "grid-cols-[minmax(0,1fr)_28px] pl-2")}>
+        <h2 id={hostsId} className={cx(heading, collapsed && "sr-only")}>
+          Hosts
+        </h2>
+        <IconButton icon={Plus} label="Add host" onClick={() => setAdding(true)} />
+      </div>
       {hosts.isSuccess && list.length === 0 && !collapsed && (
-        <p aria-labelledby={hostsId} className="m-0 px-2 text-xs text-faint">
+        <p aria-labelledby={hostsId} className="m-0 px-2 text-meta text-faint">
           No hosts yet
         </p>
       )}
@@ -119,23 +130,30 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
           <NavLink
             key={h.id}
             to={`/e/${engagementId}/h/${h.id}`}
-            title={h.name}
+            title={collapsed ? [h.name, h.ip].filter(Boolean).join("\n") : h.name}
             className={({ isActive }) =>
               cx(
-                "grid cursor-default items-center gap-2 rounded-sm text-left text-[13px] no-underline transition-colors duration-100",
-                collapsed ? "h-[30px] grid-cols-1 justify-items-center px-0" : "min-h-[38px] grid-cols-[auto_minmax(0,1fr)_auto] px-2 py-1",
+                "grid cursor-default items-center rounded-sm text-left text-body no-underline transition-colors duration-100",
+                collapsed
+                  ? "min-h-[44px] grid-cols-[minmax(0,1fr)] justify-items-center gap-0.5 px-0 py-1"
+                  : "min-h-[44px] grid-cols-[16px_minmax(0,1fr)_auto] gap-2 px-2 py-1",
                 rowState(isActive),
               )
             }
           >
             <HostGlyph column={h.boardColumn} />
             {collapsed ? (
-              <span className="sr-only">{h.name}</span>
+              <>
+                <span className="sr-only">{h.name}</span>
+                <span aria-hidden className="max-w-full truncate font-mono text-meta">
+                  {railName(h.name, h.ip)}
+                </span>
+              </>
             ) : (
               <>
                 <span className="grid min-w-0 grid-cols-1">
                   <span className="truncate">{shortHostName(h.name)}</span>
-                  {h.ip && <span className="font-mono text-[10.5px] text-faint">{h.ip}</span>}
+                  {h.ip && <span className="truncate font-mono text-meta text-faint">{h.ip}</span>}
                 </span>
                 {dot}
               </>
@@ -143,15 +161,6 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
           </NavLink>
         );
       })}
-      <button
-        type="button"
-        onClick={() => setAdding(true)}
-        aria-label={collapsed ? "Add host" : undefined}
-        title={collapsed ? "Add host" : undefined}
-        className={cx(row, "justify-start text-faint hover:bg-surface hover:text-fg", collapsed && "justify-center px-0")}
-      >
-        {collapsed ? "+" : "+ Add host"}
-      </button>
       <HostDialog open={adding} onOpenChange={setAdding} engagementId={engagementId} />
     </nav>
   );

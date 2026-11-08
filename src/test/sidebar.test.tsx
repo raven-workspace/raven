@@ -54,6 +54,32 @@ describe("sidebar", () => {
     expect(within(link).getByText("10.10.20.15")).toHaveClass("font-mono");
   });
 
+  it("a long host name truncates in the sidebar with its title", async () => {
+    mount();
+    const short = await screen.findByText("web-portal-dmz-frontend-01");
+    expect(short).toHaveClass("truncate");
+    expect(short.closest("a")).toHaveAttribute("title", FULL);
+  });
+
+  it("add host is an icon button named Add host", async () => {
+    mount();
+    await screen.findByText("dc01");
+    const btn = screen.getByRole("button", { name: "Add host" });
+    expect(btn.querySelector("svg")).not.toBeNull();
+    expect(btn).not.toHaveTextContent("+");
+  });
+
+  it("collapsed rail names each host", async () => {
+    useSidebarStore.setState({ collapsed: true });
+    m.hostsList.mockResolvedValue([host("h1", FULL, "10.10.20.15"), host("h2", "dc01", null), host("h3", "", "192.0.2.77")]);
+    mount();
+    const web = (await screen.findByText("web-")).closest("a")!;
+    expect(web).toHaveAttribute("title", `${FULL}\n10.10.20.15`);
+    expect(screen.getByRole("link", { name: /dc01/ })).toHaveAttribute("title", "dc01");
+    expect(screen.getByText("77").closest("a")).toHaveAttribute("title", "192.0.2.77");
+    expect(screen.getByRole("button", { name: "Add host" })).toBeInTheDocument();
+  });
+
   it("toggles with the button and with Cmd+B", async () => {
     const user = userEvent.setup();
     mount();
