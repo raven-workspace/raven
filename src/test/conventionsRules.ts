@@ -182,20 +182,45 @@ const NON_COLOR: Record<string, RegExp> = {
   to: /^\d+%$/,
 };
 
-/** Colour utilities (any variant, optional /opacity) whose colour is not defined in tokens.css. */
+/** Splits a class region into tokens; `(`, `)` and `,` separate tokens only outside `[…]`. */
+function classTokens(region: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let depth = 0;
+  for (const c of region) {
+    if (c === "[") depth++;
+    else if (c === "]") depth = Math.max(0, depth - 1);
+    if (/[\s"'`{}]/.test(c) || (depth === 0 && /[(),]/.test(c))) {
+      if (cur) out.push(cur);
+      cur = "";
+    } else cur += c;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+/** An arbitrary value (`[…]`) that is a colour: hex, a colour function, or an explicit `color:` hint. */
+const ARBITRARY_COLOR = /^\[(?:#[\da-f]{3,8}|(?:rgba?|hsla?|hwb|oklch|oklab|lab|lch|color|color-mix)\(|color:)/i;
+
+/** Colour utilities (any variant, optional /opacity) whose colour is not a tokens.css token, and arbitrary colour values. */
 function unknownColors(src: string): string[] {
   const bad: string[] = [];
-  const toks = classRegions(stripComments(src)).flatMap((r) =>
-    r.split(/[\s"'`{}(),]+/),
-  );
+  const toks = classRegions(stripComments(src)).flatMap(classTokens);
   for (const t of toks) {
-    const base = t.replace(/^(?:[\w-]+(?:\[[^\]]*\])?:)*!?/, "").replace(/!$/, "");
+    const base = stripVariants(t);
+    const arb = /^(bg|text|border(?:-[xytblrse])?|outline|ring|fill|stroke|divide|placeholder|from|via|to|decoration|shadow|accent|caret)-(\[[^\]]*\])(?:\/[\w.[\]%]+)?$/.exec(base);
+    if (arb) {
+      if (ARBITRARY_COLOR.test(arb[2])) bad.push(t);
+      continue;
+    }
     const m = /^(bg|text|border|outline|ring|fill|stroke|divide|placeholder|from|via|to)-([^[/]+)(?:\/[\w.[\]%]+)?$/.exec(
       base,
     );
     if (!m) continue;
-    const [, prefix, value] = m;
-    if (TOKEN_COLORS.has(value) || NON_COLOR[prefix].test(value)) continue;
+    const [, prefix, raw] = m;
+    // Per-side border colours (border-l-accent) name the colour after the side.
+    const value = prefix === "border" ? raw.replace(/^[xytblrse]-(?=[a-z])/, "") : raw;
+    if (TOKEN_COLORS.has(value) || NON_COLOR[prefix].test(value) || NON_COLOR[prefix].test(raw)) continue;
     bad.push(t);
   }
   return bad;
@@ -205,8 +230,14 @@ function unknownColors(src: string): string[] {
 const SPACING_STEPS = new Set(["0", "1", "2", "3", "4", "6", "8", "px", "auto"]);
 const SPACING_UTIL =
   /^-?(?:gap-x|gap-y|space-x|space-y|gap|px|py|pt|pr|pb|pl|ps|pe|p|mx|my|mt|mr|mb|ml|ms|me|m)-(.+)$/;
-/** The documented exceptions: the hint key-to-label gap is 6px. */
-const SPACING_ALLOWED: Record<string, string[]> = { "src/ui/HintLine.tsx": ["gap-[6px]"] };
+/** The documented exceptions, per file: the exact utilities allowed off the scale, and why. */
+const SPACING_ALLOWED: Record<string, { tokens: string[]; reason: string }> = {
+  "src/ui/HintLine.tsx": { tokens: ["gap-[6px]"], reason: "the hint key-to-label gap is 6px (DESIGN.md)" },
+  "src/ui/TitleBar.tsx": {
+    tokens: ["pl-[78px]", "pl-[max(78px,calc((100%_-_var(--col-max))/2_+_var(--col-inset)))]"],
+    reason: "window chrome: the 78px left clearance for the macOS traffic lights (titleBarStyle Overlay), not a spacing step",
+  },
+};
 
 /** Drops the variant prefixes (`md:`, `group-data-[x=y]:`, `[&>svg]:`): everything up to the last top-level colon. */
 function stripVariants(t: string): string {
@@ -222,16 +253,18 @@ function stripVariants(t: string): string {
 
 /** Padding, margin, gap and space utilities off the 4/8/12/16/24/32 scale (0.5, 1.5, 2.5, 3.5, 5, 7, arbitrary px). */
 function offScaleSpacing(file: string, src: string): string[] {
-  const allowed = SPACING_ALLOWED[file] ?? [];
+  const allowed = SPACING_ALLOWED[file]?.tokens ?? [];
   const bad: string[] = [];
-  const toks = classRegions(stripComments(src)).flatMap((r) => r.split(/[\s"'`{}(),]+/));
+  const toks = classRegions(stripComments(src)).flatMap(classTokens);
   for (const t of toks) {
     const m = SPACING_UTIL.exec(stripVariants(t));
     if (!m) continue;
     const v = m[1];
     if (SPACING_STEPS.has(v) || allowed.includes(stripVariants(t))) continue;
     const arbitrary = /^\[(-?[\d.]+)(px|rem|em)?\]$/.exec(v);
-    if (arbitrary ? Number(arbitrary[1]) !== 0 : /^\d+(\.\d+)?$/.test(v)) bad.push(t);
+    // Inside an arbitrary expression (max(), calc()) any non-zero length is off the scale.
+    const lengthInside = v.startsWith("[") && /(?<![\w.-])(?!0(?:px|rem|em)\b)[\d.]+(px|rem|em)\b/.test(v);
+    if (arbitrary ? Number(arbitrary[1]) !== 0 : lengthInside || /^\d+(\.\d+)?$/.test(v)) bad.push(t);
   }
   return bad;
 }

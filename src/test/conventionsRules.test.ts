@@ -126,6 +126,22 @@ describe("unknown-color matcher", () => {
     expect(bad('<a className="bg-background text-foreground bg-popover text-muted-foreground border-input bg-destructive/10" />')).toBe(false);
     expect(bad('<a className="bg-chart-1" />')).toBe(true);
   });
+  it("flags arbitrary colour values", () => {
+    for (const c of ["bg-[#123]", "text-[color:var(--x)]", "border-[rgb(1,2,3)]", "from-[#fff]", "hover:bg-[hsl(0_0%_50%)]", "ring-[oklch(0.5_0.1_120)]", "text-[#abcdef]/50"])
+      expect(bad(`<a className="${c}" />`), c).toBe(true);
+  });
+  it("accepts arbitrary non-colour values", () => {
+    expect(bad('<a className="border-[2px] bg-[url(/a.png)] bg-[length:4px_4px] text-[length:13px] from-[10%]" />')).toBe(false);
+  });
+  it("strips named-group and arbitrary variants before judging", () => {
+    expect(bad('<a className="group-hover/item:text-accent [&>svg]:text-muted data-[state=open]:bg-surface-hi" />')).toBe(false);
+    expect(bad('<a className="group-hover/item:text-red-500" />')).toBe(true);
+    expect(bad('<a className="[&>svg]:text-red-500" />')).toBe(true);
+  });
+  it("accepts per-side border colours that are tokens", () => {
+    expect(bad('<a className="border-l-accent border-t-line border-x-line-2 border-b-transparent" />')).toBe(false);
+    expect(bad('<a className="border-l-red-500" />')).toBe(true);
+  });
   it("does not treat type roles, sizes, widths or modes as colours", () => {
     expect(
       bad('<a className="text-title text-body text-meta text-sm text-2xl text-left border-2 border-t border-dashed outline-none ring-2 bg-none from-10% stroke-2 divide-y" />'),
@@ -141,6 +157,16 @@ describe("off-scale-spacing matcher", () => {
   });
   it("accepts the 4/8/12/16/24/32 scale, zero, px, auto, and non-spacing utilities", () => {
     expect(bad('<a className="p-1 px-2 py-3 gap-4 gap-x-6 mt-8 -ml-2 m-0 mx-auto pt-px gap-[0] size-7 h-7 w-0.5 top-1.5 inset-2.5 text-body" />')).toBe(false);
+  });
+  it("sees px inside arbitrary expressions", () => {
+    expect(bad('<a className="pl-[max(78px,calc(50%_-_10px))]" />')).toBe(true);
+    expect(bad('<a className="pr-[max(var(--a),calc(50%_+_var(--b)))]" />')).toBe(false);
+  });
+  it("allows the title bar's 78px traffic-light inset, only in TitleBar", () => {
+    expect(bad('<a className="pl-[78px]" />', "src/ui/TitleBar.tsx")).toBe(false);
+    expect(bad('<a className="pl-[max(78px,calc((100%_-_var(--col-max))/2_+_var(--col-inset)))]" />', "src/ui/TitleBar.tsx")).toBe(false);
+    expect(bad('<a className="pl-[78px]" />')).toBe(true);
+    expect(bad('<a className="pl-[80px]" />', "src/ui/TitleBar.tsx")).toBe(true);
   });
   it("allows only the documented 6px hint gap, only in HintLine", () => {
     expect(bad('<a className="gap-[6px]" />', "src/ui/HintLine.tsx")).toBe(false);

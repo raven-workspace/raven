@@ -1,5 +1,5 @@
 import type { Icon } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { cx } from "../lib/cx";
 import { Button } from "./Button";
 import { Kbd } from "./Kbd";
@@ -21,30 +21,23 @@ export interface TitleBarProps {
   className?: string;
 }
 
-/** Left clearance for the macOS traffic lights (titleBarStyle Overlay): a window-chrome constant, not a spacing step. */
-const TRAFFIC_LIGHTS = 78;
-
 /**
  * The 38px window chrome. The bar is the drag region (`data-tauri-drag-region`);
  * The right inset (pr-6) equals the content column's px-6, so the controls end where page actions end.
- * 78px on the left are left clear for the macOS traffic lights (titleBarStyle Overlay).
+ * 78px on the left are left clear for the macOS traffic lights (titleBarStyle Overlay): a window-chrome
+ * constant, not a spacing step, allowed by name in the conventions test (SPACING_ALLOWED).
  */
 export function TitleBar({ left, title, right, column, className }: TitleBarProps) {
   return (
     <div
       data-tauri-drag-region
       // % padding is of the bar's own width, so this is half the free space beside the column plus its inset.
-      style={
-        column
-          ? {
-              paddingLeft: `max(${TRAFFIC_LIGHTS}px, calc((100% - ${column.max}px) / 2 + ${column.inset}px))`,
-              paddingRight: `max(${column.inset}px, calc((100% - ${column.max}px) / 2 + ${column.inset}px))`,
-            }
-          : { paddingLeft: TRAFFIC_LIGHTS }
-      }
+      style={column ? ({ "--col-max": `${column.max}px`, "--col-inset": `${column.inset}px` } as CSSProperties) : undefined}
       className={cx(
         "grid h-[38px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-line text-meta text-muted-2 select-none",
-        !column && "pr-6",
+        column
+          ? "pl-[max(78px,calc((100%_-_var(--col-max))/2_+_var(--col-inset)))] pr-[max(var(--col-inset),calc((100%_-_var(--col-max))/2_+_var(--col-inset)))]"
+          : "pl-[78px] pr-6",
         className,
       )}
     >
