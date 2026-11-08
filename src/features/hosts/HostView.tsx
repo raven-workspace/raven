@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { SCROLL_PANE } from "../../ui/controlStyles";
 import { useLocation, useNavigate } from "react-router";
 import { isDialogOpen, isFreeKey, isTypingTarget, useKeydown } from "../../lib/keys";
-import { Button, EmptyState, queryState } from "../../ui";
+import { Button, EmptyState, LoadingState, queryState } from "../../ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/shadcn/tabs";
 import type { Finding } from "../../types/findings";
 import { FindingSplit } from "../findings/FindingSplit";
@@ -30,17 +30,21 @@ type TabId = (typeof TABS)[number]["id"];
 /** Two columns from this width of the host page (the `@min-[760px]/host` container query); stacked below it. */
 const TWO_COLUMNS_PX = 760;
 
-/** The element's width, once measured; undefined until then (and in tests, which have no layout). */
+/**
+ * The element's width, once measured; undefined until then (and in tests, which have no layout). Measured as the ref
+ * attaches, during the commit, so the first paint already knows it: the fact groups never paint open and then fold.
+ */
 function useWidth() {
-  const [el, setEl] = useState<HTMLElement | null>(null);
   const [width, setWidth] = useState<number>();
-  useEffect(() => {
+  const ref = useCallback((el: HTMLElement | null) => {
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width));
+    const set = (w: number) => { if (w > 0) setWidth(w); };
+    set(el.getBoundingClientRect().width);
+    const ro = new ResizeObserver(([e]) => set(e.contentRect.width));
     ro.observe(el);
     return () => ro.disconnect();
-  }, [el]);
-  return [setEl, width] as const;
+  }, []);
+  return [ref, width] as const;
 }
 
 export function HostView({ engagementId, hostId }: { engagementId: string; hostId: string }) {
@@ -144,7 +148,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   const facts = <FactsColumn engagementId={engagementId} host={host} variant={stacked ? "stacked" : "column"} onOpenEntry={openInLog} />;
 
   return (
-    <div ref={rootRef} className="@container/host grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4">
+    <div ref={rootRef} data-host-layout={width === undefined ? undefined : stacked ? "stacked" : "columns"} className="@container/host grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4">
       <HostHeader host={host} onStuck={toggleStuck} />
       {split ? (
         <FindingSplit
@@ -175,9 +179,9 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
             </div>
             <TabsContent value={tab} aria-label={TABS.find((t) => t.id === tab)!.label} className={`border-t border-line ${SCROLL_PANE}`}>
               {tab === "log" ? (
-                log.isError ? (
-                  queryState([log], "the log")
-                ) : entries.length === 0 && log.data ? (
+                !log.data ? (
+                  queryState([log], "the log") ?? <LoadingState label="the log" />
+                ) : entries.length === 0 ? (
                   <p className="text-meta text-muted">Nothing logged on this host yet. Press L to capture.</p>
                 ) : (
                   <ul className="m-0 list-none p-0">

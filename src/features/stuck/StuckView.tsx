@@ -267,7 +267,8 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
 
   // Leads from half-loaded data would be wrong (an unloaded checklist reads as "nothing done"), so wait for all of it.
   const queries = [hostsQ, engagement, servicesQ, checklistQ, tunnelsQ, credentialsQ, attemptsQ, usernamesQ];
-  const failedState = queries.some((q) => q.error) ? queryState(queries, "the stuck check") : null;
+  // Failed or still loading: say so (never a blank pane while the stuck check waits for its data).
+  const state = queryState(queries, "the stuck check");
   const hosts = hostsQ.data;
   const eng = engagement.data;
   const credentials = credentialsQ.data;
@@ -282,8 +283,8 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
         : [],
     [loaded, eng, hosts, servicesByHost, byOwner, credentials, attempts, usernames, tunnels],
   );
-  if (failedState) return failedState;
-  if (!loaded || !hosts || !eng || !credentials || !attempts || !usernames) return null;
+  if (state) return state;
+  if (!loaded || !hosts || !eng || !credentials || !attempts || !usernames) return <LoadingState label="the stuck check" />;
 
   const go = (l: StuckLine) => {
     // Engagement-placed steps (the pivot tunnel) are not on the host view: open the engagement checklist on that host's row.

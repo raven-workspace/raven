@@ -20,7 +20,8 @@ const tab = (name: string) => (page: Page) => page.getByRole("tab", { name, exac
 /** Opens a fact group by its toggle; a group that is already open stays as it is. */
 const openGroup = (name: string) => async (page: Page) => {
   // The host page measures itself first; groups fold (stacked) or stay open (two columns) only after that.
-  await page.waitForTimeout(500);
+  // With no data (the `empty` state run) there is no host to measure, only "Host not found".
+  await page.locator("[data-host-layout]").or(page.getByText("Host not found")).first().waitFor();
   const toggle = page.locator(`button[title^='Open ${name}']`);
   if ((await toggle.count()) > 0) await toggle.first().click();
 };
