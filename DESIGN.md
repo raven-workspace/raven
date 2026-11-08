@@ -301,7 +301,7 @@ Each table declares its column policy; automatic layout never decides.
 - When space runs out, secondary parts drop first ("of 23h 45m", then the progress bar), then whole cells from the end. Nothing wraps or ellipsizes mid-value.
 - The strip carries no hint line.
 - **Headers** (engagement, host, drawer) use `grid-cols-[minmax(0,1fr)_auto]`. Row 1 is the title and its actions; row 2 is the metadata line. The title gets the slack track. Under 1000px, actions collapse to icon buttons before the title truncates.
-- **Title bar:** every destination uses the same control style. The controls sit on the left, after the wordmark, with their left edge on the main content column's left edge (the same x as the page title below). Order: Arsenal, Payloads, Search, Lock (with the `Lock` icon), then Settings last as a `Gear` icon button.
+- **Title bar:** every destination uses the same control style. The controls sit on the right, with their right edge on the main content column's right edge (the same x where the page header's actions end below). Order: Arsenal, Payloads, Search, Lock (with the `Lock` icon), then Settings last as a `Gear` icon button.
 
 ### Navigation
 
