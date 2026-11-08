@@ -187,10 +187,18 @@ function classTokens(region: string): string[] {
   const out: string[] = [];
   let cur = "";
   let depth = 0;
+  let parens = 0;
   for (const c of region) {
     if (c === "[") depth++;
     else if (c === "]") depth = Math.max(0, depth - 1);
-    if (/[\s"'`{}]/.test(c) || (depth === 0 && /[(),]/.test(c))) {
+    // Tailwind 4's `bg-(--x,var(--y))`: a "(" right after "-" opens a value, not a call.
+    else if (c === "(" && depth === 0 && (parens > 0 || cur.endsWith("-"))) parens++;
+    else if (c === ")" && depth === 0 && parens > 0) {
+      parens--;
+      cur += c;
+      continue;
+    }
+    if (/[\s"'`{}]/.test(c) || (depth === 0 && parens === 0 && /[(),]/.test(c))) {
       if (cur) out.push(cur);
       cur = "";
     } else cur += c;
@@ -199,28 +207,82 @@ function classTokens(region: string): string[] {
   return out;
 }
 
-/** An arbitrary value (`[…]`) that is a colour: hex, a colour function, or an explicit `color:` hint. */
-const ARBITRARY_COLOR = /^\[(?:#[\da-f]{3,8}|(?:rgba?|hsla?|hwb|oklch|oklab|lab|lch|color|color-mix)\(|color:)/i;
+/** Every custom property the stylesheets declare (tokens, shadcn aliases, sidebar vars). */
+const DECLARED_VARS = new Set(
+  ["src/styles/tokens.css", "src/styles/global.css"].flatMap((f) =>
+    [...readFileSync(join(ROOT, f), "utf8").matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]),
+  ),
+);
 
-/** Colour utilities (any variant, optional /opacity) whose colour is not a tokens.css token, and arbitrary colour values. */
+/** CSS named colours a hand-written value might use (the common ones; tokens are the only colours allowed). */
+const NAMED_COLORS =
+  /^(red|green|blue|white|black|gray|grey|orange|yellow|purple|pink|brown|cyan|magenta|lime|navy|teal|maroon|olive|silver|gold|indigo|violet|crimson|coral|salmon|tomato|aqua|fuchsia|beige|khaki|ivory|lavender|turquoise|tan|orchid|plum|chocolate|firebrick|darkred|darkgreen|darkblue|lightgray|lightgrey|darkgray|darkgrey)$/i;
+
+/** A raw colour inside an arbitrary value: hex, a colour function or a named colour, anywhere in it. */
+function rawColour(value: string): boolean {
+  if (/#[\da-f]{3,8}(?![\w-])/i.test(value)) return true;
+  if (/(?:^|[^\w-])(?:rgba?|hsla?|hwb|oklch|oklab|lab|lch|color|color-mix)\(/i.test(value)) return true;
+  return value.split(/[\s_,()[\]:/]+/).some((w) => NAMED_COLORS.test(w));
+}
+
+/** var(--x) references in a value that are neither declared in the stylesheets nor defined locally from tokens. */
+function unknownVars(value: string, local: Set<string>): boolean {
+  const refs = [...value.matchAll(/var\((--[\w-]+)/g), ...value.matchAll(/^\(?(--[\w-]+)/g)].map((m) => m[1]);
+  return refs.some((v) => !DECLARED_VARS.has(v) && !local.has(v));
+}
+
+/** Custom properties a class list defines (`[--pane-bg:var(--bg)]`). Their values are checked where they are defined. */
+function varsDefinedIn(toks: string[]): string[] {
+  return toks.flatMap((t) => {
+    const p = /^\[(--[\w-]+):(.*)\]$/.exec(stripVariants(t));
+    return p ? [p[1]] : [];
+  });
+}
+
+let projectVarsCache: Set<string> | undefined;
+/** Custom properties defined in any checked file, so a pane's `--pane-bg` can be read by the components inside it. */
+function projectVars(): Set<string> {
+  projectVarsCache ??= new Set(
+    files.flatMap((f) => varsDefinedIn(classRegions(stripComments(readFileSync(join(ROOT, f), "utf8"))).flatMap(classTokens))),
+  );
+  return projectVarsCache;
+}
+
+const COLOUR_PREFIX = "bg|text|border(?:-[xytblrse])?|outline|ring|fill|stroke|divide|placeholder|from|via|to|decoration|shadow|accent|caret";
+
+/**
+ * Colour utilities (any variant, optional /opacity) whose colour is not a tokens.css token, and hand-written colours in
+ * arbitrary values (`bg-[#123]`, `bg-[red]`, `shadow-[0_0_0_1px_#fff]`, `bg-[var(--unknown)]`, `bg-(--unknown)`) or
+ * arbitrary properties (`[color:#123]`). A local custom property (`[--pane-bg:var(--bg)]`) may be used once it is defined
+ * from tokens.
+ */
 function unknownColors(src: string): string[] {
   const bad: string[] = [];
   const toks = classRegions(stripComments(src)).flatMap(classTokens);
+  const local = new Set([...projectVars(), ...varsDefinedIn(toks)]);
   for (const t of toks) {
     const base = stripVariants(t);
-    const arb = /^(bg|text|border(?:-[xytblrse])?|outline|ring|fill|stroke|divide|placeholder|from|via|to|decoration|shadow|accent|caret)-(\[[^\]]*\])(?:\/[\w.[\]%]+)?$/.exec(base);
-    if (arb) {
-      if (ARBITRARY_COLOR.test(arb[2])) bad.push(t);
+    const prop = /^\[([\w-]+):(.*)\]$/.exec(base);
+    if (prop) {
+      const [, name, value] = prop;
+      const colourProp = name.startsWith("--") || /color|background|border|fill|stroke|outline|shadow|caret|accent/.test(name);
+      if (colourProp && (rawColour(value) || unknownVars(value, local))) bad.push(t);
       continue;
     }
-    const m = /^(bg|text|border|outline|ring|fill|stroke|divide|placeholder|from|via|to)-([^[/]+)(?:\/[\w.[\]%]+)?$/.exec(
+    const arb = new RegExp(`^(${COLOUR_PREFIX})-(\\[[^\\]]*\\]|\\([^)]*\\)+)(?:/[\\w.[\\]%]+)?$`).exec(base);
+    if (arb) {
+      const inner = arb[2].slice(1, -1);
+      if (rawColour(inner) || unknownVars(inner, local)) bad.push(t);
+      continue;
+    }
+    const m = /^(bg|text|border|outline|ring|fill|stroke|divide|placeholder|from|via|to)-([^[/(]+)(?:\/[\w.[\]%]+)?$/.exec(
       base,
     );
     if (!m) continue;
     const [, prefix, raw] = m;
     // Per-side border colours (border-l-accent) name the colour after the side.
-    const value = prefix === "border" ? raw.replace(/^[xytblrse]-(?=[a-z])/, "") : raw;
-    if (TOKEN_COLORS.has(value) || NON_COLOR[prefix].test(value) || NON_COLOR[prefix].test(raw)) continue;
+    const v = prefix === "border" ? raw.replace(/^[xytblrse]-(?=[a-z])/, "") : raw;
+    if (TOKEN_COLORS.has(v) || NON_COLOR[prefix].test(v) || NON_COLOR[prefix].test(raw)) continue;
     bad.push(t);
   }
   return bad;
@@ -263,7 +325,7 @@ function offScaleSpacing(file: string, src: string): string[] {
     if (SPACING_STEPS.has(v) || allowed.includes(stripVariants(t))) continue;
     const arbitrary = /^\[(-?[\d.]+)(px|rem|em)?\]$/.exec(v);
     // Inside an arbitrary expression (max(), calc()) any non-zero length is off the scale.
-    const lengthInside = v.startsWith("[") && /(?<![\w.-])(?!0(?:px|rem|em)\b)[\d.]+(px|rem|em)\b/.test(v);
+    const lengthInside = v.startsWith("[") && /(?<![A-Za-z0-9.-])(?!0(?:px|rem|em)\b)[\d.]+(px|rem|em)\b/.test(v);
     if (arbitrary ? Number(arbitrary[1]) !== 0 : lengthInside || /^\d+(\.\d+)?$/.test(v)) bad.push(t);
   }
   return bad;

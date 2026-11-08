@@ -130,6 +130,13 @@ describe("unknown-color matcher", () => {
     for (const c of ["bg-[#123]", "text-[color:var(--x)]", "border-[rgb(1,2,3)]", "from-[#fff]", "hover:bg-[hsl(0_0%_50%)]", "ring-[oklch(0.5_0.1_120)]", "text-[#abcdef]/50"])
       expect(bad(`<a className="${c}" />`), c).toBe(true);
   });
+  it("flags named colours, unknown vars, colours anywhere in an arbitrary value, and arbitrary colour properties", () => {
+    for (const c of ["bg-[red]", "text-[white]", "bg-[var(--x)]", "bg-(--x)", "shadow-[0_0_0_1px_#fff]", "shadow-[0_0_0_1px_red]", "[color:#123]", "[background-color:rgb(1,2,3)]", "hover:[color:var(--nope)]", "[--pane-bg:#000]"])
+      expect(bad(`<a className="${c}" />`), c).toBe(true);
+  });
+  it("accepts token vars in arbitrary values and local vars defined from tokens", () => {
+    expect(bad('<a className="shadow-[inset_2px_0_0_var(--accent)] shadow-[0_0_0_1px_var(--sidebar-border)] accent-[var(--color-accent)] [--pane-bg:var(--bg)] bg-(--pane-bg,var(--surface))" />')).toBe(false);
+  });
   it("accepts arbitrary non-colour values", () => {
     expect(bad('<a className="border-[2px] bg-[url(/a.png)] bg-[length:4px_4px] text-[length:13px] from-[10%]" />')).toBe(false);
   });
@@ -161,6 +168,11 @@ describe("off-scale-spacing matcher", () => {
   it("sees px inside arbitrary expressions", () => {
     expect(bad('<a className="pl-[max(78px,calc(50%_-_10px))]" />')).toBe(true);
     expect(bad('<a className="pr-[max(var(--a),calc(50%_+_var(--b)))]" />')).toBe(false);
+  });
+  it("sees lengths after an underscore in arbitrary values", () => {
+    expect(bad('<a className="pl-[calc(50%_-_10px)]" />')).toBe(true);
+    expect(bad('<a className="p-[6px_10px]" />')).toBe(true);
+    expect(bad('<a className="p-[0_0]" />')).toBe(false);
   });
   it("allows the title bar's 78px traffic-light inset, only in TitleBar", () => {
     expect(bad('<a className="pl-[78px]" />', "src/ui/TitleBar.tsx")).toBe(false);
