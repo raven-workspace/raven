@@ -54,3 +54,12 @@ describe("shadcn Ink theme", () => {
     expect(cn("h-8", "h-11")).toBe("h-11");
   });
 });
+
+describe("code type role", () => {
+  it("text-code sets the mono family, and code has ligatures off", () => {
+    expect(css).toMatch(/\.text-code\s*\{[^}]*font-family:\s*var\(--font-mono\)/);
+    const rule = /code,\s*kbd,\s*samp,\s*pre,\s*\.font-mono,\s*\.text-code\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(rule).toMatch(/font-variant-ligatures:\s*none/);
+    expect(rule).toMatch(/"liga" 0, "calt" 0/);
+  });
+});

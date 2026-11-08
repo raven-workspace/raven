@@ -146,7 +146,7 @@ describe("⌘K palette", () => {
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzprobe");
     await user.keyboard("{Enter}");
     // The unfilled {TARGET_IP} holds the first Enter back; the second copies anyway.
-    expect(await screen.findByText("{TARGET_IP} not filled · ↵ again to copy anyway")).toBeInTheDocument();
+    expect(await screen.findByText("{TARGET_IP} not filled. Press ↵ again to copy anyway")).toBeInTheDocument();
     await user.keyboard("{Enter}");
     await vi.waitFor(async () => expect(await navigator.clipboard.readText()).toBe("zzprobe {TARGET_IP} from 10.10.14.9"));
     expect(m.logCreate).not.toHaveBeenCalled();
@@ -689,11 +689,11 @@ describe("⌘K cap and copy-guard arm", () => {
     await user.type(box, "zzguard");
     await navigator.clipboard.writeText("untouched");
     await user.keyboard("{Enter}");
-    expect(await screen.findByText(/not filled · ↵ again to copy anyway/)).toBeInTheDocument();
+    expect(await screen.findByText(/not filled. Press ↵ again to copy anyway/)).toBeInTheDocument();
     box.focus();
     await user.keyboard("{ArrowDown}{ArrowUp}");
     await user.keyboard("{Enter}");
-    expect(await screen.findByText(/not filled · ↵ again to copy anyway/)).toBeInTheDocument();
+    expect(await screen.findByText(/not filled. Press ↵ again to copy anyway/)).toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toBe("untouched");
   });
 });

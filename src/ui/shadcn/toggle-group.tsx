@@ -27,7 +27,7 @@ function ToggleGroup({
       data-variant={variant}
       data-size={size}
       className={cn(
-        "group/toggle-group inline-flex w-fit shrink-0 items-center overflow-hidden rounded-sm border border-line-2",
+        "group/toggle-group inline-flex h-7 w-fit shrink-0 items-stretch overflow-hidden rounded-sm border border-line-2",
         className
       )}
       {...props}
@@ -60,6 +60,7 @@ function ToggleGroupItem({
           variant: context.variant || variant,
           size: context.size || size,
         }),
+        "h-full",
         className
       )}
       {...props}

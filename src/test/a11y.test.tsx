@@ -11,10 +11,10 @@ describe("a11y leftovers", () => {
     expect(b.querySelector("kbd")).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("command blocks are focusable and named", () => {
+  it("command blocks are named and add no Tab stop", () => {
     render(<CommandList commands={[{ id: "a", title: "Run it", text: "id", unresolved: [], msfMarker: false }]} />);
     const pre = screen.getAllByTestId("command-block")[0]!.querySelector("pre")!;
-    expect(pre.tabIndex).toBe(0);
     expect(pre).toHaveAccessibleName("Command: Run it");
+    expect(pre.getAttribute("tabindex")).toBeNull();
   });
 });

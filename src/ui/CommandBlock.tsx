@@ -50,10 +50,8 @@ export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, 
     <div className="grid gap-1">
       {label && <span className="text-meta text-muted-2">{label}</span>}
       <div className="grid grid-cols-[minmax(0,1fr)_28px] items-start gap-2 rounded-sm border border-line bg-surface px-2 py-2">
-        {/* Focusable so a keyboard user can scroll a token longer than the line. */}
         <pre
-          className="m-0 min-w-0 overflow-x-auto font-mono text-code whitespace-pre-wrap text-fg-2"
-          tabIndex={0}
+          className="m-0 min-w-0 overflow-x-hidden font-mono text-code whitespace-pre-wrap text-fg-2"
           {...(name ? { role: "group", "aria-label": `Command: ${name}` } : {})}
         >
           <code>
@@ -63,7 +61,7 @@ export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, 
               // Each space-separated token never breaks (browsers would otherwise break after a hyphen), even around a
               // placeholder; the spaces between tokens are the only break points.
               return (
-                <span key={i} data-token className="whitespace-nowrap">
+                <span key={i} data-token className="inline-block max-w-full [overflow-wrap:anywhere]">
                   {marks(t, re).map((m, j) => (m.warn ? <mark key={j} className="bg-transparent text-warn">{m.text}</mark> : m.text))}
                 </span>
               );

@@ -318,6 +318,22 @@ describe("engagement checklist", () => {
     expect(m.tunnelDelete).toHaveBeenCalledWith("t1");
   });
 
+  it("tunnel and hop rows delete with a muted trash icon", async () => {
+    const user = userEvent.setup();
+    const t: Tunnel = { id: "t1", engagementId: "e1", kind: "chisel", viaHostId: "h1", subnets: ["10.20.0.0/24"], callbackIp: "", status: "up", notes: null, createdAt: 1, updatedAt: 1 };
+    mount({ hops: [hop()], tunnels: [t] });
+    for (const name of [/^Delete hop/, /^Delete chisel tunnel/]) {
+      const del = await screen.findByRole("button", { name });
+      expect(del.querySelector("svg")).not.toBeNull();
+      expect(del).toHaveTextContent("");
+      expect(del.className).toMatch(/text-muted/);
+      expect(del.className).toMatch(/hover:text-warn/);
+      expect(del.className).not.toMatch(/(^|\s)text-warn/);
+    }
+    await user.click(screen.getByRole("button", { name: /^Delete hop/ }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
   it("setup follows Off-the-Bat order with groups", async () => {
     mount();
     await screen.findByText("Add the /etc/hosts lines");

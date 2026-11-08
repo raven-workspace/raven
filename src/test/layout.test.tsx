@@ -30,6 +30,8 @@ describe("layout (U5–U7)", () => {
     const pre = screen.getByText((_, el) => el?.tagName === "PRE");
     expect(pre.className).not.toMatch(/break-all|break-words|wrap-anywhere|wrap-break-word/);
     expect(pre.className).toMatch(/whitespace-pre-wrap/);
+    expect(pre.className).toMatch(/overflow-x-hidden/);
+    expect(pre.className).not.toMatch(/overflow-x-(auto|scroll)/);
     expect(pre.textContent).toBe("nxc smb 10.10.67.140 -u tom");
   });
 
@@ -58,7 +60,8 @@ describe("layout (U5–U7)", () => {
     const segs = within(group).getAllByRole("radio");
     expect(segs.map((b) => b.textContent)).toEqual(["To do", "Doing", "Done", "N/A"]);
     expect(segs.filter((b) => b.getAttribute("aria-checked") === "true").map((b) => b.textContent)).toEqual(["Doing"]);
-    for (const s of segs) expect(s.className).toMatch(/\bh-7\b/);
+    expect(group.className).toMatch(/\bh-7\b/);
+    for (const s of segs) expect(s.className).toMatch(/\bh-full\b/);
     expect(group.className).toMatch(/rounded-sm/);
     expect(screen.getByText("Because.").parentElement!.className).toMatch(/gap-3/);
   });
@@ -81,7 +84,7 @@ describe("layout (U5–U7)", () => {
     const block = screen.getByTestId("command-block");
     const words = [...block.querySelectorAll("[data-token]")];
     expect(words.map((w) => w.textContent)).toEqual(["rustscan", "-a", "10.10.20.15", "--", "-sC", "-sV"]);
-    for (const w of words) expect(w.className).toMatch(/whitespace-nowrap/);
+    for (const w of words) expect(w.className).toMatch(/inline-block max-w-full \[overflow-wrap:anywhere\]/);
     expect(block.querySelector("pre")!.textContent).toBe("rustscan -a 10.10.20.15 -- -sC -sV");
   });
 

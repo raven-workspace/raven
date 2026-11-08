@@ -105,10 +105,11 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
     root.current?.scrollIntoView({ block: "start" });
   }, [focus]);
   const titleClass = status === "done" ? "text-muted line-through" : status === "na" ? "text-muted" : "text-fg";
+  const cover = isCoverMarked(state);
   const Caret = open ? CaretDown : CaretRight;
 
   return (
-    <li ref={root} data-goal-id={goal.id} className="grid grid-cols-[28px_minmax(0,1fr)_auto_auto] items-start gap-x-2 gap-y-3 border-b border-line py-3">
+    <li ref={root} data-goal-id={goal.id} className={`grid items-start gap-x-2 gap-y-3 border-b border-line py-3 ${cover ? "grid-cols-[28px_minmax(0,1fr)_auto_auto]" : "grid-cols-[28px_minmax(0,1fr)_auto]"}`}>
       <IconButton
         icon={Caret}
         label={`${open ? "Collapse" : "Expand"} ${goal.title}`}
@@ -118,15 +119,15 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
       <div data-testid="goal-title-col" className="grid min-w-0 gap-1">
         <span className={`min-w-0 py-1 text-body ${titleClass}`}>{goal.title}</span>
       </div>
-      {isCoverMarked(state) && <span className="col-start-3 py-1 text-meta text-muted">{DA_COVER_LABEL}</span>}
-      <div data-testid="goal-status" className="col-start-4">
+      {cover && <span className="py-1 text-meta text-muted">{DA_COVER_LABEL}</span>}
+      <div data-testid="goal-status">
         <StatusToggles label={`Status: ${goal.title}`} status={status} onStatus={(s) => onStatus(goal.id, s)} />
       </div>
       {status === "done" && newCredLabels && newCredLabels.length > 0 && (
-        <div className="col-start-2 col-end-5 min-w-0"><NewCredNotice labels={newCredLabels} /></div>
+        <div className="col-start-2 col-end-[-1] min-w-0"><NewCredNotice labels={newCredLabels} /></div>
       )}
       {open && (
-        <div className="col-start-2 col-end-5 grid min-w-0 gap-3">
+        <div className="col-start-2 col-end-[-1] grid min-w-0 gap-3">
           {goal.why && <p className="m-0 text-meta text-muted">{goal.why}</p>}
           {commands.length > 0 ? (
             <>

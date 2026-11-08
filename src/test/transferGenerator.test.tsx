@@ -208,7 +208,7 @@ describe("Transfer a file in Payloads: context and copy guard", () => {
     expect(await navigator.clipboard.readText()).toBe("untouched");
     expect(m.logCreate).not.toHaveBeenCalled();
     expect(screen.getByRole("complementary", { name: "Raven's read" }).querySelector("input[aria-label='LHOST']")).toHaveFocus();
-    expect(g.getByText("{LHOST} not filled · ↵ again to copy anyway")).toBeInTheDocument();
+    expect(g.getByText("{LHOST} not filled. Press ↵ again to copy anyway")).toBeInTheDocument();
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
   });

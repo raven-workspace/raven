@@ -175,7 +175,7 @@ describe("Payloads drawer", () => {
     await user.keyboard("{Enter}");
     expect(await navigator.clipboard.readText()).toBe("untouched");
     expect(d.getByRole("textbox", { name: "LHOST" })).toHaveFocus();
-    expect(d.getByText("{LHOST} not filled · ↵ again to copy anyway")).toBeInTheDocument();
+    expect(d.getByText("{LHOST} not filled. Press ↵ again to copy anyway")).toBeInTheDocument();
     // Typing the IP there and pressing ↵ copies the filled payload.
     await user.keyboard(LHOST);
     await user.keyboard("{Enter}");

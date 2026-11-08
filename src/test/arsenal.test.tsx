@@ -660,11 +660,11 @@ describe("drawer list grouped by category (U1)", () => {
     await navigator.clipboard.writeText("untouched");
     await d.findByRole("option", { name: /Zzfetch the file/ });
     await user.keyboard("{Enter}");
-    expect(await d.findByText("{FILE} not filled · ↵ again to copy anyway")).toBeInTheDocument();
+    expect(await d.findByText("{FILE} not filled. Press ↵ again to copy anyway")).toBeInTheDocument();
     expect(d.getByRole("combobox", { name: "Value for FILE" })).toHaveFocus();
     expect(await navigator.clipboard.readText()).toBe("untouched");
     await user.keyboard("{Enter}");
-    expect(await d.findByText("Copied for dc01 · 1 placeholder left")).toBeInTheDocument();
+    expect(await d.findByText("Copied for dc01. 1 placeholder left")).toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toBe("zzfetch http://10.10.14.9/{FILE}");
   });
 
@@ -679,10 +679,10 @@ describe("drawer list grouped by category (U1)", () => {
     await navigator.clipboard.writeText("untouched");
     await d.findByRole("option", { name: /Zzfetch the file/ });
     await user.keyboard("{Enter}");
-    expect(await d.findByText(/not filled · ↵ again to copy anyway/)).toBeInTheDocument();
+    expect(await d.findByText(/not filled. Press ↵ again to copy anyway/)).toBeInTheDocument();
     search.focus();
     await user.keyboard("{ArrowDown}{ArrowUp}{Enter}");
-    expect(await d.findByText(/not filled · ↵ again to copy anyway/)).toBeInTheDocument();
+    expect(await d.findByText(/not filled. Press ↵ again to copy anyway/)).toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toBe("untouched");
   });
 
