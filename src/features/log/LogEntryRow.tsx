@@ -4,7 +4,7 @@ import { HOST_IP } from "../../engines/attribution";
 import { shortHostName } from "../../lib/hostName";
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
-import { Button, Chip, Dialog, Toolbar } from "../../ui";
+import { Button, Chip, Dialog, IconButton, Toolbar } from "../../ui";
 import { EditEntryDialog } from "./EditEntryDialog";
 import { KIND_LABELS } from "./kindLabels";
 import { LogEntryBody } from "./LogEntryBody";
@@ -110,16 +110,13 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
     <li className="border-b border-line">
       {picking ? (
         <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center">
-          <button
-            type="button"
-            aria-expanded={open}
+          <IconButton
+            icon={Caret}
+            label={open ? "Hide the entry" : "Show the entry"}
             aria-label={open ? `Hide ${entry.title}` : `Show ${entry.title}`}
-            title={open ? "Hide the entry" : "Show the entry"}
+            aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
-            className="grid h-7 w-6 cursor-default place-items-center text-muted hover:text-fg"
-          >
-            <Caret size={12} weight="light" aria-hidden />
-          </button>
+          />
           {row}
         </div>
       ) : (

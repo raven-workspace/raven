@@ -13,7 +13,7 @@ import { useId, useState } from "react";
 import { NavLink, useMatch } from "react-router";
 import { cx } from "../../lib/cx";
 import { shortHostName } from "../../lib/hostName";
-import { IconButton } from "../../ui";
+import { IconButton, Tooltip } from "../../ui";
 import {
   Sidebar as ShadSidebar,
   SidebarContent,
@@ -26,7 +26,6 @@ import {
   SidebarProvider,
   SidebarSeparator,
 } from "../../ui/shadcn/sidebar";
-import { TooltipProvider } from "../../ui/shadcn/tooltip";
 import { isDialogOpen, useKeydown } from "../../lib/keys";
 import type { Host } from "../../types/host";
 import { HostDialog } from "../hosts/HostDialog";
@@ -67,32 +66,35 @@ function SectionItem({ engagementId, id, label, n, collapsed }: {
   const SectionIcon = SECTION_ICONS[id];
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton
-        asChild
-        isActive={active}
-        // The key number lives in the rail tooltip ("Board" then "1"); the tooltip shows only when collapsed.
-        tooltip={{
-          children: (
-            <>
-              <span>{label}</span>
-              <span className="ml-2 font-mono text-muted">{n}</span>
-            </>
-          ),
-        }}
-        className={cx("cursor-default", !collapsed && "grid h-[30px] grid-cols-[16px_minmax(0,1fr)_auto] px-2")}
+      {/* The key number lives in the rail tooltip ("Board" then "1"); the tooltip shows only when collapsed. */}
+      <Tooltip
+        side="right"
+        disabled={!collapsed}
+        content={
+          <>
+            <span>{label}</span>
+            <span className="ml-2 font-mono text-muted">{n}</span>
+          </>
+        }
       >
-        <NavLink to={to} end aria-label={collapsed ? label : undefined}>
-          <SectionIcon aria-hidden />
-          {!collapsed && (
-            <>
-              <span>{label}</span>
-              <span aria-hidden className="font-mono text-meta text-faint">
-                {n}
-              </span>
-            </>
-          )}
-        </NavLink>
-      </SidebarMenuButton>
+        <SidebarMenuButton
+          asChild
+          isActive={active}
+          className={cx("cursor-default", !collapsed && "grid h-[30px] grid-cols-[16px_minmax(0,1fr)_auto] px-2")}
+        >
+          <NavLink to={to} end aria-label={collapsed ? label : undefined}>
+            <SectionIcon aria-hidden />
+            {!collapsed && (
+              <>
+                <span>{label}</span>
+                <span aria-hidden className="font-mono text-meta text-faint">
+                  {n}
+                </span>
+              </>
+            )}
+          </NavLink>
+        </SidebarMenuButton>
+      </Tooltip>
     </SidebarMenuItem>
   );
 }
@@ -104,37 +106,50 @@ function HostItem({ engagementId, host: h, threads, collapsed }: {
   const active = useMatch(to) !== null;
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton
-        asChild
-        size="lg"
-        isActive={active}
-        className={cx(
-          "cursor-default",
-          collapsed
-            ? "grid grid-cols-[minmax(0,1fr)] justify-items-center gap-1"
-            : "grid grid-cols-[16px_minmax(0,1fr)_auto] gap-2 px-2",
-        )}
+      {/* Collapsed, the rail shows a short name: the full name and IP are in the tooltip, which keyboard focus opens too. */}
+      <Tooltip
+        side="right"
+        disabled={!collapsed}
+        content={
+          <span className="grid">
+            {h.name && <span>{h.name}</span>}
+            {h.ip && <span className="font-mono text-code">{h.ip}</span>}
+          </span>
+        }
       >
-        <NavLink to={to} title={collapsed ? [h.name, h.ip].filter(Boolean).join("\n") : h.name}>
-          <HostGlyph column={h.boardColumn} />
-          {collapsed ? (
-            <>
-              <span className="sr-only">{h.name}</span>
-              <span aria-hidden className="font-mono text-meta">
-                {railName(h.name, h.ip)}
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="grid min-w-0 grid-cols-1">
-                <span className="truncate">{shortHostName(h.name)}</span>
-                {h.ip && <span className="truncate font-mono text-meta text-faint">{h.ip}</span>}
-              </span>
-              <ThreadDot count={threads} />
-            </>
+        <SidebarMenuButton
+          asChild
+          size="lg"
+          isActive={active}
+          className={cx(
+            "cursor-default",
+            collapsed
+              ? "grid grid-cols-[minmax(0,1fr)] justify-items-center gap-1"
+              : "grid grid-cols-[16px_minmax(0,1fr)_auto] gap-2 px-2",
           )}
-        </NavLink>
-      </SidebarMenuButton>
+        >
+          <NavLink to={to} title={collapsed ? undefined : h.name}>
+            <HostGlyph column={h.boardColumn} />
+            {collapsed ? (
+              <>
+                {/* The link's name: the host name, or its IP when it has none (the tooltip is not a name). */}
+                <span className="sr-only">{h.name || h.ip}</span>
+                <span aria-hidden className="font-mono text-meta">
+                  {railName(h.name, h.ip)}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="grid min-w-0 grid-cols-1">
+                  <span className="truncate">{shortHostName(h.name)}</span>
+                  {h.ip && <span className="truncate font-mono text-meta text-faint">{h.ip}</span>}
+                </span>
+                <ThreadDot count={threads} />
+              </>
+            )}
+          </NavLink>
+        </SidebarMenuButton>
+      </Tooltip>
     </SidebarMenuItem>
   );
 }
@@ -163,7 +178,7 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
   const group = collapsed ? "px-1 py-0" : "px-3 py-0";
 
   return (
-    <TooltipProvider>
+    <>
       <SidebarProvider
         open={!collapsed}
         onOpenChange={(open) => open === collapsed && toggle()}
@@ -226,6 +241,6 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
         </ShadSidebar>
       </SidebarProvider>
       <HostDialog open={adding} onOpenChange={setAdding} engagementId={engagementId} />
-    </TooltipProvider>
+    </>
   );
 }

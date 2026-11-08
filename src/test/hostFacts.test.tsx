@@ -292,6 +292,16 @@ describe("services grid", () => {
     expect(m.serviceSetVerdict).toHaveBeenCalledWith("s3", "candidate", undefined);
   });
 
+  it("the verdict chip's hint is a tooltip that keyboard focus opens", async () => {
+    mount();
+    const g = await group("Services");
+    const chip = await g.findByRole("button", { name: "Verdict for 22/tcp: untested" });
+    expect(chip).not.toHaveAttribute("title");
+    expect(chip).toHaveClass("min-h-7");
+    chip.focus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Set the verdict (C, U or D on the row)");
+  });
+
   it("clicking the pressed verdict closes the menu without changing it", async () => {
     const user = userEvent.setup();
     mount();
@@ -495,6 +505,18 @@ describe("who am I and privesc vectors", () => {
     expect(m.vectorSetStatus).toHaveBeenCalledWith("v1", "ruled_out", "patched");
     await user.click(vectors.getByRole("button", { name: "Reopen AlwaysInstallElevated" }));
     expect(m.vectorSetStatus).toHaveBeenCalledWith("v3", "untested", undefined);
+  });
+
+  it("a vector's status chip names its toggle in a tooltip on keyboard focus", async () => {
+    mount({ host: after(), vectors: [vector("v1", "SeImpersonatePrivilege abuse", "try"), vector("v3", "AlwaysInstallElevated", "ruled_out")] });
+    const vectors = await group("Privesc vectors");
+    const tryChip = await vectors.findByRole("button", { name: "SeImpersonatePrivilege abuse: try" });
+    const reopen = vectors.getByRole("button", { name: "Reopen AlwaysInstallElevated" });
+    for (const b of [tryChip, reopen]) expect(b).not.toHaveAttribute("title");
+    tryChip.focus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Mark untested");
+    reopen.focus();
+    await waitFor(() => expect(screen.getByRole("tooltip")).toHaveTextContent("Reopen as untested"));
   });
 
   it("deleting a vector asks first", async () => {

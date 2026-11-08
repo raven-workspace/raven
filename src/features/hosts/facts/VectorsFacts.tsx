@@ -3,7 +3,7 @@ import { useState } from "react";
 import { cx } from "../../../lib/cx";
 import type { PrivescVector, VectorStatus } from "../../../types/hostFacts";
 import type { Host } from "../../../types/host";
-import { ActionCell, Button, Chip, IconButton, Input, type ChipVariant } from "../../../ui";
+import { ActionCell, Button, Chip, IconButton, Input, Tooltip, type ChipVariant } from "../../../ui";
 import { ConfirmDelete } from "../../checklist/ConfirmDelete";
 import { useHostFactsMutations, useVectors } from "../queries";
 import { FactGroup, SummaryCell } from "./FactGroup";
@@ -57,26 +57,29 @@ function VectorRow({ v, engagementId, hostId }: { v: PrivescVector; engagementId
   return (
     <li className="col-span-full grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-2 border-b border-line py-2 @min-[26rem]:col-span-3 @min-[26rem]:grid-cols-subgrid">
       <span className={cx("col-span-2 min-w-0 truncate text-meta @min-[26rem]:col-span-1", ruledOut ? "text-muted" : "text-fg")} title={v.title}>{v.title}</span>
+      {/* A status chip as a toggle (DESIGN.md Chips): a 28px target, its action in a tooltip. */}
       {ruledOut ? (
-        <button
-          type="button"
-          title="Reopen as untested"
-          aria-label={`Reopen ${v.title}`}
-          onClick={() => setVectorStatus.mutate({ id: v.id, status: "untested" })}
-          className="grid min-h-7 cursor-default place-items-center justify-self-start"
-        >
-          {status}
-        </button>
+        <Tooltip content="Reopen as untested">
+          <button
+            type="button"
+            aria-label={`Reopen ${v.title}`}
+            onClick={() => setVectorStatus.mutate({ id: v.id, status: "untested" })}
+            className="grid min-h-7 cursor-default place-items-center justify-self-start"
+          >
+            {status}
+          </button>
+        </Tooltip>
       ) : (
-        <button
-          type="button"
-          title={v.status === "try" ? "Mark untested" : "Mark worth trying"}
-          aria-label={`${v.title}: ${STATUS_LABEL[v.status]}`}
-          onClick={() => setVectorStatus.mutate({ id: v.id, status: v.status === "try" ? "untested" : "try" })}
-          className="grid min-h-7 cursor-default place-items-center justify-self-start"
-        >
-          {status}
-        </button>
+        <Tooltip content={v.status === "try" ? "Mark untested" : "Mark worth trying"}>
+          <button
+            type="button"
+            aria-label={`${v.title}: ${STATUS_LABEL[v.status]}`}
+            onClick={() => setVectorStatus.mutate({ id: v.id, status: v.status === "try" ? "untested" : "try" })}
+            className="grid min-h-7 cursor-default place-items-center justify-self-start"
+          >
+            {status}
+          </button>
+        </Tooltip>
       )}
       <div className="justify-self-end"><ActionCell>
         {!ruledOut && (

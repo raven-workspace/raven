@@ -6,7 +6,7 @@ import { isFreeKey } from "../../../lib/keys";
 import type { ServiceVerdict } from "../../../types/hostFacts";
 import type { LogEntry } from "../../../types/log";
 import type { Service } from "../../../types/service";
-import { Button, Chip, Dialog, Input, type ChipVariant } from "../../../ui";
+import { Button, Chip, Dialog, Input, Tooltip, type ChipVariant } from "../../../ui";
 import { ToggleGroup, ToggleGroupItem } from "../../../ui/shadcn/toggle-group";
 import { useServiceMutations, useServices } from "../../services/queries";
 import { ConfirmServiceDialog } from "../ConfirmServiceDialog";
@@ -130,18 +130,20 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
           {s.state !== "open" && <span className="text-code text-muted-2">{s.state}</span>}
         </span>
       </button>
-      <button
-        type="button"
-        aria-label={`Verdict for ${proto}: ${VERDICT_LABEL[verdict]}`}
-        aria-expanded={asking === "menu"}
-        title="Set the verdict (C, U or D on the row)"
-        onClick={() => setAsking(asking === "menu" ? undefined : "menu")}
-        className="grid min-h-7 cursor-default place-items-center justify-self-start"
-      >
-        <Chip variant={VERDICT_CHIP[verdict]} className={verdict === "dead_end" ? "text-muted line-through" : undefined}>
-          {VERDICT_LABEL[verdict]}
-        </Chip>
-      </button>
+      {/* A status chip as a toggle (DESIGN.md Chips): a 28px target, its action in a tooltip. */}
+      <Tooltip content="Set the verdict (C, U or D on the row)">
+        <button
+          type="button"
+          aria-label={`Verdict for ${proto}: ${VERDICT_LABEL[verdict]}`}
+          aria-expanded={asking === "menu"}
+          onClick={() => setAsking(asking === "menu" ? undefined : "menu")}
+          className="grid min-h-7 cursor-default place-items-center justify-self-start"
+        >
+          <Chip variant={VERDICT_CHIP[verdict]} className={verdict === "dead_end" ? "text-muted line-through" : undefined}>
+            {VERDICT_LABEL[verdict]}
+          </Chip>
+        </button>
+      </Tooltip>
       {asking === "menu" && (
         <div className="col-span-3 grid grid-flow-col items-center justify-start gap-2 pb-2">
           <ToggleGroup

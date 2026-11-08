@@ -75,10 +75,26 @@ describe("sidebar", () => {
     m.hostsList.mockResolvedValue([host("h1", FULL, "10.10.20.15"), host("h2", "dc01", null), host("h3", "", "192.0.2.77")]);
     mount();
     const web = (await screen.findByText("web")).closest("a")!;
-    expect(web).toHaveAttribute("title", `${FULL}\n10.10.20.15`);
-    expect(screen.getByRole("link", { name: /dc01/ })).toHaveAttribute("title", "dc01");
-    expect(screen.getByText("77").closest("a")).toHaveAttribute("title", "192.0.2.77");
+    // Name and IP live in a Raven tooltip (shown on keyboard focus), not a native title.
+    for (const a of screen.getAllByRole("link")) expect(a).not.toHaveAttribute("title");
+    expect(screen.getByRole("link", { name: /dc01/ })).toBeInTheDocument();
+    expect(screen.getByText("77").closest("a")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add host" })).toBeInTheDocument();
+    web.focus();
+    const tip = await screen.findByRole("tooltip");
+    expect(within(tip).getByText(FULL)).toBeInTheDocument();
+    expect(within(tip).getByText("10.10.20.15")).toHaveClass("font-mono");
+  });
+
+  it("a rail host with no name shows its IP alone in the tooltip", async () => {
+    useSidebarStore.setState({ collapsed: true });
+    m.hostsList.mockResolvedValue([host("h3", "", "192.0.2.77")]);
+    mount();
+    const link = (await screen.findByText("77")).closest("a")!;
+    expect(link).toHaveAccessibleName(/192\.0\.2\.77$/);
+    link.focus();
+    const tip = await screen.findByRole("tooltip");
+    expect(tip).toHaveTextContent(/^192\.0\.2\.77$/);
   });
 
   it("section labels are not truncated, so Engagement checklist fits", async () => {
@@ -219,6 +235,18 @@ describe("log row chip", () => {
   it("shows a short chip for other hosts", () => {
     renderRow(<LogEntryRow entry={e} hosts={hosts} />);
     expect(screen.getByText("web-portal-dmz-frontend-01")).toBeInTheDocument();
+  });
+  it("pick mode's caret is an icon button whose tooltip shows on keyboard focus", async () => {
+    const user = userEvent.setup();
+    renderRow(<LogEntryRow entry={e} hosts={hosts} onPick={() => {}} />);
+    const caret = screen.getByRole("button", { name: "Show t" });
+    expect(caret).not.toHaveAttribute("title");
+    expect(caret).toHaveClass("size-7");
+    expect(caret.querySelector("svg")).toHaveAttribute("width", "16");
+    caret.focus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Show the entry");
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: "Hide t" })).toHaveAttribute("aria-expanded", "true");
   });
 });
 

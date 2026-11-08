@@ -198,6 +198,7 @@ All shared pieces live in `src/ui`. Feature code composes them and doesn't hand-
 
 ### Buttons and icon buttons
 
+- **Tooltips.** One `Tooltip` (`src/ui`), on hover and on keyboard focus, under the app's single `TooltipProvider`, so moving along a toolbar opens the next tooltip at once. Feature code never imports shadcn's tooltip (lint enforces it). A native `title` doesn't show on keyboard focus, so it never carries the only statement of an action or shortcut.
 - **IconButton.** A 28×28 box with a 16px Phosphor icon (regular weight). It has no border at rest, `--surface-hi` on hover, and the focus ring on focus. An `aria-label` and a tooltip are required; the tooltip names the action and its shortcut ("Copy · ⌘C").
 - **Icon or text.**
   - Universal verbs are icons:
@@ -275,6 +276,10 @@ Each table declares its column policy; automatic layout never decides.
 - Chips are for state. Metadata (OS, kind, sub-label) is text in the metadata line, or the OS brand icon.
 - No fact appears as a chip more than once per screen.
 - A chip never sits in a track that can't contain it.
+- **A status chip as a toggle.** Where a compact state flips in place (a service verdict, a privesc vector's status), the chip itself is the control:
+  - a bare `button` wraps the chip and is the 28px target (`min-h-7`), with an `aria-label` naming the subject and its state;
+  - the action ("Mark untested", "Set the verdict (C, U or D on the row)") is in a Raven `Tooltip`, which keyboard focus opens too. Never a native `title`.
+  - Anything with more than two states, or not a state, is a `Button` or a `ToggleGroup`.
 
 ### Secondary options and disclosure
 
