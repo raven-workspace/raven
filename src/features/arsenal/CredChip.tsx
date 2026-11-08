@@ -30,7 +30,7 @@ export function CredChip({ credentials, value, onPick, attempts = [], hostId = n
 }) {
   const options: ChipOption[] = [
     { id: null, name: "No credential" },
-    ...credentials.map((c) => ({ id: c.id, name: who(c), detail: `${kind(c)}, ${testedState(c.id, hostId, attempts)}` })),
+    ...credentials.map((c) => ({ id: c.id, name: who(c), detail: kind(c), detail2: testedState(c.id, hostId, attempts) })),
   ];
   return (
     <div className={cx("grid min-w-0", className)}>
@@ -41,7 +41,7 @@ export function CredChip({ credentials, value, onPick, attempts = [], hostId = n
         onPick={onPick}
         label={`Fill with credential: ${value ? who(value) : "none"}`}
         listLabel="Fill with credential"
-        title="Fill with another credential (⌥C)"
+        title={`${value ? credLabel(value) : "No credential"}: fill with another credential (⌥C)`}
         align={align}
         wide
         prefix="Credential"

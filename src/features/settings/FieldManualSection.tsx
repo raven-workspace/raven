@@ -58,7 +58,7 @@ export function FieldManualSection() {
       {error && <p className="m-0 mt-2 text-xs text-warn">{error}</p>}
       {s && (
         <p className="m-0 mt-3 text-xs text-fg-2">
-          last: {new Date(s.importedAt).toLocaleString()} · {s.cards.length} cards ·{" "}
+          last: {new Date(s.importedAt).toLocaleString()}, {s.cards.length} cards,{" "}
           {Object.keys(s.overlay ?? {}).length + (s.added?.length ?? 0)} commands
         </p>
       )}

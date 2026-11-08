@@ -10,6 +10,8 @@ export interface ChipOption {
   name: string;
   /** Right-hand muted cell. */
   detail?: string;
+  /** A second right-hand muted cell. */
+  detail2?: string;
 }
 
 const FLASH_MS = 600;
@@ -19,7 +21,7 @@ const TYPEAHEAD_MS = 700;
  * A context picker: a bordered `PickerTrigger` ("Host  dc01 v", amber "Pick one" while `shown` is unset) in the Tab
  * order, and its listbox. A click, Enter or `ref.open()` opens the list: arrows move, Enter picks, Esc closes and gives
  * focus back, typeahead works only inside the open list. A pick that changes `value` flashes the trigger once
- * (`data-flash`). The pointer never moves the list's highlight: hover tints a row, keys and clicks choose.
+ * (`data-flash`). In the open list the pointer moves the highlight like the arrow keys (a popup, not a pane).
  */
 export function ChipPicker({ options, value, onPick, label, listLabel, title, align = "end", wide, prefix, shown, ref }: {
   options: ChipOption[]; value: string | null; onPick: (id: string | null) => void;
@@ -148,10 +150,12 @@ export function ChipPicker({ options, value, onPick, label, listLabel, title, al
               // Keeps focus on the chip so its keys keep working and blur does not close the list first.
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => pick(i)}
-              className={`grid cursor-default grid-cols-[minmax(0,1fr)_auto] gap-4 rounded-sm px-2 py-1 whitespace-pre ${i === active ? "bg-accent/10 text-accent" : "text-fg-2 hover:bg-surface-hi"}`}
+              onMouseMove={() => setActive(i)}
+              className={`grid cursor-default grid-cols-[minmax(0,1fr)_auto_auto] gap-4 rounded-sm px-2 py-1 whitespace-pre ${i === active ? "bg-accent/10 text-accent shadow-[inset_2px_0_0_var(--accent)]" : "text-fg-2"}`}
             >
               <span className="truncate">{o.name}</span>
               <span className="text-meta text-muted">{o.detail ?? ""}</span>
+              <span className="text-meta text-muted">{o.detail2 ?? ""}</span>
             </li>
           ))}
         </ul>

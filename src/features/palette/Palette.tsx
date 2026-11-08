@@ -224,13 +224,16 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     void run(e.metaKey || e.ctrlKey);
   };
 
-  const hints: Hint[] = [
-    { keys: "↵", label: "copy", priority: 1 },
-    { keys: "⌘↵", label: host ? "copy and log" : "copy and log (open a host)", priority: 2 },
-    { keys: "→", label: "in card", priority: 3 },
-    { keys: "⇥", label: "edit a value", priority: 4 },
-    ...(engagementId ? [{ keys: "⌥H", label: "host", priority: 5 }, { keys: "⌥C", label: "credential", priority: 5 }] : []),
-  ];
+  const hints = useMemo<Hint[]>(
+    () => [
+      { keys: "↵", label: "copy", priority: 1 },
+      { keys: "⌘↵", label: host ? "copy and log" : "copy and log (open a host)", priority: 2 },
+      ...(engagementId ? [{ keys: "⌥H", label: "host", priority: 3 }, { keys: "⌥C", label: "credential", priority: 3 }] : []),
+      { keys: "→", label: "in card", priority: 4 },
+      { keys: "⇥", label: "edit a value", priority: 5 },
+    ],
+    [engagementId, host],
+  );
   return (
     <div data-hint-surface="" className="grid gap-3" onKeyDown={onKey} onKeyDownCapture={onKeyCapture}>
       <header className="grid gap-2">
@@ -251,14 +254,14 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
           {...(engagementId ? { trailing: null } : {})}
         />
         {engagementId && (
-          <div className="grid grid-cols-[auto_minmax(0,1fr)] justify-items-start gap-3">
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] justify-items-start gap-3">
             <HostChip
               ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} align="start" className="max-w-full"
               {...(remembered && d.engagement ? { engagementName: d.engagement.name } : {})}
             />
             <CredChip
               ref={credRef} credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred}
-              onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} align="start" className="max-w-full"
+              onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} className="max-w-full"
             />
           </div>
         )}

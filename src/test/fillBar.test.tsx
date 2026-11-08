@@ -116,7 +116,7 @@ describe("CredChip", () => {
     expect(chip).toHaveFocus();
     act(() => ref.current?.open());
     const opts = within(screen.getByRole("listbox", { name: "Fill with credential" })).getAllByRole("option");
-    expect(opts.map((o) => o.textContent)).toEqual(["No credential", "CORP\\alicepassword, admin", "CORP\\bobhash, untested"]);
+    expect(opts.map((o) => o.textContent)).toEqual(["No credential", "CORP\\alicepasswordadmin", "CORP\\bobhashuntested"]);
     await user.keyboard("{ArrowUp}{Enter}");
     expect(onPick).toHaveBeenCalledWith("c1");
   });

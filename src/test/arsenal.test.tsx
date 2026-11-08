@@ -168,7 +168,8 @@ describe("Arsenal", () => {
     await user.click(await screen.findByRole("button", { name: "From card Zz Card" }));
     const d = within(await drawer());
     expect(await d.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
-    expect(d.getByText("Zz Cat · any")).toBeInTheDocument();
+    expect(d.getByText("Zz Cat")).toBeInTheDocument();
+    expect(d.getByText("any")).toBeInTheDocument();
   });
 
   it("a FILE chip edit refills every command on the card", async () => {
@@ -628,7 +629,7 @@ describe("drawer list grouped by category (U1)", () => {
     expect(screen.getByRole("complementary", { name: "Arsenal" })).toBeInTheDocument();
     expect(d.getByRole("option", { name: /Zzprobe the target/ })).toBeInTheDocument();
     const hints = [...d.getByRole("group", { name: "Arsenal shortcuts" }).querySelectorAll("[data-hint]")].map((h) => h.textContent);
-    expect(hints).toEqual(["↵copy", "⌘↵copy and log", "→in card", "⌥Hhost", "Escclose"]);
+    expect(hints).toEqual(["↵copy", "⌘↵copy and log", "⌥Hhost", "⌥Ccredential", "Escclose"]);
   });
 
   it("hovering another row keeps the clicked row selected and its fill fields reachable", async () => {

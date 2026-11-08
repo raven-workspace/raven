@@ -97,6 +97,12 @@ describe("tiny-type and joined-strings", () => {
     expect(breaks("joined-strings", U, "<p>a — b</p>")).toBe(false);
     expect(breaks("joined-strings", U, "<span>a · b</span>")).toBe(true);
   });
+  it("joined-strings catches a separator between two expressions, even inside <p>", () => {
+    expect(breaks("joined-strings", U, "<p>{a} · {b}</p>")).toBe(true);
+    expect(breaks("joined-strings", U, "<p>{a} — {b}</p>")).toBe(true);
+    expect(breaks("joined-strings", U, "<p>{a} → {b}</p>")).toBe(true);
+    expect(breaks("joined-strings", U, "<p>{a} and {b}</p>")).toBe(false);
+  });
   it("joined-strings catches escaped separators", () => {
     for (const j of ["\\u00B7", "\\u2014", "\\u2192", "&middot;", "&mdash;", "&rarr;"])
       expect(breaks("joined-strings", U, `const s = \`a ${j} b\`;`)).toBe(true);

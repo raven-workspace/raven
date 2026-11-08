@@ -56,6 +56,7 @@ export function ArsenalBrowse() {
   const listRef = useRef<HTMLDivElement>(null);
   const readingRef = useRef<HTMLElement>(null);
   const catsRef = useRef<HTMLDivElement>(null);
+  const selectRef = useRef<HTMLButtonElement>(null);
   // A category picked by arrow keeps focus on its button once the list has re-rendered.
   const focusAfter = useRef<string | null>(null);
   useEffect(() => {
@@ -185,7 +186,9 @@ export function ArsenalBrowse() {
     if (open?.type === "generator") void navigate(payloadsPath(open.id));
     else (readingRef.current?.querySelector<HTMLElement>("[data-block]") ?? readingRef.current)?.focus();
   };
-  const focusCategory = () => catsRef.current?.querySelector<HTMLElement>('button[tabindex="0"]')?.focus();
+  const wide = () => !catsRef.current || getComputedStyle(catsRef.current).display !== "none";
+  // Below 1100px the categories are the Select above the list, so ← goes there.
+  const focusCategory = () => (wide() ? catsRef.current?.querySelector<HTMLElement>('button[tabindex="0"]') : selectRef.current)?.focus();
   const modified = (e: ReactKeyboardEvent) => e.metaKey || e.ctrlKey || e.altKey || e.nativeEvent.isComposing;
 
   const onSearchKey = (e: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -203,10 +206,13 @@ export function ArsenalBrowse() {
     if (e.key === "ArrowRight") {
       e.preventDefault();
       listRef.current?.focus();
-    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Home" || e.key === "End") {
       e.preventDefault();
-      const at = visible.indexOf(current ?? "");
-      const next = visible[Math.max(0, Math.min(visible.length - 1, at + (e.key === "ArrowDown" ? 1 : -1)))];
+      // From the focused tab (while searching it can differ from the open category).
+      const from = (e.target as HTMLElement).closest<HTMLElement>("[data-category]")?.dataset.category ?? current ?? "";
+      const at = visible.indexOf(from);
+      const to = e.key === "Home" ? 0 : e.key === "End" ? visible.length - 1 : at + (e.key === "ArrowDown" ? 1 : -1);
+      const next = visible[Math.max(0, Math.min(visible.length - 1, to))];
       if (!next) return;
       // While searching the arrows only move; Enter or a click picks (and ends the search).
       if (searching) {
@@ -262,7 +268,7 @@ export function ArsenalBrowse() {
       <article aria-label={c.title} className="grid grid-cols-[minmax(0,1fr)] gap-3">
         <header className="grid gap-1">
           <h2 className="m-0 text-heading text-fg">{c.title}</h2>
-          <p className="m-0 text-meta text-muted"><span className="font-mono">{c.tool}</span> · {categoryLabel(categoryOf(c, cards))}</p>
+          <p className="m-0 grid grid-flow-col justify-start gap-2 text-meta text-muted"><span className="font-mono">{c.tool}</span><span>{categoryLabel(categoryOf(c, cards))}</span></p>
         </header>
         <CommandPane key={c.id} commands={[c]} {...common} />
         {card && (
@@ -302,7 +308,7 @@ export function ArsenalBrowse() {
                 }}
               />
               <CredChip
-                ref={credRef} align="start" credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred}
+                ref={credRef} credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred}
                 onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} className="max-w-72"
               />
             </>
@@ -315,7 +321,7 @@ export function ArsenalBrowse() {
         <nav aria-label="Categories" className="col-start-1 row-start-1 min-h-0 min-[1100px]:overflow-y-auto min-[1100px]:overflow-x-hidden min-[1100px]:py-1 min-[1100px]:pl-1 min-[1100px]:pr-3">
           <div className="grid min-[1100px]:hidden">
             <Select
-              aria-label="Category" value={current ?? undefined} onValueChange={(c) => openCategory(c, false)}
+              aria-label="Category" ref={selectRef} value={current ?? ""} onValueChange={(c) => openCategory(c, false)}
               options={visible.map((c) => ({ value: c, label: `${categoryLabel(c)} (${searching ? (hits.get(c) ?? 0) : counts.get(c)})` }))}
               className="w-full"
             />

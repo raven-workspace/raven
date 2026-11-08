@@ -554,9 +554,12 @@ describe("⌘K groups, hosts and contained suggestions", () => {
     const dlg = within(await screen.findByRole("dialog", { name: "Search" }));
     const line = dlg.getByRole("group", { name: "Search shortcuts" });
     expect(within(line).getByText("in card")).toBeInTheDocument();
+    expect(within(line).getByText("host")).toBeInTheDocument();
+    expect(within(line).getByText("credential")).toBeInTheDocument();
     // Five show; the rest are one click away behind the "?" key.
+    expect(within(line).queryByText("edit a value")).not.toBeInTheDocument();
     await user.click(within(line).getByRole("button", { name: "All shortcuts" }));
-    expect(await screen.findByText("credential")).toBeInTheDocument();
+    expect(await screen.findByText("edit a value")).toBeInTheDocument();
   });
 
   it("palette footer is a HintLine", async () => {

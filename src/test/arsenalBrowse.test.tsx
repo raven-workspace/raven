@@ -263,6 +263,33 @@ describe("three-pane browse", () => {
     expect(categories().getByRole("tab", { name: /Active Directory/ })).toHaveFocus();
   });
 
+  it("while searching, arrows walk the tabs from the focused one; Home and End jump", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByRole("heading", { name: "Aardvark roasting" });
+    await user.type(screen.getByRole("textbox", { name: "Search the Arsenal" }), "zz");
+    const tabs = categories().getAllByRole("tab");
+    tabs[0]!.focus();
+    await user.keyboard("{ArrowDown}");
+    expect(tabs[1]).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(tabs[2]).toHaveFocus();
+    await user.keyboard("{End}");
+    expect(tabs[tabs.length - 1]).toHaveFocus();
+    await user.keyboard("{Home}");
+    expect(tabs[0]).toHaveFocus();
+  });
+
+  it("below 1100px ← from the list focuses the Category select", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByRole("heading", { name: "Aardvark roasting" });
+    screen.getByRole("tablist", { name: "Categories" }).style.display = "none";
+    await user.click(screen.getByRole("option", { name: /Aardvark roasting/ }));
+    await user.keyboard("{ArrowLeft}");
+    expect(screen.getByRole("combobox", { name: "Category" })).toHaveFocus();
+  });
+
   it("the transfer generator is a link to Payloads", async () => {
     const user = userEvent.setup();
     mount();

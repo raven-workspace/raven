@@ -23,6 +23,11 @@ const METHOD_GROUPS = [
   { label: "HTTP", test: isHttp },
   { label: "Other", test: (g: string) => !isHttp(g) },
 ];
+const FIELD_COLS: Record<number, string> = {
+  2: "grid-cols-[max-content_max-content_minmax(0,1fr)]",
+  3: "grid-cols-[max-content_max-content_max-content_minmax(0,1fr)]",
+  4: "grid-cols-[max-content_max-content_max-content_max-content_minmax(0,1fr)]",
+};
 const dirKey = (os: Os) => `raven.transfer.dir.${os}`;
 const readDir = (os: Os): string => {
   try {
@@ -155,7 +160,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
   return (
     <section aria-label="Transfer a file" className="grid gap-4">
       <h2 className="m-0 text-heading text-fg">Transfer a file</h2>
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(8rem,max-content))] items-start justify-start gap-x-4 gap-y-3">
+      <div className={cx("grid items-start gap-x-4 gap-y-3", FIELD_COLS[2 + Number(!contextOs) + Number(usesPort)])}>
         <label className="grid gap-2 text-meta text-muted-2">
           <span>File</span>
           <FilePicker ref={fileRef} name="FILE" os={os} className="h-8 w-64 max-w-full" value={file} onChange={setFile} />

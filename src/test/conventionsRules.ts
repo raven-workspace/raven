@@ -250,8 +250,12 @@ export function breaks(rule: RuleId, file: string, src: string): boolean {
         )
       );
     case "joined-strings":
-      return /\s(·|—|→|&middot;|&mdash;|&rarr;|\\u00B7|\\u2014|\\u2192|\\u\{(b7|2014|2192)\}|&#(183|8212|8594);|&#x(b7|2014|2192);)\s/i.test(
-        stripProse(src),
+      return (
+        /\s(·|—|→|&middot;|&mdash;|&rarr;|\\u00B7|\\u2014|\\u2192|\\u\{(b7|2014|2192)\}|&#(183|8212|8594);|&#x(b7|2014|2192);)\s/i.test(
+          stripProse(src),
+        ) ||
+        // A separator between two expressions is a joined string even inside <p>: `{a} · {b}`.
+        /\}\s+(·|—|→|&middot;|&mdash;|&rarr;)\s+\{/i.test(stripComments(src))
       );
     case "hand-hint":
       return file !== "src/ui/HintLine.tsx" && handHint(src);

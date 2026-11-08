@@ -129,7 +129,8 @@ export function TokenInput({ name, value, onChange, suggestions, placeholder, cl
                 pick(s);
               }}
               title={s.value}
-              className={`grid cursor-default grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-sm px-2 py-1 font-mono text-code whitespace-nowrap ${i === active ? "bg-surface-hi text-fg" : "text-fg-2 hover:bg-surface-hi"}`}
+              onMouseMove={() => setActive(i)}
+              className={`grid cursor-default grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-sm px-2 py-1 font-mono text-code whitespace-nowrap ${i === active ? "bg-surface-hi text-fg shadow-[inset_2px_0_0_var(--accent)]" : "text-fg-2"}`}
             >
               <span className="min-w-0 truncate">{s.value}</span>
               {s.hint && <span className="font-sans text-meta text-muted">{s.hint}</span>}

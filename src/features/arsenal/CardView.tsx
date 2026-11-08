@@ -312,7 +312,7 @@ export function CardView({ cardId, engagementId, hostId, overrides, onOverrides,
     <article className="grid grid-cols-[minmax(0,1fr)] gap-3" aria-label={card.title}>
       <header className="grid gap-1">
         <h2 className="m-0 text-heading text-fg">{card.title}</h2>
-        <p className="m-0 text-meta text-muted">{categoryLabel(card.category)} · {card.os}</p>
+        <p className="m-0 grid grid-flow-col justify-start gap-2 text-meta text-muted"><span>{categoryLabel(card.category)}</span><span>{card.os}</span></p>
       </header>
       <CommandPane
         key={cardId} commands={commands} also={also} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={onOverrides}

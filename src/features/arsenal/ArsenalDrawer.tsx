@@ -257,16 +257,18 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
     else if (r.hit.type === "command") searchRef.current?.focus();
     else openHit(r.hit, false);
   };
-  const pickers: Hint[] = engagementId ? [{ keys: "⌥H", label: "host", priority: 4 }, { keys: "⌥C", label: "credential", priority: 4 }] : [];
-  const hints: Hint[] = onList
-    ? [
-        { keys: "↵", label: "copy", priority: 1 },
-        { keys: "⌘↵", label: host ? "copy and log" : "copy and log (open a host)", priority: 2 },
-        { keys: "→", label: "in card", priority: 3 },
-        ...pickers,
-        { keys: "Esc", label: inCategory ? "back" : "close", priority: 1 },
-      ]
-    : [{ keys: "Esc", label: "back", priority: 1 }, ...pickers];
+  const hints = useMemo<Hint[]>(() => {
+    const pickers: Hint[] = engagementId ? [{ keys: "⌥H", label: "host", priority: 3 }, { keys: "⌥C", label: "credential", priority: 3 }] : [];
+    return onList
+      ? [
+          { keys: "↵", label: "copy", priority: 1 },
+          { keys: "⌘↵", label: host ? "copy and log" : "copy and log (open a host)", priority: 2 },
+          { keys: "→", label: "in card", priority: 4 },
+          ...pickers,
+          { keys: "Esc", label: inCategory ? "back" : "close", priority: 1 },
+        ]
+      : [{ keys: "Esc", label: "back", priority: 1 }, ...pickers];
+  }, [engagementId, onList, host, inCategory]);
   return (
     <div
       // A results list keeps a fixed preview row under it: picking a longer or shorter command never moves the list.
@@ -310,7 +312,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
           </Button>
         </div>
         {engagementId && (
-          <div className="grid grid-cols-[auto_minmax(0,1fr)] justify-items-start gap-3">
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] justify-items-start gap-3">
             <HostChip ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} className="max-w-full" />
             <CredChip
               ref={credRef} credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred}
@@ -338,7 +340,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
             <>
             <CommandPreview
               filled={filled} hasCred={cred !== null} hostKey={host?.id ?? null} suggest={suggestCtx} os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
-              overrides={overrides} onOverrides={setOverrides}
+              overrides={overrides} onOverrides={setOverrides} rule={false}
               fieldRef={(t, el) => (el ? fieldEls.current.set(t, el) : fieldEls.current.delete(t))}
             />
             {note && <p role="status" className={`m-0 text-meta ${guard.hint ? "text-warn" : "text-muted"}`}>{note}</p>}

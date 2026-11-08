@@ -69,10 +69,11 @@ beforeEach(() => {
 });
 
 describe("CardView reading view", () => {
-  it("shows the title and a category · os meta line, without chips", async () => {
+  it("shows the title and a category and os meta line, without chips", async () => {
     mount();
     expect(await screen.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
-    expect(screen.getByText("Active Directory · windows")).toBeInTheDocument();
+    expect(screen.getByText("Active Directory")).toBeInTheDocument();
+    expect(screen.getByText("windows")).toBeInTheDocument();
     expect(screen.queryByText("Field Manual")).not.toBeInTheDocument();
   });
 
