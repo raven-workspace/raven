@@ -115,6 +115,11 @@ describe("unknown-color matcher", () => {
     expect(bad('<a className="bg-surface-hi/50 text-fg-2 border-line-strong hover:text-accent" />')).toBe(false);
     expect(bad('<a className="bg-transparent text-current border-inherit text-warn!" />')).toBe(false);
   });
+  it("accepts the shadcn colour names global.css aliases to Ink tokens", () => {
+    expect(bad('<a className="bg-sidebar text-sidebar-foreground hover:bg-sidebar-accent border-sidebar-border ring-sidebar-ring" />')).toBe(false);
+    expect(bad('<a className="bg-background text-foreground bg-popover text-muted-foreground border-input bg-destructive/10" />')).toBe(false);
+    expect(bad('<a className="bg-chart-1" />')).toBe(true);
+  });
   it("does not treat type roles, sizes, widths or modes as colours", () => {
     expect(
       bad('<a className="text-title text-body text-meta text-sm text-2xl text-left border-2 border-t border-dashed outline-none ring-2 bg-none from-10% stroke-2 divide-y" />'),

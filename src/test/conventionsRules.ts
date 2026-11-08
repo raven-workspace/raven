@@ -139,6 +139,18 @@ function handHint(src: string): boolean {
   return false;
 }
 
+/**
+ * shadcn's semantic colour names (src/ui/shadcn). Each is an alias of an Ink token, declared in
+ * global.css's "shadcn aliases" block (checked by src/test/ui/shadcnTheme.test.ts).
+ */
+export const SHADCN_COLORS = [
+  "background", "foreground", "card", "card-foreground", "popover", "popover-foreground",
+  "primary", "primary-foreground", "secondary", "secondary-foreground", "muted-foreground",
+  "accent-foreground", "destructive", "border", "input", "ring",
+  "sidebar", "sidebar-foreground", "sidebar-primary", "sidebar-primary-foreground",
+  "sidebar-accent", "sidebar-accent-foreground", "sidebar-border", "sidebar-ring",
+];
+
 /** The colour names tokens.css defines under `--color-*` (the rest of Tailwind's palette is reset). */
 const TOKEN_COLORS = new Set([
   ...[
@@ -146,6 +158,7 @@ const TOKEN_COLORS = new Set([
       /--color-([\w-]+):/g,
     ),
   ].map((m) => m[1]),
+  ...SHADCN_COLORS,
   "transparent",
   "current",
   "inherit",
