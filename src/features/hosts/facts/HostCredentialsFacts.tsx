@@ -1,4 +1,4 @@
-import { Plus } from "@phosphor-icons/react";
+import { PlusIcon } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 import {
   cellFor,
@@ -19,7 +19,7 @@ import { LEVEL_LABEL } from "../../credentials/AccessGrants";
 import { useAccessGrantMutations, useAccessGrants, useCredAttempts, useCredentials, useUsernames } from "../../credentials/queries";
 import { TestGrid } from "../../credentials/TestGrid";
 import { useLog } from "../../log/queries";
-import { FactGroup } from "./FactGroup";
+import { EntryLink, FactGroup, SummaryCell } from "./FactGroup";
 
 const LEVEL_OPTIONS = (Object.keys(LEVEL_LABEL) as AccessLevel[]).map((value) => ({ value, label: LEVEL_LABEL[value] }));
 const WORKS = new Set<CredAttempt["result"]>(["admin", "valid"]);
@@ -60,18 +60,21 @@ export function HostCredentialsFacts({ engagementId: eid, host, open, onToggle, 
   const failed = credsQ.error ?? usersQ.error ?? grantsQ.error ?? attemptsQ.error ?? servicesQ.error ?? logQ.error;
   const ready = credsQ.data && usersQ.data && grantsQ.data && attemptsQ.data && servicesQ.data && logQ.data;
   const counts = ready ? hostCredentialCounts(host, servicesByHost.get(host.id) ?? [], shown.creds, shown.attempts, grantsQ.data!) : undefined;
-  const summary = failed
-    ? "Host Credentials · couldn't load"
-    : counts
-      ? `Host Credentials · ${counts.works} work · ${counts.untested} untested`
-      : "Host Credentials";
+  const summary = failed ? (
+    <span>couldn't load</span>
+  ) : counts ? (
+    <>
+      <SummaryCell label="work">{counts.works}</SummaryCell>
+      <SummaryCell label="untested">{counts.untested}</SummaryCell>
+    </>
+  ) : undefined;
 
   return (
     <FactGroup title="Host Credentials" summary={summary} open={open} onToggle={onToggle}>
       {failed ? (
-        <p role="alert" className="m-0 text-xs text-warn">Couldn't load credentials: {failed.message}</p>
+        <p role="alert" className="m-0 text-meta text-warn">Couldn't load credentials: {failed.message}</p>
       ) : !ready ? null : (
-        <div className="flex flex-col gap-5">
+        <div className="grid gap-6">
           <HostResults
             attempts={attempts.filter((a) => a.hostId === host.id)}
             creds={creds}
@@ -96,28 +99,27 @@ function HostAccess({ eid, host, usernames, grants }: { eid: string; host: Host;
     return u ? usernameLabel(u) : "removed username";
   };
   return (
-    <section aria-label="Access without a secret" className="flex flex-col gap-2">
+    <section aria-label="Access without a secret" className="grid gap-2">
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
         <h3 className={`m-0 ${labelClass}`}>Access without a secret</h3>
         <Button size="sm" onClick={() => setAdding(true)} disabled={usernames.length === 0}>
-          <Plus size={12} weight="light" aria-hidden /> Add access
+          <PlusIcon size={16} weight="regular" aria-hidden /> Add access
         </Button>
       </header>
       {grants.length === 0 ? (
-        <p className="m-0 text-xs text-muted">
+        <p className="m-0 text-meta text-muted">
           {usernames.length === 0 ? "No usernames yet. List one on the Credentials page first." : "None on this host."}
         </p>
       ) : (
         <ul className="m-0 list-none border-t border-line p-0">
           {grants.map((g) => (
-            <li key={g.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-line py-1.5 text-[13px]">
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="truncate font-mono text-fg">{nameOf(g.usernameId)}</span>
-                <Chip variant="accent">{LEVEL_LABEL[g.level]}{g.via && ` · via ${g.via}`}</Chip>
-              </span>
+            <li key={g.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2 gap-y-1 border-b border-line py-2 text-meta">
+              <span className="truncate font-mono text-fg" title={nameOf(g.usernameId)}>{nameOf(g.usernameId)}</span>
+              <Chip variant="accent">{LEVEL_LABEL[g.level]}</Chip>
               <Button size="sm" aria-label={`Remove access as ${nameOf(g.usernameId)} on ${host.name}`} onClick={() => setRemoving(g)}>
                 Remove
               </Button>
+              {g.via && <span className="col-span-3 truncate text-muted" title={g.via}>via {g.via}</span>}
             </li>
           ))}
         </ul>
@@ -184,10 +186,13 @@ function AddHostAccess({ eid, host, usernames, onClose }: { eid: string; host: H
           <Input value={via} onChange={(e) => setVia(e.target.value)} placeholder="webshell" />
         </Field>
       </div>
-      {errors.form && <p role="alert" className="m-0 mt-2 text-xs text-warn">{errors.form}</p>}
+      {errors.form && <p role="alert" className="m-0 mt-2 text-meta text-warn">{errors.form}</p>}
     </Dialog>
   );
 }
+
+/** The command of a log entry's title: what comes before a standalone separator, so the link reads "nxc smb". */
+const commandName = (title: string) => title.split(/\s+[^\w\s]\s+/)[0];
 
 /** Accent only for access that works; warn for errored. */
 function ResultChip({ result }: { result: CredAttempt["result"] }) {
@@ -212,29 +217,28 @@ function HostResults({ attempts, creds, usernames, titles, onOpenEntry }: {
   };
   const rows = [...attempts].sort((a, b) => b.at - a.at);
   return (
-    <section aria-label="Results against this host" className="flex flex-col gap-2">
+    <section aria-label="Results against this host" className="grid gap-2">
       <h3 className={`m-0 ${labelClass}`}>Results against this host</h3>
       {rows.length === 0 ? (
-        <p className="m-0 text-xs text-muted">Nothing tried here yet. Paste nxc output into Add to log to record results.</p>
+        <p className="m-0 text-meta text-muted">Nothing tried here yet. Paste nxc output into Add to log to record results.</p>
       ) : (
         <ul className="m-0 list-none border-t border-line p-0">
           {rows.map((a) => {
             const title = a.logEntryId ? titles.get(a.logEntryId) : undefined;
             const who = subject(a);
             return (
-              <li key={a.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5 border-b border-line py-1.5">
-                <span className="truncate font-mono text-[12.5px] text-fg" title={who}>{who}</span>
+              <li key={a.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 border-b border-line py-2">
+                <span className="truncate font-mono text-code text-fg" title={who}>{who}</span>
                 <ResultChip result={a.result} />
-                <span className="min-w-0 truncate font-mono text-xs text-muted">
-                  <span className="text-fg-2">{a.service.toUpperCase()}{a.port ? ` ${a.port}` : ""}{a.authMode === "local" ? " · local" : ""}</span>
-                  {a.detail && <> · <span>{a.detail}</span></>}
+                <span className="grid min-w-0 grid-cols-[auto_auto_minmax(0,1fr)] items-baseline gap-2 font-mono text-code text-muted">
+                  <span className="text-fg-2">{a.service.toUpperCase()}{a.port ? ` ${a.port}` : ""}</span>
+                  <span>{a.authMode === "local" ? "local" : ""}</span>
+                  <span className="truncate" title={a.detail || undefined}>{a.detail}</span>
                 </span>
                 {a.logEntryId && title !== undefined ? (
-                  <button type="button" onClick={() => onOpenEntry?.(a.logEntryId!)} className="min-w-0 max-w-[14ch] cursor-default justify-self-end" title={title}>
-                    <Chip className="max-w-full hover:text-fg"><span className="truncate">↗ {title}</span></Chip>
-                  </button>
+                  <EntryLink title={title} label={commandName(title)} onClick={() => onOpenEntry?.(a.logEntryId!)} className="max-w-[20ch] justify-self-end" />
                 ) : (
-                  <span className="justify-self-end text-xs text-faint">{a.logEntryId ? "log entry removed" : "no proof"}</span>
+                  <span className="justify-self-end text-meta text-faint">{a.logEntryId ? "log entry removed" : "no proof"}</span>
                 )}
               </li>
             );

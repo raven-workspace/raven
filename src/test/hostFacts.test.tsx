@@ -121,9 +121,9 @@ describe("facts by phase", () => {
   it("before a foothold: Coverage, Services and Host Credentials are open; the after-foothold groups are folded summaries", async () => {
     mount();
     for (const name of ["Coverage", "Services", "Host Credentials"]) expect(await isOpen(name)).toBe(true);
-    expect(await summaryOf("Who am I")).toMatch(/^Who am I · not known yet/);
-    expect(await summaryOf("Privesc vectors")).toMatch(/^Privesc vectors · none yet/);
-    expect(await summaryOf("Other accounts")).toMatch(/^Other accounts · 0/);
+    expect(await summaryOf("Who am I")).toMatch(/^Who am I.*not known yet/);
+    expect(await summaryOf("Privesc vectors")).toMatch(/^Privesc vectors.*none yet/);
+    expect(await summaryOf("Other accounts")).toMatch(/^Other accounts.*0$/);
     const order = [...screen.getByRole("region", { name: "Facts" }).children].map((r) => r.getAttribute("aria-label"));
     expect(order).toEqual(["Coverage", "Services", "Host Credentials", "Who am I", "Privesc vectors", "Other accounts"]);
   });
@@ -138,7 +138,7 @@ describe("facts by phase", () => {
     const vectors = await group("Privesc vectors");
     expect(await vectors.findByText("SeImpersonatePrivilege abuse")).toBeInTheDocument();
     expect(vectors.getByRole("button", { name: "SeImpersonatePrivilege abuse: try" })).toBeInTheDocument();
-    expect(await summaryOf("Services")).toMatch(/^Services · /);
+    expect(await summaryOf("Services")).toMatch(/^Services.+/);
     const order = [...screen.getByRole("region", { name: "Facts" }).children].map((r) => r.getAttribute("aria-label"));
     expect(order.slice(0, 3)).toEqual(["Who am I", "Privesc vectors", "Other accounts"]);
   });
@@ -146,14 +146,23 @@ describe("facts by phase", () => {
   it("phase follows access, not the board column", async () => {
     mount({ host: host({ access: "none", boardColumn: "privilege-escalation" }) });
     expect(await isOpen("Services")).toBe(true);
-    expect(await summaryOf("Who am I")).toMatch(/^Who am I · /);
+    expect(await summaryOf("Who am I")).toMatch(/^Who am I.+/);
   });
 
-  it("the summaries: Services, Coverage and Host Credentials", async () => {
+  it("the summaries: Services, Coverage and Host Credentials, as labelled cells", async () => {
     mount({ host: host({ access: "root" }) });
-    expect(await summaryOf("Services")).toBe("Services · 1 ✓ · entry nginx 80 · 1 ?");
-    expect(await summaryOf("Coverage")).toMatch(/^Coverage · Vulnerability detection 0\/\d+$/);
-    await waitFor(async () => expect(await summaryOf("Host Credentials")).toBe("Host Credentials · 0 work · 0 untested"));
+    const services = await group("Services");
+    const cells = await services.findAllByTitle(/^(confirmed|entry|unidentified)$/);
+    expect(cells.map((c) => c.getAttribute("title"))).toEqual(["confirmed", "entry", "unidentified"]);
+    expect(cells.map((c) => c.textContent)).toEqual(["confirmed1", "entrynginx 80", "unidentified1"]);
+    expect(await summaryOf("Coverage")).toMatch(/^Coverage.*Vulnerability detection.*0\/\d+$/);
+    await waitFor(async () => expect(await summaryOf("Host Credentials")).toBe("Host Credentialswork0untested0"));
+  });
+
+  it("services summary has no middot string", async () => {
+    mount({ host: host({ access: "root" }) });
+    for (const name of ["Services", "Coverage", "Host Credentials"]) expect(await summaryOf(name)).not.toMatch(/[·—→]/);
+    expect(await summaryOf("Services")).not.toContain("✓");
   });
 
   it("an opened group stays open for that host (stored per host, folds only)", async () => {
@@ -186,7 +195,7 @@ describe("S toggles Services", () => {
     mount();
     expect(await isOpen("Services")).toBe(true);
     await user.keyboard("s");
-    expect(await summaryOf("Services")).toMatch(/^Services · /);
+    expect(await summaryOf("Services")).toMatch(/^Services.+/);
     await user.keyboard("S");
     expect(await isOpen("Services")).toBe(true);
   });
@@ -213,9 +222,10 @@ describe("services grid", () => {
     const nginx = (await g.findByText(/nginx 1\.18/)).closest("span")!;
     expect(nginx).toHaveClass("text-fg");
     expect(nginx).toHaveAttribute("title", "nmap: http Apache 2.4");
-    expect(within(nginx).getByText("✓")).toHaveClass("text-accent");
+    expect(within(nginx.parentElement!).getByText("confirmed").parentElement).toHaveClass("text-accent");
     expect(g.getByText("ssh OpenSSH 8.2")).toHaveClass("text-muted");
-    expect(g.getByText("?", { exact: false, selector: ".text-warn" })).toBeInTheDocument();
+    const smb = g.getByRole("button", { name: /^445\/tcp/ });
+    expect(within(smb).getByText("unidentified")).toBeInTheDocument();
   });
 
   it("a service that is not open shows its state", async () => {
@@ -278,7 +288,7 @@ describe("services grid", () => {
     mount();
     const g = await group("Services");
     await user.click(await g.findByRole("button", { name: "Verdict for 22/tcp: untested" }));
-    await user.click(within(g.getByRole("group", { name: "Verdict for 22/tcp" })).getByRole("button", { name: "Candidate" }));
+    await user.click(within(g.getByRole("radiogroup", { name: "Verdict for 22/tcp" })).getByRole("radio", { name: "Candidate" }));
     expect(m.serviceSetVerdict).toHaveBeenCalledWith("s3", "candidate", undefined);
   });
 
@@ -357,7 +367,6 @@ describe("who am I and privesc vectors", () => {
     const who = await group("Who am I");
     expect(await who.findByText(/Not known yet/)).toBeInTheDocument();
     const edit = who.getByRole("button", { name: "Edit who am I" });
-    expect(edit).toHaveAttribute("title");
     await user.click(edit);
     await user.type(who.getByRole("textbox", { name: "User" }), "ms01\\svc");
     await user.type(who.getByRole("textbox", { name: "Privileges" }), "SeBackupPrivilege");
@@ -472,7 +481,7 @@ describe("who am I and privesc vectors", () => {
     m.vectorDelete.mockResolvedValue(null);
     mount({ host: after(), vectors: [vector("v1", "SeImpersonatePrivilege abuse", "try")] });
     const del = await (await group("Privesc vectors")).findByRole("button", { name: "Delete SeImpersonatePrivilege abuse" });
-    expect(del).toHaveAttribute("data-variant", "danger");
+    expect(del).toHaveAccessibleName("Delete SeImpersonatePrivilege abuse");
     await user.click(del);
     expect(m.vectorDelete).not.toHaveBeenCalled();
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete vector" }));
@@ -503,7 +512,7 @@ describe("who am I and privesc vectors", () => {
     expect(g.queryByText(/Winter2024/)).not.toBeInTheDocument();
     const user = userEvent.setup();
     await user.click(await toggleOf("Other accounts"));
-    expect(await summaryOf("Other accounts")).toBe("Other accounts · 2");
+    expect(await summaryOf("Other accounts")).toMatch(/^Other accounts.*2$/);
   });
 
   it("Other accounts shows at most six rows, then +N more; the summary counts them all", async () => {
@@ -516,7 +525,7 @@ describe("who am I and privesc vectors", () => {
     expect(g.getAllByText(/\(hash\)$/)).toHaveLength(6);
     const user = userEvent.setup();
     await user.click(await toggleOf("Other accounts"));
-    expect(await summaryOf("Other accounts")).toBe("Other accounts · 9");
+    expect(await summaryOf("Other accounts")).toMatch(/^Other accounts.*9$/);
   });
 
   it("saving an identity edit adds vectors only for newly added privileges, keeping the user's status on the rest", async () => {

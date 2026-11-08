@@ -72,6 +72,16 @@ beforeEach(() => {
 });
 
 describe("stuck view", () => {
+  it("stuck view has a visible close button", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByRole("region", { name: "Host" });
+    await user.keyboard("h");
+    const panel = await screen.findByRole("complementary", { name: /Stuck on web01/ });
+    await user.click(within(panel).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("complementary", { name: /Stuck on web01/ })).not.toBeInTheDocument();
+  });
+
   it("H opens the stuck view and Esc closes it", async () => {
     const user = userEvent.setup();
     mount();

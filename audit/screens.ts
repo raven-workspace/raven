@@ -39,7 +39,7 @@ export const SCREENS: Screen[] = [
     },
   },
   { id: "host-findings", path: H, ready: "role=tab[name='Findings'][selected]", setup: tab("Findings") },
-  { id: "host-postfoothold", path: `/e/${AUDIT_IDS.examEngagement}/h/${AUDIT_IDS.msfHost}`, ready: "role=button[name='Edit who am I']" },
+  { id: "host-postfoothold", path: `/e/${AUDIT_IDS.examEngagement}/h/${AUDIT_IDS.msfHost}`, ready: "role=region[name='Who am I']" },
   {
     id: "finding-split", path: H, ready: "role=region[name='Finding']",
     setup: async (page) => { await focusBody(page); await page.keyboard.press("f"); },

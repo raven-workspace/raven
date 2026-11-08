@@ -1,4 +1,4 @@
-import { CaretDownIcon, CaretRightIcon, Plus } from "@phosphor-icons/react";
+import { CaretDownIcon, CaretRightIcon, CheckIcon, PlusIcon, QuestionIcon } from "@phosphor-icons/react";
 import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { effectiveVerdict, foldServices, serviceIdentity, sortServices, type EffectiveVerdict } from "../../../engines/facts";
 import { cx } from "../../../lib/cx";
@@ -6,11 +6,12 @@ import { isFreeKey } from "../../../lib/keys";
 import type { ServiceVerdict } from "../../../types/hostFacts";
 import type { LogEntry } from "../../../types/log";
 import type { Service } from "../../../types/service";
-import { Button, Dialog, Input } from "../../../ui";
+import { Button, Chip, Dialog, Input, type ChipVariant } from "../../../ui";
+import { ToggleGroup, ToggleGroupItem } from "../../../ui/shadcn/toggle-group";
 import { useServiceMutations, useServices } from "../../services/queries";
 import { ConfirmServiceDialog } from "../ConfirmServiceDialog";
 import { ServiceDialog } from "../ServiceDialog";
-import { FactGroup } from "./FactGroup";
+import { FactGroup, SummaryCell } from "./FactGroup";
 
 const VERDICT_LABEL: Record<EffectiveVerdict, string> = {
   candidate: "candidate",
@@ -18,27 +19,40 @@ const VERDICT_LABEL: Record<EffectiveVerdict, string> = {
   untested: "untested",
   dead_end: "dead end",
 };
-const VERDICT_TONE: Record<EffectiveVerdict, string> = {
-  candidate: "border-accent text-accent",
-  identify: "border-warn text-warn",
-  untested: "border-line-strong text-fg-2",
-  dead_end: "border-line text-muted line-through",
+const VERDICT_CHIP: Record<EffectiveVerdict, ChipVariant> = {
+  candidate: "accent",
+  identify: "default",
+  untested: "default",
+  dead_end: "default",
 };
 const GRID = "grid grid-cols-[6ch_minmax(0,1fr)_auto] gap-x-2";
-const ROW = "col-span-3 grid grid-cols-subgrid items-baseline border-b border-line";
+const ROW = "col-span-3 grid grid-cols-subgrid items-center border-b border-line";
 
-/** "Services · 7 ✓ · entry IIS 80 · 2 ?": what's confirmed, the first candidate, and what's still unidentified. */
-export function servicesSummary(services: Service[]): string {
-  if (services.length === 0) return "Services · none yet";
+/** What the folded Services line counts: confirmed identities, the first candidate (the entry), and unidentified ones. */
+export function servicesSummaryParts(services: Service[]) {
   const confirmed = services.filter((s) => serviceIdentity(s).confirmed).length;
   const unknown = services.filter((s) => !serviceIdentity(s).confirmed && serviceIdentity(s).unidentified).length;
   const entry = sortServices(services).find((s) => s.verdict === "candidate");
-  const parts = ["Services"];
-  if (confirmed > 0) parts.push(`${confirmed} ✓`);
-  if (entry) parts.push(`entry ${entry.confirmedProduct?.trim() || entry.nmapService || "?"} ${entry.port}`);
-  if (unknown > 0) parts.push(`${unknown} ?`);
-  if (parts.length === 1) parts.push(`${services.length} open`);
-  return parts.join(" · ");
+  return {
+    confirmed,
+    unknown,
+    entry: entry ? `${entry.confirmedProduct?.trim() || entry.nmapService || "?"} ${entry.port}` : undefined,
+    total: services.length,
+  };
+}
+
+/** The folded Services line as labelled cells: confirmed, entry, unidentified (or the open count). */
+function ServicesSummary({ services }: { services: Service[] }) {
+  if (services.length === 0) return <span>none yet</span>;
+  const { confirmed, unknown, entry, total } = servicesSummaryParts(services);
+  if (confirmed === 0 && !entry && unknown === 0) return <SummaryCell label="open">{total}</SummaryCell>;
+  return (
+    <>
+      {confirmed > 0 && <SummaryCell label="confirmed" icon={CheckIcon} tone="accent">{confirmed}</SummaryCell>}
+      {entry && <SummaryCell label="entry">{entry}</SummaryCell>}
+      {unknown > 0 && <SummaryCell label="unidentified" icon={QuestionIcon}>{unknown}</SummaryCell>}
+    </>
+  );
 }
 
 /** Arrow keys move between the rows of one services grid. */
@@ -91,50 +105,67 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
         type="button"
         data-service-row
         aria-label={`${proto} ${id.label || "unidentified"}, ${VERDICT_LABEL[verdict]}`}
-        title={verdict === "dead_end" ? `${proto}: dead end. Change it from the verdict menu` : `${proto}: C candidate · U untested · D dead end`}
+        title={verdict === "dead_end" ? `${proto}: dead end. Change it from the verdict menu` : `${proto}: C candidate, U untested, D dead end`}
         onClick={onOpen}
         onKeyDown={onKeyDown}
-        className="col-span-2 grid cursor-default grid-cols-subgrid items-baseline py-1 text-left hover:bg-surface focus-visible:bg-surface"
+        className="col-span-2 grid min-h-8 cursor-default grid-cols-subgrid items-center py-1 text-left hover:bg-surface focus-visible:bg-surface"
       >
-        <span className="font-mono text-xs text-fg-2">
+        <span className="text-code text-fg-2">
           {s.port}
           {s.protocol === "udp" && <span className="text-faint">u</span>}
         </span>
-        <span className="min-w-0 truncate text-[13px]">
-          {id.confirmed ? (
-            <span className="text-fg" title={guess ? `nmap: ${guess}` : undefined}>
-              {id.label} <span className="text-accent">✓</span>
-            </span>
-          ) : (
-            <span className="text-muted">
-              {id.label}
-              {id.unidentified && <span className="text-warn">{id.label ? " ?" : "?"}</span>}
-            </span>
-          )}
-          {s.state !== "open" && <span className="ml-1.5 font-mono text-[11px] text-muted-2">{s.state}</span>}
+        <span className="grid min-w-0 grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 text-meta">
+          <span className={id.confirmed ? "text-accent" : "text-fg-2"}>
+            {id.confirmed && <CheckIcon size={16} weight="regular" aria-hidden />}
+            {id.confirmed && <span className="sr-only">confirmed</span>}
+            {!id.confirmed && id.unidentified && <QuestionIcon size={16} weight="regular" aria-hidden />}
+            {!id.confirmed && id.unidentified && <span className="sr-only">unidentified</span>}
+          </span>
+          <span
+            className={cx("truncate", id.confirmed ? "text-fg" : "text-muted")}
+            title={id.confirmed && guess ? `nmap: ${guess}` : id.label || undefined}
+          >
+            {id.label || "unidentified"}
+          </span>
+          {s.state !== "open" && <span className="text-code text-muted-2">{s.state}</span>}
         </span>
       </button>
       <button
         type="button"
         aria-label={`Verdict for ${proto}: ${VERDICT_LABEL[verdict]}`}
         aria-expanded={asking === "menu"}
-        title="Set the verdict (C · U · D on the row)"
+        title="Set the verdict (C, U or D on the row)"
         onClick={() => setAsking(asking === "menu" ? undefined : "menu")}
-        className={cx("cursor-default self-center rounded-sm border px-1.5 text-[11px] leading-4", VERDICT_TONE[verdict])}
+        className="cursor-default self-center"
       >
-        {VERDICT_LABEL[verdict]}
+        <Chip variant={VERDICT_CHIP[verdict]} className={verdict === "dead_end" ? "text-muted line-through" : undefined}>
+          {VERDICT_LABEL[verdict]}
+        </Chip>
       </button>
       {asking === "menu" && (
-        <div role="group" aria-label={`Verdict for ${proto}`} className="col-span-3 flex gap-1.5 pb-1.5">
-          <Button size="sm" onClick={() => { onVerdict("candidate"); setAsking(undefined); }}>Candidate</Button>
-          <Button size="sm" onClick={() => { onVerdict("untested"); setAsking(undefined); }}>Untested</Button>
-          <Button size="sm" onClick={askReason}>Dead end…</Button>
+        <div className="col-span-3 grid grid-flow-col items-center justify-start gap-2 pb-2">
+          <ToggleGroup
+            type="single"
+            size="sm"
+            aria-label={`Verdict for ${proto}`}
+            value={s.verdict ?? ""}
+            onValueChange={(v) => {
+              if (v === "candidate" || v === "untested") {
+                onVerdict(v);
+                setAsking(undefined);
+              } else if (v === "dead_end") askReason();
+            }}
+          >
+            <ToggleGroupItem value="candidate">Candidate</ToggleGroupItem>
+            <ToggleGroupItem value="untested">Untested</ToggleGroupItem>
+            <ToggleGroupItem value="dead_end">Dead end…</ToggleGroupItem>
+          </ToggleGroup>
           {s.verdict !== null && <Button size="sm" onClick={() => { onVerdict(null); setAsking(undefined); }}>Clear</Button>}
         </div>
       )}
       {asking === "reason" && (
         <form
-          className="col-span-3 pb-1.5"
+          className="col-span-3 pb-2"
           onSubmit={(e) => {
             e.preventDefault();
             if (pending || reason.trim() === "") return;
@@ -153,7 +184,7 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
               e.preventDefault();
               setAsking(undefined);
             }}
-            className="h-7 text-xs"
+            className="h-7"
           />
         </form>
       )}
@@ -183,9 +214,9 @@ export function FoldedRows({ label, services, render, defaultOpen = false }: {
           aria-expanded={open}
           title={open ? `Fold ${label}` : `Show ${label}`}
           onClick={() => setOpen(!open)}
-          className="col-span-3 grid cursor-default grid-cols-subgrid items-center py-1 text-left text-[13px] text-muted hover:text-fg"
+          className="col-span-3 grid min-h-8 cursor-default grid-cols-subgrid items-center py-1 text-left text-meta text-muted hover:text-fg"
         >
-          <Caret size={12} weight="light" aria-hidden />
+          <Caret size={16} weight="regular" aria-hidden />
           <span className="col-span-2">{label}</span>
         </button>
       </li>
@@ -252,20 +283,20 @@ export function ServicesFacts({ engagementId, hostId, entries, open, onToggle }:
   return (
     <FactGroup
       title="Services"
-      summary={services.isError ? "Services · couldn't load" : services.data ? servicesSummary(services.data) : "Services"}
+      summary={services.isError ? <span>couldn't load</span> : services.data ? <ServicesSummary services={services.data} /> : undefined}
       open={open}
       onToggle={onToggle}
       shortcut="S"
       actions={
         <Button size="sm" onClick={() => setAdding(true)}>
-          <Plus size={12} weight="light" aria-hidden /> Add service
+          <PlusIcon size={16} weight="regular" aria-hidden /> Add service
         </Button>
       }
     >
       {services.isError ? (
-        <p role="alert" className="m-0 text-xs text-warn">Couldn't load services: {services.error.message}</p>
+        <p role="alert" className="m-0 text-meta text-warn">Couldn't load services: {services.error.message}</p>
       ) : services.data?.length === 0 ? (
-        <p className="m-0 text-xs text-muted">No services yet. Paste an nmap scan to capture them.</p>
+        <p className="m-0 text-meta text-muted">No services yet. Paste an nmap scan to capture them.</p>
       ) : (
         <ul data-services-grid className={cx(GRID, "m-0 list-none p-0")}>
           {sortServices(rows).map(row)}
@@ -273,7 +304,7 @@ export function ServicesFacts({ engagementId, hostId, entries, open, onToggle }:
           <FoldedRows label={`${udp.length} UDP`} services={udp} render={row} />
         </ul>
       )}
-      {setVerdict.error && <p role="alert" className="m-0 text-xs text-warn">Couldn't set the verdict: {setVerdict.error.message}</p>}
+      {setVerdict.error && <p role="alert" className="m-0 text-meta text-warn">Couldn't set the verdict: {setVerdict.error.message}</p>}
       {current && dialog?.mode === "confirm" && (
         <ConfirmServiceDialog
           engagementId={engagementId}

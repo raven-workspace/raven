@@ -3,6 +3,7 @@ import { SCROLL_PANE } from "../../ui/controlStyles";
 import { Link, useLocation, useNavigate } from "react-router";
 import { isDialogOpen, isFreeKey, isTypingTarget, useKeydown } from "../../lib/keys";
 import { EmptyState } from "../../ui";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/shadcn/tabs";
 import type { Finding } from "../../types/findings";
 import { FindingSplit } from "../findings/FindingSplit";
 import { HostFindings } from "../findings/HostFindings";
@@ -117,6 +118,10 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   });
   const [rootRef, width] = useWidth();
   const stacked = width !== undefined && width < TWO_COLUMNS_PX;
+  const selectTab = (id: TabId) => {
+    setTab(id);
+    setFocusGoal(undefined);
+  };
   const openInLog = (id: string) => {
     setOpenEntry(id);
     setTab("log");
@@ -130,7 +135,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
       <EmptyState
         title="Host not found"
         body="It may have been deleted."
-        action={<Link to={`/e/${engagementId}`} className="text-[13px] text-fg-2 hover:text-fg">Back to the board</Link>}
+        action={<Link to={`/e/${engagementId}`} className="text-meta text-fg-2 hover:text-fg">Back to the board</Link>}
       />
     );
   }
@@ -152,37 +157,28 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
       ) : (
         <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 @min-[760px]/host:grid-cols-[minmax(16rem,1fr)_minmax(0,1.4fr)] @min-[760px]/host:grid-rows-1 @min-[760px]/host:gap-6">
           <div className={`max-h-[40vh] ${SCROLL_PANE} @min-[760px]/host:max-h-none`}>{facts}</div>
-          <div className="flex min-h-0 min-w-0 flex-col">
+          <Tabs
+            value={tab}
+            onValueChange={(v) => selectTab(v as TabId)}
+            className="min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)]"
+          >
             <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-              <div role="tablist" aria-label="Host work" className="flex gap-2">
+              <TabsList aria-label="Host work">
                 {TABS.map((t, i) => (
-                  <button
-                    key={t.id}
-                    role="tab"
-                    type="button"
-                    aria-selected={tab === t.id}
-                    title={`${t.label} (⌥${i + 1})`}
-                    onClick={() => {
-                      setTab(t.id);
-                      setFocusGoal(undefined);
-                    }}
-                    className={`h-7 cursor-default rounded-[var(--radius-sm)] px-3 text-[13px] uppercase ${
-                      tab === t.id ? "bg-surface-hi text-fg shadow-[inset_0_-2px_0_var(--color-accent)] font-semibold" : "text-muted hover:text-fg"
-                    }`}
-                  >
+                  <TabsTrigger key={t.id} value={t.id} title={`${t.label} (⌥${i + 1})`} onClick={() => selectTab(t.id)}>
                     {t.label}
-                  </button>
+                  </TabsTrigger>
                 ))}
-              </div>
+              </TabsList>
               {tab === "log" && <OrderButton order={order} onChange={setOrder} />}
               {tab === "next" && <FullChecklistToggle full={fullChecklist} onChange={setFullChecklist} />}
             </div>
-            <div role="tabpanel" aria-label={TABS.find((t) => t.id === tab)!.label} className={`mt-3 flex-1 border-t border-line ${SCROLL_PANE}`}>
+            <TabsContent value={tab} aria-label={TABS.find((t) => t.id === tab)!.label} className={`border-t border-line ${SCROLL_PANE}`}>
               {tab === "log" ? (
                 log.isError ? (
-                  <p role="alert" className="text-xs text-warn">Couldn't load the log: {log.error.message}</p>
+                  <p role="alert" className="text-meta text-warn">Couldn't load the log: {log.error.message}</p>
                 ) : entries.length === 0 && log.data ? (
-                  <p className="text-[13px] text-muted">Nothing logged on this host yet. Press L to capture.</p>
+                  <p className="text-meta text-muted">Nothing logged on this host yet. Press L to capture.</p>
                 ) : (
                   <ul className="m-0 list-none p-0">
                     {entries.map((e) => <LogEntryRow key={e.id} entry={e} hosts={hosts.data} currentHostId={hostId} defaultOpen={e.id === openEntry} />)}
@@ -193,8 +189,8 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
               ) : (
                 <HostFindings engagementId={engagementId} host={host} onOpenEntry={openInLog} onOpenFinding={openFinding} />
               )}
-            </div>
-          </div>
+            </TabsContent>
+          </Tabs>
         </div>
       )}
       <StuckView
