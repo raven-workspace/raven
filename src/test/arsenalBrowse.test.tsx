@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -109,6 +109,19 @@ describe("three-pane browse", () => {
     expect(await screen.findByRole("heading", { name: "Aardvark roasting" })).toBeInTheDocument();
     expect(screen.queryByText("Pick a card.")).not.toBeInTheDocument();
     expect(await screen.findByRole("option", { name: /Aardvark roasting/ })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("hovering another row changes neither the selection nor the reading pane", async () => {
+    mount();
+    await screen.findByRole("heading", { name: "Aardvark roasting" });
+    const list = within(screen.getByRole("listbox", { name: "Arsenal results" }));
+    const first = await list.findByRole("option", { name: /Aardvark roasting/ });
+    const other = list.getByRole("option", { name: /Aakerbrute user enum/ });
+    fireEvent.mouseMove(other);
+    expect(first).toHaveAttribute("aria-selected", "true");
+    expect(other).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("heading", { name: "Aardvark roasting" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Aakerbrute user enum" })).not.toBeInTheDocument();
   });
 
   it("opens where you stopped", async () => {

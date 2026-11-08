@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -150,6 +150,28 @@ describe("⌘K palette", () => {
     await user.keyboard("{Enter}");
     await vi.waitFor(async () => expect(await navigator.clipboard.readText()).toBe("zzprobe {TARGET_IP} from 10.10.14.9"));
     expect(m.logCreate).not.toHaveBeenCalled();
+  });
+
+  it("hovering another row keeps the clicked row selected and its fill fields reachable", async () => {
+    const user = userEvent.setup();
+    setImported({ commands: [PROBE, { ...PROBE, id: "zz-plain", title: "Zzprobe plain", template: "zzprobe --version" }], cards: [] });
+    mount("/");
+    await screen.findByText("Lab A");
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzprobe");
+    const target = await screen.findByRole("option", { name: /Zzprobe the target/ });
+    const other = screen.getByRole("option", { name: /Zzprobe plain/ });
+    await user.click(target);
+    fireEvent.mouseMove(other);
+    expect(target).toHaveAttribute("aria-selected", "true");
+    expect(other).toHaveAttribute("aria-selected", "false");
+    const field = screen.getByRole("combobox", { name: "Value for TARGET_IP" });
+    await user.click(field);
+    await user.type(field, "198.51.100.7");
+    fireEvent.mouseMove(other);
+    expect(screen.getByRole("combobox", { name: "Value for TARGET_IP" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(await navigator.clipboard.readText()).toContain("198.51.100.7");
   });
 
   it("on the dashboard {DEST_DIR} follows the command's own OS, and stays unfilled for an any-OS command", async () => {

@@ -259,7 +259,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
       <div className="grid max-h-[44vh] overflow-y-auto">
         {results.length === 0 && <p className="m-0 px-1 py-2 text-xs text-muted">Nothing matches</p>}
         <ResultList
-          id="palette-results" label="Results" groups={rowGroups} selected={index} onSelect={setSelected}
+          id="palette-results" label="Results" groups={rowGroups} selected={index}
           onActivate={(_, i) => {
             setSelected(i);
             searchRef.current?.focus();

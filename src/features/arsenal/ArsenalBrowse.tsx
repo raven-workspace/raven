@@ -334,7 +334,7 @@ export function ArsenalBrowse() {
         <div className="col-start-1 row-start-2 min-h-0 overflow-y-auto overflow-x-hidden p-1 min-[1100px]:col-start-2 min-[1100px]:row-start-1">
           {examReady && rows.length === 0 && <p className="m-0 px-2 py-1 text-xs text-muted">Nothing matches</p>}
           <ResultList
-            id="arsenal-results" label="Arsenal results" groups={resultGroups} selected={index} onSelect={() => {}}
+            id="arsenal-results" label="Arsenal results" groups={resultGroups} selected={index}
             onActivate={(r) => {
               if (r.hit.type === "generator") return void navigate(payloadsPath(r.hit.id));
               pick(r.hit);

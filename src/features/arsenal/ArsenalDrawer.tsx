@@ -320,7 +320,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
             {examReady && rows.length === 0 && <p className="m-0 px-1 py-2 text-xs text-muted">Nothing matches</p>}
             <ResultList
               id="arsenal-results" label="Arsenal results" groups={listing ? rowGroups : [{ key: "categories", rows }]}
-              selected={index} onSelect={setSelected} onActivate={activate}
+              selected={index} onActivate={activate}
             />
           </>
         )}

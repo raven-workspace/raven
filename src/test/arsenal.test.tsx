@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import { MemoryRouter, useNavigate } from "react-router";
@@ -625,6 +625,29 @@ describe("drawer list grouped by category (U1)", () => {
     expect(screen.getByRole("complementary", { name: "Arsenal" })).toBeInTheDocument();
     expect(d.getByRole("option", { name: /Zzprobe the target/ })).toBeInTheDocument();
     expect(d.getByRole("contentinfo")).toHaveTextContent("↵ copy · ⌘↵ copy and log · → in card · ⌥H host · ⌥C credential · Esc close");
+  });
+
+  it("hovering another row keeps the clicked row selected and its fill fields reachable", async () => {
+    const user = userEvent.setup();
+    setImported({ commands: [PROBE, cmd("zz-plain", { title: "Zzprobe plain", template: "zzprobe --version", cardId: undefined, source: "raven" })], cards: [CARD] });
+    mount("/");
+    await screen.findByText("Lab A");
+    await user.keyboard("a");
+    const d = within(await drawer());
+    await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zzprobe");
+    const target = await d.findByRole("option", { name: /Zzprobe the target/ });
+    const other = d.getByRole("option", { name: /Zzprobe plain/ });
+    await user.click(target);
+    fireEvent.mouseMove(other);
+    expect(target).toHaveAttribute("aria-selected", "true");
+    expect(other).toHaveAttribute("aria-selected", "false");
+    const field = d.getByRole("combobox", { name: "Value for TARGET_IP" });
+    await user.click(field);
+    await user.type(field, "198.51.100.7");
+    fireEvent.mouseMove(other);
+    expect(d.getByRole("combobox", { name: "Value for TARGET_IP" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(await navigator.clipboard.readText()).toContain("198.51.100.7");
   });
 
   it("an unfilled field holds the copy back once, then Enter copies anyway", async () => {

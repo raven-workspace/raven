@@ -22,13 +22,13 @@ export interface ResultGroup<R extends ResultRow> {
 /**
  * The Arsenal drawer's and ⌘K's results: `role=listbox` of `role=group`s (named by a plain heading, never an h3)
  * holding `role=option` rows. Rows are numbered across the groups in order; `selected` is the row number on `ON`.
- * Focus stays in the search field, which points at the row with `aria-activedescendant`.
+ * Hover only tints a row: selection is set by click or keys, never by the pointer. Focus stays in the search field, which points at the row with `aria-activedescendant`.
  */
-export function ResultList<R extends ResultRow>({ id, label, groups, selected, onSelect, onActivate, listRef, listProps }: {
+export function ResultList<R extends ResultRow>({ id, label, groups, selected, onActivate, listRef, listProps }: {
   /** For a list that takes focus itself (browse's middle pane): its ref and tabindex, key and `aria-activedescendant` props. */
   listRef?: Ref<HTMLDivElement>; listProps?: HTMLAttributes<HTMLDivElement>;
   id: string; label: string; groups: ResultGroup<R>[]; selected: number;
-  onSelect: (index: number) => void; onActivate: (row: R, index: number) => void;
+  onActivate: (row: R, index: number) => void;
 }) {
   let next = 0;
   const option = (r: R) => {
@@ -40,9 +40,8 @@ export function ResultList<R extends ResultRow>({ id, label, groups, selected, o
         role="option"
         aria-selected={i === selected}
         onClick={() => onActivate(r, i)}
-        onMouseMove={() => onSelect(i)}
         title={r.title}
-        className={`grid cursor-default ${r.stack ? "grid-cols-[minmax(0,1fr)] gap-0" : "grid-cols-[minmax(0,1fr)_auto] items-center gap-2"} rounded-sm px-2 py-1 text-left text-[13px] ${i === selected ? ON : "text-fg-2"}`}
+        className={`grid cursor-default ${r.stack ? "grid-cols-[minmax(0,1fr)] gap-0" : "grid-cols-[minmax(0,1fr)_auto] items-center gap-2"} rounded-sm px-2 py-1 text-left text-[13px] ${i === selected ? ON : "text-fg-2 hover:bg-surface-2"}`}
       >
         <span className="min-w-0 truncate">{r.title}</span>
         {r.tag && <span className={`min-w-0 truncate text-[11px] text-muted ${r.mono ? "font-mono" : ""} ${r.stack ? "" : "max-w-40"}`}>{r.tag}</span>}

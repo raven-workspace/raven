@@ -9,13 +9,13 @@ const groups = [{ key: "g", rows: [
 
 describe("ResultList", () => {
   it("every option carries its full title", () => {
-    render(<ResultList id="l" label="L" groups={groups} selected={0} onSelect={() => {}} onActivate={() => {}} />);
+    render(<ResultList id="l" label="L" groups={groups} selected={0} onActivate={() => {}} />);
     expect(screen.getByRole("option", { name: /very long/ })).toHaveAttribute("title", "A command with a very long descriptive title");
     expect(screen.getByRole("option", { name: /plain row/ })).toHaveAttribute("title", "A plain row");
   });
 
   it("a stacked row puts the tool on its own line under the title", () => {
-    render(<ResultList id="l" label="L" groups={groups} selected={0} onSelect={() => {}} onActivate={() => {}} />);
+    render(<ResultList id="l" label="L" groups={groups} selected={0} onActivate={() => {}} />);
     const stacked = screen.getByRole("option", { name: /very long/ });
     const tool = stacked.querySelector("span.font-mono")!;
     expect(tool).toHaveTextContent("nxc");
