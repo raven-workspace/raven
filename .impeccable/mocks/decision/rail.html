@@ -1,0 +1,61 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Collapsed sidebar options</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<style>
+:root{--bg:#000;--fg:#fff;--fg2:#e8e8e8;--muted:#a8a8a8;--muted2:#c4c4c4;--faint:#8a8a8a;--line:#1f1f1f;--line2:#2a2a2a;--ls:#3a3a3a;--surface:#0b0b0b;--hi:#111;--acc:#c6ff00}
+*{box-sizing:border-box;margin:0}
+body{background:#050505;color:var(--fg2);font:14px/1.5 "Instrument Sans",system-ui,sans-serif;padding:28px 32px}
+h1{font-size:20px;font-weight:600;color:var(--fg)}
+.intro{color:var(--muted);max-width:76ch;margin:6px 0 22px}
+.row{display:grid;grid-template-columns:repeat(3,400px);gap:28px;align-items:start}
+.opt h2{font-size:16px;font-weight:600;color:var(--fg);margin-bottom:4px}
+.opt p{color:var(--muted);min-height:112px;margin-bottom:12px}
+.rec{color:var(--acc);font-weight:600}
+.win{height:640px;border:1px solid var(--line2);border-radius:8px;overflow:hidden;display:grid;background:var(--bg)}
+.content{padding:20px;display:grid;align-content:start;gap:12px;color:var(--muted)}
+.content b{color:var(--fg);font-size:20px;font-weight:600}
+.stub{height:10px;border-radius:4px;background:var(--hi)}
+.rail{border-right:1px solid var(--line);display:grid;align-content:start;justify-items:center;padding:12px 0;gap:4px}
+.ib{position:relative;width:32px;height:32px;display:grid;place-items:center;border-radius:6px;color:var(--muted2);font-size:18px}
+.ib.on{background:var(--hi);color:var(--fg);box-shadow:inset 2px 0 0 var(--acc)}
+.n{position:absolute;right:-1px;bottom:-1px;font:500 12px/1 "JetBrains Mono",monospace;color:var(--faint)}
+.sep{width:24px;height:1px;background:var(--line);margin:8px 0}
+.host{width:32px;height:32px;display:grid;place-items:center;border-radius:6px;color:var(--acc);font-size:16px}
+.pop{position:absolute;left:52px;top:300px;width:220px;border:1px solid var(--ls);border-radius:8px;background:var(--hi);box-shadow:0 12px 32px rgba(0,0,0,.6);padding:4px;display:grid}
+.pi{display:grid;grid-template-columns:16px 1fr;gap:8px;align-items:center;padding:6px 8px;border-radius:5px;color:var(--fg2)}
+.pi small{grid-column:2;font:13px "JetBrains Mono",monospace;color:var(--faint);line-height:1.2}
+.pi.on{background:rgba(198,255,0,.08);color:var(--acc)}
+.pi i{color:var(--acc)}
+.label{font:13px "JetBrains Mono",monospace;color:var(--muted2)}
+.r72 .ib2{width:56px;height:32px;display:grid;grid-template-columns:20px 16px;gap:6px;align-items:center;justify-content:center;border-radius:6px;color:var(--muted2);font-size:18px}
+.r72 .ib2 span{font:500 13px "JetBrains Mono",monospace;color:var(--faint)}
+.r72 .ib2.on{background:var(--hi);color:var(--fg);box-shadow:inset 2px 0 0 var(--acc)}
+.r72 .h{width:56px;display:grid;justify-items:center;gap:2px;padding:4px 0;border-radius:6px}
+.r72 .h i{color:var(--acc);font-size:16px}
+.edge{position:relative}
+.tab{position:absolute;left:0;top:14px;width:20px;height:32px;border:1px solid var(--line2);border-left:0;border-radius:0 6px 6px 0;display:grid;place-items:center;color:var(--muted2);background:var(--surface)}
+</style></head><body>
+<h1>Collapsed sidebar: revised option</h1>
+<p class="intro">The expanded sidebar is 200px. The collapsed rail today is 48px and tries to fit names, numbers and icons into it, and fails. Each option below gives back most of the width. The difference is where hosts go.</p>
+<div class="row" style="grid-template-columns:400px">
+<div class="opt r72"><h2>D · C, narrowed to 56px <span class="rec">· revised</span></h2>
+<p>Section icons only, with no numbers on the rail. Each number shows in its icon's tooltip ("Board · 1"), and in the expanded sidebar. Hosts stay listed with their state mark and a short name, and the host you're on is lit with a background and the accent bar. 56px instead of 72px.</p>
+<div class="win" style="grid-template-columns:56px 1fr">
+ <div class="rail">
+  <div class="ib"><i class="ph ph-sidebar-simple"></i></div><div class="sep"></div>
+  <div class="ib on"><i class="ph ph-kanban"></i></div>
+  <div class="ib"><i class="ph ph-list-bullets"></i></div>
+  <div class="ib"><i class="ph ph-key"></i></div>
+  <div class="ib"><i class="ph ph-flag"></i></div>
+  <div class="ib"><i class="ph ph-list-checks"></i></div>
+  <div class="ib"><i class="ph ph-file-text"></i></div>
+  <div class="sep"></div>
+  <div class="h" style="width:48px;background:var(--hi);box-shadow:inset 2px 0 0 var(--acc)"><i class="ph ph-check-circle"></i><span class="label" style="color:var(--fg)">DC01</span></div>
+  <div class="h" style="width:48px"><i class="ph ph-check-circle"></i><span class="label">MS01</span></div>
+  <div class="h" style="width:48px"><i class="ph ph-check-circle"></i><span class="label">MS02</span></div>
+  <div class="h" style="width:48px"><i class="ph ph-circle-half"></i><span class="label">WEB0</span></div>
+  <div class="ib"><i class="ph ph-plus"></i></div>
+ </div>
+ <div class="content"><b>DC01</b><div class="stub" style="width:70%"></div><div class="stub" style="width:50%"></div><div class="stub" style="width:62%"></div></div>
+</div></div>
+</div></body></html>
