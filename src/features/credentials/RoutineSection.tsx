@@ -49,9 +49,9 @@ export function RoutineSection({ eid, hosts, creds, usernames, attempts, service
 
   if (!cred) {
     return (
-      <section aria-label="Credential routine" className="flex flex-col gap-1">
+      <section aria-label="Credential routine" className="grid gap-1">
         <h3 className={`m-0 ${labelClass}`}>Credential routine</h3>
-        <p className="m-0 text-xs text-muted">No sprayable credentials yet.</p>
+        <p className="m-0 text-meta text-muted">No sprayable credentials yet.</p>
       </section>
     );
   }
@@ -72,18 +72,18 @@ export function RoutineSection({ eid, hosts, creds, usernames, attempts, service
   };
 
   return (
-    <section aria-label="Credential routine" className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-3">
+    <section aria-label="Credential routine" className="grid gap-2">
+      <div className="grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-3">
         <h3 className={`m-0 ${labelClass}`}>Credential routine</h3>
         <Select
           aria-label="Routine credential"
-          className="h-7 w-auto min-w-48 text-xs"
+          className="h-7 w-auto min-w-48 text-body"
           value={cred.id}
           onValueChange={setPicked}
           options={newest.map((c) => ({ value: c.id, label: credLabel(c) }))}
         />
       </div>
-      {setStatus.error && <p role="alert" className="m-0 text-xs text-warn">{setStatus.error.message}</p>}
+      {setStatus.error && <p role="alert" className="m-0 text-meta text-warn">{setStatus.error.message}</p>}
       <ul className="m-0 list-none border-t border-line p-0">
         {ROUTINE_STEPS.map((step) => {
           const applies = routineStepApplies(step.id, cred, hosts, servicesByHost, usernames);
@@ -92,19 +92,18 @@ export function RoutineSection({ eid, hosts, creds, usernames, attempts, service
             <li
               key={step.id}
               aria-label={step.title}
-              className={`flex flex-col gap-1 border-b border-line py-2 ${applies ? "" : "opacity-50"}`}
+              className={`grid gap-1 border-b border-line py-2 ${applies ? "" : "opacity-50"}`}
             >
-              <div className="flex items-center gap-2">
+              <div className="grid grid-cols-[max-content_max-content_max-content] items-center justify-start gap-2">
                 <Toggle
                   on={done}
                   onChange={(on) => setStatus.mutate({ ownerId: eid, goalId: step.itemId, status: on ? "done" : "todo" })}
                   aria-label={`Done: ${step.title}`}
-                  className="h-5 px-1.5 text-[11px]"
                 >
                   Done
                 </Toggle>
-                <span className="text-[13px] text-fg">{step.title}</span>
-                {!applies && <span className="text-xs text-muted">Doesn't apply</span>}
+                <span className="text-body text-fg">{step.title}</span>
+                {!applies && <span className="text-meta text-muted">Doesn't apply</span>}
               </div>
               {applies && <TestCommands set={commandsFor(step.id)} shown={commandsFor(step.id, MASK)} />}
             </li>

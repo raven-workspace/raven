@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { CommandSet } from "../../engines/credentials";
-import { Button } from "../../ui";
+import { Button, CommandBlock } from "../../ui";
 import { copySecret } from "../../lib/clipboard";
 
 const NOTICE: Record<NonNullable<CommandSet["notice"]>, string> = {
@@ -9,14 +9,14 @@ const NOTICE: Record<NonNullable<CommandSet["notice"]>, string> = {
   "not-sprayable": "This credential can't be sprayed.",
 };
 
-function CopyButton({ text, label, children }: { text: string; label: string; children?: string }) {
+function CopyUsersButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
   return (
     <Button
       size="sm"
-      aria-label={label}
+      aria-label="Copy users.txt for spray"
       onClick={() =>
         void copySecret(text).then(() => {
           setCopied(true);
@@ -25,7 +25,7 @@ function CopyButton({ text, label, children }: { text: string; label: string; ch
         })
       }
     >
-      {copied ? "Copied" : (children ?? "Copy")}
+      {copied ? "Copied" : "Copy users.txt"}
     </Button>
   );
 }
@@ -33,20 +33,22 @@ function CopyButton({ text, label, children }: { text: string; label: string; ch
 /** Commands for one routine step. `shown` is the same build with the secret masked; Copy uses the real one. */
 export function TestCommands({ set, shown }: { set: CommandSet & { usersFile?: string }; shown: CommandSet }) {
   if (set.commands.length === 0) {
-    return <p className="m-0 text-xs text-muted">{set.notice ? NOTICE[set.notice] : "Nothing to run."}</p>;
+    return <p className="m-0 text-meta text-muted">{set.notice ? NOTICE[set.notice] : "Nothing to run."}</p>;
   }
   return (
-    <div className="flex flex-col gap-1">
+    <div className="grid gap-1">
       {set.commands.map((c, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap font-mono text-xs text-fg-2">{shown.commands[i]?.command ?? ""}</code>
-          <CopyButton text={c.command} label={`Copy ${c.service} ${c.authMode} command`} />
-        </div>
+        <CommandBlock
+          key={i}
+          text={shown.commands[i]?.command ?? ""}
+          copyText={c.command}
+          copyLabel={`Copy ${c.service} ${c.authMode} command`}
+        />
       ))}
       {set.usersFile && (
-        <div className="flex items-center gap-2 text-xs text-muted">
-          <span className="flex-1">users.txt ({set.usersFile.split("\n").length} usernames)</span>
-          <CopyButton text={set.usersFile} label="Copy users.txt for spray">Copy users.txt</CopyButton>
+        <div className="grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-2 text-meta text-muted">
+          <span>users.txt ({set.usersFile.split("\n").length} usernames)</span>
+          <CopyUsersButton text={set.usersFile} />
         </div>
       )}
     </div>

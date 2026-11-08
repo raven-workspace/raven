@@ -139,11 +139,61 @@ describe("credentials section", () => {
     expect(await navigator.clipboard.readText()).toBe("Winter2024!");
     expect(screen.queryByText("Winter2024!")).not.toBeInTheDocument();
 
-    const reveal = within(row).getByRole("button", { name: /^Reveal secret/ });
-    expect(reveal).toHaveAttribute("aria-pressed", "false");
-    await user.click(reveal);
-    expect(reveal).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(row).getByRole("button", { name: "Reveal secret" }));
+    expect(within(row).getByRole("button", { name: "Hide secret" })).toBeInTheDocument();
     expect(within(row).getByText("Winter2024!")).toBeInTheDocument();
+  });
+
+  it("secret mask never wraps and reveal is an eye icon button", async () => {
+    const user = userEvent.setup();
+    mount({ creds: [cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "Winter2024!" })] });
+    const row = (await screen.findAllByText("CORP\\jsmith")).map((e) => e.closest("tr")).find((r) => r?.querySelector("[aria-label^=Delete]"))!;
+    const mask = within(row).getByTestId("secret-text");
+    expect(mask.textContent).toBe("••••••••");
+    expect(mask.className).toMatch(/whitespace-nowrap/);
+    expect(mask.className).not.toMatch(/break-all/);
+    const reveal = within(row).getByRole("button", { name: "Reveal secret" });
+    expect(within(row).queryByText("Reveal")).not.toBeInTheDocument();
+    await user.click(reveal);
+    expect(within(row).getByRole("button", { name: "Hide secret" })).toBeInTheDocument();
+    expect(mask.textContent).toBe("Winter2024!");
+  });
+
+  it("row actions are icon buttons Copy, Edit, Delete", async () => {
+    mount({ creds: [cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "Winter2024!" })] });
+    const row = (await screen.findAllByText("CORP\\jsmith")).map((e) => e.closest("tr")).find((r) => r?.querySelector("[aria-label^=Delete]"))!;
+    for (const name of ["Copy secret", "Edit CORP\\jsmith", "Delete CORP\\jsmith"]) {
+      const b = within(row).getAllByRole("button").find((x) => x.getAttribute("aria-label")?.startsWith(name))!;
+      expect(b).toBeTruthy();
+      expect(b.textContent).toBe("");
+    }
+  });
+
+  it("delete is muted at rest", async () => {
+    mount({ creds: [cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "Winter2024!" })] });
+    const del = await screen.findByRole("button", { name: "Delete CORP\\jsmith" });
+    expect(del.className).toMatch(/text-muted/);
+    expect(del.className).not.toMatch(/(^|\s)text-warn/);
+  });
+
+  it("scope renders value and host on two lines, not a middot string", async () => {
+    mount({
+      creds: [cred({ id: "c1", username: "admin", scope: "local", localHostId: "h1", secret: "Winter2024!" })],
+    });
+    const row = (await screen.findAllByText("admin")).map((e) => e.closest("tr")).find((r) => r?.querySelector("[aria-label^=Delete]"))!;
+    expect(row.textContent).not.toContain(" · ");
+    expect(within(row).getByText("local")).toBeInTheDocument();
+    expect(within(row).getByText("dc01")).toBeInTheDocument();
+  });
+
+  it("a 60-character credential name truncates and the actions stay visible", async () => {
+    const long = "a".repeat(60);
+    mount({ creds: [cred({ id: "c1", username: long, secret: "Winter2024!" })] });
+    const name = (await screen.findAllByText(long)).find((e) => e.closest("tr"))!;
+    expect(name).toHaveAttribute("title", long);
+    expect(name.className).toMatch(/truncate/);
+    const row = name.closest("tr")!;
+    expect(within(row).getByRole("button", { name: `Delete ${long}` })).toBeVisible();
   });
 
   it("credentials list shows a Machine accounts group", async () => {

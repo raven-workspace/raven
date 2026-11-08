@@ -55,6 +55,15 @@ describe("CommandBlock", () => {
   });
 });
 
+describe("CommandBlock with a masked display", () => {
+  it("shows the text but copies copyText under copyLabel", async () => {
+    render(<CommandBlock text="nxc smb h -p ••••••••" copyText="nxc smb h -p 'Real1!'" copyLabel="Copy smb command" />);
+    expect(screen.queryByText(/Real1/)).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Copy smb command" }));
+    expect(await navigator.clipboard.readText()).toBe("nxc smb h -p 'Real1!'");
+  });
+});
+
 describe("LoadingState", () => {
   afterEach(() => vi.useRealTimers());
   it("loading state is blank for 150ms", () => {

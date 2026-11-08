@@ -1,12 +1,16 @@
 import { Copy } from "@phosphor-icons/react";
 import { Fragment } from "react";
-import { copyPlain } from "../lib/clipboard";
+import { copyPlain, copySecret } from "../lib/clipboard";
 import { IconButton } from "./IconButton";
 
 export interface CommandBlockProps {
   text: string;
   label?: string;
   onCopy?: () => void;
+  /** When the shown text is masked, the real command Copy puts on the clipboard (treated as a secret). */
+  copyText?: string;
+  /** Accessible name of the Copy button when "Copy" alone is ambiguous. */
+  copyLabel?: string;
   /** Render `{TOKEN}` placeholders in the warn colour. */
   placeholders?: boolean;
 }
@@ -16,7 +20,7 @@ function parts(text: string, placeholders: boolean) {
   return text.split(/(\{[A-Za-z0-9_]+\})/g);
 }
 
-export function CommandBlock({ text, label, onCopy, placeholders }: CommandBlockProps) {
+export function CommandBlock({ text, label, onCopy, placeholders, copyText, copyLabel }: CommandBlockProps) {
   return (
     <div className="grid gap-1">
       {label && <span className="text-meta text-muted-2">{label}</span>}
@@ -34,9 +38,9 @@ export function CommandBlock({ text, label, onCopy, placeholders }: CommandBlock
         </code>
         <IconButton
           icon={Copy}
-          label="Copy"
+          label={copyLabel ?? "Copy"}
           onClick={() => {
-            void copyPlain(text);
+            void (copyText === undefined ? copyPlain(text) : copySecret(copyText));
             onCopy?.();
           }}
         />

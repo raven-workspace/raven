@@ -1,7 +1,8 @@
+import { Check, Copy } from "@phosphor-icons/react";
 import { useState, type FormEvent } from "react";
 import { credLabel, getCrackingCommands, identifyHash, isMachineAccount } from "../../engines/credentials";
 import type { Credential } from "../../types/credentials";
-import { Button, Chip, Dialog, Field, Input, labelClass } from "../../ui";
+import { ActionCell, Button, Chip, Dialog, Field, IconButton, Input, Row, labelClass } from "../../ui";
 import { MASK, MaskedSecret } from "./MaskedSecret";
 import { useCredentialMutations } from "./queries";
 import { copySecret } from "../../lib/clipboard";
@@ -42,16 +43,14 @@ export function CrackDialog({ eid, hash, onClose }: { eid: string; hash: Credent
 function CopyCommand({ label, text }: { label: string; text: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <Button
-      size="sm"
-      aria-label={`Copy ${label} command`}
+    <IconButton
+      icon={copied ? Check : Copy}
+      label={`Copy ${label} command`}
       onClick={() => void copySecret(text).then(() => {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
       })}
-    >
-      {copied ? "Copied" : `Copy ${label}`}
-    </Button>
+    />
   );
 }
 
@@ -66,33 +65,33 @@ function HashRow({ eid, hash, onCrack }: { eid: string; hash: Credential; onCrac
   const shown = getCrackingCommands(MASK, cand);
   const dead = hash.crackStatus === "uncrackable";
   return (
-    <li className="flex flex-col gap-1 border-b border-line py-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[12.5px] text-fg">{label}</span>
+    <li className="grid gap-1 border-b border-line py-2">
+      <Row tracks="minmax(16ch,2fr) max-content max-content max-content max-content">
+        <span className="truncate font-mono text-code text-fg" title={label}>{label}</span>
         <Chip>{hash.hashType ?? cand?.name ?? "unknown type"}</Chip>
-        <Chip className={dead ? "border-warn text-warn" : undefined}>{hash.crackStatus ?? "uncracked"}</Chip>
+        <Chip variant={dead ? "warn" : "default"}>{hash.crackStatus ?? "uncracked"}</Chip>
         <MaskedSecret secret={hash.secret} label={`hash ${label}`} />
-        <span className="ml-auto flex gap-1.5">
+        <ActionCell>
           <Button size="sm" aria-label={`Crack ${label}`} onClick={onCrack}>Crack</Button>
           {dead ? (
             <Button size="sm" aria-label={`Reset ${label}`} onClick={() => setCrackStatus.mutate({ id: hash.id, status: "uncracked" })}>Reset</Button>
           ) : (
             <Button size="sm" aria-label={`Mark ${label} uncrackable`} onClick={() => setCrackStatus.mutate({ id: hash.id, status: "uncrackable" })}>Mark uncrackable</Button>
           )}
-        </span>
-      </div>
-      {setCrackStatus.error && <p role="alert" className="m-0 text-xs text-warn">{setCrackStatus.error.message}</p>}
+        </ActionCell>
+      </Row>
+      {setCrackStatus.error && <p role="alert" className="m-0 text-meta text-warn">{setCrackStatus.error.message}</p>}
       {(cmds.hashcat || cmds.john) && (
-        <div className="flex flex-col gap-1">
+        <div className="grid gap-1">
           {cmds.hashcat && (
-            <div className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap font-mono text-xs text-fg-2">{shown.hashcat}</code>
+            <div className="grid grid-cols-[minmax(0,1fr)_28px] items-center gap-2">
+              <code className="min-w-0 overflow-x-auto whitespace-pre-wrap font-mono text-code text-fg-2">{shown.hashcat}</code>
               <CopyCommand label="hashcat" text={cmds.hashcat} />
             </div>
           )}
           {cmds.john && (
-            <div className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap font-mono text-xs text-fg-2">{cmds.john}</code>
+            <div className="grid grid-cols-[minmax(0,1fr)_28px] items-center gap-2">
+              <code className="min-w-0 overflow-x-auto whitespace-pre-wrap font-mono text-code text-fg-2">{cmds.john}</code>
               <CopyCommand label="john" text={cmds.john} />
             </div>
           )}
@@ -107,7 +106,7 @@ export function HashesList({ eid, hashes: all }: { eid: string; hashes: Credenti
   const hashes = all.filter((h) => !isMachineAccount(h));
   const [cracking, setCracking] = useState<Credential>();
   return (
-    <section aria-label="Hashes" className="flex flex-col gap-1">
+    <section aria-label="Hashes" className="grid gap-1">
       <h3 className={`m-0 ${labelClass}`}>Hashes <span className="tabular-nums">{hashes.length}</span></h3>
       <ul className="m-0 list-none border-t border-line p-0">
         {hashes.map((h) => (
