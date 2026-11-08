@@ -20,9 +20,9 @@ import { MsfLock } from "./MsfLock";
 
 /**
  * Drop steps, in order: each step hides one part when the strip has run out of room (see useFitStrip).
- * Secondary parts go first, then whole cells from the end, so LHOST stays as long as there is room for it.
+ * Secondary parts go first, then Cleanup, Threads, the Metasploit lock and LHOST: the display order stays, but LHOST (the most-copied value) outlasts the cells before it.
  */
-const STEP = { of: 1, bar: 2, lhost: 3, cleanup: 4, threads: 5, msf: 6, flags: 7, rooted: 8 } as const;
+const STEP = { of: 1, bar: 2, cleanup: 3, threads: 4, msf: 5, lhost: 6, flags: 7, rooted: 8 } as const;
 const LAST_STEP = 8;
 
 /** One labelled value. `step` marks the part as droppable at that step. */

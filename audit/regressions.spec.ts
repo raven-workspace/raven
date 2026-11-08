@@ -834,10 +834,15 @@ test("status strip drops by its own free space: LHOST stays while it fits", asyn
   for (const path of ["/e/e-lab", "/e/e-lab/h/h-web", "/e/e-exam"]) {
     await open(page, path, 900);
     await page.getByRole("tab", { name: "Next" }).or(page.getByRole("status", { name: "Engagement status" })).first().waitFor();
-    // Below 1000px the sidebar starts as the 56px rail, so the strip is ~844px wide.
-    await page.getByRole("button", { name: "Expand sidebar" }).waitFor();
+    // Below 1000px the sidebar starts as the 56px rail (strip ~844px); expanded it is ~660px. LHOST outlasts Cleanup and Threads.
     const strip = page.getByRole("status", { name: "Engagement status" });
-    await expect(strip.getByRole("link", { name: /LHOST/ }), `${path}: LHOST on an 844px strip`).toBeVisible();
+    for (const expanded of [false, true]) {
+      await page.getByRole("button", { name: /(Expand|Collapse) sidebar/ }).waitFor();
+      // The choice persists across pages, so press only when the sidebar is not already in the wanted state.
+      if (await page.getByRole("button", { name: expanded ? "Expand sidebar" : "Collapse sidebar" }).isVisible()) await page.keyboard.press("Meta+B");
+      await page.getByRole("button", { name: expanded ? "Collapse sidebar" : "Expand sidebar" }).waitFor();
+      await expect(strip.getByRole("link", { name: /LHOST/ }), `${path}: LHOST, sidebar ${expanded ? "expanded" : "collapsed"}`).toBeVisible();
+    }
     // Nothing hidden that would have fit: un-hide the first hidden part and it must overflow.
     const wasteful = await strip.evaluate((el) => {
       const box = el.firstElementChild as HTMLElement;
@@ -872,7 +877,7 @@ test("title bar controls end where the centred page column ends (dashboard, sett
     await open(page, path, right);
     const gear = await page.getByRole("button", { name: "Settings" }).evaluate((el) => el.getBoundingClientRect().right);
     const col = await page.evaluate(() => {
-      const root = document.querySelector("[data-testid=app-root], div.max-w-\\[640px\\]");
+      const root = document.querySelector("[data-testid=app-root], div.max-w-\\[720px\\]");
       const r = (root as HTMLElement).getBoundingClientRect();
       const cs = getComputedStyle(root as HTMLElement);
       return r.right - parseFloat(cs.paddingRight);

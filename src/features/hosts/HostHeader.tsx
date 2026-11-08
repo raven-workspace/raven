@@ -11,8 +11,8 @@ import { COLUMN_LABELS, OS_LABELS } from "./columns";
 
 export function HostHeader({ host, onStuck }: { host: Host; onStuck?: () => void }) {
   const [editing, setEditing] = useState(false);
-  // Under 1000px the actions become icons before the title has to truncate (DESIGN.md Status strip and headers).
-  const [headerRef, narrow] = useNarrow<HTMLElement>(1000);
+  // Under 1000px of pane (952 here: this section sits inside the page's 24px side padding) the actions become icons before the title truncates, at the same window width as the engagement header.
+  const [headerRef, narrow] = useNarrow<HTMLElement>(952);
   const threads = useThreadCounts(host.engagementId).byHost.get(host.id) ?? 0;
   // The AD set only means something in an exam sim (it counts as one target there).
   const engagement = useQuery({ queryKey: ["engagement", host.engagementId], queryFn: () => api.engagementGet(host.engagementId) });

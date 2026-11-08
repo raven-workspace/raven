@@ -187,7 +187,7 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
   });
 
   return (
-    <div className="mx-auto flex max-w-[640px] flex-col gap-4 px-6 py-6">
+    <div className="mx-auto flex max-w-[720px] flex-col gap-4 px-6 py-6">
       <h1 className="m-0 text-lg font-semibold text-fg">Settings</h1>
       {error && <p className="m-0 text-xs text-warn">{error}</p>}
       {settings.data && (

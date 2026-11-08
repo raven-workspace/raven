@@ -235,9 +235,9 @@ export function VaultGate({ children }: { children: ReactNode }) {
 
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  // Dashboard and Settings are centred max-width columns (Dashboard max-w-[1120px] px-8, Settings max-w-[640px] px-6):
+  // Dashboard and Settings are centred max-width columns (Dashboard max-w-[1120px] px-8, Settings max-w-[720px] px-6):
   // the bar's content follows that column. Engagement screens keep the window-edge bar.
-  const column = pathname === "/" ? { max: 1120, inset: 32 } : pathname === "/settings" ? { max: 640, inset: 24 } : undefined;
+  const column = pathname === "/" ? { max: 1120, inset: 32 } : pathname === "/settings" ? { max: 720, inset: 24 } : undefined;
   const right = unlocked ? (
     <>
       <TitleBarButton hint="A" icon={Stack} onClick={() => useArsenalStore.getState().toggle()}>Arsenal</TitleBarButton>
