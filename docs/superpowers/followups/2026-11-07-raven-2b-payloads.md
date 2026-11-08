@@ -65,7 +65,7 @@ These are left over from the 2b-B Payloads build (branch `interpreters-payloads`
   - Esc when `/payloads` is the first history entry;
   - the weak `nc.exe` `toHaveCount(0)` check in the audit.
 
-## Questions for the owner
+## Owner decisions (2026-11-08)
 
-- [ ] **Exam bans: fold or hide?** The spec's constraints say banned techniques stay *hidden*, while its fit rule says misfits are *folded, never hidden*. Today exam-banned payloads are folded with "Not allowed in the exam". No current payload is banned, so nothing is affected yet.
-- [ ] **Stale warnings only cover logged payloads.** A payload copied with plain ↵ is never remembered, so it never gets a stale-LHOST warning. Is that enough, or should every copy of a payload file be remembered?
+- [ ] **Never run a payload built with a stale LHOST.** A warning on logged payloads isn't enough. Raven should remember every copy of a payload that bakes in LHOST/LPORT (rev.ps1, msfvenom files), not only ⌘↵ copy-and-log. Once LHOST or LPORT changes, it should stop you using the old build until it's rebuilt, instead of only showing a warning line. (`memory.ts` `staleBaked`, `usePayloadSession.tsx`, the copy guard)
+- [ ] **No payload is banned on the exam.** Only some tools are banned or restricted. Remove the "Not allowed in the exam" payload fold and its meterpreter/staged check, and handle exam limits at the tool level, as the existing Metasploit lock does. (`fit.ts`, `msfvenom.ts` notes, the spec's "exam rules" lines)
