@@ -479,7 +479,7 @@ Don't port `migration.ts`, `library.ts` (operator library editing is phase 2, Ar
   - `flushNotes(): Promise<void>`: saves any pending text now.
 - **Behaviour:**
   - **Opening:** `N` (outside inputs) toggles a panel that slides over the right side; the screen underneath stays.
-  - **Scope:** it opens on the current host's notes in a host view, else the engagement's. `⌘E` and a two-button segmented control switch scope, and the title says "Notes · VEGA" or "Notes · Mock exam A".
+  - **Scope:** it opens on the current host's notes in a host view, else the engagement's. `⌘E` and a two-button segmented control switch scope, and the title says "Notes · SRV11" or "Notes · Lab A".
   - **Editor:** a monospace Markdown textarea (raw Markdown; no preview in step 3), with a Private toggle.
   - **Saving:** auto-saves 500 ms after the last keystroke, and on close, on scope switch, on route change and before lock. `flushNotes` is awaited in the lock path before `vault_lock`.
   - **Sizing:** a drag handle on the left edge resizes it (min 320 px, max 70 % of the window). The width is remembered across launches in `localStorage` key `raven.notes.width`.
@@ -543,7 +543,7 @@ Don't port `migration.ts`, `library.ts` (operator library editing is phase 2, Ar
 - Test: `src/test/msfLock.test.tsx`, plus additions to the settings and hosts tests
 
 **Behaviour:**
-- **Strip:** in exam sims the status strip shows "Metasploit: unused" or "Metasploit: VEGA", with the host name in the warn colour once locked.
+- **Strip:** in exam sims the status strip shows "Metasploit: unused" or "Metasploit: SRV11", with the host name in the warn colour once locked.
 - **Lock dialog:** clicking it opens a small dialog to change the locked host or release it, with release confirmed.
 - **Settings** gains "Your IP (tun0)" and "Listener port" fields, validated as Task 2 does, with this hint: "Filled into checklist commands as LHOST and LPORT".
 - **Host dialog** gains a "Dual-homed (reaches another network)" toggle. The pivot goals apply only when it's on.

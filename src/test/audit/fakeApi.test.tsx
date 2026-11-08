@@ -107,7 +107,7 @@ describe("audit fake api", () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
-    expect((await screen.findAllByText(/Lumen Corp — internal segment B/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Acme Corp — internal segment B/)).length).toBeGreaterThan(0);
     expect(screen.queryByText(/unlock/i)).not.toBeInTheDocument();
   });
 });

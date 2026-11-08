@@ -118,7 +118,7 @@ describe('computeDrift', () => {
   });
 
   it('unfillable lists only UPPER_SNAKE tokens', () => {
-    const d = computeDrift([], [], [cmd('a', 'x {7d49d726-3c21-4f05-99aa-fdc2c9474656} {name} {pos} {MY_TOKEN} {SUBNET_2}')], [], []);
+    const d = computeDrift([], [], [cmd('a', 'x {11111111-2222-4333-8444-555555555555} {name} {pos} {MY_TOKEN} {SUBNET_2}')], [], []);
     expect(d.unfillable.map((u) => u.token)).toEqual(['MY_TOKEN', 'SUBNET_2']);
   });
 });

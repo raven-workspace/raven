@@ -10,7 +10,7 @@ const host = (id: string, name: string, ip: string | null): Host => ({
   id, engagementId: "e1", name, ip, os: "windows", boardColumn: "information-gathering", boardManual: false,
   dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1,
 });
-const HOSTS = [host("h1", "dc01.corp.local", "10.10.10.5"), host("h2", "web02", "10.10.10.6"), host("h3", "sql03", null)];
+const HOSTS = [host("h1", "dc01.corp.local", "10.10.10.5"), host("h2", "web07", "10.10.10.6"), host("h3", "sql03", null)];
 
 function setup(value: string | null = "h1") {
   const onChange = vi.fn();
@@ -52,7 +52,7 @@ describe("HostChip", () => {
     const list = screen.getByRole("listbox", { name: "Fill for host" });
     expect(chip()).toHaveFocus();
     expect(chip()).toHaveAttribute("aria-expanded", "true");
-    expect([...list.querySelectorAll("[role=option]")].map((o) => o.textContent)).toEqual(["No host", "dc01.corp.local10.10.10.5", "web0210.10.10.6", "sql03"]);
+    expect([...list.querySelectorAll("[role=option]")].map((o) => o.textContent)).toEqual(["No host", "dc01.corp.local10.10.10.5", "web0710.10.10.6", "sql03"]);
     await user.keyboard("{ArrowDown}{Enter}");
     expect(onChange).toHaveBeenCalledWith("h2");
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
@@ -87,7 +87,7 @@ describe("HostChip", () => {
       const { chip } = setup();
       expect(chip()).not.toHaveAttribute("data-flash");
       await user.click(chip());
-      await user.click(screen.getByRole("option", { name: /web02/ }));
+      await user.click(screen.getByRole("option", { name: /web07/ }));
       expect(chip()).toHaveAttribute("data-flash");
       act(() => void vi.advanceTimersByTime(700));
       expect(chip()).not.toHaveAttribute("data-flash");

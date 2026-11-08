@@ -88,14 +88,14 @@ describe('analyzeCommandOutput', () => {
   });
 
   it('reads systeminfo', () => {
-    const a = analyzeCommandOutput('Host Name:                 WEB01\nOS Name:                   Microsoft Windows Server 2022 Standard\nDomain:                    orchard.com\n');
-    expect(a).toMatchObject({ tool: 'systeminfo', hostname: 'WEB01', domain: 'orchard.com' });
+    const a = analyzeCommandOutput('Host Name:                 WEB01\nOS Name:                   Microsoft Windows Server 2022 Standard\nDomain:                    med.test\n');
+    expect(a).toMatchObject({ tool: 'systeminfo', hostname: 'WEB01', domain: 'med.test' });
     expect(a.os?.os).toBe('windows');
   });
 
   it('reads uname -a and uses the prompt line as the title', () => {
-    const a = analyzeCommandOutput('$ uname -a\nLinux web02 5.15.0-91-generic #101-Ubuntu SMP x86_64 GNU/Linux');
-    expect(a).toMatchObject({ tool: 'uname', title: 'uname -a', hostname: 'web02' });
+    const a = analyzeCommandOutput('$ uname -a\nLinux web07 5.15.0-91-generic #101-Ubuntu SMP x86_64 GNU/Linux');
+    expect(a).toMatchObject({ tool: 'uname', title: 'uname -a', hostname: 'web07' });
     expect(a.os?.os).toBe('linux');
   });
 
@@ -105,8 +105,8 @@ describe('analyzeCommandOutput', () => {
   });
 
   it('reads the domain from ldapsearch naming contexts', () => {
-    const a = analyzeCommandOutput('# extended LDIF\n#\n# LDAPv3\ndn:\nnamingContexts: DC=lumen,DC=com\n');
-    expect(a).toMatchObject({ tool: 'ldapsearch', domain: 'lumen.com' });
+    const a = analyzeCommandOutput('# extended LDIF\n#\n# LDAPv3\ndn:\nnamingContexts: DC=acme,DC=com\n');
+    expect(a).toMatchObject({ tool: 'ldapsearch', domain: 'acme.com' });
   });
 
   it('labels directory brute-forcers without inventing an OS', () => {

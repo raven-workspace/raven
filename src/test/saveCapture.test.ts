@@ -90,38 +90,30 @@ beforeEach(() => {
 });
 
 describe("saveCapture", () => {
-  it("saveCapture creates new hosts before the entry", async () => {
-    const order: string[] = [];
-    m.hostCreate.mockImplementation(async (_e, input) => {
-      order.push(`host ${input.ip}`);
-      return host({ id: `new-${input.ip}`, name: input.name, ip: input.ip ?? null });
-    });
-    m.logCreate.mockImplementation(async (_e, input) => {
-      order.push("log");
-      return entry(input);
-    });
+  it("saveCapture saves the entry; an unknown IP with nothing proven there makes no host", async () => {
     const saved = await saveCapture({
       engagementId: "e1",
-      draft: draft(),
+      draft: draft({ unknownScopeIps: ["10.10.10.7"] }),
       edits: edits({ observations: "  smb signing off  ", ranOn: "" }),
-      addIps: ["10.10.10.7", "10.10.10.8"],
       image: null,
       hosts: [DC],
     });
-    expect(order).toEqual(["host 10.10.10.7", "host 10.10.10.8", "log"]);
-    expect(m.hostCreate).toHaveBeenCalledWith("e1", { name: "10.10.10.7", ip: "10.10.10.7" });
+    expect(m.hostCreate).not.toHaveBeenCalled();
     expect(m.logCreate).toHaveBeenCalledWith("e1", {
       title: "Scan · 10.10.10.5",
       titleEdited: false,
       ranOn: null,
-      hostIds: ["h1", "new-10.10.10.7", "new-10.10.10.8"],
+      hostIds: ["h1"],
       observations: "smb signing off",
       returnedNothing: false,
       private: false,
       content,
       attachment: null,
     });
-    expect(saved.id).toBe("l1");
+    expect(saved.entry.id).toBe("l1");
+    // Nothing in the output was parsed: no summary and no extraction.
+    expect(saved.summary).toBeNull();
+    expect(m.extractionSave).not.toHaveBeenCalled();
     expect(m.servicesUpsertScan).not.toHaveBeenCalled();
   });
 
@@ -143,7 +135,6 @@ describe("saveCapture", () => {
       engagementId: "e1",
       draft: draft({ scan: { hostId: "h1", ports: PORTS, os: "linux" } }),
       edits: edits(),
-      addIps: [],
       image: null,
       hosts: [DC],
     });
@@ -159,7 +150,6 @@ describe("saveCapture", () => {
       engagementId: "e1",
       draft: draft({ scan: { hostId: "h1", ports: PORTS, os: "linux" } }),
       edits: edits(),
-      addIps: [],
       image: null,
       hosts: [linux],
     });
@@ -170,7 +160,6 @@ describe("saveCapture", () => {
       engagementId: "e1",
       draft: draft({ scan: { hostId: "h1", ports: PORTS, os: "linux" } }),
       edits: edits({ hostIds: [] }),
-      addIps: [],
       image: null,
       hosts: [DC],
     });
@@ -216,7 +205,6 @@ describe("saveCapture", () => {
       draft: draft({ hostIds: [], scan: null, unknownScopeIps: ["10.10.10.9"] }),
       draftInput,
       edits: edits({ hostIds: [] }),
-      addIps: ["10.10.10.9"],
       image: null,
       hosts: [DC],
       onHostCreated: (h) => created.push(h.id),
@@ -230,8 +218,8 @@ describe("saveCapture", () => {
     expect(m.hostUpdate).toHaveBeenCalledWith("h9", { name: "10.10.10.9", ip: "10.10.10.9", os: "linux", access: "none" });
   });
 
-  it("re-run after creating a host writes only that host's section of a multi-host scan", async () => {
-    m.hostCreate.mockImplementation(async (_e, input) => host({ id: "h9", name: input.name, ip: input.ip ?? null }));
+  it("a multi-host scan of new boxes makes each a host with only its own section", async () => {
+    m.hostCreate.mockImplementation(async (_e, input) => host({ id: `h-${input.ip}`, name: input.name, ip: input.ip ?? null }));
     m.logCreate.mockImplementation(async (_e, input) => entry(input));
     m.servicesUpsertScan.mockResolvedValue([]);
     m.hostUpdate.mockImplementation(async (id, input) => host({ id, name: input.name }));
@@ -260,12 +248,13 @@ describe("saveCapture", () => {
         lastRanOn: null,
       },
       edits: edits({ hostIds: [] }),
-      addIps: ["10.10.10.9"],
       image: null,
       hosts: [DC],
     });
-    expect(m.servicesUpsertScan).toHaveBeenCalledWith("h9", [expect.objectContaining({ port: 22 })]);
-    expect(m.hostUpdate).not.toHaveBeenCalled();
+    expect(m.servicesUpsertScan).toHaveBeenCalledTimes(2);
+    expect(m.servicesUpsertScan).toHaveBeenCalledWith("h-10.10.10.9", [expect.objectContaining({ port: 22 })]);
+    expect(m.servicesUpsertScan).toHaveBeenCalledWith("h-10.10.10.8", [expect.objectContaining({ port: 135 })]);
+    expect(m.logCreate).toHaveBeenCalledWith("e1", expect.objectContaining({ hostIds: ["h-10.10.10.9", "h-10.10.10.8"] }));
   });
 
   it("only open ports are upserted (M1)", async () => {
@@ -281,7 +270,6 @@ describe("saveCapture", () => {
       engagementId: "e1",
       draft: draft({ scan: { hostId: "h1", ports, os: null } }),
       edits: edits(),
-      addIps: [],
       image: null,
       hosts: [{ ...DC, os: "linux" }],
     });
@@ -294,7 +282,6 @@ describe("saveCapture", () => {
       engagementId: "e1",
       draft: draft({ scan: { hostId: "h1", ports: PORTS, os: null } }),
       edits: edits(),
-      addIps: [],
       image: { mime: "image/png", dataBase64: "AAAA" },
       hosts: [DC],
     }).catch((e: unknown) => e);
@@ -313,7 +300,6 @@ describe("saveCapture", () => {
       engagementId: "e1",
       draft: draft({ scan: { hostId: "h1", ports: PORTS, os: null } }),
       edits: edits(),
-      addIps: [],
       image: null,
       hosts: [DC],
     }).catch((e: unknown) => e);
@@ -323,7 +309,7 @@ describe("saveCapture", () => {
     });
   });
 
-  it("services and credential intake both failing says both and carries every cause", async () => {
+  it("services and extraction both failing says both and carries every cause", async () => {
     const busy = new Error("db busy");
     const locked = new Error("locked");
     m.servicesUpsertScan.mockRejectedValue(busy);
@@ -333,18 +319,17 @@ describe("saveCapture", () => {
       engagementId: "e1",
       draft: draft({ scan: { hostId: "h1", ports: PORTS, os: null } }),
       edits: edits({ content: nxc }),
-      addIps: [],
       image: null,
       hosts: [DC],
-      intake: { credentials: [], usernames: [], toggles: {}, previewKeys: [] },
     }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(PartialSaveError);
     expect(err).toMatchObject({
-      message: "Saved, but services didn't update: db busy. The credentials didn't update either: paste the output again to retry.",
+      message: "Saved, but services didn't update: db busy. Raven couldn't file what it found either: paste the output again to retry.",
       reason: busy,
       reasons: [busy, locked],
     });
   });
+
 
   it("services failure with a lock-only follow-up failure uses the lock's message", async () => {
     m.servicesUpsertScan.mockRejectedValue(new Error("db busy"));
@@ -355,7 +340,6 @@ describe("saveCapture", () => {
       engagementId: "e1",
       draft: draft({ scan: { hostId: "h1", ports: PORTS, os: null } }),
       edits: edits({ content: { kind: "command", blocks: [{ command: "msfconsole -q -x 'use exploit/windows/smb/psexec; set RHOSTS 10.10.10.5'", output: "" }] } }),
-      addIps: [],
       image: null,
       hosts: [DC],
     }).catch((e: unknown) => e);
@@ -372,7 +356,6 @@ describe("saveCapture", () => {
       engagementId: "e1",
       draft: draft(),
       edits: edits({ content: { kind: "flag", flagKind: "local", value: "0123456789abcdef0123456789abcdef" }, kind: "flag" }),
-      addIps: [],
       image: null,
       hosts: [DC],
     }).catch((e: unknown) => e);
@@ -384,6 +367,32 @@ describe("saveCapture", () => {
     });
   });
 
+  it("a partial save carries the summary of the extraction it stored, and none when storing failed", async () => {
+    const svc = (id: string, port: number) => ({
+      id, hostId: "h1", port, protocol: "tcp" as const, state: "open", nmapService: null, nmapVersion: null, confirmedProduct: null,
+      confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
+    });
+    m.servicesList.mockResolvedValue([]);
+    m.servicesUpsertScan.mockResolvedValue([svc("s1", 22), svc("s2", 80)] as never);
+    m.checklistList.mockRejectedValue(new Error("locked"));
+    m.extractionSave.mockImplementation(async (logEntryId, engagementId, summary, record) => ({
+      logEntryId, engagementId, summary, record, createdAt: 2, undoneAt: null,
+    }));
+    const run = () =>
+      saveCapture({ engagementId: "e1", draft: draft({ scan: { hostId: "h1", ports: PORTS, os: null } }), edits: edits(), image: null, hosts: [DC] })
+        .catch((e: unknown) => e);
+    const err = await run();
+    expect(err).toBeInstanceOf(PartialSaveError);
+    expect(m.extractionSave).toHaveBeenCalledTimes(1);
+    expect((err as PartialSaveError).summary).toEqual(m.extractionSave.mock.calls[0]![2]);
+    expect((err as PartialSaveError).summary?.counts).toContain("2 services updated on dc01");
+
+    m.extractionSave.mockRejectedValue(new Error("db busy"));
+    const err2 = await run();
+    expect(err2).toBeInstanceOf(PartialSaveError);
+    expect((err2 as PartialSaveError).summary).toBeNull();
+  });
+
   describe("identity capture", () => {
     const priv = "PRIVILEGES INFORMATION\n----------------------\n\nPrivilege Name                Description                    State\n============================= ============================== ========\nSeImpersonatePrivilege        Impersonate a client after authentication Enabled\n";
     const run = (hostIds: string[], hosts: Host[]) => {
@@ -392,7 +401,6 @@ describe("saveCapture", () => {
         engagementId: "e1",
         draft: draft({ content: c, hostIds }),
         edits: edits({ content: c, hostIds, ranOn: "dc01" }),
-        addIps: [],
         image: null,
         hosts,
       });
@@ -410,12 +418,11 @@ describe("saveCapture", () => {
     it("records privileges from an Evil-WinRM whoami /priv even when Ran on is Kali", async () => {
       m.hostIdentityGet.mockResolvedValue(null);
       const c = { kind: "command" as const, blocks: [{ command: "whoami /priv", output: priv, shell: "evil-winrm" }] };
-      const win = host({ id: "h1", name: "onyx", os: "windows" });
+      const win = host({ id: "h1", name: "srv13", os: "windows" });
       await saveCapture({
         engagementId: "e1",
         draft: draft({ content: c }),
         edits: edits({ content: c, ranOn: "Kali (VM)" }),
-        addIps: [],
         image: null,
         hosts: [win],
       });
@@ -429,7 +436,6 @@ describe("saveCapture", () => {
         engagementId: "e1",
         draft: draft({ content: c }),
         edits: edits({ content: c, ranOn: "dc01" }),
-        addIps: [],
         image: null,
         hosts: [DC],
       });
@@ -451,19 +457,18 @@ describe("saveCapture", () => {
 
     it("a flag capture whose proof holds id output sets the identity and keeps the proof as pasted", async () => {
       m.hostIdentityGet.mockResolvedValue(null);
-      const paste = "# id\nuid=0(root) gid=0(root) groups=0(root)\n# cat /root/proof.txt\n918eef4c77a6e2903e0a3f4ff8554182";
-      const c = { kind: "flag" as const, flagKind: "proof" as const, value: "918eef4c77a6e2903e0a3f4ff8554182", proof: paste };
-      const vega = host({ id: "h1", name: "Vega", os: "linux" });
+      const paste = "# id\nuid=0(root) gid=0(root) groups=0(root)\n# cat /root/proof.txt\n44444444444444444444444444444444";
+      const c = { kind: "flag" as const, flagKind: "proof" as const, value: "44444444444444444444444444444444", proof: paste };
+      const srv11 = host({ id: "h1", name: "Srv11", os: "linux" });
       const saved = await saveCapture({
         engagementId: "e1",
         draft: draft({ kind: "flag", content: c }),
-        edits: edits({ kind: "flag", content: c, ranOn: "Vega" }),
-        addIps: [],
+        edits: edits({ kind: "flag", content: c, ranOn: "Srv11" }),
         image: null,
-        hosts: [vega],
+        hosts: [srv11],
       });
       expect(m.hostIdentitySet).toHaveBeenCalledWith(expect.objectContaining({ hostId: "h1", username: "root", entryId: "l1" }));
-      expect(saved.content).toEqual(c);
+      expect(saved.entry.content).toEqual(c);
       expect(m.logCreate).toHaveBeenCalledWith("e1", expect.objectContaining({ content: expect.objectContaining({ proof: paste }) }));
     });
 
@@ -474,17 +479,17 @@ describe("saveCapture", () => {
     });
 
     it("a hand edit keeps everything but its groups when whoami /groups is captured later", async () => {
-      const stored = storeLikeTheDb({ hostId: "h1", username: "corp\\sam", privileges: ["SeBackupPrivilege"], groups: ["typed-by-hand"], entryId: null, updatedAt: 1 });
+      const stored = storeLikeTheDb({ hostId: "h1", username: "corp\\cora", privileges: ["SeBackupPrivilege"], groups: ["typed-by-hand"], entryId: null, updatedAt: 1 });
       await capture("whoami /groups", groupsOut);
-      expect(stored()).toMatchObject({ username: "corp\\sam", privileges: ["SeBackupPrivilege"], groups: ["BUILTIN\\Users"] });
+      expect(stored()).toMatchObject({ username: "corp\\cora", privileges: ["SeBackupPrivilege"], groups: ["BUILTIN\\Users"] });
     });
 
-    it("a vector that fails to save is reported as the vectors, not the identity", async () => {
+    it("a vector that fails to save is reported as the extraction, not the identity", async () => {
       storeLikeTheDb(null);
       m.vectorUpsert.mockRejectedValue(new Error("db down"));
       const err = await run(["h1"], [DC]).catch((e) => e);
       expect(err).toBeInstanceOf(PartialSaveError);
-      expect(err.message).toBe("Saved the entry, but the privesc vectors didn't update. Paste the output again to retry.");
+      expect(err.message).toBe("Saved the entry, but Raven couldn't file what it found. Paste the output again to retry.");
     });
 
     it("does nothing with two linked hosts", async () => {

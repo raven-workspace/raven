@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { LogEntry } from "../../types/log";
 import { Button, labelClass } from "../../ui";
 import { AttachmentImage } from "./AttachmentImage";
+import { ExtractedLine } from "./ExtractedLine";
 
 const FOLD_LINES = 40;
 const pre = "m-0 max-h-[320px] overflow-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-[1.5] text-muted-2";
@@ -67,6 +68,7 @@ export function LogEntryBody({ entry }: { entry: LogEntry }) {
           {c.attachmentId && <AttachmentImage id={c.attachmentId} alt={`${entry.title} screenshot`} />}
         </>
       )}
+      <ExtractedLine entry={entry} />
       {entry.observations && (
         <div className="flex flex-col gap-1 border-t border-line pt-2">
           <span className={labelClass}>Observations</span>

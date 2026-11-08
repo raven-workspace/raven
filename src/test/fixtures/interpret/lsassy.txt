@@ -1,0 +1,8 @@
+[+] 10.10.10.5 Authentication successful
+[+] 10.10.10.5 Lsass dumped in C:\Windows\Temp\lsass.dmp (52428800 Bytes)
+[+] 10.10.10.5 Lsass dump deleted
+[+] 10.10.10.5 3 Credentials extracted
+CORP\jay  [NT] 33333333333333333333333333333333 | [SHA1] 1234567890abcdef1234567890abcdef12345678
+CORP\drew  [PWD] Spring2026x
+CORP\MS01$  [NT] 44444444444444444444444444444444
+CORP\MS01$  [PWD] 5f 3a 91 c0 de ad be ef

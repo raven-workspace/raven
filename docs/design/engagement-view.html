@@ -1,5 +1,5 @@
 <h2>Inside one engagement: how should it be arranged?</h2>
-<p class="subtitle">This is what you see after opening Mock exam A from the dashboard. The kanban columns are the host stages from the checklist. Field notes slide out from the right on <code>N</code> in both options.</p>
+<p class="subtitle">This is what you see after opening Lab A from the dashboard. The kanban columns are the host stages from the checklist. Field notes slide out from the right on <code>N</code> in both options.</p>
 
 <style>
   .k-wrap{font-size:12px}
@@ -25,15 +25,15 @@
     <div class="content">
       <h3>Tabs across the top, board first</h3>
       <p>One row of tabs. The Board is the landing tab; everything else is one click (or a number key) away.</p>
-      <div class="mockup"><div class="mockup-header">Raven › Mock exam A</div><div class="mockup-body k-wrap">
-        <div class="k-top"><b>Mock exam A</b><span class="k-tabs"><span class="on">Board</span><span>Log</span><span>Credentials</span><span>Findings</span><span>Engagement checklist</span><span>Report</span></span></div>
+      <div class="mockup"><div class="mockup-header">Raven › Lab A</div><div class="mockup-body k-wrap">
+        <div class="k-top"><b>Lab A</b><span class="k-tabs"><span class="on">Board</span><span>Log</span><span>Credentials</span><span>Findings</span><span>Engagement checklist</span><span>Report</span></span></div>
         <div class="k-strip"><span>⏱ 14h 10m left</span><span>50/100 pts</span><span class="warn">2 open threads</span><span>Cleanup 4</span><span>MSF lock: unused</span></div>
         <div class="k-board">
-          <div class="k-col"><div>Enumerate</div><div class="k-card">Onyx<small>.145 · 4 ports unidentified</small></div><div class="k-card">DC01<small>.140 · AD</small></div></div>
-          <div class="k-col"><div>Foothold</div><div class="k-card">Quartz<small>.144 · open thread</small></div></div>
+          <div class="k-col"><div>Enumerate</div><div class="k-card">srv13<small>.145 · 4 ports unidentified</small></div><div class="k-card">DC01<small>.140 · AD</small></div></div>
+          <div class="k-col"><div>Foothold</div><div class="k-card">srv12<small>.144 · open thread</small></div></div>
           <div class="k-col"><div>Privesc</div></div>
           <div class="k-col"><div>Loot / pivot</div><div class="k-card">MS01<small>.141 · dual-homed</small></div></div>
-          <div class="k-col"><div>Done</div><div class="k-card">Vega<small>root · 20 pts</small></div><div class="k-card">MS02<small>SYSTEM</small></div></div>
+          <div class="k-col"><div>Done</div><div class="k-card">srv11<small>root · 20 pts</small></div><div class="k-card">MS02<small>SYSTEM</small></div></div>
         </div>
       </div></div>
     </div>
@@ -43,21 +43,21 @@
     <div class="letter">B</div>
     <div class="content">
       <h3>Sidebar of sections and hosts, board first</h3>
-      <p>A narrow left sidebar always lists the engagement's sections <em>and</em> its hosts, so jumping straight to Vega is one click from anywhere.</p>
-      <div class="mockup"><div class="mockup-header">Raven › Mock exam A</div><div class="mockup-body k-wrap" style="display:grid;grid-template-columns:150px 1fr">
+      <p>A narrow left sidebar always lists the engagement's sections <em>and</em> its hosts, so jumping straight to srv11 is one click from anywhere.</p>
+      <div class="mockup"><div class="mockup-header">Raven › Lab A</div><div class="mockup-body k-wrap" style="display:grid;grid-template-columns:150px 1fr">
         <div class="k-side">
           <div class="on">▦ Board</div><div>☰ Log</div><div>🔑 Credentials</div><div>⚑ Findings</div><div>✓ Engagement checklist</div><div>📄 Report</div>
           <div style="margin-top:8px;opacity:.6">HOSTS</div>
-          <div>DC01 ◻</div><div>MS01 ◐</div><div>MS02 ✓</div><div>Vega ✓</div><div>Quartz ◐ <span class="warn">•</span></div><div>Onyx ◻</div>
+          <div>DC01 ◻</div><div>MS01 ◐</div><div>MS02 ✓</div><div>srv11 ✓</div><div>srv12 ◐ <span class="warn">•</span></div><div>srv13 ◻</div>
         </div>
         <div>
           <div class="k-strip"><span>⏱ 14h 10m left</span><span>50/100 pts</span><span class="warn">2 open threads</span><span>Cleanup 4</span><span>MSF lock: unused</span></div>
           <div class="k-board" style="grid-template-columns:repeat(5,1fr)">
-            <div class="k-col"><div>Enumerate</div><div class="k-card">Onyx</div><div class="k-card">DC01</div></div>
-            <div class="k-col"><div>Foothold</div><div class="k-card">Quartz</div></div>
+            <div class="k-col"><div>Enumerate</div><div class="k-card">srv13</div><div class="k-card">DC01</div></div>
+            <div class="k-col"><div>Foothold</div><div class="k-card">srv12</div></div>
             <div class="k-col"><div>Privesc</div></div>
             <div class="k-col"><div>Loot / pivot</div><div class="k-card">MS01</div></div>
-            <div class="k-col"><div>Done</div><div class="k-card">Vega</div><div class="k-card">MS02</div></div>
+            <div class="k-col"><div>Done</div><div class="k-card">srv11</div><div class="k-card">MS02</div></div>
           </div>
         </div>
       </div></div>

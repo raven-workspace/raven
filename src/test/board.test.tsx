@@ -13,7 +13,7 @@ const m = vi.mocked(api, true);
 
 const E1: Engagement = {
   id: "e1",
-  name: "Mock exam A",
+  name: "Lab A",
   kind: "lab",
   client: null,
   subLabel: null,
@@ -90,7 +90,7 @@ beforeEach(() => {
     }),
     host({
       id: "h2",
-      name: "web02",
+      name: "web07",
       ip: "10.10.10.6",
       os: "linux",
       boardColumn: "reporting",
@@ -127,7 +127,7 @@ describe("board", () => {
       "accent",
     );
     expect(
-      within(column("Reporting")).getByRole("link", { name: /web02/ }),
+      within(column("Reporting")).getByRole("link", { name: /web07/ }),
     ).toBeInTheDocument();
     const mystery = within(column("Information gathering")).getByRole("link", {
       name: /mystery/,
@@ -181,7 +181,7 @@ describe("board", () => {
       expect(m.hostMove).toHaveBeenLastCalledWith("h1", "vulnerability-detection"),
     );
     // edges do nothing
-    const done = within(column("Reporting")).getByRole("link", { name: /web02/ });
+    const done = within(column("Reporting")).getByRole("link", { name: /web07/ });
     m.hostMove.mockClear();
     done.focus();
     await user.keyboard("]");
@@ -206,9 +206,9 @@ describe("board", () => {
       effectAllowed: "",
       dropEffect: "",
     };
-    fireEvent.dragStart(within(column("Reporting")).getByRole("link", { name: /web02/ }), { dataTransfer });
+    fireEvent.dragStart(within(column("Reporting")).getByRole("link", { name: /web07/ }), { dataTransfer });
     fireEvent.drop(column("Post-exploitation"), { dataTransfer });
-    await vi.waitFor(() => expect(within(column("Post-exploitation")).getByRole("link", { name: /web02/ })).toBeInTheDocument());
+    await vi.waitFor(() => expect(within(column("Post-exploitation")).getByRole("link", { name: /web07/ })).toBeInTheDocument());
     expect(within(column("Information gathering")).getByRole("link", { name: /mystery/ })).toHaveFocus();
     // A move that works clears the message.
     expect(screen.queryByText(/Couldn't move/)).not.toBeInTheDocument();

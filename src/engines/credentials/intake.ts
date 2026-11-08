@@ -2,7 +2,7 @@ import type { CredAttemptInput, Credential, CredentialInput, Username, UsernameI
 import type { CommandBlock } from "../../types/log";
 import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
-import { credKey, findDuplicateCredential, usernameKey } from "./keys";
+import { credKey, findDuplicateCredential, sameDomain, usernameKey } from "./keys";
 import { isOwnerless } from "./matrix";
 import { parseNxcAuthResults, parseRoastHashes, type NxcAuthResult } from "./nxc";
 import type { CredAuthMode } from "./types";
@@ -46,6 +46,8 @@ export interface CredentialIntakePlan {
   newUsernames: PlannedUsername[];
   /** Roast hashes not already stored (dedupe by credKey). */
   newHashes: PlannedCredential[];
+  /** Stored rows the output proved again but the plan doesn't add: listed usernames and roast hashes already stored. */
+  reproved: { credentialIds: string[]; usernameIds: string[] };
   /** Stored credentials a spray hit shows came from an owner-less secret; applied only where `fromSecretId` is unset. */
   links?: { credId: string; fromSecretId: string }[];
   /** IPs not among the engagement's hosts . */
@@ -57,8 +59,8 @@ export interface CredentialIntakePlan {
   summary: { admin: number; valid: number; failed: number; errored: number };
 }
 
-const LOCAL_ONLY = new Set(['ssh', 'ftp', 'vnc', 'nfs']);
-const HASH_RE = /^[0-9a-f]{32}(?::[0-9a-f]{32})?$/i;
+export const LOCAL_ONLY = new Set(['ssh', 'ftp', 'vnc', 'nfs']);
+export const HASH_RE = /^[0-9a-f]{32}(?::[0-9a-f]{32})?$/i;
 
 /** Split a command into shell words: adjacent quoted/bare pieces, '\'' joins, backslash escapes. */
 function shellWords(command: string): string[] {
@@ -151,7 +153,7 @@ const lc = (s?: string): string => (s ?? '').trim().toLowerCase();
 
 function usernameMatches(u: Username, username: string, domain?: string): boolean {
   if (lc(u.username) !== lc(username)) return false;
-  return !u.domain || !domain || lc(u.domain) === lc(domain);
+  return !u.domain || !domain || sameDomain(u.domain, domain);
 }
 
 export function planCredentialIntake(input: {
@@ -175,6 +177,7 @@ export function planCredentialIntake(input: {
   const pendingAttempts = new Map<string, Map<string, Omit<PlannedAttemptBase, 'credId'>>>();
   const declinedAttempts = new Map<string, Map<string, PlannedAttempt>>();
   const newUsernames = new Map<string, PlannedUsername>();
+  const reproved: CredentialIntakePlan['reproved'] = { credentialIds: [], usernameIds: [] };
   const links = new Map<string, { credId: string; fromSecretId: string }>();
   const unknownHosts: string[] = [];
   const ipChanges: CredentialIntakePlan['ipChanges'] = [];
@@ -248,6 +251,7 @@ export function planCredentialIntake(input: {
       // Username seen in output but not yet listed: planned, and treated as listed for the rest of this plan.
       const listed = engUsernames.find(u => usernameMatches(u, r.username, domain));
       const nuKey = usernameKey({ engagementId: engagement.id, username: r.username, domain: domain ?? null });
+      if (listed && !reproved.usernameIds.includes(listed.id)) reproved.usernameIds.push(listed.id);
       if (!listed && !newUsernames.has(nuKey)) {
         newUsernames.set(nuKey, {
           username: r.username, ...(domain ? { domain } : {}), engagementId: engagement.id,
@@ -257,6 +261,7 @@ export function planCredentialIntake(input: {
 
       const sameUser = engCreds.find(c => lc(c.username) === lc(r.username) && secretMatches(c, r.secret));
       if (sameUser) {
+        if (!reproved.credentialIds.includes(sameUser.id)) reproved.credentialIds.push(sameUser.id);
         // A hit while spraying an owner-less secret at this user: link the stored credential to it.
         if (!sameUser.fromSecretId && (r.result === 'admin' || r.result === 'valid')) {
           const owner = engCreds.find(c => isOwnerless(c) && secretMatches(c, r.secret));
@@ -345,7 +350,11 @@ export function planCredentialIntake(input: {
         source: 'nxc ldap roast', crackStatus: 'uncracked', engagementId: engagement.id,
       };
       const candidate = asCredential(hashInput, `planned:${newHashes.length}`);
-      if (findDuplicateCredential(seen, candidate)) continue;
+      const dup = findDuplicateCredential(seen, candidate);
+      if (dup) {
+        if (engCreds.includes(dup) && !reproved.credentialIds.includes(dup.id)) reproved.credentialIds.push(dup.id);
+        continue;
+      }
       seen.push(candidate);
       newHashes.push(hashInput);
     }
@@ -359,36 +368,10 @@ export function planCredentialIntake(input: {
     newUsernames: [...newUsernames.values()],
     links: [...links.values()],
     newHashes,
+    reproved,
     unknownHosts,
     ipChanges,
     unrecorded,
     summary,
   };
-}
-
-/** One-line summary: `nxc: 1 admin · 1 valid · 12 failed · 2 errored`, plus unknown hosts / unrecorded when non-zero. */
-export function formatIntakeSummary(plan: CredentialIntakePlan): string {
-  const { admin, valid, failed, errored } = plan.summary;
-  const parts = [`nxc: ${admin} admin`, `${valid} valid`, `${failed} failed`, `${errored} errored`];
-  if (plan.unknownHosts.length > 0) parts.push(`${plan.unknownHosts.length} unknown hosts`);
-  if (plan.ipChanges.length > 0) parts.push(`${plan.ipChanges.length} host IP changed`);
-  if (plan.unrecorded > 0) parts.push(`${plan.unrecorded} unrecorded`);
-  return parts.join(' · ');
-}
-
-/**
- * Names a failed-only pair so the operator can tell same-named accounts apart: who, where, and which secret
- * ("a hash" or "a password": never any part of the secret).
- */
-export function unrecordedLabel(p: PendingCredential, hosts: Pick<Host, 'id' | 'name' | 'ip'>[]): string {
-  const ids = [...new Set(p.attempts.map((a) => a.hostId))];
-  const where = ids.map((id) => { const h = hosts.find((x) => x.id === id); return h?.name || h?.ip || id; }).join(', ');
-  // Never any part of the secret (T8-R2): the label is shown in the UI.
-  const secret = p.input.type === 'hash' ? 'a hash' : 'a password';
-  return `${pendingCredentialLabel(p)} with ${secret} on ${where}`;
-}
-
-/** `domain\user` label for a pending credential. */
-export function pendingCredentialLabel(p: PendingCredential): string {
-  return p.input.domain ? `${p.input.domain}\\${p.input.username ?? ''}` : (p.input.username ?? '');
 }

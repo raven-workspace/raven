@@ -1,0 +1,109 @@
+ANSI color bit for Windows is not set. If you are executing this from a Windows terminal inside the host you should run 'REG ADD HKCU\Console /v VirtualTerminalLevel /t REG_DWORD /d 1' and then start a new CMD
+Long paths are disabled, so the maximum length of a path supported is 260 chars (this may cause false negatives when looking for files).
+
+ADVISORY: winpeas should be used for authorized penetration testing and/or educational purposes only.
+
+  WinPEAS-ng by @hacktricks_live
+
+  [+] Legend:
+         Red                Indicates a special privilege over an object or something is misconfigured
+         Green              Indicates that some protection is enabled or something is well configured
+         Cyan               Indicates active users
+         Blue               Indicates disabled users
+         LightYellow        Indicates links
+
+   Creating Dynamic lists, this could take a while, please wait...
+   - Checking if domain...
+   - Getting Win32_UserAccount info...
+
+������������������ System Information (T1082,T1068,T1548.002)
+
+����͹ Basic System Information (T1082)
+�Check if the Windows versions is vulnerable to some known exploit https://book.hacktricks.wiki/en/windows-hardening/windows-local-privilege-escalation/index.html#version-exploits
+    OS Name: Microsoft Windows 10 Pro
+    OS Version: 10.0.19041 N/A Build 19041
+    System Type: x64-based PC
+    Hostname: MS01
+    ProductName: Windows 10 Pro
+    EditionID: Professional
+    ReleaseId: 2004
+
+����͹ UAC Status (T1548.002)
+�If you are in the Administrators group check how to bypass the UAC https://book.hacktricks.wiki/en/windows-hardening/windows-local-privilege-escalation/index.html#uac
+    ConsentPromptBehaviorAdmin: 5 - PromptForNonWindowsBinaries
+    EnableLUA: 1
+    LocalAccountTokenFilterPolicy:
+    FilterAdministratorToken:
+      [*] LocalAccountTokenFilterPolicy set to 0 and FilterAdministratorToken != 1.
+      [-] Only the RID-500 local admin account can be used for lateral movement.
+
+����͹ Checking AlwaysInstallElevated (T1548.002)
+� https://book.hacktricks.wiki/en/windows-hardening/windows-local-privilege-escalation/index.html#alwaysinstallelevated
+    AlwaysInstallElevated set to 1 in HKLM!
+    AlwaysInstallElevated set to 1 in HKCU!
+
+����͹ Environment note (T1552.001)
+    DB_PASSWORD=Password123!
+    AUTOLOGON_PASS=Password123!
+
+������������������ Users Information (T1087.001,T1033,T1134.001)
+
+����͹ Current Token privileges (T1134.001)
+�Check if you can escalate privilege using some enabled token https://book.hacktricks.wiki/en/windows-hardening/windows-local-privilege-escalation/index.html#token-manipulation
+    SeShutdownPrivilege: DISABLED
+    SeChangeNotifyPrivilege: SE_PRIVILEGE_ENABLED_BY_DEFAULT, SE_PRIVILEGE_ENABLED
+    SeImpersonatePrivilege: SE_PRIVILEGE_ENABLED_BY_DEFAULT, SE_PRIVILEGE_ENABLED
+    SeCreateGlobalPrivilege: SE_PRIVILEGE_ENABLED_BY_DEFAULT, SE_PRIVILEGE_ENABLED
+    SeIncreaseWorkingSetPrivilege: DISABLED
+
+����͹ Display information about local users (T1087.001)
+   Computer Name           :   MS01
+   User Name               :   jay
+   User Id                 :   1004
+   Is Enabled              :   True
+   User Type               :   Administrator
+   Comment                 :
+   Logons Count            :   2
+
+   =================================================================================================
+
+������������������ Services Information (T1007,T1543.003,T1574.001)
+
+����͹ Interesting Services -non Microsoft- (T1007)
+�Check if you can overwrite some service binary or perform a DLL hijacking, also check for unquoted paths https://book.hacktricks.wiki/en/windows-hardening/windows-local-privilege-escalation/index.html#services
+    BalloonService(BalloonService)["C:\Program Files\Acme-Tools\Balloon\agentsvc.exe"] - Auto - Running
+    Balloon Service
+   =================================================================================================
+
+    QEMU-GA(https://www.qemu.org - QEMU Guest Agent)["C:\Program Files\Qemu-ga\qemu-ga.exe" -d --retry-path] - Auto - Running
+    QEMU Guest Agent
+   =================================================================================================
+
+    ssh-agent(OpenSSH Authentication Agent)[C:\WINDOWS\System32\OpenSSH\ssh-agent.exe] - Disabled - Stopped
+    Agent to hold private keys used for public key authentication.
+   =================================================================================================
+
+    AcmeSyncSvc(Acme Corp - Acme Sync Service)[C:\Program Files (x86)\Acme Sync Service\AcmeSyncSvc.exe] - Auto - Running - No quotes and Space detected
+    Acme sync service
+   =================================================================================================
+
+    VMTools(VMware, Inc. - VMware Tools)["C:\Program Files\VMware\VMware Tools\vmtoolsd.exe"] - Auto - Stopped
+    Provides support for synchronizing objects between the host and guest operating systems.
+   =================================================================================================
+
+����͹ Modifiable Services (T1543.003)
+�Check if you can modify any service https://book.hacktricks.wiki/en/windows-hardening/windows-local-privilege-escalation/index.html#services
+    LOOKS LIKE YOU CAN MODIFY OR START/STOP SOME SERVICE/s:
+    RmSvc: GenericExecute (Start/Stop)
+    wcncsvc: GenericExecute (Start/Stop)
+
+����͹ Checking write permissions in PATH folders (DLL Hijacking) (T1574.001)
+�Check for DLL Hijacking in PATH folders https://book.hacktricks.wiki/en/windows-hardening/windows-local-privilege-escalation/index.html#dll-hijacking
+    C:\WINDOWS\system32
+    C:\WINDOWS
+
+������������������ Applications Information (T1518,T1547.001)
+
+����͹ Autorun Applications (T1547.001)
+    File: C:\Program Files\VMware\VMware Tools\vmtoolsd.exe -n vmusr (Unquoted and Space detected) - C:\
+    File: C:\Program Files (x86)\Acme Sync Service\AcmeSyncSvc.exe (Unquoted and Space detected) - C:\

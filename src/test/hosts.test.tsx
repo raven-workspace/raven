@@ -14,7 +14,7 @@ const m = vi.mocked(api, true);
 
 const E1: Engagement = {
   id: "e1",
-  name: "Mock exam A",
+  name: "Lab A",
   kind: "lab",
   client: null,
   subLabel: null,
@@ -68,7 +68,7 @@ beforeEach(() => {
   m.vectorsList.mockResolvedValue([]);
   hosts = [
     host({ id: "h1", name: "dc01", ip: "10.10.10.5", boardColumn: "vulnerability-detection" }),
-    host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "reporting" }),
+    host({ id: "h2", name: "web07", ip: "10.10.10.6", boardColumn: "reporting" }),
   ];
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
@@ -189,7 +189,7 @@ describe("hosts", () => {
     m.engagementGet.mockResolvedValue(exam);
     hosts = [
       host({ id: "h1", name: "dc01", ip: "10.10.10.5", adSetEffective: true }),
-      host({ id: "h2", name: "web02", ip: "10.10.10.6" }),
+      host({ id: "h2", name: "web07", ip: "10.10.10.6" }),
     ];
     m.hostUpdate.mockImplementation(async (id, input) => {
       const next = { ...hosts.find((h) => h.id === id)!, name: input.name, adSet: input.adSet ?? null };

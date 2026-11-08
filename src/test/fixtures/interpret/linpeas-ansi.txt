@@ -1,0 +1,172 @@
+    /---------------------------------------------------------------------------------\
+    |                             Do you like PEASS?                                  |
+    |---------------------------------------------------------------------------------|
+    |                                 Thank you!                                      |
+    \---------------------------------------------------------------------------------/
+          LinPEAS-ng by carlospolop
+
+ADVISORY: This script should be used for authorized penetration testing and/or educational purposes only.
+
+ LEGEND:
+  RED/YELLOW: 95% a PE vector
+  RED: You should take a look into it
+  LightCyan: Users with console
+  Blue: Users without console & mounted devs
+  Green: Common things (users, groups, SUID/SGID, mounts, .sh scripts, cronjobs) 
+  LightMagenta: Your username
+
+ Starting LinPEAS. Caching Writable Folders...
+                               ╔═══════════════════╗
+═══════════════════════════════╣ Basic information ╠═══════════════════════════════
+                               ╚═══════════════════╝
+OS: Linux version 5.15.0-53-generic (builder@build01) #59-Ubuntu SMP Mon Jan 1 00:00:00 UTC 2026
+User & Groups: uid=1000(jay) gid=1000(jay) groups=1000(jay),4(adm),24(cdrom),30(dip),46(plugdev)
+Hostname: web01
+
+[+] /usr/bin/ping is available for network discovery (LinPEAS can discover hosts, learn more with -h)
+[+] /usr/bin/nc is available for network discovery & port scanning (LinPEAS can discover hosts and scan ports, learn more with -h)
+
+                              ╔════════════════════╗
+══════════════════════════════╣ System Information ╠══════════════════════════════
+                              ╚════════════════════╝
+[1;36m╔══════════╣ [1;32mOperative system (T1082)[0m
+╚ https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#kernel-exploits
+Linux version 5.15.0-53-generic (builder@build01) #59-Ubuntu SMP Mon Jan 1 00:00:00 UTC 2026
+Distributor ID:	Ubuntu
+Description:	Ubuntu 22.04.1 LTS
+Release:	22.04
+Codename:	jammy
+
+[1;36m╔══════════╣ [1;32mSudo version (T1548.003,T1068)[0m
+╚ https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#sudo-version
+[1;31mSudo version 1.9.9[0m
+
+[1;36m╔══════════╣ [1;32mPATH (T1574.007)[0m
+╚ https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#writable-path-abuses
+/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+
+[1;36m╔══════════╣ [1;32mDate & uptime (T1082)[0m
+Thu Jan  1 12:00:00 AM UTC 2026
+ 00:00:01 up  1:17,  1 user,  load average: 0.23, 0.06, 0.02
+
+[1;36m╔══════════╣ [1;32mEnvironment (T1082,T1552.007)[0m
+╚ Any private information inside environment variables?
+USER=jay
+HOME=/home/jay
+DB_PASSWORD=Password123!
+API_TOKEN=Password123!
+SHELL=/bin/bash
+
+[1;36m╔══════════╣ [1;32mCheck for vulnerable cron jobs (T1053.003)[0m
+╚ https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#scheduledcron-jobs
+══╣ Cron jobs list (T1053.003)
+/usr/bin/crontab
+incrontab Not Found
+-rw-r--r-- 1 root root    1136 Jan  1  2026 /etc/crontab
+
+/etc/cron.d:
+total 16
+drwxr-xr-x  2 root root 4096 Jan  1  2026 .
+drwxr-xr-x 98 root root 4096 Jan  1 00:00 ..
+-rw-r--r--  1 root root  201 Jan  1  2026 e2scrub_all
+
+[1;36m╔══════════╣ [1;32mActive Ports (T1049)[0m
+╚ https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#open-ports
+tcp   LISTEN 0      128          0.0.0.0:22        0.0.0.0:*
+tcp   LISTEN 0      511          0.0.0.0:80        0.0.0.0:*
+tcp   LISTEN 0      128             [::]:22           [::]:*
+
+                               ╔═══════════════════╗
+═══════════════════════════════╣ User Information ╠═══════════════════════════════
+                               ╚═══════════════════╝
+[1;36m╔══════════╣ [1;32mMy user (T1033)[0m
+╚ https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#users
+[1;35muid=1000(jay) gid=1000(jay) groups=1000(jay),4(adm),24(cdrom),30(dip),46(plugdev)[0m
+
+[1;36m╔══════════╣ [1;32mChecking 'sudo -l', /etc/sudoers, and /etc/sudoers.d (T1548.003)[0m
+╚ https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#sudo-and-suid
+Matching Defaults entries for jay on web01:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/snap/bin
+
+User jay may run the following commands on web01:
+    [1;31;103m(ALL) NOPASSWD: /usr/bin/vim[0m
+    (root) /usr/bin/crontab -l
+
+[1;36m╔══════════╣ [1;32mChecking sudo tokens (T1548.003)[0m
+╚ https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#reusing-sudo-tokens
+ptrace protection is enabled (1)
+Sudo token directory perms:
+drwx--x--x 2 root root 60 Jan  1 00:00 /var/run/sudo/ts
+
+doas.conf Not Found
+
+[1;36m╔══════════╣ [1;32mSearching tmux sessions[0m
+╚ https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#open-shell-sessions
+
+                      ╔════════════════════════════════════╗
+══════════════════════╣ Files with Interesting Permissions ╠══════════════════════
+                      ╚════════════════════════════════════╝
+[1;36m╔══════════╣ [1;32mSUID - Check easy privesc, exploits and write perms (T1548.001)[0m
+╚ https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#sudo-and-suid
+[0;32m-rwsr-xr-x 1 root root 19K Jan  1  2026 /usr/libexec/polkit-agent-helper-1[0m
+[0;32m-rwsr-xr-x 1 root root 40K Jan  1  2026 /usr/bin/newgrp  --->  HP-UX_10.20[0m
+[1;31m-rwsr-xr-x 1 root root 31K Jan  1  2026 /usr/bin/pkexec  --->  Linux4.10_to_5.1.17(CVE-2019-13272)/rhel_6(CVE-2011-1485)/Generic_CVE-2021-4034[0m
+[0;32m-rwsr-xr-x 1 root root 55K Jan  1  2026 /usr/bin/su[0m
+[0;32m-rwsr-xr-x 1 root root 44K Jan  1  2026 /usr/bin/chsh[0m
+[0;32m-rwsr-xr-x 1 root root 59K Jan  1  2026 /usr/bin/passwd  --->  Apple_Mac_OSX(03-2006)/Solaris_8/9(12-2004)/SPARC_8/9/Sun_Solaris_2.3_to_2.5.1(02-1997)[0m
+[0;32m-rwsr-xr-x 1 root root 72K Jan  1  2026 /usr/bin/chfn  --->  SuSE_9.3/10[0m
+[0;32m-rwsr-xr-x 1 root root 71K Jan  1  2026 /usr/bin/gpasswd[0m
+[0;32m-rwsr-xr-x 1 root root 35K Jan  1  2026 /usr/bin/fusermount3[0m
+[0;32m-rwsr-xr-x 1 root root 35K Jan  1  2026 /usr/bin/umount  --->  BSD/Linux(08-1996)[0m
+[0;32m-rwsr-xr-x 1 root root 227K Jan  1  2026 /usr/bin/sudo  --->  check_if_the_sudo_version_is_vulnerable[0m
+[0;32m-rwsr-xr-x 1 root root 47K Jan  1  2026 /usr/bin/mount  --->  Apple_Mac_OSX(Lion)_Kernel_xnu-1699.32.7_except_xnu-1699.24.8[0m
+-rwsr-xr-x 1 root root 136K Jan  1  2026 /usr/lib/snapd/snap-confine  --->  Ubuntu_snapd<2.37_dirty_sock_Local_Privilege_Escalation(CVE-2019-7304)
+[0;32m-rwsr-xr-x 1 root root 331K Jan  1  2026 /usr/lib/openssh/ssh-keysign[0m
+-rwsr-xr-- 1 root messagebus 35K Jan  1  2026 /usr/lib/dbus-1.0/dbus-daemon-launch-helper
+[1;31;103m-rwsr-xr-x 1 root root 320K Jan  1  2026 /usr/bin/find[0m
+-rwsr-xr-x 1 root root 84K Jan  1  2026 /snap/core20/1405/usr/bin/chfn  --->  SuSE_9.3/10
+-rwsr-xr-x 1 root root 52K Jan  1  2026 /snap/core20/1405/usr/bin/chsh
+-rwsr-xr-x 1 root root 55K Jan  1  2026 /snap/core20/1405/usr/bin/mount  --->  Apple_Mac_OSX(Lion)_Kernel_xnu-1699.32.7_except_xnu-1699.24.8
+-rwsr-xr-x 1 root root 67K Jan  1  2026 /snap/core20/1405/usr/bin/su
+-rwsr-xr-x 1 root root 163K Jan  1  2026 /snap/core20/1405/usr/bin/sudo  --->  check_if_the_sudo_version_is_vulnerable
+-rwsr-xr-- 1 root systemd-resolve 51K Jan  1  2026 /snap/core20/1405/usr/lib/dbus-1.0/dbus-daemon-launch-helper
+
+[1;36m╔══════════╣ [1;32mSGID (T1548.001)[0m
+╚ https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#sudo-and-suid
+-rwxr-sr-x 1 root crontab 39K Jan  1  2026 /usr/bin/crontab
+-rwxr-sr-x 1 root shadow 23K Jan  1  2026 /usr/bin/expiry
+-rwxr-sr-x 1 root tty 23K Jan  1  2026 /usr/bin/write.ul (Unknown SGID binary)
+-rwxr-sr-x 1 root tty 23K Jan  1  2026 /usr/bin/wall
+
+[1;36m╔══════════╣ [1;32mFiles with ACLs (limited to 50) (T1222)[0m
+╚ https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#acls
+files with acls in searched folders Not Found
+
+[1;36m╔══════════╣ [1;32mCapabilities (T1548.001)[0m
+╚ https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#capabilities
+══╣ Current shell capabilities (T1548.001)
+CapInh:  0x0000000000000000=
+CapPrm:  0x0000000000000000=
+CapEff:	 0x0000000000000000=
+CapBnd:  0x000001ffffffffff=cap_chown,cap_dac_override,cap_dac_read_search,cap_fowner,cap_fsetid,cap_kill,cap_setgid,cap_setuid,cap_setpcap,cap_net_bind_service,cap_net_admin,cap_net_raw,cap_sys_admin
+CapAmb:  0x0000000000000000=
+
+══╣ Processes with capability sets (non-zero CapEff/CapAmb, limit 40) (T1548.001)
+PID 1 (systemd) user=root
+
+══╣ Files with capabilities (limited to 50)
+/usr/lib/x86_64-linux-gnu/gstreamer1.0/gstreamer-1.0/gst-ptp-helper cap_net_bind_service,cap_net_admin=ep
+/snap/core20/1405/usr/bin/ping cap_net_raw=ep
+[1;31;103m/usr/bin/python3.10 cap_setuid=ep[0m
+/usr/bin/ping cap_net_raw=ep
+
+[1;36m╔══════════╣ [1;32mUsers with capabilities (T1548.001)[0m
+╚ https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#capabilities
+
+╚ Checking if PAM loads pam_cap.so
+/etc/pam.d/common-auth:25:auth	optional			pam_cap.so 
+
+[1;36m╔══════════╣ [1;32mChecking misconfigurations of ld.so (T1574.006)[0m
+╚ https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#ld.so
+/etc/ld.so.conf
+include /etc/ld.so.d/*.conf

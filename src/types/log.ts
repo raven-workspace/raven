@@ -1,3 +1,7 @@
+import type { Credential, CredAttempt } from "./credentials";
+import type { HostIdentity } from "./hostFacts";
+import type { Service } from "./service";
+
 export type LogKind = "command" | "screenshot" | "http" | "note" | "flag";
 export type FlagKind = "local" | "proof";
 
@@ -63,4 +67,54 @@ export interface Progress {
   hostsRooted: number;
   flagsFound: number;
   flagsTotal: number;
+}
+
+/** Mirrors the Rust `ExtractionSummary`: display lines, already worded. `wins` are accent lines, `counts` muted,
+ *  `ticks` like "Ticked 'Dump hashes' on DC01". */
+export interface ExtractionSummary {
+  wins: string[];
+  counts: string[];
+  ticks: string[];
+}
+
+/** A checklist tick an entry's output proved (`parser` names the interpreter). */
+export interface OutputTick {
+  ownerId: string;
+  goalId: string;
+  parser: string;
+}
+
+/** Mirrors the Rust `ExtractionRecord`: what one Save filed (created ids) and "before" snapshots of the rows it
+ *  changed, so Undo can reverse exactly that save. Every list may be empty. */
+export interface ExtractionRecord {
+  createdHostIds: string[];
+  createdServiceIds: string[];
+  /** Rows changed by a scan, as they were. */
+  servicesBefore: Service[];
+  hostOsBefore: { hostId: string; os: string | null }[];
+  identityBefore: { hostId: string; identity: HostIdentity | null }[];
+  createdCredentialIds: string[];
+  /** Rows upgraded (cracked) by this save, as they were. */
+  credentialsBefore: Credential[];
+  createdUsernameIds: string[];
+  createdAttemptIds: string[];
+  /** Rows whose result this save changed, as they were. */
+  attemptsBefore: CredAttempt[];
+  createdTriedPairIds: string[];
+  createdVectorIds: string[];
+  outputTicks: OutputTick[];
+  /** Stored credentials this save proved again (re-dumped, re-cracked): another entry's Undo keeps them. */
+  reprovedCredentialIds: string[];
+  /** Stored usernames this save listed again: another entry's Undo keeps them. */
+  reprovedUsernameIds: string[];
+}
+
+/** Mirrors the Rust `Extraction`: one per log entry. Timestamps are Unix milliseconds. */
+export interface Extraction {
+  logEntryId: string;
+  engagementId: string;
+  summary: ExtractionSummary;
+  record: ExtractionRecord;
+  createdAt: number;
+  undoneAt: number | null;
 }

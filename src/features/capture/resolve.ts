@@ -1,8 +1,6 @@
 import { buildDraft, detectKind, findFlagInPaste, flagTitle, screenshotFileName, type CaptureDraft, type DraftInput } from "../../engines/capture";
-import { planCredentialIntake, type CredentialIntakePlan, type PendingCredential } from "../../engines/credentials";
 import { OS_LABELS } from "../hosts/columns";
 import { KIND_LABELS } from "../log/kindLabels";
-import type { Credential, Username } from "../../types/credentials";
 import type { BoardColumn, Host, HostOs } from "../../types/host";
 import type { FlagKind, LogContent, LogKind } from "../../types/log";
 import type { CaptureEdits } from "./saveCapture";
@@ -46,7 +44,6 @@ export interface Resolved {
   titleInput: string;
   /** The host the flag, screenshot name and title refer to: the first linked one. */
   selectedHost: Host | null;
-  unknownIps: string[];
   servicesLine: string | null;
   flagKind: FlagKind;
   canSave: boolean;
@@ -101,12 +98,10 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
   const osPart = (os: HostOs | null, current: HostOs | null) => (os && !current ? ` · OS: ${OS_LABELS[os]}` : "");
   let servicesLine =
     scan && scanHost ? `Updates services on ${scanHost.name}: ${ports(scan.ports)}${osPart(scan.os, scanHost.os)}` : null;
-  if (!scan && kind === "command" && pd.addIps.length) {
-    // First scan of a new box: the scan belongs to an IP that becomes a host on save.
-    const pending = pd.addIps.map((ip) => ({ id: `new:${ip}`, name: ip, ip, column: "information-gathering" as const }));
-    const provisional = buildDraft({ ...draftInput, hosts: [...draftInput.hosts, ...pending] }).scan;
-    const ip = provisional?.hostId.startsWith("new:") ? provisional.hostId.slice(4) : null;
-    if (provisional && ip) servicesLine = `Updates services on ${ip}: ${ports(provisional.ports)}${osPart(provisional.os, null)}`;
+  if (!scan && kind === "command") {
+    // First scan of a new box: the scan's open ports prove the IP, which becomes a host on save.
+    const lines = newHostScans(draft, draftInput).map(({ ip, scan: s }) => `Updates services on ${ip}: ${ports(s.ports)}${osPart(s.os, null)}`);
+    if (lines.length) servicesLine = lines.join("; ");
   }
 
   return {
@@ -116,7 +111,6 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
     titleInput: pd.titleEdited ? pd.title : autoTitle,
     selectedHost,
     flagKind,
-    unknownIps: draft.unknownScopeIps.filter((ip) => !pd.addIps.includes(ip)),
     servicesLine,
     canSave: kind === "screenshot" ? pd.image !== null : pd.text.trim() !== "",
     edits: {
@@ -133,55 +127,20 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
   };
 }
 
+const OPEN_STATES = new Set(["open", "open|filtered"]);
+
 /**
- * The credential intake of a command entry: what its nxc output would record against the engagement's
- * credentials, usernames and hosts. Null for any other kind, or when the output has no nxc results or roast hashes.
+ * The scans of a command's IPs that aren't hosts yet and show an open port (which proves the host; it is made on
+ * save). Each IP is tried alone, so a multi-host scan gives each new IP its own section.
  */
-export function intakePlanFor(
-  edits: Pick<CaptureEdits, "kind" | "content">,
-  ctx: { engagementId: string; hosts: Host[]; credentials: Credential[]; usernames: Username[] },
-): CredentialIntakePlan | null {
-  if (edits.kind !== "command" || edits.content.kind !== "command") return null;
-  return planCredentialIntake({
-    blocks: edits.content.blocks,
-    engagement: { id: ctx.engagementId },
-    hosts: ctx.hosts,
-    credentials: ctx.credentials,
-    usernames: ctx.usernames,
+export function newHostScans(
+  draft: CaptureDraft,
+  draftInput: DraftInput,
+): { ip: string; scan: NonNullable<CaptureDraft["scan"]> }[] {
+  if (draft.scan) return [];
+  return draft.unknownScopeIps.flatMap((ip) => {
+    const pending = { id: `new:${ip}`, name: ip, ip, column: "information-gathering" as const };
+    const scan = buildDraft({ ...draftInput, kind: "command", hosts: [...draftInput.hosts, pending] }).scan;
+    return scan?.hostId === pending.id && scan.ports.some((p) => OPEN_STATES.has(p.state.toLowerCase())) ? [{ ip, scan }] : [];
   });
-}
-
-/** Id of the host an IP ticked "+ add as host" becomes on save (as the scan preview does). */
-export const provisionalHostId = (ip: string) => `new:${ip}`;
-
-/**
- * The hosts plus a provisional host (`new:<ip>`) for each IP the user ticked to add, so the intake preview offers the
- * pairs on it (Ruling F-R2). An IP already a host (a retry after a failed save) adds nothing.
- */
-export function withProvisionalHosts(hosts: Host[], engagementId: string, addIps: string[]): Host[] {
-  const fresh = addIps.filter((ip) => !hosts.some((h) => h.ip === ip));
-  if (fresh.length === 0) return hosts;
-  return [
-    ...hosts,
-    ...fresh.map((ip): Host => ({
-      id: provisionalHostId(ip), engagementId, name: ip, ip, os: null, boardColumn: "information-gathering", boardManual: false,
-      access: "none", createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false,
-    })),
-  ];
-}
-
-/**
- * A preview key (or toggle key) with its provisional host id swapped for the created host's id. Only a local
- * credential's key names a host (`…|local:<hostId>`).
- */
-export function realIntakeKey(key: string, created: Map<string, string>): string {
-  return key.replace(/\|local:(new:[^|]+)$/, (whole, pid: string) => {
-    const id = created.get(pid);
-    return id ? `|local:${id}` : whole;
-  });
-}
-
-/** A pending credential is added when the operator turned it on; by default a success is, a failed-only pair isn't. */
-export function isAccepted(p: PendingCredential, toggles: Record<string, boolean>): boolean {
-  return toggles[p.key] ?? !p.failedOnly;
 }

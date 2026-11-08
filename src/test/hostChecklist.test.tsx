@@ -26,7 +26,7 @@ vi.mock("../features/checklist/ticks", async (orig) => ({
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {
-  id: "e1", name: "Mock exam A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
+  id: "e1", name: "Lab A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
@@ -35,7 +35,7 @@ const host = (id: string, name: string, ip: string, over: Partial<Host> = {}): H
   boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1, ...over,
 });
 const H1 = host("h1", "dc01", "10.10.10.5");
-const H2 = host("h2", "web02", "10.10.10.6", { os: "linux" });
+const H2 = host("h2", "web07", "10.10.10.6", { os: "linux" });
 const svc = (id: string, port: number, over: Partial<Service> = {}): Service => ({
   id, hostId: "h1", port, protocol: "tcp", state: "open", nmapService: null, nmapVersion: null,
   confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1, ...over,
@@ -123,7 +123,7 @@ describe("host checklist tab", () => {
 
   it("group headings show only when a goal in them applies", async () => {
     const user = userEvent.setup();
-    mount({ hosts: [host("h1", "web02", "10.10.10.6", { os: "linux", access: "user" })] });
+    mount({ hosts: [host("h1", "web07", "10.10.10.6", { os: "linux", access: "user" })] });
     await openChecklist(user);
     const panel = within(await screen.findByRole("tabpanel"));
     expect(await panel.findByRole("heading", { level: 4, name: "Linux" })).toBeInTheDocument();
@@ -132,7 +132,7 @@ describe("host checklist tab", () => {
 
   it("existing commands still render under h-pe-lin-auto", async () => {
     const user = userEvent.setup();
-    mount({ hosts: [host("h1", "web02", "10.10.10.6", { os: "linux", access: "user" })] });
+    mount({ hosts: [host("h1", "web07", "10.10.10.6", { os: "linux", access: "user" })] });
     await openChecklist(user);
     const panel = within(await screen.findByRole("tabpanel"));
     expect((await panel.findAllByRole("button", { name: /^Copy command: .*linPEAS/i })).length).toBeGreaterThan(0);
@@ -202,7 +202,7 @@ describe("host checklist tab", () => {
     m.tunnelsList.mockResolvedValue([tun("t1", "down")]);
     mount();
     await openChecklist(user);
-    const notes = await screen.findAllByText(/via tunnel on web02/);
+    const notes = await screen.findAllByText(/via tunnel on web07/);
     expect(notes[0]).toHaveClass("text-warn");
     expect(notes[0]).toHaveTextContent("(down)");
   });
@@ -214,7 +214,7 @@ describe("host checklist tab", () => {
     ]);
     mount();
     await openChecklist(user);
-    const notes = await screen.findAllByText(/via tunnel on web02/);
+    const notes = await screen.findAllByText(/via tunnel on web07/);
     expect(notes[0]).not.toHaveClass("text-warn");
   });
 

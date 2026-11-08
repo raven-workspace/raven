@@ -26,7 +26,7 @@ vi.mock("../features/checklist/ticks", async (orig) => ({
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {
-  id: "e1", name: "Mock exam A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
+  id: "e1", name: "Lab A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
@@ -140,7 +140,7 @@ describe("⌘K palette", () => {
   it("on the dashboard host tokens stay unfilled", async () => {
     const user = userEvent.setup();
     mount("/");
-    await screen.findByText("Mock exam A");
+    await screen.findByText("Lab A");
     await user.keyboard(cmdK);
     expect(screen.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzprobe");
@@ -162,7 +162,7 @@ describe("⌘K palette", () => {
     });
     const user = userEvent.setup();
     mount("/");
-    await screen.findByText("Mock exam A");
+    await screen.findByText("Lab A");
     await user.keyboard(cmdK);
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzcertutil");
     await user.keyboard("{Enter}");
@@ -205,7 +205,7 @@ describe("⌘K palette", () => {
   it("typing in an input does not open on K alone", async () => {
     const user = userEvent.setup();
     mount("/");
-    await screen.findByText("Mock exam A");
+    await screen.findByText("Lab A");
     const input = document.createElement("input");
     document.body.appendChild(input);
     input.focus();
@@ -219,7 +219,7 @@ describe("⌘K palette", () => {
 });
 
 describe("host picker in the palette (U3)", () => {
-  const H2: Host = { ...H1, id: "h2", name: "web02", ip: "10.10.10.6" };
+  const H2: Host = { ...H1, id: "h2", name: "web07", ip: "10.10.10.6" };
 
   it("the search bar is one field with a leading glyph; the host chip sits on the row under it", async () => {
     const user = userEvent.setup();
@@ -230,14 +230,17 @@ describe("host picker in the palette (U3)", () => {
     const bar = await screen.findByRole("search", { name: "Search" });
     const b = within(bar);
     expect(b.getByRole("combobox", { name: "Search" })).toBeInTheDocument();
-    expect(b.getByText("⌕")).toBeInTheDocument();
+    // A leading search icon, decorative (hidden from assistive tech), before the field.
+    const glyph = bar.querySelector('[aria-hidden="true"] svg');
+    expect(glyph).not.toBeNull();
+    expect(glyph!.compareDocumentPosition(b.getByRole("combobox", { name: "Search" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const chip = hostChip(screen);
     expect(bar).not.toContainElement(chip);
     expect(scopeText(chip)).toBe("for dc01 ⌄");
     // The menu lists each host with its IP, plus No host.
     await user.click(chip);
     const opts = within(screen.getByRole("listbox", { name: "Fill for host" })).getAllByRole("option");
-    expect(opts.map((o) => o.textContent)).toEqual(["No host", "dc0110.10.10.5", "web0210.10.10.6"]);
+    expect(opts.map((o) => o.textContent)).toEqual(["No host", "dc0110.10.10.5", "web0710.10.10.6"]);
     await user.click(opts[0]!);
     expect(scopeText(chip)).toBe("for no host ⌄");
   });
@@ -245,7 +248,7 @@ describe("host picker in the palette (U3)", () => {
   it("on the dashboard the bar reads for no host", async () => {
     const user = userEvent.setup();
     mount("/");
-    await screen.findByText("Mock exam A");
+    await screen.findByText("Lab A");
     await user.keyboard(cmdK);
     const bar = await screen.findByRole("search", { name: "Search" });
     expect(within(bar).getByText("for no host")).toBeInTheDocument();
@@ -263,7 +266,7 @@ describe("host picker in the palette (U3)", () => {
     expect((await preview()).textContent).toBe("zzprobe 10.10.10.5 from 10.10.14.9");
     await user.keyboard("{Alt>}h{/Alt}");
     expect(hostChip(screen)).toHaveFocus();
-    await user.click(screen.getByRole("option", { name: /web02/ }));
+    await user.click(screen.getByRole("option", { name: /web07/ }));
     expect((await preview()).textContent).toBe("zzprobe 10.10.10.6 from 10.10.14.9");
     await user.keyboard("{Alt>}h{/Alt}");
     await user.click(screen.getByRole("option", { name: "No host" }));
@@ -281,7 +284,7 @@ describe("host picker in the palette (U3)", () => {
     await user.type(await screen.findByRole("combobox", { name: "Value for FILE" }), "x.exe");
     expect((await preview()).textContent).toBe("zzfetch http://10.10.14.9/x.exe");
     await user.click(hostChip(screen));
-    await user.click(screen.getByRole("option", { name: /web02/ }));
+    await user.click(screen.getByRole("option", { name: /web07/ }));
     expect((await preview()).textContent).toBe("zzfetch http://10.10.14.9/{FILE}");
   });
 });
@@ -438,7 +441,7 @@ describe("token suggestions (U4)", () => {
 });
 
 describe("⌘K groups, hosts and contained suggestions", () => {
-  const H2: Host = { ...H1, id: "h2", name: "web02", ip: "10.10.10.66" };
+  const H2: Host = { ...H1, id: "h2", name: "web07", ip: "10.10.10.66" };
   const CARD_CMD: LibraryCommand = { ...PROBE, id: "zz-card-cmd", title: "Zzcard step", cardId: "c-zz", source: "field-manual" };
   const ZZCARD = { id: "c-zz", title: "Zzcard", stage: "initial-foothold", category: "Shells", os: "any", file: "02-Cards/S/Z.md" } as const;
 
@@ -451,10 +454,10 @@ describe("⌘K groups, hosts and contained suggestions", () => {
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "10.10.10.66");
     const list = screen.getByRole("listbox", { name: "Results" });
     expect(await within(list).findByRole("group", { name: "This engagement" })).toBeInTheDocument();
-    expect(within(list).getAllByRole("option").map((o) => o.textContent)).toEqual(["web02host"]);
+    expect(within(list).getAllByRole("option").map((o) => o.textContent)).toEqual(["web07host"]);
     await user.keyboard("{Enter}");
     expect(screen.queryByRole("dialog", { name: "Search" })).not.toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: /web02/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /web07/ })).toBeInTheDocument();
   });
 
   it("Arsenal groups come first, then This engagement with hosts before log entries", async () => {
@@ -479,7 +482,7 @@ describe("⌘K groups, hosts and contained suggestions", () => {
     await user.clear(screen.getByRole("combobox", { name: "Search" }));
     await user.type(screen.getByRole("combobox", { name: "Search" }), "10");
     const eng = within(await screen.findByRole("group", { name: "This engagement" })).getAllByRole("option");
-    expect(eng.map((o) => o.textContent)).toEqual(["dc01host", "web02host"]);
+    expect(eng.map((o) => o.textContent)).toEqual(["dc01host", "web07host"]);
   });
 
   it("→ on a raven command opens the drawer solo view", async () => {
@@ -566,7 +569,7 @@ describe("⌘K groups, hosts and contained suggestions", () => {
     const pre = await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent!.startsWith("zz"));
     expect(pre).not.toHaveAttribute("data-flash");
     await user.keyboard("{Alt>}h{/Alt}");
-    await user.click(screen.getByRole("option", { name: /web02/ }));
+    await user.click(screen.getByRole("option", { name: /web07/ }));
     expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzprobe 10.10.10.66 from 10.10.14.9")).toHaveAttribute("data-flash");
   });
 

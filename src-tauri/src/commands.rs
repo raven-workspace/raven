@@ -4,6 +4,8 @@
 //! unlocked (no daily backup: a brand-new vault has nothing to back up).
 
 use crate::attempts::{self, CredAttempt, CredAttemptInput};
+use crate::tried_pairs::{self, TriedPair, TriedPairInput};
+use crate::extractions::{self, Extraction, ExtractionRecord, ExtractionSummary};
 use crate::backup::{self, BackupInfo};
 use crate::cleanup::{self, CleanupInput, CleanupItem};
 use crate::findings::{
@@ -740,4 +742,63 @@ pub async fn failed_attempt_update(app: AppHandle, id: String, input: FailedAtte
 #[tauri::command]
 pub async fn failed_attempt_delete(app: AppHandle, id: String) -> AppResult<()> {
     with_vault(app, move |v| findings::attempt_delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn tried_pairs_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<TriedPair>> {
+    with_vault(app, move |v| tried_pairs::list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn tried_pairs_upsert(
+    app: AppHandle,
+    engagement_id: String,
+    inputs: Vec<TriedPairInput>,
+) -> AppResult<Vec<TriedPair>> {
+    with_vault(app, move |v| tried_pairs::upsert(v.conn()?, &engagement_id, &inputs)).await
+}
+
+#[tauri::command]
+pub async fn tried_pair_delete(app: AppHandle, id: String) -> AppResult<()> {
+    with_vault(app, move |v| tried_pairs::delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn tried_pair_promote(
+    app: AppHandle,
+    engagement_id: String,
+    username: String,
+    domain: Option<String>,
+    secret: String,
+) -> AppResult<usize> {
+    with_vault(app, move |v| {
+        tried_pairs::promote(v.conn()?, &engagement_id, &username, domain.as_deref(), &secret)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn extraction_save(
+    app: AppHandle,
+    log_entry_id: String,
+    engagement_id: String,
+    summary: ExtractionSummary,
+    record: ExtractionRecord,
+) -> AppResult<Extraction> {
+    with_vault(app, move |v| extractions::save(v.conn()?, &log_entry_id, &engagement_id, &summary, &record)).await
+}
+
+#[tauri::command]
+pub async fn extraction_get(app: AppHandle, log_entry_id: String) -> AppResult<Option<Extraction>> {
+    with_vault(app, move |v| extractions::get(v.conn()?, &log_entry_id)).await
+}
+
+#[tauri::command]
+pub async fn extractions_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<Extraction>> {
+    with_vault(app, move |v| extractions::list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn extraction_undo(app: AppHandle, log_entry_id: String) -> AppResult<Extraction> {
+    with_vault(app, move |v| extractions::undo(v.conn()?, &log_entry_id)).await
 }

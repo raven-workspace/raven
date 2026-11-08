@@ -1,0 +1,6 @@
+# unverified: no real sample yet (owner collects in next lab)
+user:[Administrator] rid:[0x1f4]
+user:[Guest] rid:[0x1f5]
+user:[krbtgt] rid:[0x1f6]
+user:[jay] rid:[0x44f]
+user:[tom] rid:[0x450]

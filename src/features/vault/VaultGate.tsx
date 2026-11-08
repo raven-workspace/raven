@@ -3,12 +3,13 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Link } from "react-router";
 import { api } from "../../lib/api";
 import { onLockedError, reportError } from "../../lib/lockSignal";
+import { useSaveSummaryStore } from "../capture/useSaveSummaryStore";
 import { useCaptureStore } from "../capture/useCaptureStore";
 import { useCredPickStore } from "../checklist/credPick";
 import { useFindingDraftStore } from "../findings/useFindingDraftStore";
 import { discardNotes, flushNotes, hasPendingNotes, sessionGeneration, setNotesQueryClient, startNotesSession } from "../notes/useNotesStore";
 import type { UnlockResult, VaultStatus } from "../../types/vault";
-import { Button, TitleBar, TitleBarButton } from "../../ui";
+import { Button, TitleBar, TitleBarButton, Wordmark } from "../../ui";
 import { SetupScreen } from "./SetupScreen";
 import { UnlockScreen } from "./UnlockScreen";
 import { setImported } from "../../engines/library/store";
@@ -16,6 +17,7 @@ import { applySnapshot, FIELD_MANUAL_KEY, useVaultNewer } from "../fieldManual/q
 import { useAutoLock } from "./useAutoLock";
 import { clearSecretClipboard } from "../../lib/clipboard";
 import { isDialogOpen } from "../../lib/keys";
+import { SaveSummary } from "../capture/SaveSummary";
 import { ArsenalDrawer } from "../arsenal/ArsenalDrawer";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useLastEngagementStore } from "../arsenal/useFillScope";
@@ -89,6 +91,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
     qc.clear();
     // Unsaved capture drafts hold engagement data: they go with the lock.
     useCaptureStore.getState().reset();
+    useSaveSummaryStore.getState().close();
     // Finding drafts too: they live in memory only and never outlive the session.
     useFindingDraftStore.getState().clearAll();
     // Which credential fills commands is session state too.
@@ -282,6 +285,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
         {children}
         <Palette />
         <ArsenalDrawer />
+        <SaveSummary />
       </VaultContext.Provider>
     );
   }
@@ -291,12 +295,12 @@ export function VaultGate({ children }: { children: ReactNode }) {
       <TitleBar
         left={
           unlocked ? (
-            <Link to="/" className="rounded-sm px-1 py-0.5 text-xs font-semibold text-fg-2 hover:text-fg">
-              Raven
+            <Link to="/" className="grid rounded-sm px-1 py-1 opacity-90 hover:opacity-100">
+              <Wordmark className="h-3" />
             </Link>
           ) : undefined
         }
-        title={unlocked ? undefined : "Raven"}
+        title={unlocked ? undefined : <Wordmark className="h-3" />}
         right={right}
       />
       <div className="min-h-0 flex-1 overflow-auto">{body}</div>

@@ -66,7 +66,13 @@ export function isPlaceholderSecret(c: Credential): boolean {
   return c.type === 'password' && PLACEHOLDER_SECRETS.has(c.secret.trim().toLowerCase());
 }
 
+/** A computer account (`HOST$`). Its password is machine-generated: never sprayed, never cracked. */
+export function isMachineAccount(c: Pick<Credential, 'username'>): boolean {
+  return c.username.trim().endsWith('$');
+}
+
 export function isSprayable(cred: Credential): boolean {
+  if (isMachineAccount(cred)) return false;
   if (!cred.secret || !cred.secret.trim()) return false;
   if (cred.crackStatus === 'uncrackable') return false;
   if (cred.type === 'ticket' || cred.type === 'key' || cred.type === 'token') return false;

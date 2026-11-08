@@ -3,7 +3,7 @@ import { api } from "../../lib/api";
 import { cx } from "../../lib/cx";
 import type { BackupInfo } from "../../types/backup";
 import type { UnlockResult } from "../../types/vault";
-import { Button, Chip, Field, Input } from "../../ui";
+import { Button, Chip, Field, Input, Wordmark } from "../../ui";
 
 function errorText(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
@@ -78,7 +78,7 @@ function UnlockForm({
   return (
     <main className="flex h-full items-center justify-center px-6">
       <form onSubmit={submit} className="flex w-[320px] flex-col gap-4">
-        <h1 className="m-0 text-lg font-semibold text-fg">Raven</h1>
+        <h1 className="m-0"><Wordmark className="h-6" /></h1>
         <Field label="Password" error={error ?? undefined}>
           <Input
             ref={ref}
@@ -166,7 +166,7 @@ function DamagedPanel({ onRestored }: { onRestored: () => void }) {
   return (
     <main className="flex h-full items-center justify-center px-6">
       <form onSubmit={submit} className="flex w-[420px] flex-col gap-4">
-        <h1 className="m-0 text-lg font-semibold text-fg">Raven</h1>
+        <h1 className="m-0"><Wordmark className="h-6" /></h1>
         <p className="m-0 text-[13px] text-fg-2">Raven can't read its database file. Restore a backup to continue.</p>
         {listError && (
           <div className="flex items-center gap-3">

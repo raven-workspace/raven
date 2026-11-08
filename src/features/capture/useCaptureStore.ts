@@ -15,7 +15,6 @@ export interface PanelDraft {
   title: string;
   titleEdited: boolean;
   hostIds: string[] | null;
-  addIps: string[];
   /** Hosts a failed save already created; a retry reuses them. */
   created: Host[];
   ranOn: string | null;
@@ -23,11 +22,6 @@ export interface PanelDraft {
   returnedNothing: boolean;
   private: boolean;
   flagKind: FlagKind | null;
-  /**
-   * The operator's choices on the pending credentials of an nxc paste, by pending key. Absent means the default
-   * (on for a success, off for a failed-only pair). Cleared whenever the paste changes.
-   */
-  intakeToggles: Record<string, boolean>;
 }
 
 export const EMPTY_DRAFT: PanelDraft = {
@@ -38,14 +32,12 @@ export const EMPTY_DRAFT: PanelDraft = {
   title: "",
   titleEdited: false,
   hostIds: null,
-  addIps: [],
   created: [],
   ranOn: null,
   observations: "",
   returnedNothing: false,
   private: false,
   flagKind: null,
-  intakeToggles: {},
 };
 
 interface CaptureState {

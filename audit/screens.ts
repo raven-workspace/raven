@@ -15,7 +15,7 @@ export const WIDTHS = [900, 1024, 1280, 1440] as const;
 const E = `/e/${AUDIT_IDS.labEngagement}`;
 const H = `${E}/h/${AUDIT_IDS.webHost}`;
 
-// dispatchEvent, not click(): at 900 the Findings tab sits under the Order button, which swallows a real click.
+// dispatchEvent, not click(): at 900 the Findings tab sits under the Order button, which sdoe a real click.
 const tab = (name: string) => (page: Page) => page.getByRole("tab", { name, exact: true }).dispatchEvent("click");
 const FS01 = `${E}/h/${AUDIT_IDS.fileHost}`;
 /** A command with a fill field the host does not answer, so the first Enter is held back by the copy guard. */

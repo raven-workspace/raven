@@ -1,0 +1,9 @@
+Using default input encoding: UTF-8
+Loaded 1 password hash (ZIP, WinZip [PBKDF2-SHA1 128/128 ASIMD 4x])
+Cost 1 (HMAC size) is 720 for all loaded hashes
+Will run 4 OpenMP threads
+Press 'q' or Ctrl-C to abort, almost any other key for status
+Winter2000!         (archive.zip/web/app.conf)     
+1g 0:00:00:00 DONE (2026-01-01 00:00:00) 0.9500g/s 52000p/s 52000c/s 52000C/s aaaaaaa..bbbbbbb
+Use the "--show" option to display all of the cracked passwords reliably
+Session completed.

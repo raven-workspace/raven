@@ -103,8 +103,8 @@
 - [ ] **Step 3:** Implement the migration, `tried_pairs.rs` (list, upsert, delete and promote, following `attempts.rs`'s style, with `check_scope` for the engagement), and the commands `tried_pairs_list`, `tried_pairs_upsert` and `tried_pair_delete`.
 - [ ] **Step 4:** Run `cargo test`. Expected: all pass (236 + new).
 - [ ] **Step 5:** Write the test `TestGrid shows tried pairs muted under their username, never as a credential row`:
-  - render `TestGrid` with `tried=[{ username:'liam.brooks', secret:'CopperKite71', hostId:'h1', service:'ssh', … }]`;
-  - assert the text `liam.brooks · tried` appears in a row with `data-tried=""`;
+  - render `TestGrid` with `tried=[{ username:'amy', secret:'Winter2026!', hostId:'h1', service:'ssh', … }]`;
+  - assert the text `amy · tried` appears in a row with `data-tried=""`;
   - assert its cell for h1/ssh has `aria-label` matching `/failed/i`;
   - assert there's no row with `data-cred-id` for that pair.
 - [ ] **Step 6:** Implement:
@@ -413,7 +413,7 @@ Ticks on `{ranOn}`: `h-pe-lin-suid`, `h-pe-lin-sudo`, `h-pe-lin-caps`, `h-pe-lin
   - If nothing parsed at all, the summary is null and no extraction row is written.
 
 - [ ] **Step 1:** Write the tests (mock `api`):
-  - `nxc spray: valid pair becomes a credential and win line; failed unknown-secret pairs become tried pairs and a count`, using the screenshot case: ronan valid on SSH Quartz; Liam.Brooks and reid failed;
+  - `nxc spray: valid pair becomes a credential and win line; failed unknown-secret pairs become tried pairs and a count`, using the screenshot case: bob valid on SSH srv12; Amy and tom failed;
   - `a valid pair later promotes its tried pair`;
   - `secretsdump on an unknown IP creates the host and lists 'New host'`;
   - `same paste twice files nothing new` (Review Focus 1);

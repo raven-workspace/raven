@@ -21,7 +21,7 @@ vi.mock("../features/checklist/ticks", async (orig) => ({
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {
-  id: "e1", name: "Mock exam A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
+  id: "e1", name: "Lab A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
@@ -30,7 +30,7 @@ const host = (id: string, name: string, ip: string, over: Partial<Host> = {}): H
   boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1, ...over,
 });
 const H1 = host("h1", "dc01", "10.10.10.5");
-const H2 = host("h2", "web02", "10.10.10.6", { os: "linux" });
+const H2 = host("h2", "web07", "10.10.10.6", { os: "linux" });
 function mount(opts: { hosts?: Host[] } = {}) {
   m.credentialsList.mockResolvedValue([]);
   m.credAttemptsList.mockResolvedValue([]);

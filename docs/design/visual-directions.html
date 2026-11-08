@@ -87,21 +87,21 @@
 </style></head>
 <body>
 <h1>Visual direction: which one feels like Raven?</h1>
-<p class="sub">Same host screen (Vega), your palette: black, white and light-grey lines/text, accent #c6ff00. Click one, then reply in the terminal. Mixing is fine ("B's surfaces with C's type").</p>
+<p class="sub">Same host screen (srv11), your palette: black, white and light-grey lines/text, accent #c6ff00. Click one, then reply in the terminal. Mixing is fine ("B's surfaces with C's type").</p>
 
 <!-- template rendered 3x -->
 <div class="dir A" data-choice="a" onclick="toggleSelect(this)">
   <div class="dir-label"><b>A</b><span>Ink</span><em>Flat true black, hairline borders, accent used sparingly as a thin marker.</em></div>
   <div class="win">
-    <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span>Mock exam A — Vega</span></div>
+    <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span>Lab A — srv11</span></div>
     <div class="body">
       <div class="side">
         <div class="sec on">Board</div><div class="sec">Log</div><div class="sec">Credentials</div><div class="sec">Findings</div><div class="sec">Engagement checklist</div><div class="sec">Report</div>
         <div class="h">Hosts</div>
-        <div class="sec">DC01</div><div class="sec">MS01</div><div class="sec on">Vega</div><div class="sec">Quartz</div><div class="sec">Onyx</div>
+        <div class="sec">DC01</div><div class="sec">MS01</div><div class="sec on">srv11</div><div class="sec">srv12</div><div class="sec">srv13</div>
       </div>
       <div class="main">
-        <div class="hdr"><span class="name">Vega</span><span class="mono" style="color:#8a8a8a;font-size:12px">172.31.166.143</span><span class="chip">Linux</span><span class="chip acc">user · vega</span><span class="chip">Privesc</span><span class="chip">1 open thread</span></div>
+        <div class="hdr"><span class="name">srv11</span><span class="mono" style="color:#8a8a8a;font-size:12px">10.10.61.143</span><span class="chip">Linux</span><span class="chip acc">user · srv11</span><span class="chip">Privesc</span><span class="chip">1 open thread</span></div>
         <div class="cols">
           <div class="card"><h5>Services</h5>
             <div class="svc mono"><span>22</span><span>OpenSSH 8.2p1</span></div>
@@ -112,7 +112,7 @@
             <div style="font-size:12.5px;color:#bdbdbd">◻ Cron &amp; timers<br>◻ Writable configs</div>
           </div>
           <div class="card"><div class="tabs"><span class="on">Story</span><span>Checklist</span><span>Credentials</span><span>Findings</span></div>
-            <div class="entry"><span class="t mono">21:42</span><div>Talk to 3003 directly<div class="cmd mono">nc -nv 172.31.166.143 3003</div><div class="obs">Info protocol answers <span class="mono">help</span> with no auth.</div></div></div>
+            <div class="entry"><span class="t mono">21:42</span><div>Talk to 3003 directly<div class="cmd mono">nc -nv 10.10.61.143 3003</div><div class="obs">Info protocol answers <span class="mono">help</span> with no auth.</div></div></div>
             <div class="entry"><span class="t mono">21:58</span><div>CouchDB build<div class="cmd mono">build → 3.1.1</div></div></div>
             <div class="entry"><span class="t mono">22:31</span><div>SUID binaries<div class="cmd mono">find / -perm -4000 2&gt;/dev/null</div><div class="obs">backupd looks non-standard — investigate.</div></div></div>
           </div>
@@ -125,15 +125,15 @@
 <div class="dir B" data-choice="b" onclick="toggleSelect(this)">
   <div class="dir-label"><b>B</b><span>Glass</span><em>Translucent layered surfaces over a faint accent glow; softer, more depth.</em></div>
   <div class="win">
-    <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span>Mock exam A — Vega</span></div>
+    <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span>Lab A — srv11</span></div>
     <div class="body">
       <div class="side">
         <div class="sec on">Board</div><div class="sec">Log</div><div class="sec">Credentials</div><div class="sec">Findings</div><div class="sec">Engagement checklist</div><div class="sec">Report</div>
         <div class="h">Hosts</div>
-        <div class="sec">DC01</div><div class="sec">MS01</div><div class="sec on">Vega</div><div class="sec">Quartz</div><div class="sec">Onyx</div>
+        <div class="sec">DC01</div><div class="sec">MS01</div><div class="sec on">srv11</div><div class="sec">srv12</div><div class="sec">srv13</div>
       </div>
       <div class="main">
-        <div class="hdr"><span class="name">Vega</span><span class="mono" style="color:#8a8a8a;font-size:12px">172.31.166.143</span><span class="chip">Linux</span><span class="chip acc">user · vega</span><span class="chip">Privesc</span><span class="chip">1 open thread</span></div>
+        <div class="hdr"><span class="name">srv11</span><span class="mono" style="color:#8a8a8a;font-size:12px">10.10.61.143</span><span class="chip">Linux</span><span class="chip acc">user · srv11</span><span class="chip">Privesc</span><span class="chip">1 open thread</span></div>
         <div class="cols">
           <div class="card"><h5>Services</h5>
             <div class="svc mono"><span>22</span><span>OpenSSH 8.2p1</span></div>
@@ -144,7 +144,7 @@
             <div style="font-size:12.5px;color:#c4c4c4">◻ Cron &amp; timers<br>◻ Writable configs</div>
           </div>
           <div class="card"><div class="tabs"><span class="on">Story</span><span>Checklist</span><span>Credentials</span><span>Findings</span></div>
-            <div class="entry"><span class="t mono">21:42</span><div>Talk to 3003 directly<div class="cmd mono">nc -nv 172.31.166.143 3003</div><div class="obs">Info protocol answers <span class="mono">help</span> with no auth.</div></div></div>
+            <div class="entry"><span class="t mono">21:42</span><div>Talk to 3003 directly<div class="cmd mono">nc -nv 10.10.61.143 3003</div><div class="obs">Info protocol answers <span class="mono">help</span> with no auth.</div></div></div>
             <div class="entry"><span class="t mono">21:58</span><div>CouchDB build<div class="cmd mono">build → 3.1.1</div></div></div>
             <div class="entry"><span class="t mono">22:31</span><div>SUID binaries<div class="cmd mono">find / -perm -4000 2&gt;/dev/null</div><div class="obs">backupd looks non-standard — investigate.</div></div></div>
           </div>
@@ -157,15 +157,15 @@
 <div class="dir C" data-choice="c" onclick="toggleSelect(this)">
   <div class="dir-label"><b>C</b><span>Console</span><em>Monospace throughout, square edges, accent as solid blocks; feels like an instrument.</em></div>
   <div class="win">
-    <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span>Mock exam A — Vega</span></div>
+    <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span>Lab A — srv11</span></div>
     <div class="body">
       <div class="side">
         <div class="sec on">Board</div><div class="sec">Log</div><div class="sec">Credentials</div><div class="sec">Findings</div><div class="sec">Engagement checklist</div><div class="sec">Report</div>
         <div class="h">Hosts</div>
-        <div class="sec">DC01</div><div class="sec">MS01</div><div class="sec on">Vega</div><div class="sec">Quartz</div><div class="sec">Onyx</div>
+        <div class="sec">DC01</div><div class="sec">MS01</div><div class="sec on">srv11</div><div class="sec">srv12</div><div class="sec">srv13</div>
       </div>
       <div class="main">
-        <div class="hdr"><span class="name">Vega</span><span style="color:#8a8a8a;font-size:12px">172.31.166.143</span><span class="chip">Linux</span><span class="chip acc">user · vega</span><span class="chip">Privesc</span><span class="chip">1 open thread</span></div>
+        <div class="hdr"><span class="name">srv11</span><span style="color:#8a8a8a;font-size:12px">10.10.61.143</span><span class="chip">Linux</span><span class="chip acc">user · srv11</span><span class="chip">Privesc</span><span class="chip">1 open thread</span></div>
         <div class="cols">
           <div class="card"><h5>Services</h5>
             <div class="svc"><span>22</span><span>OpenSSH 8.2p1</span></div>
@@ -176,7 +176,7 @@
             <div style="font-size:12px;color:#bdbdbd">[ ] Cron &amp; timers<br>[ ] Writable configs</div>
           </div>
           <div class="card"><div class="tabs"><span class="on">Story</span><span>Checklist</span><span>Credentials</span><span>Findings</span></div>
-            <div class="entry"><span class="t">21:42</span><div>Talk to 3003 directly<div class="cmd">nc -nv 172.31.166.143 3003</div><div class="obs">The service answers without auth.</div></div></div>
+            <div class="entry"><span class="t">21:42</span><div>Talk to 3003 directly<div class="cmd">nc -nv 10.10.61.143 3003</div><div class="obs">The service answers without auth.</div></div></div>
             <div class="entry"><span class="t">21:58</span><div>CouchDB build<div class="cmd">build → 3.1.1</div></div></div>
             <div class="entry"><span class="t">22:31</span><div>SUID binaries<div class="cmd">find / -perm -4000 2&gt;/dev/null</div><div class="obs">backupd looks non-standard — investigate.</div></div></div>
           </div>

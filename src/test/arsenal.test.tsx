@@ -26,7 +26,7 @@ vi.mock("../features/checklist/ticks", async (orig) => ({
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {
-  id: "e1", name: "Mock exam A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
+  id: "e1", name: "Lab A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
@@ -272,7 +272,7 @@ describe("Arsenal", () => {
   it("on the dashboard host tokens stay unfilled", async () => {
     const user = userEvent.setup();
     mount("/");
-    await screen.findByText("Mock exam A");
+    await screen.findByText("Lab A");
     await user.click(screen.getByRole("button", { name: "Arsenal" }));
     const d = within(await drawer());
     expect(d.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
@@ -287,9 +287,13 @@ describe("Arsenal", () => {
     await screen.findByRole("tab", { name: "Next" });
     await user.keyboard("a");
     const d = within(await drawer());
-    const bar = within(d.getByRole("search", { name: "Search the Arsenal" }));
+    const barEl = d.getByRole("search", { name: "Search the Arsenal" });
+    const bar = within(barEl);
     expect(bar.getByRole("textbox", { name: "Search the Arsenal" })).toBeInTheDocument();
-    expect(bar.getByText("⌕")).toBeInTheDocument();
+    // A leading search icon, decorative (hidden from assistive tech).
+    expect(barEl.querySelector('[aria-hidden="true"] svg')).not.toBeNull();
+    // Focusing the text field rings the whole bar in the accent, like every other input.
+    expect(barEl.className).toMatch(/has-\[input:focus-visible\]:outline-accent/);
     expect(bar.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
     expect(scopeText(hostChip(d))).toBe("for dc01 ⌄");
     const header = d.getByRole("banner");
@@ -326,7 +330,7 @@ describe("Arsenal", () => {
   it("A opens a hostless drawer on the dashboard and is ignored while typing", async () => {
     const user = userEvent.setup();
     mount("/");
-    await screen.findByText("Mock exam A");
+    await screen.findByText("Lab A");
     await user.keyboard("a");
     const d = within(await drawer());
     expect(d.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
@@ -347,7 +351,7 @@ describe("Arsenal", () => {
 
   it("a chip override never fills another host", async () => {
     const user = userEvent.setup();
-    const H2: Host = { ...H1, id: "h2", name: "web02", ip: "10.10.10.6" };
+    const H2: Host = { ...H1, id: "h2", name: "web07", ip: "10.10.10.6" };
     m.hostsList.mockResolvedValue([H1, H2]);
     mount("/e/e1/h/h1");
     await screen.findByRole("tab", { name: "Next" });
@@ -428,7 +432,7 @@ describe("Arsenal after a Field Manual import (B2)", () => {
 
 describe("full-screen Arsenal uses the engagement you came from (B4)", () => {
   const E2: Engagement = { ...E1, id: "e2", name: "Client Beta", lastActivityAt: 1 };
-  const NEWER: Engagement = { ...E1, id: "e1", name: "Mock exam A", lastActivityAt: 99 };
+  const NEWER: Engagement = { ...E1, id: "e1", name: "Lab A", lastActivityAt: 99 };
   const H9: Host = { ...H1, id: "h9", engagementId: "e2", name: "web09", ip: "10.20.0.9" };
   const NOTE = {
     id: "l9", engagementId: "e2", kind: "note" as const, title: "Qqnote about the portal", titleEdited: false, ranOn: null, hostIds: [],
@@ -474,7 +478,7 @@ describe("full-screen Arsenal uses the engagement you came from (B4)", () => {
     mountAt("/arsenal");
     await userEvent.setup().click(await screen.findByRole("button", { name: /^Fill for host/ }));
     expect(await screen.findByRole("option", { name: /dc01/ })).toBeInTheDocument();
-    expect(screen.getByText("Mock exam A")).toBeInTheDocument();
+    expect(screen.getByText("Lab A")).toBeInTheDocument();
     expect(m.engagementGet).not.toHaveBeenCalledWith("gone");
   });
 
@@ -726,7 +730,7 @@ describe("drawer list grouped by category (U1)", () => {
     const user = userEvent.setup();
     setImported({ commands: [cmd("zz-login", { title: "Zzlogin as user", template: "zzlogin -u {USER} -d {DOMAIN} {TARGET_IP}", cardId: undefined, source: "raven" })], cards: [] });
     m.credentialsList.mockResolvedValue([{
-      id: "c2", engagementId: "e1", type: "password", username: "svc", domain: "LUMEN", secret: "pw", hashType: null,
+      id: "c2", engagementId: "e1", type: "password", username: "svc", domain: "ACME", secret: "pw", hashType: null,
       scope: "domain", localHostId: null, sourceHostId: null, source: null, notes: null, crackStatus: null, crackedFrom: null, fromSecretId: null,
       createdAt: 1, updatedAt: 1,
     }]);
@@ -791,7 +795,7 @@ describe("drawer list grouped by category (U1)", () => {
 
   it("route host change resets chip and overrides", async () => {
     const user = userEvent.setup();
-    const H2: Host = { ...H1, id: "h2", name: "web02", ip: "10.10.10.6" };
+    const H2: Host = { ...H1, id: "h2", name: "web07", ip: "10.10.10.6" };
     m.hostsList.mockResolvedValue([H1, H2]);
     mount("/e/e1/h/h1");
     await screen.findByRole("tab", { name: "Next" });
@@ -805,7 +809,7 @@ describe("drawer list grouped by category (U1)", () => {
     const after = await block(d, "zzprobe 10.10.10.6 from 10.10.14.9");
     expect(after).toHaveAttribute("data-flash");
     expect(d.getByRole("combobox", { name: "Value for TARGET_IP" })).toHaveValue("10.10.10.6");
-    expect(hostChip(d)).toHaveAccessibleName("Fill for host: web02");
+    expect(hostChip(d)).toHaveAccessibleName("Fill for host: web07");
   });
 
   it("Esc with the host list open closes only the list", async () => {
@@ -858,7 +862,7 @@ describe("browse selection state (U2)", () => {
 describe("host picker in the drawer (U3)", () => {
   it("picking another host refills the card and clears chip edits", async () => {
     const user = userEvent.setup();
-    const H2: Host = { ...H1, id: "h2", name: "web02", ip: "10.10.10.6" };
+    const H2: Host = { ...H1, id: "h2", name: "web07", ip: "10.10.10.6" };
     m.hostsList.mockResolvedValue([H1, H2]);
     mount("/e/e1/h/h1");
     await screen.findByRole("tab", { name: "Next" });
@@ -868,7 +872,7 @@ describe("host picker in the drawer (U3)", () => {
     expect(await block(d, "zzcopy a.exe C:\\Windows\\Temp")).toBeInTheDocument();
     await user.keyboard("{Alt>}h{/Alt}");
     expect(hostChip(d)).toHaveFocus();
-    await user.click(d.getByRole("option", { name: /web02/ }));
+    await user.click(d.getByRole("option", { name: /web07/ }));
     expect(await block(d, "zzprobe 10.10.10.6 from 10.10.14.9")).toBeInTheDocument();
     expect(d.getByRole("combobox", { name: "Value for FILE" })).toHaveValue("");
     await user.keyboard("{Alt>}h{/Alt}");

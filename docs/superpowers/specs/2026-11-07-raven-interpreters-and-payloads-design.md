@@ -50,7 +50,7 @@ Both halves will be tested in the PEN-200 labs straight after this round.
 **Anti-goals.** Doing any of these makes the round a failure even if it technically works:
 - **Filing anything Raven isn't sure of.** A wrong credential or vector is worse than none. When in doubt, the raw output stays in the log and nothing is filed.
 - **A wall of chips or toggles before save.** That includes the current nxc pre-save preview, which this round removes.
-- **Creating a credential from a failed attempt.** Today the preview offers "Add Liam.Brooks with a password on Quartz" for a failure, and that has to stop.
+- **Creating a credential from a failed attempt.** Today the preview offers "Add Amy with a password on srv12" for a failure, and that has to stop.
 - **Offering a payload that would fail as pasted in its stated context,** or one whose parts aren't explained.
 - **Changing the Arsenal's rules.** In the Arsenal the host only fills placeholders and never filters or ranks. Payloads is deliberately different (§5.2), and the difference must not leak into the Arsenal.
 
@@ -87,7 +87,7 @@ Both halves will be tested in the PEN-200 labs straight after this round.
 ### 3.2 Save summary
 
 - **Toast.** A toast appears after Save and stays **5 seconds**, with an **X** to close it early and an **Undo**.
-- **Order.** Wins come first, in the accent colour: a new working credential ("ronan:CopperKite71 works on SSH, Quartz"), a new privesc vector, a domain-admin credential. Routine counts follow in muted text: "3 failed attempts recorded · 41 usernames added · ticked 'Dump NTDS' on DC01". During a long session the owner has to notice a win among failures, and this toast is their summary of the run.
+- **Order.** Wins come first, in the accent colour: a new working credential ("bob:Winter2026! works on SSH, srv12"), a new privesc vector, a domain-admin credential. Routine counts follow in muted text: "3 failed attempts recorded · 41 usernames added · ticked 'Dump NTDS' on DC01". During a long session the owner has to notice a win among failures, and this toast is their summary of the run.
 - **Extracted line.** The same summary is stored on the log entry as an **"Extracted"** line under the output, so it can be read later. It carries its own **Undo**, because a mistake can be noticed after the toast is gone.
 - **Undo** reverses everything that save filed automatically: hosts it created, services and OS from scans, identity (restored to its previous value, so it needs a snapshot), credentials, usernames, attempts and tried pairs, vectors and ticks, including today's command-matched ticks. The summary lists all of the same things. *(My call: one Undo for everything automatic, matching "what went where".)*
 - **Editing** a saved entry's output doesn't re-run extraction; only Save does. *(My call.)*
@@ -229,7 +229,7 @@ Payload content (templates, wrapping rules, explanations and the SQL walkthrough
    - **Explanations are a first-class part,** since they double as SQL teaching: what `UNION` requires, why `NULL`, what `--` and `#` do.
 4. **msfvenom.** Stageless `shell_reverse_tcp` only, because of the exam: exe, elf, aspx, war, dll and hta. The architecture comes from the host, with a note that Veil and Shellter need x86. The serve or upload step comes from Transfer.
 5. **Encode PowerShell.** Any command to `powershell -e <UTF-16LE base64>`, with the decoded text shown beside it.
-6. **Upgrade a shell.** The python3 PTY, `script`, `stty raw -echo; fg` and `stty rows/cols` steps (Linux), and a note that penelope does this automatically. Includes the `export HOME=…` fix the owner hit on Vega.
+6. **Upgrade a shell.** The python3 PTY, `script`, `stty raw -echo; fg` and `stty rows/cols` steps (Linux), and a note that penelope does this automatically. Includes the `export HOME=…` fix the owner hit on srv11.
 
 ### 4.5 Keyboard
 

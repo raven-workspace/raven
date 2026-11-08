@@ -140,11 +140,11 @@ A log entry is one **step**. Every kind shares the same shape: title, the conten
 
 | Kind | Content | Auto-title |
 |---|---|---|
-| Command | one or more command+output blocks, parsed from a pasted terminal block (prompt, command, output) | a library match names the purpose plus the key target ("Full TCP scan · 172.31.166.143"); otherwise the **full first command line**, never trimmed to the tool name |
-| Screenshot | a pasted image | caption field; the file name is generated as `<ip>_<stage>_<port-or-topic>` (e.g. `172.31.166.143_enum_port81`) |
+| Command | one or more command+output blocks, parsed from a pasted terminal block (prompt, command, output) | a library match names the purpose plus the key target ("Full TCP scan · 10.10.61.143"); otherwise the **full first command line**, never trimmed to the tool name |
+| Screenshot | a pasted image | caption field; the file name is generated as `<ip>_<stage>_<port-or-topic>` (e.g. `10.10.61.143_enum_port81`) |
 | HTTP | a raw request, or request+response pasted from Burp | method + host:port + path (`GET :81/`); the response is folded by default |
 | Note | free text, e.g. an analysis like a CVE applicability table | first line |
-| Flag proof | screenshot plus flag value, `local.txt` or `proof.txt` | "local.txt · Vega" |
+| Flag proof | screenshot plus flag value, `local.txt` or `proof.txt` | "local.txt · srv11" |
 
 **The common flow:**
 1. Press `L`.
@@ -225,7 +225,7 @@ Each engagement keeps a list of artifacts left on targets: uploaded files and th
 - A one-time import from an old-Raven **backup JSON**: Settings → Import.
   - **Format:** the user's backup is **plain JSON**. Its file format is `version: "2.0.0"` (top-level keys `machines`, `userNotes`, `customNotes`, …), and the machine data inside is at old-Raven `SCHEMA_VERSION = 7` (`pwndash/src/utils/schemaWriteGate.ts`).
   - **Encrypted old backups** (`raven-backup-encrypted`) are rejected with a clear message ("export an unencrypted backup from old Raven"). Supporting them isn't required.
-- The user picks which engagements to import. The intent is Mock exam A and later. The picker lists the backup's labs and standalone machines with their dates, and nothing is selected by default.
+- The user picks which engagements to import. The intent is Lab A and later. The picker lists the backup's labs and standalone machines with their dates, and nothing is selected by default.
   - A **standalone machine** becomes a one-host engagement.
   - **Kind mapping:** `exam-sim` stays `exam-sim`; `challenge-lab` or unset becomes `lab`; `real` becomes `client`. *(my call)*
 - **Imported:** engagements, hosts, services, log entries with blocks and observations, screenshots and images, credentials, access grants and test results, checklist state (old `itemsState`, already in the v7 goal shape), hops, tunnels and findings.

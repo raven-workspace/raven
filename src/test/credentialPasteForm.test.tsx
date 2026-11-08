@@ -27,10 +27,10 @@ describe("pasting user:pass into the credential form", () => {
     const user = userEvent.setup();
     const dlg = mount();
     await user.click(dlg.getByLabelText("Username"));
-    await user.paste("LUMEN\\svc_report:Summer2026!");
+    await user.paste("ACME\\svc_report:Winter2000!");
     expect(dlg.getByLabelText("Username")).toHaveValue("svc_report");
-    expect(dlg.getByLabelText("Domain")).toHaveValue("LUMEN");
-    expect(dlg.getByLabelText("Secret")).toHaveValue("Summer2026!");
+    expect(dlg.getByLabelText("Domain")).toHaveValue("ACME");
+    expect(dlg.getByLabelText("Secret")).toHaveValue("Winter2000!");
     expect(dlg.getByRole("combobox", { name: "Type" })).toHaveTextContent("password");
   });
 

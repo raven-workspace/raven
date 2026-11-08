@@ -26,6 +26,9 @@ pub enum AppError {
     Offline(String),
     #[error("NVD refused the request (key rejected or rate-limited)")]
     KeyRejected,
+    /// The write would replace something that must stay as it is.
+    #[error("{0}")]
+    Conflict(String),
 }
 
 pub type AppResult<T> = Result<T, AppError>;
@@ -45,6 +48,7 @@ impl AppError {
             AppError::NoKey => "no_key",
             AppError::Offline(_) => "offline",
             AppError::KeyRejected => "key_rejected",
+            AppError::Conflict(_) => "conflict",
         }
     }
 }
@@ -108,6 +112,12 @@ mod tests {
         let v = serde_json::to_value(AppError::KeyRejected).unwrap();
         assert_eq!(v["code"], "key_rejected");
         assert_eq!(v["message"], "NVD refused the request (key rejected or rate-limited)");
+    }
+
+    #[test]
+    fn conflict_code_and_message() {
+        let v = serde_json::to_value(AppError::Conflict("already recorded".into())).unwrap();
+        assert_eq!((v["code"].as_str(), v["message"].as_str()), (Some("conflict"), Some("already recorded")));
     }
 
     #[test]

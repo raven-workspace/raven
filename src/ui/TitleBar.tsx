@@ -6,7 +6,7 @@ import { Kbd } from "./Kbd";
 export interface TitleBarProps {
   /** Interactive content at the far left, after the traffic lights (e.g. the home link). */
   left?: ReactNode;
-  /** Centre-left text, e.g. "Mock exam A — Vega". */
+  /** Centre-left text, e.g. "Lab A — srv11". */
   title?: ReactNode;
   /** Right-aligned controls. Interactive children opt out of dragging automatically. */
   right?: ReactNode;

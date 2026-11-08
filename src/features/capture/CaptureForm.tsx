@@ -4,28 +4,25 @@ import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type Keyboar
 import { metasploitHostIds, metasploitWarning } from "../../engines/checklist";
 import { api } from "../../lib/api";
 import type { Engagement } from "../../types/engagement";
-import type { Credential, Username } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
 import { Button, Chip, Field, Input, Kbd, Select, Textarea } from "../../ui";
 import { useHosts } from "../hosts/queries";
-import { credAttemptsKey, credentialsKey, useCredentials, useUsernames, usernamesKey } from "../credentials/queries";
+import { invalidateAfterSave } from "../log/extractions";
 import { HostChips } from "./HostChips";
 import { clipboardImage, readImage, releaseImage } from "./imagePaste";
 import { KindChips } from "./KindChips";
 import { KindFields } from "./KindFields";
 import { PasteArea } from "./PasteArea";
 import { Toggle } from "./Toggle";
-import { IntakePreview } from "./IntakePreview";
-import { intakePlanFor, KINDS, resolveCapture, withProvisionalHosts } from "./resolve";
+import { KINDS, resolveCapture } from "./resolve";
+import { useSaveSummaryStore } from "./useSaveSummaryStore";
 import { PartialSaveError, saveCapture } from "./saveCapture";
 import { reportError } from "../../lib/lockSignal";
 import { EMPTY_DRAFT, useCaptureStore, type PanelDraft } from "./useCaptureStore";
 
 const NO_HOSTS: Host[] = [];
 const NO_MACHINES: string[] = [];
-const NO_CREDENTIALS: Credential[] = [];
-const NO_USERNAMES: Username[] = [];
 
 export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; pasteRef: RefObject<HTMLElement | null> }) {
   const id = engagement.id;
@@ -68,22 +65,6 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
     };
     return metasploitWarning(draft, engagement, metasploitHostIds(draft, engagement, hosts));
   }, [engagement, hosts, id, r.edits]);
-  // nxc intake plans with the IPs ticked "+ add as host" as provisional hosts, so pairs on them are offered (F-R2).
-  const intakeHosts = useMemo(() => withProvisionalHosts(hosts, id, pd.addIps), [hosts, id, pd.addIps]);
-  // The credentials and usernames are read only once the paste has nxc results or roast hashes.
-  const hasIntake = useMemo(
-    () => intakePlanFor(r.edits, { engagementId: id, hosts: intakeHosts, credentials: NO_CREDENTIALS, usernames: NO_USERNAMES }) !== null,
-    [r.edits, id, intakeHosts],
-  );
-  const credsQ = useCredentials(id, { enabled: hasIntake });
-  const usersQ = useUsernames(id, { enabled: hasIntake });
-  const intake = useMemo(
-    () =>
-      hasIntake && credsQ.data && usersQ.data
-        ? intakePlanFor(r.edits, { engagementId: id, hosts: intakeHosts, credentials: credsQ.data, usernames: usersQ.data })
-        : null,
-    [hasIntake, credsQ.data, usersQ.data, r.edits, id, intakeHosts],
-  );
   const set = (patch: Partial<PanelDraft>) => useCaptureStore.getState().update(id, patch);
 
   // After an image paste the caption is the next thing to type.
@@ -94,11 +75,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
     }
   }, [pd.image]);
 
-  function refresh() {
-    for (const key of [["log", id], ["hosts", id], ["services"], ["services", "engagement", id], ["checklist", id], ["progress"], ["engagement", id], ["engagements"], credentialsKey(id), usernamesKey(id), credAttemptsKey(id), ["hostIdentity"], ["vectors"]]) {
-      void qc.invalidateQueries({ queryKey: key });
-    }
-  }
+  const refresh = () => invalidateAfterSave(qc, id);
 
   async function save() {
     if (saving || !r.canSave) return;
@@ -106,34 +83,14 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
     setError(null);
     const store = useCaptureStore.getState();
     const image = pd.image && (kind === "screenshot" || kind === "flag") ? { mime: pd.image.mime, dataBase64: pd.image.dataBase64 } : null;
-    // The lists the preview showed (read now if it hasn't loaded yet). Nothing is saved when they can't be read.
-    let intakeLists: { credentials: Credential[]; usernames: Username[]; previewKeys: string[] } | undefined;
-    if (hasIntake) {
-      try {
-        const [credentials, usernames] = await Promise.all([
-          qc.ensureQueryData({ queryKey: credentialsKey(id), queryFn: () => api.credentialsList(id) }),
-          qc.ensureQueryData({ queryKey: usernamesKey(id), queryFn: () => api.usernamesList(id) }),
-        ]);
-        // What the preview offers (computed here too when Save comes before it has rendered).
-        const preview = intakePlanFor(r.edits, { engagementId: id, hosts: intakeHosts, credentials, usernames });
-        intakeLists = { credentials, usernames, previewKeys: preview?.newCredentials.map((p) => p.key) ?? [] };
-      } catch (e) {
-        reportError(e);
-        setError(`Couldn't read the credentials: ${e instanceof Error ? e.message : String(e)}`);
-        setSaving(false);
-        return;
-      }
-    }
     try {
-      await saveCapture({
+      const saved = await saveCapture({
         engagementId: id,
         draft: r.draft,
         draftInput: r.draftInput,
         edits: r.edits,
-        addIps: pd.addIps,
         image,
         hosts,
-        intake: intakeLists && { ...intakeLists, toggles: pd.intakeToggles },
         onHostCreated: (h) => {
           const cur = useCaptureStore.getState().drafts[id]?.created ?? [];
           set({ created: [...cur, h] });
@@ -142,6 +99,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
       refresh();
       store.discard(id);
       store.close();
+      useSaveSummaryStore.getState().show(saved.entry.id, saved.summary);
     } catch (e) {
       // A `locked` rejection must reach the vault gate, as query and mutation errors do.
       for (const reason of e instanceof PartialSaveError ? e.reasons : [e]) reportError(reason);
@@ -149,6 +107,8 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
         refresh();
         store.discard(id);
         store.setNotice(e.message);
+        // The extraction was stored all the same: its summary (and Undo) still shows.
+        useSaveSummaryStore.getState().show(e.entry.id, e.summary);
       } else {
         void qc.invalidateQueries({ queryKey: ["hosts", id] });
         setError(e instanceof Error ? e.message : String(e));
@@ -237,7 +197,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
           text={pd.text}
           image={pd.image}
           bindRef={bindPaste}
-          onText={(text) => set({ text, intakeToggles: {} })}
+          onText={(text) => set({ text })}
           onPaste={onPaste}
           onKeyDown={kind === "note" ? noteEnter : enterSaves}
           onRemoveImage={removeImage}
@@ -262,29 +222,8 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
           captionRef={captionRef}
         />
 
-        <HostChips
-          hosts={hosts}
-          linked={r.edits.hostIds}
-          addIps={pd.addIps}
-          unknownIps={r.unknownIps}
-          onLinked={(hostIds) => set({ hostIds })}
-          onAddIps={(addIps) => set({ addIps })}
-        />
+        <HostChips hosts={hosts} linked={r.edits.hostIds} onLinked={(hostIds) => set({ hostIds })} />
         {r.servicesLine && <p className="m-0 font-mono text-xs text-muted">{r.servicesLine}</p>}
-        {intake && (
-          <IntakePreview
-            plan={intake}
-            hosts={intakeHosts}
-            toggles={pd.intakeToggles}
-            onToggle={(key, on) => set({ intakeToggles: { ...pd.intakeToggles, [key]: on } })}
-          />
-        )}
-        {hasIntake && (credsQ.error ?? usersQ.error) && (
-          <p role="alert" className="m-0 text-xs text-warn">
-            Couldn't read the credentials: {(credsQ.error ?? usersQ.error)!.message}
-          </p>
-        )}
-
         <Field label="Ran on">
           <Select
             value={r.edits.ranOn}

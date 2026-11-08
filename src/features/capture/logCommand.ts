@@ -1,8 +1,9 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
-import { credAttemptsKey, credentialsKey, usernamesKey } from "../credentials/queries";
-import { saveCapture, type CaptureEdits } from "./saveCapture";
+import { invalidateAfterSave } from "../log/extractions";
+import { useSaveSummaryStore } from "./useSaveSummaryStore";
+import { PartialSaveError, saveCapture, type CaptureEdits } from "./saveCapture";
 
 /**
  * Logs a command as a command entry against one host, through the capture save path, so the checklist
@@ -19,13 +20,18 @@ export async function logCommand(
     observations: "", returnedNothing: false, private: false, content,
   };
   try {
-    return await saveCapture({
-      engagementId: id, hosts: args.hosts, addIps: [], image: null, edits,
+    const { entry, summary } = await saveCapture({
+      engagementId: id, hosts: args.hosts, image: null, edits,
       draft: { kind: "command", title: args.title, hostIds: [host.id], ranOn: args.ranOn, content, unknownScopeIps: [], scan: null },
     });
+    // A command logged with no output files nothing, so there is usually no summary to show.
+    useSaveSummaryStore.getState().show(entry.id, summary);
+    return entry;
+  } catch (e) {
+    // A partial save may still have stored an extraction: show it, with its Undo.
+    if (e instanceof PartialSaveError) useSaveSummaryStore.getState().show(e.entry.id, e.summary);
+    throw e;
   } finally {
-    for (const key of [["log", id], ["hosts", id], ["services"], ["services", "engagement", id], ["checklist", id], ["progress"], ["engagement", id], ["engagements"], credentialsKey(id), usernamesKey(id), credAttemptsKey(id), ["hostIdentity"], ["vectors"]]) {
-      void qc.invalidateQueries({ queryKey: key });
-    }
+    invalidateAfterSave(qc, id);
   }
 }

@@ -47,6 +47,30 @@ export function findDuplicateCredential(list: Credential[], cred: Credential): C
   return list.find((c) => hasSecret(c) && credKey(c) === key && sameScope(c, cred));
 }
 
+/**
+ * Whether two domain spellings name the same domain (R16): equal ignoring case, or a NetBIOS name (`CORP`) and an FQDN
+ * (`corp.lan`) whose first label it is. mimikatz and RID brute print NetBIOS; nxc and secretsdump print the FQDN.
+ */
+export function sameDomain(a: string | null | undefined, b: string | null | undefined): boolean {
+  const x = (a ?? "").trim().toLowerCase();
+  const y = (b ?? "").trim().toLowerCase();
+  if (x === y) return true;
+  if (!x || !y) return false;
+  const [netbios, fqdn] = x.includes(".") ? [y, x] : [x, y];
+  return !netbios.includes(".") && fqdn.includes(".") && fqdn.split(".")[0] === netbios;
+}
+
+/**
+ * `findDuplicateCredential`, where a stored credential whose domain is the same domain spelled the other way
+ * (`sameDomain`) also counts as the duplicate.
+ */
+export function findStoredCredential(list: Credential[], cred: Credential): Credential | undefined {
+  return (
+    findDuplicateCredential(list, cred) ??
+    list.find((c) => !!c.domain && !!cred.domain && sameDomain(c.domain, cred.domain) && !!findDuplicateCredential([c], { ...cred, domain: c.domain }))
+  );
+}
+
 /** Identity of an attempt: the subject (credential or username), the host, the service and the auth mode. */
 export function attemptKey(a: Pick<CredAttempt, "credId" | "usernameId" | "hostId" | "service" | "authMode">): string {
   return `${a.credId}|${a.usernameId ?? ""}|${a.hostId}|${a.service}|${a.authMode}`;

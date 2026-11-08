@@ -43,7 +43,7 @@ function fixtures(): Engagement[] {
   return [
     eng({
       id: "e1",
-      name: "Mock exam A",
+      name: "Lab A",
       kind: "exam-sim",
       subLabel: "AD + 3 standalone",
       timeboxStart: now - 2 * HOUR,
@@ -52,7 +52,7 @@ function fixtures(): Engagement[] {
       lastRanOn: null, msfHostId: null,
     }),
     eng({ id: "e4", name: "Acme Corp internal", kind: "client", client: "Acme Corp", subLabel: "assumed breach" }),
-    eng({ id: "e2", name: "Lumen", kind: "lab", status: "archived" }),
+    eng({ id: "e2", name: "Acme", kind: "lab", status: "archived" }),
     eng({ id: "e3", name: "Internal", kind: "client", client: "Globex", status: "archived" }),
   ];
 }
@@ -115,19 +115,19 @@ describe("dashboard", () => {
   it("lists active as cards and archived in past table", async () => {
     mount();
     const active = await screen.findByRole("region", { name: "Active" });
-    expect(within(active).getByText("Mock exam A")).toBeInTheDocument();
+    expect(within(active).getByText("Lab A")).toBeInTheDocument();
     expect(within(active).getByText("Acme Corp internal")).toBeInTheDocument();
     expect(within(active).getByText("exam sim")).toBeInTheDocument();
     expect(within(active).getByText("AD + 3 standalone")).toBeInTheDocument();
     expect(within(active).getByText(/^21h 4[45]m left$/)).toBeInTheDocument();
     expect(within(active).getAllByText("Rooted 0/0 · flags 0/0")).toHaveLength(2);
     expect(within(active).getByText(/12m ago/)).toBeInTheDocument();
-    expect(within(active).queryByText("Lumen")).not.toBeInTheDocument();
+    expect(within(active).queryByText("Acme")).not.toBeInTheDocument();
 
     const table = screen.getByRole("table");
-    expect(within(table).getByText("Lumen")).toBeInTheDocument();
+    expect(within(table).getByText("Acme")).toBeInTheDocument();
     expect(within(table).getByText("Internal")).toBeInTheDocument();
-    expect(within(table).queryByText("Mock exam A")).not.toBeInTheDocument();
+    expect(within(table).queryByText("Lab A")).not.toBeInTheDocument();
     for (const h of ["Engagement", "Kind", "Dates", "Result", "Report"]) {
       expect(within(table).getByRole("columnheader", { name: h })).toBeInTheDocument();
     }
@@ -137,7 +137,7 @@ describe("dashboard", () => {
   it("clicking a card opens the engagement", async () => {
     const user = userEvent.setup();
     mount();
-    await user.click(await screen.findByRole("link", { name: /Mock exam A/ }));
+    await user.click(await screen.findByRole("link", { name: /Lab A/ }));
     expect(await within(await screen.findByRole("main")).findByText("No hosts yet")).toBeInTheDocument();
   });
 
@@ -148,10 +148,10 @@ describe("dashboard", () => {
     const search = screen.getByRole("searchbox", { name: "Search past engagements" });
     await user.type(search, "GLOBEX");
     expect(within(table).getByText("Internal")).toBeInTheDocument();
-    expect(within(table).queryByText("Lumen")).not.toBeInTheDocument();
+    expect(within(table).queryByText("Acme")).not.toBeInTheDocument();
     await user.clear(search);
-    await user.type(search, "reli");
-    expect(within(table).getByText("Lumen")).toBeInTheDocument();
+    await user.type(search, "acm");
+    expect(within(table).getByText("Acme")).toBeInTheDocument();
     expect(within(table).queryByText("Internal")).not.toBeInTheDocument();
   });
 
@@ -227,15 +227,15 @@ describe("dashboard", () => {
     expect(within(dialog).queryByLabelText("Hours")).not.toBeInTheDocument();
     expect(within(dialog).queryByLabelText("Client")).not.toBeInTheDocument();
 
-    await user.type(within(dialog).getByLabelText("Name"), "Lumen 2");
-    await user.type(within(dialog).getByLabelText("Scope"), " 10.10.0.0/24 \n\n  172.31.1.5\n");
+    await user.type(within(dialog).getByLabelText("Name"), "Acme 2");
+    await user.type(within(dialog).getByLabelText("Scope"), " 10.10.0.0/24 \n\n  10.10.66.5\n");
     await user.click(within(dialog).getByRole("button", { name: "Create engagement" }));
 
     await vi.waitFor(() => expect(m.engagementCreate).toHaveBeenCalledTimes(1));
     const input = m.engagementCreate.mock.calls[0]![0];
-    expect(input.name).toBe("Lumen 2");
+    expect(input.name).toBe("Acme 2");
     expect(input.kind).toBe("lab");
-    expect(input.scopeCidrs).toEqual(["10.10.0.0/24", "172.31.1.5"]);
+    expect(input.scopeCidrs).toEqual(["10.10.0.0/24", "10.10.66.5"]);
     expect(input.timeboxStart ?? null).toBeNull();
     expect(input.timeboxMinutes ?? null).toBeNull();
     expect(input.client ?? null).toBeNull();
@@ -250,7 +250,7 @@ describe("dashboard", () => {
     await user.keyboard("{Meta>}n{/Meta}");
     const dialog = await screen.findByRole("dialog", { name: "New engagement" });
     await user.click(within(dialog).getByRole("radio", { name: "Exam sim" }));
-    await user.type(within(dialog).getByLabelText("Name"), "Mock exam B");
+    await user.type(within(dialog).getByLabelText("Name"), "Lab B");
     fireEvent.change(within(dialog).getByLabelText("Timebox start"), { target: { value: "2026-11-10T09:30" } });
     await user.click(within(dialog).getByRole("button", { name: "Create engagement" }));
     await vi.waitFor(() => expect(m.engagementCreate).toHaveBeenCalledTimes(1));
@@ -313,7 +313,7 @@ describe("dashboard", () => {
 describe("engagement shell", () => {
   it("shows sections, the hosts group and the board placeholder", async () => {
     mount("/e/e1");
-    expect(await screen.findByRole("heading", { name: "Mock exam A" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Lab A" })).toBeInTheDocument();
     const nav = screen.getByRole("navigation", { name: "Engagement" });
     for (const s of ["Board", "Log", "Credentials", "Findings", "Engagement checklist", "Report"]) {
       expect(within(nav).getByRole("link", { name: new RegExp(s) })).toBeInTheDocument();
@@ -381,7 +381,7 @@ describe("engagement shell", () => {
     const confirm = within(dialog).getByRole("button", { name: "Delete engagement" });
     expect(confirm).toBeDisabled();
     const input = within(dialog).getByLabelText(/Type the engagement name/);
-    await user.type(input, "OSCP");
+    await user.type(input, "Lab");
     expect(confirm).toBeDisabled();
     await user.click(confirm);
     expect(m.engagementDelete).not.toHaveBeenCalled();
@@ -410,7 +410,7 @@ describe("engagement shell", () => {
       errors: { "e1:h1": "not found" },
     });
     const dialog = await screen.findByRole("dialog", { name: "Delete engagement" });
-    await user.type(within(dialog).getByLabelText(/Type the engagement name/), "Mock exam A");
+    await user.type(within(dialog).getByLabelText(/Type the engagement name/), "Lab A");
     await user.click(within(dialog).getByRole("button", { name: "Delete engagement" }));
     await vi.waitFor(() => expect(m.engagementDelete).toHaveBeenCalledWith("e1"));
     // Only the other engagement's text was left to save.
@@ -429,7 +429,7 @@ describe("engagement shell", () => {
     mount("/e/e1");
     await user.click(await screen.findByRole("button", { name: "Edit" }));
     const dialog = await screen.findByRole("dialog", { name: "Edit engagement" });
-    expect(within(dialog).getByLabelText("Name")).toHaveValue("Mock exam A");
+    expect(within(dialog).getByLabelText("Name")).toHaveValue("Lab A");
     expect(within(dialog).getByRole("radio", { name: "Exam sim" })).toHaveAttribute("aria-checked", "true");
     expect(within(dialog).getByLabelText("Hours")).toHaveValue(23);
     await user.click(within(dialog).getByRole("button", { name: "Save" }));

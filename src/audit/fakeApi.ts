@@ -2,11 +2,12 @@
 // writes mutate a private copy and return the resulting record. Reloading the page restores the fixtures.
 import type { Api } from "../lib/api";
 import type { ChecklistItem } from "../types/checklist";
+import type { TriedPair } from "../types/credentials";
 import type { ErrorCode } from "../types/errors";
 import type { NvdRecord } from "../types/findings";
 import { RavenError } from "../types/errors";
 import type { ServiceVerdict } from "../types/hostFacts";
-import type { Progress } from "../types/log";
+import type { Extraction, Progress } from "../types/log";
 import { AUDIT_NOW, FIXTURES, FIXTURE_PROGRESS, type AuditFixtures } from "./fixtures";
 
 export type { Api };
@@ -338,6 +339,62 @@ const base = {
     return clone(db.credAttempts.filter((a) => a.engagementId === engagementId));
   },
   credAttemptDelete: async (id: string) => remove(db.credAttempts, id),
+  triedPairsList: async (engagementId: string) => clone(db.triedPairs.filter((t) => t.engagementId === engagementId)),
+  triedPairsUpsert: async (engagementId: string, inputs) => {
+    const out: TriedPair[] = [];
+    for (const i of inputs) {
+      const authMode = i.authMode ?? "domain";
+      const same = (t: TriedPair) =>
+        t.engagementId === engagementId && t.username.toLowerCase() === i.username.toLowerCase() && (t.domain ?? "").toLowerCase() === (i.domain ?? "").toLowerCase() &&
+        t.secret === i.secret && t.hostId === i.hostId && t.service === i.service && t.authMode === authMode;
+      let row = db.triedPairs.find(same);
+      if (!row) {
+        row = { id: nid("tp"), engagementId, username: i.username, domain: i.domain ?? null, secret: i.secret, secretKind: i.secretKind, hostId: i.hostId, service: i.service, authMode, logEntryId: i.logEntryId ?? null, at: i.at ?? now() };
+        db.triedPairs.push(row);
+      }
+      out.push(clone(row));
+    }
+    return out;
+  },
+  triedPairDelete: async (id: string) => remove(db.triedPairs, id),
+  triedPairPromote: async (engagementId: string, username: string, domain: string | null, secret: string) => {
+    const hit = (t: TriedPair) =>
+      t.engagementId === engagementId && t.username.toLowerCase() === username.toLowerCase() && (t.domain ?? "").toLowerCase() === (domain ?? "").toLowerCase() && t.secret === secret;
+    const n = db.triedPairs.filter(hit).length;
+    db.triedPairs = db.triedPairs.filter((t) => !hit(t));
+    return n;
+  },
+  extractionSave: async (logEntryId, engagementId, summary, record) => {
+    const row: Extraction = { logEntryId, engagementId, summary: clone(summary), record: clone(record), createdAt: now(), undoneAt: null };
+    db.extractions = db.extractions.filter((x) => x.logEntryId !== logEntryId);
+    db.extractions.push(row);
+    return clone(row);
+  },
+  extractionGet: async (logEntryId: string) => clone(db.extractions.find((x) => x.logEntryId === logEntryId) ?? null),
+  extractionsList: async (engagementId: string) => clone(db.extractions.filter((x) => x.engagementId === engagementId)),
+  extractionUndo: async (logEntryId: string) => {
+    const row = db.extractions.find((e) => e.logEntryId === logEntryId);
+    if (!row) throw new RavenError("not_found", `No extraction for ${logEntryId}`);
+    const r = row.record;
+    // Reverse what the save filed: drop what it created, put back what it changed.
+    db.credentials = db.credentials.filter((c) => !r.createdCredentialIds.includes(c.id));
+    for (const before of r.credentialsBefore) {
+      const i = db.credentials.findIndex((c) => c.id === before.id);
+      if (i >= 0) db.credentials[i] = clone(before);
+    }
+    db.usernames = db.usernames.filter((u) => !r.createdUsernameIds.includes(u.id));
+    db.credAttempts = db.credAttempts.filter((a) => !r.createdAttemptIds.includes(a.id));
+    for (const before of r.attemptsBefore) {
+      const i = db.credAttempts.findIndex((a) => a.id === before.id);
+      if (i >= 0) db.credAttempts[i] = clone(before);
+    }
+    db.triedPairs = db.triedPairs.filter((t) => !r.createdTriedPairIds.includes(t.id));
+    db.vectors = db.vectors.filter((v) => !r.createdVectorIds.includes(v.id));
+    db.services = db.services.filter((s) => !r.createdServiceIds.includes(s.id));
+    db.hosts = db.hosts.filter((h) => !r.createdHostIds.includes(h.id));
+    row.undoneAt = now();
+    return clone(row);
+  },
   credAttemptsRekey: async (usernameId: string, secretCredIds: string[], credId: string, hostId?: string | null) => {
     const moved = db.credAttempts.filter((a) => a.usernameId === usernameId && secretCredIds.includes(a.credId) && (hostId == null || a.hostId === hostId));
     for (const a of moved) Object.assign(a, { credId, usernameId: null });

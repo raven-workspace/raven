@@ -20,7 +20,7 @@ vi.mock("../features/checklist/ticks", async (orig) => ({
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {
-  id: "e1", name: "Mock exam A", kind: "exam-sim", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
+  id: "e1", name: "Lab A", kind: "exam-sim", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
@@ -28,8 +28,8 @@ const host = (id: string, name: string, over: Partial<Host> = {}): Host => ({
   id, engagementId: "e1", name, ip: "10.10.10.5", os: "windows", boardColumn: "information-gathering", boardManual: false,
   dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1, ...over,
 });
-const VEGA = host("h1", "VEGA");
-const WEB = host("h2", "web02", { os: "linux" });
+const SRV11 = host("h1", "SRV11");
+const WEB = host("h2", "web07", { os: "linux" });
 const svc: Service = {
   id: "s1", hostId: "h1", port: 445, protocol: "tcp", state: "open", nmapService: "microsoft-ds", nmapVersion: null,
   confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
@@ -57,7 +57,7 @@ beforeEach(() => {
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
   m.engagementsProgress.mockResolvedValue({});
-  m.hostsList.mockResolvedValue([VEGA, WEB]);
+  m.hostsList.mockResolvedValue([SRV11, WEB]);
   m.servicesList.mockResolvedValue([]);
   m.servicesListEngagement.mockResolvedValue([svc]);
   m.checklistList.mockResolvedValue([]);
@@ -80,8 +80,8 @@ describe("metasploit lock", () => {
 
   it("shows the locked host name in warn", async () => {
     mount("/e/e1", { ...E1, msfHostId: "h1" });
-    const btn = await screen.findByRole("button", { name: /Metasploit: VEGA/ });
-    expect(within(btn).getByText("VEGA")).toHaveClass("text-warn");
+    const btn = await screen.findByRole("button", { name: /Metasploit: SRV11/ });
+    expect(within(btn).getByText("SRV11")).toHaveClass("text-warn");
   });
 
   it("shows locked, not unused, while the locked host's name is unresolved", async () => {
@@ -97,7 +97,7 @@ describe("metasploit lock", () => {
     mount("/e/e1", E1);
     await user.click(await screen.findByRole("button", { name: /Metasploit: unused/ }));
     const dialog = await screen.findByRole("dialog", { name: "Metasploit host" });
-    await user.click(within(dialog).getByRole("button", { name: "web02" }));
+    await user.click(within(dialog).getByRole("button", { name: "web07" }));
     expect(m.engagementSetMsfHost).toHaveBeenCalledWith("e1", "h2");
   });
 
@@ -105,7 +105,7 @@ describe("metasploit lock", () => {
     const user = userEvent.setup();
     m.engagementSetMsfHost.mockResolvedValue({ ...E1, msfHostId: null });
     mount("/e/e1", { ...E1, msfHostId: "h1" });
-    await user.click(await screen.findByRole("button", { name: /Metasploit: VEGA/ }));
+    await user.click(await screen.findByRole("button", { name: /Metasploit: SRV11/ }));
     await user.click(await screen.findByRole("button", { name: "Release lock" }));
     expect(m.engagementSetMsfHost).not.toHaveBeenCalled();
     const confirm = await screen.findByRole("dialog", { name: /Release the Metasploit lock/ });
@@ -118,10 +118,10 @@ describe("dual-homed flag", () => {
   it("dual-homed toggle saves, and the pivot goals live on the engagement view, not the host", async () => {
     const user = userEvent.setup();
     const lab = { ...E1, kind: "lab" as const };
-    let hosts = [VEGA, WEB];
+    let hosts = [SRV11, WEB];
     m.hostsList.mockImplementation(async () => hosts);
     m.hostUpdate.mockImplementation(async (_id, input) => {
-      hosts = [{ ...VEGA, dualHomed: input.dualHomed ?? false }, WEB];
+      hosts = [{ ...SRV11, dualHomed: input.dualHomed ?? false }, WEB];
       return hosts[0]!;
     });
     mount("/e/e1/h/h1", lab);
@@ -141,7 +141,7 @@ describe("dual-homed flag", () => {
     // Positive proof the flag took effect: the engagement checklist lists the pivot steps behind this host.
     await user.click(await screen.findByRole("link", { name: /Engagement checklist/ }));
     const section = within(await screen.findByRole("region", { name: "Lateral movement" }));
-    expect(await section.findByRole("heading", { name: `Behind ${VEGA.name}` })).toBeInTheDocument();
+    expect(await section.findByRole("heading", { name: `Behind ${SRV11.name}` })).toBeInTheDocument();
     expect(document.querySelector('li[data-goal-id="h-pivot-tunnel"]')).not.toBeNull();
     expect(document.querySelector('li[data-goal-id="h-pivot-sweep"]')).not.toBeNull();
   });
@@ -149,10 +149,10 @@ describe("dual-homed flag", () => {
 
 describe("listener on the strip", () => {
   it("shows LHOST:LPORT from settings, and links to Settings", async () => {
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "172.31.45.160", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "10.10.64.160", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
     const user = userEvent.setup();
     mount("/e/e1", { ...E1, kind: "lab" });
-    const link = await screen.findByRole("link", { name: /LHOST 192\.168\.45\.160:4444/ });
+    const link = await screen.findByRole("link", { name: /LHOST 10\.10\.64\.160:4444/ });
     await user.click(link);
     expect(await screen.findByLabelText("Your IP (tun0)")).toBeInTheDocument();
   });

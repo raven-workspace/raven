@@ -1027,7 +1027,7 @@ mod tests {
                   "logEntryId": null, "at": 250, "updatedAt": 250 }
             ],
             "tunnels": [
-                { "id": "t1", "engagementId": "E1", "kind": "ligolo", "viaHostId": "h2", "subnets": ["172.16.0.0/24"],
+                { "id": "t1", "engagementId": "E1", "kind": "ligolo", "viaHostId": "h2", "subnets": ["10.60.0.0/24"],
                   "callbackIp": "10.10.14.2", "status": "down", "notes": null, "createdAt": 1, "updatedAt": 2 }
             ],
             "findings": [

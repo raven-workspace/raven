@@ -10,12 +10,12 @@ import { att, byHost, cred as baseCred, hostWith, NT as _NT, user } from "./fixt
 const NT = "c33b5cf9c33b5cf9c33b5cf9c33b5cf9";
 void _NT;
 const cred = (extra: Partial<Credential> = {}): Credential =>
-  baseCred({ username: "harriet", secret: "Blue7Sky3.!", domain: "vertex.lan", ...extra });
+  baseCred({ username: "carol", secret: "Synth9Pw.!", domain: "zone2.test", ...extra });
 
 const mk = (id: string, ip: string, ports: number[]) => hostWith(id, ip, ports);
-const SRV21 = mk("h1", "172.31.162.95", [445]);
-const SRV22 = mk("h2", "172.31.162.96", [445]);
-const DC = mk("h3", "172.31.162.97", [445, 389]);
+const SRV21 = mk("h1", "10.10.60.95", [445]);
+const SRV22 = mk("h2", "10.10.60.96", [445]);
+const DC = mk("h3", "10.10.60.97", [445, 389]);
 const ALL = [SRV21, SRV22, DC];
 const HOSTS = ALL.map((x) => x.host);
 const SBH = byHost(...ALL);
@@ -32,8 +32,8 @@ describe('credentialCommands', () => {
       attempts: [att({ hostId: 'h2', authMode: 'domain', result: 'failed' })],
     });
     expect(r.commands.map((c) => c.command)).toEqual([
-      "nxc smb 172.31.162.95 172.31.162.97 -u 'harriet' -p 'Blue7Sky3.!' -d 'vertex.lan' | tee nxc-smb-harriet.txt",
-      "nxc smb 172.31.162.95 172.31.162.96 172.31.162.97 -u 'harriet' -p 'Blue7Sky3.!' --local-auth | tee nxc-smb-harriet-local.txt",
+      "nxc smb 10.10.60.95 10.10.60.97 -u 'carol' -p 'Synth9Pw.!' -d 'zone2.test' | tee nxc-smb-carol.txt",
+      "nxc smb 10.10.60.95 10.10.60.96 10.10.60.97 -u 'carol' -p 'Synth9Pw.!' --local-auth | tee nxc-smb-carol-local.txt",
     ]);
   });
 
@@ -58,14 +58,14 @@ describe('credentialCommands', () => {
 
   it('app scope has no -d', () => {
     const r = buildTestCommands({ cred: cred({ scope: 'app' }), ...one(SRV21), attempts: [], services: ['smb'], extraFlags: '--shares' });
-    expect(r.commands[0].command).toBe("nxc smb 172.31.162.95 -u 'harriet' -p 'Blue7Sky3.!' --shares | tee nxc-smb-harriet.txt");
+    expect(r.commands[0].command).toBe("nxc smb 10.10.60.95 -u 'carol' -p 'Synth9Pw.!' --shares | tee nxc-smb-carol.txt");
   });
 
   it('teeSuffix keeps the shares step from overwriting the smb output', () => {
     const r = buildTestCommands({ cred: cred(), ...one(SRV21), attempts: [], services: ['smb'], extraFlags: '--shares', teeSuffix: 'shares' });
     expect(r.commands.map((c) => c.command)).toEqual([
-      "nxc smb 172.31.162.95 -u 'harriet' -p 'Blue7Sky3.!' -d 'vertex.lan' --shares | tee nxc-smb-harriet-shares.txt",
-      "nxc smb 172.31.162.95 -u 'harriet' -p 'Blue7Sky3.!' --local-auth --shares | tee nxc-smb-harriet-local-shares.txt",
+      "nxc smb 10.10.60.95 -u 'carol' -p 'Synth9Pw.!' -d 'zone2.test' --shares | tee nxc-smb-carol-shares.txt",
+      "nxc smb 10.10.60.95 -u 'carol' -p 'Synth9Pw.!' --local-auth --shares | tee nxc-smb-carol-local-shares.txt",
     ]);
   });
 
@@ -76,7 +76,7 @@ describe('credentialCommands', () => {
   });
 
   it('tee names stay safe for a username with no filename-safe characters', () => {
-    const r = buildTestCommands({ cred: cred({ username: '$$$' }), ...one(SRV21), attempts: [], services: ['smb'] });
+    const r = buildTestCommands({ cred: cred({ username: '%%%' }), ...one(SRV21), attempts: [], services: ['smb'] });
     expect(r.commands[0].command).toMatch(/\| tee nxc-smb-[A-Za-z0-9._-]+\.txt$/);
   });
 
@@ -99,7 +99,7 @@ describe('credentialCommands', () => {
   it('ssh carries neither -d nor --local-auth nor -local suffix', () => {
     const r = buildTestCommands({ cred: cred(), ...one(mk('h9', '10.0.0.9', [22])), attempts: [] });
     expect(r.commands).toHaveLength(1);
-    expect(r.commands[0].command).toBe("nxc ssh 10.0.0.9 -u 'harriet' -p 'Blue7Sky3.!' | tee nxc-ssh-harriet.txt");
+    expect(r.commands[0].command).toBe("nxc ssh 10.0.0.9 -u 'carol' -p 'Synth9Pw.!' | tee nxc-ssh-carol.txt");
   });
 
   it('sanitizes the tee username', () => {
@@ -129,8 +129,8 @@ describe('credentialCommands', () => {
       cred: cred(), hosts: HOSTS, servicesByHost: SBH, services: ['smb'], useTargetsFile: true,
       attempts: [att({ hostId: 'h2', authMode: 'domain' })],
     });
-    expect(r.commands[0].command).toBe("nxc smb targets.txt -u 'harriet' -p 'Blue7Sky3.!' -d 'vertex.lan' | tee nxc-smb-harriet.txt");
-    expect(r.commands[0].targets).toBe('172.31.162.95\n172.31.162.97');
+    expect(r.commands[0].command).toBe("nxc smb targets.txt -u 'carol' -p 'Synth9Pw.!' -d 'zone2.test' | tee nxc-smb-carol.txt");
+    expect(r.commands[0].targets).toBe('10.10.60.95\n10.10.60.97');
   });
 
   it('input domain is the fallback', () => {
@@ -142,7 +142,7 @@ describe('credentialCommands', () => {
     const r = buildRoastCommands({ cred: cred(), hosts: HOSTS, servicesByHost: SBH });
     expect(r.commands).toHaveLength(1);
     expect(r.commands[0].command).toBe(
-      "nxc ldap 172.31.162.97 -u 'harriet' -p 'Blue7Sky3.!' -d 'vertex.lan' --kerberoasting kerb.txt --asreproast asrep.txt | tee nxc-ldap-roast-harriet.txt");
+      "nxc ldap 10.10.60.97 -u 'carol' -p 'Synth9Pw.!' -d 'zone2.test' --kerberoasting kerb.txt --asreproast asrep.txt | tee nxc-ldap-roast-carol.txt");
     expect(buildRoastCommands({ cred: cred({ scope: 'local' }), hosts: HOSTS, servicesByHost: SBH }).commands).toEqual([]);
     expect(buildRoastCommands({ cred: cred(), ...one(SRV21) }).notice).toBe('no-services');
   });
@@ -155,7 +155,7 @@ describe('credentialCommands', () => {
     });
     expect(r.usersFile).toBe('bob');
     expect(r.commands[0].command).toBe(
-      "nxc smb 172.31.162.95 -u users.txt -p 'Blue7Sky3.!' --continue-on-success -d 'vertex.lan' | tee nxc-smb-spray-svc.txt");
+      "nxc smb 10.10.60.95 -u users.txt -p 'Synth9Pw.!' --continue-on-success -d 'zone2.test' | tee nxc-smb-spray-svc.txt");
     expect(r.commands[1].command).toContain('--local-auth');
   });
 
@@ -194,7 +194,7 @@ describe('credentialCommands', () => {
       ['domain', ['h1', 'h3']],
       ['local', ['h2', 'h3']],
     ]);
-    expect(r.commands[0].command).toContain('--shares | tee nxc-smb-harriet-shares.txt');
+    expect(r.commands[0].command).toContain('--shares | tee nxc-smb-carol-shares.txt');
     // without the option a worked host is not re-run
     const plain = buildTestCommands({ cred: cred(), hosts: HOSTS, servicesByHost: SBH, attempts, services: ['smb'] });
     expect(plain.commands.map((c) => [c.authMode, c.hostIds])).toEqual([['domain', ['h3']], ['local', ['h3']]]);
@@ -209,18 +209,18 @@ describe('credentialCommands', () => {
 
 describe('local credentials', () => {
   it('get a --local-auth command and a -d command with the engagement domain', () => {
-    const mary = cred({ id: 'm', username: 'jo.parker', secret: 'pw', domain: null, scope: 'local', localHostId: 'h1' });
-    const r = buildTestCommands({ cred: mary, ...one(SRV21), attempts: [], services: ['smb'], domain: 'mock.exam' });
+    const mary = cred({ id: 'm', username: 'mia.jones', secret: 'pw', domain: null, scope: 'local', localHostId: 'h1' });
+    const r = buildTestCommands({ cred: mary, ...one(SRV21), attempts: [], services: ['smb'], domain: 'exam.test' });
     expect(r.commands.map((c) => c.command)).toEqual([
-      "nxc smb 172.31.162.95 -u 'jo.parker' -p 'pw' --local-auth | tee nxc-smb-jo.parker-local.txt",
-      "nxc smb 172.31.162.95 -u 'jo.parker' -p 'pw' -d 'mock.exam' | tee nxc-smb-jo.parker.txt",
+      "nxc smb 10.10.60.95 -u 'mia.jones' -p 'pw' --local-auth | tee nxc-smb-mia.jones-local.txt",
+      "nxc smb 10.10.60.95 -u 'mia.jones' -p 'pw' -d 'exam.test' | tee nxc-smb-mia.jones.txt",
     ]);
   });
 
   it('drop the -d command once the domain result is in', () => {
-    const mary = cred({ id: 'm', username: 'jo.parker', secret: 'pw', domain: null, scope: 'local', localHostId: 'h1' });
+    const mary = cred({ id: 'm', username: 'mia.jones', secret: 'pw', domain: null, scope: 'local', localHostId: 'h1' });
     const r = buildTestCommands({
-      cred: mary, ...one(SRV21), services: ['smb'], domain: 'mock.exam',
+      cred: mary, ...one(SRV21), services: ['smb'], domain: 'exam.test',
       attempts: [att({ credId: 'm', hostId: 'h1', authMode: 'domain', result: 'failed' })],
     });
     expect(r.commands.map((c) => c.authMode)).toEqual(['local']);

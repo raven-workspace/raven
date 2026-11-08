@@ -4,6 +4,7 @@ import {
   credLabel,
   dedupeHashCaptures,
   foldCrackedHashes,
+  isMachineAccount,
   isOwnerless,
   isPlaceholderSecret,
   overallState,
@@ -20,7 +21,7 @@ import { AccessFields, EMPTY_ACCESS, hostLabel, type AccessDraft } from "./Acces
 import { CredentialForm } from "./CredentialForm";
 import { CrackDialog, HashesList } from "./HashesList";
 import { MaskedSecret } from "./MaskedSecret";
-import { useAccessGrants, useCredAttempts, useCredentialMutations, useCredentials, useUsernames } from "./queries";
+import { useAccessGrants, useCredAttempts, useCredentialMutations, useCredentials, useTriedPairs, useUsernames } from "./queries";
 import { RoutineSection } from "./RoutineSection";
 import { TestGrid } from "./TestGrid";
 import { UsernamesList } from "./UsernamesList";
@@ -46,6 +47,7 @@ export function CredentialsSection() {
   const usersQ = useUsernames(id);
   const grantsQ = useAccessGrants(id);
   const attemptsQ = useCredAttempts(id);
+  const triedQ = useTriedPairs(id);
   const { servicesByHost, query: servicesQ } = useEngagementServices(id);
   const { remove } = useCredentialMutations(id);
   const [form, setForm] = useState<{ edit?: Credential } | null>(null);
@@ -63,6 +65,21 @@ export function CredentialsSection() {
   const hosts = hostsQ.data;
   const hostName = (hid: string | null) => (hid ? hostLabel(hosts.find((h) => h.id === hid)) : "");
   const hashes = shown.creds.filter((c) => c.type === "hash");
+  const users = shown.creds.filter((c) => !isMachineAccount(c));
+  const machines = shown.creds.filter(isMachineAccount);
+  const renderRow = (c: Credential) => (
+    <CredentialRow
+      key={c.id}
+      cred={c}
+      all={creds}
+      state={overallState(c, hosts, servicesByHost, shown.attempts)}
+      scopeHost={c.scope === "local" ? hostName(c.localHostId) : ""}
+      onEdit={() => setForm({ edit: c })}
+      onDelete={() => setDeleting(c)}
+      onConvert={() => setConverting(c)}
+      onCrack={() => setCracking(c)}
+    />
+  );
 
   return (
     <section aria-label="Credentials" className="flex flex-col gap-5">
@@ -83,24 +100,22 @@ export function CredentialsSection() {
             </tr>
           </thead>
           <tbody>
-            {shown.creds.map((c) => (
-              <CredentialRow
-                key={c.id}
-                cred={c}
-                all={creds}
-                state={overallState(c, hosts, servicesByHost, shown.attempts)}
-                scopeHost={c.scope === "local" ? hostName(c.localHostId) : ""}
-                onEdit={() => setForm({ edit: c })}
-                onDelete={() => setDeleting(c)}
-                onConvert={() => setConverting(c)}
-                onCrack={() => setCracking(c)}
-              />
-            ))}
+            {users.map(renderRow)}
+            {machines.length > 0 && (
+              <>
+                <tr>
+                  <th colSpan={7} scope="colgroup" className="px-2 pb-1 pt-4 text-left text-[10.5px] font-semibold uppercase tracking-label text-muted">
+                    Machine accounts <span className="tabular-nums">{machines.length}</span>
+                  </th>
+                </tr>
+                {machines.map(renderRow)}
+              </>
+            )}
           </tbody>
         </table>
       )}
 
-      <TestGrid eid={id} hosts={hosts} creds={shown.creds} attempts={shown.attempts} servicesByHost={servicesByHost} />
+      <TestGrid eid={id} hosts={hosts} creds={shown.creds} attempts={shown.attempts} servicesByHost={servicesByHost} tried={triedQ.data} />
       <RoutineSection eid={id} hosts={hosts} creds={shown.creds} usernames={usersQ.data} attempts={shown.attempts} servicesByHost={servicesByHost} />
 
       <UsernamesList eid={id} usernames={usersQ.data} grants={grantsQ.data} hosts={hosts} />

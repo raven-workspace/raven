@@ -127,3 +127,33 @@ export interface CredAttemptInput {
   /** Absent means now. */
   at?: number;
 }
+
+/** Mirrors the Rust `TriedPair`: a failed username + secret on a host/service. Never a credential. */
+export interface TriedPair {
+  id: string;
+  engagementId: string;
+  username: string;
+  domain: string | null;
+  secret: string;
+  secretKind: 'password' | 'hash';
+  hostId: string;
+  service: string;
+  authMode: AuthMode;
+  logEntryId: string | null;
+  at: number;
+}
+
+/** Mirrors the Rust `TriedPairInput`. Upserts are idempotent on the pair key (user and domain ignore case). */
+export interface TriedPairInput {
+  username: string;
+  domain?: string | null;
+  secret: string;
+  secretKind: 'password' | 'hash';
+  hostId: string;
+  service: string;
+  /** Absent means domain. */
+  authMode?: AuthMode;
+  logEntryId?: string | null;
+  /** Absent means now. */
+  at?: number;
+}

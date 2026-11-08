@@ -13,7 +13,7 @@ import {
 import { getLibrary } from "../../engines/library/store";
 import { api } from "../../lib/api";
 import type { ChecklistItemInput, ChecklistState } from "../../types/checklist";
-import type { LogEntry } from "../../types/log";
+import type { LogEntry, OutputTick } from "../../types/log";
 import { byOwnerOf, servicesByHostOf, stateToInput } from "./state";
 
 /** checklist_put accepts at most this many items per call. */
@@ -65,10 +65,44 @@ async function write(engagementId: string, items: ChecklistItemInput[]): Promise
   for (let i = 0; i < items.length; i += PUT_LIMIT) await api.checklistPut(engagementId, items.slice(i, i + PUT_LIMIT));
 }
 
+/** Command ticks merged with output ticks, deduped by owner and goal; a command tick wins. */
+function mergeTicks(commandTicks: Tick[], outputTicks: Tick[]): Tick[] {
+  const seen = new Set(commandTicks.map((t) => `${t.ownerId}\u0000${t.goalId}`));
+  const out = [...commandTicks];
+  for (const t of outputTicks) {
+    const key = `${t.ownerId}\u0000${t.goalId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
+
+/** An extraction's output ticks as checklist ticks of its entry. */
+export function outputTicksOf(entryId: string, ticks: OutputTick[]): Tick[] {
+  return ticks.map((t) => ({ ownerId: t.ownerId, goalId: t.goalId, commandId: `out:${t.parser}`, entryId }));
+}
+
+/**
+ * An entry's ticks: its command ticks (`ticksForEntry`) and its output ticks (`commandId: 'out:<parser>'`). Without
+ * `outputTicks` they are read from the entry's extraction record, so an edit keeps them. An entry whose extraction
+ * was undone ticks nothing at all (R3).
+ */
+async function entryTicks(entry: LogEntry, ctx: TickContext, outputTicks?: Tick[]): Promise<Tick[]> {
+  let output = outputTicks;
+  if (!output) {
+    const extraction = await api.extractionGet(entry.id);
+    if (extraction?.undoneAt != null) return [];
+    output = extraction ? outputTicksOf(entry.id, extraction.record.outputTicks ?? []) : [];
+  }
+  return mergeTicks(ticksForEntry(entry, ctx), output);
+}
+
 /**
  * Re-derives one log entry's ticks after it was created, edited (`entry`) or deleted (`entry` null). Every owner
  * that holds evidence from the entry, or gets a tick from it, runs `replaceEntryTicks` with its own ticks, so a tick
- * moves when the entry's hosts change and an undo restores the prior status. Writes only changed items, in one
+ * moves when the entry's hosts change and an undo restores the prior status. `outputTicks` are the ticks its output
+ * proved, given on create before the extraction is stored. Writes only changed items, in one
  * `checklistPut`. Returns the rows that undo the write (empty when nothing changed) and the checklist after it.
  */
 export async function writeEntryTicks(
@@ -76,9 +110,10 @@ export async function writeEntryTicks(
   entry: LogEntry | null,
   entryId: string,
   ctx: TickContext,
+  outputTicks?: Tick[],
 ): Promise<{ undo: ChecklistItemInput[]; after: Map<string, ChecklistState> }> {
   const before = byOwnerOf(await api.checklistList(engagementId));
-  const ticks = entry ? ticksForEntry(entry, ctx) : [];
+  const ticks = entry ? await entryTicks(entry, ctx, outputTicks) : [];
   const owners = new Set(ticks.map((t) => t.ownerId));
   for (const [ownerId, state] of before) if (hasEvidenceFrom(state, entryId)) owners.add(ownerId);
 
@@ -154,16 +189,23 @@ export async function syncBoards(engagementId: string, ctx: TickContext, byOwner
 
 /**
  * Rebuilds every auto-tick from the whole log, oldest entry first: each entry's ticks are re-applied (a goal it
- * still ticks keeps its completion time, a new tick is stamped with the entry's time) and evidence from entries no longer in the log is removed. Manual statuses
+ * still ticks keeps its completion time, a new tick is stamped with the entry's time) and evidence from entries no longer in the log is removed.
+ * Output ticks come from each entry's extraction; an undone extraction's entry ticks nothing. Manual statuses
  * and notes stay. Writes the changed items, then syncs the board.
  */
 export async function tickFromLog(engagementId: string, ctx: TickContext): Promise<{ updated: number; message: string }> {
-  const [items, log] = await Promise.all([api.checklistList(engagementId), api.logList(engagementId)]);
+  const [items, log, extractions] = await Promise.all([
+    api.checklistList(engagementId),
+    api.logList(engagementId),
+    api.extractionsList(engagementId),
+  ]);
   const before = byOwnerOf(items);
   const after = new Map(before);
+  const extractionOf = new Map((extractions ?? []).map((x) => [x.logEntryId, x]));
   const entries = [...log].sort((a, b) => a.at - b.at);
   for (const entry of entries) {
-    const ticks = ticksForEntry(entry, ctx);
+    const x = extractionOf.get(entry.id);
+    const ticks = x?.undoneAt != null ? [] : mergeTicks(ticksForEntry(entry, ctx), outputTicksOf(entry.id, x?.record.outputTicks ?? []));
     const owners = new Set(ticks.map((t) => t.ownerId));
     for (const [ownerId, state] of after) if (hasEvidenceFrom(state, entry.id)) owners.add(ownerId);
     // A goal the rebuild ticks was done when the entry was logged, not now.
@@ -249,7 +291,7 @@ export class FollowUpError extends Error {
  * then the exam-sim Metasploit lock. A failed step does not stop the lock; the first failure is thrown as a
  * `FollowUpError` (`CHECKLIST_FAILED`, `BOARD_FAILED` or `MSF_LOCK_FAILED`).
  */
-export async function afterEntrySaved(engagementId: string, entry: LogEntry | null, entryId: string): Promise<void> {
+export async function afterEntrySaved(engagementId: string, entry: LogEntry | null, entryId: string, outputTicks?: Tick[]): Promise<void> {
   await afterAutoTick(engagementId);
   let ctx: TickContext;
   try {
@@ -260,7 +302,7 @@ export async function afterEntrySaved(engagementId: string, entry: LogEntry | nu
   let failure: FollowUpError | null = null;
   let after: Map<string, ChecklistState> | null = null;
   try {
-    ({ after } = await writeEntryTicks(engagementId, entry, entryId, ctx));
+    ({ after } = await writeEntryTicks(engagementId, entry, entryId, ctx, outputTicks));
     // A scan saved with this entry may have set services and OS; then an intake may have recorded the admin result.
     after = await applyFacts(engagementId, ctx, after);
     after = await applyDaCover(engagementId, ctx, after);

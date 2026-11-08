@@ -62,7 +62,7 @@
   - `auditApiPlugin(): Plugin`: `enforce: "pre"`. `resolveId` resolves the import with `skipSelf`. If the result is `<root>/src/lib/api.ts`, it returns `<root>/src/audit/fakeApi.ts`. Imports from inside `src/audit/` are left alone, so the fake can `import type { Api } from "../lib/api"`.
 
 **Fixture requirements** (exact values a test asserts):
-- `e-lab`: kind `lab`, name ≥ 70 chars (e.g. `"Lumen Corp — internal segment B (10.10.20.0/24) with the long-named finance DMZ"`), domain `lumen.corp`.
+- `e-lab`: kind `lab`, name ≥ 70 chars (e.g. `"Acme Corp — internal segment B (10.10.20.0/24) with the long-named finance DMZ"`), domain `acme.corp`.
   - **6 hosts:**
     - `h-web`: name ≥ 40 chars, 24 services, ≥ 3 of them UDP `open|filtered`, some confirmed.
     - `h-dc01`: windows, `adSet: true`, ports 53/88/135/389/445/636/3268/5985.
@@ -99,8 +99,8 @@
 - [ ] **Step 4: Run tests.** `npx vitest run src/test/audit/fakeApi.test.tsx`: PASS. `npm run typecheck`: PASS.
 - [ ] **Step 5: Implement `src/audit/vitePlugin.ts` and wire it in `vite.config.ts`.** Add the `dev:audit` script.
 - [ ] **Step 6: Verify isolation both ways.**
-  - Run `npx vite build --mode audit --outDir "$TMPDIR/raven-audit-dist" && grep -l "Lumen Corp" "$TMPDIR"/raven-audit-dist/assets/*.js`. Expected: a match (the fake is in).
-  - Run `npm run build && ! grep -l "Lumen Corp" dist/assets/*.js`. Expected: exit 0 (the fake is out of the normal build).
+  - Run `npx vite build --mode audit --outDir "$TMPDIR/raven-audit-dist" && grep -l "Acme Corp" "$TMPDIR"/raven-audit-dist/assets/*.js`. Expected: a match (the fake is in).
+  - Run `npm run build && ! grep -l "Acme Corp" dist/assets/*.js`. Expected: exit 0 (the fake is out of the normal build).
   - Run `npm run dev:audit`, then `curl -s localhost:5199 | grep -c root`. Expected: `1`. Stop the server.
 - [ ] **Step 7: Run the full suite.** `npm test && npm run lint`: all pass.
 - [ ] **Step 8: Commit.** `git commit -m "feat(audit): audit mode with in-memory fake backend and stress fixtures"`

@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { detectPrompt, splitPaste } from '../../../engines/parse/logPaste'
 
-const EW = '*Evil-WinRM* PS C:\\Users\\harriet\\Documents> '
+const EW = '*Evil-WinRM* PS C:\\Users\\carol\\Documents> '
 
 describe('splitPaste', () => {
   it('single block', () => {
     expect(
-      splitPaste("nxc winrm 172.31.162.97 -u harriet -p 'x'\nWINRM ... [+] ... (Pwn3d!)\n"),
+      splitPaste("nxc winrm 10.10.60.97 -u carol -p 'x'\nWINRM ... [+] ... (Pwn3d!)\n"),
     ).toEqual([
       {
-        command: "nxc winrm 172.31.162.97 -u harriet -p 'x'",
+        command: "nxc winrm 10.10.60.97 -u carol -p 'x'",
         output: 'WINRM ... [+] ... (Pwn3d!)',
       },
     ])
@@ -21,10 +21,10 @@ describe('splitPaste', () => {
 
   it('evil-winrm session', () => {
     const text = [
-      "evil-winrm -i 172.31.162.97 -u harriet -p 'x'",
+      "evil-winrm -i 10.10.60.97 -u carol -p 'x'",
       'Evil-WinRM shell v3.5',
       `${EW}whoami`,
-      'vertex\\harriet',
+      'zone2\\carol',
       `${EW}whoami /priv`,
       'SeChangeNotifyPrivilege Enabled',
       'SeIncreaseWorkingSetPrivilege Enabled',
@@ -33,10 +33,10 @@ describe('splitPaste', () => {
     const blocks = splitPaste(text)
     expect(blocks).toHaveLength(3)
     expect(blocks[0]).toEqual({
-      command: "evil-winrm -i 172.31.162.97 -u harriet -p 'x'",
+      command: "evil-winrm -i 10.10.60.97 -u carol -p 'x'",
       output: 'Evil-WinRM shell v3.5',
     })
-    expect(blocks[1]).toEqual({ shell: 'evil-winrm', command: 'whoami', output: 'vertex\\harriet' })
+    expect(blocks[1]).toEqual({ shell: 'evil-winrm', command: 'whoami', output: 'zone2\\carol' })
     expect(blocks[2].command).toBe('whoami /priv')
     expect(blocks[2].output).toContain('SeIncreaseWorkingSetPrivilege')
   })

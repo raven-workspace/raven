@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { credLabel, getCrackingCommands, identifyHash } from "../../engines/credentials";
+import { credLabel, getCrackingCommands, identifyHash, isMachineAccount } from "../../engines/credentials";
 import type { Credential } from "../../types/credentials";
 import { Button, Chip, Dialog, Field, Input, labelClass } from "../../ui";
 import { MASK, MaskedSecret } from "./MaskedSecret";
@@ -102,7 +102,9 @@ function HashRow({ eid, hash, onCrack }: { eid: string; hash: Credential; onCrac
   );
 }
 
-export function HashesList({ eid, hashes }: { eid: string; hashes: Credential[] }) {
+export function HashesList({ eid, hashes: all }: { eid: string; hashes: Credential[] }) {
+  // Machine-account passwords are machine-generated: not worth cracking.
+  const hashes = all.filter((h) => !isMachineAccount(h));
   const [cracking, setCracking] = useState<Credential>();
   return (
     <section aria-label="Hashes" className="flex flex-col gap-1">
