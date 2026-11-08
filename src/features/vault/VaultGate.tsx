@@ -21,6 +21,8 @@ import { SaveSummary } from "../capture/SaveSummary";
 import { ArsenalDrawer } from "../arsenal/ArsenalDrawer";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useLastEngagementStore } from "../arsenal/useFillScope";
+import { PayloadsDrawer } from "../payloads/PayloadsDrawer";
+import { usePayloadsStore } from "../payloads/usePayloadsStore";
 import { Palette } from "../palette/Palette";
 import { usePaletteStore } from "../palette/usePaletteStore";
 
@@ -241,6 +243,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
         {vaultNewer && <span aria-hidden="true" className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />}
       </Link>
       <TitleBarButton hint="A" onClick={() => useArsenalStore.getState().toggle()}>Arsenal</TitleBarButton>
+      <TitleBarButton hint="P" onClick={() => usePayloadsStore.getState().toggle()}>Payloads</TitleBarButton>
       <TitleBarButton hint="⌘K" onClick={() => usePaletteStore.getState().open()}>Search</TitleBarButton>
       <TitleBarButton hint="⌘L" onClick={lock}>Lock</TitleBarButton>
     </>
@@ -285,6 +288,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
         {children}
         <Palette />
         <ArsenalDrawer />
+        <PayloadsDrawer />
         <SaveSummary />
       </VaultContext.Provider>
     );

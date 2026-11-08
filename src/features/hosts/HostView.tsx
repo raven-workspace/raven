@@ -11,6 +11,7 @@ import { LogEntryRow } from "../log/LogEntryRow";
 import { OrderButton } from "../log/OrderButton";
 import { byOrder, usePersistedOrder } from "../log/usePersistedOrder";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
+import { usePayloadsStore } from "../payloads/usePayloadsStore";
 import { useNotesStore } from "../notes/useNotesStore";
 import { StuckView } from "../stuck/StuckView";
 import { FactsColumn } from "./facts/FactsColumn";
@@ -70,18 +71,21 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   // The Arsenal drawer shares that edge too.
   useEffect(() => useNotesStore.subscribe((s) => { if (s.open) setStuckOpen(false); }), []);
   useEffect(() => useArsenalStore.subscribe((s) => { if (s.open) setStuckOpen(false); }), []);
+  useEffect(() => usePayloadsStore.subscribe((s) => { if (s.open) setStuckOpen(false); }), []);
   const toggleStuck = () => {
     // The stuck view replaces the split; the finding draft stays.
     if (split) {
       setSplit(null);
       useNotesStore.getState().close();
       useArsenalStore.getState().close();
+      usePayloadsStore.getState().close();
       setStuckOpen(true);
       return;
     }
     if (!stuckOpen) {
       useNotesStore.getState().close();
       useArsenalStore.getState().close();
+      usePayloadsStore.getState().close();
     }
     setStuckOpen(!stuckOpen);
   };
