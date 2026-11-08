@@ -17,6 +17,13 @@ const H = `${E}/h/${AUDIT_IDS.webHost}`;
 
 // dispatchEvent, not click(): at 900 the Findings tab sits under the Order button, which sdoe a real click.
 const tab = (name: string) => (page: Page) => page.getByRole("tab", { name, exact: true }).dispatchEvent("click");
+/** Opens a fact group by its toggle; a group that is already open stays as it is. */
+const openGroup = (name: string) => async (page: Page) => {
+  // The host page measures itself first; groups fold (stacked) or stay open (two columns) only after that.
+  await page.waitForTimeout(500);
+  const toggle = page.locator(`button[title^='Open ${name}']`);
+  if ((await toggle.count()) > 0) await toggle.first().click();
+};
 const FS01 = `${E}/h/${AUDIT_IDS.fileHost}`;
 /** A command with a fill field the host does not answer, so the first Enter is held back by the copy guard. */
 const GUARD_QUERY = "several ports";
@@ -39,6 +46,14 @@ export const SCREENS: Screen[] = [
     },
   },
   { id: "host-findings", path: H, ready: "role=tab[name='Findings'][selected]", setup: tab("Findings") },
+  {
+    id: "host-facts-open", path: FS01, ready: "role=region[name='Services']",
+    setup: async (page) => { await openGroup("Services")(page); await openGroup("Host Credentials")(page); },
+  },
+  {
+    id: "host-vectors-open", path: `/e/${AUDIT_IDS.examEngagement}/h/${AUDIT_IDS.msfHost}`, ready: "role=region[name='Privesc vectors']",
+    setup: openGroup("Privesc vectors"),
+  },
   { id: "host-postfoothold", path: `/e/${AUDIT_IDS.examEngagement}/h/${AUDIT_IDS.msfHost}`, ready: "role=region[name='Who am I']" },
   {
     id: "finding-split", path: H, ready: "role=region[name='Finding']",

@@ -292,6 +292,25 @@ describe("services grid", () => {
     expect(m.serviceSetVerdict).toHaveBeenCalledWith("s3", "candidate", undefined);
   });
 
+  it("clicking the pressed verdict closes the menu without changing it", async () => {
+    const user = userEvent.setup();
+    mount();
+    const g = await group("Services");
+    await user.click(await g.findByRole("button", { name: "Verdict for 80/tcp: candidate" }));
+    await user.click(within(g.getByRole("radiogroup", { name: "Verdict for 80/tcp" })).getByRole("radio", { name: "Candidate" }));
+    expect(g.queryByRole("radiogroup", { name: "Verdict for 80/tcp" })).not.toBeInTheDocument();
+    expect(m.serviceSetVerdict).not.toHaveBeenCalled();
+  });
+
+  it("clicking the pressed Dead end asks for the reason again", async () => {
+    const user = userEvent.setup();
+    mount({ services: [SSH, svc("s4", 21, { nmapService: "ftp", verdict: "dead_end" })] });
+    const g = await group("Services");
+    await user.click(await g.findByRole("button", { name: "Verdict for 21/tcp: dead end" }));
+    await user.click(within(g.getByRole("radiogroup", { name: "Verdict for 21/tcp" })).getByRole("radio", { name: /Dead end/ }));
+    expect(await screen.findByRole("textbox", { name: "Why is 21/tcp a dead end?" })).toBeInTheDocument();
+  });
+
   it("7 dynamic RPC ports fold into one msrpc ×7 row that opens in place; UDP folds too", async () => {
     const user = userEvent.setup();
     const rpc = Array.from({ length: 7 }, (_, i) => svc(`r${i}`, 49664 + i, { nmapService: "msrpc" }));
@@ -367,6 +386,8 @@ describe("who am I and privesc vectors", () => {
     const who = await group("Who am I");
     expect(await who.findByText(/Not known yet/)).toBeInTheDocument();
     const edit = who.getByRole("button", { name: "Edit who am I" });
+    await user.hover(edit);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Edit who am I");
     await user.click(edit);
     await user.type(who.getByRole("textbox", { name: "User" }), "ms01\\svc");
     await user.type(who.getByRole("textbox", { name: "Privileges" }), "SeBackupPrivilege");
@@ -482,6 +503,8 @@ describe("who am I and privesc vectors", () => {
     mount({ host: after(), vectors: [vector("v1", "SeImpersonatePrivilege abuse", "try")] });
     const del = await (await group("Privesc vectors")).findByRole("button", { name: "Delete SeImpersonatePrivilege abuse" });
     expect(del).toHaveAccessibleName("Delete SeImpersonatePrivilege abuse");
+    // Destructive tone: muted at rest, amber only on hover or focus.
+    expect(del).toHaveClass("text-muted");
     await user.click(del);
     expect(m.vectorDelete).not.toHaveBeenCalled();
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete vector" }));

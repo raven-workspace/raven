@@ -6,24 +6,26 @@ import { Toolbar, labelClass } from "../../../ui";
  * One cell of a folded group's summary. With an `icon` it is a count (the label is its accessible name and tooltip);
  * without one it reads as a small labelled pair, e.g. "entry  nginx 80".
  */
-export function SummaryCell({ label, icon: Glyph, tone, children }: {
+export function SummaryCell({ label, icon: Glyph, tone, shrink = "value", children }: {
   label: string;
+  /** Which part gives way when the line is narrow: the value (default) or the label (a long stage name). */
+  shrink?: "label" | "value";
   icon?: Icon;
   tone?: "accent" | "warn";
   children: ReactNode;
 }) {
   const colour = tone === "accent" ? "text-accent" : tone === "warn" ? "text-warn" : "text-fg-2";
   return (
-    <span data-summary-cell title={label} className="inline-grid min-w-0 grid-flow-col items-center gap-1 whitespace-nowrap">
+    <span data-summary-cell title={label} className={`inline-grid min-w-0 items-center gap-1 whitespace-nowrap ${shrink === "label" ? "grid-cols-[minmax(0,1fr)_auto]" : "grid-cols-[auto_minmax(0,1fr)]"}`}>
       {Glyph ? (
         <>
           <Glyph size={16} weight="regular" aria-hidden className={colour} />
           <span className="sr-only">{label}</span>
         </>
       ) : (
-        <span className="text-muted-2">{label}</span>
+        <span className={`text-muted-2 ${shrink === "label" ? "min-w-0 truncate" : ""}`}>{label}</span>
       )}
-      <span className="min-w-0 truncate text-fg-2">{children}</span>
+      <span className={`min-w-0 text-fg-2 ${shrink === "label" ? "" : "truncate"}`}>{children}</span>
     </span>
   );
 }
@@ -52,10 +54,10 @@ export function FactGroup({ title, summary, open, onToggle, shortcut, actions, c
           aria-expanded={false}
           title={`Open ${title}${hint}`}
           onClick={onToggle}
-          className="grid min-h-8 w-full cursor-default grid-cols-[auto_minmax(0,1fr)_16px] items-center gap-3 border-b border-line py-1 text-left text-meta text-fg-2 hover:text-fg"
+          className="grid min-h-8 w-full cursor-default grid-cols-[18ch_minmax(0,1fr)_16px] items-center gap-3 border-b border-line py-1 text-left text-meta text-fg-2 hover:text-fg"
         >
           <span>{title}</span>
-          <span className="grid min-w-0 grid-flow-col items-center justify-start gap-3 overflow-hidden text-muted">{summary}</span>
+          <span className="grid min-w-0 auto-cols-[minmax(0,max-content)] grid-flow-col items-center justify-start gap-3 overflow-hidden text-muted">{summary}</span>
           <CaretRightIcon size={16} weight="regular" aria-hidden />
         </button>
       </section>

@@ -136,7 +136,7 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
         aria-expanded={asking === "menu"}
         title="Set the verdict (C, U or D on the row)"
         onClick={() => setAsking(asking === "menu" ? undefined : "menu")}
-        className="cursor-default self-center"
+        className="grid min-h-7 cursor-default place-items-center justify-self-start"
       >
         <Chip variant={VERDICT_CHIP[verdict]} className={verdict === "dead_end" ? "text-muted line-through" : undefined}>
           {VERDICT_LABEL[verdict]}
@@ -154,6 +154,9 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
                 onVerdict(v);
                 setAsking(undefined);
               } else if (v === "dead_end") askReason();
+              // The pressed item was clicked again: a dead end is edited (its reason asked again), others just close.
+              else if (s.verdict === "dead_end") askReason();
+              else setAsking(undefined);
             }}
           >
             <ToggleGroupItem value="candidate">Candidate</ToggleGroupItem>

@@ -197,7 +197,7 @@ const commandName = (title: string) => title.split(/\s+[^\w\s]\s+/)[0];
 /** Accent only for access that works; warn for errored. */
 function ResultChip({ result }: { result: CredAttempt["result"] }) {
   const variant = WORKS.has(result) ? "accent" : result === "errored" ? "warn" : "default";
-  return <Chip variant={variant}>{result}</Chip>;
+  return <Chip variant={variant} className="justify-self-end">{result}</Chip>;
 }
 
 /** Newest first; two lines per result so it fits the Facts column: who and the result, then where and the proof. */
@@ -230,9 +230,9 @@ function HostResults({ attempts, creds, usernames, titles, onOpenEntry }: {
               <li key={a.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 border-b border-line py-2">
                 <span className="truncate font-mono text-code text-fg" title={who}>{who}</span>
                 <ResultChip result={a.result} />
-                <span className="grid min-w-0 grid-cols-[auto_auto_minmax(0,1fr)] items-baseline gap-2 font-mono text-code text-muted">
+                <span className="grid min-w-0 auto-cols-[minmax(0,max-content)] grid-flow-col items-baseline justify-start gap-2 font-mono text-code text-muted">
                   <span className="text-fg-2">{a.service.toUpperCase()}{a.port ? ` ${a.port}` : ""}</span>
-                  <span>{a.authMode === "local" ? "local" : ""}</span>
+                  {a.authMode === "local" && <span>local</span>}
                   <span className="truncate" title={a.detail || undefined}>{a.detail}</span>
                 </span>
                 {a.logEntryId && title !== undefined ? (

@@ -209,7 +209,7 @@ const services: Service[] = [
   svc("h-fs01", 135, "msrpc", "Microsoft Windows RPC"),
   svc("h-fs01", 389, "ldap", "Microsoft Windows Active Directory LDAP"),
   svc("h-fs01", 445, "microsoft-ds?", null, confirmed("SMB", "3.1.1")),
-  svc("h-fs01", 3389, "ms-wbt-server", "Microsoft Terminal Services"),
+  svc("h-fs01", 3389, "ms-wbt-server", "Microsoft Terminal Services", { verdict: "dead_end" }),
   svc("h-sql01", 88, "kerberos-sec", "Microsoft Windows Kerberos"),
   svc("h-sql01", 389, "ldap", "Microsoft Windows Active Directory LDAP"),
   svc("h-sql01", 445, "microsoft-ds?", null),
@@ -390,7 +390,7 @@ const credAttempts: CredAttempt[] = [
   { id: "ca-3", engagementId: "e-lab", credId: "c-6", usernameId: null, hostId: "h-sql01", service: "mssql", port: 1433, result: "valid", authMode: "domain", detail: null, logEntryId: "l-13", at: ago(45 * MIN) },
   { id: "ca-4", engagementId: "e-lab", credId: "c-2", usernameId: null, hostId: "h-fs01", service: "smb", port: 445, result: "failed", authMode: "domain", detail: "STATUS_LOGON_FAILURE", logEntryId: null, at: ago(60 * MIN) },
   // A password that works on fs01: the Arsenal's credential chip should offer it first there.
-  { id: "ca-5", engagementId: "e-lab", credId: "c-9", usernameId: null, hostId: "h-fs01", service: "smb", port: 445, result: "valid", authMode: "domain", detail: null, logEntryId: null, at: ago(30 * MIN) },
+  { id: "ca-5", engagementId: "e-lab", credId: "c-9", usernameId: null, hostId: "h-fs01", service: "smb", port: 445, result: "valid", authMode: "domain", detail: null, logEntryId: "l-5", at: ago(30 * MIN) },
 ];
 
 const accessGrants: AccessGrant[] = [
@@ -476,6 +476,8 @@ const hostIdentity: HostIdentity[] = [
 const vectors: PrivescVector[] = [
   { id: "pv-1", hostId: "h-exam-ms01", title: "SeImpersonatePrivilege (potato)", status: "try", source: "auto", createdAt: ago(30 * MIN), updatedAt: ago(30 * MIN) },
   { id: "pv-2", hostId: "h-exam-ms01", title: "Unquoted service path", status: "untested", source: "manual", createdAt: ago(25 * MIN), updatedAt: ago(25 * MIN) },
+  { id: "pv-3", hostId: "h-exam-ms01", title: "SeImpersonatePrivilege abuse through a named pipe", status: "try", source: "manual", createdAt: ago(20 * MIN), updatedAt: ago(20 * MIN) },
+  { id: "pv-4", hostId: "h-exam-ms01", title: "AlwaysInstallElevated", status: "ruled_out", source: "manual", createdAt: ago(15 * MIN), updatedAt: ago(15 * MIN) },
 ];
 
 // ---------------------------------------------------------------- network, notes, cleanup

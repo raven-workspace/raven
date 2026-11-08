@@ -23,7 +23,7 @@ function LineInput({ label, placeholder, pending, onSave, onCancel }: {
   const [text, setText] = useState("");
   return (
     <form
-      className="col-span-3"
+      className="col-span-full"
       onSubmit={(e) => {
         e.preventDefault();
         if (!pending && text.trim() !== "") onSave(text.trim());
@@ -55,15 +55,15 @@ function VectorRow({ v, engagementId, hostId }: { v: PrivescVector; engagementId
     <Chip variant={STATUS_CHIP[v.status]} className={ruledOut ? "text-muted line-through" : undefined}>{STATUS_LABEL[v.status]}</Chip>
   );
   return (
-    <li className="col-span-3 grid grid-cols-subgrid items-center gap-y-1 border-b border-line py-2">
-      <span className={cx("line-clamp-2 min-w-0 break-words text-meta", ruledOut ? "text-muted" : "text-fg")} title={v.title}>{v.title}</span>
+    <li className="col-span-full grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-2 border-b border-line py-2 @min-[26rem]:col-span-3 @min-[26rem]:grid-cols-subgrid">
+      <span className={cx("col-span-2 min-w-0 truncate text-meta @min-[26rem]:col-span-1", ruledOut ? "text-muted" : "text-fg")} title={v.title}>{v.title}</span>
       {ruledOut ? (
         <button
           type="button"
           title="Reopen as untested"
           aria-label={`Reopen ${v.title}`}
           onClick={() => setVectorStatus.mutate({ id: v.id, status: "untested" })}
-          className="cursor-default"
+          className="grid min-h-7 cursor-default place-items-center justify-self-start"
         >
           {status}
         </button>
@@ -73,17 +73,17 @@ function VectorRow({ v, engagementId, hostId }: { v: PrivescVector; engagementId
           title={v.status === "try" ? "Mark untested" : "Mark worth trying"}
           aria-label={`${v.title}: ${STATUS_LABEL[v.status]}`}
           onClick={() => setVectorStatus.mutate({ id: v.id, status: v.status === "try" ? "untested" : "try" })}
-          className="cursor-default"
+          className="grid min-h-7 cursor-default place-items-center justify-self-start"
         >
           {status}
         </button>
       )}
-      <ActionCell>
+      <div className="justify-self-end"><ActionCell>
         {!ruledOut && (
           <Button size="sm" onClick={() => setRuling(true)} aria-label={`Rule out ${v.title}`}>Rule out</Button>
         )}
         <IconButton icon={TrashIcon} label={`Delete ${v.title}`} tone="destructive" onClick={() => setDeleting(true)} />
-      </ActionCell>
+      </ActionCell></div>
       {ruling && (
         <LineInput
           label={`Why is ${v.title} ruled out?`}
@@ -93,7 +93,7 @@ function VectorRow({ v, engagementId, hostId }: { v: PrivescVector; engagementId
           onSave={(reason) => setVectorStatus.mutate({ id: v.id, status: "ruled_out", reason }, { onSuccess: () => setRuling(false) })}
         />
       )}
-      {setVectorStatus.error && <p role="alert" className="col-span-3 m-0 text-meta text-warn">{setVectorStatus.error.message}</p>}
+      {setVectorStatus.error && <p role="alert" className="col-span-full m-0 text-meta text-warn">{setVectorStatus.error.message}</p>}
       {deleting && (
         <ConfirmDelete
           title={`Delete ${v.title}?`}
@@ -147,7 +147,7 @@ export function VectorsFacts({ engagementId, host, open, onToggle }: {
       {vectorsQ.isError ? (
         <p role="alert" className="m-0 text-meta text-warn">Couldn't load the vectors: {vectorsQ.error.message}</p>
       ) : (
-        <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)_auto_auto] gap-x-2 p-0">
+        <ul className="@container m-0 grid list-none grid-cols-[minmax(0,1fr)_auto_auto] gap-x-2 p-0">
           {vectors.map((v) => <VectorRow key={v.id} v={v} engagementId={engagementId} hostId={host.id} />)}
           {adding && (
             <li className="col-span-3 grid grid-cols-subgrid py-1">
