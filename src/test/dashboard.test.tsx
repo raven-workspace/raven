@@ -380,17 +380,20 @@ describe("engagement shell", () => {
     expect(screen.queryByRole("button", { name: /^Delete/ })).not.toBeInTheDocument();
   });
 
-  it("Delete engagement is in the edit dialog and still confirms", async () => {
+  it("Tab reaches Delete engagement in the edit dialog; Enter opens the confirm; Esc closes only the confirm", async () => {
     const user = userEvent.setup();
     mount("/e/e1");
     await user.click(await screen.findByRole("button", { name: "Edit" }));
     const edit = await screen.findByRole("dialog", { name: "Edit engagement" });
     const del = within(edit).getByRole("button", { name: "Delete engagement" });
-    // Name field has initial focus; Tab walks the form to the footer, where Delete comes first.
-    del.focus();
+    for (let i = 0; i < 40 && document.activeElement !== del; i++) await user.tab();
+    expect(del).toHaveFocus();
     await user.keyboard("{Enter}");
     expect(await screen.findByRole("dialog", { name: "Delete engagement" })).toBeInTheDocument();
     expect(m.engagementDelete).not.toHaveBeenCalled();
+    await user.keyboard("{Escape}");
+    await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: "Delete engagement" })).not.toBeInTheDocument());
+    expect(screen.getByRole("dialog", { name: "Edit engagement" })).toBeInTheDocument();
   });
 
   it("delete requires typing the name", async () => {

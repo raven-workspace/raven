@@ -2,6 +2,7 @@ export { Button, type ButtonProps, type ButtonVariant, type ButtonSize } from ".
 export { Input, type InputProps } from "./Input";
 export { Textarea, type TextareaProps } from "./Textarea";
 export { Select, type SelectProps, type SelectOption } from "./Select";
+export { BrandIcon, type Brand } from "./BrandIcon";
 export { Chip, type ChipProps, type ChipVariant } from "./Chip";
 export { Label, labelClass, type LabelProps } from "./Label";
 export { Field, type FieldProps } from "./Field";

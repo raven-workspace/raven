@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes, Ref } from "react";
 import { cx } from "../lib/cx";
 
-export type ButtonVariant = "primary" | "ghost" | "danger";
+export type ButtonVariant = "primary" | "ghost" | "danger" | "quiet-danger";
 export type ButtonSize = "sm" | "md";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -21,6 +21,10 @@ const variants: Record<ButtonVariant, string> = {
   ghost: "border-line-2 text-fg-2 enabled:hover:bg-surface-hi enabled:hover:text-fg enabled:hover:border-line-strong",
   // No red in Ink: destructive actions use the warning amber.
   danger: "border-warn text-warn enabled:hover:bg-surface-hi",
+  // Neutral at rest (one amber at rest per screen); amber on hover and keyboard focus.
+  "quiet-danger":
+    "border-line-2 text-fg-2 enabled:hover:bg-surface-hi enabled:hover:border-warn enabled:hover:text-warn " +
+    "enabled:focus-visible:border-warn enabled:focus-visible:text-warn",
 };
 
 const sizes: Record<ButtonSize, string> = {

@@ -64,9 +64,6 @@ function draftFrom(e: Engagement | undefined): Draft {
   };
 }
 
-/** Neutral at rest; amber on hover and keyboard focus. Sits at the footer's left edge. */
-const DELETE_BUTTON = "mr-auto hover:border-warn! hover:text-warn! focus-visible:border-warn! focus-visible:text-warn!";
-
 const orNull = (s: string) => (s.trim() === "" ? null : s.trim());
 const sentence = (s: string) => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
 
@@ -227,7 +224,7 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
       footer={
         <>
           {engagement && (
-            <Button className={DELETE_BUTTON} onClick={() => setDeleting(true)}>
+            <Button variant="quiet-danger" className="mr-auto" onClick={() => setDeleting(true)}>
               Delete engagement
             </Button>
           )}

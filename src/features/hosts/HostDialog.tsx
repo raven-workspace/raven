@@ -12,9 +12,6 @@ const HOST_DELETE_DETAIL =
   "ruled-out items, tunnels through it and hops to or from it go with it; " +
   "log entries, credentials and findings stay but lose this host.";
 
-/** Neutral at rest; amber on hover and keyboard focus. Sits at the footer's left edge. */
-const DELETE_BUTTON = "mr-auto hover:border-warn! hover:text-warn! focus-visible:border-warn! focus-visible:text-warn!";
-
 const OS_OPTIONS = [
   { value: "unknown", label: "Unknown" },
   { value: "windows", label: "Windows" },
@@ -27,11 +24,7 @@ const AD_CHOICES: { value: AdChoice; label: string }[] = [
   { value: "on", label: "On" },
   { value: "off", label: "Off" },
 ];
-const AD_VALUE: Record<AdChoice, boolean | null> = {
-  auto: null,
-  on: true,
-  off: false,
-};
+const AD_VALUE: Record<AdChoice, boolean | null> = { auto: null, on: true, off: false };
 
 const ACCESS_OPTIONS = [
   { value: "none", label: "None" },
@@ -61,10 +54,7 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
   const [os, setOs] = useState(host?.os ?? "unknown");
   const [access, setAccess] = useState<HostAccess>(host?.access ?? "none");
   const [dualHomed, setDualHomed] = useState(host?.dualHomed ?? false);
-  const engagement = useQuery({
-    queryKey: ["engagement", engagementId],
-    queryFn: () => api.engagementGet(engagementId),
-  });
+  const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId) });
   const examSim = engagement.data?.kind === "exam-sim";
   const [adChoice, setAdChoice] = useState<AdChoice>(host?.adSet == null ? "auto" : host.adSet ? "on" : "off");
   const [errors, setErrors] = useState<Partial<Record<"name" | "ip" | "form", string>>>({});
@@ -107,7 +97,7 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
       footer={
         <>
           {host && (
-            <Button className={DELETE_BUTTON} onClick={() => setDeleting(true)}>
+            <Button variant="quiet-danger" className="mr-auto" onClick={() => setDeleting(true)}>
               Delete host
             </Button>
           )}
@@ -153,9 +143,7 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
                 </Toggle>
               ))}
               {adChoice === "auto" && (
-                <span className="text-meta text-muted">
-                  {host?.adSet == null && host?.adSetEffective ? "(auto: DC detected)" : "(auto)"}
-                </span>
+                <span className="text-meta text-muted">{host?.adSet == null && host?.adSetEffective ? "(auto: DC detected)" : "(auto)"}</span>
               )}
             </ChipSet>
           </div>

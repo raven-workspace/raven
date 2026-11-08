@@ -3,8 +3,7 @@ import { useState } from "react";
 import { api } from "../../lib/api";
 import { cx } from "../../lib/cx";
 import type { Engagement } from "../../types/engagement";
-import metasploitUrl from "../../assets/metasploit.svg";
-import { Button, Dialog, labelClass } from "../../ui";
+import { BrandIcon, Button, Dialog, labelClass } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { useHosts } from "../hosts/queries";
 
@@ -40,7 +39,7 @@ export function MsfLock({ engagement: e, className }: { engagement: Engagement; 
           className,
         )}
       >
-        <img src={metasploitUrl} alt="" draggable={false} className="size-4 brightness-0 invert opacity-70" />
+        <BrandIcon brand="metasploit" />
         <span className={labelClass}>Metasploit</span>{" "}
         <span className={cx("text-meta", e.msfHostId ? "text-warn" : "text-fg")}>
           {e.msfHostId ? (locked?.name ?? "locked") : "unused"}

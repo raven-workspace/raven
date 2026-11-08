@@ -155,16 +155,27 @@ describe("host view", () => {
     expect(header.queryByRole("button", { name: /^Delete/ })).not.toBeInTheDocument();
   });
 
-  it("Delete host is in the edit dialog and still confirms from the keyboard", async () => {
+  it("Tab reaches Delete host in the edit dialog; Enter opens the confirm; Esc closes only the confirm", async () => {
     const user = userEvent.setup();
     mount();
     const header = within(await screen.findByRole("region", { name: "Host" }));
     await user.click(header.getByRole("button", { name: "Edit" }));
     const edit = await screen.findByRole("dialog", { name: "Edit host" });
-    within(edit).getByRole("button", { name: "Delete host" }).focus();
+    const del = within(edit).getByRole("button", { name: "Delete host" });
+    for (let i = 0; i < 40 && document.activeElement !== del; i++) await user.tab();
+    expect(del).toHaveFocus();
     await user.keyboard("{Enter}");
     expect(await screen.findByRole("dialog", { name: "Delete dc01?" })).toBeInTheDocument();
     expect(m.hostDelete).not.toHaveBeenCalled();
+    await user.keyboard("{Escape}");
+    await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: "Delete dc01?" })).not.toBeInTheDocument());
+    expect(screen.getByRole("dialog", { name: "Edit host" })).toBeInTheDocument();
+  });
+
+  it("header shows the Windows brand icon beside the OS name", async () => {
+    mount();
+    const header = await screen.findByRole("region", { name: "Host" });
+    expect(header.querySelector('img[data-brand="windows"]')).not.toBeNull();
   });
 
   it("a 255-character host name truncates and keeps its title", async () => {
