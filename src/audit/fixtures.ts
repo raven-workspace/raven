@@ -324,7 +324,7 @@ const attachments: Attachment[] = (Object.keys(AUDIT_PNGS) as (keyof typeof AUDI
   id: `a-${k}`, mime: "image/png", dataBase64: AUDIT_PNGS[k].base64,
 }));
 
-// ---------------------------------------------------------------- credentials (all domain scope, all newer than the done goal)
+// ---------------------------------------------------------------- credentials (domain scope except one local account, all newer than the done goal)
 
 const cred = (n: number, type: Credential["type"], username: string, secret: string, over: Partial<Credential> = {}): Credential => ({
   id: `c-${n}`, engagementId: "e-lab", type, username, domain: "ACME", secret, hashType: null, scope: "domain",
@@ -344,7 +344,7 @@ const credentials: Credential[] = [
   cred(8, "hash", "m.okafor", NT(0x82), { hashType: "NTLM", crackStatus: "cracked", sourceHostId: "h-fs01" }),
   cred(9, "password", "m.okafor", "Autumn2026#", { sourceHostId: "h-fs01", fromSecretId: "c-8" }),
   cred(10, "hash", "a.lindqvist-with-an-extraordinarily-long-service-account-name", NT(0x93), { hashType: "NTLM", crackStatus: "uncracked", domain: "ACME-DMZ" }),
-  cred(11, "password", "backup-operator", "Password123!", { notes: "Found in a sticky note file on the desktop." }),
+  cred(11, "password", "backup-operator", "Password123!", { domain: null, scope: "local", localHostId: "h-fs01", source: "local SAM dump on fs01", notes: "Found in a sticky note file on the desktop." }),
   cred(12, "hash", "ws07$", `aad3b435b51404eeaad3b435b51404ee:${NT(0xa4)}`, { hashType: "pwdump", crackStatus: "uncrackable", sourceHostId: "h-ws07" }),
 ];
 

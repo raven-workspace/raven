@@ -34,8 +34,7 @@ export function MaskedSecret({ secret, label, copy = true }: { secret: string; l
   return (
     <span className={`inline-grid items-center gap-1 ${copy ? "grid-cols-[max-content_28px_28px]" : "grid-cols-[max-content_28px]"}`}>
       <span
-        className={`whitespace-nowrap font-mono text-code text-fg ${shown ? "max-w-[32ch] truncate" : ""}`}
-        title={shown ? secret : undefined}
+        className={`font-mono text-code text-fg ${shown ? "max-w-[32ch] whitespace-normal [overflow-wrap:anywhere]" : "whitespace-nowrap"}`}
         data-testid="secret-text"
       >
         {shown ? secret : MASK}
@@ -43,6 +42,7 @@ export function MaskedSecret({ secret, label, copy = true }: { secret: string; l
       <IconButton
         icon={shown ? EyeSlash : Eye}
         label={shown ? "Hide secret" : "Reveal secret"}
+        aria-label={`${shown ? "Hide" : "Reveal"} ${label}`}
         onClick={() => setShown((v) => !v)}
       />
       {copy && <CopySecretButton secret={secret} label={label} />}

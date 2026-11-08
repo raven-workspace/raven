@@ -59,9 +59,11 @@ describe("TestGrid tried pairs", () => {
     const pwRow = screen.getByText("sam.doe").closest("tr")!;
     expect(within(pwRow).getByTestId("secret-text")).toHaveTextContent("••••••••");
     expect(within(pwRow).queryByText(/SyntheticPw01/)).toBeNull();
-    fireEvent.click(within(pwRow).getByRole("button", { name: "Reveal secret" }));
+    fireEvent.click(within(pwRow).getByRole("button", { name: /^Reveal secret/ }));
     expect(within(pwRow).getByTestId("secret-text")).toHaveTextContent("SyntheticPw01");
+    expect(within(pwRow).getByText("tried password")).toBeInTheDocument();
     const hashRow = screen.getByText("drew").closest("tr")!;
+    expect(within(hashRow).getByText("tried hash")).toBeInTheDocument();
     expect(within(hashRow).getByTestId("tried-secret")).toHaveTextContent("01234567…cdef");
     expect(within(hashRow).queryByText(nt)).toBeNull();
   });

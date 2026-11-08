@@ -46,7 +46,7 @@ export function AccessFields({ value, onChange, hosts, errors = {} }: {
   );
 }
 
-/** A username's grants as small removable chips: "admin on dc01, via webshell". */
+/** A username's grants as small removable chips with the access route beside them. */
 export function AccessGrantTags({ eid, username, grants, hosts }: {
   eid: string;
   username: Username;
@@ -64,11 +64,9 @@ export function AccessGrantTags({ eid, username, grants, hosts }: {
           {grants.map((g) => {
             const host = hostLabel(hosts.find((h) => h.id === g.hostId));
             return (
-              <div key={g.id} className="grid grid-cols-[max-content_28px] items-center gap-1">
-                <Chip variant="accent">
-                  {LEVEL_LABEL[g.level]} on {host}
-                  {g.via && <span className="text-fg-2">, via {g.via}</span>}
-                </Chip>
+              <div key={g.id} className="grid grid-cols-[max-content_max-content_28px] items-center gap-2">
+                <Chip variant="accent">{LEVEL_LABEL[g.level]} on {host}</Chip>
+                {g.via ? <span className="text-meta text-fg-2">via {g.via}</span> : <span aria-hidden />}
                 <IconButton icon={X} label={`Remove access as ${name} on ${host}`} onClick={() => setRemoving(g)} />
               </div>
             );

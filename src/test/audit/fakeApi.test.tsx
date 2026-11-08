@@ -106,7 +106,7 @@ describe("audit fake api", () => {
   it("makes the done-goal notice show 12 new credentials", async () => {
     const goal = (await api.checklistList("e-lab")).find((i) => i.status === "done" && i.completedAt != null)!;
     const creds = await api.credentialsList("e-lab");
-    expect(creds.every((c) => c.scope === "domain" && c.createdAt > goal.completedAt!)).toBe(true);
+    expect(creds.every((c) => c.createdAt > goal.completedAt!)).toBe(true);
     expect(new Set(creds.map((c) => `${c.domain}\\${c.username}${c.type === "hash" ? " (hash)" : ""}`)).size).toBe(12);
   });
 

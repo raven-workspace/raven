@@ -143,9 +143,9 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose }: {
         </>
       }
     >
-      <form id={formId} onSubmit={(e) => void submit(e)} noValidate className="grid gap-3.5">
+      <form id={formId} onSubmit={(e) => void submit(e)} noValidate className="grid gap-4">
         {!edit && (
-          <div role="group" aria-label="What you have" className="grid gap-1.5">
+          <div role="group" aria-label="What you have" className="grid gap-2">
             <span className={labelClass}>What you have</span>
             <ChipSet>
               {MODES.map((m) => (

@@ -53,7 +53,7 @@ export function UsernamesList({ eid, usernames, grants, hosts }: {
   };
 
   return (
-    <section aria-label="Usernames" className="grid gap-2">
+    <section aria-label="Usernames" className="grid grid-cols-[minmax(0,1fr)] gap-2">
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
         <h3 className={`m-0 ${labelClass}`}>Usernames <span className="tabular-nums">{usernames.length}</span></h3>
         {usernames.length > 0 && <Button size="sm" onClick={copyAll}>{copied ? "Copied" : "Copy all"}</Button>}
@@ -63,11 +63,11 @@ export function UsernamesList({ eid, usernames, grants, hosts }: {
         <Button type="submit" disabled={um.create.isPending}>Add username</Button>
         {error && <p role="alert" className="m-0 self-center text-meta text-warn">{error}</p>}
       </form>
-      <ul className="m-0 list-none border-t border-line p-0">
+      <ul className="m-0 grid list-none grid-cols-[minmax(16ch,max-content)_minmax(0,1fr)_max-content] gap-x-3 border-t border-line p-0">
         {usernames.map((u) => (
-          <li key={u.id} className="grid grid-cols-[minmax(16ch,max-content)_minmax(0,1fr)_max-content] items-center gap-3 border-b border-line py-1.5">
+          <li key={u.id} className="col-span-full grid grid-cols-subgrid items-center border-b border-line py-2">
             <span className="truncate font-mono text-code text-fg" title={usernameLabel(u)}>{usernameLabel(u)}</span>
-            <AccessGrantTags eid={eid} username={u} grants={grants.filter((g) => g.usernameId === u.id)} hosts={hosts} />
+            <div className="min-w-0"><AccessGrantTags eid={eid} username={u} grants={grants.filter((g) => g.usernameId === u.id)} hosts={hosts} /></div>
             <ActionCell>
               <Button size="sm" aria-label={`Add access for ${usernameLabel(u)}`} onClick={() => setGranting(u)}>Add access</Button>
               <IconButton icon={Trash} tone="destructive" label={`Delete username ${usernameLabel(u)}`} onClick={() => setDeleting(u)} />

@@ -16,7 +16,7 @@ import { api } from "../../lib/api";
 import type { CredAttempt, Credential, Username } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
-import { Select, Toggle, labelClass } from "../../ui";
+import { Button, Select, labelClass } from "../../ui";
 import { useChecklist, useChecklistMutations } from "../checklist/queries";
 import { MASK } from "./MaskedSecret";
 import { TestCommands } from "./TestCommands";
@@ -49,7 +49,7 @@ export function RoutineSection({ eid, hosts, creds, usernames, attempts, service
 
   if (!cred) {
     return (
-      <section aria-label="Credential routine" className="grid gap-1">
+      <section aria-label="Credential routine" className="grid grid-cols-[minmax(0,1fr)] gap-1">
         <h3 className={`m-0 ${labelClass}`}>Credential routine</h3>
         <p className="m-0 text-meta text-muted">No sprayable credentials yet.</p>
       </section>
@@ -72,12 +72,12 @@ export function RoutineSection({ eid, hosts, creds, usernames, attempts, service
   };
 
   return (
-    <section aria-label="Credential routine" className="grid gap-2">
+    <section aria-label="Credential routine" className="grid grid-cols-[minmax(0,1fr)] gap-2">
       <div className="grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-3">
         <h3 className={`m-0 ${labelClass}`}>Credential routine</h3>
         <Select
           aria-label="Routine credential"
-          className="h-7 w-auto min-w-48 text-body"
+          className="w-auto min-w-48"
           value={cred.id}
           onValueChange={setPicked}
           options={newest.map((c) => ({ value: c.id, label: credLabel(c) }))}
@@ -94,16 +94,20 @@ export function RoutineSection({ eid, hosts, creds, usernames, attempts, service
               aria-label={step.title}
               className={`grid gap-1 border-b border-line py-2 ${applies ? "" : "opacity-50"}`}
             >
-              <div className="grid grid-cols-[max-content_max-content_max-content] items-center justify-start gap-2">
-                <Toggle
-                  on={done}
-                  onChange={(on) => setStatus.mutate({ ownerId: eid, goalId: step.itemId, status: on ? "done" : "todo" })}
+              <div className="grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-3">
+                <span className="text-body text-fg">
+                  {step.title}
+                  {!applies && <span className="ml-2 text-meta text-muted">Doesn't apply</span>}
+                </span>
+                <Button
+                  size="sm"
+                  variant={done ? "primary" : "ghost"}
+                  aria-pressed={done}
                   aria-label={`Done: ${step.title}`}
+                  onClick={() => setStatus.mutate({ ownerId: eid, goalId: step.itemId, status: done ? "todo" : "done" })}
                 >
                   Done
-                </Toggle>
-                <span className="text-body text-fg">{step.title}</span>
-                {!applies && <span className="text-meta text-muted">Doesn't apply</span>}
+                </Button>
               </div>
               {applies && <TestCommands set={commandsFor(step.id)} shown={commandsFor(step.id, MASK)} />}
             </li>

@@ -139,8 +139,8 @@ describe("credentials section", () => {
     expect(await navigator.clipboard.readText()).toBe("Winter2024!");
     expect(screen.queryByText("Winter2024!")).not.toBeInTheDocument();
 
-    await user.click(within(row).getByRole("button", { name: "Reveal secret" }));
-    expect(within(row).getByRole("button", { name: "Hide secret" })).toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: /^Reveal secret/ }));
+    expect(within(row).getByRole("button", { name: /^Hide secret/ })).toBeInTheDocument();
     expect(within(row).getByText("Winter2024!")).toBeInTheDocument();
   });
 
@@ -152,10 +152,10 @@ describe("credentials section", () => {
     expect(mask.textContent).toBe("••••••••");
     expect(mask.className).toMatch(/whitespace-nowrap/);
     expect(mask.className).not.toMatch(/break-all/);
-    const reveal = within(row).getByRole("button", { name: "Reveal secret" });
+    const reveal = within(row).getByRole("button", { name: /^Reveal secret/ });
     expect(within(row).queryByText("Reveal")).not.toBeInTheDocument();
     await user.click(reveal);
-    expect(within(row).getByRole("button", { name: "Hide secret" })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /^Hide secret/ })).toBeInTheDocument();
     expect(mask.textContent).toBe("Winter2024!");
   });
 

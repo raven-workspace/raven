@@ -38,7 +38,7 @@ export function CellPopover({ eid, cred, host, services, service, attempts, onCl
         {cellModes(cred, service, cell).map((mode) => {
           const latest = cell.byMode[mode];
           return (
-            <div key={mode} className="grid gap-1.5 border-b border-line pb-3 last:border-b-0 last:pb-0">
+            <div key={mode} className="grid gap-2 border-b border-line pb-3 last:border-b-0 last:pb-0">
               <h4 className={`m-0 ${labelClass}`}>{MODE_LABEL[mode]}</h4>
               {latest ? (
                 <p className="m-0 text-meta text-fg-2">
