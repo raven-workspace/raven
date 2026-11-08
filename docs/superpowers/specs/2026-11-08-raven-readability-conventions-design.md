@@ -75,7 +75,8 @@ The visual audit already *reports* most of these: 16,000 tiny-text findings and 
    - Log:
      - the "Oldest first ↑" sort button becomes a `SortAscending` or `SortDescending` icon button;
      - filter labels (Host, Kind, Ran on) become sentence-case and never wrap;
-     - the kind column is sentence case.
+     - the kind column is sentence case;
+     - **titles Raven generates** (auto-titles in capture, such as "Screenshot · <host>", and flag titles) never join values with "·", "—" or "→", and never repeat the host, which the row already shows as a chip. Titles stored from the old pwndash import keep their text, because stored entries are real data and are not rewritten. The owner can edit them.
    - Loading, error and empty states use the new components on every section.
    - Text glyphs used as icons (✓ ? ◐ ○ ▸ ▾ ⌄) become Phosphor icons.
    - Every `text-xs` and `text-[Npx]` becomes a type role. Every flex layout other than a single-line run becomes a grid.
@@ -131,6 +132,7 @@ The visual audit already *reports* most of these: 16,000 tiny-text findings and 
 - Dialogs close with an `X` icon that has a single hover state; no "esc" cap.
 - Side-by-side lanes share header rows.
 - The Log's sort control uses Phosphor `SortAscending` and `SortDescending`.
+- The no-joined-strings rule is enforced on titles Raven generates (the owner: imported "—" and "→" titles came from pwndash, "but we should enforce it").
 - Payloads fits are shown as a visible list (option B).
 - A right-click context menu is deferred.
 - Work happens on a branch.

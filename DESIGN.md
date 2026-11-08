@@ -349,7 +349,7 @@ One `CommandBlock` everywhere a command appears:
 ### Don't:
 - **Don't** use `flex-col`, `flex-1`, `flex-wrap`, `justify-between` or `grow` in feature code.
 - **Don't** use `text-xs` or arbitrary `text-[Npx]` sizes, or anything under 12px.
-- **Don't** join structured values with " · ". Middots are for prose only.
+- **Don't** join structured values with " · ", " — " or " → ", in the UI or in titles Raven generates. They're for prose only.
 - **Don't** make an action a grey text link.
 - **Don't** use amber at rest for an action, or more than one amber control at rest per screen.
 - **Don't** put Delete in a persistent header.
