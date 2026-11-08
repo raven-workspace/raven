@@ -1,9 +1,9 @@
-import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { PASTE_CONTEXTS } from "../../engines/payloads/context";
 import { cx } from "../../lib/cx";
 import { isDialogOpen, isTypingTarget, useKeydown } from "../../lib/keys";
-import { Input, Kbd, labelClass, Toggle } from "../../ui";
+import { HintLine, Input, Kbd, labelClass, Toggle } from "../../ui";
 import type { ChipPickerHandle } from "../arsenal/ChipPicker";
 import { HostChip } from "../arsenal/HostChip";
 import { useFillScope } from "../arsenal/useFillScope";
@@ -17,10 +17,10 @@ import { usePayloadsStore, type PayloadOverride } from "./usePayloadsStore";
 /** One labelled block of the left column, with the line saying where the value came from (amber when unknown). */
 function ReadItem({ label, why, unknown, children }: { label: string; why?: string | null; unknown?: string; children: ReactNode }) {
   return (
-    <div className="grid gap-1.5">
-      <span className="text-xs text-muted">{label}</span>
+    <div className="grid gap-2">
+      <span className="text-meta text-muted-2">{label}</span>
       {children}
-      {why ? <span className="text-xs text-muted">{why}</span> : unknown && <span className="text-xs text-warn">{unknown}</span>}
+      {why ? <span className="text-meta text-muted">{why}</span> : unknown && <span className="text-meta text-warn">{unknown}</span>}
     </div>
   );
 }
@@ -36,6 +36,10 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
   const listRef = useRef<HTMLDivElement>(null);
   const s = usePayloadSession({ engagementId, hostId: scopeHostId, bodyRef, lhostField: false });
   const { generator, fit, ranked, index, setIndex, def, built, guard, note, hostRef, osRef, contextRef, psRef, fieldEls } = s;
+  const hints = useMemo(
+    () => hintsFor(generator, "back", [{ keys: "P", label: "generators", priority: 4 }], ranked?.ordered),
+    [generator, ranked?.ordered],
+  );
   const override = (patch: PayloadOverride) => usePayloadsStore.getState().override(fit.hostKey, patch);
   const contexts = PASTE_CONTEXTS.filter((c) => !fit.os || c.os === "any" || c.os === fit.os);
   const exam = fit.engagement.kind === "exam-sim";
@@ -63,8 +67,8 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
   };
 
   return (
-    <main aria-label="Payloads" className="grid h-full min-h-0 grid-cols-[360px_minmax(0,1fr)]" onKeyDown={s.onKeyDown}>
-      <aside role="complementary" aria-label="Raven's read" className="grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden border-r border-line px-5 py-4">
+    <main aria-label="Payloads" data-hint-surface="" className="grid h-full min-h-0 grid-cols-[360px_minmax(0,1fr)]" onKeyDown={s.onKeyDown}>
+      <aside role="complementary" aria-label="Raven's read" className="grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden border-r border-line px-6 py-4">
         <h2 className={`${labelClass} m-0`}>Raven's read</h2>
         <ReadItem label="Target">
           {engagementId ? (
@@ -72,18 +76,18 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
               <HostChip ref={hostRef} hosts={fit.d.hosts} value={fit.host?.id ?? null} onChange={s.setHostId} align="start" className="max-w-80" />
             </div>
           ) : (
-            <span className="text-xs text-fg-2">No active engagement</span>
+            <span className="text-meta text-fg-2">No active engagement</span>
           )}
         </ReadItem>
         <ReadItem label="OS" why={fit.evidence.os} unknown="Not known: pick one">
-          <div ref={choiceGroup(osRef)} className="grid grid-cols-2 gap-1.5">
+          <div ref={choiceGroup(osRef)} className="grid grid-cols-2 gap-2">
             {(["linux", "windows"] as const).map((o) => (
               <Toggle key={o} on={fit.os === o} onChange={() => override({ os: o })} className="justify-center">{OS_LABEL[o]}</Toggle>
             ))}
           </div>
         </ReadItem>
         <ReadItem label="Where you paste it" why={fit.evidence.context} unknown="Not known: pick one">
-          <div ref={choiceGroup(contextRef)} className="grid grid-cols-2 gap-1.5">
+          <div ref={choiceGroup(contextRef)} className="grid grid-cols-2 gap-2">
             {contexts.map((c) => (
               <Toggle key={c.id} on={fit.context === c.id} onChange={() => override({ context: c.id })} className="min-w-0 justify-center">
                 <span className="min-w-0 truncate">{c.label}</span>
@@ -92,32 +96,32 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
           </div>
         </ReadItem>
         <div className="grid grid-cols-2 gap-3">
-          <label className="grid gap-1.5">
-            <span className="text-xs text-muted">LHOST</span>
+          <label className="grid gap-2">
+            <span className="text-meta text-muted-2">LHOST</span>
             <Input
-              mono aria-label="LHOST" className="h-7" ref={register("LHOST")} value={fit.lhostInput} placeholder={lhostPlaceholder(fit.settingsLhost)}
+              mono aria-label="LHOST" ref={register("LHOST")} value={fit.lhostInput} placeholder={lhostPlaceholder(fit.settingsLhost)}
               onChange={(e) => usePayloadsStore.getState().setLhost(e.target.value)}
             />
           </label>
-          <label className="grid gap-1.5">
-            <span className="text-xs text-muted">LPORT</span>
+          <label className="grid gap-2">
+            <span className="text-meta text-muted-2">LPORT</span>
             <Input
-              mono aria-label="LPORT" className="h-7" ref={register("LPORT")} value={fit.portInput} placeholder={fit.settingsPort ? `Settings: ${fit.settingsPort}` : "443"} inputMode="numeric"
+              mono aria-label="LPORT" ref={register("LPORT")} value={fit.portInput} placeholder={fit.settingsPort ? `Settings: ${fit.settingsPort}` : "443"} inputMode="numeric"
               onChange={(e) => override({ port: e.target.value.replace(/\D/g, "") })}
             />
           </label>
         </div>
         <ReadItem label="Exam rules">
-          <span className={cx("text-xs", exam ? "text-fg-2" : "text-muted")}>
+          <span className={cx("text-meta", exam ? "text-fg-2" : "text-muted")}>
             No meterpreter; msfvenom offers stageless shell_reverse_tcp only.{exam ? " Enforced: exam sim." : ""}
           </span>
         </ReadItem>
-        <div className="grid gap-1.5 border-t border-line pt-3">
+        <div className="grid gap-2 border-t border-line pt-3">
           <span className={labelClass}>Generator</span>
           <div
             id={GENERATOR_LIST_ID} ref={listRef} role="listbox" aria-label="Generator" tabIndex={0}
             aria-activedescendant={`payloads-gen-${generator}`} onKeyDown={onListKey}
-            className="grid gap-0.5 rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-accent"
+            className="grid gap-1 rounded-sm"
           >
             {GENERATORS.map((g, i) => (
               <div
@@ -127,12 +131,12 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
                   listRef.current?.focus();
                 }}
                 className={cx(
-                  "grid cursor-default grid-cols-[minmax(0,1fr)_auto] items-center rounded-sm px-2 py-1 text-[13px]",
-                  generator === g.id ? "bg-accent/10 text-accent shadow-[inset_2px_0_0_var(--accent)]" : "text-fg-2 hover:bg-surface-hi",
+                  "grid min-h-8 cursor-default grid-cols-[minmax(0,1fr)_max-content] items-center rounded-sm px-2 py-1 text-body",
+                  generator === g.id ? "bg-surface-hi text-accent shadow-[inset_2px_0_0_var(--accent)]" : "text-fg-2 hover:bg-surface-hi",
                 )}
               >
                 <span className="truncate">{g.label}</span>
-                <Kbd>⌥{i + 1}</Kbd>
+                <Kbd variant="inline">⌥{i + 1}</Kbd>
               </div>
             ))}
           </div>
@@ -140,37 +144,35 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
       </aside>
 
       <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]">
-        <div ref={bodyRef} tabIndex={-1} className="min-h-0 overflow-y-auto overflow-x-hidden px-6 py-5 outline-none">
+        <div ref={bodyRef} tabIndex={-1} className="min-h-0 overflow-y-auto overflow-x-hidden px-6 py-6 outline-none">
           {ranked && (
             <PayloadView
               fits={ranked.fits} misfits={ranked.misfits} index={index} onIndex={setIndex} ordered={ranked.ordered}
               built={built} fitsLine={s.fitsLine ? `Fits: ${s.fitsLine}` : null} pasteLabel={s.pasteLabel} numbered
               stale={def?.bakesIp ? fit.staleLines.get(def.id) : null} note={note} noteWarn={guard.hint !== null} fields={s.fields}
-              onCopy={() => void s.copy(false)} onCopyListener={s.copyListener}
+              onCopy={() => s.copy(false)} onCopyListener={s.copyListener}
             />
           )}
           {generator === "encode" && (
             <div className="grid content-start gap-3">
-              <label className="grid gap-1">
-                <span className="text-xs text-muted">PowerShell command to encode</span>
+              <label className="grid gap-2">
+                <span className="text-meta text-muted-2">PowerShell command to encode</span>
                 <Input mono ref={psRef} aria-label="PowerShell command" value={s.psCommand} onChange={(e) => s.setPsCommand(e.target.value)} />
               </label>
               {built && (
-                <PayloadBlock built={built} pasteLabel="Paste into cmd.exe or PowerShell" numbered note={note} noteWarn={guard.hint !== null} onCopy={() => void s.copy(false)} />
+                <PayloadBlock
+                  built={built} pasteLabel="Paste into cmd.exe or PowerShell" numbered note={note} noteWarn={guard.hint !== null}
+                  onCopy={() => s.copy(false)} onCopyListener={s.copyListener}
+                />
               )}
             </div>
           )}
           {generator === "transfer" && <TransferPanel engagementId={engagementId} hostId={s.hostId} fit={fit} focusToken={s.focusToken} autoFocus={!inGeneratorList()} />}
           {generator === "sql" && <SqlPanel fit={fit} onFocusToken={s.focusToken} />}
-          {s.status && <p role="alert" className="m-0 mt-2 text-xs text-warn">{s.status}</p>}
+          {s.status && <p role="alert" className="m-0 mt-2 text-meta text-warn">{s.status}</p>}
         </div>
-        <footer data-hint-line="" className="border-t border-line px-6 py-2 text-[11px] text-muted">
-          {hintsFor(generator, "back", [["P", "generators"]]).map(([key, label], i) => (
-            <span key={key}>
-              {i > 0 && " · "}
-              <span className="whitespace-nowrap"><Kbd>{key}</Kbd> {label}</span>
-            </span>
-          ))}
+        <footer className="grid border-t border-line px-6 py-2">
+          <HintLine hints={hints} ariaLabel="Payloads shortcuts" />
         </footer>
       </div>
     </main>

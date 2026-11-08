@@ -238,7 +238,18 @@ export const SCREENS: Screen[] = [
     id: "payloads-drawer-misfits", path: IIS, ready: "role=list[name=\"Don't fit here\"]",
     setup: async (page) => {
       await openPayloads(page);
-      await page.locator("aside[aria-label='Payloads']").getByRole("button", { name: "show" }).click();
+      await page.locator("aside[aria-label='Payloads']").getByRole("button", { name: /^Don't fit here \(\d+\)$/ }).click();
+    },
+  },
+  {
+    // Three fits in a PowerShell prompt (the owner's "where my shells went" case), the second one picked by click.
+    id: "payloads-drawer-fits", path: IIS, ready: "aside[aria-label='Payloads'] >> role=option[name=/powercat/][selected]",
+    setup: async (page) => {
+      await openPayloads(page);
+      const aside = page.locator("aside[aria-label='Payloads']");
+      await aside.getByRole("button", { name: /^Paste into: / }).click();
+      await aside.getByRole("option", { name: /^PowerShell prompt/ }).click();
+      await aside.getByRole("listbox", { name: "Fits" }).getByRole("option", { name: /powercat/ }).click();
     },
   },
   {

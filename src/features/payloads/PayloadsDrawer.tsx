@@ -1,8 +1,8 @@
 import { ArrowsOut } from "@phosphor-icons/react";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useMatch, useNavigate } from "react-router";
 import { isFreeKey, useKeydown } from "../../lib/keys";
-import { Button, Input, Kbd } from "../../ui";
+import { HintLine, IconButton, Input } from "../../ui";
 import { useFillScope } from "../arsenal/useFillScope";
 import { ContextChips } from "./ContextChips";
 import { PayloadBlock, PayloadView } from "./PayloadView";
@@ -16,60 +16,61 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
   const bodyRef = useRef<HTMLDivElement>(null);
   const s = usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, onEscape: () => usePayloadsStore.getState().close() });
   const { generator, fit, ranked, index, setIndex, def, built, guard, note, hostRef, osRef, contextRef, portRef, psRef } = s;
+  const hints = useMemo(() => hintsFor(generator, "close", [], ranked?.ordered), [generator, ranked?.ordered]);
 
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto]" onKeyDown={s.onKeyDown}>
-      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-line px-4 py-2.5">
+      <header className="grid grid-cols-[minmax(0,1fr)_28px] items-center gap-2 border-b border-line px-4 py-2">
         <div role="tablist" aria-label="Generator" className="grid grid-flow-col justify-start gap-1 overflow-hidden">
           {GENERATORS.map((g, i) => (
             <button
               key={g.id} type="button" role="tab" aria-selected={generator === g.id} title={`⌥${i + 1}`}
               onClick={() => usePayloadsStore.getState().setGenerator(g.id)}
-              className={`cursor-default whitespace-nowrap rounded-sm border px-2 py-0.5 text-xs ${generator === g.id ? "border-accent text-accent" : "border-line-2 text-fg-2 hover:bg-surface-hi"}`}
+              // An inset ring, not a border: six tabs at 13px fit the 560px drawer beside Full screen.
+              className={`h-7 cursor-default whitespace-nowrap rounded-sm px-2 text-meta ring-1 ring-inset ${generator === g.id ? "text-accent ring-accent" : "text-fg-2 ring-line-2 hover:bg-surface-hi"}`}
             >
               {g.label}
             </button>
           ))}
         </div>
-        <Button
-          size="sm" aria-label="Full screen" title="Full screen"
+        <IconButton
+          icon={ArrowsOut} label="Full screen"
           onClick={() => {
             usePayloadsStore.getState().close();
             void navigate("/payloads");
           }}
-        >
-          <ArrowsOut size={14} aria-hidden="true" />
-        </Button>
+        />
       </header>
       <ContextChips fit={fit} engagementId={engagementId} onHost={s.setHostId} hostRef={hostRef} osRef={osRef} contextRef={contextRef} portRef={portRef} />
-      <div ref={bodyRef} tabIndex={-1} className="min-h-0 overflow-y-auto overflow-x-hidden px-4 py-3 outline-none">
+      <div ref={bodyRef} tabIndex={-1} className="min-h-0 overflow-y-auto overflow-x-hidden px-4 py-4 outline-none">
         {ranked && (
           <PayloadView
             fits={ranked.fits} misfits={ranked.misfits} index={index} onIndex={setIndex} ordered={ranked.ordered}
             built={built} fitsLine={s.fitsLine ? `Fits: ${s.fitsLine}` : null} pasteLabel={s.pasteLabel}
             stale={def?.bakesIp ? fit.staleLines.get(def.id) : null} note={note} noteWarn={guard.hint !== null} fields={s.fields}
+            onCopy={() => s.copy(false)} onCopyListener={s.copyListener}
           />
         )}
         {generator === "encode" && (
           <div className="grid content-start gap-3">
-            <label className="grid gap-1">
-              <span className="text-xs text-muted">PowerShell command to encode</span>
+            <label className="grid gap-2">
+              <span className="text-meta text-muted-2">PowerShell command to encode</span>
               <Input mono ref={psRef} aria-label="PowerShell command" value={s.psCommand} onChange={(e) => s.setPsCommand(e.target.value)} />
             </label>
-            {built && <PayloadBlock built={built} pasteLabel="Paste into cmd.exe or PowerShell" note={note} noteWarn={guard.hint !== null} />}
+            {built && (
+              <PayloadBlock
+                built={built} pasteLabel="Paste into cmd.exe or PowerShell" note={note} noteWarn={guard.hint !== null}
+                onCopy={() => s.copy(false)} onCopyListener={s.copyListener}
+              />
+            )}
           </div>
         )}
         {generator === "transfer" && <TransferPanel engagementId={engagementId} hostId={s.hostId} fit={fit} lhostField focusToken={s.focusToken} />}
         {generator === "sql" && <SqlPanel fit={fit} onFocusToken={s.focusToken} lhostField />}
-        {s.status && <p role="alert" className="m-0 mt-2 text-xs text-warn">{s.status}</p>}
+        {s.status && <p role="alert" className="m-0 mt-2 text-meta text-warn">{s.status}</p>}
       </div>
-      <footer data-hint-line="" className="border-t border-line px-4 py-2 text-[11px] text-muted">
-        {hintsFor(generator, "close").map(([key, label], i) => (
-          <span key={key}>
-            {i > 0 && " · "}
-            <span className="whitespace-nowrap"><Kbd>{key}</Kbd> {label}</span>
-          </span>
-        ))}
+      <footer className="grid border-t border-line px-4 py-2">
+        <HintLine hints={hints} ariaLabel="Payloads shortcuts" />
       </footer>
     </div>
   );
@@ -109,7 +110,7 @@ export function PayloadsDrawer() {
 
   if (!open || onFull) return null;
   return (
-    <aside aria-label="Payloads" className="fixed inset-y-0 right-0 z-30 grid w-[560px] max-w-[70vw] border-l border-line-2 bg-surface text-fg-2">
+    <aside aria-label="Payloads" data-hint-surface="" className="fixed inset-y-0 right-0 z-30 grid w-[560px] max-w-[70vw] border-l border-line-2 bg-surface text-fg-2">
       <DrawerBody engagementId={engagementId} hostId={hostId} />
     </aside>
   );

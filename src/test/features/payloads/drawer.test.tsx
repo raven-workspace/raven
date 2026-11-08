@@ -102,7 +102,12 @@ beforeEach(() => {
 afterEach(() => setImported({ commands: [], cards: [] }));
 
 const drawer = () => screen.findByRole("complementary", { name: "Payloads" });
-const payloadText = (d: ReturnType<typeof within>) => d.getByLabelText("Payload").textContent;
+/** The hints the line shows (not the full `?` list), as "keys label". */
+const shownHints = (surface: HTMLElement) =>
+  [...within(surface).getByRole("group", { name: "Payloads shortcuts" }).querySelectorAll(":scope > [data-hint]")].map(
+    (u) => `${[...u.querySelectorAll("kbd")].map((k) => k.textContent).join(" ")} ${u.lastElementChild?.textContent}`,
+  );
+const payloadText = (d: ReturnType<typeof within>) => d.getByLabelText("Command: Payload").textContent;
 
 async function openOn(path: string, settings?: { attackerIp?: string }) {
   const user = userEvent.setup();
@@ -150,11 +155,14 @@ describe("Payloads drawer", () => {
     expect(d.getByRole("button", { name: "Paste into: Web shell ?cmd=" })).toBeInTheDocument();
     expect(d.getByText(/OS from nmap \(Microsoft IIS httpd 10\.0 on 80\)/)).toBeInTheDocument();
     expect(d.getByText(/paste context from your 14:02 log entry/)).toBeInTheDocument();
-    expect(d.getByLabelText("Listener")).toHaveTextContent(`penelope -O -p ${LPORT}`);
+    expect(d.getByLabelText("Command: Listener")).toHaveTextContent(`penelope -O -p ${LPORT}`);
     expect(payloadText(d)).toBe(buildPayload(def("ps-b64"), "webshell-param", { LHOST, LPORT }).text);
-    expect(d.getByText(/Also fits:/)).toHaveTextContent("nc.exe -e");
-    const hint = screen.getByRole("complementary", { name: "Payloads" }).querySelector("[data-hint-line]");
-    expect(hint?.textContent).toBe("↵ copy payload · ⌥L copy listener · ⇥ next fit · ⌥O OS · ⌥W where you paste · ⌥1-6 generator · ⌘↵ copy and log · Esc close");
+    expect(within(d.getByRole("listbox", { name: "Fits" })).getAllByRole("option")).toHaveLength(2);
+    // At most five hints, by priority: ↵ and Esc never drop, ⇥ next fit stays; the rest are under "?".
+    const aside = screen.getByRole("complementary", { name: "Payloads" });
+    expect(aside).toHaveAttribute("data-hint-surface");
+    expect(shownHints(aside)).toEqual(["↵ copy payload", "⌘↵ copy and log", "⌥L copy listener", "⇥ next fit", "Esc close"]);
+    expect(d.getByRole("button", { name: "All shortcuts" })).toBeInTheDocument();
   });
 
   it("↵ copies the payload, ⌥L copies the listener", async () => {
@@ -189,7 +197,7 @@ describe("Payloads drawer", () => {
     expect(payloadText(d)).toBe(buildPayload(def("ps-b64"), "webshell-param", { LHOST, LPORT }).text);
     expect(d.getByRole("button", { name: `Port: ${LPORT}` })).toBeInTheDocument();
     expect(d.getByText(/port from Settings/)).toBeInTheDocument();
-    expect(d.getByLabelText("Listener")).toHaveTextContent(`penelope -O -p ${LPORT}`);
+    expect(d.getByLabelText("Command: Listener")).toHaveTextContent(`penelope -O -p ${LPORT}`);
     // The field stays empty while you type a new value, with Settings' value as the hint.
     const field = d.getByRole("textbox", { name: "LHOST" });
     expect(field).toHaveValue("");
@@ -210,10 +218,10 @@ describe("Payloads drawer", () => {
     expect(body).not.toHaveFocus();
   });
 
-  it("⇥ from the body eventually reaches the misfit 'show' button and Full screen", async () => {
+  it("⇥ from the body eventually reaches the misfit disclosure and Full screen", async () => {
     const { user, d } = await openOn("/e/e1/h/h1");
     await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
-    const show = d.getByRole("button", { name: "show" });
+    const show = d.getByRole("button", { name: "Don't fit here (7)" });
     const full = d.getByRole("button", { name: "Full screen" });
     const reached = new Set<Element>();
     // Past the body's last control Tab runs on through the page behind (the drawer is not modal) and comes round.
@@ -263,13 +271,81 @@ describe("Payloads drawer", () => {
     expect(tab).not.toHaveFocus();
   });
 
-  it("misfit fold shows 'N don't fit here' and expands with reasons", async () => {
+  it("fits are a visible list near the top and clicking one selects it", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    const list = d.getByRole("listbox", { name: "Fits" });
+    const options = within(list).getAllByRole("option");
+    expect(options.map((o) => o.querySelector("[data-fit-name]")?.textContent)).toEqual(["PowerShell base64 (-e)", "nc.exe -e"]);
+    expect(options[0]).toHaveAttribute("aria-selected", "true");
+    // Each row says why it fits, in its own spans; the best one says so.
+    expect(within(options[0]!).getByText("Best fit")).toBeInTheDocument();
+    expect(within(options[0]!).getByText("uses PowerShell")).toBeInTheDocument();
+    expect(within(options[1]!).getByText("needs nc with -e")).toBeInTheDocument();
+    // Near the top: before the listener and the payload.
+    expect(list.compareDocumentPosition(d.getByLabelText("Command: Listener")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Hover only highlights; a click selects.
+    await user.hover(options[1]!);
+    expect(options[0]).toHaveAttribute("aria-selected", "true");
+    await user.click(options[1]!);
+    expect(options[1]).toHaveAttribute("aria-selected", "true");
+    expect(d.getByRole("heading", { name: "nc.exe -e" })).toBeInTheDocument();
+    expect(payloadText(d)).toBe(buildPayload(def("nc-exe"), "webshell-param", { LHOST, LPORT }).text);
+    // The list keeps focus: ↑ and ↓ move the selected fit, ↵ copies it.
+    expect(list).toHaveFocus();
+    await user.keyboard("{ArrowUp}");
+    expect(options[0]).toHaveAttribute("aria-selected", "true");
+    await navigator.clipboard.writeText("untouched");
+    await user.keyboard("{Enter}");
+    expect(await navigator.clipboard.readText()).toBe(buildPayload(def("ps-b64"), "webshell-param", { LHOST, LPORT }).text);
+  });
+
+  it("⇥ still cycles fits", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    await user.keyboard("{Tab}");
+    const options = within(d.getByRole("listbox", { name: "Fits" })).getAllByRole("option");
+    expect(options[1]).toHaveAttribute("aria-selected", "true");
+    expect(options[0]).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("don't-fit line is a disclosure with a count", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    const toggle = d.getByRole("button", { name: "Don't fit here (7)" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(d.queryByRole("list", { name: "Don't fit here" })).not.toBeInTheDocument();
+    toggle.focus();
+    await user.keyboard(" ");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(within(d.getByRole("list", { name: "Don't fit here" })).getAllByRole("listitem")).toHaveLength(7);
+  });
+
+  it("context pickers are reachable with Tab", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    d.getByRole("button", { name: "Full screen" }).focus();
+    const seen: (string | null)[] = [];
+    for (let i = 0; i < 4; i++) {
+      await user.keyboard("{Tab}");
+      seen.push(document.activeElement?.getAttribute("aria-label") ?? null);
+    }
+    expect(seen).toEqual(["Fill for host: zzweb01", "OS: Windows", "Paste into: Web shell ?cmd=", `Port: ${LPORT}`]);
+    // ⌥H, ⌥O and ⌥W still open them.
+    await user.keyboard("{Alt>}h{/Alt}");
+    expect(d.getByRole("button", { name: "Fill for host: zzweb01" })).toHaveAttribute("aria-expanded", "true");
+    await user.keyboard("{Escape}");
+    await user.keyboard("{Alt>}o{/Alt}");
+    expect(d.getByRole("button", { name: "OS: Windows" })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("the misfit disclosure shows 'Don't fit here (N)' and expands with reasons", async () => {
     const { user, d } = await openOn("/e/e1/h/h1");
     await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
     // Five Linux shells plus powercat and Nishang, which do not work in a web shell parameter.
-    expect(d.getByText(/7 don't fit here:/)).toBeInTheDocument();
+    expect(d.getByRole("button", { name: "Don't fit here (7)" })).toBeInTheDocument();
     expect(d.queryByText("Wrong OS (windows)")).not.toBeInTheDocument();
-    await user.click(d.getByRole("button", { name: "show" }));
+    await user.click(d.getByRole("button", { name: "Don't fit here (7)" }));
     const fold = within(d.getByRole("list", { name: "Don't fit here" }));
     expect(fold.getAllByRole("listitem")).toHaveLength(7);
     expect(fold.getByText("Bash /dev/tcp")).toBeInTheDocument();
@@ -305,8 +381,8 @@ describe("Payloads drawer", () => {
     const paste = d.getByRole("button", { name: "Paste into: not set" });
     for (const chip of [os, paste]) expect(chip.querySelector(".text-warn")).not.toBeNull();
     expect(d.getByRole("heading", { name: "Bash /dev/tcp" })).toBeInTheDocument();
-    expect(d.queryByText(/don't fit here/)).not.toBeInTheDocument();
-    expect(d.getByText(/Also fits:/)).toHaveTextContent("nc.exe -e");
+    expect(d.queryByRole("button", { name: /^Don't fit here/ })).not.toBeInTheDocument();
+    expect(within(d.getByRole("listbox", { name: "Fits" })).getByRole("option", { name: /nc\.exe -e/ })).toBeInTheDocument();
   });
 
   it("⌘↵ copies and logs with the payload id and the LHOST/LPORT used", async () => {
@@ -337,12 +413,12 @@ describe("Payloads drawer", () => {
     usePayloadsStore.setState({ overrides: { h1: { context: "sql-string", port: "80" } } });
     const { d } = await openOn("/e/e1/h/h1");
     expect(await d.findByRole("heading", { name: "Nishang cradle (served rev.ps1)" })).toBeInTheDocument();
-    expect(d.getByLabelText("Prepare on Kali").textContent).toBe(buildPayload(def("nishang-cradle"), "sql-string", { LHOST, LPORT: "80" }).prepare);
-    expect(d.getByLabelText("Prepare on Kali").textContent).toContain("python3 -m http.server 8000");
+    expect(d.getByLabelText("Command: Prepare on Kali").textContent).toBe(buildPayload(def("nishang-cradle"), "sql-string", { LHOST, LPORT: "80" }).prepare);
+    expect(d.getByLabelText("Command: Prepare on Kali").textContent).toContain("python3 -m http.server 8000");
     expect(payloadText(d)).toContain("http://192.0.2.10:8000/rev.ps1");
     expect(d.queryByRole("textbox", { name: "SERVE_PORT" })).not.toBeInTheDocument();
     expect(d.queryByRole("textbox", { name: "WEB_PORT" })).not.toBeInTheDocument();
-    expect(d.getByRole("button", { name: "Copy prepare on kali" })).toBeInTheDocument();
+    expect(d.getByRole("button", { name: "Copy prepare on Kali" })).toBeInTheDocument();
   });
 
   it("msfvenom opens on the ASPX for an IIS host and on the WAR for a Tomcat host", async () => {

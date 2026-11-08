@@ -713,7 +713,7 @@ test("payloads drawer and workbench: no pane scrolls sideways or clips focus", a
     // The long host name and "Paste into Web shell ?cmd=" share the chip row; every generator tab shows.
     await expect(aside.getByRole("button", { name: /^Paste into: Web shell \?cmd=/ })).toBeVisible();
     expect(await truncatedChips(aside), `chips cut short at ${width}`).toEqual([]);
-    await aside.getByRole("button", { name: "show" }).click();
+    await aside.getByRole("button", { name: /^Don't fit here \(\d+\)$/ }).click();
     await aside.getByRole("list", { name: "Don't fit here" }).waitFor();
     expect(await page.evaluate(ARSENAL_PANES(DRAWER)), `drawer panes at ${width}`).toEqual([]);
     expect(await page.evaluate(CLIPPED(DRAWER)), `drawer controls at ${width}`).toEqual([]);
@@ -743,7 +743,7 @@ test("payloads drawer and workbench: no pane scrolls sideways or clips focus", a
 test("long ps-b64 payload wraps inside its block", async ({ page }) => {
   /** The block's overflow and how far it sits outside its scroll pane (0 when inside). */
   const measure = (root: string) =>
-    page.locator(`${root} pre[aria-label='Payload']`).evaluate((el) => {
+    page.locator(`${root} pre[aria-label='Command: Payload']`).evaluate((el) => {
       let pane = el.parentElement;
       while (pane && !/auto|scroll/.test(getComputedStyle(pane).overflowY)) pane = pane.parentElement;
       const r = el.getBoundingClientRect();
@@ -771,7 +771,7 @@ test("P opens on the best fit for the IIS host and ↵ copies it", async ({ page
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const aside = await openIisDrawer(page, 1280);
   await expect(aside.getByText("Best fit", { exact: true })).toBeVisible();
-  const shown = await aside.locator("pre[aria-label='Payload']").textContent();
+  const shown = await aside.locator("pre[aria-label='Command: Payload']").textContent();
   expect(shown).toMatch(/^powershell/);
   // A sentinel, so a stale or empty clipboard cannot pass.
   await page.evaluate(() => navigator.clipboard.writeText("SENTINEL"));
@@ -782,8 +782,8 @@ test("P opens on the best fit for the IIS host and ↵ copies it", async ({ page
 test("the misfit fold lists nc.exe as failed here before", async ({ page }) => {
   const aside = await openIisDrawer(page, 1280);
   // Not among the fits the drawer offers.
-  await expect(aside.getByRole("button", { name: "nc.exe -e" })).toHaveCount(0);
-  const show = aside.getByRole("button", { name: "show" });
+  await expect(aside.getByRole("listbox", { name: "Fits" }).getByRole("option", { name: /nc\.exe -e/ })).toHaveCount(0);
+  const show = aside.getByRole("button", { name: /^Don't fit here \(\d+\)$/ });
   await expect(show).toHaveAttribute("aria-expanded", "false");
   await show.click();
   const row = aside.getByRole("list", { name: "Don't fit here" }).getByRole("listitem").filter({ hasText: "nc.exe -e" });

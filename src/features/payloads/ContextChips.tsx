@@ -20,9 +20,9 @@ function Chip({ name, value, options, current, onPick, ref }: {
 }
 
 /**
- * The drawer's context row: host (⌥H), OS (⌥O), where you paste it (⌥W), and the listener port, each overridable for
- * this host (session only), then one muted line saying where each value came from. Unknown values are empty and amber.
- * OS, paste context and port are Tab stops.
+ * The drawer's context pickers: host (⌥H) on its own line, then OS (⌥O), where you paste it (⌥W) and the listener port,
+ * each overridable for this host (session only), then one muted line saying where each value came from. Unknown
+ * values say an amber "Pick one". All four are Tab stops.
  */
 export function ContextChips({ fit, engagementId, onHost, hostRef, osRef, contextRef, portRef }: {
   fit: PayloadFit; engagementId: string; onHost: (id: string | null) => void;
@@ -40,13 +40,16 @@ export function ContextChips({ fit, engagementId, onHost, hostRef, osRef, contex
   ];
   return (
     <div className="grid gap-2 border-b border-line px-4 py-3">
-      {/* OS, paste context and port read in full; the host chip gives way (it truncates) when the row is short. */}
-      <div className="grid grid-cols-[minmax(0,max-content)_repeat(3,max-content)] justify-start gap-1">
+      {/* The host on its own line, so a long name reads instead of being squeezed to nothing beside the other three. */}
+      <div className="grid grid-cols-[minmax(0,max-content)] justify-start">
         {engagementId ? (
-          <HostChip ref={hostRef} hosts={fit.d.hosts} value={fit.host?.id ?? null} onChange={onHost} align="start" className="max-w-48" />
+          <HostChip ref={hostRef} hosts={fit.d.hosts} value={fit.host?.id ?? null} onChange={onHost} align="start" className="max-w-full" />
         ) : (
-          <span className="px-2 py-1 text-meta text-muted">no host</span>
+          <span className="py-1 text-meta text-muted">No host</span>
         )}
+      </div>
+      {/* OS, paste context and port read in full. */}
+      <div className="grid grid-cols-[repeat(3,max-content)] justify-start gap-2">
         <Chip
           ref={osRef} name="OS" value={os ? OS_LABEL[os] : null} current={os}
           options={(["linux", "windows"] as const).map((o) => ({ id: o, name: OS_LABEL[o] }))}
@@ -63,7 +66,10 @@ export function ContextChips({ fit, engagementId, onHost, hostRef, osRef, contex
           onPick={(id) => set({ port: id })}
         />
       </div>
-      <p className="m-0 px-2 text-meta text-muted">{why.join(" · ")}</p>
+      {/* One span per value, so each source reads on its own and a narrow drawer wraps between them first. */}
+      <p className="m-0 text-meta text-muted">
+        {why.map((w, i) => <span key={w} className={`inline-block ${i < why.length - 1 ? "mr-4" : ""}`}>{w}</span>)}
+      </p>
     </div>
   );
 }

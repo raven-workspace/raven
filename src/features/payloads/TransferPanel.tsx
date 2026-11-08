@@ -20,10 +20,10 @@ export function TransferPanel({ engagementId, hostId, fit, lhostField, focusToke
   return (
     <div className="grid content-start gap-4">
       {lhostField && (
-        <label className="grid grid-cols-[auto_minmax(0,14rem)] items-center gap-3">
-          <span className="font-mono text-xs text-muted">LHOST</span>
+        <label className="grid grid-cols-[max-content_minmax(0,14rem)] items-center gap-3">
+          <span className="font-mono text-code text-muted">LHOST</span>
           <Input
-            mono aria-label="LHOST" className="h-7" ref={lhostRef} value={fit.lhostInput} placeholder={lhostPlaceholder(fit.settingsLhost)}
+            mono aria-label="LHOST" ref={lhostRef} value={fit.lhostInput} placeholder={lhostPlaceholder(fit.settingsLhost)}
             onChange={(e) => usePayloadsStore.getState().setLhost(e.target.value)}
           />
         </label>
