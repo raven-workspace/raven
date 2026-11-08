@@ -252,13 +252,14 @@ export function collectLayoutIssues(): RawIssue[] {
     return box;
   };
   const OVERLAY = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [role="tooltip"], [data-radix-popper-content-wrapper]';
-  const isOverlay = (e: Element): boolean => {
-    if (e.closest(OVERLAY)) return true;
+  /** The overlay layer an element belongs to: its nearest ancestor-or-self that is fixed or sticky, or a dialog, menu,
+   *  listbox, tooltip or popper. Null for the page itself. */
+  const layerRoot = (e: Element): Element | null => {
     for (let cur: Element | null = e; cur && cur !== document.body; cur = cur.parentElement) {
-      const pos = style(cur).position;
-      if (pos === "fixed" || pos === "sticky") return true;
+      const pos: string = style(cur).position;
+      if (pos === "fixed" || pos === "sticky" || cur.matches(OVERLAY)) return cur;
     }
-    return false;
+    return null;
   };
   /** At (x, y): are both controls there, without a real overlay hiding the lower one? */
   const touches = (a: Element, b: Element, x: number, y: number): boolean => {
@@ -280,10 +281,14 @@ export function collectLayoutIssues(): RawIssue[] {
     if (unhit(a, ia) || unhit(b, ib)) return false;
     if (ia === -1 || ib === -1) return true;
     const [upper, lower, to] = ia < ib ? [a, b, ib] : [b, a, ia];
+    // Painted above the lower control: everything before it in the stack that is not part of either control and does not
+    // hold the lower one. It covers the lower control only if it belongs to an overlay layer the lower one is not in:
+    // inside one drawer, dialog, sticky header or fixed shell, controls are judged against each other as usual.
     const between = stack.slice(0, to).filter((e) => !upper.contains(e) && !lower.contains(e) && !e.contains(lower));
-    // The upper control's own overlay (it sits in a drawer or dialog the lower one is not in) covers the lower one.
-    const upperLayer = between.some((e) => e.contains(upper) && isOverlay(e));
-    return !upperLayer && !between.some((e) => !e.contains(upper) && isOverlay(e));
+    return !between.some((e) => {
+      const root = layerRoot(e);
+      return root !== null && !root.contains(lower);
+    });
   };
   const isHidden = (e: Element) => e.closest('[aria-hidden="true"], [inert]') !== null;
   for (let i = 0; i < interactive.length; i++) {

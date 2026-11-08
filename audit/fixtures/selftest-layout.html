@@ -22,6 +22,28 @@
   <div style="position:absolute;left:80px;top:0;width:300px;height:58px;background:#fff;z-index:2"><button style="position:absolute;left:10px;top:12px;width:120px;height:30px">In the modal</button></div>
 </section>
 
+<section data-case="overlap-in-fixed-dialog" data-expect="overlap" style="height:0;padding:0;border:0;margin:0">
+  <!-- A fixed panel in the top-right corner, clear of every other case. -->
+  <div role="dialog" aria-label="Drawer" style="position:fixed;left:540px;top:0;width:340px;height:110px;background:#eee;z-index:5">
+    <div style="position:relative;height:100px">
+      <div style="position:absolute;left:0;top:0;width:200px;height:80px;background:#ddd"><button style="position:absolute;left:60px;top:20px;width:120px;height:30px">Row one</button></div>
+      <div style="position:absolute;left:120px;top:10px;width:200px;height:80px;background:#ccc"><button style="position:absolute;left:10px;top:20px;width:120px;height:30px">Row two</button></div>
+    </div>
+  </div>
+</section>
+
+<section data-case="overlap-in-sticky-header" data-expect="overlap" style="height:100px">
+  <div style="height:90px;overflow:auto">
+    <header style="position:sticky;top:0;height:60px;background:#eee">
+      <div style="position:relative;height:60px">
+        <div style="position:absolute;left:0;top:0;width:200px;height:50px"><button style="position:absolute;left:60px;top:10px;width:120px;height:30px">Head one</button></div>
+        <div style="position:absolute;left:120px;top:5px;width:200px;height:50px"><button style="position:absolute;left:10px;top:10px;width:120px;height:30px">Head two</button></div>
+      </div>
+    </header>
+    <div style="height:300px"></div>
+  </div>
+</section>
+
 <section data-case="overlap-opaque-cards" data-expect="overlap" style="height:100px">
   <div style="position:absolute;left:0;top:0;width:300px;height:80px;background:#ddd"><button style="position:absolute;left:150px;top:20px;width:120px;height:30px">A action</button></div>
   <div style="position:absolute;left:200px;top:10px;width:300px;height:80px;background:#bbb"><button style="position:absolute;left:10px;top:20px;width:120px;height:30px">B action</button></div>
