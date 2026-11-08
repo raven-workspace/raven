@@ -12,7 +12,7 @@ function ChipText({ name, value }: { name: string; value: string | null }) {
   return (
     <>
       <span>{name}</span>
-      {value ? <b className="max-w-40 truncate font-medium text-fg-2">{value}</b> : <b className="font-medium text-warn">?</b>}
+      {value ? <b className="truncate font-medium text-fg-2">{value}</b> : <b className="font-medium text-warn">?</b>}
       <span aria-hidden="true" className="text-[10px] opacity-70">⌄</span>
     </>
   );
@@ -51,7 +51,8 @@ export function ContextChips({ fit, engagementId, onHost, hostRef, portRef }: {
   ];
   return (
     <div className="grid gap-1.5 border-b border-line px-4 py-2.5">
-      <div className="grid grid-cols-[repeat(4,auto)] justify-start gap-1">
+      {/* OS, paste context and port read in full; the host chip gives way (it truncates) when the row is short. */}
+      <div className="grid grid-cols-[minmax(0,max-content)_repeat(3,max-content)] justify-start gap-1">
         {engagementId ? (
           <HostChip ref={hostRef} hosts={fit.d.hosts} value={fit.host?.id ?? null} onChange={onHost} align="start" className="max-w-48" />
         ) : (
