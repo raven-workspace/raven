@@ -12,11 +12,11 @@ const FILL: Partial<Record<BoardColumn, 0 | 1 | 2 | 3 | 4>> = {
 };
 
 // Wedge paths on a 16px box centred at (8,8), radius 5.
-const WEDGE = [
+export const WEDGE = [
   "",
   "M8 8V3A5 5 0 0 1 13 8Z",
   "M8 8V3A5 5 0 0 1 8 13Z",
-  "M8 8V3A5 5 0 0 1 3 8Z",
+  "M8 8V3A5 5 0 1 1 3 8Z",
   "M8 3A5 5 0 1 1 8 13A5 5 0 1 1 8 3Z",
 ];
 

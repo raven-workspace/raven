@@ -129,7 +129,8 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
           link
         );
       })}
-      <h2 id={hostsId} className={cx(heading, "mt-6 mb-2 px-2", collapsed && "sr-only")}>
+      {collapsed && <div aria-hidden className="mx-2 my-2 h-px bg-line" />}
+      <h2 id={hostsId} className={cx(heading, collapsed ? "sr-only" : "mt-6 mb-2 px-2")}>
         Hosts
       </h2>
       {hosts.isSuccess && list.length === 0 && !collapsed && (
@@ -174,7 +175,7 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
           </NavLink>
         );
       })}
-      <div className={cx("grid", collapsed ? "justify-items-center" : "justify-items-start pl-1")}>
+      <div className={cx("grid", collapsed ? "justify-items-center" : "grid-cols-[16px] justify-items-center px-2")}>
         <IconButton icon={Plus} label="Add host" onClick={() => setAdding(true)} />
       </div>
       <HostDialog open={adding} onOpenChange={setAdding} engagementId={engagementId} />

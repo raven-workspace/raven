@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { WEDGE } from "../features/hosts/HostGlyph";
 import { Sidebar } from "../features/engagements/Sidebar";
 import { useSidebarStore } from "../features/engagements/useSidebarStore";
 import { LogEntryRow } from "../features/log/LogEntryRow";
@@ -118,6 +119,32 @@ describe("sidebar", () => {
     expect(a).toHaveClass("bg-surface-hi");
     expect(a.className).toContain("inset_2px_0_0_var(--accent)");
     expect(screen.getByText("web-").closest("a")).not.toHaveClass("bg-surface-hi");
+  });
+
+  it("expanded Add host sits in the same 16px glyph track as the host rows", async () => {
+    mount();
+    const row = (await screen.findByText("dc01")).closest("a")!;
+    const wrap = screen.getByRole("button", { name: "Add host" }).parentElement!.parentElement ?? screen.getByRole("button", { name: "Add host" }).parentElement!;
+    const cols = (el: Element) => /grid-cols-\[(16px)[_\]]/.exec(el.className)?.[1];
+    expect(cols(row)).toBe("16px");
+    const w = screen.getByRole("button", { name: "Add host" }).closest("div.grid")!;
+    expect(cols(w)).toBe("16px");
+    expect(w).toHaveClass("px-2");
+    expect(row).toHaveClass("px-2");
+    expect(wrap).toBeTruthy();
+  });
+
+  it("host glyph wedges: pinned paths, rising sweep", () => {
+    expect(WEDGE).toEqual([
+      "",
+      "M8 8V3A5 5 0 0 1 13 8Z",
+      "M8 8V3A5 5 0 0 1 8 13Z",
+      "M8 8V3A5 5 0 1 1 3 8Z",
+      "M8 3A5 5 0 1 1 8 13A5 5 0 1 1 8 3Z",
+    ]);
+    // 1/4, 1/2 and 3/4 sweeps: large-arc flag is 0 up to a half, 1 beyond it.
+    const large = WEDGE.slice(1, 4).map((d) => /A5 5 0 (\d) 1/.exec(d)![1]);
+    expect(large).toEqual(["0", "0", "1"]);
   });
 
   it("toggles with the button and with Cmd+B", async () => {
