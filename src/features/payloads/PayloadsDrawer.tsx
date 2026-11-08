@@ -60,7 +60,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
           </div>
         )}
         {generator === "transfer" && <TransferPanel engagementId={engagementId} hostId={s.hostId} fit={fit} lhostField focusToken={s.focusToken} />}
-        {generator === "sql" && <SqlPanel fit={fit} onFocusToken={s.focusToken} />}
+        {generator === "sql" && <SqlPanel fit={fit} onFocusToken={s.focusToken} lhostField />}
         {s.status && <p role="alert" className="m-0 mt-2 text-xs text-warn">{s.status}</p>}
       </div>
       <footer data-hint-line="" className="border-t border-line px-4 py-2 text-[11px] text-muted">

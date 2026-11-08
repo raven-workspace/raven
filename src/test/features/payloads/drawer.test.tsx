@@ -357,6 +357,26 @@ describe("Payloads drawer", () => {
     expect(await d.findByRole("heading", { name: "Java WAR (Tomcat on Windows)" })).toBeInTheDocument();
   });
 
+  it("SQL tab, blank LHOST: an exec payload's Copy jumps to an LHOST field on the SQL tab", async () => {
+    const mssql: Service = { ...IIS_SERVICE, id: "s3", hostId: "h2", port: 1433, nmapService: "ms-sql-s", nmapVersion: "Microsoft SQL Server 2019" };
+    m.servicesList.mockResolvedValue([IIS_SERVICE, mssql]);
+    m.servicesListEngagement.mockResolvedValue([IIS_SERVICE, mssql]);
+    m.logList.mockResolvedValue([]);
+    const { user, d } = await openOn("/e/e1/h/h2", { attackerIp: "" });
+    await user.keyboard("{Alt>}3{/Alt}");
+    const sql = within(await d.findByRole("region", { name: "SQL injection" }));
+    expect(sql.getByRole("button", { name: "MSSQL" })).toHaveAttribute("aria-pressed", "true");
+    await navigator.clipboard.writeText("untouched");
+    await user.click(sql.getByRole("button", { name: "Copy xp_cmdshell reverse shell" }));
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    const field = sql.getByRole("textbox", { name: "LHOST" });
+    expect(field).toHaveFocus();
+    await user.type(field, LHOST);
+    await user.click(sql.getByRole("button", { name: "Copy xp_cmdshell reverse shell" }));
+    expect(await navigator.clipboard.readText()).toContain("xp_cmdshell");
+    expect(usePayloadsStore.getState().lhost).toBe(LHOST);
+  });
+
   it("⌥1-6 switches the generator", async () => {
     const { user, d } = await openOn("/e/e1/h/h1");
     await d.findByRole("heading", { name: "PowerShell base64 (-e)" });

@@ -5,6 +5,7 @@ import { copyPlain } from "../../lib/clipboard";
 import { reportError } from "../../lib/lockSignal";
 import { Button, Input, labelClass, Toggle } from "../../ui";
 import type { PayloadFit } from "./usePayloadFit";
+import { lhostPlaceholder } from "./usePayloadSession";
 import { usePayloadsStore, type PayloadOverride } from "./usePayloadsStore";
 
 const ENGINE_LABEL: Record<SqlEngine, string> = { mssql: "MSSQL", mysql: "MySQL", postgres: "PostgreSQL", oracle: "Oracle", sqlite: "SQLite" };
@@ -26,8 +27,10 @@ const STEP_INPUT: Partial<Record<(typeof SQL_STEPS)[number]["id"], { key: CarryK
   tables: { key: "table", label: "Table", placeholder: "users" },
   columns: { key: "column", label: "Column", placeholder: "username,password" },
 };
-/** The input each unfilled token lives in, when it lives in this panel. */
-const TOKEN_INPUT: Record<string, string> = { COLUMNS: "columns", TABLE: "table", COLUMN: "column", PATH: "path" };
+/** The input each unfilled token lives in, when it lives in this panel (LHOST only with `lhostField`). */
+const TOKEN_INPUT: Record<string, string> = { COLUMNS: "columns", TABLE: "table", COLUMN: "column", PATH: "path", LHOST: "lhost" };
+/** Exec payloads that embed a reverse shell, so need LHOST. */
+const CALLS_BACK = new Set(["mssql-xp_cmdshell", "postgres-copy-program"]);
 /** Armed for one exact payload: any change to it (engine, point, values) needs a fresh confirm. */
 const armKey = (id: string, b: BuiltPayload) => `${id}|${b.text}`;
 const PRE = "m-0 max-h-40 overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-all rounded-sm border border-line bg-bg px-3 py-2 font-mono text-[12.5px] leading-relaxed text-fg";
@@ -80,10 +83,12 @@ function SqlPayload({ id, title, result, armedKey, onCopy }: {
  * inject, then the ten steps in order. Each step builds from what earlier steps found (column count, shown column,
  * table, column), typed once in the step that finds it. The engine's exec payloads follow. Choices stick per host.
  */
-export function SqlPanel({ fit, onFocusToken }: {
+export function SqlPanel({ fit, onFocusToken, lhostField }: {
   fit: PayloadFit;
   /** Focus the field for a token this panel has no input for (LHOST, LPORT): the view's own. */
   onFocusToken?: (token: string) => void;
+  /** Show an LHOST field above the run commands that call back (the drawer; the Workbench has one on the left). */
+  lhostField?: boolean;
 }) {
   const ov = usePayloadsStore((s) => s.overrides[fit.hostKey]);
   const set = (patch: PayloadOverride) => usePayloadsStore.getState().override(fit.hostKey, patch);
@@ -191,6 +196,15 @@ export function SqlPanel({ fit, onFocusToken }: {
 
       <section aria-label={`Run commands (${ENGINE_LABEL[engine]})`} className="grid gap-3 border-t border-line-2 pt-3">
         <h3 className={`${labelClass} m-0`}>Run commands · {ENGINE_LABEL[engine]}</h3>
+        {lhostField && !values.cmd && execIds.some((id) => CALLS_BACK.has(id)) && (
+          <label className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
+            <span className="font-mono text-xs text-fg-2">LHOST</span>
+            <Input
+              mono aria-label="LHOST" ref={(el) => setInput("lhost", el)} className="h-7" value={fit.lhostInput} placeholder={lhostPlaceholder(fit.settingsLhost)}
+              onChange={(e) => usePayloadsStore.getState().setLhost(e.target.value)}
+            />
+          </label>
+        )}
         {(engine === "mysql" || engine === "mssql") && (
           <label className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
             <span className="text-xs text-fg-2">File path</span>
