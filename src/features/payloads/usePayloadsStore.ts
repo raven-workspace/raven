@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { PasteContext } from "../../engines/payloads/context";
+import type { SqlEngine, SqlPoint, SqlValues } from "../../engines/payloads/sql";
 import type { GeneratorId } from "../../engines/payloads/types";
 import { useNotesStore } from "../notes/useNotesStore";
 
@@ -9,6 +10,10 @@ export interface PayloadOverride {
   context?: PasteContext;
   /** The listener port (LPORT). */
   port?: string;
+  /** The SQL panel's engine, injection point, and the values found along the way (column count, table...). */
+  sqlEngine?: SqlEngine;
+  sqlPoint?: SqlPoint;
+  sqlValues?: SqlValues;
 }
 
 interface PayloadsState {
@@ -21,6 +26,8 @@ interface PayloadsState {
   lhost: string | null;
   /** Opens or closes the drawer. Opening closes Notes (they share the right edge; the Arsenal store closes itself). */
   toggle: () => void;
+  /** Opens the drawer on one generator (the Arsenal's and ⌘K's way in). */
+  show: (g: GeneratorId) => void;
   close: () => void;
   setGenerator: (g: GeneratorId) => void;
   override: (hostId: string, patch: PayloadOverride) => void;
@@ -36,6 +43,10 @@ export const usePayloadsStore = create<PayloadsState>()((set, get) => ({
     if (get().open) return get().close();
     if (useNotesStore.getState().open) useNotesStore.getState().close();
     set({ open: true });
+  },
+  show: (generator) => {
+    if (useNotesStore.getState().open) useNotesStore.getState().close();
+    set({ open: true, generator });
   },
   close: () => set({ open: false }),
   setGenerator: (generator) => set({ generator }),

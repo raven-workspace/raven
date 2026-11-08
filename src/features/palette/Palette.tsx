@@ -23,6 +23,8 @@ import type { ResultGroup, ResultRow } from "../arsenal/ResultList";
 import { SearchBar } from "../arsenal/SearchBar";
 import { useFillBase } from "./fillData";
 import { GENERATORS } from "./generators";
+import type { GeneratorId } from "../../engines/payloads/types";
+import { usePayloadsStore } from "../payloads/usePayloadsStore";
 import { capGroups, searchPalette, withoutSecrets, type EngagementItem, type PaletteResult } from "./search";
 import { usePaletteStore } from "./usePaletteStore";
 import type { SuggestContext } from "./suggest";
@@ -137,10 +139,10 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
       return;
     }
     if (current?.type === "generator") {
-      // The generator lives in full-screen Arsenal, for the engagement and host in view here.
-      if (engagementId) useLastEngagementStore.setState({ engagementId, hostId: host?.id ?? null });
-      void navigate(`/arsenal?generator=${encodeURIComponent(current.id)}`);
+      // Generators live in Payloads: its drawer opens on this one (on /payloads the Workbench switches to it).
       onClose();
+      // Generator hits come from GENERATORS, whose ids are Payloads generator ids.
+      usePayloadsStore.getState().show(current.id as GeneratorId);
       return;
     }
     if (!filled || current?.type !== "command") return;

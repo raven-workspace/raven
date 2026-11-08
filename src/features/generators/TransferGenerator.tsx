@@ -44,7 +44,11 @@ const saveDir = (os: Os, dir: string) => {
  * as a copy-ready pair. The methods come from the transfer cards in the library (imported cards win), so editing a
  * card changes the generator. ⌘↵ copies and logs the target half against the host.
  */
-export function TransferGenerator({ engagementId, hostId: viewHostId }: { engagementId: string; hostId: string | null }) {
+export function TransferGenerator({ engagementId, hostId: viewHostId, autoFocus = true }: {
+  engagementId: string; hostId: string | null;
+  /** Start in the File field (off while you move through the Workbench's generator list). */
+  autoFocus?: boolean;
+}) {
   const qc = useQueryClient();
   const version = useLibraryVersion();
   // The host is the screen's own (the browse bar's HostChip); there is no second host control here.
@@ -60,7 +64,10 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
   const [status, setStatus] = useState<string>();
   const fileRef = useRef<HTMLInputElement>(null);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  useEffect(() => fileRef.current?.focus(), []);
+  const [startFocused] = useState(autoFocus);
+  useEffect(() => {
+    if (startFocused) fileRef.current?.focus();
+  }, [startFocused]);
 
   // getLibrary()/getCards() change only with the library version.
   /* eslint-disable react-hooks/exhaustive-deps */

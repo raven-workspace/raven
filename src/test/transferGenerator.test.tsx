@@ -93,7 +93,7 @@ const generator = async () => {
 describe("Transfer a file", () => {
   it("picking winPEASx64_ofs.exe for MS02 fills serve and fetch with LHOST, FILE and DEST_DIR", async () => {
     const user = userEvent.setup();
-    mount("/arsenal?generator=transfer");
+    mount("/payloads?generator=transfer");
     const g = within(await generator());
     await user.type(g.getByRole("combobox", { name: "Value for FILE" }), "winPEASx64_ofs.exe");
     expect(g.getByText("1 · On Kali")).toBeInTheDocument();
@@ -119,7 +119,7 @@ describe("Transfer a file", () => {
       windowsToolsDir: "/opt/win tools", linuxToolsDir: "/opt/lin", fieldManualPath: "~/fm", nvdKeySet: false,
     });
     const user = userEvent.setup();
-    mount("/arsenal?generator=transfer");
+    mount("/payloads?generator=transfer");
     const g = within(await generator());
     await user.type(g.getByRole("combobox", { name: "Value for FILE" }), "winPEASx64_ofs.exe");
     expect(await pre(g, "cd '/opt/win tools' && python3 -m http.server 80")).toBeInTheDocument();
@@ -127,7 +127,7 @@ describe("Transfer a file", () => {
 
   it("an unstaged tool shows where to get it", async () => {
     const user = userEvent.setup();
-    mount("/arsenal?generator=transfer");
+    mount("/payloads?generator=transfer");
     const g = within(await generator());
     await user.click(await g.findByRole("combobox", { name: "Value for FILE" }));
     const list = await g.findByRole("listbox", { name: "Suggestions for FILE" });
@@ -142,20 +142,20 @@ describe("Transfer a file", () => {
     const certutil = getLibrary().find((c) => c.title === "Download with certutil" && c.cardId === "shell-file-transfer-to-windows")!;
     setImported({ commands: [{ ...certutil, exam: "banned" }], cards: [], toolkit: TOOLKIT });
     const user = userEvent.setup();
-    const { unmount } = mount("/arsenal?generator=transfer", EXAM);
+    const { unmount } = mount("/payloads?generator=transfer", EXAM);
     const g = within(await generator());
     expect(await g.findByRole("tab", { name: "bitsadmin" })).toBeInTheDocument();
     expect(g.queryByRole("tab", { name: "certutil" })).not.toBeInTheDocument();
     unmount();
     // In a lab the same method is offered.
-    mount("/arsenal?generator=transfer");
+    mount("/payloads?generator=transfer");
     expect(await within(await generator()).findByRole("tab", { name: "certutil" })).toBeInTheDocument();
     void user;
   });
 
   it("⌘↵ copies and logs the fetch against the host", async () => {
     const user = userEvent.setup();
-    mount("/arsenal?generator=transfer");
+    mount("/payloads?generator=transfer");
     const g = within(await generator());
     await user.type(await g.findByRole("combobox", { name: "Value for FILE" }), "nc.exe");
     await user.keyboard("{Meta>}{Enter}{/Meta}");
@@ -166,7 +166,7 @@ describe("Transfer a file", () => {
     });
   });
 
-  it("the palette opens the generator in Arsenal", async () => {
+  it("the palette opens the generator in the Payloads drawer", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/ms02");
     await screen.findByRole("tab", { name: "Next" });
@@ -180,8 +180,8 @@ describe("Transfer a file", () => {
 });
 
 describe("Transfer a file: layout", () => {
-  it("has no host control of its own: the browse chip is the one source", async () => {
-    mount("/arsenal?generator=transfer");
+  it("has no host control of its own: the Workbench chip is the one source", async () => {
+    mount("/payloads?generator=transfer");
     const g = within(await generator());
     expect(g.queryByRole("combobox", { name: "To host" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /^Fill for host/ })).toHaveLength(1);
@@ -189,7 +189,7 @@ describe("Transfer a file: layout", () => {
 
   it("footnote never reads 'the the'", async () => {
     useLastEngagementStore.setState({ engagementId: "e1", hostId: null });
-    mount("/arsenal?generator=transfer");
+    mount("/payloads?generator=transfer");
     const g = within(await screen.findByRole("region", { name: "Transfer a file" }));
     const note = await g.findByText(/copies the .* half/);
     expect(note.textContent).toMatch(/copies the target half/);
@@ -197,13 +197,13 @@ describe("Transfer a file: layout", () => {
   });
 
   it("with a host the footnote names it", async () => {
-    mount("/arsenal?generator=transfer");
+    mount("/payloads?generator=transfer");
     const g = within(await generator());
     expect((await g.findByText(/copies the .* half/)).textContent).toMatch(/copies the MS02 half/);
   });
 
   it("method pills are grouped under HTTP and Other with about 6 per group (the Windows HTTP group has 7)", async () => {
-    mount("/arsenal?generator=transfer");
+    mount("/payloads?generator=transfer");
     const g = within(await generator());
     await g.findAllByRole("tab");
     const groups = g.getAllByRole("tablist");
@@ -218,7 +218,7 @@ describe("Transfer a file: layout", () => {
 describe("Transfer a file: keyboard", () => {
   it("focuses the File field and keeps the method tabs to one Tab stop with arrow keys", async () => {
     const user = userEvent.setup();
-    mount("/arsenal?generator=transfer");
+    mount("/payloads?generator=transfer");
     const g = within(await generator());
     await vi.waitFor(() => expect(g.getByRole("combobox", { name: "Value for FILE" })).toHaveFocus());
     const tabs = g.getAllByRole("tab");

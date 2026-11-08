@@ -250,10 +250,14 @@ describe("three-pane browse", () => {
     expect(categories().getByRole("button", { name: /Active Directory/ })).toHaveFocus();
   });
 
-  it("the transfer generator opens in pane 3", async () => {
-    nav.current = "/arsenal?generator=transfer";
+  it("the transfer generator is a link to Payloads", async () => {
+    const user = userEvent.setup();
     mount();
-    expect(await screen.findByRole("region", { name: "Transfer a file" })).toBeInTheDocument();
-    expect(await screen.findByRole("option", { name: /Transfer a file/ })).toHaveAttribute("aria-selected", "true");
+    await user.type(await screen.findByRole("textbox", { name: "Search the Arsenal" }), "transfer a file");
+    await user.keyboard("{ArrowDown}");
+    // Selected, pane 3 points to Payloads; the generator itself is no longer rendered here.
+    const link = await screen.findByRole("link", { name: /Open in Payloads/ });
+    expect(link).toHaveAttribute("href", "/payloads?generator=transfer");
+    expect(screen.queryByRole("region", { name: "Transfer a file" })).not.toBeInTheDocument();
   });
 });

@@ -49,7 +49,9 @@ export function usePayloadFit(engagementId: string, hostId: string | null) {
     os: ov?.os ? "set by you" : (inferred.evidence.os ?? null),
     context: ov?.context ? "set by you" : (inferred.evidence.prompt ?? inferred.evidence.webShellUrl ?? null),
     port: ov?.port ? "set by you" : settingsPort ? "from Settings" : null,
+    dbEngine: ov?.sqlEngine ? "set by you" : (inferred.evidence.dbEngine ?? null),
   };
+  const dbEngine = ov?.sqlEngine ?? inferred.situation.dbEngine;
 
   const ranked = useMemo<Record<"shell" | "msfvenom" | "upgrade", Ranked>>(() => ({
     shell: { ...rankPayloads(REVERSE_SHELLS, situation, context), ordered: false },
@@ -71,7 +73,7 @@ export function usePayloadFit(engagementId: string, hostId: string | null) {
     return out;
   }, [d.log, lhost, port]);
 
-  return { d, host: host ?? null, hostKey, engagement, os, context, port, settingsPort, lhost, evidence, ranked, build, staleLines };
+  return { d, host: host ?? null, hostKey, engagement, os, context, dbEngine, port, settingsPort, lhost, evidence, ranked, build, staleLines };
 }
 
 export type PayloadFit = ReturnType<typeof usePayloadFit>;

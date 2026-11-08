@@ -18,7 +18,7 @@ import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 
 vi.mock("../lib/api");
-vi.mock("../features/palette/generators", () => ({ GENERATORS: [{ id: "g-zz", title: "Zzgen reverse shell", category: "Shells-and-Transfers" }] }));
+vi.mock("../features/palette/generators", () => ({ GENERATORS: [{ id: "shell", title: "Zzgen reverse shell", category: "Shells-and-Transfers" }] }));
 vi.mock("../features/checklist/ticks", async (orig) => ({
   ...(await orig<typeof import("../features/checklist/ticks")>()),
   resyncBoards: vi.fn().mockResolvedValue(undefined),
@@ -780,7 +780,7 @@ describe("drawer list grouped by category (U1)", () => {
     expect(d.getByRole("listbox", { name: "Arsenal results" })).toBeInTheDocument();
   });
 
-  it("Enter on a generator opens it in full-screen Arsenal", async () => {
+  it("Enter on a generator opens it in the Payloads drawer", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
     await screen.findByRole("tab", { name: "Next" });
@@ -789,7 +789,8 @@ describe("drawer list grouped by category (U1)", () => {
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zzgen");
     await d.findByRole("option", { name: /Zzgen reverse shell/ });
     await user.keyboard("{Enter}");
-    expect(await screen.findByRole("navigation", { name: "Categories" })).toBeInTheDocument();
+    const p = within(await screen.findByRole("complementary", { name: "Payloads" }));
+    expect(p.getByRole("tab", { name: "Reverse shell" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByRole("complementary", { name: "Arsenal" })).not.toBeInTheDocument();
   });
 

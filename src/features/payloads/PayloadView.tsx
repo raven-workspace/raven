@@ -1,15 +1,27 @@
 import type { ReactNode } from "react";
 import type { BuiltPayload, PayloadDef } from "../../engines/payloads/types";
-import { labelClass } from "../../ui";
+import { Button, labelClass } from "../../ui";
 import { MisfitFold } from "./MisfitFold";
 
 const PRE = "m-0 max-h-48 overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-all rounded-sm border border-line bg-bg px-3 py-2 font-mono text-[12.5px] leading-relaxed text-fg";
+
+/** A copy block with its Copy button beside it, when there is one. */
+function CopyRow({ label, text, onCopy }: { label: string; text: string; onCopy?: () => void }) {
+  const pre = <pre aria-label={label} className={PRE}>{text}</pre>;
+  if (!onCopy) return pre;
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
+      {pre}
+      <Button size="sm" aria-label={`Copy ${label.toLowerCase()}`} onClick={onCopy}>Copy</Button>
+    </div>
+  );
+}
 
 /**
  * One built payload: the listener, an amber stale line when a baked file is out of date, the payload to paste, a note
  * from the copy guard, what each part does, and the def's notes. Shared by every generator that builds a payload.
  */
-export function PayloadBlock({ built, pasteLabel, stale, note, noteWarn, fields }: {
+export function PayloadBlock({ built, pasteLabel, stale, note, noteWarn, fields, numbered, onCopy, onCopyListener }: {
   built: BuiltPayload; pasteLabel: string;
   /** `Built at … with …; rebuild it`, for a baked payload whose LHOST or LPORT has changed since. */
   stale?: string | null;
@@ -17,20 +29,25 @@ export function PayloadBlock({ built, pasteLabel, stale, note, noteWarn, fields 
   note?: string | null; noteWarn?: boolean;
   /** Fill fields (LHOST and the payload's other placeholders), above the copy blocks. */
   fields?: ReactNode;
+  /** Number the copy blocks as steps ("1 · Listener on Kali", "2 · Paste into …"), as the Workbench does. */
+  numbered?: boolean;
+  /** Copy buttons beside the blocks (the Workbench); the drawer copies with ↵ and ⌥L only. */
+  onCopy?: () => void; onCopyListener?: () => void;
 }) {
+  const pasteHeading = numbered ? `${built.listener ? 2 : 1} · ${pasteLabel}` : pasteLabel;
   return (
     <div className="grid gap-3">
       {fields}
       {built.listener && (
         <section className="grid gap-1">
-          <h3 className={`${labelClass} m-0`}>Listener</h3>
-          <pre aria-label="Listener" className={PRE}>{built.listener}</pre>
+          <h3 className={`${labelClass} m-0`}>{numbered ? "1 · Listener on Kali" : "Listener"}</h3>
+          <CopyRow label="Listener" text={built.listener} onCopy={onCopyListener} />
         </section>
       )}
       <section className="grid gap-1">
         {stale && <p className="m-0 text-xs text-warn">{stale}</p>}
-        <h3 className={`${labelClass} m-0`}>{pasteLabel}</h3>
-        <pre aria-label="Payload" className={PRE}>{built.text}</pre>
+        <h3 className={`${labelClass} m-0`}>{pasteHeading}</h3>
+        <CopyRow label="Payload" text={built.text} onCopy={onCopy} />
         {note && <p role="status" className={`m-0 text-xs ${noteWarn ? "text-warn" : "text-muted"}`}>{note}</p>}
       </section>
       {built.parts.length > 0 && (
@@ -59,7 +76,7 @@ export function PayloadBlock({ built, pasteLabel, stale, note, noteWarn, fields 
  * The shared body of the drawer and the Workbench: the payload in view (best fit first), its block, the other fits one
  * ⇥ away, and the misfits folded with their reasons. `ordered` lists steps in order instead of by fit.
  */
-export function PayloadView({ fits, misfits, index, onIndex, ordered, built, fitsLine, pasteLabel, stale, note, noteWarn, fields }: {
+export function PayloadView({ fits, misfits, index, onIndex, ordered, built, fitsLine, ...block }: {
   fits: PayloadDef[]; misfits: { def: PayloadDef; reason: string }[];
   index: number; onIndex: (i: number) => void; ordered?: boolean;
   /** The payload at `index`, built for the current values. */
@@ -78,7 +95,7 @@ export function PayloadView({ fits, misfits, index, onIndex, ordered, built, fit
             <h2 className="m-0 text-[17px] font-semibold text-fg">{current.title}</h2>
             {fitsLine && <span className="text-xs text-accent">{fitsLine}</span>}
           </header>
-          <PayloadBlock built={built} pasteLabel={pasteLabel} stale={stale} note={note} noteWarn={noteWarn} fields={fields} />
+          <PayloadBlock built={built} {...block} />
         </>
       ) : (
         <p className="m-0 text-xs text-muted">Nothing fits what is known about this host. Check the reasons below, or change OS or paste context above.</p>

@@ -179,6 +179,16 @@ describe("Payloads drawer", () => {
     expect(d.getByRole("heading", { name: "PowerShell base64 (-e)" })).toBeInTheDocument();
   });
 
+  it("⇥ on a button moves focus, not the fit", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    const tab = d.getByRole("tab", { name: "Reverse shell" });
+    tab.focus();
+    await user.keyboard("{Tab}");
+    expect(d.getByRole("heading", { name: "PowerShell base64 (-e)" })).toBeInTheDocument();
+    expect(tab).not.toHaveFocus();
+  });
+
   it("misfit fold shows 'N don't fit here' and expands with reasons", async () => {
     const { user, d } = await openOn("/e/e1/h/h1");
     await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
