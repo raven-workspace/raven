@@ -7,8 +7,10 @@ import type { Service } from "../../types/service";
 
 export interface Suggestion {
   value: string;
-  /** Where it comes from: a host name, "DC", "staged". */
+  /** Where it comes from: a host name, a domain, "staged". */
   hint?: string;
+  /** The host's role, shown after the hint as its own element ("DC", "AD"). */
+  role?: string;
 }
 
 export interface SuggestContext {
@@ -65,8 +67,8 @@ export function tokenSuggestions(token: string, ctx: SuggestContext): Suggestion
     const dc = dcForFill(ctx.hosts, servicesByHost);
     const ad = adHosts(ctx.hosts, servicesByHost);
     out = [
-      ...(dc?.ip?.trim() ? [{ value: dc.ip.trim(), hint: `${dc.name} · DC` }] : []),
-      ...ad.filter((h) => h.ip?.trim()).map((h) => ({ value: h.ip!.trim(), hint: `${h.name} · AD` })),
+      ...(dc?.ip?.trim() ? [{ value: dc.ip.trim(), hint: dc.name, role: "DC" }] : []),
+      ...ad.filter((h) => h.ip?.trim()).map((h) => ({ value: h.ip!.trim(), hint: h.name, role: "AD" })),
       ...hostIps(),
     ];
   } else if (IP_TOKENS.has(t) || t.endsWith("_IP")) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { breaks } from "./conventionsRules";
+import { breaks, files } from "./conventionsRules";
 
 const F = "src/features/x/X.tsx";
 const U = "src/ui/X.tsx";
@@ -183,5 +183,45 @@ describe("off-scale-spacing matcher", () => {
   it("allows only the documented 6px hint gap, only in HintLine", () => {
     expect(bad('<a className="gap-[6px]" />', "src/ui/HintLine.tsx")).toBe(false);
     expect(bad('<a className="gap-x-5" />', "src/ui/HintLine.tsx")).toBe(true);
+  });
+});
+
+describe("scan scope", () => {
+  it("covers .ts and .tsx under features and ui, App.tsx, and engines", () => {
+    expect(files).toContain("src/App.tsx");
+    expect(files).toContain("src/features/palette/suggest.ts");
+    expect(files).toContain("src/ui/controlStyles.ts");
+    expect(files).toContain("src/engines/stuck/engagementStuck.ts");
+    expect(files.filter((f) => f.startsWith("src/engines/") && !f.endsWith(".ts"))).toEqual([]);
+  });
+  it("tiny-type catches rem and em arbitrary sizes", () => {
+    for (const c of ["text-[0.7rem]", "text-[.75em]", "text-[1rem]", "md:text-[0.6875rem]"])
+      expect(breaks("tiny-type", U, `<i className="${c}" />`), c).toBe(true);
+  });
+  it("joined-strings sees UI strings in .ts files", () => {
+    expect(breaks("joined-strings", "src/features/x/x.ts", "const s = { hint: `${dc.name} · DC` };")).toBe(true);
+    expect(breaks("joined-strings", "src/ui/x.ts", 'export const T = "Close — Esc";')).toBe(true);
+  });
+});
+
+describe("joined-strings in engines (narrow)", () => {
+  const E = "src/engines/x/x.ts";
+  it("flags a separator joined to an interpolation", () => {
+    expect(breaks("joined-strings", E, "const t = `${host} — no foothold`;")).toBe(true);
+    expect(breaks("joined-strings", E, "const t = `${a} · ${b}`;")).toBe(true);
+    expect(breaks("joined-strings", E, "const t = `from → ${b}`;")).toBe(true);
+  });
+  it("leaves prose fields, comments and separators away from interpolations alone", () => {
+    expect(breaks("joined-strings", E, 'const p = { text: "Note your tun0 IP → this is `{LHOST}` — always" };')).toBe(false);
+    expect(breaks("joined-strings", E, "// `${a} — ${b}` was the old title\nconst a = 1;")).toBe(false);
+    expect(breaks("joined-strings", E, "const w = `${n} hosts detected — primary target ports mapped.`;")).toBe(false);
+  });
+  it("exempts the import writers: stored titles and note bodies stay as they were", () => {
+    expect(breaks("joined-strings", "src/engines/import/plan.ts", "const t = `${a} · ${b}`;")).toBe(false);
+    expect(breaks("joined-strings", "src/engines/import/loot.ts", "const t = `${a} · ${b}`;")).toBe(false);
+  });
+  it("applies no markup rules to engines", () => {
+    for (const r of ["tiny-type", "feature-flex", "hand-hint", "esc-close", "unknown-color", "off-scale-spacing"] as const)
+      expect(breaks(r, E, 'const c = "text-xs flex bg-[#fff] p-1.5"; <div><Kbd>a</Kbd><Kbd>esc</Kbd></div>'), r).toBe(false);
   });
 });

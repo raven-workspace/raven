@@ -4,21 +4,52 @@ import type { RuleId } from "./conventionsPending";
 
 export const ROOT = join(__dirname, "..", "..");
 
-function walk(dir: string, out: string[] = []): string[] {
+function walk(dir: string, exts: RegExp, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
-    if (statSync(p).isDirectory()) walk(p, out);
-    else if (p.endsWith(".tsx")) out.push(p);
+    if (statSync(p).isDirectory()) walk(p, exts, out);
+    else if (exts.test(p) && !p.endsWith(".d.ts")) out.push(p);
   }
   return out;
 }
 
+/**
+ * Every file the rules read: .ts and .tsx under src/features and src/ui (constants and builders render too), the app
+ * shell, and src/engines (.ts), which only the narrow engine joined-strings check applies to.
+ */
 export const files = [
-  ...walk(join(ROOT, "src/features")),
-  ...walk(join(ROOT, "src/ui")),
+  ...walk(join(ROOT, "src/features"), /\.tsx?$/),
+  ...walk(join(ROOT, "src/ui"), /\.tsx?$/),
+  join(ROOT, "src/App.tsx"),
+  ...walk(join(ROOT, "src/engines"), /\.ts$/),
 ]
   .map((p) => relative(ROOT, p))
   .sort();
+
+const isEngine = (file: string) => file.startsWith("src/engines/");
+
+/**
+ * Engine files the narrow joined-strings check skips, and why. They write stored data, never UI labels: an imported
+ * flag keeps its old "local.txt · host" title and imported notes keep their "- 80: status — note" lines (the stored data
+ * is real and stays as it was).
+ */
+const ENGINE_JOIN_ALLOWED: Record<string, string> = {
+  "src/engines/import/plan.ts": "imported flag titles and note bodies keep their stored form",
+  "src/engines/import/loot.ts": "imported loot becomes a note section in its stored form",
+};
+
+/**
+ * Engines hold prose (field manual, playbook text) where a dash or arrow is punctuation. Only a separator touching a
+ * `${…}` interpolation in a template literal is a joined structured value (`${host} — no foothold`).
+ */
+function engineJoined(file: string, src: string): boolean {
+  if (file in ENGINE_JOIN_ALLOWED) return false;
+  const code = stripComments(src);
+  for (const m of code.matchAll(/`(?:[^`\\]|\\.)*`/g)) {
+    if (/\}\s+(·|—|→)\s|\s(·|—|→)\s+\$\{/.test(m[0])) return true;
+  }
+  return false;
+}
 
 /** Drops block and line comments (a `//` right after `:` is a URL, so it stays). */
 const stripComments = (s: string) =>
@@ -332,9 +363,11 @@ function offScaleSpacing(file: string, src: string): string[] {
 }
 
 export function breaks(rule: RuleId, file: string, src: string): boolean {
+  // Engines render no markup: only the narrow joined-strings check reads them.
+  if (isEngine(file)) return rule === "joined-strings" && engineJoined(file, src);
   switch (rule) {
     case "tiny-type":
-      return /\btext-xs\b|text-\[\d+(\.\d+)?px\]/.test(stripComments(src));
+      return /\btext-xs\b|text-\[(\d+(\.\d+)?|\.\d+)(px|r?em)\]/.test(stripComments(src));
     case "feature-flex":
       return (
         file.startsWith("src/features/") &&
