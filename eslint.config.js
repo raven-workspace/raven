@@ -12,4 +12,22 @@ export default tseslint.config(
     plugins: { "react-hooks": reactHooks },
     rules: reactHooks.configs.recommended.rules,
   },
+  {
+    // Feature code composes Raven's primitives (src/ui); the stock shadcn pieces they wrap or replace are off limits.
+    files: ["src/features/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              regex: "(^@/|/)ui/shadcn/(button|input|skeleton|sheet|toggle|tooltip)$",
+              message:
+                "Use the Raven primitives in src/ui (Button, IconButton, Input, LoadingState, Dialog, Toggle, Tooltip): they carry Raven's sizes, type roles and keyboard tooltips.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 );
