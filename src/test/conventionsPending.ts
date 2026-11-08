@@ -105,7 +105,6 @@ export const PENDING: Record<RuleId, string[]> = {
     "src/features/vault/SetupScreen.tsx",
     "src/features/vault/UnlockScreen.tsx",
     "src/features/vault/VaultGate.tsx",
-    "src/ui/Button.tsx",
     "src/ui/Chip.tsx",
     "src/ui/Dialog.tsx",
     "src/ui/EmptyState.tsx",
