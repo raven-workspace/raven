@@ -383,8 +383,9 @@ test("browse pane 3: a held-back copy focuses the field, and Enter copies the fi
 test("lateral movement finds Pivoting", async ({ page }) => {
   await open(page, "/arsenal", 1280);
   await page.locator("input[aria-label='Search the Arsenal']").fill("lateral movement");
-  await expect(page.getByRole("button", { name: /^Pivoting/ })).toBeVisible();
-  await page.getByRole("button", { name: /^Pivoting/ }).click();
+  // Categories are a tablist (each tab names its category and its match count).
+  await expect(page.getByRole("tab", { name: /^Pivoting/ })).toBeVisible();
+  await page.getByRole("tab", { name: /^Pivoting/ }).click();
   await expect(page.getByRole("option").first()).toBeVisible();
 });
 

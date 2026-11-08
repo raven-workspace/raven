@@ -290,7 +290,7 @@ export function ArsenalBrowse() {
   ];
 
   return (
-    <div data-arsenal-browse="" data-hint-surface="" className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-6 py-6">
+    <main aria-label="Arsenal" data-arsenal-browse="" data-hint-surface="" className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-6 py-6">
       <header className="grid grid-cols-[minmax(200px,320px)_minmax(0,1fr)] items-center gap-x-4 gap-y-2">
         <SearchBar
           label="Search the Arsenal" id={SEARCH_ID} inputRef={searchRef} placeholder="Search cards and commands" trailing={null}
@@ -369,6 +369,6 @@ export function ArsenalBrowse() {
       <footer className="grid border-t border-line pt-3">
         <HintLine hints={hints} ariaLabel="Arsenal shortcuts" />
       </footer>
-    </div>
+    </main>
   );
 }

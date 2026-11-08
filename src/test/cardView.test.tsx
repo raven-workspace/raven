@@ -93,8 +93,9 @@ describe("CardView reading view", () => {
   it("focusBlockId outlines that block", async () => {
     mount("zz-b");
     await pre("zzb 10.10.10.5");
-    expect(blockEl("zz-b")).toHaveClass("ring-1", "ring-accent");
-    expect(blockEl("zz-a")).not.toHaveClass("ring-accent");
+    // An outline 8px clear of the block (an outline takes no room, so the block never widens its column).
+    expect(blockEl("zz-b")).toHaveClass("outline-1", "outline-solid", "outline-accent");
+    expect(blockEl("zz-a")).not.toHaveClass("outline-solid");
   });
 
   it("j/k move between blocks and c copies the focused one", async () => {

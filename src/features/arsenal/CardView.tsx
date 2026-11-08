@@ -221,7 +221,11 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   const block = (c: LibraryCommand, msf: Set<string>) => (
     <div
       key={c.id} id={`block-${c.id}`} data-block="" data-block-id={c.id} tabIndex={-1}
-      className={cx("-m-2 grid scroll-mt-14 gap-1 rounded-sm p-2 outline-none focus:ring-1 focus:ring-accent", marked === c.id && "ring-1 ring-accent")}
+      // The ring stands 8px clear of the block as an outline: outlines take no room, so the block never widens its column.
+      className={cx(
+        "grid scroll-mt-14 gap-1 rounded-sm outline-offset-8 outline-accent",
+        marked === c.id ? "outline-1 outline-solid" : "outline-none focus:outline-1 focus:outline-solid",
+      )}
     >
       <CommandList
         commands={[fillLibraryCommand(c, input, msf.has(c.id))]} hostName={hostName} hideDcNote strongTitles
@@ -241,19 +245,20 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   return (
     <div ref={root} tabIndex={-1} onKeyDown={onKeyDown} className="grid grid-cols-[minmax(0,1fr)] gap-4 outline-none">
       {hasStrip && (
+        // Even padding above and below: the labels and the scroll arrows share the strip's middle.
         <nav
           aria-label="On this card"
-          className={cx("sticky -top-3 z-10 grid items-center gap-1 border-b border-line bg-(--pane-bg,var(--surface)) pt-2", overflowing ? "grid-cols-[28px_minmax(0,1fr)_28px]" : "grid-cols-[minmax(0,1fr)]")}
+          className={cx("sticky -top-3 z-10 grid items-center gap-1 border-b border-line bg-(--pane-bg,var(--surface)) py-2", overflowing ? "grid-cols-[28px_minmax(0,1fr)_28px]" : "grid-cols-[minmax(0,1fr)]")}
         >
           {overflowing && <IconButton icon={CaretLeft} label="Earlier blocks" disabled={!edges.start} onClick={() => scrollStrip(-1)} />}
           <div
             ref={stripRow} data-scroll-x="" onScroll={measureStrip} style={fade ? { maskImage: fade, WebkitMaskImage: fade } : undefined}
-            className="relative grid auto-cols-max grid-flow-col gap-4 overflow-x-auto px-1 pb-3 pt-1 text-meta [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="relative grid auto-cols-max grid-flow-col gap-4 overflow-x-auto px-1 py-1 text-meta [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {main.shown.map((c) => (
               <button
                 key={c.id} type="button" data-for={c.id} title={c.title} onClick={() => jump(c.id)} aria-current={inView === c.id ? "location" : undefined}
-                className={cx("max-w-48 cursor-pointer truncate border-0 bg-transparent p-0 text-meta hover:text-fg", inView === c.id ? "text-accent" : "text-muted-2")}
+                className={cx("max-w-48 cursor-pointer truncate border-0 bg-transparent px-0 py-1 text-meta hover:text-fg", inView === c.id ? "text-accent" : "text-muted-2")}
               >
                 {c.title}
               </button>
