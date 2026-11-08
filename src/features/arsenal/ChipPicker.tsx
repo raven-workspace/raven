@@ -15,11 +15,11 @@ const FLASH_MS = 600;
 const TYPEAHEAD_MS = 700;
 
 /**
- * The muted "for <host> ⌄" / "as <cred> ⌄" button with no Tab stop, and its listbox. A click or `ref.open()` opens
+ * The muted "for <host> ⌄" / "as <cred> ⌄" button, with no Tab stop unless `tabbable`, and its listbox. A click or `ref.open()` opens
  * the list: arrows move, Enter picks, Esc closes and gives focus back, typeahead works only inside the open list.
  * `children` is the button's content; a pick that changes `value` flashes the chip once (`data-flash`).
  */
-export function ChipPicker({ options, value, onPick, label, listLabel, title, align = "end", wide, children, ref }: {
+export function ChipPicker({ options, value, onPick, label, listLabel, title, align = "end", wide, tabbable, children, ref }: {
   options: ChipOption[]; value: string | null; onPick: (id: string | null) => void;
   /** The button's accessible name. */
   label: string; listLabel: string; title: string;
@@ -27,6 +27,8 @@ export function ChipPicker({ options, value, onPick, label, listLabel, title, al
   align?: "start" | "end";
   /** Allow the list to grow past min-w-48. */
   wide?: boolean;
+  /** A Tab stop (the Payloads context chips); the Arsenal's chips have none and open with ⌥H/⌥C. */
+  tabbable?: boolean;
   children: ReactNode; ref?: Ref<ChipPickerHandle>;
 }) {
   const listId = useId();
@@ -115,7 +117,7 @@ export function ChipPicker({ options, value, onPick, label, listLabel, title, al
       <button
         ref={buttonRef}
         type="button"
-        tabIndex={-1}
+        tabIndex={tabbable ? 0 : -1}
         aria-label={label}
         aria-haspopup="listbox"
         aria-expanded={open}

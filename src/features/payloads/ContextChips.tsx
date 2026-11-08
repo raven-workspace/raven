@@ -23,7 +23,7 @@ function Chip({ name, value, options, current, onPick, ref }: {
 }) {
   return (
     <ChipPicker
-      ref={ref} options={options} value={current} onPick={(id) => id !== null && onPick(id)}
+      ref={ref} tabbable options={options} value={current} onPick={(id) => id !== null && onPick(id)}
       label={`${name}: ${value ?? "not set"}`} listLabel={name} title={`${name} (inferred; pick to override for this host)`} align="start"
     >
       <ChipText name={name} value={value} />
@@ -32,12 +32,13 @@ function Chip({ name, value, options, current, onPick, ref }: {
 }
 
 /**
- * The drawer's context row: host (⌥H), OS, where you paste it, and the listener port, each overridable for this host
- * (session only), then one muted line saying where each value came from. Unknown values are empty and amber.
+ * The drawer's context row: host (⌥H), OS (⌥O), where you paste it (⌥W), and the listener port, each overridable for
+ * this host (session only), then one muted line saying where each value came from. Unknown values are empty and amber.
+ * OS, paste context and port are Tab stops.
  */
-export function ContextChips({ fit, engagementId, onHost, hostRef, portRef }: {
+export function ContextChips({ fit, engagementId, onHost, hostRef, osRef, contextRef, portRef }: {
   fit: PayloadFit; engagementId: string; onHost: (id: string | null) => void;
-  hostRef?: Ref<HostChipHandle>; portRef?: Ref<ChipPickerHandle>;
+  hostRef?: Ref<HostChipHandle>; osRef?: Ref<ChipPickerHandle>; contextRef?: Ref<ChipPickerHandle>; portRef?: Ref<ChipPickerHandle>;
 }) {
   const { os, context, port, settingsPort, evidence, hostKey } = fit;
   const set = (patch: PayloadOverride) => usePayloadsStore.getState().override(hostKey, patch);
@@ -59,12 +60,12 @@ export function ContextChips({ fit, engagementId, onHost, hostRef, portRef }: {
           <span className="px-1.5 py-0.5 text-xs text-muted">no host</span>
         )}
         <Chip
-          name="OS" value={os ? OS_LABEL[os] : null} current={os}
+          ref={osRef} name="OS" value={os ? OS_LABEL[os] : null} current={os}
           options={(["linux", "windows"] as const).map((o) => ({ id: o, name: OS_LABEL[o] }))}
           onPick={(id) => set({ os: id as "linux" | "windows" })}
         />
         <Chip
-          name="Paste into" value={context ? contextLabel(context) : null} current={context}
+          ref={contextRef} name="Paste into" value={context ? contextLabel(context) : null} current={context}
           options={contexts.map((c) => ({ id: c.id, name: c.label }))}
           onPick={(id) => set({ context: id as (typeof contexts)[number]["id"] })}
         />

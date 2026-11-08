@@ -15,7 +15,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
   const navigate = useNavigate();
   const bodyRef = useRef<HTMLDivElement>(null);
   const s = usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, onEscape: () => usePayloadsStore.getState().close() });
-  const { generator, fit, ranked, index, setIndex, def, built, guard, note, hostRef, portRef, psRef } = s;
+  const { generator, fit, ranked, index, setIndex, def, built, guard, note, hostRef, osRef, contextRef, portRef, psRef } = s;
 
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto]" onKeyDown={s.onKeyDown}>
@@ -41,7 +41,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
           <ArrowsOut size={14} aria-hidden="true" />
         </Button>
       </header>
-      <ContextChips fit={fit} engagementId={engagementId} onHost={s.setHostId} hostRef={hostRef} portRef={portRef} />
+      <ContextChips fit={fit} engagementId={engagementId} onHost={s.setHostId} hostRef={hostRef} osRef={osRef} contextRef={contextRef} portRef={portRef} />
       <div ref={bodyRef} tabIndex={-1} className="min-h-0 overflow-y-auto overflow-x-hidden px-4 py-3 outline-none">
         {ranked && (
           <PayloadView

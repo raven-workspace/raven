@@ -1,9 +1,10 @@
-import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { PASTE_CONTEXTS } from "../../engines/payloads/context";
 import { cx } from "../../lib/cx";
 import { isDialogOpen, isTypingTarget, useKeydown } from "../../lib/keys";
 import { Input, Kbd, labelClass, Toggle } from "../../ui";
+import type { ChipPickerHandle } from "../arsenal/ChipPicker";
 import { HostChip } from "../arsenal/HostChip";
 import { useFillScope } from "../arsenal/useFillScope";
 import { PayloadBlock, PayloadView } from "./PayloadView";
@@ -24,11 +25,17 @@ function ReadItem({ label, why, unknown, children }: { label: string; why?: stri
   );
 }
 
+/** ⌥O / ⌥W in the Workbench: focus the picked choice of a toggle group (or its first), ready for ⇥ and Space. */
+const choiceGroup = (handle: RefObject<ChipPickerHandle | null>) => (el: HTMLDivElement | null) => {
+  const focus = () => el && (el.querySelector<HTMLElement>('[aria-pressed="true"]') ?? el.querySelector<HTMLElement>("button"))?.focus();
+  handle.current = el ? { open: focus, focus } : null;
+};
+
 function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: string; hostId: string | null }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const s = usePayloadSession({ engagementId, hostId: scopeHostId, bodyRef, lhostField: false });
-  const { generator, fit, ranked, index, setIndex, def, built, guard, note, hostRef, psRef, fieldEls } = s;
+  const { generator, fit, ranked, index, setIndex, def, built, guard, note, hostRef, osRef, contextRef, psRef, fieldEls } = s;
   const override = (patch: PayloadOverride) => usePayloadsStore.getState().override(fit.hostKey, patch);
   const contexts = PASTE_CONTEXTS.filter((c) => !fit.os || c.os === "any" || c.os === fit.os);
   const exam = fit.engagement.kind === "exam-sim";
@@ -69,14 +76,14 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
           )}
         </ReadItem>
         <ReadItem label="OS" why={fit.evidence.os} unknown="Not known: pick one">
-          <div className="grid grid-cols-2 gap-1.5">
+          <div ref={choiceGroup(osRef)} className="grid grid-cols-2 gap-1.5">
             {(["linux", "windows"] as const).map((o) => (
               <Toggle key={o} on={fit.os === o} onChange={() => override({ os: o })} className="justify-center">{OS_LABEL[o]}</Toggle>
             ))}
           </div>
         </ReadItem>
         <ReadItem label="Where you paste it" why={fit.evidence.context} unknown="Not known: pick one">
-          <div className="grid grid-cols-2 gap-1.5">
+          <div ref={choiceGroup(contextRef)} className="grid grid-cols-2 gap-1.5">
             {contexts.map((c) => (
               <Toggle key={c.id} on={fit.context === c.id} onChange={() => override({ context: c.id })} className="min-w-0 justify-center">
                 <span className="min-w-0 truncate">{c.label}</span>

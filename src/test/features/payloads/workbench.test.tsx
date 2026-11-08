@@ -275,11 +275,22 @@ describe("Payloads Workbench", () => {
     const w = within(await workbench());
     await w.findByRole("heading", { name: "PowerShell base64 (-e)" });
     const hint = () => screen.getByRole("main", { name: "Payloads" }).querySelector("[data-hint-line]")?.textContent;
-    expect(hint()).toBe("↵ copy payload · ⌥L copy listener · ⇥ next fit · ⌥1-6 generator · ⌘↵ copy and log · P generators · Esc back");
+    expect(hint()).toBe("↵ copy payload · ⌥L copy listener · ⇥ next fit · ⌥O OS · ⌥W where you paste · ⌥1-6 generator · ⌘↵ copy and log · P generators · Esc back");
     await user.keyboard("{Alt>}3{/Alt}");
     expect(hint()).toBe("↵ copy step · ⌥1-6 generator · P generators · Esc back");
     await user.keyboard("{Alt>}2{/Alt}");
     expect(hint()).toBe("⌘↵ copy and log · ⌥1-6 generator · P generators · Esc back");
+  });
+
+  it("⌥O and ⌥W jump to the OS and where-you-paste-it choices", async () => {
+    const user = userEvent.setup();
+    mount(["/payloads"]);
+    const w = within(await workbench());
+    await w.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    await user.keyboard("{Alt>}o{/Alt}");
+    expect(read().getByRole("button", { name: "Windows" })).toHaveFocus();
+    await user.keyboard("{Alt>}w{/Alt}");
+    expect(read().getByRole("button", { name: "Web shell ?cmd=" })).toHaveFocus();
   });
 
   it("P then Esc leaves the Workbench in one press", async () => {

@@ -140,7 +140,7 @@ describe("Payloads drawer", () => {
     expect(payloadText(d)).toBe(buildPayload(def("ps-b64"), "webshell-param", { LHOST, LPORT }).text);
     expect(d.getByText(/Also fits:/)).toHaveTextContent("nc.exe -e");
     const hint = screen.getByRole("complementary", { name: "Payloads" }).querySelector("[data-hint-line]");
-    expect(hint?.textContent).toBe("↵ copy payload · ⌥L copy listener · ⇥ next fit · ⌥1-6 generator · ⌘↵ copy and log · Esc close");
+    expect(hint?.textContent).toBe("↵ copy payload · ⌥L copy listener · ⇥ next fit · ⌥O OS · ⌥W where you paste · ⌥1-6 generator · ⌘↵ copy and log · Esc close");
   });
 
   it("↵ copies the payload, ⌥L copies the listener", async () => {
@@ -168,15 +168,61 @@ describe("Payloads drawer", () => {
     expect(await navigator.clipboard.readText()).toBe(buildPayload(def("ps-b64"), "webshell-param", { LHOST, LPORT }).text);
   });
 
-  it("⇥ moves to the next fit", async () => {
+  it("⇥ moves to the next fit and, past the last one, releases focus instead of wrapping", async () => {
     const { user, d } = await openOn("/e/e1/h/h1");
     await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    const body = document.activeElement;
     await user.keyboard("{Tab}");
     expect(d.getByRole("heading", { name: "nc.exe -e" })).toBeInTheDocument();
     expect(payloadText(d)).toBe(buildPayload(def("nc-exe"), "webshell-param", { LHOST, LPORT }).text);
-    // It wraps back to the best fit.
+    expect(body).toHaveFocus();
+    // The last fit: ⇥ moves focus on and the fit stays.
     await user.keyboard("{Tab}");
+    expect(d.getByRole("heading", { name: "nc.exe -e" })).toBeInTheDocument();
+    expect(body).not.toHaveFocus();
+  });
+
+  it("⇥ from the body eventually reaches the misfit 'show' button and Full screen", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    const show = d.getByRole("button", { name: "show" });
+    const full = d.getByRole("button", { name: "Full screen" });
+    const reached = new Set<Element>();
+    // Past the body's last control Tab runs on through the page behind (the drawer is not modal) and comes round.
+    for (let i = 0; i < 300 && !(reached.has(show) && reached.has(full)); i++) {
+      await user.keyboard("{Tab}");
+      if (document.activeElement) reached.add(document.activeElement);
+    }
+    expect(reached.has(show)).toBe(true);
+    expect(reached.has(full)).toBe(true);
+  }, 30_000);
+
+  it("⇧⇥ always moves focus out of the body, never the fit", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    const body = document.activeElement;
+    await user.keyboard("{Shift>}{Tab}{/Shift}");
     expect(d.getByRole("heading", { name: "PowerShell base64 (-e)" })).toBeInTheDocument();
+    expect(body).not.toHaveFocus();
+    // The chips above the body are Tab stops: port, paste context, OS, then Full screen.
+    expect(d.getByRole("button", { name: `Port: ${LPORT}` })).toHaveFocus();
+    await user.keyboard("{Shift>}{Tab}{Tab}{Tab}{/Shift}");
+    expect(d.getByRole("button", { name: "Full screen" })).toHaveFocus();
+  });
+
+  it("the OS, paste and port chips are Tab stops; ⌥O and ⌥W open the OS and paste pickers", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    for (const name of ["OS: Windows", "Paste into: Web shell ?cmd=", `Port: ${LPORT}`]) expect(d.getByRole("button", { name }).tabIndex).toBe(0);
+    await user.keyboard("{Alt>}o{/Alt}");
+    expect(d.getByRole("button", { name: "OS: Windows" })).toHaveAttribute("aria-expanded", "true");
+    expect(d.getByRole("listbox", { name: "OS" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("complementary", { name: "Payloads" })).toBeInTheDocument();
+    await user.keyboard("{Alt>}w{/Alt}");
+    expect(d.getByRole("button", { name: "Paste into: Web shell ?cmd=" })).toHaveAttribute("aria-expanded", "true");
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(d.getByRole("button", { name: /^Paste into: / })).not.toHaveAccessibleName("Paste into: Web shell ?cmd=");
   });
 
   it("⇥ on a button moves focus, not the fit", async () => {

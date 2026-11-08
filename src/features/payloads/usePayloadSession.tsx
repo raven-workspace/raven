@@ -27,7 +27,7 @@ export const GENERATORS: { id: GeneratorId; label: string }[] = [
 ];
 /** The key hint line for the ranked generators; the last entry is what Esc does. */
 export const HINTS: [string, string][] = [
-  ["↵", "copy payload"], ["⌥L", "copy listener"], ["⇥", "next fit"], ["⌥1-6", "generator"], ["⌘↵", "copy and log"], ["Esc", "close"],
+  ["↵", "copy payload"], ["⌥L", "copy listener"], ["⇥", "next fit"], ["⌥O", "OS"], ["⌥W", "where you paste"], ["⌥1-6", "generator"], ["⌘↵", "copy and log"], ["Esc", "close"],
 ];
 /** The hint line for one generator: only the keys that work there. `esc` names what Esc does in this view. */
 export function hintsFor(g: GeneratorId, esc: string, extra: [string, string][] = []): [string, string][] {
@@ -55,8 +55,9 @@ const altCode = (e: KeyboardEvent) => (e.altKey && !e.metaKey && !e.ctrlKey ? e.
 
 /**
  * What the drawer and the Workbench share: the host in view, its fit, the payload in view and its copy guard, and the
- * keys. ↵ copies, ⌘↵ copies and logs, ⇥ moves to the next fit (only while focus is on the payload body itself, so Tab
- * still reaches the buttons and fields), and ⌥1–⌥6, ⌥L, ⌥H work wherever focus is.
+ * keys. ↵ copies, ⌘↵ copies and logs, ⇥ moves to the next fit (only while focus is on the payload body itself, and
+ * never past the last fit: there it moves focus on, so Tab still reaches every button and field; ⇧⇥ always moves focus),
+ * and ⌥1–⌥6, ⌥L, ⌥H, ⌥O (OS) and ⌥W (where you paste it) work wherever focus is.
  * `onEscape`, when given, takes Esc in the capture phase (the drawer closes on it).
  * `lhostField`: show LHOST among the payload's fill fields (the Workbench has its own in the left column).
  */
@@ -92,6 +93,9 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
 
   const hostRef = useRef<HostChipHandle>(null);
   const portRef = useRef<ChipPickerHandle>(null);
+  /** ⌥O and ⌥W: the drawer's chips, or the Workbench's choice groups. */
+  const osRef = useRef<ChipPickerHandle>(null);
+  const contextRef = useRef<ChipPickerHandle>(null);
   const psRef = useRef<HTMLInputElement>(null);
   const fieldEls = useRef(new Map<string, HTMLInputElement>());
   const focusToken = useCallback((t: string) => (t === "LPORT" && portRef.current ? portRef.current.open() : fieldEls.current.get(t)?.focus()), []);
@@ -132,7 +136,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
     if (built?.listener) void copyPlain(built.listener).catch(reportError);
   };
 
-  // ⌥1–⌥6, ⌥L and ⌥H, wherever focus is. Capture phase, so the host view's own ⌥1–⌥3 tabs never see them.
+  // ⌥1–⌥6, ⌥L, ⌥H, ⌥O and ⌥W, wherever focus is. Capture phase, so the host view's own ⌥1–⌥3 tabs never see them.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // The Workbench stays mounted under an Arsenal or Notes drawer: ⌥H ⌥L ⌥1–⌥6 then belong to that drawer.
@@ -145,6 +149,9 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
       } else if (code === "KeyL" && built?.listener) {
         e.preventDefault();
         copyListener();
+      } else if (code === "KeyO" || code === "KeyW") {
+        e.preventDefault();
+        (code === "KeyO" ? osRef : contextRef).current?.open();
       } else if (engagementId && isHostPickKey(e)) {
         e.preventDefault();
         hostRef.current?.open();
@@ -165,10 +172,10 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
       if (t.tagName === "BUTTON" || t.getAttribute("aria-haspopup") === "listbox") return;
       e.preventDefault();
       void copy(e.metaKey || e.ctrlKey);
-    } else if (e.key === "Tab" && ranked && ranked.fits.length > 1 && t === bodyRef.current) {
+    } else if (e.key === "Tab" && !e.shiftKey && ranked && index < ranked.fits.length - 1 && t === bodyRef.current) {
+      // Past the last fit ⇥ is plain Tab again, so focus can leave the body.
       e.preventDefault();
-      const n = ranked.fits.length;
-      setIndex((index + (e.shiftKey ? n - 1 : 1)) % n);
+      setIndex(index + 1);
     }
   };
 
@@ -198,7 +205,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
 
   return {
     generator, hostId, setHostId, fit, ranked, index, setIndex, def, built, guard, note, copy, copyListener, onKeyDown,
-    status, psCommand, setPsCommand, pasteLabel, fitsLine, fields, focusToken, hostRef, portRef, psRef, fieldEls,
+    status, psCommand, setPsCommand, pasteLabel, fitsLine, fields, focusToken, hostRef, osRef, contextRef, portRef, psRef, fieldEls,
   };
 }
 
