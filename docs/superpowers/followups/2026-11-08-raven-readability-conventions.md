@@ -21,6 +21,29 @@ The runtime `off-scale-spacing` audit check reports nothing on any screen.
 Credentials is about 4000px tall, which breaks the page-length rule. Splitting it (tabs or sub-pages for the matrix, the
 routine and the hashes) changes the information architecture, so it's a round of its own. The spec's non-goals defer it.
 
+**Owner decisions (2026-11-08), next round:** do an impeccable pass on Credentials as its own round.
+- Put the sections into tabs.
+- The test matrix is the page's best part; the rest is weak by comparison and should be rebuilt around it.
+- No duplicate information. That includes the same hash in both the table and the Hashes section, each with its own Crack button.
+- It should be easy to see at a glance what we have: passwords, hashes, tickets and so on.
+- Look at shadcn's components and blocks for patterns before designing.
+
+## Host page feedback (owner screenshot, 2026-11-08)
+
+- **Disclosure headers don't match.** Open sections ("WHO AM I", "PRIVESC VECTORS", "OTHER ACCOUNTS") use big uppercase
+  headings with the caret on the left. Closed rows ("Services", "Coverage", "Host Credentials") use small sentence-case
+  labels with the caret on the right. One disclosure should look the same open or closed: same size and type, and the
+  caret stays in one place and only rotates.
+- **The Services summary is unclear.** "✓ 3  entry CouchDB 3003" reads as "a 3 entry CouchDB 3003". It needs a
+  labelled form, for example "3 services · entry: CouchDB on 3003". Check the Coverage and Host Credentials summaries
+  for the same problem ("work 0  untested 12").
+
+## Settled (2026-11-08)
+
+- Imported entries keep their old "file · host" titles. No new ones get made, so they don't need fixing.
+- Tab from ⌘K search going to the host picker when every value is filled is fine.
+- The sidebar rail is approved.
+
 ## Right-click menu
 
 The owner deferred a right-click context menu (spec non-goals). Row actions stay as icon buttons for now.
