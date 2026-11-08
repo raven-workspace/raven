@@ -35,5 +35,15 @@ The owner deferred a right-click context menu (spec non-goals). Row actions stay
   never shifts. With classic, always-shown scrollbars, `scrollbar-gutter: stable` on `<main>` would turn an occasional 15px
   shift on long pages into a permanent 15px misalignment with the title bar and header on every page. The host page's own
   panes already reserve the gutter (`SCROLL_PANE`). Revisit if the owner turns on always-shown scrollbars.
-- **The overlap check's blind spot.** It treats any opaque layer between two controls as covering. A control whose own opaque
-  wrapper collides with another control would be missed. No case found; worth a self-test if one turns up.
+- **The audit gate's blind spots** (also in `audit/README.md`):
+  - `overlap` treats a control under a fixed or sticky layer, a dialog, menu, listbox or tooltip, or inside an aria-hidden
+    or inert subtree as covered. So a collision hidden under a sticky header is not reported. Control-on-text overlaps are
+    never checked.
+  - `overflow` lets an unclipped popup reach past its anchor; a popup running off the window is left to `offscreen`
+    (reported) and `page-overflow`.
+  - `clipped` leaves line clamps to `truncated`, which is reported only.
+  - `small-target` measures a checkbox in a label by the label; `tiny-text` allows 12px anywhere inside `.text-label` or `kbd`.
+  - sr-only is recognised by the Tailwind pattern (`clip-path: inset(50%)` or a zero `clip`); other hiding techniques are
+    judged as visible.
+- **The save summary under the capture sheet at 900px.** The 400px toast runs under the 580px sheet, so its Undo and close
+  button are hidden while the sheet is open (the sheet is a modal; the toast waits). The sheet's Discard and Save stay clear.

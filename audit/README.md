@@ -14,12 +14,28 @@ Drives the real UI against the in-memory fake backend (`npm run dev:audit`, port
   `page-overflow`, `overflow`, `clipped` and `mid-token-wrap`. The list lives in `FAILING_CHECKS` (`audit/types.ts`).
   `offscreen`, `squeezed`, `narrow-wrap`, `truncated`, `long-lines`, `off-scale-spacing` and the rest are reported only.
   A screen that can't reach its ready state, a page error, or a failed self-test also fails the run.
-- How the failing checks judge what shows: 1px screen-reader-only boxes are not seen; `overlap` clips each control by its
-  scrolling ancestors and hit-tests the middle of the overlap, so a control under an opaque layer that is not the other
-  control (a drawer, the stuck panel, a popup list) is covered, not overlapping; `overflow` ignores an absolutely placed
-  popup reaching past its anchor; `clipped` leaves line clamps to `truncated`.
+- How the failing checks judge what shows, and what each still can't see:
+  - Screen-reader-only text is recognised by its pattern (absolutely placed with `clip-path: inset(50%)` or a zero `clip`
+    rect) and skipped. A box that collapsed to 1px around real text is still judged. Blind spot: sr-only text built some
+    other way is judged as visible text.
+  - `overlap`: two controls in the same scroll container are compared by plain geometry, scrolled into view or not. In
+    different containers, each is first clipped by the clipping ancestors the other is not inside. Where both are on
+    screen, the middle of the overlap is hit-tested. A control counts as covered, not overlapping, only under a real
+    overlay: it is aria-hidden or inert (an open Radix modal), or a fixed or sticky layer, or a dialog, menu, listbox or
+    tooltip, sits over it. A control that ignores the pointer is judged by geometry. Blind spots: a collision under a
+    fixed or sticky layer (for example two controls both hidden under a sticky header) is not reported; overlaps between a
+    control and plain text are never checked.
+  - `overflow`: an absolutely placed popup (listbox, menu, dialog, tooltip, Radix popper) may reach past an anchor that
+    doesn't clip it. Anything else hanging out, or a popup cut off by a clipping box, fails. Blind spot: a popup reaching
+    past an unclipped anchor and off the window is only caught by `offscreen` (reported) and `page-overflow`.
+  - `clipped` leaves line clamps to `truncated` (reported), so a clamp hiding text without a `title` is a report, not a
+    failure.
+  - `small-target` measures a checkbox or radio by its `<label>`. Blind spot: a tiny checkbox in a label that is large
+    only because of other content still passes.
+  - `tiny-text` allows 12px inside any `.text-label` or `kbd`, so non-label text nested in a label passes at 12px.
 - **Opt-out.** One element (and its subtree) opts out of a check with `data-audit-allow="<check>"` (a check id from
   `audit/types.ts`; several ids separated by spaces) plus a `data-audit-reason="<why there is no fix>"`. An opt-out without a
-  reason is itself a failing issue (`opt-out-unreasoned`). `report.md` lists every opt-out, with its reason and screens, under
+  reason is itself a failing issue (`opt-out-unreasoned`), and so is one naming an id that isn't a check (`opt-out-invalid`),
+  since a typo would opt out of nothing. `report.md` lists every opt-out, with its reason and screens, under
   "Opt-outs". Opt out only when the component genuinely can't be fixed.
 - Screens live in `audit/screens.ts`; each needs a specific `ready` selector (never `body`).
