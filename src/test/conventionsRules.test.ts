@@ -126,3 +126,18 @@ describe("unknown-color matcher", () => {
     ).toBe(false);
   });
 });
+
+describe("off-scale-spacing matcher", () => {
+  const bad = (s: string, file = F) => breaks("off-scale-spacing", file, s);
+  it("flags half steps, steps off the scale and arbitrary px, with variants and negatives", () => {
+    for (const c of ["p-1.5", "px-0.5", "gap-x-5", "mt-7", "hover:gap-2.5", "md:-ml-3.5", "py-10", "gap-[6px]", "pt-[10px]", "space-y-12"])
+      expect(bad(`<a className="${c}" />`), c).toBe(true);
+  });
+  it("accepts the 4/8/12/16/24/32 scale, zero, px, auto, and non-spacing utilities", () => {
+    expect(bad('<a className="p-1 px-2 py-3 gap-4 gap-x-6 mt-8 -ml-2 m-0 mx-auto pt-px gap-[0] size-7 h-7 w-0.5 top-1.5 inset-2.5 text-body" />')).toBe(false);
+  });
+  it("allows only the documented 6px hint gap, only in HintLine", () => {
+    expect(bad('<a className="gap-[6px]" />', "src/ui/HintLine.tsx")).toBe(false);
+    expect(bad('<a className="gap-x-5" />', "src/ui/HintLine.tsx")).toBe(true);
+  });
+});

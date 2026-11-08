@@ -201,6 +201,41 @@ function unknownColors(src: string): string[] {
   return bad;
 }
 
+/** Spacing steps DESIGN.md allows: 0, 1 (4px), 2 (8), 3 (12), 4 (16), 6 (24), 8 (32), plus px/auto. */
+const SPACING_STEPS = new Set(["0", "1", "2", "3", "4", "6", "8", "px", "auto"]);
+const SPACING_UTIL =
+  /^-?(?:gap-x|gap-y|space-x|space-y|gap|px|py|pt|pr|pb|pl|ps|pe|p|mx|my|mt|mr|mb|ml|ms|me|m)-(.+)$/;
+/** The documented exceptions: the hint key-to-label gap is 6px. */
+const SPACING_ALLOWED: Record<string, string[]> = { "src/ui/HintLine.tsx": ["gap-[6px]"] };
+
+/** Drops the variant prefixes (`md:`, `group-data-[x=y]:`, `[&>svg]:`): everything up to the last top-level colon. */
+function stripVariants(t: string): string {
+  let depth = 0;
+  let cut = -1;
+  for (let i = 0; i < t.length; i++) {
+    if (t[i] === "[" || t[i] === "(") depth++;
+    else if (t[i] === "]" || t[i] === ")") depth--;
+    else if (t[i] === ":" && depth === 0) cut = i;
+  }
+  return t.slice(cut + 1).replace(/^!/, "").replace(/!$/, "");
+}
+
+/** Padding, margin, gap and space utilities off the 4/8/12/16/24/32 scale (0.5, 1.5, 2.5, 3.5, 5, 7, arbitrary px). */
+function offScaleSpacing(file: string, src: string): string[] {
+  const allowed = SPACING_ALLOWED[file] ?? [];
+  const bad: string[] = [];
+  const toks = classRegions(stripComments(src)).flatMap((r) => r.split(/[\s"'`{}(),]+/));
+  for (const t of toks) {
+    const m = SPACING_UTIL.exec(stripVariants(t));
+    if (!m) continue;
+    const v = m[1];
+    if (SPACING_STEPS.has(v) || allowed.includes(stripVariants(t))) continue;
+    const arbitrary = /^\[(-?[\d.]+)(px|rem|em)?\]$/.exec(v);
+    if (arbitrary ? Number(arbitrary[1]) !== 0 : /^\d+(\.\d+)?$/.test(v)) bad.push(t);
+  }
+  return bad;
+}
+
 export function breaks(rule: RuleId, file: string, src: string): boolean {
   switch (rule) {
     case "tiny-type":
@@ -222,6 +257,8 @@ export function breaks(rule: RuleId, file: string, src: string): boolean {
       return file !== "src/ui/HintLine.tsx" && handHint(src);
     case "unknown-color":
       return unknownColors(src).length > 0;
+    case "off-scale-spacing":
+      return offScaleSpacing(file, src).length > 0;
     case "esc-close":
       return /<Kbd\b(?:=>|[^>])*>\s*(?:esc|\{\s*["']esc["']\s*\})\s*<\/Kbd>/i.test(
         stripComments(src),
@@ -229,4 +266,4 @@ export function breaks(rule: RuleId, file: string, src: string): boolean {
   }
 }
 
-export { unknownColors };
+export { unknownColors, offScaleSpacing };

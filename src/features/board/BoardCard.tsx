@@ -35,7 +35,7 @@ export function BoardCard({ host, onShift }: BoardCardProps) {
       data-host-id={host.id}
       onDragStart={onDragStart}
       onKeyDown={onKeyDown}
-      className="grid min-w-0 gap-1 rounded border border-line bg-bg px-1.5 py-2 text-fg no-underline hover:border-line-strong focus-visible:outline-1 focus-visible:outline-accent"
+      className="grid min-w-0 gap-1 rounded border border-line bg-bg px-1 py-2 text-fg no-underline hover:border-line-strong focus-visible:outline-1 focus-visible:outline-accent"
     >
       <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_8px] items-start gap-1">
         <span title={host.name} className="line-clamp-2 break-words text-body font-semibold">{host.name}</span>

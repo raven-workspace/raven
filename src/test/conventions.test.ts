@@ -11,6 +11,7 @@ const RULES: RuleId[] = [
   "hand-hint",
   "esc-close",
   "unknown-color",
+  "off-scale-spacing",
 ];
 const read = (f: string) => readFileSync(join(ROOT, f), "utf8");
 

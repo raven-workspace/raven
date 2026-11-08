@@ -17,9 +17,9 @@ const ORDER: BoardColumn[] = [
   "reporting",
 ];
 
-/** Break points for the one lane title longer than a narrow lane ("Vulnerabil-ity detection"); the section's aria-label keeps the real name. */
+/** Break points for the lane titles longer than a narrow lane ("Vulnerabil-ity"); the section's aria-label keeps the real name. */
 function softHyphenate(label: string): string {
-  return label.replace("Vulnerability", "Vulnerabil\u00ADity");
+  return label.replace("Vulnerability", "Vulnerabil\u00ADity").replace("exploitation", "exploita\u00ADtion");
 }
 
 export function Board() {
@@ -127,7 +127,7 @@ export function Board() {
               onDrop={(e) => onDrop(e, col)}
               style={{ gridRow: "span 2", gridTemplateRows: "subgrid" }}
               className={cx(
-                "grid min-h-40 min-w-0 gap-2 rounded border p-1.5",
+                "grid min-h-40 min-w-0 gap-2 rounded border p-2",
                 over === col ? "border-accent" : "border-line",
               )}
             >
