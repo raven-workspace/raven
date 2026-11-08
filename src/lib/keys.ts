@@ -4,7 +4,8 @@ import { useNavigate } from "react-router";
 /** True when the key went to a text field, select or editable element. */
 export function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
-  if (target.isContentEditable) return true;
+  // isContentEditable, or the attribute itself where the DOM doesn't implement it (jsdom).
+  if (target.isContentEditable || target.closest('[contenteditable="true"], [contenteditable=""], [contenteditable="plaintext-only"]')) return true;
   const tag = target.tagName;
   if (tag === "TEXTAREA" || tag === "SELECT") return true;
   if (tag === "INPUT") {

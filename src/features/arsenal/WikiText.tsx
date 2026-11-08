@@ -16,7 +16,7 @@ export function WikiText({ text, onOpenCard }: { text: string; onOpenCard?: (car
         return (
           <button
             key={i} type="button" onClick={() => onOpenCard(card.id)} title={`Open the card ${card.title}`}
-            className="cursor-pointer border-0 bg-transparent p-0 text-xs text-fg-2 underline decoration-line-2 underline-offset-2 hover:text-accent hover:decoration-accent"
+            className="cursor-pointer border-0 bg-transparent p-0 text-meta text-fg-2 underline decoration-line-2 underline-offset-2 hover:text-accent hover:decoration-accent"
           >
             {p.label}
           </button>

@@ -12,11 +12,11 @@ export interface PanelProps extends Omit<HTMLAttributes<HTMLElement>, "title"> {
 /** Flat hairline box on black. No fill, no shadow. */
 export function Panel({ title, actions, className, children, ...rest }: PanelProps) {
   return (
-    <section className={cx("min-h-0 rounded border border-line bg-bg px-3 py-2.5", className)} {...rest}>
+    <section className={cx("min-h-0 rounded border border-line bg-bg px-3 py-3", className)} {...rest}>
       {(title || actions) && (
         <header className="mb-2 flex min-h-5 items-center justify-between gap-2">
           {title && <h2 className={cx(labelClass, "m-0")}>{title}</h2>}
-          {actions && <div className="flex items-center gap-1.5">{actions}</div>}
+          {actions && <div className="flex items-center gap-2">{actions}</div>}
         </header>
       )}
       {children}

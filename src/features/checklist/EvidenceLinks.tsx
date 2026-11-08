@@ -1,4 +1,5 @@
-import { Chip } from "../../ui";
+import { ArrowSquareOut } from "@phosphor-icons/react";
+import { Button, ChipSet } from "../../ui";
 
 export interface EvidenceLink {
   entryId: string;
@@ -8,20 +9,21 @@ export interface EvidenceLink {
   exists: boolean;
 }
 
-/** Evidence chips: a live entry opens in the Log tab; a deleted one just says so. */
+/** Evidence as buttons: a live entry opens in the Log tab; a deleted one just says so. */
 export function EvidenceLinks({ evidence, onOpen }: { evidence: EvidenceLink[]; onOpen: (entryId: string) => void }) {
   if (evidence.length === 0) return null;
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <ChipSet>
       {evidence.map((e) =>
         e.exists ? (
-          <button key={e.entryId} type="button" onClick={() => onOpen(e.entryId)} className="cursor-default">
-            <Chip className="hover:text-fg">↗ {e.label}</Chip>
-          </button>
+          <Button key={e.entryId} size="sm" className="min-w-0 max-w-full" title={e.label} onClick={() => onOpen(e.entryId)}>
+            <ArrowSquareOut size={16} aria-hidden className="shrink-0" />
+            <span className="min-w-0 truncate">{e.label}</span>
+          </Button>
         ) : (
-          <Chip key={e.entryId} className="text-faint">log entry removed</Chip>
+          <span key={e.entryId} className="py-1 text-meta text-faint">log entry removed</span>
         ),
       )}
-    </div>
+    </ChipSet>
   );
 }

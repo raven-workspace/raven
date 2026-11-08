@@ -136,7 +136,7 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
       </div>
       <section
         aria-label="Host context"
-        className={cx("min-h-0 min-w-0 flex-col", pane === "context" ? "flex" : "hidden", "@min-[760px]/host:flex")}
+        className={cx("min-h-0 min-w-0 grid-rows-[minmax(0,1fr)]", pane === "context" ? "grid" : "hidden", "@min-[760px]/host:grid")}
       >
         <SplitLeftPane
           eid={eid}

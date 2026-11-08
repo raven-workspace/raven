@@ -99,7 +99,7 @@ describe("open threads", () => {
     const card = container.querySelector<HTMLElement>('[data-host-id="h1"]')!;
     expect(await within(card).findByLabelText("2 open threads")).toBeInTheDocument();
     const strip = screen.getByRole("status", { name: "Engagement status" });
-    expect(await within(strip).findByText("Threads 3")).toBeInTheDocument();
+    expect(await within(strip).findByLabelText("Threads 3")).toBeInTheDocument();
     expect(within(screen.getByRole("navigation", { name: "Engagement" })).getByLabelText("2 open threads")).toBeInTheDocument();
   });
 
@@ -135,7 +135,8 @@ describe("open threads", () => {
   it("the dashboard card shows the engagement's total", async () => {
     setStored("h1", "? a\n? b");
     mount("/");
-    expect(await screen.findByText("2 threads")).toBeInTheDocument();
+    // A labelled count, like the status strip: "Threads" then "2".
+    expect((await screen.findByText("Threads")).nextSibling).toHaveTextContent("2");
   });
 
   it("closing as dead end requires a reason and creates a ruled-out item", async () => {

@@ -10,9 +10,9 @@ export function FullChecklistToggle({ full, onChange }: { full: boolean; onChang
       type="button"
       aria-expanded={full}
       onClick={() => onChange(!full)}
-      className="inline-flex cursor-default items-center gap-1 text-xs text-fg-2 hover:text-fg"
+      className="grid min-h-7 cursor-default grid-flow-col items-center gap-1 text-meta text-fg-2 hover:text-fg"
     >
-      Full checklist <Caret size={12} weight="light" aria-hidden />
+      Full checklist <Caret size={16} weight="regular" aria-hidden />
     </button>
   );
 }

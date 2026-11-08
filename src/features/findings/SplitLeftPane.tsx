@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { cx } from "../../lib/cx";
+import { ChipSet } from "../../ui";
 import { SCROLL_PANE } from "../../ui/controlStyles";
 import type { Host } from "../../types/host";
 import { shortHostName } from "../../lib/hostName";
@@ -51,9 +52,9 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
   }, [tab, activeId]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={cx("grid min-h-0 gap-3", affected.length > 1 ? "grid-rows-[auto_auto_minmax(0,1fr)]" : "grid-rows-[auto_minmax(0,1fr)]")}>
       {affected.length > 1 && (
-        <div role="group" aria-label="Host" className="mb-2 flex flex-wrap gap-1.5">
+        <ChipSet role="group" aria-label="Host">
           {affected.map((h) => (
             <button
               key={h.id}
@@ -62,16 +63,16 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
               title={hostLabel(h)}
               onClick={() => setChosen(h.id)}
               className={cx(
-                "inline-flex h-6 cursor-default items-center rounded-sm border px-2 text-xs",
+                "inline-grid h-7 cursor-default items-center rounded-sm border px-2 text-meta",
                 h.id === activeId ? "border-accent text-accent" : "border-line-2 text-fg-2 hover:text-fg",
               )}
             >
               {shortHostName(hostLabel(h))}
             </button>
           ))}
-        </div>
+        </ChipSet>
       )}
-      <div role="tablist" aria-label="Finding context" className="flex gap-2">
+      <div role="tablist" aria-label="Finding context" className="grid grid-flow-col auto-cols-max justify-start gap-2">
         {TABS.map((t) => {
           const disabled = t.id === "facts" && !active;
           return (
@@ -84,7 +85,7 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
               title={disabled ? "Pick an affected host to see its facts" : t.title}
               onClick={() => onTab(t.id)}
               className={cx(
-                "h-7 cursor-default rounded-[var(--radius-sm)] px-3 text-[13px] uppercase disabled:opacity-40",
+                "h-7 cursor-default rounded-[var(--radius-sm)] px-3 text-body disabled:opacity-40",
                 tab === t.id ? "bg-surface-hi font-semibold text-fg shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-muted hover:text-fg",
               )}
             >
@@ -96,13 +97,13 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
       <div
         role="tabpanel"
         aria-label={TABS.find((t) => t.id === tab)!.label}
-        className={`@container/ctx mt-3 flex flex-1 flex-col border-t border-line ${SCROLL_PANE}`}
+        className={`@container/ctx grid grid-rows-[minmax(min-content,1fr)] border-t border-line ${SCROLL_PANE}`}
       >
         {tab === "log" ? (
           log.isError ? (
-            <p role="alert" className="text-xs text-warn">Couldn't load the log: {log.error.message}</p>
+            <p role="alert" className="text-meta text-warn">Couldn't load the log: {log.error.message}</p>
           ) : entries.length === 0 && log.data ? (
-            <p className="text-[13px] text-muted">Nothing logged {active ? "on this host" : "yet"}. Press L to capture.</p>
+            <p className="text-meta text-muted">Nothing logged {active ? "on this host" : "yet"}. Press L to capture.</p>
           ) : (
             <ul className="m-0 list-none p-0">
               {entries.map((e) => {
@@ -122,7 +123,7 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
             </ul>
           )
         ) : tab === "notes" ? (
-          <NoteEditor key={activeId ?? ""} target={{ engagementId: eid, hostId: activeId }} textRef={notesRef} className="min-h-[16rem] flex-1 py-2" />
+          <NoteEditor key={activeId ?? ""} target={{ engagementId: eid, hostId: activeId }} textRef={notesRef} className="min-h-[16rem] py-2" />
         ) : active ? (
           <FactsColumn
             engagementId={eid}
@@ -134,7 +135,7 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
             }}
           />
         ) : (
-          <p className="text-[13px] text-muted">Pick an affected host to see its facts.</p>
+          <p className="text-meta text-muted">Pick an affected host to see its facts.</p>
         )}
       </div>
     </div>

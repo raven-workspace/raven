@@ -85,6 +85,19 @@ beforeEach(() => {
 });
 
 describe("log", () => {
+  it("a command whose target IP is no known host shows that IP on its row; a known host's IP does not", async () => {
+    m.hostsList.mockResolvedValue([{ ...host("h1", "dc01"), ip: "192.0.2.10" }]);
+    entries = [
+      entry({ id: "u", title: "Full TCP scan", kind: "command", content: { kind: "command", blocks: [{ command: "nmap -p- 192.0.2.77", output: "" }] } }),
+      entry({ id: "k", title: "Service scan", kind: "command", at: T + 1, content: { kind: "command", blocks: [{ command: "nmap -sV 192.0.2.10", output: "" }] } }),
+    ];
+    mount();
+    await screen.findByText("Full TCP scan");
+    const [known, unknown] = rows();
+    expect(within(unknown!).getByText("192.0.2.77")).toBeInTheDocument();
+    expect(within(known!).queryByText("192.0.2.10")).toBeNull();
+  });
+
   it("log lists newest first with filters", async () => {
     const user = userEvent.setup();
     mount();
@@ -105,18 +118,39 @@ describe("log", () => {
     expect(rows()).toHaveLength(1);
   });
 
+  it("order button toggles between sort ascending and descending icons", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByText("nmap scan");
+    const btn = screen.getByRole("button", { name: "Newest first" });
+    const newestIcon = btn.innerHTML;
+    expect(newestIcon).toContain("<svg");
+    await user.click(btn);
+    const flipped = screen.getByRole("button", { name: "Oldest first" });
+    expect(flipped.innerHTML).toContain("<svg");
+    expect(flipped.innerHTML).not.toBe(newestIcon);
+    await user.click(flipped);
+    expect(screen.getByRole("button", { name: "Newest first" })).toBeInTheDocument();
+  });
+
+  it("stored titles are shown unchanged", async () => {
+    entries = [entry({ id: "z", title: "nmap → host · scan — all" })];
+    mount();
+    expect(await screen.findByText("nmap → host · scan — all")).toBeInTheDocument();
+  });
+
   it("order flips to oldest first and is remembered", async () => {
     const user = userEvent.setup();
     const first = mount();
     await screen.findByText("nmap scan");
-    await user.click(screen.getByRole("button", { name: /Switch to oldest first/ }));
+    await user.click(screen.getByRole("button", { name: "Newest first" }));
     expect(titles()[0]).toMatch(/older note/);
     expect(titles()[2]).toMatch(/secret thing/);
     first.unmount();
     mount();
     await screen.findByText("nmap scan");
     expect(titles()[0]).toMatch(/older note/);
-    await user.click(screen.getByRole("button", { name: /Switch to newest first/ }));
+    await user.click(screen.getByRole("button", { name: "Oldest first" }));
     expect(titles()[0]).toMatch(/secret thing/);
   });
 
@@ -147,7 +181,7 @@ describe("log", () => {
     const user = userEvent.setup();
     mount();
     await user.click(await screen.findByRole("button", { name: /nmap scan/ }));
-    expect(screen.getByText("$ nmap -sV 10.10.10.5")).toHaveClass("font-mono");
+    expect(screen.getByText("$ nmap -sV 10.10.10.5")).toHaveClass("text-code");
     expect(screen.getByText("445/tcp open smb").tagName).toBe("PRE");
     expect(screen.getByText("Observations")).toBeInTheDocument();
     expect(screen.getByText("port 445 open")).toBeInTheDocument();
@@ -224,13 +258,15 @@ describe("log", () => {
     expect(screen.getByText("Delete this entry? Its screenshot goes with it.")).toBeInTheDocument();
   });
 
-  it("load failure shows the error and Try again refetches", async () => {
+  it("load failure shows the error and Retry refetches", async () => {
     const user = userEvent.setup();
     m.logList.mockRejectedValueOnce(new Error("db busy"));
     mount();
     expect(await screen.findByText("Couldn't load the log")).toBeInTheDocument();
+    // The raw error sits in the collapsed Details disclosure.
+    await user.click(screen.getByRole("button", { name: "Details" }));
     expect(screen.getByText("db busy")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByText("nmap scan")).toBeInTheDocument();
   });
 

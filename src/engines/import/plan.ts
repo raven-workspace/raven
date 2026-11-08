@@ -132,6 +132,11 @@ export interface ImportPlan {
   skipped: Record<string, number>;
 }
 
+
+/** Imported flags keep the old "local.txt · host" title: the stored data is real and stays as it was (new captures use the plain name). */
+const importedFlagTitle = (flagKind: FlagKind, host: { name: string } | null) =>
+  host ? `${flagTitle(flagKind)} · ${host.name}` : flagTitle(flagKind);
+
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const hasText = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
@@ -478,7 +483,7 @@ export function buildImportPlan(b: OldBackup, selectedIds: string[], now: number
           continue;
         }
         pushLog({
-          ...base(`${m.id}:flag:${flagKind}`, flagTitle(flagKind, host), hostFor(m), toMs(at, now)),
+          ...base(`${m.id}:flag:${flagKind}`, importedFlagTitle(flagKind, host), hostFor(m), toMs(at, now)),
           kind: "flag",
           content: { kind: "flag", flagKind, value: value.trim(), attachmentId: null, proof: null },
         });

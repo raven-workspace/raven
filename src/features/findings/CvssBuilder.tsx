@@ -76,7 +76,7 @@ function buildVector(version: CvssVersion, picks: Record<string, string>): strin
 }
 
 const segment =
-  "inline-flex h-6 items-center rounded-sm border px-2 text-xs cursor-default " +
+  "inline-grid h-7 items-center rounded-sm border px-2 text-meta cursor-default " +
   "transition-colors duration-150 ease-out motion-reduce:transition-none";
 const segmentOn = "border-accent text-accent";
 const segmentOff = "border-line-2 text-fg-2 hover:border-line-strong hover:text-fg";
@@ -143,7 +143,7 @@ export function CvssBuilder({ value, onChange }: { value: string; onChange(vecto
             );
           })}
         </div>
-        <output aria-label="CVSS score" className="justify-self-end font-mono text-xs tabular-nums text-fg-2">
+        <output aria-label="CVSS score" className="justify-self-end font-mono text-meta tabular-nums text-fg-2">
           {score !== null ? (
             <>
               <span className="text-fg">{score.toFixed(1)}</span> {scoreToSeverity(score)}
@@ -154,7 +154,7 @@ export function CvssBuilder({ value, onChange }: { value: string; onChange(vecto
         </output>
       </div>
       {groupsFor(version).map((g) => (
-        <section key={g.heading} aria-label={g.heading} className="grid gap-1.5">
+        <section key={g.heading} aria-label={g.heading} className="grid gap-2">
           <h4 className={cx(labelClass, "m-0")}>{g.heading}</h4>
           {g.metrics.map((m) => (
             <div
@@ -163,7 +163,7 @@ export function CvssBuilder({ value, onChange }: { value: string; onChange(vecto
               aria-label={`${m.name} (${m.key})`}
               className="grid grid-cols-[10rem_minmax(0,1fr)] items-center gap-2"
             >
-              <span className="text-xs text-fg-2">
+              <span className="text-meta text-fg-2">
                 <span className="font-mono text-muted">{m.key}</span> {m.name}
               </span>
               <div className="grid grid-flow-col auto-cols-max gap-1">

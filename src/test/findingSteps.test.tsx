@@ -98,6 +98,23 @@ const stepTitles = (dlg: HTMLElement) =>
   within(within(dlg).getByRole("list", { name: "Reproduction steps" })).getAllByTestId("step-title").map((e) => e.textContent);
 
 describe("finding steps", () => {
+  it("finding steps reorder with icon buttons named Move up and Move down", async () => {
+    const user = userEvent.setup();
+    mount(SECTION, [finding({ id: "f1", title: "Shell upload", hostIds: ["h1"], stepEntryIds: ["l1", "l2"] })]);
+    const dlg = await openEdit(user, "Shell upload");
+    await within(dlg).findByRole("list", { name: "Reproduction steps" });
+    for (const name of [/^Move up /, /^Move down /, /^Remove step /]) {
+      for (const b of within(dlg).getAllByRole("button", { name })) {
+        expect(b).toHaveTextContent("");
+        expect(b.querySelector("svg")).not.toBeNull();
+      }
+    }
+    // Both slots exist on every row: the first has Up disabled, the last Down disabled, nothing is dropped.
+    const rows = within(dlg).getAllByTestId("step-title").length;
+    expect(within(dlg).getAllByRole("button", { name: /^Move up / })).toHaveLength(rows);
+    expect(within(dlg).getAllByRole("button", { name: /^Move down / })).toHaveLength(rows);
+  });
+
   it("adding steps keeps order; moving up and down reorders; saving sends the ordered ids", async () => {
     const user = userEvent.setup();
     mount(SECTION, [finding({ id: "f1", title: "Shell upload", hostIds: ["h1"] })]);
@@ -397,7 +414,11 @@ describe("host findings tab", () => {
     mount("/e/e1/h/h1", []);
     m.findingsList.mockRejectedValue(new Error("findings down"));
     await user.click(await screen.findByRole("tab", { name: "Findings" }));
-    expect(await screen.findByText(/Couldn.t load findings: findings down/)).toBeInTheDocument();
+    // The attempts list on the same tab reads the findings too, so it fails alongside.
+    const alert = (await screen.findAllByRole("alert")).find((a) => a.textContent?.includes("Couldn't load findings"))!;
+    expect(alert).toBeDefined();
+    await user.click(within(alert).getByRole("button", { name: "Details" }));
+    expect(alert).toHaveTextContent("findings down");
   });
 
   it("shows an empty message when the host has no findings", async () => {

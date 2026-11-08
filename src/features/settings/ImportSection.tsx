@@ -4,7 +4,8 @@ import { buildImportPlan, listImportable, readBackup } from "../../engines/impor
 import type { ImportCandidate, ImportPlan } from "../../engines/import";
 import { api } from "../../lib/api";
 import type { ImportRecordType, ImportSummary } from "../../types/import";
-import { Button, Chip, Panel, Toggle } from "../../ui";
+import { cx } from "../../lib/cx";
+import { Button, Chip, Panel, Toggle, labelClass } from "../../ui";
 
 const TYPE_LABELS: Record<ImportRecordType, string> = {
   engagements: "Engagements",
@@ -88,20 +89,16 @@ export function dateRange(c: ImportCandidate): string {
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-function countLine(c: { added: number; present: number; merged: number }): string {
-  return `${c.added} added · ${c.present} already present${c.merged > 0 ? ` · ${c.merged} merged into existing` : ""}`;
-}
-
 function SkipGroup({ title, labels, skipped }: { title: string; labels: Record<string, string>; skipped: Record<string, number> }) {
   const rows = Object.entries(skipped).filter(([k]) => k in labels);
   if (rows.length === 0) return null;
   return (
     <div className="mt-3">
-      <div className="text-xs text-muted">{title}</div>
-      <ul className="m-0 mt-1 flex list-none flex-col gap-0.5 p-0">
+      <h3 className="m-0 text-meta text-muted">{title}</h3>
+      <ul className="m-0 mt-1 grid list-none grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 p-0 text-meta text-fg-2">
         {rows.map(([k, n]) => (
-          <li key={k} className="flex gap-3 text-xs text-fg-2">
-            <span className="font-mono">{n}</span>
+          <li key={k} className="col-span-full grid grid-cols-subgrid">
+            <span className="font-mono text-code tabular-nums">{n}</span>
             <span>{labels[k]}</span>
           </li>
         ))}
@@ -119,14 +116,29 @@ function Summary({ summary, skipped }: { summary: ImportSummary; skipped: Record
   const unknown = Object.fromEntries(Object.keys(unknownCounts).map((k) => [k, k]));
   return (
     <div className="mt-4 border-t border-line pt-3" aria-label="Import summary">
-      <ul className="m-0 flex list-none flex-col gap-1 p-0">
-        {rows.map((t) => (
-          <li key={t} className="flex items-baseline gap-3 text-xs">
-            <span className="w-40 text-fg-2">{TYPE_LABELS[t]}</span>
-            <span className="font-mono text-fg">{countLine(summary[t])}</span>
-          </li>
-        ))}
-      </ul>
+      <table className="w-full border-collapse text-meta">
+        <thead>
+          <tr>
+            {["Records", "Added", "Already present", "Merged"].map((h, i) => (
+              <th key={h} scope="col" className={cx(labelClass, "pb-2 whitespace-nowrap", i === 0 ? "text-left" : "pl-6 text-right")}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((t) => (
+            <tr key={t}>
+              <th scope="row" className="py-1 text-left font-normal text-fg-2">{TYPE_LABELS[t]}</th>
+              {(["added", "present", "merged"] as const).map((k) => (
+                <td key={k} className="py-1 pl-6 text-right font-mono text-code text-fg tabular-nums">
+                  {summary[t][k]}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
       <SkipGroup title="Skipped" labels={SKIPPED} skipped={skipped} />
       <SkipGroup title="Adjusted (kept in notes)" labels={ADJUSTED} skipped={skipped} />
       <SkipGroup title="Other" labels={unknown} skipped={unknownCounts} />
@@ -217,21 +229,24 @@ export function ImportSection() {
           e.target.value = "";
         }}
       />
-      <p className="m-0 text-xs text-muted">
+      <p className="m-0 text-meta text-muted">
         Import labs and standalone machines from an unencrypted old Raven backup. Existing data is never changed.
       </p>
       {readError && (
-        <p role="alert" className="m-0 mt-3 text-xs text-warn">
+        <p role="alert" className="m-0 mt-3 text-meta text-warn">
           {readError}
         </p>
       )}
       {backup && (
         <div className="mt-3">
-          <div className="mb-1 font-mono text-xs text-muted">{fileName}</div>
-          {candidates.length === 0 && <p className="m-0 text-xs text-fg-2">Nothing importable in this backup.</p>}
-          <ul className="m-0 flex list-none flex-col p-0">
+          <div className="mb-1 font-mono text-code text-muted">{fileName}</div>
+          {candidates.length === 0 && <p className="m-0 text-meta text-fg-2">Nothing importable in this backup.</p>}
+          <ul className="m-0 grid list-none p-0">
             {candidates.map((c) => (
-              <li key={c.id} className="flex items-center gap-3 border-b border-line py-2 last:border-b-0">
+              <li
+                key={c.id}
+                className="grid grid-cols-[max-content_minmax(0,1fr)_max-content_max-content] items-center gap-3 border-b border-line py-2 last:border-b-0"
+              >
                 <Toggle
                   on={selected.has(c.id)}
                   onChange={(on) => toggle(c.id, on)}
@@ -239,10 +254,12 @@ export function ImportSection() {
                 >
                   {selected.has(c.id) ? "Selected" : "Select"}
                 </Toggle>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] text-fg">{c.name}</div>
-                  <div className="text-xs text-muted">
-                    {plural(c.hostCount, "host", "hosts")} · {plural(c.logCount, "log entry", "log entries")} · {dateRange(c)}
+                <div className="grid min-w-0">
+                  <div className="truncate text-body text-fg" title={c.name}>{c.name}</div>
+                  <div className="grid grid-flow-col justify-start gap-4 text-meta text-muted">
+                    <span>{plural(c.hostCount, "host", "hosts")}</span>
+                    <span>{plural(c.logCount, "log entry", "log entries")}</span>
+                    <span>{dateRange(c)}</span>
                   </div>
                 </div>
                 <Chip>{c.kind}</Chip>
@@ -251,7 +268,7 @@ export function ImportSection() {
             ))}
           </ul>
           {candidates.length > 0 && (
-            <div className="mt-3 flex items-center gap-3">
+            <div className="mt-3 grid grid-flow-col items-center justify-start gap-3">
               <Button
                 variant="primary"
                 disabled={selected.size === 0 || run.isPending}
@@ -260,13 +277,13 @@ export function ImportSection() {
               >
                 Import
               </Button>
-              {run.isPending && <span className="text-xs text-muted">Backing up and importing…</span>}
+              {run.isPending && <span className="text-meta text-muted">Backing up and importing…</span>}
             </div>
           )}
         </div>
       )}
       {run.isError && (
-        <p role="alert" className="m-0 mt-3 text-xs text-warn">
+        <p role="alert" className="m-0 mt-3 text-meta text-warn">
           {run.error.message}
         </p>
       )}

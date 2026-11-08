@@ -148,7 +148,7 @@ export function buildDraft(input: DraftInput): CaptureDraft {
     const scan = attributed.length === 1 ? scanFor(blocks.map((b) => b.output).join('\n'), attributed[0], domain) : null;
     return {
       kind,
-      title: commandTitle(blocks, hosts, domain),
+      title: commandTitle(blocks),
       hostIds: attributed.map((h) => h.id),
       ranOn,
       content: { kind: 'command', blocks },
@@ -175,7 +175,8 @@ export function buildDraft(input: DraftInput): CaptureDraft {
       return {
         ...base,
         kind,
-        title: first ? `Screenshot · ${first.name}` : 'Screenshot',
+        // The caption's first line names the shot; without one it is just "Screenshot" (never joined to a host).
+        title: noteTitle(text) || 'Screenshot',
         content: { kind: 'screenshot', attachmentId: '', caption: text.trim(), fileName },
         unknownScopeIps,
       };
@@ -201,7 +202,7 @@ export function buildDraft(input: DraftInput): CaptureDraft {
         ...base,
         kind,
         ranOn: found && first ? first.name : base.ranOn,
-        title: flagTitle(flagKind, first),
+        title: flagTitle(flagKind),
         content: { kind: 'flag', flagKind, value: found?.value ?? text.trim(), attachmentId: '', proof: found ? text.trim() : null },
         unknownScopeIps: found ? [] : unknownScopeIps,
       };

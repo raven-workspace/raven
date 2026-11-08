@@ -1,11 +1,5 @@
-import type { LabelHTMLAttributes } from "react";
-import { cx } from "../lib/cx";
+/** The uppercase tracked section label (headings like "Hosts"). Field labels use `fieldLabelClass` or `Field`. */
+export const labelClass = "text-label uppercase tracking-[0.08em] text-muted";
 
-/** Small uppercase tracked label. Use `labelClass` for headings in the same style. */
-export const labelClass = "text-[10.5px] font-semibold uppercase tracking-label text-muted";
-
-export type LabelProps = LabelHTMLAttributes<HTMLLabelElement>;
-
-export function Label({ className, ...rest }: LabelProps) {
-  return <label className={cx(labelClass, "block", className)} {...rest} />;
-}
+/** Label of a form field or field group: sentence case, never the uppercase section label. */
+export const fieldLabelClass = "text-meta text-muted-2";

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
-import { dateRange, progressLine, relativeTime, timeLeft } from "../features/engagements/format";
+import { dateRange, relativeTime, timeLeft } from "../features/engagements/format";
 import { useNotesStore } from "../features/notes/useNotesStore";
 import { api } from "../lib/api";
 import type { Engagement } from "../types/engagement";
@@ -104,11 +104,6 @@ describe("format", () => {
     expect(relativeTime(now - 3 * HOUR, now)).toBe("3h ago");
     expect(relativeTime(now - 50 * HOUR, now)).toBe("2d ago");
   });
-
-  it("progressLine formats counts", () => {
-    expect(progressLine({ hostsRooted: 0, hostsTotal: 0, flagsFound: 0, flagsTotal: 0 })).toBe("Rooted 0/0 · flags 0/0");
-    expect(progressLine({ hostsRooted: 3, hostsTotal: 6, flagsFound: 7, flagsTotal: 9 })).toBe("Rooted 3/6 · flags 7/9");
-  });
 });
 
 describe("dashboard", () => {
@@ -120,7 +115,10 @@ describe("dashboard", () => {
     expect(within(active).getByText("exam sim")).toBeInTheDocument();
     expect(within(active).getByText("AD + 3 standalone")).toBeInTheDocument();
     expect(within(active).getByText(/^21h 4[45]m left$/)).toBeInTheDocument();
-    expect(within(active).getAllByText("Rooted 0/0 · flags 0/0")).toHaveLength(2);
+    // Each card: labelled Rooted and Flags counts (never one middot-joined line).
+    expect(within(active).getAllByText("Rooted")).toHaveLength(2);
+    expect(within(active).getAllByText("Flags")).toHaveLength(2);
+    expect(within(active).getAllByText("0/0")).toHaveLength(4);
     expect(within(active).getByText(/12m ago/)).toBeInTheDocument();
     expect(within(active).queryByText("Acme")).not.toBeInTheDocument();
 
@@ -369,6 +367,33 @@ describe("engagement shell", () => {
     expect(m.engagementSetStatus).toHaveBeenLastCalledWith("e1", "active");
   });
 
+  async function openDeleteConfirm(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.click(await screen.findByRole("button", { name: "Delete engagement" }));
+  }
+
+  it("engagement header has no Delete button", async () => {
+    mount("/e/e1");
+    await screen.findByRole("button", { name: "Edit" });
+    expect(screen.queryByRole("button", { name: /^Delete/ })).not.toBeInTheDocument();
+  });
+
+  it("Tab reaches Delete engagement in the edit dialog; Enter opens the confirm; Esc closes only the confirm", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1");
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    const edit = await screen.findByRole("dialog", { name: "Edit engagement" });
+    const del = within(edit).getByRole("button", { name: "Delete engagement" });
+    for (let i = 0; i < 40 && document.activeElement !== del; i++) await user.tab();
+    expect(del).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("dialog", { name: "Delete engagement" })).toBeInTheDocument();
+    expect(m.engagementDelete).not.toHaveBeenCalled();
+    await user.keyboard("{Escape}");
+    await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: "Delete engagement" })).not.toBeInTheDocument());
+    expect(screen.getByRole("dialog", { name: "Edit engagement" })).toBeInTheDocument();
+  });
+
   it("delete requires typing the name", async () => {
     const user = userEvent.setup();
     m.engagementDelete.mockImplementation(async (id) => {
@@ -376,7 +401,7 @@ describe("engagement shell", () => {
       return null;
     });
     mount("/e/e1");
-    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    await openDeleteConfirm(user);
     const dialog = await screen.findByRole("dialog", { name: "Delete engagement" });
     const confirm = within(dialog).getByRole("button", { name: "Delete engagement" });
     expect(confirm).toBeDisabled();
@@ -400,7 +425,7 @@ describe("engagement shell", () => {
       ownerId: hostId ?? engagementId, engagementId, hostId, body, private: isPrivate, updatedAt: 1,
     }));
     mount("/e/e1");
-    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    await openDeleteConfirm(user);
     useNotesStore.setState({
       pending: {
         "e1:": { engagementId: "e1", hostId: null, body: "? gone", private: false },

@@ -55,7 +55,7 @@ describe("Field Manual import", () => {
     m.fieldManualSave.mockResolvedValue(null);
     mount(<FieldManualSection />);
     await user.click(await screen.findByRole("button", { name: "Import now" }));
-    expect(await screen.findByText(/1 cards · /)).toBeInTheDocument();
+    expect(await screen.findByText(/1 cards, /)).toBeInTheDocument();
     expect(m.fieldManualScan).toHaveBeenCalledWith("~/fm");
     expect(m.fieldManualSave).toHaveBeenCalledTimes(1);
     expect(getLibrary().some((c) => c.id === "fm-zz-new-card-v0")).toBe(true);

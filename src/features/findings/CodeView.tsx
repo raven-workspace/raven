@@ -33,7 +33,7 @@ export function CodeView({ code, language }: { code: string; language: string })
   const lang = hljs.getLanguage(language) ? language : "plaintext";
   const html = useMemo(() => hljs.highlight(code, { language: lang, ignoreIllegals: true }).value, [code, lang]);
   return (
-    <pre className="m-0 max-h-[320px] overflow-auto rounded-sm border border-line bg-bg p-2.5 text-[12px] leading-[1.5]">
+    <pre className="m-0 max-h-[320px] overflow-auto rounded-sm border border-line bg-bg p-3 text-code">
       {/* highlight.js output is escaped HTML; raw file content never reaches the DOM unescaped. */}
       <code className={`hljs language-${lang}`} dangerouslySetInnerHTML={{ __html: html }} />
     </pre>

@@ -27,6 +27,8 @@ export const AUDIT_IDS = {
   payloadsEngagement: "e-pay",
   iisHost: "h-pay-iis",
   pgHost: "h-pay-pg",
+  boardEngagement: "e-board",
+  findingsListEngagement: "e-fl",
 } as const;
 
 /** 2026-11-05 14:00 UTC. The browser clock is frozen here when auditing. */
@@ -94,6 +96,22 @@ const engagements: Engagement[] = [
     timeboxStart: null, timeboxMinutes: null, status: "active", createdAt: ago(48 * HOUR), updatedAt: ago(24 * HOUR),
     lastActivityAt: ago(24 * HOUR), lastRanOn: "Kali (VM)", msfHostId: null,
   },
+  // Board stress: a 20-host lane next to empty lanes (RFC 5737 addresses, example.test names). Archived, so it only
+  // adds one row to the dashboard's past table.
+  {
+    id: "e-board", name: "Board sweep", kind: "lab", client: null, subLabel: null,
+    scopeCidrs: ["203.0.113.0/24"], domain: "example.test", startsAt: null, endsAt: null,
+    timeboxStart: null, timeboxMinutes: null, status: "archived", createdAt: ago(20 * 24 * HOUR),
+    updatedAt: ago(19 * 24 * HOUR), lastActivityAt: ago(19 * 24 * HOUR), lastRanOn: "Kali (VM)", msfHostId: null,
+  },
+  // Findings list: every severity, long titles and host names, attempts with and without a log entry. Archived, so it
+  // only adds one row to the dashboard's past table.
+  {
+    id: "e-fl", name: "Findings list drill", kind: "lab", client: null, subLabel: null,
+    scopeCidrs: ["192.0.2.0/24"], domain: "example.test", startsAt: null, endsAt: null,
+    timeboxStart: null, timeboxMinutes: null, status: "archived", createdAt: ago(18 * 24 * HOUR),
+    updatedAt: ago(17 * 24 * HOUR), lastActivityAt: ago(17 * 24 * HOUR), lastRanOn: "Kali (VM)", msfHostId: null,
+  },
 ];
 
 // ---------------------------------------------------------------- hosts
@@ -122,6 +140,20 @@ const hosts: Host[] = [
   host("h-pay-iis", "e-pay", "intranet-gateway-iis-frontend-07.corp.example.test", "198.51.100.20", "windows", { boardColumn: "initial-foothold", access: "user" }),
   host("h-pay-pg", "e-pay", "pg01.example.test", "198.51.100.30", "linux"),
   host("h-old-1", "e-old", "shop.contoso.example", "10.60.5.10", "linux", { boardColumn: "reporting", access: "root" }),
+  // Board sweep: 20 hosts in information gathering; post-exploitation and reporting stay empty. Placed by hand
+  // (boardManual), so the board's auto-sync leaves the lanes as written.
+  ...Array.from({ length: 20 }, (_, i) => {
+    const os: Host["os"][] = ["windows", "linux", "other", null];
+    const name = i === 0 ? "file-server-replica-backup-node-03.branch.example.test" : `ws${String(i + 1).padStart(2, "0")}.example.test`;
+    return host(`h-board-${i + 1}`, "e-board", name, `203.0.113.${i + 10}`, os[i % 4], { access: i % 5 === 0 ? "user" : "none", boardManual: true });
+  }),
+  host("h-board-vd", "e-board", "mail.example.test", "203.0.113.40", "windows", { boardColumn: "vulnerability-detection", boardManual: true }),
+  host("h-board-if", "e-board", "intranet-gateway-iis-frontend-07.example.test", "203.0.113.41", "windows", { boardColumn: "initial-foothold", access: "user", boardManual: true }),
+  host("h-board-pe", "e-board", "db.example.test", "203.0.113.42", "linux", { boardColumn: "privilege-escalation", access: "root", boardManual: true }),
+  host("h-fl-1", "e-fl", "app-server-replica-backup-node-03.branch-office.example.test", "192.0.2.10", "linux", { access: "user" }),
+  host("h-fl-2", "e-fl", "dc01.example.test", "192.0.2.11", "windows", { access: "root" }),
+  host("h-fl-3", "e-fl", "fs01.example.test", "192.0.2.12", "windows"),
+  host("h-fl-4", "e-fl", "web01.example.test", "192.0.2.13", "linux"),
 ];
 
 // ---------------------------------------------------------------- services
@@ -177,7 +209,7 @@ const services: Service[] = [
   svc("h-fs01", 135, "msrpc", "Microsoft Windows RPC"),
   svc("h-fs01", 389, "ldap", "Microsoft Windows Active Directory LDAP"),
   svc("h-fs01", 445, "microsoft-ds?", null, confirmed("SMB", "3.1.1")),
-  svc("h-fs01", 3389, "ms-wbt-server", "Microsoft Terminal Services"),
+  svc("h-fs01", 3389, "ms-wbt-server", "Microsoft Terminal Services", { verdict: "dead_end" }),
   svc("h-sql01", 88, "kerberos-sec", "Microsoft Windows Kerberos"),
   svc("h-sql01", 389, "ldap", "Microsoft Windows Active Directory LDAP"),
   svc("h-sql01", 445, "microsoft-ds?", null),
@@ -305,7 +337,7 @@ const attachments: Attachment[] = (Object.keys(AUDIT_PNGS) as (keyof typeof AUDI
   id: `a-${k}`, mime: "image/png", dataBase64: AUDIT_PNGS[k].base64,
 }));
 
-// ---------------------------------------------------------------- credentials (all domain scope, all newer than the done goal)
+// ---------------------------------------------------------------- credentials (domain scope except one local account, all newer than the done goal)
 
 const cred = (n: number, type: Credential["type"], username: string, secret: string, over: Partial<Credential> = {}): Credential => ({
   id: `c-${n}`, engagementId: "e-lab", type, username, domain: "ACME", secret, hashType: null, scope: "domain",
@@ -325,7 +357,7 @@ const credentials: Credential[] = [
   cred(8, "hash", "m.okafor", NT(0x82), { hashType: "NTLM", crackStatus: "cracked", sourceHostId: "h-fs01" }),
   cred(9, "password", "m.okafor", "Autumn2026#", { sourceHostId: "h-fs01", fromSecretId: "c-8" }),
   cred(10, "hash", "a.lindqvist-with-an-extraordinarily-long-service-account-name", NT(0x93), { hashType: "NTLM", crackStatus: "uncracked", domain: "ACME-DMZ" }),
-  cred(11, "password", "backup-operator", "Password123!", { notes: "Found in a sticky note file on the desktop." }),
+  cred(11, "password", "backup-operator", "Password123!", { domain: null, scope: "local", localHostId: "h-fs01", source: "local SAM dump on fs01", notes: "Found in a sticky note file on the desktop." }),
   cred(12, "hash", "ws07$", `aad3b435b51404eeaad3b435b51404ee:${NT(0xa4)}`, { hashType: "pwdump", crackStatus: "uncrackable", sourceHostId: "h-ws07" }),
 ];
 
@@ -358,7 +390,7 @@ const credAttempts: CredAttempt[] = [
   { id: "ca-3", engagementId: "e-lab", credId: "c-6", usernameId: null, hostId: "h-sql01", service: "mssql", port: 1433, result: "valid", authMode: "domain", detail: null, logEntryId: "l-13", at: ago(45 * MIN) },
   { id: "ca-4", engagementId: "e-lab", credId: "c-2", usernameId: null, hostId: "h-fs01", service: "smb", port: 445, result: "failed", authMode: "domain", detail: "STATUS_LOGON_FAILURE", logEntryId: null, at: ago(60 * MIN) },
   // A password that works on fs01: the Arsenal's credential chip should offer it first there.
-  { id: "ca-5", engagementId: "e-lab", credId: "c-9", usernameId: null, hostId: "h-fs01", service: "smb", port: 445, result: "valid", authMode: "domain", detail: null, logEntryId: null, at: ago(30 * MIN) },
+  { id: "ca-5", engagementId: "e-lab", credId: "c-9", usernameId: null, hostId: "h-fs01", service: "smb", port: 445, result: "valid", authMode: "domain", detail: null, logEntryId: "l-5", at: ago(30 * MIN) },
 ];
 
 const accessGrants: AccessGrant[] = [
@@ -391,6 +423,19 @@ const findings: Finding[] = [
     status: "draft", description: "", impact: "", remediation: "", exploitNotes: "", lessons: "", refs: [], hostIds: [], serviceIds: [], stepEntryIds: [],
     createdAt: ago(21 * MIN), updatedAt: ago(21 * MIN),
   },
+  ...[
+    ["Unauthenticated remote code execution through a deserialisation flaw in the legacy report export endpoint of the customer portal", "critical", 10, "reported", ["h-fl-1", "h-fl-2", "h-fl-3", "h-fl-4"]],
+    ["SMB signing not required", "high", 8.1, "confirmed", ["h-fl-2"]],
+    ["Outdated TLS configuration", "medium", 5.3, "draft", ["h-fl-4"]],
+    ["Verbose server banner", "low", 2.1, "draft", ["h-fl-3"]],
+    ["Unrated observation about the backup share", null, null, "draft", []],
+    ["Informational: guest account enabled", "info", null, "confirmed", ["h-fl-2", "h-fl-3"]],
+  ].map(([title, severity, cvssScore, status, hostIds], i): Finding => ({
+    id: `f-fl-${i + 1}`, engagementId: "e-fl", title: title as string, severity: severity as Finding["severity"], cvssVector: null,
+    cvssScore: cvssScore as number | null, status: status as Finding["status"], description: "", impact: "", remediation: "",
+    exploitNotes: "", lessons: "", refs: [], hostIds: hostIds as string[], serviceIds: [], stepEntryIds: [],
+    createdAt: ago((40 - i) * MIN), updatedAt: ago((40 - i) * MIN),
+  })),
 ];
 
 const findingFiles: FindingFile[] = [
@@ -400,6 +445,21 @@ const findingFiles: FindingFile[] = [
 const failedAttempts: FailedAttempt[] = [
   { id: "fa-1", engagementId: "e-lab", hostId: "h-web", findingId: null, title: "Anonymous FTP upload", reasonKind: "control", reason: "Anonymous login is disabled.", private: false, logEntryId: "l-10", createdAt: ago(60 * MIN), updatedAt: ago(60 * MIN) },
 ];
+
+const flLog: LogEntry[] = [
+  cmd("Relay attempt against the DC", "ntlmrelayx.py -t smb://192.0.2.11 -smb2support", "SMB signing is required", ["h-fl-2"], { engagementId: "e-fl", at: ago(3 * HOUR) }),
+].map((e) => ({ ...e, id: "l-fl-1" }));
+log.push(...flLog);
+
+const flAttempt = (n: number, over: Partial<FailedAttempt>): FailedAttempt => ({
+  id: `fa-fl-${n}`, engagementId: "e-fl", hostId: null, findingId: null, title: "", reasonKind: "control", reason: "", private: false,
+  logEntryId: null, createdAt: ago(n * 30 * MIN), updatedAt: ago(n * 30 * MIN), ...over,
+});
+failedAttempts.push(
+  flAttempt(1, { title: "Relay to the DC", hostId: "h-fl-2", reason: "SMB signing is required.", logEntryId: "l-fl-1" }),
+  flAttempt(2, { title: "Spray the VPN portal", hostId: "h-fl-1", reasonKind: "access", reason: "Account lockout after three tries, and the lockout window turned out to be the full 30 minutes, so the spray was stopped and the user list was cut down before a second attempt." }),
+  flAttempt(3, { title: "Wrong wordlist for the hash", reasonKind: "operator", reason: "Used a Windows wordlist against a Linux hash.", private: true }),
+);
 
 const ruledOut: RuledOut[] = [
   { id: "r-1", engagementId: "e-lab", hostId: "h-web", text: "vsftpd 3.0.3 backdoor", reason: "Backdoor was in 2.3.4 only.", private: false, sourceKind: null, sourceId: null, createdAt: ago(90 * MIN) },
@@ -416,6 +476,8 @@ const hostIdentity: HostIdentity[] = [
 const vectors: PrivescVector[] = [
   { id: "pv-1", hostId: "h-exam-ms01", title: "SeImpersonatePrivilege (potato)", status: "try", source: "auto", createdAt: ago(30 * MIN), updatedAt: ago(30 * MIN) },
   { id: "pv-2", hostId: "h-exam-ms01", title: "Unquoted service path", status: "untested", source: "manual", createdAt: ago(25 * MIN), updatedAt: ago(25 * MIN) },
+  { id: "pv-3", hostId: "h-exam-ms01", title: "SeImpersonatePrivilege abuse through a named pipe", status: "try", source: "manual", createdAt: ago(20 * MIN), updatedAt: ago(20 * MIN) },
+  { id: "pv-4", hostId: "h-exam-ms01", title: "AlwaysInstallElevated", status: "ruled_out", source: "manual", createdAt: ago(15 * MIN), updatedAt: ago(15 * MIN) },
 ];
 
 // ---------------------------------------------------------------- network, notes, cleanup
@@ -460,6 +522,8 @@ const progress: Record<string, Progress> = {
   "e-exam": { hostsTotal: 5, hostsRooted: 0, flagsFound: 1, flagsTotal: 6 },
   "e-old": { hostsTotal: 1, hostsRooted: 1, flagsFound: 2, flagsTotal: 2 },
   "e-pay": { hostsTotal: 2, hostsRooted: 0, flagsFound: 0, flagsTotal: 4 },
+  "e-board": { hostsTotal: 23, hostsRooted: 1, flagsFound: 0, flagsTotal: 0 },
+  "e-fl": { hostsTotal: 4, hostsRooted: 1, flagsFound: 0, flagsTotal: 0 },
 };
 
 const backups: BackupInfo[] = [

@@ -1,4 +1,5 @@
 import type { HTMLAttributes, Ref } from "react";
+import { labelClass } from "../../ui";
 import { ON } from "./styles";
 
 /** What a result row shows: a title and a small tag at its right (a count, a card/tool, an engagement item's kind). */
@@ -22,13 +23,13 @@ export interface ResultGroup<R extends ResultRow> {
 /**
  * The Arsenal drawer's and ⌘K's results: `role=listbox` of `role=group`s (named by a plain heading, never an h3)
  * holding `role=option` rows. Rows are numbered across the groups in order; `selected` is the row number on `ON`.
- * Focus stays in the search field, which points at the row with `aria-activedescendant`.
+ * Hover only tints a row: selection is set by click or keys, never by the pointer. Focus stays in the search field, which points at the row with `aria-activedescendant`.
  */
-export function ResultList<R extends ResultRow>({ id, label, groups, selected, onSelect, onActivate, listRef, listProps }: {
+export function ResultList<R extends ResultRow>({ id, label, groups, selected, onActivate, listRef, listProps }: {
   /** For a list that takes focus itself (browse's middle pane): its ref and tabindex, key and `aria-activedescendant` props. */
   listRef?: Ref<HTMLDivElement>; listProps?: HTMLAttributes<HTMLDivElement>;
   id: string; label: string; groups: ResultGroup<R>[]; selected: number;
-  onSelect: (index: number) => void; onActivate: (row: R, index: number) => void;
+  onActivate: (row: R, index: number) => void;
 }) {
   let next = 0;
   const option = (r: R) => {
@@ -40,12 +41,11 @@ export function ResultList<R extends ResultRow>({ id, label, groups, selected, o
         role="option"
         aria-selected={i === selected}
         onClick={() => onActivate(r, i)}
-        onMouseMove={() => onSelect(i)}
         title={r.title}
-        className={`grid cursor-default ${r.stack ? "grid-cols-[minmax(0,1fr)] gap-0" : "grid-cols-[minmax(0,1fr)_auto] items-center gap-2"} rounded-sm px-2 py-1 text-left text-[13px] ${i === selected ? ON : "text-fg-2"}`}
+        className={`grid cursor-default ${r.stack ? "grid-cols-[minmax(0,1fr)] gap-0" : "grid-cols-[minmax(0,1fr)_auto] items-center gap-2"} rounded-sm px-2 py-1 text-left text-body ${i === selected ? ON : "text-fg-2 hover:bg-surface-hi"}`}
       >
         <span className="min-w-0 truncate">{r.title}</span>
-        {r.tag && <span className={`min-w-0 truncate text-[11px] text-muted ${r.mono ? "font-mono" : ""} ${r.stack ? "" : "max-w-40"}`}>{r.tag}</span>}
+        {r.tag && <span className={`min-w-0 truncate text-meta text-muted ${r.mono ? "font-mono" : ""} ${r.stack ? "" : "max-w-40"}`}>{r.tag}</span>}
       </div>
     );
   };
@@ -55,8 +55,8 @@ export function ResultList<R extends ResultRow>({ id, label, groups, selected, o
         if (g.label === undefined) return g.rows.map(option);
         const headingId = `${id}-group-${g.key}`;
         return (
-          <div key={g.key} role="group" aria-labelledby={headingId} className="grid grid-cols-[minmax(0,1fr)] border-t border-line pt-1.5 first:border-t-0 first:pt-0">
-            <div id={headingId} className="px-2 pb-0.5 text-[11px] font-semibold uppercase tracking-label text-muted">{g.label}</div>
+          <div key={g.key} role="group" aria-labelledby={headingId} className="grid grid-cols-[minmax(0,1fr)] border-t border-line pt-2 first:border-t-0 first:pt-0">
+            <div id={headingId} className={`px-2 pb-1 ${labelClass}`}>{g.label}</div>
             {g.rows.map(option)}
           </div>
         );

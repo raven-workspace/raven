@@ -121,9 +121,9 @@ describe("facts by phase", () => {
   it("before a foothold: Coverage, Services and Host Credentials are open; the after-foothold groups are folded summaries", async () => {
     mount();
     for (const name of ["Coverage", "Services", "Host Credentials"]) expect(await isOpen(name)).toBe(true);
-    expect(await summaryOf("Who am I")).toMatch(/^Who am I · not known yet/);
-    expect(await summaryOf("Privesc vectors")).toMatch(/^Privesc vectors · none yet/);
-    expect(await summaryOf("Other accounts")).toMatch(/^Other accounts · 0/);
+    expect(await summaryOf("Who am I")).toMatch(/^Who am I.*not known yet/);
+    expect(await summaryOf("Privesc vectors")).toMatch(/^Privesc vectors.*none yet/);
+    expect(await summaryOf("Other accounts")).toMatch(/^Other accounts.*none yet$/);
     const order = [...screen.getByRole("region", { name: "Facts" }).children].map((r) => r.getAttribute("aria-label"));
     expect(order).toEqual(["Coverage", "Services", "Host Credentials", "Who am I", "Privesc vectors", "Other accounts"]);
   });
@@ -138,7 +138,7 @@ describe("facts by phase", () => {
     const vectors = await group("Privesc vectors");
     expect(await vectors.findByText("SeImpersonatePrivilege abuse")).toBeInTheDocument();
     expect(vectors.getByRole("button", { name: "SeImpersonatePrivilege abuse: try" })).toBeInTheDocument();
-    expect(await summaryOf("Services")).toMatch(/^Services · /);
+    expect(await summaryOf("Services")).toMatch(/^Services.+/);
     const order = [...screen.getByRole("region", { name: "Facts" }).children].map((r) => r.getAttribute("aria-label"));
     expect(order.slice(0, 3)).toEqual(["Who am I", "Privesc vectors", "Other accounts"]);
   });
@@ -146,14 +146,23 @@ describe("facts by phase", () => {
   it("phase follows access, not the board column", async () => {
     mount({ host: host({ access: "none", boardColumn: "privilege-escalation" }) });
     expect(await isOpen("Services")).toBe(true);
-    expect(await summaryOf("Who am I")).toMatch(/^Who am I · /);
+    expect(await summaryOf("Who am I")).toMatch(/^Who am I.+/);
   });
 
-  it("the summaries: Services, Coverage and Host Credentials", async () => {
+  it("the summaries: Services, Coverage and Host Credentials, as labelled cells", async () => {
     mount({ host: host({ access: "root" }) });
-    expect(await summaryOf("Services")).toBe("Services · 1 ✓ · entry nginx 80 · 1 ?");
-    expect(await summaryOf("Coverage")).toMatch(/^Coverage · Vulnerability detection 0\/\d+$/);
-    await waitFor(async () => expect(await summaryOf("Host Credentials")).toBe("Host Credentials · 0 work · 0 untested"));
+    const services = await group("Services");
+    await services.findByRole("button", { expanded: false });
+    const cells = [...services.getByRole("button", { expanded: false }).querySelectorAll("[data-summary-cell]")];
+    expect(cells.map((c) => c.textContent)).toEqual(["3 services", "1 confirmed", "entry:nginx on 80", "1 unidentified"]);
+    expect(await summaryOf("Coverage")).toMatch(/^Coverage.*Vulnerability detection:0\/\d+ done$/);
+    await waitFor(async () => expect(await summaryOf("Host Credentials")).toBe("Host Credentials0 working0 untested"));
+  });
+
+  it("services summary has no middot string", async () => {
+    mount({ host: host({ access: "root" }) });
+    for (const name of ["Services", "Coverage", "Host Credentials"]) expect(await summaryOf(name)).not.toMatch(/[·—→]/);
+    expect(await summaryOf("Services")).not.toContain("✓");
   });
 
   it("an opened group stays open for that host (stored per host, folds only)", async () => {
@@ -186,7 +195,7 @@ describe("S toggles Services", () => {
     mount();
     expect(await isOpen("Services")).toBe(true);
     await user.keyboard("s");
-    expect(await summaryOf("Services")).toMatch(/^Services · /);
+    expect(await summaryOf("Services")).toMatch(/^Services.+/);
     await user.keyboard("S");
     expect(await isOpen("Services")).toBe(true);
   });
@@ -213,9 +222,10 @@ describe("services grid", () => {
     const nginx = (await g.findByText(/nginx 1\.18/)).closest("span")!;
     expect(nginx).toHaveClass("text-fg");
     expect(nginx).toHaveAttribute("title", "nmap: http Apache 2.4");
-    expect(within(nginx).getByText("✓")).toHaveClass("text-accent");
+    expect(within(nginx.parentElement!).getByText("confirmed").parentElement).toHaveClass("text-accent");
     expect(g.getByText("ssh OpenSSH 8.2")).toHaveClass("text-muted");
-    expect(g.getByText("?", { exact: false, selector: ".text-warn" })).toBeInTheDocument();
+    const smb = g.getByRole("button", { name: /^445\/tcp/ });
+    expect(within(smb).getByText("unidentified")).toBeInTheDocument();
   });
 
   it("a service that is not open shows its state", async () => {
@@ -278,8 +288,37 @@ describe("services grid", () => {
     mount();
     const g = await group("Services");
     await user.click(await g.findByRole("button", { name: "Verdict for 22/tcp: untested" }));
-    await user.click(within(g.getByRole("group", { name: "Verdict for 22/tcp" })).getByRole("button", { name: "Candidate" }));
+    await user.click(within(g.getByRole("radiogroup", { name: "Verdict for 22/tcp" })).getByRole("radio", { name: "Candidate" }));
     expect(m.serviceSetVerdict).toHaveBeenCalledWith("s3", "candidate", undefined);
+  });
+
+  it("the verdict chip's hint is a tooltip that keyboard focus opens", async () => {
+    mount();
+    const g = await group("Services");
+    const chip = await g.findByRole("button", { name: "Verdict for 22/tcp: untested" });
+    expect(chip).not.toHaveAttribute("title");
+    expect(chip).toHaveClass("min-h-7");
+    chip.focus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Set the verdict (C, U or D on the row)");
+  });
+
+  it("clicking the pressed verdict closes the menu without changing it", async () => {
+    const user = userEvent.setup();
+    mount();
+    const g = await group("Services");
+    await user.click(await g.findByRole("button", { name: "Verdict for 80/tcp: candidate" }));
+    await user.click(within(g.getByRole("radiogroup", { name: "Verdict for 80/tcp" })).getByRole("radio", { name: "Candidate" }));
+    expect(g.queryByRole("radiogroup", { name: "Verdict for 80/tcp" })).not.toBeInTheDocument();
+    expect(m.serviceSetVerdict).not.toHaveBeenCalled();
+  });
+
+  it("clicking the pressed Dead end asks for the reason again", async () => {
+    const user = userEvent.setup();
+    mount({ services: [SSH, svc("s4", 21, { nmapService: "ftp", verdict: "dead_end" })] });
+    const g = await group("Services");
+    await user.click(await g.findByRole("button", { name: "Verdict for 21/tcp: dead end" }));
+    await user.click(within(g.getByRole("radiogroup", { name: "Verdict for 21/tcp" })).getByRole("radio", { name: /Dead end/ }));
+    expect(await screen.findByRole("textbox", { name: "Why is 21/tcp a dead end?" })).toBeInTheDocument();
   });
 
   it("7 dynamic RPC ports fold into one msrpc ×7 row that opens in place; UDP folds too", async () => {
@@ -357,7 +396,8 @@ describe("who am I and privesc vectors", () => {
     const who = await group("Who am I");
     expect(await who.findByText(/Not known yet/)).toBeInTheDocument();
     const edit = who.getByRole("button", { name: "Edit who am I" });
-    expect(edit).toHaveAttribute("title");
+    await user.hover(edit);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Edit who am I");
     await user.click(edit);
     await user.type(who.getByRole("textbox", { name: "User" }), "ms01\\svc");
     await user.type(who.getByRole("textbox", { name: "Privileges" }), "SeBackupPrivilege");
@@ -467,12 +507,26 @@ describe("who am I and privesc vectors", () => {
     expect(m.vectorSetStatus).toHaveBeenCalledWith("v3", "untested", undefined);
   });
 
+  it("a vector's status chip names its toggle in a tooltip on keyboard focus", async () => {
+    mount({ host: after(), vectors: [vector("v1", "SeImpersonatePrivilege abuse", "try"), vector("v3", "AlwaysInstallElevated", "ruled_out")] });
+    const vectors = await group("Privesc vectors");
+    const tryChip = await vectors.findByRole("button", { name: "SeImpersonatePrivilege abuse: try" });
+    const reopen = vectors.getByRole("button", { name: "Reopen AlwaysInstallElevated" });
+    for (const b of [tryChip, reopen]) expect(b).not.toHaveAttribute("title");
+    tryChip.focus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Mark untested");
+    reopen.focus();
+    await waitFor(() => expect(screen.getByRole("tooltip")).toHaveTextContent("Reopen as untested"));
+  });
+
   it("deleting a vector asks first", async () => {
     const user = userEvent.setup();
     m.vectorDelete.mockResolvedValue(null);
     mount({ host: after(), vectors: [vector("v1", "SeImpersonatePrivilege abuse", "try")] });
     const del = await (await group("Privesc vectors")).findByRole("button", { name: "Delete SeImpersonatePrivilege abuse" });
-    expect(del).toHaveAttribute("data-variant", "danger");
+    expect(del).toHaveAccessibleName("Delete SeImpersonatePrivilege abuse");
+    // Destructive tone: muted at rest, amber only on hover or focus.
+    expect(del).toHaveClass("text-muted");
     await user.click(del);
     expect(m.vectorDelete).not.toHaveBeenCalled();
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete vector" }));
@@ -503,7 +557,7 @@ describe("who am I and privesc vectors", () => {
     expect(g.queryByText(/Winter2024/)).not.toBeInTheDocument();
     const user = userEvent.setup();
     await user.click(await toggleOf("Other accounts"));
-    expect(await summaryOf("Other accounts")).toBe("Other accounts · 2");
+    expect(await summaryOf("Other accounts")).toMatch(/^Other accounts.*2 accounts$/);
   });
 
   it("Other accounts shows at most six rows, then +N more; the summary counts them all", async () => {
@@ -516,7 +570,7 @@ describe("who am I and privesc vectors", () => {
     expect(g.getAllByText(/\(hash\)$/)).toHaveLength(6);
     const user = userEvent.setup();
     await user.click(await toggleOf("Other accounts"));
-    expect(await summaryOf("Other accounts")).toBe("Other accounts · 9");
+    expect(await summaryOf("Other accounts")).toMatch(/^Other accounts.*9 accounts$/);
   });
 
   it("saving an identity edit adds vectors only for newly added privileges, keeping the user's status on the rest", async () => {

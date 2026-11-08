@@ -142,7 +142,7 @@ test("credentials notice stays one line", async ({ page }) => {
   await open(page, LAB_HOST, 900);
   await page.getByRole("tab", { name: "Next" }).click();
   await page.getByRole("button", { name: "Full checklist" }).click();
-  const notice = page.getByText(/new creds since done/).first();
+  const notice = page.getByText(/New credentials since done/).first();
   await notice.waitFor();
   const { height, lineHeight } = await notice.evaluate((el) => {
     const s = getComputedStyle(el);
@@ -221,6 +221,46 @@ test("sidebar collapses without sideways scroll and shows IPs", async ({ page })
   expect(rows.some((r) => r.text.includes(WEB_SHORT))).toBe(true);
 });
 
+test("rail: 32px section boxes on the host glyphs' centre line, names inside the rail", async ({ page }) => {
+  for (const width of [900, 1280]) {
+    await open(page, LAB_HOST, width);
+    await page.getByRole("tab", { name: "Next" }).waitFor();
+    if (await page.getByRole("button", { name: "Collapse sidebar" }).isVisible()) await page.keyboard.press("Meta+B");
+    await page.getByRole("button", { name: "Expand sidebar" }).waitFor();
+    const nav = page.getByRole("navigation", { name: "Engagement" });
+    // The rail is 56px including its 1px hairline; let the width transition settle.
+    await expect.poll(async () => (await nav.boundingBox())!.width).toBe(55);
+    const geo = await nav.evaluate((el) => {
+      const rail = el.getBoundingClientRect();
+      const box = (e: Element) => e.getBoundingClientRect();
+      const cx = (r: DOMRect) => r.left + r.width / 2;
+      const sections = [...el.querySelectorAll('a:not([href*="/h/"])')].map(box);
+      const hosts = [...el.querySelectorAll('a[href*="/h/"]')];
+      const glyphs = hosts.map((a) => box(a.firstElementChild!));
+      const labels = hosts.map((a) => a.querySelector("span[aria-hidden]")!);
+      return {
+        railCx: cx(rail), railRight: rail.right,
+        sections: sections.map((r) => ({ w: r.width, h: r.height, cx: cx(r), top: r.top })),
+        glyphCx: glyphs.map(cx),
+        hostRight: hosts.map((a) => box(a).right),
+        labelFits: labels.map((l) => l.scrollWidth <= l.clientWidth + 0.5 && box(l).right <= rail.right),
+      };
+    });
+    expect(geo.sections).toHaveLength(6);
+    for (const s of geo.sections) {
+      expect(s.w, `${width}: section box width`).toBe(32);
+      expect(s.h, `${width}: section box height`).toBe(32);
+      expect(Math.abs(s.cx - geo.railCx), `${width}: section centred in the rail`).toBeLessThanOrEqual(0.5);
+    }
+    for (let i = 1; i < geo.sections.length; i++)
+      expect(geo.sections[i].top - geo.sections[i - 1].top, `${width}: section pitch`).toBeGreaterThanOrEqual(36);
+    expect(geo.glyphCx.length).toBeGreaterThan(0);
+    for (const g of geo.glyphCx) expect(Math.abs(g - geo.sections[0].cx), `${width}: host glyph on the section centre line`).toBeLessThanOrEqual(0.5);
+    for (const r of geo.hostRight) expect(r, `${width}: host row inside the rail`).toBeLessThanOrEqual(geo.railRight);
+    expect(geo.labelFits.every(Boolean), `${width}: rail host names fit`).toBe(true);
+  }
+});
+
 test("log rows on a host page have no chip for that host", async ({ page }) => {
   await open(page, LAB_HOST, 1280);
   await page.getByRole("tab", { name: "Log" }).click();
@@ -268,18 +308,20 @@ test("post-foothold facts show without scrolling", async ({ page }) => {
 
 const FS01 = "/e/e-lab/h/h-fs01";
 
-test("host chip is never a Tab stop", async ({ page }) => {
+test("host picker is a Tab stop", async ({ page }) => {
   await open(page, FS01, 1280);
   await page.keyboard.press("Meta+K");
   const search = page.getByRole("dialog").getByRole("combobox", { name: "Search" });
   await search.waitFor();
   await search.fill("smb");
   const chip = page.getByRole("button", { name: /^Fill for host/ });
-  await expect(chip).toHaveAttribute("tabindex", "-1");
-  for (let i = 0; i < 8; i++) {
+  await expect(chip).not.toHaveAttribute("tabindex", "-1");
+  let reached = false;
+  for (let i = 0; i < 8 && !reached; i++) {
     await page.keyboard.press("Tab");
-    await expect(chip).not.toBeFocused();
+    reached = await chip.evaluate((el) => el === document.activeElement);
   }
+  expect(reached).toBe(true);
 });
 
 test("Enter in the drawer copies", async ({ page, context }) => {
@@ -304,7 +346,7 @@ async function holdBack(page: Page, context: import("@playwright/test").BrowserC
   // A sentinel, so "not copied" cannot pass on an empty or stale clipboard.
   await page.evaluate(() => navigator.clipboard.writeText("SENTINEL"));
   await page.keyboard.press("Enter");
-  await expect(page.getByText("{SECOND_LPORT} not filled · ↵ again to copy anyway")).toBeVisible();
+  await expect(page.getByText("{SECOND_LPORT} not filled. Press ↵ again to copy anyway")).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Value for SECOND_LPORT" })).toBeFocused();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("SENTINEL");
 }
@@ -341,8 +383,9 @@ test("browse pane 3: a held-back copy focuses the field, and Enter copies the fi
 test("lateral movement finds Pivoting", async ({ page }) => {
   await open(page, "/arsenal", 1280);
   await page.locator("input[aria-label='Search the Arsenal']").fill("lateral movement");
-  await expect(page.getByRole("button", { name: /^Pivoting/ })).toBeVisible();
-  await page.getByRole("button", { name: /^Pivoting/ }).click();
+  // Categories are a tablist (each tab names its category and its match count).
+  await expect(page.getByRole("tab", { name: /^Pivoting/ })).toBeVisible();
+  await page.getByRole("tab", { name: /^Pivoting/ }).click();
   await expect(page.getByRole("option").first()).toBeVisible();
 });
 
@@ -671,7 +714,7 @@ test("payloads drawer and workbench: no pane scrolls sideways or clips focus", a
     // The long host name and "Paste into Web shell ?cmd=" share the chip row; every generator tab shows.
     await expect(aside.getByRole("button", { name: /^Paste into: Web shell \?cmd=/ })).toBeVisible();
     expect(await truncatedChips(aside), `chips cut short at ${width}`).toEqual([]);
-    await aside.getByRole("button", { name: "show" }).click();
+    await aside.getByRole("button", { name: /^Don't fit here \(\d+\)$/ }).click();
     await aside.getByRole("list", { name: "Don't fit here" }).waitFor();
     expect(await page.evaluate(ARSENAL_PANES(DRAWER)), `drawer panes at ${width}`).toEqual([]);
     expect(await page.evaluate(CLIPPED(DRAWER)), `drawer controls at ${width}`).toEqual([]);
@@ -701,7 +744,7 @@ test("payloads drawer and workbench: no pane scrolls sideways or clips focus", a
 test("long ps-b64 payload wraps inside its block", async ({ page }) => {
   /** The block's overflow and how far it sits outside its scroll pane (0 when inside). */
   const measure = (root: string) =>
-    page.locator(`${root} pre[aria-label='Payload']`).evaluate((el) => {
+    page.locator(`${root} pre[aria-label='Command: Payload']`).evaluate((el) => {
       let pane = el.parentElement;
       while (pane && !/auto|scroll/.test(getComputedStyle(pane).overflowY)) pane = pane.parentElement;
       const r = el.getBoundingClientRect();
@@ -729,7 +772,7 @@ test("P opens on the best fit for the IIS host and ↵ copies it", async ({ page
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const aside = await openIisDrawer(page, 1280);
   await expect(aside.getByText("Best fit", { exact: true })).toBeVisible();
-  const shown = await aside.locator("pre[aria-label='Payload']").textContent();
+  const shown = await aside.locator("pre[aria-label='Command: Payload']").textContent();
   expect(shown).toMatch(/^powershell/);
   // A sentinel, so a stale or empty clipboard cannot pass.
   await page.evaluate(() => navigator.clipboard.writeText("SENTINEL"));
@@ -740,11 +783,117 @@ test("P opens on the best fit for the IIS host and ↵ copies it", async ({ page
 test("the misfit fold lists nc.exe as failed here before", async ({ page }) => {
   const aside = await openIisDrawer(page, 1280);
   // Not among the fits the drawer offers.
-  await expect(aside.getByRole("button", { name: "nc.exe -e" })).toHaveCount(0);
-  const show = aside.getByRole("button", { name: "show" });
+  await expect(aside.getByRole("listbox", { name: "Fits" }).getByRole("option", { name: /nc\.exe -e/ })).toHaveCount(0);
+  const show = aside.getByRole("button", { name: /^Don't fit here \(\d+\)$/ });
   await expect(show).toHaveAttribute("aria-expanded", "false");
   await show.click();
   const row = aside.getByRole("list", { name: "Don't fit here" }).getByRole("listitem").filter({ hasText: "nc.exe -e" });
   await expect(row).toHaveCount(1);
   await expect(row).toContainText("Failed here before");
+});
+
+// Board: lanes share their header row, so every lane's first card starts on one line (DESIGN.md Layout rule 5).
+
+test("board: first cards share a top line at 900/1100/1280/1440", async ({ page }) => {
+  // e-board has a 20-host lane, three one-host lanes and two empty lanes; e-lab has a long host name.
+  for (const id of ["e-board", "e-lab"]) {
+    for (const width of [900, 1100, 1280, 1440]) {
+      await open(page, `/e/${id}`, width);
+      await page.locator("section[aria-label='Information gathering'] [data-lane-body]").waitFor();
+      const r = await page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>("section[aria-label]:has(> [data-lane-body])")].map((lane) => {
+          const body = lane.querySelector<HTMLElement>("[data-lane-body]")!;
+          const cards = [...body.querySelectorAll<HTMLElement>("a[data-host-id]")];
+          const overflow = cards.flatMap((card) => {
+            const box = card.getBoundingClientRect();
+            return [...card.querySelectorAll<HTMLElement>("[data-variant], img[data-brand]")]
+              .filter((el) => {
+                const b = el.getBoundingClientRect();
+                return b.left < box.left - 0.5 || b.right > box.right + 0.5;
+              })
+              .map((el) => `${card.dataset.hostId}: ${el.textContent || el.dataset.brand}`);
+          });
+          return {
+            lane: lane.getAttribute("aria-label")!,
+            cards: cards.length,
+            top: (cards[0] ?? body).getBoundingClientRect().top,
+            overflow,
+          };
+        }),
+      );
+      expect(r, `${id} lanes at ${width}`).toHaveLength(6);
+      if (id === "e-board") {
+        expect(r.map((l) => l.cards), "fixture shape").toEqual([20, 1, 1, 1, 0, 0]);
+      }
+      for (const l of r) {
+        expect(Math.abs(l.top - r[0].top), `${id} "${l.lane}" first card top at ${width}`).toBeLessThanOrEqual(1);
+        if (width === 900) expect(l.overflow, `${id} "${l.lane}" chips inside cards at 900`).toEqual([]);
+      }
+    }
+  }
+});
+
+test("status strip drops by its own free space: LHOST stays while it fits", async ({ page }) => {
+  for (const path of ["/e/e-lab", "/e/e-lab/h/h-web", "/e/e-exam"]) {
+    await open(page, path, 900);
+    await page.getByRole("tab", { name: "Next" }).or(page.getByRole("status", { name: "Engagement status" })).first().waitFor();
+    // Below 1000px the sidebar starts as the 56px rail (strip ~844px); expanded it is ~660px. LHOST outlasts Cleanup and Threads.
+    const strip = page.getByRole("status", { name: "Engagement status" });
+    for (const expanded of [false, true]) {
+      await page.getByRole("button", { name: /(Expand|Collapse) sidebar/ }).waitFor();
+      // The choice persists across pages, so press only when the sidebar is not already in the wanted state.
+      if (await page.getByRole("button", { name: expanded ? "Expand sidebar" : "Collapse sidebar" }).isVisible()) await page.keyboard.press("Meta+B");
+      await page.getByRole("button", { name: expanded ? "Collapse sidebar" : "Expand sidebar" }).waitFor();
+      await expect(strip.getByRole("link", { name: /LHOST/ }), `${path}: LHOST, sidebar ${expanded ? "expanded" : "collapsed"}`).toBeVisible();
+    }
+    // Nothing hidden that would have fit: un-hide the first hidden part and it must overflow.
+    const wasteful = await strip.evaluate((el) => {
+      const box = el.firstElementChild as HTMLElement;
+      const hidden = [...box.querySelectorAll<HTMLElement>("[data-drop]")]
+        .filter((p) => p.style.display === "none")
+        .sort((a, b) => Number(a.dataset.drop) - Number(b.dataset.drop));
+      if (!hidden.length) return false;
+      hidden[hidden.length - 1].style.display = "";
+      const fits = box.scrollWidth <= box.clientWidth;
+      hidden[hidden.length - 1].style.display = "none";
+      return fits;
+    });
+    expect(wasteful, `${path}: the last dropped part would still fit`).toBe(false);
+    expect(await strip.evaluate((el) => el.firstElementChild!.scrollWidth <= el.firstElementChild!.clientWidth), `${path}: strip content fits`).toBe(true);
+  }
+});
+
+test("headers: actions are icon buttons under 1000px, so the title keeps its room", async ({ page }) => {
+  await open(page, LAB_HOST, 900);
+  await page.getByRole("tab", { name: "Next" }).waitFor();
+  await expect(page.getByRole("button", { name: "Edit host" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stuck?" })).toBeVisible();
+  await open(page, "/e/e-lab", 900);
+  await expect(page.getByRole("button", { name: "Edit engagement" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Archive" })).toBeVisible();
+  await open(page, "/e/e-lab", 1440);
+  if (await page.getByRole("button", { name: "Expand sidebar" }).isVisible()) await page.keyboard.press("Meta+B");
+  await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
+});
+
+test("title bar controls end where the centred page column ends (dashboard, settings)", async ({ page }) => {
+  for (const [path, right] of [["/", 1440], ["/", 900], ["/", 1024], ["/settings", 1280], ["/settings", 900]] as const) {
+    await open(page, path, right);
+    const gear = await page.getByRole("button", { name: "Settings" }).evaluate((el) => el.getBoundingClientRect().right);
+    const col = await page.evaluate(() => {
+      const root = document.querySelector("[data-testid=app-root], [data-testid=settings-root]");
+      const r = (root as HTMLElement).getBoundingClientRect();
+      const cs = getComputedStyle(root as HTMLElement);
+      return r.right - parseFloat(cs.paddingRight);
+    });
+    expect(Math.abs(gear - col), `${path} @${right}: gear right edge vs content right edge`).toBeLessThanOrEqual(1);
+    const g = await page.getByRole("button", { name: "Settings" }).evaluate((el) => {
+      const svg = el.querySelector("svg")!.getBoundingClientRect();
+      return { w: el.getBoundingClientRect().width, svg: svg.width, color: getComputedStyle(el).color };
+    });
+    expect([g.w, g.svg], `${path} @${right}: 28px box with a 16px gear`).toEqual([28, 16]);
+    // Accent lime on /settings only (accent is #c6ff3d-ish: green channel far above blue).
+    const lime = (c: string) => { const [r, gr, b] = c.match(/\d+/g)!.map(Number); return gr > 200 && b < 120 && r > 120; };
+    expect(lime(g.color), `${path} @${right}: gear accent only on /settings`).toBe(path === "/settings");
+  }
 });

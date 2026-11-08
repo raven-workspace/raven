@@ -75,6 +75,14 @@ export function collectUxIssues(): RawIssue[] {
       .replace(/\s+/g, " ")
       .trim();
 
+  /** An element (or an ancestor) opts out of one check with `data-audit-allow="<check> …"`; collectOptOuts lists them. */
+  const allowed = (el: Element, check: RawIssue["check"]): boolean => {
+    for (let a = el.closest("[data-audit-allow]"); a; a = a.parentElement?.closest("[data-audit-allow]") ?? null) {
+      if ((a.getAttribute("data-audit-allow") ?? "").split(/\s+/).includes(check)) return true;
+    }
+    return false;
+  };
+
   const px = (v: number) => `${Math.round(v * 10) / 10}px`;
   const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE"]);
 
@@ -167,11 +175,15 @@ export function collectUxIssues(): RawIssue[] {
     add("off-scale-spacing", null, `${offScale.size} off-scale values; most frequent: ${top.map(([k, n]) => `${k} x${n}`).join(", ")}`, "(page)");
   }
 
-  // tiny-text
+  // tiny-text: nothing under 12px; only the label role (labels and chips, `.text-label`) and key caps may be 12px.
   for (const el of all) {
-    if (ownText(el) === "") continue;
+    if (ownText(el) === "" || allowed(el, "tiny-text")) continue;
     const fs = parseFloat(style(el).fontSize);
-    if (fs < 12) add("tiny-text", el, `font-size ${fs}px < 12px: "${ownText(el).slice(0, 40)}"`);
+    const twelveOk = el.closest("kbd, .text-label") !== null;
+    const floor = twelveOk ? 12 : 13;
+    if (fs < floor - 0.01) {
+      add("tiny-text", el, `font-size ${fs}px < ${floor}px${twelveOk ? "" : " (12px is only for labels, chips and key caps)"}: "${ownText(el).slice(0, 40)}"`);
+    }
   }
 
   // long-lines
@@ -185,13 +197,15 @@ export function collectUxIssues(): RawIssue[] {
     const ch = content / (0.6 * fs);
     // A line cannot be longer than its text, so short text in a wide box is fine.
     const chars = (el.textContent ?? "").replace(/\s+/g, " ").trim().length;
-    if (ch > 100 && chars > 100) add("long-lines", el, `${Math.round(ch)}ch wide (> 100ch) with ${chars} chars of text`);
+    if (ch > 100 && chars > 100 && !allowed(el, "long-lines")) add("long-lines", el, `${Math.round(ch)}ch wide (> 100ch) with ${chars} chars of text`);
   }
 
   // small-target
   for (const el of Array.from(document.body.querySelectorAll(INTERACTIVE)).filter(isVisible)) {
-    const r = el.getBoundingClientRect();
-    if (r.width >= 24 && r.height >= 24) continue;
+    // A checkbox or radio inside its <label> is clicked through the label: the label is the target.
+    const owner = el.matches('input[type="checkbox"], input[type="radio"]') ? el.closest("label") : null;
+    const r = (owner ?? el).getBoundingClientRect();
+    if ((r.width >= 24 && r.height >= 24) || allowed(el, "small-target")) continue;
     if (el.tagName === "A" && style(el).display.startsWith("inline") && ownText(el.parentElement ?? el) !== "") {
       const inRunningText = Array.from(el.parentElement?.childNodes ?? []).some(
         (n) => n !== el && n.nodeType === Node.TEXT_NODE && (n.textContent ?? "").trim() !== "",
@@ -274,7 +288,7 @@ export function collectUxIssues(): RawIssue[] {
     if (anim.playState !== "running") continue;
     const effect = anim.effect as KeyframeEffect | null;
     const target = effect?.target ?? null;
-    if (!effect || !target || target.closest('[data-audit-allow="motion"]')) continue;
+    if (!effect || !target || allowed(target, "unreduced-motion")) continue;
     const t = effect.getComputedTiming();
     const duration = Number(t.duration);
     if (t.iterations === Infinity || duration > 200) {

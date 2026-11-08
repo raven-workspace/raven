@@ -7,6 +7,7 @@ import { ArsenalBrowse } from "./features/arsenal/ArsenalBrowse";
 import { PayloadsWorkbench } from "./features/payloads/PayloadsWorkbench";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { useEscapeTo } from "./lib/keys";
+import { TooltipProvider } from "./ui";
 import { useVault, VaultGate } from "./features/vault/VaultGate";
 
 // Dev-only component gallery. `import.meta.env.DEV` is false in builds, so the
@@ -20,6 +21,7 @@ function SettingsRoute() {
 
 export default function App() {
   return (
+    <TooltipProvider>
     <VaultGate>
       <Routes>
         <Route index element={<Dashboard />} />
@@ -43,5 +45,6 @@ export default function App() {
         )}
       </Routes>
     </VaultGate>
+    </TooltipProvider>
   );
 }

@@ -16,6 +16,9 @@ export function collectLayoutIssues(): RawIssue[] {
     const r = el.getBoundingClientRect();
     if (r.width === 0 || r.height === 0) return false;
     const s = style(el);
+    // Screen-reader-only text (sr-only) is never seen: recognised by its pattern, not its size, so a box that collapsed
+    // to 1px around real text is still judged.
+    if (s.position === "absolute" && (s.clipPath === "inset(50%)" || /^rect\(0(px)?,? 0(px)?,? 0(px)?,? 0(px)?\)$/.test(s.clip))) return false;
     return s.visibility !== "hidden" && parseFloat(s.opacity) > 0;
   };
 
@@ -65,6 +68,14 @@ export function collectLayoutIssues(): RawIssue[] {
     issues.push({ check, selector: selector ?? (el ? describe(el) : "html"), detail });
   };
 
+  /** An element (or an ancestor) opts out of one check with `data-audit-allow="<check> …"`; collectOptOuts lists them. */
+  const allowed = (el: Element, check: RawIssue["check"]): boolean => {
+    for (let a = el.closest("[data-audit-allow]"); a; a = a.parentElement?.closest("[data-audit-allow]") ?? null) {
+      if ((a.getAttribute("data-audit-allow") ?? "").split(/\s+/).includes(check)) return true;
+    }
+    return false;
+  };
+
   const hasOwnText = (el: Element): boolean =>
     Array.from(el.childNodes).some((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? "").trim() !== "");
 
@@ -86,7 +97,7 @@ export function collectLayoutIssues(): RawIssue[] {
   for (const el of all) {
     const s = style(el);
     const tag = el.tagName.toLowerCase();
-    const allowTruncate = el.closest('[data-audit-allow="truncate"]') !== null;
+    const allowTruncate = allowed(el, "truncated");
     const hasTitle = el.hasAttribute("title");
     let reportedTruncated = false;
 
@@ -104,22 +115,48 @@ export function collectLayoutIssues(): RawIssue[] {
       }
     }
 
-    // overflow
+    // overflow. A popup (a listbox, menu, dialog or tooltip, absolutely placed) may reach past its anchor when nothing
+    // clips it: that alone is not overflow. Anything else hanging out, or any popup cut off by a clipping box, is.
+    const POPUP = '[role="listbox"], [role="menu"], [role="dialog"], [role="tooltip"], [data-radix-popper-content-wrapper]';
+    const popupOnly = (): boolean => {
+      if (s.overflowX !== "visible") return false;
+      const right = el.getBoundingClientRect().left + el.clientLeft + el.clientWidth + TOL;
+      let popup = false;
+      const walk = (node: Element): boolean => {
+        for (const child of Array.from(node.children)) {
+          const cs = style(child);
+          const r = child.getBoundingClientRect();
+          if ((cs.position === "absolute" || cs.position === "fixed") && child.matches(POPUP)) {
+            if (r.right > right) popup = true;
+            continue;
+          }
+          if (r.width > 0 && r.right > right) return false;
+          if (!walk(child)) return false;
+        }
+        return true;
+      };
+      return walk(el) && popup;
+    };
     if (
       el.clientWidth > 0 &&
       (s.overflowX === "visible" || s.overflowX === "hidden") &&
       s.textOverflow !== "ellipsis" &&
-      el.scrollWidth > el.clientWidth + TOL
+      el.scrollWidth > el.clientWidth + TOL &&
+      !allowed(el, "overflow") &&
+      !popupOnly()
     ) {
       add("overflow", el, `scrollWidth ${el.scrollWidth} > clientWidth ${el.clientWidth}`);
     }
 
-    // clipped
+    // clipped (a line clamp is truncation on purpose: the truncated check judges it, titled or not)
+    const clamp = s.getPropertyValue("-webkit-line-clamp");
     if (
       !reportedTruncated &&
+      !(clamp && clamp !== "none") &&
       s.overflowY === "hidden" &&
       hasOwnText(el) &&
-      el.scrollHeight > el.clientHeight + TOL
+      el.scrollHeight > el.clientHeight + TOL &&
+      !allowed(el, "clipped")
     ) {
       add("clipped", el, `scrollHeight ${el.scrollHeight} > clientHeight ${el.clientHeight}`);
     }
@@ -130,7 +167,7 @@ export function collectLayoutIssues(): RawIssue[] {
       const r = el.getBoundingClientRect();
       const fs = parseFloat(s.fontSize);
       const lh = s.lineHeight === "normal" ? fs * 1.2 : parseFloat(s.lineHeight);
-      if (r.width < 80 && lh > 0 && r.height >= 3 * lh) {
+      if (r.width < 80 && lh > 0 && r.height >= 3 * lh && !allowed(el, "squeezed")) {
         add("squeezed", el, `width ${Math.round(r.width)} < 80, height ${Math.round(r.height)} >= 3 x line-height ${Math.round(lh)}`);
       }
     }
@@ -162,6 +199,7 @@ export function collectLayoutIssues(): RawIssue[] {
   // offscreen
   const interactive = Array.from(document.body.querySelectorAll(INTERACTIVE)).filter(isVisible);
   for (const el of interactive) {
+    if (allowed(el, "offscreen")) continue;
     const r = el.getBoundingClientRect();
     if (r.left < -TOL || r.right > window.innerWidth + TOL) {
       add("offscreen", el, `rect ${Math.round(r.left)}..${Math.round(r.right)} outside viewport 0..${window.innerWidth}`);
@@ -181,19 +219,101 @@ export function collectLayoutIssues(): RawIssue[] {
     }
   }
 
-  // overlap
+  // overlap: two controls that sit on each other.
+  // - Two controls in the same scroll container are compared by plain geometry, scrolled into view or not.
+  // - In different containers, each rect is first clipped by the clipping ancestors the other one is not inside (a strip
+  //   label scrolled under its arrow shows nothing there).
+  // - Inside the viewport the middle of the overlap is hit-tested. Only a real overlay covers: the lower control is
+  //   aria-hidden or inert (a Radix modal hides the page), or a fixed or sticky layer, or a dialog, menu, listbox or
+  //   tooltip, sits over it. A control that can't be hit (pointer-events: none) is judged by geometry.
+  type Box = { left: number; top: number; right: number; bottom: number };
+  const clipsX = (e: Element) => {
+    const cs = style(e);
+    return cs.overflowX !== "visible" || cs.overflowY !== "visible";
+  };
+  const scroller = (e: Element): Element | null => {
+    for (let anc = e.parentElement; anc && anc !== document.documentElement; anc = anc.parentElement) {
+      if (style(anc).position === "fixed") return anc;
+      if (clipsX(anc)) return anc;
+    }
+    return null;
+  };
+  const clippedBox = (el: Element, other: Element | null): Box | null => {
+    const r = el.getBoundingClientRect();
+    let box: Box | null = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    for (let anc = el.parentElement; anc && box && anc !== document.documentElement; anc = anc.parentElement) {
+      if (other && anc.contains(other)) break;
+      if (style(anc).position === "fixed") break;
+      if (!clipsX(anc)) continue;
+      const ar = anc.getBoundingClientRect();
+      box = { left: Math.max(box.left, ar.left), top: Math.max(box.top, ar.top), right: Math.min(box.right, ar.right), bottom: Math.min(box.bottom, ar.bottom) };
+      if (box.right - box.left <= 0 || box.bottom - box.top <= 0) box = null;
+    }
+    return box;
+  };
+  const OVERLAY = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [role="tooltip"], [data-radix-popper-content-wrapper]';
+  /** The overlay layer an element belongs to: its nearest ancestor-or-self that is fixed or sticky, or a dialog, menu,
+   *  listbox, tooltip or popper. Null for the page itself. */
+  const layerRoot = (e: Element): Element | null => {
+    for (let cur: Element | null = e; cur && cur !== document.body; cur = cur.parentElement) {
+      const pos: string = style(cur).position;
+      if (pos === "fixed" || pos === "sticky" || cur.matches(OVERLAY)) return cur;
+    }
+    return null;
+  };
+  /** At (x, y): are both controls there, without a real overlay hiding the lower one? */
+  const touches = (a: Element, b: Element, x: number, y: number): boolean => {
+    if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) return true;
+    // Hit-testing only says something where both controls are on screen; scrolled out of their pane, geometry decides.
+    const on = (e: Element) => {
+      const v = clippedBox(e, null);
+      return v !== null && x >= v.left && x <= v.right && y >= v.top && y <= v.bottom;
+    };
+    if (!on(a) || !on(b)) return true;
+    // Behind an open modal (Radix hides the rest of the page with aria-hidden and pointer-events: none): covered.
+    if (isHidden(a) || isHidden(b)) return false;
+    const stack = document.elementsFromPoint(x, y);
+    const ia = stack.findIndex((e) => a === e || a.contains(e));
+    const ib = stack.findIndex((e) => b === e || b.contains(e));
+    // A control that ignores the pointer (pointer-events: none) is not in the stack: geometry decides. One that takes the
+    // pointer but isn't there is hidden under something (a modal's backdrop): not touching.
+    const unhit = (e: Element, i: number) => i === -1 && style(e).pointerEvents !== "none";
+    if (unhit(a, ia) || unhit(b, ib)) return false;
+    if (ia === -1 || ib === -1) return true;
+    const [upper, lower, to] = ia < ib ? [a, b, ib] : [b, a, ia];
+    // Painted above the lower control: everything before it in the stack that is not part of either control and does not
+    // hold the lower one. It covers the lower control only if it belongs to an overlay layer the lower one is not in:
+    // inside one drawer, dialog, sticky header or fixed shell, controls are judged against each other as usual.
+    const between = stack.slice(0, to).filter((e) => !upper.contains(e) && !lower.contains(e) && !e.contains(lower));
+    return !between.some((e) => {
+      const root = layerRoot(e);
+      return root !== null && !root.contains(lower);
+    });
+  };
+  const isHidden = (e: Element) => e.closest('[aria-hidden="true"], [inert]') !== null;
   for (let i = 0; i < interactive.length; i++) {
     for (let j = i + 1; j < interactive.length; j++) {
       const a = interactive[i];
       const b = interactive[j];
-      if (a.contains(b) || b.contains(a)) continue;
-      const ra = a.getBoundingClientRect();
-      const rb = b.getBoundingClientRect();
+      if (a.contains(b) || b.contains(a) || allowed(a, "overlap") || allowed(b, "overlap")) continue;
+      let ra: Box | null;
+      let rb: Box | null;
+      if (scroller(a) === scroller(b)) {
+        const x = a.getBoundingClientRect();
+        const y = b.getBoundingClientRect();
+        ra = { left: x.left, top: x.top, right: x.right, bottom: x.bottom };
+        rb = { left: y.left, top: y.top, right: y.right, bottom: y.bottom };
+      } else {
+        ra = clippedBox(a, b);
+        rb = clippedBox(b, a);
+      }
+      if (!ra || !rb) continue;
       const ix = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
       const iy = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
-      if (ix > 4 && iy > 4) {
-        add("overlap", a, `overlaps ${describe(b)} by ${Math.round(ix)}×${Math.round(iy)}`);
-      }
+      if (ix <= 4 || iy <= 4) continue;
+      const x = Math.max(ra.left, rb.left) + ix / 2;
+      const y = Math.max(ra.top, rb.top) + iy / 2;
+      if (touches(a, b, x, y)) add("overlap", a, `overlaps ${describe(b)} by ${Math.round(ix)}×${Math.round(iy)}`);
     }
   }
 
@@ -202,7 +322,7 @@ export function collectLayoutIssues(): RawIssue[] {
   const seenText = new Set<Node>();
   for (const host of Array.from(document.body.querySelectorAll("code, pre, kbd, [data-command]"))) {
     if (budget <= 0) break;
-    if (!isVisible(host)) continue;
+    if (!isVisible(host) || allowed(host, "mid-token-wrap")) continue;
     let reported = false;
     const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
     for (let n = walker.nextNode(); n && budget > 0 && !reported; n = walker.nextNode()) {
@@ -228,7 +348,7 @@ export function collectLayoutIssues(): RawIssue[] {
 
   // narrow-wrap: a text block squeezed into a sliver, so it stacks a few characters per line
   for (const el of all) {
-    if (el.closest("pre, code")) continue;
+    if (el.closest("pre, code") || allowed(el, "narrow-wrap")) continue;
     const text = ownText(el).replace(/\s+/g, " ");
     if (text.length < 4) continue;
     const range = document.createRange();

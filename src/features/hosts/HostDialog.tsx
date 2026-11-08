@@ -1,9 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { useId, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router";
 import { api } from "../../lib/api";
 import type { Host, HostAccess, HostInput, HostOs } from "../../types/host";
-import { Button, Dialog, Field, Input, Select, Toggle, labelClass } from "../../ui";
+import { Button, ChipSet, Dialog, Field, Input, Select, Toggle } from "../../ui";
 import { useHostMutations } from "./queries";
+
+/** What a host delete takes with it (FK cascades) and what stays. */
+const HOST_DELETE_DETAIL =
+  "Its services, checklist items, credential test results, access grants on it, finding links, field notes, " +
+  "ruled-out items, tunnels through it and hops to or from it go with it; " +
+  "log entries, credentials and findings stay but lose this host.";
 
 const OS_OPTIONS = [
   { value: "unknown", label: "Unknown" },
@@ -51,6 +58,7 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
   const examSim = engagement.data?.kind === "exam-sim";
   const [adChoice, setAdChoice] = useState<AdChoice>(host?.adSet == null ? "auto" : host.adSet ? "on" : "off");
   const [errors, setErrors] = useState<Partial<Record<"name" | "ip" | "form", string>>>({});
+  const [deleting, setDeleting] = useState(false);
   const pending = create.isPending || update.isPending;
 
   function submit(e: FormEvent) {
@@ -88,6 +96,11 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
       title={host ? "Edit host" : "Add host"}
       footer={
         <>
+          {host && (
+            <Button variant="quiet-danger" className="mr-auto" onClick={() => setDeleting(true)}>
+              Delete host
+            </Button>
+          )}
           <Button onClick={onClose}>Cancel</Button>
           <Button type="submit" form={formId} variant="primary" disabled={pending}>
             {host ? "Save" : "Add host"}
@@ -95,7 +108,7 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
         </>
       }
     >
-      <form id={formId} onSubmit={submit} noValidate className="flex flex-col gap-3.5">
+      <form id={formId} onSubmit={submit} noValidate className="grid gap-4">
         <Field label="Name" error={errors.name}>
           <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="dc01" />
         </Field>
@@ -110,13 +123,13 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
             <Select options={ACCESS_OPTIONS} value={access} onValueChange={(v) => setAccess(v as HostAccess)} />
           </Field>
         </div>
-        <Toggle on={dualHomed} onChange={setDualHomed} className="self-start">
+        <Toggle on={dualHomed} onChange={setDualHomed} className="justify-self-start">
           Dual-homed (reaches another network)
         </Toggle>
         {examSim && (
-          <div role="radiogroup" aria-label="Part of the AD set" className="flex flex-col gap-1.5">
-            <span className={labelClass}>Part of the AD set</span>
-            <div className="flex flex-wrap items-center gap-1.5">
+          <div role="radiogroup" aria-label="Part of the AD set" className="grid gap-2">
+            <span className="block text-meta text-muted-2">Part of the AD set</span>
+            <ChipSet className="items-center">
               {AD_CHOICES.map((c) => (
                 <Toggle
                   key={c.value}
@@ -130,13 +143,57 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
                 </Toggle>
               ))}
               {adChoice === "auto" && (
-                <span className="text-xs text-muted">{host?.adSet == null && host?.adSetEffective ? "(auto: DC detected)" : "(auto)"}</span>
+                <span className="text-meta text-muted">{host?.adSet == null && host?.adSetEffective ? "(auto: DC detected)" : "(auto)"}</span>
               )}
-            </div>
+            </ChipSet>
           </div>
         )}
-        {errors.form && <p className="m-0 text-xs text-warn">{errors.form}</p>}
+        {errors.form && <p className="m-0 text-meta text-warn">{errors.form}</p>}
       </form>
+      {host && deleting && <DeleteHostDialog host={host} onClose={() => setDeleting(false)} />}
     </Dialog>
+  );
+}
+
+function DeleteHostDialog({ host, onClose }: { host: Host; onClose: () => void }) {
+  const navigate = useNavigate();
+  const { remove } = useHostMutations(host.engagementId);
+  const [error, setError] = useState<string>();
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title={`Delete ${host.name}?`}
+      description={
+        <>
+          {HOST_DELETE_DETAIL}
+          {error && (
+            <>
+              {" "}
+              <span role="alert" className="text-warn">
+                {error}
+              </span>
+            </>
+          )}
+        </>
+      }
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            variant="danger"
+            disabled={remove.isPending}
+            onClick={() =>
+              remove.mutate(host.id, {
+                onSuccess: () => void navigate(`/e/${host.engagementId}`),
+                onError: (e) => setError(e.message),
+              })
+            }
+          >
+            Delete host
+          </Button>
+        </>
+      }
+    />
   );
 }

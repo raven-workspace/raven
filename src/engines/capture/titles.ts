@@ -1,19 +1,17 @@
 import type { BoardColumn } from '../../types/host';
 import type { CommandBlock, FlagKind } from '../../types/log';
-import { HOST_IP, namedHostsInLine, type HostRef } from '../attribution';
 import { matchLine } from '../library/matcher';
 import { getLibrary } from '../library/store';
 
 const collapse = (s: string) => s.replace(/\s+/g, ' ').trim();
 
-export function commandTitle(blocks: CommandBlock[], hosts: HostRef[], domain: string): string {
+/** What the command is, never where: the host is its own field, so the title never repeats it. */
+export function commandTitle(blocks: CommandBlock[]): string {
   const command = blocks[0]?.command ?? '';
   const line = command.split('\n').find((l) => l.trim()) ?? '';
   const match = matchLine(line, getLibrary())[0];
   if (!match) return collapse(line).slice(0, 200);
-  const named = namedHostsInLine(line, hosts, domain)[0];
-  const target = named ? (named.ip ?? named.name) : (line.match(HOST_IP)?.[0] ?? null);
-  return target ? `${match.title} · ${target}` : match.title;
+  return match.title;
 }
 
 export function noteTitle(text: string): string {
@@ -21,8 +19,8 @@ export function noteTitle(text: string): string {
   return first.replace(/^[#\s]+/, '').trim().slice(0, 120);
 }
 
-export function flagTitle(flagKind: FlagKind, host: HostRef | null): string {
-  return host ? `${flagKind}.txt · ${host.name}` : `${flagKind}.txt`;
+export function flagTitle(flagKind: FlagKind): string {
+  return `${flagKind}.txt`;
 }
 
 const STAGE: Record<BoardColumn, string> = {

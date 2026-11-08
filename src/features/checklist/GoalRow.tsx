@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { DA_COVER_LABEL, isCoverMarked, type ChecklistGoal } from "../../engines/checklist";
 import { getCards, useLibraryVersion } from "../../engines/library/store";
 import type { ChecklistStatus, ItemState } from "../../types/checklist";
-import { cx } from "../../lib/cx";
-import { Textarea, labelClass } from "../../ui";
+import { ArrowSquareOut, CaretDown, CaretRight } from "@phosphor-icons/react";
+import { Button, ChipSet, Disclosure, IconButton, Textarea, fieldLabelClass } from "../../ui";
+import { ToggleGroup, ToggleGroupItem } from "../../ui/shadcn/toggle-group";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { CommandList, type FilledCommand } from "./CommandList";
 import { FileChip } from "./FileChip";
@@ -20,30 +21,16 @@ const STATUSES: { value: ChecklistStatus; label: string }[] = [
 ];
 
 /**
- * To do / Doing / Done / N/A for one step, as one small button group: a rounded hairline pill with thin dividers,
- * the selected segment in accent. The checklist's status control.
+ * To do / Doing / Done / N/A for one step: a 28px segmented control (shadcn ToggleGroup), exactly one segment on,
+ * the selected one in accent. Pressing the selected segment again keeps it.
  */
 export function StatusToggles({ label, status, onStatus }: { label: string; status: ChecklistStatus; onStatus: (status: ChecklistStatus) => void }) {
   return (
-    <div role="group" aria-label={label} className="inline-flex shrink-0 divide-x divide-line-2 overflow-hidden rounded-full border border-line-2">
-      {STATUSES.map((s) => {
-        const on = status === s.value;
-        return (
-          <button
-            key={s.value}
-            type="button"
-            aria-pressed={on}
-            onClick={() => onStatus(s.value)}
-            className={cx(
-              "inline-flex h-5 cursor-default items-center px-2 text-[11px] leading-none",
-              on ? "bg-accent/10 text-accent" : "text-fg-2 hover:bg-surface-2 hover:text-fg",
-            )}
-          >
-            {s.label}
-          </button>
-        );
-      })}
-    </div>
+    <ToggleGroup type="single" size="sm" aria-label={label} value={status} onValueChange={(v) => v && onStatus(v as ChecklistStatus)}>
+      {STATUSES.map((s) => (
+        <ToggleGroupItem key={s.value} value={s.value}>{s.label}</ToggleGroupItem>
+      ))}
+    </ToggleGroup>
   );
 }
 
@@ -66,51 +53,40 @@ export interface GoalRowProps {
   children?: ReactNode;
 }
 
-/** One link per distinct Arsenal card behind a step's commands, and a way into the rest of the Arsenal. */
+/** One button per distinct Arsenal card behind a step's commands, and a way into the rest of the Arsenal. */
 function CardLinks({ commands }: { commands: FilledCommand[] }) {
   // Re-render after an import so card titles follow the vault.
   useLibraryVersion();
   const cards = getCards();
   const ids = [...new Set(commands.map((c) => c.cardId).filter((id): id is string => !!id))];
   if (ids.length === 0) return null;
-  const linkClass = "cursor-default text-fg-2 hover:text-fg";
   return (
-    <p className="m-0 flex flex-wrap items-center gap-x-2 text-xs text-muted">
-      {ids.map((id) => (
-        <button key={id} type="button" className={linkClass} onClick={() => useArsenalStore.getState().openCard(id)}>
-          From card {cards.find((c) => c.id === id)?.title ?? id} ↗
-        </button>
-      ))}
-      <span aria-hidden="true">·</span>
-      <button type="button" className={linkClass} onClick={() => useArsenalStore.getState().openCard()}>more in Arsenal</button>
-    </p>
+    <ChipSet>
+      {ids.map((id) => {
+        const title = cards.find((c) => c.id === id)?.title ?? id;
+        return (
+          <Button key={id} size="sm" className="min-w-0 max-w-full" title={`From card ${title}`} onClick={() => useArsenalStore.getState().openCard(id)}>
+            <span className="min-w-0 truncate">From card {title}</span>
+            <ArrowSquareOut size={16} aria-hidden className="shrink-0" />
+          </Button>
+        );
+      })}
+      <Button size="sm" onClick={() => useArsenalStore.getState().openCard()}>More in Arsenal</Button>
+    </ChipSet>
   );
 }
 
-/**
- * "12 new creds since done · re-check ▸" on one line, so the title track keeps its width; the labels (never secrets)
- * list one per line in the disclosure underneath.
- */
+/** "N new credentials since done" as a Disclosure with its count; the labels (never secrets) list one per line inside. */
 function NewCredNotice({ labels }: { labels: string[] }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="min-w-0 text-xs text-muted">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className="block max-w-full cursor-default truncate bg-transparent p-0 text-left text-xs text-fg-2 hover:text-fg"
-      >
-        {labels.length} new cred{labels.length === 1 ? "" : "s"} since done · re-check {open ? "▾" : "▸"}
-      </button>
-      {open && (
-        <ul className="m-0 mt-1 flex min-w-0 list-none flex-col gap-0.5 p-0">
-          {labels.map((l) => (
-            <li key={l} className="min-w-0 break-words">{l}</li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <Disclosure label="New credentials since done" count={labels.length} open={open} onOpenChange={setOpen}>
+      <ul className="m-0 grid min-w-0 list-none gap-1 px-1 py-1">
+        {labels.map((l) => (
+          <li key={l} title={l} className="min-w-0 truncate text-code text-fg-2">{l}</li>
+        ))}
+      </ul>
+    </Disclosure>
   );
 }
 
@@ -129,29 +105,30 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
     root.current?.scrollIntoView({ block: "start" });
   }, [focus]);
   const titleClass = status === "done" ? "text-muted line-through" : status === "na" ? "text-muted" : "text-fg";
+  const cover = isCoverMarked(state);
+  const Caret = open ? CaretDown : CaretRight;
 
   return (
-    <li ref={root} data-goal-id={goal.id} className="border-b border-line py-3">
-      <div data-testid="goal-head" className="flex min-w-0 items-center gap-3">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-label={`${open ? "Collapse" : "Expand"} ${goal.title}`}
-          onClick={() => setOpen((o) => !o)}
-          className="w-4 shrink-0 cursor-default text-xs text-muted hover:text-fg"
-        >
-          {open ? "▾" : "▸"}
-        </button>
-        <div data-testid="goal-title-col" className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className={`min-w-0 text-[13px] ${titleClass}`}>{goal.title}</span>
-          {status === "done" && newCredLabels && newCredLabels.length > 0 && <NewCredNotice labels={newCredLabels} />}
-        </div>
-        {isCoverMarked(state) && <span className="shrink-0 text-xs text-muted">{DA_COVER_LABEL}</span>}
+    <li ref={root} data-goal-id={goal.id} className={`grid items-start gap-x-2 gap-y-3 border-b border-line py-3 ${cover ? "grid-cols-[28px_minmax(0,1fr)_auto_auto]" : "grid-cols-[28px_minmax(0,1fr)_auto]"}`}>
+      <IconButton
+        icon={Caret}
+        label={`${open ? "Collapse" : "Expand"} ${goal.title}`}
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      />
+      <div data-testid="goal-title-col" className="grid min-w-0 gap-1">
+        <span className={`min-w-0 py-1 text-body ${titleClass}`}>{goal.title}</span>
+      </div>
+      {cover && <span className="py-1 text-meta text-muted">{DA_COVER_LABEL}</span>}
+      <div data-testid="goal-status">
         <StatusToggles label={`Status: ${goal.title}`} status={status} onStatus={(s) => onStatus(goal.id, s)} />
       </div>
+      {status === "done" && newCredLabels && newCredLabels.length > 0 && (
+        <div className="col-start-2 col-end-[-1] min-w-0"><NewCredNotice labels={newCredLabels} /></div>
+      )}
       {open && (
-        <div className="mt-3 flex flex-col gap-3 pl-7">
-          {goal.why && <p className="m-0 text-xs text-muted">{goal.why}</p>}
+        <div className="col-start-2 col-end-[-1] grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
+          {goal.why && <p className="m-0 text-meta text-muted">{goal.why}</p>}
           {commands.length > 0 ? (
             <>
               <FileChip commands={commands} />
@@ -160,11 +137,11 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
               <CardLinks commands={commands} />
             </>
           ) : (
-            emptyCommandsText && <p className="m-0 text-xs text-muted">{emptyCommandsText}</p>
+            emptyCommandsText && <p className="m-0 text-meta text-muted">{emptyCommandsText}</p>
           )}
           {children}
-          <div className="flex flex-col gap-1">
-            <span className={labelClass}>Notes</span>
+          <div className="grid gap-1">
+            <span className={fieldLabelClass}>Notes</span>
             <Textarea
               key={notes}
               rows={2}

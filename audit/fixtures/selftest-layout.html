@@ -11,6 +11,63 @@
 </style>
 </head>
 <body>
+<!-- Hit-testing only works inside the viewport: this case stays first. -->
+<section data-case="covered-ok" data-expect="none" style="height:60px">
+  <button style="position:absolute;left:20px;top:8px;width:120px;height:30px">Under the panel</button>
+  <div role="dialog" aria-label="Panel" style="position:absolute;left:80px;top:0;width:300px;height:58px;background:#fff;z-index:2"><button style="position:absolute;left:10px;top:12px;width:120px;height:30px">On the panel</button></div>
+</section>
+
+<section data-case="covered-inert-ok" data-expect="none" style="height:60px">
+  <div aria-hidden="true"><button tabindex="-1" style="position:absolute;left:20px;top:8px;width:120px;height:30px">Behind a modal</button></div>
+  <div style="position:absolute;left:80px;top:0;width:300px;height:58px;background:#fff;z-index:2"><button style="position:absolute;left:10px;top:12px;width:120px;height:30px">In the modal</button></div>
+</section>
+
+<section data-case="overlap-in-fixed-dialog" data-expect="overlap" style="height:0;padding:0;border:0;margin:0">
+  <!-- A fixed panel in the top-right corner, clear of every other case. -->
+  <div role="dialog" aria-label="Drawer" style="position:fixed;left:540px;top:0;width:340px;height:110px;background:#eee;z-index:5">
+    <div style="position:relative;height:100px">
+      <div style="position:absolute;left:0;top:0;width:200px;height:80px;background:#ddd"><button style="position:absolute;left:60px;top:20px;width:120px;height:30px">Row one</button></div>
+      <div style="position:absolute;left:120px;top:10px;width:200px;height:80px;background:#ccc"><button style="position:absolute;left:10px;top:20px;width:120px;height:30px">Row two</button></div>
+    </div>
+  </div>
+</section>
+
+<section data-case="overlap-in-sticky-header" data-expect="overlap" style="height:100px">
+  <div style="height:90px;overflow:auto">
+    <header style="position:sticky;top:0;height:60px;background:#eee">
+      <div style="position:relative;height:60px">
+        <div style="position:absolute;left:0;top:0;width:200px;height:50px"><button style="position:absolute;left:60px;top:10px;width:120px;height:30px">Head one</button></div>
+        <div style="position:absolute;left:120px;top:5px;width:200px;height:50px"><button style="position:absolute;left:10px;top:10px;width:120px;height:30px">Head two</button></div>
+      </div>
+    </header>
+    <div style="height:300px"></div>
+  </div>
+</section>
+
+<section data-case="overlap-opaque-cards" data-expect="overlap" style="height:100px">
+  <div style="position:absolute;left:0;top:0;width:300px;height:80px;background:#ddd"><button style="position:absolute;left:150px;top:20px;width:120px;height:30px">A action</button></div>
+  <div style="position:absolute;left:200px;top:10px;width:300px;height:80px;background:#bbb"><button style="position:absolute;left:10px;top:20px;width:120px;height:30px">B action</button></div>
+</section>
+
+<section data-case="overlap-pointer-none" data-expect="overlap" style="height:50px">
+  <button style="position:absolute;left:0;top:8px;width:120px;height:30px">One</button>
+  <button style="position:absolute;left:40px;top:12px;width:120px;height:30px;pointer-events:none">Two</button>
+</section>
+
+<section data-case="overlap-scrolled-out" data-expect="overlap" style="height:100px">
+  <div style="height:90px;overflow:auto"><div style="position:relative;height:400px">
+    <button style="position:absolute;left:0;top:150px;width:120px;height:30px">Hidden one</button>
+    <button style="position:absolute;left:40px;top:155px;width:120px;height:30px">Hidden two</button>
+  </div></div>
+</section>
+
+<section data-case="overlap-below-fold" data-expect="overlap" style="height:100px">
+  <div style="height:90px;overflow:auto"><div style="position:relative;height:3000px">
+    <button style="position:absolute;left:0;top:2000px;width:120px;height:30px">Deep one</button>
+    <button style="position:absolute;left:40px;top:2005px;width:120px;height:30px">Deep two</button>
+  </div></div>
+</section>
+
 <section data-case="overflow" data-expect="overflow">
   <div class="box" style="overflow:hidden;white-space:nowrap"><span style="display:inline-block;width:320px">fixed wide inner content</span></div>
 </section>
@@ -81,7 +138,7 @@
 </section>
 
 <section data-case="allow-ok" data-expect="none">
-  <div data-audit-allow="truncate"><div class="box" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">This sentence is much too long for a 200px box but is allowed</div></div>
+  <div data-audit-allow="truncated" data-audit-reason="self-test: allowed truncation"><div class="box" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">This sentence is much too long for a 200px box but is allowed</div></div>
 </section>
 
 <section data-case="narrow-wrap-ok" data-expect="none">
@@ -90,6 +147,27 @@
 
 <section data-case="wrap-ok" data-expect="none">
   <p style="width:300px;margin:0">Long text that wraps at spaces across several lines without any trouble at all, because it has plenty of room to breathe.</p>
+</section>
+<section data-case="sr-only-ok" data-expect="none">
+  <button style="width:120px;height:30px">Copy<span style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap">Copy the command to the clipboard</span></button>
+</section>
+
+<section data-case="clamp-titled-ok" data-expect="none">
+  <span class="box" title="A long card title that is clamped to two lines on purpose and carries its full text in a title" style="display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden">A long card title that is clamped to two lines on purpose and carries its full text in a title</span>
+</section>
+<section data-case="popup-ok" data-expect="none" style="height:90px">
+  <span class="box" style="position:relative;display:inline-grid"><input aria-label="Value" style="width:180px"><ul role="listbox" aria-label="Suggestions" style="position:absolute;left:0;top:100%;width:320px;margin:0;padding:0;list-style:none;background:#fff"><li role="option">10.10.20.21 fs01.acme.corp (this host)</li></ul></span>
+</section>
+<section data-case="popup-clipped" data-expect="overflow" style="height:70px">
+  <div style="position:relative;width:200px;height:60px;overflow:hidden"><button>Open</button><ul role="listbox" aria-label="Menu" style="position:absolute;left:0;top:30px;width:320px;margin:0;padding:0;background:#fff"><li role="option">Menu item cut off by the card</li></ul></div>
+</section>
+
+<section data-case="abs-button-hangs-out" data-expect="overflow" style="height:70px">
+  <div style="position:relative;width:200px;height:60px"><button style="position:absolute;left:150px;top:10px;width:120px;height:30px">Copy</button></div>
+</section>
+
+<section data-case="collapsed-1px" data-expect="clipped">
+  <div style="width:300px;height:1px;overflow:hidden">Important status message that has vanished</div>
 </section>
 </body>
 </html>

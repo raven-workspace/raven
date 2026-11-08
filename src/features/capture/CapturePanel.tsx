@@ -30,7 +30,7 @@ export function CapturePanel({ engagement }: { engagement: Engagement }) {
               el.focus();
             }
           }}
-          className="fixed inset-y-0 right-0 z-50 flex w-[min(580px,100vw)] flex-col border-l border-line-2 bg-surface text-fg-2"
+          className="fixed inset-y-0 right-0 z-50 grid w-[min(580px,100vw)] grid-rows-[minmax(0,1fr)] border-l border-line-2 bg-surface text-fg-2"
         >
           <CaptureForm engagement={engagement} pasteRef={pasteRef} />
         </RD.Content>

@@ -1,0 +1,110 @@
+import { QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import App from "../../App";
+import { resyncBoards } from "../../features/checklist/ticks";
+import { api } from "../../lib/api";
+import { makeQueryClient } from "../../lib/queryClient";
+import type { Engagement } from "../../types/engagement";
+
+vi.mock("../../lib/api");
+vi.mock("../../features/checklist/ticks", async (orig) => ({
+  ...(await orig<typeof import("../../features/checklist/ticks")>()),
+  resyncBoards: vi.fn(),
+}));
+const m = vi.mocked(api, true);
+
+const E1: Engagement = {
+  id: "e1", name: "Lab A", kind: "exam-sim", client: null, subLabel: null, scopeCidrs: ["192.0.2.0/24"],
+  domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
+  createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
+};
+
+beforeEach(() => {
+  vi.mocked(resyncBoards).mockReset();
+  m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+  m.settingsGet.mockResolvedValue({ attackerIp: "192.0.2.9", listenerPort: "443", autoLockMinutes: 30 } as never);
+  m.engagementGet.mockResolvedValue(E1);
+  m.engagementsList.mockResolvedValue([E1]);
+  for (const k of ["hostsList", "servicesList", "servicesListEngagement", "checklistList", "checklistPut", "logList", "notesList", "tunnelsList"] as const)
+    (m[k] as unknown as { mockResolvedValue: (v: unknown) => void }).mockResolvedValue([]);
+  m.notesGet.mockResolvedValue({ engagementId: "e1", hostId: null, body: "", updatedAt: 1 } as never);
+});
+
+async function mountStrip() {
+  render(
+    <QueryClientProvider client={makeQueryClient()}>
+      <MemoryRouter initialEntries={["/e/e1"]}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  return screen.findByRole("status", { name: "Engagement status" });
+}
+
+describe("status strip and title bar", () => {
+  it("status strip has no keyboard hints", async () => {
+    const strip = await mountStrip();
+    expect(strip.querySelector("kbd")).toBeNull();
+    expect(strip).not.toHaveTextContent(/sections|engagements/);
+  });
+
+  it("cells are labelled in priority order", async () => {
+    const strip = await mountStrip();
+    await within(strip).findByText("LHOST");
+    const labels = [...strip.querySelectorAll("span")]
+      .filter((s) => /^(Dates|Timebox|Rooted|Flags|Metasploit|Threads|Cleanup|LHOST)$/.test(s.textContent ?? "") && s.children.length === 0)
+      .map((s) => s.textContent);
+    expect(labels).toEqual(["Dates", "Rooted", "Flags", "Metasploit", "LHOST"]);
+  });
+
+  it("with a timebox, open threads and cleanup, every cell is in the documented order", async () => {
+    const timed: Engagement = { ...E1, timeboxStart: 1, timeboxMinutes: 1440 };
+    m.engagementGet.mockResolvedValue(timed);
+    m.engagementsList.mockResolvedValue([timed]);
+    m.notesList.mockResolvedValue([{ ownerId: "e1", engagementId: "e1", hostId: null, body: "? why is 445 filtered\n? retry the share", private: false, updatedAt: 1 }] as never);
+    m.cleanupCounts.mockResolvedValue({ e1: 2 });
+    const strip = await mountStrip();
+    await within(strip).findByText("Cleanup");
+    await within(strip).findByText("Threads");
+    const labels = [...strip.querySelectorAll("span")]
+      .filter((s) => /^(Dates|Timebox|Rooted|Flags|Metasploit|Threads|Cleanup|LHOST)$/.test(s.textContent ?? "") && s.children.length === 0)
+      .map((s) => s.textContent);
+    expect(labels).toEqual(["Timebox", "Rooted", "Flags", "Metasploit", "Threads", "Cleanup", "LHOST"]);
+  });
+
+  it("metasploit cell shows the brand icon", async () => {
+    const strip = await mountStrip();
+    const btn = await within(strip).findByRole("button", { name: /Metasploit unused/ });
+    const img = btn.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img!.getAttribute("src")).toMatch(/Metasploit/);
+    expect(img).toHaveAttribute("alt", "");
+  });
+
+  it("settings is the last title bar control and is an icon button named Settings", async () => {
+    await mountStrip();
+    const controls = [...screen.getByRole("button", { name: "Settings" }).closest("[data-tauri-drag-region] > div")!.querySelectorAll("button")];
+    expect(controls.at(-1)).toBe(screen.getByRole("button", { name: "Settings" }));
+    expect(controls.slice(0, -1).map((b) => b.textContent?.replace(/\s*(⌘\w|A|P)$/, "").trim())).toEqual(["Arsenal", "Payloads", "Search", "Lock"]);
+    expect(screen.getByRole("button", { name: "Settings" }).querySelector("svg")).not.toBeNull();
+  });
+
+  it("controls are the last track, inset like the content column", async () => {
+    await mountStrip();
+    const bar = document.querySelector<HTMLElement>("[data-tauri-drag-region]")!;
+    expect(bar.className).toMatch(/grid-cols-\[auto_minmax\(0,1fr\)_auto\]/);
+    expect(bar.className).toMatch(/\bpr-6\b/);
+    const group = screen.getByRole("button", { name: "Settings" }).closest("[data-tauri-drag-region] > div")!;
+    expect(bar.lastElementChild).toBe(group);
+    expect(bar.firstElementChild!.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("lock button shows a lock icon, with an inline key hint", async () => {
+    await mountStrip();
+    const lock = screen.getByRole("button", { name: "Lock" });
+    expect(lock.querySelector("svg")).not.toBeNull();
+    expect(lock.querySelector("kbd")!.className).not.toMatch(/border/);
+  });
+});

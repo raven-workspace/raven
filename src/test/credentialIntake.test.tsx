@@ -513,7 +513,8 @@ describe("Host Credentials fact group", () => {
     // grants on this host only, removable
     const access = within(panel).getByRole("region", { name: "Access without a secret" });
     expect(within(access).getByText(/corp\.local\\alice/)).toBeInTheDocument();
-    expect(within(access).getByText(/admin · via webshell/)).toBeInTheDocument();
+    expect(within(access).getByText("admin")).toBeInTheDocument();
+    expect(within(access).getByText("via webshell")).toBeInTheDocument();
     expect(within(access).queryByText(/via rdp/)).not.toBeInTheDocument();
     await user.click(within(access).getByRole("button", { name: "Remove access as corp.local\\alice on dc01" }));
     await user.click(await screen.findByRole("button", { name: "Remove access" }));

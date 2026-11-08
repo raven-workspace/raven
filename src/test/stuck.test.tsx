@@ -72,6 +72,16 @@ beforeEach(() => {
 });
 
 describe("stuck view", () => {
+  it("stuck view has a visible close button", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByRole("region", { name: "Host" });
+    await user.keyboard("h");
+    const panel = await screen.findByRole("complementary", { name: /Stuck on web01/ });
+    await user.click(within(panel).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("complementary", { name: /Stuck on web01/ })).not.toBeInTheDocument();
+  });
+
   it("H opens the stuck view and Esc closes it", async () => {
     const user = userEvent.setup();
     mount();
@@ -116,7 +126,10 @@ describe("stuck view", () => {
     await screen.findByRole("region", { name: "Host" });
     await user.keyboard("h");
     const panel = await screen.findByRole("complementary", { name: /Stuck on web01/ });
-    expect(await within(panel).findByRole("alert")).toHaveTextContent("vault locked");
+    const alert = await within(panel).findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn't load this host");
+    await user.click(within(alert).getByRole("button", { name: "Details" }));
+    expect(alert).toHaveTextContent("vault locked");
     expect(within(panel).queryByText("Before a foothold")).not.toBeInTheDocument();
   });
 
@@ -127,7 +140,9 @@ describe("stuck view", () => {
     await screen.findByRole("region", { name: "Host" });
     await user.keyboard("h");
     const panel = await screen.findByRole("complementary", { name: /Stuck on web01/ });
-    expect(await within(panel).findByRole("alert")).toHaveTextContent("settings unreadable");
+    const alert = await within(panel).findByRole("alert");
+    await user.click(within(alert).getByRole("button", { name: "Details" }));
+    expect(alert).toHaveTextContent("settings unreadable");
   });
 
   it("before a foothold shows the nudges for a guessed service", async () => {
@@ -159,7 +174,12 @@ describe("stuck view", () => {
     expect(screen.queryByText(/dual-homed, no tunnel recorded/)).not.toBeInTheDocument();
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(await screen.findByText(/web01 — dual-homed, no tunnel recorded/)).toBeInTheDocument();
+    const state = await screen.findByText("dual-homed, no tunnel recorded");
+    // Host and state are two elements, never one " — " string.
+    const line = state.closest("button")!;
+    expect(within(line).getByText("web01")).not.toBe(state);
+    expect(line).toHaveAccessibleName("web01 dual-homed, no tunnel recorded");
+    expect(line.textContent).not.toMatch(/ — /);
   });
 
   it("a skipped step opens the Checklist tab on that goal", async () => {
@@ -224,7 +244,7 @@ describe("stuck view", () => {
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     await user.click(screen.getByRole("button", { name: /Stuck check/ }));
-    await user.click(await screen.findByRole("button", { name: /web07 — dual-homed, no tunnel recorded/ }));
+    await user.click(await screen.findByRole("button", { name: "web07 dual-homed, no tunnel recorded" }));
     expect(await screen.findByRole("button", { name: /Lateral movement/ })).toHaveAttribute("aria-expanded", "true");
     const rows = [...document.querySelectorAll('li[data-goal-id="h-pivot-tunnel"]')] as HTMLElement[];
     expect(rows).toHaveLength(2);

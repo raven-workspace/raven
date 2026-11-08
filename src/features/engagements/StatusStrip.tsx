@@ -1,7 +1,8 @@
+import { useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { cx } from "../../lib/cx";
 import { useNow } from "../../lib/keys";
 import type { Engagement } from "../../types/engagement";
-import { Kbd, labelClass } from "../../ui";
+import { labelClass } from "../../ui";
 import { useCleanupCounts } from "../cleanup/queries";
 import { useProgress } from "../hosts/queries";
 import { useThreadCounts } from "../notes/useThreadCounts";
@@ -11,37 +12,96 @@ import {
   dateRange,
   formatDuration,
   hasTimebox,
-  progressLine,
   timeLeft,
   timeboxElapsed,
 } from "./format";
 import { Listener } from "./Listener";
 import { MsfLock } from "./MsfLock";
 
+/**
+ * Drop steps, in order: each step hides one part when the strip has run out of room (see useFitStrip).
+ * Secondary parts go first, then Cleanup, Threads, the Metasploit lock and LHOST: the display order stays, but LHOST (the most-copied value) outlasts the cells before it.
+ */
+const STEP = { of: 1, bar: 2, cleanup: 3, threads: 4, msf: 5, lhost: 6, flags: 7, rooted: 8 } as const;
+const LAST_STEP = 8;
+
+/** One labelled value. `step` marks the part as droppable at that step. */
+function Cell({ label, value, step, tone }: { label: string; value: string; step?: number; tone?: "warn" }) {
+  return (
+    <span role="group" aria-label={`${label} ${value}`} data-drop={step} className="grid grid-flow-col items-center gap-2">
+      <span className={labelClass}>{label}</span>
+      <span className={cx("font-mono text-meta", tone === "warn" ? "text-warn" : "text-fg")}>{value}</span>
+    </span>
+  );
+}
+
+/**
+ * Hides droppable parts (`data-drop="n"`) one step at a time, from step 1 up, until the strip's content fits
+ * its own width: drops follow the space the strip has, not the window width. Runs before paint on every render
+ * (the clock changes the text width) and whenever the strip is resized.
+ */
+function useFitStrip() {
+  const outer = useRef<HTMLDivElement>(null);
+  const inner = useRef<HTMLDivElement>(null);
+  const fit = useCallback(() => {
+    const box = inner.current;
+    if (!box) return;
+    const parts = [...box.querySelectorAll<HTMLElement>("[data-drop]")];
+    const show = (upTo: number) => {
+      for (const el of parts) el.style.display = Number(el.dataset.drop) <= upTo ? "none" : "";
+    };
+    let step = 0;
+    show(step);
+    while (box.scrollWidth > box.clientWidth && step < LAST_STEP) show(++step);
+  }, []);
+  // After every render (the clock changes the text width), before paint.
+  useLayoutEffect(() => fit());
+  // One observer for the strip's life: the strip itself (window/sidebar resize) and its cells (a late text change,
+  // e.g. the listener settings arriving or the Metasploit host name). Hidden cells report no size, so refits cannot loop.
+  useEffect(() => {
+    const ro = new ResizeObserver(() => fit());
+    if (outer.current) ro.observe(outer.current);
+    for (const c of inner.current?.children ?? []) ro.observe(c);
+    const mo = new MutationObserver(() => {
+      ro.disconnect();
+      if (outer.current) ro.observe(outer.current);
+      for (const c of inner.current?.children ?? []) ro.observe(c);
+    });
+    if (inner.current) mo.observe(inner.current, { childList: true });
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+    };
+  }, [fit]);
+  return { outer, inner };
+}
+
 export function StatusStrip({ engagement: e }: { engagement: Engagement }) {
   const now = useNow();
   const progress = useProgress().data?.[e.id] ?? EMPTY_PROGRESS;
   const threads = useThreadCounts(e.id).total;
   const cleanup = useCleanupCounts().data?.[e.id] ?? 0;
+  const { outer, inner } = useFitStrip();
   return (
     <div
+      ref={outer}
       role="status"
       aria-label="Engagement status"
-      className="flex h-9 shrink-0 items-center gap-5 border-b border-line px-6 text-xs text-muted-2"
+      className="h-9 shrink-0 overflow-hidden border-b border-line px-6 text-meta text-muted-2"
     >
-      {hasTimebox(e) ? (
-        <TimeboxStatus start={e.timeboxStart} minutes={e.timeboxMinutes} now={now} />
-      ) : (
-        <span>{dateRange(e.startsAt, e.endsAt, now)}</span>
-      )}
-      <span className="shrink-0 whitespace-nowrap text-fg-2">{progressLine(progress)}</span>
-      {threads > 0 && <span className="shrink-0 whitespace-nowrap text-fg-2">Threads {threads}</span>}
-      {cleanup > 0 && <span className="shrink-0 whitespace-nowrap text-fg-2">Cleanup {cleanup}</span>}
-      {e.kind === "exam-sim" && <MsfLock engagement={e} />}
-      <Listener />
-      <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap text-faint max-[1100px]:hidden">
-        <Kbd>1</Kbd>–<Kbd>6</Kbd> sections <Kbd className="ml-2">esc</Kbd> engagements
-      </span>
+      <div ref={inner} className="grid h-full grid-flow-col auto-cols-max items-center justify-start gap-6 whitespace-nowrap">
+        {hasTimebox(e) ? (
+          <TimeboxStatus start={e.timeboxStart} minutes={e.timeboxMinutes} now={now} />
+        ) : (
+          <Cell label="Dates" value={dateRange(e.startsAt, e.endsAt, now)} />
+        )}
+        <Cell label="Rooted" value={`${progress.hostsRooted}/${progress.hostsTotal}`} step={STEP.rooted} />
+        <Cell label="Flags" value={`${progress.flagsFound}/${progress.flagsTotal}`} step={STEP.flags} />
+        {e.kind === "exam-sim" && <MsfLock engagement={e} step={STEP.msf} />}
+        {threads > 0 && <Cell label="Threads" value={String(threads)} step={STEP.threads} />}
+        {cleanup > 0 && <Cell label="Cleanup" value={String(cleanup)} step={STEP.cleanup} />}
+        <Listener step={STEP.lhost} />
+      </div>
     </div>
   );
 }
@@ -49,14 +109,15 @@ export function StatusStrip({ engagement: e }: { engagement: Engagement }) {
 function TimeboxStatus({ start, minutes, now }: { start: number | null; minutes: number; now: number }) {
   const left = timeLeft(start, minutes, now);
   const over = left === "Time's up";
+  const of: ReactNode = <span data-drop={STEP.of} className="text-faint">of {formatDuration(minutes)}</span>;
   return (
-    <span className="flex items-center gap-2.5">
+    <span className="grid grid-flow-col items-center gap-2">
       <span className={labelClass}>Timebox</span>
-      <span className={cx("font-mono text-[12px]", over ? "text-warn" : "text-fg")}>{left}</span>
-      <span className="w-24">
+      <span className={cx("font-mono text-meta", over ? "text-warn" : "text-fg")}>{left}</span>
+      <span data-drop={STEP.bar} className="w-24">
         <TimeBar fraction={timeboxElapsed(start, minutes, now)} over={over} />
       </span>
-      <span className="text-faint">of {formatDuration(minutes)}</span>
+      {of}
     </span>
   );
 }

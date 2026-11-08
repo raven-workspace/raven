@@ -15,7 +15,7 @@ import {
 import { playbookTriggers } from "../../engines/credentials/state";
 import { api } from "../../lib/api";
 import type { Host } from "../../types/host";
-import { Button } from "../../ui";
+import { Button, labelClass, queryState } from "../../ui";
 import { CleanupPanel } from "../cleanup/CleanupPanel";
 import { EngagementStuckCheck } from "../stuck/StuckView";
 import { useHosts } from "../hosts/queries";
@@ -39,7 +39,7 @@ import { TunnelsPanel } from "./TunnelsPanel";
 /** Sub-heading above the first row of each group. */
 const GroupHeading = ({ children }: { children: ReactNode }) => (
   <li role="presentation" className="list-none pb-1 pt-3 first:pt-0">
-    <h4 className="m-0 text-[11px] font-medium tracking-label text-faint">{children}</h4>
+    <h4 className="m-0 text-meta font-medium text-muted-2">{children}</h4>
   </li>
 );
 
@@ -82,9 +82,8 @@ export function EngagementChecklist() {
   const hosts = hostsQ.data;
   const eng = engagement.data;
 
-  const failed = hostsQ.error ?? engagement.error ?? servicesQ.error ?? settings.error ?? log.error;
-  if (failed) return <p role="alert" className="py-3 text-xs text-warn">Couldn't load the engagement checklist: {failed.message}</p>;
-  if (!hosts || !eng || !servicesQ.data) return null;
+  const loadState = queryState([hostsQ, engagement, servicesQ, settings, log], "the engagement checklist");
+  if (loadState || !hosts || !eng || !servicesQ.data) return loadState;
 
   const facts = engagementFacts(eng, hosts, servicesByHost);
   const setup = ENGAGEMENT_SETUP.filter((g) => goalApplies(g, facts));
@@ -157,26 +156,28 @@ export function EngagementChecklist() {
   };
 
   return (
-    <section aria-label="Engagement checklist" className="flex flex-col gap-5">
+    <section aria-label="Engagement checklist" className="grid gap-6">
       <EngagementStuckCheck engagementId={id} />
 
-      <div className="flex items-center gap-3">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
         <Button disabled={tick.ticking} onClick={() => void runTick()}>Tick from log</Button>
-        <p role="status" className="m-0 text-xs text-fg-2">{tick.message}</p>
-        {tick.error && <p role="alert" className="m-0 text-xs text-warn">{tick.error}</p>}
+        <div className="grid min-w-0 gap-1">
+          <p role="status" className="m-0 text-meta text-fg-2">{tick.message}</p>
+          {tick.error && <p role="alert" className="m-0 text-meta text-warn">{tick.error}</p>}
+        </div>
       </div>
 
       <CredentialPicker credentials={creds.credentials} value={creds.cred} onChange={creds.pick} />
 
-      <div className="flex flex-col gap-1">
-        <h3 className="m-0 text-[11px] font-semibold uppercase tracking-label text-muted">Setup</h3>
+      <div className="grid gap-1">
+        <h3 className={`m-0 ${labelClass}`}>Setup</h3>
         <ul className="m-0 list-none p-0">{grouped(setup)}</ul>
       </div>
 
       <AccessFlags engagementId={id} hosts={hosts} attempts={attempts} credentials={credentials} />
 
-      <div className="flex flex-col gap-3">
-        <h3 className="m-0 text-[11px] font-semibold uppercase tracking-label text-muted">Active Directory</h3>
+      <div className="grid gap-3">
+        <h3 className={`m-0 ${labelClass}`}>Active Directory</h3>
         {AD_PLAYBOOKS.map((p) => (
           <PlaybookSection key={p.id} title={p.title} opensWhen={p.opensWhen} defaultOpen={opens[p.id]}>
             {p.goals.map((g) => row(g))}

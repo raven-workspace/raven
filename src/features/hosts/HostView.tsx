@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { SCROLL_PANE } from "../../ui/controlStyles";
-import { Link, useLocation, useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { isDialogOpen, isFreeKey, isTypingTarget, useKeydown } from "../../lib/keys";
-import { EmptyState } from "../../ui";
+import { Button, EmptyState, LoadingState, queryState } from "../../ui";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/shadcn/tabs";
 import type { Finding } from "../../types/findings";
 import { FindingSplit } from "../findings/FindingSplit";
 import { HostFindings } from "../findings/HostFindings";
@@ -29,17 +30,21 @@ type TabId = (typeof TABS)[number]["id"];
 /** Two columns from this width of the host page (the `@min-[760px]/host` container query); stacked below it. */
 const TWO_COLUMNS_PX = 760;
 
-/** The element's width, once measured; undefined until then (and in tests, which have no layout). */
+/**
+ * The element's width, once measured; undefined until then (and in tests, which have no layout). Measured as the ref
+ * attaches, during the commit, so the first paint already knows it: the fact groups never paint open and then fold.
+ */
 function useWidth() {
-  const [el, setEl] = useState<HTMLElement | null>(null);
   const [width, setWidth] = useState<number>();
-  useEffect(() => {
+  const ref = useCallback((el: HTMLElement | null) => {
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width));
+    const set = (w: number) => { if (w > 0) setWidth(w); };
+    set(el.getBoundingClientRect().width);
+    const ro = new ResizeObserver(([e]) => set(e.contentRect.width));
     ro.observe(el);
     return () => ro.disconnect();
-  }, [el]);
-  return [setEl, width] as const;
+  }, []);
+  return [ref, width] as const;
 }
 
 export function HostView({ engagementId, hostId }: { engagementId: string; hostId: string }) {
@@ -117,20 +122,24 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   });
   const [rootRef, width] = useWidth();
   const stacked = width !== undefined && width < TWO_COLUMNS_PX;
+  const selectTab = (id: TabId) => {
+    setTab(id);
+    setFocusGoal(undefined);
+  };
   const openInLog = (id: string) => {
     setOpenEntry(id);
     setTab("log");
   };
   const host = hosts.data?.find((h) => h.id === hostId);
 
-  if (hosts.isError) return <EmptyState title="Couldn't load this host" body={hosts.error.message} />;
-  if (!hosts.data) return null;
+  const hostsState = queryState([hosts], "this host");
+  if (hostsState || !hosts.data) return hostsState;
   if (!host) {
     return (
       <EmptyState
         title="Host not found"
         body="It may have been deleted."
-        action={<Link to={`/e/${engagementId}`} className="text-[13px] text-fg-2 hover:text-fg">Back to the board</Link>}
+        action={<Button onClick={() => void navigate(`/e/${engagementId}`)}>Back to the board</Button>}
       />
     );
   }
@@ -139,7 +148,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   const facts = <FactsColumn engagementId={engagementId} host={host} variant={stacked ? "stacked" : "column"} onOpenEntry={openInLog} />;
 
   return (
-    <div ref={rootRef} className="@container/host grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4">
+    <div ref={rootRef} data-host-layout={width === undefined ? undefined : stacked ? "stacked" : "columns"} className="@container/host grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4">
       <HostHeader host={host} onStuck={toggleStuck} />
       {split ? (
         <FindingSplit
@@ -152,37 +161,28 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
       ) : (
         <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 @min-[760px]/host:grid-cols-[minmax(16rem,1fr)_minmax(0,1.4fr)] @min-[760px]/host:grid-rows-1 @min-[760px]/host:gap-6">
           <div className={`max-h-[40vh] ${SCROLL_PANE} @min-[760px]/host:max-h-none`}>{facts}</div>
-          <div className="flex min-h-0 min-w-0 flex-col">
+          <Tabs
+            value={tab}
+            onValueChange={(v) => selectTab(v as TabId)}
+            className="min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)]"
+          >
             <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-              <div role="tablist" aria-label="Host work" className="flex gap-2">
+              <TabsList aria-label="Host work">
                 {TABS.map((t, i) => (
-                  <button
-                    key={t.id}
-                    role="tab"
-                    type="button"
-                    aria-selected={tab === t.id}
-                    title={`${t.label} (⌥${i + 1})`}
-                    onClick={() => {
-                      setTab(t.id);
-                      setFocusGoal(undefined);
-                    }}
-                    className={`h-7 cursor-default rounded-[var(--radius-sm)] px-3 text-[13px] uppercase ${
-                      tab === t.id ? "bg-surface-hi text-fg shadow-[inset_0_-2px_0_var(--color-accent)] font-semibold" : "text-muted hover:text-fg"
-                    }`}
-                  >
+                  <TabsTrigger key={t.id} value={t.id} title={`${t.label} (⌥${i + 1})`} onClick={() => selectTab(t.id)}>
                     {t.label}
-                  </button>
+                  </TabsTrigger>
                 ))}
-              </div>
+              </TabsList>
               {tab === "log" && <OrderButton order={order} onChange={setOrder} />}
               {tab === "next" && <FullChecklistToggle full={fullChecklist} onChange={setFullChecklist} />}
             </div>
-            <div role="tabpanel" aria-label={TABS.find((t) => t.id === tab)!.label} className={`mt-3 flex-1 border-t border-line ${SCROLL_PANE}`}>
+            <TabsContent value={tab} aria-label={TABS.find((t) => t.id === tab)!.label} className={`border-t border-line ${SCROLL_PANE}`}>
               {tab === "log" ? (
-                log.isError ? (
-                  <p role="alert" className="text-xs text-warn">Couldn't load the log: {log.error.message}</p>
-                ) : entries.length === 0 && log.data ? (
-                  <p className="text-[13px] text-muted">Nothing logged on this host yet. Press L to capture.</p>
+                !log.data ? (
+                  queryState([log], "the log") ?? <LoadingState label="the log" />
+                ) : entries.length === 0 ? (
+                  <p className="text-meta text-muted">Nothing logged on this host yet. Press L to capture.</p>
                 ) : (
                   <ul className="m-0 list-none p-0">
                     {entries.map((e) => <LogEntryRow key={e.id} entry={e} hosts={hosts.data} currentHostId={hostId} defaultOpen={e.id === openEntry} />)}
@@ -193,8 +193,8 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
               ) : (
                 <HostFindings engagementId={engagementId} host={host} onOpenEntry={openInLog} onOpenFinding={openFinding} />
               )}
-            </div>
-          </div>
+            </TabsContent>
+          </Tabs>
         </div>
       )}
       <StuckView

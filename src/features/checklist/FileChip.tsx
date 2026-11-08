@@ -9,9 +9,9 @@ export function FileChip({ commands }: { commands: FilledCommand[] }) {
   if (!c?.fileToken) return null;
   const { hostId, os, token } = c.fileToken;
   return (
-    <label className="flex items-center gap-1.5 self-start text-xs text-muted">
+    <label className="grid grid-cols-[max-content_176px] items-center justify-start gap-2 text-meta text-muted-2">
       {token}
-      <FilePicker name={token} os={os} className="h-7 w-44" value={filePickFor(hostId)} onChange={(v) => useFilePickStore.getState().set(hostId, v)} />
+      <FilePicker name={token} os={os} className="h-7 w-full" value={filePickFor(hostId)} onChange={(v) => useFilePickStore.getState().set(hostId, v)} />
     </label>
   );
 }

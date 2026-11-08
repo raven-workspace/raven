@@ -12,17 +12,17 @@ const base = {
 };
 
 describe('capture draft', () => {
-  it('nmap -p- full scan gets library title with target IP', () => {
+  it('nmap -p- full scan gets library title without the target', () => {
     const d = buildDraft({ ...base, text: 'sudo nmap -p- -Pn 10.10.61.143' });
     expect(d.kind).toBe('command');
-    expect(d.title).toBe('Scan every TCP port · 10.10.61.143');
+    expect(d.title).toBe('Scan every TCP port');
     expect(d.hostIds).toEqual(['h1']);
   });
 
   it('unmatched command keeps the full first line', () => {
     const line = './exploit.py --target 10.10.61.143 --lport 4444';
     const blocks = [{ command: line, output: '' }];
-    expect(commandTitle(blocks, [srv11], '')).toBe(line);
+    expect(commandTitle(blocks)).toBe(line);
   });
 
   it('prompt shell attributes target host and ranOn', () => {
@@ -98,8 +98,8 @@ describe('capture draft', () => {
     const v = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
     expect(detectKind(v, false)).toBe('flag');
     expect(buildDraft({ ...base, text: v }).content).toMatchObject({ kind: 'flag', flagKind: 'local', value: v, attachmentId: '' });
-    expect(flagTitle('local', srv11)).toBe('local.txt · Srv11');
-    expect(flagTitle('proof', null)).toBe('proof.txt');
+    expect(flagTitle('local')).toBe('local.txt');
+    expect(flagTitle('proof')).toBe('proof.txt');
     expect(detectKind('x', true)).toBe('screenshot');
   });
 
@@ -228,7 +228,7 @@ describe('proof pastes and chained commands', () => {
     expect(detectKind(proof, false)).toBe('flag');
     const d = buildDraft({ ...base, text: proof });
     expect(d.content).toMatchObject({ kind: 'flag', flagKind: 'local', value: '22222222222222222222222222222222', proof });
-    expect(d.title).toBe('local.txt · Srv11');
+    expect(d.title).toBe('local.txt');
     expect(d.hostIds).toEqual(['h1']);
     expect(d.ranOn).toBe('Srv11');
     // The broadcast address is in scope but is not a box to add.

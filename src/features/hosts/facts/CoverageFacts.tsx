@@ -8,7 +8,7 @@ import type { Host } from "../../../types/host";
 import { useChecklist, useEngagementServices } from "../../checklist/queries";
 import { COLUMN_LABELS } from "../columns";
 import { useHosts } from "../queries";
-import { FactGroup } from "./FactGroup";
+import { FactGroup, SummaryCell } from "./FactGroup";
 
 /** Steps done out of the ones that apply (N/A steps don't count against the stage). */
 function tally(goalIds: string[], state: Record<string, ItemState | undefined>) {
@@ -41,26 +41,26 @@ export function CoverageFacts({ engagementId, host, open, onToggle }: {
     .filter((s) => s.goals.length > 0)
     .map((s) => ({ stage: s.stage, ...tally(s.goals.map((g) => g.id), state) }));
   const now = rows.find((r) => r.stage.id === current?.id);
-  const summary = failed
-    ? "Coverage · couldn't load"
-    : !hosts || !eng || !servicesQ.data
-      ? "Coverage"
-      : now
-        ? `Coverage · ${now.stage.title} ${now.done}/${now.applicable}`
-        : currentStage(state, stages)
-          ? `Coverage · ${current?.title ?? COLUMN_LABELS[host.boardColumn]}`
-          : "Coverage · all stages done";
+  const summary = failed ? (
+    <span>couldn't load</span>
+  ) : !hosts || !eng || !servicesQ.data ? undefined : now ? (
+    <SummaryCell label={now.stage.title} shrink="label">{now.done}/{now.applicable} done</SummaryCell>
+  ) : currentStage(state, stages) ? (
+    <span>{current?.title ?? COLUMN_LABELS[host.boardColumn]}</span>
+  ) : (
+    <span>all stages done</span>
+  );
 
   return (
     <FactGroup title="Coverage" summary={summary} open={open} onToggle={onToggle}>
       {failed ? (
-        <p role="alert" className="m-0 text-xs text-warn">Couldn't load the checklist: {failed.message}</p>
+        <p role="alert" className="m-0 text-meta text-warn">Couldn't load the checklist: {failed.message}</p>
       ) : (
-        <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 p-0 text-[13px]">
+        <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 p-0 text-meta">
           {rows.map((r) => (
             <li key={r.stage.id} className="col-span-2 grid grid-cols-subgrid items-center">
               <span className={cx("min-w-0 truncate", r.stage.id === current?.id ? "text-fg" : "text-muted")}>{r.stage.title}</span>
-              <span className="font-mono text-xs text-fg-2">{r.done}/{r.applicable}</span>
+              <span className="text-code text-fg-2">{r.done}/{r.applicable}</span>
               <span aria-hidden className="col-span-2 h-0.5 overflow-hidden rounded-full bg-line">
                 <span
                   className={cx("block h-full", r.done === r.applicable ? "bg-accent" : "bg-fg-2")}

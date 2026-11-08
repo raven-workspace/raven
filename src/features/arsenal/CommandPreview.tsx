@@ -4,7 +4,8 @@ import { getToolkit } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
 import type { Host } from "../../types/host";
 import { Chip } from "../../ui";
-import { COMMAND_PRE, MarkedText, type FilledCommand } from "../checklist/CommandList";
+import type { FilledCommand } from "../checklist/CommandList";
+import { COMMAND_PRE, MarkedText } from "../checklist/commandPre";
 import { fillLibraryCommand } from "../checklist/goalCommands";
 import type { SuggestContext } from "../palette/suggest";
 import { FillBar } from "./FillBar";
@@ -44,7 +45,9 @@ const FLASH_MS = 600;
  * The filled command under a result list, with its fill fields (⌘K and the drawer). `hostKey` is the host it is filled
  * for: when it changes, the block flashes once (`data-flash`).
  */
-export function CommandPreview({ filled, hasCred, hostKey, suggest, os, overrides, onOverrides, fieldRef }: {
+export function CommandPreview({ filled, hasCred, hostKey, suggest, os, overrides, onOverrides, fieldRef, rule = true }: {
+  /** A top rule; off where the surrounding row already draws one. */
+  rule?: boolean;
   filled: FilledPreview; hasCred: boolean; hostKey: string | null; suggest: SuggestContext; os: "linux" | "windows" | null;
   overrides: Record<string, string>; onOverrides: (next: Record<string, string>) => void;
   fieldRef: (token: string, el: HTMLInputElement | null) => void;
@@ -59,7 +62,7 @@ export function CommandPreview({ filled, hasCred, hostKey, suggest, os, override
     return () => clearTimeout(t);
   }, [hostKey]);
   return (
-    <div className="flex flex-col gap-2 border-t border-line pt-3">
+    <div className={rule ? "grid gap-2 border-t border-line pt-3" : "grid gap-2"}>
       <pre className={`${COMMAND_PRE} max-h-48 overflow-y-auto`} tabIndex={0} role="group" aria-label={`Command: ${filled.cmd.title}`} {...(flash ? { "data-flash": "" } : {})}><MarkedText text={filled.cmd.text} tokens={filled.cmd.tokens ?? []} /></pre>
       {filled.cmd.msfMarker && <Chip>uses your one Metasploit host</Chip>}
       <FillBar tokens={filled.tokens} hasCred={hasCred} auto={filled.auto} suggest={suggest} os={os} overrides={overrides} onOverrides={onOverrides} fieldRef={fieldRef} />

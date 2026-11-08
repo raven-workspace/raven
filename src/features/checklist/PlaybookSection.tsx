@@ -1,3 +1,4 @@
+import { CaretDown, CaretRight } from "@phosphor-icons/react";
 import { useState, type ReactNode } from "react";
 
 /** A collapsible group of goals with a heading and its trigger text. */
@@ -23,18 +24,19 @@ export function PlaybookSection({
     if (openRequest !== undefined) setManual(true);
   }
   const open = manual ?? defaultOpen;
+  const Caret = open ? CaretDown : CaretRight;
   return (
-    <section aria-label={title} className="flex flex-col gap-1 border-t border-line pt-3">
+    <section aria-label={title} className="grid gap-1 border-t border-line pt-3">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setManual(!open)}
-        className="flex w-full cursor-default items-center gap-2 text-left text-[13px] font-semibold text-fg"
+        className="grid min-h-7 w-full cursor-default grid-cols-[16px_minmax(0,1fr)] items-center gap-2 rounded-sm text-left text-body font-semibold text-fg hover:bg-surface-hi"
       >
-        <span className="w-4 text-xs text-muted" aria-hidden>{open ? "▾" : "▸"}</span>
-        {title}
+        <Caret size={16} className="text-muted" aria-hidden />
+        <span className="truncate">{title}</span>
       </button>
-      <p className="m-0 pl-6 text-xs text-muted">Opens when {opensWhen}</p>
+      <p className="m-0 pl-6 text-meta text-muted">Opens when {opensWhen}</p>
       {open && <ul className="m-0 list-none p-0">{children}</ul>}
     </section>
   );

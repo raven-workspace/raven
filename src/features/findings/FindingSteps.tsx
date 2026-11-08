@@ -1,6 +1,7 @@
+import { ArrowDown, ArrowUp, X } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LogEntry } from "../../types/log";
-import { Button, Input, Toggle, labelClass } from "../../ui";
+import { ActionCell, Button, IconButton, Input, Toggle, fieldLabelClass } from "../../ui";
 import { SCROLL_PANE } from "../../ui/controlStyles";
 import { KIND_LABELS } from "../log/kindLabels";
 import { LogEntryBody } from "../log/LogEntryBody";
@@ -74,50 +75,67 @@ export function FindingSteps({ eid, hostIds, value, onChange }: {
     .sort((a, b) => a.at - b.at);
 
   return (
-    <div role="group" aria-label="Reproduction steps section" className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <span className={labelClass}>Reproduction steps</span>
+    <div role="group" aria-label="Reproduction steps section" className="@container/steps grid gap-2">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+        <span className={fieldLabelClass}>Reproduction steps</span>
         <Button size="sm" aria-expanded={picking} onClick={() => setPicking((p) => !p)}>
           {picking ? "Done adding" : "Add step"}
         </Button>
       </div>
 
       {steps.length === 0 && value.length > 0 && log.isError ? (
-        <p role="alert" className="m-0 text-xs text-warn">Couldn't load the log, so the steps can't be shown: {log.error.message}</p>
+        <p role="alert" className="m-0 text-meta text-warn">Couldn't load the log, so the steps can't be shown: {log.error.message}</p>
       ) : steps.length === 0 && value.length > 0 && !log.data ? (
-        <p className="m-0 text-xs text-muted">Loading the log…</p>
+        <p className="m-0 text-meta text-muted">Loading the log…</p>
       ) : steps.length === 0 ? (
-        <p className="m-0 text-xs text-muted">No steps yet. Add the log entries that reproduce this finding, in order.</p>
+        <p className="m-0 text-meta text-muted">No steps yet. Add the log entries that reproduce this finding, in order.</p>
       ) : (
-        <ol ref={listRef} aria-label="Reproduction steps" className="m-0 flex list-none flex-col p-0">
+        <ol ref={listRef} aria-label="Reproduction steps" className="m-0 grid list-none p-0">
           {steps.map((s, i) => {
             const open = expanded.has(s.id);
             return (
-              <li key={s.id} data-step={s.id} className="border-b border-line py-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-5 shrink-0 text-right font-mono text-xs tabular-nums text-muted">{i + 1}</span>
-                  <span className={`${labelClass} w-[72px] shrink-0`}>{KIND_LABELS[s.kind]}</span>
-                  <button
-                    type="button"
-                    data-expand
-                    aria-expanded={open}
-                    onClick={() => toggleOpen(s.id)}
-                    onKeyDown={(e) => {
-                      if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
-                        e.preventDefault();
-                        reorder(s.id, e.key === "ArrowUp" ? -1 : 1);
-                      }
-                    }}
-                    className="min-w-0 flex-1 cursor-default truncate text-left text-[13px] text-fg hover:underline"
-                  >
-                    <span data-testid="step-title">{s.title}</span>
-                  </button>
-                  <time dateTime={new Date(s.at).toISOString()} className="shrink-0 font-mono text-xs text-muted">{clock(s.at)}</time>
-                  <Button size="sm" aria-label={`Move up ${s.title}`} disabled={i === 0} onClick={() => reorder(s.id, -1)}>Up</Button>
-                  <Button size="sm" aria-label={`Move down ${s.title}`} disabled={i === steps.length - 1} onClick={() => reorder(s.id, 1)}>Down</Button>
-                  <Button size="sm" variant="danger" aria-label={`Remove step ${s.title}`} onClick={() => onChange(ids.filter((x) => x !== s.id))}>Remove</Button>
+              <li
+                key={s.id}
+                data-step={s.id}
+                className="grid grid-cols-[24px_minmax(0,1fr)_max-content_max-content] items-start gap-x-3 border-b border-line py-2 @min-[480px]/steps:grid-cols-[24px_88px_minmax(0,1fr)_max-content_max-content]"
+              >
+                <span className="col-start-1 row-start-1 mt-1 text-right font-mono text-code tabular-nums text-muted">{i + 1}</span>
+                <span
+                  className="col-start-2 row-start-2 truncate text-meta text-muted @min-[480px]/steps:row-start-1 @min-[480px]/steps:mt-1"
+                  title={KIND_LABELS[s.kind]}
+                >
+                  {KIND_LABELS[s.kind]}
+                </span>
+                <button
+                  type="button"
+                  data-expand
+                  aria-expanded={open}
+                  onClick={() => toggleOpen(s.id)}
+                  onKeyDown={(e) => {
+                    if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+                      e.preventDefault();
+                      reorder(s.id, e.key === "ArrowUp" ? -1 : 1);
+                    }
+                  }}
+                  title={s.title}
+                  className="col-start-2 row-start-1 mt-1 block min-h-6 min-w-0 cursor-default line-clamp-2 break-words text-left text-body text-fg hover:underline @min-[480px]/steps:col-start-3"
+                >
+                  <span data-testid="step-title">{s.title}</span>
+                </button>
+                <time
+                  dateTime={new Date(s.at).toISOString()}
+                  className="col-start-3 row-start-1 mt-1 font-mono text-code text-muted @min-[480px]/steps:col-start-4"
+                >
+                  {clock(s.at)}
+                </time>
+                <div className="col-start-4 row-start-1 @min-[480px]/steps:col-start-5">
+                  <ActionCell>
+                    <IconButton icon={ArrowUp} label={`Move up ${s.title}`} disabled={i === 0} onClick={() => reorder(s.id, -1)} />
+                    <IconButton icon={ArrowDown} label={`Move down ${s.title}`} disabled={i === steps.length - 1} onClick={() => reorder(s.id, 1)} />
+                    <IconButton icon={X} tone="destructive" label={`Remove step ${s.title}`} onClick={() => onChange(ids.filter((x) => x !== s.id))} />
+                  </ActionCell>
                 </div>
-                {open && <div className="mt-2 pl-[28px]"><LogEntryBody entry={s} /></div>}
+                {open && <div className="col-span-3 col-start-2 row-start-3 mt-2 @min-[480px]/steps:col-span-4"><LogEntryBody entry={s} /></div>}
               </li>
             );
           })}
@@ -125,28 +143,28 @@ export function FindingSteps({ eid, hostIds, value, onChange }: {
       )}
 
       {picking && (
-        <div className="flex flex-col gap-2 rounded-sm border border-line-2 p-2">
-          <div className="flex items-center gap-2">
+        <div className="grid gap-2 rounded-sm border border-line-2 p-2">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
             <Input aria-label="Search log" placeholder="Search the log" value={query} onChange={(e) => setQuery(e.target.value)} />
             {hostIds.length > 0 && <Toggle on={allHosts} onChange={setAllHosts}>All hosts</Toggle>}
           </div>
           {log.isError ? (
-            <p role="alert" className="m-0 text-xs text-warn">Couldn't load the log: {log.error.message}</p>
+            <p role="alert" className="m-0 text-meta text-warn">Couldn't load the log: {log.error.message}</p>
           ) : candidates.length === 0 ? (
-            <p className="m-0 text-xs text-muted">{log.data ? "No matching entries." : "Loading the log."}</p>
+            <p className="m-0 text-meta text-muted">{log.data ? "No matching entries." : "Loading the log."}</p>
           ) : (
-            <ul className={`m-0 flex max-h-[200px] list-none flex-col ${SCROLL_PANE}`}>
+            <ul className={`m-0 grid max-h-[200px] list-none content-start ${SCROLL_PANE}`}>
               {candidates.map((e) => (
                 <li key={e.id}>
                   <button
                     type="button"
                     aria-label={`Add ${e.title}`}
                     onClick={() => onChange([...ids, e.id])}
-                    className="flex w-full cursor-default items-center gap-2 px-1 py-1 text-left hover:bg-surface"
+                    className="grid w-full cursor-default grid-cols-[48px_88px_minmax(0,1fr)] items-center gap-2 px-1 py-1 text-left hover:bg-surface"
                   >
-                    <span className="w-11 shrink-0 font-mono text-xs text-muted">{clock(e.at)}</span>
-                    <span className={`${labelClass} w-[72px] shrink-0`}>{KIND_LABELS[e.kind]}</span>
-                    <span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">{e.title}</span>
+                    <span className="font-mono text-code text-muted">{clock(e.at)}</span>
+                    <span className="truncate text-meta text-muted">{KIND_LABELS[e.kind]}</span>
+                    <span className="truncate text-body text-fg-2" title={e.title}>{e.title}</span>
                   </button>
                 </li>
               ))}

@@ -237,7 +237,7 @@ describe("auto-tick wiring", () => {
     mount();
     const dialog = await openCapture(user);
     await user.paste(`whoami; hostname; ip a\nweb07\n    inet 10.10.10.6/24 brd 10.10.10.255 scope global ens3\ncat /home/web/local.txt\n${FLAG}`);
-    expect(within(dialog).getByLabelText("Title")).toHaveValue("local.txt · web07");
+    expect(within(dialog).getByLabelText("Title")).toHaveValue("local.txt");
     await saveCapture(user);
     await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalled());
     expect(putFor("h2", "h-orient-proof")).toEqual([

@@ -1,7 +1,8 @@
 import * as RD from "@radix-ui/react-dialog";
 import type { ReactNode } from "react";
 import { cx } from "../lib/cx";
-import { Kbd } from "./Kbd";
+import { X } from "@phosphor-icons/react";
+import { IconButton } from "./IconButton";
 
 export interface DialogProps {
   open: boolean;
@@ -24,6 +25,16 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
         <RD.Overlay className="fixed inset-0 z-40 bg-bg/80" />
         <RD.Content
           {...(description ? {} : { "aria-describedby": undefined })}
+          // Start on the first control in the body or footer, never the Close button: its tooltip would
+          // open on focus and swallow the first Esc.
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            const root = e.currentTarget as HTMLElement;
+            const first = root.querySelector<HTMLElement>(
+              "[data-popup-bounds] :is(input,textarea,select,button,[href],[tabindex]):not([tabindex='-1']):not(:disabled), footer :is(button,[href],input):not(:disabled)",
+            );
+            (first ?? root).focus();
+          }}
           className={cx(
             "fixed left-1/2 z-50 flex -translate-x-1/2 flex-col",
             size === "xl"
@@ -35,21 +46,18 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
             className,
           )}
         >
-          <header className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-4 pt-3.5 pb-3">
+          <header className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b border-line px-4 py-3">
             <div className="min-w-0">
-              <RD.Title className="m-0 text-[15px] font-semibold tracking-[-0.01em] text-fg">{title}</RD.Title>
+              <RD.Title className="m-0 text-heading text-fg">{title}</RD.Title>
               {description && (
-                <RD.Description className="m-0 mt-0.5 text-[13px] text-muted">{description}</RD.Description>
+                <RD.Description className="m-0 mt-1 text-meta text-muted">{description}</RD.Description>
               )}
             </div>
-            <RD.Close
-              aria-label="Close"
-              className="shrink-0 rounded-sm border border-transparent p-0.5 hover:border-line-2"
-            >
-              <Kbd>esc</Kbd>
+            <RD.Close asChild>
+              <IconButton icon={X} label="Close" shortcut="Esc" />
             </RD.Close>
           </header>
-          {children !== undefined && <div data-popup-bounds="" className="min-h-0 overflow-y-auto px-4 py-3.5">{children}</div>}
+          {children !== undefined && <div data-popup-bounds="" className="min-h-0 overflow-y-auto px-4 py-4">{children}</div>}
           {footer && <footer className="flex shrink-0 justify-end gap-2 border-t border-line px-4 py-3">{footer}</footer>}
         </RD.Content>
       </RD.Portal>

@@ -17,17 +17,17 @@ export interface KindFieldsProps {
 export function KindFields({ content, caption, onCaption, flagKind, onFlagKind, onKeyDown, captionRef }: KindFieldsProps) {
   if (content.kind === "screenshot") {
     return (
-      <div className="flex flex-col gap-1">
+      <div className="grid gap-1">
         <Field label="Caption">
           <Input ref={captionRef} value={caption} onChange={(e) => onCaption(e.target.value)} onKeyDown={onKeyDown} />
         </Field>
-        <p className="m-0 font-mono text-xs text-muted">{content.fileName}</p>
+        <p className="m-0 text-code text-muted">{content.fileName}</p>
       </div>
     );
   }
   if (content.kind === "flag") {
     return (
-      <div role="group" aria-label="Flag file" className="flex items-center gap-1.5">
+      <div role="group" aria-label="Flag file" className="grid grid-flow-col auto-cols-max justify-start gap-2">
         {(["local", "proof"] as const).map((k) => (
           <button
             key={k}
@@ -35,7 +35,7 @@ export function KindFields({ content, caption, onCaption, flagKind, onFlagKind, 
             aria-pressed={flagKind === k}
             onClick={() => onFlagKind(k)}
             className={cx(
-              "h-6 rounded-sm border px-2 font-mono text-xs cursor-default",
+              "h-7 rounded-sm border px-2 text-code cursor-default",
               flagKind === k ? "border-accent text-accent" : "border-line-2 text-fg-2 hover:text-fg",
             )}
           >

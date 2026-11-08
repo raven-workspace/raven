@@ -6,7 +6,7 @@ import { credLabel } from "../../engines/credentials/labels";
 import { getCards, getLibrary, getToolkit, useLibraryVersion } from "../../engines/library/store";
 import { copyPlain, copySecret } from "../../lib/clipboard";
 import { reportError } from "../../lib/lockSignal";
-import { Dialog, Kbd } from "../../ui";
+import { Dialog, HintLine, type Hint } from "../../ui";
 import { logCommand } from "../capture/logCommand";
 import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
 import { shortHostName } from "../../lib/hostName";
@@ -90,7 +90,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
       .map((g) => ({ key: g.category, label: g.label, rows: g.hits.map(paletteRow) }));
     // The cap only keeps the dialog short: what it left out is one row away in the Arsenal, never silently dropped.
     const left = found.groups.reduce((n, g) => n + g.hits.length, 0) - out.reduce((n, g) => n + g.rows.length, 0);
-    if (left > 0) out.push({ key: "more", rows: [paletteRow({ type: "more", id: "more", count: left, title: `${left} more — open in Arsenal` })] });
+    if (left > 0) out.push({ key: "more", rows: [paletteRow({ type: "more", id: "more", count: left, title: `${left} more, open in the Arsenal` })] });
     if (found.items.length > 0) out.push({ key: "engagement", label: "This engagement", rows: found.items.slice(0, MAX_RESULTS).map(paletteRow) });
     return out;
   }, [found]);
@@ -156,7 +156,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
         const typed = fillCommand(c.template, filled.input, { commandOs: c.os }).text;
         await logCommand(qc, {
           engagementId, host, hosts: d.hosts, command: typed,
-          title: `${c.title} · ${host.ip ?? host.name}`,
+          title: c.title,
           ranOn: c.runFrom === "attacker" ? (d.settings?.machines[0] ?? "") : host.name,
         });
       }
@@ -169,9 +169,10 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
 
   const suggestCtx: SuggestContext = { engagement: d.engagement, hosts: d.hosts, services: d.services, credentials: d.credentials, host, toolkit: getToolkit() };
 
-  // Tab goes to the first field still empty, else the first field.
+  // Tab goes to the first field still empty. With every value filled there is nothing to jump to: Tab moves on as usual,
+  // to the host picker. Only tokens that have a field count (a credential's USER and PASS have none once it is picked).
   const firstUnfilled = (): HTMLInputElement | undefined => {
-    const t = filled?.tokens.find((n) => filled.auto[n]?.unresolved && !overrides[n]) ?? filled?.tokens[0];
+    const t = filled?.tokens.find((n) => filled.auto[n]?.unresolved && !overrides[n] && fieldEls.current.has(n));
     return t ? fieldEls.current.get(t) : undefined;
   };
 
@@ -179,7 +180,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       setSelected(Math.max(0, Math.min(results.length - 1, index + (e.key === "ArrowDown" ? 1 : -1))));
-    } else if (e.key === "Tab" && !e.shiftKey && (filled?.tokens.length ?? 0) > 0) {
+    } else if (e.key === "Tab" && !e.shiftKey && firstUnfilled()) {
       e.preventDefault();
       // The dialog's focus trap would otherwise see Tab leave its last field and loop back to the top.
       e.stopPropagation();
@@ -224,8 +225,20 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     void run(e.metaKey || e.ctrlKey);
   };
 
+  const hasUnfilled = filled?.tokens.some((n) => filled.auto[n]?.unresolved && !overrides[n]) ?? false;
+  const hints = useMemo<Hint[]>(
+    () => [
+      { keys: "↵", label: "copy", priority: 1 },
+      { keys: "⌘↵", label: host ? "copy and log" : "log (no host)", priority: 2 },
+      ...(engagementId ? [{ keys: "⌥H", label: "host", priority: 3 }, { keys: "⌥C", label: "credential", priority: 3 }] : []),
+      { keys: "→", label: "in card", priority: 4 },
+      // ⇥ jumps only to a value still missing; with every value filled Tab moves on to the host picker, so no hint.
+      ...(hasUnfilled ? [{ keys: "⇥", label: "edit a value", priority: 5 }] : []),
+    ],
+    [engagementId, host, hasUnfilled],
+  );
   return (
-    <div className="grid gap-3" onKeyDown={onKey} onKeyDownCapture={onKeyCapture}>
+    <div data-hint-surface="" className="grid gap-3" onKeyDown={onKey} onKeyDownCapture={onKeyCapture}>
       <header className="grid gap-2">
         <SearchBar
           label="Search"
@@ -244,22 +257,22 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
           {...(engagementId ? { trailing: null } : {})}
         />
         {engagementId && (
-          <div className="grid grid-cols-[auto_minmax(0,1fr)] justify-items-start gap-3">
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] justify-items-start gap-3">
             <HostChip
               ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} align="start" className="max-w-full"
               {...(remembered && d.engagement ? { engagementName: d.engagement.name } : {})}
             />
             <CredChip
               ref={credRef} credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred}
-              onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} align="start" className="max-w-full"
+              onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} className="max-w-full"
             />
           </div>
         )}
       </header>
       <div className="grid max-h-[44vh] overflow-y-auto">
-        {results.length === 0 && <p className="m-0 px-1 py-2 text-xs text-muted">Nothing matches</p>}
+        {results.length === 0 && <p className="m-0 px-1 py-2 text-meta text-muted">Nothing matches</p>}
         <ResultList
-          id="palette-results" label="Results" groups={rowGroups} selected={index} onSelect={setSelected}
+          id="palette-results" label="Results" groups={rowGroups} selected={index}
           onActivate={(_, i) => {
             setSelected(i);
             searchRef.current?.focus();
@@ -273,16 +286,11 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
           fieldRef={(t, el) => (el ? fieldEls.current.set(t, el) : fieldEls.current.delete(t))}
         />
       )}
-      {guard.hint && filled && guard.forKey === copyKey(filled.cmd) && <p role="status" className="m-0 text-xs text-warn">{guard.hint}</p>}
-      {status && <p role="alert" className="m-0 text-xs text-warn">{status}</p>}
-      <p data-hint-line="" className="m-0 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
-        <span><Kbd>↵</Kbd> copy</span>
-        <span><Kbd>⌘↵</Kbd> copy and log{host ? "" : " (open a host)"}</span>
-        <span><Kbd>→</Kbd> in card</span>
-        <span><Kbd>⇥</Kbd> edit a value</span>
-        {engagementId && <span><Kbd>⌥H</Kbd> host</span>}
-        {engagementId && <span><Kbd>⌥C</Kbd> credential</span>}
-      </p>
+      {guard.hint && filled && guard.forKey === copyKey(filled.cmd) && <p role="status" className="m-0 text-meta text-warn">{guard.hint}</p>}
+      {status && <p role="alert" className="m-0 text-meta text-warn">{status}</p>}
+      <footer className="grid">
+        <HintLine hints={hints} ariaLabel="Search shortcuts" />
+      </footer>
     </div>
   );
 }

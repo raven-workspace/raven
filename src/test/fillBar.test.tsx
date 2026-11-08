@@ -97,7 +97,7 @@ describe("FillBar", () => {
 describe("CredChip", () => {
   const CREDS = [cred("c1", "alice"), cred("c2", "bob", "hash")];
 
-  it("reads as <label> · kind, is out of the Tab order, and lists tested state", async () => {
+  it("reads as a Credential picker, is a Tab stop, and lists tested state", async () => {
     const user = userEvent.setup();
     const ref = createRef<CredChipHandle>();
     const onPick = vi.fn();
@@ -109,14 +109,14 @@ describe("CredChip", () => {
       </form>,
     );
     const chip = screen.getByRole("button", { name: /Fill with credential/ });
-    expect(chip).toHaveTextContent(/^as\s*CORP\\bob\s*·\s*hash/);
-    expect(chip).toHaveAttribute("tabindex", "-1");
+    expect(chip).toHaveTextContent(/^Credential\s*CORP\\bob \(hash\)/);
+    expect(chip).not.toHaveAttribute("tabindex", "-1");
     await user.click(screen.getByLabelText("first"));
     await user.tab();
-    expect(screen.getByLabelText("last")).toHaveFocus();
+    expect(chip).toHaveFocus();
     act(() => ref.current?.open());
     const opts = within(screen.getByRole("listbox", { name: "Fill with credential" })).getAllByRole("option");
-    expect(opts.map((o) => o.textContent)).toEqual(["No credential", "CORP\\alicepassword · admin", "CORP\\bobhash · untested"]);
+    expect(opts.map((o) => o.textContent)).toEqual(["No credential", "CORP\\alicepasswordadmin", "CORP\\bobhashuntested"]);
     await user.keyboard("{ArrowUp}{Enter}");
     expect(onPick).toHaveBeenCalledWith("c1");
   });
@@ -125,7 +125,7 @@ describe("CredChip", () => {
     const user = userEvent.setup();
     const onPick = vi.fn();
     const { rerender } = render(<CredChip credentials={CREDS} value={null} onPick={onPick} />);
-    expect(screen.getByRole("button", { name: /Fill with credential/ })).toHaveTextContent(/^as\s*no credential/);
+    expect(screen.getByRole("button", { name: /Fill with credential/ })).toHaveTextContent(/^Credential\s*No credential/);
     rerender(<CredChip credentials={CREDS} value={CREDS[0]!} onPick={onPick} />);
     const chip = screen.getByRole("button", { name: /Fill with credential/ });
     await user.click(chip);

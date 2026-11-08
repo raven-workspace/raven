@@ -208,10 +208,10 @@ describe("cleanup panel", () => {
   it("the strip and card show the open count", async () => {
     store = [item("c1"), item("c2", { target: "/tmp/y" }), item("c3", { target: "/tmp/z", status: "removed", removedAt: 5 })];
     const strip = mount({ path: "/e/e1" });
-    expect(await within(await screen.findByRole("status", { name: "Engagement status" })).findByText("Cleanup 2")).toBeInTheDocument();
+    expect(await within(await screen.findByRole("status", { name: "Engagement status" })).findByLabelText("Cleanup 2")).toBeInTheDocument();
     strip.unmount();
     mount({ path: "/" });
-    expect(await screen.findByText("Cleanup 2")).toBeInTheDocument();
+    expect((await screen.findByText("Cleanup")).nextSibling).toHaveTextContent("2");
   });
 
   it("the Engagement checklist shows the Cleanup panel and the sidebar is unchanged", async () => {

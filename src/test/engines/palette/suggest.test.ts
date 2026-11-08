@@ -30,6 +30,9 @@ describe('tokenSuggestions', () => {
     expect(JSON.stringify(tokenSuggestions('USER', ctx))).not.toContain('Winter2024!');
   });
   it('offers the DC first for DC_IP, then other hosts', () => expect(values('DC_IP')).toEqual(['10.0.0.10', '10.0.0.11']));
+  it('names the DC by host and role as two fields, never a joined string', () => {
+    expect(tokenSuggestions('DC_IP', ctx)[0]).toEqual({ value: '10.0.0.10', hint: 'dc01', role: 'DC' });
+  });
   it('offers host IPs and FQDNs', () => {
     expect(values('TARGET_IP')).toEqual(['10.0.0.11', '10.0.0.10']);
     expect(values('DC_HOST')).toEqual(['ms01.corp.local', 'ms01', 'dc01.corp.local', 'dc01']);

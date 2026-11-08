@@ -102,6 +102,11 @@ beforeEach(() => {
 afterEach(() => setImported({ commands: [], cards: [] }));
 
 const workbench = () => screen.findByRole("main", { name: "Payloads" });
+/** The hints the line shows (not the full `?` list), as "keys label". */
+const shownHints = (surface: HTMLElement) =>
+  [...within(surface).getByRole("group", { name: "Payloads shortcuts" }).querySelectorAll(":scope > [data-hint]")].map(
+    (u) => `${[...u.querySelectorAll("kbd")].map((k) => k.textContent).join(" ")} ${u.lastElementChild?.textContent}`,
+  );
 const read = () => within(screen.getByRole("complementary", { name: "Raven's read" }));
 
 describe("Payloads Workbench", () => {
@@ -121,11 +126,11 @@ describe("Payloads Workbench", () => {
     expect(r.getByRole("textbox", { name: "LPORT" })).toHaveValue(LPORT);
     expect(r.getByText(/no meterpreter/i)).toBeInTheDocument();
     expect(r.getByRole("listbox", { name: "Generator" })).toBeInTheDocument();
-    expect(w.getByText("1 · Listener on Kali")).toBeInTheDocument();
-    expect(w.getByText("2 · Paste into Web shell ?cmd=")).toBeInTheDocument();
-    expect(w.getByLabelText("Payload").textContent).toBe(buildPayload(def("ps-b64"), "webshell-param", { LHOST, LPORT }).text);
+    expect(w.getByText("1. Listener on Kali")).toBeInTheDocument();
+    expect(w.getByText("2. Paste into Web shell ?cmd=")).toBeInTheDocument();
+    expect(w.getByLabelText("Command: Payload").textContent).toBe(buildPayload(def("ps-b64"), "webshell-param", { LHOST, LPORT }).text);
     expect(w.getByText("What each part does")).toBeInTheDocument();
-    expect(w.getByText(/don't fit here:/)).toBeInTheDocument();
+    expect(w.getByRole("button", { name: /^Don't fit here \(\d+\)$/ })).toHaveAttribute("aria-expanded", "false");
   });
 
   it("clicking 'Inside a SQL string' re-wraps the payload", async () => {
@@ -136,13 +141,13 @@ describe("Payloads Workbench", () => {
     await user.click(read().getByRole("button", { name: "Inside a SQL string" }));
     expect(read().getByRole("button", { name: "Inside a SQL string" })).toHaveAttribute("aria-pressed", "true");
     // A served cradle: prepare the file on Kali, start the listener, then paste.
-    expect(w.getByText("1 · Prepare on Kali")).toBeInTheDocument();
-    expect(w.getByText("2 · Listener on Kali")).toBeInTheDocument();
-    expect(w.getByText("3 · Paste into Inside a SQL string")).toBeInTheDocument();
+    expect(w.getByText("1. Prepare on Kali")).toBeInTheDocument();
+    expect(w.getByText("2. Listener on Kali")).toBeInTheDocument();
+    expect(w.getByText("3. Paste into Inside a SQL string")).toBeInTheDocument();
     // The fit re-ranks for the new context: the cradle, its quotes doubled for the SQL string.
     expect(w.getByRole("heading", { name: "Nishang cradle (served rev.ps1)" })).toBeInTheDocument();
-    expect(w.getByLabelText("Payload").textContent).toBe(buildPayload(def("nishang-cradle"), "sql-string", { LHOST, LPORT }).text);
-    expect(w.getByLabelText("Payload").textContent).toContain("''http://192.0.2.10/rev.ps1''");
+    expect(w.getByLabelText("Command: Payload").textContent).toBe(buildPayload(def("nishang-cradle"), "sql-string", { LHOST, LPORT }).text);
+    expect(w.getByLabelText("Command: Payload").textContent).toContain("''http://192.0.2.10/rev.ps1''");
     // The override sticks for the host: the drawer's chip shows it too.
     expect(usePayloadsStore.getState().overrides.h1?.context).toBe("sql-string");
   });
@@ -155,7 +160,7 @@ describe("Payloads Workbench", () => {
     const lport = read().getByRole("textbox", { name: "LPORT" });
     await user.clear(lport);
     await user.type(lport, "8443");
-    expect(w.getByLabelText("Listener")).toHaveTextContent("penelope -O -p 8443");
+    expect(w.getByLabelText("Command: Listener")).toHaveTextContent("penelope -O -p 8443");
     expect(usePayloadsStore.getState().overrides.h1?.port).toBe("8443");
   });
 
@@ -195,7 +200,7 @@ describe("Payloads Workbench", () => {
     expect(steps.map((s) => within(s).getByRole("heading").textContent)).toEqual(SQL_STEPS.map((s, i) => `${i + 1}. ${s.title}`));
     // A column count typed once carries into the later steps.
     await user.type(sql.getByRole("textbox", { name: "Columns" }), "3");
-    expect(within(steps[5]!).getByLabelText("Version payload").textContent).toBe(buildSql("version", "postgres", "url-param", { columns: 3 }).text);
+    expect(within(steps[5]!).getByLabelText("Command: Version payload").textContent).toBe(buildSql("version", "postgres", "url-param", { columns: 3 }).text);
     // Exec payloads for postgres only.
     const exec = within(sql.getByRole("list", { name: "Run commands" }));
     expect(exec.getAllByRole("listitem").map((s) => within(s).getByRole("heading").textContent)).toEqual(["COPY FROM PROGRAM reverse shell"]);
@@ -260,7 +265,7 @@ describe("Payloads Workbench", () => {
     await user.click(sql.getByRole("button", { name: "Copy Version" }));
     expect(await navigator.clipboard.readText()).toBe("untouched");
     expect(sql.getByRole("textbox", { name: "Columns" })).toHaveFocus();
-    expect(sql.getByText("{COLUMNS} not filled · Copy again to copy anyway")).toHaveClass("text-warn");
+    expect(sql.getByText("{COLUMNS} not filled. Copy again to copy anyway")).toHaveClass("text-warn");
     // Another injection point is another payload: the old confirm does not carry over.
     await user.click(sql.getByRole("button", { name: "Form field" }));
     await user.click(sql.getByRole("button", { name: "Copy Version" }));
@@ -277,12 +282,18 @@ describe("Payloads Workbench", () => {
     mount(["/payloads"]);
     const w = within(await workbench());
     await w.findByRole("heading", { name: "PowerShell base64 (-e)" });
-    const hint = () => screen.getByRole("main", { name: "Payloads" }).querySelector("[data-hint-line]")?.textContent;
-    expect(hint()).toBe("↵ copy payload · ⌥L copy listener · ⇥ next fit · ⌥O OS · ⌥W where you paste · ⌥1-6 generator · ⌘↵ copy and log · P generators · Esc back");
+    const main = screen.getByRole("main", { name: "Payloads" });
+    expect(main).toHaveAttribute("data-hint-surface");
+    expect(shownHints(main)).toEqual(["↵ copy payload", "⌘↵ copy and log", "⌥L copy listener", "⇥ next fit", "Esc back"]);
+    // The rest are one "?" away.
+    await user.click(within(main).getByRole("button", { name: "All shortcuts" }));
+    expect(await screen.findByText("generators")).toBeInTheDocument();
+    expect(screen.getByText("where you paste")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
     await user.keyboard("{Alt>}3{/Alt}");
-    expect(hint()).toBe("↵ copy step · ⌥1-6 generator · P generators · Esc back");
+    expect(shownHints(main)).toEqual(["↵ copy step", "⌥1–6 generator", "P generators", "Esc back"]);
     await user.keyboard("{Alt>}2{/Alt}");
-    expect(hint()).toBe("⌘↵ copy and log · ⌥1-6 generator · P generators · Esc back");
+    expect(shownHints(main)).toEqual(["⌘↵ copy and log", "⌥1–6 generator", "P generators", "Esc back"]);
   });
 
   it("⌥O and ⌥W jump to the OS and where-you-paste-it choices", async () => {
@@ -306,8 +317,8 @@ describe("Payloads Workbench", () => {
     expect(read().getByRole("textbox", { name: "LHOST" })).toHaveValue("");
     expect(read().getByRole("textbox", { name: "LPORT" })).toHaveValue("");
     expect(read().getByRole("textbox", { name: "LPORT" })).toHaveAttribute("placeholder", `Settings: ${LPORT}`);
-    expect(w.getByLabelText("Payload").textContent).toBe(buildPayload(def("ps-b64"), "webshell-param", { LHOST, LPORT }).text);
-    expect(w.getByLabelText("Listener")).toHaveTextContent(`penelope -O -p ${LPORT}`);
+    expect(w.getByLabelText("Command: Payload").textContent).toBe(buildPayload(def("ps-b64"), "webshell-param", { LHOST, LPORT }).text);
+    expect(w.getByLabelText("Command: Listener")).toHaveTextContent(`penelope -O -p ${LPORT}`);
   });
 
   it("P then Esc leaves the Workbench in one press", async () => {

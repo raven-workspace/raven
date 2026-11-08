@@ -1,7 +1,8 @@
 import { useState } from "react";
 import type { AccessGrant, AccessLevel, Username } from "../../types/credentials";
 import type { Host } from "../../types/host";
-import { Chip, Field, Input, Select } from "../../ui";
+import { X } from "@phosphor-icons/react";
+import { Chip, ChipSet, Field, IconButton, Input, Select } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { usernameLabel } from "../../engines/credentials";
 import { useAccessGrantMutations } from "./queries";
@@ -45,7 +46,7 @@ export function AccessFields({ value, onChange, hosts, errors = {} }: {
   );
 }
 
-/** A username's grants as small removable tags: "admin on dc01 · via webshell". */
+/** A username's grants as small removable chips with the access route beside them. */
 export function AccessGrantTags({ eid, username, grants, hosts }: {
   eid: string;
   username: Username;
@@ -58,26 +59,20 @@ export function AccessGrantTags({ eid, username, grants, hosts }: {
   const name = usernameLabel(username);
   return (
     <>
-      <ul aria-label={`Access as ${name}`} className="m-0 flex list-none flex-wrap gap-1 p-0">
-        {grants.map((g) => {
-          const host = hostLabel(hosts.find((h) => h.id === g.hostId));
-          return (
-            <li key={g.id}>
-              <Chip variant="accent">
-                <span>{LEVEL_LABEL[g.level]} on {host}{g.via && <span className="text-fg-2"> · via {g.via}</span>}</span>
-                <button
-                  type="button"
-                  aria-label={`Remove access as ${name} on ${host}`}
-                  onClick={() => setRemoving(g)}
-                  className="cursor-default text-muted hover:text-fg"
-                >
-                  ×
-                </button>
-              </Chip>
-            </li>
-          );
-        })}
-      </ul>
+      <div role="group" aria-label={`Access as ${name}`}>
+        <ChipSet>
+          {grants.map((g) => {
+            const host = hostLabel(hosts.find((h) => h.id === g.hostId));
+            return (
+              <div key={g.id} className="grid grid-cols-[max-content_max-content_28px] items-center gap-2">
+                <Chip variant="accent">{LEVEL_LABEL[g.level]} on {host}</Chip>
+                {g.via ? <span className="text-meta text-fg-2">via {g.via}</span> : <span aria-hidden />}
+                <IconButton icon={X} label={`Remove access as ${name} on ${host}`} onClick={() => setRemoving(g)} />
+              </div>
+            );
+          })}
+        </ChipSet>
+      </div>
       {removing && (
         <ConfirmDelete
           title={`Remove ${LEVEL_LABEL[removing.level]} access as ${name}?`}

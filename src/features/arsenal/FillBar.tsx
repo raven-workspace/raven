@@ -19,7 +19,7 @@ export function FillBar({ tokens: all, hasCred = false, auto, overrides, onOverr
   const tokens = hasCred ? all.filter((t) => !((t === "USER" || t === "DOMAIN") && auto[t] && !auto[t].unresolved)) : all;
   if (tokens.length === 0) return null;
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-x-3 gap-y-1.5" aria-label="Fill values">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-x-4 gap-y-2" aria-label="Fill values">
       {tokens.map((t) => {
         const a = auto[t] ?? { text: "", unresolved: true };
         const typed = overrides[t] ?? "";
@@ -44,11 +44,11 @@ export function FillBar({ tokens: all, hasCred = false, auto, overrides, onOverr
           <label
             key={t}
             {...(t === "DC_IP" && a.dcByName && !typed ? { title: "DC (by name): no Kerberos/LDAP seen, picked by its host name" } : {})}
-            className={`grid grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 text-xs ${unfilled ? "text-warn" : "text-muted"}`}
+            className={`grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 text-meta ${unfilled ? "text-warn" : "text-muted-2"}`}
           >
             <span>
               {t}
-              {t === "DC_IP" && a.dcByName && !typed && <span className="ml-1 text-[11px] text-muted-2">(by name)</span>}
+              {t === "DC_IP" && a.dcByName && !typed && <span className="ml-1 text-meta text-muted-2">(by name)</span>}
             </span>
             {isFileToken(t) ? (
               <FilePicker {...shared} os={os} />

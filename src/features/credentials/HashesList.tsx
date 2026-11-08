@@ -1,10 +1,9 @@
 import { useState, type FormEvent } from "react";
-import { credLabel, getCrackingCommands, identifyHash, isMachineAccount } from "../../engines/credentials";
+import { credLabel, credName, getCrackingCommands, identifyHash, isMachineAccount } from "../../engines/credentials";
 import type { Credential } from "../../types/credentials";
-import { Button, Chip, Dialog, Field, Input, labelClass } from "../../ui";
+import { Button, Chip, CommandBlock, Dialog, Field, Input, labelClass } from "../../ui";
 import { MASK, MaskedSecret } from "./MaskedSecret";
 import { useCredentialMutations } from "./queries";
-import { copySecret } from "../../lib/clipboard";
 
 /** Plaintext for a hash. The server records a linked password; the hash then folds into it. */
 export function CrackDialog({ eid, hash, onClose }: { eid: string; hash: Credential; onClose: () => void }) {
@@ -39,22 +38,6 @@ export function CrackDialog({ eid, hash, onClose }: { eid: string; hash: Credent
   );
 }
 
-function CopyCommand({ label, text }: { label: string; text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <Button
-      size="sm"
-      aria-label={`Copy ${label} command`}
-      onClick={() => void copySecret(text).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      })}
-    >
-      {copied ? "Copied" : `Copy ${label}`}
-    </Button>
-  );
-}
-
 function HashRow({ eid, hash, onCrack }: { eid: string; hash: Credential; onCrack: () => void }) {
   const { setCrackStatus } = useCredentialMutations(eid);
   const label = credLabel(hash);
@@ -66,36 +49,26 @@ function HashRow({ eid, hash, onCrack }: { eid: string; hash: Credential; onCrac
   const shown = getCrackingCommands(MASK, cand);
   const dead = hash.crackStatus === "uncrackable";
   return (
-    <li className="flex flex-col gap-1 border-b border-line py-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[12.5px] text-fg">{label}</span>
-        <Chip>{hash.hashType ?? cand?.name ?? "unknown type"}</Chip>
-        <Chip className={dead ? "border-warn text-warn" : undefined}>{hash.crackStatus ?? "uncracked"}</Chip>
-        <MaskedSecret secret={hash.secret} label={`hash ${label}`} />
-        <span className="ml-auto flex gap-1.5">
-          <Button size="sm" aria-label={`Crack ${label}`} onClick={onCrack}>Crack</Button>
-          {dead ? (
-            <Button size="sm" aria-label={`Reset ${label}`} onClick={() => setCrackStatus.mutate({ id: hash.id, status: "uncracked" })}>Reset</Button>
-          ) : (
-            <Button size="sm" aria-label={`Mark ${label} uncrackable`} onClick={() => setCrackStatus.mutate({ id: hash.id, status: "uncrackable" })}>Mark uncrackable</Button>
-          )}
-        </span>
-      </div>
-      {setCrackStatus.error && <p role="alert" className="m-0 text-xs text-warn">{setCrackStatus.error.message}</p>}
+    <li className="col-span-full grid grid-cols-subgrid items-center gap-y-2 border-b border-line py-2">
+      <span className="truncate font-mono text-code text-fg" title={credName(hash)}>{credName(hash)}</span>
+      <span className="text-meta text-muted">{hash.hashType ?? cand?.name ?? "unknown type"}</span>
+      <span><Chip variant={dead ? "warn" : "default"}>{hash.crackStatus ?? "uncracked"}</Chip></span>
+      <MaskedSecret secret={hash.secret} label={`secret for ${label}`} />
+      <span className="justify-self-end">
+        <Button size="sm" aria-label={`Crack ${label}`} onClick={onCrack}>Crack</Button>
+      </span>
+      <span className="justify-self-end">
+        {dead ? (
+          <Button size="sm" aria-label={`Reset ${label}`} onClick={() => setCrackStatus.mutate({ id: hash.id, status: "uncracked" })}>Reset</Button>
+        ) : (
+          <Button size="sm" aria-label={`Mark ${label} uncrackable`} onClick={() => setCrackStatus.mutate({ id: hash.id, status: "uncrackable" })}>Mark uncrackable</Button>
+        )}
+      </span>
+      {setCrackStatus.error && <p role="alert" className="col-span-full m-0 text-meta text-warn">{setCrackStatus.error.message}</p>}
       {(cmds.hashcat || cmds.john) && (
-        <div className="flex flex-col gap-1">
-          {cmds.hashcat && (
-            <div className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap font-mono text-xs text-fg-2">{shown.hashcat}</code>
-              <CopyCommand label="hashcat" text={cmds.hashcat} />
-            </div>
-          )}
-          {cmds.john && (
-            <div className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap font-mono text-xs text-fg-2">{cmds.john}</code>
-              <CopyCommand label="john" text={cmds.john} />
-            </div>
-          )}
+        <div className="col-span-full grid gap-1">
+          {cmds.hashcat && <CommandBlock text={shown.hashcat ?? ""} copyText={cmds.hashcat} copyLabel="Copy hashcat command" />}
+          {cmds.john && <CommandBlock text={cmds.john} copyText={cmds.john} copyLabel="Copy john command" />}
         </div>
       )}
     </li>
@@ -107,9 +80,9 @@ export function HashesList({ eid, hashes: all }: { eid: string; hashes: Credenti
   const hashes = all.filter((h) => !isMachineAccount(h));
   const [cracking, setCracking] = useState<Credential>();
   return (
-    <section aria-label="Hashes" className="flex flex-col gap-1">
+    <section aria-label="Hashes" className="grid grid-cols-[minmax(0,1fr)] gap-1">
       <h3 className={`m-0 ${labelClass}`}>Hashes <span className="tabular-nums">{hashes.length}</span></h3>
-      <ul className="m-0 list-none border-t border-line p-0">
+      <ul className="m-0 grid list-none grid-cols-[minmax(16ch,2fr)_max-content_max-content_max-content_max-content_max-content] gap-x-3 border-t border-line p-0">
         {hashes.map((h) => (
           <HashRow key={h.id} eid={eid} hash={h} onCrack={() => setCracking(h)} />
         ))}

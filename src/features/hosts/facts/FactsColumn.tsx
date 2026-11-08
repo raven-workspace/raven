@@ -50,7 +50,7 @@ export function FactsColumn({ engagementId, host, variant, onOpenEntry }: {
   const order: FactGroupId[] = phase === "before" ? [...BEFORE, ...AFTER] : [...AFTER, "services", "coverage", "credentials"];
 
   return (
-    <div aria-label="Facts" role="region" className="flex flex-col">
+    <div aria-label="Facts" role="region" className="grid">
       {order.map((g) => groups[g])}
     </div>
   );

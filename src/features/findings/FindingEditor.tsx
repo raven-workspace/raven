@@ -1,4 +1,4 @@
-import { CaretDownIcon, CaretRightIcon, X } from "@phosphor-icons/react";
+import { Check, Copy, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isCveId, nvdFill, scoreCvss, scoreToSeverity, type NvdFillResult } from "../../engines/findings";
 import { api } from "../../lib/api";
@@ -10,7 +10,7 @@ import { RavenError } from "../../types/errors";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
 import type { Finding, FindingInput, FindingStatus, NvdRecord, Severity } from "../../types/findings";
-import { Button, Chip, Dialog, Field, Input, Select, Textarea, Toggle, labelClass } from "../../ui";
+import { ActionCell, Button, Chip, ChipSet, Dialog, Disclosure, Field, IconButton, Input, Select, Textarea, Toggle, fieldLabelClass } from "../../ui";
 import { hostLabel } from "../credentials/AccessGrants";
 import { useLog } from "../log/queries";
 import { CvssBuilder } from "./CvssBuilder";
@@ -88,9 +88,9 @@ function lookupLine(cve: string, e: unknown): string {
   const err = RavenError.from(e);
   switch (err.code) {
     case "no_key":
-      return "Add an NVD API key in Settings to look up CVEs · use the builder";
+      return "Add an NVD API key in Settings to look up CVEs. Use the builder.";
     case "offline":
-      return "No connection · use the builder";
+      return "No connection. Use the builder.";
     case "key_rejected":
       return err.message || "NVD rejected the key";
     case "not_found":
@@ -112,7 +112,7 @@ function CopyRef({ value }: { value: string }) {
       timer.current = setTimeout(() => setCopied(false), 1500);
     });
   };
-  return <Button size="sm" aria-label={`Copy ${value}`} onClick={copy}>{copied ? "Copied" : "Copy"}</Button>;
+  return <IconButton icon={copied ? Check : Copy} label={`Copy ${value}`} onClick={copy} />;
 }
 
 /**
@@ -324,25 +324,23 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
     });
 
   return (
-    <form aria-label={title} onSubmit={(e) => e.preventDefault()} className="flex flex-col">
-      <header className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-line bg-bg pb-2">
-        <h2 className={`m-0 truncate ${labelClass}`}>
-          {title}
-          {hostName && <span className="font-normal normal-case tracking-normal text-muted"> · {hostName}</span>}
-        </h2>
-        <span className="flex items-center gap-1.5">
+    <form aria-label={title} onSubmit={(e) => e.preventDefault()} className="grid">
+      <header className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-3 border-b border-line bg-bg pb-2">
+        <div className="grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] items-baseline gap-2">
+          <h2 className="m-0 truncate text-heading text-fg">{title}</h2>
+          {hostName && <span className="truncate text-meta text-muted" title={hostName}>{hostName}</span>}
+        </div>
+        <ActionCell>
           {dirty && (
             <Button size="sm" onClick={() => setConfirmDiscard(true)}>Discard changes</Button>
           )}
           <Button size="sm" variant="primary" disabled={busy} title="Save (⌘↵)" onClick={save}>Save</Button>
-          <Button size="sm" aria-label="Close" title="Close, keeping the draft (Esc)" disabled={busy} onClick={onClose}>
-            <X size={14} weight="light" aria-hidden />
-          </Button>
-        </span>
+          <IconButton icon={X} label="Close, keeping the draft" aria-label="Close" shortcut="Esc" disabled={busy} onClick={onClose} />
+        </ActionCell>
       </header>
 
-      <div className="flex flex-col gap-3.5 pt-3">
-        {notice && <p role="status" className="m-0 text-xs text-muted">{notice}</p>}
+      <div className="grid gap-4 pt-3">
+        {notice && <p role="status" className="m-0 text-meta text-muted">{notice}</p>}
         <Field label="Title" error={titleError}>
           <Input autoFocus value={d.title} onChange={(e) => set("title", e.target.value)} />
         </Field>
@@ -363,32 +361,32 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
           </Field>
         </div>
 
-        <div role="group" aria-label="Affected hosts" className="flex flex-col gap-1.5">
-          <span className={labelClass}>Affected hosts</span>
-          <div className="flex flex-wrap gap-1.5">
+        <div role="group" aria-label="Affected hosts" className="grid gap-2">
+          <span className={fieldLabelClass}>Affected hosts</span>
+          <ChipSet>
             {hosts.map((h) => (
               <Toggle key={h.id} on={d.hostIds.includes(h.id)} title={hostLabel(h)} onChange={() => toggleHost(h.id)}>
                 {shortHostName(hostLabel(h))}
               </Toggle>
             ))}
-            {hosts.length === 0 && <span className="text-xs text-muted">No hosts yet</span>}
-          </div>
+            {hosts.length === 0 && <span className="text-meta text-muted">No hosts yet</span>}
+          </ChipSet>
         </div>
 
         <ServicePicker hosts={affected} servicesByHost={servicesByHost} error={servicesError} value={d.serviceIds} onChange={(ids) => set("serviceIds", ids)} />
 
-        <div className="flex flex-col gap-1.5">
-          <span className={labelClass}>References</span>
+        <div className="grid gap-2">
+          <span className={fieldLabelClass}>References</span>
           {d.refs.length > 0 && (
-            <ul className="m-0 flex list-none flex-col gap-1 p-0">
+            <ul className="m-0 grid list-none gap-1 p-0">
               {d.refs.map((r) => (
-                <li key={r} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-[13px]">
+                <li key={r} className="grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-2">
                   {/* No opener plugin: a link would be a dead click in the desktop app, so a URL is copied instead. */}
-                  <span className="truncate font-mono text-xs text-fg">{r}</span>
-                  <span className="flex gap-1.5">
-                    {isUrl(r) && <CopyRef value={r} />}
-                    <Button size="sm" aria-label={`Remove ${r}`} onClick={() => set("refs", d.refs.filter((x) => x !== r))}>Remove</Button>
-                  </span>
+                  <span className="truncate font-mono text-code text-fg" title={r}>{r}</span>
+                  <ActionCell>
+                    {isUrl(r) ? <CopyRef value={r} /> : <span aria-hidden className="size-7" />}
+                    <IconButton icon={X} tone="destructive" label={`Remove ${r}`} onClick={() => set("refs", d.refs.filter((x) => x !== r))} />
+                  </ActionCell>
                 </li>
               ))}
             </ul>
@@ -411,25 +409,25 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
             <Button onClick={() => { addRef(newRef); setNewRef(""); }}>Add</Button>
           </div>
           <RefSuggestions eid={eid} hostIds={d.hostIds} added={d.refs} onAdd={addRef} />
-          <span aria-live="polite" className="text-xs text-muted">
+          <span aria-live="polite" className="text-meta text-muted">
             {nvd.looking ? `Looking up ${nvd.looking} on NVD…` : nvd.line ?? ""}
           </span>
           {nvd.diffs.map((df) => (
-            <p key={df.field} className="m-0 flex flex-wrap items-center gap-2 text-xs text-fg-2">
-              NVD has a different {FIELD_NAME[df.field]} ·
+            <p key={df.field} className="m-0 grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-2 text-meta text-fg-2">
+              <span>NVD has a different {FIELD_NAME[df.field]}</span>
               <Button size="sm" onClick={() => set(df.field, df.nvd)}>use NVD</Button>
             </p>
           ))}
         </div>
 
-        <div className="flex flex-col gap-1.5">
+        <div className="grid gap-2">
           <Field
             label="CVSS vector"
             error={vector !== "" && score === null ? "Not a valid CVSS 3.1 or 4.0 vector" : undefined}
             hint={
               score !== null && suggested ? (
-                <span className="inline-flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-fg">{score.toFixed(1)}</span>
+                <span className="grid grid-flow-col auto-cols-max items-center justify-start gap-2">
+                  <span className="font-mono text-code text-fg">{score.toFixed(1)}</span>
                   <span>Suggested: {suggested}</span>
                   {d.severity !== suggested && (
                     <Button size="sm" onClick={() => set("severity", suggested)}>Use suggested</Button>
@@ -440,17 +438,9 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
           >
             <Input mono value={d.cvssVector} onChange={(e) => set("cvssVector", e.target.value)} placeholder="CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N" />
           </Field>
-          <button
-            type="button"
-            aria-expanded={builder}
-            title={builder ? "Fold the CVSS builder" : "Build the vector metric by metric"}
-            onClick={() => setBuilder(!builder)}
-            className="inline-flex cursor-default items-center gap-1 self-start text-xs text-fg-2 hover:text-fg"
-          >
-            {builder ? <CaretDownIcon size={12} weight="light" aria-hidden /> : <CaretRightIcon size={12} weight="light" aria-hidden />}
-            CVSS builder
-          </button>
-          {builder && <CvssBuilder value={d.cvssVector} onChange={(v) => set("cvssVector", v)} />}
+          <Disclosure label="CVSS builder" open={builder} onOpenChange={setBuilder}>
+            <CvssBuilder value={d.cvssVector} onChange={(v) => set("cvssVector", v)} />
+          </Disclosure>
         </div>
 
         <Field label="Description"><Textarea rows={4} value={d.description} onChange={(e) => set("description", e.target.value)} /></Field>
@@ -468,14 +458,14 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
             register={registerFlush}
           />
         ) : (
-          <p className="m-0 text-xs text-muted">Save the finding to attach files.</p>
+          <p className="m-0 text-meta text-muted">Save the finding to attach files.</p>
         )}
 
-        <Field label={<span className="inline-flex items-center gap-2">Lessons <Chip>Private</Chip></span>} hint="Never included in an export or report.">
+        <Field label={<span className="grid grid-flow-col auto-cols-max items-center justify-start gap-2">Lessons <Chip>Private</Chip></span>} hint="Never included in an export or report.">
           <Textarea rows={3} value={d.lessons} onChange={(e) => set("lessons", e.target.value)} />
         </Field>
 
-        {formError && <p role="alert" className="m-0 text-xs text-warn">{formError}</p>}
+        {formError && <p role="alert" className="m-0 text-meta text-warn">{formError}</p>}
       </div>
       {confirmDiscard && (
         <Dialog

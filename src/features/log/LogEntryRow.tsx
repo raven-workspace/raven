@@ -1,15 +1,28 @@
 import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
 import { useState } from "react";
+import { HOST_IP } from "../../engines/attribution";
 import { shortHostName } from "../../lib/hostName";
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
-import { Button, Chip, Dialog, labelClass } from "../../ui";
+import { Button, Chip, Dialog, IconButton, Toolbar } from "../../ui";
 import { EditEntryDialog } from "./EditEntryDialog";
 import { KIND_LABELS } from "./kindLabels";
 import { LogEntryBody } from "./LogEntryBody";
 import { useLogMutations } from "./queries";
 
 const pad = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * The IP a command targets when it is no known host's: titles never name the target, so without this a row about a box
+ * not yet on the board has no hint of where it ran. Read from the stored command, like the old titles did.
+ */
+function unknownTarget(entry: LogEntry, hosts: Host[]): string | null {
+  if (entry.content.kind !== "command") return null;
+  const line = entry.content.blocks[0]?.command.split("\n").find((l) => l.trim()) ?? "";
+  const ip = line.match(HOST_IP)?.[0];
+  if (!ip || hosts.some((h) => h.ip === ip) || entry.title.includes(ip)) return null;
+  return ip;
+}
 
 interface LogEntryRowProps {
   entry: LogEntry;
@@ -39,7 +52,8 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
     .filter((n): n is string => !!n)
     .map(shortHostName);
   const picking = onPick !== undefined;
-  const hasExtras = names.length > 0 || entry.private || entry.returnedNothing || picking;
+  const target = unknownTarget(entry, hosts);
+  const hasExtras = target !== null || names.length > 0 || entry.private || entry.returnedNothing || picking;
   // In the finding split's narrow pane the title keeps priority: at least 7rem, the kind label only from 30rem of
   // pane (the `ctx` container), and the extras shrink and clip instead of squeezing the title out.
   const cols = picking
@@ -61,13 +75,14 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
       }}
       className={`grid w-full items-center gap-3 px-1 py-2 text-left cursor-default hover:bg-surface focus-visible:bg-surface ${cols}`}
     >
-      <time dateTime={d.toISOString()} title={d.toLocaleString()} className="font-mono text-xs text-muted">
+      <time dateTime={d.toISOString()} title={d.toLocaleString()} className="text-code text-muted">
         {`${pad(d.getHours())}:${pad(d.getMinutes())}`}
       </time>
-      <span className={`${labelClass} truncate ${picking ? "hidden @min-[30rem]/ctx:block" : ""}`}>{KIND_LABELS[entry.kind]}</span>
-      <span data-testid="entry-title" className="truncate text-[13px] text-fg">{entry.title}</span>
+      <span className={`truncate text-meta text-muted ${picking ? "hidden @min-[30rem]/ctx:block" : ""}`}>{KIND_LABELS[entry.kind]}</span>
+      <span data-testid="entry-title" className="truncate text-body text-fg">{entry.title}</span>
       {hasExtras && (
-        <span className={`flex items-center gap-2 ${picking ? "min-w-0 justify-end overflow-hidden" : ""}`}>
+        <span className={`grid grid-flow-col auto-cols-max items-center gap-2 ${picking ? "min-w-0 justify-end overflow-hidden" : ""}`}>
+          {target && <span className="whitespace-nowrap font-mono text-code text-muted">{target}</span>}
           {names.map((n) => (
             <Chip key={n} className={`${picking ? "max-w-[10ch]" : "max-w-[16ch]"} truncate`}>
               <span className="truncate">{n}</span>
@@ -76,15 +91,15 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
           {entry.private && <Chip>private</Chip>}
           {entry.returnedNothing &&
             (picking ? (
-              <span title="Returned nothing" className="font-mono text-xs text-faint">∅</span>
+              <span title="Returned nothing" className="text-code text-faint">∅</span>
             ) : (
-              <span className="whitespace-nowrap text-xs text-faint">returned nothing</span>
+              <span className="whitespace-nowrap text-meta text-faint">returned nothing</span>
             ))}
           {picking &&
             (stepNumber ? (
-              <span className="whitespace-nowrap font-mono text-xs text-accent">step {stepNumber}</span>
+              <span className="whitespace-nowrap text-code text-accent">step {stepNumber}</span>
             ) : (
-              <span className="whitespace-nowrap text-xs text-muted">+ step</span>
+              <span className="whitespace-nowrap text-meta text-muted">+ step</span>
             ))}
         </span>
       )}
@@ -95,31 +110,30 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
     <li className="border-b border-line">
       {picking ? (
         <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center">
-          <button
-            type="button"
-            aria-expanded={open}
+          <IconButton
+            icon={Caret}
+            label={open ? "Hide the entry" : "Show the entry"}
             aria-label={open ? `Hide ${entry.title}` : `Show ${entry.title}`}
-            title={open ? "Hide the entry" : "Show the entry"}
+            aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
-            className="grid h-7 w-6 cursor-default place-items-center text-muted hover:text-fg"
-          >
-            <Caret size={12} weight="light" aria-hidden />
-          </button>
+          />
           {row}
         </div>
       ) : (
         row
       )}
       {open && (
-        <div className="flex flex-col gap-3 pb-3 pl-[60px] pr-1">
-          <LogEntryBody entry={entry} />
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => setEditing(true)}>
-              Edit
-            </Button>
-            <Button size="sm" variant="danger" onClick={() => setDeleting(true)}>
-              Delete
-            </Button>
+        <div className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-3 px-1 pb-3">
+          <div className="col-start-2 grid min-w-0 gap-3">
+            <LogEntryBody entry={entry} />
+            <Toolbar>
+              <Button size="sm" onClick={() => setEditing(true)}>
+                Edit
+              </Button>
+              <Button size="sm" variant="quiet-danger" onClick={() => setDeleting(true)}>
+                Delete
+              </Button>
+            </Toolbar>
           </div>
         </div>
       )}

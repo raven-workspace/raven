@@ -20,6 +20,15 @@
         ],
         "createdAt": "2026-11-06T22:13:20.153Z",
         "reason": "Claude: throwaway brainstorm wireframe scaled down to fit three side-by-side cards; not product UI"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/rail.html"
+        ],
+        "createdAt": "2026-11-08T08:12:45.869Z",
+        "reason": "Claude: throwaway mock loads the static Google Fonts builds of DESIGN.md's Instrument Sans / JetBrains Mono (the app uses the Variable builds); same faces"
       }
     ]
   }

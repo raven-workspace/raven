@@ -159,10 +159,10 @@ describe("domain admin cover", () => {
     };
     mount("/e/e1/h/ws", [ADMIN], [covered]);
     await user.click(await screen.findByRole("button", { name: "Full checklist" }));
-    const group = await screen.findByRole("group", { name: "Status: Check token privileges for potato attacks" });
+    const group = await screen.findByRole("radiogroup", { name: "Status: Check token privileges for potato attacks" });
     const row = group.closest("li") as HTMLElement;
     expect(within(row).getByText("Covered by domain admin")).toBeInTheDocument();
-    await user.click(within(group).getByRole("button", { name: "To do" }));
+    await user.click(within(group).getByRole("radio", { name: "To do" }));
     await waitFor(() => expect(within(row).queryByText("Covered by domain admin")).not.toBeInTheDocument());
     // Let the resync that follows the put run, then check it never covered the item again.
     await waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalled());

@@ -1,4 +1,4 @@
-import { PencilSimple } from "@phosphor-icons/react";
+import { PencilSimpleIcon } from "@phosphor-icons/react";
 import { useId, useMemo, useState, type FormEvent } from "react";
 import { credLabel, dedupeHashCaptures, foldCrackedHashes, usernameLabel } from "../../../engines/credentials";
 import { vectorsFromIdentity } from "../../../engines/facts";
@@ -6,11 +6,11 @@ import { api } from "../../../lib/api";
 import { cx } from "../../../lib/cx";
 import type { HostIdentity } from "../../../types/hostFacts";
 import type { Host } from "../../../types/host";
-import { Button, Chip, Input } from "../../../ui";
+import { Button, ChipSet, IconButton, Input, Toolbar } from "../../../ui";
 import { useAccessGrants, useCredAttempts, useCredentials, useUsernames } from "../../credentials/queries";
 import { useLog } from "../../log/queries";
 import { useHostFactsMutations, useHostIdentity } from "../queries";
-import { FactGroup } from "./FactGroup";
+import { EntryLink, FactGroup, SummaryCell } from "./FactGroup";
 import { identityFromLog } from "./identityFromLog";
 
 /** `MS01\iis`, `iis@corp` and `iis` are the same account name. */
@@ -20,7 +20,7 @@ const isNotablePriv = (p: string) => vectorsFromIdentity({ privileges: [p], grou
 const isNotableGroup = (g: string) => vectorsFromIdentity({ privileges: [], groups: [g] }).length > 0;
 const splitList = (s: string) => s.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
 
-const KV = "grid grid-cols-[6ch_minmax(0,1fr)] gap-x-2 gap-y-1 text-[13px]";
+const KV = "grid grid-cols-[6ch_minmax(0,1fr)] gap-x-2 gap-y-1 text-meta";
 
 function IdentityForm({ engagementId, host, identity, onDone }: {
   engagementId: string;
@@ -56,7 +56,7 @@ function IdentityForm({ engagementId, host, identity, onDone }: {
   return (
     <form
       aria-label="Edit who am I"
-      className="flex flex-col gap-2"
+      className="grid gap-2"
       onSubmit={(e) => void submit(e)}
       onKeyDown={(e) => {
         if (e.key !== "Escape") return;
@@ -64,25 +64,25 @@ function IdentityForm({ engagementId, host, identity, onDone }: {
         onDone();
       }}
     >
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-2 gap-y-2 text-[13px]">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-2 gap-y-2 text-meta">
         <label htmlFor={`${idBase}-user`} className="text-muted">User</label>
         <Input id={`${idBase}-user`} autoFocus mono placeholder="e.g. corp\svc_web" value={username} onChange={(e) => setUsername(e.target.value)} />
         <label htmlFor={`${idBase}-privs`} className="text-muted">Privileges</label>
-        <div className="grid min-w-0 gap-0.5">
+        <div className="grid min-w-0 gap-1">
           <Input id={`${idBase}-privs`} mono aria-describedby={`${idBase}-privs-hint`} placeholder="e.g. SeImpersonatePrivilege SeBackupPrivilege" value={privileges} onChange={(e) => setPrivileges(e.target.value)} />
-          <p id={`${idBase}-privs-hint`} className="m-0 text-xs text-muted">Separate with spaces</p>
+          <p id={`${idBase}-privs-hint`} className="m-0 text-meta text-muted">Separate with spaces</p>
         </div>
         <label htmlFor={`${idBase}-groups`} className="text-muted">Groups</label>
-        <div className="grid min-w-0 gap-0.5">
+        <div className="grid min-w-0 gap-1">
           <Input id={`${idBase}-groups`} mono aria-describedby={`${idBase}-groups-hint`} placeholder="e.g. docker sudo" value={groups} onChange={(e) => setGroups(e.target.value)} />
-          <p id={`${idBase}-groups-hint`} className="m-0 text-xs text-muted">Separate with spaces</p>
+          <p id={`${idBase}-groups-hint`} className="m-0 text-meta text-muted">Separate with spaces</p>
         </div>
       </div>
-      {error && <p role="alert" className="m-0 text-xs text-warn">{error}</p>}
-      <div className="flex gap-1.5">
+      {error && <p role="alert" className="m-0 text-meta text-warn">{error}</p>}
+      <Toolbar>
         <Button size="sm" variant="primary" type="submit" disabled={pending}>Save</Button>
         <Button size="sm" onClick={onDone}>Cancel</Button>
-      </div>
+      </Toolbar>
     </form>
   );
 }
@@ -130,11 +130,13 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
   const source = identity?.entryId ? logQ.data?.find((e) => e.id === identity.entryId) : undefined;
   const groups = identity?.groups.filter(isNotableGroup) ?? [];
   const otherGroups = (identity?.groups.length ?? 0) - groups.length;
-  const summary = identityQ.isError
-    ? "Who am I · couldn't load"
-    : identityQ.isPending
-      ? "Who am I"
-      : `Who am I · ${identity?.username ?? "not known yet"}`;
+  const summary = identityQ.isError ? (
+    <span>couldn't load</span>
+  ) : identityQ.isPending ? undefined : identity ? (
+    <SummaryCell label="user">{identity.username}</SummaryCell>
+  ) : (
+    <span>not known yet</span>
+  );
 
   return (
     <FactGroup
@@ -143,22 +145,18 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
       open={open}
       onToggle={onToggle}
       actions={
-        !editing && (
-          <Button size="sm" aria-label="Edit who am I" title="Edit who am I" onClick={() => setEditing(true)} className="w-6 px-0!">
-            <PencilSimple size={14} weight="light" aria-hidden />
-          </Button>
-        )
+        !editing && <IconButton icon={PencilSimpleIcon} label="Edit who am I" onClick={() => setEditing(true)} />
       }
     >
       {/* Shown whatever the branch: identity can be saved and a vector upsert still fail. */}
-      {readError && <p role="alert" className="m-0 text-xs text-warn">{readError}</p>}
+      {readError && <p role="alert" className="m-0 text-meta text-warn">{readError}</p>}
       {identityQ.isError ? (
-        <p role="alert" className="m-0 text-xs text-warn">Couldn't load who you are here: {identityQ.error.message}</p>
+        <p role="alert" className="m-0 text-meta text-warn">Couldn't load who you are here: {identityQ.error.message}</p>
       ) : editing ? (
         <IdentityForm engagementId={engagementId} host={host} identity={identity} onDone={() => setEditing(false)} />
       ) : !identity ? (
         <div className="grid gap-2">
-          <p className="m-0 text-xs text-muted">Not known yet. Log whoami /all or id output on this host.</p>
+          <p className="m-0 text-meta text-muted">Not known yet. Log whoami /all or id output on this host.</p>
           {fromLog && fromLog.sources > 0 && (
             <div>
               <Button size="sm" onClick={() => void readFromLog()} disabled={setIdentity.isPending || upsertVector.isPending}>
@@ -180,19 +178,23 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
           {identity.privileges.length > 0 && (
             <>
               <dt className="text-muted">privs</dt>
-              <dd className="m-0 flex min-w-0 flex-wrap gap-x-2 font-mono text-xs">
-                {identity.privileges.map((p) => (
-                  <span key={p} className={isNotablePriv(p) ? "text-accent" : "text-muted"}>{p}</span>
-                ))}
+              <dd className="m-0 min-w-0">
+                <ChipSet className="text-code">
+                  {identity.privileges.map((p) => (
+                    <span key={p} className={isNotablePriv(p) ? "text-accent" : "text-muted"}>{p}</span>
+                  ))}
+                </ChipSet>
               </dd>
             </>
           )}
           {identity.groups.length > 0 && (
             <>
               <dt className="text-muted">groups</dt>
-              <dd className="m-0 flex min-w-0 flex-wrap gap-x-2 font-mono text-xs">
-                {groups.map((g) => <span key={g} className="text-accent">{g}</span>)}
-                {otherGroups > 0 && <span className="text-muted">{groups.length > 0 ? `+${otherGroups} more` : `${otherGroups} group${otherGroups === 1 ? "" : "s"}`}</span>}
+              <dd className="m-0 min-w-0">
+                <ChipSet className="text-code">
+                  {groups.map((g) => <span key={g} className="text-accent">{g}</span>)}
+                  {otherGroups > 0 && <span className="text-muted">{groups.length > 0 ? `+${otherGroups} more` : `${otherGroups} group${otherGroups === 1 ? "" : "s"}`}</span>}
+                </ChipSet>
               </dd>
             </>
           )}
@@ -200,9 +202,7 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
             <>
               <dt className="text-muted">from</dt>
               <dd className="m-0 min-w-0">
-                <button type="button" onClick={() => onOpenEntry?.(source.id)} className="max-w-full cursor-default" title={source.title}>
-                  <Chip className="max-w-full hover:text-fg"><span className="truncate">↗ {source.title}</span></Chip>
-                </button>
+                <EntryLink title={source.title} onClick={() => onOpenEntry?.(source.id)} />
               </dd>
             </>
           )}
@@ -237,26 +237,26 @@ export function OtherAccountsFacts({ engagementId, host, open, onToggle }: {
       .filter((c) =>
         c.type === "hash" ? c.crackStatus !== "cracked" && c.crackStatus !== "uncrackable" : c.sourceHostId === host.id,
       )
-      .map((c) => ({ id: c.id, label: credLabel(c), kind: c.type === "hash" ? "uncracked" : `${c.type}, found here` }));
+      .map((c) => ({ id: c.id, label: credLabel(c), kind: c.type === "hash" ? "uncracked" : "found here" }));
   }, [credsQ.data, attemptsQ.data, identityQ.data, host.id]);
   const failed = credsQ.error ?? attemptsQ.error;
-  const summary = failed ? "Other accounts · couldn't load" : ready ? `Other accounts · ${rows.length}` : "Other accounts";
+  const summary = failed ? <span>couldn't load</span> : ready ? rows.length === 0 ? <span>none yet</span> : <SummaryCell count={rows.length} label={rows.length === 1 ? "account" : "accounts"} /> : undefined;
   const more = rows.length - OTHER_ACCOUNTS_SHOWN;
   return (
     <FactGroup title="Other accounts" summary={summary} open={open} onToggle={onToggle}>
       {failed ? (
-        <p role="alert" className="m-0 text-xs text-warn">Couldn't load credentials: {failed.message}</p>
+        <p role="alert" className="m-0 text-meta text-warn">Couldn't load credentials: {failed.message}</p>
       ) : !ready ? null : rows.length === 0 ? (
-        <p className="m-0 text-xs text-muted">None yet. Uncracked hashes and credentials found on this host show here.</p>
+        <p className="m-0 text-meta text-muted">None yet. Uncracked hashes and credentials found on this host show here.</p>
       ) : (
-        <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 p-0 text-[13px]">
+        <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 p-0 text-meta">
           {rows.slice(0, OTHER_ACCOUNTS_SHOWN).map((r) => (
             <li key={r.id} className="col-span-2 grid grid-cols-subgrid items-baseline">
               <span className="truncate font-mono text-fg" title={r.label}>{r.label}</span>
-              <span className="text-xs text-muted">{r.kind}</span>
+              <span className="text-meta text-muted">{r.kind}</span>
             </li>
           ))}
-          {more > 0 && <li className="col-span-2 text-xs text-muted">+{more} more on the Credentials page</li>}
+          {more > 0 && <li className="col-span-2 text-meta text-muted">+{more} more on the Credentials page</li>}
         </ul>
       )}
     </FactGroup>

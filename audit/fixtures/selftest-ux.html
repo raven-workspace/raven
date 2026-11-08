@@ -65,7 +65,23 @@
 
 <script type="text/html" data-case="motion-allowed-ok" data-expect="none">
 <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
-<div data-audit-allow="motion" style="width:20px;height:20px;background:#555;animation:spin 1s linear infinite"></div>
+<div data-audit-allow="unreduced-motion" data-audit-reason="self-test: allowed motion" style="width:20px;height:20px;background:#555;animation:spin 1s linear infinite"></div>
+</script>
+
+<script type="text/html" data-case="checkbox-bare" data-expect="small-target">
+<input type="checkbox" aria-label="Include 445/tcp">
+</script>
+
+<script type="text/html" data-case="checkbox-in-label-ok" data-expect="none">
+<label style="display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:center;min-height:28px"><input type="checkbox" style="margin:0"> 445/tcp microsoft-ds</label>
+</script>
+
+<script type="text/html" data-case="label-and-kbd-12-ok" data-expect="none">
+<span class="text-label" style="font-size:12px">SERVICES</span> <kbd style="font-size:12px">K</kbd>
+</script>
+
+<script type="text/html" data-case="tiny-text-body-12" data-expect="tiny-text">
+<p style="margin:0;font-size:12px">Twelve pixel body text</p>
 </script>
 
 <script>

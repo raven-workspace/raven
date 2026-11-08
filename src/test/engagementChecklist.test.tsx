@@ -156,7 +156,9 @@ describe("engagement checklist", () => {
 
   it("a hop to the DC opens the Domain admin playbook", async () => {
     mount({ services: AD, hops: [hop()] });
-    expect(await screen.findByText(/dc01.*creds|Kali.*dc01/)).toBeInTheDocument();
+    const hopRow = (await screen.findByText("via creds")).closest("li")!;
+    expect(hopRow).toHaveTextContent("Kali");
+    expect(hopRow).toHaveTextContent("dc01");
     expect(await screen.findByRole("button", { name: /Domain admin/, expanded: true })).toBeInTheDocument();
   });
 
@@ -233,7 +235,7 @@ describe("engagement checklist", () => {
     mount({ services: AD, items: [done], creds: [cred("c1", { createdAt: 50 })] });
     await screen.findAllByText("Sync the clock to the DC");
     const row = document.querySelector('li[data-goal-id="e-setup-clock"]') as HTMLElement;
-    const notice = within(row).getByRole("button", { name: /1 new cred since done · re-check/ });
+    const notice = within(row).getByRole("button", { name: /New credentials since done \(1\)/ });
     expect(within(row).queryByText("CORP\\svc_sql")).toBeNull();
     await userEvent.click(notice);
     expect(within(row).getByText("CORP\\svc_sql")).toBeInTheDocument();
@@ -272,15 +274,19 @@ describe("engagement checklist", () => {
     await user.click(screen.getByRole("button", { name: "Tick from log" }));
     await waitFor(() => {
       const row = screen.getAllByText("Sync the clock to the DC")[0]!.closest("li")!;
-      expect(within(row).getByRole("button", { name: "Done" })).toHaveAttribute("aria-pressed", "true");
+      expect(within(row).getByRole("radio", { name: "Done" })).toHaveAttribute("aria-checked", "true");
     });
     await waitFor(() => expect(m.hostsList.mock.calls.length).toBeGreaterThan(hostReads));
   });
 
   it("shows an alert when settings fail to load", async () => {
     m.settingsGet.mockRejectedValue(new Error("settings broke"));
+    const user = userEvent.setup();
     mount();
-    expect(await screen.findByRole("alert")).toHaveTextContent("settings broke");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn't load the engagement checklist");
+    await user.click(within(alert).getByRole("button", { name: "Details" }));
+    expect(alert).toHaveTextContent("settings broke");
   });
 
   it("a hop cannot go from a host to itself", async () => {
@@ -314,6 +320,22 @@ describe("engagement checklist", () => {
     expect(m.tunnelDelete).not.toHaveBeenCalled();
     await user.click(await screen.findByRole("button", { name: "Delete tunnel" }));
     expect(m.tunnelDelete).toHaveBeenCalledWith("t1");
+  });
+
+  it("tunnel and hop rows delete with a muted trash icon", async () => {
+    const user = userEvent.setup();
+    const t: Tunnel = { id: "t1", engagementId: "e1", kind: "chisel", viaHostId: "h1", subnets: ["10.20.0.0/24"], callbackIp: "", status: "up", notes: null, createdAt: 1, updatedAt: 1 };
+    mount({ hops: [hop()], tunnels: [t] });
+    for (const name of [/^Delete hop/, /^Delete chisel tunnel/]) {
+      const del = await screen.findByRole("button", { name });
+      expect(del.querySelector("svg")).not.toBeNull();
+      expect(del).toHaveTextContent("");
+      expect(del.className).toMatch(/text-muted/);
+      expect(del.className).toMatch(/hover:text-warn/);
+      expect(del.className).not.toMatch(/(^|\s)text-warn/);
+    }
+    await user.click(screen.getByRole("button", { name: /^Delete hop/ }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
   it("setup follows Off-the-Bat order with groups", async () => {
@@ -352,7 +374,7 @@ describe("engagement checklist", () => {
     mount({ hosts: [{ ...H1, dualHomed: true }, H2] });
     await screen.findByRole("region", { name: "Lateral movement" });
     const li = document.querySelector('li[data-goal-id="h-pivot-tunnel"]') as HTMLElement;
-    await user.click(within(li).getByRole("button", { name: /done/i }));
+    await user.click(within(li).getByRole("radio", { name: /done/i }));
     expect(m.checklistPut).toHaveBeenCalledWith("e1", [expect.objectContaining({ ownerId: "h1", goalId: "h-pivot-tunnel" })]);
   });
 

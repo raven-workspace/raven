@@ -1,6 +1,5 @@
 import { cloneElement, isValidElement, useId, type ReactElement, type ReactNode } from "react";
 import { cx } from "../lib/cx";
-import { Label } from "./Label";
 
 interface ControlProps {
   id?: string;
@@ -35,16 +34,18 @@ export function Field({ label, children, hint, error, id, className }: FieldProp
     : children;
 
   return (
-    <div className={cx("flex flex-col gap-1.5", className)}>
-      <Label htmlFor={controlId}>{label}</Label>
+    <div className={cx("grid gap-2", className)}>
+      <label htmlFor={controlId} className="block text-meta text-muted-2">
+        {label}
+      </label>
       {control}
       {hint && (
-        <p id={hintId} className="m-0 text-xs text-muted">
+        <p id={hintId} className="m-0 text-meta text-muted">
           {hint}
         </p>
       )}
       {error && (
-        <p id={errorId} className="m-0 text-xs text-warn">
+        <p id={errorId} className="m-0 text-meta text-warn">
           {error}
         </p>
       )}

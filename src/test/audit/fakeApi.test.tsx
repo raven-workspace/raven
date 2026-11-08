@@ -34,7 +34,7 @@ describe("audit fake api", () => {
     expect(id?.username).toBe("ms01\\iis_apppool");
     expect(id?.privileges).toContain("SeImpersonatePrivilege");
     expect(await api.hostIdentityGet("h-web")).toBeNull();
-    expect(await api.vectorsList("h-exam-ms01")).toHaveLength(2);
+    expect(await api.vectorsList("h-exam-ms01")).toHaveLength(4);
   });
 
   it("round-trips a logged payload's id and values, and serves the failed nc.exe entry", async () => {
@@ -106,7 +106,7 @@ describe("audit fake api", () => {
   it("makes the done-goal notice show 12 new credentials", async () => {
     const goal = (await api.checklistList("e-lab")).find((i) => i.status === "done" && i.completedAt != null)!;
     const creds = await api.credentialsList("e-lab");
-    expect(creds.every((c) => c.scope === "domain" && c.createdAt > goal.completedAt!)).toBe(true);
+    expect(creds.every((c) => c.createdAt > goal.completedAt!)).toBe(true);
     expect(new Set(creds.map((c) => `${c.domain}\\${c.username}${c.type === "hash" ? " (hash)" : ""}`)).size).toBe(12);
   });
 

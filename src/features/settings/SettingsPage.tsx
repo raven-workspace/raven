@@ -3,7 +3,7 @@ import { useState } from "react";
 import { api } from "../../lib/api";
 import type { BackupInfo } from "../../types/backup";
 import type { SettingsPatch } from "../../types/settings";
-import { Button, Chip, Dialog, EmptyState, Field, Input, Panel } from "../../ui";
+import { Button, Chip, Dialog, EmptyState, Field, Input, Panel, SETTINGS_COLUMN, queryState } from "../../ui";
 import { FieldManualSection } from "./FieldManualSection";
 import { ImportSection } from "./ImportSection";
 
@@ -36,14 +36,13 @@ function NumberSetting({
 }) {
   const [text, setText] = useState(String(value));
   return (
-    <Field label={label} error={error}>
+    <Field label={label} error={error} className="w-44">
       <Input
         type="number"
         inputMode="numeric"
         min={min}
         max={max}
         mono
-        className="w-28"
         value={text}
         onChange={(e) => setText(e.target.value)}
         onBlur={() => {
@@ -108,36 +107,39 @@ function NvdKeySetting({
     if (v !== "") onSave(v, () => setText(""));
   };
   return (
-    <div className="grid grid-cols-[minmax(0,22rem)_auto_auto] items-end gap-3">
-      <Field label="NVD API key" error={error}>
-        <Input
-          type="password"
-          autoComplete="off"
-          spellCheck={false}
-          mono
-          value={text}
-          placeholder={set ? "Paste a new key to replace it" : "Paste your key"}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              save();
-            }
-          }}
-        />
-      </Field>
-      <Button size="sm" className="mb-1" disabled={pending || text.trim() === ""} onClick={save}>
-        Save key
-      </Button>
-      <Button size="sm" className="mb-1" disabled={pending || !set} onClick={() => onSave("", () => setText(""))}>
-        Clear key
-      </Button>
-      <p className="col-span-3 m-0 text-xs text-muted">
-        <span className={set ? "text-fg" : undefined}>{set ? "Set" : "Not set"}</span>
-        {" · "}
-        Looks up CVEs you add to findings. Only the CVE ID and this key are sent, to NIST NVD. Without a key, use the
-        CVSS builder.
-      </p>
+    <div className="grid gap-3">
+      <div className="grid grid-cols-[minmax(0,22rem)_auto_auto] items-end justify-start gap-3">
+        <Field label="NVD API key" error={error}>
+          <Input
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            mono
+            value={text}
+            placeholder={set ? "Paste a new key to replace it" : "Paste your key"}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                save();
+              }
+            }}
+          />
+        </Field>
+        <Button disabled={pending || text.trim() === ""} onClick={save}>
+          Save key
+        </Button>
+        <Button disabled={pending || !set} onClick={() => onSave("", () => setText(""))}>
+          Clear key
+        </Button>
+      </div>
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2">
+        <Chip variant={set ? "accent" : "default"}>{set ? "Set" : "Not set"}</Chip>
+        <p className="m-0 text-meta text-muted">
+          Looks up CVEs you add to findings. Only the CVE ID and this key are sent, to NIST NVD. Without a key, use the
+          CVSS builder.
+        </p>
+      </div>
     </div>
   );
 }
@@ -187,12 +189,13 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
   });
 
   return (
-    <div className="mx-auto flex max-w-[640px] flex-col gap-4 px-6 py-6">
-      <h1 className="m-0 text-lg font-semibold text-fg">Settings</h1>
-      {error && <p className="m-0 text-xs text-warn">{error}</p>}
+    <div data-testid="settings-root" className="mx-auto grid gap-4 py-6" style={{ maxWidth: SETTINGS_COLUMN.max, paddingInline: SETTINGS_COLUMN.inset }}>
+      <h1 className="m-0 text-title text-fg">Settings</h1>
+      {error && <p role="alert" className="m-0 text-meta text-warn">{error}</p>}
+      {queryState([settings], "settings")}
       {settings.data && (
         <Panel title="Security and backups">
-          <div className="flex gap-6">
+          <div className="grid grid-flow-col justify-start gap-6">
             <NumberSetting
               key={settings.data.autoLockMinutes}
               label="Auto-lock (minutes)"
@@ -216,7 +219,7 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
       )}
       {settings.data && (
         <Panel title="Attacker">
-          <div className="flex gap-6">
+          <div className="grid grid-flow-col justify-start gap-6">
             <TextSetting
               key={`ip-${settings.data.attackerIp}`}
               label="Your IP (tun0)"
@@ -236,14 +239,13 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
               onSave={(v) => update.mutate({ listenerPort: v })}
             />
           </div>
-          <p className="m-0 mt-3 text-xs text-muted">Filled into checklist commands as LHOST and LPORT</p>
-          <div className="mt-4 flex gap-6">
+          <p className="m-0 mt-3 text-meta text-muted">Filled into checklist commands as LHOST and LPORT</p>
+          <div className="mt-4 grid grid-cols-[minmax(0,11rem)_minmax(0,16rem)_minmax(0,16rem)] justify-start gap-6">
             <TextSetting
               key={`ku-${settings.data.kaliUser}`}
               label="Kali user"
               value={settings.data.kaliUser}
               placeholder="kali"
-              className="w-44"
               error={fieldError?.field === "kaliUser" ? fieldError.msg : undefined}
               onSave={(v) => update.mutate({ kaliUser: v })}
             />
@@ -252,7 +254,6 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
               label="Windows tools folder (on Kali)"
               value={settings.data.windowsToolsDir}
               placeholder="~/tools/windows"
-              className="w-64"
               error={fieldError?.field === "windowsToolsDir" ? fieldError.msg : undefined}
               onSave={(v) => update.mutate({ windowsToolsDir: v })}
             />
@@ -261,7 +262,6 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
               label="Linux tools folder (on Kali)"
               value={settings.data.linuxToolsDir}
               placeholder="~/tools/linux"
-              className="w-64"
               error={fieldError?.field === "linuxToolsDir" ? fieldError.msg : undefined}
               onSave={(v) => update.mutate({ linuxToolsDir: v })}
             />
@@ -291,15 +291,21 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
           </Button>
         }
       >
+        {queryState([backups], "backups")}
         {backups.data && backups.data.length === 0 && (
           <EmptyState title="No backups yet" body="Raven backs up daily when you unlock. Use Back up now any time." />
         )}
-        <ul className="m-0 flex list-none flex-col p-0">
+        <ul className="m-0 grid list-none p-0">
           {backups.data?.map((b) => (
-            <li key={b.file} className="flex items-center gap-3 border-b border-line py-2 last:border-b-0">
-              <span className="font-mono text-xs text-fg-2">{new Date(b.createdAt).toLocaleString()}</span>
-              <Chip>{b.reason}</Chip>
-              <span className="ml-auto font-mono text-xs text-muted">{formatBytes(b.sizeBytes)}</span>
+            <li
+              key={b.file}
+              className="grid grid-cols-[max-content_minmax(0,1fr)_max-content_auto] items-center gap-3 border-b border-line py-2 last:border-b-0"
+            >
+              <span className="font-mono text-code text-fg-2">{new Date(b.createdAt).toLocaleString()}</span>
+              <span className="grid justify-items-start">
+                <Chip>{b.reason}</Chip>
+              </span>
+              <span className="font-mono text-code text-muted tabular-nums">{formatBytes(b.sizeBytes)}</span>
               <Button size="sm" onClick={() => setRestoreTarget(b)}>
                 Restore
               </Button>
@@ -327,12 +333,12 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
         }
       >
         {restoreTarget && (
-          <div className="mb-3 flex items-center gap-3">
-            <span className="font-mono text-xs text-fg-2">{new Date(restoreTarget.createdAt).toLocaleString()}</span>
+          <div className="mb-3 grid grid-cols-[max-content_minmax(0,1fr)] items-center justify-items-start gap-3">
+            <span className="font-mono text-code text-fg-2">{new Date(restoreTarget.createdAt).toLocaleString()}</span>
             <Chip>{restoreTarget.reason}</Chip>
           </div>
         )}
-        <p className="m-0 text-[13px] text-fg-2">
+        <p className="m-0 text-body text-fg-2">
           Restore this backup? Raven will save a backup of the current data first, then lock. Unlock with your password
           to continue.
         </p>

@@ -2,7 +2,7 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCREENS, WIDTHS } from "./screens";
-import type { Issue, RawIssue } from "./types";
+import { FAILING_CHECKS, type Issue, type RawIssue } from "./types";
 
 const OUT = fileURLToPath(new URL("../audit-output/", import.meta.url));
 const ISSUES = join(OUT, "issues");
@@ -53,15 +53,36 @@ export function groupRows(issues: Issue[]): { groups: RowGroup[]; more: { check:
 }
 
 /** `ran` holds the `<id>@<width>` of every issue file written: a file (even holding `[]`) means that id ran. */
-export function renderMarkdown(issues: Issue[], screenIds: string[], shots: Set<string>, ran: Set<string>): string {
+export function renderMarkdown(all: Issue[], screenIds: string[], shots: Set<string>, ran: Set<string>): string {
+  // Opt-outs are not issues: they get their own section, listed once per element and reason.
+  const optOuts = all.filter((i) => i.check === "opt-out");
+  const issues = all.filter((i) => i.check !== "opt-out");
   const widths = [...new Set(issues.map((i) => i.width))].sort(cmp);
   const checks = [...new Set(issues.map((i) => i.check))].sort(cmp);
-  const lines: string[] = ["# Raven visual audit", "", `${issues.length} issues`, ""];
+  const failing = issues.filter((i) => FAILING_CHECKS.has(i.check)).length;
+  const lines: string[] = [
+    "# Raven visual audit",
+    "",
+    `${issues.length} issues, ${failing} failing (${[...FAILING_CHECKS].join(", ")} fail the run; the rest are reported)`,
+    "",
+  ];
   lines.push(`| check | ${widths.join(" | ")} | total |`, `|---|${widths.map(() => "---:").join("|")}|---:|`);
   for (const c of checks) {
     const counts = widths.map((w) => issues.filter((i) => i.check === c && i.width === w).length);
     const groupCount = new Set(issues.filter((i) => i.check === c).map((i) => `${i.screen}\u0000${i.selector.replace(/:nth-(?:of-type|child)\([^)]*\)/g, "")}`)).size;
-    lines.push(`| ${c} | ${counts.join(" | ")} | ${counts.reduce((a, b) => a + b, 0)} (${groupCount} groups) |`);
+    lines.push(`| ${FAILING_CHECKS.has(c) ? `**${c}** (fails)` : c} | ${counts.join(" | ")} | ${counts.reduce((a, b) => a + b, 0)} (${groupCount} groups) |`);
+  }
+  lines.push("", "## Opt-outs", "");
+  const byOptOut = new Map<string, { selector: string; detail: string; screens: Set<string> }>();
+  for (const o of optOuts) {
+    const key = `${o.selector}\u0000${o.detail}`;
+    const hit = byOptOut.get(key) ?? { selector: o.selector, detail: o.detail, screens: new Set<string>() };
+    hit.screens.add(o.screen);
+    byOptOut.set(key, hit);
+  }
+  if (byOptOut.size === 0) lines.push("None.");
+  for (const o of [...byOptOut.values()].sort((a, b) => cmp(a.selector, b.selector))) {
+    lines.push(`- \`${o.selector}\` — ${o.detail} (on ${[...o.screens].sort(cmp).join(", ")})`);
   }
   // Keyboard, flow and state runs are filed under ids that are not screens (`<id>:kbd`, `shortcut:<id>`, `flow:<id>`, `<id>~state`).
   const extra = [...new Set([...ran].map((r) => r.slice(0, r.lastIndexOf("@"))))].filter((s) => !screenIds.includes(s));

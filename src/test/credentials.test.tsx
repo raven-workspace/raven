@@ -119,7 +119,22 @@ async function pick(user: ReturnType<typeof userEvent.setup>, label: string, opt
   await user.click(await screen.findByRole("option", { name: option }));
 }
 
+/** A command's tokens are separate spans, so match the <code> element by its whole text. */
+const codeMatching = (re: RegExp) => (_: string, el: Element | null) => el?.tagName === "CODE" && re.test(el.textContent ?? "");
+
 describe("credentials section", () => {
+  it("credentials section shows a retry on load failure", async () => {
+    const user = userEvent.setup();
+    mount();
+    // The first load fails (the query runs after the vault check, so this lands before it); Retry loads.
+    m.credentialsList.mockRejectedValueOnce(new Error("disk said no"));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn't load credentials");
+    await user.click(within(alert).getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("button", { name: "Add credential" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("adding a password credential lists it masked; Reveal shows it; Copy copies without revealing", async () => {
     const user = userEvent.setup();
     mount();
@@ -139,11 +154,61 @@ describe("credentials section", () => {
     expect(await navigator.clipboard.readText()).toBe("Winter2024!");
     expect(screen.queryByText("Winter2024!")).not.toBeInTheDocument();
 
-    const reveal = within(row).getByRole("button", { name: /^Reveal secret/ });
-    expect(reveal).toHaveAttribute("aria-pressed", "false");
-    await user.click(reveal);
-    expect(reveal).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(row).getByRole("button", { name: /^Reveal secret/ }));
+    expect(within(row).getByRole("button", { name: /^Hide secret/ })).toBeInTheDocument();
     expect(within(row).getByText("Winter2024!")).toBeInTheDocument();
+  });
+
+  it("secret mask never wraps and reveal is an eye icon button", async () => {
+    const user = userEvent.setup();
+    mount({ creds: [cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "Winter2024!" })] });
+    const row = (await screen.findAllByText("CORP\\jsmith")).map((e) => e.closest("tr")).find((r) => r?.querySelector("[aria-label^=Delete]"))!;
+    const mask = within(row).getByTestId("secret-text");
+    expect(mask.textContent).toBe("••••••••");
+    expect(mask.className).toMatch(/whitespace-nowrap/);
+    expect(mask.className).not.toMatch(/break-all/);
+    const reveal = within(row).getByRole("button", { name: /^Reveal secret/ });
+    expect(within(row).queryByText("Reveal")).not.toBeInTheDocument();
+    await user.click(reveal);
+    expect(within(row).getByRole("button", { name: /^Hide secret/ })).toBeInTheDocument();
+    expect(mask.textContent).toBe("Winter2024!");
+  });
+
+  it("row actions are icon buttons Copy, Edit, Delete", async () => {
+    mount({ creds: [cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "Winter2024!" })] });
+    const row = (await screen.findAllByText("CORP\\jsmith")).map((e) => e.closest("tr")).find((r) => r?.querySelector("[aria-label^=Delete]"))!;
+    for (const name of ["Copy secret", "Edit CORP\\jsmith", "Delete CORP\\jsmith"]) {
+      const b = within(row).getAllByRole("button").find((x) => x.getAttribute("aria-label")?.startsWith(name))!;
+      expect(b).toBeTruthy();
+      expect(b.textContent).toBe("");
+    }
+  });
+
+  it("delete is muted at rest", async () => {
+    mount({ creds: [cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "Winter2024!" })] });
+    const del = await screen.findByRole("button", { name: "Delete CORP\\jsmith" });
+    expect(del.className).toMatch(/text-muted/);
+    expect(del.className).not.toMatch(/(^|\s)text-warn/);
+  });
+
+  it("scope renders value and host on two lines, not a middot string", async () => {
+    mount({
+      creds: [cred({ id: "c1", username: "admin", scope: "local", localHostId: "h1", secret: "Winter2024!" })],
+    });
+    const row = (await screen.findAllByText("admin")).map((e) => e.closest("tr")).find((r) => r?.querySelector("[aria-label^=Delete]"))!;
+    expect(row.textContent).not.toContain(" · ");
+    expect(within(row).getByText("local")).toBeInTheDocument();
+    expect(within(row).getByText("dc01")).toBeInTheDocument();
+  });
+
+  it("a 60-character credential name truncates and the actions stay visible", async () => {
+    const long = "a".repeat(60);
+    mount({ creds: [cred({ id: "c1", username: long, secret: "Winter2024!" })] });
+    const name = (await screen.findAllByText(long)).find((e) => e.closest("tr"))!;
+    expect(name).toHaveAttribute("title", long);
+    expect(name.className).toMatch(/truncate/);
+    const row = name.closest("tr")!;
+    expect(within(row).getByRole("button", { name: `Delete ${long}` })).toBeVisible();
   });
 
   it("credentials list shows a Machine accounts group", async () => {
@@ -228,13 +293,14 @@ describe("credentials section", () => {
     const hash = "8846f7eaee8fb117ad06bdd830b7586c";
     mount({ creds: [cred({ id: "h", type: "hash", username: "jsmith", domain: "CORP", secret: hash, hashType: "NTLM", crackStatus: "uncracked" })] });
     const list = await screen.findByRole("region", { name: "Hashes" });
-    expect(within(list).getByText(/hashcat -m 1000/)).toBeInTheDocument();
+    expect(within(list).getByText(codeMatching(/hashcat -m 1000/))).toBeInTheDocument();
     expect(within(list).queryByText(new RegExp(hash))).not.toBeInTheDocument();
     // Commands wrap at whitespace only; a long hash scrolls instead of breaking mid-token.
     for (const re of [/hashcat -m 1000/, /^john /]) {
-      const code = within(list).getByText(re);
-      expect(code.className).not.toMatch(/break-all/);
-      expect(code.className).toMatch(/whitespace-pre-wrap/);
+      const code = within(list).getByText(codeMatching(re));
+      const block = code.closest("pre")!;
+      expect(block.className).not.toMatch(/break-all/);
+      expect(block.className).toMatch(/whitespace-pre-wrap/);
     }
     await user.click(within(list).getByRole("button", { name: "Crack CORP\\jsmith (hash)" }));
     const dlg = await screen.findByRole("dialog");
@@ -362,7 +428,7 @@ describe("credentials section", () => {
     const user = userEvent.setup();
     mount({ creds: [cred({ id: "h", type: "hash", username: "jsmith", secret: "8846f7eaee8fb117ad06bdd830b7586c", hashType: "MD5", crackStatus: "uncracked" })] });
     const list = await screen.findByRole("region", { name: "Hashes" });
-    expect(within(list).getByText(/hashcat -m 0 /)).toBeInTheDocument();
+    expect(within(list).getByText(codeMatching(/hashcat -m 0 /))).toBeInTheDocument();
     await user.click(within(list).getByRole("button", { name: "Copy hashcat command" }));
     expect(await navigator.clipboard.readText()).toBe("hashcat -m 0 '8846f7eaee8fb117ad06bdd830b7586c' /usr/share/wordlists/rockyou.txt");
   });
@@ -371,7 +437,7 @@ describe("credentials section", () => {
     const secret = "$6$sa'lt$abcdefgh";
     mount({ creds: [cred({ id: "h", type: "hash", username: "jsmith", secret, crackStatus: "uncracked" })] });
     const list = await screen.findByRole("region", { name: "Hashes" });
-    expect(within(list).getByText(/hashcat -m 1800/)).toBeInTheDocument();
+    expect(within(list).getByText(codeMatching(/hashcat -m 1800/))).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("sa'lt");
     expect(document.body.textContent).not.toContain("abcdefgh");
   });

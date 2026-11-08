@@ -1,8 +1,9 @@
+import { PencilSimple, Trash } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { sortFindingsBySeverity } from "../../engines/findings";
 import type { Finding } from "../../types/findings";
-import { Button, Chip, EmptyState, labelClass } from "../../ui";
+import { ActionCell, Button, Chip, EmptyState, IconButton, labelClass, queryState } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { hostLabel } from "../credentials/AccessGrants";
 import { useHosts } from "../hosts/queries";
@@ -27,9 +28,8 @@ export function FindingsSection() {
   const [deleting, setDeleting] = useState<Finding>();
   const sorted = useMemo(() => sortFindingsBySeverity(findingsQ.data ?? []), [findingsQ.data]);
 
-  const failed = hostsQ.error ?? findingsQ.error;
-  if (failed) return <p role="alert" className="py-3 text-xs text-warn">Couldn't load findings: {failed.message}</p>;
-  if (!hostsQ.data || !findingsQ.data) return null;
+  const state = queryState([hostsQ, findingsQ], "findings");
+  if (state || !hostsQ.data || !findingsQ.data) return state;
   const hosts = hostsQ.data;
   if (editor) {
     // The same split as the host page: with one affected host its context shows; otherwise the switcher or the engagement's.
@@ -43,8 +43,8 @@ export function FindingsSection() {
   const names = (f: Finding) => f.hostIds.map((hid) => hostLabel(hosts.find((h) => h.id === hid))).join(", ");
 
   return (
-    <section aria-label="Findings" className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
+    <section aria-label="Findings" className="grid gap-4">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
         <h3 className={`m-0 ${labelClass}`}>Findings <span className="tabular-nums">{sorted.length}</span></h3>
         <Button variant="primary" onClick={() => setEditor({})}>Add finding</Button>
       </div>
@@ -52,20 +52,25 @@ export function FindingsSection() {
       {sorted.length === 0 ? (
         <EmptyState title="No findings yet" />
       ) : (
-        <ul className="m-0 flex list-none flex-col p-0">
+        <ul className="m-0 grid list-none grid-cols-[max-content_minmax(0,1fr)_max-content_max-content_max-content] gap-x-3 p-0">
           {sorted.map((f) => (
-            <li key={f.id} className="flex items-center gap-3 border-b border-line py-2">
-              <span className="w-[72px] shrink-0"><SeverityChip severity={f.severity} /></span>
-              <span className="min-w-0 flex-1">
-                <span data-testid="finding-title" className="block truncate text-[13px] text-fg">{f.title}</span>
-                {f.hostIds.length > 0 && <span className="block truncate text-[11px] text-muted">{names(f)}</span>}
+            <li key={f.id} className="col-span-full grid grid-cols-subgrid items-start border-b border-line py-2">
+              <span className="grid h-5 content-center justify-self-start"><SeverityChip severity={f.severity} /></span>
+              <span className="grid min-w-0 gap-1">
+                <span data-testid="finding-title" className="line-clamp-2 break-words text-body text-fg" title={f.title}>{f.title}</span>
+                {f.hostIds.length > 0 && (
+                  <span className="grid grid-cols-[minmax(0,max-content)_max-content] justify-start gap-2 text-meta text-muted" title={names(f)}>
+                    <span className="truncate">{hostLabel(hosts.find((h) => h.id === f.hostIds[0]))}</span>
+                    {f.hostIds.length > 1 && <span>{`+${f.hostIds.length - 1}`}</span>}
+                  </span>
+                )}
               </span>
-              <span className="text-xs text-fg-2">{f.status}</span>
-              <span className="w-8 text-right font-mono text-xs tabular-nums text-fg-2">{f.cvssScore !== null ? f.cvssScore.toFixed(1) : ""}</span>
-              <span className="flex gap-1.5">
-                <Button size="sm" aria-label={`Edit ${f.title}`} onClick={() => setEditor({ edit: f })}>Edit</Button>
-                <Button size="sm" variant="danger" aria-label={`Delete ${f.title}`} onClick={() => setDeleting(f)}>Delete</Button>
-              </span>
+              <span className="text-meta text-fg-2">{f.status}</span>
+              <span className="min-w-[3ch] text-right font-mono text-code tabular-nums text-fg-2">{f.cvssScore !== null ? f.cvssScore.toFixed(1) : ""}</span>
+              <ActionCell>
+                <IconButton icon={PencilSimple} label={`Edit ${f.title}`} onClick={() => setEditor({ edit: f })} />
+                <IconButton icon={Trash} tone="destructive" label={`Delete ${f.title}`} onClick={() => setDeleting(f)} />
+              </ActionCell>
             </li>
           ))}
         </ul>

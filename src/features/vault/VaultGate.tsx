@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Link } from "react-router";
+import { Gear, Lock, MagnifyingGlass, Package, Stack, X } from "@phosphor-icons/react";
+import { Link, useLocation, useNavigate } from "react-router";
 import { api } from "../../lib/api";
 import { onLockedError, reportError } from "../../lib/lockSignal";
 import { useSaveSummaryStore } from "../capture/useSaveSummaryStore";
@@ -9,7 +10,7 @@ import { useCredPickStore } from "../checklist/credPick";
 import { useFindingDraftStore } from "../findings/useFindingDraftStore";
 import { discardNotes, flushNotes, hasPendingNotes, sessionGeneration, setNotesQueryClient, startNotesSession } from "../notes/useNotesStore";
 import type { UnlockResult, VaultStatus } from "../../types/vault";
-import { Button, TitleBar, TitleBarButton, Wordmark } from "../../ui";
+import { Button, DASHBOARD_COLUMN, IconButton, SETTINGS_COLUMN, TitleBar, TitleBarButton, TitleBarIconButton, Wordmark } from "../../ui";
 import { SetupScreen } from "./SetupScreen";
 import { UnlockScreen } from "./UnlockScreen";
 import { setImported } from "../../engines/library/store";
@@ -232,29 +233,33 @@ export function VaultGate({ children }: { children: ReactNode }) {
     setStatus({ exists: true, unlocked: true });
   };
 
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // Dashboard and Settings are centred max-width columns: the bar's content follows that column.
+  // Engagement screens keep the window-edge bar.
+  const column = pathname === "/" ? DASHBOARD_COLUMN : pathname === "/settings" ? SETTINGS_COLUMN : undefined;
   const right = unlocked ? (
     <>
-      <Link
-        to="/settings"
+      <TitleBarButton hint="A" icon={Stack} onClick={() => useArsenalStore.getState().toggle()}>Arsenal</TitleBarButton>
+      <TitleBarButton hint="P" icon={Package} onClick={() => usePayloadsStore.getState().toggle()}>Payloads</TitleBarButton>
+      <TitleBarButton hint="⌘K" icon={MagnifyingGlass} onClick={() => usePaletteStore.getState().open()}>Search</TitleBarButton>
+      <TitleBarButton hint="⌘L" icon={Lock} onClick={lock}>Lock</TitleBarButton>
+      <span
         title={vaultNewer ? "The Field Manual has changes to import" : undefined}
-        className="relative rounded-sm px-2 py-1 text-xs text-muted-2 hover:text-fg"
+        className="relative grid"
       >
-        Settings
+        <TitleBarIconButton icon={Gear} label="Settings" current={pathname === "/settings"} onClick={() => navigate("/settings")} />
         {vaultNewer && <span aria-hidden="true" className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />}
-      </Link>
-      <TitleBarButton hint="A" onClick={() => useArsenalStore.getState().toggle()}>Arsenal</TitleBarButton>
-      <TitleBarButton hint="P" onClick={() => usePayloadsStore.getState().toggle()}>Payloads</TitleBarButton>
-      <TitleBarButton hint="⌘K" onClick={() => usePaletteStore.getState().open()}>Search</TitleBarButton>
-      <TitleBarButton hint="⌘L" onClick={lock}>Lock</TitleBarButton>
+      </span>
     </>
   ) : undefined;
 
   let body: ReactNode = null;
   if (loadFailed) {
     body = (
-      <main className="flex h-full items-center justify-center px-6">
-        <div className="flex w-[320px] flex-col items-start gap-3">
-          <p className="m-0 text-[13px] text-fg-2">Raven couldn't check its data.</p>
+      <main className="grid h-full place-items-center px-6">
+        <div className="grid w-[320px] justify-items-start gap-3">
+          <p className="m-0 text-meta text-fg-2">Raven couldn't check its data.</p>
           <Button onClick={() => void retryLoad()} disabled={retrying} aria-busy={retrying}>
             {retrying ? "Trying…" : "Try again"}
           </Button>
@@ -262,27 +267,24 @@ export function VaultGate({ children }: { children: ReactNode }) {
       </main>
     );
   } else if (status && !status.exists) body = <SetupScreen onCreated={refresh} />;
-  else if (status && !status.unlocked) body = <UnlockScreen onUnlocked={onUnlocked} notice={lockRetrying ? "Couldn't lock fully — Raven is retrying" : undefined} />;
+  else if (status && !status.unlocked) body = <UnlockScreen onUnlocked={onUnlocked} notice={lockRetrying ? "Couldn't lock fully, Raven is retrying" : undefined} />;
   else if (status) {
     body = (
       <VaultContext.Provider value={ctx}>
         {(notice || backupError) && (
-          <div className="flex items-start gap-2 border-b border-line px-4 py-1.5 text-xs text-muted">
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-line px-4 py-1 text-meta text-muted">
+            <div className="grid min-w-0 gap-1">
               {notice && <p className="m-0">{notice}</p>}
               {backupError && <p className="m-0">Daily backup failed: {backupError}</p>}
             </div>
-            <button
-              type="button"
-              aria-label="Dismiss notice"
+            <IconButton
+              icon={X}
+              label="Dismiss notice"
               onClick={() => {
                 setNotice(null);
                 setBackupError(null);
               }}
-              className="shrink-0 cursor-default rounded-sm px-1 text-muted-2 hover:text-fg"
-            >
-              ×
-            </button>
+            />
           </div>
         )}
         {children}
@@ -295,19 +297,20 @@ export function VaultGate({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex h-full flex-col bg-bg">
+    <div className="grid h-full grid-rows-[auto_minmax(0,1fr)] bg-bg">
       <TitleBar
         left={
           unlocked ? (
-            <Link to="/" className="grid rounded-sm px-1 py-1 opacity-90 hover:opacity-100">
+            <Link to="/" className="-ml-1 grid h-7 items-center rounded-sm px-1 opacity-90 hover:opacity-100">
               <Wordmark className="h-3" />
             </Link>
           ) : undefined
         }
         title={unlocked ? undefined : <Wordmark className="h-3" />}
         right={right}
+        {...(column ? { column } : {})}
       />
-      <div className="min-h-0 flex-1 overflow-auto">{body}</div>
+      <div className="min-h-0 overflow-auto">{body}</div>
     </div>
   );
 }

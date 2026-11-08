@@ -66,6 +66,25 @@
   --tracking-label: 0.12em;
 }
 
+/* Type roles (DESIGN.md Typography). Stock sizes stay; these are the sizes new code uses. */
+@theme static {
+  --text-title: 20px;
+  --text-title--line-height: 28px;
+  --text-title--font-weight: 600;
+  --text-heading: 15px;
+  --text-heading--line-height: 22px;
+  --text-heading--font-weight: 600;
+  --text-body: 14px;
+  --text-body--line-height: 20px;
+  --text-code: 13px;
+  --text-code--line-height: 20px;
+  --text-meta: 13px;
+  --text-meta--line-height: 18px;
+  --text-label: 12px;
+  --text-label--line-height: 16px;
+  --text-label--font-weight: 600;
+}
+
 /* Metric-compatible stand-in while Instrument Sans loads: Arial scaled to its widths and vertical metrics, so swapping fonts does not reflow text. */
 @font-face {
   font-family: "Instrument Sans Fallback";

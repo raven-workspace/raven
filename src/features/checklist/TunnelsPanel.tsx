@@ -2,7 +2,8 @@ import { useId, useState, type FormEvent } from "react";
 import { parseScopeList } from "../../engines/parse/scope";
 import type { Host } from "../../types/host";
 import type { Tunnel, TunnelInput, TunnelKind, TunnelStatus } from "../../types/network";
-import { Button, Dialog, Field, Input, Panel, Select, Toggle } from "../../ui";
+import { PencilSimple, Plus, Trash } from "@phosphor-icons/react";
+import { Button, Chip, ChipSet, Dialog, Field, IconButton, Input, Panel, Select, Toggle, fieldLabelClass } from "../../ui";
 import { ConfirmDelete } from "./ConfirmDelete";
 import { useTunnelMutations } from "./queries";
 
@@ -13,6 +14,8 @@ const KINDS: { value: TunnelKind; label: string }[] = [
   { value: "socks", label: "SOCKS" },
   { value: "other", label: "Other" },
 ];
+
+const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.value, k.label])) as Record<TunnelKind, string>;
 
 type Errors = Partial<Record<"subnets" | "callbackIp" | "viaHostId" | "form", string>>;
 
@@ -64,7 +67,7 @@ function TunnelForm({ engagementId, hosts, tunnel, onClose }: { engagementId: st
         </>
       }
     >
-      <form id={formId} onSubmit={submit} noValidate className="flex flex-col gap-3.5">
+      <form id={formId} onSubmit={submit} noValidate className="grid gap-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Kind">
             <Select options={KINDS} value={kind} onValueChange={(v) => setKind(v as TunnelKind)} />
@@ -79,11 +82,11 @@ function TunnelForm({ engagementId, hosts, tunnel, onClose }: { engagementId: st
         <Field label="Callback IP" hint="Kali's address as seen from the pivot" error={errors.callbackIp}>
           <Input mono value={callback} onChange={(e) => setCallback(e.target.value)} placeholder="10.10.14.9" />
         </Field>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-fg-2">Status</span>
+        <div className="grid grid-cols-[max-content_max-content] items-center justify-start gap-2">
+          <span className={fieldLabelClass}>Status</span>
           <Toggle on={status === "up"} onChange={(on) => setStatus(on ? "up" : "down")}>{status === "up" ? "Up" : "Down"}</Toggle>
         </div>
-        {errors.form && <p role="alert" className="m-0 text-xs text-warn">{errors.form}</p>}
+        {errors.form && <p role="alert" className="m-0 text-meta text-warn">{errors.form}</p>}
       </form>
     </Dialog>
   );
@@ -96,21 +99,33 @@ export function TunnelsPanel({ engagementId, hosts, tunnels }: { engagementId: s
   const [deleteError, setDeleteError] = useState<string>();
   const name = (id: string) => hosts.find((h) => h.id === id)?.name ?? "?";
   return (
-    <Panel title="Tunnels" actions={<Button size="sm" onClick={() => setEditing("new")}>Add tunnel</Button>}>
+    <Panel title="Tunnels" actions={<IconButton icon={Plus} label="Add tunnel" onClick={() => setEditing("new")} />}>
       {tunnels.length === 0 ? (
-        <p className="m-0 text-xs text-muted">No tunnels yet.</p>
+        <p className="m-0 text-meta text-muted">No tunnels yet.</p>
       ) : (
-        <ul className="m-0 list-none p-0">
-          {tunnels.map((t) => (
-            <li key={t.id} className="flex items-center gap-2 border-b border-line py-1.5 last:border-b-0">
-              <span className="min-w-0 flex-1 text-[13px] text-fg">
-                {t.kind} via {name(t.viaHostId)} <span className="font-mono text-fg-2">{t.subnets.join(", ")}</span>
-              </span>
-              <span className={`text-xs ${t.status === "up" ? "text-fg-2" : "text-warn"}`}>{t.status}</span>
-              <Button size="sm" aria-label={`Edit ${t.kind} tunnel via ${name(t.viaHostId)}`} onClick={() => setEditing(t)}>Edit</Button>
-              <Button size="sm" aria-label={`Delete ${t.kind} tunnel via ${name(t.viaHostId)}`} onClick={() => { setDeleteError(undefined); setDeleting(t); }}>Delete</Button>
-            </li>
-          ))}
+        <ul className="m-0 grid list-none p-0">
+          {tunnels.map((t) => {
+            const where = `${t.kind} tunnel via ${name(t.viaHostId)}`;
+            return (
+              <li key={t.id} className="grid grid-cols-[minmax(0,1fr)_56px_28px_28px] items-start gap-2 border-b border-line py-2 last:border-b-0">
+                <div className="grid min-w-0 gap-1">
+                  <span className="truncate py-1 text-body text-fg" title={`${KIND_LABEL[t.kind]} via ${name(t.viaHostId)}`}>
+                    {KIND_LABEL[t.kind]} via <span className="font-mono text-code">{name(t.viaHostId)}</span>
+                  </span>
+                  <ChipSet>
+                    {t.subnets.map((n) => (
+                      <span key={n} className="text-code text-fg-2">{n}</span>
+                    ))}
+                  </ChipSet>
+                </div>
+                <div className="grid h-7 items-center justify-start">
+                  <Chip variant={t.status === "up" ? "default" : "warn"}>{t.status}</Chip>
+                </div>
+                <IconButton icon={PencilSimple} label={`Edit ${where}`} onClick={() => setEditing(t)} />
+                <IconButton icon={Trash} label={`Delete ${where}`} tone="destructive" onClick={() => { setDeleteError(undefined); setDeleting(t); }} />
+              </li>
+            );
+          })}
         </ul>
       )}
       {deleting && (

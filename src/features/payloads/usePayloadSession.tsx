@@ -7,7 +7,7 @@ import { copyPlain } from "../../lib/clipboard";
 import { shortHostName } from "../../lib/hostName";
 import { isDialogOpen } from "../../lib/keys";
 import { reportError } from "../../lib/lockSignal";
-import { Input } from "../../ui";
+import { Input, type Hint } from "../../ui";
 import type { ChipPickerHandle } from "../arsenal/ChipPicker";
 import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
 import { isHostPickKey, type HostChipHandle } from "../arsenal/HostChip";
@@ -26,17 +26,27 @@ export const GENERATORS: { id: GeneratorId; label: string }[] = [
   { id: "encode", label: "Encode" },
   { id: "upgrade", label: "Upgrade" },
 ];
-/** The key hint line for the ranked generators; the last entry is what Esc does. */
-export const HINTS: [string, string][] = [
-  ["↵", "copy payload"], ["⌥L", "copy listener"], ["⇥", "next fit"], ["⌥O", "OS"], ["⌥W", "where you paste"], ["⌥1-6", "generator"], ["⌘↵", "copy and log"], ["Esc", "close"],
-];
-/** The hint line for one generator: only the keys that work there. `esc` names what Esc does in this view. */
-export function hintsFor(g: GeneratorId, esc: string, extra: [string, string][] = []): [string, string][] {
-  const tail: [string, string][] = [...extra, ["Esc", esc]];
-  if (g === "transfer") return [["⌘↵", "copy and log"], ["⌥1-6", "generator"], ...tail];
-  if (g === "sql") return [["↵", "copy step"], ["⌥1-6", "generator"], ...tail];
-  if (g === "encode") return [["↵", "copy payload"], ["⌥1-6", "generator"], ["⌘↵", "copy and log"], ...tail];
-  return [...HINTS.slice(0, -1), ...tail];
+/**
+ * The hint line for one generator: only the keys that work there, by priority (1 never drops). `esc` names what Esc
+ * does in this view; `extra` adds the view's own keys. `ordered`: ⇥ walks steps, not fits.
+ */
+export function hintsFor(g: GeneratorId, esc: string, extra: Hint[] = [], ordered = false): Hint[] {
+  const generator: Hint = { keys: "⌥1–6", label: "generator", priority: 5 };
+  const tail: Hint[] = [...extra, { keys: "Esc", label: esc, priority: 1 }];
+  const copyLog: Hint = { keys: "⌘↵", label: "copy and log", priority: 3 };
+  if (g === "transfer") return [{ ...copyLog, priority: 1 }, generator, ...tail];
+  if (g === "sql") return [{ keys: "↵", label: "copy step", priority: 1 }, generator, ...tail];
+  if (g === "encode") return [{ keys: "↵", label: "copy payload", priority: 1 }, copyLog, generator, ...tail];
+  return [
+    { keys: "↵", label: "copy payload", priority: 1 },
+    copyLog,
+    { keys: "⌥L", label: "copy listener", priority: 3 },
+    { keys: "⇥", label: ordered ? "next step" : "next fit", priority: 2 },
+    { keys: "⌥O", label: "OS", priority: 4 },
+    { keys: "⌥W", label: "where you paste", priority: 4 },
+    generator,
+    ...tail,
+  ];
 }
 /** The Arsenal or Notes drawer is open over this view: its keys win. */
 export const otherDrawerOpen = () => useArsenalStore.getState().open || useNotesStore.getState().open;
@@ -116,23 +126,27 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
     else if (generator !== "transfer") bodyRef.current?.focus();
   }, [generator, bodyRef]);
 
-  const copy = async (log: boolean) => {
-    if (!built) return;
+  /** Copies the payload in view through the copy guard; "guarded" when it held the copy back. */
+  const copy = async (log: boolean): Promise<"copied" | "guarded"> => {
+    if (!built) return "guarded";
     setStatus(undefined);
     const b = built;
     const cmd = { id: b.def.id, title: b.def.title, text: b.text, unresolved: b.unresolved, msfMarker: false };
     try {
       const r = await guard.attempt(cmd, () => copyPlain(b.text));
-      if (r !== "copied" || !log || !host || !d.engagement) return;
+      if (r !== "copied") return "guarded";
+      if (!log || !host || !d.engagement) return "copied";
       await logCommand(qc, {
-        engagementId, host, hosts: d.hosts, command: b.text, title: `${b.def.title} · ${host.ip ?? host.name}`,
+        engagementId, host, hosts: d.hosts, command: b.text, title: b.def.title,
         // msfvenom runs on your own machine; everything else runs on the target.
         ranOn: b.def.generator === "msfvenom" ? (d.settings?.machines[0] ?? "") : host.name,
         payloadId: b.def.id, payloadValues: { LHOST: fit.lhost, LPORT: fit.port },
       });
+      return "copied";
     } catch (e) {
       reportError(e);
       setStatus(e instanceof Error ? e.message : String(e));
+      return "guarded";
     }
   };
   const copyListener = () => {
@@ -190,12 +204,12 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
     : null;
   const tokens = def ? fieldTokens(def).filter((t) => lhostField || t !== "LHOST") : [];
   const fields = tokens.length > 0 && (
-    <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1">
+    <div className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
       {tokens.map((t) => (
         <label key={t} className="contents">
-          <span className="font-mono text-xs text-muted">{t}</span>
+          <span className="font-mono text-code text-muted">{t}</span>
           <Input
-            mono aria-label={t} className="h-7"
+            mono aria-label={t}
             ref={(el) => { if (el) fieldEls.current.set(t, el); else fieldEls.current.delete(t); }}
             value={t === "LHOST" ? fit.lhostInput : (extra[t] ?? "")}
             placeholder={t === "LHOST" ? lhostPlaceholder(fit.settingsLhost) : (def?.defaults?.[t] ?? "")}

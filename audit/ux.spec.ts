@@ -3,9 +3,13 @@ import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { AUDIT_NOW } from "../src/audit/fixtures";
 import { FLOWS, runFlow } from "./checks/flows";
+import { collectLayoutIssues } from "./checks/layout";
+import { collectOptOuts } from "./checks/optouts";
 import { collectStateIssues, type AuditState } from "./checks/states";
+import { collectUxIssues } from "./checks/ux";
 import { writeIssues } from "./report";
 import { SCREENS } from "./screens";
+import { CHECK_IDS, gateFailures } from "./types";
 
 const WIDTH = 1280;
 const SHOTS = fileURLToPath(new URL("../audit-output/shots/", import.meta.url));
@@ -39,6 +43,8 @@ const NEEDS_DATA = new Set([
   "host-checklist", "host-findings", "host-log", "finding-split", "exam-host-locked", "findings", "log-images", "transfer-generator",
   // No host under `empty`, so OS is unknown and every payload fits: there is no misfit fold to open.
   "payloads-drawer-misfits",
+  // The rail tip is a host's tooltip; with no hosts there is nothing to focus.
+  "sidebar-rail-tip",
 ]);
 
 for (const screen of STATE_SCREENS) {
@@ -58,10 +64,17 @@ for (const screen of STATE_SCREENS) {
       if (scenario === "empty") await setup;
       else await setup?.catch(() => undefined);
       await page.evaluate(() => document.fonts.ready);
-      const issues = await collectStateIssues(page, scenario);
+      const issues = [
+        ...(await collectStateIssues(page, scenario)),
+        // The state screens obey the same conventions as the full ones.
+        ...(await page.evaluate(collectLayoutIssues)),
+        ...(await page.evaluate(collectUxIssues)),
+        ...(await page.evaluate(collectOptOuts, CHECK_IDS)),
+      ];
       await writeIssues(`${screen.id}~${scenario}`, WIDTH, issues);
       await page.screenshot({ path: `${SHOTS}${screen.id}@${WIDTH}~${scenario}.png`, fullPage: true, animations: "disabled" });
       expect(errors, "page errors").toEqual([]);
+      expect(gateFailures(issues), "convention breaks").toEqual([]);
     });
   }
 }

@@ -152,7 +152,7 @@ describe("copy guard in the app", () => {
     const chip = await screen.findByRole("button", { name: /^Fill with credential/ });
     expect(chip).toHaveFocus();
     expect(screen.queryByRole("listbox", { name: "Fill with credential" })).not.toBeInTheDocument();
-    expect(await screen.findByText("{PASS} not filled · ↵ again to copy anyway")).toBeInTheDocument();
+    expect(await screen.findByText("{PASS} not filled. Press ↵ again to copy anyway")).toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toBe("untouched");
     await user.keyboard("{Enter}");
     await vi.waitFor(() => expect(screen.queryByRole("combobox", { name: "Search" })).not.toBeInTheDocument());
@@ -174,11 +174,11 @@ describe("copy guard in the app", () => {
     await navigator.clipboard.writeText("untouched");
     const fetchBtn = d.getByRole("button", { name: "Copy command: Zzfetch the file" });
     await user.click(fetchBtn);
-    expect(await d.findByText("{FILE} not filled · ↵ again to copy anyway")).toBeInTheDocument();
+    expect(await d.findByText("{FILE} not filled. Press ↵ again to copy anyway")).toBeInTheDocument();
     expect(d.getByRole("combobox", { name: "Value for FILE" })).toHaveFocus();
     expect(await navigator.clipboard.readText()).toBe("untouched");
     await user.click(fetchBtn);
-    const status = await d.findByText("Copied for dc01 · 1 placeholder left");
+    const status = await d.findByText("Copied for dc01. 1 placeholder left");
     expect(status).toHaveAttribute("role", "status");
     expect(status).toHaveClass("text-warn");
     expect(await navigator.clipboard.readText()).toBe("zzfetch http://10.10.14.9/{FILE}");
@@ -192,11 +192,11 @@ describe("copy guard in the app", () => {
     await navigator.clipboard.writeText("untouched");
     const btn = await screen.findByRole("button", { name: "Copy command: Zzrow user" });
     await user.click(btn);
-    expect(await screen.findByText("{USER} not filled · ↵ again to copy anyway")).toBeInTheDocument();
+    expect(await screen.findByText("{USER} not filled. Press ↵ again to copy anyway")).toBeInTheDocument();
     expect(btn).toHaveFocus();
     expect(await navigator.clipboard.readText()).toBe("untouched");
     await user.keyboard("{Enter}");
-    expect(await screen.findByText(/^Copied for dc01 · 1 placeholder left/)).toBeInTheDocument();
+    expect(await screen.findByText(/^Copied for dc01. 1 placeholder left/)).toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toBe("zzrow {USER}");
   });
 

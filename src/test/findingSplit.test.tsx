@@ -258,7 +258,7 @@ describe("finding split editor", () => {
     const form = await openSplit(user);
     await user.type(within(form).getByLabelText("Title"), "Apache path traversal");
     await addRef(user, form, "CVE-2021-41773");
-    expect(await within(form).findByText("No connection · use the builder")).toBeInTheDocument();
+    expect(await within(form).findByText("No connection. Use the builder.")).toBeInTheDocument();
     await user.click(within(form).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(m.findingCreate).toHaveBeenCalledWith("e1", expect.objectContaining({
       title: "Apache path traversal", refs: ["CVE-2021-41773"], cvssVector: null,
@@ -266,7 +266,7 @@ describe("finding split editor", () => {
   });
 
   it.each<[ErrorCode, string, string]>([
-    ["no_key", "No NVD key", "Add an NVD API key in Settings to look up CVEs · use the builder"],
+    ["no_key", "No NVD key", "Add an NVD API key in Settings to look up CVEs. Use the builder."],
     ["key_rejected", "NVD refused the request (key rejected or rate-limited)", "NVD refused the request (key rejected or rate-limited)"],
     ["not_found", "missing", "CVE not found on NVD"],
   ])("lookup failure leaves the form savable (%s)", async (code, message, line) => {

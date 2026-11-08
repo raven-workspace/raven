@@ -149,11 +149,50 @@ describe("host view", () => {
     expect(header.getByText("Vulnerability detection")).toBeInTheDocument();
   });
 
+  it("host header has no Delete button", async () => {
+    mount();
+    const header = within(await screen.findByRole("region", { name: "Host" }));
+    expect(header.queryByRole("button", { name: /^Delete/ })).not.toBeInTheDocument();
+  });
+
+  it("Tab reaches Delete host in the edit dialog; Enter opens the confirm; Esc closes only the confirm", async () => {
+    const user = userEvent.setup();
+    mount();
+    const header = within(await screen.findByRole("region", { name: "Host" }));
+    await user.click(header.getByRole("button", { name: "Edit" }));
+    const edit = await screen.findByRole("dialog", { name: "Edit host" });
+    const del = within(edit).getByRole("button", { name: "Delete host" });
+    for (let i = 0; i < 40 && document.activeElement !== del; i++) await user.tab();
+    expect(del).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("dialog", { name: "Delete dc01?" })).toBeInTheDocument();
+    expect(m.hostDelete).not.toHaveBeenCalled();
+    await user.keyboard("{Escape}");
+    await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: "Delete dc01?" })).not.toBeInTheDocument());
+    expect(screen.getByRole("dialog", { name: "Edit host" })).toBeInTheDocument();
+  });
+
+  it("header shows the Windows brand icon beside the OS name", async () => {
+    mount();
+    const header = await screen.findByRole("region", { name: "Host" });
+    expect(header.querySelector('img[data-brand="windows"]')).not.toBeNull();
+  });
+
+  it("a 255-character host name truncates and keeps its title", async () => {
+    const long = "h".repeat(255);
+    m.hostsList.mockResolvedValue([{ ...H1, name: long }]);
+    mount();
+    const title = within(await screen.findByRole("region", { name: "Host" })).getByRole("heading", { level: 1 });
+    expect(title).toHaveAttribute("title", long);
+    expect(title).toHaveClass("truncate");
+  });
+
   it("host delete confirm says what goes with it and what stays", async () => {
     const user = userEvent.setup();
     mount();
     const header = within(await screen.findByRole("region", { name: "Host" }));
-    await user.click(header.getByRole("button", { name: "Delete" }));
+    await user.click(header.getByRole("button", { name: "Edit" }));
+    await user.click(await screen.findByRole("button", { name: "Delete host" }));
     const confirm = await screen.findByRole("dialog", { name: "Delete dc01?" });
     expect(confirm).toHaveAccessibleDescription(
       "Its services, checklist items, credential test results, access grants on it, finding links, field notes, " +
@@ -168,7 +207,8 @@ describe("host view", () => {
     const user = userEvent.setup();
     mount();
     const header = within(await screen.findByRole("region", { name: "Host" }));
-    await user.click(header.getByRole("button", { name: "Delete" }));
+    await user.click(header.getByRole("button", { name: "Edit" }));
+    await user.click(await screen.findByRole("button", { name: "Delete host" }));
     const confirm = await screen.findByRole("dialog", { name: "Delete dc01?" });
     const text = confirm.getAttribute("aria-describedby") ? document.getElementById(confirm.getAttribute("aria-describedby")!)!.textContent! : "";
     for (const part of ["field notes", "ruled-out items", "tunnels", "hops"]) expect(text).toContain(part);
@@ -190,7 +230,7 @@ describe("host view", () => {
     const user = userEvent.setup();
     mount();
     await openLog(user);
-    await user.click(screen.getByRole("button", { name: /Switch to newest first/ }));
+    await user.click(screen.getByRole("button", { name: "Oldest first" }));
     const items = screen.getAllByRole("listitem").filter((li) => li.textContent?.includes("on dc01"));
     expect(items.map((li) => within(li).getAllByRole("button")[0]!.textContent)).toEqual([
       expect.stringContaining("newer on dc01"),

@@ -1,7 +1,8 @@
 import type { DragEvent, KeyboardEvent } from "react";
 import { Link } from "react-router";
 import type { Host } from "../../types/host";
-import { Chip } from "../../ui";
+import { cx } from "../../lib/cx";
+import { BrandIcon, Chip } from "../../ui";
 import { OS_LABELS } from "../hosts/columns";
 import { ThreadDot } from "../notes/ThreadDot";
 import { useThreadCounts } from "../notes/useThreadCounts";
@@ -34,22 +35,30 @@ export function BoardCard({ host, onShift }: BoardCardProps) {
       data-host-id={host.id}
       onDragStart={onDragStart}
       onKeyDown={onKeyDown}
-      className="flex min-w-0 flex-col gap-1 rounded border border-line bg-bg px-3 py-2 text-fg no-underline hover:border-line-strong focus-visible:outline-1 focus-visible:outline-accent"
+      className="grid min-w-0 gap-1 rounded border border-line bg-bg px-1 py-2 text-fg no-underline hover:border-line-strong focus-visible:outline-1 focus-visible:outline-accent"
     >
-      <span className="flex min-w-0 items-center gap-1.5">
-        <span className="truncate text-[13px] font-semibold">{host.name}</span>
+      <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_8px] items-start gap-1">
+        <span title={host.name} className="line-clamp-2 break-words text-body font-semibold">{host.name}</span>
         <ThreadDot count={threads} />
       </span>
-      {host.ip && (
-        <span className="truncate font-mono text-[11px] text-muted-2">{host.ip}</span>
-      )}
+      {host.ip && <span className="whitespace-nowrap font-mono text-code text-muted-2 [overflow-wrap:anywhere]">{host.ip}</span>}
       {(host.os || host.access !== "none") && (
-        <span className="mt-0.5 flex gap-1">
-          {host.os && <Chip>{OS_LABELS[host.os]}</Chip>}
-          {host.access !== "none" && (
-            <Chip variant="accent">{host.access}</Chip>
+        // OS on its own row, the access chip on its own row: every card has the same shape, whatever the widths.
+        <div className="grid min-w-0 justify-items-start gap-1">
+          {host.os && (
+            // OS is metadata, not state: the brand icon and its name as text (DESIGN.md Chips).
+            <span
+              className={cx(
+                "grid min-w-0 max-w-full items-center gap-1 text-meta text-fg-2",
+                host.os === "other" ? "grid-cols-[minmax(0,1fr)]" : "grid-cols-[16px_minmax(0,1fr)]",
+              )}
+            >
+              {host.os !== "other" && <BrandIcon brand={host.os} />}
+              <span className="truncate">{OS_LABELS[host.os]}</span>
+            </span>
           )}
-        </span>
+          {host.access !== "none" && <Chip variant="accent">{host.access}</Chip>}
+        </div>
       )}
     </Link>
   );

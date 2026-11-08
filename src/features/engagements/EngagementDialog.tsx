@@ -1,9 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useId, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useNavigate } from "react-router";
 import { api } from "../../lib/api";
 import { cx } from "../../lib/cx";
 import type { Engagement, EngagementInput, EngagementKind } from "../../types/engagement";
-import { Button, Dialog, Field, Input, Label, Textarea } from "../../ui";
+import { dropPendingNotes } from "../notes/useNotesStore";
+import { Button, Dialog, Field, Input, Textarea } from "../../ui";
 import {
   DEFAULT_TIMEBOX_MINUTES,
   fromDateInput,
@@ -122,7 +124,7 @@ function KindPicker({
     group?.querySelector<HTMLElement>(`[data-kind="${next.value}"]`)?.focus();
   };
   return (
-    <div role="radiogroup" aria-labelledby={labelId} className="flex w-fit rounded-sm border border-line-2">
+    <div role="radiogroup" aria-labelledby={labelId} className="grid w-fit grid-flow-col rounded-sm border border-line-2">
       {KINDS.map((k, i) => {
         const on = k.value === value;
         return (
@@ -136,7 +138,7 @@ function KindPicker({
             onClick={() => onChange(k.value)}
             onKeyDown={(e) => move(e, i)}
             className={cx(
-              "h-8 cursor-default px-3 text-[13px] transition-colors duration-100",
+              "h-8 cursor-default px-3 text-body transition-colors duration-100",
               i > 0 && "border-l border-line-2",
               on ? "bg-surface-hi text-fg shadow-[inset_0_-1px_0_var(--accent)]" : "text-muted-2 hover:text-fg",
             )}
@@ -167,6 +169,7 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
   const [initial] = useState(() => draftFrom(engagement));
   const [d, setD] = useState(initial);
   const [errors, setErrors] = useState<Partial<Record<FieldName | "form", string>>>({});
+  const [deleting, setDeleting] = useState(false);
   const kindLabelId = useId();
   const formId = useId();
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
@@ -220,6 +223,11 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
       size="lg"
       footer={
         <>
+          {engagement && (
+            <Button variant="quiet-danger" className="mr-auto" onClick={() => setDeleting(true)}>
+              Delete engagement
+            </Button>
+          )}
           <Button onClick={onClose}>Cancel</Button>
           <Button type="submit" form={formId} variant="primary" disabled={save.isPending}>
             {engagement ? "Save" : "Create engagement"}
@@ -227,13 +235,15 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
         </>
       }
     >
-      <form id={formId} onSubmit={submit} noValidate className="flex flex-col gap-3.5">
+      <form id={formId} onSubmit={submit} noValidate className="grid gap-4">
         <Field label="Name" error={err("name")}>
           <Input autoFocus value={d.name} onChange={(e) => set("name", e.target.value)} placeholder="Mock exam A" />
         </Field>
 
-        <div className="flex flex-col gap-1.5">
-          <Label id={kindLabelId}>Kind</Label>
+        <div className="grid gap-2">
+          <span id={kindLabelId} className="block text-meta text-muted-2">
+            Kind
+          </span>
           <KindPicker value={d.kind} onChange={(k) => set("kind", k)} labelId={kindLabelId} />
         </div>
 
@@ -257,11 +267,11 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
                 onChange={(e) => set("timeboxStart", e.target.value)}
               />
             </Field>
-            <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
-              <legend className="mb-1.5 p-0 text-[10.5px] font-semibold uppercase tracking-label text-muted">
+            <fieldset className="m-0 grid gap-2 border-0 p-0">
+              <legend className="mb-2 p-0 text-meta text-muted-2">
                 Duration
               </legend>
-              <div className="flex items-center gap-1.5">
+              <div className="grid grid-flow-col items-center justify-start gap-2">
                 <div className="w-16">
                   <Input
                     type="number"
@@ -273,7 +283,7 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
                     onChange={(e) => set("hours", e.target.value)}
                   />
                 </div>
-                <span className="text-xs text-muted">h</span>
+                <span className="text-meta text-muted">h</span>
                 <div className="w-16">
                   <Input
                     type="number"
@@ -286,9 +296,9 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
                     onChange={(e) => set("minutes", e.target.value)}
                   />
                 </div>
-                <span className="text-xs text-muted">m</span>
+                <span className="text-meta text-muted">m</span>
               </div>
-              {err("timeboxMinutes") && <p className="m-0 text-xs text-warn">{err("timeboxMinutes")}</p>}
+              {err("timeboxMinutes") && <p className="m-0 text-meta text-warn">{err("timeboxMinutes")}</p>}
             </fieldset>
           </div>
         )}
@@ -316,7 +326,70 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
           <Input mono value={d.domain} onChange={(e) => set("domain", e.target.value)} placeholder="mock.exam" />
         </Field>
 
-        {(errors.form || hidden) && <p className="m-0 text-xs text-warn">{errors.form ?? hidden}</p>}
+        {(errors.form || hidden) && <p className="m-0 text-meta text-warn">{errors.form ?? hidden}</p>}
+      </form>
+      {engagement && deleting && (
+        <DeleteDialog engagement={engagement} onClose={() => setDeleting(false)} />
+      )}
+    </Dialog>
+  );
+}
+
+/** The confirm step: typing the name is the guard. Deleting leaves for the dashboard. */
+function DeleteDialog({ engagement: e, onClose }: { engagement: Engagement; onClose: () => void }) {
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const [typed, setTyped] = useState("");
+  const del = useMutation({
+    mutationFn: () => api.engagementDelete(e.id),
+    onSuccess: () => {
+      // Its notes are gone: unsaved text for them can never be saved.
+      dropPendingNotes(e.id);
+      qc.removeQueries({ queryKey: ["engagement", e.id] });
+      void qc.invalidateQueries({ queryKey: ["engagements"] });
+      void navigate("/");
+    },
+  });
+  const match = typed === e.name;
+  const confirm = () => match && !del.isPending && del.mutate();
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title="Delete engagement"
+      description="This removes it and everything in it. It can't be undone; backups still hold older copies."
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="danger" disabled={!match || del.isPending} onClick={confirm}>
+            Delete engagement
+          </Button>
+        </>
+      }
+    >
+      <form
+        onSubmit={(ev) => {
+          ev.preventDefault();
+          confirm();
+        }}
+      >
+        <Field
+          label={
+            <>
+              Type the engagement name to confirm: <span className="text-fg-2">{e.name}</span>
+            </>
+          }
+          error={del.isError ? del.error.message : undefined}
+        >
+          <Input
+            autoFocus
+            autoComplete="off"
+            spellCheck={false}
+            value={typed}
+            onChange={(ev) => setTyped(ev.target.value)}
+          />
+        </Field>
       </form>
     </Dialog>
   );

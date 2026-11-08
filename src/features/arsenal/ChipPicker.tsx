@@ -1,5 +1,6 @@
 import { useEffect, useId, useImperativeHandle, useRef, useState } from "react";
-import type { KeyboardEvent, ReactNode, Ref } from "react";
+import type { KeyboardEvent, Ref } from "react";
+import { PickerTrigger } from "../../ui";
 
 export interface ChipPickerHandle { open(): void; focus(): void }
 export interface ChipOption {
@@ -9,17 +10,20 @@ export interface ChipOption {
   name: string;
   /** Right-hand muted cell. */
   detail?: string;
+  /** A second right-hand muted cell. */
+  detail2?: string;
 }
 
 const FLASH_MS = 600;
 const TYPEAHEAD_MS = 700;
 
 /**
- * The muted "for <host> ⌄" / "as <cred> ⌄" button, with no Tab stop unless `tabbable`, and its listbox. A click or `ref.open()` opens
- * the list: arrows move, Enter picks, Esc closes and gives focus back, typeahead works only inside the open list.
- * `children` is the button's content; a pick that changes `value` flashes the chip once (`data-flash`).
+ * A context picker: a bordered `PickerTrigger` ("Host  dc01 v", amber "Pick one" while `shown` is unset) in the Tab
+ * order, and its listbox. A click, Enter or `ref.open()` opens the list: arrows move, Enter picks, Esc closes and gives
+ * focus back, typeahead works only inside the open list. A pick that changes `value` flashes the trigger once
+ * (`data-flash`). In the open list the pointer moves the highlight like the arrow keys (a popup, not a pane).
  */
-export function ChipPicker({ options, value, onPick, label, listLabel, title, align = "end", wide, tabbable, children, ref }: {
+export function ChipPicker({ options, value, onPick, label, listLabel, title, align = "end", wide, prefix, shown, ref }: {
   options: ChipOption[]; value: string | null; onPick: (id: string | null) => void;
   /** The button's accessible name. */
   label: string; listLabel: string; title: string;
@@ -27,9 +31,11 @@ export function ChipPicker({ options, value, onPick, label, listLabel, title, al
   align?: "start" | "end";
   /** Allow the list to grow past min-w-48. */
   wide?: boolean;
-  /** A Tab stop (the Payloads context chips); the Arsenal's chips have none and open with ⌥H/⌥C. */
-  tabbable?: boolean;
-  children: ReactNode; ref?: Ref<ChipPickerHandle>;
+  /** The trigger's small prefix ("Host"). */
+  prefix: string;
+  /** The value the trigger shows; unset shows an amber "Pick one". */
+  shown?: string;
+  ref?: Ref<ChipPickerHandle>;
 }) {
   const listId = useId();
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -113,11 +119,11 @@ export function ChipPicker({ options, value, onPick, label, listLabel, title, al
   };
 
   return (
-    <div className="relative grid min-w-0 shrink">
-      <button
+    <div className="relative grid min-w-0">
+      <PickerTrigger
         ref={buttonRef}
-        type="button"
-        tabIndex={tabbable ? 0 : -1}
+        prefix={prefix}
+        {...(shown ? { value: shown } : {})}
         aria-label={label}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -127,16 +133,13 @@ export function ChipPicker({ options, value, onPick, label, listLabel, title, al
         onClick={() => (open ? close(true) : openList())}
         onBlur={() => open && close(false)}
         onKeyDown={onKeyDown}
-        className="grid min-w-0 cursor-default grid-flow-col items-center justify-start gap-1 rounded-md px-1.5 py-0.5 text-xs whitespace-nowrap text-muted hover:bg-surface-2 focus-visible:bg-surface-2"
-      >
-        {children}
-      </button>
+      />
       {open && (
         <ul
           id={listId}
           role="listbox"
           aria-label={listLabel}
-          className={`absolute top-full z-30 ${align === "end" ? "right-0" : "left-0"} m-0 mt-1 grid max-h-60 ${wide ? "min-w-80" : "min-w-48"} list-none overflow-y-auto rounded-md border border-line-2 bg-surface p-1 text-xs shadow-lg`}
+          className={`absolute top-full z-30 ${align === "end" ? "right-0" : "left-0"} m-0 mt-1 grid max-h-60 ${wide ? "min-w-80" : "min-w-48"} list-none overflow-y-auto rounded-md border border-line-2 bg-surface p-1 text-body shadow-lg`}
         >
           {options.map((o, i) => (
             <li
@@ -148,10 +151,11 @@ export function ChipPicker({ options, value, onPick, label, listLabel, title, al
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => pick(i)}
               onMouseMove={() => setActive(i)}
-              className={`grid cursor-default grid-cols-[1fr_auto] gap-4 rounded-sm px-2 py-1 whitespace-pre ${i === active ? "bg-accent/10 text-accent" : "text-fg-2"}`}
+              className={`grid cursor-default grid-cols-[minmax(0,1fr)_auto_auto] gap-4 rounded-sm px-2 py-1 whitespace-pre ${i === active ? "bg-accent/10 text-accent shadow-[inset_2px_0_0_var(--accent)]" : "text-fg-2"}`}
             >
               <span className="truncate">{o.name}</span>
-              <span className="text-muted">{o.detail ?? ""}</span>
+              <span className="text-meta text-muted">{o.detail ?? ""}</span>
+              <span className="text-meta text-muted">{o.detail2 ?? ""}</span>
             </li>
           ))}
         </ul>

@@ -15,8 +15,17 @@ export const WIDTHS = [900, 1024, 1280, 1440] as const;
 const E = `/e/${AUDIT_IDS.labEngagement}`;
 const H = `${E}/h/${AUDIT_IDS.webHost}`;
 
-// dispatchEvent, not click(): at 900 the Findings tab sits under the Order button, which sdoe a real click.
+// dispatchEvent rather than click(): it switches the tab without depending on pointer hit-testing (at 900 the Order
+// button once sat over the Findings tab and swallowed a real click).
 const tab = (name: string) => (page: Page) => page.getByRole("tab", { name, exact: true }).dispatchEvent("click");
+/** Opens a fact group by its toggle; a group that is already open stays as it is. */
+const openGroup = (name: string) => async (page: Page) => {
+  // The host page measures itself first; groups fold (stacked) or stay open (two columns) only after that.
+  // With no data (the `empty` state run) there is no host to measure, only "Host not found".
+  await page.locator("[data-host-layout]").or(page.getByText("Host not found")).first().waitFor();
+  const toggle = page.locator(`button[title^='Open ${name}']`);
+  if ((await toggle.count()) > 0) await toggle.first().click();
+};
 const FS01 = `${E}/h/${AUDIT_IDS.fileHost}`;
 /** A command with a fill field the host does not answer, so the first Enter is held back by the copy guard. */
 const GUARD_QUERY = "several ports";
@@ -34,12 +43,20 @@ export const SCREENS: Screen[] = [
     id: "host-checklist", path: H, ready: "role=button[name='Full checklist'][expanded]",
     setup: async (page) => {
       await page.getByRole("button", { name: "Full checklist" }).click();
-      const notice = page.getByRole("button", { name: /new creds? since done/ }).first();
+      const notice = page.getByRole("button", { name: /New credentials since done/ }).first();
       if (await notice.count()) await notice.click();
     },
   },
   { id: "host-findings", path: H, ready: "role=tab[name='Findings'][selected]", setup: tab("Findings") },
-  { id: "host-postfoothold", path: `/e/${AUDIT_IDS.examEngagement}/h/${AUDIT_IDS.msfHost}`, ready: "role=button[name='Edit who am I']" },
+  {
+    id: "host-facts-open", path: FS01, ready: "role=region[name='Services']",
+    setup: async (page) => { await openGroup("Services")(page); await openGroup("Host Credentials")(page); },
+  },
+  {
+    id: "host-vectors-open", path: `/e/${AUDIT_IDS.examEngagement}/h/${AUDIT_IDS.msfHost}`, ready: "role=region[name='Privesc vectors']",
+    setup: openGroup("Privesc vectors"),
+  },
+  { id: "host-postfoothold", path: `/e/${AUDIT_IDS.examEngagement}/h/${AUDIT_IDS.msfHost}`, ready: "role=region[name='Who am I']" },
   {
     id: "finding-split", path: H, ready: "role=region[name='Finding']",
     setup: async (page) => { await focusBody(page); await page.keyboard.press("f"); },
@@ -51,6 +68,20 @@ export const SCREENS: Screen[] = [
       await focusBody(page);
       if (await page.getByRole("button", { name: "Collapse sidebar" }).isVisible()) await page.keyboard.press("Meta+B");
     },
+  },
+  {
+    id: "sidebar-rail-tip", path: H, ready: "role=tooltip",
+    // The collapsed rail's host tooltip (name and IP), opened by keyboard focus.
+    setup: async (page) => {
+      await focusBody(page);
+      if (await page.getByRole("button", { name: "Collapse sidebar" }).isVisible()) await page.keyboard.press("Meta+B");
+      await page.locator(`nav[aria-label='Engagement'] a[href$='/h/${AUDIT_IDS.webHost}']`).focus();
+    },
+  },
+  {
+    id: "eng-stuck", path: `${E}/s/checklist`, ready: "role=region[name='Engagement checklist']",
+    // The engagement stuck check, open: subject and state are separate elements.
+    setup: async (page) => { await page.getByRole("button", { name: /Stuck check/ }).click(); },
   },
   { id: "host-stuck", path: H, ready: "aside[aria-label^='Stuck on']", setup: async (page) => { await focusBody(page); await page.keyboard.press("h"); } },
   { id: "dc-next", path: `${E}/h/${AUDIT_IDS.dcHost}`, ready: "role=tablist >> visible=true" },
@@ -65,6 +96,9 @@ export const SCREENS: Screen[] = [
       await page.getByRole("button", { name: /^Edit Domain compromise via Kerberoastable/ }).click();
       await page.getByRole("region", { name: "Finding" }).waitFor();
     },
+  },
+  {
+    id: "findings-list", path: `/e/${AUDIT_IDS.findingsListEngagement}/s/findings`, ready: "role=region[name='Findings']",
   },
   { id: "log", path: `${E}/s/log`, ready: "role=region[name='Log']" },
   {
@@ -102,7 +136,7 @@ export const SCREENS: Screen[] = [
       });
     },
   },
-  { id: "exam-board", path: `/e/${AUDIT_IDS.examEngagement}`, ready: "role=button[name=/Metasploit|MSF/i]" },
+  { id: "exam-board", path: `/e/${AUDIT_IDS.examEngagement}`, ready: "role=status[name='Engagement status'] >> visible=true" },
   {
     id: "exam-host-locked", path: `/e/${AUDIT_IDS.examEngagement}/h/${AUDIT_IDS.msfHost}`, ready: "role=button[name='Full checklist'][expanded]",
     setup: async (page) => { await page.getByRole("button", { name: "Full checklist" }).click(); },
@@ -127,7 +161,7 @@ export const SCREENS: Screen[] = [
     },
   },
   {
-    id: "palette-guard", path: FS01, ready: "text=/not filled · ↵ again to copy anyway/",
+    id: "palette-guard", path: FS01, ready: "text=/not filled. Press ↵ again to copy anyway/",
     setup: async (page) => {
       await page.keyboard.press("Meta+K");
       await page.getByRole("combobox", { name: "Search" }).fill(GUARD_QUERY);
@@ -164,6 +198,11 @@ export const SCREENS: Screen[] = [
     setup: async (page) => { await focusBody(page); await page.keyboard.press("a"); },
   },
   {
+    // No host in view: the "log (no host)" label; ↵, ⌘↵, → and Esc must all still show.
+    id: "arsenal-drawer-nohost", path: E, ready: "role=listbox[name='Arsenal results']",
+    setup: async (page) => { await focusBody(page); await page.keyboard.press("a"); },
+  },
+  {
     id: "arsenal-drawer-smb", path: FS01, ready: "role=listbox[name='Arsenal results']",
     setup: async (page) => {
       await focusBody(page);
@@ -187,7 +226,7 @@ export const SCREENS: Screen[] = [
       // The strip follows the scroll through an IntersectionObserver: wait until the active entry is no longer the first one.
       await page.waitForFunction(() => {
         const nav = document.querySelector("nav[aria-label='On this card']");
-        const buttons = [...(nav?.querySelectorAll("button") ?? [])];
+        const buttons = [...(nav?.querySelectorAll("button[data-for]") ?? [])];
         const at = buttons.findIndex((b) => b.getAttribute("aria-current") === "location");
         return at > 0;
       });
@@ -215,7 +254,18 @@ export const SCREENS: Screen[] = [
     id: "payloads-drawer-misfits", path: IIS, ready: "role=list[name=\"Don't fit here\"]",
     setup: async (page) => {
       await openPayloads(page);
-      await page.locator("aside[aria-label='Payloads']").getByRole("button", { name: "show" }).click();
+      await page.locator("aside[aria-label='Payloads']").getByRole("button", { name: /^Don't fit here \(\d+\)$/ }).click();
+    },
+  },
+  {
+    // Three fits in a PowerShell prompt (the owner's "where my shells went" case), the second one picked by click.
+    id: "payloads-drawer-fits", path: IIS, ready: "aside[aria-label='Payloads'] >> role=option[name=/powercat/][selected]",
+    setup: async (page) => {
+      await openPayloads(page);
+      const aside = page.locator("aside[aria-label='Payloads']");
+      await aside.getByRole("button", { name: /^Paste into: / }).click();
+      await aside.getByRole("option", { name: /^PowerShell prompt/ }).click();
+      await aside.getByRole("listbox", { name: "Fits" }).getByRole("option", { name: /powercat/ }).click();
     },
   },
   {

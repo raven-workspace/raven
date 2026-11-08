@@ -30,7 +30,7 @@ describe("TestGrid tried pairs", () => {
         tried={[pair(), pair({ id: "t2", username: "SAM.DOE", hostId: "h1", service: "smb" })]}
       />,
     );
-    const label = screen.getByText("sam.doe · tried");
+    const label = screen.getByText("sam.doe");
     const row = label.closest("tr")!;
     expect(row).toHaveAttribute("data-tried", "");
     const ssh = within(row).getByRole("img", { name: /on h1 SSH/ });
@@ -56,19 +56,21 @@ describe("TestGrid tried pairs", () => {
         tried={[pair(), pair({ id: "t2", username: "drew", secret: nt, secretKind: "hash" })]}
       />,
     );
-    const pwRow = screen.getByText("sam.doe · tried").closest("tr")!;
+    const pwRow = screen.getByText("sam.doe").closest("tr")!;
     expect(within(pwRow).getByTestId("secret-text")).toHaveTextContent("••••••••");
     expect(within(pwRow).queryByText(/SyntheticPw01/)).toBeNull();
-    fireEvent.click(within(pwRow).getByRole("button", { name: "Reveal tried password for sam.doe" }));
+    fireEvent.click(within(pwRow).getByRole("button", { name: /^Reveal secret/ }));
     expect(within(pwRow).getByTestId("secret-text")).toHaveTextContent("SyntheticPw01");
-    const hashRow = screen.getByText("drew · tried").closest("tr")!;
+    expect(within(pwRow).getByText("tried password")).toBeInTheDocument();
+    const hashRow = screen.getByText("drew").closest("tr")!;
+    expect(within(hashRow).getByText("tried hash")).toBeInTheDocument();
     expect(within(hashRow).getByTestId("tried-secret")).toHaveTextContent("01234567…cdef");
     expect(within(hashRow).queryByText(nt)).toBeNull();
   });
 
   it("shows the grid for tried pairs alone", () => {
     wrap(<TestGrid eid="eng1" hosts={[h1.host]} creds={[]} attempts={[]} servicesByHost={byHost(h1)} tried={[pair()]} />);
-    expect(screen.getByText("sam.doe · tried")).toBeInTheDocument();
+    expect(screen.getByText("sam.doe")).toBeInTheDocument();
   });
 });
 

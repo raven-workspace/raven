@@ -1,13 +1,19 @@
 import type { HTMLAttributes } from "react";
 import { cx } from "../lib/cx";
 
-export type KbdProps = HTMLAttributes<HTMLElement>;
+export type KbdProps = HTMLAttributes<HTMLElement> & {
+  /** `cap` is a bordered key cap; `inline` drops border and fill for use inside bordered buttons. */
+  variant?: "cap" | "inline";
+};
 
-export function Kbd({ className, ...rest }: KbdProps) {
+export function Kbd({ className, variant = "cap", ...rest }: KbdProps) {
   return (
     <kbd
       className={cx(
-        "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[4px] border border-line-2 bg-surface px-1 font-mono text-[10.5px] leading-none text-muted-2",
+        "inline-flex h-5 min-w-5 items-center justify-center rounded-[4px] px-1 font-mono text-label font-normal leading-none",
+        variant === "cap"
+          ? "border border-line-strong bg-surface text-fg-2"
+          : "text-muted",
         className,
       )}
       {...rest}

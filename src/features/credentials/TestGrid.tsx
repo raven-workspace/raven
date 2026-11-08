@@ -1,10 +1,10 @@
-import { useMemo, useState } from "react";
-import { cellFor, cellModes, credLabel, hostSprayServices, isSprayable, type CellState, type SprayService } from "../../engines/credentials";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { cellFor, cellModes, credLabel, credName, hostSprayServices, isSprayable, type CellState, type SprayService } from "../../engines/credentials";
 import type { Cell } from "../../engines/credentials";
 import type { CredAttempt, Credential, TriedPair } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
-import { labelClass } from "../../ui";
+import { ChipSet, labelClass } from "../../ui";
 import { hostLabel } from "./AccessGrants";
 import { CellPopover } from "./CellPopover";
 import { MaskedSecret } from "./MaskedSecret";
@@ -19,7 +19,7 @@ const META: Record<CellState, { glyph: string; label: string; aria: string; tone
 };
 
 const HATCH = { backgroundImage: "repeating-linear-gradient(135deg, currentColor 0 1px, transparent 1px 5px)", opacity: 0.45 };
-const BOX = "relative inline-flex h-8 w-8 items-center justify-center rounded-sm border font-mono text-xs";
+const BOX = "relative inline-grid h-7 w-7 place-items-center rounded-sm border font-mono text-meta";
 
 function Glyph({ state }: { state: CellState }) {
   const meta = META[state];
@@ -40,19 +40,23 @@ function partialLabel(cred: Credential, service: SprayService, cell: Cell): stri
 
 function Legend() {
   const states: CellState[] = ["admin", "valid", "failed", "untested", "errored", "na"];
+  const unit = "grid grid-flow-col auto-cols-max items-center gap-2";
   return (
-    <ul aria-label="Legend" className="m-0 flex list-none flex-wrap items-center gap-x-3 gap-y-1 p-0 text-[11px] text-muted">
+    <ChipSet as="ul" gap={6} aria-label="Legend" className="m-0 list-none p-0 text-meta text-muted">
       {states.map((s) => (
-        <li key={s} className="flex items-center gap-1.5">
-          <span aria-hidden="true" className={`${BOX} h-5 w-5 text-[10px] ${META[s].tone}`} style={s === "na" ? HATCH : undefined}>{META[s].glyph}</span>
+        <li key={s} className={unit}>
+          <span aria-hidden="true" className={`${BOX} h-5 w-5 text-label ${META[s].tone}`} style={s === "na" ? HATCH : undefined}>{META[s].glyph}</span>
           {META[s].label}
         </li>
       ))}
-      <li className="flex items-center gap-1.5">
-        <span aria-hidden="true" className="h-2 w-2 rounded-full border border-dashed border-fg-2" />
+      <li className={unit}>
+        <span aria-hidden="true" className={`${BOX} h-5 w-5 text-label border-line-2 text-fg-2`}>
+          {META.failed.glyph}
+          <span className="absolute inset-0.5 rounded-sm border border-dashed border-fg-2" />
+        </span>
         Failed, other mode untried
       </li>
-    </ul>
+    </ChipSet>
   );
 }
 
@@ -79,6 +83,17 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
   servicesByHost: Map<string, Service[]>;
   tried?: TriedPair[];
 }) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const [fade, setFade] = useState(false);
+  const measure = () => {
+    const el = scroller.current;
+    if (el) setFade(el.scrollWidth - el.scrollLeft - el.clientWidth > 1);
+  };
+  useEffect(() => {
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  });
   const [open, setOpen] = useState<{ credId: string; hostId: string; service: SprayService }>();
   const rows = useMemo(() => creds.filter(isSprayable), [creds]);
   const triedList = useMemo(() => triedRows(tried), [tried]);
@@ -90,9 +105,9 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
   const header = <h3 className={`m-0 ${labelClass}`}>Test matrix</h3>;
   if ((rows.length === 0 && triedList.length === 0) || groups.length === 0) {
     return (
-      <section aria-label="Test matrix" className="flex flex-col gap-2">
+      <section aria-label="Test matrix" className="grid grid-cols-[minmax(0,1fr)] gap-2">
         {header}
-        <p className="m-0 text-xs text-muted">
+        <p className="m-0 text-meta text-muted">
           {rows.length === 0
             ? "No sprayable credentials yet. Hashes appear here once cracked (NTLM hashes are tested as-is)."
             : "No host has scanned services yet. Import an nmap scan to fill the grid."}
@@ -106,25 +121,26 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
   const openHost = open && hosts.find((h) => h.id === open.hostId);
 
   return (
-    <section aria-label="Test matrix" className="flex flex-col gap-2">
+    <section aria-label="Test matrix" className="grid grid-cols-[minmax(0,1fr)] gap-2">
       {header}
       <Legend />
-      <div className="overflow-x-auto rounded border border-line">
-        <table aria-label="Test grid" className="border-separate border-spacing-0 text-xs">
+      <div className="relative rounded border border-line">
+        <div ref={scroller} onScroll={measure} className="overflow-x-auto">
+        <table aria-label="Test grid" className="min-w-full border-separate border-spacing-0 text-meta">
           <thead>
             <tr>
-              <th rowSpan={2} scope="col" className="min-w-36 border-b border-r border-line px-3 py-1.5 text-left font-semibold text-muted">Credential</th>
+              <th rowSpan={2} scope="col" className={`sticky left-0 z-20 w-[28ch] min-w-[28ch] max-w-[28ch] border-b border-r border-line bg-bg px-3 py-2 text-left ${labelClass}`}>Credential</th>
               {groups.map(({ host, services }) => (
-                <th key={host.id} colSpan={services.length} scope="colgroup" className="border-b border-l border-line px-2 pb-1 pt-1.5 text-left font-semibold text-fg">
-                  {hostLabel(host)}
-                  {host.ip && host.ip !== hostLabel(host) && <span className="ml-1.5 font-mono text-[10px] font-normal text-muted">{host.ip}</span>}
+                <th key={host.id} colSpan={services.length} scope="colgroup" className="border-b border-l border-line px-3 pb-1 pt-2 text-left font-semibold text-fg">
+                  <span className="block max-w-[18ch] truncate" title={host.ip && host.ip !== hostLabel(host) ? `${hostLabel(host)} ${host.ip}` : hostLabel(host)}>{hostLabel(host)}</span>
+                  {host.ip && host.ip !== hostLabel(host) && <span className="block max-w-[18ch] truncate font-mono text-meta font-normal text-muted">{host.ip}</span>}
                 </th>
               ))}
             </tr>
             <tr>
               {groups.flatMap(({ host, services }) =>
                 services.map((s, i) => (
-                  <th key={`${host.id}-${s}`} scope="col" className={`border-b border-line px-1 pb-1 font-mono text-[10px] font-normal text-muted ${i === 0 ? "border-l" : ""}`}>
+                  <th key={`${host.id}-${s}`} scope="col" className={`border-b border-line px-1 pb-1 font-mono text-code font-normal text-muted ${i === 0 ? "border-l" : ""}`}>
                     {s.toUpperCase()}
                   </th>
                 )),
@@ -134,9 +150,12 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
           <tbody>
             {rows.map((cred) => (
               <tr key={cred.id} data-cred-id={cred.id}>
-                <th scope="row" className="border-b border-r border-line px-3 py-1 text-left font-normal">
-                  <div className="font-mono text-fg">{credLabel(cred)}</div>
-                  <div className="text-[10px] text-muted">{cred.type}{cred.scope !== "domain" ? ` · ${cred.scope}` : ""}</div>
+                <th scope="row" className="sticky left-0 z-10 w-[28ch] min-w-[28ch] max-w-[28ch] border-b border-r border-line bg-bg px-3 py-2 text-left font-normal">
+                  <div className="truncate font-mono text-fg" title={credName(cred)}>{credName(cred)}</div>
+                  <div className="text-meta text-muted">
+                    <span>{cred.type}</span>
+                    {cred.scope !== "domain" && <span className="ml-2">{cred.scope}</span>}
+                  </div>
                 </th>
                 {groups.flatMap(({ host, services }) =>
                   services.map((service, i) => {
@@ -154,11 +173,11 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
                             title={label}
                             aria-haspopup="dialog"
                             onClick={() => setOpen({ credId: cred.id, hostId: host.id, service })}
-                            className="relative inline-flex cursor-default rounded-sm hover:brightness-125"
+                            className="relative inline-grid cursor-default rounded-sm hover:brightness-125"
                           >
                             <Glyph state={cell.state} />
-                            {partial && <span data-testid="untried-marker" aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-dashed border-fg-2 bg-bg" />}
-                            {cell.modesDiffer && <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-fg-2" />}
+                            {partial && <span data-testid="untried-marker" aria-hidden="true" className="pointer-events-none absolute inset-0.5 rounded-sm border border-dashed border-fg-2" />}
+                            {cell.modesDiffer && <span aria-hidden="true" className="absolute right-0.5 top-0.5 size-2 rounded-full bg-fg-2" />}
                           </button>
                         )}
                       </td>
@@ -171,16 +190,16 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
               const who = `${t.domain ? `${t.domain}\\` : ""}${t.username}`;
               return (
                 <tr key={t.key} data-tried="" className="text-muted">
-                  <th scope="row" className="border-b border-r border-line px-3 py-1 text-left font-normal">
-                    <div className="font-mono">{t.username} · tried</div>
+                  <th scope="row" className="sticky left-0 z-10 w-[28ch] min-w-[28ch] max-w-[28ch] border-b border-r border-line bg-bg px-3 py-2 text-left font-normal">
+                    <div className="truncate font-mono" title={who}>{t.username}</div>
                     <div data-testid="tried-secret">
                       {t.kind === "hash" ? (
-                        <span className="font-mono text-[12.5px]" aria-label={`tried hash for ${who}`}>{truncatedHash(t.secret)}</span>
+                        <span className="font-mono text-code" aria-label={`tried hash for ${who}`}>{truncatedHash(t.secret)}</span>
                       ) : (
-                        <MaskedSecret secret={t.secret} label={`tried password for ${who}`} />
+                        <MaskedSecret secret={t.secret} label={`secret tried for ${who}`} />
                       )}
                     </div>
-                    <div className="text-[10px]">{t.domain ? `${t.domain} · ` : ""}{t.kind}, not a credential</div>
+                    <div className="text-meta" title={`${t.domain ? `${t.domain}: ` : ""}tried ${t.kind}, not a credential`}>tried {t.kind}</div>
                   </th>
                   {groups.flatMap(({ host, services }) =>
                     services.map((service, i) => {
@@ -200,6 +219,8 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
             })}
           </tbody>
         </table>
+        </div>
+        {fade && <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-linear-to-l from-bg to-transparent" />}
       </div>
       {open && openCred && openHost && (
         <CellPopover

@@ -43,7 +43,7 @@ export function useCopyGuard({ focusToken, focusCred, hostName }: {
       clearTimeout(timer.current);
       if (r.action === "focus") {
         armed.current = { id: cmd.id, key };
-        setState({ key, hint: `{${r.token}} not filled · ↵ again to copy anyway`, confirm: null });
+        setState({ key, hint: `{${r.token}} not filled. Press ↵ again to copy anyway`, confirm: null });
         if (CRED_TOKENS.has(r.token)) focusCred();
         else focusToken(r.token);
         return "guarded";
@@ -51,7 +51,7 @@ export function useCopyGuard({ focusToken, focusCred, hostName }: {
       armed.current = null;
       await doCopy();
       const n = cmd.unresolved.length;
-      const left = n > 0 ? ` · ${n} placeholder${n === 1 ? "" : "s"} left` : "";
+      const left = n > 0 ? `. ${n} placeholder${n === 1 ? "" : "s"} left` : "";
       setState({ key, hint: null, confirm: `${hostName ? `Copied for ${hostName}` : "Copied"}${left}` });
       timer.current = setTimeout(() => setState(null), CONFIRM_MS);
       return "copied";

@@ -13,7 +13,7 @@ export function Textarea({ mono, className, rows = 4, ...rest }: TextareaProps) 
     <textarea
       rows={rows}
       spellCheck={mono ? false : undefined}
-      className={cx(controlBase, "block px-2.5 py-2 leading-normal resize-y", mono && "font-mono text-[12.5px]", className)}
+      className={cx(controlBase, "block w-full px-3 py-2 resize-y", mono && "font-mono text-code", className)}
       {...rest}
     />
   );

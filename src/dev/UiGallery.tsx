@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Button, Chip, Dialog, EmptyState, Field, Input, Kbd, Label, labelClass, Panel, Select, Textarea } from "../ui";
+import { Button, Chip, Dialog, EmptyState, Field, Input, Kbd, labelClass, Panel, Select, Textarea } from "../ui";
 
 /** Dev-only (`/__ui`): every Ink component, plus the mockup-A host screen rebuilt from them. */
 export default function UiGallery() {
@@ -72,7 +72,7 @@ export default function UiGallery() {
             <Field label="Output">
               <Textarea mono defaultValue={"find / -perm -4000 2>/dev/null\n/usr/bin/backupd"} />
             </Field>
-            <Label>A standalone label</Label>
+            <span className={labelClass}>A section label</span>
             <p className="m-0 text-[13px] text-muted-2">
               Quick capture <Kbd>⌘</Kbd> <Kbd>K</Kbd> · close <Kbd>esc</Kbd>
             </p>

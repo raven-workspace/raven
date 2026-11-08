@@ -1,7 +1,7 @@
 import { useEffect, useRef, type MouseEvent } from "react";
 import { isDialogOpen } from "../../lib/keys";
 import type { Engagement } from "../../types/engagement";
-import { Kbd, labelClass } from "../../ui";
+import { Kbd, Toolbar, labelClass } from "../../ui";
 import { cx } from "../../lib/cx";
 import { useHosts } from "../hosts/queries";
 import { NoteEditor } from "./NoteEditor";
@@ -82,7 +82,7 @@ function PanelBody({
   const target = { engagementId: engagement.id, hostId: scope === "host" ? hostId : null };
   const setScope = useNotesStore((s) => s.setScope);
   const scopeName = scope === "host" ? hostName : engagement.name;
-  const title = scopeName ? `Notes · ${scopeName}` : "Notes";
+  const title = scopeName ? `Notes: ${scopeName}` : "Notes";
 
   const startDrag = (e: MouseEvent) => {
     e.preventDefault();
@@ -103,7 +103,7 @@ function PanelBody({
     <aside
       aria-label={title}
       style={{ width }}
-      className="fixed inset-y-0 right-0 z-30 flex max-w-[70vw] flex-col border-l border-line-2 bg-surface text-fg-2"
+      className="fixed inset-y-0 right-0 z-30 grid max-w-[70vw] grid-rows-[auto_minmax(0,1fr)] border-l border-line-2 bg-surface text-fg-2"
     >
       <div
         role="separator"
@@ -121,10 +121,14 @@ function PanelBody({
         }}
         className="absolute inset-y-0 -left-1 w-2 cursor-col-resize hover:bg-line-2 focus-visible:bg-line-2"
       />
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-4 py-3">
-        <h2 className={cx(labelClass, "m-0 truncate")}>{title}</h2>
-        <div className="flex items-center gap-2">
-          <div role="group" aria-label="Scope" className="flex">
+      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-4 py-3">
+        {/* The space keeps "Notes SRV11" readable as one heading name; the grid ignores it. */}
+        <h2 className="m-0 grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-2">
+          <span className={labelClass}>Notes</span>{" "}
+          {scopeName && <span className="truncate text-body text-fg" title={scopeName}>{scopeName}</span>}
+        </h2>
+        <Toolbar>
+          <div role="group" aria-label="Scope" className="grid grid-flow-col">
             <Segment on={scope === "host"} disabled={!hostId} onClick={() => setScope("host")}>
               Host
             </Segment>
@@ -133,9 +137,9 @@ function PanelBody({
             </Segment>
           </div>
           <Kbd aria-hidden>⌘E</Kbd>
-        </div>
+        </Toolbar>
       </header>
-      <NoteEditor target={target} textRef={textRef} className="flex-1 px-4 py-3" />
+      <NoteEditor target={target} textRef={textRef} className="px-4 py-3" />
     </aside>
   );
 }
@@ -148,7 +152,7 @@ function Segment({ on, disabled, onClick, children }: { on: boolean; disabled?: 
       disabled={disabled}
       onClick={onClick}
       className={cx(
-        "h-6 border border-line-2 px-2 text-xs first:rounded-l-sm last:rounded-r-sm last:border-l-0 cursor-default disabled:opacity-40",
+        "h-7 border border-line-2 px-2 text-body first:rounded-l-sm last:rounded-r-sm last:border-l-0 cursor-default disabled:opacity-40",
         on ? "border-accent text-accent" : "text-fg-2 hover:text-fg",
       )}
     >

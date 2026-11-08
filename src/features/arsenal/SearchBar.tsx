@@ -17,18 +17,18 @@ export function SearchBar({ label, trailing, inputRef, ...input }: InputHTMLAttr
       aria-label={label}
       // The field draws the box, so the focus ring is the box's: the same 1px accent outline every other input gets,
       // only while the text field itself is focused (not the host chip inside the bar).
-      className="flex h-9 w-full min-w-0 items-center gap-2 rounded-sm border border-line-2 bg-bg pl-3 pr-1.5 text-[13px] text-fg hover:border-line-strong focus-within:border-line-strong has-[input:focus-visible]:outline has-[input:focus-visible]:outline-1 has-[input:focus-visible]:outline-offset-1 has-[input:focus-visible]:outline-accent"
+      className="grid h-8 w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-sm border border-line-2 bg-bg pl-3 pr-2 text-body text-fg hover:border-line-strong focus-within:border-line-strong has-[input:focus-visible]:outline has-[input:focus-visible]:outline-1 has-[input:focus-visible]:outline-offset-1 has-[input:focus-visible]:outline-accent"
     >
-      <span aria-hidden="true" className="shrink-0 text-[13px] leading-none text-muted"><MagnifyingGlassIcon size={13} weight="light" /></span>
+      <span aria-hidden="true" className="text-body leading-none text-muted"><MagnifyingGlassIcon size={13} weight="light" /></span>
       <input
         ref={inputRef}
         type="text"
         aria-label={label}
         autoComplete="off"
-        className="h-full min-w-0 flex-1 bg-transparent text-[14px] text-fg outline-none placeholder:text-muted"
+        className="h-full min-w-0 bg-transparent text-body text-fg outline-none placeholder:text-muted"
         {...input}
       />
-      {trailing === undefined ? <span className="shrink-0 px-1.5 text-xs whitespace-nowrap text-muted">for no host</span> : trailing}
+      {trailing === undefined ? <span className="px-2 text-meta whitespace-nowrap text-muted">for no host</span> : trailing}
     </div>
   );
 }

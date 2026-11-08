@@ -63,12 +63,11 @@ export function ConfirmServiceDialog({ engagementId, service, entries, onClose, 
           <Button disabled={pending} onClick={onEdit}>
             Edit
           </Button>
-          <Button variant="danger" disabled={pending} onClick={onDelete}>
+          <Button variant="quiet-danger" className="mr-auto" disabled={pending} onClick={onDelete}>
             Delete
           </Button>
-          <span className="flex-1" />
           {confirmed && (
-            <Button variant="danger" disabled={pending} onClick={() => unconfirm.mutate(service.id, opts)}>
+            <Button variant="quiet-danger" disabled={pending} onClick={() => unconfirm.mutate(service.id, opts)}>
               Remove confirmation
             </Button>
           )}
@@ -79,7 +78,7 @@ export function ConfirmServiceDialog({ engagementId, service, entries, onClose, 
         </>
       }
     >
-      <form id={formId} onSubmit={submit} noValidate className="flex flex-col gap-3.5">
+      <form id={formId} onSubmit={submit} noValidate className="grid gap-4">
         <Field label="Product">
           <Input autoFocus value={product} onChange={(e) => setProduct(e.target.value)} placeholder="OpenSSH" />
         </Field>
@@ -94,7 +93,7 @@ export function ConfirmServiceDialog({ engagementId, service, entries, onClose, 
             options={[{ value: NONE, label: "Nothing yet" }, ...entries.map((e) => ({ value: e.id, label: e.title }))]}
           />
         </Field>
-        {error && <p className="m-0 text-xs text-warn">{error}</p>}
+        {error && <p className="m-0 text-meta text-warn">{error}</p>}
       </form>
     </Dialog>
   );

@@ -3,14 +3,16 @@ import { OrderButton } from "./OrderButton";
 import { byOrder, usePersistedOrder } from "./usePersistedOrder";
 import { useParams } from "react-router";
 import type { LogKind } from "../../types/log";
-import { Button, EmptyState, Select, labelClass } from "../../ui";
+import { EmptyState, Select, queryState } from "../../ui";
 import { useHosts } from "../hosts/queries";
 import { KIND_LABELS } from "./kindLabels";
 import { LogEntryRow } from "./LogEntryRow";
 import { useLog } from "./queries";
 
 const KINDS: LogKind[] = ["command", "screenshot", "http", "note", "flag"];
-const sel = "h-7 w-auto text-xs";
+const sel = "h-7 w-auto";
+const filter = "grid grid-cols-[auto_auto] items-center gap-2";
+const filterLabel = "whitespace-nowrap text-meta text-muted-2";
 
 export function LogSection() {
   const { id = "" } = useParams();
@@ -22,15 +24,8 @@ export function LogSection() {
   const [order, setOrder] = usePersistedOrder("raven.log.order", "newest");
 
   const entries = log.data ?? [];
-  if (log.isError) {
-    return (
-      <EmptyState
-        title="Couldn't load the log"
-        body={log.error.message}
-        action={<Button onClick={() => void log.refetch()}>Try again</Button>}
-      />
-    );
-  }
+  const state = queryState([log], "the log");
+  if (state) return state;
   if (log.isSuccess && entries.length === 0) {
     return <EmptyState title="Nothing logged yet. Press L to capture." />;
   }
@@ -45,28 +40,28 @@ export function LogSection() {
     .sort(byOrder(order));
 
   return (
-    <section aria-label="Log" className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-1.5">
-          <span className={labelClass}>Host</span>
+    <section aria-label="Log" className="grid gap-3">
+      <div className="grid grid-cols-[repeat(3,auto)_minmax(0,1fr)] items-center justify-start gap-3">
+        <div className={filter}>
+          <span className={filterLabel}>Host</span>
           <Select aria-label="Host" className={sel} value={hostSel} onValueChange={setHost} options={[{ value: "all", label: "All" }, ...hosts.map((h) => ({ value: h.id, label: h.name })), { value: "none", label: "No host" }]} />
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className={labelClass}>Kind</span>
+        <div className={filter}>
+          <span className={filterLabel}>Kind</span>
           <Select aria-label="Kind" className={sel} value={kind} onValueChange={setKind} options={[{ value: "all", label: "All" }, ...KINDS.map((k) => ({ value: k, label: KIND_LABELS[k] }))]} />
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className={labelClass}>Ran on</span>
+        <div className={filter}>
+          <span className={filterLabel}>Ran on</span>
           <Select aria-label="Ran on" className={sel} value={ranOnSel} onValueChange={setRanOn} options={[{ value: "all", label: "All" }, ...ranOns.map((r) => ({ value: r, label: r }))]} />
         </div>
-        <OrderButton className="ml-auto" order={order} onChange={setOrder} />
+        <OrderButton className="justify-self-end" order={order} onChange={setOrder} />
       </div>
       <ul className="m-0 list-none p-0 border-t border-line">
         {shown.map((e) => (
           <LogEntryRow key={e.id} entry={e} hosts={hosts} />
         ))}
       </ul>
-      {shown.length === 0 && log.isSuccess && <p className="m-0 text-[13px] text-muted">No entries match these filters.</p>}
+      {shown.length === 0 && log.isSuccess && <p className="m-0 text-meta text-muted">No entries match these filters.</p>}
     </section>
   );
 }

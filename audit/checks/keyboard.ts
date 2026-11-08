@@ -307,7 +307,15 @@ export async function checkShortcut(page: Page, s: ShortcutCase): Promise<RawIss
   if (!opened) return [{ check: "shortcut", selector: s.opens, detail: `${keys} did not open ${s.opens}` }];
 
   if (s.focusInside) {
-    const inside = await target.evaluate((el) => el === document.activeElement || el.contains(document.activeElement));
+    // An active-descendant widget (the host picker's listbox) keeps DOM focus on its trigger; the option it points at counts.
+    const inside = await target.evaluate((el) => {
+      const a = document.activeElement;
+      if (!a) return false;
+      if (el === a || el.contains(a)) return true;
+      const id = a.getAttribute("aria-activedescendant");
+      const d = id ? document.getElementById(id) : null;
+      return !!d && el.contains(d);
+    });
     if (!inside) {
       const active = await page.evaluate(() => {
         const a = document.activeElement;

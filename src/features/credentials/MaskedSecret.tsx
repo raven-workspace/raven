@@ -1,35 +1,51 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, Toggle } from "../../ui";
+import { Check, Copy, Eye, EyeSlash } from "@phosphor-icons/react";
+import { IconButton } from "../../ui";
 import { copySecret } from "../../lib/clipboard";
 
 export const MASK = "••••••••";
 
-/** A secret shown as dots. Reveal shows it; Copy puts the real value on the clipboard without revealing it. */
-export function MaskedSecret({ secret, label }: { secret: string; label: string }) {
-  const [shown, setShown] = useState(false);
+/** Copy puts the real value on the clipboard without revealing it. */
+export function CopySecretButton({ secret, label }: { secret: string; label: string }) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
-
-  const copy = () => {
-    void copySecret(secret).then(() => {
-      setCopied(true);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => setCopied(false), 1500);
-    });
-  };
-
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5">
-      <span className="min-w-0 break-all font-mono text-[12.5px] text-fg" data-testid="secret-text">
+    <IconButton
+      icon={copied ? Check : Copy}
+      label={`Copy ${label}`}
+      onClick={() => {
+        void copySecret(secret).then(() => {
+          setCopied(true);
+          clearTimeout(timer.current);
+          timer.current = setTimeout(() => setCopied(false), 1500);
+        });
+      }}
+    />
+  );
+}
+
+/**
+ * A secret as a fixed 8-dot mask that never wraps. The eye reveals it in place; Copy is its own track
+ * (omit it with `copy={false}` when the row has Copy in its action cell).
+ */
+export function MaskedSecret({ secret, label, copy = true }: { secret: string; label: string; copy?: boolean }) {
+  const [shown, setShown] = useState(false);
+  return (
+    <span className={`inline-grid items-center gap-1 ${copy ? "grid-cols-[max-content_28px_28px]" : "grid-cols-[max-content_28px]"}`}>
+      <span
+        className={`font-mono text-code text-fg ${shown ? "max-w-[32ch] whitespace-normal [overflow-wrap:anywhere]" : "whitespace-nowrap"}`}
+        data-testid="secret-text"
+      >
         {shown ? secret : MASK}
       </span>
-      <Toggle on={shown} onChange={setShown} aria-label={`Reveal ${label}`} className="h-5 px-1.5 text-[11px]">
-        {shown ? "Hide" : "Reveal"}
-      </Toggle>
-      <Button size="sm" aria-label={`Copy ${label}`} onClick={copy}>
-        {copied ? "Copied" : "Copy"}
-      </Button>
+      <IconButton
+        icon={shown ? EyeSlash : Eye}
+        label={shown ? "Hide secret" : "Reveal secret"}
+        aria-label={`${shown ? "Hide" : "Reveal"} ${label}`}
+        onClick={() => setShown((v) => !v)}
+      />
+      {copy && <CopySecretButton secret={secret} label={label} />}
     </span>
   );
 }

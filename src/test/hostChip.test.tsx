@@ -26,13 +26,16 @@ function setup(value: string | null = "h1") {
 }
 
 describe("HostChip", () => {
-  it("is labelled with the short host name and is not in the Tab order", async () => {
+  it("host and credential pickers are tabbable triggers: labelled with the short host name, in the Tab order", async () => {
     const user = userEvent.setup();
     const { chip } = setup();
     expect(chip()).toHaveAccessibleName("Fill for host: dc01");
     expect(chip()).toHaveAttribute("aria-haspopup", "listbox");
-    expect(chip()).toHaveAttribute("tabindex", "-1");
+    expect(chip()).not.toHaveAttribute("tabindex", "-1");
+    expect(chip()).toHaveTextContent(/^Host\s*dc01/);
     await user.click(screen.getByLabelText("first"));
+    await user.tab();
+    expect(chip()).toHaveFocus();
     await user.tab();
     expect(screen.getByLabelText("last")).toHaveFocus();
   });

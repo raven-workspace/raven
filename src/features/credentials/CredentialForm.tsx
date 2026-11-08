@@ -9,7 +9,7 @@ import {
 } from "../../engines/credentials";
 import type { Credential, CredentialInput, CredentialScope, CredentialType } from "../../types/credentials";
 import type { Host } from "../../types/host";
-import { Button, Dialog, Field, Input, Select, Textarea, Toggle } from "../../ui";
+import { Button, ChipSet, Dialog, Field, Input, Select, Textarea, Toggle, labelClass } from "../../ui";
 import { AccessFields, EMPTY_ACCESS, hostLabel, type AccessDraft } from "./AccessGrants";
 import { useAccessGrantMutations, useCredentialMutations, useUsernameMutations, useUsernames } from "./queries";
 import { parseUsername } from "./UsernamesList";
@@ -143,17 +143,17 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose }: {
         </>
       }
     >
-      <form id={formId} onSubmit={(e) => void submit(e)} noValidate className="flex flex-col gap-3.5">
+      <form id={formId} onSubmit={(e) => void submit(e)} noValidate className="grid gap-4">
         {!edit && (
-          <div role="group" aria-label="What you have" className="flex flex-col gap-1.5">
-            <span className="text-[10.5px] font-semibold uppercase tracking-label text-muted">What you have</span>
-            <div className="flex flex-wrap gap-1.5">
+          <div role="group" aria-label="What you have" className="grid gap-2">
+            <span className={labelClass}>What you have</span>
+            <ChipSet>
               {MODES.map((m) => (
                 <Toggle key={m.id} on={mode === m.id} onChange={() => { setMode(m.id); setErrors({}); setDuplicate(undefined); }}>
                   {m.label}
                 </Toggle>
               ))}
-            </div>
+            </ChipSet>
           </div>
         )}
 
@@ -214,12 +214,12 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose }: {
                 label="Hash type"
                 hint={
                   candidates.length > 0 ? (
-                    <span className="inline-flex flex-wrap items-center gap-1.5">
-                      Looks like:
+                    <ChipSet className="items-center">
+                      <span>Looks like:</span>
                       {candidates.map((c) => (
                         <Button key={c.name} size="sm" onClick={() => setHashType(c.name)}>{c.name}</Button>
                       ))}
-                    </span>
+                    </ChipSet>
                   ) : undefined
                 }
               >
@@ -236,12 +236,12 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose }: {
         )}
 
         {duplicate && (
-          <div role="alert" className="flex items-center justify-between gap-3 rounded-sm border border-warn px-3 py-2 text-xs text-warn">
+          <div role="alert" className="grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-3 rounded-sm border border-warn px-3 py-2 text-meta text-warn">
             <span>Already recorded: {credLabel(duplicate)}</span>
             <Button size="sm" onClick={onClose}>Use existing</Button>
           </div>
         )}
-        {errors.form && <p role="alert" className="m-0 text-xs text-warn">{errors.form}</p>}
+        {errors.form && <p role="alert" className="m-0 text-meta text-warn">{errors.form}</p>}
       </form>
     </Dialog>
   );

@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -92,7 +92,7 @@ beforeEach(() => {
 afterEach(() => setImported({ commands: [], cards: [] }));
 
 /** What the host scope shows (its visible text, without the hidden native select's options). */
-const scopeText = (chip: HTMLElement): string => [...chip.children].map((n) => n.textContent).join(" ");
+const scopeText = (chip: HTMLElement): string => [...chip.children].map((n) => n.textContent).join(" ").trim();
 const hostChip = (scope: { getByRole: typeof screen.getByRole }) => scope.getByRole("button", { name: /^Fill for host/ });
 
 describe("⌘K palette", () => {
@@ -146,10 +146,32 @@ describe("⌘K palette", () => {
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzprobe");
     await user.keyboard("{Enter}");
     // The unfilled {TARGET_IP} holds the first Enter back; the second copies anyway.
-    expect(await screen.findByText("{TARGET_IP} not filled · ↵ again to copy anyway")).toBeInTheDocument();
+    expect(await screen.findByText("{TARGET_IP} not filled. Press ↵ again to copy anyway")).toBeInTheDocument();
     await user.keyboard("{Enter}");
     await vi.waitFor(async () => expect(await navigator.clipboard.readText()).toBe("zzprobe {TARGET_IP} from 10.10.14.9"));
     expect(m.logCreate).not.toHaveBeenCalled();
+  });
+
+  it("hovering another row keeps the clicked row selected and its fill fields reachable", async () => {
+    const user = userEvent.setup();
+    setImported({ commands: [PROBE, { ...PROBE, id: "zz-plain", title: "Zzprobe plain", template: "zzprobe --version" }], cards: [] });
+    mount("/");
+    await screen.findByText("Lab A");
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzprobe");
+    const target = await screen.findByRole("option", { name: /Zzprobe the target/ });
+    const other = screen.getByRole("option", { name: /Zzprobe plain/ });
+    await user.click(target);
+    fireEvent.mouseMove(other);
+    expect(target).toHaveAttribute("aria-selected", "true");
+    expect(other).toHaveAttribute("aria-selected", "false");
+    const field = screen.getByRole("combobox", { name: "Value for TARGET_IP" });
+    await user.click(field);
+    await user.type(field, "198.51.100.7");
+    fireEvent.mouseMove(other);
+    expect(screen.getByRole("combobox", { name: "Value for TARGET_IP" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(await navigator.clipboard.readText()).toContain("198.51.100.7");
   });
 
   it("on the dashboard {DEST_DIR} follows the command's own OS, and stays unfilled for an any-OS command", async () => {
@@ -193,7 +215,7 @@ describe("⌘K palette", () => {
   it("Escape closes and returns focus", async () => {
     const user = userEvent.setup();
     mount("/");
-    const settings = await screen.findByRole("link", { name: "Settings" });
+    const settings = await screen.findByRole("button", { name: "Settings" });
     settings.focus();
     await user.keyboard(cmdK);
     await screen.findByRole("combobox", { name: "Search" });
@@ -236,13 +258,13 @@ describe("host picker in the palette (U3)", () => {
     expect(glyph!.compareDocumentPosition(b.getByRole("combobox", { name: "Search" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const chip = hostChip(screen);
     expect(bar).not.toContainElement(chip);
-    expect(scopeText(chip)).toBe("for dc01 ⌄");
+    expect(scopeText(chip)).toBe("Host dc01");
     // The menu lists each host with its IP, plus No host.
     await user.click(chip);
     const opts = within(screen.getByRole("listbox", { name: "Fill for host" })).getAllByRole("option");
     expect(opts.map((o) => o.textContent)).toEqual(["No host", "dc0110.10.10.5", "web0710.10.10.6"]);
     await user.click(opts[0]!);
-    expect(scopeText(chip)).toBe("for no host ⌄");
+    expect(scopeText(chip)).toBe("Host No host");
   });
 
   it("on the dashboard the bar reads for no host", async () => {
@@ -374,6 +396,46 @@ describe("token suggestions (U4)", () => {
     expect(screen.queryByRole("combobox", { name: "Value for USER" })).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Value for PASS" })).not.toBeInTheDocument();
     expect(screen.queryByText(/Summer2025!/)).not.toBeInTheDocument();
+  });
+
+  it("the ⇥ edit-a-value hint shows only while a value is missing", async () => {
+    const user = userEvent.setup();
+    m.credentialsList.mockResolvedValue([cred("c9", "carol", "Autumn2026!")]);
+    setImported({ commands: [{ ...USERCMD, template: "zzuser {USER}@{TARGET_IP} {PASS}" }], cards: [] });
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    const dlg = within(await screen.findByRole("dialog", { name: "Search" }));
+    await user.type(dlg.getByRole("combobox", { name: "Search" }), "zzuser");
+    const allHints = async () => {
+      await user.click(within(dlg.getByRole("group", { name: "Search shortcuts" })).getByRole("button", { name: "All shortcuts" }));
+      const shown = screen.queryByText("edit a value") !== null;
+      await user.keyboard("{Escape}");
+      return shown;
+    };
+    expect(await allHints()).toBe(true);
+    await user.keyboard("{Alt>}c{/Alt}");
+    await user.click(screen.getByRole("option", { name: /carol/ }));
+    expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzuser carol@10.10.10.5 ••••••••")).toBeInTheDocument();
+    expect(await allHints()).toBe(false);
+  });
+
+  it("Tab with every value filled is never swallowed: it moves on to the host picker", async () => {
+    const user = userEvent.setup();
+    // An id no other test lists, so the shared credential pick it leaves behind fills nothing elsewhere.
+    m.credentialsList.mockResolvedValue([cred("c9", "carol", "Autumn2026!")]);
+    setImported({ commands: [{ ...USERCMD, template: "zzuser {USER}@{TARGET_IP} {PASS}" }], cards: [] });
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    const box = await screen.findByRole("combobox", { name: "Search" });
+    await user.type(box, "zzuser");
+    await user.keyboard("{Alt>}c{/Alt}");
+    await user.click(screen.getByRole("option", { name: /carol/ }));
+    expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzuser carol@10.10.10.5 ••••••••")).toBeInTheDocument();
+    box.focus();
+    await user.keyboard("{Tab}");
+    expect(screen.getByRole("button", { name: /^Fill for host/ })).toHaveFocus();
   });
 
   it("Esc with the suggestion list open closes only the list; the next Esc closes the palette", async () => {
@@ -524,14 +586,32 @@ describe("⌘K groups, hosts and contained suggestions", () => {
     expect(within(list).getAllByRole("option").length).toBeGreaterThan(0);
   });
 
-  it("the footer says → in card and lists ⌥C credential", async () => {
+  it("the footer says → in card and lists ⌥C credential behind ?", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
     await screen.findByRole("tab", { name: "Next" });
     await user.keyboard(cmdK);
     const dlg = within(await screen.findByRole("dialog", { name: "Search" }));
-    expect(dlg.getByText("in card")).toBeInTheDocument();
-    expect(dlg.getByText("credential")).toBeInTheDocument();
+    const line = dlg.getByRole("group", { name: "Search shortcuts" });
+    expect(within(line).getByText("in card")).toBeInTheDocument();
+    expect(within(line).getByText("host")).toBeInTheDocument();
+    expect(within(line).getByText("credential")).toBeInTheDocument();
+    // Five show; the rest are one click away behind the "?" key.
+    expect(within(line).queryByText("edit a value")).not.toBeInTheDocument();
+    await user.click(within(line).getByRole("button", { name: "All shortcuts" }));
+    expect(await screen.findByText("edit a value")).toBeInTheDocument();
+  });
+
+  it("palette footer is a HintLine", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    const dlg = within(await screen.findByRole("dialog", { name: "Search" }));
+    const line = dlg.getByRole("group", { name: "Search shortcuts" });
+    expect(line).toHaveAttribute("data-hint-line");
+    expect(line.closest("[data-hint-surface]")).not.toBeNull();
+    expect(line.querySelectorAll("[data-hint]").length).toBeLessThanOrEqual(5);
   });
 
   it("the host and credential chips sit on their own row under the search field", async () => {
@@ -635,7 +715,7 @@ describe("⌘K cap and copy-guard arm", () => {
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzmany");
     const options = within(screen.getByRole("listbox", { name: "Results" })).getAllByRole("option");
     expect(options).toHaveLength(31);
-    expect(options[30]).toHaveTextContent("10 more — open in Arsenal");
+    expect(options[30]).toHaveTextContent("10 more, open in the Arsenal");
     await user.keyboard("{ArrowDown}".repeat(30));
     expect(options[30]).toHaveAttribute("aria-selected", "true");
     await user.keyboard("{Enter}");
@@ -667,11 +747,11 @@ describe("⌘K cap and copy-guard arm", () => {
     await user.type(box, "zzguard");
     await navigator.clipboard.writeText("untouched");
     await user.keyboard("{Enter}");
-    expect(await screen.findByText(/not filled · ↵ again to copy anyway/)).toBeInTheDocument();
+    expect(await screen.findByText(/not filled. Press ↵ again to copy anyway/)).toBeInTheDocument();
     box.focus();
     await user.keyboard("{ArrowDown}{ArrowUp}");
     await user.keyboard("{Enter}");
-    expect(await screen.findByText(/not filled · ↵ again to copy anyway/)).toBeInTheDocument();
+    expect(await screen.findByText(/not filled. Press ↵ again to copy anyway/)).toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toBe("untouched");
   });
 });
