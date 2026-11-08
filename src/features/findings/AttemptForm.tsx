@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { FailedAttempt, FailedAttemptInput, Finding, ReasonKind } from "../../types/findings";
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
-import { Button, Dialog, Field, Input, Select, Toggle, labelClass } from "../../ui";
+import { Button, ChipSet, Dialog, Field, Input, Select, Toggle, fieldLabelClass } from "../../ui";
 import { hostLabel } from "../credentials/AccessGrants";
 import { useFailedAttemptMutations } from "./queries";
 
@@ -75,7 +75,7 @@ export function AttemptForm({ eid, hosts, findings, log, edit, defaultHostId, on
         </>
       }
     >
-      <div className="flex flex-col gap-3.5">
+      <div className="grid gap-4">
         <Field label="What was tried" error={errors.title}>
           <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} />
         </Field>
@@ -98,22 +98,22 @@ export function AttemptForm({ eid, hosts, findings, log, edit, defaultHostId, on
         <Field label="Log entry">
           <Select options={withNone("No log entry", logOptions)} value={logEntryId ?? NONE} onValueChange={(v) => setLogEntryId(pick(v))} />
         </Field>
-        <div role="radiogroup" aria-label="Why it failed" className="flex flex-col gap-1.5">
-          <span className={labelClass}>Why it failed</span>
-          <div className="flex flex-wrap gap-1.5">
+        <div role="radiogroup" aria-label="Why it failed" className="grid gap-2">
+          <span className={fieldLabelClass}>Why it failed</span>
+          <ChipSet>
             {REASONS.map((r) => (
               <Toggle key={r} role="radio" aria-checked={kind === r} aria-pressed={undefined} on={kind === r} onChange={() => setKind(r)}>
                 {REASON_LABELS[r]}
               </Toggle>
             ))}
-          </div>
-          {errors.kind && <p className="m-0 text-xs text-warn">{errors.kind}</p>}
-          {kind === "operator" && <p className="m-0 text-xs text-muted">Never appears in a report</p>}
+          </ChipSet>
+          {errors.kind && <p className="m-0 text-meta text-warn">{errors.kind}</p>}
+          {kind === "operator" && <p className="m-0 text-meta text-muted">Never appears in a report</p>}
         </div>
         <Field label="Reason" error={errors.reason}>
           <Input value={reason} onChange={(e) => setReason(e.target.value)} />
         </Field>
-        {errors.form && <p role="alert" className="m-0 text-xs text-warn">{errors.form}</p>}
+        {errors.form && <p role="alert" className="m-0 text-meta text-warn">{errors.form}</p>}
       </div>
     </Dialog>
   );

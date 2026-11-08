@@ -17,32 +17,32 @@ export function HostFindings({ engagementId, host, onOpenEntry, onOpenFinding }:
 }) {
   const findings = useFindings(engagementId);
 
-  if (findings.error) return <p role="alert" className="text-xs text-warn">Couldn't load findings: {findings.error.message}</p>;
+  if (findings.error) return <p role="alert" className="text-meta text-warn">Couldn't load findings: {findings.error.message}</p>;
   if (!findings.data) return null;
   const mine = sortFindingsBySeverity(findings.data.filter((f) => f.hostIds.includes(host.id)));
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="grid gap-4">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 pt-2">
-        {mine.length === 0 ? <p className="m-0 text-[13px] text-muted">No findings on this host yet.</p> : <span />}
+        {mine.length === 0 ? <p className="m-0 text-meta text-muted">No findings on this host yet.</p> : <span />}
         <Button size="sm" title="Add finding (F)" onClick={() => onOpenFinding("new")}>
-          <Plus size={12} weight="light" aria-hidden /> Add finding
+          <Plus size={16} weight="regular" aria-hidden /> Add finding
         </Button>
       </div>
       {mine.length > 0 && (
-        <ul className="m-0 flex list-none flex-col p-0">
+        <ul className="m-0 grid list-none p-0">
           {mine.map((f) => (
             <li key={f.id} className="border-b border-line">
               <button
                 type="button"
                 aria-label={`Open ${f.title}`}
                 onClick={() => onOpenFinding(f)}
-                className="flex w-full cursor-default items-center gap-3 px-1 py-2 text-left hover:bg-surface"
+                className="grid w-full cursor-default grid-cols-[72px_minmax(0,1fr)_88px_32px] items-center gap-3 px-1 py-2 text-left hover:bg-surface"
               >
-                <span className="w-[72px] shrink-0"><SeverityChip severity={f.severity} /></span>
-                <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{f.title}</span>
-                <span className="text-xs text-fg-2">{f.status}</span>
-                <span className="w-8 text-right font-mono text-xs tabular-nums text-fg-2">{f.cvssScore !== null ? f.cvssScore.toFixed(1) : ""}</span>
+                <span className="justify-self-start"><SeverityChip severity={f.severity} /></span>
+                <span className="truncate text-body text-fg" title={f.title}>{f.title}</span>
+                <span className="text-meta text-fg-2">{f.status}</span>
+                <span className="text-right font-mono text-code tabular-nums text-fg-2">{f.cvssScore !== null ? f.cvssScore.toFixed(1) : ""}</span>
               </button>
             </li>
           ))}

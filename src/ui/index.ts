@@ -4,7 +4,7 @@ export { Textarea, type TextareaProps } from "./Textarea";
 export { Select, type SelectProps, type SelectOption } from "./Select";
 export { BrandIcon, type Brand } from "./BrandIcon";
 export { Chip, type ChipProps, type ChipVariant } from "./Chip";
-export { Label, labelClass, type LabelProps } from "./Label";
+export { Label, labelClass, fieldLabelClass, type LabelProps } from "./Label";
 export { Field, type FieldProps } from "./Field";
 export { Panel, type PanelProps } from "./Panel";
 export { Dialog, type DialogProps } from "./Dialog";

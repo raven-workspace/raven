@@ -98,6 +98,23 @@ const stepTitles = (dlg: HTMLElement) =>
   within(within(dlg).getByRole("list", { name: "Reproduction steps" })).getAllByTestId("step-title").map((e) => e.textContent);
 
 describe("finding steps", () => {
+  it("finding steps reorder with icon buttons named Move up and Move down", async () => {
+    const user = userEvent.setup();
+    mount(SECTION, [finding({ id: "f1", title: "Shell upload", hostIds: ["h1"], stepEntryIds: ["l1", "l2"] })]);
+    const dlg = await openEdit(user, "Shell upload");
+    await within(dlg).findByRole("list", { name: "Reproduction steps" });
+    for (const name of [/^Move up /, /^Move down /, /^Remove step /]) {
+      for (const b of within(dlg).getAllByRole("button", { name })) {
+        expect(b).toHaveTextContent("");
+        expect(b.querySelector("svg")).not.toBeNull();
+      }
+    }
+    // Both slots exist on every row: the first has Up disabled, the last Down disabled, nothing is dropped.
+    const rows = within(dlg).getAllByTestId("step-title").length;
+    expect(within(dlg).getAllByRole("button", { name: /^Move up / })).toHaveLength(rows);
+    expect(within(dlg).getAllByRole("button", { name: /^Move down / })).toHaveLength(rows);
+  });
+
   it("adding steps keeps order; moving up and down reorders; saving sends the ordered ids", async () => {
     const user = userEvent.setup();
     mount(SECTION, [finding({ id: "f1", title: "Shell upload", hostIds: ["h1"] })]);

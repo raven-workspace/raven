@@ -108,6 +108,22 @@ async function addAttempt(user: ReturnType<typeof userEvent.setup>, kind: string
 }
 
 describe("attempts", () => {
+  it("attempt row actions are icon buttons", async () => {
+    m.logList.mockResolvedValue([L1]);
+    mount(SECTION, [
+      attempt({ id: "a1", title: "Spray the VPN", logEntryId: "l1" }),
+      attempt({ id: "a2", title: "Relay to the DC" }),
+    ]);
+    const list = await screen.findByRole("region", { name: "Attempts" });
+    for (const name of ["Open log entry for Spray the VPN", "Edit Spray the VPN", "Delete Spray the VPN", "Edit Relay to the DC", "Delete Relay to the DC"]) {
+      const b = await within(list).findByRole("button", { name });
+      expect(b).toHaveTextContent("");
+      expect(b.querySelector("svg")).not.toBeNull();
+    }
+    // The row without a log entry reserves the slot instead of shifting Edit and Delete.
+    expect(within(list).queryByRole("button", { name: "Open log entry for Relay to the DC" })).not.toBeInTheDocument();
+  });
+
   it("a reported reason saves as not private", async () => {
     const user = userEvent.setup();
     mount(SECTION);

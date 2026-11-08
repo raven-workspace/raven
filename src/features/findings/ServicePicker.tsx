@@ -4,7 +4,7 @@ import { cx } from "../../lib/cx";
 import { shortHostName } from "../../lib/hostName";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
-import { labelClass } from "../../ui";
+import { fieldLabelClass } from "../../ui";
 import { hostLabel } from "../credentials/AccessGrants";
 import { FoldedRows } from "../hosts/facts/ServicesFacts";
 
@@ -27,11 +27,11 @@ function PickRow({ s, on, onChange }: { s: Service; on: boolean; onChange: () =>
           aria-label={`${s.port}/${s.protocol} ${id.label || "unidentified"}`}
           className="self-center accent-[var(--color-accent)]"
         />
-        <span className="font-mono text-xs text-fg-2">
+        <span className="font-mono text-code text-fg-2">
           {s.port}
           {s.protocol === "udp" && <span className="text-faint">u</span>}
         </span>
-        <span className="min-w-0 truncate text-[13px]">
+        <span className="min-w-0 truncate text-body">
           {id.confirmed ? (
             <span className="text-fg" title={guess ? `nmap: ${guess}` : undefined}>
               {id.label} <span className="text-accent">✓</span>
@@ -42,7 +42,7 @@ function PickRow({ s, on, onChange }: { s: Service; on: boolean; onChange: () =>
               {id.unidentified && <span className="text-warn">{id.label ? " ?" : "?"}</span>}
             </span>
           )}
-          {s.state !== "open" && <span className="ml-1.5 font-mono text-[11px] text-muted-2">{s.state}</span>}
+          {s.state !== "open" && <span className="ml-2 font-mono text-meta text-muted-2">{s.state}</span>}
         </span>
       </label>
     </li>
@@ -68,23 +68,23 @@ export function ServicePicker({ hosts, servicesByHost, error, value, onChange }:
   const withServices = hosts.filter((h) => (servicesByHost.get(h.id) ?? []).length > 0);
 
   return (
-    <div role="group" aria-label="Affected services" className="flex flex-col gap-1.5">
-      <span className={labelClass}>Affected services</span>
+    <div role="group" aria-label="Affected services" className="grid gap-2">
+      <span className={fieldLabelClass}>Affected services</span>
       {error ? (
-        <p role="alert" className="m-0 text-xs text-warn">Couldn't load services: {error}</p>
+        <p role="alert" className="m-0 text-meta text-warn">Couldn't load services: {error}</p>
       ) : hosts.length === 0 ? (
-        <span className="text-xs text-muted">Pick an affected host to choose its services.</span>
+        <span className="text-meta text-muted">Pick an affected host to choose its services.</span>
       ) : withServices.length === 0 ? (
-        <span className="text-xs text-muted">No services on {hosts.length === 1 ? "this host" : "these hosts"} yet.</span>
+        <span className="text-meta text-muted">No services on {hosts.length === 1 ? "this host" : "these hosts"} yet.</span>
       ) : (
         // Its own scroll past ~10 rows, so a host with many ports doesn't push the rest of the form away.
-        <div className={`flex max-h-[17rem] flex-col gap-2 ${SCROLL_PANE}`}>
+        <div className={`grid max-h-[17rem] content-start gap-2 ${SCROLL_PANE}`}>
           {withServices.map((h) => {
             const { rows, rpc, udp } = foldServices(servicesByHost.get(h.id) ?? []);
             const has = (list: Service[]) => list.some((s) => value.includes(s.id));
             return (
-              <div key={h.id} className="flex flex-col gap-0.5">
-                {hosts.length > 1 && <span title={hostLabel(h)} className="text-xs text-fg-2">{shortHostName(hostLabel(h))}</span>}
+              <div key={h.id} className="grid gap-1">
+                {hosts.length > 1 && <span title={hostLabel(h)} className="text-meta text-fg-2">{shortHostName(hostLabel(h))}</span>}
                 <ul className={cx(GRID, "m-0 list-none p-0")}>
                   {sortServices(rows).map(row)}
                   <FoldedRows label={`msrpc ×${rpc.length}`} services={rpc} defaultOpen={has(rpc)} render={row} />

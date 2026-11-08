@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { suggestRefs } from "../../engines/findings";
 import type { LogEntry } from "../../types/log";
+import { ChipSet } from "../../ui";
 import { useLog } from "../log/queries";
 import { useNotes } from "../notes/queries";
 import { useNotesStore } from "../notes/useNotesStore";
@@ -44,8 +45,9 @@ export function RefSuggestions({ eid, hostIds, added, onAdd }: {
 
   if (suggestions.length === 0) return null;
   return (
-    <div role="group" aria-label="Suggested references" className="flex flex-wrap items-center gap-1.5">
-      <span className="text-xs text-muted">Found in the log and notes:</span>
+    <div role="group" aria-label="Suggested references" className="grid gap-2">
+      <span className="text-meta text-muted">Found in the log and notes</span>
+      <ChipSet>
       {suggestions.map((r) => (
         <button
           key={r}
@@ -53,11 +55,12 @@ export function RefSuggestions({ eid, hostIds, added, onAdd }: {
           aria-label={`Add ${r}`}
           title={`Add ${r} to the references`}
           onClick={() => onAdd(r)}
-          className="inline-flex h-6 cursor-default items-center rounded-sm border border-line-2 px-2 font-mono text-xs text-fg-2 hover:border-accent hover:text-accent"
+          className="inline-grid h-7 cursor-default items-center rounded-sm border border-line-2 px-2 font-mono text-code text-fg-2 hover:border-accent hover:text-accent"
         >
           {r}
         </button>
       ))}
+      </ChipSet>
     </div>
   );
 }
