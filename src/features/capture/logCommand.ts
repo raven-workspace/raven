@@ -11,13 +11,15 @@ import { PartialSaveError, saveCapture, type CaptureEdits } from "./saveCapture"
  */
 export async function logCommand(
   qc: QueryClient,
-  args: { engagementId: string; host: Host; hosts: Host[]; title: string; command: string; ranOn: string },
+  args: { engagementId: string; host: Host; hosts: Host[]; title: string; command: string; ranOn: string;
+    payloadId?: string; payloadValues?: Record<string, string> },
 ): Promise<LogEntry> {
   const { engagementId: id, host, command } = args;
   const content = { kind: "command" as const, blocks: [{ command, output: "" }] };
   const edits: CaptureEdits = {
     kind: "command", title: args.title, titleEdited: false, hostIds: [host.id], ranOn: args.ranOn,
     observations: "", returnedNothing: false, private: false, content,
+    payloadId: args.payloadId, payloadValues: args.payloadValues,
   };
   try {
     const { entry, summary } = await saveCapture({

@@ -2,6 +2,7 @@ import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
 import type { Service } from "../../types/service";
 import { PASTE_CONTEXTS, type PasteContext } from "./context";
+import { failedPayloadIds } from "./memory";
 import type { PayloadDef } from "./types";
 
 export type DbEngine = "mssql" | "mysql" | "postgres" | "oracle" | "sqlite";
@@ -12,7 +13,7 @@ export interface PayloadSituation {
   prompt: "ps" | "cmd" | "sh" | null;
   webShellUrl: string | null;
   tools: { present: string[]; absent: string[] };
-  /** Task 6 adds LogEntry.payloadId and fills this from logged payloads marked failed; empty until then. */
+  /** Payloads logged on this host that returned nothing or errored (memory.ts). */
   failedPayloadIds: string[];
   exam: boolean;
   dbEngine: DbEngine | null;
@@ -149,7 +150,7 @@ export function inferSituation(input: {
         port: s.port, name: s.nmapService ?? "",
         product: s.confirmedProduct ?? s.nmapVersion ?? "",
       })),
-      prompt, webShellUrl, tools, failedPayloadIds: [], exam: examKind, dbEngine,
+      prompt, webShellUrl, tools, failedPayloadIds: host ? failedPayloadIds(entries, host.id) : [], exam: examKind, dbEngine,
     },
     evidence,
   };

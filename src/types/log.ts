@@ -29,6 +29,9 @@ export interface LogEntry {
   returnedNothing: boolean;
   private: boolean;
   content: LogContent;
+  /** Payloads drawer: the payload this command came from and the LHOST/LPORT it was built with. */
+  payloadId?: string | null;
+  payloadValues?: Record<string, string> | null;
   at: number;
   createdAt: number;
   updatedAt: number;
@@ -57,6 +60,9 @@ export interface LogEntryInput {
   returnedNothing: boolean;
   private: boolean;
   content: LogContent;
+  /** Omitted on update keeps the stored values. */
+  payloadId?: string | null;
+  payloadValues?: Record<string, string> | null;
   at?: number | null;
   attachment?: NewAttachment | null;
 }

