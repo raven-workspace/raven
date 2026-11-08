@@ -1,6 +1,5 @@
 import * as Popover from "@radix-ui/react-popover";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { cx } from "../lib/cx";
 import { Kbd } from "./Kbd";
 
 export interface Hint {
@@ -27,6 +26,11 @@ function HintUnit({ hint }: { hint: Hint }) {
 }
 
 /**
+ * Requirement: the HintLine must sit in a parent whose width does not depend on the
+ * HintLine's own content (a block or grid parent, not an inline/auto-sized one). The line
+ * fills that width (`w-full`) and the resize observer watches the parent, so drops never
+ * feed back into the measurement.
+ *
  * One-line key hints. Shows the top `max` by priority; lowest priority drop out when narrow.
  * A final `?` opens the full list. The `?` key does the same while focus is inside the
  * closest `[data-hint-surface]` ancestor and not in a text field.
@@ -43,7 +47,7 @@ export function HintLine({ hints, max = 5, ariaLabel }: { hints: Hint[]; max?: n
     const top = [...indexed].sort((a, b) => a.h.priority - b.h.priority || a.i - b.i).slice(0, max);
     return {
       base: top.sort((a, b) => a.i - b.i),
-      dropOrder: [...top].sort((a, b) => b.h.priority - a.h.priority || b.i - a.i).map((x) => x.i),
+      dropOrder: [...top].filter((x) => x.h.priority > 1).sort((a, b) => b.h.priority - a.h.priority || b.i - a.i).map((x) => x.i),
     };
   }, [hints, max]);
 
@@ -65,7 +69,7 @@ export function HintLine({ hints, max = 5, ariaLabel }: { hints: Hint[]; max?: n
 
   // On resize, start again from the full set and let the layout effect trim.
   useEffect(() => {
-    const el = ref.current;
+    const el = ref.current?.parentElement;
     if (!el) return;
     const ro = new ResizeObserver(() => {
       setDropped(0);
@@ -80,7 +84,8 @@ export function HintLine({ hints, max = 5, ariaLabel }: { hints: Hint[]; max?: n
       if (e.key !== "?" || e.metaKey || e.ctrlKey || e.altKey) return;
       const surface = ref.current?.closest("[data-hint-surface]");
       const active = document.activeElement;
-      if (!surface || !active || !surface.contains(active) || isTyping(active)) return;
+      // Innermost surface wins, so nested surfaces never open two lists.
+      if (!surface || !active || active.closest("[data-hint-surface]") !== surface || isTyping(active)) return;
       e.preventDefault();
       setOpen(true);
     };
@@ -94,7 +99,7 @@ export function HintLine({ hints, max = 5, ariaLabel }: { hints: Hint[]; max?: n
       data-hint-line
       role="group"
       aria-label={ariaLabel}
-      className="grid min-w-0 grid-flow-col items-center justify-start gap-x-5 overflow-hidden"
+      className="grid w-full min-w-0 grid-flow-col items-center justify-start gap-x-5 overflow-hidden"
     >
       {shown.map(({ h, i }) => (
         <HintUnit key={i} hint={h} />
@@ -104,12 +109,9 @@ export function HintLine({ hints, max = 5, ariaLabel }: { hints: Hint[]; max?: n
           <button
             type="button"
             aria-label="All shortcuts"
-            className={cx(
-              "inline-grid h-5 min-w-5 place-items-center rounded-[4px] border border-line-strong bg-surface px-1 font-mono text-label text-fg-2",
-              "hover:text-fg",
-            )}
+            className="inline-grid place-items-center hover:opacity-80"
           >
-            ?
+            <Kbd>?</Kbd>
           </button>
         </Popover.Trigger>
         <Popover.Portal>

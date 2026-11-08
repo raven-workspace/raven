@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { act } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HintLine, type Hint } from "../../ui";
 
@@ -72,5 +73,68 @@ describe("HintLine", () => {
     );
     await userEvent.type(screen.getByLabelText("Query"), "?");
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("? key ignored in a select", async () => {
+    render(
+      <div data-hint-surface>
+        <select aria-label="Pick"><option>a</option></select>
+        <HintLine hints={hints} ariaLabel="Keys" />
+      </div>,
+    );
+    screen.getByLabelText("Pick").focus();
+    await userEvent.keyboard("?");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("nested surfaces: only the innermost opens", async () => {
+    render(
+      <div data-hint-surface>
+        <HintLine hints={[{ keys: "A", label: "Outer", priority: 1 }]} ariaLabel="Outer keys" />
+        <div data-hint-surface>
+          <button>Inner</button>
+          <HintLine hints={[{ keys: "B", label: "Inner hint", priority: 1 }]} ariaLabel="Inner keys" />
+        </div>
+      </div>,
+    );
+    screen.getByRole("button", { name: "Inner" }).focus();
+    await userEvent.keyboard("?");
+    expect(await screen.findAllByRole("dialog")).toHaveLength(1);
+  });
+
+  it("never drops priority-1 hints", () => {
+    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(999);
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(10);
+    render(<HintLine hints={hints} ariaLabel="Keys" />);
+    expect([...line().querySelectorAll("[data-hint]")].map((e) => e.textContent)).toEqual(["↵Open", "EscClose"]);
+  });
+
+  it("hints reappear when the container widens (observer on the parent)", () => {
+    let cb: () => void = () => {};
+    let observed: Element | null = null;
+    const Orig = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      constructor(c: () => void) { cb = c; }
+      observe(el: Element) { observed = el; }
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+    let avail = 300;
+    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (this: HTMLElement) {
+      return this.hasAttribute("data-hint-line") ? (this.querySelectorAll("[data-hint]").length + 1) * 100 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+      return this.hasAttribute("data-hint-line") ? avail : 0;
+    });
+    try {
+      render(<div data-testid="parent"><HintLine hints={hints} ariaLabel="Keys" /></div>);
+      expect(observed).toBe(screen.getByTestId("parent"));
+      expect(line().querySelectorAll("[data-hint]")).toHaveLength(2);
+      avail = 600;
+      act(() => cb());
+      expect(line().querySelectorAll("[data-hint]")).toHaveLength(5);
+    } finally {
+      globalThis.ResizeObserver = Orig;
+    }
   });
 });
