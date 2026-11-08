@@ -3,7 +3,7 @@ import { useState } from "react";
 import { api } from "../../lib/api";
 import type { BackupInfo } from "../../types/backup";
 import type { SettingsPatch } from "../../types/settings";
-import { Button, Chip, Dialog, EmptyState, Field, Input, Panel } from "../../ui";
+import { Button, Chip, Dialog, EmptyState, Field, Input, Panel, SETTINGS_COLUMN } from "../../ui";
 import { FieldManualSection } from "./FieldManualSection";
 import { ImportSection } from "./ImportSection";
 
@@ -187,7 +187,7 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
   });
 
   return (
-    <div className="mx-auto flex max-w-[720px] flex-col gap-4 px-6 py-6">
+    <div data-testid="settings-root" className="mx-auto flex flex-col gap-4 py-6" style={{ maxWidth: SETTINGS_COLUMN.max, paddingInline: SETTINGS_COLUMN.inset }}>
       <h1 className="m-0 text-lg font-semibold text-fg">Settings</h1>
       {error && <p className="m-0 text-xs text-warn">{error}</p>}
       {settings.data && (

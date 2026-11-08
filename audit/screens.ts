@@ -102,7 +102,7 @@ export const SCREENS: Screen[] = [
       });
     },
   },
-  { id: "exam-board", path: `/e/${AUDIT_IDS.examEngagement}`, ready: "role=button[name=/Metasploit|MSF/i]" },
+  { id: "exam-board", path: `/e/${AUDIT_IDS.examEngagement}`, ready: "role=status[name='Engagement status'] >> visible=true" },
   {
     id: "exam-host-locked", path: `/e/${AUDIT_IDS.examEngagement}/h/${AUDIT_IDS.msfHost}`, ready: "role=button[name='Full checklist'][expanded]",
     setup: async (page) => { await page.getByRole("button", { name: "Full checklist" }).click(); },

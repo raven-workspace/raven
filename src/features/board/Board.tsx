@@ -17,6 +17,11 @@ const ORDER: BoardColumn[] = [
   "reporting",
 ];
 
+/** Break points for the one lane title longer than a narrow lane ("Vulnerabil-ity detection"); the section's aria-label keeps the real name. */
+function softHyphenate(label: string): string {
+  return label.replace("Vulnerability", "Vulnerabil\u00ADity");
+}
+
 export function Board() {
   const { id = "" } = useParams();
   const hosts = useHosts(id);
@@ -122,15 +127,15 @@ export function Board() {
               onDrop={(e) => onDrop(e, col)}
               style={{ gridRow: "span 2", gridTemplateRows: "subgrid" }}
               className={cx(
-                "grid min-h-40 min-w-0 gap-2 rounded border p-2",
+                "grid min-h-40 min-w-0 gap-2 rounded border p-1.5",
                 over === col ? "border-accent" : "border-line",
               )}
             >
               {/* Narrow lanes (under 144px inside, i.e. below about 1200px wide) put the count under the title, so
                   "Vulnerability" never collides with it; wider lanes keep it beside. The shared row absorbs both. */}
               <header className="@container">
-                <div className="grid items-start gap-x-2 @min-[144px]:grid-cols-[minmax(0,1fr)_auto]">
-                  <span className={cx(labelClass, "break-words")}>{COLUMN_LABELS[col]}</span>
+                <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-x-2 @min-[144px]:grid-cols-[minmax(0,1fr)_auto]">
+                  <span lang="en" className={cx(labelClass, "min-w-0 break-words hyphens-auto")}>{softHyphenate(COLUMN_LABELS[col])}</span>
                   <span className="text-meta tabular-nums text-muted">{cards.length}</span>
                 </div>
               </header>

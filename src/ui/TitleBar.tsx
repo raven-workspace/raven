@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { cx } from "../lib/cx";
 import { Button } from "./Button";
 import { Kbd } from "./Kbd";
+import type { PageColumn } from "./pageColumns";
 import { Tooltip } from "./Tooltip";
 
 export interface TitleBarProps {
@@ -16,7 +17,7 @@ export interface TitleBarProps {
    * Screens whose page content is a centred, max-width column: the bar's inner track follows that column
    * (wordmark at its left edge, controls at its right edge). `inset` is the column's own side padding.
    */
-  column?: { max: number; inset: number };
+  column?: PageColumn;
   className?: string;
 }
 
@@ -34,7 +35,7 @@ export function TitleBar({ left, title, right, column, className }: TitleBarProp
         column
           ? {
               paddingLeft: `max(78px, calc((100% - ${column.max}px) / 2 + ${column.inset}px))`,
-              paddingRight: `max(24px, calc((100% - ${column.max}px) / 2 + ${column.inset}px))`,
+              paddingRight: `max(${column.inset}px, calc((100% - ${column.max}px) / 2 + ${column.inset}px))`,
             }
           : undefined
       }
@@ -87,15 +88,20 @@ export function TitleBarIconButton({
 }) {
   return (
     <Tooltip content={<span>{label}</span>}>
-      <Button
-        size="sm"
+      <button
+        type="button"
         aria-label={label}
         aria-current={current ? "page" : undefined}
-        className={cx("w-7 px-0", current && "border-line-strong bg-surface-hi text-accent")}
         onClick={onClick}
+        className={cx(
+          // Own classes, not Button's: cx does not merge, so size/variant classes would fight w-7/p-0 and the accent.
+          "inline-grid size-7 place-items-center rounded-sm border bg-bg p-0 cursor-default select-none transition-colors duration-100",
+          "hover:bg-surface-hi hover:border-line-strong",
+          current ? "border-line-strong text-accent" : "border-line-2 text-fg-2 hover:text-fg",
+        )}
       >
-        <Glyph size={16} weight="regular" aria-hidden />
-      </Button>
+        <Glyph size={16} weight="regular" aria-hidden className="shrink-0" />
+      </button>
     </Tooltip>
   );
 }

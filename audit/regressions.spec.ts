@@ -856,6 +856,7 @@ test("status strip drops by its own free space: LHOST stays while it fits", asyn
       return fits;
     });
     expect(wasteful, `${path}: the last dropped part would still fit`).toBe(false);
+    expect(await strip.evaluate((el) => el.firstElementChild!.scrollWidth <= el.firstElementChild!.clientWidth), `${path}: strip content fits`).toBe(true);
   }
 });
 
@@ -873,15 +874,23 @@ test("headers: actions are icon buttons under 1000px, so the title keeps its roo
 });
 
 test("title bar controls end where the centred page column ends (dashboard, settings)", async ({ page }) => {
-  for (const [path, right] of [["/", 1440], ["/settings", 1280]] as const) {
+  for (const [path, right] of [["/", 1440], ["/", 900], ["/", 1024], ["/settings", 1280], ["/settings", 900]] as const) {
     await open(page, path, right);
     const gear = await page.getByRole("button", { name: "Settings" }).evaluate((el) => el.getBoundingClientRect().right);
     const col = await page.evaluate(() => {
-      const root = document.querySelector("[data-testid=app-root], div.max-w-\\[720px\\]");
+      const root = document.querySelector("[data-testid=app-root], [data-testid=settings-root]");
       const r = (root as HTMLElement).getBoundingClientRect();
       const cs = getComputedStyle(root as HTMLElement);
       return r.right - parseFloat(cs.paddingRight);
     });
-    expect(Math.abs(gear - col), `${path}: gear right edge vs content right edge`).toBeLessThanOrEqual(1);
+    expect(Math.abs(gear - col), `${path} @${right}: gear right edge vs content right edge`).toBeLessThanOrEqual(1);
+    const g = await page.getByRole("button", { name: "Settings" }).evaluate((el) => {
+      const svg = el.querySelector("svg")!.getBoundingClientRect();
+      return { w: el.getBoundingClientRect().width, svg: svg.width, color: getComputedStyle(el).color };
+    });
+    expect([g.w, g.svg], `${path} @${right}: 28px box with a 16px gear`).toEqual([28, 16]);
+    // Accent lime on /settings only (accent is #c6ff3d-ish: green channel far above blue).
+    const lime = (c: string) => { const [r, gr, b] = c.match(/\d+/g)!.map(Number); return gr > 200 && b < 120 && r > 120; };
+    expect(lime(g.color), `${path} @${right}: gear accent only on /settings`).toBe(path === "/settings");
   }
 });

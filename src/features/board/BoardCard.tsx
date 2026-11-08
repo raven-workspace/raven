@@ -35,13 +35,13 @@ export function BoardCard({ host, onShift }: BoardCardProps) {
       data-host-id={host.id}
       onDragStart={onDragStart}
       onKeyDown={onKeyDown}
-      className="grid min-w-0 gap-1 rounded border border-line bg-bg px-2 py-2 text-fg no-underline hover:border-line-strong focus-visible:outline-1 focus-visible:outline-accent"
+      className="grid min-w-0 gap-1 rounded border border-line bg-bg px-1.5 py-2 text-fg no-underline hover:border-line-strong focus-visible:outline-1 focus-visible:outline-accent"
     >
       <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_8px] items-start gap-1">
         <span title={host.name} className="line-clamp-2 break-words text-body font-semibold">{host.name}</span>
         <ThreadDot count={threads} />
       </span>
-      {host.ip && <span className="truncate font-mono text-code text-muted-2">{host.ip}</span>}
+      {host.ip && <span className="whitespace-nowrap font-mono text-code text-muted-2 [overflow-wrap:anywhere]">{host.ip}</span>}
       {(host.os || host.access !== "none") && (
         // OS on its own row, the access chip on its own row: every card has the same shape, whatever the widths.
         <div className="grid min-w-0 justify-items-start gap-1">

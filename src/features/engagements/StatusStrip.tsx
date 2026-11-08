@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { cx } from "../../lib/cx";
 import { useNow } from "../../lib/keys";
 import type { Engagement } from "../../types/engagement";
@@ -43,23 +43,36 @@ function Cell({ label, value, step, tone }: { label: string; value: string; step
 function useFitStrip() {
   const outer = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const fit = () => {
-      const box = inner.current;
-      if (!box) return;
-      const parts = [...box.querySelectorAll<HTMLElement>("[data-drop]")];
-      const show = (upTo: number) => {
-        for (const el of parts) el.style.display = Number(el.dataset.drop) <= upTo ? "none" : "";
-      };
-      let step = 0;
-      show(step);
-      while (box.scrollWidth > box.clientWidth && step < LAST_STEP) show(++step);
+  const fit = useCallback(() => {
+    const box = inner.current;
+    if (!box) return;
+    const parts = [...box.querySelectorAll<HTMLElement>("[data-drop]")];
+    const show = (upTo: number) => {
+      for (const el of parts) el.style.display = Number(el.dataset.drop) <= upTo ? "none" : "";
     };
-    fit();
-    const ro = new ResizeObserver(fit);
+    let step = 0;
+    show(step);
+    while (box.scrollWidth > box.clientWidth && step < LAST_STEP) show(++step);
+  }, []);
+  // After every render (the clock changes the text width), before paint.
+  useLayoutEffect(() => fit());
+  // One observer for the strip's life: the strip itself (window/sidebar resize) and its cells (a late text change,
+  // e.g. the listener settings arriving or the Metasploit host name). Hidden cells report no size, so refits cannot loop.
+  useEffect(() => {
+    const ro = new ResizeObserver(() => fit());
     if (outer.current) ro.observe(outer.current);
-    return () => ro.disconnect();
-  });
+    for (const c of inner.current?.children ?? []) ro.observe(c);
+    const mo = new MutationObserver(() => {
+      ro.disconnect();
+      if (outer.current) ro.observe(outer.current);
+      for (const c of inner.current?.children ?? []) ro.observe(c);
+    });
+    if (inner.current) mo.observe(inner.current, { childList: true });
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+    };
+  }, [fit]);
   return { outer, inner };
 }
 

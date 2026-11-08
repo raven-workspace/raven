@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { api } from "../../lib/api";
 import { isDialogOpen, isTypingTarget, useKeydown, useNow } from "../../lib/keys";
-import { Button, EmptyState, Input, Kbd, labelClass } from "../../ui";
+import { Button, DASHBOARD_COLUMN, EmptyState, Input, Kbd, labelClass } from "../../ui";
 import { ActiveCard } from "./ActiveCard";
 import { EngagementDialog } from "./EngagementDialog";
 import { PastTable, matchesSearch } from "./PastTable";
@@ -30,7 +30,8 @@ export function Dashboard() {
   const shown = past.filter((e) => matchesSearch(e, q));
 
   return (
-    <div data-testid="app-root" className="mx-auto flex w-full max-w-[1120px] flex-col gap-7 px-8 pt-6 pb-10">
+    <div data-testid="app-root" className="mx-auto flex w-full flex-col gap-7 pt-6 pb-10"
+      style={{ maxWidth: DASHBOARD_COLUMN.max, paddingInline: DASHBOARD_COLUMN.inset }}>
       <header className="flex items-center justify-between gap-4">
         <h1 className="m-0 text-xl font-semibold tracking-[-0.01em] text-fg">Engagements</h1>
         <Button variant="primary" onClick={() => setCreating(true)}>

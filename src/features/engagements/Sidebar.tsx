@@ -79,7 +79,7 @@ function SectionItem({ engagementId, id, label, n, collapsed }: {
             </>
           ),
         }}
-        className={cx("cursor-default transition-colors", !collapsed && "grid h-[30px] grid-cols-[16px_minmax(0,1fr)_auto] px-2")}
+        className={cx("cursor-default", !collapsed && "grid h-[30px] grid-cols-[16px_minmax(0,1fr)_auto] px-2")}
       >
         <NavLink to={to} end aria-label={collapsed ? label : undefined}>
           <SectionIcon aria-hidden />
@@ -109,7 +109,7 @@ function HostItem({ engagementId, host: h, threads, collapsed }: {
         size="lg"
         isActive={active}
         className={cx(
-          "cursor-default transition-colors",
+          "cursor-default",
           collapsed
             ? "grid grid-cols-[minmax(0,1fr)] justify-items-center gap-1"
             : "grid grid-cols-[16px_minmax(0,1fr)_auto] gap-2 px-2",
