@@ -111,8 +111,14 @@
   - a `tried?: TriedPair[]` prop on `TestGrid`, rendering one muted row per (username, domain, secret) with failed cells, below the credential rows;
   - fetch through a `useTriedPairs(engagementId)` query in `src/features/credentials/queries.ts`;
   - pass it from `CredentialsSection`.
-- [ ] **Step 7:** Run `npx vitest run src/test/features/credentials`. Expected: PASS.
-- [ ] **Step 8:** Commit: `feat(credentials): tried pairs — failed sprays kept without becoming credentials`.
+- [ ] **Step 7:** Machine accounts. Add `isMachineAccount(c: Pick<Credential,'username'>): boolean` (username ends with `$`) to `src/engines/credentials/matrix.ts`.
+  - `isSprayable` returns false for machine accounts, so they never get spray-grid rows.
+  - `formatCrackingList` callers in `HashesList` leave them out.
+  - The credentials list groups them under a muted "Machine accounts" heading after the user credentials.
+
+  Tests: `machine accounts are not sprayable`, `machine accounts are left out of the cracking list`, `credentials list shows a Machine accounts group`.
+- [ ] **Step 8:** Run `npx vitest run src/test/features/credentials src/test/engines/credentials`. Expected: PASS.
+- [ ] **Step 9:** Commit: `feat(credentials): tried pairs — failed sprays kept without becoming credentials`.
 
 ### Task 2: Extraction record and exact Undo (Rust)
 
@@ -227,14 +233,14 @@ Rules the tests pin:
 - **secretsdump:**
   - The section header decides scope: `Dumping local SAM hashes` → `scope:'local', host:{ranOn:true}`; `Dumping Domain Credentials` → `scope:'domain'`.
   - A line `user:rid:lm:nt:::` → `type:'hash', hashType:'NTLM', secret:<nt>`. The `domain\user` prefix sets the domain.
-  - Machine accounts (`$`) are skipped (decided in this plan).
+  - **Machine accounts** (names ending `$`, e.g. `DC01$`, and the `$MACHINE.ACC` line in LSA secrets, which is the dumped host's own account) are **filed**, with `machine: true` on `FoundCredential` (add the field, default false). They're never skipped: the DC's machine hash can DCSync and a server's enables silver tickets. *(Owner decision 2026-11-07.)*
   - An all-zero/empty NT hash (`31d6cfe0d16ae931b73c59d7e0c089c0`) is skipped.
   - Cached `$DCC2$` lines → `hashType:'DCC2'`.
   - LSA cleartext `DOMAIN\user:password` lines in the `Dumping LSA Secrets` section → `type:'password'`.
   - Ticks: `h-loot-hashes` on `{ranOn}`; NTDS also `h-loot-domain`.
 - **mimikatz:**
   - `sekurlsa::logonpasswords` blocks → per `* Username / * Domain / * NTLM` an NTLM hash, and per `* Password` that isn't `(null)` a password.
-  - `lsadump::sam` and `lsadump::dcsync` (`SAM Username` + `Hash NTLM:`) → hashes.
+  - `lsadump::sam` and `lsadump::dcsync` (`SAM Username` + `Hash NTLM:`) → hashes. Accounts ending `$` get `machine: true`.
   - Ticks `h-loot-hashes`; dcsync also `h-loot-domain`.
 - **lsassy:** `DOMAIN\user  [NT] <hash>` / `[PWD] <password>` lines → as mimikatz (unverified).
 - **cracked:**
@@ -248,6 +254,7 @@ Rules the tests pin:
 - [ ] **Step 2:** Write the tests, one per fixture, asserting exact `credentials`/`cracks`/`ticks`:
   - `secretsdump SAM gives local NTLM hashes on the target and skips machine accounts and the empty hash`;
   - `secretsdump NTDS gives domain hashes and ticks h-loot-domain`;
+  - `machine accounts are filed with machine: true, including $MACHINE.ACC as the target host's account`;
   - `mimikatz logonpasswords gives NTLM and cleartext, never (null)`;
   - `mimikatz dcsync gives the domain hash`;
   - `hashcat --show pairs hash with plaintext`;
@@ -270,7 +277,7 @@ Rules the tests pin:
 - **RID brute and lookupsid:** `\d+: (\S+)\\(\S+) \(SidTypeUser\)` (lookupsid unverified).
 - **rpcclient:** `user:\[(.+?)\] rid:\[` (unverified).
 
-Machine accounts are skipped. Tick: `h-enum-ad-users` on the target host (`{ip}` from the nxc line or the command's target IP, else `{ranOn}`).
+Username lists skip machine accounts: a bare `name$` with no secret has nothing to spray (credentials from dumps keep them, Task 4). Tick: `h-enum-ad-users` on the target host (`{ip}` from the nxc line or the command's target IP, else `{ranOn}`).
 
 - [ ] **Step 1:** Fixtures: nxc ones from the backups/vault; the others written from documented formats, marked unverified.
 - [ ] **Step 2:** Tests:
@@ -398,6 +405,7 @@ Ticks on `{ranOn}`: `h-pe-lin-suid`, `h-pe-lin-sudo`, `h-pe-lin-caps`, `h-pe-lin
 - **Summary wording** (exact):
   - win: `${user}:${secretShown} works on ${SERVICE}, ${hostName}`, where `secretShown` is the password, or `NT hash` for hashes; append ` (admin)` for admin;
   - vector: `${title} on ${hostName}`;
+  - machine account of a DC (the account name without `$` matches a host with ports 88 and 389 open, the same test as the domain-admin cover): `${NAME}$ hash: can DCSync`; other machine hashes go in counts as `${n} machine account hash(es) added`;
   - counts: `${n} failed attempt(s) recorded`, `${n} username(s) added`, `${n} hash(es) added`, `New host ${ip}`, `${n} result(s) on hosts not in this engagement`, `${hostName} answered on ${newIp}` (an IP change, applied as today by the nxc intake);
   - ticks: `Ticked '${goalTitle}' on ${ownerName}`.
 - **Nothing new:**

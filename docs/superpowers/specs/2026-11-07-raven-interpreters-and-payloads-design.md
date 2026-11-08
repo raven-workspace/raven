@@ -99,7 +99,7 @@ Both halves will be tested in the PEN-200 labs straight after this round.
 **Credentials and usernames**
 | Tool | Input | Files |
 |---|---|---|
-| secretsdump | SAM, LSA, cached and NTDS sections | local or domain credentials (NT hash; LM ignored when empty); machine accounts (`$`) as their own credentials or skipped (builder's call, stated in the plan); the owning host from the target or "ran on" |
+| secretsdump | SAM, LSA, cached and NTDS sections | local or domain credentials (NT hash; LM ignored when empty); machine accounts (`$`, including `$MACHINE.ACC`) **filed** and marked as machine accounts: kept out of the spray grid and cracking lists, shown under their own heading, and a DC's machine hash is a win ("can DCSync") *(owner's decision)*; the owning host from the target or "ran on" |
 | mimikatz | `sekurlsa::logonpasswords`, `lsadump::sam`, `lsadump::dcsync` | NT hashes and cleartext passwords (skip `(null)`), with user and domain |
 | lsassy | default output | as mimikatz |
 | hashcat | `--show` output and the final status lines | cracked password matched to an existing hash credential, which is upgraded |
@@ -269,7 +269,6 @@ Payload content (templates, wrapping rules, explanations and the SQL walkthrough
 ## 7. Left to the builder
 
 - How extraction provenance and Undo are stored.
-- Whether machine accounts from secretsdump are kept or skipped (state it in the plan).
 - Key choices for switching generators.
 - How PEAS highlights are detected without ANSI codes (confirm against fixtures).
 - The visual details beyond the reference sketches.
