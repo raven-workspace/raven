@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "../../App";
 import { api, resetAuditState, scenarioFromSearch, setAuditScenario } from "../../audit/fakeApi";
 import { RavenError } from "../../types/errors";
+import { FIXTURES } from "../../audit/fixtures";
 import { AUDIT_PNGS } from "../../audit/images";
 import { makeQueryClient } from "../../lib/queryClient";
 
@@ -54,6 +55,11 @@ describe("audit fake api", () => {
     const failed = (await api.logList("e-pay")).find((e) => e.payloadId === "nc-exe")!;
     expect(failed.hostIds).toEqual(["h-pay-iis"]);
     expect(failed.content.kind === "command" && failed.content.blocks[0]!.output).toMatch(/not recognized/);
+  });
+
+  it("the attacker side is synthetic: Settings' attacker IP and every callback are 192.0.2.10 (RFC 5737)", async () => {
+    expect((await api.settingsGet()).attackerIp).toBe("192.0.2.10");
+    expect(JSON.stringify(FIXTURES)).not.toContain("10.10.14.");
   });
 
   it("stresses layouts", async () => {

@@ -633,11 +633,18 @@ const CLIPPED = (root: string) => `(() => {
   return bad;
 })()`;
 
-/** The context chips whose value is cut short (an ellipsis): OS, paste context and port must always read in full. */
+/**
+ * The context chips whose value is cut short (an ellipsis): OS, paste context and port must always read in full.
+ * Each of the three must exist, so a renamed or missing chip fails instead of passing with nothing to check.
+ */
 async function truncatedChips(aside: import("@playwright/test").Locator) {
-  return aside.getByRole("button", { name: /^(OS|Paste into|Port): / }).evaluateAll((chips) =>
-    chips.filter((c) => [c, ...c.querySelectorAll("*")].some((e) => e.scrollWidth > e.clientWidth + 0.5)).map((c) => c.getAttribute("aria-label")),
+  const chips = aside.getByRole("button", { name: /^(OS|Paste into|Port): / });
+  const names = await chips.evaluateAll((els) => els.map((c) => (c.getAttribute("aria-label") ?? "").split(":")[0]));
+  const missing = ["OS", "Paste into", "Port"].filter((n) => names.filter((x) => x === n).length !== 1).map((n) => `expected one ${n} chip`);
+  const cut = await chips.evaluateAll((els) =>
+    els.filter((c) => [c, ...c.querySelectorAll("*")].some((e) => e.scrollWidth > e.clientWidth + 0.5)).map((c) => c.getAttribute("aria-label")),
   );
+  return [...missing, ...cut];
 }
 
 /** Opens the Payloads drawer on a host page and waits for the payload in view. */

