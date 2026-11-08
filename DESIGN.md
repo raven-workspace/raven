@@ -233,7 +233,7 @@ All shared pieces live in `src/ui`. Feature code composes them and doesn't hand-
 One `HintLine` component; feature code never builds hint strings.
 
 - Each hint is a unit, `[Kbd] label`, with 6px between the key and the label, `nowrap`, and the label in `text-meta` `--muted-2`.
-- Hints are separated by 20px of space: no middots, bullets or dividers.
+- Hints are separated by 24px of space: no middots, bullets or dividers.
 - A single line that never wraps. Each hint has a priority. When the container is too narrow, the lowest-priority hints drop out, and a final `?` hint opens the full list.
 - At most 5 hints visible. The primary action comes first and Esc/close last.
 - **Kbd:** 20px tall, at least 20px wide, 12px JetBrains Mono, `--fg-2` on `--surface`, with a `--line-strong` border.
@@ -349,7 +349,7 @@ One `CommandBlock` everywhere a command appears:
 - **Do** keep row actions visible in a fixed-width action column.
 - **Do** align side-by-side siblings on shared rows (subgrid).
 - **Do** declare what every view does under 1000px.
-- **Do** keep each hint's key and label together, with 20px between hints.
+- **Do** keep each hint's key and label together, with 24px between hints.
 
 ### Don't:
 - **Don't** use `flex-col`, `flex-1`, `flex-wrap`, `justify-between` or `grow` in feature code.
