@@ -15,7 +15,7 @@ export function Input({ mono, className, type = "text", ...rest }: InputProps) {
       spellCheck={mono ? false : undefined}
       autoCorrect={mono ? "off" : undefined}
       autoCapitalize={mono ? "off" : undefined}
-      className={cx(controlBase, "h-8 px-2.5", mono && "font-mono text-[12.5px]", className)}
+      className={cx(controlBase, "h-8 w-full px-3", mono && "font-mono text-code", className)}
       {...rest}
     />
   );

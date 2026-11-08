@@ -26,3 +26,4 @@ export { CommandBlock, type CommandBlockProps } from "./CommandBlock";
 export { LoadingState } from "./LoadingState";
 export { ErrorState, type ErrorStateProps } from "./ErrorState";
 export { PickerTrigger, type PickerTriggerProps } from "./PickerTrigger";
+export { queryState, type QueryLike } from "./QueryState";

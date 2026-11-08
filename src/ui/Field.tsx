@@ -34,7 +34,7 @@ export function Field({ label, children, hint, error, id, className }: FieldProp
     : children;
 
   return (
-    <div className={cx("flex flex-col gap-1.5", className)}>
+    <div className={cx("grid gap-2", className)}>
       <label htmlFor={controlId} className="block text-meta text-muted-2">
         {label}
       </label>

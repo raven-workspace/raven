@@ -7,7 +7,7 @@ import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
 import { XIcon } from "@phosphor-icons/react";
-import { Button, Chip, Field, IconButton, Input, Kbd, Select, Textarea, Toolbar } from "../../ui";
+import { Button, Chip, Field, IconButton, Input, Kbd, Select, Textarea, Toggle, Toolbar } from "../../ui";
 import { useHosts } from "../hosts/queries";
 import { invalidateAfterSave } from "../log/extractions";
 import { HostChips } from "./HostChips";
@@ -15,7 +15,6 @@ import { clipboardImage, readImage, releaseImage } from "./imagePaste";
 import { KindChips } from "./KindChips";
 import { KindFields } from "./KindFields";
 import { PasteArea } from "./PasteArea";
-import { Toggle } from "./Toggle";
 import { KINDS, resolveCapture } from "./resolve";
 import { useSaveSummaryStore } from "./useSaveSummaryStore";
 import { PartialSaveError, saveCapture } from "./saveCapture";
@@ -247,11 +246,11 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
 
         <Toolbar>
           {kind === "command" && (
-            <Toggle on={pd.returnedNothing} keys="⌘." onClick={() => set({ returnedNothing: !pd.returnedNothing })}>
+            <Toggle on={pd.returnedNothing} keys="⌘." onChange={() => set({ returnedNothing: !pd.returnedNothing })}>
               Returned nothing
             </Toggle>
           )}
-          <Toggle on={pd.private} keys="⌘P" onClick={() => set({ private: !pd.private })}>
+          <Toggle on={pd.private} keys="⌘P" onChange={() => set({ private: !pd.private })}>
             Private
           </Toggle>
         </Toolbar>

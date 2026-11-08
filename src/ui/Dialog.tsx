@@ -46,18 +46,18 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
             className,
           )}
         >
-          <header className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b border-line px-4 pt-3.5 pb-3">
+          <header className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b border-line px-4 py-3">
             <div className="min-w-0">
               <RD.Title className="m-0 text-heading text-fg">{title}</RD.Title>
               {description && (
-                <RD.Description className="m-0 mt-0.5 text-meta text-muted">{description}</RD.Description>
+                <RD.Description className="m-0 mt-1 text-meta text-muted">{description}</RD.Description>
               )}
             </div>
             <RD.Close asChild>
               <IconButton icon={X} label="Close" shortcut="Esc" />
             </RD.Close>
           </header>
-          {children !== undefined && <div data-popup-bounds="" className="min-h-0 overflow-y-auto px-4 py-3.5">{children}</div>}
+          {children !== undefined && <div data-popup-bounds="" className="min-h-0 overflow-y-auto px-4 py-4">{children}</div>}
           {footer && <footer className="flex shrink-0 justify-end gap-2 border-t border-line px-4 py-3">{footer}</footer>}
         </RD.Content>
       </RD.Portal>

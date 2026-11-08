@@ -14,13 +14,13 @@ export function EmptyState({ title, body, action, className }: EmptyStateProps) 
   return (
     <div
       className={cx(
-        "flex flex-col items-start gap-2 rounded border border-dashed border-line-2 px-5 py-6",
+        "grid justify-items-start gap-2 rounded border border-dashed border-line-2 px-6 py-6",
         className,
       )}
     >
       <p className="m-0 text-body font-semibold text-fg">{title}</p>
       {body && <p className="m-0 max-w-[52ch] text-meta text-muted-2">{body}</p>}
-      {action && <div className="mt-1.5">{action}</div>}
+      {action && <div className="mt-2">{action}</div>}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { Check, Copy } from "@phosphor-icons/react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { copyPlain, copySecret } from "../lib/clipboard";
+import { reportError } from "../lib/lockSignal";
 import { IconButton } from "./IconButton";
 
 export interface CommandBlockProps {
@@ -78,7 +79,8 @@ export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, 
               });
               return;
             }
-            void (copyText === undefined ? copyPlain(text) : copySecret(copyText));
+            // A failed copy (a locked vault included) goes to the shared error path, never an unhandled rejection.
+            (copyText === undefined ? copyPlain(text) : copySecret(copyText)).catch(reportError);
             onCopy?.();
             flashDone();
           }}

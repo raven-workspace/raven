@@ -61,7 +61,9 @@ export function Select({
         ref={ref}
         className={cx(
           controlBase,
-          "h-8 px-2.5 inline-flex items-center justify-between gap-2 text-left cursor-default",
+          // Full width unless the caller sets one: cx does not merge, so w-full would fight a `w-*` class.
+          !/(?:^|\s)w-/.test(className ?? "") && "w-full",
+          "h-8 px-3 inline-flex items-center justify-between gap-2 text-left cursor-default",
           "data-placeholder:text-faint",
           className,
         )}
@@ -88,7 +90,7 @@ export function Select({
                 value={o.value}
                 disabled={o.disabled}
                 className={cx(
-                  "relative flex h-7 items-center rounded-[4px] pl-3 pr-2 text-meta text-fg-2 select-none cursor-default",
+                  "relative flex h-7 items-center rounded-[4px] pl-3 pr-2 text-body text-fg-2 select-none cursor-default",
                   // Radix moves real focus onto the highlighted item, so that item carries the
                   // Ink focus ring: 1px accent outline drawn inside the item's edge.
                   "data-highlighted:bg-surface-hi data-highlighted:text-fg",

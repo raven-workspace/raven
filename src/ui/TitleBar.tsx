@@ -21,6 +21,9 @@ export interface TitleBarProps {
   className?: string;
 }
 
+/** Left clearance for the macOS traffic lights (titleBarStyle Overlay): a window-chrome constant, not a spacing step. */
+const TRAFFIC_LIGHTS = 78;
+
 /**
  * The 38px window chrome. The bar is the drag region (`data-tauri-drag-region`);
  * The right inset (pr-6) equals the content column's px-6, so the controls end where page actions end.
@@ -34,21 +37,21 @@ export function TitleBar({ left, title, right, column, className }: TitleBarProp
       style={
         column
           ? {
-              paddingLeft: `max(78px, calc((100% - ${column.max}px) / 2 + ${column.inset}px))`,
+              paddingLeft: `max(${TRAFFIC_LIGHTS}px, calc((100% - ${column.max}px) / 2 + ${column.inset}px))`,
               paddingRight: `max(${column.inset}px, calc((100% - ${column.max}px) / 2 + ${column.inset}px))`,
             }
-          : undefined
+          : { paddingLeft: TRAFFIC_LIGHTS }
       }
       className={cx(
         "grid h-[38px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-line text-meta text-muted-2 select-none",
-        !column && "pr-6 pl-[78px]",
+        !column && "pr-6",
         className,
       )}
     >
       <div className="grid grid-flow-col items-center">{left}</div>
       {/* pointer-events-none so a drag on the text still lands on the drag region */}
       <span className="pointer-events-none truncate">{title}</span>
-      <div className="grid grid-flow-col items-center gap-1.5">{right}</div>
+      <div className="grid grid-flow-col items-center gap-2">{right}</div>
     </div>
   );
 }
