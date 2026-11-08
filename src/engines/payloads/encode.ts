@@ -21,11 +21,16 @@ export function decodeUtf16leBase64(b64: string): string {
 const SHELL_ENCODED: Record<string, string> = {
   " ": "+", "&": "%26", ">": "%3E", "<": "%3C", "|": "%7C", ";": "%3B", "#": "%23", "'": "%27", '"': "%22",
   "/": "%2F", "%": "%25", "+": "%2B", "=": "%3D", "?": "%3F",
+  // curl treats [] {} as globs, and strict servers reject \ ^ ` raw.
+  "\\": "%5C", "[": "%5B", "]": "%5D", "{": "%7B", "}": "%7D", "^": "%5E", "`": "%60",
 };
 
-/** Encodes only what breaks a shell command inside a URL; `-` and `.` stay raw so the command stays readable. */
+/**
+ * Encodes only what breaks a shell command inside a URL; `-` and `.` stay raw so the command stays readable.
+ * An unresolved `{PLACEHOLDER}` stays as it is, so the gap is still visible and detectable.
+ */
 export function urlEncodeShell(s: string): string {
-  return s.replace(/[ &><|;#'"/%+=?]/g, (c) => SHELL_ENCODED[c]);
+  return s.replace(/\{[A-Z][A-Z0-9_]*\}|[ &><|;#'"/%+=?\\[\]{}^`]/g, (c) => SHELL_ENCODED[c] ?? c);
 }
 
 export function urlEncodeFull(s: string): string {

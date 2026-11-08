@@ -233,7 +233,7 @@ const EXEC_CORE: Record<Exec, (c: Ctx) => Core> = {
 };
 
 function finalize(raw: string, point: SqlPoint): string {
-  return point === "url-param" ? urlEncodeShell(raw).replace(/\\/g, "%5C") : raw;
+  return point === "url-param" ? urlEncodeShell(raw) : raw;
 }
 
 export function buildSql(stepOrExecId: string, engine: SqlEngine, point: SqlPoint, values: SqlValues = {}): BuiltPayload {
