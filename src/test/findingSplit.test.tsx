@@ -23,7 +23,7 @@ vi.mock("../lib/api");
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {
-  id: "e1", name: "Mock exam A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
+  id: "e1", name: "Lab A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
@@ -501,11 +501,11 @@ describe("finding split: layout and keys (review round 1)", () => {
 
   it("host chips use the short name, with the full name in the title", async () => {
     const user = userEvent.setup();
-    m.hostsList.mockResolvedValue([{ ...H1, name: "dc01.corp.lumen.local" }, H2]);
+    m.hostsList.mockResolvedValue([{ ...H1, name: "dc01.corp.acme.local" }, H2]);
     mount();
     const form = await openSplit(user);
     const chip = within(form).getByRole("button", { name: "dc01" });
-    expect(chip).toHaveAttribute("title", "dc01.corp.lumen.local");
+    expect(chip).toHaveAttribute("title", "dc01.corp.acme.local");
     expect(chip).toHaveAttribute("aria-pressed", "true");
   });
 

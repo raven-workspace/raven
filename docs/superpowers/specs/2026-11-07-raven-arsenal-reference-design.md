@@ -115,7 +115,7 @@ These rules apply wherever commands are shown filled: drawer, ⌘K, browse and c
 - **On cards shown inline on the host page** (checklist-linked), the host chip is read-only: it shows the route's host and can't be changed there (*my call*). The drawer and ⌘K keep a live host chip, even on a host page.
 
 **Credential chip (new)**
-- It looks like `as LUMEN\svc_report · password ⌄`. It fills USER, DOMAIN and PASS or HASH together, from the one picked credential, which is already the only source of those tokens in `src/engines/checklist/fill.ts`.
+- It looks like `as ACME\svc_report · password ⌄`. It fills USER, DOMAIN and PASS or HASH together, from the one picked credential, which is already the only source of those tokens in `src/engines/checklist/fill.ts`.
 - It opens a picker with a key (*my call:* ⌥C) or a click, and is not in the Tab order. The picker lists:
   - the engagement's credentials, each labelled with its kind (password, hash) and its tested state on the picked host;
   - "No credential".

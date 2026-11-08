@@ -15,7 +15,7 @@ vi.mock("../lib/api");
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {
-  id: "e1", name: "Mock exam A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
+  id: "e1", name: "Lab A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
@@ -61,6 +61,7 @@ function mount(seed: { creds?: Credential[]; users?: Username[] } = {}) {
   m.usernamesList.mockImplementation(async () => [...users]);
   m.accessGrantsList.mockImplementation(async () => [...grants]);
   m.credAttemptsList.mockResolvedValue([]);
+  m.triedPairsList.mockResolvedValue([]);
   m.credentialCreate.mockImplementation(async (_e, input) => {
     const c = toCred(input);
     creds.push(c);
@@ -143,6 +144,21 @@ describe("credentials section", () => {
     await user.click(reveal);
     expect(reveal).toHaveAttribute("aria-pressed", "true");
     expect(within(row).getByText("Winter2024!")).toBeInTheDocument();
+  });
+
+  it("credentials list shows a Machine accounts group", async () => {
+    mount({
+      creds: [
+        cred({ id: "c1", username: "DC01$", domain: "CORP", secret: "x9f3kq2m" }),
+        cred({ id: "c2", username: "jay", domain: "CORP", secret: "Winter2024!" }),
+      ],
+    });
+    const group = await screen.findByRole("columnheader", { name: /Machine accounts/ });
+    const rows = screen.getAllByRole("row");
+    const idx = (text: string) => rows.findIndex((r) => r.textContent?.includes(text));
+    expect(idx("CORP\\jay")).toBeGreaterThan(0);
+    expect(idx("CORP\\jay")).toBeLessThan(rows.indexOf(group.closest("tr")!));
+    expect(idx("CORP\\DC01$")).toBeGreaterThan(rows.indexOf(group.closest("tr")!));
   });
 
   it("an ownerless secret shows owner unknown", async () => {

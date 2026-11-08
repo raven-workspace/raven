@@ -10,7 +10,8 @@ export type ErrorCode =
   | "db"
   | "no_key"
   | "offline"
-  | "key_rejected";
+  | "key_rejected"
+  | "conflict";
 
 /** The JSON shape of a rejected Tauri command (Rust `AppError`). */
 export interface AppError {
@@ -32,6 +33,7 @@ const CODES: readonly ErrorCode[] = [
   "no_key",
   "offline",
   "key_rejected",
+  "conflict",
 ];
 
 export function isAppError(value: unknown): value is AppError {

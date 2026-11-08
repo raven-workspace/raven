@@ -111,7 +111,7 @@ test("scroll panes never clip focus or hide controls under the scrollbar", async
 // Host page, finding split and sidebar (redesign).
 
 const LAB_HOST = "/e/e-lab/h/h-web";
-const WEB_SHORT = "web-finance-dmz-portal-01";
+const WEB_SHORT = "web-portal-dmz-frontend-01";
 
 /** Opens a path at a width with a frozen clock and waits for the app shell. */
 async function open(page: Page, path: string, width: number, height = 900) {
@@ -521,4 +521,230 @@ test("jumping to a block from the contents strip leaves its outline clear of the
       expect(b!.y - 1, `block ${i} at ${width}`).toBeGreaterThanOrEqual(s!.y + s!.height);
     }
   }
+});
+
+// ---------------------------------------------------------------- interpreters and the save summary
+
+const NXC_PASTE = [
+  "$ nxc smb 10.10.20.10 -u jay drew -p 'Synth123!' 'Guess1' --continue-on-success",
+  "SMB  10.10.20.10  445  DC01  [+] acme.corp\\jay:Synth123! (Pwn3d!)",
+  "SMB  10.10.20.10  445  DC01  [-] acme.corp\\drew:Guess1 STATUS_LOGON_FAILURE",
+].join("\n");
+
+/** Opens the capture sheet on a host page, pastes `text` and saves with the Save button. */
+async function captureAndSave(page: Page, text: string) {
+  await page.keyboard.press("l");
+  const paste = page.getByRole("textbox", { name: "Paste" });
+  await paste.waitFor();
+  await paste.fill(text);
+  await page.getByRole("button", { name: /^Save/ }).click();
+}
+
+test("saving nxc spray output shows the win in the toast and the Extracted line, and Undo removes the credential", async ({ page }) => {
+  await open(page, "/e/e-lab/h/h-dc01", 1280);
+  await captureAndSave(page, NXC_PASTE);
+  const toast = page.getByRole("status").filter({ has: page.getByRole("button", { name: "Close summary" }) });
+  await expect(toast.getByText(/jay:Synth123! works on SMB/)).toBeVisible();
+
+  // The new entry's own Extracted line shows without a reload.
+  await page.getByRole("tab", { name: "Log" }).click();
+  await page.getByRole("button", { name: /nxc/ }).first().click();
+  const extracted = page.getByRole("button", { name: /Extracted: jay:Synth123! works on SMB/ });
+  await expect(extracted).toBeVisible();
+
+  // Navigating inside the app keeps the fake backend's state (a reload would restore the fixtures).
+  const credentialsNav = page.getByRole("link", { name: "Credentials", exact: true });
+  await credentialsNav.click();
+  await expect(page.getByText("Synth123!").first()).toBeVisible();
+
+  await toast.getByRole("button", { name: "Undo" }).click();
+  await expect(toast).toBeHidden();
+  await expect(page.getByText("Synth123!")).toHaveCount(0);
+});
+
+const overlaps = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+test("the toast never covers the capture Save button or the hint line", async ({ page }) => {
+  for (const width of [900, 1280]) {
+    await open(page, "/e/e-lab/h/h-dc01", width);
+    await captureAndSave(page, NXC_PASTE);
+    const toast = page.getByRole("status").filter({ has: page.getByRole("button", { name: "Close summary" }) });
+    await toast.waitFor();
+    await toast.hover(); // hovering holds the toast open while the boxes are measured
+    const toastBox = (await toast.boundingBox())!;
+
+    await page.keyboard.press("l");
+    const save = page.getByRole("button", { name: /^Save/ });
+    await save.waitFor();
+    expect(overlaps(toastBox, (await save.boundingBox())!), `toast over Save at ${width}`).toBe(false);
+    await page.keyboard.press("Escape");
+
+    await page.keyboard.press("Meta+K");
+    const hint = page.getByRole("dialog").locator("[data-hint-line]");
+    await hint.waitFor();
+    expect(overlaps(toastBox, (await hint.boundingBox())!), `toast over the hint line at ${width}`).toBe(false);
+    await page.keyboard.press("Escape");
+  }
+});
+
+test("tried pairs render muted in the test matrix with no sideways scroll", async ({ page }) => {
+  for (const width of [900, 1280]) {
+    await open(page, "/e/e-lab/s/credentials", width);
+    const tried = page.locator("tr[data-tried]");
+    await tried.first().waitFor();
+    await expect(tried.first()).toContainText("drew");
+    await expect(tried.first()).toContainText("tried");
+    await expect(tried.first()).toHaveClass(/text-muted/);
+    await expect(tried.first().getByRole("img", { name: /failed \(tried\)/ }).first()).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `the page scrolls sideways at ${width}`).toBe(true);
+  }
+});
+
+// ---------------------------------------------------------------- Payloads
+
+const IIS = "/e/e-pay/h/h-pay-iis";
+const PG = "/e/e-pay/h/h-pay-pg";
+const PAYLOADS_WIDTHS = [900, 1100, 1280, 1440];
+const DRAWER = "aside[aria-label='Payloads']";
+const WORKBENCH = "main[aria-label='Payloads']";
+
+/**
+ * Controls cut off by an ancestor that hides overflow (a tab row, a chip row), or poking out of the view itself.
+ * ARSENAL_PANES only looks at scroll panes; this catches `overflow: hidden` rows and grid tracks wider than the view.
+ */
+const CLIPPED = (root: string) => `(() => {
+  const bad = [];
+  const scope = document.querySelector(${JSON.stringify(root)});
+  const s = scope.getBoundingClientRect();
+  for (const el of scope.querySelectorAll('button, input, [role="tab"], [role="option"]')) {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) continue;
+    const name = (el.getAttribute("aria-label") || el.textContent || el.tagName).trim().slice(0, 40);
+    if (r.left < s.left - 0.5 || r.right > s.right + 0.5) { bad.push("outside the view: " + name); continue; }
+    for (let a = el.parentElement; a && a !== scope.parentElement; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      if (cs.overflowX === "visible" && cs.overflowY === "visible") continue;
+      const p = a.getBoundingClientRect();
+      const left = p.left + a.clientLeft;
+      if (r.left < left - 0.5 || r.right > left + a.clientWidth + 0.5) { bad.push("clipped: " + name); break; }
+    }
+  }
+  return bad;
+})()`;
+
+/**
+ * The context chips whose value is cut short (an ellipsis): OS, paste context and port must always read in full.
+ * Each of the three must exist, so a renamed or missing chip fails instead of passing with nothing to check.
+ */
+async function truncatedChips(aside: import("@playwright/test").Locator) {
+  const chips = aside.getByRole("button", { name: /^(OS|Paste into|Port): / });
+  const names = await chips.evaluateAll((els) => els.map((c) => (c.getAttribute("aria-label") ?? "").split(":")[0]));
+  const missing = ["OS", "Paste into", "Port"].filter((n) => names.filter((x) => x === n).length !== 1).map((n) => `expected one ${n} chip`);
+  const cut = await chips.evaluateAll((els) =>
+    els.filter((c) => [c, ...c.querySelectorAll("*")].some((e) => e.scrollWidth > e.clientWidth + 0.5)).map((c) => c.getAttribute("aria-label")),
+  );
+  return [...missing, ...cut];
+}
+
+/** Opens the Payloads drawer on a host page and waits for the payload in view. */
+async function openDrawer(page: Page, path: string, width: number) {
+  await open(page, path, width);
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press("p");
+  const aside = page.locator(DRAWER);
+  await aside.getByRole("heading", { level: 2 }).waitFor();
+  return aside;
+}
+
+/** The IIS host's drawer, settled on its best fit (the host and its log have loaded). */
+async function openIisDrawer(page: Page, width: number) {
+  const aside = await openDrawer(page, IIS, width);
+  await expect(aside.getByText("Fits: Windows, Web shell ?cmd=")).toBeVisible();
+  await expect(aside.getByRole("heading", { level: 2 })).toHaveText("PowerShell base64 (-e)");
+  return aside;
+}
+
+test("payloads drawer and workbench: no pane scrolls sideways or clips focus", async ({ page }) => {
+  for (const width of PAYLOADS_WIDTHS) {
+    const aside = await openIisDrawer(page, width);
+    // The long host name and "Paste into Web shell ?cmd=" share the chip row; every generator tab shows.
+    await expect(aside.getByRole("button", { name: /^Paste into: Web shell \?cmd=/ })).toBeVisible();
+    expect(await truncatedChips(aside), `chips cut short at ${width}`).toEqual([]);
+    await aside.getByRole("button", { name: "show" }).click();
+    await aside.getByRole("list", { name: "Don't fit here" }).waitFor();
+    expect(await page.evaluate(ARSENAL_PANES(DRAWER)), `drawer panes at ${width}`).toEqual([]);
+    expect(await page.evaluate(CLIPPED(DRAWER)), `drawer controls at ${width}`).toEqual([]);
+
+    await aside.getByRole("button", { name: "Full screen" }).click();
+    const main = page.locator(WORKBENCH);
+    await expect(main.getByRole("heading", { level: 2, name: "PowerShell base64 (-e)" })).toBeVisible();
+    expect(await page.evaluate(ARSENAL_PANES(WORKBENCH)), `workbench panes at ${width}`).toEqual([]);
+    expect(await page.evaluate(CLIPPED(WORKBENCH)), `workbench controls at ${width}`).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `page at ${width}`).toBe(true);
+
+    // The Postgres host, with the longest paste context picked, then its SQL generator (long steps, fields, Copy buttons).
+    const pg = await openDrawer(page, PG, width);
+    await pg.getByRole("button", { name: /^Paste into: / }).click();
+    await pg.getByRole("option", { name: "Injected command (Linux)" }).click();
+    await expect(pg.getByRole("button", { name: "Paste into: Injected command (Linux)" })).toBeVisible();
+    expect(await truncatedChips(pg), `chips cut short on the Postgres host at ${width}`).toEqual([]);
+    expect(await page.evaluate(CLIPPED(DRAWER)), `Postgres drawer controls at ${width}`).toEqual([]);
+    await page.keyboard.press("Alt+Digit3");
+    await expect(pg.getByRole("tab", { name: "SQL injection" })).toHaveAttribute("aria-selected", "true");
+    await expect(pg.getByText("PostgreSQL").first()).toBeVisible();
+    expect(await page.evaluate(ARSENAL_PANES(DRAWER)), `SQL panes at ${width}`).toEqual([]);
+    expect(await page.evaluate(CLIPPED(DRAWER)), `SQL controls at ${width}`).toEqual([]);
+  }
+});
+
+test("long ps-b64 payload wraps inside its block", async ({ page }) => {
+  /** The block's overflow and how far it sits outside its scroll pane (0 when inside). */
+  const measure = (root: string) =>
+    page.locator(`${root} pre[aria-label='Payload']`).evaluate((el) => {
+      let pane = el.parentElement;
+      while (pane && !/auto|scroll/.test(getComputedStyle(pane).overflowY)) pane = pane.parentElement;
+      const r = el.getBoundingClientRect();
+      const p = pane!.getBoundingClientRect();
+      return {
+        length: (el.textContent ?? "").length, sideways: el.scrollWidth - el.clientWidth,
+        paneSideways: pane!.scrollWidth - pane!.clientWidth, outside: Math.max(0, r.right - (p.left + pane!.clientWidth)),
+      };
+    });
+  for (const width of PAYLOADS_WIDTHS) {
+    const aside = await openIisDrawer(page, width);
+    const drawer = await measure(DRAWER);
+    expect(drawer.length, "the base64 payload is the long one").toBeGreaterThan(1000);
+    expect(drawer, `drawer at ${width}`).toMatchObject({ sideways: 0, paneSideways: 0, outside: 0 });
+
+    await aside.getByRole("button", { name: "Full screen" }).click();
+    await expect(page.locator(WORKBENCH).getByRole("heading", { level: 2, name: "PowerShell base64 (-e)" })).toBeVisible();
+    const bench = await measure(WORKBENCH);
+    expect(bench.length).toBe(drawer.length);
+    expect(bench, `workbench at ${width}`).toMatchObject({ sideways: 0, paneSideways: 0, outside: 0 });
+  }
+});
+
+test("P opens on the best fit for the IIS host and ↵ copies it", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const aside = await openIisDrawer(page, 1280);
+  await expect(aside.getByText("Best fit", { exact: true })).toBeVisible();
+  const shown = await aside.locator("pre[aria-label='Payload']").textContent();
+  expect(shown).toMatch(/^powershell/);
+  // A sentinel, so a stale or empty clipboard cannot pass.
+  await page.evaluate(() => navigator.clipboard.writeText("SENTINEL"));
+  await page.keyboard.press("Enter");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(shown);
+});
+
+test("the misfit fold lists nc.exe as failed here before", async ({ page }) => {
+  const aside = await openIisDrawer(page, 1280);
+  // Not among the fits the drawer offers.
+  await expect(aside.getByRole("button", { name: "nc.exe -e" })).toHaveCount(0);
+  const show = aside.getByRole("button", { name: "show" });
+  await expect(show).toHaveAttribute("aria-expanded", "false");
+  await show.click();
+  const row = aside.getByRole("list", { name: "Don't fit here" }).getByRole("listitem").filter({ hasText: "nc.exe -e" });
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText("Failed here before");
 });

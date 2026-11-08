@@ -54,8 +54,8 @@ describe("ui", () => {
   });
 
   it("Chip exposes its variant", () => {
-    render(<Chip variant="accent">user · vega</Chip>);
-    expect(screen.getByText("user · vega")).toHaveAttribute("data-variant", "accent");
+    render(<Chip variant="accent">user · srv11</Chip>);
+    expect(screen.getByText("user · srv11")).toHaveAttribute("data-variant", "accent");
   });
 });
 

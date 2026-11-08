@@ -22,7 +22,7 @@ vi.mock("../lib/api");
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {
-  id: "e1", name: "Mock exam A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
+  id: "e1", name: "Lab A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: "Kali (VM)", msfHostId: null,
 };
@@ -93,7 +93,7 @@ beforeEach(() => {
   engagement = E1;
   hosts = [
     host({ id: "h1", name: "dc01", ip: "10.10.10.5" }),
-    host({ id: "h2", name: "web02", ip: "10.10.10.6" }),
+    host({ id: "h2", name: "web07", ip: "10.10.10.6" }),
   ];
   entries = [];
   store = [];
@@ -195,7 +195,7 @@ describe("auto-tick wiring", () => {
     await user.click(log().getByRole("button", { name: "Edit" }));
     await user.click(screen.getByRole("button", { name: "Remove dc01" }));
     await user.click(screen.getByRole("combobox", { name: "Link a host" }));
-    await user.click(await screen.findByRole("option", { name: /web02/ }));
+    await user.click(await screen.findByRole("option", { name: /web07/ }));
     await user.click(screen.getByRole("button", { name: "Save" }));
     await vi.waitFor(() => expect(m.checklistPut).toHaveBeenCalled());
     expect(m.checklistPut).toHaveBeenCalledTimes(1);
@@ -236,8 +236,8 @@ describe("auto-tick wiring", () => {
     const user = userEvent.setup();
     mount();
     const dialog = await openCapture(user);
-    await user.paste(`whoami; hostname; ip a\nweb02\n    inet 10.10.10.6/24 brd 10.10.10.255 scope global ens3\ncat /home/web/local.txt\n${FLAG}`);
-    expect(within(dialog).getByLabelText("Title")).toHaveValue("local.txt · web02");
+    await user.paste(`whoami; hostname; ip a\nweb07\n    inet 10.10.10.6/24 brd 10.10.10.255 scope global ens3\ncat /home/web/local.txt\n${FLAG}`);
+    expect(within(dialog).getByLabelText("Title")).toHaveValue("local.txt · web07");
     await saveCapture(user);
     await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalled());
     expect(putFor("h2", "h-orient-proof")).toEqual([
@@ -368,7 +368,7 @@ describe("auto-tick wiring", () => {
     m.hostSyncBoard.mockRejectedValue(new Error("board busy"));
     mount();
     const dialog = await openCapture(user);
-    await user.paste(`whoami; hostname; ip a\nweb02\n    inet 10.10.10.6/24 brd 10.10.10.255 scope global ens3\ncat /home/web/local.txt\n${FLAG}`);
+    await user.paste(`whoami; hostname; ip a\nweb07\n    inet 10.10.10.6/24 brd 10.10.10.255 scope global ens3\ncat /home/web/local.txt\n${FLAG}`);
     await saveCapture(user);
     expect(
       await within(dialog).findByText("Saved the entry, but the board didn't update. Use Tick from log on the Engagement checklist."),
@@ -452,7 +452,7 @@ describe("first open of an engagement logged before step 3 (F-R1)", () => {
     expect(m.hostSyncBoard).not.toHaveBeenCalledWith("h2", "information-gathering");
     expect(hosts.find((h) => h.id === "h2")).toMatchObject({ boardColumn: "reporting", boardManual: true, boardDerived: "privilege-escalation" });
     // The card is still in Done on the board.
-    await vi.waitFor(() => expect(within(screen.getByRole("region", { name: "Reporting" })).getByRole("link", { name: /web02/ })).toBeInTheDocument());
+    await vi.waitFor(() => expect(within(screen.getByRole("region", { name: "Reporting" })).getByRole("link", { name: /web07/ })).toBeInTheDocument());
   });
 
   it("a board sync started while the automatic tick runs waits for it; concurrent callers share one run", async () => {
@@ -482,7 +482,7 @@ describe("first open of an engagement logged before step 3 (F-R1)", () => {
     rustSyncBoard();
     hosts = [
       host({ id: "h1", name: "dc01", ip: "10.10.10.5", boardColumn: "reporting", boardManual: true, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false }),
-      host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "post-exploitation", boardManual: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false }),
+      host({ id: "h2", name: "web07", ip: "10.10.10.6", boardColumn: "post-exploitation", boardManual: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false }),
     ];
     await resyncBoards("e1");
     expect(m.hostSyncBoard).not.toHaveBeenCalledWith("h1", expect.anything());
@@ -643,7 +643,7 @@ describe("service mutations", () => {
     let services = [svc({})];
     m.servicesListEngagement.mockImplementation(async () => services);
     m.serviceConfirm.mockImplementation(async () => {
-      services = [svc({ confirmedProduct: "CouchDB", confirmedVersion: "5.1" })];
+      services = [svc({ confirmedProduct: "Cachestore", confirmedVersion: "5.1" })];
       return services[0]!;
     });
     const ctx = await loadTickContext("e1");
@@ -651,7 +651,7 @@ describe("service mutations", () => {
     expect(before.some((g) => g.id.startsWith("h-enum-web"))).toBe(true);
     store = before.filter((g) => !g.id.startsWith("h-enum-web")).map((g) => item({ ownerId: "h1", goalId: g.id, status: "done", completedAt: 1 }));
     const { result } = renderHook(() => useServiceMutations("e1", "h1"), { wrapper: hookWrapper() });
-    await act(() => result.current.confirm.mutateAsync({ id: "s1", input: { product: "CouchDB", version: "5.1" } }));
+    await act(() => result.current.confirm.mutateAsync({ id: "s1", input: { product: "Cachestore", version: "5.1" } }));
     await vi.waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h1", "vulnerability-detection"));
   });
 

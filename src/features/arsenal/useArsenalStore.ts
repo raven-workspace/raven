@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { LibraryCommand } from "../../engines/library/types";
 import { useNotesStore } from "../notes/useNotesStore";
+import { usePayloadsStore } from "../payloads/usePayloadsStore";
 
 interface ArsenalState {
   /** The right-edge drawer is showing. */
@@ -48,4 +49,12 @@ export const useArsenalStore = create<ArsenalState>()((set, get) => ({
 // Notes and the drawer share the right edge: opening Notes closes the drawer.
 useNotesStore.subscribe((s) => {
   if (s.open && useArsenalStore.getState().open) useArsenalStore.getState().close();
+});
+
+// Payloads share the right edge too: whichever opens last stays.
+usePayloadsStore.subscribe((s) => {
+  if (s.open && useArsenalStore.getState().open) useArsenalStore.getState().close();
+});
+useArsenalStore.subscribe((s) => {
+  if (s.open && usePayloadsStore.getState().open) usePayloadsStore.getState().close();
 });

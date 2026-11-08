@@ -26,7 +26,9 @@ import { SearchBar } from "./SearchBar";
 import { ResultList } from "./ResultList";
 import type { ResultGroup, ResultRow } from "./ResultList";
 import { useArsenalStore } from "./useArsenalStore";
-import { useFillScope, useLastEngagementStore } from "./useFillScope";
+import type { GeneratorId } from "../../engines/payloads/types";
+import { usePayloadsStore } from "../payloads/usePayloadsStore";
+import { useFillScope } from "./useFillScope";
 
 type Row = ResultRow & ({ kind: "category"; category: string } | { kind: "hit"; hit: ArsenalHit });
 
@@ -176,9 +178,8 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
     setQuery("");
     setSelected(0);
     if (hit.type === "generator") {
-      // The generator lives in full-screen Arsenal, for the engagement and host in view here.
-      if (engagementId) useLastEngagementStore.setState({ engagementId, hostId: host?.id ?? null });
-      void navigate(`/arsenal?generator=${encodeURIComponent(hit.id)}`);
+      // Generators live in Payloads now: its drawer takes the right edge (and this one closes itself).
+      usePayloadsStore.getState().show(hit.id as GeneratorId);
     } else if (hit.type === "card") {
       useArsenalStore.getState().openCard(hit.id);
     } else if (hit.command.cardId) {

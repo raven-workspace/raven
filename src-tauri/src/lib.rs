@@ -7,6 +7,7 @@ pub mod commands;
 pub mod credentials;
 pub mod engagements;
 pub mod error;
+pub mod extractions;
 pub mod host_facts;
 pub mod hosts;
 pub mod field_manual;
@@ -18,6 +19,7 @@ pub mod nvd;
 pub mod migrations;
 pub mod paths;
 pub mod services;
+pub mod tried_pairs;
 pub mod settings;
 pub mod vault;
 
@@ -115,6 +117,14 @@ pub fn run() {
             commands::cred_attempts_upsert,
             commands::cred_attempt_delete,
             commands::cred_attempts_rekey,
+            commands::tried_pairs_list,
+            commands::tried_pairs_upsert,
+            commands::tried_pair_delete,
+            commands::tried_pair_promote,
+            commands::extraction_save,
+            commands::extraction_get,
+            commands::extractions_list,
+            commands::extraction_undo,
             commands::findings_list,
             commands::finding_create,
             commands::finding_update,

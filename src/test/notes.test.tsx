@@ -20,12 +20,12 @@ vi.mock("../lib/api");
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {
-  id: "e1", name: "Mock exam A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
+  id: "e1", name: "Lab A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
 const H1: Host = {
-  id: "h1", engagementId: "e1", name: "VEGA", ip: "10.10.10.5", os: "linux", boardColumn: "vulnerability-detection",
+  id: "h1", engagementId: "e1", name: "SRV11", ip: "10.10.10.5", os: "linux", boardColumn: "vulnerability-detection",
   boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1,
 };
 
@@ -98,7 +98,7 @@ afterEach(() => {
 async function open(user: ReturnType<typeof userEvent.setup>, path: string) {
   mount(path);
   await vi.waitFor(() => expect(m.engagementGet).toHaveBeenCalled());
-  await screen.findByText("Mock exam A");
+  await screen.findByText("Lab A");
   await user.keyboard("n");
   const p = await panel();
   const ta = await within(p).findByLabelText("Notes");
@@ -112,7 +112,7 @@ describe("field notes panel", () => {
     setStored(null, "eng body");
     const user = userEvent.setup();
     const a = await open(user, "/e/e1/h/h1");
-    expect(within(a.p).getByText("Notes · VEGA")).toBeInTheDocument();
+    expect(within(a.p).getByText("Notes · SRV11")).toBeInTheDocument();
     await vi.waitFor(() => expect(a.ta).toHaveValue("host body"));
     expect(m.notesGet).toHaveBeenCalledWith("e1", "h1");
     expect(within(a.p).getByRole("button", { name: "Host" })).toHaveAttribute("aria-pressed", "true");
@@ -124,7 +124,7 @@ describe("field notes panel", () => {
     setStored(null, "eng body");
     const user = userEvent.setup();
     const a = await open(user, "/e/e1");
-    expect(within(a.p).getByText("Notes · Mock exam A")).toBeInTheDocument();
+    expect(within(a.p).getByText("Notes · Lab A")).toBeInTheDocument();
     await vi.waitFor(() => expect(a.ta).toHaveValue("eng body"));
     expect(m.notesGet).toHaveBeenCalledWith("e1", null);
     expect(within(a.p).getByRole("button", { name: "Host" })).toBeDisabled();
@@ -187,10 +187,10 @@ describe("field notes panel", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     vi.useRealTimers();
-    expect(within(p).getByText("Notes · Mock exam A")).toBeInTheDocument();
+    expect(within(p).getByText("Notes · Lab A")).toBeInTheDocument();
     await vi.waitFor(() => expect(within(p).getByLabelText("Notes")).toHaveValue("eng body"));
     await user.click(within(p).getByRole("button", { name: "Host" }));
-    expect(await within(p).findByText("Notes · VEGA")).toBeInTheDocument();
+    expect(await within(p).findByText("Notes · SRV11")).toBeInTheDocument();
   });
 
   it("navigating flushes pending text immediately", async () => {
@@ -224,7 +224,7 @@ describe("field notes panel", () => {
     // From here the server never answers a read: only the cache can supply the text.
     m.notesGet.mockReturnValue(new Promise(() => {}));
     act(() => go("/e/e1"));
-    await screen.findByText("Mock exam A");
+    await screen.findByText("Lab A");
     await user.keyboard("n");
     const again = await within(await panel()).findByLabelText("Notes");
     expect(again).toHaveValue("typed then left");
@@ -274,7 +274,7 @@ describe("field notes panel", () => {
     m.vaultLock.mockImplementation(() => new Promise((resolve) => (finishLock = () => resolve(null))));
     const user = userEvent.setup();
     mount("/e/e1");
-    await screen.findByText("Mock exam A");
+    await screen.findByText("Lab A");
     await user.keyboard("{Meta>}l{/Meta}");
     await vi.waitFor(() => expect(m.vaultLock).toHaveBeenCalled());
     // A checklist mutation finishing in the lock window writes to the cache.
@@ -340,7 +340,7 @@ describe("field notes panel", () => {
   it("N inside an input types the letter", async () => {
     const user = userEvent.setup();
     mount("/e/e1");
-    await screen.findByText("Mock exam A");
+    await screen.findByText("Lab A");
     await user.click(screen.getByLabelText("probe"));
     await user.keyboard("n");
     expect(screen.getByLabelText("probe")).toHaveValue("n");

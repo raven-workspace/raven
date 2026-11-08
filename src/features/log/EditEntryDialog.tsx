@@ -7,7 +7,6 @@ import { Button, Dialog, Field, Input, Select, Textarea, Toggle } from "../../ui
 import { HostChips } from "../capture/HostChips";
 import { useLogMutations } from "./queries";
 
-const NO_IPS: string[] = [];
 const NONE = "__none";
 const NO_MACHINES: string[] = [];
 
@@ -80,7 +79,7 @@ export function EditEntryDialog({ entry, hosts, onClose }: EditEntryDialogProps)
         </Field>
         <div className="flex flex-col gap-1.5">
           <span className="text-[10.5px] font-semibold uppercase tracking-label text-muted">Hosts</span>
-          <HostChips hosts={hosts} linked={hostIds} addIps={NO_IPS} unknownIps={NO_IPS} onLinked={setHostIds} onAddIps={() => {}} />
+          <HostChips hosts={hosts} linked={hostIds} onLinked={setHostIds} />
         </div>
         <Field label="Ran on">
           <Select

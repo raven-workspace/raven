@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "../../App";
 import { api, resetAuditState, scenarioFromSearch, setAuditScenario } from "../../audit/fakeApi";
 import { RavenError } from "../../types/errors";
+import { FIXTURES } from "../../audit/fixtures";
 import { AUDIT_PNGS } from "../../audit/images";
 import { makeQueryClient } from "../../lib/queryClient";
 
@@ -34,6 +35,31 @@ describe("audit fake api", () => {
     expect(id?.privileges).toContain("SeImpersonatePrivilege");
     expect(await api.hostIdentityGet("h-web")).toBeNull();
     expect(await api.vectorsList("h-exam-ms01")).toHaveLength(2);
+  });
+
+  it("round-trips a logged payload's id and values, and serves the failed nc.exe entry", async () => {
+    const created = await api.logCreate("e-pay", {
+      title: "PowerShell base64 (-e) · 198.51.100.20", hostIds: ["h-pay-iis"], ranOn: "Kali (VM)",
+      observations: null, returnedNothing: false, private: false,
+      content: { kind: "command", blocks: [{ command: "powershell -nop -w hidden -e AAAA", output: "" }] },
+      payloadId: "ps-b64", payloadValues: { LHOST: "192.0.2.10", LPORT: "443" },
+    });
+    expect(created).toMatchObject({ payloadId: "ps-b64", payloadValues: { LHOST: "192.0.2.10", LPORT: "443" } });
+    const listed = (await api.logList("e-pay")).find((e) => e.id === created.id)!;
+    expect(listed).toMatchObject({ payloadId: "ps-b64", payloadValues: { LHOST: "192.0.2.10", LPORT: "443" } });
+    // An update that leaves them out keeps them.
+    const { ranOn, hostIds, observations, returnedNothing, content } = listed;
+    const updated = await api.logUpdate(created.id, { title: "renamed", ranOn, hostIds, observations, returnedNothing, private: false, content });
+    expect(updated).toMatchObject({ title: "renamed", payloadId: "ps-b64" });
+
+    const failed = (await api.logList("e-pay")).find((e) => e.payloadId === "nc-exe")!;
+    expect(failed.hostIds).toEqual(["h-pay-iis"]);
+    expect(failed.content.kind === "command" && failed.content.blocks[0]!.output).toMatch(/not recognized/);
+  });
+
+  it("the attacker side is synthetic: Settings' attacker IP and every callback are 192.0.2.10 (RFC 5737)", async () => {
+    expect((await api.settingsGet()).attackerIp).toBe("192.0.2.10");
+    expect(JSON.stringify(FIXTURES)).not.toContain("10.10.14.");
   });
 
   it("stresses layouts", async () => {
@@ -107,7 +133,7 @@ describe("audit fake api", () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
-    expect((await screen.findAllByText(/Lumen Corp — internal segment B/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Acme Corp — internal segment B/)).length).toBeGreaterThan(0);
     expect(screen.queryByText(/unlock/i)).not.toBeInTheDocument();
   });
 });

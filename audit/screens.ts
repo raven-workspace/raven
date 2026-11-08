@@ -15,12 +15,15 @@ export const WIDTHS = [900, 1024, 1280, 1440] as const;
 const E = `/e/${AUDIT_IDS.labEngagement}`;
 const H = `${E}/h/${AUDIT_IDS.webHost}`;
 
-// dispatchEvent, not click(): at 900 the Findings tab sits under the Order button, which swallows a real click.
+// dispatchEvent, not click(): at 900 the Findings tab sits under the Order button, which sdoe a real click.
 const tab = (name: string) => (page: Page) => page.getByRole("tab", { name, exact: true }).dispatchEvent("click");
 const FS01 = `${E}/h/${AUDIT_IDS.fileHost}`;
 /** A command with a fill field the host does not answer, so the first Enter is held back by the copy guard. */
 const GUARD_QUERY = "several ports";
 const focusBody = (page: Page) => page.locator("body").click({ position: { x: 1, y: 1 } });
+const IIS = `/e/${AUDIT_IDS.payloadsEngagement}/h/${AUDIT_IDS.iisHost}`;
+const PG = `/e/${AUDIT_IDS.payloadsEngagement}/h/${AUDIT_IDS.pgHost}`;
+const openPayloads = async (page: Page) => { await focusBody(page); await page.keyboard.press("p"); };
 
 export const SCREENS: Screen[] = [
   { id: "dashboard", path: "/", ready: "role=heading[name='Engagements']" },
@@ -205,6 +208,26 @@ export const SCREENS: Screen[] = [
       await page.getByRole("option", { name: /Transfer a file/ }).click();
       await page.getByRole("button", { name: /^Fill for host/ }).click();
       await page.getByRole("listbox", { name: "Fill for host" }).getByRole("option").nth(1).click();
+    },
+  },
+  { id: "payloads-drawer", path: IIS, ready: "aside[aria-label='Payloads'] h2", setup: openPayloads },
+  {
+    id: "payloads-drawer-misfits", path: IIS, ready: "role=list[name=\"Don't fit here\"]",
+    setup: async (page) => {
+      await openPayloads(page);
+      await page.locator("aside[aria-label='Payloads']").getByRole("button", { name: "show" }).click();
+    },
+  },
+  {
+    id: "payloads-sql", path: PG, ready: "aside[aria-label='Payloads'] >> role=tab[name='SQL injection'][selected]",
+    setup: async (page) => { await openPayloads(page); await page.keyboard.press("Alt+Digit3"); },
+  },
+  {
+    // In-app navigation, so the Workbench keeps the IIS host the drawer was opened on.
+    id: "payloads-workbench", path: IIS, ready: "main[aria-label='Payloads'] h2",
+    setup: async (page) => {
+      await openPayloads(page);
+      await page.locator("aside[aria-label='Payloads']").getByRole("button", { name: "Full screen" }).click();
     },
   },
 ];

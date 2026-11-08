@@ -8,7 +8,7 @@ import type { ChecklistGoal } from '../../../engines/checklist';
 import { defaultCredFor, defaultDomainCred, fillCommand, portChoices, hasUnmodelledQuoting, quoteContextAt, tunnelFor, type FillInput } from '../../../engines/checklist';
 
 const host = (p: Partial<Host> = {}): Host => ({
-  id: 'h1', engagementId: 'e1', name: 'ms01', ip: '172.16.1.5', os: 'windows', boardColumn: 'information-gathering', boardManual: false,
+  id: 'h1', engagementId: 'e1', name: 'ms01', ip: '10.60.1.5', os: 'windows', boardColumn: 'information-gathering', boardManual: false,
   access: 'none', createdAt: 0, updatedAt: 0, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, ...p,
 });
 const eng = (p: Partial<Engagement> = {}): Engagement => ({
@@ -17,7 +17,7 @@ const eng = (p: Partial<Engagement> = {}): Engagement => ({
   lastActivityAt: null, lastRanOn: null, msfHostId: null, ...p,
 });
 const tun = (p: Partial<Tunnel> = {}): Tunnel => ({
-  id: 't1', engagementId: 'e1', kind: 'ligolo', viaHostId: 'pivot', subnets: ['172.16.1.0/24'], callbackIp: '240.0.0.1',
+  id: 't1', engagementId: 'e1', kind: 'ligolo', viaHostId: 'pivot', subnets: ['10.60.1.0/24'], callbackIp: '240.0.0.1',
   status: 'up', notes: null, createdAt: 0, updatedAt: 0, ...p,
 });
 let n = 0;
@@ -72,10 +72,10 @@ describe('fillCommand', () => {
 
   it('ignores invalid subnets and trims whitespace', () => {
     const h = host();
-    expect(tunnelFor(h, [tun({ subnets: ['172.16.1.0/24 '] })])).not.toBeNull();
-    expect(tunnelFor(h, [tun({ subnets: ['garbage', '172.16.1.0/33'] })])).toBeNull();
+    expect(tunnelFor(h, [tun({ subnets: ['10.60.1.0/24 '] })])).not.toBeNull();
+    expect(tunnelFor(h, [tun({ subnets: ['garbage', '10.60.1.0/33'] })])).toBeNull();
     expect(tunnelFor(h, [tun({ subnets: ['0.0.0.0/0'] })])).not.toBeNull();
-    expect(tunnelFor(h, [tun({ subnets: [' 172.16.1.5'] })])).not.toBeNull();
+    expect(tunnelFor(h, [tun({ subnets: [' 10.60.1.5'] })])).not.toBeNull();
   });
 
   it('unknown values stay unresolved, never blank or placeholder defaults', () => {
@@ -109,23 +109,23 @@ describe('fillCommand', () => {
   });
 
   it('subnet comes from the pivot tunnel, else the scope range not containing the host', () => {
-    const e = eng({ scopeCidrs: ['172.31.50.0/24', '172.16.10.0/24'] });
-    const r = fillCommand('{SUBNET} {SUBNET_PREFIX}', input({ host: host({ ip: '172.31.50.5' }), engagement: e }));
-    expect(r.text).toBe('172.16.10.0/24 172.16.10');
-    const pivot = host({ id: 'pivot', ip: '172.31.50.5' });
+    const e = eng({ scopeCidrs: ['10.10.65.0/24', '10.60.10.0/24'] });
+    const r = fillCommand('{SUBNET} {SUBNET_PREFIX}', input({ host: host({ ip: '10.10.65.5' }), engagement: e }));
+    expect(r.text).toBe('10.60.10.0/24 10.60.10');
+    const pivot = host({ id: 'pivot', ip: '10.10.65.5' });
     const r2 = fillCommand('{SUBNET}', input({
-      host: pivot, engagement: eng({ scopeCidrs: ['172.31.50.0/24'] }), tunnels: [tun({ subnets: ['10.5.5.0/24'] })],
+      host: pivot, engagement: eng({ scopeCidrs: ['10.10.65.0/24'] }), tunnels: [tun({ subnets: ['10.5.5.0/24'] })],
     }));
     expect(r2.text).toBe('10.5.5.0/24');
   });
 
   it('scope fills SUBNET only when exactly one other range exists', () => {
     const fill = (scopeCidrs: string[]) =>
-      fillCommand('{SUBNET}', input({ host: host({ ip: '172.31.50.5' }), engagement: eng({ scopeCidrs }) }));
-    expect(fill(['172.31.50.0/24', '172.16.10.0/24']).text).toBe('172.16.10.0/24');
-    expect(fill(['172.31.50.0/24', '172.16.10.0/24', '10.10.20.0/24']).unresolved).toEqual(['SUBNET']);
-    expect(fill(['172.31.50.0/24']).unresolved).toEqual(['SUBNET']);
-    expect(fill(['172.16.10.0/24', '10.10.20.0/24']).unresolved).toEqual(['SUBNET']);
+      fillCommand('{SUBNET}', input({ host: host({ ip: '10.10.65.5' }), engagement: eng({ scopeCidrs }) }));
+    expect(fill(['10.10.65.0/24', '10.60.10.0/24']).text).toBe('10.60.10.0/24');
+    expect(fill(['10.10.65.0/24', '10.60.10.0/24', '10.10.20.0/24']).unresolved).toEqual(['SUBNET']);
+    expect(fill(['10.10.65.0/24']).unresolved).toEqual(['SUBNET']);
+    expect(fill(['10.60.10.0/24', '10.10.20.0/24']).unresolved).toEqual(['SUBNET']);
   });
 
   it('subnet prefix is unresolved for non-/24 ranges', () => {
@@ -135,15 +135,15 @@ describe('fillCommand', () => {
   });
 
   it('DC_IP fills from the DC-named host when its ports were never scanned (it sits behind a pivot)', () => {
-    const dc = host({ id: 'dc', name: 'DC01', ip: '172.16.5.10' });
-    const ms = host({ id: 'ms', name: 'MS01', ip: '172.16.5.11' });
+    const dc = host({ id: 'dc', name: 'DC01', ip: '10.60.5.10' });
+    const ms = host({ id: 'ms', name: 'MS01', ip: '10.60.5.11' });
     const r = fillCommand('{DC_IP} {DC_HOST}', input({ host: ms, engagement: eng({ domain: 'corp.local' }), hosts: [ms, dc] }));
-    expect(r.text).toBe('172.16.5.10 DC01.corp.local');
+    expect(r.text).toBe('10.60.5.10 DC01.corp.local');
     expect(r.unresolved).toEqual([]);
   });
 
   it('a DC picked by name is marked; a scanned DC is not', () => {
-    const dc = host({ id: 'dc', name: 'DC01', ip: '172.16.5.10' });
+    const dc = host({ id: 'dc', name: 'DC01', ip: '10.60.5.10' });
     expect(fillCommand('{DC_IP}', input({ hosts: [host(), dc] })).dcByName).toBe(true);
     expect(fillCommand('{DC_IP}', input({ hosts: [dc], servicesByHost: adServices('dc') })).dcByName).toBeUndefined();
     expect(fillCommand('{TARGET_IP}', input({ hosts: [host(), dc] })).dcByName).toBeUndefined();
@@ -350,7 +350,7 @@ describe('arsenal tokens', () => {
   const text = (t: string, p: Partial<FillInput> = {}) => fillCommand(t, input(p));
 
   it('TARGET_HOST is the FQDN for a domain-joined host and the name otherwise', () => {
-    const dc = host({ id: 'dc', name: 'dc01', ip: '172.16.1.2' });
+    const dc = host({ id: 'dc', name: 'dc01', ip: '10.60.1.2' });
     const hosts = [dc, host({ name: 'ms01' })];
     const servicesByHost = new Map([['dc', [svc('dc', 88), svc('dc', 389)]]]);
     const joined = input({ engagement: eng({ domain: 'corp.local' }), hosts, servicesByHost });
@@ -417,7 +417,7 @@ describe('arsenal tokens', () => {
     });
     expect(r.text).toBe('10.9.9.9 9001 10.1.1.1 x.local');
     expect(r.unresolved).toEqual([]);
-    expect(text('{LHOST} {TARGET_IP}').text).toBe('10.10.14.3 172.16.1.5');
+    expect(text('{LHOST} {TARGET_IP}').text).toBe('10.10.14.3 10.60.1.5');
   });
 
   it('portChoices offers only ports whose state is exactly open (never open|filtered, closed, filtered, or another host\'s)', () => {

@@ -331,14 +331,14 @@ mod tests {
         let mut bad = tin(&h, &[], "");
         bad.status = "sideways".into();
         assert_eq!(field(tunnel_create(c, &e, bad)), "status");
-        let t = tunnel_create(c, &e, tin(&h, &[" 10.10.0.0/24 ", "172.16.0.5"], " 10.10.0.2 ")).unwrap();
-        assert_eq!((t.subnets.clone(), t.callback_ip.as_str(), t.status.as_str()), (vec!["10.10.0.0/24".to_string(), "172.16.0.5".to_string()], "10.10.0.2", "up"));
+        let t = tunnel_create(c, &e, tin(&h, &[" 10.10.0.0/24 ", "10.60.0.5"], " 10.10.0.2 ")).unwrap();
+        assert_eq!((t.subnets.clone(), t.callback_ip.as_str(), t.status.as_str()), (vec!["10.10.0.0/24".to_string(), "10.60.0.5".to_string()], "10.10.0.2", "up"));
         tunnel_create(c, &e, tin(&h, &[], "")).unwrap();
         assert_eq!(tunnels_list(c, &e).unwrap().len(), 2);
-        let mut upd = tin(&h, &["172.31.1.0/24"], "");
+        let mut upd = tin(&h, &["10.10.66.0/24"], "");
         upd.status = "down".into();
         let u = tunnel_update(c, &t.id, upd).unwrap();
-        assert_eq!((u.status.as_str(), u.subnets.clone()), ("down", vec!["172.31.1.0/24".to_string()]));
+        assert_eq!((u.status.as_str(), u.subnets.clone()), ("down", vec!["10.10.66.0/24".to_string()]));
         // foreign host
         let e2 = eng(c);
         let h2 = host(c, &e2, "10.0.0.5");

@@ -341,13 +341,13 @@ describe('built-in command library', () => {
   it('credential-routine nxc lines tick the matching engagement goals only', () => {
     const goalsFor = (line: string) =>
       new Set(lib.filter((c) => c.match && matchesCommand(line, c.match)).flatMap((c) => c.goals));
-    const roast = goalsFor("nxc ldap 10.0.0.5 -u 'jace' -p 'Pw1!' -d corp.local --kerberoasting kerb.txt --asreproast asrep.txt | tee x.txt");
+    const roast = goalsFor("nxc ldap 10.0.0.5 -u 'jay' -p 'Pw1!' -d corp.local --kerberoasting kerb.txt --asreproast asrep.txt | tee x.txt");
     expect(roast.has('e-ad-user-kerberoast')).toBe(true);
     expect(roast.has('e-ad-user-asrep')).toBe(true);
     expect(roast.has('e-ad-nocreds-asrep')).toBe(false);
-    const plain = goalsFor("nxc smb 10.0.0.5 -u 'jace' -p 'Pw1!' -d corp.local | tee x.txt");
+    const plain = goalsFor("nxc smb 10.0.0.5 -u 'jay' -p 'Pw1!' -d corp.local | tee x.txt");
     expect([...plain]).toEqual([]);
-    expect(goalsFor("nxc smb 10.0.0.5 -u 'jace' -p 'Pw1!' --users").has('e-ad-user-users')).toBe(true);
+    expect(goalsFor("nxc smb 10.0.0.5 -u 'jay' -p 'Pw1!' --users").has('e-ad-user-users')).toBe(true);
     expect(goalsFor("nxc smb 10.0.0.5 -u '' -p '' --rid-brute 10000").has('e-ad-nocreds-rid')).toBe(true);
     expect(goalsFor("nxc smb 10.0.0.5 -u '' -p '' --rid-brute 10000").has('e-ad-user-rid')).toBe(false);
     const spray = goalsFor("nxc smb 10.0.0.5 -u users.txt -p 'Pw1!' --continue-on-success | tee x.txt");

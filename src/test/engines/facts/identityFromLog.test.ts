@@ -5,7 +5,7 @@ import type { Host } from "../../../types/host";
 import type { CommandBlock, LogEntry } from "../../../types/log";
 
 const MS02 = { id: "h2", name: "MS02" } as Host;
-const PROMPT = "*Evil-WinRM* PS C:\\Users\\sam.rivera\\Documents>";
+const PROMPT = "*Evil-WinRM* PS C:\\Users\\kim.lee\\Documents>";
 
 const PRIV = `${PROMPT} whoami /priv
 
@@ -60,10 +60,10 @@ describe("identityFromLog", () => {
 
   it("folds by kind like capture: a newer id replaces privileges and groups, a later /groups only the groups", () => {
     const priv = entry("l1", splitPaste(PRIV), { at: 1 });
-    const all = entry("l2", [{ command: "id", output: "uid=1000(sam) gid=1000(sam) groups=1000(sam),27(sudo)" }], { at: 2 });
+    const all = entry("l2", [{ command: "id", output: "uid=1000(cora) gid=1000(cora) groups=1000(cora),27(sudo)" }], { at: 2 });
     const groups = entry("l3", splitPaste(GROUPS), { at: 3 });
     const r = identityFromLog([groups, priv, all], MS02);
-    expect(r.identity).toEqual({ username: "sam", privileges: [], groups: ["Everyone", "BUILTIN\\Remote Management Users"], entryId: "l3" });
+    expect(r.identity).toEqual({ username: "cora", privileges: [], groups: ["Everyone", "BUILTIN\\Remote Management Users"], entryId: "l3" });
     // The /priv entry was replaced by id; id still names the user and its (empty) privileges.
     expect(r.sources).toBe(2);
   });
@@ -75,9 +75,9 @@ describe("identityFromLog", () => {
   });
 
   it("reads a Windows-only whoami /all whose Ran on is Kali, for a windows host", () => {
-    const onyx = { id: "h2", name: "Onyx", os: "windows" } as Host;
+    const srv13 = { id: "h2", name: "Srv13", os: "windows" } as Host;
     const all = entry("l1", [{ command: "whoami /all", output: "PRIVILEGES INFORMATION\n----\n\nPrivilege Name  Description  State\n=== === ===\nSeImpersonatePrivilege  Impersonate  Enabled" }], { ranOn: "Kali (VM)" });
-    const r = identityFromLog([all], onyx);
+    const r = identityFromLog([all], srv13);
     expect(r.sources).toBeGreaterThanOrEqual(1);
     expect(r.identity?.privileges).toContain("SeImpersonatePrivilege");
   });
@@ -88,20 +88,20 @@ describe("identityFromLog", () => {
   });
 
   describe("flag proof entries", () => {
-    const VEGA = { id: "h2", name: "Vega", os: "linux" } as Host;
+    const SRV11 = { id: "h2", name: "Srv11", os: "linux" } as Host;
     const flagEntry = (proof: string | null, over: Partial<LogEntry> = {}): LogEntry =>
-      entry("f1", [], { kind: "flag", ranOn: "Vega", content: { kind: "flag", flagKind: "proof", value: "x", proof }, ...over });
-    const PROOF = "# id\nuid=0(root) gid=0(root) groups=0(root)\n# cat /root/proof.txt\n918eef4c77a6e2903e0a3f4ff8554182";
+      entry("f1", [], { kind: "flag", ranOn: "Srv11", content: { kind: "flag", flagKind: "proof", value: "x", proof }, ...over });
+    const PROOF = "# id\nuid=0(root) gid=0(root) groups=0(root)\n# cat /root/proof.txt\n44444444444444444444444444444444";
 
     it("counts a flag entry whose proof holds id output as a source", () => {
-      const r = identityFromLog([flagEntry(PROOF)], VEGA);
+      const r = identityFromLog([flagEntry(PROOF)], SRV11);
       expect(r.sources).toBe(1);
       expect(r.identity?.username).toBe("root");
       expect(r.identity?.entryId).toBe("f1");
     });
 
     it("ignores a flag entry with proof null", () => {
-      expect(identityFromLog([flagEntry(null)], VEGA)).toEqual({ identity: null, sources: 0 });
+      expect(identityFromLog([flagEntry(null)], SRV11)).toEqual({ identity: null, sources: 0 });
     });
   });
 });

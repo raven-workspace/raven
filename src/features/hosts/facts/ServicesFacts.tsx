@@ -1,4 +1,4 @@
-import { CaretDown, CaretRight, Plus } from "@phosphor-icons/react";
+import { CaretDownIcon, CaretRightIcon, Plus } from "@phosphor-icons/react";
 import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { effectiveVerdict, foldServices, serviceIdentity, sortServices, type EffectiveVerdict } from "../../../engines/facts";
 import { cx } from "../../../lib/cx";
@@ -174,7 +174,7 @@ export function FoldedRows({ label, services, render, defaultOpen = false }: {
 }) {
   const [open, setOpen] = useState(defaultOpen);
   if (services.length === 0) return null;
-  const Caret = open ? CaretDown : CaretRight;
+  const Caret = open ? CaretDownIcon : CaretRightIcon;
   return (
     <>
       <li className={ROW}>

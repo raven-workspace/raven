@@ -117,9 +117,9 @@ describe('scanParserUtils', () => {
   <!ENTITY lol2 "&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;">
   <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
 ]>
-<nmaprun scanner="nmap" args="nmap 172.31.1.254" version="7.94">
+<nmaprun scanner="nmap" args="nmap 10.10.66.254" version="7.94">
   <host>
-    <address addr="172.31.1.254" addrtype="ipv4"/>
+    <address addr="10.10.66.254" addrtype="ipv4"/>
     <ports>
       <port protocol="tcp" portid="22">
         <state state="open"/>
@@ -131,7 +131,7 @@ describe('scanParserUtils', () => {
 
       const result = parseNmapXml(billionLaughsXml);
       expect(result).not.toBeNull();
-      expect(result?.detectedIp).toBe('172.31.1.254');
+      expect(result?.detectedIp).toBe('10.10.66.254');
       expect(result?.ports[0].port).toBe(22);
     });
   });
@@ -143,34 +143,34 @@ describe('scanParserUtils', () => {
 | {}  }| { } |{ {__ {_   _}{ {__  /  ___} / {} \\ |  \\| |
 | .-. \\| {_} |.-}_} } | |  .-}_} }\\     }/  /\\  \\|   | |
 \`-' \`-' \`-----'\`----'  \`-'  \`----'  \`---' \`-'  \`-'\`-' \`-'
-Open 10.10.10.175:22
-Open 10.10.10.175:80
-Open 10.10.10.175:8080
+Open 10.10.10.212:22
+Open 10.10.10.212:80
+Open 10.10.10.212:8080
 [~] Starting Script(s)
       `;
 
       const result = parseRustscan(rustscanOutput);
       expect(result).not.toBeNull();
       expect(result?.format).toBe('rustscan');
-      expect(result?.detectedIp).toBe('10.10.10.175');
+      expect(result?.detectedIp).toBe('10.10.10.212');
       expect(result?.ports.map((p) => p.port)).toEqual([22, 80, 8080]);
     });
   });
 
   describe('detectAndParseScan', () => {
     it('automatically identifies XML format', () => {
-      const xml = `<nmaprun><host><address addr="172.31.1.1" addrtype="ipv4"/><ports><port protocol="tcp" portid="443"><state state="open"/></port></ports></host></nmaprun>`;
+      const xml = `<nmaprun><host><address addr="10.10.66.1" addrtype="ipv4"/><ports><port protocol="tcp" portid="443"><state state="open"/></port></ports></host></nmaprun>`;
       const res = detectAndParseScan(xml);
       expect(res).not.toBeNull();
       expect(res?.format).toBe('nmap-xml');
-      expect(res?.detectedIp).toBe('172.31.1.1');
+      expect(res?.detectedIp).toBe('10.10.66.1');
     });
 
     it('parses multi-host XML scans detecting all hosts and returning primary target', () => {
       const multiHostXml = `<?xml version="1.0" encoding="UTF-8"?>
 <nmaprun scanner="nmap" version="7.94">
   <host>
-    <address addr="10.10.10.161" addrtype="ipv4"/>
+    <address addr="10.10.10.211" addrtype="ipv4"/>
     <hostnames><hostname name="dc01.forest.local"/></hostnames>
     <ports>
       <port protocol="tcp" portid="88"><state state="open"/><service name="kerberos-sec"/></port>
@@ -189,7 +189,7 @@ Open 10.10.10.175:8080
       expect(res).not.toBeNull();
       expect(res?.format).toBe('nmap-xml');
       expect(res?.hosts).toHaveLength(2);
-      expect(res?.hosts?.[0].ip).toBe('10.10.10.161');
+      expect(res?.hosts?.[0].ip).toBe('10.10.10.211');
       expect(res?.hosts?.[1].ip).toBe('10.10.10.162');
       expect(res?.warnings?.[0]).toContain('Multi-host scan: 2 hosts detected');
     });
@@ -214,7 +214,7 @@ Open 10.10.10.175:8080
         'rlwrap nc -lvnp 4444\nlistening on [any] 4444 ...',
         'python3 -m http.server 8000\nServing HTTP on 0.0.0.0 port 8000 (http://0.0.0.0:8000/) ...',
         'netstat -ano\n  TCP    0.0.0.0:135   0.0.0.0:0   LISTENING   912\n  TCP    0.0.0.0:445   0.0.0.0:0   LISTENING   4',
-        'sudo nmap -p- -Pn --min-rate 1000 -oA full-tcp 172.31.162.95',
+        'sudo nmap -p- -Pn --min-rate 1000 -oA full-tcp 10.10.60.95',
         'udp sweep finished in 12 seconds',
         'grep -rni "port" /etc /opt 2>/dev/null\n/etc/services:1433:ms-sql-s 1433/tcp\n/opt/app/config.yml:12:  ports: 8080, 9090\n/etc/ssh/sshd_config:13:#Port 22\n/opt/app/README:207:open the dashboard after 30 seconds',
       ]) {

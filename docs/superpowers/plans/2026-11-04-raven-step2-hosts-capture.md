@@ -57,7 +57,7 @@ Field notes and threads, the checklist, auto-tick and the Metasploit lock are st
 
 ## Review Focus
 
-1. **A pasted block whose IP is in no host and not in scope** (e.g. the attacker IP `172.31.45.200` in a `nc -lvnp` line). It must not attribute a host or be offered as a new host. Test: `capture draft ignores out-of-scope IPs` (Task 8).
+1. **A pasted block whose IP is in no host and not in scope** (e.g. the attacker IP `10.10.14.8` in a `nc -lvnp` line). It must not attribute a host or be offered as a new host. Test: `capture draft ignores out-of-scope IPs` (Task 8).
 2. **Re-saving an engagement whose scope gained an IP after the user renamed the auto-created host.**
    - The new IP's host is added.
    - The renamed host is untouched, with no duplicate, and nothing is deleted.
@@ -418,13 +418,13 @@ No pre-restore backup is taken: the live DB is unreadable, and the `.damaged` co
     - `hostShown` is `:${port}` (or empty when there's no port) when the Host header's host equals the attributed host's IP or name. Otherwise it's `host[:port]`.
     - Example: `GET :81/`.
   - `noteTitle(text): string`: first non-empty line, leading `#`s and spaces stripped, capped at 120 characters.
-  - `flagTitle(flagKind, host: HostRef | null): string`: `local.txt · Vega`, or `local.txt` without a host.
+  - `flagTitle(flagKind, host: HostRef | null): string`: `local.txt · srv11`, or `local.txt` without a host.
   - `screenshotFileName(input: { ip: string | null; hostName: string | null; column: BoardColumn | null; caption: string; mime: string }): string`.
     - Format: `${ip ?? hostName ?? "engagement"}_${stage}_${topic}.${ext}`.
     - `stage` from the column: enumerate→`enum`, foothold→`foothold`, privesc→`privesc`, loot→`loot`, done→`done`, null→`enum`.
     - `topic`: a caption `:(\d+)` or `port\s*(\d+)` gives `port<n>`. Otherwise the first 3 words of the caption, lowercased, `[a-z0-9]+` joined with `-`. Otherwise `shot`.
     - `ext` from the mime: png, jpg, webp or gif.
-    - Example: `172.31.166.143_enum_port81.png`.
+    - Example: `10.10.61.143_enum_port81.png`.
   - **`buildDraft(input: { text: string; image: { mime: string } | null; kind?: LogKind; hosts: (HostRef & { column: BoardColumn })[]; scope: string[]; domain: string; machines: string[]; lastRanOn: string | null }): CaptureDraft`.**
     - `CaptureDraft = { kind; title; hostIds: string[]; ranOn: string; content: LogContent (attachmentId "" for screenshot/flag); unknownScopeIps: string[]; scan: { hostId: string; ports: ScanPort[]; os: HostOs | null } | null }`.
     - **Hosts:**
@@ -438,15 +438,15 @@ No pre-restore backup is taken: the live DB is unreadable, and the `.damaged` co
     - **scan:** set only when `analyzeCommandOutput` over the outputs finds a scan with `format !== "raw-ports"` and exactly one host is attributed. It holds that host's ports (`ScanPort` shape) and the detected OS.
 
 - [ ] **Step 1: Failing tests,** using spec examples:
-  - `nmap -p- full scan gets library title with target IP` → `"Scan every TCP port · 172.31.166.143"` (the library title verbatim);
-  - `unmatched command keeps the full first line` (`./exploit.py --target 172.31.166.143 --lport 4444` stays whole);
-  - `prompt shell attributes target host and ranOn`: `vega@vega:~$ id`, with a host named `Vega`, gives host Vega and ranOn `Vega`;
+  - `nmap -p- full scan gets library title with target IP` → `"Scan every TCP port · 10.10.61.143"` (the library title verbatim);
+  - `unmatched command keeps the full first line` (`./exploit.py --target 10.10.61.143 --lport 4444` stays whole);
+  - `prompt shell attributes target host and ranOn`: `srv11@srv11:~$ id`, with a host named `srv11`, gives host srv11 and ranOn `srv11`;
   - `prompt naming no host falls back to the command line`: `*Evil-WinRM* PS C:\Users\x> whoami` with `lastRanOn: "Kali (VM)"` gives no host and ranOn `Kali (VM)`;
   - `kali prompt sets ranOn to the kali machine`;
   - `capture draft ignores out-of-scope IPs`;
   - `unknown in-scope IP is offered`;
   - `http title GET :81/`;
-  - `screenshot file name 172.31.166.143_enum_port81`;
+  - `screenshot file name 10.10.61.143_enum_port81`;
   - `32-hex paste is a flag`;
   - `note title strips heading marks`;
   - `scan output yields services for the single attributed host`.

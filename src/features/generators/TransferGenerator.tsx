@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { fillCommand, filterForKind } from "../../engines/checklist";
 import { isHttp, transferMethods, TRANSFER_CARD, withToolsDirs } from "../../engines/generators/transfer";
 import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/store";
@@ -9,6 +9,7 @@ import { isDialogOpen, useKeydown } from "../../lib/keys";
 import { shortHostName } from "../../lib/hostName";
 import { reportError } from "../../lib/lockSignal";
 import { Input, Kbd, labelClass } from "../../ui";
+import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
 import { logCommand } from "../capture/logCommand";
 import { CommandList } from "../checklist/CommandList";
 import { fillLibraryCommand } from "../checklist/goalCommands";
@@ -42,16 +43,28 @@ const saveDir = (os: Os, dir: string) => {
 /**
  * "Transfer a file": pick a Toolkit file, a host and folder, and a method; get the Kali command and the target command
  * as a copy-ready pair. The methods come from the transfer cards in the library (imported cards win), so editing a
- * card changes the generator. ⌘↵ copies and logs the target half against the host.
+ * card changes the generator. ⌘↵ copies and logs the target half against the host. Copy and ⌘↵ go through the copy
+ * guard: an unfilled token (a blank LHOST) copies nothing on the first try and focuses its field.
+ * It runs inside Payloads, which supplies the OS and LHOST it settled on and the field for a token this has none for.
  */
-export function TransferGenerator({ engagementId, hostId: viewHostId }: { engagementId: string; hostId: string | null }) {
+export function TransferGenerator({ engagementId, hostId: viewHostId, os: contextOs, lhost, focusToken: focusOuter, autoFocus = true }: {
+  engagementId: string; hostId: string | null;
+  /** Payloads' OS for the host (inferred or overridden); null asks here. */
+  os: Os | null;
+  /** Payloads' LHOST (session value over Settings); "" leaves {LHOST} unfilled. */
+  lhost: string;
+  /** Focus the field for a token this generator has no input for (LHOST). */
+  focusToken: (token: string) => void;
+  /** Start in the File field (off while you move through the Workbench's generator list). */
+  autoFocus?: boolean;
+}) {
   const qc = useQueryClient();
   const version = useLibraryVersion();
   // The host is the screen's own (the browse bar's HostChip); there is no second host control here.
   const hostId = viewHostId;
   const { d, host, makeInput, examReady } = useFillBase(engagementId, hostId);
   const [osPick, setOsPick] = useState<Os>("windows");
-  const os: Os = host?.os === "linux" || host?.os === "windows" ? host.os : osPick;
+  const os: Os = contextOs ?? osPick;
   const [dirs, setDirs] = useState<Record<Os, string>>(() => ({ windows: readDir("windows"), linux: readDir("linux") }));
   const dir = dirs[os];
   const [file, setFile] = useState("");
@@ -60,7 +73,10 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
   const [status, setStatus] = useState<string>();
   const fileRef = useRef<HTMLInputElement>(null);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  useEffect(() => fileRef.current?.focus(), []);
+  const [startFocused] = useState(autoFocus);
+  useEffect(() => {
+    if (startFocused) fileRef.current?.focus();
+  }, [startFocused]);
 
   // getLibrary()/getCards() change only with the library version.
   /* eslint-disable react-hooks/exhaustive-deps */
@@ -79,7 +95,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
   const method = methods.find((m) => m.id === methodId) ?? methods[0];
 
   const effectiveDir = dir.trim() || DEFAULT_DIR[os];
-  const overrides: Record<string, string> = { DEST_DIR: effectiveDir, PORT: port };
+  const overrides: Record<string, string> = { DEST_DIR: effectiveDir, PORT: port, LHOST: lhost.trim() };
   if (file.trim()) {
     overrides.FILE = file.trim();
     overrides.SCRIPT = file.trim().replace(/\.ps1$/i, "");
@@ -89,12 +105,19 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
   const fill = (cmds: NonNullable<typeof method>["kali"]) => cmds.map((c) => fillLibraryCommand(c, input, false));
 
   // The target half as typed at the shell: one block, so the cleanup list sees every line.
-  const targetText = method ? method.target.map((c) => fillCommand(c.template, input, { commandOs: c.os }).text).join("\n") : "";
+  const targetFills = method ? method.target.map((c) => fillCommand(c.template, input, { commandOs: c.os })) : [];
+  const targetText = targetFills.map((f) => f.text).join("\n");
+  const targetCmd = method && {
+    id: `transfer:${method.id}`, title: method.label, text: targetText, unresolved: [...new Set(targetFills.flatMap((f) => f.unresolved))], msfMarker: false,
+  };
+  const focusToken = useCallback((t: string) => (t === "FILE" || t === "SCRIPT" ? fileRef.current?.focus() : focusOuter(t)), [focusOuter]);
+  const focusNothing = useCallback(() => {}, []);
+  const guard = useCopyGuard({ focusToken, focusCred: focusNothing, hostName: host ? shortHostName(host.name) : null });
   const logTarget = async () => {
     setStatus(undefined);
-    if (!method || !host || !d.engagement || !targetText) return;
+    if (!targetCmd || !host || !d.engagement || !targetText) return;
     try {
-      await copyPlain(targetText);
+      if ((await guard.attempt(targetCmd, () => copyPlain(targetText))) !== "copied") return;
       await logCommand(qc, {
         engagementId, host, hosts: d.hosts, command: targetText,
         title: `Transfer ${file.trim() || "a file"} · ${method.label} · ${host.ip ?? host.name}`,
@@ -137,7 +160,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
           <span className={labelClass}>File</span>
           <FilePicker ref={fileRef} name="FILE" os={os} className="h-7 w-64" value={file} onChange={setFile} />
         </label>
-        {!host?.os && (
+        {!contextOs && (
           <label className="flex flex-col gap-1 text-xs text-muted">
             <span className={labelClass}>OS</span>
             <select aria-label="Target OS" value={osPick} onChange={(e) => setOsPick(e.target.value as Os)} className="h-7 rounded-sm border border-line-2 bg-bg px-1 text-xs text-fg-2">
@@ -208,13 +231,13 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
           {kali.length > 0 && (
             <div className="flex flex-col gap-2">
               <h3 className="m-0 text-[11px] font-semibold uppercase tracking-label text-muted">1 · On Kali</h3>
-              <CommandList commands={kali} hostName={shortName} />
+              <CommandList commands={kali} hostName={shortName} focusToken={focusToken} />
             </div>
           )}
           {target.length > 0 && (
             <div className="flex flex-col gap-2">
               <h3 className="m-0 text-[11px] font-semibold uppercase tracking-label text-muted">{kali.length > 0 ? "2" : "1"} · On {hostName}</h3>
-              <CommandList commands={target} hostName={shortName} />
+              <CommandList commands={target} hostName={shortName} focusToken={focusToken} />
               <p className="m-0 text-[11px] text-muted">
                 <Kbd>⌘↵</Kbd> copies the {host ? hostName : "target"} half and logs it{host ? "" : " (pick a host)"}.
               </p>
@@ -223,6 +246,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId }: { engage
           {target.length === 0 && <p className="m-0 text-xs text-muted">Kali only: nothing to run on {hostName}.</p>}
         </div>
       )}
+      {targetCmd && guard.forKey === copyKey(targetCmd) && guard.hint && <p role="status" className="m-0 text-xs text-warn">{guard.hint}</p>}
       {status && <p role="status" className="m-0 text-xs text-muted">{status}</p>}
     </section>
   );

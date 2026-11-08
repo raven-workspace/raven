@@ -2,11 +2,12 @@ import { identityBlocksOf, isIdentityBlockFor, mergeIdentity, usableIdentity, ve
 import { buildDraft, type CaptureDraft, type DraftInput } from "../../engines/capture";
 import { api } from "../../lib/api";
 import { afterEntrySaved, CHECKLIST_FAILED, FollowUpError } from "../checklist/ticks";
-import { applyIntake } from "../credentials/applyIntake";
-import type { Credential, Username } from "../../types/credentials";
 import type { Host } from "../../types/host";
-import type { LogContent, LogEntry, LogKind, NewAttachment } from "../../types/log";
-import { intakePlanFor, isAccepted, provisionalHostId, realIntakeKey } from "./resolve";
+import type { HostIdentity } from "../../types/hostFacts";
+import type { ExtractionSummary, LogContent, LogEntry, LogKind, NewAttachment } from "../../types/log";
+import type { Service } from "../../types/service";
+import { applyInterpretation, ExtractionError, interpretEntry, type Applied, type FiledBySave } from "./applyInterpretation";
+import { newHostScans } from "./resolve";
 
 const OPEN_STATES = new Set(["open", "open|filtered"]);
 
@@ -21,16 +22,19 @@ export interface CaptureEdits {
   returnedNothing: boolean;
   private: boolean;
   content: LogContent;
+  payloadId?: string;
+  payloadValues?: Record<string, string>;
 }
 
 export const IDENTITY_FAILED = "Saved the entry, but the host's identity didn't update. Paste the output again to retry.";
-export const VECTORS_FAILED = "Saved the entry, but the privesc vectors didn't update. Paste the output again to retry.";
+export const EXTRACTION_FAILED = "Saved the entry, but Raven couldn't file what it found. Paste the output again to retry.";
 
 /**
  * Records who the user is on the host from its whoami/id output, merged by kind into what is stored (`whoami /priv`
- * changes only the privileges, and so on). Returns the host and the privesc vectors the output points to, or null.
+ * changes only the privileges, and so on). Returns the host, the identity before (for Undo), whether it changed, and
+ * the privesc vectors the output points to; null when the entry holds no identity output for one host.
  */
-async function recordIdentity(entry: LogEntry, hosts: Host[]): Promise<{ hostId: string; vectors: string[] } | null> {
+async function recordIdentity(entry: LogEntry, hosts: Host[]): Promise<FiledBySave["identity"]> {
   const host = hosts.find((h) => h.id === entry.hostIds[0]);
   if (!host) return null;
   const parsedBlocks = identityBlocksOf(entry).flatMap((block) => {
@@ -38,32 +42,39 @@ async function recordIdentity(entry: LogEntry, hosts: Host[]): Promise<{ hostId:
     return parsed ? [{ parsed, command: block.command }] : [];
   });
   if (parsedBlocks.length === 0) return null;
-  let stored: IdentityFields | null = (await api.hostIdentityGet(host.id)) ?? null;
+  const before: HostIdentity | null = (await api.hostIdentityGet(host.id)) ?? null;
+  let stored: IdentityFields | null = before;
   const vectors: string[] = [];
   for (const { parsed, command } of parsedBlocks) {
     stored = mergeIdentity(stored, parsed, command);
-    await api.hostIdentitySet({ hostId: host.id, username: stored.username ?? "unknown", privileges: stored.privileges, groups: stored.groups, entryId: entry.id });
     for (const title of vectorsFromIdentity(parsed)) if (!vectors.includes(title)) vectors.push(title);
   }
-  return { hostId: host.id, vectors };
+  const fields = (i: IdentityFields | null) =>
+    i && JSON.stringify([i.username ?? "unknown", i.privileges, i.groups]);
+  const changed = fields(before) !== fields(stored);
+  if (changed && stored) {
+    await api.hostIdentitySet({ hostId: host.id, username: stored.username ?? "unknown", privileges: stored.privileges, groups: stored.groups, entryId: entry.id });
+  }
+  return { hostId: host.id, before, changed, vectors };
 }
 
-export const INTAKE_FAILED = "Saved the entry, but the credentials didn't update. Paste the output again to retry.";
-
-/** The entry was saved, but a follow-up step (services, OS, credentials, checklist, Metasploit lock) failed. */
+/** The entry was saved, but a follow-up step (services, OS, identity, extraction, checklist, Metasploit lock) failed. */
 export class PartialSaveError extends Error {
   readonly entry: LogEntry;
   /** What made the (first) follow-up step fail. */
   readonly reason: unknown;
   /** What made each failed follow-up step fail, in order; `reason` is the first. */
   readonly reasons: unknown[];
-  constructor(entry: LogEntry, cause: unknown, message?: string, reasons?: unknown[]) {
+  /** The summary of the extraction this save stored despite the failure (it can be undone); null when none was. */
+  readonly summary: ExtractionSummary | null;
+  constructor(entry: LogEntry, cause: unknown, message?: string, reasons?: unknown[], summary: ExtractionSummary | null = null) {
     const detail = cause instanceof Error ? cause.message : String(cause);
     super(message ?? `Saved, but services didn't update: ${detail}`);
     this.name = "PartialSaveError";
     this.entry = entry;
     this.reason = cause;
     this.reasons = reasons ?? [cause];
+    this.summary = summary;
   }
 }
 
@@ -71,62 +82,77 @@ export interface SaveCaptureArgs {
   engagementId: string;
   draft: CaptureDraft;
   edits: CaptureEdits;
-  /** Unknown in-scope IPs the user chose to add as hosts. */
-  addIps: string[];
   image: NewAttachment | null;
   hosts: Host[];
-  /** What `draft` was built from. With it, a command's scan can land on a host created here. */
+  /** What `draft` was built from. With it, a scan of an IP that isn't a host yet makes that host. */
   draftInput?: DraftInput;
-  /** Called for each host created, so a retry after a failure reuses it. */
+  /** Called for each host created before the entry, so a retry after a failure reuses it. */
   onHostCreated?: (host: Host) => void;
-  /**
-   * For a command entry: the engagement's credentials and usernames the nxc intake plans against, and the
-   * operator's accept toggles. Absent skips the intake.
-   */
-  intake?: {
-    credentials: Credential[];
-    usernames: Username[];
-    toggles: Record<string, boolean>;
-    /**
-     * Keys of the pending credentials the preview offered. Only these can be created (T8-R3). A preview planned
-     * with provisional hosts for `addIps` (`new:<ip>`) uses those ids; they are mapped to the created hosts here.
-     */
-    previewKeys: string[];
+}
+
+export interface SaveCaptureResult {
+  entry: LogEntry;
+  /** What the save filed from the output; null when nothing in it was parsed (no extraction is stored). */
+  summary: ExtractionSummary | null;
+}
+
+type Scan = NonNullable<CaptureDraft["scan"]>;
+
+/** Upserts a scan's open ports as services and fills the OS of a host that has none; returns what changed. */
+async function applyScan(scan: Scan, hosts: Host[]): Promise<FiledBySave["scans"][number]> {
+  const { hostId } = scan;
+  // Closed and filtered ports are not services.
+  const open = scan.ports.filter((p) => OPEN_STATES.has(p.state.toLowerCase()));
+  const was: Service[] = (await api.servicesList(hostId)) ?? [];
+  const now: Service[] = (await api.servicesUpsertScan(hostId, open)) ?? [];
+  const wasById = new Map(was.map((s) => [s.id, s]));
+  const filed: FiledBySave["scans"][number] = {
+    hostId,
+    createdServiceIds: now.filter((s) => !wasById.has(s.id)).map((s) => s.id),
+    servicesBefore: now.flatMap((s) => {
+      const old = wasById.get(s.id);
+      return old && JSON.stringify(old) !== JSON.stringify(s) ? [old] : [];
+    }),
+    hostOsBefore: null,
   };
+  const h = hosts.find((x) => x.id === hostId);
+  if (h && !h.os && scan.os) {
+    await api.hostUpdate(h.id, { name: h.name, ip: h.ip, os: scan.os, access: h.access });
+    filed.hostOsBefore = { hostId: h.id, os: null };
+  }
+  return filed;
 }
 
 /**
- * Saves a capture: creates hosts for `addIps`, then the entry, then applies the nmap scan
- * (services, and the OS when the host has none), then the nxc credential intake, then the checklist ticks, board and
- * Metasploit lock.
+ * Saves a capture: creates the hosts a scan of new IPs proves, then the entry, then applies the nmap scans (services,
+ * and the OS when the host has none) and the identity, then files what the output proved (`applyInterpretation`),
+ * then the checklist ticks, board and Metasploit lock, and last stores the extraction (its time must follow the
+ * board sync, which Undo compares against).
  * A failure after the entry exists throws `PartialSaveError` carrying the saved entry.
  */
-export async function saveCapture(args: SaveCaptureArgs): Promise<LogEntry> {
-  const { engagementId, draft, edits, addIps, image, draftInput, onHostCreated } = args;
+export async function saveCapture(args: SaveCaptureArgs): Promise<SaveCaptureResult> {
+  const { engagementId, draft, edits, image, draftInput, onHostCreated } = args;
   const hostIds = [...edits.hostIds];
   const hosts = [...args.hosts];
-  const added: Host[] = [];
-  // Provisional preview id (`new:<ip>`) → the host it became.
-  const createdIds = new Map<string, string>();
-  for (const ip of addIps) {
+  const createdHostIds: string[] = [];
+
+  // First scan of a new box: an open port proves the host; the draft re-runs for it now that it exists.
+  const scans: Scan[] = draft.scan ? [draft.scan] : [];
+  const newIps = edits.kind === "command" && draftInput ? newHostScans(draft, draftInput).map((n) => n.ip) : [];
+  for (const ip of newIps) {
     // A retry after a failure finds the host already made.
     let h = hosts.find((x) => x.ip === ip);
     if (!h) {
       h = await api.hostCreate(engagementId, { name: ip, ip });
       hosts.push(h);
+      createdHostIds.push(h.id);
       onHostCreated?.(h);
     }
-    added.push(h);
-    createdIds.set(provisionalHostId(ip), h.id);
     if (!hostIds.includes(h.id)) hostIds.push(h.id);
-  }
-
-  // First scan of a new box: re-run the draft now that its host exists.
-  let scan = draft.scan;
-  if (!scan && edits.kind === "command" && draftInput && added.length) {
-    const known = new Set(draftInput.hosts.map((h) => h.id));
-    const refs = added.filter((h) => !known.has(h.id)).map((h) => ({ id: h.id, name: h.name, ip: h.ip, column: h.boardColumn }));
-    scan = buildDraft({ ...draftInput, kind: "command", hosts: [...draftInput.hosts, ...refs] }).scan;
+    const ref = { id: h.id, name: h.name, ip: h.ip, column: h.boardColumn };
+    const others = draftInput!.hosts.filter((x) => x.id !== h.id);
+    const scan = buildDraft({ ...draftInput!, kind: "command", hosts: [...others, ref] }).scan;
+    if (scan?.hostId === h.id) scans.push(scan);
   }
 
   const entry = await api.logCreate(engagementId, {
@@ -138,57 +164,41 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<LogEntry> {
     returnedNothing: edits.returnedNothing,
     private: edits.private,
     content: edits.content,
+    ...(edits.payloadId ? { payloadId: edits.payloadId, payloadValues: edits.payloadValues ?? null } : {}),
     attachment: image,
   });
 
   // Each follow-up step runs even when an earlier one failed; the first failure is reported first.
   const failures: { reason: unknown; message: string; also: string }[] = [];
-  if (scan && hostIds.includes(scan.hostId)) {
-    const { hostId } = scan;
+  const extractionAlso = "Raven couldn't file what it found either: paste the output again to retry.";
+  const filedScans: FiledBySave["scans"] = [];
+  for (const scan of scans) {
+    if (!hostIds.includes(scan.hostId)) continue;
     try {
-      // Closed and filtered ports are not services.
-      const open = scan.ports.filter((p) => OPEN_STATES.has(p.state.toLowerCase()));
-      await api.servicesUpsertScan(hostId, open);
-      const h = hosts.find((x) => x.id === hostId);
-      if (h && !h.os && scan.os) {
-        await api.hostUpdate(h.id, { name: h.name, ip: h.ip, os: scan.os, access: h.access });
-      }
+      filedScans.push(await applyScan(scan, hosts));
     } catch (e) {
       const message = new PartialSaveError(entry, e).message;
       failures.push({ reason: e, message, also: message });
     }
   }
-  if (args.intake) {
-    // Planned against the hosts as saved, so an IP added here counts as known.
-    const plan = intakePlanFor(edits, { engagementId, hosts, ...args.intake });
-    if (plan) {
-      // Only what the preview offered is ever created (T8-R3). The preview planned IPs added here as provisional
-      // hosts (F-R2): their keys and toggles are mapped to the created hosts.
-      const offered = new Set(args.intake.previewKeys.map((k) => realIntakeKey(k, createdIds)));
-      const toggles = Object.fromEntries(Object.entries(args.intake.toggles).map(([k, on]) => [realIntakeKey(k, createdIds), on]));
-      const acceptKeys = plan.newCredentials.filter((p) => offered.has(p.key) && isAccepted(p, toggles)).map((p) => p.key);
-      try {
-        await applyIntake(engagementId, plan, { logEntryId: entry.id, at: entry.at, acceptKeys });
-      } catch (e) {
-        failures.push({ reason: e, message: INTAKE_FAILED, also: "The credentials didn't update either: paste the output again to retry." });
-      }
-    }
-  }
-  let identity: Awaited<ReturnType<typeof recordIdentity>> = null;
+  let identity: FiledBySave["identity"] = null;
   try {
     identity = await recordIdentity(entry, hosts);
   } catch (e) {
     failures.push({ reason: e, message: IDENTITY_FAILED, also: "The host's identity didn't update either: paste the output again to retry." });
   }
-  if (identity) {
-    try {
-      for (const title of identity.vectors) await api.vectorUpsert(identity.hostId, { title, status: "try", source: "auto" });
-    } catch (e) {
-      failures.push({ reason: e, message: VECTORS_FAILED, also: "The privesc vectors didn't update either: paste the output again to retry." });
-    }
-  }
+
+  let applied: Applied | null = null;
   try {
-    await afterEntrySaved(engagementId, entry, entry.id);
+    const resolved = interpretEntry(entry, hosts, draftInput?.domain ?? "", draftInput?.scope ?? []);
+    applied = await applyInterpretation(engagementId, entry, resolved, { hosts, createdHostIds, scans: filedScans, identity });
+  } catch (e) {
+    if (e instanceof ExtractionError) applied = e.applied;
+    failures.push({ reason: e instanceof ExtractionError ? e.reason : e, message: EXTRACTION_FAILED, also: extractionAlso });
+  }
+
+  try {
+    await afterEntrySaved(engagementId, entry, entry.id, applied?.outputTicks ?? []);
   } catch (e) {
     const checklistAlso = "The checklist didn't update either: use Tick from log on the Engagement checklist.";
     if (e instanceof FollowUpError) {
@@ -197,10 +207,23 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<LogEntry> {
       failures.push({ reason: e, message: new PartialSaveError(entry, e).message, also: checklistAlso });
     }
   }
+
+  // R7/R8: stored once, on create, after the board sync.
+  const summary = applied?.summary ?? null;
+  let stored = false;
+  if (applied && summary) {
+    try {
+      await api.extractionSave(entry.id, engagementId, summary, applied.record);
+      stored = true;
+    } catch (e) {
+      failures.push({ reason: e, message: EXTRACTION_FAILED, also: extractionAlso });
+    }
+  }
+
   if (failures.length) {
     const [first, ...rest] = failures;
     const message = rest.reduce((acc, f) => `${acc}${acc.endsWith(".") ? "" : "."} ${f.also}`, first!.message);
-    throw new PartialSaveError(entry, first!.reason, message, failures.map((f) => f.reason));
+    throw new PartialSaveError(entry, first!.reason, message, failures.map((f) => f.reason), stored ? summary : null);
   }
-  return entry;
+  return { entry, summary };
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { filterForKind } from "../../engines/checklist";
 import { searchArsenal, type ArsenalHit } from "../../engines/library/arsenalSearch";
 import { allCategories, categoryLabel, categoryOf } from "../../engines/library/categories";
@@ -10,7 +10,6 @@ import { Button, Select } from "../../ui";
 import { useCredPickStore } from "../checklist/credPick";
 import { useFillBase } from "../palette/fillData";
 import { GENERATORS } from "../palette/generators";
-import { TransferGenerator } from "../generators/TransferGenerator";
 import { browseList, OTHER_TOOLS, type BrowseSection } from "./browseList";
 import { CardView, CommandPane } from "./CardView";
 import { CredChip, isCredPickKey } from "./CredChip";
@@ -67,8 +66,6 @@ export function ArsenalBrowse() {
 
   const [category, setCategory] = useState<string | null>(null);
   const [selected, setSelected] = useState<Pick | null>(() => {
-    const generator = GENERATORS.find((g) => g.id === params.get("generator"));
-    if (generator) return { kind: "generator", id: generator.id };
     const { cardId, lastRead } = useArsenalStore.getState();
     return cardId ? { kind: "card", id: cardId } : lastRead;
   });
@@ -181,7 +178,13 @@ export function ArsenalBrowse() {
     pick({ type: "card", id: card.id, title: card.title, card });
   };
 
-  const focusReading = () => (readingRef.current?.querySelector<HTMLElement>("[data-block]") ?? readingRef.current)?.focus();
+  // A generator lives in Payloads: opening it goes there (Esc there comes back here).
+  const navigate = useNavigate();
+  const payloadsPath = (id: string) => `/payloads?generator=${encodeURIComponent(id)}`;
+  const focusReading = () => {
+    if (open?.type === "generator") void navigate(payloadsPath(open.id));
+    else (readingRef.current?.querySelector<HTMLElement>("[data-block]") ?? readingRef.current)?.focus();
+  };
   const focusCategory = () => catsRef.current?.querySelector<HTMLElement>('button[tabindex="0"]')?.focus();
   const modified = (e: ReactKeyboardEvent) => e.metaKey || e.ctrlKey || e.altKey || e.nativeEvent.isComposing;
 
@@ -243,7 +246,15 @@ export function ArsenalBrowse() {
   const reading = (() => {
     if (!open) return null;
     const common = { engagementId, hostId, overrides, onOverrides: setOverrides, focusCred, autoFocus: false, onOpenCard: fromCard };
-    if (open.type === "generator") return open.id === "transfer" ? <TransferGenerator key={`${engagementId}`} engagementId={engagementId} hostId={hostId} /> : null;
+    if (open.type === "generator") {
+      return (
+        <article aria-label={open.title} className="grid content-start gap-2">
+          <h2 className="m-0 text-[15px] font-semibold text-fg">{open.title}</h2>
+          <p className="m-0 text-xs text-muted">This generator is in Payloads, with the reverse shells and SQL injection.</p>
+          <Link to={payloadsPath(open.id)} className="justify-self-start text-[13px] text-accent underline-offset-2 hover:underline">Open in Payloads ↵</Link>
+        </article>
+      );
+    }
     if (open.type === "card") return <CardView key={open.id} cardId={open.id} {...common} />;
     const c = open.command;
     const card = c.cardId ? cards.find((k) => k.id === c.cardId) : undefined;
@@ -325,6 +336,7 @@ export function ArsenalBrowse() {
           <ResultList
             id="arsenal-results" label="Arsenal results" groups={resultGroups} selected={index} onSelect={() => {}}
             onActivate={(r) => {
+              if (r.hit.type === "generator") return void navigate(payloadsPath(r.hit.id));
               pick(r.hit);
               listRef.current?.focus();
             }}

@@ -35,7 +35,7 @@ export default function UiGallery() {
         <Section title="Chip">
           <div className="flex flex-wrap items-center gap-2">
             <Chip>Linux</Chip>
-            <Chip variant="accent">user · vega</Chip>
+            <Chip variant="accent">user · srv11</Chip>
             <Chip>Privesc</Chip>
             <Chip>1 open thread</Chip>
             <Chip mono>10.10.0.0/24</Chip>
@@ -125,7 +125,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 /** The host screen from visual-directions.html direction A, using only Ink tokens and components. */
 function MockupA() {
   const side = ["Board", "Log", "Credentials", "Findings", "Engagement checklist", "Report"];
-  const hosts = ["DC01", "MS01", "Vega", "Quartz", "Onyx"];
+  const hosts = ["DC01", "MS01", "srv11", "srv12", "srv13"];
   const sec = (label: string, on: boolean) => (
     <div
       key={label}
@@ -143,14 +143,14 @@ function MockupA() {
       <div className="border-r border-line px-3 py-3.5">
         {side.map((s) => sec(s, s === "Board"))}
         <div className={`${labelClass} mx-2 mt-4 mb-1.5 text-faint`}>Hosts</div>
-        {hosts.map((h) => sec(h, h === "Vega"))}
+        {hosts.map((h) => sec(h, h === "srv11"))}
       </div>
       <div className="grid min-h-0 grid-rows-[auto_1fr] gap-3 px-[18px] py-3.5">
         <div className="flex flex-wrap items-center gap-2.5">
-          <span className="text-xl font-semibold tracking-[-0.01em] text-fg">Vega</span>
-          <span className="font-mono text-xs text-muted">172.31.166.143</span>
+          <span className="text-xl font-semibold tracking-[-0.01em] text-fg">srv11</span>
+          <span className="font-mono text-xs text-muted">10.10.61.143</span>
           <Chip>Linux</Chip>
-          <Chip variant="accent">user · vega</Chip>
+          <Chip variant="accent">user · srv11</Chip>
           <Chip>Privesc</Chip>
           <Chip>1 open thread</Chip>
         </div>
@@ -176,7 +176,7 @@ function MockupA() {
               <span className="text-muted">Findings</span>
             </div>
             {[
-              ["21:42", "Talk to 3003 directly", "nc -nv 172.31.166.143 3003", "The service answers without auth."],
+              ["21:42", "Talk to 3003 directly", "nc -nv 10.10.61.143 3003", "The service answers without auth."],
               ["22:31", "SUID binaries", "find / -perm -4000 2>/dev/null", "backupd looks non-standard — investigate."],
             ].map(([t, title, cmd, obs]) => (
               <div key={t} className="grid grid-cols-[58px_1fr] gap-2.5 border-b border-line py-2">

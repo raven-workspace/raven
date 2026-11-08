@@ -7,7 +7,7 @@ import {
   type PlannedCredential,
 } from "../../engines/credentials";
 import { api } from "../../lib/api";
-import type { CredAttemptInput, Credential, CredentialInput } from "../../types/credentials";
+import type { CredAttempt, CredAttemptInput, Credential, CredentialInput, Username } from "../../types/credentials";
 
 export interface IntakeContext {
   /** The saved entry: the proof of every recorded result. */
@@ -16,6 +16,14 @@ export interface IntakeContext {
   at: number;
   /** Keys of the pending credentials the operator accepted. */
   acceptKeys: string[];
+  /** Told each row the store returns as it files it, so a caller can record exactly what was filed. */
+  onFiled?: {
+    credential?: (c: Credential) => void;
+    /** Told the id of a stored credential an accepted pair or hash matched instead of adding (it may have been made earlier in this same save). */
+    reused?: (id: string) => void;
+    username?: (u: Username) => void;
+    attempts?: (rows: CredAttempt[]) => void;
+  };
 }
 
 /** A stored credential as a full update input that changes nothing but what the caller overrides. */
@@ -65,6 +73,7 @@ export async function applyIntake(engagementId: string, plan: CredentialIntakePl
   const usernameIds = new Map<string, string>();
   for (const u of plan.newUsernames) {
     const created = await api.usernameCreate(engagementId, withoutEngagement(u));
+    ctx.onFiled?.username?.(created);
     usernameIds.set(usernameKey({ ...u, domain: u.domain ?? null }), created.id);
     usernameIds.set(usernameKey(created), created.id);
   }
@@ -82,15 +91,17 @@ export async function applyIntake(engagementId: string, plan: CredentialIntakePl
   };
   const upsert = async (attempts: PlannedAttempt[]) => {
     const inputs = attempts.map(toInput).filter((i): i is CredAttemptInput => i !== null);
-    if (inputs.length) await api.credAttemptsUpsert(engagementId, inputs);
+    if (inputs.length) ctx.onFiled?.attempts?.((await api.credAttemptsUpsert(engagementId, inputs)) ?? []);
   };
 
   const addCredential = async (planned: PlannedCredential): Promise<string> => {
     const existing = findDuplicateCredential(credentials, asCredential(planned));
     if (existing) {
+      ctx.onFiled?.reused?.(existing.id);
       // Reused for a spray hit: remember the owner-less secret it came from, never replacing a link.
       if (planned.fromSecretId && !existing.fromSecretId && planned.fromSecretId !== existing.id) {
         const updated = await api.credentialUpdate(existing.id, { ...inputOf(existing), fromSecretId: planned.fromSecretId });
+        ctx.onFiled?.credential?.(updated);
         credentials[credentials.indexOf(existing)] = updated;
       }
       return existing.id;
@@ -101,6 +112,7 @@ export async function applyIntake(engagementId: string, plan: CredentialIntakePl
       if (hashType) input.hashType = hashType;
     }
     const created = await api.credentialCreate(engagementId, input);
+    ctx.onFiled?.credential?.(created);
     if (!credentials.some((c) => c.id === created.id)) credentials.push(created);
     return created.id;
   };
@@ -124,7 +136,7 @@ export async function applyIntake(engagementId: string, plan: CredentialIntakePl
     await upsert(p.attempts.map((a) => ({ ...a, credId })));
     const from = p.fromUsername;
     const fromId = from && usernameIdOf(from);
-    if (from && fromId) await api.credAttemptsRekey(fromId, from.secretCredIds, credId, from.hostId);
+    if (from && fromId) ctx.onFiled?.attempts?.((await api.credAttemptsRekey(fromId, from.secretCredIds, credId, from.hostId)) ?? []);
   }
 
   // 5. Roast hashes.
@@ -134,6 +146,8 @@ export async function applyIntake(engagementId: string, plan: CredentialIntakePl
   for (const l of plan.links ?? []) {
     const c = credentials.find((x) => x.id === l.credId);
     if (!c || c.fromSecretId || l.fromSecretId === c.id) continue;
-    credentials[credentials.indexOf(c)] = await api.credentialUpdate(c.id, { ...inputOf(c), fromSecretId: l.fromSecretId });
+    const updated = await api.credentialUpdate(c.id, { ...inputOf(c), fromSecretId: l.fromSecretId });
+    ctx.onFiled?.credential?.(updated);
+    credentials[credentials.indexOf(c)] = updated;
   }
 }

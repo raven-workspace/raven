@@ -7,7 +7,7 @@ import type { Credential } from "../types/credentials";
 
 // jsdom has no layout: these check the classes that decide wrapping (U5–U7).
 const cred: Credential = {
-  id: "c1", engagementId: "e1", type: "hash", username: "tom_admin", domain: "OFFSEC.EXAM", secret: "aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0",
+  id: "c1", engagementId: "e1", type: "hash", username: "ted_admin", domain: "EXAM2.TEST", secret: "aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0",
   hashType: "ntlm", scope: "domain", localHostId: null, sourceHostId: null, source: null, notes: null, crackStatus: null, crackedFrom: null,
   fromSecretId: null, createdAt: 1, updatedAt: 1,
 };
@@ -20,12 +20,12 @@ describe("layout (U5–U7)", () => {
     expect(label.parentElement).toBe(picker.parentElement);
     expect(label.parentElement!.className).toMatch(/flex-col/);
     expect(picker.className).toMatch(/w-full/);
-    expect(picker.getAttribute("title")).toContain("tom_admin");
+    expect(picker.getAttribute("title")).toContain("ted_admin");
     expect(picker.querySelector(".truncate")).not.toBeNull();
   });
 
   it("U6: command blocks wrap at whitespace and never scroll sideways", () => {
-    render(<CommandList commands={[{ id: "a", title: "Run it", text: "nxc smb 10.10.130.140 -u tom", unresolved: [], msfMarker: false }]} />);
+    render(<CommandList commands={[{ id: "a", title: "Run it", text: "nxc smb 10.10.67.140 -u tom", unresolved: [], msfMarker: false }]} />);
     const pre = screen.getByText((_, el) => el?.tagName === "PRE");
     expect(pre.className).not.toMatch(/break-all|break-words|wrap-anywhere|wrap-break-word/);
     expect(pre.className).toMatch(/whitespace-pre-wrap/);

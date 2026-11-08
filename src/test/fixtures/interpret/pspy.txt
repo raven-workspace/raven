@@ -1,0 +1,8 @@
+pspy - version: v1.2.1 - Commit SHA: 0000000
+
+2026/01/01 00:00:00 CMD: UID=1000  PID=2210   | ./pspy64
+2026/01/01 00:00:01 CMD: UID=0     PID=2231   | /usr/sbin/CRON -f
+2026/01/01 00:00:01 CMD: UID=0     PID=2232   | /bin/sh -c /bin/bash /home/jay/.scripts/nightly_backup.sh
+2026/01/01 00:00:01 CMD: UID=0     PID=2233   | /bin/bash /home/jay/.scripts/nightly_backup.sh
+2026/01/01 00:00:01 CMD: UID=0     PID=2234   | cp -rf /home/jay/ /var/backups/jay/
+2026/01/01 00:01:01 CMD: UID=0     PID=2240   | /usr/sbin/CRON -f

@@ -1,8 +1,9 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
-import { credAttemptsKey, credentialsKey, usernamesKey } from "../credentials/queries";
-import { saveCapture, type CaptureEdits } from "./saveCapture";
+import { invalidateAfterSave } from "../log/extractions";
+import { useSaveSummaryStore } from "./useSaveSummaryStore";
+import { PartialSaveError, saveCapture, type CaptureEdits } from "./saveCapture";
 
 /**
  * Logs a command as a command entry against one host, through the capture save path, so the checklist
@@ -10,22 +11,29 @@ import { saveCapture, type CaptureEdits } from "./saveCapture";
  */
 export async function logCommand(
   qc: QueryClient,
-  args: { engagementId: string; host: Host; hosts: Host[]; title: string; command: string; ranOn: string },
+  args: { engagementId: string; host: Host; hosts: Host[]; title: string; command: string; ranOn: string;
+    payloadId?: string; payloadValues?: Record<string, string> },
 ): Promise<LogEntry> {
   const { engagementId: id, host, command } = args;
   const content = { kind: "command" as const, blocks: [{ command, output: "" }] };
   const edits: CaptureEdits = {
     kind: "command", title: args.title, titleEdited: false, hostIds: [host.id], ranOn: args.ranOn,
     observations: "", returnedNothing: false, private: false, content,
+    payloadId: args.payloadId, payloadValues: args.payloadValues,
   };
   try {
-    return await saveCapture({
-      engagementId: id, hosts: args.hosts, addIps: [], image: null, edits,
+    const { entry, summary } = await saveCapture({
+      engagementId: id, hosts: args.hosts, image: null, edits,
       draft: { kind: "command", title: args.title, hostIds: [host.id], ranOn: args.ranOn, content, unknownScopeIps: [], scan: null },
     });
+    // A command logged with no output files nothing, so there is usually no summary to show.
+    useSaveSummaryStore.getState().show(entry.id, summary);
+    return entry;
+  } catch (e) {
+    // A partial save may still have stored an extraction: show it, with its Undo.
+    if (e instanceof PartialSaveError) useSaveSummaryStore.getState().show(e.entry.id, e.summary);
+    throw e;
   } finally {
-    for (const key of [["log", id], ["hosts", id], ["services"], ["services", "engagement", id], ["checklist", id], ["progress"], ["engagement", id], ["engagements"], credentialsKey(id), usernamesKey(id), credAttemptsKey(id), ["hostIdentity"], ["vectors"]]) {
-      void qc.invalidateQueries({ queryKey: key });
-    }
+    invalidateAfterSave(qc, id);
   }
 }

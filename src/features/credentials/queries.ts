@@ -12,6 +12,7 @@ import type {
 export const credentialsKey = (eid: string) => ["credentials", eid] as const;
 export const usernamesKey = (eid: string) => ["usernames", eid] as const;
 export const accessGrantsKey = (eid: string) => ["accessGrants", eid] as const;
+export const triedPairsKey = (eid: string) => ["triedPairs", eid] as const;
 export const credAttemptsKey = (eid: string) => ["credAttempts", eid] as const;
 
 /**
@@ -39,6 +40,10 @@ export function useAccessGrants(eid: string) {
 }
 export function useCredAttempts(eid: string) {
   return useQuery({ queryKey: credAttemptsKey(eid), queryFn: () => api.credAttemptsList(eid) });
+}
+
+export function useTriedPairs(eid: string) {
+  return useQuery({ queryKey: triedPairsKey(eid), queryFn: () => api.triedPairsList(eid) });
 }
 
 /** Every mutation invalidates its own key, plus attempts when they may change. */

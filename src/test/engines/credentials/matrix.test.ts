@@ -1,11 +1,19 @@
 import { describe, it, expect } from "vitest";
 import {
   hostSprayServices, isSprayable, isNtlmHash, isOwnerless, isPlaceholderSecret, authModesFor, cellFor, overallState,
-  foldCrackedHashes, dedupeHashCaptures, hashCaptureKind,
+  foldCrackedHashes, dedupeHashCaptures, hashCaptureKind, isMachineAccount,
 } from "../../../engines/credentials/matrix";
 import { att, byHost, cred, host, NT, svc } from "./fixtures";
 
 describe("credential matrix", () => {
+  it("machine accounts are not sprayable", () => {
+    expect(isMachineAccount(cred({ username: "DC01$" }))).toBe(true);
+    expect(isMachineAccount(cred({ username: "jay" }))).toBe(false);
+    expect(isSprayable(cred({ username: "DC01$", secret: "pw" }))).toBe(false);
+    expect(isSprayable(cred({ type: "hash", username: "DC01$", secret: NT, hashType: "NTLM" }))).toBe(false);
+    expect(isSprayable(cred({ username: "jay", secret: "pw" }))).toBe(true);
+  });
+
   it("hostSprayServices reads open services by port and by nmap name", () => {
     const h = host("h1");
     expect(hostSprayServices(h, [svc("h1", 445), svc("h1", 5985), svc("h1", 22)])).toEqual(["smb", "winrm", "ssh"]);
@@ -143,7 +151,7 @@ describe("credential matrix", () => {
 describe("a local credential tested as domain", () => {
   const ms01 = host("ms01");
   const s = [svc("ms01", 445, "microsoft-ds")];
-  const mary = cred({ id: "mary", username: "jo.parker", scope: "local", localHostId: "ms01" });
+  const mary = cred({ id: "mary", username: "mia.jones", scope: "local", localHostId: "ms01" });
 
   it("shows the recorded domain result in its cell", () => {
     const cell = cellFor(mary, ms01, s, "smb", [att({ credId: "mary", hostId: "ms01", result: "failed", authMode: "domain" })]);
@@ -188,7 +196,7 @@ describe("foldCrackedHashes", () => {
 
 describe("dedupeHashCaptures", () => {
   const tgs = (id: string, tail: string, extra = {}) =>
-    cred({ id, type: "hash", username: "web_svc", domain: "MOCK.EXAM", hashType: "Kerberoast TGS-REP (etype 23, RC4)", secret: `$krb5tgs$23$*web_svc$MOCK.EXAM$mock.exam/web_svc*$${tail}`, ...extra });
+    cred({ id, type: "hash", username: "app_svc", domain: "EXAM.TEST", hashType: "Kerberoast TGS-REP (etype 23, RC4)", secret: `$krb5tgs$23$*app_svc$EXAM.TEST$exam.test/app_svc*$${tail}`, ...extra });
 
   it("shows one capture per account, preferring the cracked one", () => {
     const list = [tgs("t1", "aa$bb"), tgs("t2", "cc$dd", { crackStatus: "cracked" }), cred({ id: "nt", type: "hash", secret: NT, hashType: "NTLM" })];
@@ -196,7 +204,7 @@ describe("dedupeHashCaptures", () => {
   });
 
   it("keeps captures of different accounts and leaves NT hashes alone", () => {
-    const other = tgs("t3", "ee$ff", { username: "sql_svc" });
+    const other = tgs("t3", "ee$ff", { username: "db_svc" });
     const nt2 = cred({ id: "nt2", type: "hash", secret: NT.replace("3", "4"), hashType: "NTLM" });
     const list = [tgs("t1", "aa$bb"), other, cred({ id: "nt", type: "hash", secret: NT, hashType: "NTLM" }), nt2];
     expect(dedupeHashCaptures(list).map((c) => c.id)).toEqual(["t1", "t3", "nt", "nt2"]);

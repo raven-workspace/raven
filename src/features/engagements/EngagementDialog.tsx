@@ -308,7 +308,7 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
             rows={3}
             value={d.scope}
             onChange={(e) => set("scope", e.target.value)}
-            placeholder={"172.31.166.0/24\n10.10.10.5"}
+            placeholder={"10.10.61.0/24\n10.10.10.5"}
           />
         </Field>
 

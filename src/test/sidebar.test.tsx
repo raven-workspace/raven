@@ -18,7 +18,7 @@ const host = (id: string, name: string, ip: string | null): Host => ({
   id, engagementId: "e1", name, ip, os: "linux", boardColumn: "information-gathering",
   boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1,
 });
-const FULL = "web-finance-dmz-portal-01.dmz.finance.lumen.corp";
+const FULL = "web-portal-dmz-frontend-01.dmz.acme.corp";
 
 function mount() {
   return render(
@@ -49,7 +49,7 @@ describe("sidebar", () => {
 
   it("shows short name and ip as separate nodes, full name in title", async () => {
     mount();
-    const link = (await screen.findByText("web-finance-dmz-portal-01")).closest("a")!;
+    const link = (await screen.findByText("web-portal-dmz-frontend-01")).closest("a")!;
     expect(link).toHaveAttribute("title", FULL);
     expect(within(link).getByText("10.10.20.15")).toHaveClass("font-mono");
   });
@@ -78,10 +78,10 @@ describe("log row chip", () => {
     render(<QueryClientProvider client={makeQueryClient()}><ul>{row}</ul></QueryClientProvider>);
   it("omits the chip for the current host", () => {
     renderRow(<LogEntryRow entry={e} hosts={hosts} currentHostId="h1" />);
-    expect(screen.queryByText("web-finance-dmz-portal-01")).not.toBeInTheDocument();
+    expect(screen.queryByText("web-portal-dmz-frontend-01")).not.toBeInTheDocument();
   });
   it("shows a short chip for other hosts", () => {
     renderRow(<LogEntryRow entry={e} hosts={hosts} />);
-    expect(screen.getByText("web-finance-dmz-portal-01")).toBeInTheDocument();
+    expect(screen.getByText("web-portal-dmz-frontend-01")).toBeInTheDocument();
   });
 });

@@ -348,7 +348,7 @@ describe("fix round 1: nothing user-entered is silently dropped", () => {
     const p = plan(
       bk([
         lab({ domain: "corp.local", os: "" }),
-        labBox({ id: "b1", domain: "dev.corp.local", vhosts: ["app.corp.local", 3 as never], extraIps: ["172.16.1.5", ""] }),
+        labBox({ id: "b1", domain: "dev.corp.local", vhosts: ["app.corp.local", 3 as never], extraIps: ["10.60.1.5", ""] }),
         labBox({ id: "b2", ip: "10.10.10.6", domain: "corp.local" }),
       ]),
       ["custom-lab-1"],
@@ -356,7 +356,7 @@ describe("fix round 1: nothing user-entered is silently dropped", () => {
     expect(p.notes).toEqual([
       {
         ownerId: "b1", engagementId: "custom-lab-1", hostId: "b1", private: false,
-        body: "## Domain / vhosts\n- domain: dev.corp.local\n- vhost: app.corp.local\n\n## Extra IPs\n- 172.16.1.5",
+        body: "## Domain / vhosts\n- domain: dev.corp.local\n- vhost: app.corp.local\n\n## Extra IPs\n- 10.60.1.5",
       },
     ]);
   });
@@ -575,7 +575,7 @@ describe("buildImportPlan: hops and tunnels", () => {
           ],
           deletedHopIds: ["hop-del"],
           tunnels: [
-            { id: "tun-1", kind: "ligolo", viaHostId: "b1", subnets: ["172.16.1.0/24"], callbackIp: "10.10.14.2", status: "up", notes: "n", createdAt: ISO, updatedAt: ISO },
+            { id: "tun-1", kind: "ligolo", viaHostId: "b1", subnets: ["10.60.1.0/24"], callbackIp: "10.10.14.2", status: "up", notes: "n", createdAt: ISO, updatedAt: ISO },
             { id: "tun-del", kind: "ssh", viaHostId: "b1", subnets: [], callbackIp: "", status: "down", createdAt: ISO, updatedAt: ISO },
           ],
           deletedTunnelIds: ["tun-del"],
@@ -592,7 +592,7 @@ describe("buildImportPlan: hops and tunnels", () => {
     ]);
     expect(p.skipped.hopCredLinkDropped).toBe(1);
     expect(p.tunnels).toEqual([
-      { id: "tun-1", engagementId: "custom-lab-1", kind: "ligolo", viaHostId: "b1", subnets: ["172.16.1.0/24"], callbackIp: "10.10.14.2", status: "up", notes: "n", createdAt: ISO_MS, updatedAt: ISO_MS },
+      { id: "tun-1", engagementId: "custom-lab-1", kind: "ligolo", viaHostId: "b1", subnets: ["10.60.1.0/24"], callbackIp: "10.10.14.2", status: "up", notes: "n", createdAt: ISO_MS, updatedAt: ISO_MS },
     ]);
   });
 

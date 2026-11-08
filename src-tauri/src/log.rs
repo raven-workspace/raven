@@ -6,6 +6,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -61,6 +62,9 @@ pub struct LogEntry {
     pub returned_nothing: bool,
     pub private: bool,
     pub content: LogContent,
+    /// Payloads drawer: which payload this command came from, and the LHOST/LPORT it was built with.
+    pub payload_id: Option<String>,
+    pub payload_values: Option<BTreeMap<String, String>>,
     pub at: i64,
     pub created_at: i64,
     pub updated_at: i64,
@@ -98,6 +102,11 @@ pub struct LogEntryInput {
     #[serde(default)]
     pub private: bool,
     pub content: LogContent,
+    /// On update, `None` keeps the stored value (an edit never wipes where a payload came from).
+    #[serde(default)]
+    pub payload_id: Option<String>,
+    #[serde(default)]
+    pub payload_values: Option<BTreeMap<String, String>>,
     #[serde(default)]
     pub at: Option<i64>,
     #[serde(default)]
@@ -105,7 +114,7 @@ pub struct LogEntryInput {
 }
 
 const COLS: &str = "id, engagement_id, kind, title, title_edited, ran_on, observations, \
-    returned_nothing, private, content, at, created_at, updated_at";
+    returned_nothing, private, content, at, created_at, updated_at, payload_id, payload_values";
 const MAX_ATTACHMENT: usize = 25 * 1024 * 1024;
 
 fn invalid(field: &str, message: &str) -> AppError {
@@ -132,6 +141,13 @@ fn from_row(r: &Row) -> rusqlite::Result<LogEntry> {
         returned_nothing: r.get(7)?,
         private: r.get(8)?,
         content,
+        payload_id: r.get(13)?,
+        payload_values: match r.get::<_, Option<String>>(14)? {
+            None => None,
+            Some(j) => Some(serde_json::from_str(&j).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(14, rusqlite::types::Type::Text, Box::new(e))
+            })?),
+        },
         at: r.get(10)?,
         created_at: r.get(11)?,
         updated_at: r.get(12)?,
@@ -299,7 +315,8 @@ fn insert_entry(
     let json = serde_json::to_string(content).map_err(|e| AppError::Db(e.to_string()))?;
     tx.execute(
         "INSERT INTO log_entries (id, engagement_id, kind, title, title_edited, ran_on, observations, \
-         returned_nothing, private, content, at, created_at, updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?12)",
+         returned_nothing, private, content, at, created_at, updated_at, payload_id, payload_values) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?12,?13,?14)",
         params![
             id,
             engagement_id,
@@ -312,10 +329,16 @@ fn insert_entry(
             input.private,
             json,
             at,
-            now
+            now,
+            opt_trim(&input.payload_id),
+            values_json(&input.payload_values)?
         ],
     )?;
     Ok(())
+}
+
+fn values_json(v: &Option<BTreeMap<String, String>>) -> AppResult<Option<String>> {
+    v.as_ref().map(|m| serde_json::to_string(m).map_err(|e| AppError::Db(e.to_string()))).transpose()
 }
 
 /// Full update. The attachment is ignored and the kind cannot change; a stored
@@ -340,7 +363,7 @@ pub fn update(conn: &Connection, id: &str, input: LogEntryInput) -> AppResult<Lo
     let tx = conn.unchecked_transaction()?;
     tx.execute(
         "UPDATE log_entries SET title=?2, title_edited=?3, ran_on=?4, observations=?5, returned_nothing=?6, \
-         private=?7, content=?8, at=?9, updated_at=?10 WHERE id=?1",
+         private=?7, content=?8, at=?9, updated_at=?10, payload_id=?11, payload_values=?12 WHERE id=?1",
         params![
             id,
             title,
@@ -351,7 +374,12 @@ pub fn update(conn: &Connection, id: &str, input: LogEntryInput) -> AppResult<Lo
             input.private,
             json,
             input.at.unwrap_or(old.at),
-            system_now_ms()
+            system_now_ms(),
+            opt_trim(&input.payload_id).or(old.payload_id.clone()),
+            match &input.payload_values {
+                Some(_) => values_json(&input.payload_values)?,
+                None => values_json(&old.payload_values)?,
+            }
         ],
     )?;
     tx.execute("DELETE FROM log_entry_hosts WHERE entry_id = ?1", [id])?;
@@ -426,9 +454,50 @@ mod tests {
             returned_nothing: false,
             private: false,
             content,
+            payload_id: None,
+            payload_values: None,
             at: None,
             attachment: None,
         }
+    }
+
+    #[test]
+    fn migrates_11_to_12_keeps_rows() {
+        let mut c = Connection::open_in_memory().unwrap();
+        c.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        crate::migrations::migrate_with(&mut c, &crate::migrations::MIGRATIONS[..11], &mut |_, _| Ok(())).unwrap();
+        c.execute("INSERT INTO engagements (id,name,kind,scope_cidrs,status,created_at,updated_at) VALUES ('e1','x','lab','[]','active',1,1)", []).unwrap();
+        c.execute("INSERT INTO log_entries (id,engagement_id,kind,title,content,at,created_at,updated_at) VALUES ('l1','e1','note','old','{\"kind\":\"note\",\"text\":\"t\"}',1,1,1)", []).unwrap();
+        let mut calls = 0;
+        let out = crate::migrations::migrate_with(&mut c, crate::migrations::MIGRATIONS, &mut |f, t| {
+            assert_eq!((f, t), (11, 12));
+            calls += 1;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!((calls, out.to), (1, 12));
+        let e = get(&c, "l1").unwrap();
+        assert_eq!((e.title.as_str(), e.payload_id, e.payload_values), ("old", None, None));
+    }
+
+    #[test]
+    fn log_round_trips_payload_id() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let mut i = input(cmd());
+        i.payload_id = Some("nc-exe".into());
+        i.payload_values = Some(BTreeMap::from([("LHOST".into(), "192.0.2.10".into()), ("LPORT".into(), "443".into())]));
+        let en = create(c, &e, i).unwrap();
+        assert_eq!(en.payload_id.as_deref(), Some("nc-exe"));
+        let listed = list(c, &e).unwrap();
+        assert_eq!(listed[0].payload_values.as_ref().unwrap()["LPORT"], "443");
+        // An update that omits them keeps them.
+        let up = update(c, &en.id, input(cmd())).unwrap();
+        assert_eq!(up.payload_id.as_deref(), Some("nc-exe"));
+        assert_eq!(up.payload_values.unwrap()["LHOST"], "192.0.2.10");
+        let json = serde_json::to_value(&listed[0]).unwrap();
+        assert_eq!(json["payloadId"], "nc-exe");
     }
 
     fn cmd() -> LogContent {

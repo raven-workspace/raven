@@ -3,8 +3,8 @@ import { parseScopeList, ipInScope, extractIps, isIgnoredIp } from '../../../eng
 
 describe('parseScopeList', () => {
   it('splits, trims, dedupes, skips comments and reports invalid tokens', () => {
-    expect(parseScopeList('172.31.162.95\n172.31.162.96, 10.10.10.0/24\n# dmz\nfoo\n172.31.162.95')).toEqual({
-      entries: ['172.31.162.95', '172.31.162.96', '10.10.10.0/24'],
+    expect(parseScopeList('10.10.60.95\n10.10.60.96, 10.10.10.0/24\n# dmz\nfoo\n10.10.60.95')).toEqual({
+      entries: ['10.10.60.95', '10.10.60.96', '10.10.10.0/24'],
       invalid: ['foo'],
     });
   });
@@ -14,7 +14,7 @@ describe('ipInScope', () => {
   it('matches exact IPs and CIDR ranges', () => {
     expect(ipInScope('10.10.10.7', ['10.10.10.0/24'])).toBe(true);
     expect(ipInScope('10.10.11.7', ['10.10.10.0/24'])).toBe(false);
-    expect(ipInScope('172.31.162.95', ['172.31.162.95'])).toBe(true);
+    expect(ipInScope('10.10.60.95', ['10.10.60.95'])).toBe(true);
     expect(ipInScope('1.2.3.4', [])).toBe(false);
   });
 });
@@ -32,7 +32,7 @@ describe('isIgnoredIp', () => {
   it('ignores unspecified, loopback and LHOST', () => {
     expect(isIgnoredIp('127.0.0.1')).toBe(true);
     expect(isIgnoredIp('0.0.0.0')).toBe(true);
-    expect(isIgnoredIp('172.31.45.213', '172.31.45.213')).toBe(true);
-    expect(isIgnoredIp('172.31.162.97', '172.31.45.213')).toBe(false);
+    expect(isIgnoredIp('10.10.64.213', '10.10.64.213')).toBe(true);
+    expect(isIgnoredIp('10.10.60.97', '10.10.64.213')).toBe(false);
   });
 });

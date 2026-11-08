@@ -1,4 +1,4 @@
-import { CaretDown, CaretRight } from "@phosphor-icons/react";
+import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
 import { useState } from "react";
 import { shortHostName } from "../../lib/hostName";
 import type { Host } from "../../types/host";
@@ -47,7 +47,7 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
     : hasExtras
       ? "grid-cols-[2.75rem_6rem_minmax(0,1fr)_auto]"
       : "grid-cols-[2.75rem_6rem_minmax(0,1fr)]";
-  const Caret = open ? CaretDown : CaretRight;
+  const Caret = open ? CaretDownIcon : CaretRightIcon;
 
   const row = (
     <button

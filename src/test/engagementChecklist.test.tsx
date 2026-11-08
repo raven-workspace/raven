@@ -20,7 +20,7 @@ vi.mock("../lib/api");
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {
-  id: "e1", name: "Mock exam A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
+  id: "e1", name: "Lab A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
@@ -29,7 +29,7 @@ const host = (id: string, name: string, ip: string, os: Host["os"]): Host => ({
   boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1,
 });
 const H1 = host("h1", "dc01", "10.10.10.5", "windows");
-const H2 = host("h2", "web02", "10.10.10.6", "linux");
+const H2 = host("h2", "web07", "10.10.10.6", "linux");
 const svc = (id: string, port: number): Service => ({
   id, hostId: "h1", port, protocol: "tcp", state: "open", nmapService: null, nmapVersion: null,
   confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
@@ -339,7 +339,7 @@ describe("engagement checklist", () => {
     mount({ hosts: [{ ...H1, dualHomed: true }, { ...H2, dualHomed: true }] });
     const section = within(await screen.findByRole("region", { name: "Lateral movement" }));
     expect(section.getByRole("heading", { name: "Behind dc01" })).toBeInTheDocument();
-    expect(section.getByRole("heading", { name: "Behind web02" })).toBeInTheDocument();
+    expect(section.getByRole("heading", { name: "Behind web07" })).toBeInTheDocument();
     const tunnels = document.querySelectorAll('li[data-goal-id="h-pivot-tunnel"]');
     expect(tunnels).toHaveLength(2);
     for (const li of tunnels) expect(within(li as HTMLElement).getAllByRole("button", { name: /^Copy command: / }).length).toBeGreaterThan(0);

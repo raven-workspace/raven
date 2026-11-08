@@ -180,12 +180,12 @@ describe('applicableGoals', () => {
     const confirmedWeb = goalsFor(host({ os: 'linux' }), [svc(8080, 'ppp', { confirmedProduct: 'Apache httpd' })]);
     expect(all(confirmedWeb)).toContain('h-enum-web-stack');
     // nmap said http but the operator confirmed it is something else: the web goals do not apply.
-    const notWeb = goalsFor(host({ os: 'linux' }), [svc(80, 'http', { confirmedProduct: 'CouchDB' })]);
+    const notWeb = goalsFor(host({ os: 'linux' }), [svc(80, 'http', { confirmedProduct: 'Cachestore' })]);
     expect(all(notWeb)).not.toContain('h-enum-web-stack');
   });
 
   it('confirmed non-web product on a web port does not trigger web goals', () => {
-    const r = all(goalsFor(host({ os: 'linux' }), [svc(3000, 'ppp', { confirmedProduct: 'CouchDB' })]));
+    const r = all(goalsFor(host({ os: 'linux' }), [svc(3000, 'ppp', { confirmedProduct: 'Cachestore' })]));
     expect(r).not.toContain('h-enum-web-stack');
     expect(r).toContain('h-enum-exploits');
   });
@@ -280,7 +280,7 @@ describe('facts', () => {
   });
 
   it('serviceNames: an unknown confirmed product adds nothing, not even the nmap name', () => {
-    expect([...serviceNames([svc(80, 'http', { confirmedProduct: 'CouchDB' })])]).toEqual([]);
+    expect([...serviceNames([svc(80, 'http', { confirmedProduct: 'Cachestore' })])]).toEqual([]);
     expect([...serviceNames([svc(5432, 'ppp', { confirmedProduct: 'PostgreSQL 15' })])]).toEqual(['postgresql']);
   });
 

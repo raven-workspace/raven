@@ -8,7 +8,15 @@ import type { ImportSummary } from "../types/import";
 import type { ConfirmInput, ScanPort, Service, ServiceInput } from "../types/service";
 import type { GoalRef } from "../engines/checklist";
 import type { ChecklistItem, ChecklistItemInput } from "../types/checklist";
-import type { Attachment, LogEntry, LogEntryInput, Progress } from "../types/log";
+import type {
+  Attachment,
+  Extraction,
+  ExtractionRecord,
+  ExtractionSummary,
+  LogEntry,
+  LogEntryInput,
+  Progress,
+} from "../types/log";
 import type {
   FailedAttempt,
   FailedAttemptInput,
@@ -27,6 +35,8 @@ import type {
   Credential,
   CredAttempt,
   CredAttemptInput,
+  TriedPair,
+  TriedPairInput,
   CredentialInput,
   CrackStatus,
   Username,
@@ -192,6 +202,17 @@ export const api = {
   credAttemptsUpsert: (engagementId: string, inputs: CredAttemptInput[]) =>
     call<CredAttempt[]>("cred_attempts_upsert", { engagementId, inputs }),
   credAttemptDelete: (id: string) => call<null>("cred_attempt_delete", { id }),
+  triedPairsList: (engagementId: string) => call<TriedPair[]>("tried_pairs_list", { engagementId }),
+  triedPairsUpsert: (engagementId: string, inputs: TriedPairInput[]) =>
+    call<TriedPair[]>("tried_pairs_upsert", { engagementId, inputs }),
+  triedPairDelete: (id: string) => call<null>("tried_pair_delete", { id }),
+  triedPairPromote: (engagementId: string, username: string, domain: string | null, secret: string) =>
+    call<number>("tried_pair_promote", { engagementId, username, domain, secret }),
+  extractionSave: (logEntryId: string, engagementId: string, summary: ExtractionSummary, record: ExtractionRecord) =>
+    call<Extraction>("extraction_save", { logEntryId, engagementId, summary, record }),
+  extractionGet: (logEntryId: string) => call<Extraction | null>("extraction_get", { logEntryId }),
+  extractionsList: (engagementId: string) => call<Extraction[]>("extractions_list", { engagementId }),
+  extractionUndo: (logEntryId: string) => call<Extraction>("extraction_undo", { logEntryId }),
   credAttemptsRekey: (usernameId: string, secretCredIds: string[], credId: string, hostId?: string | null) =>
     call<CredAttempt[]>("cred_attempts_rekey", { usernameId, secretCredIds, credId, hostId: hostId ?? null }),
   accessGrantsList: (engagementId: string) => call<AccessGrant[]>("access_grants_list", { engagementId }),

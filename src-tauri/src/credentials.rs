@@ -8,7 +8,7 @@ use crate::notes::check_scope;
 use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Credential {
     pub id: String,

@@ -20,12 +20,12 @@ vi.mock("../lib/api");
 const m = vi.mocked(api, true);
 
 const E1: Engagement = {
-  id: "e1", name: "Mock exam A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
+  id: "e1", name: "Lab A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
   createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
 };
 const H1: Host = {
-  id: "h1", engagementId: "e1", name: "VEGA", ip: "10.10.10.5", os: "linux", boardColumn: "vulnerability-detection",
+  id: "h1", engagementId: "e1", name: "SRV11", ip: "10.10.10.5", os: "linux", boardColumn: "vulnerability-detection",
   boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1,
 };
 
@@ -81,7 +81,7 @@ beforeEach(() => {
 
 async function openPanel(user: ReturnType<typeof userEvent.setup>, path: string) {
   mount(path);
-  await screen.findByText("Mock exam A");
+  await screen.findByText("Lab A");
   await user.keyboard("n");
   const p = await screen.findByRole("complementary", { name: /Notes/ });
   const ta = (await within(p).findByLabelText("Notes")) as HTMLTextAreaElement;
@@ -94,7 +94,7 @@ describe("open threads", () => {
     setStored("h1", "x\n? why 8080\n? who owns the share");
     setStored(null, "? is the DC reachable");
     const { container } = mount("/e/e1");
-    await screen.findByText("Mock exam A");
+    await screen.findByText("Lab A");
     await vi.waitFor(() => expect(container.querySelector('[data-host-id="h1"]')).not.toBeNull());
     const card = container.querySelector<HTMLElement>('[data-host-id="h1"]')!;
     expect(await within(card).findByLabelText("2 open threads")).toBeInTheDocument();

@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { cellFor, cellModes, credLabel, hostSprayServices, isSprayable, type CellState, type SprayService } from "../../engines/credentials";
 import type { Cell } from "../../engines/credentials";
-import type { CredAttempt, Credential } from "../../types/credentials";
+import type { CredAttempt, Credential, TriedPair } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
 import { labelClass } from "../../ui";
 import { hostLabel } from "./AccessGrants";
 import { CellPopover } from "./CellPopover";
+import { MaskedSecret } from "./MaskedSecret";
 
 const META: Record<CellState, { glyph: string; label: string; aria: string; tone: string }> = {
   admin: { glyph: "A", label: "Admin", aria: "admin", tone: "border-accent bg-accent text-bg font-semibold" },
@@ -55,22 +56,39 @@ function Legend() {
   );
 }
 
-export function TestGrid({ eid, hosts, creds, attempts, servicesByHost }: {
+/** A hash shown by its ends: enough to tell tried hashes apart without the whole value. */
+const truncatedHash = (h: string) => (h.length > 16 ? `${h.slice(0, 8)}…${h.slice(-4)}` : h);
+
+/** One muted row per (username, domain, secret): the failed sprays kept without becoming credentials. */
+function triedRows(tried: TriedPair[]) {
+  const rows = new Map<string, { key: string; username: string; domain: string | null; secret: string; kind: TriedPair["secretKind"]; cells: Set<string> }>();
+  for (const t of tried) {
+    const key = `${t.username.toLowerCase()}\0${(t.domain ?? "").toLowerCase()}\0${t.secret}`;
+    const row = rows.get(key) ?? { key, username: t.username, domain: t.domain, secret: t.secret, kind: t.secretKind, cells: new Set<string>() };
+    row.cells.add(`${t.hostId}:${t.service}`);
+    rows.set(key, row);
+  }
+  return [...rows.values()];
+}
+
+export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = [] }: {
   eid: string;
   hosts: Host[];
   creds: Credential[];
   attempts: CredAttempt[];
   servicesByHost: Map<string, Service[]>;
+  tried?: TriedPair[];
 }) {
   const [open, setOpen] = useState<{ credId: string; hostId: string; service: SprayService }>();
   const rows = useMemo(() => creds.filter(isSprayable), [creds]);
+  const triedList = useMemo(() => triedRows(tried), [tried]);
   const groups = useMemo(
     () => hosts.map((host) => ({ host, services: hostSprayServices(host, servicesByHost.get(host.id) ?? []) })).filter((g) => g.services.length > 0),
     [hosts, servicesByHost],
   );
 
   const header = <h3 className={`m-0 ${labelClass}`}>Test matrix</h3>;
-  if (rows.length === 0 || groups.length === 0) {
+  if ((rows.length === 0 && triedList.length === 0) || groups.length === 0) {
     return (
       <section aria-label="Test matrix" className="flex flex-col gap-2">
         {header}
@@ -115,7 +133,7 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost }: {
           </thead>
           <tbody>
             {rows.map((cred) => (
-              <tr key={cred.id}>
+              <tr key={cred.id} data-cred-id={cred.id}>
                 <th scope="row" className="border-b border-r border-line px-3 py-1 text-left font-normal">
                   <div className="font-mono text-fg">{credLabel(cred)}</div>
                   <div className="text-[10px] text-muted">{cred.type}{cred.scope !== "domain" ? ` · ${cred.scope}` : ""}</div>
@@ -149,6 +167,37 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost }: {
                 )}
               </tr>
             ))}
+            {triedList.map((t) => {
+              const who = `${t.domain ? `${t.domain}\\` : ""}${t.username}`;
+              return (
+                <tr key={t.key} data-tried="" className="text-muted">
+                  <th scope="row" className="border-b border-r border-line px-3 py-1 text-left font-normal">
+                    <div className="font-mono">{t.username} · tried</div>
+                    <div data-testid="tried-secret">
+                      {t.kind === "hash" ? (
+                        <span className="font-mono text-[12.5px]" aria-label={`tried hash for ${who}`}>{truncatedHash(t.secret)}</span>
+                      ) : (
+                        <MaskedSecret secret={t.secret} label={`tried password for ${who}`} />
+                      )}
+                    </div>
+                    <div className="text-[10px]">{t.domain ? `${t.domain} · ` : ""}{t.kind}, not a credential</div>
+                  </th>
+                  {groups.flatMap(({ host, services }) =>
+                    services.map((service, i) => {
+                      const hit = t.cells.has(`${host.id}:${service}`);
+                      const label = `${who} on ${hostLabel(host)} ${service.toUpperCase()}: ${hit ? "failed (tried)" : "not tried"}`;
+                      return (
+                        <td key={`${host.id}-${service}`} className={`border-b border-line p-1 text-center ${i === 0 ? "border-l" : ""}`}>
+                          <span role="img" aria-label={label} title={label} className="inline-block">
+                            <Glyph state={hit ? "failed" : "na"} />
+                          </span>
+                        </td>
+                      );
+                    }),
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
