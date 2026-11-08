@@ -130,19 +130,68 @@ describe("fit engine", () => {
     expect(nc.misfits.find((m) => m.def.id === "nc-exe")?.reason).toBe("Needs nc with -e, which isn't on this box");
   });
 
-  it("orders fits: context match, then no absent tools, then catalogue", () => {
-    const s = { ...base, os: "linux" as const, tools: { present: [], absent: ["nc"] } };
-    const r = rankPayloads(REVERSE_SHELLS, s, "bash-prompt");
-    expect(ids(r.fits).slice(0, 3)).toEqual(["bash-tcp", "python3", "php-exec"]);
+  it("keeps catalogue order among fits and sends non-matching contexts to misfits", () => {
+    const s = { ...base, os: "linux" as const };
+    const r = rankPayloads([...REVERSE_SHELLS].reverse(), s, "bash-prompt");
+    expect(ids(r.fits)).toEqual(ids([...REVERSE_SHELLS].reverse().filter((d) => d.os === "linux")));
+    const only = rankPayloads(REVERSE_SHELLS, { ...base, os: null }, "cmd");
+    expect(ids(only.fits)).toEqual(["ps-b64", "nishang-cradle", "nc-exe"]);
+  });
+
+  it("a mid-output # or $ line does not set a prompt; bash-5.1$ and sh-4.4$ do", () => {
+    const f = (out: string) => inferSituation({ host: host(), services: [], entries: [cmdEntry("x", out)], examKind: false }).situation.prompt;
+    expect(f("# comment\n$\n/dev/sda1 / ext4\nlast line")).toBeNull();
+    expect(f("#\nsomething")).toBeNull();
+    expect(f("bash-5.1$ ")).toBe("sh");
+    expect(f("sh-4.4$")).toBe("sh");
+  });
+
+  it("which parsing handles compound and redirected forms", () => {
+    const { situation } = inferSituation({
+      host: host(), services: [],
+      entries: [cmdEntry("which python3; which php 2>/dev/null || which nc", "/usr/bin/python3\n/usr/bin/nc")], examKind: false,
+    });
+    expect(situation.tools.present.sort()).toEqual(["nc", "python3"]);
+    expect(situation.tools.absent).toEqual(["php"]);
+  });
+
+  it("entries run elsewhere are ignored; a newer prompt-less entry keeps the prompt", () => {
+    const { situation } = inferSituation({
+      host: host({ name: "TARGET-A" }), services: [],
+      entries: [
+        cmdEntry("whoami", "PS C:\\Users\\svc>", at1402 - 120000),
+        cmdEntry("./linpeas.sh", "lots of output\nno prompt here", at1402),
+        { ...cmdEntry("id", "user@kali:~$", at1402 + 1000), ranOn: "kali" },
+      ], examKind: false,
+    });
+    expect(situation.prompt).toBe("ps");
+    const own = inferSituation({
+      host: host({ name: "TARGET-A" }), services: [],
+      entries: [{ ...cmdEntry("id", "www@web01:/tmp$", at1402), ranOn: "TARGET-A" }], examKind: false,
+    });
+    expect(own.situation.prompt).toBe("sh");
+  });
+
+  it("only open services count for OS and db engine", () => {
+    const { situation } = inferSituation({
+      host: host(), services: [svc(80, "http", "Microsoft IIS httpd 10.0", { state: "closed" }), svc(3306, "mysql", null, { state: "filtered" })],
+      entries: [], examKind: false,
+    });
+    expect(situation.os).toBeNull();
+    expect(situation.dbEngine).toBeNull();
+    expect(situation.services).toEqual([]);
+    expect(inferSituation({ host: host(), services: [svc(3306, "mysql", null, { state: "OPEN" })], entries: [], examKind: false }).situation.dbEngine).toBe("mysql");
   });
 
   it("exam folds meterpreter or staged defs", () => {
-    const meter: PayloadDef = { ...REVERSE_SHELLS[0], id: "meter", title: "Meterpreter reverse_tcp" };
+    const meter: PayloadDef = { ...REVERSE_SHELLS[0], id: "meter", template: "msfvenom -p windows/x64/meterpreter/reverse_tcp" };
     const staged: PayloadDef = { ...REVERSE_SHELLS[0], id: "staged", template: "msfvenom -p windows/x64/shell/reverse_tcp" };
     const stageless: PayloadDef = { ...REVERSE_SHELLS[0], id: "stageless", template: "msfvenom -p windows/x64/shell_reverse_tcp" };
     const r = rankPayloads([meter, staged, stageless], { ...base, exam: true }, null);
     expect(ids(r.fits)).toEqual(["stageless"]);
     expect(r.misfits.map((m) => m.reason)).toEqual(["Not allowed in the exam", "Not allowed in the exam"]);
     expect(ids(rankPayloads([meter], base, null).fits)).toEqual(["meter"]);
+    const noted: PayloadDef = { ...stageless, id: "noted", title: "Staged? no", notes: ["never meterpreter"] };
+    expect(ids(rankPayloads([noted], { ...base, exam: true }, null).fits)).toEqual(["noted"]);
   });
 });

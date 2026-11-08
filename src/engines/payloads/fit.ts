@@ -46,16 +46,19 @@ const DB_BY_PORT: Record<number, DbEngine> = { 1433: "mssql", 3306: "mysql", 543
 
 const PROMPT_PS = /^PS [A-Za-z]:\\.*>$/;
 const PROMPT_CMD = /^[A-Za-z]:\\.*>$/;
-const PROMPT_SH = /^(?:\S+@\S+.*)?[$#]$/;
+const PROMPT_SH = [
+  /^\S+@\S+:.*[$#]$/, // user@host:path$  root@host:~#
+  /^\[\S+@\S+ .*\][$#]$/, // [user@host dir]$
+  /^(?:ba|z|da|k)?sh-[\d.]+[$#]$/, // bash-5.1$  sh-4.4$
+];
 
+/** Only the last non-empty line counts, and it must have a real prompt shape. */
 function promptOf(output: string): "ps" | "cmd" | "sh" | null {
-  const lines = output.split(/\r?\n/).map((l) => l.trimEnd());
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const l = lines[i];
-    if (PROMPT_PS.test(l)) return "ps";
-    if (PROMPT_CMD.test(l)) return "cmd";
-    if (PROMPT_SH.test(l)) return "sh";
-  }
+  const last = output.split(/\r?\n/).map((l) => l.trimEnd()).filter(Boolean).pop();
+  if (!last) return null;
+  if (PROMPT_PS.test(last)) return "ps";
+  if (PROMPT_CMD.test(last)) return "cmd";
+  if (PROMPT_SH.some((r) => r.test(last))) return "sh";
   return null;
 }
 
@@ -73,12 +76,15 @@ function toolsFromEntry(e: LogEntry, found: Map<string, boolean>) {
       if (/^[╔═]/.test(line)) { inUseful = /Useful software/i.test(line); continue; }
       if (inUseful && line.startsWith("/")) found.set(normTool(basename(line)), true);
     }
-    const m = /^\s*which\s+(.+?)\s*$/.exec(b.command);
-    if (m) {
+    const names: string[] = [];
+    // Drop redirections (2>/dev/null), then split compound commands at ; | & < >.
+    for (const seg of b.command.replace(/\d*>+\S*/g, ";").split(/[;|&<>]+/)) {
+      const m = /^\s*which\s+(.+?)\s*$/.exec(seg);
+      if (m) names.push(...m[1].split(/\s+/).filter((a) => /^[\w.+-]+$/.test(a) && !a.startsWith("-")));
+    }
+    if (names.length) {
       const paths = b.output.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith("/"));
-      for (const name of m[1].split(/\s+/).filter((a) => !a.startsWith("-"))) {
-        found.set(name, paths.some((p) => basename(p) === name));
-      }
+      for (const name of names) found.set(name, paths.some((p) => basename(p) === name));
     }
   }
 }
@@ -86,7 +92,8 @@ function toolsFromEntry(e: LogEntry, found: Map<string, boolean>) {
 export function inferSituation(input: {
   host: Host | null; services: Service[]; entries: LogEntry[]; examKind: boolean;
 }): { situation: PayloadSituation; evidence: Evidence } {
-  const { host, services, examKind } = input;
+  const { host, examKind } = input;
+  const services = input.services.filter((s) => s.state.toLowerCase() === "open");
   const evidence: Evidence = {};
   const entries = input.entries
     .filter((e) => !host || e.hostIds.includes(host.id))
@@ -110,11 +117,14 @@ export function inferSituation(input: {
     }
   }
 
+  // Ran on this box only if ranOn is blank or the host's name; anything else ran on an attacker machine.
+  const onBox = entries.filter((e) => !e.ranOn || (host !== null && e.ranOn === host.name));
+
   let prompt: PayloadSituation["prompt"] = null;
-  const latestCmd = [...entries].reverse().find((e) => e.content.kind === "command");
-  if (latestCmd && latestCmd.content.kind === "command") {
-    prompt = promptOf(latestCmd.content.blocks.map((b) => b.output).join("\n"));
-    if (prompt) evidence.prompt = fromEntry(latestCmd);
+  for (const e of [...onBox].reverse()) {
+    if (e.content.kind !== "command") continue;
+    const p = promptOf(e.content.blocks.map((b) => b.output).join("\n"));
+    if (p) { prompt = p; evidence.prompt = fromEntry(e); break; }
   }
 
   let webShellUrl: string | null = null;
@@ -126,7 +136,7 @@ export function inferSituation(input: {
   }
 
   const found = new Map<string, boolean>();
-  for (const e of entries) toolsFromEntry(e, found);
+  for (const e of onBox) toolsFromEntry(e, found);
   const tools = {
     present: [...found].filter(([, v]) => v).map(([k]) => k),
     absent: [...found].filter(([, v]) => !v).map(([k]) => k),
@@ -171,9 +181,10 @@ const absentTool = (def: PayloadDef, s: PayloadSituation): string | null => {
   return null;
 };
 
-const EXAM_BANNED = /meterpreter|\bstaged\b|\/shell\/reverse_/i;
+const EXAM_BANNED = /meterpreter|\/shell\/reverse_/i;
+/** Only the payload name counts: the msfvenom -p value in the template, or the def id. Never notes or titles. */
 const bannedInExam = (d: PayloadDef) =>
-  EXAM_BANNED.test([d.id, d.title, d.template, ...(d.notes ?? []), ...d.parts.map((p) => p.token)].join("\n"));
+  EXAM_BANNED.test(d.id) || EXAM_BANNED.test(/-p\s+(\S+)/.exec(d.template)?.[1] ?? "");
 
 /**
  * Reason precedence when several apply: Wrong OS, then Doesn't work in <context>, then Needs <tool>,
@@ -194,18 +205,14 @@ function misfitReason(d: PayloadDef, s: PayloadSituation, ctx: PasteContext | nu
 export function rankPayloads(
   defs: PayloadDef[], s: PayloadSituation, ctx: PasteContext | null,
 ): { fits: PayloadDef[]; misfits: { def: PayloadDef; reason: string }[] } {
-  const fits: { def: PayloadDef; i: number }[] = [];
+  // Catalogue order. Context and absent-tool keys would be dead: with a context set, every def that
+  // lacks it is already a misfit, and absent-tool defs are misfits too, so all remaining fits tie.
+  const fits: PayloadDef[] = [];
   const misfits: { def: PayloadDef; reason: string }[] = [];
-  defs.forEach((def, i) => {
+  for (const def of defs) {
     const reason = misfitReason(def, s, ctx);
     if (reason) misfits.push({ def, reason });
-    else fits.push({ def, i });
-  });
-  const key = (x: { def: PayloadDef; i: number }) =>
-    [ctx && x.def.contexts.includes(ctx) ? 0 : 1, absentTool(x.def, s) ? 1 : 0, x.i] as const;
-  fits.sort((a, b) => {
-    const ka = key(a), kb = key(b);
-    return ka[0] - kb[0] || ka[1] - kb[1] || ka[2] - kb[2];
-  });
-  return { fits: fits.map((f) => f.def), misfits };
+    else fits.push(def);
+  }
+  return { fits, misfits };
 }
