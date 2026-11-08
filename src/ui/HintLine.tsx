@@ -114,7 +114,7 @@ export function HintLine({ hints, max = 5, ariaLabel }: { hints: Hint[]; max?: n
           <button
             type="button"
             aria-label="All shortcuts"
-            className="inline-grid place-items-center hover:opacity-80"
+            className="inline-grid size-6 place-items-center hover:opacity-80"
           >
             <Kbd>?</Kbd>
           </button>

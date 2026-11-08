@@ -20,7 +20,7 @@ export function Listener({ step }: { step?: number }) {
       aria-label={`LHOST ${value}`}
       title="Filled into checklist commands as LHOST and LPORT. Change it in Settings."
       data-drop={step}
-      className="grid grid-flow-col items-center gap-2 rounded-sm cursor-default hover:text-fg"
+      className="grid h-7 grid-flow-col items-center gap-2 rounded-sm cursor-default hover:text-fg"
     >
       <span className={labelClass}>LHOST</span>
       <span className={cx("text-meta", ip ? "font-mono text-fg" : "text-warn")}>{value}</span>

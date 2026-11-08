@@ -37,7 +37,7 @@ export function HostFindings({ engagementId, host, onOpenEntry, onOpenFinding }:
                 type="button"
                 aria-label={`Open ${f.title}`}
                 onClick={() => onOpenFinding(f)}
-                className="-mx-1 col-span-full grid cursor-default grid-cols-subgrid items-start px-1 py-2 text-left hover:bg-surface"
+                className="col-span-full grid cursor-default grid-cols-subgrid items-start py-2 text-left hover:bg-surface"
               >
                 <span className="grid h-5 content-center justify-self-start"><SeverityChip severity={f.severity} /></span>
                 <span className="line-clamp-2 break-words text-body text-fg" title={f.title}>{f.title}</span>

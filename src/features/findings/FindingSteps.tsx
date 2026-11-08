@@ -118,7 +118,7 @@ export function FindingSteps({ eid, hostIds, value, onChange }: {
                     }
                   }}
                   title={s.title}
-                  className="col-start-2 row-start-1 mt-1 block min-w-0 cursor-default line-clamp-2 break-words text-left text-body text-fg hover:underline @min-[480px]/steps:col-start-3"
+                  className="col-start-2 row-start-1 mt-1 block min-h-6 min-w-0 cursor-default line-clamp-2 break-words text-left text-body text-fg hover:underline @min-[480px]/steps:col-start-3"
                 >
                   <span data-testid="step-title">{s.title}</span>
                 </button>

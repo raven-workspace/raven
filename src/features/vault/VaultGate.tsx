@@ -301,7 +301,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
       <TitleBar
         left={
           unlocked ? (
-            <Link to="/" className="-ml-1 grid rounded-sm px-1 py-1 opacity-90 hover:opacity-100">
+            <Link to="/" className="-ml-1 grid h-7 items-center rounded-sm px-1 opacity-90 hover:opacity-100">
               <Wordmark className="h-3" />
             </Link>
           ) : undefined

@@ -198,9 +198,15 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
               </SidebarGroup>
               {collapsed && <SidebarSeparator className="mx-auto my-2 data-horizontal:w-6" />}
               <SidebarGroup className={group}>
-                <SidebarGroupLabel asChild className={cx(heading, collapsed ? "sr-only" : "mt-4 h-auto px-2 pb-2")}>
-                  <h2 id={hostsId}>Hosts</h2>
-                </SidebarGroupLabel>
+                {collapsed ? (
+                  // Collapsed, the heading is for screen readers only: a plain sr-only heading, since the group label's
+                  // own height and padding would outlast sr-only and leave a clipped sliver.
+                  <h2 id={hostsId} className="sr-only">Hosts</h2>
+                ) : (
+                  <SidebarGroupLabel asChild className={cx(heading, "mt-4 h-auto px-2 pb-2")}>
+                    <h2 id={hostsId}>Hosts</h2>
+                  </SidebarGroupLabel>
+                )}
                 {hosts.isSuccess && list.length === 0 && !collapsed && (
                   <p aria-labelledby={hostsId} className="m-0 px-2 text-meta text-faint">
                     No hosts yet

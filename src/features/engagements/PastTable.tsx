@@ -41,11 +41,12 @@ export function PastTable({ engagements, now }: { engagements: Engagement[]; now
             onClick={() => void navigate(`/e/${e.id}`)}
             className="cursor-default border-b border-line text-fg-2 transition-colors duration-100 hover:bg-surface"
           >
-            <td className={cx(cell, "py-2")}>
+            {/* The link carries half the cell's padding, so it is a 28px target and the row keeps its height. */}
+            <td className={cx(cell, "py-1")}>
               <Link
                 to={`/e/${e.id}`}
                 title={e.name}
-                className="block truncate text-fg no-underline"
+                className="block truncate py-1 text-fg no-underline"
                 onClick={(ev) => ev.stopPropagation()}
               >
                 {e.name}
