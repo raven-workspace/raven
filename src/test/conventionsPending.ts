@@ -1,5 +1,5 @@
 export type RuleId =
-  "tiny-type" | "feature-flex" | "joined-strings" | "hand-hint" | "esc-close";
+  "tiny-type" | "feature-flex" | "joined-strings" | "hand-hint" | "esc-close" | "unknown-color";
 
 /** Files that still break a rule. Later tasks fix files and remove them from here. */
 export const PENDING: Record<RuleId, string[]> = {
@@ -245,4 +245,5 @@ export const PENDING: Record<RuleId, string[]> = {
     "src/features/capture/CaptureForm.tsx",
     "src/features/engagements/StatusStrip.tsx",
   ],
+  "unknown-color": [],
 };

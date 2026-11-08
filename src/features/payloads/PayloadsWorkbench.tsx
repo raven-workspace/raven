@@ -128,7 +128,7 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
                 }}
                 className={cx(
                   "grid cursor-default grid-cols-[minmax(0,1fr)_auto] items-center rounded-sm px-2 py-1 text-[13px]",
-                  generator === g.id ? "bg-accent/10 text-accent shadow-[inset_2px_0_0_var(--accent)]" : "text-fg-2 hover:bg-surface-2",
+                  generator === g.id ? "bg-accent/10 text-accent shadow-[inset_2px_0_0_var(--accent)]" : "text-fg-2 hover:bg-surface-hi",
                 )}
               >
                 <span className="truncate">{g.label}</span>

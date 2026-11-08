@@ -41,7 +41,7 @@ export function ResultList<R extends ResultRow>({ id, label, groups, selected, o
         aria-selected={i === selected}
         onClick={() => onActivate(r, i)}
         title={r.title}
-        className={`grid cursor-default ${r.stack ? "grid-cols-[minmax(0,1fr)] gap-0" : "grid-cols-[minmax(0,1fr)_auto] items-center gap-2"} rounded-sm px-2 py-1 text-left text-[13px] ${i === selected ? ON : "text-fg-2 hover:bg-surface-2"}`}
+        className={`grid cursor-default ${r.stack ? "grid-cols-[minmax(0,1fr)] gap-0" : "grid-cols-[minmax(0,1fr)_auto] items-center gap-2"} rounded-sm px-2 py-1 text-left text-[13px] ${i === selected ? ON : "text-fg-2 hover:bg-surface-hi"}`}
       >
         <span className="min-w-0 truncate">{r.title}</span>
         {r.tag && <span className={`min-w-0 truncate text-[11px] text-muted ${r.mono ? "font-mono" : ""} ${r.stack ? "" : "max-w-40"}`}>{r.tag}</span>}

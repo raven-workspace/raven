@@ -127,7 +127,7 @@ export function ChipPicker({ options, value, onPick, label, listLabel, title, al
         onClick={() => (open ? close(true) : openList())}
         onBlur={() => open && close(false)}
         onKeyDown={onKeyDown}
-        className="grid min-w-0 cursor-default grid-flow-col items-center justify-start gap-1 rounded-md px-1.5 py-0.5 text-xs whitespace-nowrap text-muted hover:bg-surface-2 focus-visible:bg-surface-2"
+        className="grid min-w-0 cursor-default grid-flow-col items-center justify-start gap-1 rounded-md px-1.5 py-0.5 text-xs whitespace-nowrap text-muted hover:bg-surface-hi focus-visible:bg-surface-hi"
       >
         {children}
       </button>

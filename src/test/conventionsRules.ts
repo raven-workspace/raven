@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { RuleId } from "./conventionsPending";
 
@@ -139,6 +139,55 @@ function handHint(src: string): boolean {
   return false;
 }
 
+/** The colour names tokens.css defines under `--color-*` (the rest of Tailwind's palette is reset). */
+const TOKEN_COLORS = new Set([
+  ...[
+    ...readFileSync(join(ROOT, "src/styles/tokens.css"), "utf8").matchAll(
+      /--color-([\w-]+):/g,
+    ),
+  ].map((m) => m[1]),
+  "transparent",
+  "current",
+  "inherit",
+]);
+
+/** Per colour prefix, the values that are NOT colours (sizes, widths, alignment, roles, modes). */
+const NON_COLOR: Record<string, RegExp> = {
+  text:
+    /^(title|heading|body|code|meta|label|xs|sm|base|lg|\d*xl|left|center|right|justify|start|end|wrap|nowrap|balance|pretty|ellipsis|clip|shadow-.*)$/,
+  border:
+    /^(\d+|[xytblrse](-\d+)?|solid|dashed|dotted|double|hidden|none|collapse|separate|spacing-.*)$/,
+  outline: /^(\d+|none|dashed|dotted|double|hidden|solid|offset-.*)$/,
+  ring: /^(\d+|inset|offset-.*)$/,
+  bg: /^(fixed|local|scroll|clip-.*|origin-.*|repeat.*|no-repeat|cover|contain|auto|center|top|bottom|left|right|none|blend-.*|linear-.*|radial.*|conic.*|gradient-.*|(left|right|top|bottom)(-(top|bottom|left|right))?)$/,
+  fill: /^none$/,
+  stroke: /^(\d+|none)$/,
+  divide: /^(\d+|[xy](-\d+)?|reverse|solid|dashed|dotted|double|none)$/,
+  placeholder: /^$/,
+  from: /^\d+%$/,
+  via: /^\d+%$/,
+  to: /^\d+%$/,
+};
+
+/** Colour utilities (any variant, optional /opacity) whose colour is not defined in tokens.css. */
+function unknownColors(src: string): string[] {
+  const bad: string[] = [];
+  const toks = classRegions(stripComments(src)).flatMap((r) =>
+    r.split(/[\s"'`{}(),]+/),
+  );
+  for (const t of toks) {
+    const base = t.replace(/^(?:[\w-]+(?:\[[^\]]*\])?:)*!?/, "").replace(/!$/, "");
+    const m = /^(bg|text|border|outline|ring|fill|stroke|divide|placeholder|from|via|to)-([^[/]+)(?:\/[\w.[\]%]+)?$/.exec(
+      base,
+    );
+    if (!m) continue;
+    const [, prefix, value] = m;
+    if (TOKEN_COLORS.has(value) || NON_COLOR[prefix].test(value)) continue;
+    bad.push(t);
+  }
+  return bad;
+}
+
 export function breaks(rule: RuleId, file: string, src: string): boolean {
   switch (rule) {
     case "tiny-type":
@@ -158,9 +207,13 @@ export function breaks(rule: RuleId, file: string, src: string): boolean {
       );
     case "hand-hint":
       return file !== "src/ui/HintLine.tsx" && handHint(src);
+    case "unknown-color":
+      return unknownColors(src).length > 0;
     case "esc-close":
       return /<Kbd\b(?:=>|[^>])*>\s*(?:esc|\{\s*["']esc["']\s*\})\s*<\/Kbd>/i.test(
         stripComments(src),
       );
   }
 }
+
+export { unknownColors };

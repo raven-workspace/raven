@@ -321,7 +321,7 @@ export function ArsenalBrowse() {
                   tabIndex={on ? 0 : -1} aria-current={on ? "true" : undefined} onClick={() => openCategory(c, true)}
                   className={cx(
                     "grid w-full cursor-default grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-sm border-0 bg-transparent px-2 py-1 text-left text-[13px]",
-                    on ? ON : "text-fg-2 hover:bg-surface-2", searching && n === 0 && "opacity-40",
+                    on ? ON : "text-fg-2 hover:bg-surface-hi", searching && n === 0 && "opacity-40",
                   )}
                 >
                   <span className="truncate">{categoryLabel(c)}</span>

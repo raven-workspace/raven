@@ -129,7 +129,7 @@ export function TokenInput({ name, value, onChange, suggestions, placeholder, cl
                 pick(s);
               }}
               onMouseMove={() => setActive(i)}
-              className={`flex cursor-default items-center justify-between gap-3 rounded-sm px-2 py-0.5 font-mono text-[12px] whitespace-nowrap ${i === active ? "bg-surface-2 text-fg" : "text-fg-2"}`}
+              className={`flex cursor-default items-center justify-between gap-3 rounded-sm px-2 py-0.5 font-mono text-[12px] whitespace-nowrap ${i === active ? "bg-surface-hi text-fg" : "text-fg-2"}`}
             >
               <span>{s.value}</span>
               {s.hint && <span className="font-sans text-[11px] text-muted">{s.hint}</span>}

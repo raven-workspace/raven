@@ -36,7 +36,7 @@ export function StatusToggles({ label, status, onStatus }: { label: string; stat
             onClick={() => onStatus(s.value)}
             className={cx(
               "inline-flex h-5 cursor-default items-center px-2 text-[11px] leading-none",
-              on ? "bg-accent/10 text-accent" : "text-fg-2 hover:bg-surface-2 hover:text-fg",
+              on ? "bg-accent/10 text-accent" : "text-fg-2 hover:bg-surface-hi hover:text-fg",
             )}
           >
             {s.label}

@@ -102,3 +102,22 @@ describe("tiny-type and joined-strings", () => {
       expect(breaks("joined-strings", U, `const s = \`a ${j} b\`;`)).toBe(true);
   });
 });
+
+describe("unknown-color matcher", () => {
+  const bad = (s: string) => breaks("unknown-color", F, s);
+  it("flags colours tokens.css does not define, with variants and opacity", () => {
+    expect(bad('<a className="hover:bg-surface-2" />')).toBe(true);
+    expect(bad('<a className="text-red-500" />')).toBe(true);
+    expect(bad('<a className="border-gray-300/50" />')).toBe(true);
+    expect(bad('<a className="md:focus-visible:ring-blue-400" />')).toBe(true);
+  });
+  it("accepts token colours, special values and the important suffix", () => {
+    expect(bad('<a className="bg-surface-hi/50 text-fg-2 border-line-strong hover:text-accent" />')).toBe(false);
+    expect(bad('<a className="bg-transparent text-current border-inherit text-warn!" />')).toBe(false);
+  });
+  it("does not treat type roles, sizes, widths or modes as colours", () => {
+    expect(
+      bad('<a className="text-title text-body text-meta text-sm text-2xl text-left border-2 border-t border-dashed outline-none ring-2 bg-none from-10% stroke-2 divide-y" />'),
+    ).toBe(false);
+  });
+});

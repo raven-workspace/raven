@@ -213,7 +213,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
                     onClick={() => setMethodId(m.id)}
                     className={cx(
                       "cursor-default rounded-sm px-2 py-0.5 text-[13px]",
-                      m.id === method?.id ? "bg-accent/10 text-accent" : "text-fg-2 hover:bg-surface-2",
+                      m.id === method?.id ? "bg-accent/10 text-accent" : "text-fg-2 hover:bg-surface-hi",
                     )}
                   >
                     {m.label}
