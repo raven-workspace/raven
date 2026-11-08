@@ -18,26 +18,45 @@ const row = (cmds = []) => (
 );
 
 describe("new credential notice", () => {
-  it("is a collapsed count; opening lists labels one per line; never widens the row", async () => {
+  it("is a disclosure with a count; opening lists labels one per line, each truncating with its full value in a title", async () => {
     render(row());
-    const btn = screen.getByRole("button", { name: /7 new creds since done · re-check/ });
+    const btn = screen.getByRole("button", { name: "New credentials since done (7)" });
     expect(btn).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("CORP\\svc_3")).toBeNull();
-    // One line that truncates inside its own min-w-0 box: it never widens the row.
-    expect(btn.closest("div")!.className).toMatch(/min-w-0/);
-    expect(btn.className).toMatch(/truncate/);
     await userEvent.click(btn);
     const items = screen.getAllByRole("listitem").filter((li) => li.textContent?.startsWith("CORP"));
     expect(items).toHaveLength(7);
+    for (const li of items) {
+      expect(li.className).toMatch(/truncate/);
+      expect(li).toHaveAttribute("title", li.textContent);
+    }
   });
-  it("title column is min-w-0 and the status group stays shrink-0", () => {
+  it("title column is min-w-0 and wraps; the status control sits in its own column", () => {
     render(row());
     const col = screen.getByTestId("goal-title-col");
     expect(col.className).toMatch(/min-w-0/);
     expect(col.className).not.toMatch(/whitespace-nowrap/);
-    expect(screen.getByTestId("goal-head").className).toMatch(/min-w-0/);
-    expect(screen.getByRole("group", { name: /Status/ }).className).toMatch(/shrink-0/);
+    expect(screen.getByTestId("goal-status")).toContainElement(screen.getByRole("radiogroup", { name: /Status/ }));
     expect(screen.getByText("Scan all 65,535 TCP ports").className).not.toMatch(/whitespace-nowrap/);
+  });
+  it("goal status stays on the title line when new credentials open", async () => {
+    render(row());
+    const li = document.querySelector("li[data-goal-id]") as HTMLElement;
+    // jsdom has no layout: the row is a start-aligned grid and nothing offsets the status or the title.
+    expect(li.className).toMatch(/\bgrid\b/);
+    expect(li.className).toMatch(/items-start/);
+    const status = screen.getByTestId("goal-status");
+    const title = screen.getByTestId("goal-title-col");
+    expect(status.parentElement).toBe(li);
+    expect(title.parentElement).toBe(li);
+    for (const el of [status, title]) expect(el.className).not.toMatch(/\bm[tb]-|self-(center|end)|items-center/);
+    await userEvent.click(screen.getByRole("button", { name: /New credentials since done/ }));
+    expect(status.parentElement).toBe(li);
+    expect(li.className).toMatch(/items-start/);
+  });
+  it("the new-credentials line is a disclosure with a count", () => {
+    render(row());
+    expect(screen.getByRole("button", { name: /^New credentials since done \(7\)$/ })).toHaveAttribute("aria-expanded", "false");
   });
 });
 
@@ -48,7 +67,7 @@ describe("CommandList spacing", () => {
     expect(ul.className).toMatch(/gap-4/);
     expect(ul.firstElementChild!.className).toMatch(/gap-1\b/);
     const d = screen.getAllByTestId("command-desc")[0];
-    expect(d.className).toMatch(/text-xs/);
+    expect(d.className).toMatch(/text-meta/);
     expect(d.className).toMatch(/text-muted/);
   });
 });

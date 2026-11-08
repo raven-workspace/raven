@@ -1,6 +1,6 @@
 import { credLabel } from "../../engines/credentials/labels";
 import type { Credential } from "../../types/credentials";
-import { Select, labelClass } from "../../ui";
+import { Select, fieldLabelClass } from "../../ui";
 
 const NONE = "none";
 
@@ -16,14 +16,14 @@ export function CredentialPicker({ credentials, value, onChange }: { credentials
       const base = credLabel(c);
       const n = (seen.get(base) ?? 0) + 1;
       seen.set(base, n);
-      return { value: c.id, label: (total.get(base) ?? 0) > 1 ? `${base} · #${n}` : base };
+      return { value: c.id, label: (total.get(base) ?? 0) > 1 ? `${base} (#${n})` : base };
     }),
   ];
   const selected = options.find((o) => o.value === (value?.id ?? NONE));
   return (
     // Label on its own line, the picker full width below: a long DOMAIN\user (hash) never wraps the label.
-    <div className="flex flex-col gap-1">
-      <span className={labelClass}>Commands use:</span>
+    <div className="grid gap-1">
+      <span className={fieldLabelClass}>Commands use:</span>
       <Select
         aria-label="Commands use"
         className="w-full min-w-0"

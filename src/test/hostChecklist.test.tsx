@@ -243,8 +243,8 @@ describe("host checklist tab", () => {
     const user = userEvent.setup();
     mount({ items: [item("h-enum-smb", { status: "in_progress", auto: true })] });
     await openChecklist(user);
-    const group = await screen.findByRole("group", { name: "Status: Check SMB shares and null/guest access" });
-    await user.click(within(group).getByRole("button", { name: "Done" }));
+    const group = await screen.findByRole("radiogroup", { name: "Status: Check SMB shares and null/guest access" });
+    await user.click(within(group).getByRole("radio", { name: "Done" }));
     await vi.waitFor(() => expect(m.checklistPut).toHaveBeenCalled());
     const sent = m.checklistPut.mock.calls[0][1][0];
     expect(sent).toMatchObject({ ownerId: "h1", goalId: "h-enum-smb", status: "done", auto: false });
@@ -300,9 +300,9 @@ describe("credential fill on the checklist", () => {
     const user = userEvent.setup();
     mount({ creds: [cred("c1", "alice"), cred("c2", "alice", { secret: "Other1" })], attempts: [attempt("a1", "c1", 10)] });
     await openChecklist(user);
-    expect(await pickerOf()).toHaveTextContent("CORP\\alice · #1");
+    expect(await pickerOf()).toHaveTextContent("CORP\\alice (#1)");
     await user.click(await pickerOf());
-    expect(await screen.findByRole("option", { name: "CORP\\alice · #2" })).toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: "CORP\\alice (#2)" })).toBeInTheDocument();
   });
 
   it("the pick resets on lock: after unlock the default is back", async () => {
@@ -363,9 +363,9 @@ describe("GoalRow", () => {
         onNotes={() => {}}
       />,
     );
-    expect(screen.getByRole("button", { name: "From card zz-card ↗" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "From card zz-card" })).toBeInTheDocument();
     act(() => setImported({ commands: [], cards: [{ id: "zz-card", title: "Zz Imported", stage: "s", category: "c", os: "any", file: "02-Cards/zz.md" }] }));
-    expect(screen.getByRole("button", { name: "From card Zz Imported ↗" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "From card Zz Imported" })).toBeInTheDocument();
     act(() => setImported({ commands: [], cards: [] }));
   });
 });

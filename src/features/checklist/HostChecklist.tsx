@@ -3,7 +3,7 @@ import { Fragment, useMemo, useRef, useState } from "react";
 import { applicableGoals, currentStage, hostViewStages, type FillInput } from "../../engines/checklist";
 import { api } from "../../lib/api";
 import type { Host } from "../../types/host";
-import { Button, Input, Select } from "../../ui";
+import { Button, Input, Select, fieldLabelClass, labelClass } from "../../ui";
 import { COLUMN_LABELS } from "../hosts/columns";
 import { useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
@@ -38,22 +38,21 @@ function ArrivedFrom({ host, hosts, onSave }: { host: Host; hosts: Host[]; onSav
     }
   };
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-end gap-2">
-        {/* Fixed-width wrapper: the control's own w-full would otherwise win over a width class and squeeze Via. */}
-        <label className="flex w-48 shrink-0 flex-col gap-1">
-          <span className="text-xs text-fg-2">Arrived from</span>
+    <div className="grid gap-1">
+      <div className="grid grid-cols-[192px_minmax(0,1fr)_auto] items-end gap-2">
+        <label className="grid gap-1">
+          <span className={fieldLabelClass}>Arrived from</span>
           <Select aria-label="Arrived from" options={options} value={from} onValueChange={setFrom} />
         </label>
-        <label className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="text-xs text-fg-2">Via</span>
+        <label className="grid min-w-0 gap-1">
+          <span className={fieldLabelClass}>Via</span>
           <Input aria-label="Via" placeholder="creds, exploit, share…" value={via} onChange={(e) => setVia(e.target.value)} />
         </label>
-        <Button variant="primary" className="shrink-0" disabled={saving || via.trim() === ""} onClick={() => void save()}>
+        <Button variant="primary" disabled={saving || via.trim() === ""} onClick={() => void save()}>
           Save hop
         </Button>
       </div>
-      {error && <p role="alert" className="m-0 text-xs text-warn">{error}</p>}
+      {error && <p role="alert" className="m-0 text-meta text-warn">{error}</p>}
     </div>
   );
 }
@@ -95,7 +94,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
   );
 
   const failed = hostsQ.error ?? engagement.error ?? servicesQ.error;
-  if (failed) return <p role="alert" className="py-3 text-xs text-warn">Couldn't load the checklist: {failed.message}</p>;
+  if (failed) return <p role="alert" className="py-3 text-meta text-warn">Couldn't load the checklist: {failed.message}</p>;
   if (!hosts || !eng || !servicesQ.data) return null;
   const state = byOwner.get(host.id) ?? {};
   const entries = log.data ?? [];
@@ -141,23 +140,22 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
   };
 
   return (
-    <div className="flex flex-col gap-6 py-3">
+    <div className="grid gap-6 py-3">
       <CredentialPicker credentials={creds.credentials} value={creds.cred} onChange={creds.pick} />
-      {nothingNext && <p className="m-0 text-xs text-muted">{nothingNext}</p>}
+      {nothingNext && <p className="m-0 text-meta text-muted">{nothingNext}</p>}
       {doneWithNewCreds > 0 && onShowFull && (
-        <button
-          type="button"
-          onClick={onShowFull}
-          className="block max-w-full cursor-default truncate bg-transparent p-0 text-left text-xs text-fg-2 hover:text-fg"
-        >
-          {doneWithNewCreds} done step{doneWithNewCreds === 1 ? " has" : "s have"} new creds · show ▸
-        </button>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+          <span className="min-w-0 truncate text-meta text-fg-2">
+            {doneWithNewCreds} done step{doneWithNewCreds === 1 ? " has" : "s have"} new credentials
+          </span>
+          <Button size="sm" onClick={onShowFull}>Show done steps</Button>
+        </div>
       )}
       {shown.map(({ stage, goals, hint }) => (
-        <section key={stage.id} aria-label={stage.title} className="flex flex-col gap-2 border-t border-line-2 pt-5 first:border-t-0 first:pt-0">
-          <h3 className="m-0 text-[11px] font-semibold uppercase tracking-label text-muted">{stage.title}</h3>
+        <section key={stage.id} aria-label={stage.title} className="grid gap-2 border-t border-line-2 pt-6 first:border-t-0 first:pt-0">
+          <h3 className={`m-0 ${labelClass}`}>{stage.title}</h3>
           {goals.length === 0 ? (
-            <p className="m-0 text-xs text-muted">{hint}</p>
+            <p className="m-0 text-meta text-muted">{hint}</p>
           ) : (
             <ul className="m-0 list-none p-0">
               {goals.map((g, i) => {
@@ -168,7 +166,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
                   <Fragment key={g.id}>
                   {heading && (
                     <li role="presentation" className="list-none pb-1 pt-3 first:pt-0">
-                      <h4 className="m-0 text-[11px] font-medium tracking-label text-faint">{heading}</h4>
+                      <h4 className="m-0 text-meta font-medium text-muted-2">{heading}</h4>
                     </li>
                   )}
                   <GoalRow

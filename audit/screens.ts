@@ -34,7 +34,7 @@ export const SCREENS: Screen[] = [
     id: "host-checklist", path: H, ready: "role=button[name='Full checklist'][expanded]",
     setup: async (page) => {
       await page.getByRole("button", { name: "Full checklist" }).click();
-      const notice = page.getByRole("button", { name: /new creds? since done/ }).first();
+      const notice = page.getByRole("button", { name: /New credentials since done/ }).first();
       if (await notice.count()) await notice.click();
     },
   },

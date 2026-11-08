@@ -1,7 +1,8 @@
 import { useId, useState, type FormEvent } from "react";
 import type { Host } from "../../types/host";
 import type { Hop } from "../../types/network";
-import { Button, Dialog, Field, Input, Panel, Select } from "../../ui";
+import { ArrowRight, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
+import { Button, Dialog, Field, IconButton, Input, Panel, Select } from "../../ui";
 import { ConfirmDelete } from "./ConfirmDelete";
 import { useHopMutations } from "./queries";
 
@@ -51,7 +52,7 @@ function HopForm({ engagementId, hosts, hop, onClose }: { engagementId: string; 
         </>
       }
     >
-      <form id={formId} onSubmit={submit} noValidate className="flex flex-col gap-3.5">
+      <form id={formId} onSubmit={submit} noValidate className="grid gap-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label="From">
             <Select options={[{ value: KALI, label: "Kali" }, ...hosts.map((h) => ({ value: h.id, label: h.name }))]} value={from} onValueChange={setFrom} />
@@ -63,7 +64,7 @@ function HopForm({ engagementId, hosts, hop, onClose }: { engagementId: string; 
         <Field label="Via" error={errors.via}>
           <Input autoFocus value={via} onChange={(e) => setVia(e.target.value)} placeholder="creds, exploit, share…" />
         </Field>
-        {errors.form && <p role="alert" className="m-0 text-xs text-warn">{errors.form}</p>}
+        {errors.form && <p role="alert" className="m-0 text-meta text-warn">{errors.form}</p>}
       </form>
     </Dialog>
   );
@@ -75,20 +76,25 @@ export function HopsPanel({ engagementId, hosts, hops }: { engagementId: string;
   const [deleting, setDeleting] = useState<Hop | null>(null);
   const [deleteError, setDeleteError] = useState<string>();
   return (
-    <Panel title="Hops" actions={<Button size="sm" onClick={() => setEditing("new")}>Add hop</Button>}>
+    <Panel title="Hops" actions={<IconButton icon={Plus} label="Add hop" onClick={() => setEditing("new")} />}>
       {hops.length === 0 ? (
-        <p className="m-0 text-xs text-muted">No hops yet.</p>
+        <p className="m-0 text-meta text-muted">No hops yet.</p>
       ) : (
-        <ul className="m-0 list-none p-0">
-          {hops.map((h) => (
-            <li key={h.id} className="flex items-center gap-2 border-b border-line py-1.5 last:border-b-0">
-              <span className="min-w-0 flex-1 text-[13px] text-fg">
-                {hostName(hosts, h.fromHostId)} → {hostName(hosts, h.toHostId)} via {h.via}
-              </span>
-              <Button size="sm" aria-label={`Edit hop to ${hostName(hosts, h.toHostId)}`} onClick={() => setEditing(h)}>Edit</Button>
-              <Button size="sm" aria-label={`Delete hop to ${hostName(hosts, h.toHostId)}`} onClick={() => { setDeleteError(undefined); setDeleting(h); }}>Delete</Button>
-            </li>
-          ))}
+        <ul className="m-0 grid list-none p-0">
+          {hops.map((h) => {
+            const from = hostName(hosts, h.fromHostId);
+            const to = hostName(hosts, h.toHostId);
+            return (
+              <li key={h.id} className="grid grid-cols-[minmax(0,max-content)_16px_minmax(0,max-content)_minmax(0,1fr)_28px_28px] items-center gap-2 border-b border-line py-2 last:border-b-0">
+                <span className="truncate text-body text-fg" title={from}>{from}</span>
+                <ArrowRight size={16} className="text-muted" role="img" aria-label="to" />
+                <span className="truncate text-body text-fg" title={to}>{to}</span>
+                <span className="truncate text-body text-fg-2" title={h.via}>via {h.via}</span>
+                <IconButton icon={PencilSimple} label={`Edit hop to ${to}`} onClick={() => setEditing(h)} />
+                <IconButton icon={Trash} label={`Delete hop to ${to}`} tone="destructive" onClick={() => { setDeleteError(undefined); setDeleting(h); }} />
+              </li>
+            );
+          })}
         </ul>
       )}
       {deleting && (

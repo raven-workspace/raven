@@ -156,7 +156,9 @@ describe("engagement checklist", () => {
 
   it("a hop to the DC opens the Domain admin playbook", async () => {
     mount({ services: AD, hops: [hop()] });
-    expect(await screen.findByText(/dc01.*creds|Kali.*dc01/)).toBeInTheDocument();
+    const hopRow = (await screen.findByText("via creds")).closest("li")!;
+    expect(hopRow).toHaveTextContent("Kali");
+    expect(hopRow).toHaveTextContent("dc01");
     expect(await screen.findByRole("button", { name: /Domain admin/, expanded: true })).toBeInTheDocument();
   });
 
@@ -233,7 +235,7 @@ describe("engagement checklist", () => {
     mount({ services: AD, items: [done], creds: [cred("c1", { createdAt: 50 })] });
     await screen.findAllByText("Sync the clock to the DC");
     const row = document.querySelector('li[data-goal-id="e-setup-clock"]') as HTMLElement;
-    const notice = within(row).getByRole("button", { name: /1 new cred since done · re-check/ });
+    const notice = within(row).getByRole("button", { name: /New credentials since done \(1\)/ });
     expect(within(row).queryByText("CORP\\svc_sql")).toBeNull();
     await userEvent.click(notice);
     expect(within(row).getByText("CORP\\svc_sql")).toBeInTheDocument();
@@ -272,7 +274,7 @@ describe("engagement checklist", () => {
     await user.click(screen.getByRole("button", { name: "Tick from log" }));
     await waitFor(() => {
       const row = screen.getAllByText("Sync the clock to the DC")[0]!.closest("li")!;
-      expect(within(row).getByRole("button", { name: "Done" })).toHaveAttribute("aria-pressed", "true");
+      expect(within(row).getByRole("radio", { name: "Done" })).toHaveAttribute("aria-checked", "true");
     });
     await waitFor(() => expect(m.hostsList.mock.calls.length).toBeGreaterThan(hostReads));
   });
@@ -352,7 +354,7 @@ describe("engagement checklist", () => {
     mount({ hosts: [{ ...H1, dualHomed: true }, H2] });
     await screen.findByRole("region", { name: "Lateral movement" });
     const li = document.querySelector('li[data-goal-id="h-pivot-tunnel"]') as HTMLElement;
-    await user.click(within(li).getByRole("button", { name: /done/i }));
+    await user.click(within(li).getByRole("radio", { name: /done/i }));
     expect(m.checklistPut).toHaveBeenCalledWith("e1", [expect.objectContaining({ ownerId: "h1", goalId: "h-pivot-tunnel" })]);
   });
 

@@ -165,7 +165,7 @@ describe("Arsenal", () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
     await user.click(await screen.findByRole("button", { name: "Full checklist" }));
-    await user.click(await screen.findByRole("button", { name: "From card Zz Card ↗" }));
+    await user.click(await screen.findByRole("button", { name: "From card Zz Card" }));
     const d = within(await drawer());
     expect(await d.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
     expect(d.getByText("Zz Cat · any")).toBeInTheDocument();

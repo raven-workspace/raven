@@ -5,7 +5,7 @@ import { credLabel, usernameLabel } from "../../engines/credentials/labels";
 import { api } from "../../lib/api";
 import type { CredAttempt, Credential } from "../../types/credentials";
 import type { Host } from "../../types/host";
-import { Button } from "../../ui";
+import { Button, labelClass } from "../../ui";
 import { useUsernames } from "../credentials/queries";
 
 /** Hosts with valid or admin access newer than their last review, each with a Reviewed button. */
@@ -29,14 +29,14 @@ export function AccessFlags({ engagementId, hosts, attempts, credentials }: { en
     return c ? credLabel(c) : "unknown";
   };
   return (
-    <section aria-label="New access" className="flex flex-col gap-1">
-      <h3 className="m-0 text-[11px] font-semibold uppercase tracking-label text-muted">New access</h3>
-      <ul className="m-0 flex list-none flex-col p-0">
+    <section aria-label="New access" className="grid gap-1">
+      <h3 className={`m-0 ${labelClass}`}>New access</h3>
+      <ul className="m-0 grid list-none p-0">
         {flags.map((f) => {
           const host = hosts.find((h) => h.id === f.hostId);
           return (
-            <li key={`${f.hostId}-${f.credId ?? f.usernameId}-${f.service}`} className="flex items-center gap-3 border-b border-line py-2">
-              <span className="min-w-0 flex-1 text-[13px] text-fg">{`${host?.name ?? "unknown host"}: ${f.result} over ${f.service} as ${who(f)}`}</span>
+            <li key={`${f.hostId}-${f.credId ?? f.usernameId}-${f.service}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b border-line py-2">
+              <span className="min-w-0 py-1 text-body text-fg">{`${host?.name ?? "unknown host"}: ${f.result} over ${f.service} as ${who(f)}`}</span>
               <Button size="sm" disabled={reviewed.isPending} onClick={() => reviewed.mutate(f.hostId)}>
                 Reviewed
               </Button>

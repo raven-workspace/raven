@@ -142,7 +142,7 @@ test("credentials notice stays one line", async ({ page }) => {
   await open(page, LAB_HOST, 900);
   await page.getByRole("tab", { name: "Next" }).click();
   await page.getByRole("button", { name: "Full checklist" }).click();
-  const notice = page.getByText(/new creds since done/).first();
+  const notice = page.getByText(/New credentials since done/).first();
   await notice.waitFor();
   const { height, lineHeight } = await notice.evaluate((el) => {
     const s = getComputedStyle(el);

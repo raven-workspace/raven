@@ -112,7 +112,7 @@ describe("Next tab", () => {
     mount({ items: ids.slice(0, -1).map((id) => item(id, "done")) });
     const tab = await next();
     await tab.findByRole("heading", { name: "Information gathering" });
-    await user.click(within(tab.getByRole("group", { name: /^Status: / })).getByRole("button", { name: "Done" }));
+    await user.click(within(tab.getByRole("radiogroup", { name: /^Status: / })).getByRole("radio", { name: "Done" }));
     expect(m.checklistPut).toHaveBeenCalledWith("e1", [expect.objectContaining({ goalId: last, status: "done" })]);
     expect(await tab.findByRole("heading", { name: "Vulnerability detection" })).toBeInTheDocument();
     await waitFor(() => expect(m.hostSyncBoard).toHaveBeenCalledWith("h1", "vulnerability-detection"));
@@ -145,7 +145,7 @@ describe("Next tab", () => {
     mount();
     const tab = await next();
     await tab.findByRole("heading", { name: "Information gathering" });
-    await user.click(within(tab.getAllByRole("group", { name: /^Status: / })[0]).getByRole("button", { name: "Doing" }));
+    await user.click(within(tab.getAllByRole("radiogroup", { name: /^Status: / })[0]).getByRole("radio", { name: "Doing" }));
     await waitFor(() => expect(m.checklistPut).toHaveBeenCalledWith("e1", [expect.objectContaining({ status: "in_progress" })]));
   });
 
@@ -209,12 +209,12 @@ describe("Next: done steps with new credentials", () => {
     m.credentialsList.mockResolvedValue([domainCred("c1", 50)]);
     mount({ items: [doneAt("h-enum-full-tcp", 5)] });
     const tab = await next();
-    const line = await tab.findByRole("button", { name: "1 done step has new creds · show ▸" });
+    const line = await tab.findByRole("button", { name: "Show done steps" });
     expect(tab.queryByText("Scan all 65,535 TCP ports")).not.toBeInTheDocument();
     await user.click(line);
     expect(await tab.findByText("Scan all 65,535 TCP ports")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Full checklist" })).toHaveAttribute("aria-expanded", "true");
-    expect(tab.queryByRole("button", { name: /done steps? ha(s|ve) new creds/ })).not.toBeInTheDocument();
+    expect(tab.queryByRole("button", { name: "Show done steps" })).not.toBeInTheDocument();
   });
 
   it("shows nothing when every credential is older than the done steps", async () => {
@@ -222,22 +222,20 @@ describe("Next: done steps with new credentials", () => {
     mount({ items: [doneAt("h-enum-full-tcp", 5)] });
     const tab = await next();
     await tab.findByRole("heading", { name: "Information gathering" });
-    expect(tab.queryByText(/new creds · show/)).not.toBeInTheDocument();
+    expect(tab.queryByText(/done steps? ha(s|ve) new credentials/)).not.toBeInTheDocument();
   });
 });
 
 describe("new credentials notice", () => {
-  it("is one line, `12 new creds since done · re-check`, with the labels only in its disclosure", async () => {
+  it("is a disclosure with a count, closed by default, with the labels only inside it", async () => {
     const labels = Array.from({ length: 12 }, (_, i) => `CORP\\user_${i}`);
     render(
       <ul>
         <GoalRow goal={{ id: "g", title: "Spray the domain" }} state={{ status: "done" }} commands={[]} evidence={[]} newCredLabels={labels} onStatus={vi.fn()} onNotes={vi.fn()} />
       </ul>,
     );
-    const notice = screen.getByText(/12 new creds since done/);
-    expect(notice).toHaveTextContent("12 new creds since done · re-check ▸");
-    expect(notice.tagName).toBe("BUTTON");
-    expect(notice.className).toMatch(/truncate/);
+    const notice = screen.getByRole("button", { name: "New credentials since done (12)" });
+    expect(notice).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("CORP\\user_0")).not.toBeInTheDocument();
     await userEvent.click(notice);
     expect(notice).toHaveAttribute("aria-expanded", "true");
