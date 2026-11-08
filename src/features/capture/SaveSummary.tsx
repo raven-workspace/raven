@@ -40,9 +40,11 @@ export function SaveSummary() {
       onMouseLeave={() => setHover(false)}
       onFocus={() => setFocus(true)}
       onBlur={() => setFocus(false)}
-      className="fixed bottom-4 left-4 z-30 grid w-[min(360px,calc(100vw-2rem))] grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 rounded-md border border-line-2 bg-surface px-3 py-3 text-meta shadow-lg"
+      className="fixed bottom-4 left-4 z-30 grid w-[min(400px,calc(100vw-2rem))] grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 rounded-md border border-line-2 bg-surface px-3 py-3 text-meta shadow-lg"
     >
-      <ul className="m-0 grid list-none gap-1 p-0">
+      {/* Undo sits under the close button, beside the lines rather than below them: the toast stays short enough to clear the
+          palette's hint line and the capture sheet's Save button. */}
+      <ul className="row-span-2 m-0 grid list-none gap-1 p-0">
         {summary.wins.map((t, i) => (
           <li key={`w${i}`} className="text-accent">{t}</li>
         ))}
@@ -54,7 +56,7 @@ export function SaveSummary() {
         ))}
       </ul>
       <IconButton icon={XIcon} label="Close summary" onClick={close} />
-      <Button size="sm" className="col-span-2 justify-self-start" onClick={() => void undo()}>Undo</Button>
+      <Button size="sm" className="justify-self-end" onClick={() => void undo()}>Undo</Button>
     </div>
   );
 }
