@@ -92,7 +92,7 @@ beforeEach(() => {
 afterEach(() => setImported({ commands: [], cards: [] }));
 
 /** What the host scope shows (its visible text, without the hidden native select's options). */
-const scopeText = (chip: HTMLElement): string => [...chip.children].map((n) => n.textContent).join(" ");
+const scopeText = (chip: HTMLElement): string => [...chip.children].map((n) => n.textContent).join(" ").trim();
 const hostChip = (scope: { getByRole: typeof screen.getByRole }) => scope.getByRole("button", { name: /^Fill for host/ });
 
 describe("⌘K palette", () => {
@@ -258,13 +258,13 @@ describe("host picker in the palette (U3)", () => {
     expect(glyph!.compareDocumentPosition(b.getByRole("combobox", { name: "Search" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const chip = hostChip(screen);
     expect(bar).not.toContainElement(chip);
-    expect(scopeText(chip)).toBe("for dc01 ⌄");
+    expect(scopeText(chip)).toBe("Host dc01");
     // The menu lists each host with its IP, plus No host.
     await user.click(chip);
     const opts = within(screen.getByRole("listbox", { name: "Fill for host" })).getAllByRole("option");
     expect(opts.map((o) => o.textContent)).toEqual(["No host", "dc0110.10.10.5", "web0710.10.10.6"]);
     await user.click(opts[0]!);
-    expect(scopeText(chip)).toBe("for no host ⌄");
+    expect(scopeText(chip)).toBe("Host No host");
   });
 
   it("on the dashboard the bar reads for no host", async () => {
@@ -546,14 +546,29 @@ describe("⌘K groups, hosts and contained suggestions", () => {
     expect(within(list).getAllByRole("option").length).toBeGreaterThan(0);
   });
 
-  it("the footer says → in card and lists ⌥C credential", async () => {
+  it("the footer says → in card and lists ⌥C credential behind ?", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");
     await screen.findByRole("tab", { name: "Next" });
     await user.keyboard(cmdK);
     const dlg = within(await screen.findByRole("dialog", { name: "Search" }));
-    expect(dlg.getByText("in card")).toBeInTheDocument();
-    expect(dlg.getByText("credential")).toBeInTheDocument();
+    const line = dlg.getByRole("group", { name: "Search shortcuts" });
+    expect(within(line).getByText("in card")).toBeInTheDocument();
+    // Five show; the rest are one click away behind the "?" key.
+    await user.click(within(line).getByRole("button", { name: "All shortcuts" }));
+    expect(await screen.findByText("credential")).toBeInTheDocument();
+  });
+
+  it("palette footer is a HintLine", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    const dlg = within(await screen.findByRole("dialog", { name: "Search" }));
+    const line = dlg.getByRole("group", { name: "Search shortcuts" });
+    expect(line).toHaveAttribute("data-hint-line");
+    expect(line.closest("[data-hint-surface]")).not.toBeNull();
+    expect(line.querySelectorAll("[data-hint]").length).toBeLessThanOrEqual(5);
   });
 
   it("the host and credential chips sit on their own row under the search field", async () => {
@@ -657,7 +672,7 @@ describe("⌘K cap and copy-guard arm", () => {
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzmany");
     const options = within(screen.getByRole("listbox", { name: "Results" })).getAllByRole("option");
     expect(options).toHaveLength(31);
-    expect(options[30]).toHaveTextContent("10 more — open in Arsenal");
+    expect(options[30]).toHaveTextContent("10 more, open in the Arsenal");
     await user.keyboard("{ArrowDown}".repeat(30));
     expect(options[30]).toHaveAttribute("aria-selected", "true");
     await user.keyboard("{Enter}");

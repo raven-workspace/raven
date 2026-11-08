@@ -167,10 +167,12 @@ describe("CardView reading view", () => {
   it("Also in Raven is folded and includes oscp-notes commands", async () => {
     mount();
     await pre("zza 10.10.10.5");
-    const also = screen.getByText("Also in Raven").closest("details")!;
-    expect(also).not.toHaveAttribute("open");
-    expect(within(also).getByText("Oscp note helper")).toBeInTheDocument();
-    expect(within(also).getByText("Raven helper")).toBeInTheDocument();
+    const toggle = screen.getByRole("button", { name: /^Also in Raven/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Oscp note helper")).not.toBeInTheDocument();
+    await userEvent.setup().click(toggle);
+    expect(screen.getByText("Oscp note helper")).toBeInTheDocument();
+    expect(screen.getByText("Raven helper")).toBeInTheDocument();
   });
 
   it("Open in Obsidian calls the API with the card's file", async () => {

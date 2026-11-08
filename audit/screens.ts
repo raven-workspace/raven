@@ -205,7 +205,7 @@ export const SCREENS: Screen[] = [
       // The strip follows the scroll through an IntersectionObserver: wait until the active entry is no longer the first one.
       await page.waitForFunction(() => {
         const nav = document.querySelector("nav[aria-label='On this card']");
-        const buttons = [...(nav?.querySelectorAll("button") ?? [])];
+        const buttons = [...(nav?.querySelectorAll("button[data-for]") ?? [])];
         const at = buttons.findIndex((b) => b.getAttribute("aria-current") === "location");
         return at > 0;
       });

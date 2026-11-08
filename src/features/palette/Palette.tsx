@@ -6,7 +6,7 @@ import { credLabel } from "../../engines/credentials/labels";
 import { getCards, getLibrary, getToolkit, useLibraryVersion } from "../../engines/library/store";
 import { copyPlain, copySecret } from "../../lib/clipboard";
 import { reportError } from "../../lib/lockSignal";
-import { Dialog, Kbd } from "../../ui";
+import { Dialog, HintLine, type Hint } from "../../ui";
 import { logCommand } from "../capture/logCommand";
 import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
 import { shortHostName } from "../../lib/hostName";
@@ -90,7 +90,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
       .map((g) => ({ key: g.category, label: g.label, rows: g.hits.map(paletteRow) }));
     // The cap only keeps the dialog short: what it left out is one row away in the Arsenal, never silently dropped.
     const left = found.groups.reduce((n, g) => n + g.hits.length, 0) - out.reduce((n, g) => n + g.rows.length, 0);
-    if (left > 0) out.push({ key: "more", rows: [paletteRow({ type: "more", id: "more", count: left, title: `${left} more — open in Arsenal` })] });
+    if (left > 0) out.push({ key: "more", rows: [paletteRow({ type: "more", id: "more", count: left, title: `${left} more, open in the Arsenal` })] });
     if (found.items.length > 0) out.push({ key: "engagement", label: "This engagement", rows: found.items.slice(0, MAX_RESULTS).map(paletteRow) });
     return out;
   }, [found]);
@@ -156,7 +156,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
         const typed = fillCommand(c.template, filled.input, { commandOs: c.os }).text;
         await logCommand(qc, {
           engagementId, host, hosts: d.hosts, command: typed,
-          title: `${c.title} · ${host.ip ?? host.name}`,
+          title: c.title,
           ranOn: c.runFrom === "attacker" ? (d.settings?.machines[0] ?? "") : host.name,
         });
       }
@@ -224,8 +224,15 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     void run(e.metaKey || e.ctrlKey);
   };
 
+  const hints: Hint[] = [
+    { keys: "↵", label: "copy", priority: 1 },
+    { keys: "⌘↵", label: host ? "copy and log" : "copy and log (open a host)", priority: 2 },
+    { keys: "→", label: "in card", priority: 3 },
+    { keys: "⇥", label: "edit a value", priority: 4 },
+    ...(engagementId ? [{ keys: "⌥H", label: "host", priority: 5 }, { keys: "⌥C", label: "credential", priority: 5 }] : []),
+  ];
   return (
-    <div className="grid gap-3" onKeyDown={onKey} onKeyDownCapture={onKeyCapture}>
+    <div data-hint-surface="" className="grid gap-3" onKeyDown={onKey} onKeyDownCapture={onKeyCapture}>
       <header className="grid gap-2">
         <SearchBar
           label="Search"
@@ -257,7 +264,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
         )}
       </header>
       <div className="grid max-h-[44vh] overflow-y-auto">
-        {results.length === 0 && <p className="m-0 px-1 py-2 text-xs text-muted">Nothing matches</p>}
+        {results.length === 0 && <p className="m-0 px-1 py-2 text-meta text-muted">Nothing matches</p>}
         <ResultList
           id="palette-results" label="Results" groups={rowGroups} selected={index}
           onActivate={(_, i) => {
@@ -273,16 +280,11 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
           fieldRef={(t, el) => (el ? fieldEls.current.set(t, el) : fieldEls.current.delete(t))}
         />
       )}
-      {guard.hint && filled && guard.forKey === copyKey(filled.cmd) && <p role="status" className="m-0 text-xs text-warn">{guard.hint}</p>}
-      {status && <p role="alert" className="m-0 text-xs text-warn">{status}</p>}
-      <p data-hint-line="" className="m-0 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
-        <span><Kbd>↵</Kbd> copy</span>
-        <span><Kbd>⌘↵</Kbd> copy and log{host ? "" : " (open a host)"}</span>
-        <span><Kbd>→</Kbd> in card</span>
-        <span><Kbd>⇥</Kbd> edit a value</span>
-        {engagementId && <span><Kbd>⌥H</Kbd> host</span>}
-        {engagementId && <span><Kbd>⌥C</Kbd> credential</span>}
-      </p>
+      {guard.hint && filled && guard.forKey === copyKey(filled.cmd) && <p role="status" className="m-0 text-meta text-warn">{guard.hint}</p>}
+      {status && <p role="alert" className="m-0 text-meta text-warn">{status}</p>}
+      <footer className="grid">
+        <HintLine hints={hints} ariaLabel="Search shortcuts" />
+      </footer>
     </div>
   );
 }

@@ -7,7 +7,8 @@ import { isTypingTarget } from "../../lib/keys";
 import { reportError } from "../../lib/lockSignal";
 import { api } from "../../lib/api";
 import { cx } from "../../lib/cx";
-import { Button } from "../../ui";
+import { CaretLeft, CaretRight } from "@phosphor-icons/react";
+import { Button, Disclosure, IconButton } from "../../ui";
 import { fillLibraryCommand } from "../checklist/goalCommands";
 import { CommandList } from "../checklist/CommandList";
 import { useFillBase } from "../palette/fillData";
@@ -157,8 +158,8 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
     if (e.metaKey || e.ctrlKey || e.altKey || e.nativeEvent.isComposing || e.defaultPrevented || isTypingTarget(e.target)) return;
     const cur = e.target instanceof HTMLElement ? e.target.closest<HTMLElement>("[data-block]") : null;
     if (e.key === "j" || e.key === "k") {
-      // Blocks inside the folded "Also in Raven" are not reachable.
-      const blocks = [...(root.current?.querySelectorAll<HTMLElement>("[data-block]") ?? [])].filter((b) => !b.closest("details:not([open])"));
+      // The folded "Also in Raven" blocks are not in the page, so they are not reachable.
+      const blocks = [...(root.current?.querySelectorAll<HTMLElement>("[data-block]") ?? [])];
       const at = cur ? blocks.indexOf(cur) : -1;
       const next = blocks[e.key === "j" ? Math.min(blocks.length - 1, at + 1) : Math.max(0, at - 1)];
       if (!next) return;
@@ -170,6 +171,8 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
       cur.querySelector<HTMLElement>(COPY_BUTTON)?.click();
     }
   };
+
+  const [alsoOpen, setAlsoOpen] = useState(false);
 
   // Keep the current entry visible in a strip that scrolls sideways.
   const stripRow = useRef<HTMLDivElement>(null);
@@ -199,6 +202,11 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
     ro.observe(r);
     return () => ro.disconnect();
   }, [hasStrip, measureStrip]);
+  const overflowing = edges.start || edges.end;
+  const scrollStrip = (dir: -1 | 1) => {
+    const r = stripRow.current;
+    r?.scrollBy?.({ left: dir * Math.max(120, r.clientWidth * 0.75), behavior: "smooth" });
+  };
   const fade = edges.start || edges.end
     ? `linear-gradient(to right, ${edges.start ? "transparent 0, #000 32px" : "#000 0"}, ${edges.end ? "#000 calc(100% - 32px), transparent 100%" : "#000 100%"})`
     : undefined;
@@ -213,7 +221,7 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   const block = (c: LibraryCommand, msf: Set<string>) => (
     <div
       key={c.id} id={`block-${c.id}`} data-block="" data-block-id={c.id} tabIndex={-1}
-      className={cx("-m-1.5 grid scroll-mt-14 gap-1 rounded-sm p-1.5 outline-none focus:ring-1 focus:ring-accent", marked === c.id && "ring-1 ring-accent")}
+      className={cx("-m-2 grid scroll-mt-14 gap-1 rounded-sm p-2 outline-none focus:ring-1 focus:ring-accent", marked === c.id && "ring-1 ring-accent")}
     >
       <CommandList
         commands={[fillLibraryCommand(c, input, msf.has(c.id))]} hostName={hostName} hideDcNote strongTitles
@@ -226,27 +234,32 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
           focusCredChip?.();
         }}
       />
-      {c.why && <p className="m-0 text-xs text-muted"><WikiText text={c.why} onOpenCard={onOpenCard} /></p>}
+      {c.why && <p className="m-0 text-meta text-muted"><WikiText text={c.why} onOpenCard={onOpenCard} /></p>}
     </div>
   );
 
   return (
     <div ref={root} tabIndex={-1} onKeyDown={onKeyDown} className="grid grid-cols-[minmax(0,1fr)] gap-4 outline-none">
       {hasStrip && (
-        <nav aria-label="On this card" className="sticky -top-3 z-10 border-b border-line bg-(--pane-bg,var(--surface)) pt-2">
+        <nav
+          aria-label="On this card"
+          className={cx("sticky -top-3 z-10 grid items-center gap-1 border-b border-line bg-(--pane-bg,var(--surface)) pt-2", overflowing ? "grid-cols-[28px_minmax(0,1fr)_28px]" : "grid-cols-[minmax(0,1fr)]")}
+        >
+          {overflowing && <IconButton icon={CaretLeft} label="Earlier blocks" disabled={!edges.start} onClick={() => scrollStrip(-1)} />}
           <div
             ref={stripRow} data-scroll-x="" onScroll={measureStrip} style={fade ? { maskImage: fade, WebkitMaskImage: fade } : undefined}
-            className="relative grid auto-cols-max grid-flow-col gap-4 overflow-x-auto px-1 pb-3 pt-1 text-xs [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="relative grid auto-cols-max grid-flow-col gap-4 overflow-x-auto px-1 pb-3 pt-1 text-meta [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {main.shown.map((c) => (
               <button
-                key={c.id} type="button" data-for={c.id} onClick={() => jump(c.id)} aria-current={inView === c.id ? "location" : undefined}
-                className={cx("max-w-48 cursor-pointer truncate border-0 bg-transparent p-0 text-xs hover:text-fg", inView === c.id ? "text-accent" : "text-muted")}
+                key={c.id} type="button" data-for={c.id} title={c.title} onClick={() => jump(c.id)} aria-current={inView === c.id ? "location" : undefined}
+                className={cx("max-w-48 cursor-pointer truncate border-0 bg-transparent p-0 text-meta hover:text-fg", inView === c.id ? "text-accent" : "text-muted-2")}
               >
                 {c.title}
               </button>
             ))}
           </div>
+          {overflowing && <IconButton icon={CaretRight} label="Later blocks" disabled={!edges.end} onClick={() => scrollStrip(1)} />}
         </nav>
       )}
       <FillBar
@@ -254,13 +267,12 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
         os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
         fieldRef={(t, el) => (el ? fieldEls.current.set(t, el) : fieldEls.current.delete(t))}
       />
-      <div className="grid gap-5">{main.shown.map((c) => block(c, main.msfMarker))}</div>
-      {main.shown.length === 0 && commands.length > 0 && <p className="m-0 text-xs text-muted">Nothing here is allowed in this exam.</p>}
+      <div className="grid gap-6">{main.shown.map((c) => block(c, main.msfMarker))}</div>
+      {main.shown.length === 0 && commands.length > 0 && <p className="m-0 text-meta text-muted">Nothing here is allowed in this exam.</p>}
       {extra.shown.length > 0 && (
-        <details className="grid gap-3">
-          <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-label text-muted">Also in Raven</summary>
-          <div className="grid gap-5 pt-3">{extra.shown.map((c) => block(c, extra.msfMarker))}</div>
-        </details>
+        <Disclosure label="Also in Raven" count={extra.shown.length} open={alsoOpen} onOpenChange={setAlsoOpen}>
+          <div className="grid gap-6 pt-3">{extra.shown.map((c) => block(c, extra.msfMarker))}</div>
+        </Disclosure>
       )}
     </div>
   );
@@ -288,7 +300,7 @@ export function CardView({ cardId, engagementId, hostId, overrides, onOverrides,
   }, [commands, version]);
   /* eslint-enable react-hooks/exhaustive-deps */
 
-  if (!card) return <p className="m-0 text-xs text-muted">That card is not in the library.</p>;
+  if (!card) return <p className="m-0 text-meta text-muted">That card is not in the library.</p>;
   const openInObsidian = () => {
     setObsidianError(undefined);
     api.openObsidian(card.file).catch((e: unknown) => {
@@ -298,9 +310,9 @@ export function CardView({ cardId, engagementId, hostId, overrides, onOverrides,
   };
   return (
     <article className="grid grid-cols-[minmax(0,1fr)] gap-3" aria-label={card.title}>
-      <header className="grid gap-0.5">
-        <h2 className="m-0 text-[15px] font-semibold text-fg">{card.title}</h2>
-        <p className="m-0 text-xs text-muted">{categoryLabel(card.category)} · {card.os}</p>
+      <header className="grid gap-1">
+        <h2 className="m-0 text-heading text-fg">{card.title}</h2>
+        <p className="m-0 text-meta text-muted">{categoryLabel(card.category)} · {card.os}</p>
       </header>
       <CommandPane
         key={cardId} commands={commands} also={also} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={onOverrides}
@@ -308,7 +320,7 @@ export function CardView({ cardId, engagementId, hostId, overrides, onOverrides,
       />
       <div className="grid justify-items-start gap-1">
         <Button size="sm" onClick={openInObsidian}>Open in Obsidian</Button>
-        {obsidianError && <p role="alert" className="m-0 text-xs text-warn">{obsidianError}</p>}
+        {obsidianError && <p role="alert" className="m-0 text-meta text-warn">{obsidianError}</p>}
       </div>
     </article>
   );

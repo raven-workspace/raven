@@ -22,13 +22,13 @@ export function FilePicker({ name, os, value, onChange, className, placeholder, 
     () => toolkit.filter((f) => !os || f.os === os).sort((a, b) => Number(b.staged) - Number(a.staged)),
     [toolkit, os],
   );
-  const suggestions: Suggestion[] = files.map((f) => ({ value: f.file, hint: `${f.purpose}${f.staged ? "" : " · not staged"}` }));
+  const suggestions: Suggestion[] = files.map((f) => ({ value: f.file, hint: f.staged ? f.purpose : `${f.purpose}, not staged` }));
   const picked = files.find((f) => f.file === value.trim());
   return (
-    <span className="inline-flex flex-col gap-1">
+    <span className="inline-grid gap-1">
       <TokenInput name={name} className={className} placeholder={placeholder} autoValue={autoValue} value={value} suggestions={suggestions} onChange={onChange} ref={ref} />
       {picked && !picked.staged && (
-        <span role="note" className="max-w-xs text-[11px] text-warn">
+        <span role="note" className="max-w-xs text-meta text-warn">
           not staged on Kali; get it from: {picked.where || "unknown"}
           {picked.note ? ` ${picked.note}` : ""}
         </span>

@@ -107,7 +107,7 @@ const block = (root: { findByText: typeof screen.findByText }, text: string) =>
 const drawer = () => screen.findByRole("complementary", { name: "Arsenal" });
 
 /** What the host scope shows (its visible text, without the hidden native select's options). */
-const scopeText = (chip: HTMLElement): string => [...chip.children].map((n) => n.textContent).join(" ");
+const scopeText = (chip: HTMLElement): string => [...chip.children].map((n) => n.textContent).join(" ").trim();
 const hostChip = (scope: { getByRole: typeof screen.getByRole }) => scope.getByRole("button", { name: /^Fill for host/ });
 
 describe("Arsenal", () => {
@@ -190,7 +190,9 @@ describe("Arsenal", () => {
     mount("/e/e1/h/h1");
     await screen.findByRole("tab", { name: "Next" });
     act(() => useArsenalStore.getState().openCard("zz-card"));
-    const also = within((await screen.findByText("Also in Raven")).closest("details")!);
+    const toggle = await screen.findByRole("button", { name: /^Also in Raven/ });
+    await userEvent.setup().click(toggle);
+    const also = within(toggle.parentElement!);
     expect(await block(also, "zzhelper 10.10.10.5")).toBeInTheDocument();
     expect(also.queryByText(/zzprobe/)).not.toBeInTheDocument();
   });
@@ -199,7 +201,7 @@ describe("Arsenal", () => {
     const user = userEvent.setup();
     mount("/arsenal");
     const cats = within(await screen.findByRole("navigation", { name: "Categories" }));
-    await user.click(await cats.findByRole("button", { name: /^Zz Cat/ }));
+    await user.click(await cats.findByRole("tab", { name: /^Zz Cat/ }));
     const list = within(screen.getByRole("listbox", { name: "Arsenal results" }));
     expect(list.getAllByRole("option")).toHaveLength(1);
     expect(list.queryByRole("option", { name: /Zz Other/ })).not.toBeInTheDocument();
@@ -295,7 +297,7 @@ describe("Arsenal", () => {
     // Focusing the text field rings the whole bar in the accent, like every other input.
     expect(barEl.className).toMatch(/has-\[input:focus-visible\]:outline-accent/);
     expect(bar.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
-    expect(scopeText(hostChip(d))).toBe("for dc01 ⌄");
+    expect(scopeText(hostChip(d))).toBe("Host dc01");
     const header = d.getByRole("banner");
     for (const el of [bar.getByRole("textbox"), hostChip(d), d.getByRole("button", { name: /^Fill with credential/ }), d.getByRole("button", { name: "Full screen" })]) {
       expect(header.contains(el)).toBe(true);
@@ -425,7 +427,7 @@ describe("Arsenal after a Field Manual import (B2)", () => {
     const user = userEvent.setup();
     mount("/arsenal");
     const cats = within(await screen.findByRole("navigation", { name: "Categories" }));
-    await user.click(await cats.findByRole("button", { name: /^Qq Misc/ }));
+    await user.click(await cats.findByRole("tab", { name: /^Qq Misc/ }));
     for (const c of perStage) expect(within(screen.getByRole("listbox", { name: "Arsenal results" })).getByRole("option", { name: new RegExp(`^${c.title}`) })).toBeInTheDocument();
   });
 });
@@ -541,7 +543,8 @@ describe("drawer list grouped by category (U1)", () => {
     act(() => useArsenalStore.getState().openCard());
     const d = within(await drawer());
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "qx");
-    expect(d.getAllByRole("group").map((g) => g.getAttribute("aria-labelledby")).map((id) => document.getElementById(id!)?.textContent))
+    const resultGroups = () => d.getAllByRole("group").filter((g) => g.hasAttribute("aria-labelledby"));
+    expect(resultGroups().map((g) => g.getAttribute("aria-labelledby")).map((id) => document.getElementById(id!)?.textContent))
       .toEqual(["Shells & transfers", "Zz Cat", "Zz Other Cat"]);
     const zz = within(d.getByRole("group", { name: "Zz Cat" }));
     expect(zz.getAllByRole("option").map((o) => o.textContent)).toEqual(["Qx alphacard", "Qx alpha twocard"]);
@@ -594,7 +597,7 @@ describe("drawer list grouped by category (U1)", () => {
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "other cat");
     const group = within(await d.findByRole("group", { name: "Zz Other Cat" }));
     expect(group.getAllByRole("option").map((o) => o.textContent)).toEqual(["Zz Othercard", "Zzother cmdzz"]);
-    expect(d.getAllByRole("group")).toHaveLength(1);
+    expect(d.getAllByRole("group").filter((g) => g.hasAttribute("aria-labelledby"))).toHaveLength(1);
   });
 
   it("listbox has no heading children", async () => {
@@ -624,7 +627,8 @@ describe("drawer list grouped by category (U1)", () => {
     expect(await navigator.clipboard.readText()).toBe("zzprobe 10.10.10.5 from 10.10.14.9");
     expect(screen.getByRole("complementary", { name: "Arsenal" })).toBeInTheDocument();
     expect(d.getByRole("option", { name: /Zzprobe the target/ })).toBeInTheDocument();
-    expect(d.getByRole("contentinfo")).toHaveTextContent("↵ copy · ⌘↵ copy and log · → in card · ⌥H host · ⌥C credential · Esc close");
+    const hints = [...d.getByRole("group", { name: "Arsenal shortcuts" }).querySelectorAll("[data-hint]")].map((h) => h.textContent);
+    expect(hints).toEqual(["↵copy", "⌘↵copy and log", "→in card", "⌥Hhost", "Escclose"]);
   });
 
   it("hovering another row keeps the clicked row selected and its fill fields reachable", async () => {
@@ -696,7 +700,26 @@ describe("drawer list grouped by category (U1)", () => {
     await d.findByRole("option", { name: /Zzprobe the target/ });
     await user.keyboard("{ArrowRight}");
     await d.findByRole("heading", { name: "Zz Card" });
-    expect(d.getByRole("contentinfo")).toHaveTextContent("Esc back · ⌥H host · ⌥C credential");
+    const keys = within(d.getByRole("group", { name: "Arsenal shortcuts" }));
+    expect(keys.getByText("back")).toBeInTheDocument();
+    expect(keys.getByText("host")).toBeInTheDocument();
+    expect(keys.getByText("credential")).toBeInTheDocument();
+  });
+
+  it("arsenal drawer footer is a HintLine with at most 5 hints", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("a");
+    const aside = await drawer();
+    expect(aside).toHaveAttribute("data-hint-surface");
+    await within(aside).findByRole("listbox", { name: "Arsenal results" });
+    const line = within(aside).getByRole("group", { name: "Arsenal shortcuts" });
+    expect(line).toHaveAttribute("data-hint-line");
+    const shown = line.querySelectorAll("[data-hint]").length;
+    expect(shown).toBeGreaterThan(0);
+    expect(shown).toBeLessThanOrEqual(5);
+    expect(within(line).getByRole("button", { name: "All shortcuts" })).toBeInTheDocument();
   });
 
   it("with only a hash on file the guard focuses the credential chip and a second Enter there copies", async () => {
@@ -873,12 +896,12 @@ describe("browse selection state (U2)", () => {
     const user = userEvent.setup();
     mount("/arsenal");
     const cats = within(await screen.findByRole("navigation", { name: "Categories" }));
-    await user.click(await cats.findByRole("button", { name: /^Zz Other Cat/ }));
-    expect(cats.getByRole("button", { name: /^Zz Other Cat/ })).toHaveAttribute("aria-current", "true");
-    expect(cats.getByRole("button", { name: /^Zz Cat/ })).not.toHaveAttribute("aria-current");
+    await user.click(await cats.findByRole("tab", { name: /^Zz Other Cat/ }));
+    expect(cats.getByRole("tab", { name: /^Zz Other Cat/ })).toHaveAttribute("aria-selected", "true");
+    expect(cats.getByRole("tab", { name: /^Zz Cat/ })).toHaveAttribute("aria-selected", "false");
     const results = within(screen.getByRole("listbox", { name: "Arsenal results" }));
     expect(await results.findByRole("option", { name: /Zz Other/ })).toHaveAttribute("aria-selected", "true");
-    await user.click(cats.getByRole("button", { name: /^Shells & transfers/ }));
+    await user.click(cats.getByRole("tab", { name: /^Shells & transfers/ }));
     expect(await results.findByRole("option", { name: /Zzgen reverse shell/ })).toBeInTheDocument();
   });
 });

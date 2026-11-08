@@ -7,27 +7,15 @@ import { usePayloadsStore, type PayloadOverride } from "./usePayloadsStore";
 
 const SUGGESTED_PORTS = ["443", "80"];
 
-/** One chip's visible text: the value, or an amber "?" when nothing is known yet. */
-function ChipText({ name, value }: { name: string; value: string | null }) {
-  return (
-    <>
-      <span>{name}</span>
-      {value ? <b className="truncate font-medium text-fg-2">{value}</b> : <b className="font-medium text-warn">?</b>}
-      <span aria-hidden="true" className="text-[10px] opacity-70">⌄</span>
-    </>
-  );
-}
-
 function Chip({ name, value, options, current, onPick, ref }: {
   name: string; value: string | null; options: ChipOption[]; current: string | null; onPick: (id: string) => void; ref?: Ref<ChipPickerHandle>;
 }) {
   return (
     <ChipPicker
-      ref={ref} tabbable options={options} value={current} onPick={(id) => id !== null && onPick(id)}
+      ref={ref} options={options} value={current} onPick={(id) => id !== null && onPick(id)}
       label={`${name}: ${value ?? "not set"}`} listLabel={name} title={`${name} (inferred; pick to override for this host)`} align="start"
-    >
-      <ChipText name={name} value={value} />
-    </ChipPicker>
+      prefix={name} {...(value ? { shown: value } : {})}
+    />
   );
 }
 
@@ -51,13 +39,13 @@ export function ContextChips({ fit, engagementId, onHost, hostRef, osRef, contex
     evidence.port ? `port ${evidence.port}` : "port not set",
   ];
   return (
-    <div className="grid gap-1.5 border-b border-line px-4 py-2.5">
+    <div className="grid gap-2 border-b border-line px-4 py-3">
       {/* OS, paste context and port read in full; the host chip gives way (it truncates) when the row is short. */}
       <div className="grid grid-cols-[minmax(0,max-content)_repeat(3,max-content)] justify-start gap-1">
         {engagementId ? (
           <HostChip ref={hostRef} hosts={fit.d.hosts} value={fit.host?.id ?? null} onChange={onHost} align="start" className="max-w-48" />
         ) : (
-          <span className="px-1.5 py-0.5 text-xs text-muted">no host</span>
+          <span className="px-2 py-1 text-meta text-muted">no host</span>
         )}
         <Chip
           ref={osRef} name="OS" value={os ? OS_LABEL[os] : null} current={os}
@@ -75,7 +63,7 @@ export function ContextChips({ fit, engagementId, onHost, hostRef, osRef, contex
           onPick={(id) => set({ port: id })}
         />
       </div>
-      <p className="m-0 px-1.5 text-xs text-muted">{why.join(" · ")}</p>
+      <p className="m-0 px-2 text-meta text-muted">{why.join(" · ")}</p>
     </div>
   );
 }

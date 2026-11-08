@@ -136,10 +136,10 @@ describe("three-pane browse", () => {
     await screen.findByRole("heading", { name: "Aardvark roasting" });
     expect(screen.queryByRole("region", { name: "Stage" })).toBeNull();
     // Cards plus card-less commands (plus generators) in the category: the number of rows pane 2 lists.
-    const ad = categories().getByRole("button", { name: /Active Directory/ });
+    const ad = categories().getByRole("tab", { name: /Active Directory/ });
     const rows = within(screen.getByRole("listbox", { name: "Arsenal results" })).getAllByRole("option");
     expect(ad).toHaveTextContent(String(rows.length));
-    expect(categories().getByRole("button", { name: /Pivoting/ })).toHaveAttribute("tabindex", "-1");
+    expect(categories().getByRole("tab", { name: /Pivoting/ })).toHaveAttribute("tabindex", "-1");
   });
 
   it("shows nothing, not even categories, until the engagement kind is known", async () => {
@@ -147,7 +147,7 @@ describe("three-pane browse", () => {
     useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
     mount((r) => (release = r));
     await screen.findByRole("button", { name: /^Fill for host/ });
-    expect(categories().queryAllByRole("button")).toHaveLength(0);
+    expect(categories().queryAllByRole("tab")).toHaveLength(0);
     expect(screen.queryAllByRole("option")).toHaveLength(0);
     await act(async () => release({ ...E1, kind: "exam-sim" }));
     expect(await screen.findByRole("heading", { name: "Aardvark roasting" })).toBeInTheDocument();
@@ -175,8 +175,8 @@ describe("three-pane browse", () => {
     expect(await list.findByRole("option", { name: /Zzchisel socks proxy/ })).toBeInTheDocument();
     expect(list.queryByRole("option", { name: /Aakerbrute/ })).toBeNull();
     expect(list.getByRole("group", { name: "Pivoting" })).toBeInTheDocument();
-    expect(categories().getByRole("button", { name: /Pivoting/ })).toHaveTextContent("1");
-    expect(categories().getByRole("button", { name: /Active Directory/ })).toHaveAttribute("data-dim", "true");
+    expect(categories().getByRole("tab", { name: /Pivoting/ })).toHaveTextContent("1");
+    expect(categories().getByRole("tab", { name: /Active Directory/ })).toHaveAttribute("data-dim", "true");
   });
 
   it("searching 'lateral movement' shows Pivoting items", async () => {
@@ -186,8 +186,8 @@ describe("three-pane browse", () => {
     await user.type(screen.getByRole("textbox", { name: "Search the Arsenal" }), "lateral movement");
     expect(await screen.findByRole("option", { name: /Zzchisel socks proxy/ })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Pivoting" })).toBeInTheDocument();
-    expect(categories().getByRole("button", { name: /Pivoting/ })).not.toHaveAttribute("data-dim");
-    expect(categories().getByRole("button", { name: /Client Side Attacks/ })).toHaveAttribute("data-dim", "true");
+    expect(categories().getByRole("tab", { name: /Pivoting/ })).not.toHaveAttribute("data-dim");
+    expect(categories().getByRole("tab", { name: /Client Side Attacks/ })).toHaveAttribute("data-dim", "true");
   });
 
   it("/ focuses the search with no engagement", async () => {
@@ -243,12 +243,12 @@ describe("three-pane browse", () => {
     const user = userEvent.setup();
     mount();
     await screen.findByRole("heading", { name: "Aardvark roasting" });
-    const active = categories().getByRole("button", { name: /Active Directory/ });
+    const active = categories().getByRole("tab", { name: /Active Directory/ });
     active.focus();
     await user.keyboard("{ArrowDown}");
-    expect(categories().getByRole("button", { name: /Client Side Attacks/ })).toHaveFocus();
+    expect(categories().getByRole("tab", { name: /Client Side Attacks/ })).toHaveFocus();
     await user.keyboard("{ArrowUp}");
-    expect(categories().getByRole("button", { name: /Active Directory/ })).toHaveFocus();
+    expect(categories().getByRole("tab", { name: /Active Directory/ })).toHaveFocus();
     await user.keyboard("{ArrowRight}");
     const list = screen.getByRole("listbox", { name: "Arsenal results" });
     expect(list).toHaveFocus();
@@ -260,7 +260,7 @@ describe("three-pane browse", () => {
     await user.keyboard("{ArrowLeft}");
     expect(list).toHaveFocus();
     await user.keyboard("{ArrowLeft}");
-    expect(categories().getByRole("button", { name: /Active Directory/ })).toHaveFocus();
+    expect(categories().getByRole("tab", { name: /Active Directory/ })).toHaveFocus();
   });
 
   it("the transfer generator is a link to Payloads", async () => {

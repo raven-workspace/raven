@@ -1,5 +1,5 @@
 import { CaretDown } from "@phosphor-icons/react";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 import { cx } from "../lib/cx";
 
 export interface PickerTriggerProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> {
@@ -7,6 +7,7 @@ export interface PickerTriggerProps extends Omit<ButtonHTMLAttributes<HTMLButton
   value?: string;
   placeholder?: string;
   icon?: ReactNode;
+  ref?: Ref<HTMLButtonElement>;
 }
 
 /** A context picker button: "Host  192.0.2.10 v". An unset value says "Pick one" in warn. */
@@ -15,7 +16,7 @@ export function PickerTrigger({ prefix, value, placeholder = "Pick one", icon, t
     <button
       type={type}
       className={cx(
-        "inline-grid h-7 max-w-full grid-flow-col items-center gap-1.5 rounded-sm border border-line-2 bg-transparent px-2 text-left select-none cursor-default hover:bg-surface-hi",
+        "inline-grid h-7 max-w-full grid-flow-col items-center gap-2 rounded-sm border border-line-2 bg-transparent px-2 text-left select-none cursor-default hover:bg-surface-hi",
         className,
       )}
       {...rest}

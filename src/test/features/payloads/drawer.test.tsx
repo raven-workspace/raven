@@ -232,9 +232,9 @@ describe("Payloads drawer", () => {
     await user.keyboard("{Shift>}{Tab}{/Shift}");
     expect(d.getByRole("heading", { name: "PowerShell base64 (-e)" })).toBeInTheDocument();
     expect(body).not.toHaveFocus();
-    // The chips above the body are Tab stops: port, paste context, OS, then Full screen.
+    // The pickers above the body are Tab stops: port, paste context, OS, host, then Full screen.
     expect(d.getByRole("button", { name: `Port: ${LPORT}` })).toHaveFocus();
-    await user.keyboard("{Shift>}{Tab}{Tab}{Tab}{/Shift}");
+    await user.keyboard("{Shift>}{Tab}{Tab}{Tab}{Tab}{/Shift}");
     expect(d.getByRole("button", { name: "Full screen" })).toHaveFocus();
   });
 

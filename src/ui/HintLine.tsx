@@ -99,7 +99,7 @@ export function HintLine({ hints, max = 5, ariaLabel }: { hints: Hint[]; max?: n
       data-hint-line
       role="group"
       aria-label={ariaLabel}
-      className="grid w-full min-w-0 grid-flow-col items-center justify-start gap-x-5 overflow-hidden"
+      className="grid w-full min-w-0 grid-flow-col items-center justify-start gap-x-6 overflow-hidden"
     >
       {shown.map(({ h, i }) => (
         <HintUnit key={i} hint={h} />

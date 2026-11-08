@@ -1,4 +1,5 @@
 import type { Ref } from "react";
+import { cx } from "../../lib/cx";
 import { credLabel } from "../../engines/credentials/labels";
 import type { CredAttempt, Credential } from "../../types/credentials";
 import { ChipPicker } from "./ChipPicker";
@@ -18,7 +19,7 @@ export function testedState(credId: string, hostId: string | null | undefined, a
 }
 
 /**
- * The credential in use, as a muted "as <cred> · password ⌄" chip with no Tab stop (same interaction as `HostChip`).
+ * The credential in use, as a bordered "Credential  CORP\\bob (hash)" trigger in the Tab order (same interaction as `HostChip`).
  * The list shows each credential's kind and how it has fared on `hostId`. Callers write the pick to `useCredPickStore`.
  */
 export function CredChip({ credentials, value, onPick, attempts = [], hostId = null, align = "end", className = "max-w-1/2", ref }: {
@@ -29,10 +30,10 @@ export function CredChip({ credentials, value, onPick, attempts = [], hostId = n
 }) {
   const options: ChipOption[] = [
     { id: null, name: "No credential" },
-    ...credentials.map((c) => ({ id: c.id, name: who(c), detail: `${kind(c)} · ${testedState(c.id, hostId, attempts)}` })),
+    ...credentials.map((c) => ({ id: c.id, name: who(c), detail: `${kind(c)}, ${testedState(c.id, hostId, attempts)}` })),
   ];
   return (
-    <div className={`grid min-w-0 ${className}`}>
+    <div className={cx("grid min-w-0", className)}>
       <ChipPicker
         ref={ref}
         options={options}
@@ -43,18 +44,9 @@ export function CredChip({ credentials, value, onPick, attempts = [], hostId = n
         title="Fill with another credential (⌥C)"
         align={align}
         wide
-      >
-        <span>as</span>
-        {value ? (
-          <>
-            <b title={who(value)} className="max-w-40 truncate font-medium text-fg-2">{who(value)}</b>
-            <span>· {kind(value)}</span>
-          </>
-        ) : (
-          <b className="font-medium text-fg-2">no credential</b>
-        )}
-        <span aria-hidden="true" className="text-[10px] opacity-70">⌄</span>
-      </ChipPicker>
+        prefix="Credential"
+        shown={value ? credLabel(value) : "No credential"}
+      />
     </div>
   );
 }

@@ -9,7 +9,7 @@ import { copyPlain, copySecret } from "../../lib/clipboard";
 import { shortHostName } from "../../lib/hostName";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
 import { reportError } from "../../lib/lockSignal";
-import { Button, Kbd } from "../../ui";
+import { Button, HintLine, type Hint } from "../../ui";
 import { logCommand } from "../capture/logCommand";
 import { useCredPickStore } from "../checklist/credPick";
 import { useFillBase } from "../palette/fillData";
@@ -163,7 +163,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
         const typed = fillCommand(c.template, filled.input, { commandOs: c.os }).text;
         await logCommand(qc, {
           engagementId, host, hosts: d.hosts, command: typed,
-          title: `${c.title} · ${host.ip ?? host.name}`,
+          title: c.title,
           ranOn: c.runFrom === "attacker" ? (d.settings?.machines[0] ?? "") : host.name,
         });
       }
@@ -257,9 +257,16 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
     else if (r.hit.type === "command") searchRef.current?.focus();
     else openHit(r.hit, false);
   };
-  const hints: [string, string][] = onList
-    ? [["↵", "copy"], ["⌘↵", host ? "copy and log" : "copy and log (open a host)"], ["→", "in card"], ...(engagementId ? [["⌥H", "host"], ["⌥C", "credential"]] as [string, string][] : []), ["Esc", inCategory ? "back" : "close"]]
-    : [["Esc", "back"], ...(engagementId ? [["⌥H", "host"], ["⌥C", "credential"]] as [string, string][] : [])];
+  const pickers: Hint[] = engagementId ? [{ keys: "⌥H", label: "host", priority: 4 }, { keys: "⌥C", label: "credential", priority: 4 }] : [];
+  const hints: Hint[] = onList
+    ? [
+        { keys: "↵", label: "copy", priority: 1 },
+        { keys: "⌘↵", label: host ? "copy and log" : "copy and log (open a host)", priority: 2 },
+        { keys: "→", label: "in card", priority: 3 },
+        ...pickers,
+        { keys: "Esc", label: inCategory ? "back" : "close", priority: 1 },
+      ]
+    : [{ keys: "Esc", label: "back", priority: 1 }, ...pickers];
   return (
     <div
       // A results list keeps a fixed preview row under it: picking a longer or shorter command never moves the list.
@@ -317,7 +324,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
         {showing === "solo" && solo && <CommandPane key={solo.id} commands={[solo]} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} focusCred={focusCred} onOpenCard={openLinkedCard} />}
         {onList && (
           <>
-            {examReady && rows.length === 0 && <p className="m-0 px-1 py-2 text-xs text-muted">Nothing matches</p>}
+            {examReady && rows.length === 0 && <p className="m-0 px-1 py-2 text-meta text-muted">Nothing matches</p>}
             <ResultList
               id="arsenal-results" label="Arsenal results" groups={listing ? rowGroups : [{ key: "categories", rows }]}
               selected={index} onActivate={activate}
@@ -334,22 +341,17 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
               overrides={overrides} onOverrides={setOverrides}
               fieldRef={(t, el) => (el ? fieldEls.current.set(t, el) : fieldEls.current.delete(t))}
             />
-            {note && <p role="status" className={`m-0 text-xs ${guard.hint ? "text-warn" : "text-muted"}`}>{note}</p>}
-            {status && <p role="alert" className="m-0 text-xs text-warn">{status}</p>}
+            {note && <p role="status" className={`m-0 text-meta ${guard.hint ? "text-warn" : "text-muted"}`}>{note}</p>}
+            {status && <p role="alert" className="m-0 text-meta text-warn">{status}</p>}
             </>
           ) : (
-            current && <p className="m-0 text-xs text-muted">↵ opens this {current.kind === "category" ? "category" : current.hit.type}</p>
+            current && <p className="m-0 text-meta text-muted">↵ opens this {current.kind === "category" ? "category" : current.hit.type}</p>
           )}
         </div>
       )}
-        <footer data-hint-line="" className="border-t border-line px-4 py-2 text-[11px] text-muted">
-          {hints.map(([key, label], i) => (
-            <span key={key}>
-              {i > 0 && " · "}
-              <span className="whitespace-nowrap"><Kbd>{key}</Kbd> {label}</span>
-            </span>
-          ))}
-        </footer>
+      <footer className="grid border-t border-line px-4 py-2">
+        <HintLine hints={hints} ariaLabel="Arsenal shortcuts" />
+      </footer>
     </div>
   );
 }
@@ -390,7 +392,7 @@ export function ArsenalDrawer() {
 
   if (!open || onBrowse) return null;
   return (
-    <aside aria-label="Arsenal" className="fixed inset-y-0 right-0 z-30 grid w-[500px] max-w-[70vw] border-l border-line-2 bg-surface text-fg-2">
+    <aside aria-label="Arsenal" data-hint-surface="" className="fixed inset-y-0 right-0 z-30 grid w-[500px] max-w-[70vw] border-l border-line-2 bg-surface text-fg-2">
       <DrawerBody engagementId={engagementId} hostId={hostId} />
     </aside>
   );

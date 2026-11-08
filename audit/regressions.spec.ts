@@ -308,18 +308,20 @@ test("post-foothold facts show without scrolling", async ({ page }) => {
 
 const FS01 = "/e/e-lab/h/h-fs01";
 
-test("host chip is never a Tab stop", async ({ page }) => {
+test("host picker is a Tab stop", async ({ page }) => {
   await open(page, FS01, 1280);
   await page.keyboard.press("Meta+K");
   const search = page.getByRole("dialog").getByRole("combobox", { name: "Search" });
   await search.waitFor();
   await search.fill("smb");
   const chip = page.getByRole("button", { name: /^Fill for host/ });
-  await expect(chip).toHaveAttribute("tabindex", "-1");
-  for (let i = 0; i < 8; i++) {
+  await expect(chip).not.toHaveAttribute("tabindex", "-1");
+  let reached = false;
+  for (let i = 0; i < 8 && !reached; i++) {
     await page.keyboard.press("Tab");
-    await expect(chip).not.toBeFocused();
+    reached = await chip.evaluate((el) => el === document.activeElement);
   }
+  expect(reached).toBe(true);
 });
 
 test("Enter in the drawer copies", async ({ page, context }) => {

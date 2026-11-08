@@ -8,7 +8,7 @@ import { cx } from "../../lib/cx";
 import { isDialogOpen, useKeydown } from "../../lib/keys";
 import { shortHostName } from "../../lib/hostName";
 import { reportError } from "../../lib/lockSignal";
-import { Input, Kbd, labelClass } from "../../ui";
+import { ChipSet, Input, Kbd, Select, labelClass } from "../../ui";
 import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
 import { logCommand } from "../capture/logCommand";
 import { CommandList } from "../checklist/CommandList";
@@ -120,7 +120,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
       if ((await guard.attempt(targetCmd, () => copyPlain(targetText))) !== "copied") return;
       await logCommand(qc, {
         engagementId, host, hosts: d.hosts, command: targetText,
-        title: `Transfer ${file.trim() || "a file"} · ${method.label} · ${host.ip ?? host.name}`,
+        title: `Transfer ${file.trim() || "a file"} with ${method.label}`,
         ranOn: host.name,
       });
       setStatus("Copied and logged");
@@ -153,28 +153,28 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
   const target = method ? fill(method.target) : [];
 
   return (
-    <section aria-label="Transfer a file" className="flex flex-col gap-4">
-      <h2 className="m-0 text-[15px] font-semibold text-fg">Transfer a file</h2>
-      <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
-        <label className="flex flex-col gap-1 text-xs text-muted">
-          <span className={labelClass}>File</span>
-          <FilePicker ref={fileRef} name="FILE" os={os} className="h-7 w-64" value={file} onChange={setFile} />
+    <section aria-label="Transfer a file" className="grid gap-4">
+      <h2 className="m-0 text-heading text-fg">Transfer a file</h2>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(8rem,max-content))] items-start justify-start gap-x-4 gap-y-3">
+        <label className="grid gap-2 text-meta text-muted-2">
+          <span>File</span>
+          <FilePicker ref={fileRef} name="FILE" os={os} className="h-8 w-64 max-w-full" value={file} onChange={setFile} />
         </label>
         {!contextOs && (
-          <label className="flex flex-col gap-1 text-xs text-muted">
-            <span className={labelClass}>OS</span>
-            <select aria-label="Target OS" value={osPick} onChange={(e) => setOsPick(e.target.value as Os)} className="h-7 rounded-sm border border-line-2 bg-bg px-1 text-xs text-fg-2">
-              <option value="windows">Windows</option>
-              <option value="linux">Linux</option>
-            </select>
-          </label>
+          <div className="grid gap-2 text-meta text-muted-2">
+            <span>OS</span>
+            <Select
+              aria-label="Target OS" value={osPick} onValueChange={(v) => setOsPick(v as Os)} className="w-32"
+              options={[{ value: "windows", label: "Windows" }, { value: "linux", label: "Linux" }]}
+            />
+          </div>
         )}
-        <label className="flex flex-col gap-1 text-xs text-muted">
-          <span className={labelClass}>Folder</span>
+        <label className="grid gap-2 text-meta text-muted-2">
+          <span>Folder</span>
           <Input
             mono
             aria-label="Folder"
-            className="h-7 w-48"
+            className="w-48 max-w-full"
             placeholder={DEFAULT_DIR[os]}
             value={dir}
             onChange={(e) => {
@@ -184,9 +184,9 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
           />
         </label>
         {usesPort && (
-          <label className="flex flex-col gap-1 text-xs text-muted">
-            <span className={labelClass}>Port</span>
-            <Input mono aria-label="Port" className="h-7 w-20" value={port} onChange={(e) => setPort(e.target.value)} />
+          <label className="grid gap-2 text-meta text-muted-2">
+            <span>Port</span>
+            <Input mono aria-label="Port" className="w-20" value={port} onChange={(e) => setPort(e.target.value)} />
           </label>
         )}
       </div>
@@ -196,9 +196,9 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
           const group = methods.map((m, i) => ({ m, i })).filter(({ m }) => test(m.group));
           if (group.length === 0) return null;
           return (
-            <div key={label} className="grid grid-cols-[3.5rem_1fr] items-baseline gap-x-2">
-              <span className="text-[11px] font-semibold uppercase tracking-label text-muted">{label}</span>
-              <div role="tablist" aria-label={`${label} methods`} className="flex flex-wrap gap-1">
+            <div key={label} className="grid grid-cols-[56px_minmax(0,1fr)] items-baseline gap-x-2">
+              <span className={labelClass}>{label}</span>
+              <ChipSet role="tablist" aria-label={`${label} methods`}>
                 {group.map(({ m, i }) => (
                   <button
                     key={m.id}
@@ -212,42 +212,42 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
                     onKeyDown={(e) => onTabKey(e, i)}
                     onClick={() => setMethodId(m.id)}
                     className={cx(
-                      "cursor-default rounded-sm px-2 py-0.5 text-[13px]",
+                      "cursor-default rounded-sm px-2 py-1 text-body whitespace-nowrap",
                       m.id === method?.id ? "bg-accent/10 text-accent" : "text-fg-2 hover:bg-surface-hi",
                     )}
                   >
                     {m.label}
                   </button>
                 ))}
-              </div>
+              </ChipSet>
             </div>
           );
         })}
       </div>
-      {methods.length === 0 && <p className="m-0 text-xs text-muted">No transfer methods are allowed here.</p>}
+      {methods.length === 0 && <p className="m-0 text-meta text-muted">No transfer methods are allowed here.</p>}
 
       {method && (
-        <div className="flex flex-col gap-4">
+        <div className="grid gap-4">
           {kali.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <h3 className="m-0 text-[11px] font-semibold uppercase tracking-label text-muted">1 · On Kali</h3>
+            <div className="grid gap-2">
+              <h3 className="m-0 text-body text-fg-2">1. On Kali</h3>
               <CommandList commands={kali} hostName={shortName} focusToken={focusToken} />
             </div>
           )}
           {target.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <h3 className="m-0 text-[11px] font-semibold uppercase tracking-label text-muted">{kali.length > 0 ? "2" : "1"} · On {hostName}</h3>
+            <div className="grid gap-2">
+              <h3 title={hostName} className="m-0 truncate text-body text-fg-2">{kali.length > 0 ? "2" : "1"}. On {hostName}</h3>
               <CommandList commands={target} hostName={shortName} focusToken={focusToken} />
-              <p className="m-0 text-[11px] text-muted">
+              <p className="m-0 text-meta text-muted">
                 <Kbd>⌘↵</Kbd> copies the {host ? hostName : "target"} half and logs it{host ? "" : " (pick a host)"}.
               </p>
             </div>
           )}
-          {target.length === 0 && <p className="m-0 text-xs text-muted">Kali only: nothing to run on {hostName}.</p>}
+          {target.length === 0 && <p className="m-0 text-meta text-muted">Kali only: nothing to run on {hostName}.</p>}
         </div>
       )}
-      {targetCmd && guard.forKey === copyKey(targetCmd) && guard.hint && <p role="status" className="m-0 text-xs text-warn">{guard.hint}</p>}
-      {status && <p role="status" className="m-0 text-xs text-muted">{status}</p>}
+      {targetCmd && guard.forKey === copyKey(targetCmd) && guard.hint && <p role="status" className="m-0 text-meta text-warn">{guard.hint}</p>}
+      {status && <p role="status" className="m-0 text-meta text-muted">{status}</p>}
     </section>
   );
 }
