@@ -1,4 +1,4 @@
-import { CaretDown, CaretRight, X } from "@phosphor-icons/react";
+import { CaretDownIcon, CaretRightIcon, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isCveId, nvdFill, scoreCvss, scoreToSeverity, type NvdFillResult } from "../../engines/findings";
 import { api } from "../../lib/api";
@@ -447,7 +447,7 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
             onClick={() => setBuilder(!builder)}
             className="inline-flex cursor-default items-center gap-1 self-start text-xs text-fg-2 hover:text-fg"
           >
-            {builder ? <CaretDown size={12} weight="light" aria-hidden /> : <CaretRight size={12} weight="light" aria-hidden />}
+            {builder ? <CaretDownIcon size={12} weight="light" aria-hidden /> : <CaretRightIcon size={12} weight="light" aria-hidden />}
             CVSS builder
           </button>
           {builder && <CvssBuilder value={d.cvssVector} onChange={(v) => set("cvssVector", v)} />}

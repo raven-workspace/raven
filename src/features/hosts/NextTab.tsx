@@ -1,10 +1,10 @@
-import { CaretDown, CaretRight } from "@phosphor-icons/react";
+import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
 import type { Host } from "../../types/host";
 import { HostChecklist } from "../checklist/HostChecklist";
 
 /** "Full checklist ▸": swaps the Next tab between the current stage's open steps and every stage. Sits in the tab row. */
 export function FullChecklistToggle({ full, onChange }: { full: boolean; onChange: (full: boolean) => void }) {
-  const Caret = full ? CaretDown : CaretRight;
+  const Caret = full ? CaretDownIcon : CaretRightIcon;
   return (
     <button
       type="button"
