@@ -80,6 +80,46 @@ describe("sidebar", () => {
     expect(screen.getByRole("button", { name: "Add host" })).toBeInTheDocument();
   });
 
+  it("section labels are not truncated, so Engagement checklist fits", async () => {
+    mount();
+    await screen.findByText("dc01");
+    expect(screen.getByText("Engagement checklist")).not.toHaveClass("truncate");
+  });
+
+  it("rail has no section numbers and shows Board and 1 in its tooltip", async () => {
+    const user = userEvent.setup();
+    useSidebarStore.setState({ collapsed: true });
+    mount();
+    await screen.findByRole("link", { name: /dc01/ });
+    const board = screen.getByRole("link", { name: "Board" });
+    expect(board).not.toHaveTextContent("1");
+    expect(board).not.toHaveAttribute("title");
+    await user.tab();
+    board.focus();
+    const tip = (await screen.findAllByText("Board")).find((n) => n.closest("[role=tooltip]") || n.parentElement?.className.includes("z-50"));
+    expect(tip).toBeTruthy();
+    expect(await screen.findAllByText("1")).not.toHaveLength(0);
+  });
+
+  it("rail host short names fit and the current host is lit", async () => {
+    useSidebarStore.setState({ collapsed: true });
+    m.hostsList.mockResolvedValue([host("h1", "dc01", null), host("h2", "web-portal", null)]);
+    render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <MemoryRouter initialEntries={["/e/e1/h/h1"]}>
+          <Sidebar engagementId="e1" />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const dc = await screen.findByText("dc01", { selector: "[aria-hidden]" });
+    expect(dc).not.toHaveClass("truncate");
+    const a = dc.closest("a")!;
+    expect(a).toHaveClass("w-full");
+    expect(a).toHaveClass("bg-surface-hi");
+    expect(a.className).toContain("inset_2px_0_0_var(--accent)");
+    expect(screen.getByText("web-").closest("a")).not.toHaveClass("bg-surface-hi");
+  });
+
   it("toggles with the button and with Cmd+B", async () => {
     const user = userEvent.setup();
     mount();
