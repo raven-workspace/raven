@@ -21,8 +21,10 @@ export interface PayloadDef {
   bakesIp?: boolean;
   /** The ( ... ) & variant. */
   background?: boolean;
-  /** Command to serve a hosted script, e.g. "python3 -m http.server 80". */
+  /** Command to serve a hosted script, e.g. "python3 -m http.server {SERVE_PORT}". */
   serve?: string;
+  /** Kali-side lines that make the served file, run before `serve` (placeholders filled like the template). */
+  prepare?: string;
   /** The filled template is a PowerShell script: build UTF-16LE base64 and run it with `powershell -e`. */
   encodePowerShell?: boolean;
   /** Values used when the caller supplies none (not counted as unresolved). */
@@ -39,4 +41,6 @@ export interface BuiltPayload {
   notes: string[];
   /** Placeholder names whose value is blank or missing; they stay visible as {NAME} in the text. */
   unresolved: string[];
+  /** What to run on Kali first (make the file, then serve it), filled; null when nothing is served. */
+  prepare: string | null;
 }

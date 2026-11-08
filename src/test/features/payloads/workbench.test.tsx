@@ -135,7 +135,10 @@ describe("Payloads Workbench", () => {
     await w.findByRole("heading", { name: "PowerShell base64 (-e)" });
     await user.click(read().getByRole("button", { name: "Inside a SQL string" }));
     expect(read().getByRole("button", { name: "Inside a SQL string" })).toHaveAttribute("aria-pressed", "true");
-    expect(w.getByText("2 · Paste into Inside a SQL string")).toBeInTheDocument();
+    // A served cradle: prepare the file on Kali, start the listener, then paste.
+    expect(w.getByText("1 · Prepare on Kali")).toBeInTheDocument();
+    expect(w.getByText("2 · Listener on Kali")).toBeInTheDocument();
+    expect(w.getByText("3 · Paste into Inside a SQL string")).toBeInTheDocument();
     // The fit re-ranks for the new context: the cradle, its quotes doubled for the SQL string.
     expect(w.getByRole("heading", { name: "Nishang cradle (served rev.ps1)" })).toBeInTheDocument();
     expect(w.getByLabelText("Payload").textContent).toBe(buildPayload(def("nishang-cradle"), "sql-string", { LHOST, LPORT }).text);

@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import type { BuiltPayload, PayloadDef } from "../../engines/payloads/types";
+import { copyPlain } from "../../lib/clipboard";
+import { reportError } from "../../lib/lockSignal";
 import { Button, labelClass } from "../../ui";
 import { MisfitFold } from "./MisfitFold";
 
@@ -18,7 +20,8 @@ function CopyRow({ label, text, onCopy }: { label: string; text: string; onCopy?
 }
 
 /**
- * One built payload: the listener, an amber stale line when a baked file is out of date, the payload to paste, a note
+ * One built payload: the Kali-side prepare step for a served file (with its own Copy button, in both views: no key
+ * copies it), the listener, an amber stale line when a baked file is out of date, the payload to paste, a note
  * from the copy guard, what each part does, and the def's notes. Shared by every generator that builds a payload.
  */
 export function PayloadBlock({ built, pasteLabel, stale, note, noteWarn, fields, numbered, onCopy, onCopyListener }: {
@@ -34,13 +37,23 @@ export function PayloadBlock({ built, pasteLabel, stale, note, noteWarn, fields,
   /** Copy buttons beside the blocks (the Workbench); the drawer copies with ↵ and ⌥L only. */
   onCopy?: () => void; onCopyListener?: () => void;
 }) {
-  const pasteHeading = numbered ? `${built.listener ? 2 : 1} · ${pasteLabel}` : pasteLabel;
+  let step = 0;
+  const heading = (label: string) => (numbered ? `${++step} · ${label}` : label);
+  const prepareHeading = built.prepare ? heading("Prepare on Kali") : "";
+  const listenerHeading = built.listener ? heading(numbered ? "Listener on Kali" : "Listener") : "";
+  const pasteHeading = heading(pasteLabel);
   return (
     <div className="grid gap-3">
       {fields}
+      {built.prepare && (
+        <section className="grid gap-1">
+          <h3 className={`${labelClass} m-0`}>{prepareHeading}</h3>
+          <CopyRow label="Prepare on Kali" text={built.prepare} onCopy={() => void copyPlain(built.prepare!).catch(reportError)} />
+        </section>
+      )}
       {built.listener && (
         <section className="grid gap-1">
-          <h3 className={`${labelClass} m-0`}>{numbered ? "1 · Listener on Kali" : "Listener"}</h3>
+          <h3 className={`${labelClass} m-0`}>{listenerHeading}</h3>
           <CopyRow label="Listener" text={built.listener} onCopy={onCopyListener} />
         </section>
       )}

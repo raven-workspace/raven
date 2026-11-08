@@ -305,6 +305,18 @@ describe("Payloads drawer", () => {
     expect(line).toHaveClass("text-warn");
   });
 
+  it("a served cradle shows its Kali-side prepare step, filled, and no field for the derived ports", async () => {
+    usePayloadsStore.setState({ overrides: { h1: { context: "sql-string", port: "80" } } });
+    const { d } = await openOn("/e/e1/h/h1");
+    expect(await d.findByRole("heading", { name: "Nishang cradle (served rev.ps1)" })).toBeInTheDocument();
+    expect(d.getByLabelText("Prepare on Kali").textContent).toBe(buildPayload(def("nishang-cradle"), "sql-string", { LHOST, LPORT: "80" }).prepare);
+    expect(d.getByLabelText("Prepare on Kali").textContent).toContain("python3 -m http.server 8000");
+    expect(payloadText(d)).toContain("http://192.0.2.10:8000/rev.ps1");
+    expect(d.queryByRole("textbox", { name: "SERVE_PORT" })).not.toBeInTheDocument();
+    expect(d.queryByRole("textbox", { name: "WEB_PORT" })).not.toBeInTheDocument();
+    expect(d.getByRole("button", { name: "Copy prepare on kali" })).toBeInTheDocument();
+  });
+
   it("⌥1-6 switches the generator", async () => {
     const { user, d } = await openOn("/e/e1/h/h1");
     await d.findByRole("heading", { name: "PowerShell base64 (-e)" });

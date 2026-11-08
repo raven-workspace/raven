@@ -60,7 +60,11 @@ export function sqlExecIds(engine: SqlEngine): string[] {
 const COMMENT: Record<SqlEngine, string> = { mssql: "-- -", mysql: "-- -", postgres: "-- -", oracle: "-- -", sqlite: "-- -" };
 const IDENT = /^[A-Za-z_][\w$.]*$/;
 
-interface Ctx { engine: SqlEngine; point: SqlPoint; v: SqlValues; unresolved: string[]; notes: string[]; extra: PayloadPart[]; listener: string | null }
+interface Ctx {
+  engine: SqlEngine; point: SqlPoint; v: SqlValues; unresolved: string[]; notes: string[]; extra: PayloadPart[]; listener: string | null;
+  /** The embedded shell's Kali-side prepare step (a served cradle). */
+  prepare: string | null;
+}
 /** `inject`: text after the prefix. `stacked`: a whole new statement after `;`. `plain`: standalone statement for a session (null = not applicable there). */
 interface Core { inject: string; plain: string | null; stacked?: boolean; bare?: boolean }
 
@@ -187,8 +191,9 @@ function embeddedShell(c: Ctx, id: string, ctx: "bash-prompt" | "cmd"): string {
   const b = buildPayload(def, ctx, { LHOST: c.v.LHOST ?? "", LPORT: c.v.LPORT ?? "", FILE: "" });
   for (const u of b.unresolved) if (!c.unresolved.includes(u)) c.unresolved.push(u);
   c.listener = b.listener;
+  c.prepare = b.prepare;
   c.extra.push(...b.parts);
-  c.notes.push(...b.notes.filter((n) => n.startsWith("Serve it first") || n.startsWith("LHOST and LPORT are baked")));
+  c.notes.push(...b.notes.filter((n) => n.startsWith("LHOST and LPORT are baked")));
   return b.text;
 }
 
@@ -242,7 +247,7 @@ export function buildSql(stepOrExecId: string, engine: SqlEngine, point: SqlPoin
   if (!exec && !step) throw new Error(`Unknown SQL step or exec id: ${stepOrExecId}`);
   if (exec && exec.engine !== engine) throw new Error(`${exec.id} applies to ${exec.engine}, not ${engine}`);
 
-  const c: Ctx = { engine, point, v: values, unresolved: [], notes: [], extra: [], listener: null };
+  const c: Ctx = { engine, point, v: values, unresolved: [], notes: [], extra: [], listener: null, prepare: null };
   const core = exec ? EXEC_CORE[exec.id](c) : STEP_CORE[step!.id as Step](c);
 
   const session = point === "client-session";
@@ -285,5 +290,5 @@ export function buildSql(stepOrExecId: string, engine: SqlEngine, point: SqlPoin
     contexts: [point === "url-param" ? "url-param" : "sql-string"], requires: [], template: raw, parts,
     listener: c.listener ? "penelope" : "none",
   };
-  return { def, text, listener: c.listener, parts, notes, unresolved: c.unresolved };
+  return { def, text, listener: c.listener, parts, notes, unresolved: c.unresolved, prepare: c.prepare };
 }

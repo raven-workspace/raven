@@ -50,6 +50,7 @@ function SqlPayload({ id, title, result, armedKey, onCopy }: {
   const armed = armedKey === armKey(id, b);
   return (
     <div className="grid gap-1.5">
+      {b.prepare && <pre aria-label={`${title} prepare on Kali`} className={PRE}>{b.prepare}</pre>}
       {b.listener && <pre aria-label={`${title} listener`} className={PRE}>{b.listener}</pre>}
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
         <pre aria-label={`${title} payload`} className={PRE}>{b.text}</pre>

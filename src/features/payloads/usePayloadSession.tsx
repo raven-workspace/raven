@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
+import { DERIVED_TOKENS } from "../../engines/payloads/build";
 import { encodePs } from "../../engines/payloads/encodePs";
 import type { BuiltPayload, GeneratorId, PayloadDef } from "../../engines/payloads/types";
 import { copyPlain } from "../../lib/clipboard";
@@ -45,10 +46,10 @@ export const inGeneratorList = () => document.activeElement?.closest(`#${GENERAT
 export const isGenerator = (g: string | null): g is GeneratorId => GENERATORS.some((x) => x.id === g);
 
 const PLACEHOLDER = /\{([A-Z][A-Z0-9_]*)\}/g;
-/** The payload's placeholders as fill fields, LHOST first; LPORT is the port chip. */
+/** The payload's placeholders as fill fields, LHOST first; LPORT is the port chip, and derived ports are never typed. */
 const fieldTokens = (def: PayloadDef) =>
-  [...new Set([...def.template.matchAll(PLACEHOLDER)].map((m) => m[1]!))]
-    .filter((t) => t !== "LPORT")
+  [...new Set([...`${def.template} ${def.prepare ?? ""}`.matchAll(PLACEHOLDER)].map((m) => m[1]!))]
+    .filter((t) => t !== "LPORT" && !DERIVED_TOKENS.has(t))
     .sort((a, b) => Number(b === "LHOST") - Number(a === "LHOST"));
 /** ⌥ chords by physical key: on a Mac ⌥L types "¬" and ⌥1 "¡". */
 const altCode = (e: KeyboardEvent) => (e.altKey && !e.metaKey && !e.ctrlKey ? e.code : null);

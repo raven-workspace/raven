@@ -26,5 +26,6 @@ export function encodePs(command: string): BuiltPayload {
     parts: PARTS,
     notes: [`Decodes to: ${command}`],
     unresolved: [],
+    prepare: null,
   };
 }

