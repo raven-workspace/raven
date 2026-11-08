@@ -46,6 +46,7 @@ const KW: [RegExp, string, string][] = [
   [/sp_configure/, "sp_configure", "Changes a server setting. 'show advanced options' must be on before 'xp_cmdshell' becomes visible."],
   [/RECONFIGURE/, "RECONFIGURE", "Applies the sp_configure change now. Needed after each change."],
   [/xp_cmdshell/, "xp_cmdshell", "MSSQL: runs a Windows command as the SQL Server service account. Needs sysadmin, and the setting enabled."],
+  [/CREATE TABLE/, "CREATE TABLE", "CREATE TABLE IF NOT EXISTS makes the output table on the first run and is harmless on later runs. COPY needs a table with a text column to load into."],
   [/\bCOPY\b/, "COPY", "PostgreSQL: loads rows into a table. The table must exist and have a text column."],
   [/INTO OUTFILE/, "INTO OUTFILE", "MySQL: writes the query result to a file on the DB server. Never overwrites, needs the FILE privilege and an empty secure_file_priv."],
   [/LOAD_FILE/, "LOAD_FILE", "MySQL: returns a file's content as text. Needs the FILE privilege."],

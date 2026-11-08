@@ -9,7 +9,8 @@ const FALLBACK_LISTENER = "rlwrap nc -lvnp";
 export function buildPayload(def: PayloadDef, ctx: PasteContext, values: Record<string, string>): BuiltPayload {
   const unresolved: string[] = [];
   const value = (name: string): string | null => {
-    const v = (values[name] ?? def.defaults?.[name] ?? "").trim();
+    const given = (values[name] ?? "").trim();
+    const v = given !== "" ? given : (def.defaults?.[name] ?? "").trim();
     return v === "" ? null : v;
   };
   const filled = def.template.replace(PLACEHOLDER, (m, name: string) => {
