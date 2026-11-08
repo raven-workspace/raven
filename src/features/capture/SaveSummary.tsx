@@ -55,7 +55,7 @@ export function SaveSummary() {
           <li key={`t${i}`} className="text-muted">{t}</li>
         ))}
       </ul>
-      <IconButton icon={XIcon} label="Close summary" onClick={close} />
+      <IconButton icon={XIcon} label="Close summary" onClick={close} className="justify-self-end" />
       <Button size="sm" className="justify-self-end" onClick={() => void undo()}>Undo</Button>
     </div>
   );

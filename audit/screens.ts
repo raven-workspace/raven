@@ -15,7 +15,8 @@ export const WIDTHS = [900, 1024, 1280, 1440] as const;
 const E = `/e/${AUDIT_IDS.labEngagement}`;
 const H = `${E}/h/${AUDIT_IDS.webHost}`;
 
-// dispatchEvent, not click(): at 900 the Findings tab sits under the Order button, which sdoe a real click.
+// dispatchEvent rather than click(): it switches the tab without depending on pointer hit-testing (at 900 the Order
+// button once sat over the Findings tab and swallowed a real click).
 const tab = (name: string) => (page: Page) => page.getByRole("tab", { name, exact: true }).dispatchEvent("click");
 /** Opens a fact group by its toggle; a group that is already open stays as it is. */
 const openGroup = (name: string) => async (page: Page) => {

@@ -221,9 +221,10 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
   const block = (c: LibraryCommand, msf: Set<string>) => (
     <div
       key={c.id} id={`block-${c.id}`} data-block="" data-block-id={c.id} tabIndex={-1}
-      // The ring stands 8px clear of the block as an outline: outlines take no room, so the block never widens its column.
+      // The ring stands 6px clear of the block as an outline: outlines take no room, so the block never widens its column,
+      // and 6px plus the 1px line stays inside the reading pane's 8px left padding (which clips sideways).
       className={cx(
-        "grid scroll-mt-14 gap-1 rounded-sm outline-offset-8 outline-accent",
+        "grid scroll-mt-14 gap-1 rounded-sm outline-offset-6 outline-accent",
         marked === c.id ? "outline-1 outline-solid" : "outline-none focus:outline-1 focus:outline-solid",
       )}
     >
