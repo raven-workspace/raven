@@ -14,8 +14,6 @@ export const PENDING: Record<RuleId, string[]> = {
     "src/features/arsenal/ResultList.tsx",
     "src/features/arsenal/SearchBar.tsx",
     "src/features/arsenal/WikiText.tsx",
-    "src/features/board/Board.tsx",
-    "src/features/board/BoardCard.tsx",
     "src/features/capture/CaptureForm.tsx",
     "src/features/capture/HostChips.tsx",
     "src/features/capture/KindChips.tsx",
@@ -103,8 +101,6 @@ export const PENDING: Record<RuleId, string[]> = {
   "feature-flex": [
     "src/features/arsenal/CommandPreview.tsx",
     "src/features/arsenal/SearchBar.tsx",
-    "src/features/board/Board.tsx",
-    "src/features/board/BoardCard.tsx",
     "src/features/capture/CaptureForm.tsx",
     "src/features/capture/CapturePanel.tsx",
     "src/features/capture/HostChips.tsx",

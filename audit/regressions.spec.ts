@@ -748,3 +748,44 @@ test("the misfit fold lists nc.exe as failed here before", async ({ page }) => {
   await expect(row).toHaveCount(1);
   await expect(row).toContainText("Failed here before");
 });
+
+// Board: lanes share their header row, so every lane's first card starts on one line (DESIGN.md Layout rule 5).
+
+test("board: first cards share a top line at 900/1100/1280/1440", async ({ page }) => {
+  // e-board has a 20-host lane, three one-host lanes and two empty lanes; e-lab has a long host name.
+  for (const id of ["e-board", "e-lab"]) {
+    for (const width of [900, 1100, 1280, 1440]) {
+      await open(page, `/e/${id}`, width);
+      await page.locator("section[aria-label='Information gathering'] [data-lane-body]").waitFor();
+      const r = await page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>("section[aria-label]:has(> [data-lane-body])")].map((lane) => {
+          const body = lane.querySelector<HTMLElement>("[data-lane-body]")!;
+          const cards = [...body.querySelectorAll<HTMLElement>("a[data-host-id]")];
+          const overflow = cards.flatMap((card) => {
+            const box = card.getBoundingClientRect();
+            return [...card.querySelectorAll<HTMLElement>("[data-variant], img[data-brand]")]
+              .filter((el) => {
+                const b = el.getBoundingClientRect();
+                return b.left < box.left - 0.5 || b.right > box.right + 0.5;
+              })
+              .map((el) => `${card.dataset.hostId}: ${el.textContent || el.dataset.brand}`);
+          });
+          return {
+            lane: lane.getAttribute("aria-label")!,
+            cards: cards.length,
+            top: (cards[0] ?? body).getBoundingClientRect().top,
+            overflow,
+          };
+        }),
+      );
+      expect(r, `${id} lanes at ${width}`).toHaveLength(6);
+      if (id === "e-board") {
+        expect(r.map((l) => l.cards), "fixture shape").toEqual([20, 1, 1, 1, 0, 0]);
+      }
+      for (const l of r) {
+        expect(Math.abs(l.top - r[0].top), `${id} "${l.lane}" first card top at ${width}`).toBeLessThanOrEqual(1);
+        if (width === 900) expect(l.overflow, `${id} "${l.lane}" chips inside cards at 900`).toEqual([]);
+      }
+    }
+  }
+});

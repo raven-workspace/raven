@@ -84,17 +84,23 @@ export function Board() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-2">
+    <div
+      className="grid h-full gap-2"
+      style={{ gridTemplateRows: moveError ? "auto minmax(0, 1fr)" : "minmax(0, 1fr)" }}
+    >
       {moveError && (
-        <p role="alert" className="m-0 shrink-0 text-xs text-warn">
+        <p role="alert" className="m-0 text-meta text-warn">
           {moveError}
         </p>
       )}
+      {/* Lanes share two rows (DESIGN.md Layout rule 5): every header sits in row 1, so a title that wraps makes
+          the whole header row taller and every lane's first card still starts on the same line. */}
       <div
         ref={root}
-        className="grid min-h-0 flex-1 gap-3"
+        className="grid gap-3"
         style={{
           gridTemplateColumns: `repeat(${ORDER.length}, minmax(0, 1fr))`,
+          gridTemplateRows: "auto 1fr",
         }}
       >
         {ORDER.map((col) => {
@@ -114,23 +120,25 @@ export function Board() {
                   setOver(null);
               }}
               onDrop={(e) => onDrop(e, col)}
+              style={{ gridRow: "span 2", gridTemplateRows: "subgrid" }}
               className={cx(
-                "flex min-h-40 min-w-0 flex-col gap-2 rounded border p-2",
+                "grid min-h-40 min-w-0 gap-2 rounded border p-2",
                 over === col ? "border-accent" : "border-line",
               )}
             >
-              <header
-                className={cx(
-                  labelClass,
-                  "flex items-start justify-between gap-2 px-1",
-                )}
-              >
-                <span>{COLUMN_LABELS[col]}</span>
-                <span className="font-mono">{cards.length}</span>
+              {/* Narrow lanes (under 144px inside, i.e. below about 1200px wide) put the count under the title, so
+                  "Vulnerability" never collides with it; wider lanes keep it beside. The shared row absorbs both. */}
+              <header className="@container">
+                <div className="grid items-start gap-x-2 @min-[144px]:grid-cols-[minmax(0,1fr)_auto]">
+                  <span className={cx(labelClass, "break-words")}>{COLUMN_LABELS[col]}</span>
+                  <span className="text-meta tabular-nums text-muted">{cards.length}</span>
+                </div>
               </header>
-              {cards.map((h) => (
-                <BoardCard key={h.id} host={h} onShift={shift} />
-              ))}
+              <div data-lane-body className="grid min-w-0 content-start gap-2">
+                {cards.map((h) => (
+                  <BoardCard key={h.id} host={h} onShift={shift} />
+                ))}
+              </div>
             </section>
           );
         })}

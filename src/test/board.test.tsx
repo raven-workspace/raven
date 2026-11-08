@@ -114,14 +114,18 @@ beforeEach(() => {
 });
 
 describe("board", () => {
-  it("cards sit in their column with ip and os chip", async () => {
+  it("cards sit in their column with ip, os brand icon and access chip", async () => {
     mount();
     await ready();
     const foot = column("Vulnerability detection");
     expect(within(foot).getByText("1")).toBeInTheDocument();
     const card = within(foot).getByRole("link", { name: /dc01/ });
     expect(within(card).getByText("10.10.10.5")).toHaveClass("font-mono");
-    expect(within(card).getByText("Windows")).toBeInTheDocument();
+    // OS is metadata: brand icon plus its name as text, never a chip.
+    const os = within(card).getByText("Windows");
+    expect(os).not.toHaveAttribute("data-variant");
+    expect(os.closest("[data-variant]")).toBeNull();
+    expect(card.querySelector('img[data-brand="windows"]')).not.toBeNull();
     expect(within(card).getByText("user")).toHaveAttribute(
       "data-variant",
       "accent",
@@ -220,6 +224,23 @@ describe("board", () => {
     const grid = column("Reporting").parentElement!;
     expect(grid.style.gridTemplateColumns).toBe("repeat(6, minmax(0, 1fr))");
     expect(grid.querySelectorAll(":scope > section")).toHaveLength(6);
+  });
+
+  it("every lane header is in the same grid row", async () => {
+    mount();
+    await ready();
+    const grid = column("Reporting").parentElement!;
+    // One shared header row, then one shared body row.
+    expect(grid.style.gridTemplateRows).toBe("auto 1fr");
+    for (const lane of grid.querySelectorAll<HTMLElement>(":scope > section")) {
+      expect(lane.style.gridRow).toBe("span 2");
+      expect(lane.style.gridTemplateRows).toBe("subgrid");
+      const [header, body] = [...lane.children];
+      expect(header.tagName).toBe("HEADER");
+      expect(body).toHaveAttribute("data-lane-body");
+    }
+    // An empty lane still has its body in the second row.
+    expect(column("Post-exploitation").querySelector("[data-lane-body]")).not.toBeNull();
   });
 
   it("empty board offers add host", async () => {

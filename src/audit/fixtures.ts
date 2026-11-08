@@ -27,6 +27,7 @@ export const AUDIT_IDS = {
   payloadsEngagement: "e-pay",
   iisHost: "h-pay-iis",
   pgHost: "h-pay-pg",
+  boardEngagement: "e-board",
 } as const;
 
 /** 2026-11-05 14:00 UTC. The browser clock is frozen here when auditing. */
@@ -94,6 +95,14 @@ const engagements: Engagement[] = [
     timeboxStart: null, timeboxMinutes: null, status: "active", createdAt: ago(48 * HOUR), updatedAt: ago(24 * HOUR),
     lastActivityAt: ago(24 * HOUR), lastRanOn: "Kali (VM)", msfHostId: null,
   },
+  // Board stress: a 20-host lane next to empty lanes (RFC 5737 addresses, example.test names). Archived, so it only
+  // adds one row to the dashboard's past table.
+  {
+    id: "e-board", name: "Board sweep", kind: "lab", client: null, subLabel: null,
+    scopeCidrs: ["203.0.113.0/24"], domain: "example.test", startsAt: null, endsAt: null,
+    timeboxStart: null, timeboxMinutes: null, status: "archived", createdAt: ago(20 * 24 * HOUR),
+    updatedAt: ago(19 * 24 * HOUR), lastActivityAt: ago(19 * 24 * HOUR), lastRanOn: "Kali (VM)", msfHostId: null,
+  },
 ];
 
 // ---------------------------------------------------------------- hosts
@@ -122,6 +131,16 @@ const hosts: Host[] = [
   host("h-pay-iis", "e-pay", "intranet-gateway-iis-frontend-07.corp.example.test", "198.51.100.20", "windows", { boardColumn: "initial-foothold", access: "user" }),
   host("h-pay-pg", "e-pay", "pg01.example.test", "198.51.100.30", "linux"),
   host("h-old-1", "e-old", "shop.contoso.example", "10.60.5.10", "linux", { boardColumn: "reporting", access: "root" }),
+  // Board sweep: 20 hosts in information gathering; post-exploitation and reporting stay empty. Placed by hand
+  // (boardManual), so the board's auto-sync leaves the lanes as written.
+  ...Array.from({ length: 20 }, (_, i) => {
+    const os: Host["os"][] = ["windows", "linux", "other", null];
+    const name = i === 0 ? "file-server-replica-backup-node-03.branch.example.test" : `ws${String(i + 1).padStart(2, "0")}.example.test`;
+    return host(`h-board-${i + 1}`, "e-board", name, `203.0.113.${i + 10}`, os[i % 4], { access: i % 5 === 0 ? "user" : "none", boardManual: true });
+  }),
+  host("h-board-vd", "e-board", "mail.example.test", "203.0.113.40", "windows", { boardColumn: "vulnerability-detection", boardManual: true }),
+  host("h-board-if", "e-board", "intranet-gateway-iis-frontend-07.example.test", "203.0.113.41", "windows", { boardColumn: "initial-foothold", access: "user", boardManual: true }),
+  host("h-board-pe", "e-board", "db.example.test", "203.0.113.42", "linux", { boardColumn: "privilege-escalation", access: "root", boardManual: true }),
 ];
 
 // ---------------------------------------------------------------- services
@@ -460,6 +479,7 @@ const progress: Record<string, Progress> = {
   "e-exam": { hostsTotal: 5, hostsRooted: 0, flagsFound: 1, flagsTotal: 6 },
   "e-old": { hostsTotal: 1, hostsRooted: 1, flagsFound: 2, flagsTotal: 2 },
   "e-pay": { hostsTotal: 2, hostsRooted: 0, flagsFound: 0, flagsTotal: 4 },
+  "e-board": { hostsTotal: 23, hostsRooted: 1, flagsFound: 0, flagsTotal: 0 },
 };
 
 const backups: BackupInfo[] = [
