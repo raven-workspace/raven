@@ -3,7 +3,7 @@ import type { Host } from "../../types/host";
 import type { LogEntry, LogEntryInput } from "../../types/log";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
-import { Button, Dialog, Field, Input, Select, Textarea, Toggle } from "../../ui";
+import { Button, Dialog, Field, Input, Select, Textarea, Toggle, Toolbar } from "../../ui";
 import { HostChips } from "../capture/HostChips";
 import { useLogMutations } from "./queries";
 
@@ -73,12 +73,12 @@ export function EditEntryDialog({ entry, hosts, onClose }: EditEntryDialogProps)
         </>
       }
     >
-      <form id={formId} onSubmit={submit} noValidate className="flex flex-col gap-3.5">
+      <form id={formId} onSubmit={submit} noValidate className="grid gap-4">
         <Field label="Title" error={titleError}>
           <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} />
         </Field>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[10.5px] font-semibold uppercase tracking-label text-muted">Hosts</span>
+        <div className="grid gap-2">
+          <span className="text-meta text-muted-2">Hosts</span>
           <HostChips hosts={hosts} linked={hostIds} onLinked={setHostIds} />
         </div>
         <Field label="Ran on">
@@ -96,7 +96,7 @@ export function EditEntryDialog({ entry, hosts, onClose }: EditEntryDialogProps)
         <Field label="Observations">
           <Textarea value={observations} onChange={(e) => setObservations(e.target.value)} rows={3} />
         </Field>
-        <div className="flex gap-2">
+        <Toolbar>
           <Toggle on={isPrivate} onChange={setPrivate}>
             Private
           </Toggle>
@@ -105,8 +105,8 @@ export function EditEntryDialog({ entry, hosts, onClose }: EditEntryDialogProps)
               Returned nothing
             </Toggle>
           )}
-        </div>
-        {error && <p role="alert" className="m-0 text-xs text-warn">{error}</p>}
+        </Toolbar>
+        {error && <p role="alert" className="m-0 text-meta text-warn">{error}</p>}
       </form>
     </Dialog>
   );

@@ -230,7 +230,7 @@ describe("host view", () => {
     const user = userEvent.setup();
     mount();
     await openLog(user);
-    await user.click(screen.getByRole("button", { name: /Switch to newest first/ }));
+    await user.click(screen.getByRole("button", { name: "Oldest first" }));
     const items = screen.getAllByRole("listitem").filter((li) => li.textContent?.includes("on dc01"));
     expect(items.map((li) => within(li).getAllByRole("button")[0]!.textContent)).toEqual([
       expect.stringContaining("newer on dc01"),

@@ -105,18 +105,39 @@ describe("log", () => {
     expect(rows()).toHaveLength(1);
   });
 
+  it("order button toggles between sort ascending and descending icons", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByText("nmap scan");
+    const btn = screen.getByRole("button", { name: "Newest first" });
+    const newestIcon = btn.innerHTML;
+    expect(newestIcon).toContain("<svg");
+    await user.click(btn);
+    const flipped = screen.getByRole("button", { name: "Oldest first" });
+    expect(flipped.innerHTML).toContain("<svg");
+    expect(flipped.innerHTML).not.toBe(newestIcon);
+    await user.click(flipped);
+    expect(screen.getByRole("button", { name: "Newest first" })).toBeInTheDocument();
+  });
+
+  it("stored titles are shown unchanged", async () => {
+    entries = [entry({ id: "z", title: "nmap → host · scan — all" })];
+    mount();
+    expect(await screen.findByText("nmap → host · scan — all")).toBeInTheDocument();
+  });
+
   it("order flips to oldest first and is remembered", async () => {
     const user = userEvent.setup();
     const first = mount();
     await screen.findByText("nmap scan");
-    await user.click(screen.getByRole("button", { name: /Switch to oldest first/ }));
+    await user.click(screen.getByRole("button", { name: "Newest first" }));
     expect(titles()[0]).toMatch(/older note/);
     expect(titles()[2]).toMatch(/secret thing/);
     first.unmount();
     mount();
     await screen.findByText("nmap scan");
     expect(titles()[0]).toMatch(/older note/);
-    await user.click(screen.getByRole("button", { name: /Switch to newest first/ }));
+    await user.click(screen.getByRole("button", { name: "Oldest first" }));
     expect(titles()[0]).toMatch(/secret thing/);
   });
 
@@ -147,7 +168,7 @@ describe("log", () => {
     const user = userEvent.setup();
     mount();
     await user.click(await screen.findByRole("button", { name: /nmap scan/ }));
-    expect(screen.getByText("$ nmap -sV 10.10.10.5")).toHaveClass("font-mono");
+    expect(screen.getByText("$ nmap -sV 10.10.10.5")).toHaveClass("text-code");
     expect(screen.getByText("445/tcp open smb").tagName).toBe("PRE");
     expect(screen.getByText("Observations")).toBeInTheDocument();
     expect(screen.getByText("port 445 open")).toBeInTheDocument();

@@ -6,7 +6,8 @@ import { api } from "../../lib/api";
 import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
-import { Button, Chip, Field, Input, Kbd, Select, Textarea } from "../../ui";
+import { XIcon } from "@phosphor-icons/react";
+import { Button, Chip, Field, IconButton, Input, Kbd, Select, Textarea, Toolbar } from "../../ui";
 import { useHosts } from "../hosts/queries";
 import { invalidateAfterSave } from "../log/extractions";
 import { HostChips } from "./HostChips";
@@ -177,19 +178,19 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col" onKeyDown={onKeyDown}>
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-4 pt-3.5 pb-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <RD.Title className="m-0 text-[15px] font-semibold tracking-[-0.01em] text-fg">Add to log</RD.Title>
-          {pd.private && <Chip>Private · not in reports</Chip>}
+    <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto_auto]" onKeyDown={onKeyDown}>
+      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-4 py-3">
+        <div className="grid min-w-0 grid-flow-col auto-cols-max items-center justify-start gap-2">
+          <RD.Title className="m-0 text-heading text-fg">Add to log</RD.Title>
+          {pd.private && <Chip>Private, not in reports</Chip>}
         </div>
-        <RD.Close aria-label="Close" className="shrink-0 rounded-sm border border-transparent p-0.5 hover:border-line-2">
-          <Kbd>esc</Kbd>
+        <RD.Close asChild>
+          <IconButton icon={XIcon} label="Close" shortcut="Esc" />
         </RD.Close>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-4 py-3.5">
-        {notice && <p className="m-0 rounded-sm border border-warn px-2.5 py-2 text-[13px] text-warn">{notice}</p>}
+      <div className="grid min-h-0 content-start gap-4 overflow-y-auto px-4 py-4">
+        {notice && <p className="m-0 rounded-sm border border-warn px-3 py-2 text-meta text-warn">{notice}</p>}
         <KindChips kind={kind} onChange={(k) => set({ kind: k })} />
 
         <PasteArea
@@ -223,7 +224,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
         />
 
         <HostChips hosts={hosts} linked={r.edits.hostIds} onLinked={(hostIds) => set({ hostIds })} />
-        {r.servicesLine && <p className="m-0 font-mono text-xs text-muted">{r.servicesLine}</p>}
+        {r.servicesLine && <p className="m-0 text-code text-muted">{r.servicesLine}</p>}
         <Field label="Ran on">
           <Select
             value={r.edits.ranOn}
@@ -244,7 +245,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
           />
         </Field>
 
-        <div className="flex flex-wrap gap-1.5">
+        <Toolbar>
           {kind === "command" && (
             <Toggle on={pd.returnedNothing} keys="⌘." onClick={() => set({ returnedNothing: !pd.returnedNothing })}>
               Returned nothing
@@ -253,17 +254,17 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
           <Toggle on={pd.private} keys="⌘P" onClick={() => set({ private: !pd.private })}>
             Private
           </Toggle>
-        </div>
+        </Toolbar>
       </div>
 
-      {msfWarning && <p className="m-0 shrink-0 border-t border-line px-4 pt-2.5 text-xs text-warn">{msfWarning}</p>}
-      <footer className="flex shrink-0 items-center gap-2 border-t border-line px-4 py-3">
+      {msfWarning && <p className="m-0 border-t border-line px-4 pt-3 text-meta text-warn">{msfWarning}</p>}
+      <footer className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-t border-line px-4 py-3">
         <Button onClick={discard}>Discard</Button>
-        <p role="alert" className="m-0 min-w-0 flex-1 truncate text-xs text-warn">
+        <p role="alert" className="m-0 min-w-0 truncate text-meta text-warn">
           {error}
         </p>
         <Button variant="primary" onClick={() => void save()} disabled={!r.canSave || saving}>
-          Save <Kbd aria-hidden>↵</Kbd>
+          Save <Kbd variant="inline" aria-hidden>↵</Kbd>
         </Button>
       </footer>
     </div>

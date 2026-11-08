@@ -3,7 +3,7 @@ import { useState } from "react";
 import { shortHostName } from "../../lib/hostName";
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
-import { Button, Chip, Dialog, labelClass } from "../../ui";
+import { Button, Chip, Dialog, Toolbar } from "../../ui";
 import { EditEntryDialog } from "./EditEntryDialog";
 import { KIND_LABELS } from "./kindLabels";
 import { LogEntryBody } from "./LogEntryBody";
@@ -61,13 +61,13 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
       }}
       className={`grid w-full items-center gap-3 px-1 py-2 text-left cursor-default hover:bg-surface focus-visible:bg-surface ${cols}`}
     >
-      <time dateTime={d.toISOString()} title={d.toLocaleString()} className="font-mono text-xs text-muted">
+      <time dateTime={d.toISOString()} title={d.toLocaleString()} className="text-code text-muted">
         {`${pad(d.getHours())}:${pad(d.getMinutes())}`}
       </time>
-      <span className={`${labelClass} truncate ${picking ? "hidden @min-[30rem]/ctx:block" : ""}`}>{KIND_LABELS[entry.kind]}</span>
-      <span data-testid="entry-title" className="truncate text-[13px] text-fg">{entry.title}</span>
+      <span className={`truncate text-meta text-muted ${picking ? "hidden @min-[30rem]/ctx:block" : ""}`}>{KIND_LABELS[entry.kind]}</span>
+      <span data-testid="entry-title" className="truncate text-body text-fg">{entry.title}</span>
       {hasExtras && (
-        <span className={`flex items-center gap-2 ${picking ? "min-w-0 justify-end overflow-hidden" : ""}`}>
+        <span className={`grid grid-flow-col auto-cols-max items-center gap-2 ${picking ? "min-w-0 justify-end overflow-hidden" : ""}`}>
           {names.map((n) => (
             <Chip key={n} className={`${picking ? "max-w-[10ch]" : "max-w-[16ch]"} truncate`}>
               <span className="truncate">{n}</span>
@@ -76,15 +76,15 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
           {entry.private && <Chip>private</Chip>}
           {entry.returnedNothing &&
             (picking ? (
-              <span title="Returned nothing" className="font-mono text-xs text-faint">∅</span>
+              <span title="Returned nothing" className="text-code text-faint">∅</span>
             ) : (
-              <span className="whitespace-nowrap text-xs text-faint">returned nothing</span>
+              <span className="whitespace-nowrap text-meta text-faint">returned nothing</span>
             ))}
           {picking &&
             (stepNumber ? (
-              <span className="whitespace-nowrap font-mono text-xs text-accent">step {stepNumber}</span>
+              <span className="whitespace-nowrap text-code text-accent">step {stepNumber}</span>
             ) : (
-              <span className="whitespace-nowrap text-xs text-muted">+ step</span>
+              <span className="whitespace-nowrap text-meta text-muted">+ step</span>
             ))}
         </span>
       )}
@@ -111,15 +111,17 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
         row
       )}
       {open && (
-        <div className="flex flex-col gap-3 pb-3 pl-[60px] pr-1">
-          <LogEntryBody entry={entry} />
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => setEditing(true)}>
-              Edit
-            </Button>
-            <Button size="sm" variant="danger" onClick={() => setDeleting(true)}>
-              Delete
-            </Button>
+        <div className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-3 px-1 pb-3">
+          <div className="col-start-2 grid min-w-0 gap-3">
+            <LogEntryBody entry={entry} />
+            <Toolbar>
+              <Button size="sm" onClick={() => setEditing(true)}>
+                Edit
+              </Button>
+              <Button size="sm" variant="quiet-danger" onClick={() => setDeleting(true)}>
+                Delete
+              </Button>
+            </Toolbar>
           </div>
         </div>
       )}

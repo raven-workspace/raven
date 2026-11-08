@@ -153,7 +153,7 @@ describe("capture panel", () => {
     await ready();
     const dialog = await openCapture(user);
     expect(within(dialog).getByLabelText("Paste")).toHaveFocus();
-    expect(within(dialog).getByRole("button", { name: "Other" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByRole("radio", { name: "Other" })).toBeChecked();
   });
 
   it("pasting nmap output fills title, host and services line", async () => {
@@ -162,8 +162,8 @@ describe("capture panel", () => {
     await ready();
     const dialog = await openCapture(user);
     await user.paste(NMAP);
-    expect(within(dialog).getByRole("button", { name: "Command" })).toHaveAttribute("aria-pressed", "true");
-    expect(within(dialog).getByLabelText("Title")).toHaveValue("Versions and default scripts on the open ports · 10.10.10.5");
+    expect(within(dialog).getByRole("radio", { name: "Command" })).toBeChecked();
+    expect(within(dialog).getByLabelText("Title")).toHaveValue("Versions and default scripts on the open ports");
     const hosts = within(dialog).getByRole("group", { name: "Hosts" });
     expect(within(hosts).getByText("dc01")).toBeInTheDocument();
     expect(within(dialog).getByText("Updates services on dc01: 22, 80, 3003 · OS: Linux")).toBeInTheDocument();
@@ -220,7 +220,7 @@ describe("capture panel", () => {
     expect(m.logCreate).toHaveBeenCalledWith(
       "e1",
       expect.objectContaining({
-        title: "Versions and default scripts on the open ports · 10.10.10.5",
+        title: "Versions and default scripts on the open ports",
         hostIds: ["h1"],
         ranOn: "Kali (VM)",
         observations: "node on 3003",
@@ -244,16 +244,16 @@ describe("capture panel", () => {
     await user.clear(title);
     await user.type(title, "My scan");
     await user.keyboard("{Meta>}4{/Meta}");
-    expect(within(dialog).getByRole("button", { name: "Other" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByRole("radio", { name: "Other" })).toBeChecked();
     expect(title).toHaveValue("My scan");
-    expect(within(dialog).queryByText("Private · not in reports")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Private, not in reports")).not.toBeInTheDocument();
     // Only ⌘ shortcuts: Ctrl, or ⌘ with Shift, does nothing.
     within(dialog).getByRole("button", { name: /^Private/ }).focus();
     await user.keyboard("{Control>}p{/Control}{Control>}1{/Control}{Meta>}{Shift>}p{/Shift}{/Meta}");
-    expect(within(dialog).queryByText("Private · not in reports")).not.toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "Other" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).queryByText("Private, not in reports")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("radio", { name: "Other" })).toBeChecked();
     await user.keyboard("{Meta>}p{/Meta}");
-    expect(within(dialog).getByText("Private · not in reports")).toBeInTheDocument();
+    expect(within(dialog).getByText("Private, not in reports")).toBeInTheDocument();
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
     expect(m.logCreate.mock.calls[0]![1]).toMatchObject({
@@ -283,7 +283,7 @@ describe("capture panel", () => {
     mount();
     await ready();
     const dialog = await openCapture(user);
-    await user.click(within(dialog).getByRole("button", { name: "Other" }));
+    await user.click(within(dialog).getByRole("radio", { name: "Other" }));
     expect(within(dialog).getByLabelText("Paste")).toHaveAttribute("placeholder", expect.stringMatching(/isn't a command, screenshot, request or flag/));
   });
 
@@ -297,14 +297,31 @@ describe("capture panel", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("kind chips are 28px and keep their shortcuts", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h2");
+    await screen.findByRole("navigation", { name: "Engagement" });
+    const dialog = await openCapture(user);
+    const group = within(dialog).getByRole("radiogroup", { name: "Kind" });
+    expect(group).toHaveClass("h-7");
+    const names = ["Command", "Screenshot", "HTTP", "Other", "Flag"];
+    names.forEach((name, i) => {
+      const chip = within(group).getByRole("radio", { name });
+      expect(chip).toHaveAttribute("aria-keyshortcuts", `Meta+${i + 1}`);
+      expect(chip).toHaveTextContent(`⌘${i + 1}`);
+    });
+    await user.keyboard("{Meta>}3{/Meta}");
+    expect(within(group).getByRole("radio", { name: "HTTP" })).toBeChecked();
+  });
+
   it("flag takes its host and local/proof from the host selection", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h2");
     await screen.findByRole("navigation", { name: "Engagement" });
     const dialog = await openCapture(user);
     await user.paste("0123456789abcdef0123456789abcdef");
-    expect(within(dialog).getByRole("button", { name: "Flag" })).toHaveAttribute("aria-pressed", "true");
-    expect(within(dialog).getByLabelText("Title")).toHaveValue("proof.txt · web07");
+    expect(within(dialog).getByRole("radio", { name: "Flag" })).toBeChecked();
+    expect(within(dialog).getByLabelText("Title")).toHaveValue("proof.txt");
     expect(within(dialog).getByRole("button", { name: "proof.txt" })).toHaveAttribute("aria-pressed", "true");
     await user.click(within(dialog).getByRole("button", { name: "Remove web07" }));
     expect(within(dialog).getByLabelText("Title")).toHaveValue("local.txt");
@@ -318,9 +335,9 @@ describe("capture panel", () => {
     const dialog = await openCapture(user);
     const block = "whoami; hostname; ip a\nweb07\n    inet 10.10.10.6/24 brd 10.10.10.255 scope global ens3\ncat /home/web/local.txt\n0123456789abcdef0123456789abcdef";
     await user.paste(block);
-    expect(within(dialog).getByRole("button", { name: "Flag" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByRole("radio", { name: "Flag" })).toBeChecked();
     // web07 sits in Privesc (default proof.txt), but the block read local.txt.
-    expect(within(dialog).getByLabelText("Title")).toHaveValue("local.txt · web07");
+    expect(within(dialog).getByLabelText("Title")).toHaveValue("local.txt");
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
     expect(m.logCreate).toHaveBeenCalledWith(
@@ -389,7 +406,7 @@ describe("capture panel", () => {
     await ready();
     const dialog = await openCapture(user);
     await user.paste("┌──(kali㉿kali)-[~]\n└─$ whoami\nkali");
-    expect(within(dialog).getByRole("button", { name: "Command" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByRole("radio", { name: "Command" })).toBeChecked();
     await user.keyboard("{Enter}");
     await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
     expect(m.logCreate.mock.calls[0]![1]).toMatchObject({
@@ -443,7 +460,7 @@ describe("capture panel", () => {
     await ready();
     const dialog = await openCapture(user);
     await user.click(within(dialog).getByRole("button", { name: /^Private/ }));
-    expect(within(dialog).getByText("Private · not in reports")).not.toHaveAttribute("data-variant", "accent");
+    expect(within(dialog).getByText("Private, not in reports")).not.toHaveAttribute("data-variant", "accent");
   });
 
   it("lock discards capture drafts", async () => {
@@ -472,7 +489,7 @@ describe("capture panel", () => {
     await user.paste("0123456789abcdef0123456789abcdef");
     await pasteImage(within(dialog).getByLabelText("Paste"), pngFile());
     await vi.waitFor(() => expect(within(dialog).getByRole("img", { name: "Pasted image" })).toHaveAttribute("src", "blob:flag"));
-    expect(within(dialog).getByRole("button", { name: "Flag" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByRole("radio", { name: "Flag" })).toBeChecked();
     expect(within(dialog).getByLabelText("Paste")).toHaveValue("0123456789abcdef0123456789abcdef");
     await user.click(within(dialog).getByRole("button", { name: "Remove image" }));
     expect(within(dialog).queryByRole("img")).not.toBeInTheDocument();
@@ -481,7 +498,7 @@ describe("capture panel", () => {
     await user.keyboard("{Enter}");
     await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
     expect(m.logCreate.mock.calls[0]![1]).toMatchObject({
-      title: "proof.txt · web07",
+      title: "proof.txt",
       content: { kind: "flag", flagKind: "proof", value: "0123456789abcdef0123456789abcdef" },
       attachment: null,
     });
@@ -496,10 +513,10 @@ describe("capture panel", () => {
     const dialog = await openCapture(user);
     await pasteImage(within(dialog).getByLabelText("Paste"), pngFile());
     await vi.waitFor(() =>
-      expect(within(dialog).getByRole("button", { name: "Screenshot" })).toHaveAttribute("aria-pressed", "true"),
+      expect(within(dialog).getByRole("radio", { name: "Screenshot" })).toBeChecked(),
     );
     expect(within(dialog).getByRole("img", { name: "Pasted screenshot" })).toHaveAttribute("src", "blob:shot");
-    expect(within(dialog).getByText("10.10.10.5_vulns_shot.png")).toHaveClass("font-mono");
+    expect(within(dialog).getByText("10.10.10.5_vulns_shot.png")).toHaveClass("text-code");
     await user.type(within(dialog).getByLabelText("Caption"), "login page :8080");
     expect(within(dialog).getByText("10.10.10.5_vulns_port8080.png")).toBeInTheDocument();
     await user.keyboard("{Meta>}{Enter}{/Meta}");

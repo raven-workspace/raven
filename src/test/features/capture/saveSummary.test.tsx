@@ -124,7 +124,7 @@ describe("ExtractedLine", () => {
     m.extractionsList.mockResolvedValue([extraction()]);
     wrap(<ExtractedLine entry={entry} />);
     expect(await screen.findByText("2 hashes dumped")).toHaveClass("text-accent");
-    expect(screen.getByText("· +2 more", { exact: false })).toBeInTheDocument();
+    expect(screen.getByText(", +2 more", { exact: false })).toBeInTheDocument();
     const toggle = screen.getByRole("button", { expanded: false });
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
@@ -133,7 +133,7 @@ describe("ExtractedLine", () => {
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("+3 services")).toBeNull();
-    expect(screen.getByText("· +2 more", { exact: false })).toBeInTheDocument();
+    expect(screen.getByText(", +2 more", { exact: false })).toBeInTheDocument();
   });
 
   it("shows undone state", async () => {

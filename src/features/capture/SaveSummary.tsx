@@ -1,7 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { reportError } from "../../lib/lockSignal";
-import { Button } from "../../ui";
+import { XIcon } from "@phosphor-icons/react";
+import { Button, IconButton } from "../../ui";
 import { undoExtraction } from "../log/extractions";
 import { useSaveSummaryStore } from "./useSaveSummaryStore";
 
@@ -39,9 +40,9 @@ export function SaveSummary() {
       onMouseLeave={() => setHover(false)}
       onFocus={() => setFocus(true)}
       onBlur={() => setFocus(false)}
-      className="fixed bottom-4 left-4 z-30 grid w-[min(360px,calc(100vw-2rem))] grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 rounded-md border border-line-2 bg-surface px-3 py-2.5 text-xs shadow-lg"
+      className="fixed bottom-4 left-4 z-30 grid w-[min(360px,calc(100vw-2rem))] grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 rounded-md border border-line-2 bg-surface px-3 py-3 text-meta shadow-lg"
     >
-      <ul className="m-0 grid list-none gap-0.5 p-0">
+      <ul className="m-0 grid list-none gap-1 p-0">
         {summary.wins.map((t, i) => (
           <li key={`w${i}`} className="text-accent">{t}</li>
         ))}
@@ -52,14 +53,7 @@ export function SaveSummary() {
           <li key={`t${i}`} className="text-muted">{t}</li>
         ))}
       </ul>
-      <button
-        type="button"
-        aria-label="Close summary"
-        onClick={close}
-        className="cursor-default rounded-sm px-1 text-muted-2 hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-      >
-        ×
-      </button>
+      <IconButton icon={XIcon} label="Close summary" onClick={close} />
       <Button size="sm" className="col-span-2 justify-self-start" onClick={() => void undo()}>Undo</Button>
     </div>
   );

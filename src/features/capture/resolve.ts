@@ -77,7 +77,7 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
   let autoTitle = draft.title;
   if (content.kind === "flag") {
     content = { ...content, flagKind, value: found?.value ?? pd.text.trim(), proof: found ? pd.text.trim() : null };
-    autoTitle = flagTitle(flagKind, selectedHost);
+    autoTitle = flagTitle(flagKind);
   } else if (content.kind === "screenshot") {
     const fileName = screenshotFileName({
       ip: selectedHost?.ip ?? null,
@@ -87,7 +87,7 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
       mime: pd.image?.mime ?? "image/png",
     });
     content = { ...content, caption: pd.caption.trim(), fileName };
-    autoTitle = selectedHost ? `Screenshot · ${selectedHost.name}` : "Screenshot";
+    autoTitle = "Screenshot";
   }
 
   const userTitle = pd.titleEdited && pd.title.trim() !== "";
