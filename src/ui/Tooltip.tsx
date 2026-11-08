@@ -6,8 +6,9 @@ export function TooltipProvider({ children, delayDuration = 300 }: { children: R
 }
 
 /** Wraps one focusable child; opens on hover and on keyboard focus. */
-export function Tooltip({ text, children }: { text: string; children: ReactNode }) {
+export function Tooltip({ content, children }: { content: ReactNode; children: ReactNode }) {
   return (
+    <RT.Provider delayDuration={300}>
     <RT.Root>
       <RT.Trigger asChild>{children}</RT.Trigger>
       <RT.Portal>
@@ -16,9 +17,10 @@ export function Tooltip({ text, children }: { text: string; children: ReactNode 
           sideOffset={4}
           className="z-50 rounded-sm border border-line-strong bg-surface px-2 py-1 text-meta text-fg-2 whitespace-nowrap"
         >
-          {text}
+          {content}
         </RT.Content>
       </RT.Portal>
     </RT.Root>
+    </RT.Provider>
   );
 }

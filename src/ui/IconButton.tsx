@@ -22,7 +22,14 @@ export function IconButton({
   ...rest
 }: IconButtonProps) {
   return (
-    <Tooltip text={shortcut ? `${label} \u00B7 ${shortcut}` : label}>
+    <Tooltip
+      content={
+        <>
+          <span>{label}</span>
+          {shortcut && <span className="ml-2 font-mono text-muted">{shortcut}</span>}
+        </>
+      }
+    >
       <button
         type={type}
         aria-label={label}
