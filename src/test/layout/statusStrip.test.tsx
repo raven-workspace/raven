@@ -59,6 +59,21 @@ describe("status strip and title bar", () => {
     expect(labels).toEqual(["Dates", "Rooted", "Flags", "Metasploit", "LHOST"]);
   });
 
+  it("with a timebox, open threads and cleanup, every cell is in the documented order", async () => {
+    const timed: Engagement = { ...E1, timeboxStart: 1, timeboxMinutes: 1440 };
+    m.engagementGet.mockResolvedValue(timed);
+    m.engagementsList.mockResolvedValue([timed]);
+    m.notesList.mockResolvedValue([{ ownerId: "e1", engagementId: "e1", hostId: null, body: "? why is 445 filtered\n? retry the share", private: false, updatedAt: 1 }] as never);
+    m.cleanupCounts.mockResolvedValue({ e1: 2 });
+    const strip = await mountStrip();
+    await within(strip).findByText("Cleanup");
+    await within(strip).findByText("Threads");
+    const labels = [...strip.querySelectorAll("span")]
+      .filter((s) => /^(Dates|Timebox|Rooted|Flags|Metasploit|Threads|Cleanup|LHOST)$/.test(s.textContent ?? "") && s.children.length === 0)
+      .map((s) => s.textContent);
+    expect(labels).toEqual(["Timebox", "Rooted", "Flags", "Metasploit", "Threads", "Cleanup", "LHOST"]);
+  });
+
   it("metasploit cell shows the brand icon", async () => {
     const strip = await mountStrip();
     const btn = await within(strip).findByRole("button", { name: /Metasploit unused/ });
