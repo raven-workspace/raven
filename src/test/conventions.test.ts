@@ -31,6 +31,10 @@ describe("conventions", () => {
     });
   }
 
+  it("PENDING is empty", () => {
+    expect(Object.entries(PENDING).filter(([, list]) => list.length > 0)).toEqual([]);
+  });
+
   it("type tokens exist", () => {
     const css = readFileSync(join(ROOT, "src/styles/tokens.css"), "utf8");
     const sizes = {

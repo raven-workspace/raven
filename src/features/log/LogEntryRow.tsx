@@ -1,5 +1,6 @@
 import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
 import { useState } from "react";
+import { HOST_IP } from "../../engines/attribution";
 import { shortHostName } from "../../lib/hostName";
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
@@ -10,6 +11,18 @@ import { LogEntryBody } from "./LogEntryBody";
 import { useLogMutations } from "./queries";
 
 const pad = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * The IP a command targets when it is no known host's: titles never name the target, so without this a row about a box
+ * not yet on the board has no hint of where it ran. Read from the stored command, like the old titles did.
+ */
+function unknownTarget(entry: LogEntry, hosts: Host[]): string | null {
+  if (entry.content.kind !== "command") return null;
+  const line = entry.content.blocks[0]?.command.split("\n").find((l) => l.trim()) ?? "";
+  const ip = line.match(HOST_IP)?.[0];
+  if (!ip || hosts.some((h) => h.ip === ip) || entry.title.includes(ip)) return null;
+  return ip;
+}
 
 interface LogEntryRowProps {
   entry: LogEntry;
@@ -39,7 +52,8 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
     .filter((n): n is string => !!n)
     .map(shortHostName);
   const picking = onPick !== undefined;
-  const hasExtras = names.length > 0 || entry.private || entry.returnedNothing || picking;
+  const target = unknownTarget(entry, hosts);
+  const hasExtras = target !== null || names.length > 0 || entry.private || entry.returnedNothing || picking;
   // In the finding split's narrow pane the title keeps priority: at least 7rem, the kind label only from 30rem of
   // pane (the `ctx` container), and the extras shrink and clip instead of squeezing the title out.
   const cols = picking
@@ -68,6 +82,7 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
       <span data-testid="entry-title" className="truncate text-body text-fg">{entry.title}</span>
       {hasExtras && (
         <span className={`grid grid-flow-col auto-cols-max items-center gap-2 ${picking ? "min-w-0 justify-end overflow-hidden" : ""}`}>
+          {target && <span className="whitespace-nowrap font-mono text-code text-muted">{target}</span>}
           {names.map((n) => (
             <Chip key={n} className={`${picking ? "max-w-[10ch]" : "max-w-[16ch]"} truncate`}>
               <span className="truncate">{n}</span>

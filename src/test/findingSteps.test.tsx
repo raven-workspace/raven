@@ -414,7 +414,11 @@ describe("host findings tab", () => {
     mount("/e/e1/h/h1", []);
     m.findingsList.mockRejectedValue(new Error("findings down"));
     await user.click(await screen.findByRole("tab", { name: "Findings" }));
-    expect(await screen.findByText(/Couldn.t load findings: findings down/)).toBeInTheDocument();
+    // The attempts list on the same tab reads the findings too, so it fails alongside.
+    const alert = (await screen.findAllByRole("alert")).find((a) => a.textContent?.includes("Couldn't load findings"))!;
+    expect(alert).toBeDefined();
+    await user.click(within(alert).getByRole("button", { name: "Details" }));
+    expect(alert).toHaveTextContent("findings down");
   });
 
   it("shows an empty message when the host has no findings", async () => {

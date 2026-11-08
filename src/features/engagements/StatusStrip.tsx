@@ -111,7 +111,7 @@ function TimeboxStatus({ start, minutes, now }: { start: number | null; minutes:
   const over = left === "Time's up";
   const of: ReactNode = <span data-drop={STEP.of} className="text-faint">of {formatDuration(minutes)}</span>;
   return (
-    <span className="grid grid-flow-col items-center gap-2.5">
+    <span className="grid grid-flow-col items-center gap-2">
       <span className={labelClass}>Timebox</span>
       <span className={cx("font-mono text-meta", over ? "text-warn" : "text-fg")}>{left}</span>
       <span data-drop={STEP.bar} className="w-24">

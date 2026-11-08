@@ -123,6 +123,18 @@ async function pick(user: ReturnType<typeof userEvent.setup>, label: string, opt
 const codeMatching = (re: RegExp) => (_: string, el: Element | null) => el?.tagName === "CODE" && re.test(el.textContent ?? "");
 
 describe("credentials section", () => {
+  it("credentials section shows a retry on load failure", async () => {
+    const user = userEvent.setup();
+    mount();
+    // The first load fails (the query runs after the vault check, so this lands before it); Retry loads.
+    m.credentialsList.mockRejectedValueOnce(new Error("disk said no"));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn't load credentials");
+    await user.click(within(alert).getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("button", { name: "Add credential" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("adding a password credential lists it masked; Reveal shows it; Copy copies without revealing", async () => {
     const user = userEvent.setup();
     mount();

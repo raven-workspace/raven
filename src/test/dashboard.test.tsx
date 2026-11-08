@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
-import { dateRange, progressLine, relativeTime, timeLeft } from "../features/engagements/format";
+import { dateRange, relativeTime, timeLeft } from "../features/engagements/format";
 import { useNotesStore } from "../features/notes/useNotesStore";
 import { api } from "../lib/api";
 import type { Engagement } from "../types/engagement";
@@ -104,11 +104,6 @@ describe("format", () => {
     expect(relativeTime(now - 3 * HOUR, now)).toBe("3h ago");
     expect(relativeTime(now - 50 * HOUR, now)).toBe("2d ago");
   });
-
-  it("progressLine formats counts", () => {
-    expect(progressLine({ hostsRooted: 0, hostsTotal: 0, flagsFound: 0, flagsTotal: 0 })).toBe("Rooted 0/0 · flags 0/0");
-    expect(progressLine({ hostsRooted: 3, hostsTotal: 6, flagsFound: 7, flagsTotal: 9 })).toBe("Rooted 3/6 · flags 7/9");
-  });
 });
 
 describe("dashboard", () => {
@@ -120,7 +115,10 @@ describe("dashboard", () => {
     expect(within(active).getByText("exam sim")).toBeInTheDocument();
     expect(within(active).getByText("AD + 3 standalone")).toBeInTheDocument();
     expect(within(active).getByText(/^21h 4[45]m left$/)).toBeInTheDocument();
-    expect(within(active).getAllByText("Rooted 0/0 · flags 0/0")).toHaveLength(2);
+    // Each card: labelled Rooted and Flags counts (never one middot-joined line).
+    expect(within(active).getAllByText("Rooted")).toHaveLength(2);
+    expect(within(active).getAllByText("Flags")).toHaveLength(2);
+    expect(within(active).getAllByText("0/0")).toHaveLength(4);
     expect(within(active).getByText(/12m ago/)).toBeInTheDocument();
     expect(within(active).queryByText("Acme")).not.toBeInTheDocument();
 

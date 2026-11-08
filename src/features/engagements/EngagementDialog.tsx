@@ -235,12 +235,12 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
         </>
       }
     >
-      <form id={formId} onSubmit={submit} noValidate className="grid gap-3.5">
+      <form id={formId} onSubmit={submit} noValidate className="grid gap-4">
         <Field label="Name" error={err("name")}>
           <Input autoFocus value={d.name} onChange={(e) => set("name", e.target.value)} placeholder="Mock exam A" />
         </Field>
 
-        <div className="grid gap-1.5">
+        <div className="grid gap-2">
           <span id={kindLabelId} className="block text-meta text-muted-2">
             Kind
           </span>
@@ -267,11 +267,11 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
                 onChange={(e) => set("timeboxStart", e.target.value)}
               />
             </Field>
-            <fieldset className="m-0 grid gap-1.5 border-0 p-0">
-              <legend className="mb-1.5 p-0 text-meta text-muted-2">
+            <fieldset className="m-0 grid gap-2 border-0 p-0">
+              <legend className="mb-2 p-0 text-meta text-muted-2">
                 Duration
               </legend>
-              <div className="grid grid-flow-col items-center justify-start gap-1.5">
+              <div className="grid grid-flow-col items-center justify-start gap-2">
                 <div className="w-16">
                   <Input
                     type="number"

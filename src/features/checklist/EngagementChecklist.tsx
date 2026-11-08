@@ -15,7 +15,7 @@ import {
 import { playbookTriggers } from "../../engines/credentials/state";
 import { api } from "../../lib/api";
 import type { Host } from "../../types/host";
-import { Button, labelClass } from "../../ui";
+import { Button, labelClass, queryState } from "../../ui";
 import { CleanupPanel } from "../cleanup/CleanupPanel";
 import { EngagementStuckCheck } from "../stuck/StuckView";
 import { useHosts } from "../hosts/queries";
@@ -82,9 +82,8 @@ export function EngagementChecklist() {
   const hosts = hostsQ.data;
   const eng = engagement.data;
 
-  const failed = hostsQ.error ?? engagement.error ?? servicesQ.error ?? settings.error ?? log.error;
-  if (failed) return <p role="alert" className="py-3 text-meta text-warn">Couldn't load the engagement checklist: {failed.message}</p>;
-  if (!hosts || !eng || !servicesQ.data) return null;
+  const loadState = queryState([hostsQ, engagement, servicesQ, settings, log], "the engagement checklist");
+  if (loadState || !hosts || !eng || !servicesQ.data) return loadState;
 
   const facts = engagementFacts(eng, hosts, servicesByHost);
   const setup = ENGAGEMENT_SETUP.filter((g) => goalApplies(g, facts));

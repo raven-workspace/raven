@@ -3,7 +3,7 @@ import { OrderButton } from "./OrderButton";
 import { byOrder, usePersistedOrder } from "./usePersistedOrder";
 import { useParams } from "react-router";
 import type { LogKind } from "../../types/log";
-import { Button, EmptyState, Select } from "../../ui";
+import { EmptyState, Select, queryState } from "../../ui";
 import { useHosts } from "../hosts/queries";
 import { KIND_LABELS } from "./kindLabels";
 import { LogEntryRow } from "./LogEntryRow";
@@ -24,15 +24,8 @@ export function LogSection() {
   const [order, setOrder] = usePersistedOrder("raven.log.order", "newest");
 
   const entries = log.data ?? [];
-  if (log.isError) {
-    return (
-      <EmptyState
-        title="Couldn't load the log"
-        body={log.error.message}
-        action={<Button onClick={() => void log.refetch()}>Try again</Button>}
-      />
-    );
-  }
+  const state = queryState([log], "the log");
+  if (state) return state;
   if (log.isSuccess && entries.length === 0) {
     return <EmptyState title="Nothing logged yet. Press L to capture." />;
   }

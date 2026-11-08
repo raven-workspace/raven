@@ -74,11 +74,6 @@ export function relativeTime(ms: number, now: number = Date.now()): string {
 
 export const EMPTY_PROGRESS: Progress = { hostsTotal: 0, hostsRooted: 0, flagsFound: 0, flagsTotal: 0 };
 
-/** "Rooted 3/6 · flags 7/9". */
-export function progressLine(s: Progress): string {
-  return `Rooted ${s.hostsRooted}/${s.hostsTotal} · flags ${s.flagsFound}/${s.flagsTotal}`;
-}
-
 /** Scope as "10.20.0.0/22" or "10.20.0.0/22 +2"; null when empty. */
 export function scopeSummary(cidrs: string[]): string | null {
   if (cidrs.length === 0) return null;

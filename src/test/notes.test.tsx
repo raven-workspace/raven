@@ -112,7 +112,7 @@ describe("field notes panel", () => {
     setStored(null, "eng body");
     const user = userEvent.setup();
     const a = await open(user, "/e/e1/h/h1");
-    expect(within(a.p).getByText("Notes · SRV11")).toBeInTheDocument();
+    expect(within(a.p).getByRole("heading", { name: "Notes SRV11" })).toBeInTheDocument();
     await vi.waitFor(() => expect(a.ta).toHaveValue("host body"));
     expect(m.notesGet).toHaveBeenCalledWith("e1", "h1");
     expect(within(a.p).getByRole("button", { name: "Host" })).toHaveAttribute("aria-pressed", "true");
@@ -124,7 +124,7 @@ describe("field notes panel", () => {
     setStored(null, "eng body");
     const user = userEvent.setup();
     const a = await open(user, "/e/e1");
-    expect(within(a.p).getByText("Notes · Lab A")).toBeInTheDocument();
+    expect(within(a.p).getByRole("heading", { name: "Notes Lab A" })).toBeInTheDocument();
     await vi.waitFor(() => expect(a.ta).toHaveValue("eng body"));
     expect(m.notesGet).toHaveBeenCalledWith("e1", null);
     expect(within(a.p).getByRole("button", { name: "Host" })).toBeDisabled();
@@ -187,10 +187,10 @@ describe("field notes panel", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     vi.useRealTimers();
-    expect(within(p).getByText("Notes · Lab A")).toBeInTheDocument();
+    expect(within(p).getByRole("heading", { name: "Notes Lab A" })).toBeInTheDocument();
     await vi.waitFor(() => expect(within(p).getByLabelText("Notes")).toHaveValue("eng body"));
     await user.click(within(p).getByRole("button", { name: "Host" }));
-    expect(await within(p).findByText("Notes · SRV11")).toBeInTheDocument();
+    expect(await within(p).findByRole("heading", { name: "Notes SRV11" })).toBeInTheDocument();
   });
 
   it("navigating flushes pending text immediately", async () => {

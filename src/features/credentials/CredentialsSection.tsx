@@ -15,7 +15,7 @@ import {
 import type { Credential } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import { PencilSimple, Trash } from "@phosphor-icons/react";
-import { ActionCell, Button, Chip, Dialog, EmptyState, IconButton, labelClass } from "../../ui";
+import { ActionCell, Button, Chip, Dialog, EmptyState, IconButton, labelClass, queryState } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { useEngagementServices } from "../checklist/queries";
 import { useHosts } from "../hosts/queries";
@@ -86,9 +86,8 @@ export function CredentialsSection() {
   const attempts = useMemo(() => attemptsQ.data ?? [], [attemptsQ.data]);
   const shown = useMemo(() => foldCrackedHashes(dedupeHashCaptures(creds), attempts), [creds, attempts]);
 
-  const failed = hostsQ.error ?? credsQ.error ?? usersQ.error ?? grantsQ.error ?? attemptsQ.error ?? servicesQ.error;
-  if (failed) return <p role="alert" className="py-3 text-meta text-warn">Couldn't load credentials: {failed.message}</p>;
-  if (!hostsQ.data || !credsQ.data || !usersQ.data || !grantsQ.data || !attemptsQ.data || !servicesQ.data) return null;
+  const state = queryState([hostsQ, credsQ, usersQ, grantsQ, attemptsQ, servicesQ], "credentials");
+  if (state || !hostsQ.data || !credsQ.data || !usersQ.data || !grantsQ.data || !attemptsQ.data || !servicesQ.data) return state;
   const hosts = hostsQ.data;
   const hostName = (hid: string | null) => (hid ? hostLabel(hosts.find((h) => h.id === hid)) : "");
   const hashes = shown.creds.filter((c) => c.type === "hash");

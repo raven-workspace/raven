@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { sortFindingsBySeverity } from "../../engines/findings";
 import type { Finding } from "../../types/findings";
-import { ActionCell, Button, Chip, EmptyState, IconButton, labelClass } from "../../ui";
+import { ActionCell, Button, Chip, EmptyState, IconButton, labelClass, queryState } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { hostLabel } from "../credentials/AccessGrants";
 import { useHosts } from "../hosts/queries";
@@ -28,9 +28,8 @@ export function FindingsSection() {
   const [deleting, setDeleting] = useState<Finding>();
   const sorted = useMemo(() => sortFindingsBySeverity(findingsQ.data ?? []), [findingsQ.data]);
 
-  const failed = hostsQ.error ?? findingsQ.error;
-  if (failed) return <p role="alert" className="py-3 text-meta text-warn">Couldn't load findings: {failed.message}</p>;
-  if (!hostsQ.data || !findingsQ.data) return null;
+  const state = queryState([hostsQ, findingsQ], "findings");
+  if (state || !hostsQ.data || !findingsQ.data) return state;
   const hosts = hostsQ.data;
   if (editor) {
     // The same split as the host page: with one affected host its context shows; otherwise the switcher or the engagement's.

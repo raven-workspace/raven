@@ -2,7 +2,7 @@ import { Plus } from "@phosphor-icons/react";
 import type { Finding } from "../../types/findings";
 import type { Host } from "../../types/host";
 import { sortFindingsBySeverity } from "../../engines/findings";
-import { Button } from "../../ui";
+import { Button, queryState } from "../../ui";
 import { AttemptsList } from "./AttemptsList";
 import { SeverityChip } from "./FindingsSection";
 import { useFindings } from "./queries";
@@ -17,8 +17,8 @@ export function HostFindings({ engagementId, host, onOpenEntry, onOpenFinding }:
 }) {
   const findings = useFindings(engagementId);
 
-  if (findings.error) return <p role="alert" className="text-meta text-warn">Couldn't load findings: {findings.error.message}</p>;
-  if (!findings.data) return null;
+  const state = queryState([findings], "findings");
+  if (state || !findings.data) return state;
   const mine = sortFindingsBySeverity(findings.data.filter((f) => f.hostIds.includes(host.id)));
 
   return (

@@ -146,7 +146,8 @@ export function PayloadView({ fits, misfits, index, onIndex, ordered, built, fit
             <p className="m-0 px-3 py-2 text-meta text-muted">Nothing fits what is known about this host. Check the reasons below, or change OS or paste context above.</p>
           )}
           {misfits.length > 0 && (
-            <div className="border-t border-line px-2 py-1">
+            // pl-1 + the Disclosure's own 4px: the caret's stroke (6px into its 16px box) lands on the fit names' 12px edge.
+            <div className="border-t border-line py-1 pr-2 pl-1">
               <Disclosure label="Don't fit here" count={misfits.length} open={misfitsOpen} onOpenChange={setMisfitsOpen}>
                 <ul aria-label="Don't fit here" className="m-0 grid list-none gap-1 p-0 pt-1 pb-2">
                   {misfits.map(({ def, reason }) => (
@@ -164,7 +165,8 @@ export function PayloadView({ fits, misfits, index, onIndex, ordered, built, fit
       </div>
       {current && built && (
         <>
-          <h2 className="m-0 text-heading text-fg">{current.title}</h2>
+          {/* The fit list already shows the picked name; the heading stays for the outline and screen readers. */}
+          <h2 className="sr-only">{current.title}</h2>
           <PayloadBlock built={built} {...block} />
         </>
       )}

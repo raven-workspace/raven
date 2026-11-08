@@ -21,7 +21,7 @@ export function HostHeader({ host, onStuck }: { host: Host; onStuck?: () => void
     <section
       ref={headerRef}
       aria-label="Host"
-      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 border-b border-line pb-3"
+      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 border-b border-line pb-3"
     >
       <h1 title={host.name} className="m-0 min-w-0 truncate text-title text-fg">
         {host.name}
@@ -45,10 +45,10 @@ export function HostHeader({ host, onStuck }: { host: Host; onStuck?: () => void
           </>
         )}
       </Toolbar>
-      <ChipSet className="col-span-2 items-center gap-x-4 gap-y-1.5">
+      <ChipSet className="col-span-2 items-center gap-x-4 gap-y-2">
         {host.ip && <span className="font-mono text-code text-fg-2">{host.ip}</span>}
         {host.os && (
-          <span className="grid grid-flow-col items-center gap-1.5 text-meta text-fg-2">
+          <span className="grid grid-flow-col items-center gap-2 text-meta text-fg-2">
             {(host.os === "windows" || host.os === "linux") && <BrandIcon brand={host.os} />}
             {OS_LABELS[host.os]}
           </span>

@@ -85,6 +85,19 @@ beforeEach(() => {
 });
 
 describe("log", () => {
+  it("a command whose target IP is no known host shows that IP on its row; a known host's IP does not", async () => {
+    m.hostsList.mockResolvedValue([{ ...host("h1", "dc01"), ip: "192.0.2.10" }]);
+    entries = [
+      entry({ id: "u", title: "Full TCP scan", kind: "command", content: { kind: "command", blocks: [{ command: "nmap -p- 192.0.2.77", output: "" }] } }),
+      entry({ id: "k", title: "Service scan", kind: "command", at: T + 1, content: { kind: "command", blocks: [{ command: "nmap -sV 192.0.2.10", output: "" }] } }),
+    ];
+    mount();
+    await screen.findByText("Full TCP scan");
+    const [known, unknown] = rows();
+    expect(within(unknown!).getByText("192.0.2.77")).toBeInTheDocument();
+    expect(within(known!).queryByText("192.0.2.10")).toBeNull();
+  });
+
   it("log lists newest first with filters", async () => {
     const user = userEvent.setup();
     mount();
@@ -245,13 +258,15 @@ describe("log", () => {
     expect(screen.getByText("Delete this entry? Its screenshot goes with it.")).toBeInTheDocument();
   });
 
-  it("load failure shows the error and Try again refetches", async () => {
+  it("load failure shows the error and Retry refetches", async () => {
     const user = userEvent.setup();
     m.logList.mockRejectedValueOnce(new Error("db busy"));
     mount();
     expect(await screen.findByText("Couldn't load the log")).toBeInTheDocument();
+    // The raw error sits in the collapsed Details disclosure.
+    await user.click(screen.getByRole("button", { name: "Details" }));
     expect(screen.getByText("db busy")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByText("nmap scan")).toBeInTheDocument();
   });
 

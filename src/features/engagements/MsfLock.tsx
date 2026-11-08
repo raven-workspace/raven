@@ -35,7 +35,7 @@ export function MsfLock({ engagement: e, step }: { engagement: Engagement; step?
         type="button"
         onClick={() => setDialog("pick")}
         data-drop={step}
-        className="grid grid-flow-col items-center gap-2 cursor-default rounded-sm text-fg-2 hover:text-fg focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+        className="grid grid-flow-col items-center gap-2 cursor-default rounded-sm text-fg-2 hover:text-fg"
       >
         <BrandIcon brand="metasploit" />
         <span className={labelClass}>Metasploit</span>{" "}

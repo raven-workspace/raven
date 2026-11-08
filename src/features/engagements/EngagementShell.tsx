@@ -1,11 +1,11 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { Link, Outlet, useNavigate, useParams } from "react-router";
+import { Outlet, useNavigate, useParams } from "react-router";
 import { api } from "../../lib/api";
 import { reportError } from "../../lib/lockSignal";
 import { isFreeKey, useEscapeTo, useKeydown } from "../../lib/keys";
 import type { Engagement } from "../../types/engagement";
-import { EmptyState } from "../../ui";
+import { Button, EmptyState, queryState } from "../../ui";
 import { checklistKey } from "../checklist/queries";
 import { resyncAndRefresh } from "../checklist/resync";
 import { autoTickFromLog } from "../checklist/ticks";
@@ -69,32 +69,27 @@ export function EngagementShell() {
     }
   });
 
-  if (query.isError) {
-    const missing = (query.error as { code?: string }).code === "not_found";
+  if (query.isError && (query.error as { code?: string }).code === "not_found") {
     return (
       <div className="px-8 py-6">
         <EmptyState
-          title={missing ? "Engagement not found" : "Couldn't load this engagement"}
-          body={missing ? "It may have been deleted." : query.error.message}
-          action={
-            <Link to="/" className="text-[13px] text-fg-2 hover:text-fg">
-              Back to engagements
-            </Link>
-          }
+          title="Engagement not found"
+          body="It may have been deleted."
+          action={<Button onClick={() => void navigate("/")}>Back to engagements</Button>}
         />
       </div>
     );
   }
-  if (!query.data) return null;
+  if (!query.data) return <div className="px-8 py-6">{queryState([query], "this engagement")}</div>;
   const e = query.data;
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[auto_minmax(0,1fr)]">
       <Sidebar engagementId={id} />
-      <div className="flex min-h-0 min-w-0 flex-col">
+      <div className="grid min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)]">
         <EngagementHeader engagement={e} />
         <StatusStrip engagement={e} />
-        <main className="min-h-0 flex-1 overflow-auto px-6 py-5">
+        <main className="min-h-0 overflow-auto px-6 py-6">
           <Outlet />
         </main>
       </div>

@@ -108,7 +108,7 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
         </>
       }
     >
-      <form id={formId} onSubmit={submit} noValidate className="grid gap-3.5">
+      <form id={formId} onSubmit={submit} noValidate className="grid gap-4">
         <Field label="Name" error={errors.name}>
           <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="dc01" />
         </Field>
@@ -127,9 +127,9 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
           Dual-homed (reaches another network)
         </Toggle>
         {examSim && (
-          <div role="radiogroup" aria-label="Part of the AD set" className="grid gap-1.5">
+          <div role="radiogroup" aria-label="Part of the AD set" className="grid gap-2">
             <span className="block text-meta text-muted-2">Part of the AD set</span>
-            <ChipSet className="items-center gap-1.5">
+            <ChipSet className="items-center">
               {AD_CHOICES.map((c) => (
                 <Toggle
                   key={c.value}

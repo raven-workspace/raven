@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Gear, Lock, MagnifyingGlass, Package, Stack } from "@phosphor-icons/react";
+import { Gear, Lock, MagnifyingGlass, Package, Stack, X } from "@phosphor-icons/react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { api } from "../../lib/api";
 import { onLockedError, reportError } from "../../lib/lockSignal";
@@ -10,7 +10,7 @@ import { useCredPickStore } from "../checklist/credPick";
 import { useFindingDraftStore } from "../findings/useFindingDraftStore";
 import { discardNotes, flushNotes, hasPendingNotes, sessionGeneration, setNotesQueryClient, startNotesSession } from "../notes/useNotesStore";
 import type { UnlockResult, VaultStatus } from "../../types/vault";
-import { Button, DASHBOARD_COLUMN, SETTINGS_COLUMN, TitleBar, TitleBarButton, TitleBarIconButton, Wordmark } from "../../ui";
+import { Button, DASHBOARD_COLUMN, IconButton, SETTINGS_COLUMN, TitleBar, TitleBarButton, TitleBarIconButton, Wordmark } from "../../ui";
 import { SetupScreen } from "./SetupScreen";
 import { UnlockScreen } from "./UnlockScreen";
 import { setImported } from "../../engines/library/store";
@@ -272,22 +272,19 @@ export function VaultGate({ children }: { children: ReactNode }) {
     body = (
       <VaultContext.Provider value={ctx}>
         {(notice || backupError) && (
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 border-b border-line px-4 py-1.5 text-meta text-muted">
-            <div className="grid min-w-0 gap-0.5">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-line px-4 py-1 text-meta text-muted">
+            <div className="grid min-w-0 gap-1">
               {notice && <p className="m-0">{notice}</p>}
               {backupError && <p className="m-0">Daily backup failed: {backupError}</p>}
             </div>
-            <button
-              type="button"
-              aria-label="Dismiss notice"
+            <IconButton
+              icon={X}
+              label="Dismiss notice"
               onClick={() => {
                 setNotice(null);
                 setBackupError(null);
               }}
-              className="shrink-0 cursor-default rounded-sm px-1 text-muted-2 hover:text-fg"
-            >
-              ×
-            </button>
+            />
           </div>
         )}
         {children}

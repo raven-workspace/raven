@@ -86,9 +86,9 @@ export function HopsPanel({ engagementId, hosts, hops }: { engagementId: string;
             const to = hostName(hosts, h.toHostId);
             return (
               <li key={h.id} className="grid grid-cols-[minmax(0,max-content)_16px_minmax(0,max-content)_minmax(0,1fr)_28px_28px] items-center gap-2 border-b border-line py-2 last:border-b-0">
-                <span className="truncate text-body text-fg" title={from}>{from}</span>
+                <span className="truncate font-mono text-code text-fg" title={from}>{from}</span>
                 <ArrowRight size={16} className="text-muted" role="img" aria-label="to" />
-                <span className="truncate text-body text-fg" title={to}>{to}</span>
+                <span className="truncate font-mono text-code text-fg" title={to}>{to}</span>
                 <span className="truncate text-body text-fg-2" title={h.via}>via {h.via}</span>
                 <IconButton icon={PencilSimple} label={`Edit hop to ${to}`} onClick={() => setEditing(h)} />
                 <IconButton icon={Trash} label={`Delete hop to ${to}`} tone="destructive" onClick={() => { setDeleteError(undefined); setDeleting(h); }} />

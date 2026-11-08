@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
-import { toggleThreadPrefix } from "../../engines/notes/threads";
+import { openThreads, toggleThreadPrefix } from "../../engines/notes/threads";
 import { cx } from "../../lib/cx";
 import { RavenError } from "../../types/errors";
-import { Textarea, Toggle } from "../../ui";
+import { ErrorState, Textarea, Toggle } from "../../ui";
 import { CloseThreadDialog, type ClosingThread } from "./CloseThreadDialog";
 import { ThreadsList } from "./ThreadsList";
 import { useNote } from "./queries";
@@ -75,7 +75,14 @@ export function NoteEditor({ target, textRef, className }: {
   };
 
   return (
-    <div className={cx("flex min-h-0 flex-col gap-2", className)}>
+    <div
+      className={cx(
+        "grid min-h-0 gap-2",
+        // Threads (when any), the text, then the footer: the text takes the slack.
+        openThreads(body).length > 0 ? "grid-rows-[auto_minmax(0,1fr)_auto]" : "grid-rows-[minmax(0,1fr)_auto]",
+        className,
+      )}
+    >
       <ThreadsList body={body} onClose={(line, text) => setClosing({ line, text })} />
       <Textarea
         ref={ref}
@@ -87,25 +94,30 @@ export function NoteEditor({ target, textRef, className }: {
         {...NO_TEXT_SERVICES}
         onChange={(e) => edit(target, e.target.value, isPrivate)}
         onKeyDown={onKeyDown}
-        className="min-h-0 flex-1 resize-none"
+        className="h-full min-h-0 resize-none"
       />
-      {note.isError && !pending && (
-        <p role="alert" className="m-0 text-xs text-warn">
-          Couldn't load these notes: {RavenError.from(note.error).message}
-        </p>
-      )}
-      {error && (
-        <p role="alert" className="m-0 text-xs text-warn">
-          {error}. Your text is still here; it saves again when you type or close.
-        </p>
-      )}
-      <div className="flex items-center justify-between">
-        <Toggle on={isPrivate} onChange={(on) => edit(target, body, on)} disabled={!ready}>
-          Private
-        </Toggle>
-        <span className="text-xs text-muted" aria-live="polite">
-          {error ? "" : pending ? "Saving…" : note.data && note.data.updatedAt > 0 ? "Saved" : ""}
-        </span>
+      <div className="grid gap-2">
+        {note.isError && !pending && (
+          <ErrorState
+            title="Couldn't load these notes"
+            hint="Retry. If it keeps failing, lock and unlock Raven."
+            onRetry={() => void note.refetch()}
+            detail={RavenError.from(note.error).message}
+          />
+        )}
+        {error && (
+          <p role="alert" className="m-0 text-meta text-warn">
+            {error}. Your text is still here; it saves again when you type or close.
+          </p>
+        )}
+        <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
+          <Toggle on={isPrivate} onChange={(on) => edit(target, body, on)} disabled={!ready}>
+            Private
+          </Toggle>
+          <span className="justify-self-end text-meta text-muted" aria-live="polite">
+            {error ? "" : pending ? "Saving…" : note.data && note.data.updatedAt > 0 ? "Saved" : ""}
+          </span>
+        </div>
       </div>
       <CloseThreadDialog
         thread={closing}

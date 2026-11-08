@@ -211,7 +211,7 @@ describe("cleanup panel", () => {
     expect(await within(await screen.findByRole("status", { name: "Engagement status" })).findByLabelText("Cleanup 2")).toBeInTheDocument();
     strip.unmount();
     mount({ path: "/" });
-    expect(await screen.findByText("Cleanup 2")).toBeInTheDocument();
+    expect((await screen.findByText("Cleanup")).nextSibling).toHaveTextContent("2");
   });
 
   it("the Engagement checklist shows the Cleanup panel and the sidebar is unchanged", async () => {

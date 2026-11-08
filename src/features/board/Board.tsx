@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { useParams } from "react-router";
 import type { BoardColumn, Host } from "../../types/host";
-import { Button, EmptyState, labelClass } from "../../ui";
+import { Button, EmptyState, labelClass, queryState } from "../../ui";
 import { cx } from "../../lib/cx";
 import { COLUMN_LABELS } from "../hosts/columns";
 import { HostDialog } from "../hosts/HostDialog";
@@ -45,6 +45,8 @@ export function Board() {
     }
   }, [hosts.data]);
 
+  const state = queryState([hosts], "hosts");
+  if (state) return state;
   const list = hosts.data ?? [];
   if (hosts.isSuccess && list.length === 0) {
     return (

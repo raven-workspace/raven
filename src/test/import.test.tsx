@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,6 +16,12 @@ const summary = (over: Partial<ImportSummary> = {}): ImportSummary => ({
   engagements: zero, hosts: zero, services: zero, logEntries: zero, notes: zero, checklist: zero, tunnels: zero,
   hops: zero, findings: zero, credentials: zero, usernames: zero, accessGrants: zero, credAttempts: zero, ...over,
 });
+
+/** The summary row for one record type: its Added, Already present and Merged counts. */
+const counts = (label: string) =>
+  within(screen.getByRole("row", { name: new RegExp(`^${label}\\b`) }))
+    .getAllByRole("cell")
+    .map((c) => c.textContent);
 
 let qc: QueryClient;
 function mount() {
@@ -76,8 +82,9 @@ describe("settings import", () => {
     await waitFor(() => expect(m.importApply).toHaveBeenCalledTimes(1));
     const plan = m.importApply.mock.calls[0]![0];
     expect(plan.engagements.map((e) => e.id)).toEqual(["custom-solo-1#e"]);
-    expect(await screen.findByText("1 added · 0 already present")).toBeInTheDocument();
-    expect(screen.getByText("1 added · 2 already present · 3 merged into existing")).toBeInTheDocument();
+    await screen.findByLabelText("Import summary");
+    expect(counts("Engagements")).toEqual(["1", "0", "0"]);
+    expect(counts("Hosts")).toEqual(["1", "2", "3"]);
     expect(screen.queryByText(/Usernames/)).toBeNull();
     expect(inv).toHaveBeenCalledWith();
   });
@@ -106,11 +113,12 @@ describe("settings import", () => {
     await choose(user, await backupV3());
     await user.click(await screen.findByRole("button", { name: "Select Solo" }));
     await user.click(screen.getByRole("button", { name: "Import" }));
-    expect(await screen.findByText("1 added · 0 already present")).toBeInTheDocument();
+    await screen.findByLabelText("Import summary");
+    expect(counts("Engagements")).toEqual(["1", "0", "0"]);
     expect(screen.getByRole("button", { name: "Select Solo", pressed: false })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Select Solo" }));
     await user.click(screen.getByRole("button", { name: "Import" }));
-    expect(await screen.findByText("0 added · 1 already present")).toBeInTheDocument();
+    await waitFor(() => expect(counts("Engagements")).toEqual(["0", "1", "0"]));
     expect(m.importApply).toHaveBeenCalledTimes(2);
   });
 
@@ -149,8 +157,9 @@ describe("settings import", () => {
         ],
       }),
     );
-    expect(await screen.findByText(/1 host · 1 log entry ·/)).toBeInTheDocument();
-    expect(screen.getByText(/1 host · 2 log entries ·/)).toBeInTheDocument();
+    expect(await screen.findByText("1 log entry")).toBeInTheDocument();
+    expect(screen.getByText("2 log entries")).toBeInTheDocument();
+    expect(screen.getAllByText("1 host")).toHaveLength(2);
   });
 
   it("choosing a new file resets the selection, the summary and any error", async () => {
@@ -161,7 +170,8 @@ describe("settings import", () => {
     await choose(user, await backupV3());
     await user.click(await screen.findByRole("button", { name: "Select Solo" }));
     await user.click(screen.getByRole("button", { name: "Import" }));
-    expect(await screen.findByText("1 added · 0 already present")).toBeInTheDocument();
+    await screen.findByLabelText("Import summary");
+    expect(counts("Engagements")).toEqual(["1", "0", "0"]);
     await user.click(screen.getByRole("button", { name: "Select Solo" }));
     await user.click(screen.getByRole("button", { name: "Select Lab One" }));
     await choose(user, await backupV3());

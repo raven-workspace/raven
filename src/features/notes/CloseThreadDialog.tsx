@@ -96,13 +96,13 @@ function Body({ thread, target, saved, onClose }: { thread: ClosingThread; targe
 
   return (
     <form
-      className="flex flex-col gap-3"
+      className="grid gap-4"
       onSubmit={(e) => {
         e.preventDefault();
         void submit();
       }}
     >
-      <div role="group" aria-label="Outcome" className="flex">
+      <div role="group" aria-label="Outcome" className="grid grid-flow-col justify-start">
         <Choice on={outcome === "panned"} disabled={rewritten} onClick={() => setOutcome("panned")}>
           Panned out
         </Choice>
@@ -115,17 +115,17 @@ function Body({ thread, target, saved, onClose }: { thread: ClosingThread; targe
           <Field label="Reason" hint="One line: why it's ruled out.">
             <Input autoFocus value={reason} onChange={(e) => setReason(e.target.value)} />
           </Field>
-          <Toggle on={isPrivate} onChange={setIsPrivate} className="self-start">
+          <Toggle on={isPrivate} onChange={setIsPrivate} className="justify-self-start">
             Private
           </Toggle>
         </>
       )}
       {error && (
-        <p role="alert" className="m-0 text-xs text-warn">
+        <p role="alert" className="m-0 text-meta text-warn">
           {error}
         </p>
       )}
-      <div className="flex justify-end gap-2">
+      <div className="grid grid-flow-col justify-end gap-2">
         <Button type="button" onClick={onClose}>
           Cancel
         </Button>
@@ -145,7 +145,7 @@ function Choice({ on, disabled, onClick, children }: { on: boolean; disabled?: b
       disabled={disabled}
       onClick={onClick}
       className={cx(
-        "h-8 border border-line-2 px-3 text-[13px] first:rounded-l-sm last:rounded-r-sm last:border-l-0 cursor-default disabled:opacity-40",
+        "h-7 border border-line-2 px-3 text-body first:rounded-l-sm last:rounded-r-sm last:border-l-0 cursor-default disabled:opacity-40",
         on ? "border-accent text-accent" : "text-fg-2 hover:text-fg",
       )}
     >

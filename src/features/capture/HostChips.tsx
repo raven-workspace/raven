@@ -1,14 +1,12 @@
 import type { Host } from "../../types/host";
-import { XIcon } from "@phosphor-icons/react";
-import { Chip, ChipSet, Select } from "../../ui";
+import { X } from "@phosphor-icons/react";
+import { Chip, ChipSet, IconButton, Select } from "../../ui";
 
 export interface HostChipsProps {
   hosts: Host[];
   linked: string[];
   onLinked: (ids: string[]) => void;
 }
-
-const remove = "grid place-items-center text-muted hover:text-fg cursor-default";
 
 /** Linked hosts as removable chips, and a picker. */
 export function HostChips({ hosts, linked, onLinked }: HostChipsProps) {
@@ -20,13 +18,14 @@ export function HostChips({ hosts, linked, onLinked }: HostChipsProps) {
         const h = byId.get(id);
         if (!h) return null;
         return (
-          <Chip key={id}>
-            <span>{h.name}</span>
-            {h.ip && h.ip !== h.name && <span className="font-mono text-muted">{h.ip}</span>}
-            <button type="button" aria-label={`Remove ${h.name}`} className={remove} onClick={() => onLinked(linked.filter((x) => x !== id))}>
-              <XIcon size={12} aria-hidden />
-            </button>
-          </Chip>
+          // The remove button sits beside the chip, not inside it: a 28px target never fits a 22px chip.
+          <span key={id} className="grid grid-flow-col items-center">
+            <Chip>
+              <span>{h.name}</span>
+              {h.ip && h.ip !== h.name && <span className="font-mono text-muted">{h.ip}</span>}
+            </Chip>
+            <IconButton icon={X} label={`Remove ${h.name}`} onClick={() => onLinked(linked.filter((x) => x !== id))} />
+          </span>
         );
       })}
       {free.length > 0 && (

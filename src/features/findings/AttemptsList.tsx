@@ -1,7 +1,7 @@
 import { ArrowSquareOut, PencilSimple, Trash } from "@phosphor-icons/react";
 import { useState } from "react";
 import type { FailedAttempt } from "../../types/findings";
-import { ActionCell, Button, Chip, IconButton, labelClass } from "../../ui";
+import { ActionCell, Button, Chip, IconButton, labelClass, queryState } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { hostLabel } from "../credentials/AccessGrants";
 import { useHosts } from "../hosts/queries";
@@ -23,9 +23,8 @@ export function AttemptsList({ eid, hostId, onOpenEntry }: {
   const [editor, setEditor] = useState<{ edit?: FailedAttempt } | null>(null);
   const [deleting, setDeleting] = useState<FailedAttempt>();
 
-  const failed = attemptsQ.error ?? hostsQ.error ?? findingsQ.error ?? logQ.error;
-  if (failed) return <p role="alert" className="py-3 text-meta text-warn">Couldn't load attempts: {failed.message}</p>;
-  if (!attemptsQ.data || !hostsQ.data || !findingsQ.data || !logQ.data) return null;
+  const state = queryState([attemptsQ, hostsQ, findingsQ, logQ], "attempts");
+  if (state || !attemptsQ.data || !hostsQ.data || !findingsQ.data || !logQ.data) return state;
   const hosts = hostsQ.data;
   const entryIds = new Set(logQ.data.map((e) => e.id));
   const showHost = hostId === undefined;

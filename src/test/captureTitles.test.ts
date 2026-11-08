@@ -29,4 +29,15 @@ describe("generated titles", () => {
       expect(t).not.toContain("192.0.2.7");
     }
   });
+
+  it("a captioned screenshot takes its caption as the title; an uncaptioned one stays Screenshot", () => {
+    const image = { mime: "image/png", dataBase64: "", objectUrl: "" };
+    const shot = resolveCapture({ ...EMPTY_DRAFT, kind: "screenshot", image, caption: "Admin panel login page\nsecond line" }, ctx);
+    expect(shot.autoTitle).toBe("Admin panel login page");
+    const bare = buildDraft({
+      text: "", image: { mime: "image/png" }, kind: "screenshot", hosts: [{ id: "h1", name: "web07", ip: "192.0.2.7", column: "information-gathering" }],
+      scope: ["192.0.2.0/24"], domain: "", machines: [], lastRanOn: null,
+    });
+    expect(bare.title).toBe("Screenshot");
+  });
 });

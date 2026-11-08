@@ -9,7 +9,7 @@ import { isDialogOpen } from "../../lib/keys";
 import type { Host } from "../../types/host";
 import { shortHostName } from "../../lib/hostName";
 import { XIcon } from "@phosphor-icons/react";
-import { Disclosure, HintLine, IconButton, LoadingState, labelClass, type Hint } from "../../ui";
+import { Disclosure, HintLine, IconButton, LoadingState, labelClass, queryState, type Hint } from "../../ui";
 import { useCredFill } from "../checklist/credPick";
 import { CommandList, type FilledCommand } from "../checklist/CommandList";
 import { goalCommands } from "../checklist/goalCommands";
@@ -121,12 +121,11 @@ function Body({ engagementId, host, onClose, onOpenGoal, skipRestoreRef }: { eng
   const title = `Stuck on ${host.name}`;
   // Every query the body reads: a failed checklist would otherwise look like "nothing skipped", and failed tunnels
   // would quietly change the filled commands.
-  const failed =
-    hostsQ.error ?? engagement.error ?? settings.error ?? servicesQ.error ?? log.error ?? note.error ?? credsQ.error ?? checklistQ.error ?? tunnelsQ.error;
+  const queries = [hostsQ, engagement, settings, servicesQ, log, note, credsQ, checklistQ, tunnelsQ];
 
   let content: React.ReactNode;
-  if (failed) {
-    content = <p role="alert" className="m-0 text-meta text-warn">Couldn't load this: {failed.message}</p>;
+  if (queries.some((q) => q.error)) {
+    content = queryState(queries, "this host");
   } else if (!hosts || !eng || !settings.data || !servicesQ.data || !log.data || !credsQ.data || !checklistQ.data || !tunnelsQ.data) {
     content = <LoadingState label="this host" />;
   } else {
@@ -268,7 +267,7 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
 
   // Leads from half-loaded data would be wrong (an unloaded checklist reads as "nothing done"), so wait for all of it.
   const queries = [hostsQ, engagement, servicesQ, checklistQ, tunnelsQ, credentialsQ, attemptsQ, usernamesQ];
-  const failed = queries.find((q) => q.error)?.error;
+  const failedState = queries.some((q) => q.error) ? queryState(queries, "the stuck check") : null;
   const hosts = hostsQ.data;
   const eng = engagement.data;
   const credentials = credentialsQ.data;
@@ -283,7 +282,7 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
         : [],
     [loaded, eng, hosts, servicesByHost, byOwner, credentials, attempts, usernames, tunnels],
   );
-  if (failed) return <p role="alert" className="m-0 text-meta text-warn">Couldn't load the stuck check: {failed.message}</p>;
+  if (failedState) return failedState;
   if (!loaded || !hosts || !eng || !credentials || !attempts || !usernames) return null;
 
   const go = (l: StuckLine) => {

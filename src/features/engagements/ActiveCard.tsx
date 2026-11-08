@@ -1,9 +1,9 @@
 import { Link } from "react-router";
 import { cx } from "../../lib/cx";
 import type { Engagement } from "../../types/engagement";
-import { Chip } from "../../ui";
+import { Chip, ChipSet } from "../../ui";
 import { useCleanupCounts } from "../cleanup/queries";
-import { threadsLabel, useThreadCounts } from "../notes/useThreadCounts";
+import { useThreadCounts } from "../notes/useThreadCounts";
 import { useProgress } from "../hosts/queries";
 import {
   EMPTY_PROGRESS,
@@ -11,7 +11,6 @@ import {
   dateRange,
   formatDuration,
   hasTimebox,
-  progressLine,
   relativeTime,
   scopeSummary,
   timeLeft,
@@ -30,6 +29,16 @@ export function TimeBar({ fraction, over }: { fraction: number; over?: boolean }
   );
 }
 
+/** One labelled number, like a status-strip cell: "Rooted 2/6". */
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="grid grid-flow-col items-baseline gap-1">
+      <span className="text-muted-2">{label}</span>
+      <span className="font-mono text-code text-fg tabular-nums">{value}</span>
+    </span>
+  );
+}
+
 export function ActiveCard({ engagement: e, now }: { engagement: Engagement; now: number }) {
   const scope = scopeSummary(e.scopeCidrs);
   const lastActivity = e.lastActivityAt;
@@ -41,56 +50,42 @@ export function ActiveCard({ engagement: e, now }: { engagement: Engagement; now
     <Link
       to={`/e/${e.id}`}
       className={cx(
-        "group flex min-w-0 flex-col gap-2.5 rounded border border-line bg-bg px-4 pt-3.5 pb-3 no-underline",
+        "group grid min-w-0 content-start gap-3 rounded border border-line bg-bg px-4 py-3 no-underline",
         "cursor-default transition-colors duration-100 hover:border-line-strong hover:bg-surface",
       )}
     >
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <h3 className="m-0 truncate text-[15px] font-semibold tracking-[-0.01em] text-fg">{e.name}</h3>
-        <div className="flex flex-wrap items-center gap-1">
+      <div className="grid min-w-0 gap-2">
+        <h3 className="m-0 truncate text-heading text-fg" title={e.name}>{e.name}</h3>
+        <ChipSet className="items-center">
           <Chip>{KIND_LABEL[e.kind]}</Chip>
           {e.subLabel && <Chip>{e.subLabel}</Chip>}
-          {e.kind === "client" && e.client && <span className="ml-1 truncate text-xs text-muted-2">{e.client}</span>}
-        </div>
+          {e.kind === "client" && e.client && <span className="truncate text-meta text-muted-2">{e.client}</span>}
+        </ChipSet>
       </div>
 
       {hasTimebox(e) ? (
         <TimeboxLine engagement={e} now={now} />
       ) : (
-        <p className="m-0 flex min-w-0 items-baseline gap-1.5 text-xs text-muted-2">
-          <span className="shrink-0">{dateRange(e.startsAt, e.endsAt, now)}</span>
-          {scope && (
-            <>
-              <span className="text-faint">·</span>
-              <span className="truncate font-mono text-[11.5px]">{scope}</span>
-            </>
-          )}
+        <p className="m-0 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] items-baseline gap-4 text-meta text-muted-2">
+          <span>{dateRange(e.startsAt, e.endsAt, now)}</span>
+          {scope && <span className="truncate font-mono text-code" title={e.scopeCidrs.join(", ")}>{scope}</span>}
         </p>
       )}
 
-      <p className="m-0 flex items-baseline gap-1.5 text-xs text-fg-2">
-        <span>{progressLine(progress)}</span>
-        {threads > 0 && (
-          <>
-            <span className="text-faint">·</span>
-            <span>{threadsLabel(threads)}</span>
-          </>
-        )}
-        {cleanup > 0 && (
-          <>
-            <span className="text-faint">·</span>
-            <span>Cleanup {cleanup}</span>
-          </>
-        )}
+      <p className="m-0 grid grid-flow-col justify-start gap-4 text-meta">
+        <Stat label="Rooted" value={`${progress.hostsRooted}/${progress.hostsTotal}`} />
+        <Stat label="Flags" value={`${progress.flagsFound}/${progress.flagsTotal}`} />
+        {threads > 0 && <Stat label="Threads" value={String(threads)} />}
+        {cleanup > 0 && <Stat label="Cleanup" value={String(cleanup)} />}
       </p>
 
-      <p className="m-0 border-t border-line pt-2 text-xs text-muted">
+      <p className="m-0 grid grid-flow-col justify-start gap-1 border-t border-line pt-2 text-meta text-muted">
         {lastActivity === null ? (
           "No activity yet"
         ) : (
           <>
-            Last activity{" "}
-            <span className="font-mono text-[11.5px] text-muted-2">{relativeTime(lastActivity, now)}</span>
+            <span>Last activity</span>
+            <span className="font-mono text-code text-muted-2">{relativeTime(lastActivity, now)}</span>
           </>
         )}
       </p>
@@ -102,11 +97,10 @@ function TimeboxLine({ engagement: e, now }: { engagement: Engagement & { timebo
   const left = timeLeft(e.timeboxStart, e.timeboxMinutes, now);
   const over = left === "Time's up";
   return (
-    <div className="flex flex-col gap-1.5">
-      <p className="m-0 flex items-baseline gap-1.5 text-xs text-muted-2">
-        <span>Timebox {formatDuration(e.timeboxMinutes)}</span>
-        <span className="text-faint">·</span>
-        <span className={cx("font-mono text-[11.5px]", over ? "text-warn" : "text-fg")}>{left}</span>
+    <div className="grid gap-2">
+      <p className="m-0 grid grid-flow-col justify-start gap-4 text-meta">
+        <Stat label="Timebox" value={formatDuration(e.timeboxMinutes)} />
+        <span className={cx("font-mono text-code", over ? "text-warn" : "text-fg")}>{left}</span>
       </p>
       <TimeBar fraction={timeboxElapsed(e.timeboxStart, e.timeboxMinutes, now)} over={over} />
     </div>

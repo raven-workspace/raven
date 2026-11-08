@@ -76,8 +76,8 @@ function UnlockForm({
   }
 
   return (
-    <main className="flex h-full items-center justify-center px-6">
-      <form onSubmit={submit} className="flex w-[320px] flex-col gap-4">
+    <main className="grid h-full place-items-center px-6">
+      <form onSubmit={submit} className="grid w-[320px] gap-4">
         <h1 className="m-0"><Wordmark className="h-6" /></h1>
         <Field label="Password" error={error ?? undefined}>
           <Input
@@ -91,7 +91,7 @@ function UnlockForm({
             }}
           />
         </Field>
-        {notice && <p className="m-0 text-xs text-muted">{notice}</p>}
+        {notice && <p className="m-0 text-meta text-muted">{notice}</p>}
         <Button type="submit" variant="primary" disabled={busy} aria-busy={busy}>
           {busy ? "Unlocking…" : "Unlock"}
         </Button>
@@ -164,13 +164,13 @@ function DamagedPanel({ onRestored }: { onRestored: () => void }) {
   }
 
   return (
-    <main className="flex h-full items-center justify-center px-6">
-      <form onSubmit={submit} className="flex w-[420px] flex-col gap-4">
+    <main className="grid h-full place-items-center px-6">
+      <form onSubmit={submit} className="grid w-[420px] gap-4">
         <h1 className="m-0"><Wordmark className="h-6" /></h1>
-        <p className="m-0 text-[13px] text-fg-2">Raven can't read its database file. Restore a backup to continue.</p>
+        <p className="m-0 text-meta text-fg-2">Raven can't read its database file. Restore a backup to continue.</p>
         {listError && (
-          <div className="flex items-center gap-3">
-            <p className="m-0 text-xs text-warn">{listError}</p>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+            <p role="alert" className="m-0 text-meta text-warn">{listError}</p>
             <Button
               size="sm"
               onClick={() => {
@@ -182,13 +182,13 @@ function DamagedPanel({ onRestored }: { onRestored: () => void }) {
             </Button>
           </div>
         )}
-        {backups && backups.length === 0 && <p className="m-0 text-xs text-muted">No backups yet</p>}
+        {backups && backups.length === 0 && <p className="m-0 text-meta text-muted">No backups yet</p>}
         {backups && backups.length > 0 && (
           <div
             role="radiogroup"
             aria-label="Backup"
             onKeyDown={onBackupKey}
-            className="m-0 flex max-h-64 flex-col overflow-y-auto rounded-sm border border-line"
+            className="m-0 grid max-h-64 overflow-y-auto rounded-sm border border-line"
           >
             {backups.map((b) => {
               const on = file === b.file;
@@ -201,7 +201,7 @@ function DamagedPanel({ onRestored }: { onRestored: () => void }) {
                   tabIndex={on ? 0 : -1}
                   onClick={() => choose(b.file)}
                   className={cx(
-                    "flex cursor-default items-center gap-3 border-b border-line px-2.5 py-2 text-left last:border-b-0 focus-visible:outline-1 focus-visible:outline-accent",
+                    "grid cursor-default grid-cols-[6px_max-content_minmax(0,1fr)] items-center justify-items-start gap-3 border-b border-line px-3 py-2 text-left last:border-b-0 focus-visible:outline-1 focus-visible:outline-accent",
                     on ? "bg-surface text-fg" : "text-fg-2 hover:bg-surface",
                   )}
                 >
@@ -209,7 +209,7 @@ function DamagedPanel({ onRestored }: { onRestored: () => void }) {
                     aria-hidden
                     className={cx("size-1.5 shrink-0 rounded-full", on ? "bg-fg" : "border border-line-2")}
                   />
-                  <span className="font-mono text-xs">{new Date(b.createdAt).toLocaleString()}</span>
+                  <span className="font-mono text-code">{new Date(b.createdAt).toLocaleString()}</span>
                   <Chip>{b.reason}</Chip>
                 </button>
               );

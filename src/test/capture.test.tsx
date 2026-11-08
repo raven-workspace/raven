@@ -166,7 +166,7 @@ describe("capture panel", () => {
     expect(within(dialog).getByLabelText("Title")).toHaveValue("Versions and default scripts on the open ports");
     const hosts = within(dialog).getByRole("group", { name: "Hosts" });
     expect(within(hosts).getByText("dc01")).toBeInTheDocument();
-    expect(within(dialog).getByText("Updates services on dc01: 22, 80, 3003 · OS: Linux")).toBeInTheDocument();
+    expect(within(dialog).getByText("Updates services on dc01: 22, 80, 3003. OS: Linux.")).toBeInTheDocument();
   });
 
   it("services line leaves out the OS when the host already has one", async () => {
@@ -179,7 +179,7 @@ describe("capture panel", () => {
     await ready();
     const dialog = await openCapture(user);
     await user.paste(NMAP);
-    expect(within(dialog).getByText("Updates services on dc01: 22, 80, 3003")).toBeInTheDocument();
+    expect(within(dialog).getByText("Updates services on dc01: 22, 80, 3003.")).toBeInTheDocument();
   });
 
   it("multi-host scan of new boxes lists each box's own ports", async () => {
@@ -201,7 +201,7 @@ describe("capture panel", () => {
       ].join("\n"),
     );
     // Each new box gets only its own section's ports; both become hosts on save.
-    expect(within(dialog).getByText("Updates services on 10.10.10.9: 22; Updates services on 10.10.10.8: 135 · OS: Windows")).toBeInTheDocument();
+    expect(within(dialog).getByText("Updates services on 10.10.10.9: 22. Updates services on 10.10.10.8: 135. OS: Windows.")).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: "+ 10.10.10.9" })).not.toBeInTheDocument();
   });
 
@@ -384,7 +384,7 @@ describe("capture panel", () => {
     await ready();
     const dialog = await openCapture(user);
     await user.paste(NMAP_NEW);
-    expect(within(dialog).getByText("Updates services on 10.10.10.9: 22, 80 · OS: Linux")).toBeInTheDocument();
+    expect(within(dialog).getByText("Updates services on 10.10.10.9: 22, 80. OS: Linux.")).toBeInTheDocument();
     await user.click(within(dialog).getByLabelText("Observations"));
     await user.keyboard("{Enter}");
     // The first attempt made the host, then the entry failed; the retry must not make it again.

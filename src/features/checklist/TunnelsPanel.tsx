@@ -110,7 +110,7 @@ export function TunnelsPanel({ engagementId, hosts, tunnels }: { engagementId: s
               <li key={t.id} className="grid grid-cols-[minmax(0,1fr)_56px_28px_28px] items-start gap-2 border-b border-line py-2 last:border-b-0">
                 <div className="grid min-w-0 gap-1">
                   <span className="truncate py-1 text-body text-fg" title={`${KIND_LABEL[t.kind]} via ${name(t.viaHostId)}`}>
-                    {KIND_LABEL[t.kind]} via {name(t.viaHostId)}
+                    {KIND_LABEL[t.kind]} via <span className="font-mono text-code">{name(t.viaHostId)}</span>
                   </span>
                   <ChipSet>
                     {t.subnets.map((n) => (

@@ -175,10 +175,10 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
             <SidebarHeader
               className={cx(
                 "grid items-center gap-0 pt-4 pb-2",
-                collapsed ? "grid-cols-[28px] justify-center px-1" : "grid-cols-[minmax(0,1fr)_28px] pr-3 pl-5",
+                collapsed ? "grid-cols-[28px] justify-center px-1" : "grid-cols-[minmax(0,1fr)_28px] px-3",
               )}
             >
-              <h2 className={cx(heading, collapsed && "sr-only")}>Engagement</h2>
+              <h2 className={cx(heading, collapsed ? "sr-only" : "px-2")}>Engagement</h2>
               <IconButton
                 icon={SidebarSimple}
                 label={label}

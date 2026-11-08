@@ -175,7 +175,8 @@ export function buildDraft(input: DraftInput): CaptureDraft {
       return {
         ...base,
         kind,
-        title: first ? `Screenshot · ${first.name}` : 'Screenshot',
+        // The caption's first line names the shot; without one it is just "Screenshot" (never joined to a host).
+        title: noteTitle(text) || 'Screenshot',
         content: { kind: 'screenshot', attachmentId: '', caption: text.trim(), fileName },
         unknownScopeIps,
       };

@@ -4,7 +4,7 @@ import { PencilSimple, Plus, Trash, X } from "@phosphor-icons/react";
 import type { CleanupItem, CleanupKind } from "../../types/cleanup";
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
-import { Button, Chip, ChipSet, IconButton, Panel, labelClass } from "../../ui";
+import { Button, Chip, ChipSet, IconButton, Panel, labelClass, queryState } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { shortDate } from "../engagements/format";
 import { CleanupDialog, KIND_OPTIONS } from "./CleanupDialog";
@@ -49,8 +49,8 @@ export function CleanupPanel({ engagementId, hosts, entries, domain }: {
   };
   const hostName = (id: string | null) => (id === null ? null : (hosts.find((h) => h.id === id)?.name ?? null));
 
-  if (list.error) return <p role="alert" className="py-3 text-meta text-warn">Couldn't load the cleanup list: {list.error.message}</p>;
-  if (!items) return null;
+  const state = queryState([list], "the cleanup list");
+  if (state || !items) return state;
 
   const open = items.filter((i) => i.status === "open");
   const removed = items.filter((i) => i.status === "removed");

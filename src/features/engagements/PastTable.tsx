@@ -17,7 +17,7 @@ const cell = "px-3 text-left align-baseline";
 export function PastTable({ engagements, now }: { engagements: Engagement[]; now: number }) {
   const navigate = useNavigate();
   return (
-    <table className="w-full table-fixed border-collapse text-[13px]">
+    <table className="w-full table-fixed border-collapse text-body">
       <colgroup>
         <col className="w-[40%]" />
         <col className="w-[14%]" />
@@ -41,11 +41,16 @@ export function PastTable({ engagements, now }: { engagements: Engagement[]; now
             onClick={() => void navigate(`/e/${e.id}`)}
             className="cursor-default border-b border-line text-fg-2 transition-colors duration-100 hover:bg-surface"
           >
-            <td className={cx(cell, "py-2", "truncate")}>
-              <Link to={`/e/${e.id}`} className="text-fg no-underline" onClick={(ev) => ev.stopPropagation()}>
+            <td className={cx(cell, "py-2")}>
+              <Link
+                to={`/e/${e.id}`}
+                title={e.name}
+                className="block truncate text-fg no-underline"
+                onClick={(ev) => ev.stopPropagation()}
+              >
                 {e.name}
               </Link>
-              {e.client && <span className="ml-2 text-xs text-muted">{e.client}</span>}
+              {e.client && <span className="block truncate text-meta text-muted">{e.client}</span>}
             </td>
             <td className={cx(cell, "py-2", "text-muted-2")}>{KIND_LABEL[e.kind]}</td>
             <td className={cx(cell, "py-2", "truncate text-muted-2")}>{dateRange(e.startsAt, e.endsAt, now)}</td>

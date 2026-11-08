@@ -281,8 +281,12 @@ describe("engagement checklist", () => {
 
   it("shows an alert when settings fail to load", async () => {
     m.settingsGet.mockRejectedValue(new Error("settings broke"));
+    const user = userEvent.setup();
     mount();
-    expect(await screen.findByRole("alert")).toHaveTextContent("settings broke");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn't load the engagement checklist");
+    await user.click(within(alert).getByRole("button", { name: "Details" }));
+    expect(alert).toHaveTextContent("settings broke");
   });
 
   it("a hop cannot go from a host to itself", async () => {

@@ -126,7 +126,10 @@ describe("stuck view", () => {
     await screen.findByRole("region", { name: "Host" });
     await user.keyboard("h");
     const panel = await screen.findByRole("complementary", { name: /Stuck on web01/ });
-    expect(await within(panel).findByRole("alert")).toHaveTextContent("vault locked");
+    const alert = await within(panel).findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn't load this host");
+    await user.click(within(alert).getByRole("button", { name: "Details" }));
+    expect(alert).toHaveTextContent("vault locked");
     expect(within(panel).queryByText("Before a foothold")).not.toBeInTheDocument();
   });
 
@@ -137,7 +140,9 @@ describe("stuck view", () => {
     await screen.findByRole("region", { name: "Host" });
     await user.keyboard("h");
     const panel = await screen.findByRole("complementary", { name: /Stuck on web01/ });
-    expect(await within(panel).findByRole("alert")).toHaveTextContent("settings unreadable");
+    const alert = await within(panel).findByRole("alert");
+    await user.click(within(alert).getByRole("button", { name: "Details" }));
+    expect(alert).toHaveTextContent("settings unreadable");
   });
 
   it("before a foothold shows the nudges for a guessed service", async () => {

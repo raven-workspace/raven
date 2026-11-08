@@ -33,12 +33,12 @@ export function SetupScreen({ onCreated }: { onCreated: () => void | Promise<voi
   }
 
   return (
-    <main className="flex h-full items-center justify-center px-6">
-      <form onSubmit={submit} className="flex w-[380px] flex-col gap-4">
-        <div className="flex flex-col gap-1.5">
-          <h1 className="m-0 text-lg font-semibold text-fg">Create your Raven password</h1>
-          <p className="m-0 text-[13px] text-muted-2">
-            This password encrypts everything Raven stores. It can't be recovered — if you forget it, the data is gone.
+    <main className="grid h-full place-items-center px-6">
+      <form onSubmit={submit} className="grid w-[380px] gap-4">
+        <div className="grid gap-2">
+          <h1 className="m-0 text-title text-fg">Create your Raven password</h1>
+          <p className="m-0 text-meta text-muted-2">
+            This password encrypts everything Raven stores. It can't be recovered: if you forget it, the data is gone.
           </p>
         </div>
         <Field
@@ -56,7 +56,7 @@ export function SetupScreen({ onCreated }: { onCreated: () => void | Promise<voi
             onChange={(e) => setConfirm(e.target.value)}
           />
         </Field>
-        {error?.field === "form" && <p className="m-0 text-xs text-warn">{error.msg}</p>}
+        {error?.field === "form" && <p role="alert" className="m-0 text-meta text-warn">{error.msg}</p>}
         <Button type="submit" variant="primary" disabled={busy}>
           Create password
         </Button>

@@ -30,7 +30,7 @@ export function EngagementHeader({ engagement: e }: { engagement: Engagement }) 
 
   return (
     <header ref={headerRef} className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 border-b border-line px-6 pt-4 pb-3">
-      <div className="grid min-w-0 grid-cols-[minmax(0,max-content)_auto] items-center justify-start gap-2.5">
+      <div className="grid min-w-0 grid-cols-[minmax(0,max-content)_auto] items-center justify-start gap-2">
         <h1 title={e.name} className="m-0 truncate text-title text-fg">
           {e.name}
         </h1>
@@ -72,7 +72,7 @@ export function EngagementHeader({ engagement: e }: { engagement: Engagement }) 
           </ul>
         )}
         {e.domain && (
-          <span className="grid grid-flow-col items-baseline gap-1.5">
+          <span className="grid grid-flow-col items-baseline gap-2">
             <span className="text-meta text-muted">Domain</span>
             <span className="font-mono text-code text-fg-2">{e.domain}</span>
           </span>
