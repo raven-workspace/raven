@@ -6,14 +6,18 @@ const FAILED_OUTPUT = /not recognized|invalid option|cannot find|Access is denie
 
 const outputOf = (e: LogEntry) => (e.content.kind === "command" ? e.content.blocks.map((b) => b.output).join("\n") : "");
 
-/** Payloads logged on this host whose run returned nothing or printed a "can't run here" error. */
+/** Payloads whose newest non-pending outcome on this host was a failure (returned nothing or a "can't run here" error). A later success clears it. */
 export function failedPayloadIds(entries: LogEntry[], hostId: string): string[] {
-  const out = new Set<string>();
+  const newest = new Map<string, { e: LogEntry; failed: boolean }>();
   for (const e of entries) {
     if (!e.payloadId || !e.hostIds.includes(hostId)) continue;
-    if (e.returnedNothing || FAILED_OUTPUT.test(outputOf(e))) out.add(e.payloadId);
+    const text = outputOf(e);
+    const failed = e.returnedNothing || FAILED_OUTPUT.test(text);
+    if (!failed && !text.trim()) continue; // pending: neither fails nor clears
+    const prev = newest.get(e.payloadId);
+    if (!prev || e.at > prev.e.at || (e.at === prev.e.at && e.createdAt >= prev.e.createdAt)) newest.set(e.payloadId, { e, failed });
   }
-  return [...out];
+  return [...newest].filter(([, v]) => v.failed).map(([id]) => id);
 }
 
 const BAKED = new Set([...REVERSE_SHELLS, ...MSFVENOM].filter((d) => d.bakesIp).map((d) => d.id));

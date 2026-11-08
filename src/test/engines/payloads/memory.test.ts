@@ -32,6 +32,24 @@ describe("failedPayloadIds", () => {
     const es = [entry({ id: "a", returnedNothing: true }), entry({ id: "b", output: "Access is denied." })];
     expect(failedPayloadIds(es, "h1")).toEqual(["nc-exe"]);
   });
+  it("a later success clears an earlier failure", () => {
+    const es = [entry({ id: "a", at: 1, returnedNothing: true }), entry({ id: "b", at: 2, output: "connection received" })];
+    expect(failedPayloadIds(es, "h1")).toEqual([]);
+  });
+  it("a later failure after a success is failed", () => {
+    const es = [entry({ id: "a", at: 1, output: "connection received" }), entry({ id: "b", at: 2, returnedNothing: true })];
+    expect(failedPayloadIds(es, "h1")).toEqual(["nc-exe"]);
+  });
+  it("a later pending entry (empty output) does not clear a failure", () => {
+    const es = [entry({ id: "a", at: 1, returnedNothing: true }), entry({ id: "b", at: 2, output: "" })];
+    expect(failedPayloadIds(es, "h1")).toEqual(["nc-exe"]);
+  });
+  it("resolves by at regardless of array order, then createdAt", () => {
+    const es = [entry({ id: "b", at: 2, output: "ok" }), entry({ id: "a", at: 1, returnedNothing: true })];
+    expect(failedPayloadIds(es, "h1")).toEqual([]);
+    const tie = [entry({ id: "b", at: 5, createdAt: 2, output: "ok" }), entry({ id: "a", at: 5, createdAt: 1, returnedNothing: true })];
+    expect(failedPayloadIds(tie, "h1")).toEqual([]);
+  });
 });
 
 describe("staleBaked", () => {
