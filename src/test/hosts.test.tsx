@@ -137,7 +137,8 @@ describe("hosts", () => {
   it("status strip shows progress from api", async () => {
     mount();
     const strip = await screen.findByRole("status", { name: "Engagement status" });
-    expect(await within(strip).findByText("Rooted 3/6 · flags 7/9")).toBeInTheDocument();
+    expect(await within(strip).findByLabelText("Rooted 3/6")).toBeInTheDocument();
+    expect(within(strip).getByLabelText("Flags 7/9")).toBeInTheDocument();
   });
 
   it("saving engagement scope refreshes hosts", async () => {

@@ -215,7 +215,7 @@ describe("⌘K palette", () => {
   it("Escape closes and returns focus", async () => {
     const user = userEvent.setup();
     mount("/");
-    const settings = await screen.findByRole("link", { name: "Settings" });
+    const settings = await screen.findByRole("button", { name: "Settings" });
     settings.focus();
     await user.keyboard(cmdK);
     await screen.findByRole("combobox", { name: "Search" });

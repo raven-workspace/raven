@@ -3,12 +3,13 @@ import { useState } from "react";
 import { api } from "../../lib/api";
 import { cx } from "../../lib/cx";
 import type { Engagement } from "../../types/engagement";
-import { Button, Dialog } from "../../ui";
+import metasploitUrl from "../../assets/metasploit.svg";
+import { Button, Dialog, labelClass } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { useHosts } from "../hosts/queries";
 
 /** Exam-sim only: the one host allowed to use Metasploit. Click to change or release it. */
-export function MsfLock({ engagement: e }: { engagement: Engagement }) {
+export function MsfLock({ engagement: e, className }: { engagement: Engagement; className?: string }) {
   const qc = useQueryClient();
   const hosts = useHosts(e.id).data ?? [];
   const [dialog, setDialog] = useState<"pick" | "release" | null>(null);
@@ -34,10 +35,16 @@ export function MsfLock({ engagement: e }: { engagement: Engagement }) {
       <button
         type="button"
         onClick={() => setDialog("pick")}
-        className="cursor-default rounded-sm text-fg-2 hover:text-fg focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+        className={cx(
+          "grid grid-flow-col items-center gap-2 cursor-default rounded-sm text-fg-2 hover:text-fg focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent",
+          className,
+        )}
       >
-        Metasploit:{" "}
-        <span className={cx(e.msfHostId && "text-warn")}>{e.msfHostId ? (locked?.name ?? "locked") : "unused"}</span>
+        <img src={metasploitUrl} alt="" draggable={false} className="size-4 brightness-0 invert opacity-70" />
+        <span className={labelClass}>Metasploit</span>{" "}
+        <span className={cx("text-meta", e.msfHostId ? "text-warn" : "text-fg")}>
+          {e.msfHostId ? (locked?.name ?? "locked") : "unused"}
+        </span>
       </button>
       <Dialog
         open={dialog === "pick"}
@@ -55,8 +62,8 @@ export function MsfLock({ engagement: e }: { engagement: Engagement }) {
           </>
         }
       >
-        {error && <p role="alert" className="m-0 mb-2 text-xs text-warn">{error}</p>}
-        <ul className="m-0 flex list-none flex-col gap-1 p-0">
+        {error && <p role="alert" className="m-0 mb-2 text-meta text-warn">{error}</p>}
+        <ul className="m-0 grid list-none gap-1 p-0">
           {hosts.map((h) => (
             <li key={h.id}>
               <Button
@@ -70,7 +77,7 @@ export function MsfLock({ engagement: e }: { engagement: Engagement }) {
             </li>
           ))}
         </ul>
-        {hosts.length === 0 && <p className="m-0 text-xs text-muted">Add a host first.</p>}
+        {hosts.length === 0 && <p className="m-0 text-meta text-muted">Add a host first.</p>}
       </Dialog>
       {dialog === "release" && (
         <ConfirmDelete

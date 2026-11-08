@@ -187,7 +187,7 @@ describe("closing a thread clears every count (bug 2)", () => {
       const user = userEvent.setup();
       const { p } = await openPanel(user, "/e/e1/h/h1");
       const strip = screen.getByRole("status", { name: "Engagement status" });
-      expect(await within(strip).findByText("Threads 1")).toBeInTheDocument();
+      expect(await within(strip).findByLabelText("Threads 1")).toBeInTheDocument();
       const nav = screen.getByRole("navigation", { name: "Engagement" });
       expect(within(nav).getByLabelText("1 open thread")).toBeInTheDocument();
 
@@ -221,7 +221,7 @@ describe("closing a thread clears every count (bug 2)", () => {
     const user = userEvent.setup();
     const { p } = await openPanel(user, "/e/e1/h/h1");
     const strip = screen.getByRole("status", { name: "Engagement status" });
-    expect(await within(strip).findByText("Threads 1")).toBeInTheDocument();
+    expect(await within(strip).findByLabelText("Threads 1")).toBeInTheDocument();
     // From here on the list answers slowly (a busy backend: every command waits for the vault mutex).
     let releaseList: (() => void) | undefined;
     m.notesList.mockImplementation(async () => {

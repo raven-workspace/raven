@@ -236,7 +236,7 @@ describe("vault gate", () => {
     await user.keyboard("{Meta>}l{/Meta}");
     expect(await screen.findByLabelText("Password")).toBeInTheDocument();
     await vi.waitFor(() => expect(m.vaultLock).toHaveBeenCalledTimes(2));
-    expect(screen.queryByText("Couldn't lock fully — Raven is retrying")).not.toBeInTheDocument();
+    expect(screen.queryByText("Couldn't lock fully, Raven is retrying")).not.toBeInTheDocument();
   });
 
   it("keeps retrying and says so while the backend stays unlocked", async () => {
@@ -246,7 +246,7 @@ describe("vault gate", () => {
     mount();
     await screen.findByTestId("inside");
     await user.keyboard("{Meta>}l{/Meta}");
-    expect(await screen.findByText("Couldn't lock fully — Raven is retrying")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn't lock fully, Raven is retrying")).toBeInTheDocument();
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
     m.vaultLock.mockResolvedValue(null);
     await vi.waitFor(() => expect(screen.queryByText(/retrying/)).not.toBeInTheDocument(), { timeout: 4000 });

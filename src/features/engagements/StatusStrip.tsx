@@ -1,7 +1,8 @@
+import type { ReactNode } from "react";
 import { cx } from "../../lib/cx";
 import { useNow } from "../../lib/keys";
 import type { Engagement } from "../../types/engagement";
-import { Kbd, labelClass } from "../../ui";
+import { labelClass } from "../../ui";
 import { useCleanupCounts } from "../cleanup/queries";
 import { useProgress } from "../hosts/queries";
 import { useThreadCounts } from "../notes/useThreadCounts";
@@ -11,12 +12,24 @@ import {
   dateRange,
   formatDuration,
   hasTimebox,
-  progressLine,
   timeLeft,
   timeboxElapsed,
 } from "./format";
 import { Listener } from "./Listener";
 import { MsfLock } from "./MsfLock";
+
+/**
+ * One labelled value. `drop` is the container-query class that hides the whole cell when the strip is too
+ * narrow; cells are listed in priority order, so the later ones drop first.
+ */
+function Cell({ label, value, drop, tone }: { label: string; value: string; drop?: string; tone?: "warn" }) {
+  return (
+    <span role="group" aria-label={`${label} ${value}`} className={cx("grid grid-flow-col items-center gap-2", drop)}>
+      <span className={labelClass}>{label}</span>
+      <span className={cx("font-mono text-meta", tone === "warn" ? "text-warn" : "text-fg")}>{value}</span>
+    </span>
+  );
+}
 
 export function StatusStrip({ engagement: e }: { engagement: Engagement }) {
   const now = useNow();
@@ -27,21 +40,21 @@ export function StatusStrip({ engagement: e }: { engagement: Engagement }) {
     <div
       role="status"
       aria-label="Engagement status"
-      className="flex h-9 shrink-0 items-center gap-5 border-b border-line px-6 text-xs text-muted-2"
+      className="@container h-9 shrink-0 overflow-hidden border-b border-line px-6 text-meta text-muted-2"
     >
-      {hasTimebox(e) ? (
-        <TimeboxStatus start={e.timeboxStart} minutes={e.timeboxMinutes} now={now} />
-      ) : (
-        <span>{dateRange(e.startsAt, e.endsAt, now)}</span>
-      )}
-      <span className="shrink-0 whitespace-nowrap text-fg-2">{progressLine(progress)}</span>
-      {threads > 0 && <span className="shrink-0 whitespace-nowrap text-fg-2">Threads {threads}</span>}
-      {cleanup > 0 && <span className="shrink-0 whitespace-nowrap text-fg-2">Cleanup {cleanup}</span>}
-      {e.kind === "exam-sim" && <MsfLock engagement={e} />}
-      <Listener />
-      <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap text-faint max-[1100px]:hidden">
-        <Kbd>1</Kbd>–<Kbd>6</Kbd> sections <Kbd className="ml-2">esc</Kbd> engagements
-      </span>
+      <div className="grid h-full grid-flow-col auto-cols-max items-center justify-start gap-6 whitespace-nowrap">
+        {hasTimebox(e) ? (
+          <TimeboxStatus start={e.timeboxStart} minutes={e.timeboxMinutes} now={now} />
+        ) : (
+          <Cell label="Dates" value={dateRange(e.startsAt, e.endsAt, now)} />
+        )}
+        <Cell label="Rooted" value={`${progress.hostsRooted}/${progress.hostsTotal}`} drop="@max-[560px]:hidden" />
+        <Cell label="Flags" value={`${progress.flagsFound}/${progress.flagsTotal}`} drop="@max-[640px]:hidden" />
+        {e.kind === "exam-sim" && <MsfLock engagement={e} className="@max-[720px]:hidden" />}
+        {threads > 0 && <Cell label="Threads" value={String(threads)} drop="@max-[800px]:hidden" />}
+        {cleanup > 0 && <Cell label="Cleanup" value={String(cleanup)} drop="@max-[880px]:hidden" />}
+        <Listener className="@max-[960px]:hidden" />
+      </div>
     </div>
   );
 }
@@ -49,14 +62,15 @@ export function StatusStrip({ engagement: e }: { engagement: Engagement }) {
 function TimeboxStatus({ start, minutes, now }: { start: number | null; minutes: number; now: number }) {
   const left = timeLeft(start, minutes, now);
   const over = left === "Time's up";
+  const of: ReactNode = <span className="text-faint @max-[1180px]:hidden">of {formatDuration(minutes)}</span>;
   return (
-    <span className="flex items-center gap-2.5">
+    <span className="grid grid-flow-col items-center gap-2.5">
       <span className={labelClass}>Timebox</span>
-      <span className={cx("font-mono text-[12px]", over ? "text-warn" : "text-fg")}>{left}</span>
-      <span className="w-24">
+      <span className={cx("font-mono text-meta", over ? "text-warn" : "text-fg")}>{left}</span>
+      <span className="w-24 @max-[1080px]:hidden">
         <TimeBar fraction={timeboxElapsed(start, minutes, now)} over={over} />
       </span>
-      <span className="text-faint">of {formatDuration(minutes)}</span>
+      {of}
     </span>
   );
 }

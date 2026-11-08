@@ -99,7 +99,7 @@ describe("open threads", () => {
     const card = container.querySelector<HTMLElement>('[data-host-id="h1"]')!;
     expect(await within(card).findByLabelText("2 open threads")).toBeInTheDocument();
     const strip = screen.getByRole("status", { name: "Engagement status" });
-    expect(await within(strip).findByText("Threads 3")).toBeInTheDocument();
+    expect(await within(strip).findByLabelText("Threads 3")).toBeInTheDocument();
     expect(within(screen.getByRole("navigation", { name: "Engagement" })).getByLabelText("2 open threads")).toBeInTheDocument();
   });
 

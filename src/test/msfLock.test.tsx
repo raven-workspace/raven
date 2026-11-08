@@ -71,7 +71,7 @@ beforeEach(() => {
 describe("metasploit lock", () => {
   it("strip shows the msf lock only in exam sims", async () => {
     const view = mount("/e/e1", E1);
-    expect(await screen.findByRole("button", { name: /Metasploit: unused/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Metasploit unused/ })).toBeInTheDocument();
     view.unmount();
     mount("/e/e1", { ...E1, kind: "lab" });
     await screen.findByRole("status", { name: "Engagement status" });
@@ -80,14 +80,14 @@ describe("metasploit lock", () => {
 
   it("shows the locked host name in warn", async () => {
     mount("/e/e1", { ...E1, msfHostId: "h1" });
-    const btn = await screen.findByRole("button", { name: /Metasploit: SRV11/ });
+    const btn = await screen.findByRole("button", { name: /Metasploit SRV11/ });
     expect(within(btn).getByText("SRV11")).toHaveClass("text-warn");
   });
 
   it("shows locked, not unused, while the locked host's name is unresolved", async () => {
     m.hostsList.mockReturnValue(new Promise(() => {}));
     mount("/e/e1", { ...E1, msfHostId: "h1" });
-    const btn = await screen.findByRole("button", { name: /Metasploit: locked/ });
+    const btn = await screen.findByRole("button", { name: /Metasploit locked/ });
     expect(within(btn).getByText("locked")).toHaveClass("text-warn");
   });
 
@@ -95,7 +95,7 @@ describe("metasploit lock", () => {
     const user = userEvent.setup();
     m.engagementSetMsfHost.mockResolvedValue({ ...E1, msfHostId: "h2" });
     mount("/e/e1", E1);
-    await user.click(await screen.findByRole("button", { name: /Metasploit: unused/ }));
+    await user.click(await screen.findByRole("button", { name: /Metasploit unused/ }));
     const dialog = await screen.findByRole("dialog", { name: "Metasploit host" });
     await user.click(within(dialog).getByRole("button", { name: "web07" }));
     expect(m.engagementSetMsfHost).toHaveBeenCalledWith("e1", "h2");
@@ -105,7 +105,7 @@ describe("metasploit lock", () => {
     const user = userEvent.setup();
     m.engagementSetMsfHost.mockResolvedValue({ ...E1, msfHostId: null });
     mount("/e/e1", { ...E1, msfHostId: "h1" });
-    await user.click(await screen.findByRole("button", { name: /Metasploit: SRV11/ }));
+    await user.click(await screen.findByRole("button", { name: /Metasploit SRV11/ }));
     await user.click(await screen.findByRole("button", { name: "Release lock" }));
     expect(m.engagementSetMsfHost).not.toHaveBeenCalled();
     const confirm = await screen.findByRole("dialog", { name: /Release the Metasploit lock/ });
@@ -163,7 +163,7 @@ describe("listener on the strip", () => {
     view.unmount();
     m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "443", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
     mount("/e/e1", E1);
-    expect(await screen.findByRole("link", { name: /LHOST not set · LPORT 443/ })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /LHOST not set, LPORT 443/ })).toBeInTheDocument();
   });
 });
 
