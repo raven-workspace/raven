@@ -11,7 +11,7 @@ import { PayloadBlock, PayloadView } from "./PayloadView";
 import { SqlPanel } from "./SqlPanel";
 import { TransferPanel } from "./TransferPanel";
 import { OS_LABEL } from "./usePayloadFit";
-import { GENERATOR_LIST_ID, GENERATORS, hintsFor, inGeneratorList, isGenerator, otherDrawerOpen, usePayloadSession } from "./usePayloadSession";
+import { GENERATOR_LIST_ID, GENERATORS, hintsFor, inGeneratorList, isGenerator, lhostPlaceholder, otherDrawerOpen, usePayloadSession } from "./usePayloadSession";
 import { usePayloadsStore, type PayloadOverride } from "./usePayloadsStore";
 
 /** One labelled block of the left column, with the line saying where the value came from (amber when unknown). */
@@ -95,14 +95,14 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
           <label className="grid gap-1.5">
             <span className="text-xs text-muted">LHOST</span>
             <Input
-              mono aria-label="LHOST" className="h-7" ref={register("LHOST")} value={fit.lhost} placeholder="Settings: attacker IP"
+              mono aria-label="LHOST" className="h-7" ref={register("LHOST")} value={fit.lhostInput} placeholder={lhostPlaceholder(fit.settingsLhost)}
               onChange={(e) => usePayloadsStore.getState().setLhost(e.target.value)}
             />
           </label>
           <label className="grid gap-1.5">
             <span className="text-xs text-muted">LPORT</span>
             <Input
-              mono aria-label="LPORT" className="h-7" ref={register("LPORT")} value={fit.port} placeholder="443" inputMode="numeric"
+              mono aria-label="LPORT" className="h-7" ref={register("LPORT")} value={fit.portInput} placeholder={fit.settingsPort ? `Settings: ${fit.settingsPort}` : "443"} inputMode="numeric"
               onChange={(e) => override({ port: e.target.value.replace(/\D/g, "") })}
             />
           </label>

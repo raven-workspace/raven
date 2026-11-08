@@ -168,6 +168,20 @@ describe("Payloads drawer", () => {
     expect(await navigator.clipboard.readText()).toBe(buildPayload(def("ps-b64"), "webshell-param", { LHOST, LPORT }).text);
   });
 
+  it("a cleared LHOST or LPORT (\"\") is unset: Settings fills it again and the port reads 'from Settings'", async () => {
+    usePayloadsStore.setState({ lhost: "", overrides: { h1: { port: "" } } });
+    const { d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    expect(payloadText(d)).toBe(buildPayload(def("ps-b64"), "webshell-param", { LHOST, LPORT }).text);
+    expect(d.getByRole("button", { name: `Port: ${LPORT}` })).toBeInTheDocument();
+    expect(d.getByText(/port from Settings/)).toBeInTheDocument();
+    expect(d.getByLabelText("Listener")).toHaveTextContent(`penelope -O -p ${LPORT}`);
+    // The field stays empty while you type a new value, with Settings' value as the hint.
+    const field = d.getByRole("textbox", { name: "LHOST" });
+    expect(field).toHaveValue("");
+    expect(field).toHaveAttribute("placeholder", `Settings: ${LHOST}`);
+  });
+
   it("⇥ moves to the next fit and, past the last one, releases focus instead of wrapping", async () => {
     const { user, d } = await openOn("/e/e1/h/h1");
     await d.findByRole("heading", { name: "PowerShell base64 (-e)" });

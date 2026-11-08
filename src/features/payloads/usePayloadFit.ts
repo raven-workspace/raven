@@ -41,8 +41,13 @@ export function usePayloadFit(engagementId: string, hostId: string | null) {
   const os: Os | null = ov?.os ?? inferred.situation.os;
   const context: PasteContext | null = ov?.context ?? inferContext(inferred.situation);
   const settingsPort = d.settings?.listenerPort ?? "";
-  const port = ov?.port ?? settingsPort;
-  const lhost = lhostOverride ?? d.settings?.attackerIp ?? "";
+  const settingsLhost = d.settings?.attackerIp ?? "";
+  // A cleared field ("") is unset, so Settings fills it again; the field itself keeps showing what you typed.
+  const port = ov?.port || settingsPort;
+  const lhost = lhostOverride || settingsLhost;
+  /** What the LHOST and LPORT fields show: your value, "" while cleared, else Settings'. */
+  const lhostInput = lhostOverride ?? settingsLhost;
+  const portInput = ov?.port ?? settingsPort;
   const situation = useMemo(() => ({ ...inferred.situation, os }), [inferred.situation, os]);
 
   const evidence = {
@@ -73,7 +78,10 @@ export function usePayloadFit(engagementId: string, hostId: string | null) {
     return out;
   }, [d.log, lhost, port]);
 
-  return { d, host: host ?? null, hostKey, engagement, os, context, dbEngine, port, settingsPort, lhost, evidence, ranked, build, staleLines };
+  return {
+    d, host: host ?? null, hostKey, engagement, os, context, dbEngine, port, settingsPort, lhost, settingsLhost, lhostInput, portInput,
+    evidence, ranked, build, staleLines,
+  };
 }
 
 export type PayloadFit = ReturnType<typeof usePayloadFit>;

@@ -296,6 +296,20 @@ describe("Payloads Workbench", () => {
     expect(read().getByRole("button", { name: "Web shell ?cmd=" })).toHaveFocus();
   });
 
+  it("clearing LHOST and LPORT falls back to Settings without refilling the fields", async () => {
+    const user = userEvent.setup();
+    mount(["/payloads"]);
+    const w = within(await workbench());
+    await w.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    await user.clear(read().getByRole("textbox", { name: "LHOST" }));
+    await user.clear(read().getByRole("textbox", { name: "LPORT" }));
+    expect(read().getByRole("textbox", { name: "LHOST" })).toHaveValue("");
+    expect(read().getByRole("textbox", { name: "LPORT" })).toHaveValue("");
+    expect(read().getByRole("textbox", { name: "LPORT" })).toHaveAttribute("placeholder", `Settings: ${LPORT}`);
+    expect(w.getByLabelText("Payload").textContent).toBe(buildPayload(def("ps-b64"), "webshell-param", { LHOST, LPORT }).text);
+    expect(w.getByLabelText("Listener")).toHaveTextContent(`penelope -O -p ${LPORT}`);
+  });
+
   it("P then Esc leaves the Workbench in one press", async () => {
     const user = userEvent.setup();
     mount(["/e/e1/h/h1", "/payloads"]);

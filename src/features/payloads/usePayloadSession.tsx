@@ -51,6 +51,8 @@ const fieldTokens = (def: PayloadDef) =>
   [...new Set([...`${def.template} ${def.prepare ?? ""}`.matchAll(PLACEHOLDER)].map((m) => m[1]!))]
     .filter((t) => t !== "LPORT" && !DERIVED_TOKENS.has(t))
     .sort((a, b) => Number(b === "LHOST") - Number(a === "LHOST"));
+/** The LHOST field's hint: Settings' attacker IP, which fills in while the field is empty. */
+export const lhostPlaceholder = (settingsLhost: string) => (settingsLhost ? `Settings: ${settingsLhost}` : "Settings: attacker IP");
 /** ⌥ chords by physical key: on a Mac ⌥L types "¬" and ⌥1 "¡". */
 const altCode = (e: KeyboardEvent) => (e.altKey && !e.metaKey && !e.ctrlKey ? e.code : null);
 
@@ -195,8 +197,8 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
           <Input
             mono aria-label={t} className="h-7"
             ref={(el) => { if (el) fieldEls.current.set(t, el); else fieldEls.current.delete(t); }}
-            value={t === "LHOST" ? fit.lhost : (extra[t] ?? "")}
-            placeholder={def?.defaults?.[t] ?? ""}
+            value={t === "LHOST" ? fit.lhostInput : (extra[t] ?? "")}
+            placeholder={t === "LHOST" ? lhostPlaceholder(fit.settingsLhost) : (def?.defaults?.[t] ?? "")}
             onChange={(e) => (t === "LHOST" ? usePayloadsStore.getState().setLhost(e.target.value) : setExtra({ ...extra, [t]: e.target.value }))}
           />
         </label>
