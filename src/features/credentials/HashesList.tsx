@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { credLabel, credName, getCrackingCommands, identifyHash, isMachineAccount } from "../../engines/credentials";
 import type { Credential } from "../../types/credentials";
-import { ActionCell, Button, Chip, CommandBlock, Dialog, Field, Input, labelClass } from "../../ui";
+import { Button, Chip, CommandBlock, Dialog, Field, Input, labelClass } from "../../ui";
 import { MASK, MaskedSecret } from "./MaskedSecret";
 import { useCredentialMutations } from "./queries";
 
@@ -55,14 +55,14 @@ function HashRow({ eid, hash, onCrack }: { eid: string; hash: Credential; onCrac
       <span><Chip variant={dead ? "warn" : "default"}>{hash.crackStatus ?? "uncracked"}</Chip></span>
       <MaskedSecret secret={hash.secret} label={`secret for ${label}`} />
       <span className="justify-self-end">
-        <ActionCell>
-          <Button size="sm" aria-label={`Crack ${label}`} onClick={onCrack}>Crack</Button>
-          {dead ? (
-            <Button size="sm" aria-label={`Reset ${label}`} onClick={() => setCrackStatus.mutate({ id: hash.id, status: "uncracked" })}>Reset</Button>
-          ) : (
-            <Button size="sm" aria-label={`Mark ${label} uncrackable`} onClick={() => setCrackStatus.mutate({ id: hash.id, status: "uncrackable" })}>Mark uncrackable</Button>
-          )}
-        </ActionCell>
+        <Button size="sm" aria-label={`Crack ${label}`} onClick={onCrack}>Crack</Button>
+      </span>
+      <span className="justify-self-end">
+        {dead ? (
+          <Button size="sm" aria-label={`Reset ${label}`} onClick={() => setCrackStatus.mutate({ id: hash.id, status: "uncracked" })}>Reset</Button>
+        ) : (
+          <Button size="sm" aria-label={`Mark ${label} uncrackable`} onClick={() => setCrackStatus.mutate({ id: hash.id, status: "uncrackable" })}>Mark uncrackable</Button>
+        )}
       </span>
       {setCrackStatus.error && <p role="alert" className="col-span-full m-0 text-meta text-warn">{setCrackStatus.error.message}</p>}
       {(cmds.hashcat || cmds.john) && (
@@ -82,7 +82,7 @@ export function HashesList({ eid, hashes: all }: { eid: string; hashes: Credenti
   return (
     <section aria-label="Hashes" className="grid grid-cols-[minmax(0,1fr)] gap-1">
       <h3 className={`m-0 ${labelClass}`}>Hashes <span className="tabular-nums">{hashes.length}</span></h3>
-      <ul className="m-0 grid list-none grid-cols-[minmax(16ch,2fr)_max-content_max-content_max-content_max-content] gap-x-3 border-t border-line p-0">
+      <ul className="m-0 grid list-none grid-cols-[minmax(16ch,2fr)_max-content_max-content_max-content_max-content_max-content] gap-x-3 border-t border-line p-0">
         {hashes.map((h) => (
           <HashRow key={h.id} eid={eid} hash={h} onCrack={() => setCracking(h)} />
         ))}

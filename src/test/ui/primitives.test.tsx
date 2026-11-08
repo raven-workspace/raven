@@ -55,6 +55,19 @@ describe("CommandBlock", () => {
   });
 });
 
+describe("CommandBlock wrapping", () => {
+  it("wraps each space-separated token in a nowrap span and copies the raw string", async () => {
+    const cmd = "nxc smb -u 'backup-operator' --continue-on-success";
+    const { container } = render(<CommandBlock text={cmd} />);
+    const tokens = [...container.querySelectorAll("[data-token]")];
+    expect(tokens.map((t) => t.textContent)).toEqual(["nxc", "smb", "-u", "'backup-operator'", "--continue-on-success"]);
+    for (const t of tokens) expect(t).toHaveClass("whitespace-nowrap");
+    expect(container.querySelector("code")!.textContent).toBe(cmd);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Copy" }));
+    expect(await navigator.clipboard.readText()).toBe(cmd);
+  });
+});
+
 describe("CommandBlock with a masked display", () => {
   it("shows the text but copies copyText under copyLabel", async () => {
     render(<CommandBlock text="nxc smb h -p ••••••••" copyText="nxc smb h -p 'Real1!'" copyLabel="Copy smb command" />);

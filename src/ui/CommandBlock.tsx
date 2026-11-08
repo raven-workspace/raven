@@ -28,16 +28,21 @@ export function CommandBlock({ text, label, onCopy, placeholders, copyText, copy
     <div className="grid gap-1">
       {label && <span className="text-meta text-muted-2">{label}</span>}
       <div className="grid grid-cols-[minmax(0,1fr)_28px] items-start gap-2 rounded-sm border border-line bg-surface px-2 py-2">
-        <code className="min-w-0 font-mono text-code [overflow-wrap:anywhere] whitespace-pre-wrap text-fg-2">
-          {parts(text, !!placeholders).map((p, i) =>
-            placeholders && /^\{[A-Za-z0-9_]+\}$/.test(p) ? (
-              <span key={i} className="text-warn">
-                {p}
-              </span>
-            ) : (
-              <Fragment key={i}>{p}</Fragment>
-            ),
-          )}
+        <code className="min-w-0 overflow-x-auto font-mono text-code whitespace-pre-wrap text-fg-2">
+          {parts(text, !!placeholders).map((p, i) => {
+            const warn = placeholders && /^\{[A-Za-z0-9_]+\}$/.test(p);
+            // Each space-separated token never breaks (browsers would otherwise break after a hyphen);
+            // the spaces between tokens are the only break points.
+            return p.split(/(\s+)/).map((t, j) =>
+              t === "" ? null : /^\s+$/.test(t) ? (
+                <Fragment key={`${i}-${j}`}>{t}</Fragment>
+              ) : (
+                <span key={`${i}-${j}`} data-token className={warn ? "whitespace-nowrap text-warn" : "whitespace-nowrap"}>
+                  {t}
+                </span>
+              ),
+            );
+          })}
         </code>
         <IconButton
           icon={copied ? Check : Copy}

@@ -162,7 +162,7 @@ describe("credential routine", () => {
     mount({ creds: [cred({ id: "c4", username: "jsmith", secret: "smb" })] });
     const routine = await screen.findByRole("region", { name: "Credential routine" });
     const smb = within(routine).getByRole("listitem", { name: "SMB" });
-    expect(within(smb).getAllByText("nxc smb 10.10.10.5 -u 'jsmith' -p •••••••• --local-auth | tee nxc-smb-jsmith-local.txt")).toHaveLength(1);
+    expect(within(smb).getAllByText((_, el) => el?.tagName === "CODE" && el.textContent === "nxc smb 10.10.10.5 -u 'jsmith' -p •••••••• --local-auth | tee nxc-smb-jsmith-local.txt")).toHaveLength(1);
   });
 
   it("ticking a routine step sets its checklist item", async () => {

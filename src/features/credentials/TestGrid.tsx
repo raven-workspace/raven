@@ -4,7 +4,7 @@ import type { Cell } from "../../engines/credentials";
 import type { CredAttempt, Credential, TriedPair } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
-import { labelClass } from "../../ui";
+import { ChipSet, labelClass } from "../../ui";
 import { hostLabel } from "./AccessGrants";
 import { CellPopover } from "./CellPopover";
 import { MaskedSecret } from "./MaskedSecret";
@@ -40,21 +40,23 @@ function partialLabel(cred: Credential, service: SprayService, cell: Cell): stri
 
 function Legend() {
   const states: CellState[] = ["admin", "valid", "failed", "untested", "errored", "na"];
+  const unit = "grid grid-flow-col auto-cols-max items-center gap-2";
   return (
-    <ul aria-label="Legend" className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(9rem,max-content))] gap-x-5 gap-y-2 p-0 text-meta text-muted">
+    <ChipSet as="ul" gap={6} aria-label="Legend" className="m-0 list-none p-0 text-meta text-muted">
       {states.map((s) => (
-        <li key={s} className="grid grid-flow-col auto-cols-max items-center justify-start gap-2">
+        <li key={s} className={unit}>
           <span aria-hidden="true" className={`${BOX} h-5 w-5 text-label ${META[s].tone}`} style={s === "na" ? HATCH : undefined}>{META[s].glyph}</span>
           {META[s].label}
         </li>
       ))}
-      <li className="grid grid-flow-col auto-cols-max items-center justify-start gap-2">
-        <span aria-hidden="true" className={`${BOX} h-5 w-5 border-line-2`}>
-          <span className="size-2 rounded-full border border-dashed border-fg-2" />
+      <li className={unit}>
+        <span aria-hidden="true" className={`${BOX} h-5 w-5 text-label border-line-2 text-fg-2`}>
+          {META.failed.glyph}
+          <span className="absolute inset-0.5 rounded-sm border border-dashed border-fg-2" />
         </span>
         Failed, other mode untried
       </li>
-    </ul>
+    </ChipSet>
   );
 }
 
@@ -124,7 +126,7 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
       <Legend />
       <div className="relative rounded border border-line">
         <div ref={scroller} onScroll={measure} className="overflow-x-auto">
-        <table aria-label="Test grid" className="border-separate border-spacing-0 text-meta">
+        <table aria-label="Test grid" className="min-w-full border-separate border-spacing-0 text-meta">
           <thead>
             <tr>
               <th rowSpan={2} scope="col" className={`sticky left-0 z-20 w-[28ch] min-w-[28ch] max-w-[28ch] border-b border-r border-line bg-bg px-3 py-2 text-left ${labelClass}`}>Credential</th>
@@ -174,7 +176,7 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
                             className="relative inline-grid cursor-default rounded-sm hover:brightness-125"
                           >
                             <Glyph state={cell.state} />
-                            {partial && <span data-testid="untried-marker" aria-hidden="true" className="absolute bottom-0.5 right-0.5 size-2 rounded-full border border-dashed border-fg-2 bg-bg" />}
+                            {partial && <span data-testid="untried-marker" aria-hidden="true" className="pointer-events-none absolute inset-0.5 rounded-sm border border-dashed border-fg-2" />}
                             {cell.modesDiffer && <span aria-hidden="true" className="absolute right-0.5 top-0.5 size-2 rounded-full bg-fg-2" />}
                           </button>
                         )}

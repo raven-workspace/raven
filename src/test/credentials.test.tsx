@@ -119,6 +119,9 @@ async function pick(user: ReturnType<typeof userEvent.setup>, label: string, opt
   await user.click(await screen.findByRole("option", { name: option }));
 }
 
+/** A command's tokens are separate spans, so match the <code> element by its whole text. */
+const codeMatching = (re: RegExp) => (_: string, el: Element | null) => el?.tagName === "CODE" && re.test(el.textContent ?? "");
+
 describe("credentials section", () => {
   it("adding a password credential lists it masked; Reveal shows it; Copy copies without revealing", async () => {
     const user = userEvent.setup();
@@ -278,11 +281,11 @@ describe("credentials section", () => {
     const hash = "8846f7eaee8fb117ad06bdd830b7586c";
     mount({ creds: [cred({ id: "h", type: "hash", username: "jsmith", domain: "CORP", secret: hash, hashType: "NTLM", crackStatus: "uncracked" })] });
     const list = await screen.findByRole("region", { name: "Hashes" });
-    expect(within(list).getByText(/hashcat -m 1000/)).toBeInTheDocument();
+    expect(within(list).getByText(codeMatching(/hashcat -m 1000/))).toBeInTheDocument();
     expect(within(list).queryByText(new RegExp(hash))).not.toBeInTheDocument();
     // Commands wrap at whitespace only; a long hash scrolls instead of breaking mid-token.
     for (const re of [/hashcat -m 1000/, /^john /]) {
-      const code = within(list).getByText(re);
+      const code = within(list).getByText(codeMatching(re));
       expect(code.className).not.toMatch(/break-all/);
       expect(code.className).toMatch(/whitespace-pre-wrap/);
     }
@@ -412,7 +415,7 @@ describe("credentials section", () => {
     const user = userEvent.setup();
     mount({ creds: [cred({ id: "h", type: "hash", username: "jsmith", secret: "8846f7eaee8fb117ad06bdd830b7586c", hashType: "MD5", crackStatus: "uncracked" })] });
     const list = await screen.findByRole("region", { name: "Hashes" });
-    expect(within(list).getByText(/hashcat -m 0 /)).toBeInTheDocument();
+    expect(within(list).getByText(codeMatching(/hashcat -m 0 /))).toBeInTheDocument();
     await user.click(within(list).getByRole("button", { name: "Copy hashcat command" }));
     expect(await navigator.clipboard.readText()).toBe("hashcat -m 0 '8846f7eaee8fb117ad06bdd830b7586c' /usr/share/wordlists/rockyou.txt");
   });
@@ -421,7 +424,7 @@ describe("credentials section", () => {
     const secret = "$6$sa'lt$abcdefgh";
     mount({ creds: [cred({ id: "h", type: "hash", username: "jsmith", secret, crackStatus: "uncracked" })] });
     const list = await screen.findByRole("region", { name: "Hashes" });
-    expect(within(list).getByText(/hashcat -m 1800/)).toBeInTheDocument();
+    expect(within(list).getByText(codeMatching(/hashcat -m 1800/))).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("sa'lt");
     expect(document.body.textContent).not.toContain("abcdefgh");
   });

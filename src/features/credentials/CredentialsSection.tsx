@@ -205,7 +205,7 @@ function CredentialRow({ cred, all, state, scopeHost, onEdit, onDelete, onConver
         {scopeHost && <span className="max-w-[24ch] truncate text-meta text-muted" title={scopeHost}>{scopeHost}</span>}
       </td>
       <td className={`min-w-0 ${SHOW_SOURCE} text-fg-2`}>
-        {cred.source && <span className="line-clamp-2" title={cred.source}>{cred.source}</span>}
+        {cred.source && <span className="block truncate" title={cred.source}>{cred.source}</span>}
       </td>
       <td className="whitespace-nowrap"><StateChip state={state} /></td>
       <td className="whitespace-nowrap">
