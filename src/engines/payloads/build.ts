@@ -107,10 +107,16 @@ export function buildPayload(
     const raw = def.encodePowerShell ? `powershell -nop -w hidden -e ${utf16leBase64(filled)}` : filled;
     const wrapped = wrapForContext(raw, ctx, os);
     text = wrapped.text;
-    notes.push(...wrapped.notes);
+    // A file made on Kali: the text is the Kali command, so say what to do with the file it makes.
+    if (def.upload?.kali && ctx === "uploaded-file") notes.push(`Upload ${value("FILE") ?? "{FILE}"} to the target, then open the trigger URL.`);
+    else notes.push(...wrapped.notes);
     if (filter) notes.push("Already base64 (-e).");
   }
-  if (def.bakesIp) notes.push("LHOST and LPORT are baked into the served script: regenerate it if either changes.");
+  if (def.bakesIp) {
+    notes.push(def.upload?.kali
+      ? `LHOST and LPORT are baked into ${value("FILE") ?? "{FILE}"}: make it again and upload it again if either changes.`
+      : "LHOST and LPORT are baked into the served script: regenerate it if either changes.");
+  }
 
   const listenerId = opts.listener && def.listeners.includes(opts.listener) ? opts.listener : (def.listeners[0] ?? null);
   let listener: string | null = null;

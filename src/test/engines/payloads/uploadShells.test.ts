@@ -40,8 +40,21 @@ describe("UPLOAD_SHELLS", () => {
       expect(b.text, id).toBe(want.text);
       expect(b.trigger?.text, id).toBe(want.trigger);
       expect(b.unresolved, id).toEqual([]);
-      expect(b.notes, id).toContain("Saved as a file and uploaded; nothing is wrapped.");
+      if (def(id).upload?.kali) {
+        // The text is a Kali command: the notes say what to do with the file it makes, not that the text is saved.
+        expect(b.notes, id).not.toContain("Saved as a file and uploaded; nothing is wrapped.");
+        expect(b.notes, id).toContain("Upload rev.php to the target, then open the trigger URL.");
+        expect(b.notes, id).toContain("LHOST and LPORT are baked into rev.php: make it again and upload it again if either changes.");
+        expect(b.notes.join(" "), id).not.toContain("served script");
+      } else {
+        expect(b.notes, id).toContain("Saved as a file and uploaded; nothing is wrapped.");
+      }
     }
+  });
+
+  it("a file made on Kali names the file you chose in its notes", () => {
+    const b = buildPayload(def("upload-php-pentestmonkey"), "uploaded-file", { ...V, FILE: "zz.phtml" });
+    expect(b.notes).toContain("Upload zz.phtml to the target, then open the trigger URL.");
   });
 
   it("web shells have no listener and shape webshell; the rev shells use Kali", () => {
