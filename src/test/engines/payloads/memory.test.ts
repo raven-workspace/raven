@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { failedPayloadIds, staleBaked } from "../../../engines/payloads/memory";
+import { failedPayloadIds, staleBuild } from "../../../engines/payloads/memory";
+import type { PayloadBuild } from "../../../types/payloadBuild";
 import type { LogEntry } from "../../../types/log";
 
 const entry = (over: Partial<LogEntry> & { output?: string } = {}): LogEntry => {
@@ -52,30 +53,26 @@ describe("failedPayloadIds", () => {
   });
 });
 
-describe("staleBaked", () => {
+describe("staleBuild", () => {
   const cur = { LHOST: "192.0.2.10", LPORT: "443" };
-  const baked = (over: Partial<LogEntry> = {}) =>
-    entry({ payloadId: "nishang-cradle", payloadValues: { LHOST: "192.0.2.10", LPORT: "443" }, ...over });
-  it("changed LPORT lists the rev.ps1 entry as stale", () => {
-    const r = staleBaked([baked({ at: 5000 })], { ...cur, LPORT: "4444" });
-    expect(r).toEqual([{ payloadId: "nishang-cradle", at: 5000, was: "192.0.2.10:443" }]);
+  const rec = (over: Partial<PayloadBuild> = {}): PayloadBuild => ({
+    engagementId: "e1", hostId: "h1", payloadId: "nishang-cradle", lhost: "192.0.2.10", lport: "443", at: 1, ...over,
   });
-  it("same values, unbaked payloads and entries without values are not stale", () => {
-    const es = [
-      baked(), entry({ payloadId: "nc-exe", payloadValues: { LHOST: "192.0.2.99", LPORT: "1" } }),
-      baked({ id: "z", payloadValues: null }),
-    ];
-    expect(staleBaked(es, cur)).toEqual([]);
+  it("no host or no record is null", () => {
+    expect(staleBuild([rec()], null, "nishang-cradle", { ...cur, LHOST: "192.0.2.20" })).toBeNull();
+    expect(staleBuild([], "h1", "nishang-cradle", cur)).toBeNull();
   });
-  it("returns only the newest entry per payload", () => {
-    const es = [
-      baked({ id: "old", at: 1, payloadValues: { LHOST: "192.0.2.77", LPORT: "80" } }),
-      baked({ id: "new", at: 9, payloadValues: { LHOST: "192.0.2.88", LPORT: "80" } }),
-    ];
-    expect(staleBaked(es, cur)).toEqual([{ payloadId: "nishang-cradle", at: 9, was: "192.0.2.88:80" }]);
+  it("same values is null", () => {
+    expect(staleBuild([rec()], "h1", "nishang-cradle", cur)).toBeNull();
   });
-  it("a newer entry that matches clears an older stale one", () => {
-    const es = [baked({ at: 1, payloadValues: { LHOST: "192.0.2.77", LPORT: "80" } }), baked({ at: 9 })];
-    expect(staleBaked(es, cur)).toEqual([]);
+  it("changed LHOST reports was and now", () => {
+    expect(staleBuild([rec()], "h1", "nishang-cradle", { ...cur, LHOST: "192.0.2.20" })).toEqual({ was: "192.0.2.10:443", now: "192.0.2.20:443" });
+  });
+  it("a blank current or recorded value is null", () => {
+    expect(staleBuild([rec()], "h1", "nishang-cradle", { ...cur, LPORT: "" })).toBeNull();
+    expect(staleBuild([rec({ lhost: "" })], "h1", "nishang-cradle", { ...cur, LHOST: "192.0.2.20" })).toBeNull();
+  });
+  it("another host's record is ignored", () => {
+    expect(staleBuild([rec({ hostId: "h2" })], "h1", "nishang-cradle", { ...cur, LHOST: "192.0.2.20" })).toBeNull();
   });
 });

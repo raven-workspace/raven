@@ -19,6 +19,7 @@ pub mod nvd;
 pub mod migrations;
 pub mod paths;
 pub mod services;
+pub mod payload_builds;
 pub mod tried_pairs;
 pub mod settings;
 pub mod vault;
@@ -117,6 +118,8 @@ pub fn run() {
             commands::cred_attempts_upsert,
             commands::cred_attempt_delete,
             commands::cred_attempts_rekey,
+            commands::payload_builds_list,
+            commands::payload_build_record,
             commands::tried_pairs_list,
             commands::tried_pairs_upsert,
             commands::tried_pair_delete,

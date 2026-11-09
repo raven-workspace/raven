@@ -339,6 +339,14 @@ const base = {
     return clone(db.credAttempts.filter((a) => a.engagementId === engagementId));
   },
   credAttemptDelete: async (id: string) => remove(db.credAttempts, id),
+  payloadBuildsList: async (engagementId: string) => clone(db.payloadBuilds.filter((b) => b.engagementId === engagementId)),
+  payloadBuildRecord: async (input) => {
+    const host = db.hosts.find((h) => h.id === input.hostId && h.engagementId === input.engagementId);
+    if (!host) throw new RavenError("not_found", "Not found");
+    db.payloadBuilds = db.payloadBuilds.filter((b) => !(b.hostId === input.hostId && b.payloadId === input.payloadId));
+    db.payloadBuilds.push(clone(input));
+    return clone(input);
+  },
   triedPairsList: async (engagementId: string) => clone(db.triedPairs.filter((t) => t.engagementId === engagementId)),
   triedPairsUpsert: async (engagementId: string, inputs) => {
     const out: TriedPair[] = [];

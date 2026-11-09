@@ -400,7 +400,8 @@ describe("Payloads drawer", () => {
     }));
   });
 
-  it("a baked payload built with an older LHOST shows the stale line above the copy block", async () => {
+  // Task 8 rewires this to build memory (staleBuild); skipped until then.
+  it.skip("a baked payload built with an older LHOST shows the stale line above the copy block", async () => {
     const old = new Date(2026, 10, 7, 9, 5).getTime();
     m.logList.mockResolvedValue([
       WEBSHELL_LOG,

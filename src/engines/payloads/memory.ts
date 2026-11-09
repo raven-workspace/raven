@@ -1,6 +1,5 @@
 import type { LogEntry } from "../../types/log";
-import { MSFVENOM } from "./msfvenom";
-import { REVERSE_SHELLS } from "./reverseShells";
+import type { PayloadBuild } from "../../types/payloadBuild";
 
 const FAILED_OUTPUT = /not recognized|invalid option|cannot find|Access is denied|command not found/i;
 
@@ -20,22 +19,15 @@ export function failedPayloadIds(entries: LogEntry[], hostId: string): string[] 
   return [...newest].filter(([, v]) => v.failed).map(([id]) => id);
 }
 
-const BAKED = new Set([...REVERSE_SHELLS, ...MSFVENOM].filter((d) => d.bakesIp).map((d) => d.id));
-
-/** Baked-IP payloads (served scripts, exes) whose newest logged copy used a different LHOST or LPORT than now. */
-export function staleBaked(
-  entries: LogEntry[], current: { LHOST: string; LPORT: string },
-): { payloadId: string; at: number; was: string }[] {
-  const newest = new Map<string, LogEntry>();
-  for (const e of entries) {
-    if (!e.payloadId || !BAKED.has(e.payloadId) || !e.payloadValues) continue;
-    const prev = newest.get(e.payloadId);
-    if (!prev || e.at > prev.at) newest.set(e.payloadId, e);
-  }
-  const out: { payloadId: string; at: number; was: string }[] = [];
-  for (const [payloadId, e] of newest) {
-    const { LHOST = "", LPORT = "" } = e.payloadValues!;
-    if (LHOST !== current.LHOST || LPORT !== current.LPORT) out.push({ payloadId, at: e.at, was: `${LHOST}:${LPORT}` });
-  }
-  return out;
+/** Whether a baked payload built for this host used a different LHOST or LPORT than the current ones. Null when unknown or unchanged. */
+export function staleBuild(
+  records: PayloadBuild[], hostId: string | null, payloadId: string, current: { LHOST: string; LPORT: string },
+): { was: string; now: string } | null {
+  if (!hostId) return null;
+  const r = records.find((b) => b.hostId === hostId && b.payloadId === payloadId);
+  if (!r) return null;
+  const { LHOST, LPORT } = current;
+  if (!LHOST.trim() || !LPORT.trim() || !r.lhost.trim() || !r.lport.trim()) return null;
+  if (r.lhost === LHOST && r.lport === LPORT) return null;
+  return { was: `${r.lhost}:${r.lport}`, now: `${LHOST}:${LPORT}` };
 }

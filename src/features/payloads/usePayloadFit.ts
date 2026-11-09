@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { buildPayload } from "../../engines/payloads/build";
 import { PASTE_CONTEXTS, type PasteContext } from "../../engines/payloads/context";
 import { inferContext, inferSituation, rankPayloads } from "../../engines/payloads/fit";
-import { staleBaked } from "../../engines/payloads/memory";
 import { MSFVENOM } from "../../engines/payloads/msfvenom";
 import { REVERSE_SHELLS } from "../../engines/payloads/reverseShells";
 import type { BuiltPayload, GeneratorId, PayloadDef } from "../../engines/payloads/types";
@@ -15,12 +14,6 @@ export interface Ranked { fits: PayloadDef[]; misfits: { def: PayloadDef; reason
 
 export const OS_LABEL: Record<Os, string> = { linux: "Linux", windows: "Windows" };
 export const contextLabel = (c: PasteContext) => PASTE_CONTEXTS.find((p) => p.id === c)?.label ?? c;
-
-const pad = (n: number) => String(n).padStart(2, "0");
-const clock = (ms: number) => {
-  const d = new Date(ms);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
 
 /**
  * Everything the Payloads views need for one engagement and host: the inferred situation with this session's
@@ -72,11 +65,8 @@ export function usePayloadFit(engagementId: string, hostId: string | null) {
     return buildPayload(def, ctx, { ...extra, LHOST: lhost, LPORT: port });
   };
 
-  const staleLines = useMemo(() => {
-    const out = new Map<string, string>();
-    for (const s of staleBaked(d.log ?? [], { LHOST: lhost, LPORT: port })) out.set(s.payloadId, `Built at ${clock(s.at)} with ${s.was}; rebuild it`);
-    return out;
-  }, [d.log, lhost, port]);
+  // Task 8 wires staleBuild (build memory) here; until then nothing is flagged stale.
+  const staleLines = useMemo(() => new Map<string, string>(), []);
 
   return {
     d, host: host ?? null, hostKey, engagement, os, context, dbEngine, port, settingsPort, lhost, settingsLhost, lhostInput, portInput,

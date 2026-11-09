@@ -469,7 +469,7 @@ mod tests {
         c.execute("INSERT INTO engagements (id,name,kind,scope_cidrs,status,created_at,updated_at) VALUES ('e1','x','lab','[]','active',1,1)", []).unwrap();
         c.execute("INSERT INTO log_entries (id,engagement_id,kind,title,content,at,created_at,updated_at) VALUES ('l1','e1','note','old','{\"kind\":\"note\",\"text\":\"t\"}',1,1,1)", []).unwrap();
         let mut calls = 0;
-        let out = crate::migrations::migrate_with(&mut c, crate::migrations::MIGRATIONS, &mut |f, t| {
+        let out = crate::migrations::migrate_with(&mut c, &crate::migrations::MIGRATIONS[..12], &mut |f, t| {
             assert_eq!((f, t), (11, 12));
             calls += 1;
             Ok(())

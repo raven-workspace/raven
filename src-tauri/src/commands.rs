@@ -4,6 +4,7 @@
 //! unlocked (no daily backup: a brand-new vault has nothing to back up).
 
 use crate::attempts::{self, CredAttempt, CredAttemptInput};
+use crate::payload_builds::{self, PayloadBuild};
 use crate::tried_pairs::{self, TriedPair, TriedPairInput};
 use crate::extractions::{self, Extraction, ExtractionRecord, ExtractionSummary};
 use crate::backup::{self, BackupInfo};
@@ -737,6 +738,16 @@ pub async fn failed_attempt_create(
 #[tauri::command]
 pub async fn failed_attempt_update(app: AppHandle, id: String, input: FailedAttemptInput) -> AppResult<FailedAttempt> {
     with_vault(app, move |v| findings::attempt_update(v.conn()?, &id, input)).await
+}
+
+#[tauri::command]
+pub async fn payload_builds_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<PayloadBuild>> {
+    with_vault(app, move |v| payload_builds::list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn payload_build_record(app: AppHandle, input: PayloadBuild) -> AppResult<PayloadBuild> {
+    with_vault(app, move |v| payload_builds::record(v.conn()?, input)).await
 }
 
 #[tauri::command]
