@@ -346,6 +346,7 @@ const base = {
   credAttemptDelete: async (id: string) => remove(db.credAttempts, id),
   payloadBuildsList: async (engagementId: string) => clone(db.payloadBuilds.filter((b) => b.engagementId === engagementId)),
   payloadBuildRecord: async (input) => {
+    if (!input.payloadId.trim()) throw new RavenError("validation", "payload id is required", "payloadId");
     const host = db.hosts.find((h) => h.id === input.hostId && h.engagementId === input.engagementId);
     if (!host) throw new RavenError("not_found", "Not found");
     db.payloadBuilds = db.payloadBuilds.filter((b) => !(b.hostId === input.hostId && b.payloadId === input.payloadId));

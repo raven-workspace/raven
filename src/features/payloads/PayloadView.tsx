@@ -62,12 +62,15 @@ export function PayloadBlock({
   const staleLine = (step: Step) => first === step && <p className="m-0 text-meta text-warn">{stale}</p>;
 
   const listeners = built.def.listeners;
+  // A bind shell's "listener" is the client you connect with, so its chip says so under "Connect from Kali".
+  const pickName = built.listenerHeading === "Connect from Kali" ? "Connect with" : "Listener";
   const listenerPicker = onPickListener && listeners.length > 1 && built.listenerId && (
     <ChipPicker
       options={listeners.map((l) => ({ id: l, name: LISTENERS[l].label }))} value={built.listenerId}
       onPick={(id) => id && onPickListener(id as ListenerId)}
-      label={`Listener: ${LISTENERS[built.listenerId].label}`} listLabel="Listener" title="Pick the listener for this payload (this session)"
-      prefix="Listener" shown={LISTENERS[built.listenerId].label}
+      label={`${pickName}: ${LISTENERS[built.listenerId].label}`} listLabel={pickName}
+      title={pickName === "Listener" ? "Pick the listener for this payload (this session)" : "Pick what you connect with from Kali (this session)"}
+      prefix={pickName} shown={LISTENERS[built.listenerId].label}
     />
   );
   const blocks: Record<Step, () => ReactNode> = {

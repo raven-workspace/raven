@@ -8,20 +8,26 @@ import type { ChipPickerHandle } from "../arsenal/ChipPicker";
 
 type Tick = "present" | "missing";
 type State = "unknown" | Tick;
+/** A row's three choices: no tick of yours (the log's value, else unknown), on box, missing. */
+type Choice = "auto" | Tick;
 export type ToolTicks = Partial<Record<ToolId, Tick>>;
 
 const TOOLS = Object.keys(TOOL_LABEL) as ToolId[];
-const STATES: State[] = ["unknown", "present", "missing"];
+const CHOICES: Choice[] = ["auto", "present", "missing"];
 const STATE_LABEL: Record<State, string> = { unknown: "unknown", present: "on box", missing: "missing" };
 
 /** What a tool reads as: your tick, else the log's, else unknown. */
 const stateOf = (t: ToolId, own: ToolTicks, log: ToolTicks): State => own[t] ?? log[t] ?? "unknown";
+/** The row's picked choice: your tick, else "auto". */
+const choiceOf = (t: ToolId, own: ToolTicks): Choice => own[t] ?? "auto";
+/** The "auto" choice's label: "from your log" where the log has a value, else "unknown". */
+const autoLabel = (t: ToolId, log: ToolTicks) => (log[t] !== undefined ? "from your log" : "unknown");
 
-/** Your ticks with `t` set to `s`; "unknown" drops your tick, so the log's value (if any) shows again. */
-function withState(own: ToolTicks, t: ToolId, s: State): ToolTicks {
+/** Your ticks with `t` set to `c`; "auto" drops your tick, so the log's value (if any) reads again. */
+function withChoice(own: ToolTicks, t: ToolId, c: Choice): ToolTicks {
   const next = { ...own };
-  if (s === "unknown") delete next[t];
-  else next[t] = s;
+  if (c === "auto") delete next[t];
+  else next[t] = c;
   return next;
 }
 
@@ -32,9 +38,9 @@ export const toolsSummary = (own: ToolTicks, log: ToolTicks) => {
 };
 
 /**
- * Which tools the box has: a `PickerTrigger` ("Tools  2 set") and, open, one row per tool with a three-way choice
- * (unknown / on box / missing). Rows the log filled say "from your log"; your tick wins over it, and "unknown" hands the
- * row back to the log. Focus stays on the trigger like ChipPicker: ↑↓ move, ←→ or Space cycle, a click picks, Esc or ↵
+ * Which tools the box has: a `PickerTrigger` ("Tools  2 set") and, open, one row per tool with a three-way choice:
+ * "from your log" (or "unknown" where the log says nothing) / on box / missing. A row the log filled shows what it says
+ * under the tool's name; your tick wins over it, and "from your log" hands the row back to the log. Focus stays on the trigger like ChipPicker: ↑↓ move, ←→ or Space cycle, a click picks, Esc or ↵
  * closes with focus on the trigger, Tab moves on.
  */
 export function ToolsPicker({ own, log, onChange, align = "start", ref }: {
@@ -64,15 +70,10 @@ export function ToolsPicker({ own, log, onChange, align = "start", ref }: {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [open]);
 
-  /** One step through unknown → on box → missing; skips a step that would not change what the row reads. */
+  /** One step through from your log (or unknown) → on box → missing, round again. */
   const cycle = (t: ToolId, dir: 1 | -1) => {
-    const now = stateOf(t, own, log);
-    let i = STATES.indexOf(own[t] ?? "unknown");
-    for (let k = 0; k < STATES.length - 1; k++) {
-      i = (i + dir + STATES.length) % STATES.length;
-      const next = withState(own, t, STATES[i]!);
-      if (stateOf(t, next, log) !== now) return onChange(next);
-    }
+    const i = CHOICES.indexOf(choiceOf(t, own));
+    onChange(withChoice(own, t, CHOICES[(i + dir + CHOICES.length) % CHOICES.length]!));
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
@@ -122,37 +123,40 @@ export function ToolsPicker({ own, log, onChange, align = "start", ref }: {
           onInteractOutside={(e) => { if (buttonRef.current?.contains(e.target as Node)) e.preventDefault(); }}
           // Keeps focus on the trigger so its keys keep working and blur does not close the list first.
           onMouseDown={(e) => e.preventDefault()}
-          className="z-50 grid max-h-[var(--radix-popover-content-available-height)] overflow-y-auto rounded-md border border-line-2 bg-surface p-1 text-body shadow-lg"
+          // One column grid shared by every row (subgrid), so the choices line up whether a row says "unknown" or "from your log".
+          className="z-50 grid max-h-[var(--radix-popover-content-available-height)] grid-cols-[6.5rem_repeat(3,max-content)] overflow-y-auto rounded-md border border-line-2 bg-surface p-1 text-body shadow-lg"
         >
           {TOOLS.map((t, i) => {
             const state = stateOf(t, own, log);
-            const fromLog = own[t] === undefined && log[t] !== undefined;
+            const choice = choiceOf(t, own);
+            const said = log[t];
+            const source = said === undefined ? "" : choice === "auto" ? ", from your log" : ", over your log";
             return (
               <div
                 key={t} id={`${listId}-${i}`} role="option" aria-selected={i === active}
-                aria-label={`${TOOL_LABEL[t]}: ${STATE_LABEL[state]}${fromLog ? ", from your log" : ""}`}
+                aria-label={`${TOOL_LABEL[t]}: ${STATE_LABEL[state]}${source}`}
                 onMouseMove={() => setActive(i)}
                 className={cx(
-                  "grid cursor-default grid-cols-[6.5rem_repeat(3,max-content)] items-center gap-2 rounded-sm px-2 py-1",
+                  "col-span-full grid cursor-default grid-cols-subgrid items-center gap-2 rounded-sm px-2 py-1",
                   i === active ? "bg-accent/10 shadow-[inset_2px_0_0_var(--accent)]" : "",
                 )}
               >
-                {/* "from your log" sits under the name, so the list stays narrow. */}
+                {/* What the log says sits under the name, so the list stays narrow. */}
                 <span className="grid min-w-0">
                   <span className={cx("truncate", i === active ? "text-accent" : "text-fg-2")}>{TOOL_LABEL[t]}</span>
-                  {fromLog && <span className="truncate text-meta text-muted">from your log</span>}
+                  {said !== undefined && <span className="truncate text-meta text-muted">log: {STATE_LABEL[said]}</span>}
                 </span>
-                {STATES.map((s) => (
+                {CHOICES.map((c) => (
                   <span
-                    key={s} aria-hidden onClick={() => onChange(withState(own, t, s))}
+                    key={c} aria-hidden onClick={() => onChange(withChoice(own, t, c))}
                     className={cx(
                       "rounded-sm px-1 text-meta ring-1 ring-inset",
-                      s === state
-                        ? s === "missing" ? "text-warn ring-warn" : s === "present" ? "text-accent ring-accent" : "text-fg-2 ring-line-2"
+                      c === choice
+                        ? c === "missing" ? "text-warn ring-warn" : c === "present" ? "text-accent ring-accent" : "text-fg-2 ring-line-2"
                         : "text-muted ring-transparent hover:text-fg-2",
                     )}
                   >
-                    {STATE_LABEL[s]}
+                    {c === "auto" ? autoLabel(t, log) : STATE_LABEL[c]}
                   </span>
                 ))}
               </div>

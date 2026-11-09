@@ -254,6 +254,44 @@ describe("Payloads toggles", () => {
     expect(d.getByLabelText("Command: Listener")).toHaveTextContent("rlwrap nc -lvnp 443");
   });
 
+  it("a bind shell's listener chip reads 'Connect with' under 'Connect from Kali'", async () => {
+    const { user, d } = await openDrawer();
+    await user.click(fitRow(d, "socat bind with PTY"));
+    expect(d.getByRole("heading", { name: "Connect from Kali" })).toBeInTheDocument();
+    const pick = d.getByRole("button", { name: "Connect with: socat (full TTY)" });
+    expect(d.queryByRole("button", { name: /^Listener: / })).not.toBeInTheDocument();
+    await user.click(pick);
+    await user.click(within(d.getByRole("listbox", { name: "Connect with" })).getByRole("option", { name: /rlwrap nc/ }));
+    expect(d.getByLabelText("Command: Listener")).toHaveTextContent("rlwrap nc -nv 198.51.100.20 4444");
+  });
+
+  it("an overridden tool goes back to your log: the row's first choice reads 'from your log'", async () => {
+    m.logList.mockResolvedValue([{
+      ...failed("l1", "zz", at), payloadId: null, returnedNothing: false,
+      content: { kind: "command", blocks: [{ command: "which python3", output: "/usr/bin/python3" }] },
+    }]);
+    const { user, d } = await openDrawer();
+    await user.keyboard("{Alt>}t{/Alt}");
+    const list = within(screen.getByRole("listbox", { name: "Tools" }));
+    expect(list.getByRole("option", { name: "python3: on box, from your log" })).toBeInTheDocument();
+    // → pins "on box" over the log, → again "missing"; ← twice is back to the log.
+    await user.keyboard("{ArrowDown}{ArrowRight}");
+    expect(list.getByRole("option", { name: "python3: on box, over your log" })).toBeInTheDocument();
+    await user.keyboard("{ArrowRight}");
+    expect(list.getByRole("option", { name: "python3: missing, over your log" })).toBeInTheDocument();
+    expect(usePayloadsStore.getState().overrides.h3?.tools).toEqual({ python3: "missing" });
+    // A click on "from your log" hands the row back to inference.
+    const row = list.getByRole("option", { name: "python3: missing, over your log" });
+    await user.click(within(row).getByText("from your log"));
+    expect(list.getByRole("option", { name: "python3: on box, from your log" })).toBeInTheDocument();
+    expect(usePayloadsStore.getState().overrides.h3?.tools).toEqual({});
+    // A tool the log says nothing about keeps "unknown" as its first choice.
+    const bash = list.getByRole("option", { name: "bash: unknown" });
+    expect(within(bash).getByText("unknown")).toBeInTheDocument();
+    expect(within(bash).queryByText("from your log")).not.toBeInTheDocument();
+    expect(d.getByRole("button", { name: "Tools: 1 set" })).toBeInTheDocument();
+  });
+
   it("a bind shell connects from Kali to the host's IP", async () => {
     const { user, d } = await openDrawer();
     await user.click(fitRow(d, "mkfifo + nc bind"));

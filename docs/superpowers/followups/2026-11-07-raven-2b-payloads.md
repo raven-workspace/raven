@@ -54,12 +54,12 @@ These are left over from the 2b-B Payloads build (branch `interpreters-payloads`
 
 ## Drawer and Workbench
 
-- [ ] **The drawer's Port chip only offers 443, 80 and the Settings port.** A custom LPORT needs the Workbench. (`ContextChips.tsx`)
-- [ ] **Overrides are independent:** after you pick OS = Linux, an earlier `cmd` paste override still applies.
-- [ ] **After a mouse pick, ↵ can reopen the chip instead of copying.** ⌥L copies `penelope -O -p {LPORT}` without the guard when no port is set. ⌘↵ on the Encode tab logs LHOST/LPORT, which don't apply there.
-- [ ] **Tabbing past the drawer body goes through the page before reaching Full screen.** Shift+Tab gets there in a few presses, but nothing says so.
-- [ ] **Paste-context labels truncate in the Workbench with no `title`.** The host chip has no minimum width.
-- [ ] **Test gaps:**
+- [x] **The drawer's Port chip only offers 443, 80 and the Settings port.** A custom LPORT needs the Workbench. (`ContextChips.tsx`) Done (prelab batch): an "Other…" option opens an inline numeric field; ↵ sets the port for this host and goes back to the payload, Esc drops it.
+- [x] **Overrides are independent:** after you pick OS = Linux, an earlier `cmd` paste override still applies. Done (prelab batch): picking an OS drops a paste override that does not exist for that OS (cmd.exe on Linux); an any-OS one (Web shell ?cmd=) stays.
+- [x] **After a mouse pick, ↵ can reopen the chip instead of copying.** ⌥L copies `penelope -O -p {LPORT}` without the guard when no port is set. ⌘↵ on the Encode tab logs LHOST/LPORT, which don't apply there. Done (prelab batch): a mouse pick gives focus back to the payload body; ⌥L with no port was already guarded (test added); ⌘↵ on Encode logs no LHOST/LPORT values.
+- [x] **Tabbing past the drawer body goes through the page before reaching Full screen.** Shift+Tab gets there in a few presses, but nothing says so. Done (prelab batch): Tab and ⇧⇥ wrap inside the drawer, so focus never leaves it for the page behind.
+- [x] **Paste-context labels truncate in the Workbench with no `title`.** The host chip has no minimum width. Done (prelab batch): paste-context and filter choices carry a title; the host chip's column is at least 10rem.
+- [x] **Test gaps:** Done (prelab batch): a test for each; all already behaved. The audit's `nc.exe` check was already positive (`toHaveCount(1)` + "Failed here before", 4202644), so no edit.
   - `P` while typing in a field;
   - ↵ or Esc inside an open chip list;
   - ⌥1 against HostView's tabs;
@@ -73,11 +73,11 @@ These are left over from the 2b-B Payloads build (branch `interpreters-payloads`
 
 ## Found in 2b-C (payloads breadth, 2026-11-09)
 
-- [ ] **The CommandList multi-block Transfer test picks blocks by position,** so adding a block silently changes what it checks. Pick them by name.
-- [ ] **Listener placeholders (`TARGET_IP`, `BIND_PORT`) are not reported as unresolved.** A bind-shell listener with no host IP copies with the placeholder in it and no warning.
-- [ ] **The Filter chip shows on msfvenom in injection contexts,** though msfvenom never takes a filter. Show it only for Shell.
-- [ ] **The "Listener" chip label under "Connect from Kali" reads oddly.** Rename it for bind shells.
-- [ ] **Tools inferred from the log can be overridden but not cleared.** Add a way back to "from your log".
-- [ ] **`listKey` uses `JSON.stringify(tools)`,** which depends on key order. Sort the entries first.
-- [ ] **`fakeApi` `payloadBuildRecord` lacks the empty-`payloadId` check** the real command has, so the audit backend accepts a record the app would refuse.
+- [x] **The CommandList multi-block Transfer test picks blocks by position,** so adding a block silently changes what it checks. Pick them by name. Done (prelab batch): it picks "Download with wget" and "Make the file executable" by name.
+- [x] **Listener placeholders (`TARGET_IP`, `BIND_PORT`) are not reported as unresolved.** A bind-shell listener with no host IP copies with the placeholder in it and no warning. Already closed by the 2b-C fix wave: they are fill fields and ⌥L holds the listener back once (toggles test "a bind shell on a host with no IP").
+- [x] **The Filter chip shows on msfvenom in injection contexts,** though msfvenom never takes a filter. Show it only for Shell. Already closed by the 2b-C fix wave: `showsFilter` is Shell only (toggles test "Filter and ⌥F are Shell's only").
+- [x] **The "Listener" chip label under "Connect from Kali" reads oddly.** Rename it for bind shells. Done (prelab batch): it reads "Connect with" for bind shells.
+- [x] **Tools inferred from the log can be overridden but not cleared.** Add a way back to "from your log". Done (prelab batch): a row's first choice reads "from your log" ("unknown" where the log says nothing) and hands the row back to inference; the log's value shows under the name.
+- [x] **`listKey` uses `JSON.stringify(tools)`,** which depends on key order. Sort the entries first. Done (prelab batch): entries sort first.
+- [x] **`fakeApi` `payloadBuildRecord` lacks the empty-`payloadId` check** the real command has, so the audit backend accepts a record the app would refuse. Done (prelab batch): it refuses a blank id with a validation error on `payloadId`.
 - [x] **The WAR duplicate can now use `os: "any"`.** Merge the Linux and Windows WAR entries into one (see the Java WAR item above).

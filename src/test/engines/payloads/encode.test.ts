@@ -21,6 +21,10 @@ describe("encoders", () => {
   it("urlEncodeShell keeps an unresolved {PLACEHOLDER} visible", () => {
     expect(urlEncodeShell("nc {LHOST} {LPORT} {x}", ["LHOST", "LPORT"])).toBe("nc+{LHOST}+{LPORT}+%7Bx%7D");
   });
+  it("urlEncodeShell encodes an astral character (emoji) as UTF-8, and only a lone surrogate as U+FFFD", () => {
+    expect(urlEncodeShell("a😀b")).toBe("a%F0%9F%98%80b");
+    expect(urlEncodeShell("a\uD800b")).toBe("a%EF%BF%BDb");
+  });
   it("urlEncodeFull is encodeURIComponent", () => {
     expect(urlEncodeFull("a b&c")).toBe("a%20b%26c");
   });

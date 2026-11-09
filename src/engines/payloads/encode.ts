@@ -34,7 +34,8 @@ const SHELL_ENCODED: Record<string, string> = {
 export function urlEncodeShell(s: string, keep: readonly string[] = []): string {
   return s.replace(/\{([A-Z][A-Z0-9_]*)\}|[ &><|;#'"/%+=?\\[\]{}^`]|[^\x20-\x7e]/gu, (c, name?: string) => {
     if (name !== undefined) return keep.includes(name) ? c : `%7B${name}%7D`;
-    return SHELL_ENCODED[c] ?? (/[\uD800-\uDFFF]/.test(c) ? "%EF%BF%BD" : encodeURIComponent(c));
+    // A lone surrogate (one code unit) has no UTF-8 form; a whole astral character (emoji) is two units and encodes.
+    return SHELL_ENCODED[c] ?? (c.length === 1 && /[\uD800-\uDFFF]/.test(c) ? "%EF%BF%BD" : encodeURIComponent(c));
   });
 }
 

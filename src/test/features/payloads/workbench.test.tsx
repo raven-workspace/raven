@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -333,6 +333,39 @@ describe("Payloads Workbench", () => {
     expect(await screen.findByRole("tab", { name: "Next" })).toBeInTheDocument();
   });
 
+  it("Esc with /payloads as the first history entry goes home, not out of the app", async () => {
+    const user = userEvent.setup();
+    mount(["/payloads"]);
+    await workbench();
+    await user.keyboard("{Escape}");
+    await vi.waitFor(() => expect(screen.queryByRole("main", { name: "Payloads" })).not.toBeInTheDocument());
+  });
+
+  it("P typed in a field types, and does not jump to the generator list", async () => {
+    const user = userEvent.setup();
+    mount(["/payloads"]);
+    const w = within(await workbench());
+    await w.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    const field = read().getByRole("textbox", { name: "LHOST" });
+    await user.clear(field);
+    await user.type(field, "pP");
+    expect(field).toHaveValue("pP");
+    expect(field).toHaveFocus();
+    expect(read().getByRole("listbox", { name: "Generator" })).not.toHaveFocus();
+  });
+
+  it("paste-context choices carry their full label as a title; the host chip has a minimum width", async () => {
+    mount(["/payloads"]);
+    const w = within(await workbench());
+    await w.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    for (const label of ["URL / form parameter", "Inside a SQL string", "Jenkins / Groovy console"]) {
+      expect(read().getByRole("button", { name: label })).toHaveAttribute("title", label);
+    }
+    // The chip's column never shrinks below 10rem, so a short or missing name still reads as a control.
+    const chip = read().getByRole("button", { name: "Fill for host: zzweb01" });
+    expect(chip.closest("[data-host-chip-cell]")).toHaveClass("grid-cols-[minmax(10rem,max-content)]");
+  });
+
   it("Esc leaves the Workbench", async () => {
     const user = userEvent.setup();
     mount(["/e/e1/h/h1", "/payloads"]);
@@ -402,6 +435,45 @@ describe("SQL panel folds finished steps", () => {
     await user.click(read().getByRole("button", { name: "Fill for host: zzdb02" }));
     await user.click(await screen.findByRole("option", { name: /zzweb01/ }));
     expect(await sql.findByRole("button", { name: "4. Count the columns: 5" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("a step held on host A is not held again after A → B → A", async () => {
+    const user = userEvent.setup();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h2" });
+    usePayloadsStore.setState({ overrides: { h1: { sqlValues: { columns: 5 } } } });
+    mount(["/payloads?generator=sql"]);
+    const sql = await sqlIn();
+    await user.type(sql.getByRole("textbox", { name: "Columns" }), "3");
+    expect(sql.getByRole("button", { name: "4. Count the columns" })).toHaveAttribute("aria-expanded", "true");
+    // The host in scope moves while focus stays in the field (no leave to release the hold), then comes back.
+    act(() => useLastEngagementStore.setState({ hostId: "h1" }));
+    expect(await sql.findByRole("button", { name: "4. Count the columns: 5" })).toHaveAttribute("aria-expanded", "false");
+    act(() => useLastEngagementStore.setState({ hostId: "h2" }));
+    // Back on A, its old hold is gone: the filled step reads folded.
+    expect(await sql.findByRole("button", { name: "4. Count the columns: 3" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it.each([
+    ["a cancelled press", (el: HTMLElement) => fireEvent.pointerCancel(el)],
+    ["the window losing focus", () => fireEvent.blur(window)],
+  ])("after %s, a pending fold runs and keyboard folds are immediate again", async (_, end) => {
+    const user = userEvent.setup();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h2" });
+    mount(["/payloads?generator=sql"]);
+    const sql = await sqlIn();
+    await user.type(sql.getByRole("textbox", { name: "Columns" }), "3");
+    const target = sql.getByRole("button", { name: "Copy Find the shown columns" });
+    await user.pointer({ keys: "[MouseLeft>]", target });
+    expect(sql.getByRole("textbox", { name: "Columns" })).toBeInTheDocument();
+    end(target);
+    const fold = await sql.findByRole("button", { name: "4. Count the columns: 3" });
+    expect(fold).toHaveAttribute("aria-expanded", "false");
+    // No click since: ↵ reopens the step at its field, and ⇥ out folds it at once.
+    fold.focus();
+    await user.keyboard("{Enter}");
+    expect(sql.getByRole("textbox", { name: "Columns" })).toHaveFocus();
+    await user.tab();
+    expect(sql.getByRole("button", { name: "4. Count the columns: 3" })).toHaveAttribute("aria-expanded", "false");
   });
 
   it("a filled value folds its step showing the value; ↵ on the fold line reopens it; clearing it unfolds", async () => {

@@ -121,9 +121,10 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
   const [psCommand, setPsCommand] = useState("");
   const [status, setStatus] = useState<string>();
 
-  // Which fit is in view: back to the best one whenever the list it indexes changes.
+  // Which fit is in view: back to the best one whenever the list it indexes changes. Tool ticks sort first, so the same
+  // ticks in another key order are the same list.
   const ranked = isRanked(generator) ? fit.ranked[generator] : null;
-  const listKey = `${generator}|${fit.hostKey}|${fit.os}|${fit.context}|${fit.toggles.callbacksBlocked}|${JSON.stringify(fit.toggles.tools)}`;
+  const listKey = `${generator}|${fit.hostKey}|${fit.os}|${fit.context}|${fit.toggles.callbacksBlocked}|${JSON.stringify(Object.entries(fit.toggles.tools).sort(([a], [b]) => a.localeCompare(b)))}`;
   const [pos, setPos] = useState({ key: listKey, index: 0 });
   const index = pos.key === listKey && ranked ? Math.min(pos.index, Math.max(0, ranked.fits.length - 1)) : 0;
   const setIndex = (i: number) => setPos({ key: listKey, index: i });
@@ -257,7 +258,8 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
         engagementId, host, hosts: d.hosts, command: b.text, title: b.def.title,
         // msfvenom, a file made on Kali and a step run in your own terminal run on your machine; the rest on the target.
         ranOn: b.def.generator === "msfvenom" || b.def.upload?.kali || b.def.runsOn === "kali" ? (d.settings?.machines[0] ?? "") : host.name,
-        payloadId: b.def.id, payloadValues: { LHOST: fit.lhost, LPORT: fit.port },
+        // An encoded command has no LHOST or LPORT in it: nothing to remember for it.
+        payloadId: b.def.id, ...(b.def.generator === "encode" ? {} : { payloadValues: { LHOST: fit.lhost, LPORT: fit.port } }),
       });
       return "copied";
     } catch (e) {
@@ -303,7 +305,11 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
       } else if (engagementId && isHostPickKey(e)) {
         e.preventDefault();
         hostRef.current?.open();
-      } else if (onEscape && e.key === "Escape" && document.activeElement?.getAttribute("aria-expanded") !== "true") {
+      } else if (
+        onEscape && e.key === "Escape" && document.activeElement?.getAttribute("aria-expanded") !== "true"
+        // A field that takes Esc itself (the Port chip's "Other…" field) closes first.
+        && !document.activeElement?.hasAttribute("data-own-esc")
+      ) {
         e.preventDefault();
         onEscape();
       }

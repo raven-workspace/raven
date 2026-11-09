@@ -37,6 +37,12 @@ describe("audit fake api", () => {
     expect(await api.vectorsList("h-exam-ms01")).toHaveLength(4);
   });
 
+  it("payloadBuildRecord refuses an empty payload id, as the real command does", async () => {
+    const build = { engagementId: "e-lab", hostId: "h-web", payloadId: " ", lhost: "192.0.2.10", lport: "443", at: 1 };
+    await expect(api.payloadBuildRecord(build)).rejects.toMatchObject({ code: "validation", field: "payloadId" });
+    expect(await api.payloadBuildsList("e-lab")).not.toContainEqual(expect.objectContaining({ payloadId: " " }));
+  });
+
   it("round-trips a logged payload's id and values, and serves the failed nc.exe entry", async () => {
     const created = await api.logCreate("e-pay", {
       title: "PowerShell base64 (-e) · 198.51.100.20", hostIds: ["h-pay-iis"], ranOn: "Kali (VM)",

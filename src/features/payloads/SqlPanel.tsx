@@ -169,6 +169,8 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
   const copied = new Set(ov?.sqlCopied ?? []);
   const copiedKey = (id: string) => `${engine}:${point}:${id}`;
   const [heldState, setHeld] = useState<{ host: string; ids: ReadonlySet<string> }>(() => ({ host: fit.hostKey, ids: new Set() }));
+  // Another host drops the holds outright, so coming back (A → B → A) does not revive the old ones.
+  if (heldState.host !== fit.hostKey) setHeld({ host: fit.hostKey, ids: new Set() });
   const held = heldState.host === fit.hostKey ? heldState.ids : new Set<string>();
   const hold = (id: string, on: boolean) => setHeld((h) => {
     const ids = h.host === fit.hostKey ? h.ids : new Set<string>();
@@ -242,7 +244,8 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
     const down = () => {
       pointerDown.current = true;
     };
-    // After pointerup the click is dispatched in the same task: fold on the next one.
+    // After pointerup the click is dispatched in the same task: fold on the next one. A cancelled press (pointercancel)
+    // or the window losing focus mid-press ends the press the same way, so keyboard folds never wait for a next click.
     const up = () => {
       pointerDown.current = false;
       clearTimeout(timer);
@@ -253,9 +256,13 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
     };
     window.addEventListener("pointerdown", down, true);
     window.addEventListener("pointerup", up, true);
+    window.addEventListener("pointercancel", up, true);
+    window.addEventListener("blur", up);
     return () => {
       window.removeEventListener("pointerdown", down, true);
       window.removeEventListener("pointerup", up, true);
+      window.removeEventListener("pointercancel", up, true);
+      window.removeEventListener("blur", up);
       clearTimeout(timer);
     };
   }, []);

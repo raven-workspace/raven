@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { PasteContext } from "../../engines/payloads/context";
+import { PASTE_CONTEXTS, type PasteContext } from "../../engines/payloads/context";
 import type { SqlEngine, SqlPoint, SqlValues } from "../../engines/payloads/sql";
 import type { FilterId } from "../../engines/payloads/filters";
 import type { GeneratorId, ListenerId, ToolId } from "../../engines/payloads/types";
@@ -41,6 +41,7 @@ interface PayloadsState {
   show: (g: GeneratorId) => void;
   close: () => void;
   setGenerator: (g: GeneratorId) => void;
+  /** Merges `patch` into the host's override; an OS pick drops a paste context that does not exist for that OS. */
   override: (hostId: string, patch: PayloadOverride) => void;
   setLhost: (lhost: string | null) => void;
   pickListener: (payloadId: string, id: ListenerId) => void;
@@ -63,7 +64,15 @@ export const usePayloadsStore = create<PayloadsState>()((set, get) => ({
   },
   close: () => set({ open: false }),
   setGenerator: (generator) => set({ generator }),
-  override: (hostId, patch) => set((s) => ({ overrides: { ...s.overrides, [hostId]: { ...s.overrides[hostId], ...patch } } })),
+  override: (hostId, patch) => set((s) => {
+    const next: PayloadOverride = { ...s.overrides[hostId], ...patch };
+    // Picking an OS drops a paste context that does not exist there (cmd.exe on Linux); an any-OS one stays.
+    if (patch.os && next.context && patch.context === undefined) {
+      const os = PASTE_CONTEXTS.find((c) => c.id === next.context)?.os;
+      if (os !== "any" && os !== patch.os) delete next.context;
+    }
+    return { overrides: { ...s.overrides, [hostId]: next } };
+  }),
   setLhost: (lhost) => set({ lhost }),
   pickListener: (payloadId, id) => set((s) => ({ listenerPick: { ...s.listenerPick, [payloadId]: id } })),
 }));
