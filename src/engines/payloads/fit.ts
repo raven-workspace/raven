@@ -192,7 +192,7 @@ const bannedInExam = (d: PayloadDef) =>
  * then Failed here before, then Not allowed in the exam. Only the first is shown.
  */
 function misfitReason(d: PayloadDef, s: PayloadSituation, ctx: PasteContext | null): string | null {
-  if (s.os && d.os !== s.os) return `Wrong OS (${s.os})`;
+  if (s.os && d.os !== "any" && d.os !== s.os) return `Wrong OS (${s.os})`;
   if (ctx && !d.contexts.includes(ctx)) {
     return `Doesn't work in ${PASTE_CONTEXTS.find((c) => c.id === ctx)?.label ?? ctx}`;
   }

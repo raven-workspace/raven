@@ -88,7 +88,7 @@ describe("UPGRADE", () => {
       expect(d.generator).toBe("upgrade");
       expect(d.os).toBe("linux");
       expect(d.contexts).toEqual(["bash-prompt"]);
-      expect(d.listener).toBe("none");
+      expect(d.listeners).toEqual([]);
     }
     expect(new Set(UPGRADE.map((d) => d.id)).size).toBe(UPGRADE.length);
   });

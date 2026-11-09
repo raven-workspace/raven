@@ -288,7 +288,10 @@ export function buildSql(stepOrExecId: string, engine: SqlEngine, point: SqlPoin
   const def: PayloadDef = {
     id: stepOrExecId, generator: "sql", title: (exec ?? step)!.title, os: engine === "mssql" ? "windows" : "linux",
     contexts: [point === "url-param" ? "url-param" : "sql-string"], requires: [], template: raw, parts,
-    listener: c.listener ? "penelope" : "none",
+    listeners: c.listener ? ["penelope", "rlwrap-nc"] : [],
   };
-  return { def, text, listener: c.listener, parts, notes, unresolved: c.unresolved, prepare: c.prepare };
+  return {
+    def, text, listener: c.listener, listenerId: c.listener ? "penelope" : null, listenerHeading: "Listener", trigger: null,
+    parts, notes, unresolved: c.unresolved, prepare: c.prepare,
+  };
 }

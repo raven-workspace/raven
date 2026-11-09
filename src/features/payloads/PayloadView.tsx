@@ -80,6 +80,12 @@ const REQUIRE_REASON: Record<PayloadDef["requires"][number], string> = {
   powershell: "uses PowerShell",
   bash: "uses bash",
   php: "uses PHP",
+  perl: "uses perl",
+  socat: "uses socat",
+  curl: "uses curl",
+  wget: "uses wget",
+  awk: "uses awk",
+  busybox: "uses busybox",
   "served-file": "serves a file from Kali",
 };
 

