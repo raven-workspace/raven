@@ -72,7 +72,10 @@ export function buildPayload(
     trigger = { text: filler(triggerUnresolved)(def.upload.trigger), unresolved: triggerUnresolved };
   }
 
-  const notes: string[] = [...(def.notes ?? [])];
+  // Notes may name {LPORT}, {LHOST}, {TARGET_IP} or {BIND_PORT}; a blank one stays visible, like in a listener.
+  const noteValues: Record<string, string> = {};
+  for (const name of ["LHOST", "LPORT", "TARGET_IP", "BIND_PORT"]) noteValues[name] = value(name) ?? "";
+  const notes: string[] = (def.notes ?? []).map((n) => fillListener(n, noteValues));
   let text: string;
   if (unresolved.length > 0) {
     // Keep the placeholder visible; encoding or wrapping it would hide the gap.

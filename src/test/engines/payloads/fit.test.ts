@@ -136,7 +136,7 @@ describe("fit engine", () => {
     const r = rankPayloads([...REVERSE_SHELLS].reverse(), s, "bash-prompt");
     expect(ids(r.fits)).toEqual(ids([...REVERSE_SHELLS].reverse().filter((d) => d.os === "linux")));
     const only = rankPayloads(REVERSE_SHELLS, { ...base, os: null }, "cmd");
-    expect(ids(only.fits)).toEqual(["ps-b64", "nishang-cradle", "nc-exe"]);
+    expect(ids(only.fits)).toEqual(["ps-b64", "nishang-cradle", "nc-exe", "ps-tls"]);
   });
 
   it("a mid-output # or $ line does not set a prompt; bash-5.1$ and sh-4.4$ do", () => {
