@@ -4,8 +4,8 @@ These are left over from the 2b-B Payloads build (branch `interpreters-payloads`
 
 ## Do first
 
-- [ ] **The Transfer copy-guard hint names the wrong key.** It says "↵ again to copy anyway", but in Transfer the repeat key is ⌘↵ (or the Copy button). Let `useCopyGuard` take the repeat key as a parameter. Also, Transfer's Copy button and its ⌘↵ use two separate guards, so you can get the "not filled" step twice. (`copyGuard.ts:46`, `TransferGenerator.tsx`)
-- [ ] **Two old test files still use lab-style IPs.** `src/test/transferGenerator.test.tsx` uses 10.10.14.9 and `src/test/engines/interpret/peas.test.ts` uses 10.10.14.7. Switch both to 192.0.2.x, since fixtures must be fully made up.
+- [x] **The Transfer copy-guard hint names the wrong key.** It says "↵ again to copy anyway", but in Transfer the repeat key is ⌘↵ (or the Copy button). Let `useCopyGuard` take the repeat key as a parameter. Also, Transfer's Copy button and its ⌘↵ use two separate guards, so you can get the "not filled" step twice. (`copyGuard.ts:46`, `TransferGenerator.tsx`)
+- [x] **Two old test files still use lab-style IPs.** `src/test/transferGenerator.test.tsx` uses 10.10.14.9 and `src/test/engines/interpret/peas.test.ts` uses 10.10.14.7. Switch both to 192.0.2.x, since fixtures must be fully made up.
 - [ ] **Check the Kali paths in the Nishang and powercat prepare step on a real Kali box.** (`reverseShells.ts`)
 - [ ] **Open the app and use the drawer and the Workbench for real tasks.** So far they have only been tested and audited against fake data.
 

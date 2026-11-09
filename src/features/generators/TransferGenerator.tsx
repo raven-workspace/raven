@@ -9,7 +9,7 @@ import { isDialogOpen, useKeydown } from "../../lib/keys";
 import { shortHostName } from "../../lib/hostName";
 import { reportError } from "../../lib/lockSignal";
 import { ChipSet, Input, Kbd, Select, labelClass } from "../../ui";
-import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
+import { useCopyGuard } from "../arsenal/copyGuard";
 import { logCommand } from "../capture/logCommand";
 import { CommandList } from "../checklist/CommandList";
 import { fillLibraryCommand } from "../checklist/goalCommands";
@@ -117,7 +117,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
   };
   const focusToken = useCallback((t: string) => (t === "FILE" || t === "SCRIPT" ? fileRef.current?.focus() : focusOuter(t)), [focusOuter]);
   const focusNothing = useCallback(() => {}, []);
-  const guard = useCopyGuard({ focusToken, focusCred: focusNothing, hostName: host ? shortHostName(host.name) : null });
+  const guard = useCopyGuard({ focusToken, focusCred: focusNothing, hostName: host ? shortHostName(host.name) : null, repeatKey: "⌘↵ or Copy" });
   const logTarget = async () => {
     setStatus(undefined);
     if (!targetCmd || !host || !d.engagement || !targetText) return;
@@ -243,7 +243,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
           {target.length > 0 && (
             <div className="grid gap-2">
               <h3 title={hostName} className="m-0 truncate text-body text-fg-2">{kali.length > 0 ? "2" : "1"}. On {hostName}</h3>
-              <CommandList commands={target} hostName={shortName} focusToken={focusToken} />
+              <CommandList commands={target} hostName={shortName} focusToken={focusToken} guard={guard} {...(targetCmd ? { guardAs: targetCmd } : {})} />
               <p className="m-0 text-meta text-muted">
                 <Kbd>⌘↵</Kbd> copies the {host ? hostName : "target"} half and logs it{host ? "" : " (pick a host)"}.
               </p>
@@ -252,7 +252,6 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
           {target.length === 0 && <p className="m-0 text-meta text-muted">Kali only: nothing to run on {hostName}.</p>}
         </div>
       )}
-      {targetCmd && guard.forKey === copyKey(targetCmd) && guard.hint && <p role="status" className="m-0 text-meta text-warn">{guard.hint}</p>}
       {status && <p role="status" className="m-0 text-meta text-muted">{status}</p>}
     </section>
   );

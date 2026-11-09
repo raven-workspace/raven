@@ -32,7 +32,7 @@ const noCred = () => {};
  * Filled command blocks (one `CommandBlock` each). Copy goes through the copy guard: a command with an unresolved token
  * focuses it first (`focusToken` / `focusCred`; a surface with no such field passes nothing and the hint still shows).
  */
-export function CommandList({ commands, hostName = null, focusToken = noToken, focusCred = noCred, hideDcNote = false, strongTitles = false }: {
+export function CommandList({ commands, hostName = null, focusToken = noToken, focusCred = noCred, hideDcNote = false, strongTitles = false, guard: shared, guardAs, repeatKey }: {
   commands: FilledCommand[];
   /** The short name of the host in view, for "Copied for <host>". */
   hostName?: string | null;
@@ -41,13 +41,20 @@ export function CommandList({ commands, hostName = null, focusToken = noToken, f
   hideDcNote?: boolean;
   /** Titles read as headings over their blocks (the Arsenal), not as quiet labels (a checklist goal's commands). */
   strongTitles?: boolean;
+  /** One guard shared with another copy control (Transfer's ⌘↵), instead of this list's own. */
+  guard?: ReturnType<typeof useCopyGuard>;
+  /** Guard every Copy here as this one command (its id and unresolved tokens), so a shared guard has one arm. */
+  guardAs?: FilledCommand;
+  /** What the hint tells the user to press for the second try. */
+  repeatKey?: string;
 }) {
-  const guard = useCopyGuard({ focusToken, focusCred, hostName });
+  const own = useCopyGuard({ focusToken, focusCred, hostName, ...(repeatKey ? { repeatKey } : {}) });
+  const guard = shared ?? own;
 
   const copy = (c: FilledCommand, button: HTMLElement) => {
     // A filled command carries a real credential: that copy is a secret.
     const write = c.copyText !== undefined && c.copyText !== c.text ? copySecret : copyPlain;
-    return guard.attempt(c, () => write(c.copyText ?? c.text)).then((r) => {
+    return guard.attempt(guardAs ?? c, () => write(c.copyText ?? c.text)).then((r) => {
       // Held back with no field or chip to take focus here: the Copy button keeps it, so Enter is the second press.
       const a = document.activeElement;
       if (r === "guarded" && (!a || a === document.body || a === button)) button.focus();
@@ -61,7 +68,7 @@ export function CommandList({ commands, hostName = null, focusToken = noToken, f
         <li key={c.id} className="grid gap-1">
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2">
             <span data-testid="command-desc" className={strongTitles ? "text-body font-medium text-fg" : "text-meta text-muted-2"}>{c.title}</span>
-            {guard.forKey === copyKey(c) && (guard.hint || guard.confirm) && (
+            {guard.forKey === copyKey(guardAs ?? c) && (guard.hint || guard.confirm) && (
               <span role="status" className={`text-meta ${guard.hint || c.unresolved.length > 0 ? "text-warn" : "text-accent"}`}>
                 {guard.hint ?? guard.confirm}
               </span>

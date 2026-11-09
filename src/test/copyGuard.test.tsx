@@ -115,12 +115,34 @@ describe("guardCopy", () => {
 
 describe("useCopyGuard", () => {
   const filled = (unresolved: string[], id = "a") => ({ id, unresolved }) as never;
-  function setup() {
+  function setup(repeatKey?: string) {
     const focusToken = vi.fn();
     const focusCred = vi.fn();
-    const hook = renderHook(() => useCopyGuard({ focusToken, focusCred, hostName: null }));
+    const hook = renderHook(() => useCopyGuard({ focusToken, focusCred, hostName: null, ...(repeatKey ? { repeatKey } : {}) }));
     return { focusToken, focusCred, ...hook };
   }
+  it("hint names the repeat key", async () => {
+    const { result } = setup("⌘↵ or Copy");
+    await act(() => result.current.attempt(filled(["LHOST"]), async () => {}));
+    expect(result.current.hint).toBe("{LHOST} not filled. Press ⌘↵ or Copy again to copy anyway");
+  });
+  it("warn holds the first copy back", async () => {
+    const { result } = setup();
+    const doCopy = vi.fn(async () => {});
+    const opts = { warn: "Metasploit is locked to dc01" };
+    expect(await act(() => result.current.attempt(filled([]), doCopy, opts))).toBe("guarded");
+    expect(result.current.hint).toBe("Metasploit is locked to dc01. Press ↵ again to copy anyway");
+    expect(doCopy).not.toHaveBeenCalled();
+    expect(await act(() => result.current.attempt(filled([]), doCopy, opts))).toBe("copied");
+    expect(doCopy).toHaveBeenCalledTimes(1);
+  });
+  it("a different warnKey re-arms", async () => {
+    const { result } = setup();
+    const doCopy = vi.fn(async () => {});
+    await act(() => result.current.attempt(filled([]), doCopy, { warn: "w", warnKey: "a" }));
+    expect(await act(() => result.current.attempt(filled([]), doCopy, { warn: "w", warnKey: "b" }))).toBe("guarded");
+    expect(doCopy).not.toHaveBeenCalled();
+  });
   it("sends USER and DOMAIN to their field, and PASS, HASH and CRED to the credential chip", async () => {
     const { result, focusToken, focusCred } = setup();
     for (const t of ["USER", "DOMAIN"]) await act(() => result.current.attempt(filled([t]), async () => {}));

@@ -28,8 +28,10 @@ const CONFIRM_MS = 2500;
  * try; then it focuses the field (or the credential chip) and shows `hint`. After a copy, `confirm` names the host and
  * how many placeholders were left, and clears itself. `forKey` is the `copyKey` of the command both texts belong to.
  */
-export function useCopyGuard({ focusToken, focusCred, hostName }: {
+export function useCopyGuard({ focusToken, focusCred, hostName, repeatKey = "↵" }: {
   focusToken: (token: string) => void; focusCred: () => void; hostName: string | null;
+  /** What the hint tells the user to press for the second try ("⌘↵ or Copy" where two controls copy). */
+  repeatKey?: string;
 }) {
   const armed = useRef<Armed | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -37,16 +39,27 @@ export function useCopyGuard({ focusToken, focusCred, hostName }: {
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const attempt = useCallback(
-    async (cmd: FilledCommand, doCopy: () => Promise<void>): Promise<"copied" | "guarded"> => {
+    async (
+      cmd: FilledCommand, doCopy: () => Promise<void>, opts?: { warn?: string; warnKey?: string },
+    ): Promise<"copied" | "guarded"> => {
       const key = copyKey(cmd);
       const r = guardCopy(cmd, armed.current);
       clearTimeout(timer.current);
       if (r.action === "focus") {
         armed.current = { id: cmd.id, key };
-        setState({ key, hint: `{${r.token}} not filled. Press ↵ again to copy anyway`, confirm: null });
+        setState({ key, hint: `{${r.token}} not filled. Press ${repeatKey} again to copy anyway`, confirm: null });
         if (CRED_TOKENS.has(r.token)) focusCred();
         else focusToken(r.token);
         return "guarded";
+      }
+      // Unresolved tokens are settled; a warning is a second, separate hold-back, armed on its own key.
+      if (opts?.warn) {
+        const warnArm = `${key}|${opts.warnKey ?? opts.warn}`;
+        if (!(armed.current && armed.current.id === cmd.id && armed.current.key === warnArm)) {
+          armed.current = { id: cmd.id, key: warnArm };
+          setState({ key, hint: `${opts.warn}. Press ${repeatKey} again to copy anyway`, confirm: null });
+          return "guarded";
+        }
       }
       armed.current = null;
       await doCopy();
@@ -56,7 +69,7 @@ export function useCopyGuard({ focusToken, focusCred, hostName }: {
       timer.current = setTimeout(() => setState(null), CONFIRM_MS);
       return "copied";
     },
-    [focusToken, focusCred, hostName],
+    [focusToken, focusCred, hostName, repeatKey],
   );
 
   /** Drops the arm and the notes: the command in view changed, so a held-back copy no longer applies. */

