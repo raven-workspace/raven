@@ -27,15 +27,15 @@ These are left over from the 2b-B Payloads build (branch `interpreters-payloads`
 
 ## SQL
 
-- [ ] **`CONCAT(` also matches `GROUP_CONCAT(`,** which adds a spurious "CONCAT" part. (`sqlKeywords.ts`)
-- [ ] **The keyword scan also reads embedded data,** so `NULL`/`AS`/`FROM` inside base64 or a custom cmd add spurious parts. Scan only the SQL skeleton. (`sql.ts`)
-- [ ] **Some explanations assume a stacked injection** ("the leading ;") even in a client session.
-- [ ] **Smaller correctness gaps:**
+- [x] **`CONCAT(` also matches `GROUP_CONCAT(`,** which adds a spurious "CONCAT" part. (`sqlKeywords.ts`)
+- [x] **The keyword scan also reads embedded data,** so `NULL`/`AS`/`FROM` inside base64 or a custom cmd add spurious parts. Scan only the SQL skeleton. (`sql.ts`)
+- [x] **Some explanations assume a stacked injection** ("the leading ;") even in a client session.
+- [x] **Smaller correctness gaps:**
   - The LOAD_FILE "defaults to /etc/passwd" note shows even when a path is given.
   - INTO OUTFILE doesn't check the bounds of the reflected column.
   - `%2d` is skipped when nc.exe is passed through `cmd`.
-- [ ] **Databases, tables and columns return many rows but the page shows one.** Add string_agg / LISTAGG / group_concat or a paging note.
-- [ ] **Engine gaps:**
+- [x] **Databases, tables and columns return many rows but the page shows one.** Add string_agg / LISTAGG / group_concat or a paging note.
+- [x] **Engine gaps:**
   - MySQL 5.7 needs `FROM DUAL` for `SELECT 1 WHERE 1=1`.
   - Oracle's `dbms_pipe` sleep needs an EXECUTE grant (mention it).
   - On strict engines, reflected-columns with no column count takes the old unknown-column path.
