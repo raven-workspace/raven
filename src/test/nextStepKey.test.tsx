@@ -139,13 +139,13 @@ describe("J: next open step", () => {
     mount([]);
     await screen.findByRole("heading", { name: "Information gathering" });
     const first = row(enumIds[0]!);
-    for (const store of [useArsenalStore, usePayloadsStore]) {
-      store.setState({ open: true });
+    for (const store of [useArsenalStore, usePayloadsStore] as const) {
+      (store.setState as (p: { open: boolean }) => void)({ open: true });
       const btn = screen.getByRole("tab", { name: "Log" });
       btn.focus();
       await user.keyboard("j");
       expect(first.contains(document.activeElement)).toBe(false);
-      store.setState({ open: false });
+      (store.setState as (p: { open: boolean }) => void)({ open: false });
     }
   });
 

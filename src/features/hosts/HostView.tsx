@@ -35,8 +35,8 @@ const HINTS: Hint[] = [
   { keys: "⌥1–3", label: "tabs", priority: 4 },
 ];
 
-/** The Arsenal, Payloads or Notes drawer is open over this page: its keys win (they are not role=dialog). */
-const drawerOpen = () => useArsenalStore.getState().open || usePayloadsStore.getState().open || useNotesStore.getState().open;
+/** The Arsenal or Payloads drawer is open over this page: its keys win (they are not role=dialog). Notes is left out: H and F still work over it, and J below checks it too. */
+const drawerOpen = () => useArsenalStore.getState().open || usePayloadsStore.getState().open;
 
 /** The first To do or Doing step on screen, in checklist order: its expand button gets focus and the row scrolls into view. */
 function focusFirstOpenStep(): boolean {
@@ -147,7 +147,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   const widened = useRef(false);
   const [jumpNote, setJumpNote] = useState<string>();
   useKeydown((e) => {
-    if (!isFreeKey(e) || drawerOpen() || (e.key !== "j" && e.key !== "J") || split || stuckOpen) return;
+    if (!isFreeKey(e) || drawerOpen() || useNotesStore.getState().open || (e.key !== "j" && e.key !== "J") || split || stuckOpen) return;
     e.preventDefault();
     // The Next tab's checklist is not on screen yet (loading): nothing to jump to, and no false "all done".
     if (tab === "next" && !document.querySelector("[data-checklist-ready]")) return;
