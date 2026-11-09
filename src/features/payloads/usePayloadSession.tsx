@@ -240,8 +240,8 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
       if (!log || !host || !d.engagement) return "copied";
       await logCommand(qc, {
         engagementId, host, hosts: d.hosts, command: b.text, title: b.def.title,
-        // msfvenom runs on your own machine; everything else runs on the target.
-        ranOn: b.def.generator === "msfvenom" ? (d.settings?.machines[0] ?? "") : host.name,
+        // msfvenom and a file made on Kali run on your own machine; everything else runs on the target.
+        ranOn: b.def.generator === "msfvenom" || b.def.upload?.kali ? (d.settings?.machines[0] ?? "") : host.name,
         payloadId: b.def.id, payloadValues: { LHOST: fit.lhost, LPORT: fit.port },
       });
       return "copied";

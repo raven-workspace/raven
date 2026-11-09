@@ -132,6 +132,29 @@ describe("Uploaded file view", () => {
     expect(await navigator.clipboard.readText()).toBe("http://198.51.100.20/{UPLOAD_PATH}/shell.php?cmd=whoami");
   });
 
+  it("⌘↵ on a file made on Kali logs it as run on Kali, against the host", async () => {
+    const { user, d } = await openUploaded();
+    await vi.waitFor(() => expect(fitNames(d)).toContain("PHP reverse shell (pentestmonkey)"));
+    await user.click(fitRow(d, "PHP reverse shell (pentestmonkey)"));
+    await d.findByRole("heading", { name: /Make rev\.php on Kali/ });
+    d.getByLabelText("Command: Payload").focus();
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await vi.waitFor(() => expect(logCommand).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(logCommand).mock.calls[0]![1]).toEqual(expect.objectContaining({ ranOn: "Kali (VM)", payloadId: "upload-php-pentestmonkey" }));
+    expect(vi.mocked(logCommand).mock.calls[0]![1].host.id).toBe("h3");
+  });
+
+  it("⌘↵ on a web shell saved on the target logs it as run on the target", async () => {
+    const { user, d } = await openUploaded();
+    await vi.waitFor(() => expect(fitNames(d)).toContain(PHP));
+    await user.click(fitRow(d, PHP));
+    await d.findByRole("heading", { name: "Save as shell.php" });
+    d.getByLabelText("Command: Payload").focus();
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await vi.waitFor(() => expect(logCommand).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(logCommand).mock.calls[0]![1]).toEqual(expect.objectContaining({ ranOn: "web01.example.test" }));
+  });
+
   it("a file made on Kali says so; the Workbench numbers the steps", async () => {
     const user = userEvent.setup();
     usePayloadsStore.setState({ overrides: { h3: { context: "uploaded-file" } } });
