@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams, useSearchParams } from "react-router";
 import { useDefaultLayout, usePanelRef } from "react-resizable-panels";
@@ -77,19 +77,21 @@ export function CredentialsSection() {
   // Landed: let go, so a later delete of that password can't hold the fallback off again.
   if (cracked && !waiting) setCracked(undefined);
 
-  const choose = (cid: string) => {
+  const choose = useCallback((cid: string) => {
     setCracked(undefined);
     select(cid);
-  };
-  const onCracked = (hash: Credential) => (password: Credential) => {
+  }, [select]);
+  // Move the selection to a credential just made (Record plaintext, Add credential), holding the old one docked until it is listed.
+  const follow = (fromId: string, password: Credential) => {
     select(password.id);
     // Read live, not from this render: the refetch may already have landed.
     const q = qc.getQueryState<Credential[]>(credentialsKey(id));
     const listed = !!q?.data?.some((c) => c.id === password.id);
     // Nothing more is coming and it isn't listed: no hold, normal resolution decides.
     if (q?.fetchStatus === "idle" && !listed) return;
-    setCracked({ hashId: hash.id, passwordId: password.id, since: listed ? -1 : Math.max(q?.dataUpdatedAt ?? 0, q?.errorUpdatedAt ?? 0) });
+    setCracked({ hashId: fromId, passwordId: password.id, since: listed ? -1 : Math.max(q?.dataUpdatedAt ?? 0, q?.errorUpdatedAt ?? 0) });
   };
+  const onCracked = (hash: Credential) => (password: Credential) => follow(hash.id, password);
   const onFold = (fold: boolean) => (fold ? dockRef.current?.collapse() : dockRef.current?.expand());
 
   const state = queryState([hostsQ, credsQ, usersQ, grantsQ, attemptsQ, servicesQ], "credentials");
@@ -200,7 +202,7 @@ export function CredentialsSection() {
           <div className="min-h-0">{panes}</div>
         )}
 
-        {form && <CredentialForm eid={id} hosts={hosts} credentials={creds} edit={form.edit} onClose={() => setForm(null)} />}
+        {form && <CredentialForm eid={id} hosts={hosts} credentials={creds} edit={form.edit} onClose={() => setForm(null)} onSaved={form.edit ? undefined : (c) => follow(selected?.id ?? "", c)} />}
         {deleting && (
           <ConfirmDelete
             title={`Delete ${credLabel(deleting)}?`}

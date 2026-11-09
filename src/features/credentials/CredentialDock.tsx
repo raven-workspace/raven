@@ -1,4 +1,4 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { CaretDown, CaretUp, PencilSimple, Trash } from "@phosphor-icons/react";
 import {
   cellFor,
@@ -80,10 +80,13 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
   const matched = ownerless ? all.filter((c) => c.fromSecretId === cred.id) : [];
   const scopeHost = cred.scope === "local" && cred.localHostId ? hostLabel(hosts.find((h) => h.id === cred.localHostId)) : "";
 
+  const header = useRef<HTMLElement>(null);
   const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
     if (e.key !== "Escape" || folded || e.defaultPrevented || isDialogOpen() || isTypingTarget(e.target)) return;
     e.preventDefault();
     onFold(true);
+    // The focused tab goes away with the body; leave focus on the fold button so the next Esc doesn't leave the engagement.
+    header.current?.querySelector<HTMLElement>("[data-dock-fold]")?.focus();
   };
 
   const facts = (
@@ -120,7 +123,7 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
       className={`@container grid h-full min-h-0 grid-cols-[minmax(0,1fr)] rounded-lg border border-line-2 bg-surface ${folded ? "grid-rows-[auto]" : "grid-rows-[auto_auto_minmax(0,1fr)]"}`}
     >
       {/* Folded, the dock is this row alone: its height (44px + border) is DOCK_FOLDED_PX in CredentialsSection. Keep them in step. */}
-      <header data-testid="dock-header" className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2">
+      <header ref={header} data-testid="dock-header" className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2">
         <div className="grid grid-cols-[minmax(0,max-content)_max-content_max-content_max-content] items-center justify-start gap-3">
           <span className="truncate font-mono text-heading text-fg" title={name}>{name}</span>
           <span className="text-meta text-muted">{cred.type}</span>
@@ -143,6 +146,7 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
           <IconButton icon={PencilSimple} label={`Edit ${label}`} onClick={onEdit} />
           <IconButton icon={Trash} tone="destructive" label={`Delete ${label}`} onClick={onDelete} />
           <IconButton
+            data-dock-fold=""
             icon={folded ? CaretUp : CaretDown}
             label={folded ? "Open credential" : "Fold credential"}
             onClick={() => onFold(!folded)}

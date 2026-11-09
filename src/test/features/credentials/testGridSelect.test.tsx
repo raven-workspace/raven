@@ -23,6 +23,23 @@ const grid = (props: Partial<React.ComponentProps<typeof TestGrid>> = {}) =>
   );
 
 describe("TestGrid selection", () => {
+  it("a new onSelect function with the same selection does not scroll again", () => {
+    const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
+    try {
+      const ui = (onSelect: () => void) => (
+        <QueryClientProvider client={makeQueryClient()}>
+          <TestGrid eid="eng1" hosts={[h1.host]} creds={creds} attempts={[]} servicesByHost={byHost(h1)} selectedId="c2" onSelect={onSelect} />
+        </QueryClientProvider>
+      );
+      const { rerender } = render(ui(() => {}));
+      expect(spy).toHaveBeenCalledTimes(1);
+      rerender(ui(() => {}));
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("without onSelect, row headers are plain text", () => {
     grid();
     expect(screen.queryAllByRole("button", { name: /^Select / })).toHaveLength(0);

@@ -85,6 +85,21 @@ describe("InventoryList", () => {
     expect(within(row).getByText("uncracked")).toBeInTheDocument();
   });
 
+  it("a hash with no crack status reads uncracked; cracked and uncracked are not accent, uncrackable is warn", () => {
+    mount({
+      creds: [
+        cred({ id: "n1", type: "hash", username: "nullstatus", secret: "cccccccccccccccccccccccccccccccc", hashType: "NTLM", crackStatus: null }),
+        cred({ id: "n2", type: "hash", username: "done", secret: "dddddddddddddddddddddddddddddddd", hashType: "NTLM", crackStatus: "cracked" }),
+        cred({ id: "n3", type: "hash", username: "never", secret: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", hashType: "NTLM", crackStatus: "uncrackable" }),
+      ],
+    });
+    const chip = (who: string, text: string) => within(screen.getByText(who).closest("tr")!).getByText(text);
+    expect(chip("nullstatus", "uncracked")).toBeInTheDocument();
+    expect(chip("nullstatus", "uncracked").className).not.toMatch(/accent|warn/);
+    expect(chip("done", "cracked").className).not.toMatch(/accent|warn/);
+    expect(chip("never", "uncrackable").className).toMatch(/warn/);
+  });
+
   it("rows show no secret and no row actions", () => {
     mount();
     const group = screen.getByRole("region", { name: "Passwords" });

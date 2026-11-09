@@ -25,6 +25,12 @@ export function useCredentialSelection(_eid: string, creds: Credential[], ctx: C
     [setParams],
   );
 
+  const select = useCallback((id: string) => write((p) => p.set("cred", id)), [write]);
+  const setTab = useCallback(
+    (t: "matrix" | "inventory") => write((p) => (t === "inventory" ? p.set("tab", "inventory") : p.delete("tab"))),
+    [write],
+  );
+
   useEffect(() => {
     if (!ready) return;
     if (selectedId !== (requested ?? undefined)) {
@@ -34,8 +40,8 @@ export function useCredentialSelection(_eid: string, creds: Credential[], ctx: C
 
   return {
     selectedId,
-    select: (id: string) => write((p) => p.set("cred", id)),
+    select,
     tab,
-    setTab: (t: "matrix" | "inventory") => write((p) => (t === "inventory" ? p.set("tab", "inventory") : p.delete("tab"))),
+    setTab,
   };
 }

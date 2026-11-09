@@ -194,6 +194,18 @@ describe("credentials section", () => {
     expect(within(row).getByText("Winter2024!")).toBeInTheDocument();
   });
 
+  it("a credential just added is docked and written to ?cred=", async () => {
+    const user = userEvent.setup();
+    mount({ creds: [pw(1), pw(2)], services: SMB });
+    await findDock();
+    const dlg = await openForm(user);
+    await user.type(within(dlg).getByLabelText("Username"), "newbie");
+    await user.type(within(dlg).getByLabelText("Secret"), "Fresh2024!");
+    await user.click(within(dlg).getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(search().get("cred")).toBe("c101"));
+    expect(await within(dock()).findByRole("button", { name: "Edit newbie" })).toBeInTheDocument();
+  });
+
   it("secret mask never wraps and reveal is an eye icon button", async () => {
     const user = userEvent.setup();
     mount({ creds: [cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "Winter2024!" })] });

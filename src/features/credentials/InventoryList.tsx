@@ -132,7 +132,7 @@ function Group({ label, creds, crack, typed, ...ctx }: {
                   {c.source && <span className="block truncate" title={c.source}>{c.source}</span>}
                 </TableCell>
                 <TableCell><StateChip state={overallState(c, ctx.hosts, ctx.servicesByHost, ctx.attempts)} /></TableCell>
-                {crack && <TableCell>{c.crackStatus && <Chip variant={c.crackStatus === "cracked" ? "accent" : "default"}>{c.crackStatus}</Chip>}</TableCell>}
+                {crack && <TableCell><Chip variant={c.crackStatus === "uncrackable" ? "warn" : "default"}>{c.crackStatus ?? "uncracked"}</Chip></TableCell>}
               </TableRow>
             );
           })}

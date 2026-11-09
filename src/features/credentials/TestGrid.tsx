@@ -38,13 +38,13 @@ function partialLabel(cred: Credential, service: SprayService, cell: Cell): stri
     .join(", ");
 }
 
-/** `compact`: in a toolbar row beside a note, the lowest-priority entries drop as the pane narrows instead of wrapping. */
 const DROP: Record<string, string> = {
   na: "hidden @[990px]:grid",
   errored: "hidden @[1160px]:grid",
   other: "hidden @[1240px]:grid",
 };
 
+/** `compact`: in a toolbar row beside a note, the lowest-priority entries drop as the pane narrows instead of wrapping. */
 function Legend({ compact = false }: { compact?: boolean }) {
   const states: CellState[] = ["admin", "valid", "failed", "untested", "errored", "na"];
   const unit = "grid grid-flow-col auto-cols-max items-center gap-2";
@@ -93,7 +93,7 @@ function moveRowFocus(e: React.KeyboardEvent<HTMLElement>) {
   next?.focus();
 }
 
-export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = [], selectedId, onSelect, fill = false, note, className = "" }: {
+export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = [], selectedId, onSelect, fill = false, note }: {
   eid: string;
   hosts: Host[];
   creds: Credential[];
@@ -107,8 +107,6 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
   fill?: boolean;
   /** With fill: shown right of the legend, on the same row. */
   note?: React.ReactNode;
-  /** Extra classes on the bordered box; pass a max-h to make the grid scroll vertically under a sticky header. */
-  className?: string;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const [fade, setFade] = useState(false);
@@ -122,13 +120,14 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
     return () => window.removeEventListener("resize", measure);
   });
   // The selected row stays in view inside the grid's own scroller (never the page): on mount and when the selection moves.
+  const selectable = !!onSelect;
   useEffect(() => {
-    if (!onSelect || !selectedId) return;
+    if (!selectable || !selectedId) return;
     const box = scroller.current;
     // Keep the row clear of the sticky header, which would otherwise cover a row scrolled to the top edge.
     if (box) box.style.scrollPaddingTop = `${box.querySelector("thead")?.getBoundingClientRect().height ?? 0}px`;
     box?.querySelector("tr[aria-selected='true']")?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [onSelect, selectedId]);
+  }, [selectable, selectedId]);
   const [open, setOpen] = useState<{ credId: string; hostId: string; service: SprayService }>();
   const rows = useMemo(() => creds.filter(isSprayable), [creds]);
   const triedList = useMemo(() => triedRows(tried), [tried]);
@@ -159,7 +158,7 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
   const openHost = open && hosts.find((h) => h.id === open.hostId);
 
   return (
-    <section aria-label="Test matrix" className={docked ? "grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-2" : fill ? "grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto_minmax(0,1fr)] gap-2" : "grid grid-cols-[minmax(0,1fr)] gap-2"}>
+    <section aria-label="Test matrix" className={docked ? "grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-2" : "grid grid-cols-[minmax(0,1fr)] gap-2"}>
       {docked ? (
         <div className="@container grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
           <Legend compact />
@@ -171,7 +170,7 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
           <Legend />
         </>
       )}
-      <div className={`relative rounded border border-line ${fill ? "grid max-h-full min-h-0 grid-rows-[minmax(0,1fr)] self-start " : ""}${className}`}>
+      <div className={`relative rounded border border-line ${docked ? "grid max-h-full min-h-0 grid-rows-[minmax(0,1fr)] self-start" : ""}`}>
         <div ref={scroller} onScroll={measure} className="max-h-[inherit] overflow-auto">
         <table aria-label="Test grid" className="min-w-full border-separate border-spacing-0 text-meta">
           <thead className="sticky top-0 z-30 bg-bg">
@@ -197,7 +196,6 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
           <tbody>
             {rows.map((cred) => {
               const selected = !!onSelect && cred.id === selectedId;
-              const bg = selected ? "bg-surface-hi" : "bg-bg";
               const lines = (
                 <>
                   <div className="truncate font-mono text-fg" title={credName(cred)}>{credName(cred)}</div>
@@ -208,50 +206,50 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
                 </>
               );
               return (
-              <tr key={cred.id} data-cred-id={cred.id} {...(selected ? { "data-state": "selected", "aria-selected": true } : {})}>
-                <th scope="row" className={`sticky left-0 z-10 w-[28ch] min-w-[28ch] max-w-[28ch] border-b border-r border-line ${bg} ${onSelect ? "p-0" : "px-3 py-2"} text-left font-normal ${selected ? BAR : ""}`}>
-                  {onSelect ? (
-                    <button
-                      type="button"
-                      data-row-select=""
-                      aria-pressed={selected}
-                      aria-label={`Select ${credLabel(cred)}`}
-                      onClick={() => onSelect(cred.id)}
-                      onKeyDown={moveRowFocus}
-                      className="grid min-h-9 w-full cursor-default grid-cols-[minmax(0,1fr)] content-center px-3 py-2 text-left"
-                    >
-                      {lines}
-                    </button>
-                  ) : lines}
-                </th>
-                {groups.flatMap(({ host, services }) =>
-                  services.map((service, i) => {
-                    const cell = cellFor(cred, host, servicesByHost.get(host.id) ?? [], service, attempts);
-                    const partial = partialLabel(cred, service, cell);
-                    const label = `${credLabel(cred)} on ${hostLabel(host)} ${service.toUpperCase()}: ${partial ?? META[cell.state].aria}${cell.modesDiffer ? " (domain and local differ)" : ""}`;
-                    return (
-                      <td key={`${host.id}-${service}`} className={`border-b border-line ${selected ? "bg-surface-hi" : ""} p-1 text-center ${i === 0 ? "border-l" : ""}`}>
-                        {cell.state === "na" ? (
-                          <span role="img" aria-label={label} title={label} className="inline-block"><Glyph state="na" /></span>
-                        ) : (
-                          <button
-                            type="button"
-                            aria-label={label}
-                            title={label}
-                            aria-haspopup="dialog"
-                            onClick={() => setOpen({ credId: cred.id, hostId: host.id, service })}
-                            className="relative inline-grid cursor-default rounded-sm hover:brightness-125"
-                          >
-                            <Glyph state={cell.state} />
-                            {partial && <span data-testid="untried-marker" aria-hidden="true" className="pointer-events-none absolute inset-0.5 rounded-sm border border-dashed border-fg-2" />}
-                            {cell.modesDiffer && <span aria-hidden="true" className="absolute right-0.5 top-0.5 size-2 rounded-full bg-fg-2" />}
-                          </button>
-                        )}
-                      </td>
-                    );
-                  }),
-                )}
-              </tr>
+                <tr key={cred.id} data-cred-id={cred.id} {...(selected ? { "data-state": "selected", "aria-selected": true } : {})}>
+                  <th scope="row" className={`sticky left-0 z-10 w-[28ch] min-w-[28ch] max-w-[28ch] border-b border-r border-line ${selected ? "bg-surface-hi" : "bg-bg"} ${onSelect ? "p-0" : "px-3 py-2"} text-left font-normal ${selected ? BAR : ""}`}>
+                    {onSelect ? (
+                      <button
+                        type="button"
+                        data-row-select=""
+                        aria-pressed={selected}
+                        aria-label={`Select ${credLabel(cred)}`}
+                        onClick={() => onSelect(cred.id)}
+                        onKeyDown={moveRowFocus}
+                        className="grid min-h-9 w-full cursor-default grid-cols-[minmax(0,1fr)] content-center px-3 py-2 text-left"
+                      >
+                        {lines}
+                      </button>
+                    ) : lines}
+                  </th>
+                  {groups.flatMap(({ host, services }) =>
+                    services.map((service, i) => {
+                      const cell = cellFor(cred, host, servicesByHost.get(host.id) ?? [], service, attempts);
+                      const partial = partialLabel(cred, service, cell);
+                      const label = `${credLabel(cred)} on ${hostLabel(host)} ${service.toUpperCase()}: ${partial ?? META[cell.state].aria}${cell.modesDiffer ? " (domain and local differ)" : ""}`;
+                      return (
+                        <td key={`${host.id}-${service}`} className={`border-b border-line ${selected ? "bg-surface-hi" : ""} p-1 text-center ${i === 0 ? "border-l" : ""}`}>
+                          {cell.state === "na" ? (
+                            <span role="img" aria-label={label} title={label} className="inline-block"><Glyph state="na" /></span>
+                          ) : (
+                            <button
+                              type="button"
+                              aria-label={label}
+                              title={label}
+                              aria-haspopup="dialog"
+                              onClick={() => setOpen({ credId: cred.id, hostId: host.id, service })}
+                              className="relative inline-grid cursor-default rounded-sm hover:brightness-125"
+                            >
+                              <Glyph state={cell.state} />
+                              {partial && <span data-testid="untried-marker" aria-hidden="true" className="pointer-events-none absolute inset-0.5 rounded-sm border border-dashed border-fg-2" />}
+                              {cell.modesDiffer && <span aria-hidden="true" className="absolute right-0.5 top-0.5 size-2 rounded-full bg-fg-2" />}
+                            </button>
+                          )}
+                        </td>
+                      );
+                    }),
+                  )}
+                </tr>
               );
             })}
             {triedList.map((t) => {

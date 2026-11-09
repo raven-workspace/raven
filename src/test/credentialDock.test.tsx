@@ -250,5 +250,7 @@ describe("credential dock", () => {
     screen.getByRole("tab", { name: "Test" }).focus();
     await user.keyboard("{Escape}");
     expect(onFold).toHaveBeenCalledWith(true);
+    // The body goes away on fold: focus lands on the fold button, not <body>.
+    expect(screen.getByRole("button", { name: "Fold credential" })).toHaveFocus();
   });
 });

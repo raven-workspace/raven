@@ -29,13 +29,15 @@ const SCOPES: { value: CredentialScope; label: string }[] = [
 
 type Errors = Partial<Record<"username" | "secret" | "localHostId" | "hostId" | "via" | "form", string>>;
 
-export function CredentialForm({ eid, hosts, credentials, edit, onClose }: {
+export function CredentialForm({ eid, hosts, credentials, edit, onClose, onSaved }: {
   eid: string;
   hosts: Host[];
   credentials: Credential[];
   /** Edit this credential; add when absent. */
   edit?: Credential;
   onClose: () => void;
+  /** Called with the credential the form created or updated, just before it closes. */
+  onSaved?: (cred: Credential) => void;
 }) {
   const formId = useId();
   const cm = useCredentialMutations(eid);
@@ -113,11 +115,13 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose }: {
         return;
       }
       if (edit) {
-        await cm.update.mutateAsync({ id: edit.id, input });
+        const updated = await cm.update.mutateAsync({ id: edit.id, input });
+        onSaved?.(updated);
         onClose();
         return;
       }
-      await cm.create.mutateAsync(input);
+      const created = await cm.create.mutateAsync(input);
+      onSaved?.(created);
       onClose();
     } catch (err) {
       const field = (err as { field?: string }).field;
