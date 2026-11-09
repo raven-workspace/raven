@@ -165,7 +165,7 @@ Payloads reads the engagement to choose and rank what fits. This is deliberately
 - tools proven present or absent by parsed output (python3, nc, powershell);
 - payloads that failed on this host before. Copy-and-log (⌘↵) stamps the payload's id on the log entry, and that entry counts as failed when it's marked "returned nothing" or its output shows the payload erroring. Raven doesn't guess failures from command text. *(My call.)*
 - tools on the box, taken only from parsed output that proves them (PEAS's tool list, `which` output);
-- exam rules (raw stageless shells only; no meterpreter);
+- exam rules: no payload is banned; Metasploit (Meterpreter) is limited to one machine, tracked by the Metasploit lock. msfvenom and multi/handler with raw shells are unrestricted;
 - LHOST/LPORT from settings, editable.
 
 **Output:**
@@ -227,7 +227,7 @@ Payload content (templates, wrapping rules, explanations and the SQL walkthrough
    - **Injection point:** URL parameter (encoded), form field, or a direct client session (`impacket-mssqlclient`, `mysql`, `psql`), which needs no injection wrapping.
    - **Field Manual sources:** `02-Cards/Web/SQL-Injection.md`, `MSSQL-Error-Based-SQLi.md` and `SQLi-to-Code-Execution.md`, plus the Module 10 labs.
    - **Explanations are a first-class part,** since they double as SQL teaching: what `UNION` requires, why `NULL`, what `--` and `#` do.
-4. **msfvenom.** Stageless `shell_reverse_tcp` only, because of the exam: exe, elf, aspx, war, dll and hta. The architecture comes from the host, with a note that Veil and Shellter need x86. The serve or upload step comes from Transfer.
+4. **msfvenom.** Stageless `shell_reverse_tcp` first (staged and Meterpreter were added in 2b-C; the exam limit is the Metasploit lock, not a ban): exe, elf, aspx, war, dll and hta. The architecture comes from the host, with a note that Veil and Shellter need x86. The serve or upload step comes from Transfer.
 5. **Encode PowerShell.** Any command to `powershell -e <UTF-16LE base64>`, with the decoded text shown beside it.
 6. **Upgrade a shell.** The python3 PTY, `script`, `stty raw -echo; fg` and `stty rows/cols` steps (Linux), and a note that penelope does this automatically. Includes the `export HOME=…` fix the owner hit on srv11.
 
@@ -247,7 +247,7 @@ Payload content (templates, wrapping rules, explanations and the SQL walkthrough
 - **Stack:** Tauri 2, React 19, TypeScript, Tailwind 4 and zustand. The UI uses CSS grid first.
 - **Data safety:** any schema change (for example, extraction provenance for Undo) needs a migration, and a backup is taken before migrating. Stored data is real lab data.
 - **Offline:** GTFOBins data is bundled as a static list (binary → mechanisms: suid, sudo, capabilities), with its source and date recorded.
-- **Exam rules:** banned techniques stay hidden, and Payloads never offers meterpreter.
+- **Exam rules:** No payload is banned; Metasploit (Meterpreter) is limited to one machine, tracked by the Metasploit lock. msfvenom and multi/handler with raw shells are unrestricted.
 - **Audit:** `npm run audit:visual` must cover the drawer and the Workbench (layout, focus and no sideways scroll at 900, 1100, 1280 and 1440 wide), plus regression tests for the save summary.
 
 ## 6. Decided in conversation (owner)

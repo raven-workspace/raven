@@ -89,7 +89,10 @@ Only some tools are banned or restricted on the exam. Metasploit is limited to o
 
   No macOS, Android or iOS payloads.
 - **Listener:** these use `multi/handler` (§3.5).
-- **In exam-sim, on a host that doesn't hold the lock:** these payloads still show, with an amber line "Metasploit is locked to <host>" (or "Lock Metasploit to this host first" when no host holds it), and copying goes through the copy guard: the first press explains, the second copies. **On the locked host, and outside exam-sim:** no line.
+- **Owner decision (2026-11-09): only Meterpreter is limited.** msfvenom, multi/handler and raw shells (staged or stageless, including `windows/x64/shell/reverse_tcp`) are unrestricted on the exam and never get a warning. Only Meterpreter payloads (`meterpreter: true`) touch the Metasploit lock, via `msfLockLine`:
+  - no lock yet: an info line (not a warning), "Using Meterpreter here makes this your Metasploit machine";
+  - locked to another host: a breach warning, "Metasploit is locked to <host>", and copying goes through the copy guard;
+  - locked to this host, or outside exam-sim: no line.
 - **Remove** the current "Not allowed in the exam" misfit reason and its meterpreter/staged id check (`fit.ts`). Update the 2b spec's "exam rules" lines to match.
 
 ### 3.7 Owner decisions carried from the follow-ups

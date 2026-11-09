@@ -182,14 +182,9 @@ const absentTool = (def: PayloadDef, s: PayloadSituation): string | null => {
   return null;
 };
 
-const EXAM_BANNED = /meterpreter|\/shell\/reverse_/i;
-/** Only the payload name counts: the msfvenom -p value in the template, or the def id. Never notes or titles. */
-const bannedInExam = (d: PayloadDef) =>
-  EXAM_BANNED.test(d.id) || EXAM_BANNED.test(/-p\s+(\S+)/.exec(d.template)?.[1] ?? "");
-
 /**
  * Reason precedence when several apply: Wrong OS, then Doesn't work in <context>, then Needs <tool>,
- * then Failed here before, then Not allowed in the exam. Only the first is shown.
+ * then Failed here before. Only the first is shown.
  */
 function misfitReason(d: PayloadDef, s: PayloadSituation, ctx: PasteContext | null): string | null {
   if (s.os && d.os !== "any" && d.os !== s.os) return `Wrong OS (${s.os})`;
@@ -199,7 +194,6 @@ function misfitReason(d: PayloadDef, s: PayloadSituation, ctx: PasteContext | nu
   const tool = absentTool(d, s);
   if (tool) return `Needs ${tool}, which isn't on this box`;
   if (s.failedPayloadIds.includes(d.id)) return "Failed here before";
-  if (s.exam && bannedInExam(d)) return "Not allowed in the exam";
   return null;
 }
 

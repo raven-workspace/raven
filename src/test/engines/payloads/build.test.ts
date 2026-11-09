@@ -25,7 +25,7 @@ describe("buildPayload blank values", () => {
 describe("existing catalogue builds unchanged", () => {
   const V = { LHOST: "192.0.2.10", LPORT: "443" };
   // The snapshot is the catalogue before the breadth round; later defs are tested in their own files.
-  const defs = [...REVERSE_SHELLS.filter((d) => d.id in CATALOGUE_BEFORE), ...MSFVENOM, ...UPGRADE];
+  const defs = [...REVERSE_SHELLS.filter((d) => d.id in CATALOGUE_BEFORE), ...MSFVENOM.filter((d) => d.id in CATALOGUE_BEFORE), ...UPGRADE];
   it("the snapshot covers every def and context", () => {
     expect(Object.keys(CATALOGUE_BEFORE).sort()).toEqual(defs.map((d) => d.id).sort());
     for (const d of defs) expect(Object.keys(CATALOGUE_BEFORE[d.id]!).sort()).toEqual([...d.contexts].sort());

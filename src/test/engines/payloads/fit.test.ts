@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { inferContext, inferSituation, rankPayloads, type PayloadSituation } from "../../../engines/payloads/fit";
 import { MSFVENOM } from "../../../engines/payloads/msfvenom";
@@ -184,16 +186,13 @@ describe("fit engine", () => {
     expect(inferSituation({ host: host(), services: [svc(3306, "mysql", null, { state: "OPEN" })], entries: [], examKind: false }).situation.dbEngine).toBe("mysql");
   });
 
-  it("exam folds meterpreter or staged defs", () => {
-    const meter: PayloadDef = { ...REVERSE_SHELLS[0], id: "meter", template: "msfvenom -p windows/x64/meterpreter/reverse_tcp" };
-    const staged: PayloadDef = { ...REVERSE_SHELLS[0], id: "staged", template: "msfvenom -p windows/x64/shell/reverse_tcp" };
-    const stageless: PayloadDef = { ...REVERSE_SHELLS[0], id: "stageless", template: "msfvenom -p windows/x64/shell_reverse_tcp" };
-    const r = rankPayloads([meter, staged, stageless], { ...base, exam: true }, null);
-    expect(ids(r.fits)).toEqual(["stageless"]);
-    expect(r.misfits.map((m) => m.reason)).toEqual(["Not allowed in the exam", "Not allowed in the exam"]);
-    expect(ids(rankPayloads([meter], base, null).fits)).toEqual(["meter"]);
-    const noted: PayloadDef = { ...stageless, id: "noted", title: "Staged? no", notes: ["never meterpreter"] };
-    expect(ids(rankPayloads([noted], { ...base, exam: true }, null).fits)).toEqual(["noted"]);
+  it("exam never folds a payload", () => {
+    const r = rankPayloads(MSFVENOM, { ...base, exam: true, os: "windows" }, null);
+    const win = MSFVENOM.filter((d) => d.os === "windows" || d.os === "any");
+    expect(ids(win).every((id) => ids(r.fits).includes(id))).toBe(true);
+    expect(r.misfits.map((m) => m.reason)).not.toContain("Not allowed in the exam");
+    const src = readFileSync(resolve(__dirname, "../../../engines/payloads/fit.ts"), "utf8");
+    expect(src).not.toContain("Not allowed in the exam");
   });
 });
 
@@ -203,20 +202,21 @@ describe("service preference (spec §4.2): a soft sort key, never a fold", () =>
   it("IIS puts the ASPX first; the rest keep catalogue order", () => {
     const s = situationFor([svc(80, "http", "Microsoft IIS httpd 10.0")]);
     const r = rankPayloads(MSFVENOM, s, null);
-    const windows = ids(MSFVENOM.filter((d) => d.os === "windows"));
+    const windows = ids(MSFVENOM.filter((d) => d.os === "windows" || d.os === "any"));
     expect(ids(r.fits)).toEqual(["msf-win-x64-aspx", ...windows.filter((id) => id !== "msf-win-x64-aspx")]);
     expect(r.misfits.map((m) => m.def.id)).toEqual(ids(MSFVENOM.filter((d) => d.os === "linux")));
+    expect(ids(r.fits)).toContain("msf-php-met");
   });
 
   it("Tomcat puts the WAR first", () => {
     const s = situationFor([svc(22, "ssh", "OpenSSH 8.9p1 Ubuntu 3"), svc(8080, "http", "Apache Tomcat/Coyote JSP engine 1.1")]);
     expect(s.os).toBe("linux");
-    expect(ids(rankPayloads(MSFVENOM, s, null).fits)).toEqual(["msf-java-war-linux", "msf-linux-x64-elf"]);
+    expect(ids(rankPayloads(MSFVENOM, s, null).fits)).toEqual(["msf-java-war-linux", ...ids(MSFVENOM.filter((d) => (d.os === "linux" || d.os === "any") && d.id !== "msf-java-war-linux"))]);
   });
 
   it("Apache/PHP leaves msfvenom alone and puts php-exec first among the reverse shells", () => {
     const s = situationFor([svc(80, "http", "Apache httpd 2.4.52 ((Ubuntu))")]);
-    expect(ids(rankPayloads(MSFVENOM, s, null).fits)).toEqual(["msf-linux-x64-elf", "msf-java-war-linux"]);
+    expect(ids(rankPayloads(MSFVENOM, s, null).fits)).toEqual(ids(MSFVENOM.filter((d) => d.os === "linux" || d.os === "any")));
     const linux = ids(REVERSE_SHELLS.filter((d) => d.os === "linux"));
     expect(ids(rankPayloads(REVERSE_SHELLS, s, null).fits)).toEqual(["php-exec", ...linux.filter((id) => id !== "php-exec")]);
     // Tomcat's "Apache" is not Apache httpd.
