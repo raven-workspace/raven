@@ -360,9 +360,48 @@ describe("SQL panel folds finished steps", () => {
     expect(fold).toHaveAttribute("aria-expanded", "false");
     expect(sql.queryByRole("button", { name: "Copy Break the query" })).not.toBeInTheDocument();
     expect(sql.getByRole("button", { name: "Copy Boolean test" })).toHaveFocus();
-    // It stays folded when the panel comes back (copied this session, per host).
+    // Another engine or injection point is other text, not yet copied: open again; back, it is folded again.
+    await user.click(sql.getByRole("button", { name: "MySQL" }));
+    expect(sql.queryByRole("button", { name: /^1\. Break the query/ })).not.toBeInTheDocument();
+    expect(sql.getByRole("button", { name: "Copy Break the query" })).toBeInTheDocument();
+    await user.click(sql.getByRole("button", { name: "PostgreSQL" }));
+    expect(sql.getByRole("button", { name: "1. Break the query: copied" })).toHaveAttribute("aria-expanded", "false");
     await user.click(sql.getByRole("button", { name: "Form field" }));
-    expect(sql.getByRole("button", { name: "1. Break the query: copied" })).toBeInTheDocument();
+    expect(sql.getByRole("button", { name: "Copy Break the query" })).toBeInTheDocument();
+  });
+
+  it("a step held open by typing folds by keyboard at once, by mouse only once the click is done", async () => {
+    const user = userEvent.setup();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h2" });
+    mount(["/payloads?generator=sql"]);
+    const sql = await sqlIn();
+    await user.type(sql.getByRole("textbox", { name: "Columns" }), "3");
+    const target = sql.getByRole("button", { name: "Copy Find the shown columns" });
+    // Pressed, not yet released: focus has left the field, but the step does not fold under the pointer.
+    await user.pointer({ keys: "[MouseLeft>]", target });
+    expect(target).toHaveFocus();
+    expect(sql.getByRole("textbox", { name: "Columns" })).toBeInTheDocument();
+    await user.pointer({ keys: "[/MouseLeft]", target });
+    expect(await navigator.clipboard.readText()).toBe(buildSql("reflected-columns", "postgres", "url-param", { columns: 3 }).text);
+    expect(await sql.findByRole("button", { name: "4. Count the columns: 3" })).toHaveAttribute("aria-expanded", "false");
+    // By keyboard: ⇥ out of a held field folds it straight away.
+    await user.click(sql.getByRole("button", { name: "4. Count the columns: 3" }));
+    expect(sql.getByRole("textbox", { name: "Columns" })).toHaveFocus();
+    await user.tab();
+    expect(sql.getByRole("button", { name: "4. Count the columns: 3" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("a step held open on one host is not held on another", async () => {
+    const user = userEvent.setup();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h2" });
+    usePayloadsStore.setState({ overrides: { h1: { sqlValues: { columns: 5 } } } });
+    mount(["/payloads?generator=sql"]);
+    const sql = await sqlIn();
+    await user.type(sql.getByRole("textbox", { name: "Columns" }), "3");
+    expect(sql.getByRole("button", { name: "4. Count the columns" })).toHaveAttribute("aria-expanded", "true");
+    await user.click(read().getByRole("button", { name: "Fill for host: zzdb02" }));
+    await user.click(await screen.findByRole("option", { name: /zzweb01/ }));
+    expect(await sql.findByRole("button", { name: "4. Count the columns: 5" })).toHaveAttribute("aria-expanded", "false");
   });
 
   it("a filled value folds its step showing the value; ↵ on the fold line reopens it; clearing it unfolds", async () => {

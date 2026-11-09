@@ -163,19 +163,23 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
   const execIds = sqlExecIds(engine);
 
   // Folding. Finished: a step with a value field once it is filled, anything else once copied (this session, per host).
+  // A copy counts for the engine and injection point it was built for: another one is other text, not yet copied.
   // `held` keeps a finished step open: reopened, or its field being typed in. Copying it, or leaving it for another
-  // field or button, lets it fold again.
+  // field or button, lets it fold again. It belongs to one host: another host starts with nothing held.
   const copied = new Set(ov?.sqlCopied ?? []);
-  const [held, setHeld] = useState<ReadonlySet<string>>(() => new Set());
+  const copiedKey = (id: string) => `${engine}:${point}:${id}`;
+  const [heldState, setHeld] = useState<{ host: string; ids: ReadonlySet<string> }>(() => ({ host: fit.hostKey, ids: new Set() }));
+  const held = heldState.host === fit.hostKey ? heldState.ids : new Set<string>();
   const hold = (id: string, on: boolean) => setHeld((h) => {
-    if (h.has(id) === on) return h;
-    const n = new Set(h);
+    const ids = h.host === fit.hostKey ? h.ids : new Set<string>();
+    if (ids.has(id) === on) return h.host === fit.hostKey ? h : { host: fit.hostKey, ids };
+    const n = new Set(ids);
     if (on) n.add(id);
     else n.delete(id);
-    return n;
+    return { host: fit.hostKey, ids: n };
   });
   const filled = (key: CarryKey | undefined) => key !== undefined && values[key] !== undefined && values[key] !== "";
-  const finished = (id: string, key?: CarryKey) => (key ? filled(key) : copied.has(id));
+  const finished = (id: string, key?: CarryKey) => (key ? filled(key) : copied.has(copiedKey(id)));
   const isFolded = (id: string, key?: CarryKey) => finished(id, key) && !held.has(id);
   /** Steps then run commands, in order: where focus goes once one folds. */
   const order: { id: string; title: string; key?: CarryKey }[] = [
@@ -212,7 +216,7 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
   const copyItem = (id: string, key: CarryKey | undefined, b: BuiltPayload) => {
     const r = copy(id, b);
     if (r !== "copied") return r;
-    if (!copied.has(id)) set({ sqlCopied: [...copied, id] });
+    if (!copied.has(copiedKey(id))) set({ sqlCopied: [...copied, copiedKey(id)] });
     hold(id, false);
     setFocusTo({ id, after: !key || filled(key) });
     return r;
@@ -223,9 +227,42 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
     // A reopened step with a value is reopened to change it: its field.
     if (key) setFocusTo({ id, after: false });
   };
-  /** Leaving an item for a field or button elsewhere lets it fold (focus lost to nowhere, or to another app, does not). */
+  /**
+   * Leaving an item for a field or button elsewhere lets it fold (focus lost to nowhere, or to another app, does not).
+   * By keyboard it folds at once; by mouse only once the click is done, so the content does not shift under it.
+   */
+  const pointerDown = useRef(false);
+  const pendingFolds = useRef(new Set<string>());
+  const holdRef = useRef(hold);
+  useEffect(() => {
+    holdRef.current = hold;
+  });
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const down = () => {
+      pointerDown.current = true;
+    };
+    // After pointerup the click is dispatched in the same task: fold on the next one.
+    const up = () => {
+      pointerDown.current = false;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        for (const id of pendingFolds.current) holdRef.current(id, false);
+        pendingFolds.current.clear();
+      });
+    };
+    window.addEventListener("pointerdown", down, true);
+    window.addEventListener("pointerup", up, true);
+    return () => {
+      window.removeEventListener("pointerdown", down, true);
+      window.removeEventListener("pointerup", up, true);
+      clearTimeout(timer);
+    };
+  }, []);
   const onLeave = (id: string) => (e: FocusEvent<HTMLLIElement>) => {
-    if (e.relatedTarget instanceof Node && !e.currentTarget.contains(e.relatedTarget)) hold(id, false);
+    if (!(e.relatedTarget instanceof Node) || e.currentTarget.contains(e.relatedTarget)) return;
+    if (pointerDown.current) pendingFolds.current.add(id);
+    else hold(id, false);
   };
 
   return (
