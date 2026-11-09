@@ -27,19 +27,26 @@ const fromEntry = (e: LogEntry) => {
   return `from your ${pad(d.getHours())}:${pad(d.getMinutes())} log entry`;
 };
 
-const WIN_RE = /\b(IIS|Microsoft|Windows)\b/i;
-const LIN_RE = /\b(Ubuntu|Debian|Linux|CentOS|Fedora)\b/i;
+// `_` counts as a boundary too: nmap reports Windows OpenSSH as "OpenSSH for_Windows_8.1".
+const WIN_RE = /(?:\b|_)(IIS|Microsoft|Windows)(?:\b|_)/i;
+const LIN_RE = /(?:\b|_)(Ubuntu|Debian|Linux|CentOS|Fedora)(?:\b|_)/i;
+
+/** What a service is known to run: the confirmed product (and version) when you confirmed one, else nmap's string. */
+function productOf(s: Service): { text: string; source: string } {
+  const confirmed = `${s.confirmedProduct ?? ""} ${s.confirmedVersion ?? ""}`.trim();
+  return confirmed ? { text: confirmed, source: "from the confirmed service" } : { text: s.nmapVersion ?? "", source: "from nmap" };
+}
 
 function osFromServices(services: Service[]): { os: "linux" | "windows"; evidence: string } | null {
-  let win: { s: Service; p: string } | null = null;
-  let lin: { s: Service; p: string } | null = null;
+  let win: { s: Service; p: ReturnType<typeof productOf> } | null = null;
+  let lin: { s: Service; p: ReturnType<typeof productOf> } | null = null;
   for (const s of services) {
-    const p = `${s.confirmedProduct ?? ""} ${s.confirmedVersion ?? ""}`.trim() || s.nmapVersion || "";
-    if (!win && WIN_RE.test(p)) win = { s, p };
-    if (!lin && LIN_RE.test(p)) lin = { s, p };
+    const p = productOf(s);
+    if (!win && WIN_RE.test(p.text)) win = { s, p };
+    if (!lin && LIN_RE.test(p.text)) lin = { s, p };
   }
-  if (win && !lin) return { os: "windows", evidence: `from nmap (${win.p} on ${win.s.port})` };
-  if (lin && !win) return { os: "linux", evidence: `from nmap (${lin.p} on ${lin.s.port})` };
+  if (win && !lin) return { os: "windows", evidence: `${win.p.source} (${win.p.text} on ${win.s.port})` };
+  if (lin && !win) return { os: "linux", evidence: `${lin.p.source} (${lin.p.text} on ${lin.s.port})` };
   return null;
 }
 
@@ -64,6 +71,28 @@ function promptOf(output: string): "ps" | "cmd" | "sh" | null {
 }
 
 const WEBSHELL_RE = /https?:\/\/[^\s'"]*?[?&](?:cmd|exec|command)=/i;
+const REQUEST_LINE_RE = /^[A-Z]+ (\/\S*) HTTP\/[\d.]+\s*$/m;
+const HOST_HEADER_RE = /^Host:[ \t]*(\S+)\s*$/im;
+
+/** A raw HTTP request (a request line plus a Host header) as the URL it fetched: https only for port 443. */
+function urlOfRawRequest(text: string): string | null {
+  const line = REQUEST_LINE_RE.exec(text);
+  const hostHeader = HOST_HEADER_RE.exec(text);
+  if (!line || !hostHeader) return null;
+  const scheme = /:443$/.test(hostHeader[1]) ? "https" : "http";
+  return `${scheme}://${hostHeader[1]}${line[1]}`;
+}
+
+function webShellUrlOf(text: string): string | null {
+  const direct = WEBSHELL_RE.exec(text);
+  if (direct) return direct[0];
+  const raw = urlOfRawRequest(text);
+  return raw ? (WEBSHELL_RE.exec(raw)?.[0] ?? null) : null;
+}
+
+// SGR and other CSI escapes (linPEAS colours its output).
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1b\[[0-9;?]*[A-Za-z]/g;
 
 const basename = (p: string) => p.slice(p.lastIndexOf("/") + 1);
 const normTool = (n: string) => n.replace(/^(nc|ncat)\.(openbsd|traditional)$/, "nc");
@@ -72,19 +101,21 @@ function toolsFromEntry(e: LogEntry, found: Map<string, boolean>) {
   if (e.content.kind !== "command") return;
   for (const b of e.content.blocks) {
     let inUseful = false;
-    for (const raw of b.output.split(/\r?\n/)) {
+    const output = b.output.replace(ANSI_RE, "");
+    for (const raw of output.split(/\r?\n/)) {
       const line = raw.trim();
       if (/^[╔═]/.test(line)) { inUseful = /Useful software/i.test(line); continue; }
       if (inUseful && line.startsWith("/")) found.set(normTool(basename(line)), true);
     }
     const names: string[] = [];
-    // Drop redirections (2>/dev/null), then split compound commands at ; | & < >.
-    for (const seg of b.command.replace(/\d*>+\S*/g, ";").split(/[;|&<>]+/)) {
+    // Drop redirections (2>/dev/null, python3>/dev/null: a file-descriptor number only counts after a space), then split
+    // compound commands at ; | & < >.
+    for (const seg of b.command.replace(/(?:(?<=^|\s)\d+)?>+\S*/g, ";").split(/[;|&<>]+/)) {
       const m = /^\s*which\s+(.+?)\s*$/.exec(seg);
       if (m) names.push(...m[1].split(/\s+/).filter((a) => /^[\w.+-]+$/.test(a) && !a.startsWith("-")));
     }
     if (names.length) {
-      const paths = b.output.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith("/"));
+      const paths = output.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith("/"));
       for (const name of names) found.set(name, paths.some((p) => basename(p) === name));
     }
   }
@@ -113,7 +144,9 @@ export function inferSituation(input: {
   for (const s of services) {
     if (DB_BY_PORT[s.port]) {
       dbEngine = DB_BY_PORT[s.port];
-      evidence.dbEngine = `from nmap (${s.nmapService ?? dbEngine} on ${s.port})`;
+      evidence.dbEngine = s.confirmedProduct
+        ? `from the confirmed service (${s.confirmedProduct} on ${s.port})`
+        : `from nmap (${s.nmapService ?? dbEngine} on ${s.port})`;
       break;
     }
   }
@@ -132,8 +165,8 @@ export function inferSituation(input: {
   for (const e of [...entries].reverse()) {
     const texts = e.content.kind === "command" ? e.content.blocks.map((b) => b.command)
       : e.content.kind === "http" ? [e.content.request] : [];
-    const m = texts.map((t) => WEBSHELL_RE.exec(t)).find(Boolean);
-    if (m) { webShellUrl = m[0]; evidence.webShellUrl = fromEntry(e); break; }
+    const url = texts.map(webShellUrlOf).find(Boolean);
+    if (url) { webShellUrl = url; evidence.webShellUrl = fromEntry(e); break; }
   }
 
   const found = new Map<string, boolean>();
@@ -209,6 +242,14 @@ function misfitReason(d: PayloadDef, s: PayloadSituation, ctx: PasteContext | nu
 }
 
 /**
+ * Requirement → tool, for the "Needs <tool>" marks. A def's `requires` ids are of two kinds:
+ * - ToolId (bash, python3, perl, nc, nc-e, socat, powershell, curl, wget): checked against your Tools ticks first, then
+ *   what the log says (inferredTools; `nc-e` is the `nc.exe` name, the rest go by their own name).
+ * - php: from the log only (a `which php` that found nothing); there is no tick for it.
+ * - awk, busybox, served-file: never checked. awk and busybox are nearly always there and the log rarely says;
+ *   served-file is a file you host, not a tool on the target.
+ * Requirements never fold a payload; they only mark it.
+ *
  * Marks, in order: Needs a callback (a reverse payload, only when callbacks are blocked), Needs <tool> for each required
  * tool that is missing (owner ticks over inference; php from inference only; awk, busybox and served-file never), and
  * Failed here before. A marked payload sorts down but stays a fit.

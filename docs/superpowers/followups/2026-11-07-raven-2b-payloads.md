@@ -43,14 +43,14 @@ These are left over from the 2b-B Payloads build (branch `interpreters-payloads`
 
 ## Fit and memory
 
-- [ ] **More cases fit inference doesn't handle:**
+- [x] **More cases fit inference doesn't handle:**
   - a raw HTTP request (`GET /s.aspx?cmd=id`) isn't read as a web shell;
   - linPEAS output with ANSI colour codes defeats tool detection;
   - `OpenSSH for_Windows` isn't seen as Windows;
   - `which python3>/dev/null` (no space) reads the tool as `python`. (`fit.ts`)
-- [ ] **`REQUIRE_TOOL` covers only six requirement ids, and this isn't documented.** Evidence uses the full nmap product string. (`fit.ts`)
-- [ ] **A log entry's payload id can't be cleared once set.** The failure text "cannot find" is broad. `staleBaked` reports a false stale warning if a stored value lacks LHOST or LPORT. (`log.rs`, `memory.ts`)
-- [ ] **Ranking doesn't wait for the engagement kind to load** (it isn't fail-closed like the Arsenal's). This is harmless while no payload is exam-banned. (`usePayloadFit.ts`)
+- [x] **`REQUIRE_TOOL` covers only six requirement ids, and this isn't documented.** Evidence uses the full nmap product string. (`fit.ts`)
+- [x] **A log entry's payload id can't be cleared once set.** The failure text "cannot find" is broad. `staleBaked` reports a false stale warning if a stored value lacks LHOST or LPORT. (`log.rs`, `memory.ts`)
+- [x] **Ranking doesn't wait for the engagement kind to load** (it isn't fail-closed like the Arsenal's). This is harmless while no payload is exam-banned. (`usePayloadFit.ts`)
 
 ## Drawer and Workbench
 

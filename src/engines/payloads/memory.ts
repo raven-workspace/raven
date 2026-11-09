@@ -1,7 +1,20 @@
 import type { LogEntry } from "../../types/log";
 import type { PayloadBuild } from "../../types/payloadBuild";
 
-const FAILED_OUTPUT = /not recognized|invalid option|cannot find|Access is denied|command not found/i;
+/**
+ * Shell and OS "can't run that here" shapes only, so ordinary output that happens to say "cannot find" never reads as a
+ * failure: bash/zsh "command not found", dash "sh: 1: x: not found", cmd "is not recognized as an internal or external
+ * command" and "cannot find the path specified", "No such file or directory", "Access is denied", a tool's "invalid option".
+ */
+const FAILED_OUTPUT = new RegExp([
+  /command not found/,
+  /^(?:\/bin\/)?(?:ba|da|z|k)?sh: (?:line )?\d+: \S+: not found\s*$/m,
+  /is not recognized as an internal or external command/,
+  /cannot find the path specified/,
+  /No such file or directory/,
+  /Access is denied/,
+  /invalid option/,
+].map((r) => r.source).join("|"), "im");
 
 /** Payload ids that were merged into another: what was logged or built under the old id counts for the new one. */
 const MERGED_IDS: Record<string, string> = { "msf-java-war-linux": "msf-java-war", "msf-java-war-windows": "msf-java-war" };

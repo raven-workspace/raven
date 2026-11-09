@@ -82,3 +82,25 @@ describe("staleBuild", () => {
     expect(staleBuild([rec({ hostId: "h2" })], "h1", "nishang-cradle", { ...cur, LHOST: "192.0.2.20" })).toBeNull();
   });
 });
+
+describe("FAILED_OUTPUT shapes (prelab batch)", () => {
+  const failed = (output: string) => failedPayloadIds([entry({ output })], "h1");
+  it("shell and OS failure shapes mark failed", () => {
+    for (const out of [
+      "bash: socat: command not found",
+      "sh: 1: python3: not found",
+      "'nc.exe' is not recognized as an internal or external command,\noperable program or batch file.",
+      "The system cannot find the path specified.",
+      "/bin/sh: 1: /tmp/x: No such file or directory",
+      "Access is denied.",
+      "nc: invalid option -- 'e'",
+    ]) expect(failed(out), out).toEqual(["nc-exe"]);
+  });
+  it("other 'cannot find' text does not", () => {
+    for (const out of [
+      "connect to [192.0.2.10] from (UNKNOWN) [192.0.2.5] 49711\nI cannot find the flag yet",
+      "Get-Item : Cannot find drive. A drive with the name 'Z' does not exist.",
+      "warning: cannot find a TTY, continuing",
+    ]) expect(failed(out), out).toEqual([]);
+  });
+});

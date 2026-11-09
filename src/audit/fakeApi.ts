@@ -235,6 +235,11 @@ const base = {
   logUpdate: async (id: string, input) => {
     const { at, ...rest } = input;
     delete rest.attachment; // ignored on update
+    // As the Rust update: an omitted payload id keeps the stored one; a blank one clears it and its values.
+    const clearPayload = typeof rest.payloadId === "string" && rest.payloadId.trim() === "";
+    if (rest.payloadId === null) delete rest.payloadId;
+    if (rest.payloadValues === null) delete rest.payloadValues;
+    if (clearPayload) Object.assign(rest, { payloadId: null, payloadValues: null });
     return clone(assign(find(db.log, id), rest, { kind: rest.content.kind, ...(at != null ? { at } : {}), updatedAt: now() }));
   },
   logDelete: async (id: string) => remove(db.log, id),
