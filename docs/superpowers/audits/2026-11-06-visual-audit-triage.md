@@ -145,24 +145,24 @@ The audit should get a matching check: flag `flex-wrap` containers whose childre
 
 ## 6. Deferred from UX round 1 (host page redesign, 2026-11-06)
 
-Each item was reviewed and judged not to block the merge. Source: the round-1 review ledger.
+Each item was reviewed and judged not to block the merge. Source: the round-1 review ledger. Closed in the pre-lab batch (2026-11-09, task 9); each line says what was found.
 
-- (T1) collapsed rail drops ThreadDot
-- (T1) no tests for <1000px default, legacy story.order fallback, ⌘B under dialog, rail render
-- (T1) log row chip track unbounded count
-- (T2) vectorUpsert rejects ruled_out (use vectorSetStatus) — document in api.ts JSDoc
-- (T2) fakeApi drift (manual upsert over ruled_out doesn't unlink; identity not trimmed/deduped)
-- (T2) deleting service/vector orphans linked ruled_out; hand-deleting linked item leaves dead_end — consider clearing source on delete
-- (T2) api.ts hostIdentitySet sends updatedAt:0; no cascade test for host delete
-- (T3) id matched only as exact "id" (not id -a / sudo id); no test for serviceIdentity with unconfirmed version, whoami /groups CRLF
-- (T4) no tests for error-output skip, empty no-op, ranOn mismatch, username fallback; "unknown" literal username
-- (T5) Host Credentials "works" can double-count grant+attempt; services/queries.ts dead ruledOut invalidation; no stacked-variant test; ⌥2 typing test misnamed; (new-creds signal added to Next in final wave)
-- (T6) 3.0 vector's version button is inert (no 3.0→3.1 switch)
-- (T7) in-flight save error after close not surfaced; NVD state not in draft (closing within 400ms cancels lookup); nvdFill applied over snapshot; RefSuggestions fake Note objects; FindingEditor ~450 lines (extract useNvdLookup); no debounce test
-- (T7) split log/host-chip/N tests assert DOM not layout (Playwright covers)
-- (T7b) ServicePicker list double right padding inside editor pane; regression scoping via class-string match
-- (T8) (bbox clipping check fixed in final wave) no ThreadsList pane test
-- (T8b) dead hostIdentityGet fallback; write-timing test doesn't assert vectorUpsert
-- (user) Log titles include the Evil-WinRM prompt (`*Evil-WinRM* PS C:\…> whoami /priv`). The title should be the command only.
-- (identity) In a proof pasted with bare `#`/`$` prompts, a line inside `cat` output that starts with `# whoami` is read as a command, so the next line can be taken as a username (only when Ran on is that host). Pinned by a test in identityProof.test.ts.
-- (identity) A Linux target reached by SSH and logged with Ran on = Kali is not read automatically. This is safe but manual; splitPaste could name the host from a `user@host` prompt.
+- (T1) collapsed rail drops ThreadDot. **Fixed**: the dot is pinned to the host's corner in the rail; test in sidebar.test.tsx.
+- (T1) no tests for <1000px default, legacy story.order fallback, ⌘B under dialog, rail render. **Fixed**: tests added (uxDeferredT1.test.tsx, sidebar.test.tsx); behaviour was already right.
+- (T1) log row chip track unbounded count. **Fixed**: two chips, the rest fold into one "+N" chip (title lists them).
+- (T2) vectorUpsert rejects ruled_out (use vectorSetStatus). **Fixed**: documented in the api.ts JSDoc; Rust and fakeApi both pinned by tests.
+- (T2) fakeApi drift. **Fixed**: ruled_out create refused, manual upsert over ruled_out unlinks, identity trimmed and de-duplicated, host delete cascades.
+- (T2) deleting service/vector orphans linked ruled_out. **Fixed** (Rust, in a transaction, with tests; the service-remove mutation refreshes the ruled-out lists). Hand-deleting the linked ruled-out item still leaves the service as dead_end or the vector as ruled out; left as is on purpose (the verdict stays, only its list entry is gone).
+- (T2) hostIdentitySet sends updatedAt:0; no cascade test for host delete. **Verified fine**: the Rust command stamps `updated_at` itself (test added); api.ts now says so. Host delete cascade test added.
+- (T3) id matched only as exact "id". **Fixed for `id -a`** (same output). `sudo id` is deliberately not read: it reports root, not the user. No tests for serviceIdentity with unconfirmed version, whoami /groups CRLF: **added**.
+- (T4) error-output skip, empty no-op, ranOn mismatch, username fallback. **Verified fine, tests added** (saveCaptureIdentityGaps.test.ts). The literal "unknown" username is a pinned placeholder written by saveCapture.ts when only `whoami /priv` was captured; the later `whoami` replaces it. Not changed here (capture file was in another agent's hands).
+- (T5) Host Credentials "works" double count. **Fixed**: a grant for a username that already has a working result on the host counts once. The dead ruledOut invalidation in services/queries.ts is in use (hosts/queries.ts); service delete now uses it too. Stacked-variant test and the misnamed ⌥2 typing test: **fixed** (real typing test plus a renamed dialog test).
+- (T6) 3.0 vector's version button inert. **Fixed**: a 3.0 vector shows 4.0, 3.1 and a pressed 3.0; clicking 3.1 rewrites the prefix.
+- (T7) in-flight save error after close not surfaced. **Fixed**: a failure with no form mounted is kept and shown on the draft when it comes back. NVD state not in draft: **fixed** (`nvdPending`; closing within the debounce resumes the lookup on reopen). nvdFill over snapshot: **fixed** (merge runs against the draft when the answer lands). RefSuggestions fake Note objects: **fixed**. Debounce test: **added**. useNvdLookup is already its own hook in FindingEditor.tsx; splitting FindingEditor itself is out of scope.
+- (T7) split log/host-chip/N tests assert DOM not layout. **Verified fine**: Playwright covers layout.
+- (T7b) ServicePicker double right padding. **Fixed**: the list keeps `pr-1` inside the pane's `pr-3`; the test is class-based because jsdom has no layout. Regression scoping via class-string match: the remaining class assertion is the only one and says why.
+- (T8) no ThreadsList pane test. **Added** (threadsList.test.tsx).
+- (T8b) dead hostIdentityGet fallback. **Fixed**: removed (the button shows only when no identity is stored). Write-timing test not asserting vectorUpsert: **verified fine**, it asserts it.
+- (user) Log titles include the Evil-WinRM prompt. **Verified fine on current code**: the prompt is stripped before the title is derived (single and multi-line pastes); tests added in titlesPrompt.test.ts.
+- (identity) bare `#` line inside cat output. Documented limit, unchanged.
+- (identity) Linux target reached by SSH from Kali. Documented limit, unchanged.
