@@ -119,6 +119,7 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
       onKeyDown={onKeyDown}
       className={`@container grid h-full min-h-0 grid-cols-[minmax(0,1fr)] rounded-lg border border-line-2 bg-surface ${folded ? "grid-rows-[auto]" : "grid-rows-[auto_auto_minmax(0,1fr)]"}`}
     >
+      {/* Folded, the dock is this row alone: its height (44px + border) is DOCK_FOLDED_PX in CredentialsSection. Keep them in step. */}
       <header data-testid="dock-header" className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2">
         <div className="grid grid-cols-[minmax(0,max-content)_max-content_max-content_max-content] items-center justify-start gap-3">
           <span className="truncate font-mono text-heading text-fg" title={name}>{name}</span>

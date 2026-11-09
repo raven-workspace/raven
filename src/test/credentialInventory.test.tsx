@@ -107,6 +107,17 @@ describe("InventoryList", () => {
     expect(onSelect).toHaveBeenCalledWith("p2");
   });
 
+  it("scope renders value and host on two lines, not a middot string", () => {
+    mount({ creds: [cred({ id: "l1", username: "admin", scope: "local", localHostId: "h1", secret: "Winter2024!" })] });
+    const row = screen.getByTitle("admin").closest("tr")!;
+    expect(row.textContent).not.toContain(" · ");
+    const scope = within(row).getByText("local");
+    const host = within(row).getByText("dc01");
+    expect(scope).not.toBe(host);
+    expect(host.parentElement).toBe(scope.parentElement);
+    expect(host.className).toMatch(/(^|\s)block(\s|$)/);
+  });
+
   it("a 60-character name truncates with a title", () => {
     const long = "a".repeat(60);
     mount({ creds: [cred({ id: "p9", username: long, secret: "x" })] });

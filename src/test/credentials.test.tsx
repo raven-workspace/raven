@@ -599,6 +599,25 @@ describe("credentials dock page", () => {
     expect(within(dock()).queryByRole("tab", { name: "Crack" })).not.toBeInTheDocument();
   });
 
+  it("a cracked password that never appears in the list lets the selection fall back", async () => {
+    const user = userEvent.setup();
+    mount({ creds: [pw(1), NT_HASH], services: SMB, url: "/e/e1/s/credentials?cred=h" });
+    // The server answers with a password the list never shows.
+    m.credentialCrack.mockImplementation(async (hashId, plaintext) => cred({ id: "ghost", username: "jsmith", domain: "CORP", secret: plaintext, crackedFrom: hashId }));
+    const d = await screen.findByRole("region", { name: "Credential" });
+    await user.click(within(d).getByRole("button", { name: "Record plaintext" }));
+    const dlg = await screen.findByRole("dialog");
+    await user.type(within(dlg).getByLabelText("Plaintext"), "password");
+    await user.click(within(dlg).getByRole("button", { name: "Save password" }));
+    await waitFor(() => expect(m.credentialCrack).toHaveBeenCalledWith("h", "password"));
+    // Not stuck on the unknown id: the default (the hash, still listed) is selected and docked again.
+    await waitFor(() => expect(search().get("cred")).toBe("h"));
+    expect(within(dock()).getByRole("button", { name: "Edit CORP\\jsmith (hash)" })).toBeInTheDocument();
+    // And selection still works afterwards.
+    await user.click(screen.getByRole("button", { name: "Select u1" }));
+    expect(search().get("cred")).toBe("c1");
+  });
+
   it("with only non-sprayable credentials, the newest is docked and the matrix shows the can't-be-sprayed note", async () => {
     const user = userEvent.setup();
     mount({

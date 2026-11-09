@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useParams, useSearchParams } from "react-router";
 import { useDefaultLayout, usePanelRef } from "react-resizable-panels";
 import { Plus } from "@phosphor-icons/react";
@@ -15,6 +16,7 @@ import { CredentialDock } from "./CredentialDock";
 import { CredentialForm } from "./CredentialForm";
 import { InventoryList } from "./InventoryList";
 import {
+  credentialsKey,
   useAccessGrants,
   useCredAttempts,
   useCredentialMutations,
@@ -40,6 +42,7 @@ type Tab = "matrix" | "inventory";
 
 export function CredentialsSection() {
   const { id = "" } = useParams();
+  const qc = useQueryClient();
   const hostsQ = useHosts(id);
   const credsQ = useCredentials(id);
   const usersQ = useUsernames(id);
@@ -56,7 +59,9 @@ export function CredentialsSection() {
 
   // After Record plaintext the selection moves to the new password. Until both the URL names it and the refetch lists
   // it, the hash it came from stays docked and `ready` holds off the fallback that would otherwise pick the default.
-  const [cracked, setCracked] = useState<{ hashId: string; passwordId: string }>();
+  // If the credentials query settles after the crack without listing the password (a failed refetch, or it never
+  // appears), the hold lets go and normal resolution takes over: it never sticks.
+  const [cracked, setCracked] = useState<{ hashId: string; passwordId: string; since: number }>();
 
   const creds = credsQ.data ?? NO_CREDS;
   const hosts = hostsQ.data ?? NO_HOSTS;
@@ -65,7 +70,9 @@ export function CredentialsSection() {
   const ctx = useMemo(() => ({ hosts, servicesByHost, attempts: shown.attempts }), [hosts, servicesByHost, shown.attempts]);
   const loaded = !!(hostsQ.data && credsQ.data && usersQ.data && grantsQ.data && attemptsQ.data && servicesQ.data);
   const [params] = useSearchParams();
-  const waiting = !!cracked && (params.get("cred") !== cracked.passwordId || !shown.creds.some((c) => c.id === cracked.passwordId));
+  const landed = !!cracked && shown.creds.some((c) => c.id === cracked.passwordId);
+  const settled = !credsQ.isFetching && Math.max(credsQ.dataUpdatedAt, credsQ.errorUpdatedAt) > (cracked?.since ?? Infinity);
+  const waiting = !!cracked && !(settled && !landed) && (params.get("cred") !== cracked.passwordId || !landed);
   const { selectedId, select, tab, setTab } = useCredentialSelection(id, shown.creds, ctx, loaded && !waiting);
   // Landed: let go, so a later delete of that password can't hold the fallback off again.
   if (cracked && !waiting) setCracked(undefined);
@@ -75,8 +82,13 @@ export function CredentialsSection() {
     select(cid);
   };
   const onCracked = (hash: Credential) => (password: Credential) => {
-    setCracked({ hashId: hash.id, passwordId: password.id });
     select(password.id);
+    // Read live, not from this render: the refetch may already have landed.
+    const q = qc.getQueryState<Credential[]>(credentialsKey(id));
+    const listed = !!q?.data?.some((c) => c.id === password.id);
+    // Nothing more is coming and it isn't listed: no hold, normal resolution decides.
+    if (q?.fetchStatus === "idle" && !listed) return;
+    setCracked({ hashId: hash.id, passwordId: password.id, since: listed ? -1 : Math.max(q?.dataUpdatedAt ?? 0, q?.errorUpdatedAt ?? 0) });
   };
   const onFold = (fold: boolean) => (fold ? dockRef.current?.collapse() : dockRef.current?.expand());
 
@@ -135,8 +147,13 @@ export function CredentialsSection() {
               Inventory <span className="tabular-nums">{shown.creds.length + usernames.length}</span>
             </TabsTrigger>
           </TabsList>
-          <Button variant="primary" className="hidden @[560px]:inline-grid" onClick={() => setForm({})}>Add credential</Button>
-          <IconButton icon={Plus} label="Add credential" className="@[560px]:hidden" onClick={() => setForm({})} />
+          {/* One of the two shows: the cells own the display, since Button's own inline-flex outranks `hidden`. */}
+          <div className="hidden @[560px]:grid">
+            <Button variant="primary" onClick={() => setForm({})}>Add credential</Button>
+          </div>
+          <div className="grid @[560px]:hidden">
+            <IconButton icon={Plus} label="Add credential" onClick={() => setForm({})} />
+          </div>
         </div>
 
         {selected ? (
