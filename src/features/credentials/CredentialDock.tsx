@@ -1,9 +1,11 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { CaretDown, CaretUp, PencilSimple, Trash } from "@phosphor-icons/react";
 import {
+  cellFor,
   credLabel,
   credName,
   isOwnerless,
+  hostSprayServices,
   isPlaceholderSecret,
   overallState,
   usernameLabel,
@@ -38,16 +40,20 @@ interface Props {
   onCracked: (password: Credential) => void;
 }
 
-/** Where this credential works: one entry per host and service, admin first, from the attempts. */
-function worksOn(cred: Credential, hosts: Host[], attempts: CredAttempt[]): { level: "admin" | "valid"; where: string }[] {
-  const seen = new Set<string>();
+/** Where this credential works, as the matrix sees it: one entry per host and service cell that is admin or valid, admin first. */
+function worksOn(
+  cred: Credential,
+  hosts: Host[],
+  servicesByHost: Map<string, Service[]>,
+  attempts: CredAttempt[],
+): { level: "admin" | "valid"; where: string }[] {
   const out: { level: "admin" | "valid"; where: string }[] = [];
-  for (const a of attempts) {
-    if (a.credId !== cred.id || a.usernameId || (a.result !== "valid" && a.result !== "admin")) continue;
-    const where = `${hostLabel(hosts.find((h) => h.id === a.hostId))} ${a.service.toUpperCase()}`;
-    if (seen.has(where)) continue;
-    seen.add(where);
-    out.push({ level: a.result, where });
+  for (const host of hosts) {
+    const services = servicesByHost.get(host.id) ?? [];
+    for (const service of hostSprayServices(host, services)) {
+      const { state } = cellFor(cred, host, services, service, attempts);
+      if (state === "admin" || state === "valid") out.push({ level: state, where: `${hostLabel(host)} ${service.toUpperCase()}` });
+    }
   }
   return out.sort((a, b) => Number(b.level === "admin") - Number(a.level === "admin"));
 }
@@ -67,7 +73,7 @@ export function CredentialDock({ eid, cred, all, hosts, servicesByHost, attempts
   const name = credName(cred);
   const placeholder = isPlaceholderSecret(cred);
   const ownerless = isOwnerless(cred);
-  const works = useMemo(() => worksOn(cred, hosts, attempts), [cred, hosts, attempts]);
+  const works = useMemo(() => worksOn(cred, hosts, servicesByHost, attempts), [cred, hosts, servicesByHost, attempts]);
   const tabs = useMemo(() => dockTabs(cred, { hosts, servicesByHost, usernames }), [cred, hosts, servicesByHost, usernames]);
   const matched = ownerless ? all.filter((c) => c.fromSecretId === cred.id) : [];
   const scopeHost = cred.scope === "local" && cred.localHostId ? hostLabel(hosts.find((h) => h.id === cred.localHostId)) : "";
@@ -143,10 +149,11 @@ export function CredentialDock({ eid, cred, all, hosts, servicesByHost, attempts
       {!folded && (
         <>
           <Separator className="bg-line-2" />
-          <div className={`grid min-h-0 grid-cols-[minmax(0,1fr)] ${tabs.length > 0 ? "@[700px]:grid-cols-[260px_auto_minmax(0,1fr)]" : ""}`}>
+          <div className={`grid min-h-0 grid-cols-[minmax(0,1fr)] ${tabs.length > 0 ? "grid-rows-[auto_auto_minmax(0,1fr)] @[700px]:grid-rows-none @[700px]:grid-cols-[260px_auto_minmax(0,1fr)]" : ""}`}>
             {facts}
             {tabs.length > 0 && (
               <>
+                <Separator className="bg-line-2 @[700px]:hidden" />
                 <Separator orientation="vertical" className="hidden bg-line-2 @[700px]:block" />
                 <ScrollArea className="h-full min-h-0 [&_[data-slot=scroll-area-viewport]>div]:block!">
                   <div className="p-3">
