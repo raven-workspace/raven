@@ -1,13 +1,18 @@
+import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { buildPayload } from "../../engines/payloads/build";
 import { PASTE_CONTEXTS, type PasteContext } from "../../engines/payloads/context";
 import { FILTER_CONTEXTS, filterChoices, type FilterId } from "../../engines/payloads/filters";
 import { callbackClue, inferContext, inferredTools, inferSituation, rankPayloads, type Toggles } from "../../engines/payloads/fit";
+import { staleBuild } from "../../engines/payloads/memory";
+import { msfLockLine } from "../../engines/payloads/msfLock";
 import { MSFVENOM } from "../../engines/payloads/msfvenom";
 import { SHELLS } from "../../engines/payloads/shells";
 import type { BuiltPayload, GeneratorId, PayloadDef } from "../../engines/payloads/types";
 import { UPGRADE } from "../../engines/payloads/upgrade";
+import { api } from "../../lib/api";
 import { useFillBase } from "../palette/fillData";
+import { payloadBuildsKey } from "./queries";
 import { usePayloadsStore } from "./usePayloadsStore";
 
 export type Os = "linux" | "windows";
@@ -92,12 +97,22 @@ export function usePayloadFit(engagementId: string, hostId: string | null) {
     );
   };
 
-  // Task 8 wires staleBuild (build memory) here; until then nothing is flagged stale.
-  const staleLines = useMemo(() => new Map<string, string>(), []);
+  // What each baked payload was last built with, per host (recorded when its build step is copied).
+  const builds = useQuery({ queryKey: payloadBuildsKey(engagementId), queryFn: () => api.payloadBuildsList(engagementId), enabled: engagementId !== "" });
+  /** A baked payload last built for this host with another LHOST or LPORT: "Rebuild first". Null with no host. */
+  const staleFor = (def: PayloadDef) =>
+    def.bakesIp ? staleBuild(builds.data ?? [], host?.id ?? null, def.id, { LHOST: lhost, LPORT: port }) : null;
+  /** The exam's Metasploit lock for a Meterpreter payload: a warning (`breach`) or information. Null with no host. */
+  const lockLine = (def: PayloadDef) => host
+    ? msfLockLine({
+      exam: engagement.kind === "exam-sim", def, hostId: host.id, msfHostId: engagement.msfHostId,
+      hostName: (id) => d.hosts.find((h) => h.id === id)?.name ?? "another host",
+    })
+    : null;
 
   return {
     d, host: host ?? null, hostKey, engagement, os, context, dbEngine, port, settingsPort, lhost, settingsLhost, lhostInput, portInput,
-    evidence, ranked, build, staleLines, toggles, logTools, callbackClue: clue, filter, filterApplies,
+    evidence, ranked, build, staleFor, lockLine, toggles, logTools, callbackClue: clue, filter, filterApplies,
   };
 }
 

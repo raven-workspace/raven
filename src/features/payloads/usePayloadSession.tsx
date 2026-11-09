@@ -1,11 +1,13 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import { DERIVED_TOKENS } from "../../engines/payloads/build";
 import { encodePs } from "../../engines/payloads/encodePs";
 import type { BuiltPayload, GeneratorId, ListenerId, PayloadDef } from "../../engines/payloads/types";
+import { api } from "../../lib/api";
 import { copyPlain } from "../../lib/clipboard";
 import { shortHostName } from "../../lib/hostName";
 import { isDialogOpen } from "../../lib/keys";
+import type { PayloadBuild } from "../../types/payloadBuild";
 import { reportError } from "../../lib/lockSignal";
 import { Input, type Hint } from "../../ui";
 import type { ChipPickerHandle } from "../arsenal/ChipPicker";
@@ -14,6 +16,7 @@ import { isHostPickKey, type HostChipHandle } from "../arsenal/HostChip";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { logCommand } from "../capture/logCommand";
 import { useNotesStore } from "../notes/useNotesStore";
+import { payloadBuildsKey } from "./queries";
 import { contextLabel, hasToggles, isRanked, OS_LABEL, usePayloadFit } from "./usePayloadFit";
 import { usePayloadsStore } from "./usePayloadsStore";
 
@@ -64,13 +67,18 @@ export const inGeneratorList = () => document.activeElement?.closest(`#${GENERAT
 export const isGenerator = (g: string | null): g is GeneratorId => GENERATORS.some((x) => x.id === g);
 
 const PLACEHOLDER = /\{([A-Z][A-Z0-9_]*)\}/g;
-/** The payload's placeholders as fill fields, LHOST first; LPORT is the port chip, and derived ports are never typed. */
+/** The payload's placeholders (template, prepare step, upload trigger) as fill fields, LHOST first; LPORT is the port chip, and derived ports are never typed. */
 const fieldTokens = (def: PayloadDef) =>
-  [...new Set([...`${def.template} ${def.prepare ?? ""}`.matchAll(PLACEHOLDER)].map((m) => m[1]!))]
+  [...new Set([...`${def.template} ${def.prepare ?? ""} ${def.upload?.trigger ?? ""}`.matchAll(PLACEHOLDER)].map((m) => m[1]!))]
     .filter((t) => t !== "LPORT" && !DERIVED_TOKENS.has(t))
     .sort((a, b) => Number(b === "LHOST") - Number(a === "LHOST"));
 /** The LHOST field's hint: Settings' attacker IP, which fills in while the field is empty. */
 export const lhostPlaceholder = (settingsLhost: string) => (settingsLhost ? `Settings: ${settingsLhost}` : "Settings: attacker IP");
+/** Saves what a baked payload was built with, stamped now, and refetches the build memory. */
+async function recordBuild(qc: QueryClient, build: Omit<PayloadBuild, "at">) {
+  await api.payloadBuildRecord({ ...build, at: Date.now() });
+  await qc.invalidateQueries({ queryKey: payloadBuildsKey(build.engagementId) });
+}
 /** ⌥ chords by physical key: on a Mac ⌥L types "¬" and ⌥1 "¡". */
 const altCode = (e: KeyboardEvent) => (e.altKey && !e.metaKey && !e.ctrlKey ? e.code : null);
 
@@ -139,15 +147,88 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
     else if (generator !== "transfer") bodyRef.current?.focus();
   }, [generator, bodyRef]);
 
-  /** Copies the payload in view through the copy guard; "guarded" when it held the copy back. */
+  // A baked payload last built for this host with other values (Rebuild first), and the exam's Metasploit lock.
+  const stale = def ? fit.staleFor(def) : null;
+  const lock = def ? fit.lockLine(def) : null;
+  /** The build step of a baked payload: its prepare step when it has one, else the payload itself. */
+  const buildStep = def?.bakesIp ? (def.prepare ? "prepare" as const : "payload" as const) : null;
+  const staleWarn = stale ? { warn: `Built with ${stale.was}; rebuild first`, warnKey: stale.was } : undefined;
+  const lockWarn = lock?.breach ? { warn: lock.text, warnKey: "msf-lock" } : undefined;
+
+  /**
+   * Remembers what a baked payload was built with for this host, after its build step (or, while nothing is stale, its
+   * trigger) was copied. No host, no record. A failure shows in `status`; the copy stands.
+   */
+  const record = async (d: PayloadDef) => {
+    if (!host || !d.bakesIp || !fit.lhost.trim() || !fit.port.trim()) return;
+    try {
+      await recordBuild(qc, { engagementId, hostId: host.id, payloadId: d.id, lhost: fit.lhost, lport: fit.port });
+    } catch (e) {
+      reportError(e);
+      setStatus(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  /** The prepare step's own copy key: its id and the placeholders still showing in it. */
+  const prepareCmd = built?.prepare
+    ? { id: `${built.def.id}:prepare`, unresolved: built.unresolved.filter((t) => built.prepare!.includes(`{${t}}`)) }
+    : null;
+  /** The trigger copies as is (its placeholders are highlighted, not held back); only "Rebuild first" holds it. */
+  const triggerCmd = built?.trigger ? { id: `${built.def.id}:trigger`, unresolved: [] as string[] } : null;
+
+  /** Copies the prepare step through the copy guard; it is a build step, so a copy records the build. */
+  const copyPrepare = async (): Promise<"copied" | "guarded"> => {
+    if (!built?.prepare || !prepareCmd) return "guarded";
+    setStatus(undefined);
+    const b = built;
+    const text = b.prepare!;
+    try {
+      const r = await guard.attempt({ ...prepareCmd, title: b.def.title, text, msfMarker: false }, () => copyPlain(text));
+      if (r !== "copied") return "guarded";
+    } catch (e) {
+      reportError(e);
+      setStatus(e instanceof Error ? e.message : String(e));
+      return "guarded";
+    }
+    await record(b.def);
+    return "copied";
+  };
+
+  /** Copies an uploaded file's trigger; held back once while its build is stale, and records only while it is not. */
+  const copyTrigger = async (): Promise<"copied" | "guarded"> => {
+    if (!built?.trigger || !triggerCmd) return "guarded";
+    setStatus(undefined);
+    const b = built;
+    const text = b.trigger!.text;
+    const wasStale = stale !== null;
+    try {
+      const r = await guard.attempt({ ...triggerCmd, title: b.def.title, text, msfMarker: false }, () => copyPlain(text), staleWarn);
+      if (r !== "copied") return "guarded";
+    } catch (e) {
+      reportError(e);
+      setStatus(e instanceof Error ? e.message : String(e));
+      return "guarded";
+    }
+    if (!wasStale) await record(b.def);
+    return "copied";
+  };
+
+  /**
+   * Copies the payload in view through the copy guard; "guarded" when it held the copy back. A payload that is the
+   * trigger of a stale build (a served cradle) is held back once with "rebuild first"; a Meterpreter payload on a host
+   * other than the Metasploit one, with the lock. A build step, or a trigger while nothing is stale, records the build.
+   */
   const copy = async (log: boolean): Promise<"copied" | "guarded"> => {
     if (!built) return "guarded";
     setStatus(undefined);
     const b = built;
     const cmd = { id: b.def.id, title: b.def.title, text: b.text, unresolved: b.unresolved, msfMarker: false };
+    const isBuild = buildStep === "payload";
+    const wasStale = stale !== null;
     try {
-      const r = await guard.attempt(cmd, () => copyPlain(b.text));
+      const r = await guard.attempt(cmd, () => copyPlain(b.text), !isBuild && staleWarn ? staleWarn : lockWarn);
       if (r !== "copied") return "guarded";
+      if (isBuild || !wasStale) await record(b.def);
       if (!log || !host || !d.engagement) return "copied";
       await logCommand(qc, {
         engagementId, host, hosts: d.hosts, command: b.text, title: b.def.title,
@@ -215,9 +296,14 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
     }
   };
 
-  const note = built && guard.forKey === copyKey({ id: built.def.id, unresolved: built.unresolved }) ? (guard.hint ?? guard.confirm) : null;
+  const noteFor = (c: { id: string; unresolved: string[] } | null) => (c && guard.forKey === copyKey(c) ? (guard.hint ?? guard.confirm) : null);
+  const note = noteFor(built ? { id: built.def.id, unresolved: built.unresolved } : null);
   const pasteContext = built ? (fit.context && built.def.contexts.includes(fit.context) ? fit.context : built.def.contexts[0]!) : null;
-  const pasteLabel = pasteContext ? `Paste into ${contextLabel(pasteContext)}` : "";
+  // An uploaded file is saved as (or made on Kali into) its FILE, then triggered.
+  const uploadFile = def?.upload ? (extra.FILE?.trim() || def.defaults?.FILE || "{FILE}") : null;
+  const pasteLabel = def?.upload
+    ? (def.upload.kali ? `Make ${uploadFile} on Kali` : `Save as ${uploadFile}`)
+    : pasteContext ? `Paste into ${contextLabel(pasteContext)}` : "";
   const fitsLine = ranked && !ranked.ordered && generator === "shell"
     ? [fit.os && OS_LABEL[fit.os], fit.context && contextLabel(fit.context)].filter(Boolean).join(", ")
     : null;
@@ -239,8 +325,15 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
     </div>
   );
 
+  /** What PayloadView and PayloadBlock take from the session for the payload in view (the drawer and the Workbench). */
+  const blockProps = {
+    pasteLabel, fields, note, noteWarn: guard.hint !== null, prepareNote: noteFor(prepareCmd), triggerNote: noteFor(triggerCmd),
+    stale: stale ? `Rebuild first: built with ${stale.was}, now ${stale.now}` : null, buildStep, lock,
+    onCopy: () => copy(false), onCopyPrepare: copyPrepare, onCopyTrigger: copyTrigger, onCopyListener: copyListener, onPickListener: pickListener,
+  };
+
   return {
-    generator, hostId, setHostId, fit, ranked, index, setIndex, def, built, guard, note, copy, copyListener, onKeyDown,
+    blockProps, generator, hostId, setHostId, fit, ranked, index, setIndex, def, built, guard, note, copy, copyListener, onKeyDown,
     status, psCommand, setPsCommand, pasteLabel, fitsLine, fields, focusToken, hostRef, osRef, contextRef, portRef, psRef, fieldEls,
     callbacksRef, filterRef, toolsRef, pickListener,
   };

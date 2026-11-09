@@ -37,7 +37,7 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
   const bodyRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const s = usePayloadSession({ engagementId, hostId: scopeHostId, bodyRef, lhostField: false });
-  const { generator, fit, ranked, index, setIndex, def, built, guard, note, hostRef, osRef, contextRef, callbacksRef, filterRef, toolsRef, psRef, fieldEls } = s;
+  const { generator, fit, ranked, index, setIndex, built, guard, note, hostRef, osRef, contextRef, callbacksRef, filterRef, toolsRef, psRef, fieldEls } = s;
   const hints = useMemo(
     () => hintsFor(generator, "back", [{ keys: "P", label: "generators", priority: 4 }], ranked?.ordered, fit.filterApplies),
     [generator, ranked?.ordered, fit.filterApplies],
@@ -186,9 +186,7 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
           {ranked && (
             <PayloadView
               fits={ranked.fits} misfits={ranked.misfits} marks={ranked.marks} index={index} onIndex={setIndex} ordered={ranked.ordered}
-              built={built} fitsLine={s.fitsLine ? `Fits: ${s.fitsLine}` : null} pasteLabel={s.pasteLabel} numbered
-              stale={def?.bakesIp ? fit.staleLines.get(def.id) : null} note={note} noteWarn={guard.hint !== null} fields={s.fields}
-              onCopy={() => s.copy(false)} onCopyListener={s.copyListener} onPickListener={s.pickListener}
+              built={built} fitsLine={s.fitsLine ? `Fits: ${s.fitsLine}` : null} numbered {...s.blockProps}
             />
           )}
           {generator === "encode" && (

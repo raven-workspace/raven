@@ -16,7 +16,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
   const navigate = useNavigate();
   const bodyRef = useRef<HTMLDivElement>(null);
   const s = usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, onEscape: () => usePayloadsStore.getState().close() });
-  const { generator, fit, ranked, index, setIndex, def, built, guard, note, hostRef, osRef, contextRef, callbacksRef, filterRef, toolsRef, portRef, psRef } = s;
+  const { generator, fit, ranked, index, setIndex, built, guard, note, hostRef, osRef, contextRef, callbacksRef, filterRef, toolsRef, portRef, psRef } = s;
   const hints = useMemo(
     () => hintsFor(generator, "close", [], ranked?.ordered, fit.filterApplies),
     [generator, ranked?.ordered, fit.filterApplies],
@@ -52,9 +52,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
         {ranked && (
           <PayloadView
             fits={ranked.fits} misfits={ranked.misfits} marks={ranked.marks} index={index} onIndex={setIndex} ordered={ranked.ordered}
-            built={built} fitsLine={s.fitsLine ? `Fits: ${s.fitsLine}` : null} pasteLabel={s.pasteLabel}
-            stale={def?.bakesIp ? fit.staleLines.get(def.id) : null} note={note} noteWarn={guard.hint !== null} fields={s.fields}
-            onCopy={() => s.copy(false)} onCopyListener={s.copyListener} onPickListener={s.pickListener}
+            built={built} fitsLine={s.fitsLine ? `Fits: ${s.fitsLine}` : null} {...s.blockProps}
           />
         )}
         {generator === "encode" && (

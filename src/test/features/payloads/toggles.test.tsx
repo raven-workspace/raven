@@ -90,6 +90,7 @@ beforeEach(() => {
   m.checklistPut.mockResolvedValue([]);
   m.credentialsList.mockResolvedValue([]);
   m.credAttemptsList.mockResolvedValue([]);
+  m.payloadBuildsList.mockResolvedValue([]);
   vi.mocked(logCommand).mockResolvedValue(failed("l0", "bash-tcp", at));
 });
 afterEach(() => setImported({ commands: [], cards: [] }));

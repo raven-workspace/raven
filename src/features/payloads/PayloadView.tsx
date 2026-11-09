@@ -7,33 +7,51 @@ import { ChipPicker } from "../arsenal/ChipPicker";
 
 type CopyResult = Promise<"copied" | "guarded">;
 
+/** A copy guard note under one block; `noteWarn` says whether it is a hold-back (amber) or a confirmation. */
+const Note = ({ text, warn }: { text?: string | null; warn?: boolean }) =>
+  text ? <p role="status" className={`m-0 text-meta ${warn ? "text-warn" : "text-muted"}`}>{text}</p> : null;
+
 /**
- * One built payload: the Kali-side prepare step for a served file, the listener, an amber stale line when a baked file
- * is out of date, the payload to paste, a note from the copy guard, what each part does, and the def's notes. Every
- * block is a CommandBlock with its own Copy button; the payload's goes through the copy guard (`onCopy`), as ↵ does.
+ * One built payload: the Kali-side prepare step for a served file, the listener, the payload to paste (or, for an
+ * uploaded file, the file to save or make on Kali), the trigger that fires an uploaded file, a note from the copy guard
+ * under the block it belongs to, what each part does, and the def's notes. Every block is a CommandBlock with its own
+ * Copy button; the payload's, the prepare step's and the trigger's go through the copy guard, as ↵ does.
+ * A baked payload whose build is out of date (`stale`) shows its build step first, under an amber "Rebuild first" line.
  * Shared by every generator that builds a payload.
  */
-export function PayloadBlock({ built, pasteLabel, stale, note, noteWarn, fields, numbered, onCopy, onCopyListener, onPickListener }: {
+export function PayloadBlock({
+  built, pasteLabel, stale, buildStep, lock, note, prepareNote, triggerNote, noteWarn, fields, numbered,
+  onCopy, onCopyPrepare, onCopyTrigger, onCopyListener, onPickListener,
+}: {
   built: BuiltPayload; pasteLabel: string;
-  /** `Built at … with …; rebuild it`, for a baked payload whose LHOST or LPORT has changed since. */
+  /** `Rebuild first: built with …, now …`, for a baked payload whose LHOST or LPORT has changed since its last build. */
   stale?: string | null;
-  /** The copy guard's hint or confirmation. */
-  note?: string | null; noteWarn?: boolean;
+  /** Which block builds a baked payload: its prepare step, or the payload itself (msfvenom, a file made on Kali). */
+  buildStep?: "prepare" | "payload" | null;
+  /** The exam's Metasploit lock line above the payload: amber when it is a breach, muted otherwise. */
+  lock?: { text: string; breach: boolean } | null;
+  /** The copy guard's hint or confirmation, under the payload, the prepare step or the trigger. */
+  note?: string | null; prepareNote?: string | null; triggerNote?: string | null; noteWarn?: boolean;
   /** Fill fields (LHOST and the payload's other placeholders), above the copy blocks. */
   fields?: ReactNode;
   /** Number the copy blocks as steps ("1. Listener on Kali", "2. Paste into …"), as the Workbench does. */
   numbered?: boolean;
-  /** The payload's Copy (the copy guard); the listener's Copy (⌥L). */
-  onCopy: () => CopyResult; onCopyListener: () => void;
+  /** The payload's Copy (the copy guard); the prepare step's and the trigger's; the listener's Copy (⌥L). */
+  onCopy: () => CopyResult; onCopyPrepare?: () => CopyResult; onCopyTrigger?: () => CopyResult; onCopyListener: () => void;
   /** Picks another of the def's listeners (session memory, per payload); a picker shows when it has more than one. */
   onPickListener?: (id: ListenerId) => void;
 }) {
-  let step = 0;
-  const heading = (label: string) => (numbered ? `${++step}. ${label}` : label);
-  const prepareHeading = built.prepare ? heading("Prepare on Kali") : "";
-  const listenerHeading = built.listener
-    ? heading(numbered && built.listenerHeading === "Listener" ? "Listener on Kali" : built.listenerHeading)
-    : "";
+  type Step = "prepare" | "listener" | "payload" | "trigger";
+  const present: Step[] = [
+    ...(built.prepare ? ["prepare" as const] : []), ...(built.listener ? ["listener" as const] : []),
+    "payload", ...(built.trigger ? ["trigger" as const] : []),
+  ];
+  // Out of date: the build step goes first, so you rebuild before anything else.
+  const first = stale && buildStep && present.includes(buildStep) ? buildStep : null;
+  const order = first ? [first, ...present.filter((p) => p !== first)] : present;
+  const heading = (step: Step, label: string) => (numbered ? `${order.indexOf(step) + 1}. ${label}` : label);
+  const staleLine = (step: Step) => first === step && <p className="m-0 text-meta text-warn">{stale}</p>;
+
   const listeners = built.def.listeners;
   const listenerPicker = onPickListener && listeners.length > 1 && built.listenerId && (
     <ChipPicker
@@ -43,32 +61,48 @@ export function PayloadBlock({ built, pasteLabel, stale, note, noteWarn, fields,
       prefix="Listener" shown={LISTENERS[built.listenerId].label}
     />
   );
-  const pasteHeading = heading(pasteLabel);
+  const blocks: Record<Step, () => ReactNode> = {
+    prepare: () => (
+      <section key="prepare" className="grid gap-2">
+        {staleLine("prepare")}
+        <h3 className={`${labelClass} m-0`}>{heading("prepare", "Prepare on Kali")}</h3>
+        <CommandBlock text={built.prepare!} name="Prepare on Kali" copyLabel="Copy prepare on Kali" onCopyAction={onCopyPrepare} placeholders />
+        <Note text={prepareNote} warn={noteWarn} />
+      </section>
+    ),
+    listener: () => (
+      <section key="listener" className="grid gap-2">
+        {/* The heading, with the listener picker on its right when the payload has more than one. */}
+        <div className="grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-3">
+          <h3 className={`${labelClass} m-0`}>
+            {heading("listener", numbered && built.listenerHeading === "Listener" ? "Listener on Kali" : built.listenerHeading)}
+          </h3>
+          {listenerPicker}
+        </div>
+        <CommandBlock text={built.listener!} name="Listener" copyLabel="Copy listener" onCopyAction={onCopyListener} placeholders />
+      </section>
+    ),
+    payload: () => (
+      <section key="payload" className="grid gap-2">
+        {staleLine("payload")}
+        {lock && <p className={`m-0 text-meta ${lock.breach ? "text-warn" : "text-muted"}`}>{lock.text}</p>}
+        <h3 className={`${labelClass} m-0`}>{heading("payload", pasteLabel)}</h3>
+        <CommandBlock text={built.text} name="Payload" copyLabel="Copy payload" onCopyAction={onCopy} placeholders />
+        <Note text={note} warn={noteWarn} />
+      </section>
+    ),
+    trigger: () => (
+      <section key="trigger" className="grid gap-2">
+        <h3 className={`${labelClass} m-0`}>{heading("trigger", "Trigger it")}</h3>
+        <CommandBlock text={built.trigger!.text} name="Trigger" copyLabel="Copy trigger" onCopyAction={onCopyTrigger} placeholders />
+        <Note text={triggerNote} warn={noteWarn} />
+      </section>
+    ),
+  };
   return (
     <div className="grid gap-4">
       {fields}
-      {built.prepare && (
-        <section className="grid gap-2">
-          <h3 className={`${labelClass} m-0`}>{prepareHeading}</h3>
-          <CommandBlock text={built.prepare} name="Prepare on Kali" copyLabel="Copy prepare on Kali" placeholders />
-        </section>
-      )}
-      {built.listener && (
-        <section className="grid gap-2">
-          {/* The heading, with the listener picker on its right when the payload has more than one. */}
-          <div className="grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-3">
-            <h3 className={`${labelClass} m-0`}>{listenerHeading}</h3>
-            {listenerPicker}
-          </div>
-          <CommandBlock text={built.listener} name="Listener" copyLabel="Copy listener" onCopyAction={onCopyListener} placeholders />
-        </section>
-      )}
-      <section className="grid gap-2">
-        {stale && <p className="m-0 text-meta text-warn">{stale}</p>}
-        <h3 className={`${labelClass} m-0`}>{pasteHeading}</h3>
-        <CommandBlock text={built.text} name="Payload" copyLabel="Copy payload" onCopyAction={onCopy} placeholders />
-        {note && <p role="status" className={`m-0 text-meta ${noteWarn ? "text-warn" : "text-muted"}`}>{note}</p>}
-      </section>
+      {order.map((step) => blocks[step]())}
       {built.parts.length > 0 && (
         <section className="grid gap-2">
           <h3 className={`${labelClass} m-0`}>What each part does</h3>

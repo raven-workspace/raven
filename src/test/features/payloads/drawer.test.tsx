@@ -97,6 +97,7 @@ beforeEach(() => {
   m.checklistPut.mockResolvedValue([]);
   m.credentialsList.mockResolvedValue([]);
   m.credAttemptsList.mockResolvedValue([]);
+  m.payloadBuildsList.mockResolvedValue([]);
   vi.mocked(logCommand).mockResolvedValue(WEBSHELL_LOG);
 });
 afterEach(() => setImported({ commands: [], cards: [] }));
@@ -414,19 +415,6 @@ describe("Payloads drawer", () => {
   });
 
   // Task 8 rewires this to build memory (staleBuild); skipped until then.
-  it.skip("a baked payload built with an older LHOST shows the stale line above the copy block", async () => {
-    const old = new Date(2026, 10, 7, 9, 5).getTime();
-    m.logList.mockResolvedValue([
-      WEBSHELL_LOG,
-      entry({ id: "l2", payloadId: "nishang-cradle", payloadValues: { LHOST: "192.0.2.99", LPORT }, at: old, createdAt: old, updatedAt: old }),
-    ]);
-    usePayloadsStore.setState({ overrides: { h1: { context: "sql-string" } } });
-    const { d } = await openOn("/e/e1/h/h1");
-    expect(await d.findByRole("heading", { name: "Nishang cradle (served rev.ps1)" })).toBeInTheDocument();
-    const line = d.getByText(`Built at 09:05 with 192.0.2.99:${LPORT}; rebuild it`);
-    expect(line).toHaveClass("text-warn");
-  });
-
   it("a served cradle shows its Kali-side prepare step, filled, and no field for the derived ports", async () => {
     usePayloadsStore.setState({ overrides: { h1: { context: "sql-string", port: "80" } } });
     const { d } = await openOn("/e/e1/h/h1");

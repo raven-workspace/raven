@@ -98,6 +98,7 @@ beforeEach(() => {
   m.checklistPut.mockResolvedValue([]);
   m.credentialsList.mockResolvedValue([]);
   m.credAttemptsList.mockResolvedValue([]);
+  m.payloadBuildsList.mockResolvedValue([]);
 });
 afterEach(() => setImported({ commands: [], cards: [] }));
 
