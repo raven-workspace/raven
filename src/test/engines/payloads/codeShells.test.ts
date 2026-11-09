@@ -57,6 +57,11 @@ describe("CODE_SHELLS", () => {
     }
   });
 
+  it("requires lists target-side tools only", () => {
+    expect(def("groovy-linux").requires).toEqual(["bash"]);
+    expect(def("java-linux").requires).toEqual(["bash"]);
+  });
+
   it("SHELLS has unique ids", () => {
     const ids = SHELLS.map((d) => d.id);
     expect(new Set(ids).size).toBe(ids.length);
