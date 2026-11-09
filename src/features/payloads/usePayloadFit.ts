@@ -1,18 +1,25 @@
 import { useMemo } from "react";
 import { buildPayload } from "../../engines/payloads/build";
 import { PASTE_CONTEXTS, type PasteContext } from "../../engines/payloads/context";
-import { inferContext, inferSituation, rankPayloads } from "../../engines/payloads/fit";
+import { FILTER_CONTEXTS, type FilterId } from "../../engines/payloads/filters";
+import { callbackClue, inferContext, inferredTools, inferSituation, rankPayloads, type Toggles } from "../../engines/payloads/fit";
 import { MSFVENOM } from "../../engines/payloads/msfvenom";
-import { REVERSE_SHELLS } from "../../engines/payloads/reverseShells";
+import { SHELLS } from "../../engines/payloads/shells";
 import type { BuiltPayload, GeneratorId, PayloadDef } from "../../engines/payloads/types";
 import { UPGRADE } from "../../engines/payloads/upgrade";
 import { useFillBase } from "../palette/fillData";
 import { usePayloadsStore } from "./usePayloadsStore";
 
 export type Os = "linux" | "windows";
-export interface Ranked { fits: PayloadDef[]; misfits: { def: PayloadDef; reason: string }[]; ordered: boolean }
+export interface Ranked {
+  fits: PayloadDef[]; misfits: { def: PayloadDef; reason: string }[]; ordered: boolean;
+  /** Why a fit sorted down (Needs a callback, Needs python3, Failed here before), by def id; never folds it. */
+  marks: Record<string, string[]>;
+}
+const NO_TOOLS: Toggles["tools"] = {};
 
 export const OS_LABEL: Record<Os, string> = { linux: "Linux", windows: "Windows" };
+export const FILTER_LABEL: Record<FilterId, string> = { off: "off", b64: "base64", ifs: "base64 + ${IFS}", hex: "hex", "ps-b64": "PowerShell -e" };
 export const contextLabel = (c: PasteContext) => PASTE_CONTEXTS.find((p) => p.id === c)?.label ?? c;
 
 /**
@@ -25,6 +32,7 @@ export function usePayloadFit(engagementId: string, hostId: string | null) {
   const hostKey = host?.id ?? "";
   const ov = usePayloadsStore((s) => s.overrides[hostKey]);
   const lhostOverride = usePayloadsStore((s) => s.lhost);
+  const listenerPick = usePayloadsStore((s) => s.listenerPick);
 
   const inferred = useMemo(() => {
     const services = host ? (d.services ?? []).filter((s) => s.hostId === host.id) : [];
@@ -51,18 +59,36 @@ export function usePayloadFit(engagementId: string, hostId: string | null) {
   };
   const dbEngine = ov?.sqlEngine ?? inferred.situation.dbEngine;
 
-  const ranked = useMemo<Record<"shell" | "msfvenom" | "upgrade", Ranked>>(() => ({
-    shell: { ...rankPayloads(REVERSE_SHELLS, situation, context), ordered: false },
-    // msfvenom runs at your own bash prompt: where the target pastes things does not apply.
-    msfvenom: { ...rankPayloads(MSFVENOM, situation, null), ordered: false },
-    // Upgrade steps run in order, whatever the host.
-    upgrade: { fits: UPGRADE, misfits: [], ordered: true },
-  }), [situation, context]);
+  // Your toggles, session only. Raven never sets them: a clue only says so (callbackClue).
+  const callbacksBlocked = ov?.callbacksBlocked ?? false;
+  const ownTools = ov?.tools ?? NO_TOOLS;
+  const toggles = useMemo<Toggles>(() => ({ callbacksBlocked, tools: ownTools }), [callbacksBlocked, ownTools]);
+  /** What the log says about each tool, before your ticks. */
+  const logTools = useMemo(() => inferredTools(situation), [situation]);
+  const clue = useMemo(() => callbackClue(situation, SHELLS), [situation]);
+  /** The filter applies only where the payload goes through an injection point. */
+  const filterApplies = context !== null && FILTER_CONTEXTS.includes(context);
+  const filter: FilterId = ov?.filter ?? "off";
 
-  /** Built with the paste context when the def works there, else the first context it declares. */
+  const ranked = useMemo<Record<"shell" | "msfvenom" | "upgrade", Ranked>>(() => ({
+    shell: { ...rankPayloads(SHELLS, situation, context, toggles), ordered: false },
+    // msfvenom runs at your own bash prompt: where the target pastes things does not apply.
+    msfvenom: { ...rankPayloads(MSFVENOM, situation, null, toggles), ordered: false },
+    // Upgrade steps run in order, whatever the host.
+    upgrade: { fits: UPGRADE, misfits: [], marks: {}, ordered: true },
+  }), [situation, context, toggles]);
+
+  /**
+   * Built with the paste context when the def works there, else the first context it declares; for the OS in view, the
+   * listener you picked for it, your filter where it applies, and the host's IP for a bind shell's connect line.
+   */
   const build = (def: PayloadDef, extra: Record<string, string> = {}): BuiltPayload => {
     const ctx = context && def.contexts.includes(context) ? context : def.contexts[0]!;
-    return buildPayload(def, ctx, { ...extra, LHOST: lhost, LPORT: port });
+    const pick = listenerPick[def.id];
+    return buildPayload(
+      def, ctx, { ...extra, TARGET_IP: extra.TARGET_IP || (host?.ip ?? ""), LHOST: lhost, LPORT: port },
+      { ...(os ? { os } : {}), ...(pick ? { listener: pick } : {}), ...(filterApplies ? { filter } : {}) },
+    );
   };
 
   // Task 8 wires staleBuild (build memory) here; until then nothing is flagged stale.
@@ -70,7 +96,7 @@ export function usePayloadFit(engagementId: string, hostId: string | null) {
 
   return {
     d, host: host ?? null, hostKey, engagement, os, context, dbEngine, port, settingsPort, lhost, settingsLhost, lhostInput, portInput,
-    evidence, ranked, build, staleLines,
+    evidence, ranked, build, staleLines, toggles, logTools, callbackClue: clue, filter, filterApplies,
   };
 }
 

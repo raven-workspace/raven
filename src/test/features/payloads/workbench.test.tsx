@@ -82,7 +82,7 @@ beforeEach(() => {
   usePaletteStore.getState().close();
   useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
   useArsenalStore.setState({ open: false, cardId: null, blockId: null });
-  usePayloadsStore.setState({ open: false, generator: "shell", overrides: {}, lhost: null });
+  usePayloadsStore.setState({ open: false, generator: "shell", overrides: {}, lhost: null, listenerPick: {} });
   useNotesStore.setState({ open: false });
   setImported({ commands: [], cards: [] });
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
@@ -124,7 +124,7 @@ describe("Payloads Workbench", () => {
     expect(r.getByText("from your 14:02 log entry")).toBeInTheDocument();
     expect(r.getByRole("textbox", { name: "LHOST" })).toHaveValue(LHOST);
     expect(r.getByRole("textbox", { name: "LPORT" })).toHaveValue(LPORT);
-    expect(r.getByText(/no meterpreter/i)).toBeInTheDocument();
+    expect(r.getByText("No exam limits.")).toBeInTheDocument();
     expect(r.getByRole("listbox", { name: "Generator" })).toBeInTheDocument();
     expect(w.getByText("1. Listener on Kali")).toBeInTheDocument();
     expect(w.getByText("2. Paste into Web shell ?cmd=")).toBeInTheDocument();

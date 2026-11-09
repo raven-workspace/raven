@@ -23,7 +23,7 @@ const TYPEAHEAD_MS = 700;
  * focus back, typeahead works only inside the open list. A pick that changes `value` flashes the trigger once
  * (`data-flash`). In the open list the pointer moves the highlight like the arrow keys (a popup, not a pane).
  */
-export function ChipPicker({ options, value, onPick, label, listLabel, title, align = "end", wide, prefix, shown, ref }: {
+export function ChipPicker({ options, value, onPick, label, listLabel, title, align = "end", wide, prefix, shown, warn, ref }: {
   options: ChipOption[]; value: string | null; onPick: (id: string | null) => void;
   /** The button's accessible name. */
   label: string; listLabel: string; title: string;
@@ -35,6 +35,8 @@ export function ChipPicker({ options, value, onPick, label, listLabel, title, al
   prefix: string;
   /** The value the trigger shows; unset shows an amber "Pick one". */
   shown?: string;
+  /** The shown value reads amber (PickerTrigger's warn). */
+  warn?: boolean;
   ref?: Ref<ChipPickerHandle>;
 }) {
   const listId = useId();
@@ -124,6 +126,7 @@ export function ChipPicker({ options, value, onPick, label, listLabel, title, al
         ref={buttonRef}
         prefix={prefix}
         {...(shown ? { value: shown } : {})}
+        {...(warn ? { warn } : {})}
         aria-label={label}
         aria-haspopup="listbox"
         aria-expanded={open}

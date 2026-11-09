@@ -7,11 +7,13 @@ export interface PickerTriggerProps extends Omit<ButtonHTMLAttributes<HTMLButton
   value?: string;
   placeholder?: string;
   icon?: ReactNode;
+  /** The value reads amber: a clue says it may be wrong (the value itself stays). */
+  warn?: boolean;
   ref?: Ref<HTMLButtonElement>;
 }
 
 /** A context picker button: "Host  192.0.2.10 v". An unset value says "Pick one" in warn. */
-export function PickerTrigger({ prefix, value, placeholder = "Pick one", icon, type = "button", className, ...rest }: PickerTriggerProps) {
+export function PickerTrigger({ prefix, value, placeholder = "Pick one", icon, warn, type = "button", className, ...rest }: PickerTriggerProps) {
   return (
     <button
       type={type}
@@ -24,7 +26,7 @@ export function PickerTrigger({ prefix, value, placeholder = "Pick one", icon, t
       {icon}
       <span className="text-meta text-muted-2">{prefix}</span>
       {value ? (
-        <span className="min-w-0 truncate text-body text-fg">{value}</span>
+        <span className={cx("min-w-0 truncate text-body", warn ? "text-warn" : "text-fg")}>{value}</span>
       ) : (
         <span className="text-body text-warn">{placeholder}</span>
       )}

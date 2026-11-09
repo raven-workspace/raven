@@ -15,8 +15,11 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
   const navigate = useNavigate();
   const bodyRef = useRef<HTMLDivElement>(null);
   const s = usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, onEscape: () => usePayloadsStore.getState().close() });
-  const { generator, fit, ranked, index, setIndex, def, built, guard, note, hostRef, osRef, contextRef, portRef, psRef } = s;
-  const hints = useMemo(() => hintsFor(generator, "close", [], ranked?.ordered), [generator, ranked?.ordered]);
+  const { generator, fit, ranked, index, setIndex, def, built, guard, note, hostRef, osRef, contextRef, callbacksRef, filterRef, toolsRef, portRef, psRef } = s;
+  const hints = useMemo(
+    () => hintsFor(generator, "close", [], ranked?.ordered, fit.filterApplies),
+    [generator, ranked?.ordered, fit.filterApplies],
+  );
 
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto]" onKeyDown={s.onKeyDown}>
@@ -41,14 +44,16 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
           }}
         />
       </header>
-      <ContextChips fit={fit} engagementId={engagementId} onHost={s.setHostId} hostRef={hostRef} osRef={osRef} contextRef={contextRef} portRef={portRef} />
+      <ContextChips fit={fit} engagementId={engagementId} onHost={s.setHostId} hostRef={hostRef} osRef={osRef} contextRef={contextRef} portRef={portRef}
+        callbacksRef={callbacksRef} filterRef={filterRef} toolsRef={toolsRef}
+      />
       <div ref={bodyRef} tabIndex={-1} className="min-h-0 overflow-y-auto overflow-x-hidden px-4 py-4 outline-none">
         {ranked && (
           <PayloadView
-            fits={ranked.fits} misfits={ranked.misfits} index={index} onIndex={setIndex} ordered={ranked.ordered}
+            fits={ranked.fits} misfits={ranked.misfits} marks={ranked.marks} index={index} onIndex={setIndex} ordered={ranked.ordered}
             built={built} fitsLine={s.fitsLine ? `Fits: ${s.fitsLine}` : null} pasteLabel={s.pasteLabel}
             stale={def?.bakesIp ? fit.staleLines.get(def.id) : null} note={note} noteWarn={guard.hint !== null} fields={s.fields}
-            onCopy={() => s.copy(false)} onCopyListener={s.copyListener}
+            onCopy={() => s.copy(false)} onCopyListener={s.copyListener} onPickListener={s.pickListener}
           />
         )}
         {generator === "encode" && (

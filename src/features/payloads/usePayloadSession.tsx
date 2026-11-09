@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import { DERIVED_TOKENS } from "../../engines/payloads/build";
 import { encodePs } from "../../engines/payloads/encodePs";
-import type { BuiltPayload, GeneratorId, PayloadDef } from "../../engines/payloads/types";
+import type { BuiltPayload, GeneratorId, ListenerId, PayloadDef } from "../../engines/payloads/types";
 import { copyPlain } from "../../lib/clipboard";
 import { shortHostName } from "../../lib/hostName";
 import { isDialogOpen } from "../../lib/keys";
@@ -19,7 +19,7 @@ import { usePayloadsStore } from "./usePayloadsStore";
 
 /** In ⌥1–⌥6 order. */
 export const GENERATORS: { id: GeneratorId; label: string }[] = [
-  { id: "shell", label: "Reverse shell" },
+  { id: "shell", label: "Shell" },
   { id: "transfer", label: "Transfer" },
   { id: "sql", label: "SQL injection" },
   { id: "msfvenom", label: "msfvenom" },
@@ -28,9 +28,10 @@ export const GENERATORS: { id: GeneratorId; label: string }[] = [
 ];
 /**
  * The hint line for one generator: only the keys that work there, by priority (1 never drops). `esc` names what Esc
- * does in this view; `extra` adds the view's own keys. `ordered`: ⇥ walks steps, not fits.
+ * does in this view; `extra` adds the view's own keys. `ordered`: ⇥ walks steps, not fits. `filter`: the Filter
+ * toggle applies (an injection paste context), so ⌥F is listed for the shell generator.
  */
-export function hintsFor(g: GeneratorId, esc: string, extra: Hint[] = [], ordered = false): Hint[] {
+export function hintsFor(g: GeneratorId, esc: string, extra: Hint[] = [], ordered = false, filter = false): Hint[] {
   const generator: Hint = { keys: "⌥1–6", label: "generator", priority: 5 };
   const tail: Hint[] = [...extra, { keys: "Esc", label: esc, priority: 1 }];
   const copyLog: Hint = { keys: "⌘↵", label: "copy and log", priority: 3 };
@@ -44,6 +45,13 @@ export function hintsFor(g: GeneratorId, esc: string, extra: Hint[] = [], ordere
     { keys: "⇥", label: ordered ? "next step" : "next fit", priority: 2 },
     { keys: "⌥O", label: "OS", priority: 4 },
     { keys: "⌥W", label: "where you paste", priority: 4 },
+    ...(g === "shell"
+      ? [
+        { keys: "⌥B", label: "callbacks", priority: 4 },
+        ...(filter ? [{ keys: "⌥F", label: "filter", priority: 4 }] : []),
+        { keys: "⌥T", label: "tools", priority: 4 },
+      ]
+      : []),
     generator,
     ...tail,
   ];
@@ -70,7 +78,8 @@ const altCode = (e: KeyboardEvent) => (e.altKey && !e.metaKey && !e.ctrlKey ? e.
  * What the drawer and the Workbench share: the host in view, its fit, the payload in view and its copy guard, and the
  * keys. ↵ copies, ⌘↵ copies and logs, ⇥ moves to the next fit (only while focus is on the payload body itself, and
  * never past the last fit: there it moves focus on, so Tab still reaches every button and field; ⇧⇥ always moves focus),
- * and ⌥1–⌥6, ⌥L, ⌥H, ⌥O (OS) and ⌥W (where you paste it) work wherever focus is.
+ * and ⌥1–⌥6, ⌥L, ⌥H, ⌥O (OS), ⌥W (where you paste it), ⌥B (callbacks), ⌥F (filter, while it applies) and ⌥T (tools)
+ * work wherever focus is.
  * `onEscape`, when given, takes Esc in the capture phase (the drawer closes on it).
  * `lhostField`: show LHOST among the payload's fill fields (the Workbench has its own in the left column).
  */
@@ -94,7 +103,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
 
   // Which fit is in view: back to the best one whenever the list it indexes changes.
   const ranked = isRanked(generator) ? fit.ranked[generator] : null;
-  const listKey = `${generator}|${fit.hostKey}|${fit.os}|${fit.context}`;
+  const listKey = `${generator}|${fit.hostKey}|${fit.os}|${fit.context}|${fit.toggles.callbacksBlocked}|${JSON.stringify(fit.toggles.tools)}`;
   const [pos, setPos] = useState({ key: listKey, index: 0 });
   const index = pos.key === listKey && ranked ? Math.min(pos.index, Math.max(0, ranked.fits.length - 1)) : 0;
   const setIndex = (i: number) => setPos({ key: listKey, index: i });
@@ -109,6 +118,10 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
   /** ⌥O and ⌥W: the drawer's chips, or the Workbench's choice groups. */
   const osRef = useRef<ChipPickerHandle>(null);
   const contextRef = useRef<ChipPickerHandle>(null);
+  /** ⌥B ⌥F ⌥T: Callbacks, Filter and Tools. */
+  const callbacksRef = useRef<ChipPickerHandle>(null);
+  const filterRef = useRef<ChipPickerHandle>(null);
+  const toolsRef = useRef<ChipPickerHandle>(null);
   const psRef = useRef<HTMLInputElement>(null);
   const fieldEls = useRef(new Map<string, HTMLInputElement>());
   const focusToken = useCallback((t: string) => (t === "LPORT" && portRef.current ? portRef.current.open() : fieldEls.current.get(t)?.focus()), []);
@@ -152,8 +165,11 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
   const copyListener = () => {
     if (built?.listener) void copyPlain(built.listener).catch(reportError);
   };
+  const pickListener = (id: ListenerId) => {
+    if (built) usePayloadsStore.getState().pickListener(built.def.id, id);
+  };
 
-  // ⌥1–⌥6, ⌥L, ⌥H, ⌥O and ⌥W, wherever focus is. Capture phase, so the host view's own ⌥1–⌥3 tabs never see them.
+  // ⌥1–⌥6, ⌥L, ⌥H, ⌥O, ⌥W, ⌥B, ⌥F and ⌥T, wherever focus is. Capture phase, so the host view's own ⌥1–⌥3 tabs never see them.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // The Workbench stays mounted under an Arsenal or Notes drawer: ⌥H ⌥L ⌥1–⌥6 then belong to that drawer.
@@ -169,6 +185,9 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
       } else if (code === "KeyO" || code === "KeyW") {
         e.preventDefault();
         (code === "KeyO" ? osRef : contextRef).current?.open();
+      } else if (code === "KeyB" || code === "KeyT" || (code === "KeyF" && fit.filterApplies)) {
+        e.preventDefault();
+        (code === "KeyB" ? callbacksRef : code === "KeyT" ? toolsRef : filterRef).current?.open();
       } else if (engagementId && isHostPickKey(e)) {
         e.preventDefault();
         hostRef.current?.open();
@@ -223,6 +242,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
   return {
     generator, hostId, setHostId, fit, ranked, index, setIndex, def, built, guard, note, copy, copyListener, onKeyDown,
     status, psCommand, setPsCommand, pasteLabel, fitsLine, fields, focusToken, hostRef, osRef, contextRef, portRef, psRef, fieldEls,
+    callbacksRef, filterRef, toolsRef, pickListener,
   };
 }
 
