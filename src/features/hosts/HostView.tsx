@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { SCROLL_PANE } from "../../ui/controlStyles";
 import { useLocation, useNavigate } from "react-router";
 import { isDialogOpen, isFreeKey, isTypingTarget, useKeydown } from "../../lib/keys";
-import { Button, EmptyState, LoadingState, queryState } from "../../ui";
+import { Button, EmptyState, HintLine, LoadingState, queryState, type Hint } from "../../ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/shadcn/tabs";
 import type { Finding } from "../../types/findings";
 import { FindingSplit } from "../findings/FindingSplit";
@@ -26,6 +26,24 @@ const TABS = [
   { id: "findings", label: "Findings", code: "Digit3" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
+
+const HINTS: Hint[] = [
+  { keys: "J", label: "next step", priority: 1 },
+  { keys: "H", label: "stuck", priority: 2 },
+  { keys: "F", label: "finding", priority: 3 },
+  { keys: "L", label: "capture", priority: 2 },
+  { keys: "⌥1–3", label: "tabs", priority: 4 },
+];
+
+/** The first To do or Doing step on screen, in checklist order: its expand button gets focus and the row scrolls into view. */
+function focusFirstOpenStep(): boolean {
+  const row = document.querySelector<HTMLElement>('li[data-goal-id][data-status="todo"], li[data-goal-id][data-status="in_progress"]');
+  const target = row?.querySelector<HTMLElement>("button");
+  if (!row || !target) return false;
+  target.focus();
+  row.scrollIntoView({ block: "nearest" });
+  return true;
+}
 
 /** Two columns from this width of the host page (the `@min-[760px]/host` container query); stacked below it. */
 const TWO_COLUMNS_PX = 760;
@@ -120,6 +138,37 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
     setTab(t.id);
     setFocusGoal(undefined);
   });
+  // J: a jump asked for (`n` counts the presses); it runs after the render that shows the Next tab, and widens to the
+  // full checklist when the current stage has nothing open.
+  const [jump, setJump] = useState(0);
+  const [jumpNote, setJumpNote] = useState<string>();
+  useKeydown((e) => {
+    if (!isFreeKey(e) || (e.key !== "j" && e.key !== "J") || split || stuckOpen) return;
+    e.preventDefault();
+    setJumpNote(undefined);
+    setTab("next");
+    setFocusGoal(undefined);
+    setJump((n) => n + 1);
+  });
+  useEffect(() => {
+    if (jump === 0 || tab !== "next") return;
+    // State changes go through a microtask: this effect reacts to the render, it does not feed another one back.
+    if (focusFirstOpenStep()) {
+      queueMicrotask(() => setJump(0));
+    } else if (!fullChecklist) {
+      queueMicrotask(() => setFullChecklist(true));
+    } else {
+      queueMicrotask(() => {
+        setJump(0);
+        setJumpNote("Every step is done");
+      });
+    }
+  }, [jump, tab, fullChecklist]);
+  useEffect(() => {
+    if (!jumpNote) return;
+    const t = setTimeout(() => setJumpNote(undefined), 4000);
+    return () => clearTimeout(t);
+  }, [jumpNote]);
   const [rootRef, width] = useWidth();
   const stacked = width !== undefined && width < TWO_COLUMNS_PX;
   const selectTab = (id: TabId) => {
@@ -148,7 +197,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   const facts = <FactsColumn engagementId={engagementId} host={host} variant={stacked ? "stacked" : "column"} onOpenEntry={openInLog} />;
 
   return (
-    <div ref={rootRef} data-host-layout={width === undefined ? undefined : stacked ? "stacked" : "columns"} className="@container/host grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4">
+    <div ref={rootRef} data-host-layout={width === undefined ? undefined : stacked ? "stacked" : "columns"} className="@container/host grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-4">
       <HostHeader host={host} onStuck={toggleStuck} />
       {split ? (
         <FindingSplit
@@ -175,7 +224,12 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
                 ))}
               </TabsList>
               {tab === "log" && <OrderButton order={order} onChange={setOrder} />}
-              {tab === "next" && <FullChecklistToggle full={fullChecklist} onChange={setFullChecklist} />}
+              {tab === "next" && (
+                <div className="grid grid-flow-col items-center gap-3">
+                  {jumpNote && <span role="status" className="text-meta text-muted">{jumpNote}</span>}
+                  <FullChecklistToggle full={fullChecklist} onChange={setFullChecklist} />
+                </div>
+              )}
             </div>
             <TabsContent value={tab} aria-label={TABS.find((t) => t.id === tab)!.label} className={`border-t border-line ${SCROLL_PANE}`}>
               {tab === "log" ? (
@@ -197,6 +251,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
           </Tabs>
         </div>
       )}
+      <HintLine hints={HINTS} ariaLabel="Host shortcuts" />
       <StuckView
         engagementId={engagementId}
         host={host}

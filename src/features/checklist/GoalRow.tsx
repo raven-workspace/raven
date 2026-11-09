@@ -109,7 +109,7 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
   const Caret = open ? CaretDown : CaretRight;
 
   return (
-    <li ref={root} data-goal-id={goal.id} className={`grid items-start gap-x-2 gap-y-3 border-b border-line py-3 ${cover ? "grid-cols-[28px_minmax(0,1fr)_auto_auto]" : "grid-cols-[28px_minmax(0,1fr)_auto]"}`}>
+    <li ref={root} data-goal-id={goal.id} data-status={status} className={`grid items-start gap-x-2 gap-y-3 border-b border-line py-3 ${cover ? "grid-cols-[28px_minmax(0,1fr)_auto_auto]" : "grid-cols-[28px_minmax(0,1fr)_auto]"}`}>
       <IconButton
         icon={Caret}
         label={`${open ? "Collapse" : "Expand"} ${goal.title}`}
