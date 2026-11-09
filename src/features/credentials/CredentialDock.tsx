@@ -90,7 +90,15 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
   };
 
   const facts = (
-    <dl data-testid="dock-facts" className="m-0 grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] content-start gap-3 p-3 @[700px]:min-h-0 @[700px]:grid-cols-1 @[700px]:overflow-y-auto">
+    <dl
+      data-testid="dock-facts"
+      data-layout={tabs.length > 0 ? "column" : "row"}
+      className={`m-0 grid content-start gap-3 p-3 ${
+        tabs.length > 0
+          ? "grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] @[700px]:min-h-0 @[700px]:grid-cols-1 @[700px]:overflow-y-auto"
+          : "grid-cols-[repeat(auto-fill,minmax(180px,1fr))]"
+      }`}
+    >
       <Fact label="Source">{cred.source || <span className="text-muted">none recorded</span>}</Fact>
       <Fact label="Scope">
         {cred.scope}

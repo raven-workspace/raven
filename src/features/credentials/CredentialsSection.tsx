@@ -145,9 +145,7 @@ export function CredentialsSection() {
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
           <TabsList aria-label="Credentials view">
             <TabsTrigger value="matrix">Matrix</TabsTrigger>
-            <TabsTrigger value="inventory">
-              Inventory <span className="tabular-nums">{shown.creds.length + usernames.length}</span>
-            </TabsTrigger>
+            <TabsTrigger value="inventory">Inventory</TabsTrigger>
           </TabsList>
           {/* One of the two shows: the cells own the display, since Button's own inline-flex outranks `hidden`. */}
           <div className="hidden @[560px]:grid">

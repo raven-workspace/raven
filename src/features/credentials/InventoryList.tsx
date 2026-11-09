@@ -6,9 +6,11 @@ import type { Service } from "../../types/service";
 import { Chip, labelClass } from "../../ui";
 import { revealRow } from "../../lib/revealRow";
 import { ScrollArea } from "../../ui/shadcn/scroll-area";
+import { ToggleGroup, ToggleGroupItem } from "../../ui/shadcn/toggle-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../ui/shadcn/table";
 import { hostLabel } from "./AccessGrants";
 import { UsernamesList } from "./UsernamesList";
+import { useInventoryKind, type InventoryKind } from "./useCredentialSelection";
 
 const STATE_LABEL: Record<OverallState, string> = {
   admin: "admin",
@@ -31,18 +33,19 @@ export function StateChip({ state }: { state: OverallState }) {
  */
 const TABLE = "grid gap-x-3";
 // Four shapes: with or without a type column (the group already says "password"), with or without crack status.
+// Wide, Source (free text) takes the slack and Credential is content-sized up to 40ch; narrower, Credential takes it.
 const TRACKS_PLAIN =
-  "grid-cols-[minmax(20ch,3fr)_max-content] " +
-  "@[700px]:grid-cols-[minmax(20ch,3fr)_max-content_max-content] " +
-  "@[900px]:grid-cols-[minmax(20ch,3fr)_max-content_minmax(10ch,2fr)_max-content]";
+  "grid-cols-[minmax(20ch,1fr)_max-content] " +
+  "@[700px]:grid-cols-[minmax(20ch,1fr)_max-content_max-content] " +
+  "@[900px]:grid-cols-[fit-content(40ch)_max-content_minmax(10ch,1fr)_max-content]";
 const TRACKS_TYPED =
-  "grid-cols-[minmax(20ch,3fr)_max-content_max-content] " +
-  "@[700px]:grid-cols-[minmax(20ch,3fr)_max-content_max-content_max-content] " +
-  "@[900px]:grid-cols-[minmax(20ch,3fr)_max-content_max-content_minmax(10ch,2fr)_max-content]";
+  "grid-cols-[minmax(20ch,1fr)_max-content_max-content] " +
+  "@[700px]:grid-cols-[minmax(20ch,1fr)_max-content_max-content_max-content] " +
+  "@[900px]:grid-cols-[fit-content(40ch)_max-content_max-content_minmax(10ch,1fr)_max-content]";
 const TRACKS_CRACK =
-  "grid-cols-[minmax(20ch,3fr)_max-content_max-content_max-content] " +
-  "@[700px]:grid-cols-[minmax(20ch,3fr)_max-content_max-content_max-content_max-content] " +
-  "@[900px]:grid-cols-[minmax(20ch,3fr)_max-content_max-content_minmax(10ch,2fr)_max-content_max-content]";
+  "grid-cols-[minmax(20ch,1fr)_max-content_max-content_max-content] " +
+  "@[700px]:grid-cols-[minmax(20ch,1fr)_max-content_max-content_max-content_max-content] " +
+  "@[900px]:grid-cols-[fit-content(40ch)_max-content_max-content_minmax(10ch,1fr)_max-content_max-content]";
 const ROW = "col-span-full grid grid-cols-subgrid items-start";
 const SHOW_SCOPE = "hidden @[700px]:block";
 const SHOW_SOURCE = "hidden @[900px]:block";
@@ -165,15 +168,39 @@ export function InventoryList({ eid, creds, all, hosts, servicesByHost, attempts
   }, [selectedId]);
   const people = creds.filter((c) => !isMachineAccount(c));
   const ctx = { all, hosts, servicesByHost, attempts, selectedId, onSelect, root };
+  const groups: { kind: InventoryKind; label: string; creds: Credential[]; crack?: boolean; typed?: boolean }[] = [
+    { kind: "passwords", label: "Passwords", creds: people.filter((c) => c.type === "password") },
+    { kind: "hashes", label: "Hashes", crack: true, creds: people.filter((c) => c.type === "hash") },
+    { kind: "tickets", label: "Tickets, keys and tokens", typed: true, creds: people.filter((c) => c.type !== "password" && c.type !== "hash") },
+    { kind: "machines", label: "Machine accounts", creds: creds.filter(isMachineAccount) },
+  ];
+  const present: { kind: InventoryKind; label: string; count: number }[] = [
+    ...groups.filter((g) => g.creds.length > 0).map((g) => ({ kind: g.kind, label: g.label, count: g.creds.length })),
+    ...(usernames.length > 0 ? [{ kind: "usernames" as const, label: "Usernames", count: usernames.length }] : []),
+  ];
+  const [requested, setKind] = useInventoryKind();
+  // A stale or empty kind (nothing of that kind left) is All.
+  const kind = present.some((k) => k.kind === requested) ? requested : "all";
+  const show = (k: InventoryKind) => kind === "all" || kind === k;
   return (
-    <ScrollArea className="h-full min-h-0 [&_[data-slot=scroll-area-viewport]>div]:block!">
-      <div ref={root} className="@container grid grid-cols-[minmax(0,1fr)] gap-6">
-        <Group label="Passwords" creds={people.filter((c) => c.type === "password")} {...ctx} />
-        <Group label="Hashes" crack creds={people.filter((c) => c.type === "hash")} {...ctx} />
-        <Group label="Tickets, keys and tokens" typed creds={people.filter((c) => c.type !== "password" && c.type !== "hash")} {...ctx} />
-        <Group label="Machine accounts" creds={creds.filter(isMachineAccount)} {...ctx} />
-        <UsernamesList eid={eid} usernames={usernames} grants={grants} hosts={hosts} />
+    <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-3">
+      <div className="grid grid-cols-[minmax(0,1fr)] overflow-x-auto">
+        <ToggleGroup type="single" size="sm" aria-label="Show kind" value={kind} onValueChange={(v) => v && setKind(v as InventoryKind | "all")} className="justify-self-start">
+          <ToggleGroupItem value="all" className="text-body">All</ToggleGroupItem>
+          {present.map((k) => (
+            <ToggleGroupItem key={k.kind} value={k.kind} className="gap-2 whitespace-nowrap text-body">
+              {k.label}
+              <span className="tabular-nums text-muted">{k.count}</span>
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
       </div>
-    </ScrollArea>
+      <ScrollArea className="h-full min-h-0 [&_[data-slot=scroll-area-viewport]>div]:block!">
+        <div ref={root} className="@container grid grid-cols-[minmax(0,1fr)] gap-6">
+          {groups.filter((g) => show(g.kind)).map(({ kind: k, ...g }) => <Group key={k} {...g} {...ctx} />)}
+          {show("usernames") && <UsernamesList eid={eid} usernames={usernames} grants={grants} hosts={hosts} />}
+        </div>
+      </ScrollArea>
+    </div>
   );
 }

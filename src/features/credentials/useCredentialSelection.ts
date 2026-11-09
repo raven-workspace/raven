@@ -45,3 +45,24 @@ export function useCredentialSelection(_eid: string, creds: Credential[], ctx: C
     setTab,
   };
 }
+
+export type InventoryKind = "passwords" | "hashes" | "tickets" | "machines" | "usernames";
+const KINDS: readonly string[] = ["passwords", "hashes", "tickets", "machines", "usernames"];
+
+/** The Inventory filter (`kind=`) lives in the URL; All is the absence of the param. Unknown values read as All. */
+export function useInventoryKind(): [InventoryKind | "all", (k: InventoryKind | "all") => void] {
+  const [params, setParams] = useSearchParams();
+  const raw = params.get("kind") ?? "";
+  const kind = KINDS.includes(raw) ? (raw as InventoryKind) : "all";
+  const setKind = useCallback(
+    (k: InventoryKind | "all") =>
+      setParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (k === "all") next.delete("kind");
+        else next.set("kind", k);
+        return next;
+      }, { replace: true }),
+    [setParams],
+  );
+  return [kind, setKind];
+}

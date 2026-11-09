@@ -1,7 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import { InventoryList } from "../features/credentials/InventoryList";
 import { makeQueryClient } from "../lib/queryClient";
@@ -36,11 +36,16 @@ const BASE: Credential[] = [
   cred({ id: "t1", type: "ticket", username: "admin", secret: "ticket-data" }),
 ];
 
-function mount(over: { creds?: Credential[]; selectedId?: string; onSelect?: (id: string) => void; attempts?: CredAttempt[] } = {}) {
+function Search() {
+  return <output data-testid="search">{useLocation().search}</output>;
+}
+
+function mount(over: { initial?: string; creds?: Credential[]; selectedId?: string; onSelect?: (id: string) => void; attempts?: CredAttempt[] } = {}) {
   const creds = over.creds ?? BASE;
   return render(
     <QueryClientProvider client={makeQueryClient()}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[`/${over.initial ?? ""}`]}>
+        <Search />
         <InventoryList
           eid="e1" creds={creds} all={creds} hosts={[H1]} servicesByHost={new Map([["h1", [SMB]]])}
           attempts={over.attempts ?? []} usernames={[user("u1", "carol"), user("u2", "drew")]} grants={[]}
@@ -52,6 +57,37 @@ function mount(over: { creds?: Credential[]; selectedId?: string; onSelect?: (id
 }
 
 describe("InventoryList", () => {
+  const bar = () => within(screen.getByRole("radiogroup", { name: "Show kind" }));
+  const headings = () => screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent?.replace(/\s+/g, " ").trim());
+
+  it("the filter bar lists All and only the kinds present, each with its count", () => {
+    mount({ creds: BASE.filter((c) => c.type !== "ticket") });
+    const items = bar().getAllByRole("radio");
+    expect(items.map((i) => i.firstChild?.textContent)).toEqual(["All", "Passwords", "Hashes", "Machine accounts", "Usernames"]);
+    expect(bar().getByRole("radio", { name: "All" })).toBeChecked();
+    expect(within(bar().getByRole("radio", { name: /^Passwords/ })).getByText("2")).toHaveClass("tabular-nums");
+    expect(bar().queryByRole("radio", { name: /Tickets/ })).toBeNull();
+  });
+
+  it("picking Hashes shows only that group and writes ?kind=hashes; All restores", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(bar().getByRole("radio", { name: /^Hashes/ }));
+    expect(headings()).toEqual(["Hashes 2"]);
+    expect(screen.getByTestId("search")).toHaveTextContent("?kind=hashes");
+    await user.click(bar().getByRole("radio", { name: "All" }));
+    expect(headings()).toHaveLength(5);
+    expect(screen.getByTestId("search").textContent).toBe("");
+  });
+
+  it("a stale ?kind falls back to All", () => {
+    mount({ initial: "?kind=bogus" });
+    expect(headings()).toHaveLength(5);
+    expect(bar().getByRole("radio", { name: "All" })).toBeChecked();
+    mount({ initial: "?kind=tickets", creds: BASE.filter((c) => c.type !== "ticket") });
+    expect(screen.getAllByRole("radio", { name: "All", checked: true })).toHaveLength(2);
+  });
+
   it("shows a Type column only where the group is mixed; hashes show their hash type", () => {
     mount();
     const headers = (group: string) => within(screen.getByRole("region", { name: group })).getAllByRole("columnheader").map((h) => h.textContent);

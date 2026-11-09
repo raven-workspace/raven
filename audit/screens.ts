@@ -97,7 +97,7 @@ export const SCREENS: Screen[] = [
       await page.getByRole("tab", { name: "Crack" }).waitFor();
     },
   },
-  { id: "credentials-inventory", path: `${E}/s/credentials?tab=inventory`, ready: "role=tab[name^='Inventory'][selected]" },
+  { id: "credentials-inventory", path: `${E}/s/credentials?tab=inventory`, ready: "role=tab[name='Inventory'][selected]" },
   {
     id: "credentials-folded", path: `${E}/s/credentials`, ready: "role=tab[name='Matrix'][selected]",
     setup: async (page) => {

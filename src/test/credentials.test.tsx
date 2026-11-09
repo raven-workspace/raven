@@ -552,7 +552,7 @@ describe("credentials dock page", () => {
   it("opens on the Matrix tab with the newest testable credential selected and docked", async () => {
     mount({ creds: TEN, users: TWO_USERS, services: SMB });
     expect(await screen.findByRole("tab", { name: "Matrix" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: "Inventory 12" })).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("tab", { name: "Inventory" })).toHaveAttribute("aria-selected", "false");
     expect(within(await screen.findByRole("region", { name: "Credential" })).getByTitle("u10")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Select u10" })).toHaveAttribute("aria-pressed", "true");
     await waitFor(() => expect(search().get("cred")).toBe("c10"));
