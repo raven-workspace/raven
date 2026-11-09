@@ -21,7 +21,8 @@ import { useEngagementServices } from "../checklist/queries";
 import { useHosts } from "../hosts/queries";
 import { AccessFields, EMPTY_ACCESS, hostLabel, type AccessDraft } from "./AccessGrants";
 import { CredentialForm } from "./CredentialForm";
-import { CrackDialog, HashesList } from "./HashesList";
+import { CrackDialog } from "./DockWork";
+import { HashesList } from "./HashesList";
 import { StateChip } from "./InventoryList";
 import { CopySecretButton, MaskedSecret } from "./MaskedSecret";
 import { useAccessGrants, useCredAttempts, useCredentialMutations, useCredentials, useTriedPairs, useUsernames } from "./queries";
@@ -214,7 +215,7 @@ function CredentialRow({ cred, all, state, scopeHost, onEdit, onDelete, onConver
   );
 }
 
-function ConvertDialog({ eid, cred, hosts, onClose }: { eid: string; cred: Credential; hosts: Host[]; onClose: () => void }) {
+export function ConvertDialog({ eid, cred, hosts, onClose }: { eid: string; cred: Credential; hosts: Host[]; onClose: () => void }) {
   const { convert } = useCredentialMutations(eid);
   const [draft, setDraft] = useState<AccessDraft>(EMPTY_ACCESS);
   const [errors, setErrors] = useState<{ hostId?: string; via?: string; form?: string }>({});

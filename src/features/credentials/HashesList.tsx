@@ -1,42 +1,10 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { credLabel, credName, getCrackingCommands, identifyHash, isMachineAccount } from "../../engines/credentials";
 import type { Credential } from "../../types/credentials";
-import { Button, Chip, CommandBlock, Dialog, Field, Input, labelClass } from "../../ui";
+import { Button, Chip, CommandBlock, labelClass } from "../../ui";
+import { CrackDialog } from "./DockWork";
 import { MASK, MaskedSecret } from "./MaskedSecret";
 import { useCredentialMutations } from "./queries";
-
-/** Plaintext for a hash. The server records a linked password; the hash then folds into it. */
-export function CrackDialog({ eid, hash, onClose }: { eid: string; hash: Credential; onClose: () => void }) {
-  const { crack } = useCredentialMutations(eid);
-  const [plaintext, setPlaintext] = useState("");
-  const [error, setError] = useState<string>();
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    if (crack.isPending) return;
-    if (plaintext === "") return setError("Enter the cracked password");
-    setError(undefined);
-    crack.mutate({ hashId: hash.id, plaintext }, { onSuccess: onClose, onError: (err) => setError(err.message) });
-  };
-  return (
-    <Dialog
-      open
-      onOpenChange={(o) => !o && onClose()}
-      title={`Crack ${credLabel(hash)}`}
-      footer={
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button type="submit" form="crack-form" variant="primary" disabled={crack.isPending}>Save password</Button>
-        </>
-      }
-    >
-      <form id="crack-form" onSubmit={submit} noValidate>
-        <Field label="Plaintext" error={error}>
-          <Input autoFocus mono type="password" autoComplete="off" value={plaintext} onChange={(e) => setPlaintext(e.target.value)} />
-        </Field>
-      </form>
-    </Dialog>
-  );
-}
 
 function HashRow({ eid, hash, onCrack }: { eid: string; hash: Credential; onCrack: () => void }) {
   const { setCrackStatus } = useCredentialMutations(eid);
