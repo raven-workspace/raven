@@ -37,6 +37,31 @@ describe("audit fake api", () => {
     expect(await api.vectorsList("h-exam-ms01")).toHaveLength(4);
   });
 
+  it("matches the Rust host-facts rules: no ruled_out create, reopen unlinks, deletes clean up, identity is cleaned", async () => {
+    const v = await api.vectorUpsert("h-exam-ms01", { title: "Fresh", status: "try", source: "manual" });
+    await expect(api.vectorUpsert("h-exam-ms01", { title: "Other", status: "ruled_out", source: "manual" })).rejects.toBeInstanceOf(RavenError);
+    await api.vectorSetStatus(v.id, "ruled_out", "patched");
+    expect((await api.ruledOutList("e-exam")).some((r) => r.sourceId === v.id)).toBe(true);
+    await api.vectorUpsert("h-exam-ms01", { title: "Fresh", status: "try", source: "manual" });
+    expect((await api.ruledOutList("e-exam")).some((r) => r.sourceId === v.id)).toBe(false);
+    await api.vectorSetStatus(v.id, "ruled_out", "again");
+    await api.vectorDelete(v.id);
+    expect((await api.ruledOutList("e-exam")).some((r) => r.sourceId === v.id)).toBe(false);
+
+    const dead = (await api.servicesList("h-web")).find((s) => s.verdict === "dead_end")!;
+    await api.serviceDelete(dead.id);
+    expect((await api.ruledOutList("e-lab")).some((r) => r.sourceId === dead.id)).toBe(false);
+
+    const id = await api.hostIdentitySet({ hostId: "h-web", username: "  www-data ", privileges: [" a", "a", ""], groups: [], entryId: null });
+    expect(id.privileges).toEqual(["a"]);
+    expect(id.username).toBe("www-data");
+    expect(id.updatedAt).toBeGreaterThan(0);
+
+    await api.hostDelete("h-exam-ms01");
+    expect(await api.hostIdentityGet("h-exam-ms01")).toBeNull();
+    expect(await api.vectorsList("h-exam-ms01")).toEqual([]);
+  });
+
   it("payloadBuildRecord refuses an empty payload id, as the real command does", async () => {
     const build = { engagementId: "e-lab", hostId: "h-web", payloadId: " ", lhost: "192.0.2.10", lport: "443", at: 1 };
     await expect(api.payloadBuildRecord(build)).rejects.toMatchObject({ code: "validation", field: "payloadId" });

@@ -224,10 +224,14 @@ pub fn vector_set_status(conn: &Connection, id: &str, status: &str, reason: Opti
     vector_get(conn, id)
 }
 
+/// Deleting a vector also removes the ruled-out item its ruling-out created.
 pub fn vector_delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM privesc_vectors WHERE id = ?1", [id])? == 0 {
+    let tx = conn.unchecked_transaction()?;
+    if tx.execute("DELETE FROM privesc_vectors WHERE id = ?1", [id])? == 0 {
         return Err(AppError::NotFound);
     }
+    crate::notes::unlink_ruled_out(&tx, "vector", id)?;
+    tx.commit()?;
     Ok(())
 }
 
@@ -356,5 +360,62 @@ mod tests {
         assert!(matches!(vector_upsert(c, &h, vin("x", "bogus", "auto")), Err(AppError::Validation { .. })));
         vector_delete(c, &a.id).unwrap();
         assert_eq!(vector_delete(c, &a.id), Err(AppError::NotFound));
+    }
+
+    #[test]
+    fn deleting_a_ruled_out_vector_removes_its_ruled_out_item() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let (e, h) = setup(c);
+        let a = vector_upsert(c, &h, vin("PrintNightmare", "try", "manual")).unwrap();
+        vector_set_status(c, &a.id, "ruled_out", Some("patched")).unwrap();
+        assert_eq!(crate::notes::ruled_out_list(c, &e).unwrap().len(), 1);
+        vector_delete(c, &a.id).unwrap();
+        assert!(crate::notes::ruled_out_list(c, &e).unwrap().is_empty());
+    }
+
+    #[test]
+    fn creating_a_vector_as_ruled_out_is_refused() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let (_e, h) = setup(c);
+        assert!(matches!(vector_upsert(c, &h, vin("x", "ruled_out", "manual")), Err(AppError::Validation { field, .. }) if field == "status"));
+    }
+
+    #[test]
+    fn manual_upsert_over_ruled_out_reopens_and_unlinks() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let (e, h) = setup(c);
+        let a = vector_upsert(c, &h, vin("UAC bypass", "try", "manual")).unwrap();
+        vector_set_status(c, &a.id, "ruled_out", Some("no GUI")).unwrap();
+        let back = vector_upsert(c, &h, vin("UAC bypass", "try", "manual")).unwrap();
+        assert_eq!(back.status, "try");
+        assert!(crate::notes::ruled_out_list(c, &e).unwrap().is_empty());
+    }
+
+    #[test]
+    fn identity_set_stamps_updated_at_whatever_the_caller_sends() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let (_e, h) = setup(c);
+        let got = identity_set(c, ident(&h, "u", &[])).unwrap();
+        assert!(got.updated_at > 0);
+    }
+
+    #[test]
+    fn deleting_a_host_removes_identity_vectors_and_linked_ruled_out() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let (e, h) = setup(c);
+        identity_set(c, ident(&h, "u", &["SeImpersonatePrivilege"])).unwrap();
+        let a = vector_upsert(c, &h, vin("v", "try", "manual")).unwrap();
+        vector_set_status(c, &a.id, "ruled_out", Some("r")).unwrap();
+        hosts::delete(c, &h).unwrap();
+        for t in ["host_identity", "privesc_vectors"] {
+            let n: i64 = c.query_row(&format!("SELECT count(*) FROM {t}"), [], |r| r.get(0)).unwrap();
+            assert_eq!(n, 0, "{t}");
+        }
+        assert!(crate::notes::ruled_out_list(c, &e).unwrap().is_empty());
     }
 }
