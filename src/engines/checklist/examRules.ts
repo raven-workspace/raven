@@ -4,6 +4,8 @@ import type { LogEntry } from '../../types/log';
 import { namedHostsInLine, shellHost } from '../attribution';
 import type { LibraryCommand } from '../library/types';
 import { firstBinary } from '../library/matcher';
+import { MSFVENOM } from '../payloads/msfvenom';
+import { SHELLS } from '../payloads/shells';
 
 const blocksOf = (entry: LogEntry) => (entry.content.kind === 'command' ? entry.content.blocks : []);
 
@@ -52,12 +54,18 @@ export function isMetasploitLine(line: string): boolean {
 
 const METERPRETER_LABEL = /meterpreter/i;
 
+/** Payload defs that are Meterpreter: logging one (copy and log) is Metasploit use on the host it was logged against. */
+const METERPRETER_PAYLOAD_IDS = new Set([...MSFVENOM, ...SHELLS].filter((d) => d.meterpreter).map((d) => d.id));
+const isMeterpreterPayload = (entry: LogEntry) => !!entry.payloadId && METERPRETER_PAYLOAD_IDS.has(entry.payloadId);
+
 /**
  * Hosts a Metasploit log entry is attributed to, using auto-tick's attribution: hosts the block's lines name
  * (`set RHOSTS ...` counts), the shell host of a meterpreter block, else the entry's own host tags.
- * Empty when the entry has no Metasploit line.
+ * A logged Meterpreter payload (its `payloadId`) counts for the target hosts it was logged against (its host tags),
+ * never for `ranOn`: an msfvenom entry ran on Kali. Empty when the entry has no Metasploit line and no such payload.
  */
 export function metasploitHostIds(entry: LogEntry, engagement: Pick<Engagement, 'domain'>, hosts: Host[]): string[] {
+  if (isMeterpreterPayload(entry)) return (entry.hostIds ?? []).filter((id) => hosts.some((h) => h.id === id));
   const domain = (engagement.domain ?? '').trim().toLowerCase();
   const ids = new Set<string>();
   let isMsf = false;
@@ -83,7 +91,7 @@ export function metasploitHostIds(entry: LogEntry, engagement: Pick<Engagement, 
 export function metasploitWarning(entry: LogEntry, engagement: Pick<Engagement, 'kind' | 'msfHostId'>, hostIds: string[]): string | null {
   const locked = engagement.msfHostId;
   if (!locked || engagement.kind !== 'exam-sim') return null;
-  const isMsf = blocksOf(entry).some(
+  const isMsf = isMeterpreterPayload(entry) || blocksOf(entry).some(
     (b) => METERPRETER_LABEL.test(b.shell ?? '') || (b.command ?? '').split(/\r?\n/).some(isMetasploitLine),
   );
   if (!isMsf || !hostIds.some((id) => id !== locked)) return null;
