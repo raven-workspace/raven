@@ -202,7 +202,7 @@ describe("buildSql", () => {
       const b64 = buildSql("mssql-xp_cmdshell", "mssql", "form-field", V);
       for (const t of ["NULL", "AS", "FROM", "UNION", "SELECT", "WHERE", "#", "||"]) expect(tokens(b64), t).not.toContain(t);
       const file = buildSql("mysql-load-file", "mysql", "form-field", { ...V, path: "/srv/a AS b/#/x" });
-      expect(tokens(file)).toEqual(["'", "AND 1=2", "UNION", "SELECT", "NULL", "LOAD_FILE", "-- -", "# (alternative)"]);
+      expect(tokens(file)).toEqual(["'", "AND 1=2", "UNION", "SELECT", "NULL", "LOAD_FILE", "-- -"]);
     });
 
     it("explanations mention the leading ; only for a stacked injection", () => {
@@ -276,7 +276,7 @@ describe("buildSql", () => {
         expect(b.text, `${id}/${e}`).toBe(byEngine[e]);
         expect(dec(buildSql(id, e, "url-param", V).text), `${id}/${e} url`).toBe(byEngine[e]);
       }
-      expect(buildSql("tables", "mssql", "form-field", V).notes.join(" ")).toMatch(/every MSSQL version/);
+      expect(buildSql("tables", "mssql", "form-field", V).notes.join(" ")).toMatch(/2005 and later/);
       expect(buildSql("tables", "oracle", "form-field", V).notes.join(" ")).toMatch(/ORA-01489/);
       expect(buildSql("tables", "mysql", "form-field", V).notes.join(" ")).toMatch(/1024 characters/);
     });
@@ -326,13 +326,38 @@ describe("buildSql", () => {
     });
 
     it("every part token appears in the built text", () => {
-      const meta = new Set(["(no prefix)", "# (alternative)"]);
+      const meta = new Set(["(no prefix)"]);
       for (const id of [...SQL_STEPS.map((s) => s.id), ...SQL_EXEC.map((x) => x.id)]) for (const e of SQL_ENGINES) for (const p of ["url-param", "form-field", "client-session"] as SqlPoint[]) {
         let b;
         try { b = buildSql(id, e, p, V); } catch { continue; }
         const text = p === "url-param" ? dec(b.text) : b.text;
         for (const x of b.parts) if (!meta.has(x.token) && !x.decoded) expect(text, `${id}/${e}/${p}: ${x.token}`).toContain(x.token);
       }
+    });
+
+    it("client-session steps skip the UNION machinery: no COLUMNS to fill, no stale reflected check", () => {
+      for (const id of ["version", "databases", "tables", "columns", "rows", "mysql-load-file", "mssql-read-file"]) for (const e of SQL_ENGINES) {
+        let b;
+        try { b = buildSql(id, e, "client-session", { table: "users", column: "username" }); } catch (err) { if (/applies to/.test((err as Error).message)) continue; throw err; }
+        expect(b.unresolved, `${id}/${e}`).not.toContain("COLUMNS");
+        expect(b.text, `${id}/${e}`).not.toContain("{COLUMNS}");
+        expect(() => buildSql(id, e, "client-session", { table: "users", column: "username", columns: 3, reflected: 5 }), `${id}/${e}`).not.toThrow();
+      }
+      expect(buildSql("version", "oracle", "client-session", {}).text).toBe("SELECT banner FROM v$version");
+      expect(() => buildSql("version", "mysql", "form-field", { columns: 3, reflected: 5 })).toThrow(/beyond 3 columns/);
+    });
+
+    it("MySQL's # comment is a note, not a part", () => {
+      const b = buildSql("detect-boolean", "mysql", "url-param", {});
+      expect(tokens(b)).not.toContain("# (alternative)");
+      expect(b.notes.join(" ")).toMatch(/MySQL also accepts # as the comment; send it as %23 in a URL/);
+      expect(buildSql("detect-boolean", "mysql", "client-session", {}).notes.join(" ")).not.toMatch(/%23/);
+      expect(buildSql("detect-boolean", "postgres", "url-param", {}).notes.join(" ")).not.toMatch(/%23/);
+    });
+
+    it("FOR XML PATH and ::text explanations", () => {
+      expect(explain(buildSql("tables", "postgres", "form-field", V), "::text")).toBe("PostgreSQL: cast to text so string_agg gets a plain string whatever the catalogue column type.");
+      expect(explain(buildSql("tables", "mssql", "form-field", V), "FOR XML PATH")).toMatch(/2005 and later/);
     });
   });
 });

