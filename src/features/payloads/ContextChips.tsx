@@ -1,4 +1,4 @@
-import { useRef, useState, type Ref } from "react";
+import { useId, useRef, useState, type Ref } from "react";
 import { PASTE_CONTEXTS } from "../../engines/payloads/context";
 import { filterChoices, type FilterId } from "../../engines/payloads/filters";
 import { ChipPicker, type ChipOption, type ChipPickerHandle } from "../arsenal/ChipPicker";
@@ -51,14 +51,21 @@ export function ContextChips({ fit, engagementId, onHost, onDone, toggleRow, fil
   const contexts = PASTE_CONTEXTS.filter((c) => !os || c.os === "any" || c.os === os);
   const ports = [...new Set([...SUGGESTED_PORTS, ...(settingsPort ? [settingsPort] : []), ...(port ? [port] : [])])];
   const mouse = onDone ? { onMousePick: () => onDone() } : {};
-  // The "Other…" port field, open while you type: ↵ sets a valid port and goes back to the payload, Esc drops what was
-  // typed and goes back to the chip, leaving it for anything else sets a valid port and leaves focus where it went.
-  const [custom, setCustom] = useState<string | null>(null);
+  // The "Other…" port field, open while you type: ↵ sets a valid port (stored without leading zeros) and goes back to the
+  // payload; ↵ on an empty or out-of-range one keeps the field open, marked with an amber "1–65535". Esc drops what was
+  // typed and goes back to the chip; leaving it for anything else sets a valid port and leaves focus where it went.
+  // The field belongs to the host it was opened for: another host closes it, so it never sets that host's port.
+  const [customState, setCustomState] = useState<{ host: string; text: string; invalid: boolean } | null>(null);
+  if (customState && customState.host !== hostKey) setCustomState(null);
+  const field = customState?.host === hostKey ? customState : null;
+  const custom = field?.text ?? null;
+  const setCustom = (text: string | null) => setCustomState(text === null ? null : { host: hostKey, text, invalid: false });
+  const noteId = useId();
   /** Set while ↵ or Esc moves focus away, so the field's own blur does not act a second time. */
   const closing = useRef(false);
   const portChip = () => (portRef && "current" in portRef ? portRef.current : null);
   const closeCustom = (keep: boolean) => {
-    if (keep && custom !== null && validPort(custom)) set({ port: custom });
+    if (keep && custom !== null && validPort(custom)) set({ port: String(Number(custom)) });
     setCustom(null);
   };
 
@@ -79,7 +86,7 @@ export function ContextChips({ fit, engagementId, onHost, onDone, toggleRow, fil
         )}
       </div>
       {/* OS, paste context and port read in full; the "Other…" port field sits after the Port chip while it is open. */}
-      <div className={`grid ${custom === null ? "grid-cols-[repeat(3,max-content)]" : "grid-cols-[repeat(3,max-content)_6rem]"} justify-start gap-2`}>
+      <div className={`grid ${field === null ? "grid-cols-[repeat(3,max-content)]" : "grid-cols-[repeat(3,max-content)_6rem]"} items-start justify-start gap-2`}>
         <Chip
           ref={osRef} name="OS" value={os ? OS_LABEL[os] : null} current={os}
           options={(["linux", "windows"] as const).map((o) => ({ id: o, name: OS_LABEL[o] }))}
@@ -100,23 +107,29 @@ export function ContextChips({ fit, engagementId, onHost, onDone, toggleRow, fil
           // "Other…" leaves focus to the field it opens.
           {...(onDone ? { onMousePick: (id: string | null) => id !== OTHER_PORT && onDone() } : {})}
         />
-        {custom !== null && (
-          <Input
-            mono autoFocus aria-label="Custom port" placeholder="port" inputMode="numeric" value={custom} data-own-esc=""
-            title="Any port to listen on: ↵ sets it for this host, Esc drops it"
-            onChange={(e) => setCustom(e.target.value.replace(/\D/g, "").slice(0, 5))}
-            onKeyDown={(e) => {
-              if (e.key !== "Enter" && e.key !== "Escape") return;
-              e.preventDefault();
-              e.stopPropagation();
-              closing.current = true;
-              closeCustom(e.key === "Enter");
-              if (e.key === "Enter" && onDone) onDone();
-              else portChip()?.focus();
-              closing.current = false;
-            }}
-            onBlur={() => !closing.current && closeCustom(true)}
-          />
+        {field && (
+          <div className="grid content-start gap-1">
+            <Input
+              mono autoFocus aria-label="Custom port" placeholder="port" inputMode="numeric" value={field.text} data-own-esc=""
+              {...(field.invalid ? { "aria-invalid": true, "aria-describedby": noteId } : {})}
+              title="Any port to listen on: ↵ sets it for this host, Esc drops it"
+              onChange={(e) => setCustom(e.target.value.replace(/\D/g, "").slice(0, 5))}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" && e.key !== "Escape") return;
+                e.preventDefault();
+                e.stopPropagation();
+                // Not a port: the field stays, marked, and nothing moves (the next ↵ must not copy with the old port).
+                if (e.key === "Enter" && !validPort(field.text)) return setCustomState({ ...field, invalid: true });
+                closing.current = true;
+                closeCustom(e.key === "Enter");
+                if (e.key === "Enter" && onDone) onDone();
+                else portChip()?.focus();
+                closing.current = false;
+              }}
+              onBlur={() => !closing.current && closeCustom(true)}
+            />
+            {field.invalid && <span id={noteId} className="text-meta text-warn">1–65535</span>}
+          </div>
         )}
       </div>
       {/* What gets out and what the box has: callbacks, a filter wrapper where it applies, the tools. */}

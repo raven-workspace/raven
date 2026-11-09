@@ -19,7 +19,8 @@ import type { Engagement } from "../../../types/engagement";
 import type { Host } from "../../../types/host";
 import type { LogEntry } from "../../../types/log";
 import type { Service } from "../../../types/service";
-import { MemoryRouter } from "react-router";
+import { useEffect } from "react";
+import { MemoryRouter, useNavigate, type NavigateFunction } from "react-router";
 
 vi.mock("../../../lib/api");
 vi.mock("../../../features/checklist/ticks", async (orig) => ({
@@ -58,6 +59,16 @@ const WEBSHELL_LOG = entry({});
 
 const def = (id: string) => REVERSE_SHELLS.find((d) => d.id === id)!;
 
+/** The router's navigate, so a test can move the route (and the host in scope) without moving focus. */
+const nav: { to: NavigateFunction } = { to: () => undefined };
+function GrabNavigate() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    nav.to = navigate;
+  }, [navigate]);
+  return null;
+}
+
 function mount(path: string, settings: { attackerIp?: string; listenerPort?: string } = {}) {
   m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: settings.attackerIp ?? LHOST, listenerPort: settings.listenerPort ?? LPORT, kaliUser: "kali",
@@ -67,6 +78,7 @@ function mount(path: string, settings: { attackerIp?: string; listenerPort?: str
     <QueryClientProvider client={makeQueryClient()}>
       <MemoryRouter initialEntries={[path]}>
         <App />
+        <GrabNavigate />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -516,6 +528,55 @@ describe("Payloads drawer: chips and keys", () => {
     expect(d.queryByRole("textbox", { name: "Custom port" })).not.toBeInTheDocument();
     expect(d.getByRole("button", { name: `Port: ${LPORT}` })).toHaveFocus();
     expect(usePayloadsStore.getState().overrides.h1?.port).toBeUndefined();
+  });
+
+  it("Port: an out-of-range port and ↵ keep the field open, marked, and copy nothing", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    await user.click(d.getByRole("button", { name: `Port: ${LPORT}` }));
+    await user.click(d.getByRole("option", { name: /^Other…/ }));
+    await navigator.clipboard.writeText("untouched");
+    for (const typed of ["70000", "0", ""]) {
+      const field = d.getByRole("textbox", { name: "Custom port" });
+      await user.clear(field);
+      if (typed) await user.type(field, typed);
+      await user.keyboard("{Enter}");
+      expect(field).toHaveFocus();
+      expect(field).toHaveAttribute("aria-invalid", "true");
+      expect(field).toHaveAccessibleDescription("1–65535");
+      expect(d.getByText("1–65535")).toHaveClass("text-warn");
+      expect(usePayloadsStore.getState().overrides.h1?.port).toBeUndefined();
+    }
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    // Typing again clears the mark; Esc still drops the field.
+    await user.type(d.getByRole("textbox", { name: "Custom port" }), "8");
+    expect(d.getByRole("textbox", { name: "Custom port" })).not.toHaveAttribute("aria-invalid", "true");
+    await user.keyboard("{Escape}");
+    expect(d.queryByRole("textbox", { name: "Custom port" })).not.toBeInTheDocument();
+    expect(usePayloadsStore.getState().overrides.h1?.port).toBeUndefined();
+  });
+
+  it("Port: a custom port is stored without leading zeros", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    await user.click(d.getByRole("button", { name: `Port: ${LPORT}` }));
+    await user.click(d.getByRole("option", { name: /^Other…/ }));
+    await user.type(d.getByRole("textbox", { name: "Custom port" }), "00080{Enter}");
+    expect(usePayloadsStore.getState().overrides.h1?.port).toBe("80");
+    expect(d.getByRole("button", { name: "Port: 80" })).toBeInTheDocument();
+  });
+
+  it("Port: a field opened for one host closes when the host changes, and never sets the other host's port", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    await user.click(d.getByRole("button", { name: `Port: ${LPORT}` }));
+    await user.click(d.getByRole("option", { name: /^Other…/ }));
+    await user.type(d.getByRole("textbox", { name: "Custom port" }), "9001");
+    act(() => void nav.to("/e/e1/h/h2"));
+    const after = within(await drawer());
+    expect(await after.findByRole("button", { name: "Fill for host: zzbare02" })).toBeInTheDocument();
+    expect(after.queryByRole("textbox", { name: "Custom port" })).not.toBeInTheDocument();
+    expect(usePayloadsStore.getState().overrides.h2?.port).toBeUndefined();
   });
 
   it("picking an OS drops a paste override that does not exist there; one that does (Web shell ?cmd=) stays", async () => {
