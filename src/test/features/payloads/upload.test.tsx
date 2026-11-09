@@ -123,7 +123,7 @@ describe("Uploaded file view", () => {
     expect(d.getByRole("heading", { name: "Trigger it" })).toBeInTheDocument();
     expect(d.getByLabelText("Command: Trigger").textContent).toBe("http://198.51.100.20/{UPLOAD_PATH}/shell.php?cmd=whoami");
     // The trigger's placeholders are fill fields; TARGET_IP is the host's IP until you type one.
-    expect(d.getByRole("textbox", { name: "TARGET_IP" })).toBeInTheDocument();
+    expect(d.getByRole("textbox", { name: "TARGET_IP" })).toHaveAttribute("placeholder", "198.51.100.20");
     await user.type(d.getByRole("textbox", { name: "UPLOAD_PATH" }), "/uploads/");
     expect(d.getByLabelText("Command: Trigger").textContent).toBe("http://198.51.100.20/uploads/shell.php?cmd=whoami");
     // A plain copy: its placeholders never hold it back.

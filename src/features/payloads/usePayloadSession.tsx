@@ -347,7 +347,8 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
             mono aria-label={t}
             ref={(el) => { if (el) fieldEls.current.set(t, el); else fieldEls.current.delete(t); }}
             value={t === "LHOST" ? fit.lhostInput : (extra[t] ?? "")}
-            placeholder={t === "LHOST" ? lhostPlaceholder(fit.settingsLhost) : (def?.defaults?.[t] ?? "")}
+            // TARGET_IP fills from the host's IP while the field is empty, so that is its hint.
+            placeholder={t === "LHOST" ? lhostPlaceholder(fit.settingsLhost) : t === "TARGET_IP" && host?.ip ? host.ip : (def?.defaults?.[t] ?? "")}
             onChange={(e) => (t === "LHOST" ? usePayloadsStore.getState().setLhost(e.target.value) : setExtra({ ...extra, [t]: e.target.value }))}
           />
         </label>

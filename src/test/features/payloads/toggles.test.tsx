@@ -272,6 +272,8 @@ describe("Payloads toggles", () => {
     await user.click(fitRow(d, "mkfifo + nc bind"));
     expect(d.getByLabelText("Command: Listener")).toHaveTextContent("rlwrap nc -nv {TARGET_IP} 4444");
     const field = d.getByRole("textbox", { name: "TARGET_IP" });
+    // No host IP, so no hint to show.
+    expect(field).toHaveAttribute("placeholder", "");
     await navigator.clipboard.writeText("untouched");
     await user.keyboard("{Alt>}l{/Alt}");
     expect(await d.findByText("{TARGET_IP} not filled. Press ⌥L again to copy anyway")).toBeInTheDocument();
