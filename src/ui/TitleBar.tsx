@@ -1,9 +1,8 @@
 import type { Icon } from "@phosphor-icons/react";
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { cx } from "../lib/cx";
 import { Button } from "./Button";
 import { Kbd } from "./Kbd";
-import type { PageColumn } from "./pageColumns";
 import { Tooltip } from "./Tooltip";
 
 export interface TitleBarProps {
@@ -13,32 +12,21 @@ export interface TitleBarProps {
   title?: ReactNode;
   /** Right-aligned controls. Interactive children opt out of dragging automatically. */
   right?: ReactNode;
-  /**
-   * Screens whose page content is a centred, max-width column: the wordmark follows that column's left edge; the
-   * controls stay at the window's right edge. `inset` is the column's own side padding.
-   */
-  column?: PageColumn;
   className?: string;
 }
 
 /**
  * The 38px window chrome. The bar is the drag region (`data-tauri-drag-region`);
- * The right inset is pr-6: the controls sit at the window's right edge on every screen.
- * 78px on the left are left clear for the macOS traffic lights (titleBarStyle Overlay): a window-chrome
- * constant, not a spacing step, allowed by name in the conventions test (SPACING_ALLOWED).
+ * The bar's content is pinned to the window edges on every screen (owner, 2026-11-09): the controls at pr-6, the
+ * wordmark after 94px on the left, which is the macOS traffic lights' 78px (titleBarStyle Overlay) plus 16px of air.
+ * A window-chrome constant, not a spacing step, allowed by name in the conventions test (SPACING_ALLOWED).
  */
-export function TitleBar({ left, title, right, column, className }: TitleBarProps) {
+export function TitleBar({ left, title, right, className }: TitleBarProps) {
   return (
     <div
       data-tauri-drag-region
-      // % padding is of the bar's own width, so this is half the free space beside the column plus its inset.
-      style={column ? ({ "--col-max": `${column.max}px`, "--col-inset": `${column.inset}px` } as CSSProperties) : undefined}
       className={cx(
-        "grid h-[38px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-line text-meta text-muted-2 select-none",
-        // The controls always sit at the window's right edge (owner, 2026-11-09); only the wordmark follows the column.
-        column
-          ? "pl-[max(78px,calc((100%_-_var(--col-max))/2_+_var(--col-inset)))] pr-6"
-          : "pl-[78px] pr-6",
+        "grid h-[38px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-line pl-[94px] pr-6 text-meta text-muted-2 select-none",
         className,
       )}
     >

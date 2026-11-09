@@ -174,10 +174,10 @@ describe("off-scale-spacing matcher", () => {
     expect(bad('<a className="p-[6px_10px]" />')).toBe(true);
     expect(bad('<a className="p-[0_0]" />')).toBe(false);
   });
-  it("allows the title bar's 78px traffic-light inset, only in TitleBar", () => {
-    expect(bad('<a className="pl-[78px]" />', "src/ui/TitleBar.tsx")).toBe(false);
-    expect(bad('<a className="pl-[max(78px,calc((100%_-_var(--col-max))/2_+_var(--col-inset)))]" />', "src/ui/TitleBar.tsx")).toBe(false);
-    expect(bad('<a className="pl-[78px]" />')).toBe(true);
+  it("allows the title bar's 94px traffic-light inset, only in TitleBar", () => {
+    expect(bad('<a className="pl-[94px]" />', "src/ui/TitleBar.tsx")).toBe(false);
+    expect(bad('<a className="pl-[78px]" />', "src/ui/TitleBar.tsx")).toBe(true);
+    expect(bad('<a className="pl-[94px]" />')).toBe(true);
     expect(bad('<a className="pl-[80px]" />', "src/ui/TitleBar.tsx")).toBe(true);
   });
   it("allows only the documented 6px hint gap, only in HintLine", () => {

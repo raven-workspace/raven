@@ -327,8 +327,8 @@ const SPACING_UTIL =
 const SPACING_ALLOWED: Record<string, { tokens: string[]; reason: string }> = {
   "src/ui/HintLine.tsx": { tokens: ["gap-[6px]"], reason: "the hint key-to-label gap is 6px (DESIGN.md)" },
   "src/ui/TitleBar.tsx": {
-    tokens: ["pl-[78px]", "pl-[max(78px,calc((100%_-_var(--col-max))/2_+_var(--col-inset)))]"],
-    reason: "window chrome: the 78px left clearance for the macOS traffic lights (titleBarStyle Overlay), not a spacing step",
+    tokens: ["pl-[94px]"],
+    reason: "window chrome: the macOS traffic lights' 78px clearance (titleBarStyle Overlay) plus 16px of air, not a spacing step",
   },
 };
 
