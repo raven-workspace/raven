@@ -1,5 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent } from "react";
-import { credName, isMachineAccount, isOwnerless, overallState, usernameLabel, type OverallState } from "../../engines/credentials";
+import { credName, identifyHash, isMachineAccount, isOwnerless, overallState, usernameLabel, type OverallState } from "../../engines/credentials";
 import type { AccessGrant, CredAttempt, Credential, Username } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
@@ -29,7 +29,12 @@ export function StateChip({ state }: { state: OverallState }) {
  * Hidden columns are display:none, so each template lists exactly the visible tracks.
  */
 const TABLE = "grid gap-x-3";
-const TRACKS =
+// Four shapes: with or without a type column (the group already says "password"), with or without crack status.
+const TRACKS_PLAIN =
+  "grid-cols-[minmax(20ch,3fr)_max-content] " +
+  "@[700px]:grid-cols-[minmax(20ch,3fr)_max-content_max-content] " +
+  "@[900px]:grid-cols-[minmax(20ch,3fr)_max-content_minmax(10ch,2fr)_max-content]";
+const TRACKS_TYPED =
   "grid-cols-[minmax(20ch,3fr)_max-content_max-content] " +
   "@[700px]:grid-cols-[minmax(20ch,3fr)_max-content_max-content_max-content] " +
   "@[900px]:grid-cols-[minmax(20ch,3fr)_max-content_max-content_minmax(10ch,2fr)_max-content]";
@@ -51,10 +56,13 @@ function moveRowFocus(e: KeyboardEvent<HTMLElement>, root: HTMLElement | null) {
   next?.focus();
 }
 
-function Group({ label, creds, crack, ...ctx }: {
+function Group({ label, creds, crack, typed, ...ctx }: {
   label: string;
   creds: Credential[];
+  /** Hashes: a hash-type column and crack status. */
   crack?: boolean;
+  /** A mixed group: a Type column. */
+  typed?: boolean;
   all: Credential[];
   hosts: Host[];
   servicesByHost: Map<string, Service[]>;
@@ -68,11 +76,12 @@ function Group({ label, creds, crack, ...ctx }: {
   return (
     <section aria-label={label} className="grid grid-cols-[minmax(0,1fr)] gap-2">
       <h3 className={`m-0 ${labelClass}`}>{label} <span className="tabular-nums">{creds.length}</span></h3>
-      <Table className={`${TABLE} ${crack ? TRACKS_CRACK : TRACKS}`}>
+      <Table className={`${TABLE} ${crack ? TRACKS_CRACK : typed ? TRACKS_TYPED : TRACKS_PLAIN}`}>
         <TableHeader className="contents">
           <TableRow className={ROW}>
             <TableHead scope="col">Credential</TableHead>
-            <TableHead scope="col">Type</TableHead>
+            {crack && <TableHead scope="col">Hash type</TableHead>}
+            {typed && <TableHead scope="col">Type</TableHead>}
             <TableHead scope="col" className={SHOW_SCOPE}>Scope</TableHead>
             <TableHead scope="col" className={SHOW_SOURCE}>Source</TableHead>
             <TableHead scope="col">State</TableHead>
@@ -113,7 +122,8 @@ function Group({ label, creds, crack, ...ctx }: {
                     <span className="block truncate font-mono text-code text-fg" title={name}>{name}</span>
                   )}
                 </TableCell>
-                <TableCell className="text-fg-2">{c.type}</TableCell>
+                {crack && <TableCell className="text-fg-2">{c.hashType ?? identifyHash(c.secret, "windows")[0]?.name ?? "unknown"}</TableCell>}
+                {typed && <TableCell className="text-fg-2">{c.type}</TableCell>}
                 <TableCell className={`${SHOW_SCOPE} min-w-0 text-fg-2`}>
                   <span className="whitespace-nowrap">{c.scope}</span>
                   {scopeHost && <span className="block max-w-[24ch] truncate text-meta text-muted" title={scopeHost}>{scopeHost}</span>}
@@ -157,7 +167,7 @@ export function InventoryList({ eid, creds, all, hosts, servicesByHost, attempts
       <div ref={root} className="@container grid grid-cols-[minmax(0,1fr)] gap-6">
         <Group label="Passwords" creds={people.filter((c) => c.type === "password")} {...ctx} />
         <Group label="Hashes" crack creds={people.filter((c) => c.type === "hash")} {...ctx} />
-        <Group label="Tickets, keys and tokens" creds={people.filter((c) => c.type !== "password" && c.type !== "hash")} {...ctx} />
+        <Group label="Tickets, keys and tokens" typed creds={people.filter((c) => c.type !== "password" && c.type !== "hash")} {...ctx} />
         <Group label="Machine accounts" creds={creds.filter(isMachineAccount)} {...ctx} />
         <UsernamesList eid={eid} usernames={usernames} grants={grants} hosts={hosts} />
       </div>

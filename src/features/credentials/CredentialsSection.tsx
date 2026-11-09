@@ -101,7 +101,7 @@ export function CredentialsSection() {
 
   const panes = (
     <>
-      <TabsContent value="matrix" className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] gap-3">
+      <TabsContent value="matrix" className="h-full min-h-0">
         <TestGrid
           eid={id}
           hosts={hosts}
@@ -112,13 +112,13 @@ export function CredentialsSection() {
           selectedId={selected?.id}
           onSelect={choose}
           fill
+          note={hidden > 0 ? (
+            <p className="m-0 grid grid-cols-[max-content_max-content] items-center justify-start gap-2 text-meta text-muted">
+              {`${hidden} more ${hidden === 1 ? "credential" : "credentials"} can't be sprayed:`}
+              <Button size="sm" onClick={() => setTab("inventory")}>see Inventory</Button>
+            </p>
+          ) : undefined}
         />
-        {hidden > 0 && (
-          <p className="m-0 grid grid-cols-[max-content_max-content] items-center justify-start gap-2 text-meta text-muted">
-            {`${hidden} more ${hidden === 1 ? "credential" : "credentials"} can't be sprayed:`}
-            <Button size="sm" onClick={() => setTab("inventory")}>see Inventory</Button>
-          </p>
-        )}
       </TabsContent>
       <TabsContent value="inventory" className="h-full min-h-0">
         <InventoryList
@@ -176,7 +176,7 @@ export function CredentialsSection() {
               collapsedSize={DOCK_FOLDED_PX}
               minSize={DOCK_MIN_PX}
               maxSize="70%"
-              defaultSize="45%"
+              defaultSize="38%"
               className="pt-3"
             >
               <CredentialDock

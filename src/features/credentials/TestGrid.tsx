@@ -38,18 +38,25 @@ function partialLabel(cred: Credential, service: SprayService, cell: Cell): stri
     .join(", ");
 }
 
-function Legend() {
+/** `compact`: in a toolbar row beside a note, the lowest-priority entries drop as the pane narrows instead of wrapping. */
+const DROP: Record<string, string> = {
+  na: "hidden @[990px]:grid",
+  errored: "hidden @[1160px]:grid",
+  other: "hidden @[1240px]:grid",
+};
+
+function Legend({ compact = false }: { compact?: boolean }) {
   const states: CellState[] = ["admin", "valid", "failed", "untested", "errored", "na"];
   const unit = "grid grid-flow-col auto-cols-max items-center gap-2";
   return (
     <ChipSet as="ul" gap={6} aria-label="Legend" className="m-0 list-none p-0 text-meta text-muted">
       {states.map((s) => (
-        <li key={s} className={unit}>
+        <li key={s} className={`${unit} ${compact ? DROP[s] ?? "" : ""}`}>
           <span aria-hidden="true" className={`${BOX} h-5 w-5 text-label ${META[s].tone}`} style={s === "na" ? HATCH : undefined}>{META[s].glyph}</span>
           {META[s].label}
         </li>
       ))}
-      <li className={unit}>
+      <li className={`${unit} ${compact ? DROP.other : ""}`}>
         <span aria-hidden="true" className={`${BOX} h-5 w-5 text-label border-line-2 text-fg-2`}>
           {META.failed.glyph}
           <span className="absolute inset-0.5 rounded-sm border border-dashed border-fg-2" />
@@ -86,7 +93,7 @@ function moveRowFocus(e: React.KeyboardEvent<HTMLElement>) {
   next?.focus();
 }
 
-export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = [], selectedId, onSelect, fill = false, className = "" }: {
+export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = [], selectedId, onSelect, fill = false, note, className = "" }: {
   eid: string;
   hosts: Host[];
   creds: Credential[];
@@ -98,6 +105,8 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
   onSelect?: (credId: string) => void;
   /** Fill the parent's height: the grid box takes what the header and legend leave and scrolls inside itself. */
   fill?: boolean;
+  /** With fill: shown right of the legend, on the same row. */
+  note?: React.ReactNode;
   /** Extra classes on the bordered box; pass a max-h to make the grid scroll vertically under a sticky header. */
   className?: string;
 }) {
@@ -128,7 +137,9 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
     [hosts, servicesByHost],
   );
 
-  const header = <h3 className={`m-0 ${labelClass}`}>Test matrix</h3>;
+  // As the master list of the credentials page the tab already names it: no section label, and the legend shares a row with the note.
+  const docked = fill && !!onSelect;
+  const header = docked ? null : <h3 className={`m-0 ${labelClass}`}>Test matrix</h3>;
   if ((rows.length === 0 && triedList.length === 0) || groups.length === 0) {
     return (
       <section aria-label="Test matrix" className="grid grid-cols-[minmax(0,1fr)] gap-2">
@@ -139,6 +150,7 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
             : "No host has scanned services yet. Import an nmap scan to fill the grid."}
         </p>
         <Legend />
+        {note}
       </section>
     );
   }
@@ -147,9 +159,18 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
   const openHost = open && hosts.find((h) => h.id === open.hostId);
 
   return (
-    <section aria-label="Test matrix" className={fill ? "grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto_minmax(0,1fr)] gap-2" : "grid grid-cols-[minmax(0,1fr)] gap-2"}>
-      {header}
-      <Legend />
+    <section aria-label="Test matrix" className={docked ? "grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-2" : fill ? "grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto_minmax(0,1fr)] gap-2" : "grid grid-cols-[minmax(0,1fr)] gap-2"}>
+      {docked ? (
+        <div className="@container grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+          <Legend compact />
+          {note}
+        </div>
+      ) : (
+        <>
+          {header}
+          <Legend />
+        </>
+      )}
       <div className={`relative rounded border border-line ${fill ? "grid max-h-full min-h-0 grid-rows-[minmax(0,1fr)] self-start " : ""}${className}`}>
         <div ref={scroller} onScroll={measure} className="max-h-[inherit] overflow-auto">
         <table aria-label="Test grid" className="min-w-full border-separate border-spacing-0 text-meta">

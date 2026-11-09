@@ -52,6 +52,17 @@ function mount(over: { creds?: Credential[]; selectedId?: string; onSelect?: (id
 }
 
 describe("InventoryList", () => {
+  it("shows a Type column only where the group is mixed; hashes show their hash type", () => {
+    mount();
+    const headers = (group: string) => within(screen.getByRole("region", { name: group })).getAllByRole("columnheader").map((h) => h.textContent);
+    expect(headers("Passwords")).not.toContain("Type");
+    expect(headers("Hashes")).toContain("Hash type");
+    expect(headers("Hashes")).not.toContain("Type");
+    expect(headers("Tickets, keys and tokens")).toContain("Type");
+    expect(headers("Machine accounts")).not.toContain("Type");
+    expect(within(screen.getByRole("region", { name: "Hashes" })).getAllByText("NTLM")).toHaveLength(2);
+  });
+
   it("groups by kind with counts, in order", () => {
     mount();
     const heads = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent?.replace(/\s+/g, " ").trim());

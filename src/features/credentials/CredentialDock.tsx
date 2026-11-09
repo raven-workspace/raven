@@ -14,7 +14,7 @@ import { isDialogOpen, isTypingTarget } from "../../lib/keys";
 import type { CredAttempt, Credential, Username } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
-import { Button, Chip, Dialog, IconButton, labelClass } from "../../ui";
+import { Button, Chip, Dialog, IconButton } from "../../ui";
 import { ScrollArea } from "../../ui/shadcn/scroll-area";
 import { Separator } from "../../ui/shadcn/separator";
 import { AccessFields, EMPTY_ACCESS, hostLabel, type AccessDraft } from "./AccessGrants";
@@ -63,7 +63,7 @@ function worksOn(
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="grid gap-1">
-      <dt className={labelClass}>{label}</dt>
+      <dt className="text-meta text-muted-2">{label}</dt>
       <dd className="m-0 min-w-0 text-body text-fg-2">{children}</dd>
     </div>
   );
