@@ -105,7 +105,7 @@ export function CvssBuilder({ value, onChange }: { value: string; onChange(vecto
   }
 
   const switchTo = (next: "3.1" | "4.0") => {
-    if (next === version || (next === "3.1" && version === "3.0")) return;
+    if (next === version) return;
     // Keep only the picks that mean the same thing in the other version.
     const kept: Record<string, string> = {};
     for (const m of baseOf(next)) {
@@ -114,6 +114,9 @@ export function CvssBuilder({ value, onChange }: { value: string; onChange(vecto
     }
     setVersion(next);
     setPicks(kept);
+    // 3.0 to 3.1 keeps every metric, so a complete vector is rewritten with the new prefix.
+    const vector = buildVector(next, kept);
+    if (vector !== null && vector !== value.trim()) onChange(vector);
   };
 
   const pick = (key: string, v: string) => {
@@ -132,13 +135,18 @@ export function CvssBuilder({ value, onChange }: { value: string; onChange(vecto
     <div className="grid gap-3 rounded-sm border border-line p-3">
       <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
         <div role="group" aria-label="CVSS version" className="grid grid-flow-col auto-cols-max gap-1">
-          {(["4.0", "3.1"] as const).map((v) => {
-            const on = v === "4.0" ? version === "4.0" : version !== "4.0";
-            // A stored 3.0 vector keeps its version, and the 3.x button says so.
-            const label = v === "3.1" && version === "3.0" ? "3.0" : v;
+          {/* A stored 3.0 vector keeps its version, shown as its own pressed segment; 3.1 stays one click away. */}
+          {(version === "3.0" ? (["4.0", "3.1", "3.0"] as const) : (["4.0", "3.1"] as const)).map((v) => {
+            const on = v === version;
             return (
-              <button key={v} type="button" aria-pressed={on} onClick={() => switchTo(v)} className={cx(segment, on ? segmentOn : segmentOff)}>
-                CVSS {label}
+              <button
+                key={v}
+                type="button"
+                aria-pressed={on}
+                onClick={() => (v === "3.0" ? undefined : switchTo(v))}
+                className={cx(segment, on ? segmentOn : segmentOff)}
+              >
+                CVSS {v}
               </button>
             );
           })}

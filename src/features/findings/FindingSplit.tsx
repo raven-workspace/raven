@@ -49,6 +49,8 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
     }
     return { restored: kept, replaced: false };
   });
+  // A save that failed after its form was gone (H, navigating away) is reported once, on the draft that comes back.
+  const [saveError] = useState(() => useFindingDraftStore.getState().takeSaveError(key));
   const [d, setD] = useState<Draft>(() => restored ?? base);
   const [pane, setPane] = useState<Pane>("editor");
   const [tab, setTab] = useState<ContextTab>("log");
@@ -169,7 +171,13 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
           onFileDirty={setFileDirty}
           draftKey={key}
           onBusy={onBusy}
-          notice={replaced ? "Your unsaved draft was replaced by a newer save." : undefined}
+          notice={
+            saveError
+              ? `The last save didn't go through: ${saveError}`
+              : replaced
+                ? "Your unsaved draft was replaced by a newer save."
+                : undefined
+          }
         />
       </section>
     </div>

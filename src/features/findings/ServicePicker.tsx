@@ -1,5 +1,4 @@
 import { foldServices, serviceIdentity, sortServices } from "../../engines/facts";
-import { SCROLL_PANE } from "../../ui/controlStyles";
 import { cx } from "../../lib/cx";
 import { shortHostName } from "../../lib/hostName";
 import type { Host } from "../../types/host";
@@ -77,8 +76,9 @@ export function ServicePicker({ hosts, servicesByHost, error, value, onChange }:
       ) : withServices.length === 0 ? (
         <span className="text-meta text-muted">No services on {hosts.length === 1 ? "this host" : "these hosts"} yet.</span>
       ) : (
-        // Its own scroll past ~10 rows, so a host with many ports doesn't push the rest of the form away.
-        <div className={`grid max-h-[17rem] content-start gap-2 ${SCROLL_PANE}`}>
+        // Its own scroll past ~10 rows, so a host with many ports doesn't push the rest of the form away. It sits inside
+        // the editor pane, which already pads (p-1 pr-3), so it keeps only a small gutter of its own, not SCROLL_PANE's.
+        <div data-testid="service-list" className="grid max-h-[17rem] min-h-0 content-start gap-2 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
           {withServices.map((h) => {
             const { rows, rpc, udp } = foldServices(servicesByHost.get(h.id) ?? []);
             const has = (list: Service[]) => list.some((s) => value.includes(s.id));

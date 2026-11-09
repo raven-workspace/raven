@@ -36,8 +36,10 @@ export function RefSuggestions({ eid, hostIds, added, onAdd }: {
     const mine = (ids: string[]) => hostIds.length === 0 || ids.some((h) => hostIds.includes(h));
     const texts = (log.data ?? []).filter((e) => mine(e.hostIds)).flatMap(entryTexts);
     // Note text not yet saved counts too: it is what's on screen.
-    const bodies = new Map((notes.data ?? []).map((n) => [`${n.engagementId}:${n.hostId ?? ""}`, n]));
-    for (const [k, p] of Object.entries(pending)) if (p.engagementId === eid) bodies.set(k, { ...p, ownerId: "", updatedAt: 0 });
+    const bodies = new Map<string, { hostId: string | null; body: string }>(
+      (notes.data ?? []).map((n) => [`${n.engagementId}:${n.hostId ?? ""}`, n]),
+    );
+    for (const [k, p] of Object.entries(pending)) if (p.engagementId === eid) bodies.set(k, p);
     for (const n of bodies.values()) if (hostIds.length === 0 || (n.hostId !== null && hostIds.includes(n.hostId))) texts.push(n.body);
     const have = new Set(added.map((r) => r.toUpperCase()));
     return suggestRefs(texts).filter((r) => !have.has(r.toUpperCase()));

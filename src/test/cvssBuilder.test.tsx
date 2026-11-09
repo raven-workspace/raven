@@ -80,10 +80,21 @@ describe("CvssBuilder", () => {
     const user = userEvent.setup();
     render(<Harness initial="CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H" />);
     expect(screen.getByRole("button", { name: "CVSS 3.0" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.queryByRole("button", { name: "CVSS 3.1" })).toBeNull();
+    expect(screen.getByRole("button", { name: "CVSS 3.1" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("status", { name: "CVSS score" })).toHaveTextContent("9.8");
     await pick(user, "Availability (A)", "None");
     expect(screen.getByLabelText("vector")).toHaveTextContent("CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N");
+  });
+
+  it("a 3.0 vector can be switched to 3.1, rewriting the prefix", async () => {
+    const user = userEvent.setup();
+    const onEmit = vi.fn();
+    render(<Harness initial="CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H" onEmit={onEmit} />);
+    await user.click(screen.getByRole("button", { name: "CVSS 3.1" }));
+    expect(onEmit).toHaveBeenCalledWith("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H");
+    expect(screen.getByRole("button", { name: "CVSS 3.1" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: "CVSS 3.0" })).toBeNull();
+    expect(screen.getByLabelText("CVSS score")).toHaveTextContent("9.8");
   });
 
   it("an unprefixed 3.x vector opens in 3.1 mode", () => {
