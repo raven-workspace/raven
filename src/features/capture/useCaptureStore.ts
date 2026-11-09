@@ -22,6 +22,8 @@ export interface PanelDraft {
   returnedNothing: boolean;
   private: boolean;
   flagKind: FlagKind | null;
+  /** The owner chose to keep a pasted `user:pass` as a note only: no credentials are added. */
+  asNote: boolean;
 }
 
 export const EMPTY_DRAFT: PanelDraft = {
@@ -38,6 +40,7 @@ export const EMPTY_DRAFT: PanelDraft = {
   returnedNothing: false,
   private: false,
   flagKind: null,
+  asNote: false,
 };
 
 interface CaptureState {

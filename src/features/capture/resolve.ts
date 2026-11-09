@@ -1,8 +1,9 @@
-import { buildDraft, detectKind, findFlagInPaste, flagTitle, noteTitle, screenshotFileName, type CaptureDraft, type DraftInput } from "../../engines/capture";
+import { buildDraft, credentialsInPaste, detectKind, findFlagInPaste, flagTitle, noteTitle, screenshotFileName, type CaptureDraft, type DraftInput } from "../../engines/capture";
 import { OS_LABELS } from "../hosts/columns";
 import { KIND_LABELS } from "../log/kindLabels";
 import type { BoardColumn, Host, HostOs } from "../../types/host";
 import type { FlagKind, LogContent, LogKind } from "../../types/log";
+import type { ParsedCredentialPaste } from "../../engines/credentials";
 import type { CaptureEdits } from "./saveCapture";
 import type { PanelDraft } from "./useCaptureStore";
 
@@ -46,6 +47,10 @@ export interface Resolved {
   selectedHost: Host | null;
   servicesLine: string | null;
   flagKind: FlagKind;
+  /** A note made only of `user:pass` lines: the credentials it offers (added on save unless kept as a note). */
+  credentials: ParsedCredentialPaste[];
+  /** What saving adds from `credentials`, before it happens; null when nothing is offered or it is kept as a note. */
+  credentialsLine: string | null;
   canSave: boolean;
 }
 
@@ -90,6 +95,17 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
     autoTitle = noteTitle(pd.caption) || "Screenshot";
   }
 
+  // A note of `user:pass` lines offers its credentials, linked to the capture's host.
+  const credentials = kind === "note" ? credentialsInPaste(pd.text) : [];
+  const adding = pd.asNote ? [] : credentials;
+  const account = (c: ParsedCredentialPaste) => (c.domain ? `${c.domain}\\${c.username}` : c.username);
+  let credentialsLine: string | null = null;
+  if (adding.length) {
+    autoTitle = `${adding.length === 1 ? "Credential" : "Credentials"} for ${adding.map(account).join(", ")}`.slice(0, 120);
+    const n = adding.length === 1 ? "1 credential" : `${adding.length} credentials`;
+    credentialsLine = `Adds ${n}${selectedHost ? ` for ${selectedHost.name}` : ""}: ${adding.map(account).join(", ")}.`;
+  }
+
   const userTitle = pd.titleEdited && pd.title.trim() !== "";
   const scan = draft.scan;
   const scanHost = scan && hostIds.includes(scan.hostId) ? hosts.find((h) => h.id === scan.hostId) : undefined;
@@ -113,6 +129,8 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
     selectedHost,
     flagKind,
     servicesLine,
+    credentials,
+    credentialsLine,
     canSave: kind === "screenshot" ? pd.image !== null : pd.text.trim() !== "",
     edits: {
       kind,
@@ -124,6 +142,9 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
       returnedNothing: kind === "command" && pd.returnedNothing,
       private: pd.private,
       content,
+      ...(adding.length
+        ? { credentials: adding.map((c) => ({ username: c.username, domain: c.domain, secret: c.secret, type: c.type, hostId: selectedHost?.id ?? null })) }
+        : {}),
     },
   };
 }

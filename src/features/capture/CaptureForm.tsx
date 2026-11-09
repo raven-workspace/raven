@@ -137,6 +137,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
     if (Number.isInteger(n) && n >= 1 && n <= KINDS.length) set({ kind: KINDS[n - 1]!.kind });
     else if (e.key.toLowerCase() === "p") set({ private: !pd.private });
     else if (e.key === "." && kind === "command") set({ returnedNothing: !pd.returnedNothing });
+    else if (e.key.toLowerCase() === "j" && r.credentials.length) set({ asNote: !pd.asNote });
     else if (e.key === "Enter") void save();
     else return;
     e.preventDefault();
@@ -224,6 +225,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
 
         <HostChips hosts={hosts} linked={r.edits.hostIds} onLinked={(hostIds) => set({ hostIds })} />
         {r.servicesLine && <p className="m-0 text-code text-muted">{r.servicesLine}</p>}
+        {r.credentialsLine && <p className="m-0 text-code text-muted">{r.credentialsLine}</p>}
         <Field label="Ran on">
           <Select
             value={r.edits.ranOn}
@@ -248,6 +250,11 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
           {kind === "command" && (
             <Toggle on={pd.returnedNothing} keys="⌘." onChange={() => set({ returnedNothing: !pd.returnedNothing })}>
               Returned nothing
+            </Toggle>
+          )}
+          {r.credentials.length > 0 && (
+            <Toggle on={!pd.asNote} keys="⌘J" onChange={() => set({ asNote: !pd.asNote })}>
+              Add as {r.credentials.length === 1 ? "credential" : "credentials"}
             </Toggle>
           )}
           <Toggle on={pd.private} keys="⌘P" onChange={() => set({ private: !pd.private })}>

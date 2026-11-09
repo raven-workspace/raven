@@ -1,0 +1,36 @@
+import { parseCredentialPaste, type ParsedCredentialPaste } from '../credentials/paste';
+import { detectKind } from './kind';
+
+/** Shell syntax in the account part: a command line, never a user name. */
+const SHELL_ACCOUNT = /[|;&<>()`'"{}=*]|^[-/~.]/;
+/** Shell syntax anywhere in the line: substitution, or a pipe, chain or redirect between words. */
+const SHELL_LINE = /\$\(|`|\s(?:\||\|\||&&|;|>>?|<)\s/;
+/** A port number (1–5 digits, at most 65535). */
+const PORT = /^\d{1,5}$/;
+const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
+
+/**
+ * The credentials a capture paste is made of: every non-empty line must read as `user:secret`, `DOMAIN\user:secret`,
+ * `user@domain:secret` or `user:hash` (parseCredentialPaste). Empty when any line is something else, so a note that
+ * merely contains a credential stays a note. Never offered: URLs (`scheme://`), `host:port` (an IP or a host name
+ * followed by a port number: a bare `name:445` is read as one too, unless a domain says it is an account), and
+ * command lines (a command word, a shell prompt or shell syntax).
+ */
+export function credentialsInPaste(text: string): ParsedCredentialPaste[] {
+  const lines = text.replace(/\r\n?/g, '\n').split('\n').map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return [];
+  // A command, HTTP request or flag is that kind, whatever its colons.
+  if (detectKind(text, false) !== 'note') return [];
+  const found: ParsedCredentialPaste[] = [];
+  for (const line of lines) {
+    if (line.includes('://') || SHELL_LINE.test(line) || detectKind(line, false) !== 'note') return [];
+    const parsed = parseCredentialPaste(line);
+    if (!parsed) return [];
+    if (SHELL_ACCOUNT.test(line.slice(0, line.indexOf(':')))) return [];
+    // `user@192.0.2.10:22` is a target, not an account.
+    if (parsed.domain && IPV4.test(parsed.domain)) return [];
+    if (!parsed.domain && PORT.test(parsed.secret) && Number(parsed.secret) <= 65535) return [];
+    found.push(parsed);
+  }
+  return found;
+}
