@@ -196,7 +196,7 @@ export function InventoryList({ eid, creds, all, hosts, servicesByHost, attempts
         </ToggleGroup>
       </div>
       <ScrollArea className="h-full min-h-0 [&_[data-slot=scroll-area-viewport]>div]:block!">
-        <div ref={root} className="@container grid grid-cols-[minmax(0,1fr)] gap-6">
+        <div ref={root} className="@container grid grid-cols-[minmax(0,1fr)] gap-6 pr-3">
           {groups.filter((g) => show(g.kind)).map(({ kind: k, ...g }) => <Group key={k} {...g} {...ctx} />)}
           {show("usernames") && <UsernamesList eid={eid} usernames={usernames} grants={grants} hosts={hosts} />}
         </div>

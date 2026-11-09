@@ -99,7 +99,7 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
           : "grid-cols-[repeat(auto-fill,minmax(180px,1fr))]"
       }`}
     >
-      <Fact label="Source">{cred.source || <span className="text-muted">none recorded</span>}</Fact>
+      <Fact label="Source">{cred.source || <span className="text-muted">unknown</span>}</Fact>
       <Fact label="Scope">
         {cred.scope}
         {scopeHost && <span className="block truncate text-meta text-muted" title={scopeHost}>{scopeHost}</span>}
