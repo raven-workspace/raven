@@ -261,7 +261,8 @@ export function rankPayloads(
   }
   const preferred = preferredIds(s);
   const bindFirst = (d: PayloadDef) => toggles.callbacksBlocked && d.shape === "bind";
-  const rank = (d: PayloadDef) => (bindFirst(d) ? 0 : 1) * 4 + (marks[d.id] ? 2 : 0) + (preferred.has(d.id) ? 0 : 1);
+  // Marked defs keep catalogue order: the service preference only lifts unmarked ones.
+  const rank = (d: PayloadDef) => (bindFirst(d) ? 0 : 1) * 4 + (marks[d.id] ? 2 : preferred.has(d.id) ? 0 : 1);
   // Array.prototype.sort is stable, so ties keep catalogue order.
   return { fits: [...fits].sort((a, b) => rank(a) - rank(b)), marks, misfits };
 }

@@ -338,4 +338,10 @@ describe("marks: toggles and tools never fold", () => {
     // Only defs in the list count.
     expect(callbackClue(s(["bash-tcp", "python3"]), SHELLS.filter((d) => d.id !== "python3"))).toBeNull();
   });
+  it("a marked preferred def keeps catalogue order among marked defs", () => {
+    const s = inferSituation({ host: host(), services: [svc(80, "http", "Apache httpd 2.4.52 ((Ubuntu))")], entries: [], examKind: false }).situation;
+    const r = rankPayloads(SHELLS, { ...s, failedPayloadIds: ["php-exec", "bash-tcp"] }, null);
+    expect(r.fits[0]!.id).not.toBe("php-exec");
+    expect(ids(r.fits).slice(-2)).toEqual(["bash-tcp", "php-exec"]);
+  });
 });

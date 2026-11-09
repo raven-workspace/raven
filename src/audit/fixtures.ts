@@ -318,7 +318,7 @@ const examLog: LogEntry[] = [
 ].map((e, i) => ({ ...e, id: `l-exam-${i + 1}` }));
 
 // The IIS host: a ?cmd= web shell that answers (so the paste context is "Web shell ?cmd="), then an nc.exe payload
-// logged from the drawer that failed there (so the misfit fold says "Failed here before").
+// logged from the drawer that failed there (so nc-exe stays a fit, marked "Failed here before").
 const payLog: LogEntry[] = [
   cmd(
     "Web shell answers", `curl "http://198.51.100.20/uploads/probe.aspx?cmd=whoami"`, "iis apppool\\defaultapppool", ["h-pay-iis"],

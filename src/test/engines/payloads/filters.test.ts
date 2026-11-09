@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildPayload } from "../../../engines/payloads/build";
+import { decodeUtf16leBase64 } from "../../../engines/payloads/encode";
 import { applyFilter, FILTER_CONTEXTS, filterChoices } from "../../../engines/payloads/filters";
 import { SHELLS } from "../../../engines/payloads/shells";
 
@@ -83,5 +84,23 @@ describe("buildPayload with a filter", () => {
     expect(b.text).toBe(plain.text);
     expect(b.notes).toContain("Already base64 (-e).");
     expect(b.notes.filter((n) => n !== "Already base64 (-e).")).toEqual(plain.notes);
+  });
+  it("bind-ps with ps-b64 encodes only the -c script, so its $variables survive", () => {
+    const d = def("bind-ps");
+    const b = buildPayload(d, "url-param", V, { filter: "ps-b64" });
+    const m = /^powershell\+-nop\+-w\+hidden\+-e\+([A-Za-z0-9%]+)$/.exec(b.text);
+    expect(m).not.toBeNull();
+    const script = decodeUtf16leBase64(decodeURIComponent(m![1]!));
+    const expected = /-c "(.*)"$/.exec(d.template.replace("{BIND_PORT}", "4444"))![1]!;
+    expect(script).toBe(expected);
+    expect(script).toContain("$listener = [System.Net.Sockets.TcpListener]4444;");
+    // Other raw text is encoded whole.
+    expect(decodeUtf16leBase64(applyFilter('powershell -c "a" ; x', "ps-b64").text.split(" ").pop()!)).toBe('powershell -c "a" ; x');
+    expect(decodeUtf16leBase64(applyFilter('powershell -ep bypass -command "$a=1"', "ps-b64").text.split(" ").pop()!)).toBe("$a=1");
+  });
+  it("a filter drops the def's bash -c part", () => {
+    const tokens = (f: "b64" | "hex") => buildPayload(def("bash-tcp"), "url-param", V, { filter: f }).parts.map((p) => p.token);
+    expect(tokens("b64").filter((t) => t.includes("bash -c"))).toEqual([]);
+    expect(tokens("hex").filter((t) => t.includes("bash -c"))).toHaveLength(1);
   });
 });
