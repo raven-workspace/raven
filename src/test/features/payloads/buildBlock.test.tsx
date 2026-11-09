@@ -143,6 +143,15 @@ describe("Payload build memory", () => {
     expect(logCommand).toHaveBeenCalledTimes(1);
   });
 
+  it("records LHOST trimmed, so a typed trailing space never reads as a rebuild", async () => {
+    usePayloadsStore.setState({ generator: "msfvenom", lhost: `${NEW_LHOST} ` });
+    const { user, d } = await openOn("Windows x64 exe");
+    await user.keyboard("{Enter}");
+    await vi.waitFor(() => expect(m.payloadBuildRecord).toHaveBeenCalledTimes(1));
+    expect(m.payloadBuildRecord).toHaveBeenLastCalledWith(recorded("msf-win-x64-exe", NEW_LHOST));
+    expect(d.queryByText(/Rebuild first/)).not.toBeInTheDocument();
+  });
+
   it("a record failure shows in the status line and the copy stands", async () => {
     usePayloadsStore.setState({ generator: "msfvenom" });
     m.payloadBuildRecord.mockRejectedValue(new Error("vault is locked"));

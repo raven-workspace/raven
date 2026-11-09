@@ -19,15 +19,15 @@ export function failedPayloadIds(entries: LogEntry[], hostId: string): string[] 
   return [...newest].filter(([, v]) => v.failed).map(([id]) => id);
 }
 
-/** Whether a baked payload built for this host used a different LHOST or LPORT than the current ones. Null when unknown or unchanged. */
+/** Whether a baked payload built for this host used a different LHOST or LPORT than the current ones (compared trimmed). Null when unknown or unchanged. */
 export function staleBuild(
   records: PayloadBuild[], hostId: string | null, payloadId: string, current: { LHOST: string; LPORT: string },
 ): { was: string; now: string } | null {
   if (!hostId) return null;
   const r = records.find((b) => b.hostId === hostId && b.payloadId === payloadId);
   if (!r) return null;
-  const { LHOST, LPORT } = current;
-  if (!LHOST.trim() || !LPORT.trim() || !r.lhost.trim() || !r.lport.trim()) return null;
-  if (r.lhost === LHOST && r.lport === LPORT) return null;
-  return { was: `${r.lhost}:${r.lport}`, now: `${LHOST}:${LPORT}` };
+  const [LHOST, LPORT, lhost, lport] = [current.LHOST, current.LPORT, r.lhost, r.lport].map((v) => v.trim());
+  if (!LHOST || !LPORT || !lhost || !lport) return null;
+  if (lhost === LHOST && lport === LPORT) return null;
+  return { was: `${lhost}:${lport}`, now: `${LHOST}:${LPORT}` };
 }

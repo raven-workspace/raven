@@ -176,9 +176,11 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
    * trigger) was copied. No host, no record. A failure shows in `status`; the copy stands.
    */
   const record = async (d: PayloadDef) => {
-    if (!host || !d.bakesIp || !fit.lhost.trim() || !fit.port.trim()) return;
+    const lhost = fit.lhost.trim();
+    const lport = fit.port.trim();
+    if (!host || !d.bakesIp || !lhost || !lport) return;
     try {
-      await recordBuild(qc, { engagementId, hostId: host.id, payloadId: d.id, lhost: fit.lhost, lport: fit.port });
+      await recordBuild(qc, { engagementId, hostId: host.id, payloadId: d.id, lhost, lport });
     } catch (e) {
       reportError(e);
       setStatus(e instanceof Error ? e.message : String(e));

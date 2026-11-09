@@ -72,6 +72,12 @@ describe("staleBuild", () => {
     expect(staleBuild([rec()], "h1", "nishang-cradle", { ...cur, LPORT: "" })).toBeNull();
     expect(staleBuild([rec({ lhost: "" })], "h1", "nishang-cradle", { ...cur, LHOST: "192.0.2.20" })).toBeNull();
   });
+  it("surrounding spaces never read as a change, on either side", () => {
+    expect(staleBuild([rec()], "h1", "nishang-cradle", { LHOST: "192.0.2.10 ", LPORT: " 443" })).toBeNull();
+    expect(staleBuild([rec({ lhost: " 192.0.2.10 ", lport: "443 " })], "h1", "nishang-cradle", cur)).toBeNull();
+    expect(staleBuild([rec({ lhost: "192.0.2.10 " })], "h1", "nishang-cradle", { ...cur, LHOST: " 192.0.2.20" }))
+      .toEqual({ was: "192.0.2.10:443", now: "192.0.2.20:443" });
+  });
   it("another host's record is ignored", () => {
     expect(staleBuild([rec({ hostId: "h2" })], "h1", "nishang-cradle", { ...cur, LHOST: "192.0.2.20" })).toBeNull();
   });
