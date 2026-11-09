@@ -4,6 +4,7 @@ import type { RawIssue } from "../types";
 
 const E = `/e/${AUDIT_IDS.labEngagement}`;
 const H = `${E}/h/${AUDIT_IDS.webHost}`;
+const IIS = `/e/${AUDIT_IDS.payloadsEngagement}/h/${AUDIT_IDS.iisHost}`;
 
 export interface ShortcutCase {
   id: string;
@@ -14,6 +15,8 @@ export interface ShortcutCase {
   /** Focus must land inside `opens`. */
   focusInside: boolean;
   closesWithEscape: boolean;
+  /** A selector that is visible on `path` before the keys are pressed, when no SCREENS entry for the path is ready without setup. */
+  ready?: string;
   /** Replaces the generic open/focus/close flow when the outcome is not "something opens". */
   custom?: (page: Page) => Promise<RawIssue[]>;
 }
@@ -273,6 +276,42 @@ async function tabSwitch(page: Page): Promise<RawIssue[]> {
   return ok ? [] : [{ check: "shortcut", selector: "role=tab[name='Log']", detail: "⌥2 did not select the Log tab" }];
 }
 
+/** ⌥B, ⌥F, ⌥T in the Payloads drawer (Shell generator, Web shell context): the chip's list opens, focus is on the chip or in its list, Esc closes it and focus stays in the drawer. */
+function payloadChip(code: string, name: string) {
+  return async (page: Page): Promise<RawIssue[]> => {
+    const trigger = page.locator(`aside[aria-label='Payloads'] button[aria-label^='${name}:']`);
+    const sel = `${name} chip (${code})`;
+    await page.locator("body").click({ position: { x: 1, y: 1 } });
+    await page.keyboard.press("p");
+    await trigger.waitFor({ state: "visible", timeout: 2000 });
+    await page.keyboard.press(code);
+    const opened = await trigger.waitFor({ state: "visible" }).then(() => page.waitForFunction(
+      (n) => document.querySelector(`aside[aria-label='Payloads'] button[aria-label^='${n}:']`)?.getAttribute("aria-expanded") === "true", name, { timeout: 1000 },
+    )).then(() => true, () => false);
+    if (!opened) return [{ check: "shortcut", selector: sel, detail: `${code} did not open the ${name} list` }];
+    const issues: RawIssue[] = [];
+    // The list is a listbox the trigger controls; focus may stay on the trigger (active-descendant) or move into the list.
+    const focusOk = await page.evaluate((n) => {
+      const t = document.querySelector(`aside[aria-label='Payloads'] button[aria-label^='${n}:']`);
+      const a = document.activeElement;
+      if (!t || !a) return false;
+      if (a === t) return true;
+      const lb = document.getElementById(t.getAttribute("aria-controls") ?? "");
+      return !!lb && lb.contains(a);
+    }, name);
+    if (!focusOk) issues.push({ check: "shortcut", selector: sel, detail: `${code} opened the ${name} list but focus is neither on the chip nor in the list` });
+    await page.keyboard.press("Escape");
+    const closed = await page.waitForFunction(
+      (n) => document.querySelector(`aside[aria-label='Payloads'] button[aria-label^='${n}:']`)?.getAttribute("aria-expanded") !== "true", name, { timeout: 1000 },
+    ).then(() => true, () => false);
+    if (!closed) issues.push({ check: "shortcut", selector: sel, detail: "Escape did not close it" });
+    // The chip pickers give focus back to where it was before they opened (the Tools list never took it); either way it stays in the drawer.
+    const back = await page.evaluate(() => !!document.activeElement?.closest("aside[aria-label='Payloads']"));
+    if (!back) issues.push({ check: "shortcut", selector: sel, detail: "after Escape, focus left the Payloads drawer" });
+    return issues;
+  };
+}
+
 export const SHORTCUTS: ShortcutCase[] = [
   { id: "palette", path: H, keys: ["Meta+K"], opens: 'role=dialog[name="Search"]', focusInside: true, closesWithEscape: true },
   { id: "palette-hostpick", path: H, keys: ["Meta+K", "Alt+H"], opens: "role=listbox[name='Fill for host']", focusInside: true, closesWithEscape: true },
@@ -288,6 +327,9 @@ export const SHORTCUTS: ShortcutCase[] = [
   { id: "finding-split", path: H, keys: ["f"], opens: "role=region[name='Finding']", focusInside: true, closesWithEscape: true },
   { id: "sidebar-toggle", path: H, keys: ["Meta+B"], opens: "the sidebar", focusInside: false, closesWithEscape: false, custom: sidebarToggle },
   { id: "tab-log", path: H, keys: ["Alt+2"], opens: "the Log tab", focusInside: false, closesWithEscape: false, custom: tabSwitch },
+  { id: "payloads-callbacks", path: IIS, keys: ["p", "Alt+B"], opens: "the Callbacks list", focusInside: false, closesWithEscape: false, ready: "role=tablist >> visible=true", custom: payloadChip("Alt+KeyB", "Callbacks") },
+  { id: "payloads-filter", path: IIS, keys: ["p", "Alt+F"], opens: "the Filter list", focusInside: false, closesWithEscape: false, ready: "role=tablist >> visible=true", custom: payloadChip("Alt+KeyF", "Filter") },
+  { id: "payloads-tools", path: IIS, keys: ["p", "Alt+T"], opens: "the Tools list", focusInside: false, closesWithEscape: false, ready: "role=tablist >> visible=true", custom: payloadChip("Alt+KeyT", "Tools") },
   {
     id: "board-move", path: E, keys: ["focus first board card", "]"], opens: "the moved board card",
     focusInside: false, closesWithEscape: false, custom: boardMove,

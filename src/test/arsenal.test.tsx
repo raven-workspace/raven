@@ -851,7 +851,7 @@ describe("drawer list grouped by category (U1)", () => {
     await d.findByRole("option", { name: /Zzgen reverse shell/ });
     await user.keyboard("{Enter}");
     const p = within(await screen.findByRole("complementary", { name: "Payloads" }));
-    expect(p.getByRole("tab", { name: "Reverse shell" })).toHaveAttribute("aria-selected", "true");
+    expect(p.getByRole("tab", { name: "Shell" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByRole("complementary", { name: "Arsenal" })).not.toBeInTheDocument();
   });
 

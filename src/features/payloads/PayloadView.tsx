@@ -1,55 +1,118 @@
 import { useState, type KeyboardEvent, type ReactNode } from "react";
-import type { BuiltPayload, PayloadDef } from "../../engines/payloads/types";
+import { LISTENERS } from "../../engines/payloads/listeners";
+import type { BuiltPayload, ListenerId, PayloadDef } from "../../engines/payloads/types";
 import { cx } from "../../lib/cx";
 import { CommandBlock, Disclosure, labelClass } from "../../ui";
+import { ChipPicker } from "../arsenal/ChipPicker";
 
 type CopyResult = Promise<"copied" | "guarded">;
 
+/** A copy guard note under one block; `warn` says whether it is a hold-back (amber) or a confirmation (muted). */
+const Note = ({ text, warn }: { text?: string | null; warn?: boolean }) =>
+  text ? <p role="status" className={`m-0 text-meta ${warn ? "text-warn" : "text-muted"}`}>{text}</p> : null;
+
 /**
- * One built payload: the Kali-side prepare step for a served file, the listener, an amber stale line when a baked file
- * is out of date, the payload to paste, a note from the copy guard, what each part does, and the def's notes. Every
- * block is a CommandBlock with its own Copy button; the payload's goes through the copy guard (`onCopy`), as ↵ does.
+ * One built payload: the Kali-side prepare step for a served file, the listener, the payload to paste (or, for an
+ * uploaded file, the file to save or make on Kali), the trigger that fires an uploaded file, a note from the copy guard
+ * under the block it belongs to, what each part does, and the def's notes. Every block is a CommandBlock with its own
+ * Copy button; the payload's, the prepare step's, the trigger's and the listener's go through the copy guard, as ↵ does.
+ * A baked payload whose build is out of date (`stale`) shows its build step first, under an amber "Rebuild first" line.
  * Shared by every generator that builds a payload.
  */
-export function PayloadBlock({ built, pasteLabel, stale, note, noteWarn, fields, numbered, onCopy, onCopyListener }: {
+export function PayloadBlock({
+  built, pasteLabel, pasteFile, stale, buildStep, lock, note, prepareNote, triggerNote, listenerNote, noteWarn, fields, numbered,
+  onCopy, onCopyPrepare, onCopyTrigger, onCopyListener, onPickListener,
+}: {
   built: BuiltPayload; pasteLabel: string;
-  /** `Built at … with …; rebuild it`, for a baked payload whose LHOST or LPORT has changed since. */
+  /** The uploaded file's name inside `pasteLabel`: shown as typed (a Linux name is case-sensitive), not in the label's capitals. */
+  pasteFile?: string | null;
+  /** `Rebuild first: built with …, now …`, for a baked payload whose LHOST or LPORT has changed since its last build. */
   stale?: string | null;
-  /** The copy guard's hint or confirmation. */
-  note?: string | null; noteWarn?: boolean;
+  /** Which block builds a baked payload: its prepare step, or the payload itself (msfvenom, a file made on Kali). */
+  buildStep?: "prepare" | "payload" | null;
+  /** The exam's Metasploit lock line above the payload: amber when it is a breach, muted otherwise. */
+  lock?: { text: string; breach: boolean } | null;
+  /** The copy guard's hint or confirmation, under the payload, the prepare step, the trigger or the listener. */
+  note?: string | null; prepareNote?: string | null; triggerNote?: string | null; listenerNote?: string | null; noteWarn?: boolean;
   /** Fill fields (LHOST and the payload's other placeholders), above the copy blocks. */
   fields?: ReactNode;
   /** Number the copy blocks as steps ("1. Listener on Kali", "2. Paste into …"), as the Workbench does. */
   numbered?: boolean;
-  /** The payload's Copy (the copy guard); the listener's Copy (⌥L). */
-  onCopy: () => CopyResult; onCopyListener: () => void;
+  /** The payload's Copy (the copy guard); the prepare step's and the trigger's; the listener's Copy (⌥L). */
+  onCopy: () => CopyResult; onCopyPrepare?: () => CopyResult; onCopyTrigger?: () => CopyResult; onCopyListener: () => CopyResult;
+  /** Picks another of the def's listeners (session memory, per payload); a picker shows when it has more than one. */
+  onPickListener?: (id: ListenerId) => void;
 }) {
-  let step = 0;
-  const heading = (label: string) => (numbered ? `${++step}. ${label}` : label);
-  const prepareHeading = built.prepare ? heading("Prepare on Kali") : "";
-  const listenerHeading = built.listener ? heading(numbered ? "Listener on Kali" : "Listener") : "";
-  const pasteHeading = heading(pasteLabel);
+  type Step = "prepare" | "listener" | "payload" | "trigger";
+  const present: Step[] = [
+    ...(built.prepare ? ["prepare" as const] : []), ...(built.listener ? ["listener" as const] : []),
+    "payload", ...(built.trigger ? ["trigger" as const] : []),
+  ];
+  // Out of date: the build step goes first, so you rebuild before anything else.
+  const first = stale && buildStep && present.includes(buildStep) ? buildStep : null;
+  const order = first ? [first, ...present.filter((p) => p !== first)] : present;
+  const heading = (step: Step, label: string) => (numbered ? `${order.indexOf(step) + 1}. ${label}` : label);
+  /** The paste heading; an uploaded file's name keeps its case (the label style capitalises everything else). */
+  const payloadHeading = () => {
+    const at = pasteFile ? pasteLabel.indexOf(pasteFile) : -1;
+    if (!pasteFile || at < 0) return heading("payload", pasteLabel);
+    const head = heading("payload", pasteLabel.slice(0, at));
+    return <>{head}<code data-upload-file="" className="font-mono normal-case">{pasteFile}</code>{pasteLabel.slice(at + pasteFile.length)}</>;
+  };
+  const staleLine = (step: Step) => first === step && <p className="m-0 text-meta text-warn">{stale}</p>;
+
+  const listeners = built.def.listeners;
+  const listenerPicker = onPickListener && listeners.length > 1 && built.listenerId && (
+    <ChipPicker
+      options={listeners.map((l) => ({ id: l, name: LISTENERS[l].label }))} value={built.listenerId}
+      onPick={(id) => id && onPickListener(id as ListenerId)}
+      label={`Listener: ${LISTENERS[built.listenerId].label}`} listLabel="Listener" title="Pick the listener for this payload (this session)"
+      prefix="Listener" shown={LISTENERS[built.listenerId].label}
+    />
+  );
+  const blocks: Record<Step, () => ReactNode> = {
+    prepare: () => (
+      <section key="prepare" className="grid gap-2">
+        {staleLine("prepare")}
+        <h3 className={`${labelClass} m-0`}>{heading("prepare", "Prepare on Kali")}</h3>
+        <CommandBlock text={built.prepare!} name="Prepare on Kali" copyLabel="Copy prepare on Kali" onCopyAction={onCopyPrepare} placeholders />
+        <Note text={prepareNote} warn={noteWarn} />
+      </section>
+    ),
+    listener: () => (
+      <section key="listener" className="grid gap-2">
+        {/* The heading, with the listener picker on its right when the payload has more than one. */}
+        <div className="grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-3">
+          <h3 className={`${labelClass} m-0`}>
+            {heading("listener", numbered && built.listenerHeading === "Listener" ? "Listener on Kali" : built.listenerHeading)}
+          </h3>
+          {listenerPicker}
+        </div>
+        <CommandBlock text={built.listener!} name="Listener" copyLabel="Copy listener" onCopyAction={onCopyListener} placeholders />
+        <Note text={listenerNote} warn={noteWarn} />
+      </section>
+    ),
+    payload: () => (
+      <section key="payload" className="grid gap-2">
+        {staleLine("payload")}
+        {lock && <p className={`m-0 text-meta ${lock.breach ? "text-warn" : "text-muted"}`}>{lock.text}</p>}
+        <h3 className={`${labelClass} m-0`}>{payloadHeading()}</h3>
+        <CommandBlock text={built.text} name="Payload" copyLabel="Copy payload" onCopyAction={onCopy} placeholders />
+        <Note text={note} warn={noteWarn} />
+      </section>
+    ),
+    trigger: () => (
+      <section key="trigger" className="grid gap-2">
+        <h3 className={`${labelClass} m-0`}>{heading("trigger", "Trigger it")}</h3>
+        <CommandBlock text={built.trigger!.text} name="Trigger" copyLabel="Copy trigger" onCopyAction={onCopyTrigger} placeholders />
+        <Note text={triggerNote} warn={noteWarn} />
+      </section>
+    ),
+  };
   return (
     <div className="grid gap-4">
       {fields}
-      {built.prepare && (
-        <section className="grid gap-2">
-          <h3 className={`${labelClass} m-0`}>{prepareHeading}</h3>
-          <CommandBlock text={built.prepare} name="Prepare on Kali" copyLabel="Copy prepare on Kali" placeholders />
-        </section>
-      )}
-      {built.listener && (
-        <section className="grid gap-2">
-          <h3 className={`${labelClass} m-0`}>{listenerHeading}</h3>
-          <CommandBlock text={built.listener} name="Listener" copyLabel="Copy listener" onCopyAction={onCopyListener} placeholders />
-        </section>
-      )}
-      <section className="grid gap-2">
-        {stale && <p className="m-0 text-meta text-warn">{stale}</p>}
-        <h3 className={`${labelClass} m-0`}>{pasteHeading}</h3>
-        <CommandBlock text={built.text} name="Payload" copyLabel="Copy payload" onCopyAction={onCopy} placeholders />
-        {note && <p role="status" className={`m-0 text-meta ${noteWarn ? "text-warn" : "text-muted"}`}>{note}</p>}
-      </section>
+      {order.map((step) => blocks[step]())}
       {built.parts.length > 0 && (
         <section className="grid gap-2">
           <h3 className={`${labelClass} m-0`}>What each part does</h3>
@@ -80,12 +143,26 @@ const REQUIRE_REASON: Record<PayloadDef["requires"][number], string> = {
   powershell: "uses PowerShell",
   bash: "uses bash",
   php: "uses PHP",
+  perl: "uses perl",
+  socat: "uses socat",
+  curl: "uses curl",
+  wget: "uses wget",
+  awk: "uses awk",
+  busybox: "uses busybox",
   "served-file": "serves a file from Kali",
 };
 
-/** One row of the fit list: why this payload fits, each reason its own span; "Best fit" on the first of a ranked list. */
-function FitRow({ def, best, selected, onSelect, id }: { def: PayloadDef; best: boolean; selected: boolean; onSelect: () => void; id: string }) {
-  const reasons = def.requires.map((r) => REQUIRE_REASON[r]);
+const SHAPE_REASON: Record<NonNullable<PayloadDef["shape"]>, string> = { bind: "bind", webshell: "web shell" };
+
+/**
+ * One row of the fit list: why this payload fits, each reason its own span; "Best fit" on the first of a ranked list.
+ * Marks (why it sorted down) come first, in amber; then a bind or web shell says so; then what it requires.
+ */
+function FitRow({ def, best, marks, selected, onSelect, id }: {
+  def: PayloadDef; best: boolean; marks: string[]; selected: boolean; onSelect: () => void; id: string;
+}) {
+  const reasons = [...(def.shape ? [SHAPE_REASON[def.shape]] : []), ...def.requires.map((r) => REQUIRE_REASON[r])];
+  const all = [...marks, ...reasons];
   return (
     <div
       id={id} role="option" aria-selected={selected} onClick={onSelect} title={def.title}
@@ -95,9 +172,9 @@ function FitRow({ def, best, selected, onSelect, id }: { def: PayloadDef; best: 
       )}
     >
       <span data-fit-name="" className={cx("min-w-0 truncate text-body", selected ? "font-medium text-accent" : "text-fg")}>{def.title}</span>
-      <span className="min-w-0 truncate text-right text-meta text-muted" title={reasons.join(", ")}>
+      <span className="min-w-0 truncate text-right text-meta text-muted" title={all.join(", ")}>
         {best && <span className="text-fg-2">Best fit</span>}
-        {reasons.map((r, i) => <span key={r} className={best || i > 0 ? "ml-3" : ""}>{r}</span>)}
+        {all.map((r, i) => <span key={r} className={cx((best || i > 0) && "ml-3", i < marks.length && "text-warn")}>{r}</span>)}
       </span>
     </div>
   );
@@ -109,8 +186,10 @@ function FitRow({ def, best, selected, onSelect, id }: { def: PayloadDef; best: 
  * reasons. A click, ↑↓ in the list or ⇥ on the body picks the fit; hover only highlights. Then the picked payload.
  * `ordered` lists steps in order instead of by fit.
  */
-export function PayloadView({ fits, misfits, index, onIndex, ordered, built, fitsLine, ...block }: {
+export function PayloadView({ fits, misfits, marks = {}, index, onIndex, ordered, built, fitsLine, ...block }: {
   fits: PayloadDef[]; misfits: { def: PayloadDef; reason: string }[];
+  /** Why a fit sorted down, by def id (amber in its row); it stays selectable. */
+  marks?: Record<string, string[]>;
   index: number; onIndex: (i: number) => void; ordered?: boolean;
   /** The payload at `index`, built for the current values. */
   built: BuiltPayload | null;
@@ -139,7 +218,7 @@ export function PayloadView({ fits, misfits, index, onIndex, ordered, built, fit
               className="grid focus-visible:outline-offset-[-2px]"
             >
               {fits.map((d, i) => (
-                <FitRow key={d.id} id={`${listId}-${i}`} def={d} best={!ordered && i === 0} selected={i === index} onSelect={() => onIndex(i)} />
+                <FitRow key={d.id} id={`${listId}-${i}`} def={d} best={!ordered && i === 0} marks={marks[d.id] ?? []} selected={i === index} onSelect={() => onIndex(i)} />
               ))}
             </div>
           ) : (

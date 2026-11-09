@@ -8,7 +8,7 @@ function step(
 ): PayloadDef {
   return {
     id, generator: "upgrade", title, os: "linux", contexts: ["bash-prompt"], requires: [],
-    template, parts: [{ token, explain }], listener: "none", notes, ...extra,
+    template, parts: [{ token, explain }], listeners: [], notes, ...extra,
   };
 }
 

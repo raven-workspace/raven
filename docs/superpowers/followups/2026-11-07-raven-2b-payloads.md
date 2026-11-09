@@ -4,14 +4,14 @@ These are left over from the 2b-B Payloads build (branch `interpreters-payloads`
 
 ## Do first
 
-- [ ] **The Transfer copy-guard hint names the wrong key.** It says "↵ again to copy anyway", but in Transfer the repeat key is ⌘↵ (or the Copy button). Let `useCopyGuard` take the repeat key as a parameter. Also, Transfer's Copy button and its ⌘↵ use two separate guards, so you can get the "not filled" step twice. (`copyGuard.ts:46`, `TransferGenerator.tsx`)
-- [ ] **Two old test files still use lab-style IPs.** `src/test/transferGenerator.test.tsx` uses 10.10.14.9 and `src/test/engines/interpret/peas.test.ts` uses 10.10.14.7. Switch both to 192.0.2.x, since fixtures must be fully made up.
-- [ ] **Check the Kali paths in the Nishang and powercat prepare step on a real Kali box.** (`reverseShells.ts`)
+- [x] **The Transfer copy-guard hint names the wrong key.** It says "↵ again to copy anyway", but in Transfer the repeat key is ⌘↵ (or the Copy button). Let `useCopyGuard` take the repeat key as a parameter. Also, Transfer's Copy button and its ⌘↵ use two separate guards, so you can get the "not filled" step twice. (`copyGuard.ts:46`, `TransferGenerator.tsx`)
+- [x] **Two old test files still use lab-style IPs.** `src/test/transferGenerator.test.tsx` uses 10.10.14.9 and `src/test/engines/interpret/peas.test.ts` uses 10.10.14.7. Switch both to 192.0.2.x, since fixtures must be fully made up.
+- [ ] **Check the Kali paths in the Nishang and powercat prepare step on a real Kali box.** Still open for the owner's next lab. The parts now name the packages (`powercat`, `nishang`) and give a `dpkg -L` check if `cp` fails. (`reverseShells.ts`)
 - [ ] **Open the app and use the drawer and the Workbench for real tasks.** So far they have only been tested and audited against fake data.
 
 ## Payload content
 
-- [ ] **The Java WAR shows twice when the OS is unknown** (one entry for Linux, one for Windows). When the OS is known, the other entry folds as "Wrong OS", which is wrong because a WAR runs on either. Allow `os: "any"` in `types.ts` and `fit.ts`. (`msfvenom.ts`)
+- [ ] **The Java WAR shows twice when the OS is unknown** (2b-C made `os: "any"` possible for a def, so the duplicate can go now; one entry for Linux, one for Windows). When the OS is known, the other entry folds as "Wrong OS", which is wrong because a WAR runs on either. Allow `os: "any"` in `types.ts` and `fit.ts`. (`msfvenom.ts`)
 - [ ] **Two hints are unverified:** the WAR's "browse to /rev/" and the dll's `rundll32 rev.dll,<export>`. Also, hta-psh is labelled x64, but mshta may run as 32-bit. (`msfvenom.ts`)
 - [ ] **The ps-b64 parts explain the flags but not the encoded script** (TCPClient, `iex`, the `PS >` prompt). (`reverseShells.ts`)
 - [ ] **The nc-exe part token breaks if FILE is renamed** (for example to `nc64.exe`). The Nishang note "quotes doubled" shows in every context, not only sql-string. (`reverseShells.ts`)
@@ -67,5 +67,16 @@ These are left over from the 2b-B Payloads build (branch `interpreters-payloads`
 
 ## Owner decisions (2026-11-08)
 
-- [ ] **Never run a payload built with a stale LHOST.** A warning on logged payloads isn't enough. Raven should remember every copy of a payload that bakes in LHOST/LPORT (rev.ps1, msfvenom files), not only ⌘↵ copy-and-log. Once LHOST or LPORT changes, it should stop you using the old build until it's rebuilt, instead of only showing a warning line. (`memory.ts` `staleBaked`, `usePayloadSession.tsx`, the copy guard)
-- [ ] **No payload is banned on the exam.** Only some tools are banned or restricted. Remove the "Not allowed in the exam" payload fold and its meterpreter/staged check, and handle exam limits at the tool level, as the existing Metasploit lock does. (`fit.ts`, `msfvenom.ts` notes, the spec's "exam rules" lines)
+- [x] **Never run a payload built with a stale LHOST.** Done in 2b-C: the build is remembered and the block opens with an amber "Rebuild first" line. A warning on logged payloads isn't enough. Raven should remember every copy of a payload that bakes in LHOST/LPORT (rev.ps1, msfvenom files), not only ⌘↵ copy-and-log. Once LHOST or LPORT changes, it should stop you using the old build until it's rebuilt, instead of only showing a warning line. (`memory.ts` `staleBaked`, `usePayloadSession.tsx`, the copy guard)
+- [x] **No payload is banned on the exam.** Done in 2b-C: exam limits live at the tool level (the Meterpreter lock line). Only some tools are banned or restricted. Remove the "Not allowed in the exam" payload fold and its meterpreter/staged check, and handle exam limits at the tool level, as the existing Metasploit lock does. (`fit.ts`, `msfvenom.ts` notes, the spec's "exam rules" lines)
+
+## Found in 2b-C (payloads breadth, 2026-11-09)
+
+- [ ] **The CommandList multi-block Transfer test picks blocks by position,** so adding a block silently changes what it checks. Pick them by name.
+- [ ] **Listener placeholders (`TARGET_IP`, `BIND_PORT`) are not reported as unresolved.** A bind-shell listener with no host IP copies with the placeholder in it and no warning.
+- [ ] **The Filter chip shows on msfvenom in injection contexts,** though msfvenom never takes a filter. Show it only for Shell.
+- [ ] **The "Listener" chip label under "Connect from Kali" reads oddly.** Rename it for bind shells.
+- [ ] **Tools inferred from the log can be overridden but not cleared.** Add a way back to "from your log".
+- [ ] **`listKey` uses `JSON.stringify(tools)`,** which depends on key order. Sort the entries first.
+- [ ] **`fakeApi` `payloadBuildRecord` lacks the empty-`payloadId` check** the real command has, so the audit backend accepts a record the app would refuse.
+- [ ] **The WAR duplicate can now use `os: "any"`.** Merge the Linux and Windows WAR entries into one (see the Java WAR item above).

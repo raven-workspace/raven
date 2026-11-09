@@ -3,7 +3,7 @@ import type { LogEntry } from "../../types/log";
 import type { Service } from "../../types/service";
 import { PASTE_CONTEXTS, type PasteContext } from "./context";
 import { failedPayloadIds } from "./memory";
-import type { PayloadDef } from "./types";
+import type { PayloadDef, ToolId } from "./types";
 
 export type DbEngine = "mssql" | "mysql" | "postgres" | "oracle" | "sqlite";
 
@@ -164,43 +164,64 @@ export function inferContext(s: PayloadSituation): PasteContext | null {
   return null;
 }
 
-/** Tool names a def's `requires` id is looked up as in tools.absent, and the wording used in the reason. */
-const REQUIRE_TOOL: Record<string, { lookup: string; label: string } | undefined> = {
-  nc: { lookup: "nc", label: "nc" },
-  "nc-e": { lookup: "nc.exe", label: "nc with -e" },
-  python3: { lookup: "python3", label: "python3" },
-  powershell: { lookup: "powershell", label: "PowerShell" },
-  bash: { lookup: "bash", label: "bash" },
-  php: { lookup: "php", label: "php" },
+export interface Toggles {
+  /** The owner says callbacks can't get out: reverse payloads are marked, binds come first. */
+  callbacksBlocked: boolean;
+  /** The owner's ticks; they win over inferredTools. */
+  tools: Partial<Record<ToolId, "present" | "missing">>;
+}
+
+const NO_TOGGLES: Toggles = { callbacksBlocked: false, tools: {} };
+
+export const TOOL_LABEL: Record<ToolId, string> = {
+  bash: "bash", python3: "python3", perl: "perl", nc: "nc", "nc-e": "nc with -e", socat: "socat",
+  powershell: "PowerShell", curl: "curl", wget: "wget",
 };
 
-const absentTool = (def: PayloadDef, s: PayloadSituation): string | null => {
-  for (const r of def.requires) {
-    const t = REQUIRE_TOOL[r];
-    if (t && s.tools.absent.includes(t.lookup)) return t.label;
+/** The tool name inferSituation sees for a ToolId: nc.exe stands for nc with -e; the rest go by name. */
+const TOOL_NAME: Record<ToolId, string> = {
+  bash: "bash", python3: "python3", perl: "perl", nc: "nc", "nc-e": "nc.exe", socat: "socat",
+  powershell: "powershell", curl: "curl", wget: "wget",
+};
+
+export function inferredTools(s: PayloadSituation): Partial<Record<ToolId, "present" | "missing">> {
+  const out: Partial<Record<ToolId, "present" | "missing">> = {};
+  for (const id of Object.keys(TOOL_NAME) as ToolId[]) {
+    if (s.tools.present.includes(TOOL_NAME[id])) out[id] = "present";
+    else if (s.tools.absent.includes(TOOL_NAME[id])) out[id] = "missing";
   }
-  return null;
-};
+  return out;
+}
 
-const EXAM_BANNED = /meterpreter|\/shell\/reverse_/i;
-/** Only the payload name counts: the msfvenom -p value in the template, or the def id. Never notes or titles. */
-const bannedInExam = (d: PayloadDef) =>
-  EXAM_BANNED.test(d.id) || EXAM_BANNED.test(/-p\s+(\S+)/.exec(d.template)?.[1] ?? "");
+const isTool = (r: string): r is ToolId => r in TOOL_LABEL;
+const isReverse = (d: PayloadDef) => d.shape === undefined;
 
 /**
- * Reason precedence when several apply: Wrong OS, then Doesn't work in <context>, then Needs <tool>,
- * then Failed here before, then Not allowed in the exam. Only the first is shown.
+ * Only a wrong OS or a context the def does not work in folds a payload, in that precedence; only the first is shown.
+ * Toggles, inferred tools and failure memory never fold: they are marks (see marksFor).
  */
 function misfitReason(d: PayloadDef, s: PayloadSituation, ctx: PasteContext | null): string | null {
-  if (s.os && d.os !== s.os) return `Wrong OS (${s.os})`;
+  if (s.os && d.os !== "any" && d.os !== s.os) return `Wrong OS (${s.os})`;
   if (ctx && !d.contexts.includes(ctx)) {
     return `Doesn't work in ${PASTE_CONTEXTS.find((c) => c.id === ctx)?.label ?? ctx}`;
   }
-  const tool = absentTool(d, s);
-  if (tool) return `Needs ${tool}, which isn't on this box`;
-  if (s.failedPayloadIds.includes(d.id)) return "Failed here before";
-  if (s.exam && bannedInExam(d)) return "Not allowed in the exam";
   return null;
+}
+
+/**
+ * Marks, in order: Needs a callback (a reverse payload, only when callbacks are blocked), Needs <tool> for each required
+ * tool that is missing (owner ticks over inference; php from inference only; awk, busybox and served-file never), and
+ * Failed here before. A marked payload sorts down but stays a fit.
+ */
+function marksFor(d: PayloadDef, s: PayloadSituation, toggles: Toggles, tools: Partial<Record<ToolId, "present" | "missing">>): string[] {
+  const out: string[] = [];
+  if (toggles.callbacksBlocked && isReverse(d)) out.push("Needs a callback");
+  for (const r of d.requires) {
+    if (isTool(r) && tools[r] === "missing") out.push(`Needs ${TOOL_LABEL[r]}`);
+    else if (r === "php" && s.tools.absent.includes("php")) out.push("Needs php");
+  }
+  if (s.failedPayloadIds.includes(d.id)) out.push("Failed here before");
+  return out;
 }
 
 /**
@@ -222,18 +243,34 @@ function preferredIds(s: PayloadSituation): Set<string> {
 }
 
 export function rankPayloads(
-  defs: PayloadDef[], s: PayloadSituation, ctx: PasteContext | null,
-): { fits: PayloadDef[]; misfits: { def: PayloadDef; reason: string }[] } {
-  // Catalogue order, with the open services' preferred payload first (a soft key: it never folds anything).
-  // Context and absent-tool keys would be dead: with a context set, every def that lacks it is already a misfit,
-  // and absent-tool defs are misfits too, so all remaining fits tie.
+  defs: PayloadDef[], s: PayloadSituation, ctx: PasteContext | null, toggles: Toggles = NO_TOGGLES,
+): { fits: PayloadDef[]; marks: Record<string, string[]>; misfits: { def: PayloadDef; reason: string }[] } {
+  // Order: with callbacks blocked, binds first; then unmarked defs, the open services' preferred payload first (a soft
+  // key: it never folds anything); then marked defs. Catalogue order within each group.
+  const tools = { ...inferredTools(s) };
+  for (const [k, v] of Object.entries(toggles.tools) as [ToolId, "present" | "missing" | undefined][]) if (v) tools[k] = v;
   const fits: PayloadDef[] = [];
+  const marks: Record<string, string[]> = {};
   const misfits: { def: PayloadDef; reason: string }[] = [];
   for (const def of defs) {
     const reason = misfitReason(def, s, ctx);
-    if (reason) misfits.push({ def, reason });
-    else fits.push(def);
+    if (reason) { misfits.push({ def, reason }); continue; }
+    fits.push(def);
+    const m = marksFor(def, s, toggles, tools);
+    if (m.length > 0) marks[def.id] = m;
   }
   const preferred = preferredIds(s);
-  return { fits: [...fits.filter((d) => preferred.has(d.id)), ...fits.filter((d) => !preferred.has(d.id))], misfits };
+  const bindFirst = (d: PayloadDef) => toggles.callbacksBlocked && d.shape === "bind";
+  // Marked defs keep catalogue order: the service preference only lifts unmarked ones.
+  const rank = (d: PayloadDef) => (bindFirst(d) ? 0 : 1) * 4 + (marks[d.id] ? 2 : preferred.has(d.id) ? 0 : 1);
+  // Array.prototype.sort is stable, so ties keep catalogue order.
+  return { fits: [...fits].sort((a, b) => rank(a) - rank(b)), marks, misfits };
+}
+
+/** A hint when two or more reverse payloads in `defs` already failed on this host: maybe callbacks can't get out. */
+export function callbackClue(s: PayloadSituation, defs: PayloadDef[]): string | null {
+  const reverse = new Set(defs.filter(isReverse).map((d) => d.id));
+  const n = new Set(s.failedPayloadIds.filter((id) => reverse.has(id))).size;
+  if (n < 2) return null;
+  return n === 2 ? "Callbacks failed here twice" : `Callbacks failed here ${n} times`;
 }

@@ -6,7 +6,7 @@ export const ENCODE_PS_DEF: PayloadDef = {
   contexts: ["cmd", "powershell"], requires: ["powershell"],
   template: "powershell -nop -w hidden -e {B64}",
   parts: [],
-  listener: "none",
+  listeners: [],
 };
 
 const PARTS: PayloadPart[] = [
@@ -23,6 +23,9 @@ export function encodePs(command: string): BuiltPayload {
     def: ENCODE_PS_DEF,
     text: `powershell -nop -w hidden -e ${utf16leBase64(command)}`,
     listener: null,
+    listenerId: null,
+    listenerHeading: "Listener",
+    trigger: null,
     parts: PARTS,
     notes: [`Decodes to: ${command}`],
     unresolved: [],

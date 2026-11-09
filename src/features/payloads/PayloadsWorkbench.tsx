@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { PASTE_CONTEXTS } from "../../engines/payloads/context";
+import { filterChoices } from "../../engines/payloads/filters";
 import { cx } from "../../lib/cx";
 import { isDialogOpen, isTypingTarget, useKeydown } from "../../lib/keys";
 import { HintLine, Input, Kbd, labelClass, Toggle } from "../../ui";
@@ -10,7 +11,8 @@ import { useFillScope } from "../arsenal/useFillScope";
 import { PayloadBlock, PayloadView } from "./PayloadView";
 import { SqlPanel } from "./SqlPanel";
 import { TransferPanel } from "./TransferPanel";
-import { OS_LABEL } from "./usePayloadFit";
+import { ToolsPicker } from "./ToolsPicker";
+import { FILTER_LABEL, hasToggles, OS_LABEL, showsFilter } from "./usePayloadFit";
 import { GENERATOR_LIST_ID, GENERATORS, hintsFor, inGeneratorList, isGenerator, lhostPlaceholder, otherDrawerOpen, usePayloadSession } from "./usePayloadSession";
 import { usePayloadsStore, type PayloadOverride } from "./usePayloadsStore";
 
@@ -35,14 +37,21 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
   const bodyRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const s = usePayloadSession({ engagementId, hostId: scopeHostId, bodyRef, lhostField: false });
-  const { generator, fit, ranked, index, setIndex, def, built, guard, note, hostRef, osRef, contextRef, psRef, fieldEls } = s;
+  const { generator, fit, ranked, index, setIndex, built, guard, note, hostRef, osRef, contextRef, callbacksRef, filterRef, toolsRef, psRef, fieldEls } = s;
   const hints = useMemo(
-    () => hintsFor(generator, "back", [{ keys: "P", label: "generators", priority: 4 }], ranked?.ordered),
-    [generator, ranked?.ordered],
+    () => hintsFor(generator, "back", [{ keys: "P", label: "generators", priority: 4 }], ranked?.ordered, fit.filterApplies),
+    [generator, ranked?.ordered, fit.filterApplies],
   );
   const override = (patch: PayloadOverride) => usePayloadsStore.getState().override(fit.hostKey, patch);
   const contexts = PASTE_CONTEXTS.filter((c) => !fit.os || c.os === "any" || c.os === fit.os);
   const exam = fit.engagement.kind === "exam-sim";
+  const msfHostId = fit.engagement.msfHostId;
+  const msfHost = msfHostId ? (fit.d.hosts?.find((h) => h.id === msfHostId)?.name ?? "another host") : null;
+  const blocked = fit.toggles.callbacksBlocked;
+  /** A callback clue shows only while callbacks read allowed; Raven never flips the toggle. */
+  const clue = blocked ? null : fit.callbackClue;
+  /** Callbacks, Filter and Tools apply to Shell and msfvenom only. */
+  const toggles = hasToggles(generator);
   const register = (t: string) => (el: HTMLInputElement | null) => {
     if (el) fieldEls.current.set(t, el);
     else fieldEls.current.delete(t);
@@ -111,9 +120,38 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
             />
           </label>
         </div>
+        {toggles && (
+          <ReadItem label="Callbacks" why={blocked ? "set by you: binds first" : null}>
+            <div ref={choiceGroup(callbacksRef)} className="grid grid-cols-2 gap-2">
+              <Toggle on={!blocked} onChange={() => override({ callbacksBlocked: false })} className="justify-center">
+                <span className={clue ? "text-warn" : undefined}>Allowed</span>
+              </Toggle>
+              <Toggle on={blocked} onChange={() => override({ callbacksBlocked: true })} className="justify-center">Blocked</Toggle>
+            </div>
+            {clue && <span className="text-meta text-warn">{clue}</span>}
+          </ReadItem>
+        )}
+        {showsFilter(generator, fit.filterApplies) && (
+          <ReadItem label="Filter">
+            <div ref={choiceGroup(filterRef)} className="grid grid-cols-2 gap-2">
+              {filterChoices(fit.os).map((f) => (
+                <Toggle key={f} on={fit.filter === f} onChange={() => override({ filter: f })} className="min-w-0 justify-center">
+                  <span className="min-w-0 truncate">{f === "off" ? "Off" : FILTER_LABEL[f]}</span>
+                </Toggle>
+              ))}
+            </div>
+          </ReadItem>
+        )}
+        {toggles && (
+          <ReadItem label="Tools">
+            <div className="grid justify-start">
+              <ToolsPicker ref={toolsRef} own={fit.toggles.tools} log={fit.logTools} onChange={(tools) => override({ tools })} />
+            </div>
+          </ReadItem>
+        )}
         <ReadItem label="Exam rules">
           <span className={cx("text-meta", exam ? "text-fg-2" : "text-muted")}>
-            No meterpreter; msfvenom offers stageless shell_reverse_tcp only.{exam ? " Enforced: exam sim." : ""}
+            {exam ? `Meterpreter: one machine only. ${msfHost ? `Locked to ${msfHost}.` : "Not locked yet."}` : "No exam limits."}
           </span>
         </ReadItem>
         <div className="grid gap-2 border-t border-line pt-3">
@@ -147,10 +185,8 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
         <div ref={bodyRef} tabIndex={-1} className="min-h-0 overflow-y-auto overflow-x-hidden px-6 py-6 outline-none">
           {ranked && (
             <PayloadView
-              fits={ranked.fits} misfits={ranked.misfits} index={index} onIndex={setIndex} ordered={ranked.ordered}
-              built={built} fitsLine={s.fitsLine ? `Fits: ${s.fitsLine}` : null} pasteLabel={s.pasteLabel} numbered
-              stale={def?.bakesIp ? fit.staleLines.get(def.id) : null} note={note} noteWarn={guard.hint !== null} fields={s.fields}
-              onCopy={() => s.copy(false)} onCopyListener={s.copyListener}
+              fits={ranked.fits} misfits={ranked.misfits} marks={ranked.marks} index={index} onIndex={setIndex} ordered={ranked.ordered}
+              built={built} fitsLine={s.fitsLine ? `Fits: ${s.fitsLine}` : null} numbered {...s.blockProps}
             />
           )}
           {generator === "encode" && (

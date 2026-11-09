@@ -2,7 +2,8 @@ import { sqlQuote, urlEncodeShell } from "./encode";
 
 export type PasteContext =
   | "bash-prompt" | "injected-linux" | "url-param" | "php-system" | "cmd"
-  | "powershell" | "webshell-param" | "sql-string" | "macro";
+  | "powershell" | "webshell-param" | "sql-string" | "macro"
+  | "uploaded-file" | "groovy" | "node" | "java";
 
 type Os = "linux" | "windows";
 
@@ -16,6 +17,10 @@ export const PASTE_CONTEXTS: { id: PasteContext; label: string; os: Os | "any" }
   { id: "webshell-param", label: "Web shell ?cmd=", os: "any" },
   { id: "sql-string", label: "Inside a SQL string", os: "any" },
   { id: "macro", label: "Office macro", os: "windows" },
+  { id: "uploaded-file", label: "Uploaded file", os: "any" },
+  { id: "groovy", label: "Jenkins / Groovy console", os: "any" },
+  { id: "node", label: "Node code", os: "any" },
+  { id: "java", label: "Java code", os: "any" },
 ];
 
 /** Single-quotes for bash -c; an embedded ' becomes '\'' . */
@@ -61,6 +66,10 @@ const WRAPPERS: Record<PasteContext, Wrapper> = {
   cmd: { apply: (c) => c, note: () => "Pasted as-is at cmd.exe." },
   powershell: { apply: (c) => c, note: () => "Pasted as-is at a PowerShell prompt." },
   "sql-string": { apply: sqlQuote, note: () => "Single quotes doubled for a SQL string literal." },
+  "uploaded-file": { apply: (c) => c, note: () => "Saved as a file and uploaded; nothing is wrapped." },
+  groovy: { apply: (c) => c, note: () => "Pasted into the Groovy console as-is." },
+  node: { apply: (c) => c, note: () => "Runs as Node code (RCE or SSTI in a Node template)." },
+  java: { apply: (c) => c, note: () => "Runs as Java (deserialisation or expression-language RCE)." },
   macro: { apply: vbaMacro, note: () => "Office macro: paste into the VBA editor. The command is split into 50-character chunks (VBA lines max ~1023) and run by AutoOpen/Document_Open." },
 };
 

@@ -42,6 +42,7 @@ import type {
   Username,
   UsernameInput,
 } from "../types/credentials";
+import type { PayloadBuild } from "../types/payloadBuild";
 import type { Hop, HopInput, Tunnel, TunnelInput } from "../types/network";
 import type { Host, HostInput, BoardColumn } from "../types/host";
 import type { Engagement, EngagementInput, EngagementStatus } from "../types/engagement";
@@ -202,6 +203,8 @@ export const api = {
   credAttemptsUpsert: (engagementId: string, inputs: CredAttemptInput[]) =>
     call<CredAttempt[]>("cred_attempts_upsert", { engagementId, inputs }),
   credAttemptDelete: (id: string) => call<null>("cred_attempt_delete", { id }),
+  payloadBuildsList: (engagementId: string) => call<PayloadBuild[]>("payload_builds_list", { engagementId }),
+  payloadBuildRecord: (input: PayloadBuild) => call<PayloadBuild>("payload_build_record", { input }),
   triedPairsList: (engagementId: string) => call<TriedPair[]>("tried_pairs_list", { engagementId }),
   triedPairsUpsert: (engagementId: string, inputs: TriedPairInput[]) =>
     call<TriedPair[]>("tried_pairs_upsert", { engagementId, inputs }),
