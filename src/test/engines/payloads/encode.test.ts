@@ -34,6 +34,7 @@ describe("wrapForContext", () => {
     expect(PASTE_CONTEXTS.map((c) => c.label)).toEqual([
       "Bash prompt", "Injected command (Linux)", "URL / form parameter", "PHP system()", "cmd.exe",
       "PowerShell prompt", "Web shell ?cmd=", "Inside a SQL string", "Office macro",
+      "Uploaded file", "Jenkins / Groovy console", "Node code", "Java code",
     ]);
   });
   it("bash-prompt leaves the command unchanged", () => {
