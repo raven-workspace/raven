@@ -88,8 +88,5 @@ export function applyFilter(raw: string, f: Exclude<FilterId, "off">): { text: s
   }
 }
 
-/**
- * URL-encodes filtered text like urlEncodeShell. urlEncodeShell leaves {NAME} raw so a gap stays visible; a filter only
- * runs with nothing unresolved, so the one {…} left is ${IFS}, and its braces are encoded too.
- */
-export const urlEncodeFiltered = (s: string) => urlEncodeShell(s).replace(/\{IFS\}/g, "%7BIFS%7D");
+/** URL-encodes filtered text. A filter only runs with nothing unresolved, so every {…} left (${IFS}) is encoded. */
+export const urlEncodeFiltered = (s: string) => urlEncodeShell(s);

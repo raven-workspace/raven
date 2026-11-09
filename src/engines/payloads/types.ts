@@ -6,8 +6,13 @@ export type ToolId = "bash" | "python3" | "perl" | "nc" | "nc-e" | "socat" | "po
 
 export type GeneratorId = "shell" | "transfer" | "sql" | "msfvenom" | "encode" | "upgrade";
 
-/** One line of the "what each part does" list. `token` is the text as it appears in the output. */
-export interface PayloadPart { token: string; explain: string }
+/**
+ * One line of the "what each part does" list. A text part's `token` appears in the built text (or its prepare step, or
+ * the wrapper a context adds, such as `bash -c`); its {NAME} placeholders are filled like the template. A `decoded`
+ * part explains what is inside an encoded blob (the base64 script of `powershell -e`): its token is a label found in the
+ * decoded script, not in the text, so the "token appears in the text" rule applies to text parts only.
+ */
+export interface PayloadPart { token: string; explain: string; decoded?: boolean }
 
 export interface PayloadDef {
   id: string;
@@ -46,6 +51,12 @@ export interface PayloadDef {
   defaults?: Record<string, string>;
   /** Def-specific notes and traps shown with the payload. */
   notes?: string[];
+  /** Notes shown only in the given paste context (after `notes`). */
+  contextNotes?: Partial<Record<PasteContext, string[]>>;
+  /** Where the text is run: "kali" for your own terminal (an upgrade step); absent = the target. msfvenom and upload.kali defs run on Kali regardless. */
+  runsOn?: "target" | "kali";
+  /** The template is a key to press (Ctrl-Z), not text: it has no Copy, ↵ does not copy it, and ⇥ skips past it. */
+  keypress?: boolean;
 }
 
 export interface BuiltPayload {

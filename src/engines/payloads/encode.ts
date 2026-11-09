@@ -26,11 +26,16 @@ const SHELL_ENCODED: Record<string, string> = {
 };
 
 /**
- * Encodes only what breaks a shell command inside a URL; `-` and `.` stay raw so the command stays readable.
- * An unresolved `{PLACEHOLDER}` stays as it is, so the gap is still visible and detectable.
+ * Encodes only what breaks a shell command inside a URL; `-` and `.` stay raw so the command stays readable. Line breaks,
+ * tabs, other control characters and non-ASCII are percent-encoded as UTF-8. `keep` names the placeholders still unfilled:
+ * each `{NAME}` among them stays as it is, so the gap is still visible and detectable; any other `{…}` (a custom
+ * command's `${IFS}`) is encoded like any text.
  */
-export function urlEncodeShell(s: string): string {
-  return s.replace(/\{[A-Z][A-Z0-9_]*\}|[ &><|;#'"/%+=?\\[\]{}^`]/g, (c) => SHELL_ENCODED[c] ?? c);
+export function urlEncodeShell(s: string, keep: readonly string[] = []): string {
+  return s.replace(/\{([A-Z][A-Z0-9_]*)\}|[ &><|;#'"/%+=?\\[\]{}^`]|[^\x20-\x7e]/gu, (c, name?: string) => {
+    if (name !== undefined) return keep.includes(name) ? c : `%7B${name}%7D`;
+    return SHELL_ENCODED[c] ?? (/[\uD800-\uDFFF]/.test(c) ? "%EF%BF%BD" : encodeURIComponent(c));
+  });
 }
 
 export function urlEncodeFull(s: string): string {

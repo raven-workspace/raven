@@ -239,7 +239,8 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
    * other than the Metasploit one, with the lock. A build step, or a trigger while nothing is stale, records the build.
    */
   const copy = async (log: boolean): Promise<"copied" | "guarded"> => {
-    if (!built) return "guarded";
+    // A key to press (Ctrl-Z) has nothing to copy or log.
+    if (!built || built.def.keypress) return "guarded";
     setStatus(undefined);
     const b = built;
     const cmd = { id: b.def.id, title: b.def.title, text: b.text, unresolved: b.unresolved, msfMarker: false };
@@ -254,8 +255,8 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
       if (!log || !host || !d.engagement) return "copied";
       await logCommand(qc, {
         engagementId, host, hosts: d.hosts, command: b.text, title: b.def.title,
-        // msfvenom and a file made on Kali run on your own machine; everything else runs on the target.
-        ranOn: b.def.generator === "msfvenom" || b.def.upload?.kali ? (d.settings?.machines[0] ?? "") : host.name,
+        // msfvenom, a file made on Kali and a step run in your own terminal run on your machine; the rest on the target.
+        ranOn: b.def.generator === "msfvenom" || b.def.upload?.kali || b.def.runsOn === "kali" ? (d.settings?.machines[0] ?? "") : host.name,
         payloadId: b.def.id, payloadValues: { LHOST: fit.lhost, LPORT: fit.port },
       });
       return "copied";
@@ -319,10 +320,14 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
       if (t.tagName === "BUTTON" || t.getAttribute("aria-haspopup") === "listbox") return;
       e.preventDefault();
       void copy(e.metaKey || e.ctrlKey);
-    } else if (e.key === "Tab" && !e.shiftKey && ranked && index < ranked.fits.length - 1 && t === bodyRef.current) {
-      // Past the last fit ⇥ is plain Tab again, so focus can leave the body.
+    } else if (e.key === "Tab" && !e.shiftKey && ranked && t === bodyRef.current) {
+      // ⇥ skips past a key to press (Ctrl-Z): there is nothing to copy there. Past the last fit ⇥ is plain Tab again,
+      // so focus can leave the body.
+      let next = index + 1;
+      while (ranked.fits[next]?.keypress) next++;
+      if (next >= ranked.fits.length) return;
       e.preventDefault();
-      setIndex(index + 1);
+      setIndex(next);
     }
   };
 
@@ -333,6 +338,8 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
   const uploadFile = def?.upload ? (extra.FILE?.trim() || def.defaults?.FILE || "{FILE}") : null;
   const pasteLabel = def?.upload
     ? (def.upload.kali ? `Make ${uploadFile} on Kali` : `Save as ${uploadFile}`)
+    // An upgrade step says which side it runs on: inside the caught shell, or your own terminal.
+    : def?.generator === "upgrade" ? (def.keypress ? "Press in your terminal" : def.runsOn === "kali" ? "Run in your terminal" : "Run on the target")
     : pasteContext ? `Paste into ${contextLabel(pasteContext)}` : "";
   const fitsLine = ranked && !ranked.ordered && generator === "shell"
     ? [fit.os && OS_LABEL[fit.os], fit.context && contextLabel(fit.context)].filter(Boolean).join(", ")

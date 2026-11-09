@@ -12,7 +12,8 @@ const pOf = (d: PayloadDef) => /-p\s+(\S+)/.exec(d.template)![1];
 
 describe("MSFVENOM", () => {
   it("every def is a bakesIp msfvenom def with a msfPayload; Meterpreter defs set the lock flag", () => {
-    expect(MSFVENOM.length).toBeGreaterThanOrEqual(14);
+    // 13 since the two per-OS WARs merged into one any-OS def.
+    expect(MSFVENOM.length).toBeGreaterThanOrEqual(13);
     for (const d of MSFVENOM) {
       expect(d.bakesIp).toBe(true);
       expect(d.generator).toBe("msfvenom");

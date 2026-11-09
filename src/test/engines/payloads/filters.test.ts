@@ -65,7 +65,11 @@ describe("buildPayload with a filter", () => {
   it("unresolved placeholders: no filter, the gap stays visible", () => {
     const vals = { LHOST: "", LPORT: "443" };
     const b = buildPayload(def("bash-tcp"), "url-param", vals, { filter: "b64" });
-    expect(b).toEqual(buildPayload(def("bash-tcp"), "url-param", vals));
+    const plain = buildPayload(def("bash-tcp"), "url-param", vals);
+    // Wrapped like the unfiltered payload; the only difference is the note that the filter waits.
+    expect(b.text).toBe(plain.text);
+    expect(b.notes.filter((n) => n !== "Filter applies once LHOST is set.")).toEqual(plain.notes);
+    expect(b.notes).toContain("Filter applies once LHOST is set.");
     expect(b.text).toContain("{LHOST}");
     expect(b.notes.join(" ")).toContain("Set LHOST first");
   });

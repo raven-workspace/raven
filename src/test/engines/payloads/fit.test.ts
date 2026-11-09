@@ -217,7 +217,7 @@ describe("service preference (spec §4.2): a soft sort key, never a fold", () =>
   it("Tomcat puts the WAR first", () => {
     const s = situationFor([svc(22, "ssh", "OpenSSH 8.9p1 Ubuntu 3"), svc(8080, "http", "Apache Tomcat/Coyote JSP engine 1.1")]);
     expect(s.os).toBe("linux");
-    expect(ids(rankPayloads(MSFVENOM, s, null).fits)).toEqual(["msf-java-war-linux", ...ids(MSFVENOM.filter((d) => (d.os === "linux" || d.os === "any") && d.id !== "msf-java-war-linux"))]);
+    expect(ids(rankPayloads(MSFVENOM, s, null).fits)).toEqual(["msf-java-war", ...ids(MSFVENOM.filter((d) => (d.os === "linux" || d.os === "any") && d.id !== "msf-java-war"))]);
   });
 
   it("Apache/PHP leaves msfvenom alone and puts php-exec first among the reverse shells", () => {

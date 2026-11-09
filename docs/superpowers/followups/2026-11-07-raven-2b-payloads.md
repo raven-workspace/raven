@@ -11,18 +11,19 @@ These are left over from the 2b-B Payloads build (branch `interpreters-payloads`
 
 ## Payload content
 
-- [ ] **The Java WAR shows twice when the OS is unknown** (2b-C made `os: "any"` possible for a def, so the duplicate can go now; one entry for Linux, one for Windows). When the OS is known, the other entry folds as "Wrong OS", which is wrong because a WAR runs on either. Allow `os: "any"` in `types.ts` and `fit.ts`. (`msfvenom.ts`)
-- [ ] **Two hints are unverified:** the WAR's "browse to /rev/" and the dll's `rundll32 rev.dll,<export>`. Also, hta-psh is labelled x64, but mshta may run as 32-bit. (`msfvenom.ts`)
-- [ ] **The ps-b64 parts explain the flags but not the encoded script** (TCPClient, `iex`, the `PS >` prompt). (`reverseShells.ts`)
-- [ ] **The nc-exe part token breaks if FILE is renamed** (for example to `nc64.exe`). The Nishang note "quotes doubled" shows in every context, not only sql-string. (`reverseShells.ts`)
-- [ ] **Shell upgrade:**
+- [x] **The Java WAR shows twice when the OS is unknown** (2b-C made `os: "any"` possible for a def, so the duplicate can go now; one entry for Linux, one for Windows). When the OS is known, the other entry folds as "Wrong OS", which is wrong because a WAR runs on either. Allow `os: "any"` in `types.ts` and `fit.ts`. (`msfvenom.ts`) Done (pre-lab batch): one `msf-java-war` with `os: "any"`; failures and builds logged under the old ids still count (`memory.ts`).
+- [x] **Two hints are unverified:** the WAR's "browse to /rev/" and the dll's `rundll32 rev.dll,<export>`. Also, hta-psh is labelled x64, but mshta may run as 32-bit. (`msfvenom.ts`) Done (pre-lab batch): the WAR note browses to FILE's stem (the owner's card confirms the path), the DLL note says any export works (DllMain), and the HTA note names the 64-bit mshta and says to check which one a double-click uses.
+- [x] **The ps-b64 parts explain the flags but not the encoded script** (TCPClient, `iex`, the `PS >` prompt). (`reverseShells.ts`)
+- [x] **The nc-exe part token breaks if FILE is renamed** (for example to `nc64.exe`). The Nishang note "quotes doubled" shows in every context, not only sql-string. (`reverseShells.ts`)
+- [x] **Shell upgrade:**
   - The `export TERM` step isn't labelled as running on the target.
   - `Ctrl-Z` shows as a copyable "payload".
   - Step 3 runs on Kali, but ⌘↵ logs it as run on the target.
   - No test checks that every step has parts, or that `{USER}` is unresolved. (`upgrade.ts`)
-- [ ] **Unresolved payloads show unwrapped.** If you type the IP in by hand, the result is the wrong shape for its context. Wrap them anyway, and keep the stub only for the base64 PowerShell. (`build.ts`)
-- [ ] **URL encoding still leaves newlines and non-ASCII characters raw.** Uppercase `{…}` text in a custom SQL `cmd` (for example `${IFS}`) also stays raw, because placeholders are exempt from encoding. (`encode.ts`)
-- [ ] **The macro wrapper only doubles `"`.** `injected-linux` applies `bash -c` whatever `os` is passed. (`context.ts`)
+- [x] **Unresolved payloads show unwrapped.** If you type the IP in by hand, the result is the wrong shape for its context. Wrap them anyway, and keep the stub only for the base64 PowerShell. (`build.ts`)
+- [x] **URL encoding still leaves newlines and non-ASCII characters raw.** Uppercase `{…}` text in a custom SQL `cmd` (for example `${IFS}`) also stays raw, because placeholders are exempt from encoding. (`encode.ts`)
+- [x] **The macro wrapper only doubles `"`.** `injected-linux` applies `bash -c` whatever `os` is passed. (`context.ts`)
+- [ ] **msfvenom's baked note says "the served script"** ("LHOST and LPORT are baked into the served script"), but an msfvenom def is a file you make and upload. Name the file instead, as the upload.kali note does. (`build.ts`) Found in the pre-lab batch.
 
 ## SQL
 
@@ -79,4 +80,4 @@ These are left over from the 2b-B Payloads build (branch `interpreters-payloads`
 - [ ] **Tools inferred from the log can be overridden but not cleared.** Add a way back to "from your log".
 - [ ] **`listKey` uses `JSON.stringify(tools)`,** which depends on key order. Sort the entries first.
 - [ ] **`fakeApi` `payloadBuildRecord` lacks the empty-`payloadId` check** the real command has, so the audit backend accepts a record the app would refuse.
-- [ ] **The WAR duplicate can now use `os: "any"`.** Merge the Linux and Windows WAR entries into one (see the Java WAR item above).
+- [x] **The WAR duplicate can now use `os: "any"`.** Merge the Linux and Windows WAR entries into one (see the Java WAR item above).

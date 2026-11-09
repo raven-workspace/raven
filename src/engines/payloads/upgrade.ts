@@ -12,7 +12,10 @@ function step(
   };
 }
 
-/** Steps in the order to run them, on a netcat-style shell. */
+/**
+ * Steps in the order to run them, on a netcat-style shell. Each says where it runs: on the target (inside the caught
+ * shell) or in your own terminal on Kali (`runsOn: "kali"`); Ctrl-Z is a key to press, not text to copy.
+ */
 export const UPGRADE: PayloadDef[] = [
   step("upgrade-1-pty-python", "1. Spawn a PTY (python3)", `python3 -c 'import pty; pty.spawn("/bin/bash")'`, "pty.spawn",
     "Wraps bash in a pseudo-terminal, which gives you a prompt, job control and working su/sudo. Try python if python3 is missing.",
@@ -21,10 +24,10 @@ export const UPGRADE: PayloadDef[] = [
     "-q: quiet; -c: run bash as the command; /dev/null: throw the typescript away. An alternative to python when it is absent.",
     {}, [PENELOPE]),
   step("upgrade-2-background", "2. Background the shell", "Ctrl-Z", "Ctrl-Z",
-    "Suspends the netcat session and drops you at your own terminal. A keypress, not a command.", { requires: [] }),
+    "Suspends the netcat session and drops you at your own terminal. A keypress, not a command.", { runsOn: "kali", keypress: true }),
   step("upgrade-3-raw", "3. Raw terminal, foreground", "stty raw -echo; fg", "stty raw -echo",
     "Passes your keystrokes straight through (Tab, arrows, Ctrl-C reach the target) and stops local echo. fg brings the shell back. Press Enter twice if nothing shows.",
-    {}, ["Run this in YOUR terminal, not the target's."]),
+    { runsOn: "kali" }, ["Run this in YOUR terminal, not the target's, right after Ctrl-Z."]),
   step("upgrade-4-term", "4. Set TERM", "export TERM=xterm-256color", "TERM=xterm-256color",
     "Tells programs such as clear, nano and less what the terminal can do."),
   step("upgrade-5-size", "5. Match the window size", "stty rows {ROWS} cols {COLS}", "stty rows {ROWS} cols {COLS}",
