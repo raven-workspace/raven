@@ -335,7 +335,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
 
   /** What PayloadView and PayloadBlock take from the session for the payload in view (the drawer and the Workbench). */
   const blockProps = {
-    pasteLabel, fields, note, noteWarn: guard.hint !== null && !guard.hint.startsWith(CHECKING_BUILD), prepareNote: noteFor(prepareCmd), triggerNote: noteFor(triggerCmd),
+    pasteLabel, pasteFile: uploadFile, fields, note, noteWarn: guard.hint !== null && !guard.hint.startsWith(CHECKING_BUILD), prepareNote: noteFor(prepareCmd), triggerNote: noteFor(triggerCmd),
     stale: stale ? `Rebuild first: built with ${stale.was}, now ${stale.now}` : null, buildStep, lock,
     onCopy: () => copy(false), onCopyPrepare: copyPrepare, onCopyTrigger: copyTrigger, onCopyListener: copyListener, onPickListener: pickListener,
   };

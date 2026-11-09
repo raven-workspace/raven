@@ -20,10 +20,12 @@ const Note = ({ text, warn }: { text?: string | null; warn?: boolean }) =>
  * Shared by every generator that builds a payload.
  */
 export function PayloadBlock({
-  built, pasteLabel, stale, buildStep, lock, note, prepareNote, triggerNote, noteWarn, fields, numbered,
+  built, pasteLabel, pasteFile, stale, buildStep, lock, note, prepareNote, triggerNote, noteWarn, fields, numbered,
   onCopy, onCopyPrepare, onCopyTrigger, onCopyListener, onPickListener,
 }: {
   built: BuiltPayload; pasteLabel: string;
+  /** The uploaded file's name inside `pasteLabel`: shown as typed (a Linux name is case-sensitive), not in the label's capitals. */
+  pasteFile?: string | null;
   /** `Rebuild first: built with …, now …`, for a baked payload whose LHOST or LPORT has changed since its last build. */
   stale?: string | null;
   /** Which block builds a baked payload: its prepare step, or the payload itself (msfvenom, a file made on Kali). */
@@ -50,6 +52,13 @@ export function PayloadBlock({
   const first = stale && buildStep && present.includes(buildStep) ? buildStep : null;
   const order = first ? [first, ...present.filter((p) => p !== first)] : present;
   const heading = (step: Step, label: string) => (numbered ? `${order.indexOf(step) + 1}. ${label}` : label);
+  /** The paste heading; an uploaded file's name keeps its case (the label style capitalises everything else). */
+  const payloadHeading = () => {
+    const at = pasteFile ? pasteLabel.indexOf(pasteFile) : -1;
+    if (!pasteFile || at < 0) return heading("payload", pasteLabel);
+    const head = heading("payload", pasteLabel.slice(0, at));
+    return <>{head}<code data-upload-file="" className="font-mono normal-case">{pasteFile}</code>{pasteLabel.slice(at + pasteFile.length)}</>;
+  };
   const staleLine = (step: Step) => first === step && <p className="m-0 text-meta text-warn">{stale}</p>;
 
   const listeners = built.def.listeners;
@@ -86,7 +95,7 @@ export function PayloadBlock({
       <section key="payload" className="grid gap-2">
         {staleLine("payload")}
         {lock && <p className={`m-0 text-meta ${lock.breach ? "text-warn" : "text-muted"}`}>{lock.text}</p>}
-        <h3 className={`${labelClass} m-0`}>{heading("payload", pasteLabel)}</h3>
+        <h3 className={`${labelClass} m-0`}>{payloadHeading()}</h3>
         <CommandBlock text={built.text} name="Payload" copyLabel="Copy payload" onCopyAction={onCopy} placeholders />
         <Note text={note} warn={noteWarn} />
       </section>

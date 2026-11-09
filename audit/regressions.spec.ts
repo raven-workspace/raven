@@ -793,6 +793,19 @@ test("a payload that failed here stays a fit, marked, and sorts below the unmark
   expect(names.slice(firstMarked).every((t) => t.includes("Failed here before") || /Needs /.test(t)), "marked fits sort below the unmarked").toBe(true);
 });
 
+test("an uploaded file's name keeps its case in the heading (no text-transform)", async ({ page }) => {
+  for (const width of PAYLOADS_WIDTHS) {
+    const aside = await openIisDrawer(page, width);
+    await aside.getByRole("button", { name: /^Paste into: / }).click();
+    await page.getByRole("option", { name: /^Uploaded file/ }).click();
+    const file = aside.locator("h3 [data-upload-file]");
+    await expect(file).toHaveText("shell.php");
+    expect(await file.evaluate((el) => getComputedStyle(el).textTransform), `file name text-transform at ${width}`).toBe("none");
+    // The words around it are still the label style.
+    expect(await file.evaluate((el) => getComputedStyle(el.parentElement!).textTransform)).toBe("uppercase");
+  }
+});
+
 // Board: lanes share their header row, so every lane's first card starts on one line (DESIGN.md Layout rule 5).
 
 test("board: first cards share a top line at 900/1100/1280/1440", async ({ page }) => {

