@@ -86,6 +86,18 @@ describe("sidebar", () => {
     expect(within(tip).getByText("10.10.20.15")).toHaveClass("font-mono");
   });
 
+  it("the collapsed rail keeps the open-thread dot on a host with threads", async () => {
+    useSidebarStore.setState({ collapsed: true });
+    m.notesList.mockResolvedValue([
+      { ownerId: "h2", engagementId: "e1", hostId: "h2", body: "? is 445 reachable\n? other", private: false, updatedAt: 1 },
+    ]);
+    mount();
+    const link = (await screen.findByText("dc01", { selector: "span.sr-only" })).closest("a")!;
+    expect(await within(link).findByRole("img", { name: "2 open threads" })).toBeInTheDocument();
+    const other = screen.getByText("web").closest("a")!;
+    expect(within(other).queryByRole("img", { name: /open thread/ })).toBeNull();
+  });
+
   it("a rail host with no name shows its IP alone in the tooltip", async () => {
     useSidebarStore.setState({ collapsed: true });
     m.hostsList.mockResolvedValue([host("h3", "", "192.0.2.77")]);
@@ -220,6 +232,23 @@ describe("sidebar", () => {
   });
 });
 
+describe("sidebar shortcut under a dialog", () => {
+  it("Cmd+B does nothing while a dialog is open", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByText("dc01");
+    const dlg = document.createElement("div");
+    dlg.setAttribute("role", "dialog");
+    document.body.appendChild(dlg);
+    try {
+      await user.keyboard("{Meta>}b{/Meta}");
+      expect(screen.getByRole("button", { name: /sidebar/i })).toHaveAttribute("aria-expanded", "true");
+    } finally {
+      dlg.remove();
+    }
+  });
+});
+
 describe("log row chip", () => {
   const e: LogEntry = {
     id: "x", engagementId: "e1", kind: "note", title: "t", titleEdited: false, ranOn: null, hostIds: ["h1"], observations: null,
@@ -235,6 +264,14 @@ describe("log row chip", () => {
   it("shows a short chip for other hosts", () => {
     renderRow(<LogEntryRow entry={e} hosts={hosts} />);
     expect(screen.getByText("web-portal-dmz-frontend-01")).toBeInTheDocument();
+  });
+  it("caps the host chips at two and folds the rest into +N", () => {
+    const many = ["h1", "h2", "h3", "h4", "h5"].map((id, i) => host(id, `box${i}`, null));
+    renderRow(<LogEntryRow entry={{ ...e, hostIds: many.map((h) => h.id) }} hosts={many} />);
+    expect(screen.getByText("box0")).toBeInTheDocument();
+    expect(screen.getByText("box1")).toBeInTheDocument();
+    expect(screen.queryByText("box2")).not.toBeInTheDocument();
+    expect(screen.getByText("+3")).toHaveAttribute("title", "box2, box3, box4");
   });
   it("pick mode's caret is an icon button whose tooltip shows on keyboard focus", async () => {
     const user = userEvent.setup();
