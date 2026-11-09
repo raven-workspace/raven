@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ChipSet, Chip, CommandBlock } from "../../ui";
 import { copyPlain, copySecret } from "../../lib/clipboard";
 import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
@@ -48,11 +49,16 @@ export function CommandList({ commands, hostName = null, focusToken = noToken, f
   /** What the hint tells the user to press for the second try. */
   repeatKey?: string;
 }) {
+  // Always called (hooks rule), even when a shared guard replaces it.
   const own = useCopyGuard({ focusToken, focusCred, hostName, ...(repeatKey ? { repeatKey } : {}) });
   const guard = shared ?? own;
+  // With one guard over several blocks, its status shows on the block last pressed (the first until one is).
+  const [pressed, setPressed] = useState<string | null>(null);
+  const statusId = guardAs ? (commands.some((x) => x.id === pressed) ? pressed : commands[0]?.id) : null;
 
   const copy = (c: FilledCommand, button: HTMLElement) => {
     // A filled command carries a real credential: that copy is a secret.
+    setPressed(c.id);
     const write = c.copyText !== undefined && c.copyText !== c.text ? copySecret : copyPlain;
     return guard.attempt(guardAs ?? c, () => write(c.copyText ?? c.text)).then((r) => {
       // Held back with no field or chip to take focus here: the Copy button keeps it, so Enter is the second press.
@@ -68,7 +74,7 @@ export function CommandList({ commands, hostName = null, focusToken = noToken, f
         <li key={c.id} className="grid gap-1">
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2">
             <span data-testid="command-desc" className={strongTitles ? "text-body font-medium text-fg" : "text-meta text-muted-2"}>{c.title}</span>
-            {guard.forKey === copyKey(guardAs ?? c) && (guard.hint || guard.confirm) && (
+            {guard.forKey === copyKey(guardAs ?? c) && (!guardAs || statusId === c.id) && (guard.hint || guard.confirm) && (
               <span role="status" className={`text-meta ${guard.hint || c.unresolved.length > 0 ? "text-warn" : "text-accent"}`}>
                 {guard.hint ?? guard.confirm}
               </span>

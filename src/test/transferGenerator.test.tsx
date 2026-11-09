@@ -249,6 +249,35 @@ describe("Transfer a file in Payloads: context and copy guard", () => {
   });
 });
 
+describe("Transfer a file: several target blocks share one guard", () => {
+  it("the status shows once, on the pressed block; Copy on another block copies (one arm for the half)", async () => {
+    usePayloadsStore.setState({ overrides: { ms02: { os: "linux" } }, lhost: null });
+    m.settingsGet.mockResolvedValue({
+      autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "4444", kaliUser: "kali",
+      windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false,
+    });
+    const user = userEvent.setup();
+    mount("/payloads?generator=transfer");
+    const g = within(await generator());
+    await user.type(g.getByRole("combobox", { name: "Value for FILE" }), "linpeas.sh");
+    const copies = await vi.waitFor(() => {
+      const c = g.getAllByRole("button", { name: /^Copy command/ });
+      expect(c.length).toBeGreaterThanOrEqual(3);
+      return c;
+    });
+    const targetCopies = copies.slice(-2);
+    await navigator.clipboard.writeText("untouched");
+    await user.click(targetCopies[1]!);
+    expect(await g.findAllByText(/^\{LHOST\} not filled/)).toHaveLength(1);
+    expect(targetCopies[1]!.closest("li")).toHaveTextContent("not filled");
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    await user.click(targetCopies[0]!);
+    await vi.waitFor(async () => expect(await navigator.clipboard.readText()).not.toBe("untouched"));
+    expect(g.getAllByText(/^Copied for MS02/)).toHaveLength(1);
+    expect(targetCopies[0]!.closest("li")).toHaveTextContent("Copied for MS02");
+  });
+});
+
 describe("Transfer a file: layout", () => {
   it("has no host control of its own: the Workbench chip is the one source", async () => {
     mount("/payloads?generator=transfer");

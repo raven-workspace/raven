@@ -43,7 +43,9 @@ export function useCopyGuard({ focusToken, focusCred, hostName, repeatKey = "↵
       cmd: FilledCommand, doCopy: () => Promise<void>, opts?: { warn?: string; warnKey?: string },
     ): Promise<"copied" | "guarded"> => {
       const key = copyKey(cmd);
-      const r = guardCopy(cmd, armed.current);
+      // A warning arm (`key|warnKey`) also means the unresolved step was already passed.
+      const a = armed.current;
+      const r = guardCopy(cmd, a && a.key.startsWith(`${key}|`) ? { id: a.id, key } : a);
       clearTimeout(timer.current);
       if (r.action === "focus") {
         armed.current = { id: cmd.id, key };

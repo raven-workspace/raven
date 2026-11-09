@@ -136,6 +136,17 @@ describe("useCopyGuard", () => {
     expect(await act(() => result.current.attempt(filled([]), doCopy, opts))).toBe("copied");
     expect(doCopy).toHaveBeenCalledTimes(1);
   });
+  it("with an unresolved token and a warning: not filled first, then the warning, then the copy", async () => {
+    const { result } = setup();
+    const doCopy = vi.fn(async () => {});
+    const opts = { warn: "Metasploit is locked to dc01" };
+    expect(await act(() => result.current.attempt(filled(["LHOST"]), doCopy, opts))).toBe("guarded");
+    expect(result.current.hint).toBe("{LHOST} not filled. Press ↵ again to copy anyway");
+    expect(await act(() => result.current.attempt(filled(["LHOST"]), doCopy, opts))).toBe("guarded");
+    expect(result.current.hint).toBe("Metasploit is locked to dc01. Press ↵ again to copy anyway");
+    expect(await act(() => result.current.attempt(filled(["LHOST"]), doCopy, opts))).toBe("copied");
+    expect(doCopy).toHaveBeenCalledTimes(1);
+  });
   it("a different warnKey re-arms", async () => {
     const { result } = setup();
     const doCopy = vi.fn(async () => {});
