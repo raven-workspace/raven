@@ -110,7 +110,22 @@ describe("host view", () => {
     expect(screen.getByRole("tab", { name: "Next" })).toHaveAttribute("aria-selected", "true");
   });
 
-  it("⌥2 does nothing while typing in a field", async () => {
+  it("⌥2 does nothing while typing in a field outside a dialog", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByRole("tab", { name: "Next" });
+    const field = document.createElement("input");
+    document.body.appendChild(field);
+    try {
+      field.focus();
+      await user.keyboard("{Alt>}2{/Alt}");
+      expect(screen.getByRole("tab", { name: "Next" })).toHaveAttribute("aria-selected", "true");
+    } finally {
+      field.remove();
+    }
+  });
+
+  it("⌥2 does nothing while a dialog is open", async () => {
     const user = userEvent.setup();
     mount();
     await screen.findByRole("tab", { name: "Next" });

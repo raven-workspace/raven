@@ -77,6 +77,13 @@ describe("serviceIdentity / effectiveVerdict", () => {
     const s = svc({ nmapService: "http", nmapVersion: "Apache", confirmedProduct: "nginx", confirmedVersion: "1.18" });
     expect(serviceIdentity(s)).toEqual({ label: "nginx 1.18", confirmed: true, unidentified: false });
   });
+  it("an unconfirmed version still labels from nmap and is not confirmed", () => {
+    const s = svc({ nmapService: "http", nmapVersion: "Apache httpd 2.4.49", confirmedProduct: null, confirmedVersion: null });
+    expect(serviceIdentity(s)).toMatchObject({ confirmed: false, unidentified: false });
+    expect(serviceIdentity(s).label).toContain("Apache");
+    const noVersion = svc({ nmapService: "http", confirmedProduct: "nginx", confirmedVersion: null });
+    expect(serviceIdentity(noVersion)).toEqual({ label: "nginx", confirmed: true, unidentified: false });
+  });
   it("flags unidentified services", () => {
     for (const n of [null, "unknown", "tcpwrapped?"]) {
       expect(serviceIdentity(svc({ nmapService: n })).unidentified).toBe(true);
@@ -139,6 +146,16 @@ describe("parseIdentity", () => {
   it("id", () => {
     const r = parseIdentity("id", "uid=1001(tom) gid=1001(tom) groups=1001(tom),27(sudo),999(docker)\n");
     expect(r).toEqual({ username: "tom", privileges: [], groups: ["tom", "sudo", "docker"] });
+  });
+  it("id -a reads like id; sudo id is the root identity, not the user's, so it is not read", () => {
+    const out = "uid=1001(tom) gid=1001(tom) groups=1001(tom),27(sudo)\n";
+    expect(parseIdentity("id -a", out)).toEqual({ username: "tom", privileges: [], groups: ["tom", "sudo"] });
+    expect(parseIdentity("id -a; hostname", out + "web01")?.username).toBe("tom");
+    expect(parseIdentity("sudo id", "uid=0(root) gid=0(root) groups=0(root)\n")).toBeNull();
+  });
+  it("whoami /groups reads a CRLF table", () => {
+    const crlf = GROUPS_TABLE.replace(/\r?\n/g, "\r\n");
+    expect(parseIdentity("whoami /groups", crlf)?.groups).toEqual(["Everyone", "BUILTIN\\Users"]);
   });
   it("returns null for other commands", () => {
     expect(parseIdentity("ls -la", "total 0\ndrwxr-xr-x 2 tom tom 40 .")).toBeNull();

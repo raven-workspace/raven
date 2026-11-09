@@ -64,7 +64,9 @@ const LEADING_PROMPT = /^(?:\*Evil-WinRM\* PS [^>]*>|PS [^>]*>|[A-Za-z]:\\[^>]*>
 
 /** The command with any leading target-side prompt removed, whitespace collapsed and lowercased. */
 function normalizeCommand(command: string): string {
-  return command.trim().replace(LEADING_PROMPT, "").trim().replace(/\s+/g, " ").toLowerCase();
+  const c = command.trim().replace(LEADING_PROMPT, "").trim().replace(/\s+/g, " ").toLowerCase();
+  // `id -a` prints what `id` does (the flag is legacy), so it reads the same.
+  return c.replace(/^id -a(?=$|\s*[;&])/, "id");
 }
 
 /**
