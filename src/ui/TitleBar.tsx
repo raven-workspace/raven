@@ -14,8 +14,8 @@ export interface TitleBarProps {
   /** Right-aligned controls. Interactive children opt out of dragging automatically. */
   right?: ReactNode;
   /**
-   * Screens whose page content is a centred, max-width column: the bar's inner track follows that column
-   * (wordmark at its left edge, controls at its right edge). `inset` is the column's own side padding.
+   * Screens whose page content is a centred, max-width column: the wordmark follows that column's left edge; the
+   * controls stay at the window's right edge. `inset` is the column's own side padding.
    */
   column?: PageColumn;
   className?: string;
@@ -23,7 +23,7 @@ export interface TitleBarProps {
 
 /**
  * The 38px window chrome. The bar is the drag region (`data-tauri-drag-region`);
- * The right inset (pr-6) equals the content column's px-6, so the controls end where page actions end.
+ * The right inset is pr-6: the controls sit at the window's right edge on every screen.
  * 78px on the left are left clear for the macOS traffic lights (titleBarStyle Overlay): a window-chrome
  * constant, not a spacing step, allowed by name in the conventions test (SPACING_ALLOWED).
  */
@@ -35,8 +35,9 @@ export function TitleBar({ left, title, right, column, className }: TitleBarProp
       style={column ? ({ "--col-max": `${column.max}px`, "--col-inset": `${column.inset}px` } as CSSProperties) : undefined}
       className={cx(
         "grid h-[38px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-line text-meta text-muted-2 select-none",
+        // The controls always sit at the window's right edge (owner, 2026-11-09); only the wordmark follows the column.
         column
-          ? "pl-[max(78px,calc((100%_-_var(--col-max))/2_+_var(--col-inset)))] pr-[max(var(--col-inset),calc((100%_-_var(--col-max))/2_+_var(--col-inset)))]"
+          ? "pl-[max(78px,calc((100%_-_var(--col-max))/2_+_var(--col-inset)))] pr-6"
           : "pl-[78px] pr-6",
         className,
       )}
