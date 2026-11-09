@@ -14,14 +14,14 @@ import { isDialogOpen, isTypingTarget } from "../../lib/keys";
 import type { CredAttempt, Credential, Username } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
-import { Button, Chip, IconButton, labelClass } from "../../ui";
+import { Button, Chip, Dialog, IconButton, labelClass } from "../../ui";
 import { ScrollArea } from "../../ui/shadcn/scroll-area";
 import { Separator } from "../../ui/shadcn/separator";
-import { hostLabel } from "./AccessGrants";
-import { ConvertDialog } from "./CredentialsSection";
+import { AccessFields, EMPTY_ACCESS, hostLabel, type AccessDraft } from "./AccessGrants";
 import { DockWork } from "./DockWork";
 import { StateChip } from "./InventoryList";
 import { MaskedSecret } from "./MaskedSecret";
+import { useCredentialMutations } from "./queries";
 import { dockTabs } from "./selection";
 
 interface Props {
@@ -29,6 +29,8 @@ interface Props {
   cred: Credential;
   /** The raw credential list, for matched users. */
   all: Credential[];
+  /** The credentials as listed (cracked hashes folded), for the username spray. */
+  creds: Credential[];
   hosts: Host[];
   servicesByHost: Map<string, Service[]>;
   attempts: CredAttempt[];
@@ -67,7 +69,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
-export function CredentialDock({ eid, cred, all, hosts, servicesByHost, attempts, usernames, folded, onFold, onEdit, onDelete, onCracked }: Props) {
+export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, attempts, usernames, folded, onFold, onEdit, onDelete, onCracked }: Props) {
   const [converting, setConverting] = useState(false);
   const label = credLabel(cred);
   const name = credName(cred);
@@ -166,7 +168,7 @@ export function CredentialDock({ eid, cred, all, hosts, servicesByHost, attempts
                       servicesByHost={servicesByHost}
                       attempts={attempts}
                       usernames={usernames}
-                      creds={all}
+                      creds={creds}
                       onCracked={onCracked}
                     />
                   </div>
@@ -178,5 +180,42 @@ export function CredentialDock({ eid, cred, all, hosts, servicesByHost, attempts
       )}
       {converting && <ConvertDialog eid={eid} cred={cred} hosts={hosts} onClose={() => setConverting(false)} />}
     </section>
+  );
+}
+
+/** A placeholder secret has nothing to try: keep the username and record the access instead. */
+export function ConvertDialog({ eid, cred, hosts, onClose }: { eid: string; cred: Credential; hosts: Host[]; onClose: () => void }) {
+  const { convert } = useCredentialMutations(eid);
+  const [draft, setDraft] = useState<AccessDraft>(EMPTY_ACCESS);
+  const [errors, setErrors] = useState<{ hostId?: string; via?: string; form?: string }>({});
+  const save = () => {
+    const errs = {
+      ...(draft.hostId === "" ? { hostId: "Choose a host" } : {}),
+      ...(draft.via.trim() === "" ? { via: "Say how access was gained" } : {}),
+    };
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+    convert.mutate(
+      { credId: cred.id, grant: { hostId: draft.hostId, level: draft.level, via: draft.via.trim() } },
+      { onSuccess: onClose, onError: (e) => setErrors({ form: e.message }) },
+    );
+  };
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      size="lg"
+      title={`Convert ${credLabel(cred)} to access-only`}
+      description="It has no secret to try. Keep the username and record the access instead."
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={convert.isPending} onClick={save}>Convert</Button>
+        </>
+      }
+    >
+      <AccessFields value={draft} onChange={setDraft} hosts={hosts} errors={errors} />
+      {errors.form && <p role="alert" className="m-0 mt-2 text-meta text-warn">{errors.form}</p>}
+    </Dialog>
   );
 }

@@ -86,7 +86,7 @@ function moveRowFocus(e: React.KeyboardEvent<HTMLElement>) {
   next?.focus();
 }
 
-export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = [], selectedId, onSelect, className = "" }: {
+export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = [], selectedId, onSelect, fill = false, className = "" }: {
   eid: string;
   hosts: Host[];
   creds: Credential[];
@@ -96,6 +96,8 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
   /** With onSelect, credential row headers are buttons and the selected row is marked. */
   selectedId?: string;
   onSelect?: (credId: string) => void;
+  /** Fill the parent's height: the grid box takes what the header and legend leave and scrolls inside itself. */
+  fill?: boolean;
   /** Extra classes on the bordered box; pass a max-h to make the grid scroll vertically under a sticky header. */
   className?: string;
 }) {
@@ -137,10 +139,10 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
   const openHost = open && hosts.find((h) => h.id === open.hostId);
 
   return (
-    <section aria-label="Test matrix" className="grid grid-cols-[minmax(0,1fr)] gap-2">
+    <section aria-label="Test matrix" className={fill ? "grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto_minmax(0,1fr)] gap-2" : "grid grid-cols-[minmax(0,1fr)] gap-2"}>
       {header}
       <Legend />
-      <div className={`relative rounded border border-line ${className}`}>
+      <div className={`relative rounded border border-line ${fill ? "grid max-h-full min-h-0 grid-rows-[minmax(0,1fr)] self-start " : ""}${className}`}>
         <div ref={scroller} onScroll={measure} className="max-h-[inherit] overflow-auto">
         <table aria-label="Test grid" className="min-w-full border-separate border-spacing-0 text-meta">
           <thead className="sticky top-0 z-30 bg-bg">

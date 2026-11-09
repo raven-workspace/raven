@@ -122,10 +122,19 @@ describe("test grid", () => {
   });
 });
 
+/** The routine now lives on the dock's Test tab; the only (or newest testable) credential is docked. */
+async function findRoutine(user: ReturnType<typeof userEvent.setup>) {
+  const dock = await screen.findByRole("region", { name: "Credential" });
+  const tab = within(dock).getByRole("tab", { name: "Test" });
+  if (tab.getAttribute("aria-selected") !== "true") await user.click(tab);
+  return within(dock).getByRole("tabpanel", { name: "Test" });
+}
+
 describe("credential routine", () => {
   it("routine rows that don't apply are dimmed", async () => {
+    const user = userEvent.setup();
     mount({ creds: [PW] });
-    const routine = await screen.findByRole("region", { name: "Credential routine" });
+    const routine = await findRoutine(user);
     const winrm = within(routine).getByRole("listitem", { name: "WinRM" });
     expect(within(winrm).getByText("Doesn't apply")).toBeInTheDocument();
     expect(within(winrm).queryByRole("button", { name: /^Copy/ })).not.toBeInTheDocument();
@@ -135,7 +144,7 @@ describe("credential routine", () => {
   it("routine command copy contains the real secret, display masks it", async () => {
     const user = userEvent.setup();
     mount({ creds: [PW] });
-    const routine = await screen.findByRole("region", { name: "Credential routine" });
+    const routine = await findRoutine(user);
     const smb = within(routine).getByRole("listitem", { name: "SMB" });
     expect(smb).toHaveTextContent("••••••••");
     expect(smb).not.toHaveTextContent("Winter2024!");
@@ -150,7 +159,7 @@ describe("credential routine", () => {
     const user = userEvent.setup();
     const nt = "8846f7eaee8fb117ad06bdd830b7586c";
     mount({ creds: [cred({ id: "c3", type: "hash", username: "padded", domain: "CORP", secret: ` ${nt}\n`, hashType: "NTLM" })] });
-    const routine = await screen.findByRole("region", { name: "Credential routine" });
+    const routine = await findRoutine(user);
     const smb = within(routine).getByRole("listitem", { name: "SMB" });
     expect(smb).toHaveTextContent("-H ••••••••");
     expect(document.body).not.toHaveTextContent(nt);
@@ -159,8 +168,9 @@ describe("credential routine", () => {
   });
 
   it("a secret that is a substring of the username or service only masks the secret", async () => {
+    const user = userEvent.setup();
     mount({ creds: [cred({ id: "c4", username: "jsmith", secret: "smb" })] });
-    const routine = await screen.findByRole("region", { name: "Credential routine" });
+    const routine = await findRoutine(user);
     const smb = within(routine).getByRole("listitem", { name: "SMB" });
     expect(within(smb).getAllByText((_, el) => el?.tagName === "CODE" && el.textContent === "nxc smb 10.10.10.5 -u 'jsmith' -p •••••••• --local-auth | tee nxc-smb-jsmith-local.txt")).toHaveLength(1);
   });
@@ -168,7 +178,7 @@ describe("credential routine", () => {
   it("ticking a routine step sets its checklist item", async () => {
     const user = userEvent.setup();
     mount({ creds: [PW] });
-    const routine = await screen.findByRole("region", { name: "Credential routine" });
+    const routine = await findRoutine(user);
     await user.click(within(routine).getByRole("button", { name: "Done: SMB" }));
     await waitFor(() => expect(m.checklistPut).toHaveBeenCalled());
     expect(m.checklistPut.mock.calls[0][1]).toEqual([

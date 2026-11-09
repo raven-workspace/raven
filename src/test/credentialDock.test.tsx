@@ -61,6 +61,7 @@ function mount(seed: Seed) {
         eid="e1"
         cred={seed.cred}
         all={seed.all ?? [seed.cred]}
+        creds={seed.all ?? [seed.cred]}
         hosts={[H1, H2]}
         servicesByHost={SBH}
         attempts={seed.attempts ?? []}
@@ -170,7 +171,7 @@ describe("credential dock", () => {
     // The list refreshes the credential; the dock then offers Reset.
     rerender(
       <QueryClientProvider client={makeQueryClient()}>
-        <CredentialDock eid="e1" cred={{ ...NT, crackStatus: "uncrackable" }} all={[NT]} hosts={[H1, H2]} servicesByHost={SBH}
+        <CredentialDock eid="e1" cred={{ ...NT, crackStatus: "uncrackable" }} all={[NT]} creds={[NT]} hosts={[H1, H2]} servicesByHost={SBH}
           attempts={[]} usernames={[]} folded={false} onFold={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} onCracked={vi.fn()} />
       </QueryClientProvider>,
     );
@@ -232,7 +233,7 @@ describe("credential dock", () => {
     expect(onFold).toHaveBeenCalledWith(true);
     rerender(
       <QueryClientProvider client={makeQueryClient()}>
-        <CredentialDock eid="e1" cred={PW} all={[PW]} hosts={[H1, H2]} servicesByHost={SBH} attempts={[]} usernames={[]}
+        <CredentialDock eid="e1" cred={PW} all={[PW]} creds={[PW]} hosts={[H1, H2]} servicesByHost={SBH} attempts={[]} usernames={[]}
           folded onFold={onFold} onEdit={vi.fn()} onDelete={vi.fn()} onCracked={vi.fn()} />
       </QueryClientProvider>,
     );

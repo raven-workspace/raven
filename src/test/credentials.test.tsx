@@ -1,7 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
@@ -10,6 +10,7 @@ import { makeQueryClient } from "../lib/queryClient";
 import type { AccessGrant, Credential, CredentialInput, Username } from "../types/credentials";
 import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
+import type { Service } from "../types/service";
 
 vi.mock("../lib/api");
 const m = vi.mocked(api, true);
@@ -44,7 +45,19 @@ function toCred(input: CredentialInput): Credential {
   });
 }
 
-function mount(seed: { creds?: Credential[]; users?: Username[] } = {}) {
+const svc = (id: string, port: number, nmapService: string): Service => ({
+  id, hostId: "h1", port, protocol: "tcp", state: "open", nmapService, nmapVersion: null, confirmedProduct: null,
+  confirmedVersion: null, confirmedEntryId: null, verdict: null, createdAt: 1, updatedAt: 1,
+});
+const SMB = [svc("s1", 445, "microsoft-ds")];
+
+/** The router's search string, so tests can read what the section wrote to the URL. */
+function LocationProbe() {
+  return <output data-testid="location">{useLocation().search}</output>;
+}
+const search = () => new URLSearchParams(screen.getByTestId("location").textContent ?? "");
+
+function mount(seed: { creds?: Credential[]; users?: Username[]; services?: Service[]; url?: string } = {}) {
   creds = seed.creds ?? [];
   users = seed.users ?? [];
   grants = [];
@@ -52,7 +65,7 @@ function mount(seed: { creds?: Credential[]; users?: Username[] } = {}) {
   m.engagementGet.mockResolvedValue(E1);
   m.hostsList.mockResolvedValue([H1]);
   m.checklistList.mockResolvedValue([]);
-  m.servicesListEngagement.mockResolvedValue([]);
+  m.servicesListEngagement.mockResolvedValue(seed.services ?? []);
   m.hopsList.mockResolvedValue([]);
   m.tunnelsList.mockResolvedValue([]);
   m.logList.mockResolvedValue([]);
@@ -91,8 +104,9 @@ function mount(seed: { creds?: Credential[]; users?: Username[] } = {}) {
   });
   return render(
     <QueryClientProvider client={makeQueryClient()}>
-      <MemoryRouter initialEntries={["/e/e1/s/credentials"]}>
+      <MemoryRouter initialEntries={[seed.url ?? "/e/e1/s/credentials"]}>
         <App />
+        <LocationProbe />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -109,9 +123,29 @@ beforeEach(() => {
   m.servicesList.mockResolvedValue([]);
 });
 
+/** The text button; the Plus icon button only shows under 560px of section (both are in jsdom's DOM). */
+const addButton = async () => (await screen.findAllByRole("button", { name: "Add credential" }))[0];
+
 async function openForm(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole("button", { name: "Add credential" }));
+  await user.click(await addButton());
   return await screen.findByRole("dialog");
+}
+
+/** The docked credential. */
+const findDock = () => screen.findByRole("region", { name: "Credential" });
+/** The dock's header row: name, secret and the icon actions. */
+const findDockHeader = async () => within(await findDock()).getByTestId("dock-header");
+
+async function openInventory(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("tab", { name: /^Inventory/ }));
+}
+
+/** Selects a credential by its inventory row (the nth row whose name is `title`) and returns the dock. */
+async function selectInInventory(user: ReturnType<typeof userEvent.setup>, title: string, nth = 0) {
+  await openInventory(user);
+  const rows = (await screen.findAllByTitle(title)).map((e) => e.closest("tr")).filter((r) => r?.hasAttribute("data-cred-row"));
+  await user.click(rows[nth]!);
+  return await findDock();
 }
 
 async function pick(user: ReturnType<typeof userEvent.setup>, label: string, option: string) {
@@ -131,7 +165,7 @@ describe("credentials section", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Couldn't load credentials");
     await user.click(within(alert).getByRole("button", { name: "Retry" }));
-    expect(await screen.findByRole("button", { name: "Add credential" })).toBeInTheDocument();
+    expect(await addButton()).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
@@ -144,8 +178,9 @@ describe("credentials section", () => {
     await user.type(within(dlg).getByLabelText("Secret"), "Winter2024!");
     await user.click(within(dlg).getByRole("button", { name: "Add" }));
 
-    // The test grid and routine picker also name the credential; the list row is the one in a <tr> with a Delete button.
-    const row = (await screen.findAllByText("CORP\\jsmith")).map((e) => e.closest("tr")).find((r) => r?.querySelector("[aria-label^=Delete]"))!;
+    // The new credential is the only one, so it is docked; its secret sits in the dock header.
+    await within(await findDock()).findByTitle("CORP\\jsmith");
+    const row = await findDockHeader();
     expect(m.credentialCreate).toHaveBeenCalledWith("e1", expect.objectContaining({ username: "jsmith", domain: "CORP", secret: "Winter2024!", type: "password" }));
     expect(within(row).getByText("••••••••")).toBeInTheDocument();
     expect(screen.queryByText("Winter2024!")).not.toBeInTheDocument();
@@ -162,7 +197,7 @@ describe("credentials section", () => {
   it("secret mask never wraps and reveal is an eye icon button", async () => {
     const user = userEvent.setup();
     mount({ creds: [cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "Winter2024!" })] });
-    const row = (await screen.findAllByText("CORP\\jsmith")).map((e) => e.closest("tr")).find((r) => r?.querySelector("[aria-label^=Delete]"))!;
+    const row = await findDockHeader();
     const mask = within(row).getByTestId("secret-text");
     expect(mask.textContent).toBe("••••••••");
     expect(mask.className).toMatch(/whitespace-nowrap/);
@@ -174,56 +209,38 @@ describe("credentials section", () => {
     expect(mask.textContent).toBe("Winter2024!");
   });
 
-  it("row actions are icon buttons Copy, Edit, Delete", async () => {
-    mount({ creds: [cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "Winter2024!" })] });
-    const row = (await screen.findAllByText("CORP\\jsmith")).map((e) => e.closest("tr")).find((r) => r?.querySelector("[aria-label^=Delete]"))!;
-    for (const name of ["Copy secret", "Edit CORP\\jsmith", "Delete CORP\\jsmith"]) {
-      const b = within(row).getAllByRole("button").find((x) => x.getAttribute("aria-label")?.startsWith(name))!;
-      expect(b).toBeTruthy();
-      expect(b.textContent).toBe("");
-    }
-  });
-
   it("delete is muted at rest", async () => {
     mount({ creds: [cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "Winter2024!" })] });
-    const del = await screen.findByRole("button", { name: "Delete CORP\\jsmith" });
+    const del = await within(await findDock()).findByRole("button", { name: "Delete CORP\\jsmith" });
     expect(del.className).toMatch(/text-muted/);
     expect(del.className).not.toMatch(/(^|\s)text-warn/);
-  });
-
-  it("scope renders value and host on two lines, not a middot string", async () => {
-    mount({
-      creds: [cred({ id: "c1", username: "admin", scope: "local", localHostId: "h1", secret: "Winter2024!" })],
-    });
-    const row = (await screen.findAllByText("admin")).map((e) => e.closest("tr")).find((r) => r?.querySelector("[aria-label^=Delete]"))!;
-    expect(row.textContent).not.toContain(" · ");
-    expect(within(row).getByText("local")).toBeInTheDocument();
-    expect(within(row).getByText("dc01")).toBeInTheDocument();
   });
 
   it("a 60-character credential name truncates and the actions stay visible", async () => {
     const long = "a".repeat(60);
     mount({ creds: [cred({ id: "c1", username: long, secret: "Winter2024!" })] });
-    const name = (await screen.findAllByText(long)).find((e) => e.closest("tr"))!;
-    expect(name).toHaveAttribute("title", long);
+    const dock = await findDock();
+    const name = within(dock).getByTitle(long);
+    expect(name).toHaveTextContent(long);
     expect(name.className).toMatch(/truncate/);
-    const row = name.closest("tr")!;
-    expect(within(row).getByRole("button", { name: `Delete ${long}` })).toBeVisible();
+    expect(within(dock).getByRole("button", { name: `Delete ${long}` })).toBeVisible();
   });
 
   it("credentials list shows a Machine accounts group", async () => {
+    const user = userEvent.setup();
     mount({
       creds: [
         cred({ id: "c1", username: "DC01$", domain: "CORP", secret: "x9f3kq2m" }),
         cred({ id: "c2", username: "jay", domain: "CORP", secret: "Winter2024!" }),
       ],
     });
-    const group = await screen.findByRole("columnheader", { name: /Machine accounts/ });
-    const rows = screen.getAllByRole("row");
-    const idx = (text: string) => rows.findIndex((r) => r.textContent?.includes(text));
-    expect(idx("CORP\\jay")).toBeGreaterThan(0);
-    expect(idx("CORP\\jay")).toBeLessThan(rows.indexOf(group.closest("tr")!));
-    expect(idx("CORP\\DC01$")).toBeGreaterThan(rows.indexOf(group.closest("tr")!));
+    await openInventory(user);
+    const people = await screen.findByRole("region", { name: "Passwords" });
+    const machines = screen.getByRole("region", { name: "Machine accounts" });
+    expect(within(people).getByTitle("CORP\\jay")).toBeInTheDocument();
+    expect(within(people).queryByTitle("CORP\\DC01$")).not.toBeInTheDocument();
+    expect(within(machines).getByTitle("CORP\\DC01$")).toBeInTheDocument();
+    expect(people.compareDocumentPosition(machines) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("an ownerless secret shows owner unknown", async () => {
@@ -234,13 +251,18 @@ describe("credentials section", () => {
     expect(within(dlg).queryByLabelText("Username")).not.toBeInTheDocument();
     await user.type(within(dlg).getByLabelText("Secret"), "Spring2024!");
     await user.click(within(dlg).getByRole("button", { name: "Add" }));
-    expect(await screen.findByText("owner unknown")).toBeInTheDocument();
+    await findDock();
     expect(m.credentialCreate).toHaveBeenCalledWith("e1", expect.objectContaining({ username: "", secret: "Spring2024!" }));
-    expect(screen.getByText("no user matched yet")).toBeInTheDocument();
+    await openInventory(user);
+    const list = await screen.findByRole("region", { name: "Passwords" });
+    expect(within(list).getByText("owner unknown")).toBeInTheDocument();
+    expect(within(list).getByText("no user matched yet")).toBeInTheDocument();
   });
 
   it("shows matched users for an owner-unknown secret", async () => {
+    const user = userEvent.setup();
     mount({ creds: [cred({ id: "s1", secret: "x1" }), cred({ id: "c1", username: "bob", domain: "CORP", secret: "x1", fromSecretId: "s1" })] });
+    await openInventory(user);
     expect(await screen.findByText("matched: CORP\\bob")).toBeInTheDocument();
   });
 
@@ -292,7 +314,8 @@ describe("credentials section", () => {
     const user = userEvent.setup();
     const hash = "8846f7eaee8fb117ad06bdd830b7586c";
     mount({ creds: [cred({ id: "h", type: "hash", username: "jsmith", domain: "CORP", secret: hash, hashType: "NTLM", crackStatus: "uncracked" })] });
-    const list = await screen.findByRole("region", { name: "Hashes" });
+    // The hash is the only credential, so it is docked on its Crack tab.
+    const list = await findDock();
     expect(within(list).getByText(codeMatching(/hashcat -m 1000/))).toBeInTheDocument();
     expect(within(list).queryByText(new RegExp(hash))).not.toBeInTheDocument();
     // Commands wrap at whitespace only; a long hash scrolls instead of breaking mid-token.
@@ -302,33 +325,38 @@ describe("credentials section", () => {
       expect(block.className).not.toMatch(/break-all/);
       expect(block.className).toMatch(/whitespace-pre-wrap/);
     }
-    await user.click(within(list).getByRole("button", { name: "Crack CORP\\jsmith (hash)" }));
+    await user.click(within(list).getByRole("button", { name: "Record plaintext" }));
     const dlg = await screen.findByRole("dialog");
     await user.type(within(dlg).getByLabelText("Plaintext"), "password");
     await user.click(within(dlg).getByRole("button", { name: "Save password" }));
     await waitFor(() => expect(m.credentialCrack).toHaveBeenCalledWith("h", "password"));
-    await waitFor(() => expect(screen.queryByText(/\(hash\)/)).not.toBeInTheDocument());
-    const table = screen.getByRole("table");
-    expect(within(table).getAllByRole("row")).toHaveLength(2);
-    expect(within(table).getByText("CORP\\jsmith")).toBeInTheDocument();
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "Credential" })).getByRole("button", { name: "Edit CORP\\jsmith" })).toBeInTheDocument());
+    expect(document.querySelector("[aria-label*='(hash)']")).toBeNull();
+    await openInventory(user);
+    const passwords = await screen.findByRole("region", { name: "Passwords" });
+    expect(within(passwords).getAllByRole("row")).toHaveLength(2);
+    expect(within(passwords).getByTitle("CORP\\jsmith")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Hashes" })).not.toBeInTheDocument();
   });
 
   it("marks a hash uncrackable", async () => {
     const user = userEvent.setup();
     m.credentialSetCrackStatus.mockResolvedValue(cred({ id: "h" }));
     mount({ creds: [cred({ id: "h", type: "hash", username: "jsmith", secret: "8846f7eaee8fb117ad06bdd830b7586c", crackStatus: "uncracked" })] });
-    const list = await screen.findByRole("region", { name: "Hashes" });
-    await user.click(within(list).getByRole("button", { name: "Mark jsmith (hash) uncrackable" }));
+    const list = await findDock();
+    await user.click(within(list).getByRole("button", { name: "Mark uncrackable" }));
     expect(m.credentialSetCrackStatus).toHaveBeenCalledWith("h", "uncrackable");
   });
 
   it("convert a placeholder credential to access-only", async () => {
     const user = userEvent.setup();
     mount({ creds: [cred({ id: "c1", username: "guest", domain: "CORP", secret: "none" }), cred({ id: "c2", username: "real", secret: "pw" })] });
-    expect((await screen.findAllByText("CORP\\guest")).length).toBeGreaterThan(0);
-    // Only the placeholder offers conversion.
+    // Only the placeholder offers conversion, and only in its dock.
+    await selectInInventory(user, "real");
+    expect(screen.queryByRole("button", { name: /to access-only$/ })).not.toBeInTheDocument();
+    const dock = await selectInInventory(user, "CORP\\guest");
     expect(screen.getAllByRole("button", { name: /to access-only$/ })).toHaveLength(1);
-    await user.click(screen.getByRole("button", { name: "Convert CORP\\guest to access-only" }));
+    await user.click(within(dock).getByRole("button", { name: "Convert to access-only" }));
     const dlg = await screen.findByRole("dialog");
     await user.click(within(dlg).getByRole("button", { name: "Convert" }));
     expect(await within(dlg).findByText("Choose a host")).toBeInTheDocument();
@@ -338,7 +366,7 @@ describe("credentials section", () => {
     await user.type(within(dlg).getByLabelText("Access via"), "null session");
     await user.click(within(dlg).getByRole("button", { name: "Convert" }));
     await waitFor(() => expect(m.credentialConvertToAccess).toHaveBeenCalledWith("c1", { hostId: "h1", level: "admin", via: "null session" }));
-    // The credential leaves the table; the username carries the access.
+    // The credential leaves the inventory; the username carries the access.
     const usersRegion = await screen.findByRole("region", { name: "Usernames" });
     expect(await within(usersRegion).findByText(/admin on dc01/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /to access-only$/ })).not.toBeInTheDocument();
@@ -347,6 +375,7 @@ describe("credentials section", () => {
   it("usernames accept DOMAIN\\user and reject duplicates", async () => {
     const user = userEvent.setup();
     mount();
+    await openInventory(user);
     const region = await screen.findByRole("region", { name: "Usernames" });
     await user.type(within(region).getByLabelText("New username"), "CORP\\alice");
     await user.click(within(region).getByRole("button", { name: "Add username" }));
@@ -365,7 +394,7 @@ describe("credentials section", () => {
   it("delete asks first and removes the credential", async () => {
     const user = userEvent.setup();
     mount({ creds: [cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "pw" })] });
-    await user.click(await screen.findByRole("button", { name: "Delete CORP\\jsmith" }));
+    await user.click(await within(await findDock()).findByRole("button", { name: "Delete CORP\\jsmith" }));
     const dlg = await screen.findByRole("dialog");
     expect(dlg).toHaveAccessibleDescription("Its test results in the matrix go with it.");
     expect(m.credentialDelete).not.toHaveBeenCalled();
@@ -377,6 +406,7 @@ describe("credentials section", () => {
   it("username delete confirm says its results and grants go with it", async () => {
     const user = userEvent.setup();
     mount({ users: [{ id: "u1", engagementId: "e1", username: "alice", domain: "CORP", sourceHostId: null, source: null, createdAt: 1 }] });
+    await openInventory(user);
     await user.click(await screen.findByRole("button", { name: "Delete username CORP\\alice" }));
     const dlg = await screen.findByRole("dialog", { name: "Delete username CORP\\alice?" });
     expect(dlg).toHaveAccessibleDescription("Its test results in the matrix and its access grants go with it.");
@@ -411,8 +441,9 @@ describe("credentials section", () => {
     const parent = cred({ id: "c3", type: "hash", username: "bob", domain: "CORP", secret: "aa".repeat(16), crackStatus: "cracked" });
     const secret = cred({ id: "c4", secret: "Winter2024!" });
     mount({ creds: [hash, pw, parent, secret] });
-    for (const [label, before] of [["Edit CORP\\svc (hash)", hash], ["Edit CORP\\bob", pw]] as const) {
-      await user.click(await screen.findByRole("button", { name: label }));
+    for (const [name, label, before] of [["CORP\\svc", "Edit CORP\\svc (hash)", hash], ["CORP\\bob", "Edit CORP\\bob", pw]] as const) {
+      const dock = await selectInInventory(user, name);
+      await user.click(within(dock).getByRole("button", { name: label }));
       const dlg = await screen.findByRole("dialog");
       await user.type(within(dlg).getByLabelText("Notes"), "checked");
       await user.click(within(dlg).getByRole("button", { name: "Save" }));
@@ -427,7 +458,7 @@ describe("credentials section", () => {
   it("crack commands follow the stored hash type", async () => {
     const user = userEvent.setup();
     mount({ creds: [cred({ id: "h", type: "hash", username: "jsmith", secret: "8846f7eaee8fb117ad06bdd830b7586c", hashType: "MD5", crackStatus: "uncracked" })] });
-    const list = await screen.findByRole("region", { name: "Hashes" });
+    const list = await findDock();
     expect(within(list).getByText(codeMatching(/hashcat -m 0 /))).toBeInTheDocument();
     await user.click(within(list).getByRole("button", { name: "Copy hashcat command" }));
     expect(await navigator.clipboard.readText()).toBe("hashcat -m 0 '8846f7eaee8fb117ad06bdd830b7586c' /usr/share/wordlists/rockyou.txt");
@@ -436,7 +467,7 @@ describe("credentials section", () => {
   it("a hash containing a quote is never in the DOM unrevealed", async () => {
     const secret = "$6$sa'lt$abcdefgh";
     mount({ creds: [cred({ id: "h", type: "hash", username: "jsmith", secret, crackStatus: "uncracked" })] });
-    const list = await screen.findByRole("region", { name: "Hashes" });
+    const list = await findDock();
     expect(within(list).getByText(codeMatching(/hashcat -m 1800/))).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("sa'lt");
     expect(document.body.textContent).not.toContain("abcdefgh");
@@ -449,10 +480,12 @@ describe("credentials section", () => {
       creds = creds.map((c) => (c.id === id ? { ...c, crackStatus: status } : c));
       return creds.find((c) => c.id === id)!;
     });
+    const dock = await findDock();
+    await user.click(within(dock).getByRole("button", { name: "Mark uncrackable" }));
+    await openInventory(user);
     const list = await screen.findByRole("region", { name: "Hashes" });
-    await user.click(within(list).getByRole("button", { name: "Mark jsmith (hash) uncrackable" }));
     expect(await within(list).findByText("uncrackable")).toBeInTheDocument();
-    await user.click(within(list).getByRole("button", { name: "Reset jsmith (hash)" }));
+    await user.click(await within(dock).findByRole("button", { name: "Reset" }));
     expect(await within(list).findByText("uncracked")).toBeInTheDocument();
     expect(m.credentialSetCrackStatus).toHaveBeenLastCalledWith("h", "uncracked");
   });
@@ -461,15 +494,15 @@ describe("credentials section", () => {
     const user = userEvent.setup();
     m.credentialSetCrackStatus.mockRejectedValue(new Error("write failed"));
     mount({ creds: [cred({ id: "h", type: "hash", username: "jsmith", secret: "8846f7eaee8fb117ad06bdd830b7586c", crackStatus: "uncracked" })] });
-    const list = await screen.findByRole("region", { name: "Hashes" });
-    await user.click(within(list).getByRole("button", { name: "Mark jsmith (hash) uncrackable" }));
+    const list = await findDock();
+    await user.click(within(list).getByRole("button", { name: "Mark uncrackable" }));
     expect(await within(list).findByRole("alert")).toHaveTextContent("write failed");
   });
 
   it("Edit opens the form pre-filled with the secret hidden", async () => {
     const user = userEvent.setup();
     mount({ creds: [cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "Winter2024!" })] });
-    await user.click(await screen.findByRole("button", { name: "Edit CORP\\jsmith" }));
+    await user.click(await within(await findDock()).findByRole("button", { name: "Edit CORP\\jsmith" }));
     const dlg = await screen.findByRole("dialog");
     expect(within(dlg).getByLabelText("Username")).toHaveValue("jsmith");
     const secret = within(dlg).getByLabelText("Secret");
@@ -485,8 +518,8 @@ describe("credentials section", () => {
       cred({ id: "c1", username: "jsmith", domain: "CORP", secret: "Winter2024!" }),
       cred({ id: "c2", username: "jsmith", domain: "CORP", secret: "Other2024!" }),
     ] });
-    const rows = await screen.findAllByRole("button", { name: "Edit CORP\\jsmith" });
-    await user.click(rows[1]);
+    const dock = await selectInInventory(user, "CORP\\jsmith", 1);
+    await user.click(within(dock).getByRole("button", { name: "Edit CORP\\jsmith" }));
     const dlg = await screen.findByRole("dialog");
     const secret = within(dlg).getByLabelText("Secret");
     await user.clear(secret);
@@ -494,5 +527,109 @@ describe("credentials section", () => {
     await user.click(within(dlg).getByRole("button", { name: "Save" }));
     expect(await within(dlg).findByText("Already recorded: CORP\\jsmith")).toBeInTheDocument();
     expect(m.credentialUpdate).not.toHaveBeenCalled();
+  });
+});
+
+const pw = (i: number) => cred({ id: `c${i}`, username: `u${i}`, secret: `Pass${i}!`, createdAt: i });
+const TEN = Array.from({ length: 10 }, (_, i) => pw(i + 1));
+const TWO_USERS: Username[] = ["alice", "bob"].map((u, i) => ({ id: `u-${u}`, engagementId: "e1", username: u, domain: null, sourceHostId: null, source: null, createdAt: i }));
+const dock = () => screen.getByRole("region", { name: "Credential" });
+const NT_HASH = cred({ id: "h", type: "hash", username: "jsmith", domain: "CORP", secret: "8846f7eaee8fb117ad06bdd830b7586c", hashType: "NTLM", crackStatus: "uncracked", createdAt: 20 });
+
+describe("credentials dock page", () => {
+  it("opens on the Matrix tab with the newest testable credential selected and docked", async () => {
+    mount({ creds: TEN, users: TWO_USERS, services: SMB });
+    expect(await screen.findByRole("tab", { name: "Matrix" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Inventory 12" })).toHaveAttribute("aria-selected", "false");
+    expect(within(await screen.findByRole("region", { name: "Credential" })).getByTitle("u10")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Select u10" })).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(search().get("cred")).toBe("c10"));
+  });
+
+  it("selecting a matrix row swaps the dock and writes ?cred=", async () => {
+    const user = userEvent.setup();
+    mount({ creds: TEN, services: SMB });
+    await user.click(await screen.findByRole("button", { name: "Select u3" }));
+    expect(within(dock()).getByTitle("u3")).toBeInTheDocument();
+    expect(within(dock()).queryByTitle("u10")).not.toBeInTheDocument();
+    expect(search().get("cred")).toBe("c3");
+    expect(search().get("tab")).toBeNull();
+  });
+
+  it("the selection survives switching to Inventory, and ?tab=inventory is written", async () => {
+    const user = userEvent.setup();
+    mount({ creds: TEN, services: SMB });
+    await user.click(await screen.findByRole("button", { name: "Select u3" }));
+    await user.click(screen.getByRole("tab", { name: /^Inventory/ }));
+    expect(screen.getByRole("tab", { name: /^Inventory/ })).toHaveAttribute("aria-selected", "true");
+    expect(search().get("tab")).toBe("inventory");
+    expect(search().get("cred")).toBe("c3");
+    expect(within(dock()).getByTitle("u3")).toBeInTheDocument();
+    const row = within(screen.getByRole("region", { name: "Passwords" })).getByTitle("u3").closest("tr")!;
+    expect(row).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("a stale ?cred= falls back to the default", async () => {
+    mount({ creds: TEN, services: SMB, url: "/e/e1/s/credentials?cred=nope" });
+    expect(within(await screen.findByRole("region", { name: "Credential" })).getByTitle("u10")).toBeInTheDocument();
+    await waitFor(() => expect(search().get("cred")).toBe("c10"));
+  });
+
+  it("deleting the selected credential moves the dock to the default", async () => {
+    const user = userEvent.setup();
+    mount({ creds: TEN, services: SMB, url: "/e/e1/s/credentials?cred=c3" });
+    await user.click(await within(await screen.findByRole("region", { name: "Credential" })).findByRole("button", { name: "Delete u3" }));
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete credential" }));
+    await waitFor(() => expect(m.credentialDelete).toHaveBeenCalledWith("c3"));
+    await waitFor(() => expect(within(dock()).getByTitle("u10")).toBeInTheDocument());
+    await waitFor(() => expect(search().get("cred")).toBe("c10"));
+  });
+
+  it("cracking the selected hash selects the new password", async () => {
+    const user = userEvent.setup();
+    mount({ creds: [pw(1), NT_HASH], services: SMB, url: "/e/e1/s/credentials?cred=h" });
+    const d = await screen.findByRole("region", { name: "Credential" });
+    await user.click(within(d).getByRole("button", { name: "Record plaintext" }));
+    const dlg = await screen.findByRole("dialog");
+    await user.type(within(dlg).getByLabelText("Plaintext"), "password");
+    await user.click(within(dlg).getByRole("button", { name: "Save password" }));
+    await waitFor(() => expect(m.credentialCrack).toHaveBeenCalledWith("h", "password"));
+    await waitFor(() => expect(search().get("cred")).toBe("c101"));
+    expect(within(dock()).getByRole("button", { name: "Edit CORP\\jsmith" })).toBeInTheDocument();
+    expect(within(dock()).queryByRole("tab", { name: "Crack" })).not.toBeInTheDocument();
+  });
+
+  it("with only non-sprayable credentials, the newest is docked and the matrix shows the can't-be-sprayed note", async () => {
+    const user = userEvent.setup();
+    mount({
+      creds: [
+        cred({ id: "t1", type: "ticket", username: "bob", secret: "doIF", createdAt: 1 }),
+        cred({ id: "m1", username: "DC01$", domain: "CORP", secret: "x9f3kq2m", createdAt: 2 }),
+      ],
+      services: SMB,
+    });
+    expect(within(await screen.findByRole("region", { name: "Credential" })).getByTitle("CORP\\DC01$")).toBeInTheDocument();
+    expect(screen.getByText(/2 more credentials can't be sprayed/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "see Inventory" }));
+    expect(screen.getByRole("tab", { name: /^Inventory/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("region", { name: "Machine accounts" })).toBeInTheDocument();
+  });
+
+  it("Crack appears once on the page", async () => {
+    mount({ creds: [pw(1), NT_HASH], services: SMB, url: "/e/e1/s/credentials?cred=h" });
+    await screen.findByRole("region", { name: "Credential" });
+    expect(screen.getAllByRole("button", { name: /^Crack|Record plaintext/ })).toHaveLength(1);
+  });
+
+  it("the fold persists per engagement", async () => {
+    const user = userEvent.setup();
+    const first = mount({ creds: TEN, services: SMB });
+    await user.click(await within(await screen.findByRole("region", { name: "Credential" })).findByRole("button", { name: "Fold credential" }));
+    expect(await within(dock()).findByRole("button", { name: "Open credential" })).toBeInTheDocument();
+    first.unmount();
+    mount({ creds: TEN, services: SMB });
+    expect(await within(await screen.findByRole("region", { name: "Credential" })).findByRole("button", { name: "Open credential" })).toBeInTheDocument();
+    await user.click(within(dock()).getByRole("button", { name: "Open credential" }));
+    expect(await within(dock()).findByRole("button", { name: "Fold credential" })).toBeInTheDocument();
   });
 });

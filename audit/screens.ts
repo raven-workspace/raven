@@ -89,7 +89,7 @@ export const SCREENS: Screen[] = [
     id: "eng-checklist", path: `${E}/s/checklist`, ready: "role=region[name='Engagement checklist']",
     setup: async (page) => { await page.locator("section[aria-label='Lateral movement']").scrollIntoViewIfNeeded(); },
   },
-  { id: "credentials", path: `${E}/s/credentials`, ready: "role=heading[name=/credentials/i]" },
+  { id: "credentials", path: `${E}/s/credentials`, ready: "role=tab[name='Matrix'][selected]" },
   {
     id: "findings", path: `${E}/s/findings`, ready: "role=region[name='Finding']",
     setup: async (page) => {
