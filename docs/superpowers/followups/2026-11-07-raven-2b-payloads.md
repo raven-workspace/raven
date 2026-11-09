@@ -39,7 +39,7 @@ These are left over from the 2b-B Payloads build (branch `interpreters-payloads`
   - MySQL 5.7 needs `FROM DUAL` for `SELECT 1 WHERE 1=1`.
   - Oracle's `dbms_pipe` sleep needs an EXECUTE grant (mention it).
   - On strict engines, reflected-columns with no column count takes the old unknown-column path.
-- [ ] **The SQL panel is long** (10 steps plus exec payloads), especially in the 560px drawer. Consider a compact mode, or collapsing finished steps.
+- [x] **The SQL panel is long** (10 steps plus exec payloads), especially in the 560px drawer. Consider a compact mode, or collapsing finished steps. Done (pre-lab batch): finished steps and run commands fold to one line with their result; ↵ or a click reopens.
 
 ## Fit and memory
 

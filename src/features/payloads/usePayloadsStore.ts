@@ -15,6 +15,8 @@ export interface PayloadOverride {
   sqlEngine?: SqlEngine;
   sqlPoint?: SqlPoint;
   sqlValues?: SqlValues;
+  /** SQL steps and run commands you copied (by id): they fold to one line. */
+  sqlCopied?: string[];
   /** You say callbacks can't get out: reverse payloads are marked, binds come first. Raven never sets this itself. */
   callbacksBlocked?: boolean;
   /** The wrapper for a filtered injection point; applies only in FILTER_CONTEXTS. */

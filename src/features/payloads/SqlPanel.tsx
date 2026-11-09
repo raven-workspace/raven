@@ -1,6 +1,7 @@
-import { useRef, useState, type KeyboardEvent } from "react";
+import { CaretDown, CaretRight } from "@phosphor-icons/react";
+import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
 import { buildSql, SQL_ENGINES, SQL_EXEC, SQL_STEPS, sqlExecIds, type SqlEngine, type SqlPoint, type SqlValues } from "../../engines/payloads/sql";
-import type { BuiltPayload } from "../../engines/payloads/types";
+import type { BuiltPayload, PayloadPart } from "../../engines/payloads/types";
 import { copyPlain } from "../../lib/clipboard";
 import { reportError } from "../../lib/lockSignal";
 import { CommandBlock, Disclosure, Input, labelClass, Toggle } from "../../ui";
@@ -49,7 +50,6 @@ function SqlPayload({ id, title, result, armedKey, onCopy }: {
   /** "guarded" when an unfilled token held the copy back. */
   onCopy: (b: BuiltPayload) => "copied" | "guarded";
 }) {
-  const [partsOpen, setPartsOpen] = useState(false);
   if ("error" in result) return <p className="m-0 text-meta text-muted">Skip here: {result.error}.</p>;
   const b = result.built;
   const armed = armedKey === armKey(id, b);
@@ -59,20 +59,52 @@ function SqlPayload({ id, title, result, armedKey, onCopy }: {
       {b.listener && <CommandBlock text={b.listener} name={`${title} listener`} copyLabel={`Copy ${title} listener`} placeholders />}
       <CommandBlock text={b.text} name={`${title} payload`} copyLabel={`Copy ${title}`} onCopyAction={() => Promise.resolve(onCopy(b))} placeholders />
       {armed && <p role="status" className="m-0 text-meta text-warn">{b.unresolved.map((u) => `{${u}}`).join(" ")} not filled. Copy again to copy anyway</p>}
-      {b.parts.length > 0 && (
-        <Disclosure label="What each part does" open={partsOpen} onOpenChange={setPartsOpen}>
-          <dl className="m-0 grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] gap-x-3 gap-y-1 px-1 pt-1 text-meta">
-            {b.parts.map((p) => (
-              <div key={p.token} className="contents">
-                <dt className="break-all font-mono text-code text-fg">{p.token}</dt>
-                <dd className="m-0 text-muted">{p.explain}</dd>
-              </div>
-            ))}
-          </dl>
-        </Disclosure>
-      )}
+      <PartsList label="What each part does" parts={b.parts.filter((p) => !p.decoded)} />
+      <PartsList label="Inside the base64 script" parts={b.parts.filter((p) => p.decoded)} />
       {b.notes.map((n) => <p key={n} className="m-0 text-meta text-muted">{n}</p>)}
     </div>
+  );
+}
+
+/** A folded list of what each part does; decoded parts (inside the base64 script) get their own. Nothing when empty. */
+function PartsList({ label, parts }: { label: string; parts: PayloadPart[] }) {
+  const [open, setOpen] = useState(false);
+  if (parts.length === 0) return null;
+  return (
+    <Disclosure label={label} open={open} onOpenChange={setOpen}>
+      <dl className="m-0 grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] gap-x-3 gap-y-1 px-1 pt-1 text-meta">
+        {parts.map((p) => (
+          <div key={p.token} className="contents">
+            <dt className="break-all font-mono text-code text-fg">{p.token}</dt>
+            <dd className="m-0 text-muted">{p.explain}</dd>
+          </div>
+        ))}
+      </dl>
+    </Disclosure>
+  );
+}
+
+/**
+ * A step's or run command's heading. Once it is finished it is a button: folded, one line with the result (the value
+ * found, or "copied"); reopened, the title with an open caret. Unfinished, plain text: nothing you haven't done hides.
+ */
+function FoldHeading({ label, level, finished, folded, result, mono, onToggle }: {
+  label: string; level: "h3" | "h4"; finished: boolean; folded: boolean; result: string; mono: boolean; onToggle: () => void;
+}) {
+  const H = level;
+  if (!finished) return <H className="m-0 text-heading text-fg">{label}</H>;
+  const Caret = folded ? CaretRight : CaretDown;
+  return (
+    <H className="m-0">
+      <button
+        type="button" aria-expanded={!folded} aria-label={folded ? `${label}: ${result}` : label} onClick={onToggle}
+        className="grid min-h-7 w-full grid-cols-[16px_minmax(0,max-content)_minmax(0,1fr)] items-center gap-x-3 rounded-sm border-0 bg-transparent px-1 text-left select-none cursor-default hover:bg-surface-hi"
+      >
+        <Caret size={16} aria-hidden className="text-muted-2" />
+        <span className={`truncate ${folded ? "text-body text-fg-2" : "text-heading text-fg"}`}>{label}</span>
+        {folded && <span className={`truncate text-muted ${mono ? "font-mono text-code" : "text-meta"}`}>{result}</span>}
+      </button>
+    </H>
   );
 }
 
@@ -80,6 +112,7 @@ function SqlPayload({ id, title, result, armedKey, onCopy }: {
  * SQL injection (drawer and Workbench): the engine (inferred from the host's database port, overridable), where you
  * inject, then the ten steps in order. Each step builds from what earlier steps found (column count, shown column,
  * table, column), typed once in the step that finds it. The engine's exec payloads follow. Choices stick per host.
+ * A finished step (its value filled, or copied when it has no value) folds to one line; ↵ or a click reopens it.
  */
 export function SqlPanel({ fit, onFocusToken, lhostField }: {
   fit: PayloadFit;
@@ -129,8 +162,74 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
   const execValues: SqlValues = { ...values, table: undefined, LHOST: fit.lhost, LPORT: fit.port };
   const execIds = sqlExecIds(engine);
 
+  // Folding. Finished: a step with a value field once it is filled, anything else once copied (this session, per host).
+  // `held` keeps a finished step open: reopened, or its field being typed in. Copying it, or leaving it for another
+  // field or button, lets it fold again.
+  const copied = new Set(ov?.sqlCopied ?? []);
+  const [held, setHeld] = useState<ReadonlySet<string>>(() => new Set());
+  const hold = (id: string, on: boolean) => setHeld((h) => {
+    if (h.has(id) === on) return h;
+    const n = new Set(h);
+    if (on) n.add(id);
+    else n.delete(id);
+    return n;
+  });
+  const filled = (key: CarryKey | undefined) => key !== undefined && values[key] !== undefined && values[key] !== "";
+  const finished = (id: string, key?: CarryKey) => (key ? filled(key) : copied.has(id));
+  const isFolded = (id: string, key?: CarryKey) => finished(id, key) && !held.has(id);
+  /** Steps then run commands, in order: where focus goes once one folds. */
+  const order: { id: string; title: string; key?: CarryKey }[] = [
+    ...SQL_STEPS.map((s) => ({ id: s.id as string, title: s.title as string, key: STEP_INPUT[s.id]?.key })),
+    ...execIds.map((id) => ({ id, title: SQL_EXEC.find((e) => e.id === id)!.title as string })),
+  ];
+  const rootRef = useRef<HTMLElement>(null);
+  // Focus to move after a render: into one item (its field, else its Copy), or to the next open item after one.
+  const focusTo = useRef<{ id: string; after: boolean } | null>(null);
+  const [, setFocusTick] = useState(0);
+  const setFocusTo = (to: { id: string; after: boolean }) => {
+    focusTo.current = to;
+    setFocusTick((n) => n + 1);
+  };
+  useEffect(() => {
+    const to = focusTo.current;
+    if (!to) return;
+    focusTo.current = null;
+    // An item's field (↵ there copies it), else its Copy.
+    const target = (o: (typeof order)[number]) => {
+      const li = rootRef.current?.querySelector<HTMLElement>(`[data-sql-item="${o.id}"]`);
+      return li?.querySelector<HTMLElement>("input") ?? li?.querySelector<HTMLElement>(`button[aria-label="Copy ${o.title}"]`) ?? null;
+    };
+    const at = order.findIndex((o) => o.id === to.id);
+    if (!to.after) return void target(order[at]!)?.focus();
+    // The next open item with something to act on; an earlier one when nothing follows.
+    const rest = [...order.slice(at + 1), ...order.slice(0, at)];
+    for (const o of rest) {
+      const el = isFolded(o.id, o.key) ? null : target(o);
+      if (el) return void el.focus();
+    }
+  });
+  /** Copies a step or run command; a finished one folds and focus moves on; a step still waiting for its value goes to its field. */
+  const copyItem = (id: string, key: CarryKey | undefined, b: BuiltPayload) => {
+    const r = copy(id, b);
+    if (r !== "copied") return r;
+    if (!copied.has(id)) set({ sqlCopied: [...copied, id] });
+    hold(id, false);
+    setFocusTo({ id, after: !key || filled(key) });
+    return r;
+  };
+  const toggle = (id: string, key: CarryKey | undefined) => {
+    if (!isFolded(id, key)) return hold(id, false);
+    hold(id, true);
+    // A reopened step with a value is reopened to change it: its field.
+    if (key) setFocusTo({ id, after: false });
+  };
+  /** Leaving an item for a field or button elsewhere lets it fold (focus lost to nowhere, or to another app, does not). */
+  const onLeave = (id: string) => (e: FocusEvent<HTMLLIElement>) => {
+    if (e.relatedTarget instanceof Node && !e.currentTarget.contains(e.relatedTarget)) hold(id, false);
+  };
+
   return (
-    <section aria-label="SQL injection" className="grid content-start gap-4">
+    <section ref={rootRef} aria-label="SQL injection" className="grid content-start gap-4">
       <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
         <span className={labelClass}>Engine</span>
         <div className="grid grid-cols-[repeat(5,auto)] justify-start gap-1">
@@ -161,22 +260,31 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
         )}
       </div>
 
-      <ol aria-label="SQL steps" className="m-0 grid list-none gap-4 p-0">
+      <ol aria-label="SQL steps" className="m-0 grid list-none p-0">
         {SQL_STEPS.map((step, i) => {
           const input = STEP_INPUT[step.id];
           const result = tryBuild(step.id, step.title, engine, point, values);
-          // ↵ in the step's own field copies the step.
+          const key = input?.key;
+          const folded = isFolded(step.id, key);
+          // ↵ (or ⌘↵) in the step's own field copies the step.
           const onKey = (e: KeyboardEvent<HTMLLIElement>) => {
-            if (e.key !== "Enter" || e.metaKey || e.ctrlKey || e.altKey || e.nativeEvent.isComposing) return;
+            if (e.key !== "Enter" || e.altKey || e.shiftKey || e.nativeEvent.isComposing) return;
             if (!(e.target instanceof HTMLInputElement) || !("built" in result)) return;
             e.preventDefault();
-            copy(step.id, result.built);
+            copyItem(step.id, key, result.built);
           };
+          const heading = (
+            <FoldHeading
+              label={`${i + 1}. ${step.title}`} level="h3" finished={finished(step.id, key)} folded={folded}
+              result={key ? String(values[key]) : "copied"} mono={!!key} onToggle={() => toggle(step.id, key)}
+            />
+          );
+          if (folded) return <li key={step.id} data-sql-item={step.id} className="border-t border-line py-1">{heading}</li>;
           return (
-            <li key={step.id} onKeyDown={onKey} className="grid gap-2 border-t border-line pt-3">
-              <h3 className="m-0 text-heading text-fg">{i + 1}. {step.title}</h3>
+            <li key={step.id} data-sql-item={step.id} onKeyDown={onKey} onBlur={onLeave(step.id)} className="grid gap-2 border-t border-line py-3">
+              {heading}
               <p className="m-0 text-meta text-muted">{step.explain}</p>
-              <SqlPayload id={step.id} title={step.title} result={result} armedKey={armed} onCopy={(b) => copy(step.id, b)} />
+              <SqlPayload id={step.id} title={step.title} result={result} armedKey={armed} onCopy={(b) => copyItem(step.id, key, b)} />
               {input && (
                 <label className="grid grid-cols-[max-content_minmax(0,14rem)] items-center gap-2">
                   <span className="text-meta text-fg-2">{input.label} found</span>
@@ -184,7 +292,10 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
                     mono aria-label={input.label} placeholder={input.placeholder} ref={(el) => setInput(input.key, el)}
                     inputMode={input.numeric ? "numeric" : undefined}
                     value={values[input.key] === undefined ? "" : String(values[input.key])}
-                    onChange={(e) => carry(input.key, input.numeric, e.target.value)}
+                    onChange={(e) => {
+                      hold(step.id, true);
+                      carry(input.key, input.numeric, e.target.value);
+                    }}
                   />
                 </label>
               )}
@@ -223,13 +334,18 @@ export function SqlPanel({ fit, onFocusToken, lhostField }: {
         {execIds.length === 0 ? (
           <p className="m-0 text-meta text-muted">No OS command or file payloads for {ENGINE_LABEL[engine]} here.</p>
         ) : (
-          <ul aria-label="Run commands" className="m-0 grid list-none gap-4 p-0">
+          <ul aria-label="Run commands" className="m-0 grid list-none gap-2 p-0">
             {execIds.map((id) => {
               const x = SQL_EXEC.find((e) => e.id === id)!;
+              const folded = isFolded(id);
+              const heading = (
+                <FoldHeading label={x.title} level="h4" finished={finished(id)} folded={folded} result="copied" mono={false} onToggle={() => toggle(id, undefined)} />
+              );
+              if (folded) return <li key={id} data-sql-item={id}>{heading}</li>;
               return (
-                <li key={id} className="grid gap-2">
-                  <h4 className="m-0 text-heading text-fg">{x.title}</h4>
-                  <SqlPayload id={id} title={x.title} result={tryBuild(id, x.title, engine, point, execValues)} armedKey={armed} onCopy={(b) => copy(id, b)} />
+                <li key={id} data-sql-item={id} onBlur={onLeave(id)} className="grid gap-2 pb-2">
+                  {heading}
+                  <SqlPayload id={id} title={x.title} result={tryBuild(id, x.title, engine, point, execValues)} armedKey={armed} onCopy={(b) => copyItem(id, undefined, b)} />
                 </li>
               );
             })}
