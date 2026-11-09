@@ -22,19 +22,12 @@ import { useHosts } from "../hosts/queries";
 import { AccessFields, EMPTY_ACCESS, hostLabel, type AccessDraft } from "./AccessGrants";
 import { CredentialForm } from "./CredentialForm";
 import { CrackDialog, HashesList } from "./HashesList";
+import { StateChip } from "./InventoryList";
 import { CopySecretButton, MaskedSecret } from "./MaskedSecret";
 import { useAccessGrants, useCredAttempts, useCredentialMutations, useCredentials, useTriedPairs, useUsernames } from "./queries";
 import { RoutineSection } from "./RoutineSection";
 import { TestGrid } from "./TestGrid";
 import { UsernamesList } from "./UsernamesList";
-
-const STATE_LABEL: Record<OverallState, string> = {
-  admin: "admin",
-  valid: "valid",
-  untested: "untested",
-  dead: "dead",
-  "not-sprayable": "not sprayable",
-};
 
 /*
  * Column policy (DESIGN.md Tables and lists): credential, type, scope, source, state, secret, verb, icons.
@@ -60,12 +53,6 @@ const HEADERS = [
   { label: "Secret", cls: "" },
   { label: "", cls: "col-span-2" },
 ];
-
-/** Accent only for access that works; warn for dead. */
-function StateChip({ state }: { state: OverallState }) {
-  const variant = state === "admin" || state === "valid" ? "accent" : state === "dead" ? "warn" : "default";
-  return <Chip variant={variant}>{STATE_LABEL[state]}</Chip>;
-}
 
 export function CredentialsSection() {
   const { id = "" } = useParams();
