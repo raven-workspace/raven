@@ -261,6 +261,28 @@ describe("Payloads toggles", () => {
     expect(d.getByLabelText("Command: Listener")).toHaveTextContent("rlwrap nc -nv 198.51.100.20 4444");
   });
 
+  it("a bind shell on a host with no IP: TARGET_IP is a field, and ⌥L holds the listener back once on it", async () => {
+    m.hostsList.mockResolvedValue([{ ...LIN, ip: null }]);
+    const user = userEvent.setup();
+    mount("/e/e1/h/h3");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("p");
+    const d = within(await drawer());
+    await d.findByRole("listbox", { name: "Fits" });
+    await user.click(fitRow(d, "mkfifo + nc bind"));
+    expect(d.getByLabelText("Command: Listener")).toHaveTextContent("rlwrap nc -nv {TARGET_IP} 4444");
+    const field = d.getByRole("textbox", { name: "TARGET_IP" });
+    await navigator.clipboard.writeText("untouched");
+    await user.keyboard("{Alt>}l{/Alt}");
+    expect(await d.findByText("{TARGET_IP} not filled. Press ⌥L again to copy anyway")).toBeInTheDocument();
+    expect(field).toHaveFocus();
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    await user.type(field, "198.51.100.30");
+    expect(d.getByLabelText("Command: Listener")).toHaveTextContent("rlwrap nc -nv 198.51.100.30 4444");
+    await user.click(d.getByRole("button", { name: "Copy listener" }));
+    expect(await navigator.clipboard.readText()).toBe("rlwrap nc -nv 198.51.100.30 4444");
+  });
+
   it("the hint line lists ⌥B and ⌥T for Shell and msfvenom, not for Transfer", async () => {
     const { user } = await openDrawer();
     const aside = screen.getByRole("complementary", { name: "Payloads" });

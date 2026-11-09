@@ -15,12 +15,12 @@ const Note = ({ text, warn }: { text?: string | null; warn?: boolean }) =>
  * One built payload: the Kali-side prepare step for a served file, the listener, the payload to paste (or, for an
  * uploaded file, the file to save or make on Kali), the trigger that fires an uploaded file, a note from the copy guard
  * under the block it belongs to, what each part does, and the def's notes. Every block is a CommandBlock with its own
- * Copy button; the payload's, the prepare step's and the trigger's go through the copy guard, as ↵ does.
+ * Copy button; the payload's, the prepare step's, the trigger's and the listener's go through the copy guard, as ↵ does.
  * A baked payload whose build is out of date (`stale`) shows its build step first, under an amber "Rebuild first" line.
  * Shared by every generator that builds a payload.
  */
 export function PayloadBlock({
-  built, pasteLabel, pasteFile, stale, buildStep, lock, note, prepareNote, triggerNote, noteWarn, fields, numbered,
+  built, pasteLabel, pasteFile, stale, buildStep, lock, note, prepareNote, triggerNote, listenerNote, noteWarn, fields, numbered,
   onCopy, onCopyPrepare, onCopyTrigger, onCopyListener, onPickListener,
 }: {
   built: BuiltPayload; pasteLabel: string;
@@ -32,14 +32,14 @@ export function PayloadBlock({
   buildStep?: "prepare" | "payload" | null;
   /** The exam's Metasploit lock line above the payload: amber when it is a breach, muted otherwise. */
   lock?: { text: string; breach: boolean } | null;
-  /** The copy guard's hint or confirmation, under the payload, the prepare step or the trigger. */
-  note?: string | null; prepareNote?: string | null; triggerNote?: string | null; noteWarn?: boolean;
+  /** The copy guard's hint or confirmation, under the payload, the prepare step, the trigger or the listener. */
+  note?: string | null; prepareNote?: string | null; triggerNote?: string | null; listenerNote?: string | null; noteWarn?: boolean;
   /** Fill fields (LHOST and the payload's other placeholders), above the copy blocks. */
   fields?: ReactNode;
   /** Number the copy blocks as steps ("1. Listener on Kali", "2. Paste into …"), as the Workbench does. */
   numbered?: boolean;
   /** The payload's Copy (the copy guard); the prepare step's and the trigger's; the listener's Copy (⌥L). */
-  onCopy: () => CopyResult; onCopyPrepare?: () => CopyResult; onCopyTrigger?: () => CopyResult; onCopyListener: () => void;
+  onCopy: () => CopyResult; onCopyPrepare?: () => CopyResult; onCopyTrigger?: () => CopyResult; onCopyListener: () => CopyResult;
   /** Picks another of the def's listeners (session memory, per payload); a picker shows when it has more than one. */
   onPickListener?: (id: ListenerId) => void;
 }) {
@@ -89,6 +89,7 @@ export function PayloadBlock({
           {listenerPicker}
         </div>
         <CommandBlock text={built.listener!} name="Listener" copyLabel="Copy listener" onCopyAction={onCopyListener} placeholders />
+        <Note text={listenerNote} warn={noteWarn} />
       </section>
     ),
     payload: () => (

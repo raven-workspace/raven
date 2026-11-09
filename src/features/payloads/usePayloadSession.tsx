@@ -2,6 +2,7 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import { DERIVED_TOKENS } from "../../engines/payloads/build";
 import { encodePs } from "../../engines/payloads/encodePs";
+import { LISTENERS } from "../../engines/payloads/listeners";
 import type { BuiltPayload, GeneratorId, ListenerId, PayloadDef } from "../../engines/payloads/types";
 import { api } from "../../lib/api";
 import { copyPlain } from "../../lib/clipboard";
@@ -67,9 +68,18 @@ export const inGeneratorList = () => document.activeElement?.closest(`#${GENERAT
 export const isGenerator = (g: string | null): g is GeneratorId => GENERATORS.some((x) => x.id === g);
 
 const PLACEHOLDER = /\{([A-Z][A-Z0-9_]*)\}/g;
-/** The payload's placeholders (template, prepare step, upload trigger) as fill fields, LHOST first; LPORT is the port chip, and derived ports are never typed. */
+const namesIn = (text: string) => [...text.matchAll(PLACEHOLDER)].map((m) => m[1]!);
+/** The listener placeholders that are fill values; LHOST and LPORT have their own fields, MSF_PAYLOAD comes from the def. */
+const LISTENER_FIELDS = new Set(["TARGET_IP", "BIND_PORT"]);
+/**
+ * The payload's placeholders (template, prepare step, upload trigger, and the fill values of every listener it can
+ * pick) as fill fields, LHOST first; LPORT is the port chip, and derived ports are never typed.
+ */
 const fieldTokens = (def: PayloadDef) =>
-  [...new Set([...`${def.template} ${def.prepare ?? ""} ${def.upload?.trigger ?? ""}`.matchAll(PLACEHOLDER)].map((m) => m[1]!))]
+  [...new Set([
+    ...namesIn(`${def.template} ${def.prepare ?? ""} ${def.upload?.trigger ?? ""}`),
+    ...def.listeners.flatMap((l) => namesIn(LISTENERS[l].template)).filter((t) => LISTENER_FIELDS.has(t)),
+  ])]
     .filter((t) => t !== "LPORT" && !DERIVED_TOKENS.has(t))
     .sort((a, b) => Number(b === "LHOST") - Number(a === "LHOST"));
 /** The LHOST field's hint: Settings' attacker IP, which fills in while the field is empty. */
@@ -179,6 +189,8 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
   const prepareCmd = built?.prepare
     ? { id: `${built.def.id}:prepare`, unresolved: built.unresolved.filter((t) => built.prepare!.includes(`{${t}}`)) }
     : null;
+  /** The listener's own copy key: a placeholder still showing in it ({TARGET_IP} on a host with no IP) holds it back once. */
+  const listenerCmd = built?.listener ? { id: `${built.def.id}:listener`, unresolved: [...new Set(namesIn(built.listener))] } : null;
   /** The trigger copies as is (its placeholders are highlighted, not held back); only "Rebuild first" holds it. */
   const triggerCmd = built?.trigger ? { id: `${built.def.id}:trigger`, unresolved: [] as string[] } : null;
 
@@ -251,8 +263,16 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
       return "guarded";
     }
   };
-  const copyListener = () => {
-    if (built?.listener) void copyPlain(built.listener).catch(reportError);
+  /** Copies the listener (⌥L, its Copy) through the copy guard: an unresolved placeholder focuses its field first. */
+  const copyListener = async (): Promise<"copied" | "guarded"> => {
+    if (!built?.listener || !listenerCmd) return "guarded";
+    const text = built.listener;
+    try {
+      return await guard.attempt({ ...listenerCmd, title: built.def.title, text, msfMarker: false }, () => copyPlain(text));
+    } catch (e) {
+      reportError(e);
+      return "guarded";
+    }
   };
   const pickListener = (id: ListenerId) => {
     if (built) usePayloadsStore.getState().pickListener(built.def.id, id);
@@ -270,7 +290,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
         usePayloadsStore.getState().setGenerator(GENERATORS[n - 1]!.id);
       } else if (code === "KeyL" && built?.listener) {
         e.preventDefault();
-        copyListener();
+        void copyListener();
       } else if (code === "KeyO" || code === "KeyW") {
         e.preventDefault();
         (code === "KeyO" ? osRef : contextRef).current?.open();
@@ -335,7 +355,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
 
   /** What PayloadView and PayloadBlock take from the session for the payload in view (the drawer and the Workbench). */
   const blockProps = {
-    pasteLabel, pasteFile: uploadFile, fields, note, noteWarn: guard.hint !== null && !guard.hint.startsWith(CHECKING_BUILD), prepareNote: noteFor(prepareCmd), triggerNote: noteFor(triggerCmd),
+    pasteLabel, pasteFile: uploadFile, fields, note, noteWarn: guard.hint !== null && !guard.hint.startsWith(CHECKING_BUILD), prepareNote: noteFor(prepareCmd), triggerNote: noteFor(triggerCmd), listenerNote: noteFor(listenerCmd)?.replace("Press ↵ again", "Press ⌥L again") ?? null,
     stale: stale ? `Rebuild first: built with ${stale.was}, now ${stale.now}` : null, buildStep, lock,
     onCopy: () => copy(false), onCopyPrepare: copyPrepare, onCopyTrigger: copyTrigger, onCopyListener: copyListener, onPickListener: pickListener,
   };
