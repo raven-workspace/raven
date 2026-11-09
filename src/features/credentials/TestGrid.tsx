@@ -60,7 +60,7 @@ function Legend({ present }: { present: ReadonlySet<LegendKey> }) {
             {META.failed.glyph}
             <span className="absolute inset-0.5 rounded-sm border border-dashed border-fg-2" />
           </span>
-          Failed, other mode untried
+          Other mode untried
         </li>
       )}
     </ChipSet>

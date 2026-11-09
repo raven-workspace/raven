@@ -23,7 +23,7 @@ describe("TestGrid legend lists only the states the grid shows", () => {
     grid({ creds: [cred({ id: "c1", username: "jay", domain: "ACME" })] });
     expect(legend().getByText("Untested")).toBeInTheDocument();
     expect(legend().queryByText("Not applicable")).toBeNull();
-    expect(legend().queryByText("Failed, other mode untried")).toBeNull();
+    expect(legend().queryByText("Other mode untried")).toBeNull();
     expect(legend().queryByText("Admin")).toBeNull();
     expect(legend().queryByText("Errored, retry")).toBeNull();
   });
@@ -50,7 +50,7 @@ describe("TestGrid legend lists only the states the grid shows", () => {
       attempts: [att({ credId: "c1", service: "smb", result: "failed", authMode: "domain" })],
     });
     const partial = screen.queryAllByTestId("untried-marker").length > 0;
-    expect(legend().queryByText("Failed, other mode untried") !== null).toBe(partial);
+    expect(legend().queryByText("Other mode untried") !== null).toBe(partial);
     expect(partial).toBe(true);
   });
 
