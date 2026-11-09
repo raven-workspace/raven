@@ -35,12 +35,15 @@ export interface CapturedCredential {
   domain: string | null;
   secret: string;
   type: "password" | "hash";
+  /** Windows local notation (`.\user`): local to its host. */
+  local?: boolean;
   hostId: string | null;
 }
 
 /**
  * The pasted credentials as interpretation results, so they are filed, deduped, summarised and undone like any other.
- * A domain account is a domain credential; one with no domain is local to its host (domain-wide when no host is linked).
+ * Scoped as the Credentials form does (domain), so they dedupe against what was added there; `.\user` is local to
+ * its host.
  */
 export function pastedCredentials(list: CapturedCredential[]): ResolvedInterpretation["credentials"] {
   return list.map((c) => ({
@@ -49,7 +52,7 @@ export function pastedCredentials(list: CapturedCredential[]): ResolvedInterpret
     type: c.type,
     secret: c.type === "hash" ? c.secret.toLowerCase() : c.secret,
     hashType: c.type === "hash" ? "NTLM" : null,
-    scope: !c.domain && c.hostId ? ("local" as const) : ("domain" as const),
+    scope: c.local ? ("local" as const) : ("domain" as const),
     source: "paste",
     hostId: c.hostId,
   }));

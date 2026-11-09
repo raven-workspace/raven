@@ -1,9 +1,9 @@
-import { buildDraft, credentialsInPaste, detectKind, findFlagInPaste, flagTitle, noteTitle, screenshotFileName, type CaptureDraft, type DraftInput } from "../../engines/capture";
+import { buildDraft, credentialsInPaste, type PastedCredential, detectKind, findFlagInPaste, flagTitle, noteTitle, screenshotFileName, type CaptureDraft, type DraftInput } from "../../engines/capture";
 import { OS_LABELS } from "../hosts/columns";
 import { KIND_LABELS } from "../log/kindLabels";
 import type { BoardColumn, Host, HostOs } from "../../types/host";
 import type { FlagKind, LogContent, LogKind } from "../../types/log";
-import type { ParsedCredentialPaste } from "../../engines/credentials";
+import { shortHostName } from "../../lib/hostName";
 import type { CaptureEdits } from "./saveCapture";
 import type { PanelDraft } from "./useCaptureStore";
 
@@ -48,7 +48,7 @@ export interface Resolved {
   servicesLine: string | null;
   flagKind: FlagKind;
   /** A note made only of `user:pass` lines: the credentials it offers (added on save unless kept as a note). */
-  credentials: ParsedCredentialPaste[];
+  credentials: PastedCredential[];
   /** What saving adds from `credentials`, before it happens; null when nothing is offered or it is kept as a note. */
   credentialsLine: string | null;
   canSave: boolean;
@@ -96,9 +96,11 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
   }
 
   // A note of `user:pass` lines offers its credentials, linked to the capture's host.
-  const credentials = kind === "note" ? credentialsInPaste(pd.text) : [];
-  const adding = pd.asNote ? [] : credentials;
-  const account = (c: ParsedCredentialPaste) => (c.domain ? `${c.domain}\\${c.username}` : c.username);
+  const hostNames = hosts.flatMap((h) => [h.name, shortHostName(h.name), h.ip ?? ""]);
+  const credentials = kind === "note" ? credentialsInPaste(pd.text, hostNames) : [];
+  // A local account (`.\user`) needs its host: with none linked it is not added.
+  const adding = pd.asNote ? [] : credentials.filter((c) => !c.local || selectedHost);
+  const account = (c: PastedCredential) => (c.local ? `.\\${c.username}` : c.domain ? `${c.domain}\\${c.username}` : c.username);
   let credentialsLine: string | null = null;
   if (adding.length) {
     autoTitle = `${adding.length === 1 ? "Credential" : "Credentials"} for ${adding.map(account).join(", ")}`.slice(0, 120);
@@ -143,7 +145,7 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
       private: pd.private,
       content,
       ...(adding.length
-        ? { credentials: adding.map((c) => ({ username: c.username, domain: c.domain, secret: c.secret, type: c.type, hostId: selectedHost?.id ?? null })) }
+        ? { credentials: adding.map((c) => ({ username: c.username, domain: c.domain, secret: c.secret, type: c.type, ...(c.local ? { local: true } : {}), hostId: selectedHost?.id ?? null })) }
         : {}),
     },
   };

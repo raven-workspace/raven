@@ -58,13 +58,13 @@ function save(text: string, asNote = false) {
 }
 
 describe("saveCapture with pasted credentials", () => {
-  it("admin:Summer2026! becomes a credential local to the host, and the note is kept", async () => {
+  it("admin:Summer2026! becomes a credential found on the host, scoped as the Credentials form does, and the note is kept", async () => {
     const saved = await save("admin:Summer2026!");
     expect(m.logCreate).toHaveBeenCalledWith("e1", expect.objectContaining({ hostIds: ["h1"], content: { kind: "note", text: "admin:Summer2026!" } }));
     expect(m.credentialCreate).toHaveBeenCalledTimes(1);
     expect(m.credentialCreate).toHaveBeenCalledWith("e1", {
-      type: "password", username: "admin", domain: null, secret: "Summer2026!", hashType: null, scope: "local",
-      localHostId: "h1", sourceHostId: "h1", source: "paste",
+      type: "password", username: "admin", domain: null, secret: "Summer2026!", hashType: null, scope: "domain",
+      localHostId: null, sourceHostId: "h1", source: "paste",
     });
     // Filed like any extraction: summarised, and Undo removes it.
     expect(saved.summary?.counts).toContain("1 password added");
@@ -76,6 +76,31 @@ describe("saveCapture with pasted credentials", () => {
     expect(m.credentialCreate).toHaveBeenCalledWith("e1", expect.objectContaining({
       username: "svc_sql", domain: "CORP", secret: "P@ss", scope: "domain", localHostId: null, sourceHostId: "h1",
     }));
+  });
+
+  it(".\\Administrator:Passw0rd! becomes a local credential of the host, with no domain", async () => {
+    await save(".\\Administrator:Passw0rd!");
+    expect(m.credentialCreate).toHaveBeenCalledWith("e1", expect.objectContaining({
+      username: "Administrator", domain: null, secret: "Passw0rd!", scope: "local", localHostId: "h1", sourceHostId: "h1",
+    }));
+  });
+
+  it("a credential added on the Credentials page, then pasted on web01, is nothing new", async () => {
+    // As CredentialForm adds it: domain scope, no source host.
+    stored.push({
+      id: "c0", engagementId: "e1", type: "password", username: "admin", domain: null, secret: "Summer2026!", hashType: null,
+      scope: "domain", localHostId: null, sourceHostId: null, source: null, notes: null, crackStatus: null, crackedFrom: null,
+      fromSecretId: null, createdAt: 1, updatedAt: 1,
+    });
+    const saved = await save("admin:Summer2026!");
+    expect(m.credentialCreate).not.toHaveBeenCalled();
+    expect(saved.summary?.counts).toEqual(["Nothing new: already recorded"]);
+  });
+
+  it("admin:1234 is a credential; web01:8080 is host:port", async () => {
+    await save("admin:1234");
+    await save("web01:8080");
+    expect(m.credentialCreate.mock.calls.map(([, i]) => `${i.username}:${i.secret}`)).toEqual(["admin:1234"]);
   });
 
   it("user:<32 hex> becomes an NTLM hash", async () => {

@@ -6,7 +6,7 @@ import { api } from "../../lib/api";
 import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
-import { XIcon } from "@phosphor-icons/react";
+import { KeyIcon, XIcon } from "@phosphor-icons/react";
 import { Button, Chip, Field, IconButton, Input, Kbd, Select, Textarea, Toggle, Toolbar } from "../../ui";
 import { useHosts } from "../hosts/queries";
 import { invalidateAfterSave } from "../log/extractions";
@@ -225,7 +225,13 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
 
         <HostChips hosts={hosts} linked={r.edits.hostIds} onLinked={(hostIds) => set({ hostIds })} />
         {r.servicesLine && <p className="m-0 text-code text-muted">{r.servicesLine}</p>}
-        {r.credentialsLine && <p className="m-0 text-code text-muted">{r.credentialsLine}</p>}
+        {r.credentialsLine && (
+          // The only cue that saving writes credential rows: foreground text with a key, unlike the services line.
+          <p className="m-0 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 text-code text-fg">
+            <KeyIcon size={16} weight="regular" aria-hidden className="text-accent" />
+            <span className="min-w-0">{r.credentialsLine}</span>
+          </p>
+        )}
         <Field label="Ran on">
           <Select
             value={r.edits.ranOn}

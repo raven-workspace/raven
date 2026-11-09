@@ -12,9 +12,11 @@ const WEB: Host = {
   access: "none", createdAt: 1, updatedAt: 1,
 };
 
-const resolve = (text: string, over: Partial<PanelDraft> = {}) =>
+const DC: Host = { ...WEB, id: "h2", name: "dc01.corp.example.test", ip: "192.0.2.5" };
+
+const resolve = (text: string, over: Partial<PanelDraft> = {}, hosts: Host[] = [WEB]) =>
   resolveCapture({ ...EMPTY_DRAFT, text, ...over }, {
-    hosts: [WEB], scope: [], domain: "", machines: [], lastRanOn: null, presetHostId: "h1",
+    hosts, scope: [], domain: "", machines: [], lastRanOn: null, presetHostId: "h1",
   });
 
 describe("credentialsInPaste", () => {
@@ -34,6 +36,19 @@ describe("credentialsInPaste", () => {
     expect(credentialsInPaste("ftp:ftp")).toHaveLength(1);
   });
 
+  it("reads .\\user:pass as a local account, with no domain", () => {
+    expect(credentialsInPaste(".\\Administrator:Passw0rd!")).toEqual([
+      { username: "Administrator", domain: null, secret: "Passw0rd!", type: "password", local: true },
+    ]);
+  });
+
+  it("reads an all-digit password unless the name is a known host's", () => {
+    expect(credentialsInPaste("admin:1234", ["web01", "192.0.2.10"])).toEqual([{ username: "admin", domain: null, secret: "1234", type: "password" }]);
+    expect(credentialsInPaste("web01:8080", ["web01", "192.0.2.10"])).toEqual([]);
+    expect(credentialsInPaste("WEB01:8080", ["web01"])).toEqual([]);
+    expect(credentialsInPaste("198.51.100.20:445")).toEqual([]);
+  });
+
   it("reads each line of a multi-line paste", () => {
     expect(credentialsInPaste("admin:Summer2026!\r\n\nCORP\\svc_sql:P@ss\n")).toHaveLength(2);
   });
@@ -43,7 +58,6 @@ describe("credentialsInPaste", () => {
     ["a command with a URL", "curl http://192.0.2.10:8080"],
     ["an IP and port", "198.51.100.20:445"],
     ["a host name and port", "files.example.test:8080"],
-    ["a bare host name and port", "dc01:445"],
     ["an ssh-style target", "kali@192.0.2.10:22"],
     ["a command line", "echo admin:Summer2026!"],
     ["a command word and its target", "ssh admin@192.0.2.10:2222"],
@@ -92,6 +106,26 @@ describe("resolveCapture with pasted credentials", () => {
       expect(r.credentials).toEqual([]);
       expect(r.edits.credentials).toBeUndefined();
     }
+  });
+
+  it("with several linked hosts, the credential goes to the first and the line names it", () => {
+    const r = resolve("admin:Summer2026!", { hostIds: ["h2", "h1"] }, [WEB, DC]);
+    expect(r.credentialsLine).toBe("Adds 1 credential for dc01.corp.example.test: admin.");
+    expect(r.edits.credentials?.[0]?.hostId).toBe("h2");
+  });
+
+  it("a known host's name (full, short or IP) followed by digits is host:port; admin:1234 is a credential", () => {
+    for (const text of ["dc01:445", "dc01.corp.example.test:445", "web01:8080"]) expect(resolve(text, {}, [WEB, DC]).credentials).toEqual([]);
+    expect(resolve("admin:1234", {}, [WEB, DC]).edits.credentials).toHaveLength(1);
+  });
+
+  it(".\\Administrator is offered local to the host; with no host linked it is not added", () => {
+    const r = resolve(".\\Administrator:Passw0rd!");
+    expect(r.credentialsLine).toBe("Adds 1 credential for web01: .\\Administrator.");
+    expect(r.edits.credentials).toEqual([{ username: "Administrator", domain: null, secret: "Passw0rd!", type: "password", local: true, hostId: "h1" }]);
+    const none = resolve(".\\Administrator:Passw0rd!", { hostIds: [] });
+    expect(none.credentials).toHaveLength(1);
+    expect(none.edits.credentials).toBeUndefined();
   });
 
   it("offers nothing once another kind is picked", () => {
