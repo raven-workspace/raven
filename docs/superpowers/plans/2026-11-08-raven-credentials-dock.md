@@ -33,6 +33,7 @@
   - `npx vitest run`
   - and from Task 5 on, `npm run audit:visual`.
   - The conventions test (`src/test/conventions.test.ts`) must pass.
+- **jsdom:** react-resizable-panels needs `ResizeObserver`, and Radix ScrollArea may too. If `src/test/setup` doesn't stub them, add a minimal stub there in the first task that needs it.
 - **No commit trailers** (no Co-Authored-By). Commit messages are conventional (`feat(credentials): …`).
 
 ## Review Focus
