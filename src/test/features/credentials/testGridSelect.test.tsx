@@ -24,7 +24,12 @@ const grid = (props: Partial<React.ComponentProps<typeof TestGrid>> = {}) =>
 
 describe("TestGrid selection", () => {
   it("a new onSelect function with the same selection does not scroll again", () => {
-    const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
+    const into = vi.spyOn(Element.prototype, "scrollIntoView");
+    const rect = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      const r = this.tagName === "TR" ? { top: 500, bottom: 550 } : { top: 0, bottom: 0 };
+      return { ...r, left: 0, right: 0, width: 0, height: r.bottom - r.top, x: 0, y: r.top, toJSON: () => ({}) };
+    });
+    const client = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(200);
     try {
       const ui = (onSelect: () => void) => (
         <QueryClientProvider client={makeQueryClient()}>
@@ -32,11 +37,18 @@ describe("TestGrid selection", () => {
         </QueryClientProvider>
       );
       const { rerender } = render(ui(() => {}));
-      expect(spy).toHaveBeenCalledTimes(1);
+      const scroller = document.querySelector("table")!.parentElement!;
+      // Only the grid's own scroller moves, and never through scrollIntoView (which would scroll every ancestor too).
+      expect(scroller.scrollTop).toBe(350);
+      for (let e = scroller.parentElement; e; e = e.parentElement) expect(e.scrollTop).toBe(0);
+      expect(into).not.toHaveBeenCalled();
+      scroller.scrollTop = 0;
       rerender(ui(() => {}));
-      expect(spy).toHaveBeenCalledTimes(1);
+      expect(scroller.scrollTop).toBe(0);
     } finally {
-      spy.mockRestore();
+      into.mockRestore();
+      rect.mockRestore();
+      client.mockRestore();
     }
   });
 

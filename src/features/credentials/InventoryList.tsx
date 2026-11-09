@@ -4,6 +4,7 @@ import type { AccessGrant, CredAttempt, Credential, Username } from "../../types
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
 import { Chip, labelClass } from "../../ui";
+import { revealRow } from "../../lib/revealRow";
 import { ScrollArea } from "../../ui/shadcn/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../ui/shadcn/table";
 import { hostLabel } from "./AccessGrants";
@@ -129,7 +130,7 @@ function Group({ label, creds, crack, typed, ...ctx }: {
                   {scopeHost && <span className="block max-w-[24ch] truncate text-meta text-muted" title={scopeHost}>{scopeHost}</span>}
                 </TableCell>
                 <TableCell className={`min-w-0 ${SHOW_SOURCE} text-fg-2`}>
-                  {c.source && <span className="block truncate" title={c.source}>{c.source}</span>}
+                  {c.source ? <span className="block truncate" title={c.source}>{c.source}</span> : <span className="text-muted">unknown</span>}
                 </TableCell>
                 <TableCell><StateChip state={overallState(c, ctx.hosts, ctx.servicesByHost, ctx.attempts)} /></TableCell>
                 {crack && <TableCell><Chip variant={c.crackStatus === "uncrackable" ? "warn" : "default"}>{c.crackStatus ?? "uncracked"}</Chip></TableCell>}
@@ -158,7 +159,9 @@ export function InventoryList({ eid, creds, all, hosts, servicesByHost, attempts
   const root = useRef<HTMLDivElement>(null);
   // The selected row stays in view inside the list's own scroller (never the page).
   useEffect(() => {
-    if (selectedId) root.current?.querySelector("tr[aria-selected='true']")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const row = root.current?.querySelector("tr[aria-selected='true']");
+    const viewport = root.current?.closest<HTMLElement>("[data-slot=scroll-area-viewport]");
+    if (selectedId && row && viewport) revealRow(viewport, row);
   }, [selectedId]);
   const people = creds.filter((c) => !isMachineAccount(c));
   const ctx = { all, hosts, servicesByHost, attempts, selectedId, onSelect, root };

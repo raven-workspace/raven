@@ -90,7 +90,7 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
   };
 
   const facts = (
-    <dl data-testid="dock-facts" className="m-0 grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] content-start gap-3 p-3 @[700px]:grid-cols-1">
+    <dl data-testid="dock-facts" className="m-0 grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] content-start gap-3 p-3 @[700px]:min-h-0 @[700px]:grid-cols-1 @[700px]:overflow-y-auto">
       <Fact label="Source">{cred.source || <span className="text-muted">none recorded</span>}</Fact>
       <Fact label="Scope">
         {cred.scope}
@@ -124,14 +124,16 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
     >
       {/* Folded, the dock is this row alone: its height (44px + border) is DOCK_FOLDED_PX in CredentialsSection. Keep them in step. */}
       <header ref={header} data-testid="dock-header" className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2">
-        <div className="grid grid-cols-[minmax(0,max-content)_max-content_max-content_max-content] items-center justify-start gap-3">
+        <div className="grid grid-cols-[minmax(0,max-content)_max-content_minmax(0,1fr)] items-center @[700px]:grid-cols-[minmax(0,max-content)_max-content_max-content_minmax(0,1fr)] justify-start gap-3">
           <span className="truncate font-mono text-heading text-fg" title={name}>{name}</span>
           <span className="text-meta text-muted">{cred.type}</span>
-          <span className="text-meta text-muted">{cred.scope}</span>
+          <span className="hidden text-meta text-muted @[700px]:inline">{cred.scope}</span>
           {works.length > 0 ? (
-            <Chip variant="accent">
-              {`${works[0].level} on ${works[0].where}`}
-              {works.length > 1 && ` +${works.length - 1}`}
+            <Chip variant="accent" className="min-w-0 max-w-full justify-self-start">
+              <span className="truncate">
+                {`${works[0].level} on ${works[0].where}`}
+                {works.length > 1 && ` +${works.length - 1}`}
+              </span>
             </Chip>
           ) : (
             <StateChip state={overallState(cred, hosts, servicesByHost, attempts)} />
@@ -141,7 +143,7 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
           {placeholder ? (
             <span className="text-muted">no secret</span>
           ) : (
-            <MaskedSecret secret={cred.secret} label={`secret for ${label}`} />
+            <MaskedSecret secret={cred.secret} label={`secret for ${label}`} hideMaskBelow="hidden @[700px]:inline" />
           )}
           <IconButton icon={PencilSimple} label={`Edit ${label}`} onClick={onEdit} />
           <IconButton icon={Trash} tone="destructive" label={`Delete ${label}`} onClick={onDelete} />

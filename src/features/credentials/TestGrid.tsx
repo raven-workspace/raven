@@ -7,6 +7,7 @@ import type { Service } from "../../types/service";
 import { ChipSet, labelClass } from "../../ui";
 import { hostLabel } from "./AccessGrants";
 import { CellPopover } from "./CellPopover";
+import { revealRow } from "../../lib/revealRow";
 import { MaskedSecret } from "./MaskedSecret";
 
 const META: Record<CellState, { glyph: string; label: string; aria: string; tone: string }> = {
@@ -38,31 +39,30 @@ function partialLabel(cred: Credential, service: SprayService, cell: Cell): stri
     .join(", ");
 }
 
-const DROP: Record<string, string> = {
-  na: "hidden @[990px]:grid",
-  errored: "hidden @[1160px]:grid",
-  other: "hidden @[1240px]:grid",
-};
+type LegendKey = CellState | "other";
+const LEGEND_ORDER: CellState[] = ["admin", "valid", "failed", "untested", "errored", "na"];
 
-/** `compact`: in a toolbar row beside a note, the lowest-priority entries drop as the pane narrows instead of wrapping. */
-function Legend({ compact = false }: { compact?: boolean }) {
-  const states: CellState[] = ["admin", "valid", "failed", "untested", "errored", "na"];
+/** Exactly the cell states the rendered grid shows: a legend entry exists only while a cell wears it. */
+function Legend({ present }: { present: ReadonlySet<LegendKey> }) {
   const unit = "grid grid-flow-col auto-cols-max items-center gap-2";
+  const states = LEGEND_ORDER.filter((s) => present.has(s));
   return (
     <ChipSet as="ul" gap={6} aria-label="Legend" className="m-0 list-none p-0 text-meta text-muted">
       {states.map((s) => (
-        <li key={s} className={`${unit} ${compact ? DROP[s] ?? "" : ""}`}>
+        <li key={s} className={unit}>
           <span aria-hidden="true" className={`${BOX} h-5 w-5 text-label ${META[s].tone}`} style={s === "na" ? HATCH : undefined}>{META[s].glyph}</span>
           {META[s].label}
         </li>
       ))}
-      <li className={`${unit} ${compact ? DROP.other : ""}`}>
-        <span aria-hidden="true" className={`${BOX} h-5 w-5 text-label border-line-2 text-fg-2`}>
-          {META.failed.glyph}
-          <span className="absolute inset-0.5 rounded-sm border border-dashed border-fg-2" />
-        </span>
-        Failed, other mode untried
-      </li>
+      {present.has("other") && (
+        <li className={unit}>
+          <span aria-hidden="true" className={`${BOX} h-5 w-5 text-label border-line-2 text-fg-2`}>
+            {META.failed.glyph}
+            <span className="absolute inset-0.5 rounded-sm border border-dashed border-fg-2" />
+          </span>
+          Failed, other mode untried
+        </li>
+      )}
     </ChipSet>
   );
 }
@@ -112,21 +112,38 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
   const [fade, setFade] = useState(false);
   const measure = () => {
     const el = scroller.current;
-    if (el) setFade(el.scrollWidth - el.scrollLeft - el.clientWidth > 1);
+    if (!el) return;
+    setFade(el.scrollWidth - el.scrollLeft - el.clientWidth > 1);
+    // Snap and scroll-into-view stop below the sticky header, never under it.
+    el.style.setProperty("--head-h", `${el.querySelector("thead")?.getBoundingClientRect().height ?? 0}px`);
   };
   useEffect(() => {
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   });
+  // Snap proximity does not re-run when the scroller itself resizes (the dock folding): realign a row cut by the header.
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const head = el.querySelector("thead")?.getBoundingClientRect().bottom ?? 0;
+      const cut = [...el.querySelectorAll("tbody tr")].find((tr) => {
+        const r = tr.getBoundingClientRect();
+        return r.top < head - 0.5 && r.bottom > head + 0.5;
+      });
+      if (cut) el.scrollTop += cut.getBoundingClientRect().top - head;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   // The selected row stays in view inside the grid's own scroller (never the page): on mount and when the selection moves.
   const selectable = !!onSelect;
   useEffect(() => {
     if (!selectable || !selectedId) return;
     const box = scroller.current;
-    // Keep the row clear of the sticky header, which would otherwise cover a row scrolled to the top edge.
-    if (box) box.style.scrollPaddingTop = `${box.querySelector("thead")?.getBoundingClientRect().height ?? 0}px`;
-    box?.querySelector("tr[aria-selected='true']")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const row = box?.querySelector("tr[aria-selected='true']");
+    if (box && row) revealRow(box, row, box.querySelector("thead")?.getBoundingClientRect().height ?? 0);
   }, [selectable, selectedId]);
   const [open, setOpen] = useState<{ credId: string; hostId: string; service: SprayService }>();
   const rows = useMemo(() => creds.filter(isSprayable), [creds]);
@@ -135,6 +152,22 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
     () => hosts.map((host) => ({ host, services: hostSprayServices(host, servicesByHost.get(host.id) ?? []) })).filter((g) => g.services.length > 0),
     [hosts, servicesByHost],
   );
+  const present = useMemo(() => {
+    const out = new Set<LegendKey>();
+    for (const cred of rows) {
+      for (const { host, services } of groups) {
+        for (const service of services) {
+          const cell = cellFor(cred, host, servicesByHost.get(host.id) ?? [], service, attempts);
+          out.add(cell.state);
+          if (partialLabel(cred, service, cell)) out.add("other");
+        }
+      }
+    }
+    for (const t of triedList) {
+      for (const { host, services } of groups) for (const service of services) out.add(t.cells.has(`${host.id}:${service}`) ? "failed" : "na");
+    }
+    return out;
+  }, [rows, groups, servicesByHost, attempts, triedList]);
 
   // As the master list of the credentials page the tab already names it: no section label, and the legend shares a row with the note.
   const docked = fill && !!onSelect;
@@ -148,7 +181,6 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
             ? "No sprayable credentials yet. Hashes appear here once cracked (NTLM hashes are tested as-is)."
             : "No host has scanned services yet. Import an nmap scan to fill the grid."}
         </p>
-        <Legend />
         {note}
       </section>
     );
@@ -160,18 +192,18 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
   return (
     <section aria-label="Test matrix" className={docked ? "grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-2" : "grid grid-cols-[minmax(0,1fr)] gap-2"}>
       {docked ? (
-        <div className="@container grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-          <Legend compact />
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+          <Legend present={present} />
           {note}
         </div>
       ) : (
         <>
           {header}
-          <Legend />
+          <Legend present={present} />
         </>
       )}
       <div className={`relative rounded border border-line ${docked ? "grid max-h-full min-h-0 grid-rows-[minmax(0,1fr)] self-start" : ""}`}>
-        <div ref={scroller} onScroll={measure} className="max-h-[inherit] overflow-auto">
+        <div ref={scroller} onScroll={measure} className="max-h-[inherit] snap-y snap-proximity overflow-auto [scroll-padding-top:var(--head-h,0px)]">
         <table aria-label="Test grid" className="min-w-full border-separate border-spacing-0 text-meta">
           <thead className="sticky top-0 z-30 bg-bg">
             <tr>
@@ -206,7 +238,7 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
                 </>
               );
               return (
-                <tr key={cred.id} data-cred-id={cred.id} {...(selected ? { "data-state": "selected", "aria-selected": true } : {})}>
+                <tr key={cred.id} data-cred-id={cred.id} className="snap-start" {...(selected ? { "data-state": "selected", "aria-selected": true } : {})}>
                   <th scope="row" className={`sticky left-0 z-10 w-[28ch] min-w-[28ch] max-w-[28ch] border-b border-r border-line ${selected ? "bg-surface-hi" : "bg-bg"} ${onSelect ? "p-0" : "px-3 py-2"} text-left font-normal ${selected ? BAR : ""}`}>
                     {onSelect ? (
                       <button
@@ -255,7 +287,7 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
             {triedList.map((t) => {
               const who = `${t.domain ? `${t.domain}\\` : ""}${t.username}`;
               return (
-                <tr key={t.key} data-tried="" className="text-muted">
+                <tr key={t.key} data-tried="" className="snap-start text-muted">
                   <th scope="row" className="sticky left-0 z-10 w-[28ch] min-w-[28ch] max-w-[28ch] border-b border-r border-line bg-bg px-3 py-2 text-left font-normal">
                     <div className="truncate font-mono" title={who}>{t.username}</div>
                     <div data-testid="tried-secret">

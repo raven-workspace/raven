@@ -666,23 +666,43 @@ describe("credentials dock page", () => {
 
   it("scrolls the selected row into view in its own scroller, in the matrix and in the inventory", async () => {
     const user = userEvent.setup();
-    const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
+    const into = vi.spyOn(Element.prototype, "scrollIntoView");
+    const stubs: { mockRestore: () => void }[] = [];
+    const stubLayout = () => {
+      stubs.push(
+        vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+          const r = this.tagName === "TR" ? { top: 500, bottom: 550 } : { top: 0, bottom: 0 };
+          return { ...r, left: 0, right: 0, width: 0, height: r.bottom - r.top, x: 0, y: r.top, toJSON: () => ({}) };
+        }),
+        vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(200),
+      );
+    };
+    const ancestorsStill = (el: HTMLElement) => {
+      for (let e = el.parentElement; e; e = e.parentElement) expect(e.scrollTop).toBe(0);
+    };
     try {
+      stubLayout();
       mount({ creds: TEN, services: SMB });
       await screen.findByRole("button", { name: "Select u10" });
-      await waitFor(() => expect(spy).toHaveBeenCalled());
-      const matrixRow = spy.mock.contexts.at(-1) as HTMLElement;
-      expect(matrixRow.tagName).toBe("TR");
-      expect(matrixRow.getAttribute("data-cred-id")).toBe("c10");
-      expect(spy).toHaveBeenLastCalledWith({ block: "nearest", inline: "nearest" });
-      spy.mockClear();
+      const scroller = document.querySelector("table[aria-label='Test grid']")!.parentElement!;
+      await waitFor(() => expect(scroller.scrollTop).toBe(350));
+      ancestorsStill(scroller);
+      stubs.splice(0).forEach((s) => s.mockRestore());
       await user.click(screen.getByRole("tab", { name: /^Inventory/ }));
-      await waitFor(() => expect(spy).toHaveBeenCalled());
-      const invRow = spy.mock.contexts.at(-1) as HTMLElement;
-      expect(invRow).toHaveAttribute("data-cred-row");
-      expect(invRow).toHaveAttribute("aria-selected", "true");
+      const rows = await waitFor(() => {
+        const r = document.querySelectorAll("tr[data-cred-row]");
+        expect(r.length).toBeGreaterThan(2);
+        return r;
+      });
+      stubLayout();
+      await user.click(rows[0]);
+      const viewport = document.querySelector("tr[data-cred-row][aria-selected='true']")!.closest<HTMLElement>("[data-slot=scroll-area-viewport]")!;
+      await waitFor(() => expect(viewport.scrollTop).toBe(350));
+      ancestorsStill(viewport);
+      expect(into).not.toHaveBeenCalled();
     } finally {
-      spy.mockRestore();
+      into.mockRestore();
+      stubs.forEach((s) => s.mockRestore());
     }
   });
 });

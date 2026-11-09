@@ -29,12 +29,12 @@ export function CopySecretButton({ secret, label }: { secret: string; label: str
  * A secret as a fixed 8-dot mask that never wraps. The eye reveals it in place; Copy is its own track
  * (omit it with `copy={false}` when the row has Copy in its action cell).
  */
-export function MaskedSecret({ secret, label, copy = true }: { secret: string; label: string; copy?: boolean }) {
+export function MaskedSecret({ secret, label, copy = true, hideMaskBelow }: { secret: string; label: string; copy?: boolean; /** Container-query class that hides the at-rest dots in a narrow container; a revealed secret always shows. */ hideMaskBelow?: string }) {
   const [shown, setShown] = useState(false);
   return (
     <span className={`inline-grid items-center gap-1 ${copy ? "grid-cols-[max-content_28px_28px]" : "grid-cols-[max-content_28px]"}`}>
       <span
-        className={`font-mono text-code text-fg ${shown ? "max-w-[32ch] whitespace-normal [overflow-wrap:anywhere]" : "whitespace-nowrap"}`}
+        className={`font-mono text-code text-fg ${shown ? "max-w-[32ch] whitespace-normal [overflow-wrap:anywhere]" : `whitespace-nowrap ${hideMaskBelow ?? ""}`}`}
         data-testid="secret-text"
       >
         {shown ? secret : MASK}
