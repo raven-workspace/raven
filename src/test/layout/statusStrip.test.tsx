@@ -107,4 +107,19 @@ describe("status strip and title bar", () => {
     expect(lock.querySelector("svg")).not.toBeNull();
     expect(lock.querySelector("kbd")!.className).not.toMatch(/border/);
   });
+  it("Rooted and Flags show a dash, never 0/0, while progress loads or after it fails", async () => {
+    m.engagementsProgress.mockImplementation(() => new Promise(() => {}));
+    const strip = await mountStrip();
+    await within(strip).findByText("LHOST");
+    expect(within(strip).getByRole("group", { name: "Rooted \u2014" })).toBeInTheDocument();
+    expect(within(strip).getByRole("group", { name: "Flags \u2014" })).toBeInTheDocument();
+    expect(strip).not.toHaveTextContent("0/0");
+  });
+
+  it("a failed progress query flags Rooted and Flags as unavailable, not 0/0", async () => {
+    m.engagementsProgress.mockRejectedValue(new Error("db locked"));
+    const strip = await mountStrip();
+    expect(await within(strip).findByRole("group", { name: "Rooted unavailable" })).toBeInTheDocument();
+    expect(strip).not.toHaveTextContent("0/0");
+  });
 });

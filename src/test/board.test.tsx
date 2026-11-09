@@ -259,4 +259,23 @@ describe("board", () => {
       await screen.findByRole("dialog", { name: "Add host" }),
     ).toBeInTheDocument();
   });
+  it("while hosts load it shows a loading state, not an empty board with zero counts", async () => {
+    m.hostsList.mockImplementation(() => new Promise(() => {}));
+    mount();
+    const main = within(await screen.findByRole("main"));
+    expect(await main.findByText("Loading hosts…")).toBeInTheDocument();
+    expect(main.queryByRole("region", { name: "Reporting" })).toBeNull();
+    expect(main.queryByText("No hosts yet")).toBeNull();
+  });
+
+  it("when hosts fail it shows the shared error state with Retry, not zero counts", async () => {
+    const user = userEvent.setup();
+    m.hostsList.mockRejectedValueOnce(new Error("db locked"));
+    mount();
+    const main = within(await screen.findByRole("main"));
+    expect(await main.findByRole("alert")).toHaveTextContent("Couldn't load hosts");
+    expect(main.queryByRole("region", { name: "Reporting" })).toBeNull();
+    await user.click(main.getByRole("button", { name: "Retry" }));
+    expect(await main.findByRole("region", { name: "Reporting" })).toBeInTheDocument();
+  });
 });

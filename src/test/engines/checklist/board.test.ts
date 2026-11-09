@@ -48,7 +48,23 @@ describe('derivedColumn', () => {
 
   it('access user with nothing ticked is initial-foothold', () => {
     expect(derivedColumn({ ...host, access: 'user' }, {}, all)).toBe('initial-foothold');
-    expect(derivedColumn({ ...host, access: 'root' }, {}, all)).toBe('initial-foothold');
+  });
+
+  it('root access with no proof ticked is post-exploitation, not initial-foothold', () => {
+    expect(derivedColumn({ ...host, access: 'root' }, {}, all)).toBe('post-exploitation');
+    expect(derivedColumn({ ...host, access: 'root' }, done('h-foot-shell'), all)).toBe('post-exploitation');
+  });
+
+  it('root access with proof and every late goal closed is reporting; late goals open stays post-exploitation', () => {
+    const root = { ...host, access: 'root' as const };
+    const closed = { ...closeAll('post-exploitation', 'reporting'), ...done('h-pe-proof') };
+    expect(derivedColumn(root, closed, all)).toBe('reporting');
+    expect(derivedColumn(root, done('h-pe-proof'), all)).toBe('post-exploitation');
+  });
+
+  it('user access is unchanged by the root rule', () => {
+    expect(derivedColumn({ ...host, access: 'user' }, {}, all)).toBe('initial-foothold');
+    expect(derivedColumn({ ...host, access: 'user' }, done('h-foot-shell'), all)).toBe('privilege-escalation');
   });
 
   it('a shell goal or local.txt moves to privilege-escalation', () => {

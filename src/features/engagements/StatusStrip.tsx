@@ -78,7 +78,11 @@ function useFitStrip() {
 
 export function StatusStrip({ engagement: e }: { engagement: Engagement }) {
   const now = useNow();
-  const progress = useProgress().data?.[e.id] ?? EMPTY_PROGRESS;
+  const progressQ = useProgress();
+  // A failed or pending progress query must never read as "0/0": show a dash while loading, "unavailable" (amber) on failure.
+  const progress = progressQ.data ? (progressQ.data[e.id] ?? EMPTY_PROGRESS) : null;
+  const failed = !progress && progressQ.isError;
+  const dash = failed ? "unavailable" : "\u2014";
   const threads = useThreadCounts(e.id).total;
   const cleanup = useCleanupCounts().data?.[e.id] ?? 0;
   const { outer, inner } = useFitStrip();
@@ -95,8 +99,8 @@ export function StatusStrip({ engagement: e }: { engagement: Engagement }) {
         ) : (
           <Cell label="Dates" value={dateRange(e.startsAt, e.endsAt, now)} />
         )}
-        <Cell label="Rooted" value={`${progress.hostsRooted}/${progress.hostsTotal}`} step={STEP.rooted} />
-        <Cell label="Flags" value={`${progress.flagsFound}/${progress.flagsTotal}`} step={STEP.flags} />
+        <Cell label="Rooted" value={progress ? `${progress.hostsRooted}/${progress.hostsTotal}` : dash} step={STEP.rooted} tone={failed ? "warn" : undefined} />
+        <Cell label="Flags" value={progress ? `${progress.flagsFound}/${progress.flagsTotal}` : dash} step={STEP.flags} tone={failed ? "warn" : undefined} />
         {e.kind === "exam-sim" && <MsfLock engagement={e} step={STEP.msf} />}
         {threads > 0 && <Cell label="Threads" value={String(threads)} step={STEP.threads} />}
         {cleanup > 0 && <Cell label="Cleanup" value={String(cleanup)} step={STEP.cleanup} />}

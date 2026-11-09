@@ -14,7 +14,7 @@ const isClosed = (state: ChecklistState, goalId: string) => {
 
 /**
  * The board column a host's checklist implies. Proof decides the late columns, shell goals decide privilege
- * escalation, any foothold work (or recorded access) is Initial foothold, and Vulnerability detection means
+ * escalation, recorded root access is at least Post-exploitation, any foothold work (or user access) is Initial foothold, and Vulnerability detection means
  * information gathering is finished (every applicable goal done or N/A, and at least one). Vulnerability
  * detection and lateral movement goals never move a host.
  */
@@ -24,6 +24,8 @@ export function derivedColumn(host: Host, state: ChecklistState, applicable: App
     const late = [...goalsOf('post-exploitation'), ...goalsOf('reporting')];
     return late.every((g) => isClosed(state, g.id)) ? 'reporting' : 'post-exploitation';
   }
+  // Root access means privilege escalation is over, whatever the ticks say; only proof and closed late goals reach Reporting.
+  if (host.access === 'root') return 'post-exploitation';
   if (SHELL_GOALS.some((id) => isDone(state, id))) return 'privilege-escalation';
   if (goalsOf('initial-foothold').some((g) => isDone(state, g.id)) || host.access !== 'none') return 'initial-foothold';
   const gathering = goalsOf('information-gathering');

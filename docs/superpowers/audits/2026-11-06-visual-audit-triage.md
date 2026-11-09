@@ -120,10 +120,10 @@ The audit should get a matching check: flag `flex-wrap` containers whose childre
 | flow:add-credential: pasting `user:pass` creates nothing | **Fixed 2026-11-09 (8d).** ~~Teach intake to parse `user:pass`, `DOMAIN\user:pass` and `user:hash`.~~ |
 | focus-hidden: "Fill for host" (palette, arsenal-drawer) | Add a `:focus-within` ring on the picker wrapper (the native select is opacity 0). |
 | blank-loading ×14 (host pages, credentials, findings, eng-checklist, palette, capture) | Show a skeleton or "Loading…" after 150ms. Hide the stats strip and sidebar host list until loaded (avoid "Rooted 0/0"). |
-| silent-error: board, exam-board | Show the shared ErrorState with Try again instead of an empty board with zeros. |
+| silent-error: board, exam-board | **Done 2026-11-09 (board loads/errors via queryState; strip shows a dash or amber "unavailable", never 0/0).** Show the shared ErrorState with Try again instead of an empty board with zeros. |
 | silent-error: arsenal-browse, transfer-generator | Likely a false positive: the cards are bundled and still render. Only the host list failed (it shows "No host"), so add an inline "Couldn't load hosts · retry" in the host picker. |
-| missing-empty-state: credentials "Hashes 0" | Add "No hashes yet. Captured hashes land here." Hide the matrix legend when the matrix is empty. |
-| Error style inconsistency (3 styles) | One ErrorState component everywhere. The log's card with Try again is the model. |
+| missing-empty-state: credentials "Hashes 0" | Add "No hashes yet. Captured hashes land here." Hide the matrix legend when the matrix is empty. **Checked 2026-11-09: the inventory only lists kinds that have rows, so no "Hashes 0" renders; no change needed.** |
+| Error style inconsistency (3 styles) | One ErrorState component everywhere. The log's card with Try again is the model. **Mostly done 2026-11-09: full-pane loads use queryState/ErrorState, host checklist converged. Left: inline lines in host fact groups and findings sub-panes, payloads/capture.** |
 
 ---
 
