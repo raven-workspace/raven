@@ -173,6 +173,6 @@ New screens from the pre-lab batch, checked at 1024 (and 900 where width matters
 - **SQL panel with folded steps** (drawer 560px): finished steps fold to one line with "copied"; nothing overflows. Verified fine.
 - **Custom port field ("Other…")**: **fixed**. It opened beside the Port chip, so with "Web shell ?cmd=" picked the row grew past the 560px drawer and clipped the fits list on the right. It now opens under the Port chip, in its column (`ContextChips.tsx`). Regression: "payloads: the Other… port field opens under the Port chip".
 - **Capture credential offer line**: key icon plus "Adds 1 credential for <host>: <account>." in mono, like the services line. Verified fine; with a long FQDN it wraps to two lines.
-- **Host "Host shortcuts" hint row** (J next step, H, F, L, ⌥1–3, ?): one line at 900 and 1024. Verified fine.
+- **Host "Host shortcuts" hint row** (J next step, H, F, L, ⌥1–3): one line at 900 and 1024. Verified fine.
 - **Status strip loading and unavailable states**: a dash while loading, amber "unavailable" on error, never 0/0 (`board@1280~loading.png`, `exam-board@1280~error.png`). Verified fine.
 - **Finding services list** (T7b, §6): the audit regression "scroll panes never clip focus" failed after task 9 trimmed its padding; it is back on `SCROLL_PANE`.

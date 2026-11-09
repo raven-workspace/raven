@@ -897,21 +897,30 @@ test("headers: actions are icon buttons under 1000px, so the title keeps its roo
   await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
 });
 
-// Owner, 2026-11-09 (adc414c, 1f74942): the title-bar controls sit at the window's right edge (pr-6) on every screen,
-// no longer at the centred page column's edge.
-test("title bar controls sit at the window's right edge (dashboard, settings)", async ({ page }) => {
-  for (const [path, right] of [["/", 1440], ["/", 900], ["/", 1024], ["/settings", 1280], ["/settings", 900]] as const) {
-    await open(page, path, right);
+// Owner, 2026-11-09 (adc414c, 1f74942): the title bar is pinned to the window edges on every screen: the controls at
+// pr-6 (24px from the right), the wordmark 94px from the left (the traffic lights' 78px plus 16px). It no longer
+// follows the centred page column.
+const TITLE_BAR_CASES = [
+  ...(["/", "/settings", LAB_HOST] as const).flatMap((path) => [900, 1024, 1440].map((width) => [path, width] as const)),
+  ["/settings", 1280] as const,
+];
+
+test("title bar: wordmark at the window's left inset, controls at its right edge (dashboard, settings, host)", async ({ page }) => {
+  for (const [path, width] of TITLE_BAR_CASES) {
+    await open(page, path, width);
+    const bar = page.locator("[data-tauri-drag-region]").first();
+    const mark = await bar.getByRole("img", { name: "Raven" }).evaluate((el) => el.getBoundingClientRect().left);
+    expect(Math.abs(mark - 94), `${path} @${width}: wordmark left edge at 94px`).toBeLessThanOrEqual(1);
     const gear = await page.getByRole("button", { name: "Settings" }).evaluate((el) => el.getBoundingClientRect().right);
-    expect(Math.abs(gear - (right - 24)), `${path} @${right}: gear right edge vs the window's right edge less pr-6`).toBeLessThanOrEqual(1);
+    expect(Math.abs(gear - (width - 24)), `${path} @${width}: gear right edge vs the window's right edge less pr-6`).toBeLessThanOrEqual(1);
     const g = await page.getByRole("button", { name: "Settings" }).evaluate((el) => {
       const svg = el.querySelector("svg")!.getBoundingClientRect();
       return { w: el.getBoundingClientRect().width, svg: svg.width, color: getComputedStyle(el).color };
     });
-    expect([g.w, g.svg], `${path} @${right}: 28px box with a 16px gear`).toEqual([28, 16]);
+    expect([g.w, g.svg], `${path} @${width}: 28px box with a 16px gear`).toEqual([28, 16]);
     // Accent lime on /settings only (accent is #c6ff3d-ish: green channel far above blue).
     const lime = (c: string) => { const [r, gr, b] = c.match(/\d+/g)!.map(Number); return gr > 200 && b < 120 && r > 120; };
-    expect(lime(g.color), `${path} @${right}: gear accent only on /settings`).toBe(path === "/settings");
+    expect(lime(g.color), `${path} @${width}: gear accent only on /settings`).toBe(path === "/settings");
   }
 });
 
