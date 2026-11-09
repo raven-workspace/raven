@@ -75,13 +75,29 @@ function triedRows(tried: TriedPair[]) {
   return [...rows.values()];
 }
 
-export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = [] }: {
+const BAR = "shadow-[inset_2px_0_0_var(--accent)]";
+
+/** ArrowUp/Down move focus between the row-select buttons of one table; they never select. */
+function moveRowFocus(e: React.KeyboardEvent<HTMLElement>) {
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+  const buttons = [...(e.currentTarget.closest("table")?.querySelectorAll<HTMLButtonElement>("button[data-row-select]") ?? [])];
+  const next = buttons[buttons.indexOf(e.target as HTMLButtonElement) + (e.key === "ArrowDown" ? 1 : -1)];
+  e.preventDefault();
+  next?.focus();
+}
+
+export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = [], selectedId, onSelect, className = "" }: {
   eid: string;
   hosts: Host[];
   creds: Credential[];
   attempts: CredAttempt[];
   servicesByHost: Map<string, Service[]>;
   tried?: TriedPair[];
+  /** With onSelect, credential row headers are buttons and the selected row is marked. */
+  selectedId?: string;
+  onSelect?: (credId: string) => void;
+  /** Extra classes on the bordered box; pass a max-h to make the grid scroll vertically under a sticky header. */
+  className?: string;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const [fade, setFade] = useState(false);
@@ -124,10 +140,10 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
     <section aria-label="Test matrix" className="grid grid-cols-[minmax(0,1fr)] gap-2">
       {header}
       <Legend />
-      <div className="relative rounded border border-line">
-        <div ref={scroller} onScroll={measure} className="overflow-x-auto">
+      <div className={`relative rounded border border-line ${className}`}>
+        <div ref={scroller} onScroll={measure} className="max-h-[inherit] overflow-auto">
         <table aria-label="Test grid" className="min-w-full border-separate border-spacing-0 text-meta">
-          <thead>
+          <thead className="sticky top-0 z-30 bg-bg">
             <tr>
               <th rowSpan={2} scope="col" className={`sticky left-0 z-20 w-[28ch] min-w-[28ch] max-w-[28ch] border-b border-r border-line bg-bg px-3 py-2 text-left ${labelClass}`}>Credential</th>
               {groups.map(({ host, services }) => (
@@ -148,14 +164,34 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
             </tr>
           </thead>
           <tbody>
-            {rows.map((cred) => (
-              <tr key={cred.id} data-cred-id={cred.id}>
-                <th scope="row" className="sticky left-0 z-10 w-[28ch] min-w-[28ch] max-w-[28ch] border-b border-r border-line bg-bg px-3 py-2 text-left font-normal">
+            {rows.map((cred) => {
+              const selected = !!onSelect && cred.id === selectedId;
+              const bg = selected ? "bg-surface-hi" : "bg-bg";
+              const lines = (
+                <>
                   <div className="truncate font-mono text-fg" title={credName(cred)}>{credName(cred)}</div>
                   <div className="text-meta text-muted">
                     <span>{cred.type}</span>
                     {cred.scope !== "domain" && <span className="ml-2">{cred.scope}</span>}
                   </div>
+                </>
+              );
+              return (
+              <tr key={cred.id} data-cred-id={cred.id} {...(selected ? { "data-state": "selected", "aria-selected": true } : {})}>
+                <th scope="row" className={`sticky left-0 z-10 w-[28ch] min-w-[28ch] max-w-[28ch] border-b border-r border-line ${bg} ${onSelect ? "p-0" : "px-3 py-2"} text-left font-normal ${selected ? BAR : ""}`}>
+                  {onSelect ? (
+                    <button
+                      type="button"
+                      data-row-select=""
+                      aria-pressed={selected}
+                      aria-label={`Select ${credLabel(cred)}`}
+                      onClick={() => onSelect(cred.id)}
+                      onKeyDown={moveRowFocus}
+                      className="grid min-h-9 w-full cursor-default grid-cols-[minmax(0,1fr)] content-center px-3 py-2 text-left"
+                    >
+                      {lines}
+                    </button>
+                  ) : lines}
                 </th>
                 {groups.flatMap(({ host, services }) =>
                   services.map((service, i) => {
@@ -163,7 +199,7 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
                     const partial = partialLabel(cred, service, cell);
                     const label = `${credLabel(cred)} on ${hostLabel(host)} ${service.toUpperCase()}: ${partial ?? META[cell.state].aria}${cell.modesDiffer ? " (domain and local differ)" : ""}`;
                     return (
-                      <td key={`${host.id}-${service}`} className={`border-b border-line p-1 text-center ${i === 0 ? "border-l" : ""}`}>
+                      <td key={`${host.id}-${service}`} className={`border-b border-line ${selected ? "bg-surface-hi" : ""} p-1 text-center ${i === 0 ? "border-l" : ""}`}>
                         {cell.state === "na" ? (
                           <span role="img" aria-label={label} title={label} className="inline-block"><Glyph state="na" /></span>
                         ) : (
@@ -185,7 +221,8 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
                   }),
                 )}
               </tr>
-            ))}
+              );
+            })}
             {triedList.map((t) => {
               const who = `${t.domain ? `${t.domain}\\` : ""}${t.username}`;
               return (
