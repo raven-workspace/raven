@@ -158,13 +158,13 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
       {!folded && (
         <>
           <Separator className="bg-line-2" />
-          <div className={`grid min-h-0 grid-cols-[minmax(0,1fr)] ${tabs.length > 0 ? "grid-rows-[auto_auto_minmax(0,1fr)] @[700px]:grid-rows-none @[700px]:grid-cols-[260px_auto_minmax(0,1fr)]" : ""}`}>
+          <div className={`grid min-h-0 grid-cols-[minmax(0,1fr)] content-start overflow-y-auto @[700px]:overflow-visible ${tabs.length > 0 ? "grid-rows-[auto_auto_auto] @[700px]:grid-rows-none @[700px]:grid-cols-[260px_auto_minmax(0,1fr)]" : ""}`}>
             {facts}
             {tabs.length > 0 && (
               <>
                 <Separator className="bg-line-2 @[700px]:hidden" />
                 <Separator orientation="vertical" className="hidden bg-line-2 @[700px]:block" />
-                <ScrollArea className="h-full min-h-0 [&_[data-slot=scroll-area-viewport]>div]:block!">
+                <ScrollArea className="h-auto min-h-0 @[700px]:h-full [&_[data-slot=scroll-area-viewport]>div]:block!">
                   <div className="p-3">
                     <DockWork
                       key={cred.id}
