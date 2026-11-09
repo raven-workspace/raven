@@ -31,6 +31,7 @@ export function hostCredentialCounts(host: Host, services: Service[], creds: Cre
   const working = new Set(worked.map((a) => `${a.credId}|${a.usernameId ?? ""}`));
   // A grant for a username that already has a working result here is the same access, so it counts once.
   const viaResult = new Set(worked.flatMap((a) => (a.usernameId ? [a.usernameId] : [])));
+  // Deduped by usernameId on purpose: one access per user, however it was shown.
   const grantsHere = grants.filter((g) => g.hostId === host.id && !viaResult.has(g.usernameId));
   const spray = hostSprayServices(host, services);
   const untested = creds

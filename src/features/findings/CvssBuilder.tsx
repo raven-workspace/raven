@@ -143,6 +143,8 @@ export function CvssBuilder({ value, onChange }: { value: string; onChange(vecto
                 key={v}
                 type="button"
                 aria-pressed={on}
+                aria-disabled={v === "3.0" ? true : undefined}
+                title={v === "3.0" ? "Stored as CVSS 3.0" : undefined}
                 onClick={() => (v === "3.0" ? undefined : switchTo(v))}
                 className={cx(segment, on ? segmentOn : segmentOff)}
               >

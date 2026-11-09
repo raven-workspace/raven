@@ -92,7 +92,10 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
             </Chip>
           ))}
           {names.length > MAX_CHIPS && (
-            <Chip title={names.slice(MAX_CHIPS).join(", ")}>+{names.length - MAX_CHIPS}</Chip>
+            <Chip title={names.slice(MAX_CHIPS).join(", ")}>
+              +{names.length - MAX_CHIPS}
+              <span className="sr-only">, also {names.slice(MAX_CHIPS).join(", ")}</span>
+            </Chip>
           )}
           {entry.private && <Chip>private</Chip>}
           {entry.returnedNothing &&

@@ -56,7 +56,7 @@ export interface Draft {
  * input (`fileDirty`, reported by the form itself).
  */
 export function draftChanged(d: Draft, base: Draft, fileDirty: boolean): boolean {
-  return fileDirty || JSON.stringify({ ...d, fileForm: null }) !== JSON.stringify({ ...base, fileForm: null });
+  return fileDirty || JSON.stringify({ ...d, fileForm: null, nvdPending: [] }) !== JSON.stringify({ ...base, fileForm: null, nvdPending: [] });
 }
 
 /** The draft for `f`, or a new one on `hostId` (the host page it was opened from). */
@@ -411,7 +411,7 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
                   <span className="truncate font-mono text-code text-fg" title={r}>{r}</span>
                   <ActionCell>
                     {isUrl(r) ? <CopyRef value={r} /> : <span aria-hidden className="size-7" />}
-                    <IconButton icon={X} tone="destructive" label={`Remove ${r}`} onClick={() => set("refs", d.refs.filter((x) => x !== r))} />
+                    <IconButton icon={X} tone="destructive" label={`Remove ${r}`} onClick={() => update((p) => ({ ...p, refs: p.refs.filter((x) => x !== r), nvdPending: p.nvdPending.filter((x) => x !== r) }))} />
                   </ActionCell>
                 </li>
               ))}

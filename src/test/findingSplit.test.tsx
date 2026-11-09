@@ -580,6 +580,17 @@ describe("finding split: NVD lookup and failed saves (UX round 1 leftovers)", ()
     expect(useFindingDraftStore.getState().drafts["e1:h1:new"]?.nvdPending).toEqual([]);
   });
 
+  it("adding and removing a CVE before the lookup fires leaves the draft unchanged", async () => {
+    const user = userEvent.setup();
+    mount();
+    const form = await openSplit(user);
+    await addRef(user, form, "CVE-2021-41773");
+    await user.click(within(form).getByRole("button", { name: "Remove CVE-2021-41773" }));
+    expect(useFindingDraftStore.getState().drafts["e1:h1:new"]).toBeUndefined();
+    await user.keyboard("{Escape}");
+    expect(useFindingDraftStore.getState().drafts["e1:h1:new"]).toBeUndefined();
+  });
+
   it("an NVD answer merges into what is typed by the time it lands", async () => {
     const user = userEvent.setup();
     let answer!: () => void;

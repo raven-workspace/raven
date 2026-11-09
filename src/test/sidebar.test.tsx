@@ -271,7 +271,8 @@ describe("log row chip", () => {
     expect(screen.getByText("box0")).toBeInTheDocument();
     expect(screen.getByText("box1")).toBeInTheDocument();
     expect(screen.queryByText("box2")).not.toBeInTheDocument();
-    expect(screen.getByText("+3")).toHaveAttribute("title", "box2, box3, box4");
+    expect(screen.getByText(/^\+3/)).toHaveAttribute("title", "box2, box3, box4");
+    expect(screen.getByRole("button", { name: /also box2, box3, box4/ })).toBeInTheDocument();
   });
   it("pick mode's caret is an icon button whose tooltip shows on keyboard focus", async () => {
     const user = userEvent.setup();
