@@ -54,7 +54,8 @@ export function LogEntryBody({ entry }: { entry: LogEntry }) {
       {c.kind === "screenshot" && (
         <>
           <AttachmentImage id={c.attachmentId} alt={c.caption || c.fileName || entry.title} />
-          {c.caption && <p className="m-0 text-meta text-fg-2">{c.caption}</p>}
+          {/* A capture's title is its caption's first line, so a caption that only repeats the title is not shown again. */}
+          {c.caption && c.caption.trim() !== entry.title.trim() && <p className="m-0 text-meta text-fg-2">{c.caption}</p>}
           {c.fileName && <span className="text-code text-muted">{c.fileName}</span>}
         </>
       )}

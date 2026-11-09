@@ -85,8 +85,9 @@ export function ContextChips({ fit, engagementId, onHost, onDone, toggleRow, fil
           <span className="py-1 text-meta text-muted">No host</span>
         )}
       </div>
-      {/* OS, paste context and port read in full; the "Other…" port field sits after the Port chip while it is open. */}
-      <div className={`grid ${field === null ? "grid-cols-[repeat(3,max-content)]" : "grid-cols-[repeat(3,max-content)_6rem]"} items-start justify-start gap-2`}>
+      {/* OS, paste context and port read in full; the "Other…" port field opens under the Port chip, in its column, so the
+          row never grows wider than the drawer (beside it, a long paste context pushed the field and the list past 560px). */}
+      <div className="grid grid-cols-[repeat(3,max-content)] items-start justify-start gap-2">
         <Chip
           ref={osRef} name="OS" value={os ? OS_LABEL[os] : null} current={os}
           options={(["linux", "windows"] as const).map((o) => ({ id: o, name: OS_LABEL[o] }))}
@@ -97,40 +98,42 @@ export function ContextChips({ fit, engagementId, onHost, onDone, toggleRow, fil
           options={contexts.map((c) => ({ id: c.id, name: c.label }))}
           onPick={(id) => set({ context: id as (typeof contexts)[number]["id"] })} {...mouse}
         />
-        <Chip
-          ref={portRef} name="Port" value={port || null} current={port || null}
-          options={[
-            ...ports.map((p) => ({ id: p, name: p, detail: p === settingsPort ? "Settings" : SUGGESTED_PORTS.includes(p) ? "egress-friendly" : "" })),
-            { id: OTHER_PORT, name: "Other…", detail: "type a port" },
-          ]}
-          onPick={(id) => (id === OTHER_PORT ? setCustom("") : set({ port: id }))}
-          // "Other…" leaves focus to the field it opens.
-          {...(onDone ? { onMousePick: (id: string | null) => id !== OTHER_PORT && onDone() } : {})}
-        />
-        {field && (
-          <div className="grid content-start gap-1">
-            <Input
-              mono autoFocus aria-label="Custom port" placeholder="port" inputMode="numeric" value={field.text} data-own-esc=""
-              {...(field.invalid ? { "aria-invalid": true, "aria-describedby": noteId } : {})}
-              title="Any port to listen on: ↵ sets it for this host, Esc drops it"
-              onChange={(e) => setCustom(e.target.value.replace(/\D/g, "").slice(0, 5))}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter" && e.key !== "Escape") return;
-                e.preventDefault();
-                e.stopPropagation();
-                // Not a port: the field stays, marked, and nothing moves (the next ↵ must not copy with the old port).
-                if (e.key === "Enter" && !validPort(field.text)) return setCustomState({ ...field, invalid: true });
-                closing.current = true;
-                closeCustom(e.key === "Enter");
-                if (e.key === "Enter" && onDone) onDone();
-                else portChip()?.focus();
-                closing.current = false;
-              }}
-              onBlur={() => !closing.current && closeCustom(true)}
-            />
-            {field.invalid && <span id={noteId} className="text-meta text-warn">1–65535</span>}
-          </div>
-        )}
+        <div className="grid content-start gap-1">
+          <Chip
+            ref={portRef} name="Port" value={port || null} current={port || null}
+            options={[
+              ...ports.map((p) => ({ id: p, name: p, detail: p === settingsPort ? "Settings" : SUGGESTED_PORTS.includes(p) ? "egress-friendly" : "" })),
+              { id: OTHER_PORT, name: "Other…", detail: "type a port" },
+            ]}
+            onPick={(id) => (id === OTHER_PORT ? setCustom("") : set({ port: id }))}
+            // "Other…" leaves focus to the field it opens.
+            {...(onDone ? { onMousePick: (id: string | null) => id !== OTHER_PORT && onDone() } : {})}
+          />
+          {field && (
+            <div className="grid w-24 content-start gap-1">
+              <Input
+                mono autoFocus aria-label="Custom port" placeholder="port" inputMode="numeric" value={field.text} data-own-esc=""
+                {...(field.invalid ? { "aria-invalid": true, "aria-describedby": noteId } : {})}
+                title="Any port to listen on: ↵ sets it for this host, Esc drops it"
+                onChange={(e) => setCustom(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter" && e.key !== "Escape") return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  // Not a port: the field stays, marked, and nothing moves (the next ↵ must not copy with the old port).
+                  if (e.key === "Enter" && !validPort(field.text)) return setCustomState({ ...field, invalid: true });
+                  closing.current = true;
+                  closeCustom(e.key === "Enter");
+                  if (e.key === "Enter" && onDone) onDone();
+                  else portChip()?.focus();
+                  closing.current = false;
+                }}
+                onBlur={() => !closing.current && closeCustom(true)}
+              />
+              {field.invalid && <span id={noteId} className="text-meta text-warn">1–65535</span>}
+            </div>
+          )}
+        </div>
       </div>
       {/* What gets out and what the box has: callbacks, a filter wrapper where it applies, the tools. */}
       {toggleRow && (

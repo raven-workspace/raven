@@ -540,15 +540,14 @@ describe("finding split: layout and keys (review round 1)", () => {
 });
 
 describe("finding split: services list inside the editor pane", () => {
-  it("scrolls on its own without doubling the pane's right padding", async () => {
+  it("scrolls on its own and pads like a scroll pane", async () => {
     const user = userEvent.setup();
     mount();
     const form = await openSplit(user);
     const list = await within(form).findByTestId("service-list");
-    // jsdom has no layout: the classes are the contract here (the pane pads pr-3; the list keeps pr-1; Playwright checks pixels).
-    expect(list).toHaveClass("overflow-y-auto", "pr-1");
-    expect(list).not.toHaveClass("pr-3");
-    expect(form.closest("section")).toHaveClass("pr-3");
+    // jsdom has no layout: the classes are the contract here. The list is its own scroll pane, so it pads like one
+    // (overlay scrollbars sit over its own content, not the editor pane's); Playwright checks pixels.
+    expect(list).toHaveClass("overflow-y-auto", "p-1", "pr-3");
   });
 });
 
