@@ -8,6 +8,7 @@ import { ContextChips } from "./ContextChips";
 import { PayloadBlock, PayloadView } from "./PayloadView";
 import { SqlPanel } from "./SqlPanel";
 import { TransferPanel } from "./TransferPanel";
+import { hasToggles } from "./usePayloadFit";
 import { GENERATOR_LIST_ID, GENERATORS, hintsFor, usePayloadSession } from "./usePayloadSession";
 import { usePayloadsStore } from "./usePayloadsStore";
 
@@ -44,7 +45,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
           }}
         />
       </header>
-      <ContextChips fit={fit} engagementId={engagementId} onHost={s.setHostId} hostRef={hostRef} osRef={osRef} contextRef={contextRef} portRef={portRef}
+      <ContextChips fit={fit} engagementId={engagementId} onHost={s.setHostId} toggleRow={hasToggles(generator)} hostRef={hostRef} osRef={osRef} contextRef={contextRef} portRef={portRef}
         callbacksRef={callbacksRef} filterRef={filterRef} toolsRef={toolsRef}
       />
       <div ref={bodyRef} tabIndex={-1} className="min-h-0 overflow-y-auto overflow-x-hidden px-4 py-4 outline-none">

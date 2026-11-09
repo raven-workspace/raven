@@ -12,7 +12,7 @@ import { PayloadBlock, PayloadView } from "./PayloadView";
 import { SqlPanel } from "./SqlPanel";
 import { TransferPanel } from "./TransferPanel";
 import { ToolsPicker } from "./ToolsPicker";
-import { FILTER_LABEL, OS_LABEL } from "./usePayloadFit";
+import { FILTER_LABEL, hasToggles, OS_LABEL } from "./usePayloadFit";
 import { GENERATOR_LIST_ID, GENERATORS, hintsFor, inGeneratorList, isGenerator, lhostPlaceholder, otherDrawerOpen, usePayloadSession } from "./usePayloadSession";
 import { usePayloadsStore, type PayloadOverride } from "./usePayloadsStore";
 
@@ -50,6 +50,8 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
   const blocked = fit.toggles.callbacksBlocked;
   /** A callback clue shows only while callbacks read allowed; Raven never flips the toggle. */
   const clue = blocked ? null : fit.callbackClue;
+  /** Callbacks, Filter and Tools apply to Shell and msfvenom only. */
+  const toggles = hasToggles(generator);
   const register = (t: string) => (el: HTMLInputElement | null) => {
     if (el) fieldEls.current.set(t, el);
     else fieldEls.current.delete(t);
@@ -118,16 +120,18 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
             />
           </label>
         </div>
-        <ReadItem label="Callbacks" why={blocked ? "set by you: binds first" : null}>
-          <div ref={choiceGroup(callbacksRef)} className="grid grid-cols-2 gap-2">
-            <Toggle on={!blocked} onChange={() => override({ callbacksBlocked: false })} className="justify-center">
-              <span className={clue ? "text-warn" : undefined}>Allowed</span>
-            </Toggle>
-            <Toggle on={blocked} onChange={() => override({ callbacksBlocked: true })} className="justify-center">Blocked</Toggle>
-          </div>
-          {clue && <span className="text-meta text-warn">{clue}</span>}
-        </ReadItem>
-        {fit.filterApplies && (
+        {toggles && (
+          <ReadItem label="Callbacks" why={blocked ? "set by you: binds first" : null}>
+            <div ref={choiceGroup(callbacksRef)} className="grid grid-cols-2 gap-2">
+              <Toggle on={!blocked} onChange={() => override({ callbacksBlocked: false })} className="justify-center">
+                <span className={clue ? "text-warn" : undefined}>Allowed</span>
+              </Toggle>
+              <Toggle on={blocked} onChange={() => override({ callbacksBlocked: true })} className="justify-center">Blocked</Toggle>
+            </div>
+            {clue && <span className="text-meta text-warn">{clue}</span>}
+          </ReadItem>
+        )}
+        {toggles && fit.filterApplies && (
           <ReadItem label="Filter">
             <div ref={choiceGroup(filterRef)} className="grid grid-cols-2 gap-2">
               {filterChoices(fit.os).map((f) => (
@@ -138,11 +142,13 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
             </div>
           </ReadItem>
         )}
-        <ReadItem label="Tools">
-          <div className="grid justify-start">
-            <ToolsPicker ref={toolsRef} own={fit.toggles.tools} log={fit.logTools} onChange={(tools) => override({ tools })} />
-          </div>
-        </ReadItem>
+        {toggles && (
+          <ReadItem label="Tools">
+            <div className="grid justify-start">
+              <ToolsPicker ref={toolsRef} own={fit.toggles.tools} log={fit.logTools} onChange={(tools) => override({ tools })} />
+            </div>
+          </ReadItem>
+        )}
         <ReadItem label="Exam rules">
           <span className={cx("text-meta", exam ? "text-fg-2" : "text-muted")}>
             {exam ? `Meterpreter: one machine only. ${msfHost ? `Locked to ${msfHost}.` : "Not locked yet."}` : "No exam limits."}

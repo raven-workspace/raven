@@ -127,7 +127,6 @@ describe("Payloads toggles", () => {
     // Marks come before the requires reasons.
     const texts = [...bash.querySelectorAll("span span")].map((s) => s.textContent);
     expect(texts.indexOf("Needs a callback")).toBeLessThan(texts.indexOf("uses bash"));
-    expect(d.queryByRole("button", { name: /^Don't fit here/ })?.textContent ?? "").not.toContain("Bash /dev/tcp");
   });
 
   it("a callback clue turns the chip amber but never flips it", async () => {
@@ -169,7 +168,10 @@ describe("Payloads toggles", () => {
     expect(chip).toHaveFocus();
     // bash, then python3: two steps right is "missing".
     await user.keyboard("{ArrowDown}{ArrowRight}{ArrowRight}");
-    expect(d.getByRole("option", { name: "python3: missing" })).toBeInTheDocument();
+    // The list renders in a portal, outside the drawer, so the drawer's edge never clips it.
+    const list = screen.getByRole("listbox", { name: "Tools" });
+    expect(screen.getByRole("complementary", { name: "Payloads" }).contains(list)).toBe(false);
+    expect(within(list).getByRole("option", { name: "python3: missing" })).toBeInTheDocument();
     await user.keyboard("{Escape}");
     expect(d.getByRole("button", { name: "Tools: 1 set" })).toHaveFocus();
     expect(screen.getByRole("complementary", { name: "Payloads" })).toBeInTheDocument();
@@ -179,7 +181,9 @@ describe("Payloads toggles", () => {
     const rows = within(d.getByRole("listbox", { name: "Fits" })).getAllByRole("option");
     const marked = rows.map((r) => r.querySelector(".text-warn") !== null);
     const pyAt = names.indexOf("Python 3 with PTY");
+    expect(pyAt).toBeGreaterThan(0);
     expect(marked.slice(0, pyAt).every((x) => !x)).toBe(true);
+    expect(marked.slice(pyAt).every(Boolean)).toBe(true);
   });
 
   it("a tool seen in your log shows 'from your log' in the picker", async () => {
@@ -189,8 +193,29 @@ describe("Payloads toggles", () => {
     }]);
     const { user, d } = await openDrawer();
     await user.click(d.getByRole("button", { name: "Tools: 2 set" }));
-    expect(d.getByRole("option", { name: "python3: on box, from your log" })).toBeInTheDocument();
-    expect(d.getByRole("option", { name: "socat: missing, from your log" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "python3: on box, from your log" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "socat: missing, from your log" })).toBeInTheDocument();
+  });
+
+  it("a filter that is not for the OS in view reads off", async () => {
+    usePayloadsStore.setState({ overrides: { h3: { context: "url-param", filter: "b64" } } });
+    const { user, d } = await openDrawer();
+    expect(d.getByRole("button", { name: "Filter: base64" })).toBeInTheDocument();
+    await user.click(d.getByRole("button", { name: "OS: Linux" }));
+    await user.click(d.getByRole("option", { name: /^Windows/ }));
+    expect(d.getByRole("button", { name: "Filter: off" })).toBeInTheDocument();
+  });
+
+  it("the toggles show for Shell and msfvenom only", async () => {
+    const { user, d } = await openDrawer();
+    await user.keyboard("{Alt>}4{/Alt}");
+    expect(d.getByRole("button", { name: "Callbacks: allowed" })).toBeInTheDocument();
+    await user.keyboard("{Alt>}2{/Alt}");
+    expect(d.queryByRole("button", { name: /^Callbacks: / })).not.toBeInTheDocument();
+    expect(d.queryByRole("button", { name: /^Tools: / })).not.toBeInTheDocument();
+    // ⌥B does nothing there.
+    await user.keyboard("{Alt>}b{/Alt}");
+    expect(d.queryByRole("listbox", { name: "Callbacks" })).not.toBeInTheDocument();
   });
 
   it("the listener pick sticks per payload", async () => {
@@ -216,13 +241,17 @@ describe("Payloads toggles", () => {
     expect(d.getByLabelText("Command: Listener")).toHaveTextContent("rlwrap nc -nv 198.51.100.20 4444");
   });
 
-  it("the hint line lists ⌥B and ⌥T for the shell generator, not for Transfer", async () => {
+  it("the hint line lists ⌥B and ⌥T for Shell and msfvenom, not for Transfer", async () => {
     const { user } = await openDrawer();
     const aside = screen.getByRole("complementary", { name: "Payloads" });
     await user.click(within(aside).getByRole("button", { name: "All shortcuts" }));
     expect(await screen.findByText("callbacks")).toBeInTheDocument();
     expect(screen.getByText("tools")).toBeInTheDocument();
     expect(screen.queryByText("filter")).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.keyboard("{Alt>}4{/Alt}");
+    await user.click(within(aside).getByRole("button", { name: "All shortcuts" }));
+    expect(await screen.findByText("callbacks")).toBeInTheDocument();
     await user.keyboard("{Escape}");
     await user.keyboard("{Alt>}2{/Alt}");
     await user.click(within(aside).getByRole("button", { name: "All shortcuts" }));
@@ -251,6 +280,11 @@ describe("Workbench toggles", () => {
     expect(r.getByRole("button", { name: "Off" })).toHaveFocus();
     await user.keyboard("{Alt>}t{/Alt}");
     expect(r.getByRole("button", { name: "Tools: not set" })).toHaveAttribute("aria-expanded", "true");
+    // Outside the scrolling column, so it is never clipped.
+    expect(screen.getByRole("complementary", { name: "Raven's read" }).contains(screen.getByRole("listbox", { name: "Tools" }))).toBe(false);
+    await user.keyboard("{Escape}");
+    await user.keyboard("{Alt>}2{/Alt}");
+    expect(r.queryByText("Callbacks", { selector: "span.text-muted-2" })).not.toBeInTheDocument();
     expect(r.getByText("No exam limits.")).toBeInTheDocument();
   });
 

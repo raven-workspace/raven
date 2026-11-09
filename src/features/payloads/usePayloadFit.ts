@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { buildPayload } from "../../engines/payloads/build";
 import { PASTE_CONTEXTS, type PasteContext } from "../../engines/payloads/context";
-import { FILTER_CONTEXTS, type FilterId } from "../../engines/payloads/filters";
+import { FILTER_CONTEXTS, filterChoices, type FilterId } from "../../engines/payloads/filters";
 import { callbackClue, inferContext, inferredTools, inferSituation, rankPayloads, type Toggles } from "../../engines/payloads/fit";
 import { MSFVENOM } from "../../engines/payloads/msfvenom";
 import { SHELLS } from "../../engines/payloads/shells";
@@ -68,7 +68,8 @@ export function usePayloadFit(engagementId: string, hostId: string | null) {
   const clue = useMemo(() => callbackClue(situation, SHELLS), [situation]);
   /** The filter applies only where the payload goes through an injection point. */
   const filterApplies = context !== null && FILTER_CONTEXTS.includes(context);
-  const filter: FilterId = ov?.filter ?? "off";
+  /** Your filter, or "off" when it is not one for this OS (switching OS never shows a filter that is not applied). */
+  const filter: FilterId = ov?.filter && filterChoices(os).includes(ov.filter) ? ov.filter : "off";
 
   const ranked = useMemo<Record<"shell" | "msfvenom" | "upgrade", Ranked>>(() => ({
     shell: { ...rankPayloads(SHELLS, situation, context, toggles), ordered: false },
@@ -101,5 +102,7 @@ export function usePayloadFit(engagementId: string, hostId: string | null) {
 }
 
 export type PayloadFit = ReturnType<typeof usePayloadFit>;
+/** The generators the Callbacks, Filter and Tools toggles (⌥B ⌥F ⌥T) apply to. */
+export const hasToggles = (g: GeneratorId) => g === "shell" || g === "msfvenom";
 export type RankedGenerator = Extract<GeneratorId, "shell" | "msfvenom" | "upgrade">;
 export const isRanked = (g: GeneratorId): g is RankedGenerator => g === "shell" || g === "msfvenom" || g === "upgrade";
