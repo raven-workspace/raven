@@ -129,12 +129,8 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
           <span className="text-meta text-muted">{cred.type}</span>
           <span className="hidden text-meta text-muted @[700px]:inline">{cred.scope}</span>
           {works.length > 0 ? (
-            <Chip variant="accent" className="min-w-0 max-w-full justify-self-start">
-              <span className="truncate">
-                {`${works[0].level} on ${works[0].where}`}
-                {works.length > 1 && ` +${works.length - 1}`}
-              </span>
-            </Chip>
+            // Only the best level: where it works is listed once, under Works on.
+            <Chip variant="accent" className="justify-self-start">{works[0].level}</Chip>
           ) : (
             <StateChip state={overallState(cred, hosts, servicesByHost, attempts)} />
           )}

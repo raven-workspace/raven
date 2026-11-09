@@ -99,25 +99,24 @@ describe("credential dock", () => {
     expect(within(header).getByText("untested")).toBeInTheDocument();
   });
 
-  it("state chip names where it works", () => {
-    const one = attempt({ id: "a1" });
-    const { unmount } = mount({ cred: PW, attempts: [one] });
-    expect(within(screen.getByTestId("dock-header")).getByText("valid on sql01 MSSQL")).toBeInTheDocument();
-    unmount();
-    mount({ cred: PW, attempts: [one, attempt({ id: "a2", hostId: "h1", service: "smb" })] });
-    expect(within(screen.getByTestId("dock-header")).getByText("valid on dc01 SMB +1")).toBeInTheDocument();
+  it("state chip shows only the level; where it works is listed once, under Works on", () => {
+    mount({ cred: PW, attempts: [attempt({ id: "a1" }), attempt({ id: "a2", hostId: "h1", service: "smb" })] });
+    const header = screen.getByTestId("dock-header");
+    expect(within(header).getByText("valid")).toBeInTheDocument();
+    expect(header.textContent).not.toMatch(/sql01|dc01|\+1/);
+    expect(screen.getByText(/sql01 MSSQL/)).toBeInTheDocument();
   });
 
   it("a later failure or a service the host no longer has removes it from works on", () => {
     const later = [attempt({ id: "a1", at: 1000 }), attempt({ id: "a2", result: "failed", at: 2000 })];
     const { unmount } = mount({ cred: PW, attempts: later });
-    expect(within(screen.getByTestId("dock-header")).queryByText(/^valid on/)).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("dock-header")).queryByText(/^valid$/)).not.toBeInTheDocument();
     expect(screen.getByText("nothing yet")).toBeInTheDocument();
     unmount();
     // WinRM is not open on either host, so a valid winrm attempt is not a live cell.
     mount({ cred: PW, attempts: [attempt({ id: "a3", hostId: "h1", service: "winrm" })] });
     expect(screen.getByText("nothing yet")).toBeInTheDocument();
-    expect(within(screen.getByTestId("dock-header")).queryByText(/^valid on/)).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("dock-header")).queryByText(/^valid$/)).not.toBeInTheDocument();
   });
 
   it("facts list source, scope and works on", () => {
