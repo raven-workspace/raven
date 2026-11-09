@@ -116,7 +116,7 @@ export function CredentialsSection() {
           fill
           note={hidden > 0 ? (
             <p className="m-0 grid grid-cols-[max-content_max-content] items-center justify-start gap-2 text-meta text-muted">
-              {`${hidden} more ${hidden === 1 ? "credential" : "credentials"} can't be sprayed:`}
+              {`${hidden} not sprayable`}
               <Button size="sm" onClick={() => setTab("inventory")}>see Inventory</Button>
             </p>
           ) : undefined}

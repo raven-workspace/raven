@@ -640,7 +640,7 @@ describe("credentials dock page", () => {
       services: SMB,
     });
     expect(within(await screen.findByRole("region", { name: "Credential" })).getByTitle("CORP\\DC01$")).toBeInTheDocument();
-    expect(screen.getByText(/2 more credentials can't be sprayed/)).toBeInTheDocument();
+    expect(screen.getByText(/2 not sprayable/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "see Inventory" }));
     expect(screen.getByRole("tab", { name: /^Inventory/ })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("region", { name: "Machine accounts" })).toBeInTheDocument();
