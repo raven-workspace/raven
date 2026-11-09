@@ -69,9 +69,23 @@ describe("buildPayload with a filter", () => {
     expect(b.text).toContain("{LHOST}");
     expect(b.notes.join(" ")).toContain("Set LHOST first");
   });
-  it("a filter for the other OS is ignored", () => {
-    expect(buildPayload(def("bash-tcp"), "url-param", V, { filter: "ps-b64" })).toEqual(buildPayload(def("bash-tcp"), "url-param", V));
-    expect(buildPayload(def("nc-exe"), "url-param", V, { filter: "b64" })).toEqual(buildPayload(def("nc-exe"), "url-param", V));
+  it("a filter for the other OS is not applied, and says so", () => {
+    const linux = buildPayload(def("bash-tcp"), "url-param", V);
+    const b = buildPayload(def("bash-tcp"), "url-param", V, { filter: "ps-b64" });
+    expect(b.text).toBe(linux.text);
+    expect(b.notes).toContain("Filter is for Windows payloads: not applied.");
+    expect(b.notes.filter((n) => !n.startsWith("Filter is for"))).toEqual(linux.notes);
+    // OS unknown: a Linux filter picked, a Windows payload in view.
+    const win = buildPayload(def("nc-exe"), "url-param", V);
+    const w = buildPayload(def("nc-exe"), "url-param", V, { filter: "b64" });
+    expect(w.text).toBe(win.text);
+    expect(w.notes).toContain("Filter is for Linux payloads: not applied.");
+    expect(w.notes.filter((n) => !n.startsWith("Filter is for"))).toEqual(win.notes);
+    expect(buildPayload(def("ps-b64"), "webshell-param", V, { filter: "ifs" }).notes).toContain("Filter is for Linux payloads: not applied.");
+  });
+  it("no not-applied note when no filter is picked or the context takes none", () => {
+    expect(buildPayload(def("nc-exe"), "url-param", V, { filter: "off" }).notes.join(" ")).not.toContain("not applied");
+    expect(buildPayload(def("nc-exe"), "cmd", V, { filter: "b64" }).notes.join(" ")).not.toContain("not applied");
   });
   it("nc-exe in webshell-param with ps-b64: powershell -e, URL-encoded", () => {
     const b = buildPayload(def("nc-exe"), "webshell-param", V, { filter: "ps-b64" });

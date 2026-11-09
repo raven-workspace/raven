@@ -83,8 +83,8 @@ export function buildPayload(
   for (const name of ["LHOST", "LPORT", "TARGET_IP", "BIND_PORT"]) noteValues[name] = value(name) ?? "";
   const notes: string[] = (def.notes ?? []).map((n) => fillListener(n, noteValues));
   const os = def.os === "any" ? (opts.os ?? "linux") : def.os;
-  const filter = opts.filter && opts.filter !== "off" && FILTER_CONTEXTS.includes(ctx) && filterFitsOs(opts.filter, os)
-    ? opts.filter : null;
+  const asked = opts.filter && opts.filter !== "off" && FILTER_CONTEXTS.includes(ctx) ? opts.filter : null;
+  const filter = asked && filterFitsOs(asked, os) ? asked : null;
   let parts = def.parts;
   let text: string;
   if (unresolved.length > 0) {
@@ -111,6 +111,8 @@ export function buildPayload(
     if (def.upload?.kali && ctx === "uploaded-file") notes.push(`Upload ${value("FILE") ?? "{FILE}"} to the target, then open the trigger URL.`);
     else notes.push(...wrapped.notes);
     if (filter) notes.push("Already base64 (-e).");
+    // A filter picked while the OS is unknown can be for the other OS than this payload's: say it is off here.
+    else if (asked) notes.push(`Filter is for ${asked === "ps-b64" ? "Windows" : "Linux"} payloads: not applied.`);
   }
   if (def.bakesIp) {
     notes.push(def.upload?.kali
