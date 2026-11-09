@@ -24,19 +24,21 @@ function Chip({ name, value, options, current, onPick, warn, title, ref }: {
 
 /**
  * The drawer's context pickers: host (⌥H) on its own line, then OS (⌥O), where you paste it (⌥W) and the listener port,
- * then, for Shell and msfvenom, Callbacks (⌥B), Filter (⌥F, only where the payload goes through an injection point) and Tools (⌥T), each
+ * then, for Shell and msfvenom, Callbacks (⌥B), Filter (⌥F, Shell only, where the payload goes through an injection point) and Tools (⌥T), each
  * overridable for this host (session only), then one muted line saying where each value came from. Unknown values say
  * an amber "Pick one". A callback clue turns the Callbacks value amber and shows in that line; it never flips the
  * chip. All are Tab stops.
  */
-export function ContextChips({ fit, engagementId, onHost, toggleRow, hostRef, osRef, contextRef, portRef, callbacksRef, filterRef, toolsRef }: {
+export function ContextChips({ fit, engagementId, onHost, toggleRow, filterChip, hostRef, osRef, contextRef, portRef, callbacksRef, filterRef, toolsRef }: {
   fit: PayloadFit; engagementId: string; onHost: (id: string | null) => void;
   /** Show Callbacks, Filter and Tools (the Shell and msfvenom generators). */
   toggleRow: boolean;
+  /** Show Filter in that row (Shell, where the filter applies). */
+  filterChip: boolean;
   hostRef?: Ref<HostChipHandle>; osRef?: Ref<ChipPickerHandle>; contextRef?: Ref<ChipPickerHandle>; portRef?: Ref<ChipPickerHandle>;
   callbacksRef?: Ref<ChipPickerHandle>; filterRef?: Ref<ChipPickerHandle>; toolsRef?: Ref<ChipPickerHandle>;
 }) {
-  const { os, context, port, settingsPort, evidence, hostKey, toggles, callbackClue, filter, filterApplies } = fit;
+  const { os, context, port, settingsPort, evidence, hostKey, toggles, callbackClue, filter } = fit;
   const set = (patch: PayloadOverride) => usePayloadsStore.getState().override(hostKey, patch);
   const contexts = PASTE_CONTEXTS.filter((c) => !os || c.os === "any" || c.os === os);
   const ports = [...new Set([...SUGGESTED_PORTS, ...(settingsPort ? [settingsPort] : []), ...(port ? [port] : [])])];
@@ -77,14 +79,14 @@ export function ContextChips({ fit, engagementId, onHost, toggleRow, hostRef, os
       </div>
       {/* What gets out and what the box has: callbacks, a filter wrapper where it applies, the tools. */}
       {toggleRow && (
-        <div className={`grid ${filterApplies ? "grid-cols-[repeat(3,max-content)]" : "grid-cols-[repeat(2,max-content)]"} justify-start gap-2`}>
+        <div className={`grid ${filterChip ? "grid-cols-[repeat(3,max-content)]" : "grid-cols-[repeat(2,max-content)]"} justify-start gap-2`}>
           <Chip
             ref={callbacksRef} name="Callbacks" value={toggles.callbacksBlocked ? "blocked" : "allowed"} current={toggles.callbacksBlocked ? "blocked" : "allowed"}
             options={[{ id: "allowed", name: "allowed" }, { id: "blocked", name: "blocked", detail: "binds first" }]}
             onPick={(id) => set({ callbacksBlocked: id === "blocked" })} warn={clue !== null}
             title="Whether a reverse shell can call back to Kali (pick for this host)"
           />
-          {filterApplies && (
+          {filterChip && (
             <Chip
               ref={filterRef} name="Filter" value={FILTER_LABEL[filter]} current={filter}
               options={filterChoices(os).map((f) => ({ id: f, name: FILTER_LABEL[f] }))}

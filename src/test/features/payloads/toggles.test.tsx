@@ -219,6 +219,25 @@ describe("Payloads toggles", () => {
     expect(d.queryByRole("listbox", { name: "Callbacks" })).not.toBeInTheDocument();
   });
 
+  it("Filter and ⌥F are Shell's only: msfvenom keeps Callbacks and Tools but never takes a filter", async () => {
+    usePayloadsStore.setState({ overrides: { h3: { context: "injected-linux" } } });
+    const { user, d } = await openDrawer();
+    const aside = screen.getByRole("complementary", { name: "Payloads" });
+    expect(d.getByRole("button", { name: "Filter: off" })).toBeInTheDocument();
+    await user.click(within(aside).getByRole("button", { name: "All shortcuts" }));
+    expect(await screen.findByText("filter")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.keyboard("{Alt>}4{/Alt}");
+    expect(d.getByRole("button", { name: "Callbacks: allowed" })).toBeInTheDocument();
+    expect(d.getByRole("button", { name: /^Tools: / })).toBeInTheDocument();
+    expect(d.queryByRole("button", { name: /^Filter: / })).not.toBeInTheDocument();
+    await user.keyboard("{Alt>}f{/Alt}");
+    expect(d.queryByRole("listbox", { name: "Filter" })).not.toBeInTheDocument();
+    await user.click(within(aside).getByRole("button", { name: "All shortcuts" }));
+    expect(await screen.findByText("callbacks")).toBeInTheDocument();
+    expect(screen.queryByText("filter")).not.toBeInTheDocument();
+  });
+
   it("the listener pick sticks per payload", async () => {
     usePayloadsStore.setState({ overrides: { h3: { context: "bash-prompt", port: "443" } } });
     const { user, d } = await openDrawer();
@@ -284,6 +303,11 @@ describe("Workbench toggles", () => {
     // Outside the scrolling column, so it is never clipped.
     expect(screen.getByRole("complementary", { name: "Raven's read" }).contains(screen.getByRole("listbox", { name: "Tools" }))).toBe(false);
     await user.keyboard("{Escape}");
+    // msfvenom keeps Callbacks and Tools; it never takes a filter.
+    await user.keyboard("{Alt>}4{/Alt}");
+    expect(r.getAllByText("Callbacks", { selector: "span.text-muted-2" })[0]).toBeInTheDocument();
+    expect(r.getAllByText("Tools", { selector: "span.text-muted-2" })[0]).toBeInTheDocument();
+    expect(r.queryByText("Filter", { selector: "span.text-muted-2" })).not.toBeInTheDocument();
     await user.keyboard("{Alt>}2{/Alt}");
     expect(r.queryByText("Callbacks", { selector: "span.text-muted-2" })).not.toBeInTheDocument();
     expect(r.getByText("No exam limits.")).toBeInTheDocument();

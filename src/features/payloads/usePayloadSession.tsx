@@ -17,7 +17,7 @@ import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { logCommand } from "../capture/logCommand";
 import { useNotesStore } from "../notes/useNotesStore";
 import { payloadBuildsKey } from "./queries";
-import { contextLabel, hasToggles, isRanked, OS_LABEL, usePayloadFit } from "./usePayloadFit";
+import { contextLabel, hasToggles, isRanked, OS_LABEL, showsFilter, usePayloadFit } from "./usePayloadFit";
 import { usePayloadsStore } from "./usePayloadsStore";
 
 /** In ⌥1–⌥6 order. */
@@ -32,7 +32,7 @@ export const GENERATORS: { id: GeneratorId; label: string }[] = [
 /**
  * The hint line for one generator: only the keys that work there, by priority (1 never drops). `esc` names what Esc
  * does in this view; `extra` adds the view's own keys. `ordered`: ⇥ walks steps, not fits. `filter`: the Filter
- * toggle applies (an injection paste context), so ⌥F is listed; ⌥B ⌥F ⌥T only for Shell and msfvenom.
+ * toggle applies (an injection paste context), so ⌥F is listed for Shell; ⌥B ⌥T only for Shell and msfvenom.
  */
 export function hintsFor(g: GeneratorId, esc: string, extra: Hint[] = [], ordered = false, filter = false): Hint[] {
   const generator: Hint = { keys: "⌥1–6", label: "generator", priority: 5 };
@@ -51,7 +51,7 @@ export function hintsFor(g: GeneratorId, esc: string, extra: Hint[] = [], ordere
     ...(hasToggles(g)
       ? [
         { keys: "⌥B", label: "callbacks", priority: 4 },
-        ...(filter ? [{ keys: "⌥F", label: "filter", priority: 4 }] : []),
+        ...(showsFilter(g, filter) ? [{ keys: "⌥F", label: "filter", priority: 4 }] : []),
         { keys: "⌥T", label: "tools", priority: 4 },
       ]
       : []),
@@ -89,7 +89,7 @@ const altCode = (e: KeyboardEvent) => (e.altKey && !e.metaKey && !e.ctrlKey ? e.
  * keys. ↵ copies, ⌘↵ copies and logs, ⇥ moves to the next fit (only while focus is on the payload body itself, and
  * never past the last fit: there it moves focus on, so Tab still reaches every button and field; ⇧⇥ always moves focus),
  * and ⌥1–⌥6, ⌥L, ⌥H, ⌥O (OS), ⌥W (where you paste it), ⌥B (callbacks), ⌥F (filter, while it applies) and ⌥T (tools)
- * work wherever focus is (⌥B ⌥F ⌥T on Shell and msfvenom only).
+ * work wherever focus is (⌥B ⌥T on Shell and msfvenom only, ⌥F on Shell only).
  * `onEscape`, when given, takes Esc in the capture phase (the drawer closes on it).
  * `lhostField`: show LHOST among the payload's fill fields (the Workbench has its own in the left column).
  */
@@ -274,7 +274,7 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
       } else if (code === "KeyO" || code === "KeyW") {
         e.preventDefault();
         (code === "KeyO" ? osRef : contextRef).current?.open();
-      } else if (hasToggles(generator) && (code === "KeyB" || code === "KeyT" || (code === "KeyF" && fit.filterApplies))) {
+      } else if (hasToggles(generator) && (code === "KeyB" || code === "KeyT" || (code === "KeyF" && showsFilter(generator, fit.filterApplies)))) {
         e.preventDefault();
         (code === "KeyB" ? callbacksRef : code === "KeyT" ? toolsRef : filterRef).current?.open();
       } else if (engagementId && isHostPickKey(e)) {

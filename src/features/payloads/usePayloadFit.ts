@@ -120,7 +120,9 @@ export function usePayloadFit(engagementId: string, hostId: string | null) {
 }
 
 export type PayloadFit = ReturnType<typeof usePayloadFit>;
-/** The generators the Callbacks, Filter and Tools toggles (⌥B ⌥F ⌥T) apply to. */
+/** The generators the Callbacks and Tools toggles (⌥B ⌥T) apply to. */
 export const hasToggles = (g: GeneratorId) => g === "shell" || g === "msfvenom";
+/** The Filter toggle (⌥F) shows for Shell only, and only where the payload goes through an injection point: msfvenom never takes one. */
+export const showsFilter = (g: GeneratorId, filterApplies: boolean) => g === "shell" && filterApplies;
 export type RankedGenerator = Extract<GeneratorId, "shell" | "msfvenom" | "upgrade">;
 export const isRanked = (g: GeneratorId): g is RankedGenerator => g === "shell" || g === "msfvenom" || g === "upgrade";

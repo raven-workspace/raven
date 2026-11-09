@@ -12,7 +12,7 @@ import { PayloadBlock, PayloadView } from "./PayloadView";
 import { SqlPanel } from "./SqlPanel";
 import { TransferPanel } from "./TransferPanel";
 import { ToolsPicker } from "./ToolsPicker";
-import { FILTER_LABEL, hasToggles, OS_LABEL } from "./usePayloadFit";
+import { FILTER_LABEL, hasToggles, OS_LABEL, showsFilter } from "./usePayloadFit";
 import { GENERATOR_LIST_ID, GENERATORS, hintsFor, inGeneratorList, isGenerator, lhostPlaceholder, otherDrawerOpen, usePayloadSession } from "./usePayloadSession";
 import { usePayloadsStore, type PayloadOverride } from "./usePayloadsStore";
 
@@ -131,7 +131,7 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
             {clue && <span className="text-meta text-warn">{clue}</span>}
           </ReadItem>
         )}
-        {toggles && fit.filterApplies && (
+        {showsFilter(generator, fit.filterApplies) && (
           <ReadItem label="Filter">
             <div ref={choiceGroup(filterRef)} className="grid grid-cols-2 gap-2">
               {filterChoices(fit.os).map((f) => (
