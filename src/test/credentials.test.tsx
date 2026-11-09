@@ -651,4 +651,26 @@ describe("credentials dock page", () => {
     await user.click(within(dock()).getByRole("button", { name: "Open credential" }));
     expect(await within(dock()).findByRole("button", { name: "Fold credential" })).toBeInTheDocument();
   });
+
+  it("scrolls the selected row into view in its own scroller, in the matrix and in the inventory", async () => {
+    const user = userEvent.setup();
+    const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
+    try {
+      mount({ creds: TEN, services: SMB });
+      await screen.findByRole("button", { name: "Select u10" });
+      await waitFor(() => expect(spy).toHaveBeenCalled());
+      const matrixRow = spy.mock.contexts.at(-1) as HTMLElement;
+      expect(matrixRow.tagName).toBe("TR");
+      expect(matrixRow.getAttribute("data-cred-id")).toBe("c10");
+      expect(spy).toHaveBeenLastCalledWith({ block: "nearest", inline: "nearest" });
+      spy.mockClear();
+      await user.click(screen.getByRole("tab", { name: /^Inventory/ }));
+      await waitFor(() => expect(spy).toHaveBeenCalled());
+      const invRow = spy.mock.contexts.at(-1) as HTMLElement;
+      expect(invRow).toHaveAttribute("data-cred-row");
+      expect(invRow).toHaveAttribute("aria-selected", "true");
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });

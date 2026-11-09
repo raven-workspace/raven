@@ -91,6 +91,21 @@ export const SCREENS: Screen[] = [
   },
   { id: "credentials", path: `${E}/s/credentials`, ready: "role=tab[name='Matrix'][selected]" },
   {
+    id: "credentials-hash", path: `${E}/s/credentials`, ready: "role=tab[name='Matrix'][selected]",
+    setup: async (page) => {
+      await page.getByRole("button", { name: "Select ACME\\Administrator" }).click();
+      await page.getByRole("tab", { name: "Crack" }).waitFor();
+    },
+  },
+  { id: "credentials-inventory", path: `${E}/s/credentials?tab=inventory`, ready: "role=tab[name^='Inventory'][selected]" },
+  {
+    id: "credentials-folded", path: `${E}/s/credentials`, ready: "role=tab[name='Matrix'][selected]",
+    setup: async (page) => {
+      await page.getByRole("button", { name: "Fold credential" }).click();
+      await page.getByRole("button", { name: "Open credential" }).waitFor();
+    },
+  },
+  {
     id: "findings", path: `${E}/s/findings`, ready: "role=region[name='Finding']",
     setup: async (page) => {
       await page.getByRole("button", { name: /^Edit Domain compromise via Kerberoastable/ }).click();

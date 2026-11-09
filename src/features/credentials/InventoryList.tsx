@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent } from "react";
 import { credName, isMachineAccount, isOwnerless, overallState, usernameLabel, type OverallState } from "../../engines/credentials";
 import type { AccessGrant, CredAttempt, Credential, Username } from "../../types/credentials";
 import type { Host } from "../../types/host";
@@ -146,6 +146,10 @@ export function InventoryList({ eid, creds, all, hosts, servicesByHost, attempts
   onSelect: (id: string) => void;
 }) {
   const root = useRef<HTMLDivElement>(null);
+  // The selected row stays in view inside the list's own scroller (never the page).
+  useEffect(() => {
+    if (selectedId) root.current?.querySelector("tr[aria-selected='true']")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [selectedId]);
   const people = creds.filter((c) => !isMachineAccount(c));
   const ctx = { all, hosts, servicesByHost, attempts, selectedId, onSelect, root };
   return (

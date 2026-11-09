@@ -87,7 +87,7 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
   };
 
   const facts = (
-    <dl data-testid="dock-facts" className="m-0 grid content-start gap-3 p-3">
+    <dl data-testid="dock-facts" className="m-0 grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] content-start gap-3 p-3 @[700px]:grid-cols-1">
       <Fact label="Source">{cred.source || <span className="text-muted">none recorded</span>}</Fact>
       <Fact label="Scope">
         {cred.scope}
@@ -108,7 +108,7 @@ export function CredentialDock({ eid, cred, all, creds, hosts, servicesByHost, a
         </Fact>
       )}
       {placeholder && !ownerless && (
-        <Button className="justify-self-start" onClick={() => setConverting(true)}>Convert to access-only</Button>
+        <Button className="col-span-full justify-self-start" onClick={() => setConverting(true)}>Convert to access-only</Button>
       )}
     </dl>
   );

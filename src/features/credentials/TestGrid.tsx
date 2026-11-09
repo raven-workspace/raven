@@ -112,6 +112,14 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   });
+  // The selected row stays in view inside the grid's own scroller (never the page): on mount and when the selection moves.
+  useEffect(() => {
+    if (!onSelect || !selectedId) return;
+    const box = scroller.current;
+    // Keep the row clear of the sticky header, which would otherwise cover a row scrolled to the top edge.
+    if (box) box.style.scrollPaddingTop = `${box.querySelector("thead")?.getBoundingClientRect().height ?? 0}px`;
+    box?.querySelector("tr[aria-selected='true']")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [onSelect, selectedId]);
   const [open, setOpen] = useState<{ credId: string; hostId: string; service: SprayService }>();
   const rows = useMemo(() => creds.filter(isSprayable), [creds]);
   const triedList = useMemo(() => triedRows(tried), [tried]);
