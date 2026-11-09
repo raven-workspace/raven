@@ -96,8 +96,11 @@ export function buildPayload(
   } else if (filter && !(filter === "ps-b64" && def.encodePowerShell)) {
     const f = applyFilter(filled, filter);
     text = ctx === "injected-linux" ? f.text : urlEncodeFiltered(f.text);
-    // The filter replaces the bash -c step, so its part would describe text that is not shown.
-    parts = [...def.parts.filter((p) => p.token !== "bash -c"), ...f.parts];
+    // Keep only def parts whose token still shows in the filtered text (outside the encoded blob), and not ones the
+    // filter explains itself, so "what each part does" describes the shown output.
+    const shown = f.text.replace(/[A-Za-z0-9+/=]{16,}|(?:\\x[0-9a-f]{2})+/g, " ");
+    const own = new Set(f.parts.map((p) => p.token));
+    parts = [...def.parts.filter((p) => shown.includes(p.token) && !own.has(p.token)), ...f.parts];
     notes.push(f.note);
     if (ctx !== "injected-linux") notes.push("Then URL-encoded (spaces as +).");
   } else {
