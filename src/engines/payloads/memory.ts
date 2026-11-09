@@ -4,12 +4,13 @@ import type { PayloadBuild } from "../../types/payloadBuild";
 /**
  * Shell and OS "can't run that here" shapes only, so ordinary output that happens to say "cannot find" never reads as a
  * failure: bash/zsh "command not found", dash "sh: 1: x: not found", cmd "is not recognized as an internal or external
- * command" and "cannot find the path specified", "No such file or directory", "Access is denied", a tool's "invalid option".
+ * command", PowerShell "is not recognized as the name of a cmdlet" and "cannot find the path specified", "No such file or directory", "Access is denied", a tool's "invalid option".
  */
 const FAILED_OUTPUT = new RegExp([
   /command not found/,
   /^(?:\/bin\/)?(?:ba|da|z|k)?sh: (?:line )?\d+: \S+: not found\s*$/m,
   /is not recognized as an internal or external command/,
+  /is not recognized as the name of a cmdlet, function, script file, or operable program/,
   /cannot find the path specified/,
   /No such file or directory/,
   /Access is denied/,

@@ -91,6 +91,7 @@ describe("FAILED_OUTPUT shapes (prelab batch)", () => {
       "sh: 1: python3: not found",
       "'nc.exe' is not recognized as an internal or external command,\noperable program or batch file.",
       "The system cannot find the path specified.",
+      "nc.exe : The term 'nc.exe' is not recognized as the name of a cmdlet, function, script file, or operable program.",
       "/bin/sh: 1: /tmp/x: No such file or directory",
       "Access is denied.",
       "nc: invalid option -- 'e'",
