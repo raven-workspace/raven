@@ -4,7 +4,7 @@
 
 **Goal:** Rebuild the Credentials section as two tabs (Matrix, Inventory) over a shared dock that holds everything about the one selected credential, with each fact and action shown once.
 
-**Architecture:** Presentation only. `TestGrid` gains opt-in selection. A new pure module picks the default and fallback selection, and a hook keeps the selection, tab and fold state in the URL and localStorage. A new `InventoryList` groups credentials by kind. A new `CredentialDock` absorbs today's `HashesList` row actions and `RoutineSection` steps. `CredentialsSection` is rewritten to compose them in a full-height two-row grid. No engine, query, type or database changes.
+**Architecture:** Presentation only. shadcn first where it saves reinventing (spec 7a): Resizable for the list/dock split and fold, Tabs, Table for the inventory rows, ScrollArea, Separator. `TestGrid` gains opt-in selection. A new pure module picks the default and fallback selection, and a hook keeps the selection, tab and fold state in the URL and localStorage. A new `InventoryList` groups credentials by kind. A new `CredentialDock` absorbs today's `HashesList` row actions and `RoutineSection` steps. `CredentialsSection` is rewritten to compose them in a full-height two-row grid. No engine, query, type or database changes.
 
 **Tech Stack:** React 19, TypeScript, Tailwind 4, react-router, TanStack Query, Vitest + Testing Library, Playwright visual audit.
 
@@ -22,7 +22,11 @@
 - **Display never contains a raw secret.** Commands display from `MASK`, and copy carries the real value (as today).
 - **`TestGrid` without `onSelect` renders exactly as today.** `HostCredentialsFacts` uses it.
 - **URL params:** `cred=<id>`, plus `tab=inventory` when Inventory is open. Matrix is the default and is omitted. Write them with `setSearchParams(..., { replace: true })`.
-- **Fold storage key:** `raven.credDock.<engagementId>`. The value is `"folded"` or absent.
+- **Split and fold storage:** the Resizable layout is saved under the id `raven.credDock.<engagementId>`. The fold is the dock panel's collapsed state in that saved layout, so nothing else stores it.
+- **shadcn usage (spec 7a):**
+  - Resizable, Tabs, Table, ScrollArea and Separator come from `src/ui/shadcn/*`.
+  - Wrapped pieces stay Raven's (`Button`, `IconButton`, `Input`, `Tooltip`, `Toggle`, `Dialog`, `EmptyState`, `Chip`), and lint enforces it.
+  - Where shadcn's default classes clash with DESIGN.md (flex stacks in feature code, non-Ink colours, type sizes), override at the call site or in the `src/ui/shadcn` file. Never in a way that breaks the conventions test.
 - **Checks before every commit:**
   - `npx tsc --noEmit -p .`
   - `npm run lint`
@@ -40,6 +44,21 @@
 5. **Keyboard only:** Tab reaches a row header, ↑ and ↓ move focus, Enter selects, focus moves into the dock, and Esc folds the dock. Esc inside an open dialog closes the dialog first. Task 1 and Task 5.
 
 ---
+
+### Task 0: Add the shadcn pieces
+
+**Files:**
+- Create (by CLI): `src/ui/shadcn/resizable.tsx`, `src/ui/shadcn/scroll-area.tsx`, `src/ui/shadcn/table.tsx`
+- Modify: `package.json` and `package-lock.json` (adds `react-resizable-panels`)
+
+- [ ] **Step 1: Add the components.** Run `npx shadcn@latest add resizable scroll-area table` from the repo root. Expected: the three files are created, and `react-resizable-panels` is added.
+- [ ] **Step 2: Review the added files** (shadcn skill, workflow step 7):
+  - imports use the project's aliases (`@/lib/utils` for `cn`);
+  - no lucide icons;
+  - colours use the tokens `src/styles/global.css` maps onto Ink. Check that `bg-border`, `bg-muted` and `ring-ring` resolve to Ink values there, and map any missing token in `global.css`.
+- [ ] **Step 3: Restyle the resize handle to Ink.** At rest, the handle is a 1px `--line` hairline with a hit area of at least 8px. On hover and focus-visible it's `--line-strong` with the 2px accent focus ring (DESIGN.md Focus). No grip dots.
+- [ ] **Step 4: Run** `npx tsc --noEmit -p . && npm run lint && npx vitest run src/test/conventions.test.ts`. Expected: pass.
+- [ ] **Step 5: Commit** `build(ui): add shadcn resizable, scroll-area and table`.
 
 ## File Structure
 
@@ -69,7 +88,7 @@
 **Interfaces:**
 - Produces: `TestGrid` props gain `selectedId?: string` and `onSelect?: (credId: string) => void`. With `onSelect`:
   - each credential row header's content is a `button` (`aria-pressed`, `aria-label` = `` `Select ${credLabel(cred)}` ``);
-  - the selected `tr` carries `data-selected=""` and `aria-selected="true"`.
+  - the selected `tr` carries `data-state="selected"` (shadcn's Table selection convention) and `aria-selected="true"`.
   - Tried rows are never buttons.
 
 - [ ] **Step 1: Write the failing tests**
@@ -102,10 +121,10 @@
     1. `"crack"` first, if `cred.type === "hash"`, `!isMachineAccount(cred)` and `cred.crackStatus !== "uncrackable"`;
     2. then, if `isSprayable(cred)`: `"test"`, `"shares"`, then `"spray"` if `routineStepApplies("spray-users", …)`, then `"roast"` if `routineStepApplies("roast", …)`;
     3. then `"crack"` last, if it's a non-machine hash with `crackStatus === "uncrackable"`.
-  - `useCredentialSelection(eid: string, creds: Credential[], ctx): { selectedId?: string; select(id: string): void; tab: "matrix" | "inventory"; setTab(t): void; folded: boolean; setFolded(f: boolean): void }`.
+  - `useCredentialSelection(eid: string, creds: Credential[], ctx): { selectedId?: string; select(id: string): void; tab: "matrix" | "inventory"; setTab(t): void }`.
     - Built on `useSearchParams` (react-router). Write with `replace: true`.
     - When `resolveSelection` differs from the URL's `cred`, it rewrites the URL in an effect.
-    - Fold is read from and written to localStorage key `raven.credDock.<eid>`, wrapped in try/catch like `useFactFolds`.
+    - The fold isn't part of this hook. The Resizable panel owns it (Task 5).
 - [ ] **Step 1: Write the failing unit tests** for the three pure functions:
   - `"defaultCredentialId prefers the newest sprayable with commands"`
   - `"falls back to newest sprayable, then newest of any kind, then undefined"`
@@ -143,8 +162,8 @@
   - `it("a 60-character name truncates with a title")`.
 - [ ] **Step 2: Run** the test. Expected: FAIL.
 - [ ] **Step 3: Implement.**
-  - **Structure:** one grid table per group, sharing the column template `TABLE` from today's `CredentialsSection`, minus the Secret and actions tracks. Add a Crack-status track (`max-content`) for the Hashes group only.
-  - **Rows:** each row is a `button`-like row: a `tr` with `tabIndex={0}`, `role="row"`, `aria-selected`, a click handler, Enter and Space to select, ↑ and ↓ to move focus. Hover gives `bg-surface-hi/50` only.
+  - **Structure:** build each group with shadcn `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead` and `TableCell` from `src/ui/shadcn/table`. Keep DESIGN.md's grid column policy: `Table` gets the grid template that today's `CredentialsSection` `TABLE` uses, minus the Secret and actions tracks, and rows are subgrids. The Hashes group gets a Crack-status track (`max-content`). The whole list sits in a `ScrollArea`.
+  - **Rows:** each row is a selectable `TableRow`: `tabIndex={0}`, `aria-selected`, and `data-state="selected"` when selected, so shadcn's selected style applies, mapped to `--surface-hi`, plus the accent bar on the first cell. It also has a click handler, Enter and Space to select, and ↑ and ↓ to move focus. Hover gives the light hover only.
   - **Columns:** keep the container-query drops (`@[700px]` Scope, `@[900px]` Source).
   - **Labels:** "Passwords", "Hashes", "Tickets, keys and tokens", "Machine accounts", plus `UsernamesList`'s own "Usernames" header.
 - [ ] **Step 4: Run** the test. Expected: PASS.
@@ -187,14 +206,14 @@
     - The panel is `rounded-lg border border-line-2 bg-surface`.
     - The header grid is `grid-cols-[minmax(0,1fr)_auto]`.
     - The body grid is `grid-cols-[minmax(0,1fr)]`, becoming `@[700px]:grid-cols-[260px_minmax(0,1fr)]` under `@container`.
-    - The work column scrolls (`SCROLL_PANE`).
+    - The work column is a shadcn `ScrollArea`. Hairlines between the header and the body, and between the columns, are shadcn `Separator`s.
   - **Name:** `text-heading font-mono`, truncated with a `title`.
   - **Routine logic:** `DockWork` reuses `RoutineSection`'s `commandsFor` switch verbatim, with one difference: `cred` comes from props instead of a picker.
     - The "test" tab renders the `smb`, `winrm`, `rdp`, `mssql` and `ssh` steps.
     - The "shares", "spray" and "roast" tabs each render one step.
     - Each step row keeps its title, the Done toggle (the same `aria-label` ``Done: ${step.title}``), "Doesn't apply" and `TestCommands`.
   - **Crack logic:** reuses `HashRow`'s command building.
-  - **Fold:** the Fold `IconButton` uses `CaretDown` when open and `CaretUp` when folded. Its labels are "Fold credential" and "Open credential".
+  - **Fold:** the Fold `IconButton` uses `CaretDown` when open and `CaretUp` when folded. Its labels are "Fold credential" and "Open credential". `onFold(folded)` is wired in Task 5 to the Resizable panel's `collapse()` and `expand()`. While `folded`, the dock renders only its header.
 - [ ] **Step 4: Run** the test. Expected: PASS.
 - [ ] **Step 5: Commit** `feat(credentials): the credential dock`.
 
@@ -217,7 +236,7 @@
   - `it("cracking the selected hash selects the new password")`.
   - `it("with only non-sprayable credentials, the newest is docked and the matrix shows the can't-be-sprayed note")`: the text reads "2 more credentials can't be sprayed", plus a button "see Inventory" that switches tabs.
   - `it("Crack appears once on the page")`: with a hash selected, `getAllByRole("button", { name: /^Crack|Record plaintext/ })` has length 1.
-  - `it("the fold persists per engagement")`: fold, unmount, remount. The dock is folded, and `localStorage["raven.credDock.e1"] === "folded"`.
+  - `it("the fold persists per engagement")`: fold, unmount, remount. The dock is folded (the button reads "Open credential"). Assert through the UI, not through the library's storage format.
 - [ ] **Step 2: Retarget the existing tests.**
   - Tests that clicked Reveal, Copy, Edit, Delete, Crack, Convert or Mark uncrackable in a table row now select the credential first (click its "Select …" row header, or its inventory row), then act in the dock.
   - Delete the tests made obsolete by design, and note each deletion in the commit body:
@@ -226,12 +245,19 @@
   - Keep every other assertion's intent.
 - [ ] **Step 3: Run** `npx vitest run src/test/credentials.test.tsx src/test/credentialMatrix.test.tsx`. Expected: FAIL (new tests).
 - [ ] **Step 4: Implement the section.**
-  - **Frame:** `<section aria-label="Credentials" className="@container grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-4">`.
+  - **Frame:** `<section aria-label="Credentials" className="@container grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4">`.
   - **Row 1:** `Tabs` (Matrix; Inventory with the count `shown.creds.length + usernames.length`) on the left, and `Add credential` (primary) on the right, in a `grid-cols-[minmax(0,1fr)_auto]` row.
-  - **Row 2:** the active tab's pane in `SCROLL_PANE`.
+  - **Row 2:** a vertical `ResizablePanelGroup`. Save its layout per engagement under the id `raven.credDock.<eid>`, using the persistence API of the installed `react-resizable-panels` version; check the shadcn resizable docs. It holds:
+    - **the list panel** (`minSize` 30%), with the active tab's pane;
+    - a `ResizableHandle`;
+    - **the dock panel**: `collapsible`, with `collapsedSize` equal to the dock header's height, `minSize` equal to the header plus 160px, `maxSize` 70% and `defaultSize` 45%. Use pixel or percentage units as the installed version supports.
+    - Track `folded` from the panel's collapse and expand callbacks, and pass it to `CredentialDock`. `onFold` calls the panel ref's `collapse()` or `expand()`.
+    - With no selected credential, render the list panel alone.
+
+    The list panel's content:
     - Matrix: `Legend`, `TestGrid` with `selectedId` and `onSelect`, then the note when the non-sprayable count is above 0.
     - Inventory: `InventoryList`.
-  - **Row 3:** `CredentialDock` when `selectedId` resolves. Its body has `max-h-[50cqh] min-h-[calc(theme(spacing.10)+160px)]`, or the equivalent container-height bound; check that the visual audit's spacing check accepts it.
+  - (The dock bounds come from the panel props above. There's no hand-rolled height CSS.)
   - **Crack follows:** `onCracked`, then `select(password.id)`.
   - **Narrow:** under `@[560px]` of the section, `Add credential` renders as a `Plus` `IconButton` labelled "Add credential" (spec 6.5).
   - **Height:** the shell's `<main>` is `overflow-auto px-6 py-6`. Give the section `h-full` so the page itself doesn't scroll at 900×800. Check in Task 6's screenshots.

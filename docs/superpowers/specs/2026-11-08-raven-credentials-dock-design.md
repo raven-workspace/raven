@@ -48,9 +48,10 @@ The owner called the test matrix the page's best part, and asked for tabs, a lay
 ### 6.1 Page frame
 
 - **Section header row.** The tab list (Matrix, Inventory with its total) sits on the left. **Add credential** (primary) sits on the right, on the same line. It replaces the old "CREDENTIALS 12" heading.
-- **Height.** Below the tab row, the section fills the remaining height of the main pane as a two-row grid:
-  - the active tab's list (`minmax(0,1fr)`, which scrolls inside itself);
-  - the dock (its own height, scrolling inside itself).
+- **Height.** Below the tab row, the section fills the remaining height of the main pane. It's split vertically into the list (the active tab) and the dock, with shadcn's **Resizable** (react-resizable-panels):
+  - the owner can drag the divider, or focus it and use the arrow keys;
+  - the split is saved per engagement;
+  - each panel scrolls inside itself.
 - **The dock is shared by both tabs.** It shows the selected credential, whichever tab you picked it in, and switching tabs keeps the selection.
 
 ### 6.2 Matrix tab
@@ -125,7 +126,7 @@ The dock is a bordered panel (`--surface`, 8px radius) below the list, as in the
 - With no credentials at all, the dock doesn't render, and the Matrix tab shows its empty state.
 - **The selection disappears** when the selected credential is deleted, or folds away. A credential folds away when a hash is cracked into a password or deduped. Then the selection moves to the default, and the URL is rewritten with `replace`.
 - **After Record plaintext**, the selection moves to the new password, the credential the hash folded into. The owner's next step is to test it.
-- **Fold** collapses the dock to its header row, and the list takes the height. The fold state is stored per engagement in localStorage, like the host page's folds.
+- **Fold** collapses the dock to its header row, and the list takes the height. The dock is a collapsible Resizable panel: the Fold button calls its collapse and expand, and dragging it to its minimum collapses it too. The split and fold state are stored per engagement in localStorage.
 - **Esc** while focus is inside the dock folds it. Esc closes overlays first, as everywhere.
 
 **Deep link.** The selection and the tab live in the URL as search params on the section route: `?cred=<id>`, and `&tab=inventory` when Inventory is open (Matrix is the default). Changes use `replace`, not `push`, so Back leaves the section rather than stepping through selections. Leaving the section drops them. An unknown id falls back to the default.
@@ -136,7 +137,7 @@ The dock is a bordered panel (`--surface`, 8px radius) below the list, as in the
 - **Under 700px of pane:**
   - the dock's two columns stack, facts first;
   - the dock's work tabs scroll horizontally rather than wrap.
-- **Height split.** The dock takes at most 50% of the section's height and at least its header plus about 160px. The list keeps the rest. On a short window (800px), both scroll inside themselves.
+- **Height split.** By default the dock takes about 45% of the section's height. When open it's at least its header plus about 160px, and at most 70%. The list keeps at least 30%. On a short window (800px), both scroll inside themselves.
 
 ### 6.6 States
 
@@ -158,11 +159,28 @@ The dock is a bordered panel (`--surface`, 8px radius) below the list, as in the
 - Keep the existing behaviour tests' intent. Tests that find Crack, Convert, Reveal and Copy in table rows move to the dock.
 - `TestGrid` keeps working unchanged for `HostCredentialsFacts`. Selection is opt-in props: `selectedId?` and `onSelect?`.
 
+## 7a. shadcn first (owner, 2026-11-09)
+
+The owner asked to lean on shadcn wherever it saves reinventing a pattern or brings a good convention. This round uses:
+- **Resizable:** the list and dock split, the fold (a collapsible panel), and the saved sizes.
+- **Tabs:** the page tabs and the dock's work tabs. Already installed and used by the host page.
+- **Table:**
+  - the Inventory's rows, using shadcn's selected-row convention (`data-state="selected"` on the row);
+  - the matrix's selected row uses the same attribute.
+- **ScrollArea:** the Inventory pane and the dock's work column.
+- **Separator:** the dock's hairlines.
+
+DESIGN.md wins on conflict:
+- shadcn's styling rules are overridden by Raven's grid rule, type tokens and Ink colours;
+- pieces Raven already wraps (Button, IconButton, Input, Tooltip, Toggle, Dialog, EmptyState, Chip) stay the Raven versions, and lint enforces it.
+
+The matrix keeps its native scroller, because it scrolls on both axes with a sticky header, a sticky first column and a measured fade.
+
 ## 8. Left to the builder
 
 - Splitting files, e.g. `CredentialDock.tsx` and `InventoryList.tsx`, and retiring `HashesList.tsx` and `RoutineSection.tsx` into the dock.
 - Exact dock heights within 6.5's bounds.
-- Whether the in-dock tabs use the shadcn-mapped `Tabs` from `src/ui` (preferred, since it's already adopted) or a `ToggleGroup`.
+- The exact Resizable size units (percent or pixels) within 6.5's bounds.
 
 ## 9. My calls (the owner can overrule)
 
