@@ -265,6 +265,7 @@ Each table declares its column policy; automatic layout never decides.
 
 - Header text is `text-label` and never wraps. A column is never narrower than its header.
 - When its pane is narrow, a table drops its lowest-priority columns, in an order declared per table, or switches to a stacked list. It never squeezes every column. Drops use container queries on the pane, not the window, because the sidebar makes the pane narrower than the window.
+- **Master–detail dock** (Credentials): selecting a row docks its detail below the list; the dock's height is stable across selections, it folds to its header, and the selected item's secret and actions appear only there.
 
 ### Chips
 

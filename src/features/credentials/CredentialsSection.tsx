@@ -1,74 +1,48 @@
-import { useMemo, useState } from "react";
-import { useParams } from "react-router";
-import {
-  credLabel,
-  credName,
-  dedupeHashCaptures,
-  foldCrackedHashes,
-  isMachineAccount,
-  isOwnerless,
-  isPlaceholderSecret,
-  overallState,
-  usernameLabel,
-  type OverallState,
-} from "../../engines/credentials";
+import { useCallback, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useParams, useSearchParams } from "react-router";
+import { useDefaultLayout, usePanelRef } from "react-resizable-panels";
+import { Plus } from "@phosphor-icons/react";
+import { credLabel, dedupeHashCaptures, foldCrackedHashes, isSprayable } from "../../engines/credentials";
 import type { Credential } from "../../types/credentials";
 import type { Host } from "../../types/host";
-import { PencilSimple, Trash } from "@phosphor-icons/react";
-import { ActionCell, Button, Chip, Dialog, EmptyState, IconButton, labelClass, queryState } from "../../ui";
+import { Button, IconButton, queryState } from "../../ui";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../../ui/shadcn/resizable";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/shadcn/tabs";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { useEngagementServices } from "../checklist/queries";
 import { useHosts } from "../hosts/queries";
-import { AccessFields, EMPTY_ACCESS, hostLabel, type AccessDraft } from "./AccessGrants";
+import { CredentialDock } from "./CredentialDock";
 import { CredentialForm } from "./CredentialForm";
-import { CrackDialog, HashesList } from "./HashesList";
-import { CopySecretButton, MaskedSecret } from "./MaskedSecret";
-import { useAccessGrants, useCredAttempts, useCredentialMutations, useCredentials, useTriedPairs, useUsernames } from "./queries";
-import { RoutineSection } from "./RoutineSection";
+import { InventoryList } from "./InventoryList";
+import {
+  credentialsKey,
+  useAccessGrants,
+  useCredAttempts,
+  useCredentialMutations,
+  useCredentials,
+  useTriedPairs,
+  useUsernames,
+} from "./queries";
 import { TestGrid } from "./TestGrid";
-import { UsernamesList } from "./UsernamesList";
+import { useCredentialSelection } from "./useCredentialSelection";
 
-const STATE_LABEL: Record<OverallState, string> = {
-  admin: "admin",
-  valid: "valid",
-  untested: "untested",
-  dead: "dead",
-  "not-sprayable": "not sprayable",
-};
+const NO_HOSTS: Host[] = [];
+const NO_CREDS: Credential[] = [];
 
 /*
- * Column policy (DESIGN.md Tables and lists): credential, type, scope, source, state, secret, verb, icons.
- * The pane decides, not the window: under 900px of pane Source drops, under 700px Scope too. The "verb"
- * track holds Crack/Convert (empty for most rows) so Copy, Edit and Delete land on the same x in every row.
- * The credential track outweighs Source so names stay whole while Source has slack. Rows are subgrids.
+ * The dock's header row is 44px (28px icon buttons in 8px padding) plus its 1px border top and bottom. The dock panel
+ * also holds the 12px gap above the dock. Folded, the panel is exactly that; open, it keeps 160px of body under it.
  */
-const TABLE =
-  "grid w-full gap-x-3 text-body " +
-  "grid-cols-[minmax(20ch,3fr)_max-content_max-content_max-content_max-content_max-content] " +
-  "@[700px]:grid-cols-[minmax(20ch,3fr)_max-content_max-content_max-content_max-content_max-content_max-content] " +
-  "@[900px]:grid-cols-[minmax(20ch,3fr)_max-content_max-content_minmax(10ch,2fr)_max-content_max-content_max-content_max-content]";
-const ROW = "col-span-full grid grid-cols-subgrid items-start px-2";
-const SHOW_SCOPE = "hidden @[700px]:grid";
-const SHOW_SCOPE_HEAD = "hidden @[700px]:block";
-const SHOW_SOURCE = "hidden @[900px]:block";
-const HEADERS = [
-  { label: "Credential", cls: "" },
-  { label: "Type", cls: "" },
-  { label: "Scope", cls: SHOW_SCOPE_HEAD },
-  { label: "Source", cls: SHOW_SOURCE },
-  { label: "State", cls: "" },
-  { label: "Secret", cls: "" },
-  { label: "", cls: "col-span-2" },
-];
+const DOCK_GAP_PX = 12;
+const DOCK_FOLDED_PX = DOCK_GAP_PX + 46;
+const DOCK_MIN_PX = DOCK_FOLDED_PX + 160;
 
-/** Accent only for access that works; warn for dead. */
-function StateChip({ state }: { state: OverallState }) {
-  const variant = state === "admin" || state === "valid" ? "accent" : state === "dead" ? "warn" : "default";
-  return <Chip variant={variant}>{STATE_LABEL[state]}</Chip>;
-}
+type Tab = "matrix" | "inventory";
 
 export function CredentialsSection() {
   const { id = "" } = useParams();
+  const qc = useQueryClient();
   const hostsQ = useHosts(id);
   const credsQ = useCredentials(id);
   const usersQ = useUsernames(id);
@@ -79,186 +53,166 @@ export function CredentialsSection() {
   const { remove } = useCredentialMutations(id);
   const [form, setForm] = useState<{ edit?: Credential } | null>(null);
   const [deleting, setDeleting] = useState<Credential>();
-  const [converting, setConverting] = useState<Credential>();
-  const [cracking, setCracking] = useState<Credential>();
+  const [folded, setFolded] = useState(false);
+  const dockRef = usePanelRef();
+  const layout = useDefaultLayout({ id: `raven.credDock.${id}` });
 
-  const creds = useMemo(() => credsQ.data ?? [], [credsQ.data]);
+  // After Record plaintext the selection moves to the new password. Until both the URL names it and the refetch lists
+  // it, the hash it came from stays docked and `ready` holds off the fallback that would otherwise pick the default.
+  // If the credentials query settles after the crack without listing the password (a failed refetch, or it never
+  // appears), the hold lets go and normal resolution takes over: it never sticks.
+  const [cracked, setCracked] = useState<{ hashId: string; passwordId: string; since: number }>();
+
+  const creds = credsQ.data ?? NO_CREDS;
+  const hosts = hostsQ.data ?? NO_HOSTS;
   const attempts = useMemo(() => attemptsQ.data ?? [], [attemptsQ.data]);
   const shown = useMemo(() => foldCrackedHashes(dedupeHashCaptures(creds), attempts), [creds, attempts]);
+  const ctx = useMemo(() => ({ hosts, servicesByHost, attempts: shown.attempts }), [hosts, servicesByHost, shown.attempts]);
+  const loaded = !!(hostsQ.data && credsQ.data && usersQ.data && grantsQ.data && attemptsQ.data && servicesQ.data);
+  const [params] = useSearchParams();
+  const landed = !!cracked && shown.creds.some((c) => c.id === cracked.passwordId);
+  const settled = !credsQ.isFetching && Math.max(credsQ.dataUpdatedAt, credsQ.errorUpdatedAt) > (cracked?.since ?? Infinity);
+  const waiting = !!cracked && !(settled && !landed) && (params.get("cred") !== cracked.passwordId || !landed);
+  const { selectedId, select, tab, setTab } = useCredentialSelection(id, shown.creds, ctx, loaded && !waiting);
+  // Landed: let go, so a later delete of that password can't hold the fallback off again.
+  if (cracked && !waiting) setCracked(undefined);
+
+  const choose = useCallback((cid: string) => {
+    setCracked(undefined);
+    select(cid);
+  }, [select]);
+  // Move the selection to a credential just made (Record plaintext, Add credential), holding the old one docked until it is listed.
+  const follow = (fromId: string, password: Credential) => {
+    select(password.id);
+    // Read live, not from this render: the refetch may already have landed.
+    const q = qc.getQueryState<Credential[]>(credentialsKey(id));
+    const listed = !!q?.data?.some((c) => c.id === password.id);
+    // Nothing more is coming and it isn't listed: no hold, normal resolution decides.
+    if (q?.fetchStatus === "idle" && !listed) return;
+    setCracked({ hashId: fromId, passwordId: password.id, since: listed ? -1 : Math.max(q?.dataUpdatedAt ?? 0, q?.errorUpdatedAt ?? 0) });
+  };
+  const onCracked = (hash: Credential) => (password: Credential) => follow(hash.id, password);
+  const onFold = (fold: boolean) => (fold ? dockRef.current?.collapse() : dockRef.current?.expand());
 
   const state = queryState([hostsQ, credsQ, usersQ, grantsQ, attemptsQ, servicesQ], "credentials");
-  if (state || !hostsQ.data || !credsQ.data || !usersQ.data || !grantsQ.data || !attemptsQ.data || !servicesQ.data) return state;
-  const hosts = hostsQ.data;
-  const hostName = (hid: string | null) => (hid ? hostLabel(hosts.find((h) => h.id === hid)) : "");
-  const hashes = shown.creds.filter((c) => c.type === "hash");
-  const users = shown.creds.filter((c) => !isMachineAccount(c));
-  const machines = shown.creds.filter(isMachineAccount);
-  const renderRow = (c: Credential) => (
-    <CredentialRow
-      key={c.id}
-      cred={c}
-      all={creds}
-      state={overallState(c, hosts, servicesByHost, shown.attempts)}
-      scopeHost={c.scope === "local" ? hostName(c.localHostId) : ""}
-      onEdit={() => setForm({ edit: c })}
-      onDelete={() => setDeleting(c)}
-      onConvert={() => setConverting(c)}
-      onCrack={() => setCracking(c)}
-    />
-  );
+  if (state || !loaded) return state;
+  const usernames = usersQ.data!;
+  const byId = (cid?: string) => shown.creds.find((c) => c.id === cid);
+  const selected = waiting ? (byId(cracked!.passwordId) ?? byId(cracked!.hashId)) : byId(selectedId);
+  const hidden = shown.creds.filter((c) => !isSprayable(c)).length;
 
-  return (
-    <section aria-label="Credentials" className="@container grid grid-cols-[minmax(0,1fr)] gap-6">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-        <h3 className={`m-0 ${labelClass}`}>Credentials <span className="tabular-nums">{shown.creds.length}</span></h3>
-        <Button variant="primary" onClick={() => setForm({})}>Add credential</Button>
-      </div>
-
-      {shown.creds.length === 0 ? (
-        <EmptyState title="No credentials yet" />
-      ) : (
-        <table className={TABLE}>
-          <thead className="contents">
-            <tr className={ROW}>
-              {HEADERS.map(({ label, cls }) => (
-                <th key={label} scope="col" className={`whitespace-nowrap py-2 text-left ${labelClass} ${cls}`}>
-                  {label || <span className="sr-only">Actions</span>}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="contents">
-            {users.map(renderRow)}
-            {machines.length > 0 && (
-              <>
-                <tr className="col-span-full">
-                  <th colSpan={8} scope="colgroup" className={`px-2 pb-1 pt-4 text-left ${labelClass}`}>
-                    Machine accounts <span className="tabular-nums">{machines.length}</span>
-                  </th>
-                </tr>
-                {machines.map(renderRow)}
-              </>
-            )}
-          </tbody>
-        </table>
-      )}
-
-      <TestGrid eid={id} hosts={hosts} creds={shown.creds} attempts={shown.attempts} servicesByHost={servicesByHost} tried={triedQ.data} />
-      <RoutineSection eid={id} hosts={hosts} creds={shown.creds} usernames={usersQ.data} attempts={shown.attempts} servicesByHost={servicesByHost} />
-
-      <UsernamesList eid={id} usernames={usersQ.data} grants={grantsQ.data} hosts={hosts} />
-      <HashesList eid={id} hashes={hashes} />
-
-      {form && <CredentialForm eid={id} hosts={hosts} credentials={creds} edit={form.edit} onClose={() => setForm(null)} />}
-      {cracking && <CrackDialog eid={id} hash={cracking} onClose={() => setCracking(undefined)} />}
-      {converting && <ConvertDialog eid={id} cred={converting} hosts={hosts} onClose={() => setConverting(undefined)} />}
-      {deleting && (
-        <ConfirmDelete
-          title={`Delete ${credLabel(deleting)}?`}
-          detail="Its test results in the matrix go with it."
-          pending={remove.isPending}
-          error={remove.error?.message}
-          label="Delete credential"
-          onCancel={() => setDeleting(undefined)}
-          onConfirm={() => remove.mutate(deleting.id, { onSuccess: () => setDeleting(undefined) })}
+  const panes = (
+    <>
+      <TabsContent value="matrix" className="h-full min-h-0">
+        <TestGrid
+          eid={id}
+          hosts={hosts}
+          creds={shown.creds}
+          attempts={shown.attempts}
+          servicesByHost={servicesByHost}
+          tried={triedQ.data}
+          selectedId={selected?.id}
+          onSelect={choose}
+          fill
+          note={hidden > 0 ? (
+            <p className="m-0 grid grid-cols-[max-content_max-content] items-center justify-start gap-2 text-meta text-muted">
+              {`${hidden} not sprayable`}
+              <Button size="sm" onClick={() => setTab("inventory")}>see Inventory</Button>
+            </p>
+          ) : undefined}
         />
-      )}
-    </section>
+      </TabsContent>
+      <TabsContent value="inventory" className="h-full min-h-0">
+        <InventoryList
+          eid={id}
+          creds={shown.creds}
+          all={creds}
+          hosts={hosts}
+          servicesByHost={servicesByHost}
+          attempts={shown.attempts}
+          usernames={usernames}
+          grants={grantsQ.data!}
+          selectedId={selected?.id}
+          onSelect={choose}
+        />
+      </TabsContent>
+    </>
   );
-}
 
-function CredentialRow({ cred, all, state, scopeHost, onEdit, onDelete, onConvert, onCrack }: {
-  cred: Credential;
-  all: Credential[];
-  state: OverallState;
-  scopeHost: string;
-  onEdit: () => void;
-  onDelete: () => void;
-  onConvert: () => void;
-  onCrack: () => void;
-}) {
-  const label = credLabel(cred);
-  const ownerless = isOwnerless(cred);
-  const matched = ownerless ? all.filter((c) => c.fromSecretId === cred.id) : [];
-  const placeholder = isPlaceholderSecret(cred);
-  const name = credName(cred);
   return (
-    <tr className={`${ROW} border-b border-line py-2`}>
-      <td className="min-w-0">
-        {ownerless ? (
-          <span className="grid justify-items-start gap-1">
-            <Chip>owner unknown</Chip>
-            <span className="text-meta text-muted">
-              {matched.length > 0
-                ? `matched: ${matched.map((c) => usernameLabel(c)).join(", ")}`
-                : "no user matched yet"}
-            </span>
-          </span>
+    <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} asChild>
+      <section aria-label="Credentials" className="@container grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-4">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+          <TabsList aria-label="Credentials view">
+            <TabsTrigger value="matrix">Matrix</TabsTrigger>
+            <TabsTrigger value="inventory">Inventory</TabsTrigger>
+          </TabsList>
+          {/* One of the two shows: the cells own the display, since Button's own inline-flex outranks `hidden`. */}
+          <div className="hidden @[560px]:grid">
+            <Button variant="primary" onClick={() => setForm({})}>Add credential</Button>
+          </div>
+          <div className="grid @[560px]:hidden">
+            <IconButton icon={Plus} label="Add credential" onClick={() => setForm({})} />
+          </div>
+        </div>
+
+        {selected ? (
+          <ResizablePanelGroup
+            id={`raven.credDock.${id}`}
+            orientation="vertical"
+            defaultLayout={layout.defaultLayout}
+            onLayoutChanged={(next, meta) => {
+              layout.onLayoutChanged(next, meta);
+              setFolded(dockRef.current?.isCollapsed() ?? false);
+            }}
+            className="min-h-0"
+          >
+            <ResizablePanel id="list" minSize="30%" className="pb-3">{panes}</ResizablePanel>
+            <ResizableHandle aria-label="Resize credential dock" />
+            <ResizablePanel
+              id="dock"
+              panelRef={dockRef}
+              collapsible
+              collapsedSize={DOCK_FOLDED_PX}
+              minSize={DOCK_MIN_PX}
+              maxSize="70%"
+              defaultSize="38%"
+              className="pt-3"
+            >
+              <CredentialDock
+                eid={id}
+                cred={selected}
+                all={creds}
+                creds={shown.creds}
+                hosts={hosts}
+                servicesByHost={servicesByHost}
+                attempts={shown.attempts}
+                usernames={usernames}
+                folded={folded}
+                onFold={onFold}
+                onEdit={() => setForm({ edit: selected })}
+                onDelete={() => setDeleting(selected)}
+                onCracked={onCracked(selected)}
+              />
+            </ResizablePanel>
+          </ResizablePanelGroup>
         ) : (
-          <span className="block truncate font-mono text-code text-fg" title={name}>{name}</span>
+          <div className="min-h-0">{panes}</div>
         )}
-      </td>
-      <td className="whitespace-nowrap text-fg-2">{cred.type}</td>
-      <td className={`${SHOW_SCOPE} min-w-0 text-fg-2`}>
-        <span className="whitespace-nowrap">{cred.scope}</span>
-        {scopeHost && <span className="max-w-[24ch] truncate text-meta text-muted" title={scopeHost}>{scopeHost}</span>}
-      </td>
-      <td className={`min-w-0 ${SHOW_SOURCE} text-fg-2`}>
-        {cred.source && <span className="block truncate" title={cred.source}>{cred.source}</span>}
-      </td>
-      <td className="whitespace-nowrap"><StateChip state={state} /></td>
-      <td className="whitespace-nowrap">
-        {placeholder ? <span className="text-muted">no secret</span> : <MaskedSecret secret={cred.secret} label={`secret for ${label}`} copy={false} />}
-      </td>
-      <td className="justify-self-end">
-        {cred.type === "hash" && <Button size="sm" aria-label={`Crack ${label} from list`} onClick={onCrack}>Crack</Button>}
-        {placeholder && !ownerless && (
-          <Button size="sm" aria-label={`Convert ${label} to access-only`} onClick={onConvert}>Convert to access-only</Button>
-        )}
-      </td>
-      <td>
-        <ActionCell>
-          {placeholder ? <span aria-hidden className="size-7" /> : <CopySecretButton secret={cred.secret} label={`secret for ${label}`} />}
-          <IconButton icon={PencilSimple} label={`Edit ${label}`} onClick={onEdit} />
-          <IconButton icon={Trash} tone="destructive" label={`Delete ${label}`} onClick={onDelete} />
-        </ActionCell>
-      </td>
-    </tr>
-  );
-}
 
-function ConvertDialog({ eid, cred, hosts, onClose }: { eid: string; cred: Credential; hosts: Host[]; onClose: () => void }) {
-  const { convert } = useCredentialMutations(eid);
-  const [draft, setDraft] = useState<AccessDraft>(EMPTY_ACCESS);
-  const [errors, setErrors] = useState<{ hostId?: string; via?: string; form?: string }>({});
-  const save = () => {
-    const errs = {
-      ...(draft.hostId === "" ? { hostId: "Choose a host" } : {}),
-      ...(draft.via.trim() === "" ? { via: "Say how access was gained" } : {}),
-    };
-    setErrors(errs);
-    if (Object.keys(errs).length > 0) return;
-    convert.mutate(
-      { credId: cred.id, grant: { hostId: draft.hostId, level: draft.level, via: draft.via.trim() } },
-      { onSuccess: onClose, onError: (e) => setErrors({ form: e.message }) },
-    );
-  };
-  return (
-    <Dialog
-      open
-      onOpenChange={(o) => !o && onClose()}
-      size="lg"
-      title={`Convert ${credLabel(cred)} to access-only`}
-      description="It has no secret to try. Keep the username and record the access instead."
-      footer={
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={convert.isPending} onClick={save}>Convert</Button>
-        </>
-      }
-    >
-      <AccessFields value={draft} onChange={setDraft} hosts={hosts} errors={errors} />
-      {errors.form && <p role="alert" className="m-0 mt-2 text-meta text-warn">{errors.form}</p>}
-    </Dialog>
+        {form && <CredentialForm eid={id} hosts={hosts} credentials={creds} edit={form.edit} onClose={() => setForm(null)} onSaved={form.edit ? undefined : (c) => follow(selected?.id ?? "", c)} />}
+        {deleting && (
+          <ConfirmDelete
+            title={`Delete ${credLabel(deleting)}?`}
+            detail="Its test results in the matrix go with it."
+            pending={remove.isPending}
+            error={remove.error?.message}
+            label="Delete credential"
+            onCancel={() => setDeleting(undefined)}
+            onConfirm={() => remove.mutate(deleting.id, { onSuccess: () => setDeleting(undefined) })}
+          />
+        )}
+      </section>
+    </Tabs>
   );
 }

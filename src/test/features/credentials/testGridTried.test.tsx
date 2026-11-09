@@ -1,7 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { HashesList } from "../../../features/credentials/HashesList";
 import { TestGrid } from "../../../features/credentials/TestGrid";
 import { makeQueryClient } from "../../../lib/queryClient";
 import type { TriedPair } from "../../../types/credentials";
@@ -71,22 +70,5 @@ describe("TestGrid tried pairs", () => {
   it("shows the grid for tried pairs alone", () => {
     wrap(<TestGrid eid="eng1" hosts={[h1.host]} creds={[]} attempts={[]} servicesByHost={byHost(h1)} tried={[pair()]} />);
     expect(screen.getByText("sam.doe")).toBeInTheDocument();
-  });
-});
-
-describe("HashesList machine accounts", () => {
-  it("machine accounts are left out of the cracking list", () => {
-    const nt = "31d6cfe0d16ae931b73c59d7e0c089c0";
-    wrap(
-      <HashesList
-        eid="eng1"
-        hashes={[
-          cred({ id: "c1", type: "hash", username: "jay", secret: nt }),
-          cred({ id: "c2", type: "hash", username: "DC01$", secret: nt }),
-        ]}
-      />,
-    );
-    expect(screen.getByLabelText("Crack jay (hash)")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Crack DC01$ (hash)")).toBeNull();
   });
 });
