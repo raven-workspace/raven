@@ -780,16 +780,17 @@ test("P opens on the best fit for the IIS host and ↵ copies it", async ({ page
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(shown);
 });
 
-test("the misfit fold lists nc.exe as failed here before", async ({ page }) => {
+test("a payload that failed here stays a fit, marked, and sorts below the unmarked ones", async ({ page }) => {
   const aside = await openIisDrawer(page, 1280);
-  // Not among the fits the drawer offers.
-  await expect(aside.getByRole("listbox", { name: "Fits" }).getByRole("option", { name: /nc\.exe -e/ })).toHaveCount(0);
-  const show = aside.getByRole("button", { name: /^Don't fit here \(\d+\)$/ });
-  await expect(show).toHaveAttribute("aria-expanded", "false");
-  await show.click();
-  const row = aside.getByRole("list", { name: "Don't fit here" }).getByRole("listitem").filter({ hasText: "nc.exe -e" });
-  await expect(row).toHaveCount(1);
-  await expect(row).toContainText("Failed here before");
+  // A marked payload sorts down but stays a fit (spec 2b-C): nc.exe -e failed here before, so it is listed with the mark.
+  const fits = aside.getByRole("listbox", { name: "Fits" }).getByRole("option");
+  const nc = fits.filter({ hasText: "nc.exe -e" }).filter({ hasNotText: "bind" });
+  await expect(nc).toHaveCount(1);
+  await expect(nc).toContainText("Failed here before");
+  const names = await fits.evaluateAll((els) => els.map((e) => e.textContent ?? ""));
+  const firstMarked = names.findIndex((t) => t.includes("Failed here before"));
+  expect(firstMarked, "a marked fit exists").toBeGreaterThan(0);
+  expect(names.slice(firstMarked).every((t) => t.includes("Failed here before") || /Needs /.test(t)), "marked fits sort below the unmarked").toBe(true);
 });
 
 // Board: lanes share their header row, so every lane's first card starts on one line (DESIGN.md Layout rule 5).

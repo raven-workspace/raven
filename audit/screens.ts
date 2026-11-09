@@ -32,6 +32,17 @@ const GUARD_QUERY = "several ports";
 const focusBody = (page: Page) => page.locator("body").click({ position: { x: 1, y: 1 } });
 const IIS = `/e/${AUDIT_IDS.payloadsEngagement}/h/${AUDIT_IDS.iisHost}`;
 const PG = `/e/${AUDIT_IDS.payloadsEngagement}/h/${AUDIT_IDS.pgHost}`;
+const EXAM_DC = `/e/${AUDIT_IDS.examEngagement}/h/h-exam-dc01`;
+const DRAWER = "aside[aria-label='Payloads']";
+const WORKBENCH = "main[aria-label='Payloads']";
+/** Picks "Uploaded file" as where the payload is pasted, in the drawer (a chip) or the Workbench (a toggle). */
+const pickUploaded = (root: string) => async (page: Page) => {
+  const chip = page.locator(root).getByRole("button", { name: /^Paste into: / });
+  if (await chip.count()) {
+    await chip.click();
+    await page.getByRole("option", { name: /^Uploaded file/ }).click();
+  } else await page.locator(root).getByRole("button", { name: "Uploaded file" }).click();
+};
 const openPayloads = async (page: Page) => { await focusBody(page); await page.keyboard.press("p"); };
 
 export const SCREENS: Screen[] = [
@@ -293,6 +304,52 @@ export const SCREENS: Screen[] = [
     setup: async (page) => {
       await openPayloads(page);
       await page.locator("aside[aria-label='Payloads']").getByRole("button", { name: "Full screen" }).click();
+    },
+  },
+  {
+    // Two reverse shells failed on this host: the Callbacks chip is amber and the clue sits under the chips.
+    id: "payloads-drawer-callbacks", path: IIS, ready: `${DRAWER} >> text=Callbacks failed here twice`, setup: openPayloads,
+  },
+  {
+    id: "payloads-drawer-tools", path: IIS, ready: "role=listbox[name='Tools']",
+    setup: async (page) => { await openPayloads(page); await page.keyboard.press("Alt+KeyT"); },
+  },
+  {
+    id: "payloads-workbench-read", path: IIS, ready: `${WORKBENCH} >> text=Callbacks failed here twice`,
+    setup: async (page) => {
+      await openPayloads(page);
+      await page.locator(DRAWER).getByRole("button", { name: "Full screen" }).click();
+    },
+  },
+  {
+    id: "payloads-drawer-upload", path: IIS, ready: `${DRAWER} >> text=/Save as|Make /`,
+    setup: async (page) => { await openPayloads(page); await pickUploaded(DRAWER)(page); },
+  },
+  {
+    id: "payloads-workbench-upload", path: IIS, ready: `${WORKBENCH} >> text=/Save as|Make /`,
+    setup: async (page) => {
+      await openPayloads(page);
+      await page.locator(DRAWER).getByRole("button", { name: "Full screen" }).click();
+      await pickUploaded(WORKBENCH)(page);
+    },
+  },
+  {
+    // The Nishang cradle was built for an older LHOST: its block opens with the amber "Rebuild first" line.
+    id: "payloads-drawer-stale", path: IIS, ready: `${DRAWER} >> text=/Rebuild first/`,
+    setup: async (page) => {
+      await openPayloads(page);
+      await page.locator(DRAWER).getByRole("button", { name: /^Paste into: / }).click();
+      await page.getByRole("option", { name: /^PowerShell prompt/ }).click();
+      await page.locator(DRAWER).getByRole("listbox", { name: "Fits" }).getByRole("option", { name: /Nishang/ }).click();
+    },
+  },
+  {
+    // Exam-sim: Metasploit is locked to ms01, so a Meterpreter payload for dc01 carries the amber lock line.
+    id: "payloads-drawer-msf-lock", path: EXAM_DC, ready: `${DRAWER} >> text=/Metasploit is locked to ms01/`,
+    setup: async (page) => {
+      await openPayloads(page);
+      await page.keyboard.press("Alt+Digit4");
+      await page.locator(DRAWER).getByRole("listbox", { name: "Fits" }).getByRole("option", { name: /Meterpreter \(staged\)/ }).first().click();
     },
   },
 ];

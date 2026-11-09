@@ -28,7 +28,7 @@ for (const shortcut of SHORTCUTS) {
   test(`shortcut:${shortcut.id}`, async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
-    const ready = SCREENS.find((s) => s.path === shortcut.path)?.ready;
+    const ready = shortcut.ready ?? SCREENS.find((s) => s.path === shortcut.path)?.ready;
     expect(ready, `a SCREENS entry for ${shortcut.path}`).toBeDefined();
     await page.setViewportSize({ width: WIDTH, height: 900 });
     await page.clock.install({ time: AUDIT_NOW });
