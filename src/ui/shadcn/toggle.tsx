@@ -5,7 +5,7 @@ import { Toggle as TogglePrimitive } from "radix-ui"
 
 // Ink: a hairline segment, quiet at rest, accent only while on. 28px tall (in-row control), body-scale type.
 const toggleVariants = cva(
-  "group/toggle inline-flex items-center justify-center gap-1 text-meta font-medium whitespace-nowrap select-none cursor-default transition-colors duration-100 outline-none text-fg-2 hover:bg-surface-hi hover:text-fg focus-visible:outline-2 focus-visible:outline-accent disabled:pointer-events-none disabled:text-faint data-[state=on]:bg-accent/10 data-[state=on]:text-accent [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "group/toggle inline-flex items-center justify-center gap-1 text-meta font-medium whitespace-nowrap select-none cursor-default transition-colors duration-100 outline-none text-fg-2 hover:bg-surface-hi hover:text-fg focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent disabled:pointer-events-none disabled:text-faint data-[state=on]:bg-accent/10 data-[state=on]:text-accent [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {

@@ -581,6 +581,16 @@ describe("credentials dock page", () => {
     expect(row).toHaveAttribute("aria-selected", "true");
   });
 
+  it("picking a kind in the Inventory filter keeps tab and cred, and adds kind", async () => {
+    const user = userEvent.setup();
+    mount({ creds: [pw(1), NT_HASH], services: SMB, url: "/e/e1/s/credentials?tab=inventory&cred=c1" });
+    await user.click(await screen.findByRole("radio", { name: /^Hashes/ }));
+    await waitFor(() => expect(search().get("kind")).toBe("hashes"));
+    expect(search().get("tab")).toBe("inventory");
+    expect(search().get("cred")).toBe("c1");
+    expect(within(dock()).getByTitle("u1")).toBeInTheDocument();
+  });
+
   it("a stale ?cred= falls back to the default", async () => {
     mount({ creds: TEN, services: SMB, url: "/e/e1/s/credentials?cred=nope" });
     expect(within(await screen.findByRole("region", { name: "Credential" })).getByTitle("u10")).toBeInTheDocument();

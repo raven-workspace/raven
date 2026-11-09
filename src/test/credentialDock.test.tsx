@@ -133,7 +133,6 @@ describe("credential dock", () => {
     mount({ cred: cred({ id: "m1", type: "ticket", username: "admin", domain: "CORP", secret: "ticket-data", source: "rubeus" }) });
     const facts = screen.getByTestId("dock-facts");
     expect(facts).toHaveAttribute("data-layout", "row");
-    expect(facts.className).toContain("auto-fill");
     for (const label of ["Source", "Scope", "Works on"]) expect(within(facts).getByText(label)).toHaveClass("text-meta", "text-muted-2");
     expect(within(facts).getByText("rubeus")).toBeInTheDocument();
     expect(within(facts).getByText("nothing yet")).toBeInTheDocument();

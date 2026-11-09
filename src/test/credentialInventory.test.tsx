@@ -81,11 +81,13 @@ describe("InventoryList", () => {
   });
 
   it("a stale ?kind falls back to All", () => {
-    mount({ initial: "?kind=bogus" });
+    const { unmount } = mount({ initial: "?kind=bogus" });
     expect(headings()).toHaveLength(5);
     expect(bar().getByRole("radio", { name: "All" })).toBeChecked();
+    unmount();
     mount({ initial: "?kind=tickets", creds: BASE.filter((c) => c.type !== "ticket") });
-    expect(screen.getAllByRole("radio", { name: "All", checked: true })).toHaveLength(2);
+    expect(screen.getAllByRole("radio", { name: "All", checked: true })).toHaveLength(1);
+    expect(headings()).toEqual(["Passwords 2", "Hashes 2", "Machine accounts 1", "Usernames 2"]);
   });
 
   it("shows a Type column only where the group is mixed; hashes show their hash type", () => {
