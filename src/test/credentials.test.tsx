@@ -699,6 +699,10 @@ describe("credentials dock page", () => {
       const viewport = document.querySelector("tr[data-cred-row][aria-selected='true']")!.closest<HTMLElement>("[data-slot=scroll-area-viewport]")!;
       await waitFor(() => expect(viewport.scrollTop).toBe(350));
       ancestorsStill(viewport);
+      // The selection bar is on the row box, so it spans a row whose other cells wrap to two lines.
+      const selectedRow = document.querySelector("tr[data-cred-row][aria-selected='true']")!;
+      expect(selectedRow.className).toContain("shadow-[inset_2px_0_0_var(--accent)]");
+      expect(selectedRow.firstElementChild!.className).not.toContain("inset_2px");
       expect(into).not.toHaveBeenCalled();
     } finally {
       into.mockRestore();

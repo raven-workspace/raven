@@ -80,7 +80,7 @@ function SectionItem({ engagementId, id, label, n, collapsed }: {
         <SidebarMenuButton
           asChild
           isActive={active}
-          className={cx("cursor-default", !collapsed && "grid h-[30px] grid-cols-[16px_minmax(0,1fr)_auto] px-2")}
+          className={cx("cursor-default", !collapsed && "grid h-[30px] grid-cols-[16px_minmax(0,1fr)_auto] px-2 py-0")}
         >
           <NavLink to={to} end aria-label={collapsed ? label : undefined}>
             <SectionIcon aria-hidden />

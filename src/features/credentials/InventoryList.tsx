@@ -102,7 +102,7 @@ function Group({ label, creds, crack, typed, ...ctx }: {
                 tabIndex={0}
                 aria-selected={selected}
                 data-state={selected ? "selected" : undefined}
-                className={`${ROW} cursor-pointer`}
+                className={`${ROW} cursor-pointer ${selected ? BAR : ""}`}
                 onClick={() => ctx.onSelect(c.id)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
@@ -111,7 +111,7 @@ function Group({ label, creds, crack, typed, ...ctx }: {
                   } else moveRowFocus(e, ctx.root.current);
                 }}
               >
-                <TableCell className={`min-w-0 ${selected ? BAR : ""}`}>
+                <TableCell className="min-w-0">
                   {isOwnerless(c) ? (
                     <span className="grid justify-items-start gap-1">
                       <Chip>owner unknown</Chip>
