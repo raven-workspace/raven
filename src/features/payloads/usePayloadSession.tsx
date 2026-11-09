@@ -7,8 +7,8 @@ import { api } from "../../lib/api";
 import { copyPlain } from "../../lib/clipboard";
 import { shortHostName } from "../../lib/hostName";
 import { isDialogOpen } from "../../lib/keys";
-import type { PayloadBuild } from "../../types/payloadBuild";
 import { reportError } from "../../lib/lockSignal";
+import type { PayloadBuild } from "../../types/payloadBuild";
 import { Input, type Hint } from "../../ui";
 import type { ChipPickerHandle } from "../arsenal/ChipPicker";
 import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
@@ -74,6 +74,8 @@ const fieldTokens = (def: PayloadDef) =>
     .sort((a, b) => Number(b === "LHOST") - Number(a === "LHOST"));
 /** The LHOST field's hint: Settings' attacker IP, which fills in while the field is empty. */
 export const lhostPlaceholder = (settingsLhost: string) => (settingsLhost ? `Settings: ${settingsLhost}` : "Settings: attacker IP");
+/** The muted hold on a trigger copy while the build memory is still loading. */
+const CHECKING_BUILD = "Checking the last build";
 /** Saves what a baked payload was built with, stamped now, and refetches the build memory. */
 async function recordBuild(qc: QueryClient, build: Omit<PayloadBuild, "at">) {
   await api.payloadBuildRecord({ ...build, at: Date.now() });
@@ -154,6 +156,10 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
   const buildStep = def?.bakesIp ? (def.prepare ? "prepare" as const : "payload" as const) : null;
   const staleWarn = stale ? { warn: `Built with ${stale.was}; rebuild first`, warnKey: stale.was } : undefined;
   const lockWarn = lock?.breach ? { warn: lock.text, warnKey: "msf-lock" } : undefined;
+  /** A baked payload's trigger while the build memory has not loaded: held once (muted), and it never records. */
+  const unknownBuild = !!def?.bakesIp && !!host && !fit.buildsKnown;
+  const checkingWarn = unknownBuild ? { warn: CHECKING_BUILD, warnKey: "builds-unknown" } : undefined;
+  const triggerWarn = staleWarn ?? checkingWarn;
 
   /**
    * Remembers what a baked payload was built with for this host, after its build step (or, while nothing is stale, its
@@ -200,16 +206,16 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
     setStatus(undefined);
     const b = built;
     const text = b.trigger!.text;
-    const wasStale = stale !== null;
+    const mayRecord = stale === null && !unknownBuild;
     try {
-      const r = await guard.attempt({ ...triggerCmd, title: b.def.title, text, msfMarker: false }, () => copyPlain(text), staleWarn);
+      const r = await guard.attempt({ ...triggerCmd, title: b.def.title, text, msfMarker: false }, () => copyPlain(text), triggerWarn);
       if (r !== "copied") return "guarded";
     } catch (e) {
       reportError(e);
       setStatus(e instanceof Error ? e.message : String(e));
       return "guarded";
     }
-    if (!wasStale) await record(b.def);
+    if (mayRecord) await record(b.def);
     return "copied";
   };
 
@@ -224,11 +230,13 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
     const b = built;
     const cmd = { id: b.def.id, title: b.def.title, text: b.text, unresolved: b.unresolved, msfMarker: false };
     const isBuild = buildStep === "payload";
-    const wasStale = stale !== null;
+    const mayRecord = isBuild || (stale === null && !unknownBuild);
     try {
-      const r = await guard.attempt(cmd, () => copyPlain(b.text), !isBuild && staleWarn ? staleWarn : lockWarn);
+      // A trigger's "rebuild first" (or "checking") hold comes before the lock; no Meterpreter def has a prepare step,
+      // so the two never meet today.
+      const r = await guard.attempt(cmd, () => copyPlain(b.text), (!isBuild ? triggerWarn : undefined) ?? lockWarn);
       if (r !== "copied") return "guarded";
-      if (isBuild || !wasStale) await record(b.def);
+      if (mayRecord) await record(b.def);
       if (!log || !host || !d.engagement) return "copied";
       await logCommand(qc, {
         engagementId, host, hosts: d.hosts, command: b.text, title: b.def.title,
@@ -327,14 +335,15 @@ export function usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, 
 
   /** What PayloadView and PayloadBlock take from the session for the payload in view (the drawer and the Workbench). */
   const blockProps = {
-    pasteLabel, fields, note, noteWarn: guard.hint !== null, prepareNote: noteFor(prepareCmd), triggerNote: noteFor(triggerCmd),
+    pasteLabel, fields, note, noteWarn: guard.hint !== null && !guard.hint.startsWith(CHECKING_BUILD), prepareNote: noteFor(prepareCmd), triggerNote: noteFor(triggerCmd),
     stale: stale ? `Rebuild first: built with ${stale.was}, now ${stale.now}` : null, buildStep, lock,
     onCopy: () => copy(false), onCopyPrepare: copyPrepare, onCopyTrigger: copyTrigger, onCopyListener: copyListener, onPickListener: pickListener,
   };
 
   return {
     blockProps, generator, hostId, setHostId, fit, ranked, index, setIndex, def, built, guard, note, copy, copyListener, onKeyDown,
-    status, psCommand, setPsCommand, pasteLabel, fitsLine, fields, focusToken, hostRef, osRef, contextRef, portRef, psRef, fieldEls,
+    // A build memory that failed to load shows here, as a failed copy does.
+    status: status ?? fit.buildsError ?? undefined, psCommand, setPsCommand, pasteLabel, fitsLine, fields, focusToken, hostRef, osRef, contextRef, portRef, psRef, fieldEls,
     callbacksRef, filterRef, toolsRef, pickListener,
   };
 }

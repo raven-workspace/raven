@@ -7,7 +7,7 @@ import { ChipPicker } from "../arsenal/ChipPicker";
 
 type CopyResult = Promise<"copied" | "guarded">;
 
-/** A copy guard note under one block; `noteWarn` says whether it is a hold-back (amber) or a confirmation. */
+/** A copy guard note under one block; `warn` says whether it is a hold-back (amber) or a confirmation (muted). */
 const Note = ({ text, warn }: { text?: string | null; warn?: boolean }) =>
   text ? <p role="status" className={`m-0 text-meta ${warn ? "text-warn" : "text-muted"}`}>{text}</p> : null;
 

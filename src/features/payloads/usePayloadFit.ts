@@ -99,6 +99,9 @@ export function usePayloadFit(engagementId: string, hostId: string | null) {
 
   // What each baked payload was last built with, per host (recorded when its build step is copied).
   const builds = useQuery({ queryKey: payloadBuildsKey(engagementId), queryFn: () => api.payloadBuildsList(engagementId), enabled: engagementId !== "" });
+  /** Whether the build memory has loaded: until it has, a trigger copy can neither tell it is stale nor record. */
+  const buildsKnown = builds.isSuccess;
+  const buildsError = builds.error ? (builds.error instanceof Error ? builds.error.message : String(builds.error)) : null;
   /** A baked payload last built for this host with another LHOST or LPORT: "Rebuild first". Null with no host. */
   const staleFor = (def: PayloadDef) =>
     def.bakesIp ? staleBuild(builds.data ?? [], host?.id ?? null, def.id, { LHOST: lhost, LPORT: port }) : null;
@@ -112,7 +115,7 @@ export function usePayloadFit(engagementId: string, hostId: string | null) {
 
   return {
     d, host: host ?? null, hostKey, engagement, os, context, dbEngine, port, settingsPort, lhost, settingsLhost, lhostInput, portInput,
-    evidence, ranked, build, staleFor, lockLine, toggles, logTools, callbackClue: clue, filter, filterApplies,
+    evidence, ranked, build, staleFor, lockLine, buildsKnown, buildsError, toggles, logTools, callbackClue: clue, filter, filterApplies,
   };
 }
 

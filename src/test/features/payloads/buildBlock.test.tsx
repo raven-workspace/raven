@@ -210,6 +210,32 @@ describe("Payload build memory", () => {
     await vi.waitFor(() => expect(d.queryByText(REBUILD_LINE)).not.toBeInTheDocument());
   });
 
+  it("while the build memory loads, a trigger copy is held once and never records", async () => {
+    m.payloadBuildsList.mockReturnValue(new Promise(() => {}));
+    const { user, d } = await openOn("Nishang cradle (served rev.ps1)");
+    await navigator.clipboard.writeText("untouched");
+    await user.keyboard("{Enter}");
+    const hint = await d.findByText("Checking the last build. Press ↵ again to copy anyway");
+    expect(hint).toHaveClass("text-muted");
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    await user.keyboard("{Enter}");
+    expect(await navigator.clipboard.readText()).toBe(d.getByLabelText("Command: Payload").textContent);
+    expect(m.payloadBuildRecord).not.toHaveBeenCalled();
+    // The build step still records: it is built with the current values.
+    await user.click(d.getByRole("button", { name: "Copy prepare on Kali" }));
+    await vi.waitFor(() => expect(m.payloadBuildRecord).toHaveBeenCalledWith(recorded("nishang-cradle", LHOST)));
+  });
+
+  it("a build memory that fails to load shows in the status line, and trigger copies do not record", async () => {
+    m.payloadBuildsList.mockRejectedValue(new Error("payload builds unavailable"));
+    const { user, d } = await openOn("Nishang cradle (served rev.ps1)");
+    expect(await d.findByRole("alert")).toHaveTextContent("payload builds unavailable");
+    await user.keyboard("{Enter}");
+    await user.keyboard("{Enter}");
+    expect(await navigator.clipboard.readText()).toBe(d.getByLabelText("Command: Payload").textContent);
+    expect(m.payloadBuildRecord).not.toHaveBeenCalled();
+  });
+
   it("no host, no block", async () => {
     seed("nishang-cradle", LHOST);
     usePayloadsStore.setState({ lhost: NEW_LHOST, overrides: { "": { os: "windows", context: "powershell" } } });
