@@ -158,7 +158,7 @@ describe("Payloads drawer", () => {
     expect(d.getByText(/paste context from your 14:02 log entry/)).toBeInTheDocument();
     expect(d.getByLabelText("Command: Listener")).toHaveTextContent(`penelope -O -p ${LPORT}`);
     expect(payloadText(d)).toBe(buildPayload(def("ps-b64"), "webshell-param", { LHOST, LPORT }).text);
-    expect(within(d.getByRole("listbox", { name: "Fits" })).getAllByRole("option")).toHaveLength(5);
+    expect(within(d.getByRole("listbox", { name: "Fits" })).getAllByRole("option")).toHaveLength(6);
     // At most five hints, by priority: ↵ and Esc never drop, ⇥ next fit stays; the rest are under "?".
     const aside = screen.getByRole("complementary", { name: "Payloads" });
     expect(aside).toHaveAttribute("data-hint-surface");
@@ -217,13 +217,15 @@ describe("Payloads drawer", () => {
     expect(d.getByRole("heading", { name: "PowerShell TLS (-e)" })).toBeInTheDocument();
     expect(payloadText(d)).toBe(buildPayload(def("ps-tls"), "webshell-param", { LHOST, LPORT }).text);
     expect(body).toHaveFocus();
-    // Then the two Windows binds.
+    // Then the three Windows binds.
     await user.keyboard("{Tab}{Tab}");
     expect(d.getByRole("heading", { name: "PowerShell TcpListener bind" })).toBeInTheDocument();
+    await user.keyboard("{Tab}");
+    expect(d.getByRole("heading", { name: "PowerShell TcpListener bind (-e)" })).toBeInTheDocument();
     expect(body).toHaveFocus();
     // The last fit: ⇥ moves focus on and the fit stays.
     await user.keyboard("{Tab}");
-    expect(d.getByRole("heading", { name: "PowerShell TcpListener bind" })).toBeInTheDocument();
+    expect(d.getByRole("heading", { name: "PowerShell TcpListener bind (-e)" })).toBeInTheDocument();
     expect(body).not.toHaveFocus();
   });
 
@@ -294,6 +296,7 @@ describe("Payloads drawer", () => {
     const options = within(list).getAllByRole("option");
     expect(options.map((o) => o.querySelector("[data-fit-name]")?.textContent)).toEqual([
       "PowerShell base64 (-e)", "nc.exe -e", "PowerShell TLS (-e)", "nc.exe -e bind", "PowerShell TcpListener bind",
+      "PowerShell TcpListener bind (-e)",
     ]);
     expect(options[0]).toHaveAttribute("aria-selected", "true");
     // Each row says why it fits, in its own spans; the best one says so.
