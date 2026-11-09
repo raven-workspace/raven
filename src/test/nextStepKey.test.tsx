@@ -3,6 +3,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useArsenalStore } from "../features/arsenal/useArsenalStore";
+import { usePayloadsStore } from "../features/payloads/usePayloadsStore";
 import App from "../App";
 import { applicableGoals } from "../engines/checklist";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
@@ -37,11 +39,12 @@ const enumIds = stages.find((a) => a.stage.id === "information-gathering")!.goal
 const allIds = stages.flatMap((a) => a.goals.map((g) => g.id));
 const done = (ids: string[]) => ids.map((id) => item(id, "done"));
 
-function mount(items: ChecklistItem[]) {
+function mount(items: ChecklistItem[], pending = false) {
   m.engagementGet.mockResolvedValue(E1);
   m.hostsList.mockResolvedValue([H1]);
   m.servicesListEngagement.mockResolvedValue([SMB]);
-  m.checklistList.mockResolvedValue(items);
+  if (pending) m.checklistList.mockReturnValue(new Promise(() => {}));
+  else m.checklistList.mockResolvedValue(items);
   return render(
     <QueryClientProvider client={makeQueryClient()}>
       <MemoryRouter initialEntries={["/e/e1/h/h1"]}>
@@ -129,6 +132,39 @@ describe("J: next open step", () => {
     await user.keyboard("j");
     expect(dialog).toBeInTheDocument();
     expect(document.querySelector("li[data-goal-id]")!.contains(document.activeElement)).toBe(false);
+  });
+
+  it("does nothing from a control inside an open Arsenal or Payloads drawer", async () => {
+    const user = userEvent.setup();
+    mount([]);
+    await screen.findByRole("heading", { name: "Information gathering" });
+    const first = row(enumIds[0]!);
+    for (const store of [useArsenalStore, usePayloadsStore]) {
+      store.setState({ open: true });
+      const btn = screen.getByRole("tab", { name: "Log" });
+      btn.focus();
+      await user.keyboard("j");
+      expect(first.contains(document.activeElement)).toBe(false);
+      store.setState({ open: false });
+    }
+  });
+
+  it("while the checklist is still loading, J does nothing and shows no all-done line", async () => {
+    const user = userEvent.setup();
+    mount([], true);
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("j");
+    expect(screen.queryByText("Every step is done")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Full checklist" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("after a genuine all-done J puts the Full checklist toggle back", async () => {
+    const user = userEvent.setup();
+    mount(done(allIds));
+    await screen.findByText("All stages done");
+    await user.keyboard("j");
+    await screen.findByText("Every step is done");
+    expect(screen.getByRole("button", { name: "Full checklist" })).toHaveAttribute("aria-expanded", "false");
   });
 
   it("is listed in the host page hint line", async () => {

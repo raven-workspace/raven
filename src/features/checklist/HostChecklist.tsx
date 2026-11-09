@@ -140,7 +140,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
   };
 
   return (
-    <div className="grid gap-6 py-3">
+    <div data-checklist-ready className="grid gap-6 py-3">
       <CredentialPicker credentials={creds.credentials} value={creds.cred} onChange={creds.pick} />
       {nothingNext && <p className="m-0 text-meta text-muted">{nothingNext}</p>}
       {doneWithNewCreds > 0 && onShowFull && (
