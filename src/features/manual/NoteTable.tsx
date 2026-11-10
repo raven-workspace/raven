@@ -26,20 +26,20 @@ export function NoteTable({ head, rows, anchor, cell }: { head: Inline[][]; rows
     const wrap = wrapRef.current;
     const table = tableRef.current;
     if (!wrap || !table) return;
-    /** The table's width as a table, the last time it was too wide to fit. */
-    let natural = Infinity;
-    // New content: decide afresh from the table layout (a stale stacked state would never learn its new width).
-    delete table.dataset.stacked;
+    const hasLow = table.querySelector("[data-col=low]") !== null;
+    // Decided afresh each time from the table layout, in order: (1) every column at its widest unbreakable value
+    // (the action column at its floor) fits: a table; (2) else the cause column (`data-col="low"`) is dropped and it
+    // fits: a table without it (`data-dropped`); (3) else stacked rows, the cause line dropped too.
     const fit = () => {
       const room = wrap.clientWidth;
-      if (table.dataset.stacked === undefined) {
+      delete table.dataset.stacked;
+      delete table.dataset.dropped;
+      if (table.offsetWidth <= room + 0.5) return;
+      if (hasLow) {
+        table.dataset.dropped = "low";
         if (table.offsetWidth <= room + 0.5) return;
-        natural = table.offsetWidth;
-        table.dataset.stacked = "";
-      } else if (room >= natural) {
-        delete table.dataset.stacked;
-        fit();
       }
+      table.dataset.stacked = "";
     };
     fit();
     if (typeof ResizeObserver === "undefined") return;
@@ -50,14 +50,13 @@ export function NoteTable({ head, rows, anchor, cell }: { head: Inline[][]; rows
   }, [head, rows]);
 
   const labels = head.map(plain);
-  // Column policy: the action column keeps a floor width; the cause column is the first to go (hidden in a pane under
-  // 860px, in both layouts: `!` so it beats the stacked cells' `grid`). The hide is CSS, so the fit measurement
-  // (`offsetWidth`, run in a layout effect and on resize) already sees the table without it.
+  // Column policy: the action column keeps a floor width; the cause column is the first to go, only when the table needs
+  // the room (`data-dropped` on the table, set by the fit above; `!` so it beats the stacked cells' `grid`).
   const kind = labels.map((l) => (ACTION_HEADER.test(l.trim()) ? "action" : CAUSE_HEADER.test(l.trim()) ? "cause" : ""));
-  const colClass = (j: number) => (kind[j] === "action" ? " min-w-[32ch]" : kind[j] === "cause" ? " @max-[860px]:hidden!" : "");
+  const colClass = (j: number) => (kind[j] === "action" ? " min-w-[32ch]" : kind[j] === "cause" ? " group-data-[dropped=low]/nt:hidden!" : "");
   const colAttr = (j: number) => (kind[j] === "cause" ? { "data-col": "low" } : {});
   return (
-    <div ref={wrapRef} className="@container grid min-w-0">
+    <div ref={wrapRef} className="grid min-w-0">
       <table ref={tableRef} role="table" data-table={anchor} className="group/nt w-full border-collapse text-body/5.5 data-stacked:grid">
         <thead role="rowgroup" className="group-data-stacked/nt:hidden">
           <tr role="row">
