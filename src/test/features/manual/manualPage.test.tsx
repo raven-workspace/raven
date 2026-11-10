@@ -14,8 +14,11 @@ import { useManualStore } from "../../../features/manual/useManualStore";
 import { useNotesStore } from "../../../features/notes/useNotesStore";
 import { usePaletteStore } from "../../../features/palette/usePaletteStore";
 import { usePayloadsStore } from "../../../features/payloads/usePayloadsStore";
+import { logCommand } from "../../../features/capture/logCommand";
 import { api } from "../../../lib/api";
 import { makeQueryClient } from "../../../lib/queryClient";
+import type { Engagement } from "../../../types/engagement";
+import type { Host } from "../../../types/host";
 
 vi.mock("../../../lib/api");
 vi.mock("../../../features/checklist/ticks", async (orig) => ({
@@ -28,9 +31,40 @@ const m = vi.mocked(api, true);
 // Synthetic fixtures only: invented note names and bodies.
 const BASICS = parseNote("04-Foundations/Bb-Basics.md", "# Bb Basics\nSee [[Zz-Errors#Core Concept|the errors]].\n## Alpha\ntext\n## Beta\ntext\n### Beta Two\n**Table 1 — Zz codes**\n| A | B |\n| - | - |\n| x | y |\n")!;
 const ERRORS = parseNote("04-Foundations/Zz-Errors.md", "# Zz Errors\n## Core Concept\nWords.\n")!;
-const TOOL = parseNote("03-Tools/Aa Tool.md", "# Aa Tool\n## Usage\n")!;
+const TOOL = parseNote("03-Tools/Aa Tool.md", "# Aa Tool\n## Usage\n```bash title:\"Kali\"\nzzscan -t {TARGET_IP}\n```\n")!;
 const REPORT = parseNote("05-Reporting/Report Structure.md", "# Report Structure\n## Sections\n")!;
 const NOTES: ManualNote[] = [TOOL, ERRORS, REPORT, BASICS];
+
+// RFC 5737 addresses, invented names.
+const E1: Engagement = {
+  id: "e1", name: "Lab Zz", kind: "lab", client: null, subLabel: null, scopeCidrs: ["198.51.100.0/24"],
+  domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
+  createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
+};
+const host = (id: string, name: string, ip: string): Host => ({
+  id, engagementId: "e1", name, ip, os: "linux", boardColumn: "information-gathering", boardManual: false,
+  dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 1, updatedAt: 1,
+});
+const WEB = host("h1", "zzweb01", "198.51.100.21");
+const DB = host("h2", "zzdb02", "198.51.100.22");
+
+/** An engagement with two hosts, enough for the host page and filling. */
+function withEngagement() {
+  m.engagementsList.mockResolvedValue([E1]);
+  m.engagementGet.mockResolvedValue(E1);
+  m.hostsList.mockResolvedValue([WEB, DB]);
+  m.hostIdentityGet.mockResolvedValue(null);
+  m.vectorsList.mockResolvedValue([]);
+  m.servicesList.mockResolvedValue([]);
+  m.servicesListEngagement.mockResolvedValue([]);
+  m.logList.mockResolvedValue([]);
+  m.tunnelsList.mockResolvedValue([]);
+  m.checklistList.mockResolvedValue([]);
+  m.checklistPut.mockResolvedValue([]);
+  m.credentialsList.mockResolvedValue([]);
+  m.credAttemptsList.mockResolvedValue([]);
+  m.payloadBuildsList.mockResolvedValue([]);
+}
 
 const snapshot = (notes?: ManualNote[]): FieldManualSnapshot => ({
   importedAt: 1, cards: [], overlay: {}, added: [], playbook: [], toolkit: [], report: {} as FieldManualSnapshot["report"],
@@ -304,5 +338,94 @@ describe("Manual: empty states", () => {
     mount(["/manual"]);
     expect(await screen.findByText("The Manual holds your Field Manual's Tools, Foundations and Reporting notes.")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Note" })).toBeNull();
+  });
+});
+
+describe("Manual: the host commands fill for", () => {
+  const pre = (text: string) => screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === text);
+
+  it("arriving from a host page shows that host and fills for it", async () => {
+    withEngagement();
+    useManualStore.setState({ place: { noteId: TOOL.id, scrollTop: 0 } });
+    mount(["/e/e1/h/h1"]);
+    await screen.findByRole("tab", { name: "Next" });
+    press("m");
+    await openNote("Aa Tool");
+    expect(await screen.findByRole("button", { name: "Fill for host: zzweb01" })).toBeInTheDocument();
+    expect(await pre("zzscan -t 198.51.100.21")).toBeInTheDocument();
+  });
+
+  it("switching the host refills the command, and ⌘↵ logs to the chosen host", async () => {
+    const user = userEvent.setup();
+    withEngagement();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
+    mount([`/manual/${TOOL.id}`]);
+    await pre("zzscan -t 198.51.100.21");
+    await user.click(screen.getByRole("button", { name: "Fill for host: zzweb01" }));
+    await user.click(await screen.findByRole("option", { name: /zzdb02/ }));
+    expect(await pre("zzscan -t 198.51.100.22")).toBeInTheDocument();
+    expect(screen.getByTestId("manual-host-ip")).toHaveTextContent("198.51.100.22");
+    const group = await screen.findByRole("group", { name: "Note command: Kali" });
+    act(() => group.focus());
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await waitFor(() => expect(logCommand).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      engagementId: "e1", host: expect.objectContaining({ id: "h2" }), command: "zzscan -t 198.51.100.22",
+    })));
+  });
+
+  it("⌥H opens the host picker", async () => {
+    withEngagement();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
+    mount([`/manual/${TOOL.id}`]);
+    await pre("zzscan -t 198.51.100.21");
+    press("˙", { altKey: true, code: "KeyH" });
+    expect(await screen.findByRole("option", { name: /zzdb02/ })).toBeInTheDocument();
+  });
+
+  it("no engagement: says so, and commands keep their placeholders", async () => {
+    mount([`/manual/${TOOL.id}`]);
+    expect(await screen.findByText("No active engagement")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Fill for host/ })).toBeNull();
+    expect(await screen.findByText((_, el) => el?.tagName === "PRE" && (el.textContent ?? "").includes("{TARGET_IP}"))).toBeInTheDocument();
+  });
+
+  it("the restored scroll is applied again once the exam rules have loaded", async () => {
+    withEngagement();
+    let release: (v: Engagement[]) => void = () => {};
+    m.engagementsList.mockReturnValue(new Promise((r) => (release = r)));
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
+    useManualStore.setState({ place: { noteId: ERRORS.id, scrollTop: 240 } });
+    mount(["/manual"]);
+    await openNote("Zz Errors");
+    await waitFor(() => expect(pane().scrollTop).toBe(240));
+    act(() => {
+      pane().scrollTop = 30; // late layout moved the spot
+    });
+    await act(async () => release([E1]));
+    await waitFor(() => expect(pane().scrollTop).toBe(240));
+  });
+});
+
+describe("Manual: title bar and focus", () => {
+  it("the Manual button is current on the Manual only", async () => {
+    mount();
+    expect(await ready()).not.toHaveAttribute("aria-current");
+    press("m");
+    await openNote("Bb Basics");
+    expect(screen.getByRole("button", { name: "Manual" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("M on the Manual focuses the note pane", async () => {
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    press("m");
+    expect(pane()).toHaveFocus();
+    expect(pane().className).toMatch(/focus-visible:/);
+  });
+
+  it("the hint line lists ⌘↵ copy and log", async () => {
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    expect(within(screen.getByRole("group", { name: "Manual shortcuts" })).getByText("copy and log")).toBeInTheDocument();
   });
 });

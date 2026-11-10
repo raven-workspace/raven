@@ -2,36 +2,32 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent 
 import { useLocation, useNavigate, useParams } from "react-router";
 import type { ManualNote } from "../../engines/manual";
 import { getCards, useLibraryVersion } from "../../engines/library/store";
-import { isDialogOpen, isFreeKey, isTypingTarget, useKeydown } from "../../lib/keys";
+import { isFreeKey, isTypingTarget, useKeydown } from "../../lib/keys";
 import { Button, Disclosure, EmptyState, HintLine, labelClass, type Hint } from "../../ui";
-import { useArsenalStore } from "../arsenal/useArsenalStore";
-import { useFillScope } from "../arsenal/useFillScope";
-import { useNotesStore } from "../notes/useNotesStore";
-import { usePayloadsStore } from "../payloads/usePayloadsStore";
+import { HostChip, isHostPickKey, type HostChipHandle } from "../arsenal/HostChip";
+import { useFillScope, useLastEngagementStore } from "../arsenal/useFillScope";
+import { useFillBase } from "../palette/fillData";
+import { MANUAL_NOTE_ID, manualKeysBlocked } from "./keys";
 import { ManualOutline } from "./ManualOutline";
 import { ManualRail } from "./ManualRail";
 import { NoteView } from "./NoteView";
 import { useManualStore, type ManualPlace } from "./useManualStore";
 import { firstNote, useManualNotes, type ManualStatus } from "./useManualNotes";
 
-/** The note pane's id: `M` on the Manual focuses it. */
-export const MANUAL_NOTE_ID = "manual-note";
 /** How far below the pane's top a heading may sit and still be the current section. */
 const CURRENT_SLACK = 24;
 /** Saving the place waits for the scroll to settle. */
 const SAVE_MS = 200;
 
-/** An Arsenal, Payloads or Notes drawer (or a dialog) is over the page: the page's keys stand aside. */
-export const manualKeysBlocked = () =>
-  isDialogOpen() || useArsenalStore.getState().open || usePayloadsStore.getState().open || useNotesStore.getState().open;
-
 export const manualPath = (noteId: string) => `/manual/${encodeURIComponent(noteId)}`;
 
 const HINTS: Hint[] = [
   { keys: "/", label: "filter", priority: 1 },
-  { keys: "[ ]", label: "section", priority: 2 },
+  { keys: "↵", label: "copy command", priority: 2 },
+  { keys: "⌘↵", label: "copy and log", priority: 2 },
   { keys: "⌘[", label: "previous note", priority: 2 },
-  { keys: "↵", label: "copy command", priority: 3 },
+  { keys: "[ ]", label: "section", priority: 3 },
+  { keys: "⌥H", label: "host", priority: 4 },
   { keys: "Esc", label: "back", priority: 1 },
 ];
 
@@ -72,7 +68,10 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
   const navigate = useNavigate();
   const location = useLocation();
   const note = noteId ? notes.find((n) => n.id === noteId) : undefined;
-  const { engagementId, hostId } = useFillScope();
+  const { engagementId, hostId, pending: scopePending } = useFillScope();
+  const base = useFillBase(engagementId, hostId);
+  const hostRef = useRef<HostChipHandle>(null);
+  const setHostId = (id: string | null) => useLastEngagementStore.setState({ engagementId: engagementId || null, hostId: id });
   useLibraryVersion();
   const cards = getCards();
 
@@ -89,6 +88,8 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
   const returning = useRef(false);
   /** The last section reached by [ ] or the outline: near the end of a note the pane can't scroll it to the top. */
   const jumped = useRef(-1);
+  /** A restored scroll waiting for late layout (exam lines, filled text) to settle: applied once more then. */
+  const restored = useRef<ManualPlace | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const savePlace = () => {
@@ -119,7 +120,11 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
     let top = 0;
     const pending = pendingScroll.current;
     pendingScroll.current = null;
-    if (pending?.noteId === note.id) top = pending.scrollTop;
+    restored.current = null;
+    if (pending?.noteId === note.id) {
+      top = pending.scrollTop;
+      if (top > 0 && !base.examReady) restored.current = pending;
+    }
     else if (location.hash) {
       const el = pane.querySelector(`[id="${CSS.escape(decodeURIComponent(location.hash.slice(1)))}"]`);
       if (el) {
@@ -136,6 +141,17 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
     savePlace();
     // location.key: a link to a heading in the same note scrolls again.
   }, [note?.id, location.key]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Exam rules and fill data arrive after the first paint and change the note's height: put the restored spot back once.
+  useLayoutEffect(() => {
+    const pane = paneRef.current;
+    const r = restored.current;
+    if (!base.examReady || !pane || !r) return;
+    restored.current = null;
+    if (shown.current?.noteId !== r.noteId) return;
+    pane.scrollTop = r.scrollTop;
+    shown.current = { noteId: r.noteId, scrollTop: pane.scrollTop };
+  }, [base.examReady]);
 
   const ids = useMemo(() => note?.outline.map((o) => o.id) ?? [], [note]);
 
@@ -186,6 +202,11 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
       void navigate(manualPath(prev.noteId), { replace: true });
       return;
     }
+    if (engagementId && isHostPickKey(e) && !isTypingTarget(e.target)) {
+      e.preventDefault();
+      hostRef.current?.open();
+      return;
+    }
     if (!isFreeKey(e)) return;
     if (e.key === "/") {
       e.preventDefault();
@@ -203,25 +224,40 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
   return (
     <div className="grid min-h-0 grid-cols-[260px_minmax(0,1fr)] min-[1100px]:grid-cols-[260px_minmax(0,1fr)_220px]">
       <ManualRail notes={notes} currentId={note?.id ?? null} filter={filter} onFilter={setFilter} filterRef={filterRef} onOpen={open} />
-      <section
-        id={MANUAL_NOTE_ID} ref={paneRef} aria-label="Note" tabIndex={-1} onScroll={onScroll}
-        className="grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden px-8 py-4 outline-none [--pane-bg:var(--bg)]"
-      >
-        {note && (
-          <>
-            {note.outline.length > 0 && (
-              <div className="min-[1100px]:hidden">
-                <Disclosure label="On this page" count={note.outline.length} open={outlineOpen} onOpenChange={setOutlineOpen}>
-                  <nav aria-label="On this page" className="grid pt-2">{outline}</nav>
-                </Disclosure>
+      <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+        {/* What the note's commands fill for, and where ⌘↵ logs: kept above the scroll so it never moves. */}
+        <div className="grid min-h-12 grid-cols-[minmax(10rem,max-content)_minmax(0,1fr)] items-center gap-3 border-b border-line px-8 py-2 text-meta">
+          {engagementId ? (
+            <>
+              <div data-host-chip-cell="" className="grid">
+                <HostChip ref={hostRef} hosts={base.d.hosts} value={base.host?.id ?? null} onChange={setHostId} align="start" className="max-w-80" />
               </div>
-            )}
-            <div onClickCapture={onClickCapture} className="grid min-w-0">
-              <NoteView key={note.id} note={note} notes={notes} cards={cards} hostId={hostId} engagementId={engagementId} />
-            </div>
-          </>
-        )}
-      </section>
+              <span data-testid="manual-host-ip" className="truncate font-mono text-code text-muted">{base.host?.ip ?? ""}</span>
+            </>
+          ) : (
+            !scopePending && <span className="col-span-2 text-muted">No active engagement</span>
+          )}
+        </div>
+        <section
+          id={MANUAL_NOTE_ID} ref={paneRef} aria-label="Note" tabIndex={-1} onScroll={onScroll}
+          className="grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden px-8 py-4 outline-none [--pane-bg:var(--bg)] focus-visible:shadow-[inset_0_0_0_2px_var(--accent)]"
+        >
+          {note && (
+            <>
+              {note.outline.length > 0 && (
+                <div className="min-[1100px]:hidden">
+                  <Disclosure label="On this page" count={note.outline.length} open={outlineOpen} onOpenChange={setOutlineOpen}>
+                    <nav aria-label="On this page" className="grid pt-2">{outline}</nav>
+                  </Disclosure>
+                </div>
+              )}
+              <div onClickCapture={onClickCapture} className="grid min-w-0">
+                <NoteView key={note.id} note={note} notes={notes} cards={cards} hostId={hostId} engagementId={engagementId} />
+              </div>
+            </>
+          )}
+        </section>
+      </div>
       <aside aria-label="Outline" className="hidden min-h-0 content-start gap-2 overflow-y-auto overflow-x-hidden border-l border-line px-3 py-4 min-[1100px]:grid">
         <h2 className={`${labelClass} m-0 px-2`}>On this page</h2>
         <nav aria-label="On this page" className="grid">{outline}</nav>

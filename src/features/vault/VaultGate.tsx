@@ -20,7 +20,7 @@ import { clearSecretClipboard } from "../../lib/clipboard";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
 import { SaveSummary } from "../capture/SaveSummary";
 import { ArsenalDrawer } from "../arsenal/ArsenalDrawer";
-import { MANUAL_NOTE_ID, manualKeysBlocked } from "../manual/ManualPage";
+import { MANUAL_NOTE_ID, manualKeysBlocked } from "../manual/keys";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useLastEngagementStore } from "../arsenal/useFillScope";
 import { PayloadsDrawer } from "../payloads/PayloadsDrawer";
@@ -251,7 +251,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
   const right = unlocked ? (
     <>
       <TitleBarButton hint="A" icon={Stack} onClick={() => useArsenalStore.getState().toggle()}>Arsenal</TitleBarButton>
-      <TitleBarButton hint="M" icon={BookOpenText} onClick={openManual}>Manual</TitleBarButton>
+      <TitleBarButton hint="M" icon={BookOpenText} current={onManual} onClick={openManual}>Manual</TitleBarButton>
       <TitleBarButton hint="P" icon={Package} onClick={() => usePayloadsStore.getState().toggle()}>Payloads</TitleBarButton>
       <TitleBarButton hint="⌘K" icon={MagnifyingGlass} onClick={() => usePaletteStore.getState().open()}>Search</TitleBarButton>
       <TitleBarButton hint="⌘L" icon={Lock} onClick={lock}>Lock</TitleBarButton>
