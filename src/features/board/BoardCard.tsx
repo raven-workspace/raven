@@ -35,16 +35,20 @@ export function BoardCard({ host, onShift }: BoardCardProps) {
       data-host-id={host.id}
       onDragStart={onDragStart}
       onKeyDown={onKeyDown}
-      className="grid min-w-0 gap-1 rounded border border-line bg-bg px-1 py-2 text-fg no-underline hover:border-line-strong focus-visible:outline-1 focus-visible:outline-accent"
+      className="grid min-w-0 gap-3 rounded border border-line-2 bg-bg p-2 text-fg no-underline transition-colors duration-100 hover:border-line-strong @min-[150px]:p-3"
     >
-      <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_8px] items-start gap-1">
-        <span title={host.name} className="line-clamp-2 break-words text-body font-semibold">{host.name}</span>
-        <ThreadDot count={threads} />
+      {/* Two groups, spaced apart: who it is (name, IP), then what it is and what's held (OS, access). */}
+      <span className="grid min-w-0 gap-1">
+        <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_8px] items-start gap-1">
+          <span title={host.name} className="line-clamp-2 break-words text-body font-semibold">{host.name}</span>
+          <ThreadDot count={threads} />
+        </span>
+        {host.ip && <span className="whitespace-nowrap font-mono text-code text-muted-2 [overflow-wrap:anywhere]">{host.ip}</span>}
       </span>
-      {host.ip && <span className="whitespace-nowrap font-mono text-code text-muted-2 [overflow-wrap:anywhere]">{host.ip}</span>}
       {(host.os || host.access !== "none") && (
-        // OS on its own row, the access chip on its own row: every card has the same shape, whatever the widths.
-        <div className="grid min-w-0 justify-items-start gap-1">
+        // Wide enough (a lane body of 150px: "Windows" and a chip need about 124px inside 12px padding), the access
+        // chip ends the OS row; narrower, it sits under the OS. Either way every card in a lane has the same shape.
+        <div className="grid min-w-0 items-center justify-items-start gap-x-2 gap-y-1 @min-[150px]:grid-cols-[minmax(0,1fr)_auto]">
           {host.os && (
             // OS is metadata, not state: the brand icon and its name as text (DESIGN.md Chips).
             <span
