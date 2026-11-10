@@ -181,6 +181,14 @@ export const SCREENS: Screen[] = [
     },
   },
   {
+    // A lookup row's key: its Lookup group comes first, the options are its commands ready to fill.
+    id: "palette-lookup", path: H, ready: "role=group[name^='STATUS_ZZ_DENIED'] >> role=option >> nth=0",
+    setup: async (page) => {
+      await page.keyboard.press("Meta+K");
+      await page.getByRole("combobox").first().fill("STATUS_ZZ_DENIED");
+    },
+  },
+  {
     id: "palette-credmenu", path: FS01, ready: "role=listbox[name^='Fill with credential']",
     setup: async (page) => {
       await page.keyboard.press("Meta+K");
@@ -273,7 +281,7 @@ export const SCREENS: Screen[] = [
         await page.getByRole("option", { name: /Shells & transfers/ }).click();
       }
       await page.getByRole("option", { name: /Transfer a file/ }).click();
-      await page.getByRole("button", { name: /^Fill for host/ }).click();
+      await page.getByRole("button", { name: /^(Host |No host$)/ }).click();
       await page.getByRole("listbox", { name: "Fill for host" }).getByRole("option").nth(1).click();
     },
   },
@@ -374,8 +382,12 @@ export const SCREENS: Screen[] = [
     // A card link in a note opens the Arsenal drawer over the Manual.
     id: "manual-card-drawer", path: `/manual/${AUDIT_NOTE_IDS.links}`, ready: "aside[aria-label='Arsenal'] >> text=Kerberos Enumeration",
     setup: async (page) => {
-      await page.locator(`${NOTE_PANE} button`, { hasText: "Kerberos-Enumeration" }).first().click();
+      await page.locator(`${NOTE_PANE} button`, { hasText: "Kerberos Enumeration" }).first().click();
     },
+  },
+  {
+    // A ?q= landing on a lookup-table row: the answer card above the note, the row marked in the table.
+    id: "manual-lookup-card", path: `/manual/${AUDIT_NOTE_IDS.lookup}?q=STATUS_ZZ_DENIED#table-1`, ready: "[aria-label='Answer']",
   },
   { id: "manual-empty", path: "/manual?audit=empty", ready: "text=Import your Field Manual to fill the Manual" },
 ];

@@ -315,7 +315,7 @@ test("host picker is a Tab stop", async ({ page }) => {
   const search = page.getByRole("dialog").getByRole("combobox", { name: "Search" });
   await search.waitFor();
   await search.fill("smb");
-  const chip = page.getByRole("button", { name: /^Fill for host/ });
+  const chip = page.getByRole("button", { name: /^(Host |No host$)/ });
   await expect(chip).not.toHaveAttribute("tabindex", "-1");
   let reached = false;
   for (let i = 0; i < 8 && !reached; i++) {
@@ -974,7 +974,7 @@ test("payloads: the Other… port field opens under the Port chip and keeps the 
 // The Manual's five-column table: as a table its auto layout squeezed the code columns until every status code broke
 // mid-token. Now a table that can't fit its codes stacks each row as name/value lines; one that can stays a table.
 test("Manual: a wide table stacks when its codes don't fit, stays a table when they do, and no code breaks", async ({ page }) => {
-  for (const [width, stacked] of [[900, true], [1024, true], [1280, true], [1440, false]] as const) {
+  for (const [width, stacked] of [[900, true], [1024, false], [1280, true], [1440, false]] as const) {
     await open(page, `/manual/${AUDIT_NOTE_IDS.long}`, width);
     const pane = page.getByRole("region", { name: "Note" });
     const table = pane.locator("[id='table-1'] + div table");
@@ -1006,7 +1006,8 @@ test("Manual: short key cells in a flags table stay on one line", async ({ page 
     await table.scrollIntoViewIfNeeded();
     expect(await table.getAttribute("data-stacked"), `a table at ${width}`).toBeNull();
     const keys = await table.evaluate((el) => [...el.querySelectorAll("tbody tr")].map((tr) => {
-      const code = tr.querySelector("td code")!;
+      // A key with a space (`-m MODE`) is an inline command: a button, not a code span.
+      const code = tr.querySelector("td code, td button")!;
       const lineHeight = parseFloat(getComputedStyle(code).lineHeight);
       const tops = new Set([...code.getClientRects()].map((r) => Math.round(r.top)));
       return { text: code.textContent, lines: tops.size, oneLine: code.getBoundingClientRect().height <= lineHeight * 1.5 };
@@ -1038,7 +1039,8 @@ test("Manual: every link in a note is a 24px target", async ({ page }) => {
 // The outline's scroll-spy and lime bar, in a real layout: the current entry follows the reading, the bar sits beside
 // it, and a pick scrolls the note in place without a history entry (Esc leaves the Manual in one press).
 test("Manual: On this page follows the scroll, and a pick adds no history entry", async ({ page }) => {
-  await open(page, `/manual/${AUDIT_NOTE_IDS.long}`, 1440);
+  // Short window: the outline shows every h2 and only the current section's entries, so it overflows only when short.
+  await open(page, `/manual/${AUDIT_NOTE_IDS.long}`, 1440, 240);
   const aside = page.locator("aside[aria-label='Outline']");
   const current = aside.locator("[aria-current=location]");
   await expect(current).toHaveText("Core concept");

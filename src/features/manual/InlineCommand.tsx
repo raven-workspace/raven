@@ -35,7 +35,7 @@ export function InlineCommand({ command, base, highlight }: { command: LibraryCo
     <button
       type="button" aria-label={`Copy command: ${cmd.text}`}
       onClick={() => void copy().catch(reportError)} onKeyDown={onKeyDown}
-      className="cursor-pointer rounded-sm border-0 bg-transparent p-0 text-left font-mono text-code text-fg underline decoration-line-strong decoration-dotted underline-offset-4 [overflow-wrap:break-word] hover:decoration-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid"
+      className="cursor-pointer rounded-sm border-0 bg-transparent p-0 min-h-6 text-left font-mono text-code text-fg underline decoration-line-strong decoration-dotted underline-offset-4 [overflow-wrap:break-word] hover:decoration-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid"
     >
       {pieces}
     </button>

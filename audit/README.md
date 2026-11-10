@@ -1,6 +1,6 @@
 # Visual audit
 
-Drives the real UI against the in-memory fake backend (`npm run dev:audit`, port 5199) across 22 screens x 4 widths.
+Drives the real UI against the in-memory fake backend (`npm run dev:audit`, port 5199) across every screen in `audit/screens.ts` x 4 widths.
 
 - Run: `npm run audit:visual` (selftest + visual + keyboard + ux: flows and states). Playwright starts and stops the dev server itself.
 - `npm run audit:selftest` runs only the self-tests; it also boots the 5199 dev server and writes a "No screens ran" report.
@@ -11,7 +11,9 @@ Drives the real UI against the in-memory fake backend (`npm run dev:audit`, port
 - **The gate.** These checks fail the run, on every screen and width and on the `~empty|loading|error` state runs (spec §2.5):
   `tiny-text` (under 12px; under 13px for anything that is not a label or chip, `.text-label`, or a key cap, `kbd`),
   `small-target` (under 24px; a checkbox or radio inside its `<label>` is measured by the label), `overlap`,
-  `page-overflow`, `overflow`, `clipped` and `mid-token-wrap`. The list lives in `FAILING_CHECKS` (`audit/types.ts`).
+  `page-overflow`, `document-scroll`, `overflow`, `clipped` and `mid-token-wrap`. The list lives in `FAILING_CHECKS` (`audit/types.ts`).
+  `document-scroll` is the window itself scrolling at all: the document taller or wider than the viewport, or `scrollTo(0, 5000)`
+  moving it (Raven scrolls only inside its panes; an escaped absolutely placed child once made the Manual 8452px tall).
   `offscreen`, `squeezed`, `narrow-wrap`, `truncated`, `long-lines`, `off-scale-spacing` and the rest are reported only.
   A screen that can't reach its ready state, a page error, or a failed self-test also fails the run.
 - How the failing checks judge what shows, and what each still can't see:

@@ -325,7 +325,7 @@ async function manualFilter(page: Page): Promise<RawIssue[]> {
 
 /** ⌘[ on the Manual returns to the note a link left. */
 async function manualBack(page: Page): Promise<RawIssue[]> {
-  await page.locator(NOTE("Zz Protocol")).getByRole("link", { name: "Zz-Status-Codes", exact: true }).first().click();
+  await page.locator(NOTE("Zz Protocol")).getByRole("link", { name: "Zz Status Codes", exact: true }).first().click();
   const moved = await page.locator(NOTE("Zz Status Codes")).waitFor({ timeout: 1000 }).then(() => true, () => false);
   if (!moved) return [{ check: "shortcut", selector: "a[href*='zz-status-codes']", detail: "the note link did not open the linked note" }];
   await page.locator("section[aria-label='Note']").focus();
