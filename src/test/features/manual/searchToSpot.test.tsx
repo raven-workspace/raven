@@ -234,6 +234,31 @@ describe("the note at the match", () => {
     expect(bar).toHaveTextContent("match 3 of 3");
   });
 
+  it("the landing focuses the block holding the current match; ⌥↓ moves focus with the match", async () => {
+    open();
+    await screen.findByRole("article", { name: "Zz Errors" });
+    await waitFor(() => expect(current()).toHaveLength(1));
+    const block = (el: Element) => el.closest("article > *");
+    await waitFor(() => expect(document.activeElement).toBe(block(current()[0]!)));
+    expect(document.activeElement?.querySelector("table")).not.toBeNull();
+    altDown();
+    expect(document.activeElement).toBe(block(marks()[2]!));
+  });
+
+  it("a ⌘K hit lands with focus on the match's block, not back where the palette opened", async () => {
+    const user = userEvent.setup();
+    mount();
+    await ready();
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "STATUS_ACCESS");
+    await screen.findByRole("group", { name: "Manual" });
+    await user.keyboard("{Enter}");
+    const article = await screen.findByRole("article", { name: "Zz Errors" });
+    await waitFor(() => expect(current()).toHaveLength(1));
+    await waitFor(() => expect(document.activeElement).toBe(current()[0]!.closest("article > *")));
+    expect(article.contains(document.activeElement)).toBe(true);
+  });
+
   it("⌥↓ with a drawer open does nothing", async () => {
     open();
     await screen.findByRole("article", { name: "Zz Errors" });

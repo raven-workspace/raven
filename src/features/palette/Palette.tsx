@@ -42,7 +42,7 @@ const paletteRow = (result: PaletteResult): PaletteRow => ({
   stack: result.type === "manual",
 });
 
-function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }: { engagementId: string; hostId: string | null; remembered: boolean; onClose: () => void }) {
+function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }: { engagementId: string; hostId: string | null; remembered: boolean; onClose: (opts?: { handOff?: boolean }) => void }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
@@ -143,7 +143,8 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     if (current?.type === "manual") {
       // Inside the Manual a move replaces its one history entry, so Esc still leaves the Manual.
       void navigate(manualSearchPath(current.noteId, query, current.anchor), { replace: location.pathname.startsWith("/manual") });
-      onClose();
+      // The Manual focuses the match itself: focus does not go back to where the palette opened.
+      onClose({ handOff: true });
       return;
     }
     if (current?.type === "more") {
@@ -317,7 +318,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
 
 /** ⌘K: search commands, generators, cards and this engagement, and copy the filled command. Mounted while unlocked. */
 export function Palette() {
-  const { isOpen, hostId: openedFor, returnFocus, close } = usePaletteStore();
+  const { isOpen, hostId: openedFor, returnFocus, handOff, close } = usePaletteStore();
   const scope = useFillScope();
   const engagementId = scope.engagementId;
   const hostId = openedFor ?? scope.hostId;
@@ -325,12 +326,17 @@ export function Palette() {
   // Give focus back to what had it (Radix does too when it can; this covers an element it can't restore).
   const wasOpen = useRef(false);
   useEffect(() => {
-    if (wasOpen.current && !isOpen) returnFocus?.focus();
+    if (wasOpen.current && !isOpen && !handOff) returnFocus?.focus();
     wasOpen.current = isOpen;
-  }, [isOpen, returnFocus]);
+  }, [isOpen, returnFocus, handOff]);
 
   return (
-    <Dialog open={isOpen} onOpenChange={(o) => !o && close()} title="Search" size="lg">
+    <Dialog
+      open={isOpen} onOpenChange={(o) => !o && close()} title="Search" size="lg"
+      onCloseAutoFocus={(e) => {
+        if (usePaletteStore.getState().handOff) e.preventDefault();
+      }}
+    >
       {isOpen && <PaletteBody engagementId={engagementId} hostId={hostId} remembered={scope.remembered} onClose={close} />}
     </Dialog>
   );

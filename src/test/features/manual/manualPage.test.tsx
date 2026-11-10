@@ -471,6 +471,54 @@ describe("Manual: title bar and focus", () => {
     expect(pane().className).toMatch(/focus-visible:/);
   });
 
+  it("M from elsewhere puts focus in the note pane", async () => {
+    mount();
+    await ready();
+    press("m");
+    await openNote("Bb Basics");
+    await waitFor(() => expect(pane()).toHaveFocus());
+  });
+
+  it("the title-bar button puts focus in the note pane", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(await ready());
+    await openNote("Bb Basics");
+    await waitFor(() => expect(pane()).toHaveFocus());
+  });
+
+  it("↵ in the rail opens the note and keeps focus in the rail", async () => {
+    const user = userEvent.setup();
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    press("/");
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+    await openNote("Zz Errors");
+    expect(rail().getByRole("button", { name: "Zz Errors" })).toHaveFocus();
+  });
+
+  it("] and an outline pick focus the section's heading, so Tab continues from it", async () => {
+    const user = userEvent.setup();
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    press("]");
+    const alpha = screen.getByRole("heading", { name: "Alpha" });
+    expect(alpha).toHaveFocus();
+    expect(alpha).toHaveAttribute("tabindex", "-1");
+    const outline = within(screen.getByRole("navigation", { name: "On this page" }));
+    await user.click(outline.getByRole("button", { name: /^Table 1/ }));
+    expect(document.getElementById("table-1")).toHaveFocus();
+  });
+
+  it("a link to a heading in another note focuses that heading", async () => {
+    const user = userEvent.setup();
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    await user.click(screen.getByRole("link", { name: "the errors" }));
+    await openNote("Zz Errors");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Core Concept" })).toHaveFocus());
+  });
+
   it("the hint line lists ⌘↵ copy and log", async () => {
     mount(["/manual"]);
     await openNote("Bb Basics");

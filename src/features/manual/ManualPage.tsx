@@ -99,6 +99,22 @@ function firstAfter(pane: HTMLElement, anchor: string): number {
   return Math.max(0, i);
 }
 
+/** Focus without scrolling: the scroll is already where it should be. */
+const focusQuietly = (el: HTMLElement | null | undefined) => el?.focus({ preventScroll: true });
+
+/**
+ * Focuses a jump target so the next Tab continues from it: a heading (or caption) or the block holding a match. An
+ * element that can't take focus gets `tabindex="-1"` (never a tab stop of its own).
+ */
+function focusTarget(el: Element | null | undefined) {
+  if (!(el instanceof HTMLElement)) return;
+  if (!el.hasAttribute("tabindex")) el.tabIndex = -1;
+  focusQuietly(el);
+}
+
+/** The note's top-level block (a paragraph, table, list or command) that holds `el`. */
+const blockOf = (el: Element | null): Element | null => el?.closest("article > *") ?? null;
+
 function MatchBar({ query, at, count }: { query: string; at: number; count: number }) {
   return (
     <div
@@ -183,6 +199,14 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
       }
     }
     if (left?.noteId !== note.id || pending || location.hash) pane.scrollTop = top;
+    // Arriving (M, the title-bar button, a link, ⌘[, ⌘K) puts focus in the note, so ↓ PgDn Space scroll it; a link to a
+    // heading focuses that heading. A note opened from the rail keeps focus in the rail, to keep moving along it.
+    const inRail = filterRef.current?.closest("nav")?.contains(document.activeElement) ?? false;
+    if (!inRail && (left?.noteId !== note.id || pending || location.hash)) {
+      const heading = !pending && location.hash ? pane.querySelector(`[id="${CSS.escape(decodeURIComponent(location.hash.slice(1)))}"]`) : null;
+      if (heading) focusTarget(heading);
+      else focusQuietly(pane);
+    }
     shown.current = { noteId: note.id, scrollTop: pane.scrollTop };
     if (left?.noteId !== note.id) {
       setCurrent(-1);
@@ -207,19 +231,22 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
 
   const [match, setMatch] = useState({ at: 0, count: 0 });
   const matchAt = useRef(0);
-  const showMatch = (at: number, scroll: boolean) => {
+  /** `focus`: the current match's block takes focus (a search landing, ⌥↓ ⌥↑), so the next Tab continues there. */
+  const showMatch = (at: number, scroll: boolean, focus = false) => {
     const pane = paneRef.current;
     if (!pane) return;
     matchAt.current = at;
     const { count, el } = markCurrent(pane, at);
     setMatch({ at, count });
     if (scroll) el?.scrollIntoView?.({ block: "center" });
+    if (focus && el) focusTarget(blockOf(el));
   };
   // After the hash's scroll above: a search lands on its match, not the section top.
   useLayoutEffect(() => {
     const pane = paneRef.current;
     if (!note || !pane || !query) return;
-    showMatch(firstAfter(pane, decodeURIComponent(location.hash.slice(1))), true);
+    const inRail = filterRef.current?.closest("nav")?.contains(document.activeElement) ?? false;
+    showMatch(firstAfter(pane, decodeURIComponent(location.hash.slice(1))), true, !inRail);
   }, [note?.id, query, location.key]); // eslint-disable-line react-hooks/exhaustive-deps
   // Exam lines and filled text arrive late and move the note: bring the current match back into view once.
   useLayoutEffect(() => {
@@ -255,7 +282,10 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
     if (id === undefined || !pane) return;
     jumped.current = i;
     setCurrent(i);
-    pane.querySelector(`[id="${CSS.escape(id)}"]`)?.scrollIntoView?.({ block: "start" });
+    const el = pane.querySelector(`[id="${CSS.escape(id)}"]`);
+    el?.scrollIntoView?.({ block: "start" });
+    // The next Tab continues from the section, and ↓ PgDn Space scroll the note.
+    focusTarget(el);
   };
 
   const open = (id: string) => {
@@ -288,7 +318,7 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
       if (isTypingTarget(e.target)) return;
       e.preventDefault();
       if (match.count === 0) return;
-      showMatch((match.at + (e.code === "ArrowDown" ? 1 : -1) + match.count) % match.count, true);
+      showMatch((match.at + (e.code === "ArrowDown" ? 1 : -1) + match.count) % match.count, true, true);
       return;
     }
     if (engagementId && isHostPickKey(e) && !isTypingTarget(e.target)) {

@@ -150,7 +150,7 @@ export function NoteView({ note, notes, cards, hostId, engagementId, query }: {
   let code = 0;
   let section = "";
   return (
-    <article aria-label={note.title} className="grid grid-cols-[minmax(0,1fr)] content-start gap-3">
+    <article aria-label={note.title} className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 [&_[tabindex='-1']]:outline-none">
       {blocks.map((b, i) => {
         if (b.kind === "heading" && (b.level === 2 || b.level === 3)) section = plain(b.inline).trim();
         return <BlockView key={i} block={b} n={b.kind === "code" ? code++ : -1} ctx={ctx} base={base} section={section} />;

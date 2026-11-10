@@ -15,16 +15,19 @@ export interface DialogProps {
   /** `lg` is for forms: wider, higher on screen; `xl` is for forms with embedded lists and code. The body scrolls when it doesn't fit. */
   size?: "md" | "lg" | "xl";
   className?: string;
+  /** Radix's focus return on close: `preventDefault()` when the caller has already moved focus somewhere else. */
+  onCloseAutoFocus?: (e: Event) => void;
 }
 
 /** Modal on Radix: hairline border, `--surface` panel, Esc closes. */
-export function Dialog({ open, onOpenChange, title, description, children, footer, size = "md", className }: DialogProps) {
+export function Dialog({ open, onOpenChange, title, description, children, footer, size = "md", className, onCloseAutoFocus }: DialogProps) {
   return (
     <RD.Root open={open} onOpenChange={onOpenChange}>
       <RD.Portal>
         <RD.Overlay className="fixed inset-0 z-40 bg-bg/80" />
         <RD.Content
           {...(description ? {} : { "aria-describedby": undefined })}
+          {...(onCloseAutoFocus ? { onCloseAutoFocus } : {})}
           // Start on the first control in the body or footer, never the Close button: its tooltip would
           // open on focus and swallow the first Esc.
           onOpenAutoFocus={(e) => {
