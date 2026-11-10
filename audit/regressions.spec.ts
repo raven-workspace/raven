@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { AUDIT_NOTE_IDS, AUDIT_NOW } from "../src/audit/fixtures";
+import { MEANS_HEADER } from "../src/engines/manual/lookup";
 import { SCREENS } from "./screens";
 
 // Hard regressions: unlike the audit checks, these fail the run.
@@ -974,8 +975,9 @@ test("payloads: the Other… port field opens under the Port chip and keeps the 
 // The Manual's five-column table: as a table its auto layout squeezed the code columns until every status code broke
 // mid-token. Now a table that can't fit its codes stacks each row as name/value lines; one that can stays a table.
 test("Manual: a wide table stacks when its codes don't fit, stays a table when they do, and no code breaks", async ({ page }) => {
-  // Not monotonic: the outline column appears at 1100px, so the pane is wider at 1024 (no outline) than at 1280 (with it).
-  for (const [width, stacked] of [[900, true], [1024, false], [1280, true], [1440, false]] as const) {
+  // The pane is wider at 1024 (no outline column) than at 1280 (the outline appears at 1100px); at 1024 the table still
+  // stacks, as its means column would fall under its 14ch floor (it sat at ~12ch before the floor).
+  for (const [width, stacked] of [[900, true], [1024, true], [1280, true], [1440, false]] as const) {
     await open(page, `/manual/${AUDIT_NOTE_IDS.long}`, width);
     const pane = page.getByRole("region", { name: "Note" });
     const table = pane.locator("[id='table-1'] + div table");
@@ -1022,6 +1024,44 @@ test("Manual: short key cells in a flags table stay on one line", async ({ page 
       return { right: r.left + el.clientWidth - parseFloat(getComputedStyle(el).paddingRight) };
     })]);
     expect(t!.x + t!.width, `table inside the pane at ${width}`).toBeLessThanOrEqual(p.right + 0.5);
+  }
+});
+
+// A lookup table's Means column was squeezed to a word or two a line at 900px while the table stayed a table. Prose
+// columns now keep a 14ch floor that counts in the fit: the cause column drops, then the table stacks, before that.
+test("Manual: a lookup table's prose (means) column is never narrower than 14ch in table layout", async ({ page }) => {
+  for (const id of [AUDIT_NOTE_IDS.lookup, AUDIT_NOTE_IDS.long]) {
+    for (const width of [900, 1024, 1280, 1440]) {
+      await open(page, `/manual/${id}`, width);
+      const pane = page.getByRole("region", { name: "Note" });
+      await pane.locator("table").first().waitFor();
+      const r = await pane.evaluate((el, src) => {
+        const means = new RegExp(src, "i");
+        const out: { table: number; text: string; width: number; floor: number }[] = [];
+        let tables = 0;
+        el.querySelectorAll("table").forEach((t, ti) => {
+          if (t.hasAttribute("data-stacked")) return;
+          const heads = [...t.querySelectorAll("thead th")].map((th) => (th.textContent ?? "").trim());
+          const col = heads.findIndex((h) => means.test(h));
+          if (col < 0) return;
+          tables++;
+          for (const tr of t.querySelectorAll("tbody tr")) {
+            const td = tr.children[col] as HTMLElement | undefined;
+            if (!td) continue;
+            const probe = document.createElement("span");
+            probe.style.cssText = "position:absolute;visibility:hidden;width:14ch";
+            td.append(probe);
+            const floor = probe.getBoundingClientRect().width;
+            probe.remove();
+            out.push({ table: ti, text: (td.textContent ?? "").slice(0, 40), width: td.getBoundingClientRect().width, floor });
+          }
+        });
+        return { tables, narrow: out.filter((c) => c.width < c.floor - 0.5) };
+      }, MEANS_HEADER.source);
+      expect(r.narrow, `prose cells under 14ch in ${id} at ${width}`).toEqual([]);
+      // The lookup note's table stays a table at the wide sizes, so the check is not vacuous there.
+      if (id === AUDIT_NOTE_IDS.lookup && width >= 1280) expect(r.tables, `a measured lookup table at ${width}`).toBeGreaterThan(0);
+    }
   }
 });
 
@@ -1084,7 +1124,6 @@ test("Manual: a prose line or list item holding an inline command is as tall as 
     const pick = (sel: string, withCmd: boolean) => [...el.querySelectorAll(sel)].find((n) => !!n.querySelector('button[aria-label^="Copy command"]') === withCmd && /(Plain|with nothing|in it)/.test(n.textContent ?? ""))!.getBoundingClientRect().height;
     return { p: [pick("p", false), pick("p", true)], li: [pick("li", false), pick("li", true)] };
   });
-  console.log("line heights", JSON.stringify(h));
   expect(h.p[1], "paragraph with an inline command").toBe(h.p[0]);
   expect(h.li[1], "list item with an inline command").toBe(h.li[0]);
 });

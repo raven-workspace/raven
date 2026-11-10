@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
-import { ACTION_HEADER, CAUSE_HEADER, isKeyCell, plain } from "../../engines/manual/lookup";
+import { ACTION_HEADER, CAUSE_HEADER, isKeyCell, MEANS_HEADER, plain } from "../../engines/manual/lookup";
 import type { Inline } from "../../engines/manual/markdown";
 import { labelClass } from "../../ui/Label";
 
@@ -50,10 +50,13 @@ export function NoteTable({ head, rows, anchor, cell }: { head: Inline[][]; rows
   }, [head, rows]);
 
   const labels = head.map(plain);
-  // Column policy: the action column keeps a floor width; the cause column is the first to go, only when the table needs
-  // the room (`data-dropped` on the table, set by the fit above; `!` so it beats the stacked cells' `grid`).
-  const kind = labels.map((l) => (ACTION_HEADER.test(l.trim()) ? "action" : CAUSE_HEADER.test(l.trim()) ? "cause" : ""));
-  const colClass = (j: number) => (kind[j] === "action" ? " min-w-[32ch]" : kind[j] === "cause" ? " group-data-[dropped=low]/nt:hidden!" : "");
+  // Column policy: the action column keeps a floor width, and so does the means column (prose squeezed to a word or two
+  // a line is unreadable); both floors count in the fit above, so a narrow pane drops the cause column, then stacks,
+  // before either is squeezed. The cause column is the first to go, only when the table needs the room (`data-dropped`
+  // on the table, set by the fit above; `!` so it beats the stacked cells' `grid`).
+  const kind = labels.map((l) => (ACTION_HEADER.test(l.trim()) ? "action" : CAUSE_HEADER.test(l.trim()) ? "cause" : MEANS_HEADER.test(l.trim()) ? "means" : ""));
+  const colClass = (j: number) =>
+    kind[j] === "action" ? " min-w-[32ch]" : kind[j] === "means" ? " min-w-[14ch] group-data-stacked/nt:min-w-0" : kind[j] === "cause" ? " group-data-[dropped=low]/nt:hidden!" : "";
   const colAttr = (j: number) => (kind[j] === "cause" ? { "data-col": "low" } : {});
   return (
     <div ref={wrapRef} className="relative grid min-w-0">

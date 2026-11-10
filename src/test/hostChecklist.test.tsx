@@ -237,7 +237,7 @@ describe("host checklist tab", () => {
     await user.click(screen.getByRole("button", { name: "Save hop" }));
     await vi.waitFor(() => expect(m.checklistPut).toHaveBeenCalledTimes(2));
     expect(m.hopCreate).toHaveBeenCalledTimes(1);
-  });
+  }, 15_000); // Load-sensitive: fast alone, can take over 5s under the full suite (no behaviour change).
 
   it("status buttons call checklistPut with auto false", async () => {
     const user = userEvent.setup();

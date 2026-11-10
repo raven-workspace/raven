@@ -11,7 +11,7 @@ import { useFillScope, useLastEngagementStore } from "../arsenal/useFillScope";
 import { useFillBase } from "../palette/fillData";
 import { AnswerCard } from "./AnswerCard";
 import { MANUAL_NOTE_ID, manualKeysBlocked } from "./keys";
-import { MANUAL_QUERY } from "./searchPath";
+import { MANUAL_QUERY, MANUAL_ROW } from "./searchPath";
 import { jumpBehavior, ManualOutline, useOutlineSpy } from "./ManualOutline";
 import { ManualRail } from "./ManualRail";
 import { NoteView } from "./NoteView";
@@ -87,22 +87,36 @@ function ManualEmpty({ status }: { status: keyof typeof EMPTY_TITLE }) {
 
 /**
  * Marks the `at`-th match current (`data-current` on each of its pieces) and returns the match count and its first
- * piece. Matches are counted by their `start` pieces, in document order.
+ * piece. Matches are counted by their `start` pieces, in document order. `at` −1 marks no match: then `lit` (a lookup
+ * row a ⌘K landing chose, where the query matches nothing) is the row lit instead.
  */
-function markCurrent(pane: HTMLElement, at: number): { count: number; el: HTMLElement | null } {
+function markCurrent(pane: HTMLElement, at: number, lit: HTMLElement | null = null): { count: number; el: HTMLElement | null } {
   let n = -1;
   let el: HTMLElement | null = null;
   for (const r of pane.querySelectorAll("tr[data-current-row]")) r.removeAttribute("data-current-row");
   for (const m of pane.querySelectorAll<HTMLElement>("mark[data-match]")) {
     if (m.dataset.match === "start") n++;
-    const on = n === at;
+    const on = at >= 0 && n === at;
     if (on && !el) el = m;
     if (on) m.setAttribute("data-current", "");
     else m.removeAttribute("data-current");
   }
   // A match in a table lights its row.
-  el?.closest("tr")?.setAttribute("data-current-row", "");
+  (el ? el.closest("tr") : lit)?.setAttribute("data-current-row", "");
   return { count: n + 1, el };
+}
+
+/** Row `row` of `anchor`'s table (a lookup row a ⌘K landing named), or null. */
+const tableRow = (pane: HTMLElement, anchor: string, row: number): HTMLElement | null =>
+  pane.querySelector<HTMLElement>(`[data-table="${CSS.escape(anchor)}"] tr[data-row="${row}"]`);
+
+/** The index of the first match inside `el` (−1 with none), and how many matches come before `el`. */
+function matchesIn(pane: HTMLElement, el: HTMLElement): { inside: number; before: number } {
+  const starts = [...pane.querySelectorAll("mark[data-match=start]")];
+  return {
+    inside: starts.findIndex((m) => el.contains(m)),
+    before: starts.filter((m) => !el.contains(m) && el.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_PRECEDING).length,
+  };
 }
 
 /** The first match after `anchor`'s element in document order (0 without one, or with none after it). */
@@ -141,6 +155,7 @@ function focusTarget(el: Element | null | undefined) {
 /** The note's top-level block (a paragraph, table, list or command) that holds `el`. */
 const blockOf = (el: Element | null): Element | null => el?.closest("article > *") ?? null;
 
+/** `at` −1: no match is current (a ⌘K landing lit a row the query does not match). */
 function MatchBar({ query, at, count }: { query: string; at: number; count: number }) {
   return (
     <div
@@ -148,15 +163,20 @@ function MatchBar({ query, at, count }: { query: string; at: number; count: numb
       className="grid min-h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-line px-8 py-2 text-meta"
     >
       <span className="truncate"><span className="text-muted">Search </span><span className="font-mono text-code text-fg">{query}</span></span>
-      <span className={count === 0 ? "text-warn" : "text-fg-2"}>{count === 0 ? "No match in this note" : `match ${at + 1} of ${count}`}</span>
+      <span className={count === 0 ? "text-warn" : "text-fg-2"}>{count === 0 ? "No match in this note" : at < 0 ? `${count} ${count === 1 ? "match" : "matches"}` : `match ${at + 1} of ${count}`}</span>
     </div>
   );
 }
 
-/** The one status line: what the last copy or hold-back said, right-aligned in the host row. Gone when the note changes. */
+const TONE = { ok: "text-accent", warn: "text-warn", muted: "text-muted" } as const;
+
+/**
+ * The one status line: what the last copy, hold-back or jump said, right-aligned in the host row. It clears itself
+ * after a moment, and when the note or the host changes. It truncates before the host's IP gives up any room.
+ */
 function StatusSlot() {
   const { text, tone } = useManualStatus();
-  return <span role="status" className={`truncate text-right text-meta ${tone === "warn" ? "text-warn" : "text-accent"}`}>{text}</span>;
+  return <span role="status" className={`col-start-3 min-w-0 truncate text-right text-meta ${TONE[tone]}`}>{text}</span>;
 }
 
 /** What the page's Esc needs of the answer card: close it if one shows (true when it did). */
@@ -176,6 +196,9 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
   const cards = getCards();
   const noteKey = note?.id;
   useEffect(() => useManualStatus.getState().clear(), [noteKey]);
+  // What a copy said was about the host it filled for: another host clears it.
+  const hostKey = base.host?.id;
+  useEffect(() => useManualStatus.getState().clear(), [hostKey]);
 
   const paneRef = useRef<HTMLElement>(null);
   // The match bar: `?q=` marks every match in the note; the current one starts in the hash's section.
@@ -267,8 +290,15 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
   const ids = useMemo(() => note?.outline.map((o) => o.id) ?? [], [note]);
   const spy = useOutlineSpy(paneRef, note?.id ?? "", ids);
 
-  const [match, setMatch] = useState({ at: 0, count: 0 });
+  /** `before`: with `at` −1 (a lit row, no current match), how many matches come before that row (where ⌥↓ ⌥↑ go on from). */
+  const [match, setMatch] = useState({ at: 0, count: 0, before: 0 });
   const matchAt = useRef(0);
+  /** A ⌘K landing's lookup row the query does not match: lit (with its card) though no match is current. */
+  const litRow = useRef<{ anchor: string; row: number } | null>(null);
+  const lit = () => {
+    const r = litRow.current;
+    return r && paneRef.current ? tableRow(paneRef.current, r.anchor, r.row) : null;
+  };
   /** The lookup row the current match sits in, and whether Esc closed its card (until the match moves). */
   const [card, setCard] = useState<{ row: LookupRow | null; closed: boolean; land?: boolean }>({ row: null, closed: false });
   const cardRow = query && !card.closed ? card.row : null;
@@ -280,33 +310,60 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
     // A landing or ⌥↓ ⌥↑ (`focus`) shows the card afresh; a quiet re-show of the same match (late fill data) keeps it closed.
     const same = !focus && matchAt.current === at;
     matchAt.current = at;
+    litRow.current = null;
     const { count, el } = markCurrent(pane, at);
-    setMatch({ at, count });
+    setMatch({ at, count, before: 0 });
     const row = note ? rowOf(note, el) : null;
     setCard((c) => (same && c.row === row ? c : { row, closed: false, land }));
     if (scroll) el?.scrollIntoView?.({ block: "center" });
     if (focus && el) focusTarget(blockOf(el));
   };
+  /** A ⌘K landing on a lookup row the query matches nothing in: the row lights and its card shows all the same. */
+  const landRow = (el: HTMLElement, anchor: string, row: number, focus: boolean) => {
+    const pane = paneRef.current;
+    if (!pane) return;
+    litRow.current = { anchor, row };
+    matchAt.current = -1;
+    const { count } = markCurrent(pane, -1, el);
+    setMatch({ at: -1, count, before: matchesIn(pane, el).before });
+    setCard({ row: note ? rowOf(note, el) : null, closed: false, land: focus });
+    el.scrollIntoView?.({ block: "center" });
+    if (focus) focusTarget(blockOf(el));
+  };
   // After the hash's scroll above: a search lands on its match, not the section top.
   useLayoutEffect(() => {
     const pane = paneRef.current;
-    if (!query) pane?.querySelectorAll("tr[data-current-row]").forEach((r) => r.removeAttribute("data-current-row"));
+    if (!query) {
+      litRow.current = null;
+      pane?.querySelectorAll("tr[data-current-row]").forEach((r) => r.removeAttribute("data-current-row"));
+    }
     if (!note || !pane || !query) return;
     const inRail = filterRef.current?.closest("nav")?.contains(document.activeElement) ?? false;
+    const anchor = decodeURIComponent(location.hash.slice(1));
+    // ⌘K → names the row the owner chose: land on it, never on another row of the same table that matches first.
+    const rowAt = params.get(MANUAL_ROW);
+    const target = anchor && rowAt !== null && /^\d+$/.test(rowAt) ? tableRow(pane, anchor, Number(rowAt)) : null;
     // A landing whose match gets an answer card with a command puts focus on that command instead (↵ copies it).
-    showMatch(firstAfter(pane, decodeURIComponent(location.hash.slice(1))), true, !inRail, !inRail);
+    if (target) {
+      const { inside } = matchesIn(pane, target);
+      if (inside >= 0) showMatch(inside, true, !inRail, !inRail);
+      else landRow(target, anchor, Number(rowAt), !inRail);
+    } else showMatch(firstAfter(pane, anchor), true, !inRail, !inRail);
   }, [note?.id, query, location.key]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Exam lines and filled text arrive late and move the note: bring the current match back into view once.
+  // Exam lines and filled text arrive late and move the note: bring the current match (or lit row) back into view once.
   useLayoutEffect(() => {
-    if (base.examReady && query) showMatch(matchAt.current, true);
+    if (!base.examReady || !query) return;
+    const row = lit();
+    if (row) row.scrollIntoView?.({ block: "center" });
+    else showMatch(matchAt.current, true);
   }, [base.examReady]); // eslint-disable-line react-hooks/exhaustive-deps
   // Fill data and exam lines re-render the note's text: keep the current match marked (and the count right).
   useEffect(() => {
     const pane = paneRef.current;
     if (!note || !pane || !query) return;
     const obs = new MutationObserver(() => {
-      const { count } = markCurrent(pane, matchAt.current);
-      setMatch((m) => (m.count === count ? m : { at: matchAt.current, count }));
+      const { count } = markCurrent(pane, matchAt.current, lit());
+      setMatch((m) => (m.count === count ? m : { ...m, at: matchAt.current, count }));
     });
     obs.observe(pane, { childList: true, subtree: true, characterData: true });
     return () => obs.disconnect();
@@ -324,6 +381,14 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
     setCard((c) => ({ ...c, closed: true, land: false }));
   };
   const shownCard = !!(cardRow && note);
+  // The card takes room from the pane above it: put the current match (or lit row) back in the middle, not at the
+  // bottom edge the card pushed it to.
+  const cardKey = cardRow && note ? `${cardRow.anchor}:${cardRow.row}` : "";
+  useLayoutEffect(() => {
+    const pane = paneRef.current;
+    if (!cardKey || !pane) return;
+    (pane.querySelector("mark[data-current]") ?? pane.querySelector("tr[data-current-row]"))?.scrollIntoView?.({ block: "center" });
+  }, [cardKey]);
   useEffect(() => {
     cardEscRef.current = shownCard ? () => (closeCard(), true) : null;
     onCard(shownCard);
@@ -373,7 +438,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
       e.preventDefault();
       const prev = useManualStore.getState().back();
       if (!prev) {
-        useManualStatus.getState().set("No previous note", "ok");
+        useManualStatus.getState().set("No previous note", "muted");
         return;
       }
       if (!notes.some((n) => n.id === prev.noteId)) return;
@@ -386,7 +451,9 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
       if (isTypingTarget(e.target)) return;
       e.preventDefault();
       if (match.count === 0) return;
-      showMatch((match.at + (e.code === "ArrowDown" ? 1 : -1) + match.count) % match.count, true, true);
+      // From a lit row (no current match) the step goes on from the row: the next match after it, or the last before.
+      const from = match.at < 0 ? match.before - (e.code === "ArrowDown" ? 1 : 0) : match.at;
+      showMatch((from + (e.code === "ArrowDown" ? 1 : -1) + match.count) % match.count, true, true);
       return;
     }
     if (engagementId && isHostPickKey(e) && !isTypingTarget(e.target)) {
@@ -415,14 +482,14 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
         {/* What the note's commands fill for, and where ⌘↵ logs: kept above the scroll so it never moves. */}
         <div
           data-host-row="" {...(paneFocused ? { "data-pane-focused": "" } : {})}
-          className="grid min-h-12 grid-cols-[minmax(10rem,max-content)_minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-8 py-2 text-meta data-[pane-focused]:border-accent"
+          className="grid min-h-12 grid-cols-[minmax(10rem,max-content)_max-content_minmax(0,1fr)] items-center gap-3 border-b border-line px-8 py-2 text-meta data-[pane-focused]:border-accent"
         >
           {engagementId ? (
             <>
               <div data-host-chip-cell="" className="grid">
                 <HostChip ref={hostRef} hosts={base.d.hosts} value={base.host?.id ?? null} onChange={setHostId} align="start" className="max-w-80" />
               </div>
-              <span data-testid="manual-host-ip" className="truncate font-mono text-code text-muted">{base.host?.ip ?? ""}</span>
+              <span data-testid="manual-host-ip" className="font-mono text-code text-muted">{base.host?.ip ?? ""}</span>
             </>
           ) : (
             !scopePending && <span className="col-span-2 text-muted">No active engagement</span>

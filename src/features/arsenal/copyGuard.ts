@@ -21,7 +21,8 @@ export function guardCopy(cmd: { id: string; unresolved: string[] }, armed: Arme
 
 /** These come from the credential chip, not from a fill field (USER and DOMAIN are fields when the credential does not supply them). */
 const CRED_TOKENS = new Set(["PASS", "HASH", "CRED"]);
-const CONFIRM_MS = 2500;
+/** How long a copy's confirm line stays (the Manual's status line clears after the same wait). */
+export const CONFIRM_MS = 2500;
 
 /**
  * The shared copy path. `attempt` runs `doCopy` unless the command still has an unresolved token and this is the first

@@ -130,6 +130,44 @@ describe("answer card", () => {
     await waitFor(() => expect(rows(c)[0]).toHaveFocus());
   });
 
+  it("a ⌘K landing on a row the query does not match lights that row, shows its card and focuses its first command", async () => {
+    // "login" is in the heading, the caption and STATUS_ZZ_NOSVC's means, never in STATUS_ZZ_EXPIRED's row (row 2).
+    mount([`/manual/${AUDIT_NOTE_IDS.lookup}?q=login&row=2#table-1`]);
+    const c = await card();
+    expect(within(c).getByText("STATUS_ZZ_EXPIRED")).toBeInTheDocument();
+    await waitFor(() => expect(rows(c)[0]).toHaveFocus());
+    expect(document.querySelector("[data-table='table-1'] tr[data-current-row]")).toHaveAttribute("data-row", "2");
+    // No match is current: the bar counts them without claiming one.
+    expect(document.querySelector("mark[data-current]")).toBeNull();
+    expect(screen.getByRole("status", { name: "Search in this note" })).toHaveTextContent(/login3 matches$/);
+    // ⌥↓ goes on from the row: the next match after it is STATUS_ZZ_NOSVC's.
+    altDown();
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "Answer" })).getByText("STATUS_ZZ_NOSVC")).toBeInTheDocument());
+    expect(screen.getByRole("status", { name: "Search in this note" })).toHaveTextContent(/match 3 of 3$/);
+  });
+
+  it("with the card shown, the current match is centred again (the card took room above it)", async () => {
+    // Each centring scroll, with the key the card showed at that moment.
+    const calls: { el: Element; card: string | null }[] = [];
+    Element.prototype.scrollIntoView = function (this: Element, opts?: boolean | ScrollIntoViewOptions) {
+      if (typeof opts === "object" && opts.block === "center") {
+        calls.push({ el: this, card: document.querySelector("[aria-label=Answer] p.font-mono")?.textContent ?? null });
+      }
+    };
+    // "secret": STATUS_ZZ_LOGON's means first, then STATUS_ZZ_EXPIRED's.
+    mount([at("secret")]);
+    const c = await card();
+    await waitFor(() => expect(rows(c)[0]).toHaveFocus());
+    expect(within(c).getByText("STATUS_ZZ_LOGON")).toBeInTheDocument();
+    calls.length = 0;
+    altDown();
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "Answer" })).getByText("STATUS_ZZ_EXPIRED")).toBeInTheDocument());
+    const current = document.querySelector("mark[data-current]")!;
+    expect(current.closest("tr")).toHaveAttribute("data-row", "2");
+    // ⌥↓ centres it while the old card still shows; once the new card is in, it is centred again.
+    expect(calls.some((x) => x.el === current && x.card === "STATUS_ZZ_EXPIRED")).toBe(true);
+  });
+
   it("the action line keeps only what is not a command, separators folded", async () => {
     mount([at("STATUS_ZZ_NOSVC")]);
     const c = await card();
@@ -212,7 +250,7 @@ describe("answer card", () => {
     expect(within(rows(c)[3]!).getByRole("button", { name: "Copy command: zzrelay drop 198.51.100.21" })).toBeInTheDocument();
   });
 
-  it("↓ ↑ move between command rows and onto + n more; ↵ copies, ⌘↵ logs as table: key", async () => {
+  it("↓ ↑ move between command rows; ↓ onto + n more opens it on its first command; ↵ copies, ⌘↵ logs as table: key", async () => {
     const user = userEvent.setup();
     mount([at("STATUS_ZZ_RELAY")]);
     const c = await card();
@@ -224,7 +262,10 @@ describe("answer card", () => {
     await user.keyboard("{ArrowDown}");
     expect(d).toHaveFocus();
     await user.keyboard("{ArrowDown}");
-    expect(within(c).getByRole("button", { name: "+ 1 more" })).toHaveFocus();
+    // ↓ onto "+ 1 more" opens it, focus on the first command it brought in.
+    await waitFor(() => expect(rows(c)).toHaveLength(4));
+    expect(within(c).queryByRole("button", { name: "+ 1 more" })).toBeNull();
+    await waitFor(() => expect(rows(c)[3]).toHaveFocus());
     await user.keyboard("{ArrowUp}{ArrowUp}");
     expect(b).toHaveFocus();
     await navigator.clipboard.writeText("untouched");

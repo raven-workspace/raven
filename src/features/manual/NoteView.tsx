@@ -1,4 +1,4 @@
-import { Fragment, useMemo, type ReactNode } from "react";
+import { Fragment, memo, useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
 import { classifyExam } from "../../engines/fieldManual/classifyExam";
 import type { CardMeta } from "../../engines/library/store";
@@ -105,15 +105,28 @@ function InlinePart({ p, ctx }: { p: Exclude<Inline, { text: string }>; ctx: Ctx
   return <span className="text-muted">{marked(aliased ? label : label.replace(/-/g, " "), ctx.re)}</span>;
 }
 
-/** An inline code span as a library command: it runs from Kali, and logs as its table row, else as its note and section. */
+/** Each note's inline commands, by log title and code: the same object every render, so their fill is not redone. */
+const inlineCache = new WeakMap<ManualNote, Map<string, LibraryCommand>>();
+
+/**
+ * An inline code span as a library command: it runs from Kali, and logs as its table row, else as its note and section.
+ * Memoized per note, code and log title (a re-render hands `useNoteCommand` the same command, so its fill is kept).
+ */
 export function inlineOf(code: string, ctx: Ctx): LibraryCommand {
   const { note, section, rowTitle } = ctx;
+  const title = rowTitle ?? (section ? `${shortTitle(note.title)}: ${section}` : shortTitle(note.title));
+  let byNote = inlineCache.get(note);
+  if (!byNote) inlineCache.set(note, (byNote = new Map()));
+  const key = `${title}\u0000${code}`;
+  const known = byNote.get(key);
+  if (known) return known;
   const command: LibraryCommand = {
-    id: `manual:${note.id}:inline:${code}`, title: rowTitle ?? (section ? `${shortTitle(note.title)}: ${section}` : shortTitle(note.title)),
+    id: `manual:${note.id}:inline:${code}`, title,
     tool: code.trim().split(/\s+/)[0] ?? "", template: code, os: "any", runFrom: "attacker", goals: [], source: "field-manual",
   };
   const exam = classifyExam(code);
   if (exam) command.exam = exam;
+  byNote.set(key, command);
   return command;
 }
 
@@ -231,9 +244,11 @@ function BlockView({ block, n, ctx: shared, base, section, tableName, tableAncho
 /**
  * A Manual note as a reading view: its Markdown as React elements (never injected HTML), its `[[links]]` resolved (a
  * note opens in the Manual at its heading, a card opens in the Arsenal drawer, anything else is muted text), and its
- * code blocks as commands filled for the host in view. `query` is the search the note was opened from.
+ * code blocks as commands filled for the host in view. `query` is the search the note was opened from. Memoized: the
+ * Reader re-renders on every match step, focus change and card; the note re-renders only when its props change (its
+ * own fill data still re-renders it).
  */
-export function NoteView({ note, notes, cards, hostId, engagementId, query }: {
+export const NoteView = memo(function NoteView({ note, notes, cards, hostId, engagementId, query }: {
   note: ManualNote; notes: ManualNote[]; cards: CardMeta[]; hostId: string | null; engagementId: string; query?: string;
 }) {
   const blocks = useMemo(() => parseMarkdown(note.body), [note.body]);
@@ -250,4 +265,4 @@ export function NoteView({ note, notes, cards, hostId, engagementId, query }: {
       ))}
     </article>
   );
-}
+});

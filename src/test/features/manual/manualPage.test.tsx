@@ -10,6 +10,7 @@ import { parseNote, type ManualNote } from "../../../engines/manual";
 import { useArsenalStore } from "../../../features/arsenal/useArsenalStore";
 import { useLastEngagementStore } from "../../../features/arsenal/useFillScope";
 import { useCaptureStore } from "../../../features/capture/useCaptureStore";
+import { useManualStatus } from "../../../features/manual/useManualStatus";
 import { useManualStore } from "../../../features/manual/useManualStore";
 import { useNotesStore } from "../../../features/notes/useNotesStore";
 import { usePaletteStore } from "../../../features/palette/usePaletteStore";
@@ -697,6 +698,26 @@ describe("Manual: the host commands fill for", () => {
     })));
   });
 
+  it("the status slot clears when the host changes, and never squeezes the host's IP", async () => {
+    const user = userEvent.setup();
+    withEngagement();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
+    mount([`/manual/${TOOL.id}`]);
+    await pre("zzscan -t 198.51.100.21");
+    act(() => useManualStatus.getState().set("Copied for zzweb01", "ok"));
+    expect(await screen.findByText("Copied for zzweb01")).toBeInTheDocument();
+    // The IP keeps its own track; the slot is the one that truncates.
+    const row = screen.getByTestId("manual-host-ip").parentElement!;
+    expect(row.className).toMatch(/grid-cols-\[minmax\(10rem,max-content\)_max-content_minmax\(0,1fr\)\]/);
+    expect(screen.getByTestId("manual-host-ip")).not.toHaveClass("truncate");
+    expect(screen.getByText("Copied for zzweb01")).toHaveClass("truncate", "min-w-0");
+    await user.click(screen.getByRole("button", { name: "Host zzweb01" }));
+    await user.click(await screen.findByRole("option", { name: /zzdb02/ }));
+    expect(await pre("zzscan -t 198.51.100.22")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Copied for zzweb01")).not.toBeInTheDocument());
+    expect(useManualStatus.getState().text).toBeNull();
+  });
+
   it("⌥H opens the host picker", async () => {
     withEngagement();
     useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
@@ -915,6 +936,9 @@ describe("Manual: focus follows intent, one Tab stop, hints", () => {
     await openNote("Bb Basics");
     press("[", { metaKey: true });
     expect(await screen.findByText("No previous note")).toBeInTheDocument();
+    // A neutral aside, not the accent a copy's confirm uses.
+    expect(screen.getByText("No previous note")).toHaveClass("text-muted");
+    expect(screen.getByText("No previous note")).not.toHaveClass("text-accent");
   });
 
   it("the hint line keeps five; [ ] and ⌥H stay, / and ⌘[ wait in the ? list", async () => {

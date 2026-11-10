@@ -844,9 +844,54 @@ describe("⌘K Lookup group", () => {
     expect(within(line).getByText("open in Manual")).toBeInTheDocument();
     await user.keyboard("{ArrowRight}");
     await vi.waitFor(() =>
-      expect(screen.getByTestId("where").textContent).toBe(`/manual/${AUDIT_NOTE_IDS.lookup}?q=STATUS_ZZ_EXPIRED#table-1`));
+      expect(screen.getByTestId("where").textContent).toBe(`/manual/${AUDIT_NOTE_IDS.lookup}?q=STATUS_ZZ_EXPIRED&row=2#table-1`));
     expect(screen.queryByRole("dialog", { name: "Search" })).not.toBeInTheDocument();
     expect(useArsenalStore.getState().open).toBe(false);
+  });
+
+  /** The Manual's answer card, once the landing has shown it. */
+  const answer = () => screen.findByRole("region", { name: "Answer" });
+  const answerRows = (c: HTMLElement) => within(c).queryAllByRole("group", { name: /^Answer command: / });
+
+  it("→ on the second matching row's command lands on that row, not the first match after the caption", async () => {
+    // "secret" is in STATUS_ZZ_LOGON's and STATUS_ZZ_EXPIRED's means: two groups, LOGON first.
+    const user = await open("secret");
+    await lookupGroup("STATUS_ZZ_EXPIRED");
+    const groups = within(screen.getByRole("listbox", { name: "Results" })).getAllByRole("group");
+    expect(groups[0]).toHaveAccessibleName(/^STATUS_ZZ_LOGON/);
+    expect(groups[1]).toHaveAccessibleName(/^STATUS_ZZ_EXPIRED/);
+    await user.keyboard("{ArrowDown}");
+    expect(within(groups[1]!).getByRole("option")).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{ArrowRight}");
+    await vi.waitFor(() =>
+      expect(screen.getByTestId("where").textContent).toBe(`/manual/${AUDIT_NOTE_IDS.lookup}?q=secret&row=2#table-1`));
+    const c = await answer();
+    expect(within(c).getByText("STATUS_ZZ_EXPIRED")).toBeInTheDocument();
+    await vi.waitFor(() => expect(answerRows(c)[0]).toHaveFocus());
+    expect(answerRows(c)[0]).toHaveAccessibleName("Answer command: nxc smb 10.10.10.5 --pass-pol");
+    // The lit row is the chosen one.
+    expect(document.querySelector("[data-table='table-1'] tr[data-current-row]")).toHaveAttribute("data-row", "2");
+  });
+
+  it("→ lands on the chosen row when the query's first match after the anchor is in the caption", async () => {
+    // "zz" is in the caption ("Zz login errors") before any row: the row, not the caption, is where → lands.
+    const user = await open("zz");
+    await lookupGroup("STATUS_ZZ_LOGON");
+    await user.keyboard("{ArrowDown}{ArrowRight}");
+    await vi.waitFor(() =>
+      expect(screen.getByTestId("where").textContent).toBe(`/manual/${AUDIT_NOTE_IDS.lookup}?q=zz&row=1#table-1`));
+    const c = await answer();
+    expect(within(c).getByText("STATUS_ZZ_LOGON")).toBeInTheDocument();
+    await vi.waitFor(() => expect(answerRows(c)[0]).toHaveFocus());
+  });
+
+  it("more than two matching rows: the Lookup group lists two (key matches in note order)", async () => {
+    // Every row's key holds "ZZ_": seven rows with commands match.
+    await open("ZZ_");
+    await lookupGroup("STATUS_ZZ_DENIED");
+    const keys = within(screen.getByRole("listbox", { name: "Results" })).getAllByRole("group")
+      .flatMap((g) => within(g).queryAllByText(/^STATUS_ZZ_[A-Z]+$/).map((el) => el.textContent));
+    expect(keys).toEqual(["STATUS_ZZ_DENIED", "STATUS_ZZ_LOGON"]);
   });
 
   it("exam rules hold back a banned lookup command; pending rules offer none", () => {

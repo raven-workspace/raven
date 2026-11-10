@@ -210,7 +210,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
       e.preventDefault();
       if (current.type === "command" && "lookup" in current) {
         // Inside the Manual a move replaces its one history entry, so Esc still leaves the Manual.
-        void navigate(manualSearchPath(current.lookup.noteId, query, current.lookup.anchor), { replace: location.pathname.startsWith("/manual") });
+        void navigate(manualSearchPath(current.lookup.noteId, query, current.lookup.anchor, current.lookup.row), { replace: location.pathname.startsWith("/manual") });
         // The answer card focuses its first command: focus does not go back to where the palette opened.
         onClose({ handOff: true });
         return;

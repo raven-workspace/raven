@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { parseNote, type ManualNote } from "../../../engines/manual";
 import { useCredPickStore } from "../../../features/checklist/credPick";
 import { logCommand } from "../../../features/capture/logCommand";
-import { NoteView } from "../../../features/manual/NoteView";
+import { inlineOf, NoteView, type Ctx } from "../../../features/manual/NoteView";
 import { useManualStatus } from "../../../features/manual/useManualStatus";
 import { api } from "../../../lib/api";
 import { makeQueryClient } from "../../../lib/queryClient";
@@ -142,5 +142,24 @@ describe("inline commands", () => {
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await waitFor(() => expect(logCommand).toHaveBeenCalledTimes(2));
     expect(vi.mocked(logCommand).mock.calls[1]?.[1]).toMatchObject({ command: "zzscan 192.0.2.10", title: "Zz Tool: Shares" });
+  });
+});
+
+describe("inline commands are memoized", () => {
+  it("the same note, code and log title give the same command object; another title or note gives another", () => {
+    const n = note(["Run `zzscan -t {TARGET_IP}` now."]);
+    const ctx = { note: n, notes: [n], cards: [], re: null, base: {} as Ctx["base"], section: "Shares" } satisfies Ctx;
+    const a = inlineOf("zzscan -t {TARGET_IP}", ctx);
+    expect(inlineOf("zzscan -t {TARGET_IP}", { ...ctx })).toBe(a);
+    expect(a.title).toBe("Zz Tool: Shares");
+    const row = inlineOf("zzscan -t {TARGET_IP}", { ...ctx, rowTitle: "Zz codes: X" });
+    expect(row).not.toBe(a);
+    expect(row.title).toBe("Zz codes: X");
+    const other = note(["Run `zzscan -t {TARGET_IP}` now."]);
+    expect(inlineOf("zzscan -t {TARGET_IP}", { ...ctx, note: other })).not.toBe(a);
+  });
+
+  it("NoteView is memoized: the same props skip its render", () => {
+    expect((NoteView as unknown as { $$typeof: symbol }).$$typeof).toBe(Symbol.for("react.memo"));
   });
 });

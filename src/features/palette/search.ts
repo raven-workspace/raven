@@ -30,8 +30,8 @@ export interface PaletteContext {
   notes?: ManualNote[];
 }
 
-/** A lookup-table row's command as a ⌘K command: `lookup` is where the row sits in the Manual. */
-export type LookupHit = Extract<ArsenalHit, { type: "command" }> & { lookup: { noteId: string; anchor: string } };
+/** A lookup-table row's command as a ⌘K command: `lookup` is where the row sits in the Manual (its table and row). */
+export type LookupHit = Extract<ArsenalHit, { type: "command" }> & { lookup: { noteId: string; anchor: string; row: number } };
 
 /** One lookup-table row in ⌘K: its key and plain means lead the group, its commands are the results. */
 export interface LookupGroup {
@@ -117,7 +117,7 @@ function lookupGroups(query: string, ctx: PaletteContext): LookupGroup[] {
     if (cmds.length === 0) continue;
     out.push({
       key: `lookup-${r.noteId}-${r.anchor}-${r.row}`, code: r.key, text: plain(r.means).trim(),
-      results: cmds.map((c) => ({ type: "command", id: c.id, title: c.template, command: c, msfMarker: msfMarker.has(c.id), lookup: { noteId: r.noteId, anchor: r.anchor } })),
+      results: cmds.map((c) => ({ type: "command", id: c.id, title: c.template, command: c, msfMarker: msfMarker.has(c.id), lookup: { noteId: r.noteId, anchor: r.anchor, row: r.row } })),
     });
   }
   return out;

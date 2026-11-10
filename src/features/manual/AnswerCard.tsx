@@ -87,7 +87,7 @@ function CardCommand({ command, base }: { command: LibraryCommand; base: FillBas
  * The lookup row the current search match sits in, pinned above the note: its key, what it means, its usual cause and
  * its action's commands filled for the host in view (three, then "+ n more"). The action cell reads in full under the
  * rows when it says more than its commands, and the row's Arsenal card is one click away. ↓ ↑ move between the command
- * rows while focus is in the card; Esc (handled by the page) closes it.
+ * rows while focus is in the card (↓ onto "+ n more" opens it); Esc (handled by the page) closes it.
  */
 export function AnswerCard({ row, base, onClose }: { row: LookupRow; base: FillBase; onClose(): void }) {
   const { notes } = useManualNotes();
@@ -116,7 +116,10 @@ export function AnswerCard({ row, base, onClose }: { row: LookupRow; base: FillB
     const at = stops.findIndex((s) => s === document.activeElement || s.contains(document.activeElement));
     if (at < 0) return;
     e.preventDefault();
-    stops[Math.min(stops.length - 1, Math.max(0, at + (e.key === "ArrowDown" ? 1 : -1)))]?.focus();
+    const next = stops[Math.min(stops.length - 1, Math.max(0, at + (e.key === "ArrowDown" ? 1 : -1)))];
+    // ↓ onto "+ n more" opens it: focus lands on the first command it brings in (the effect below), so ↓ carries on.
+    if (e.key === "ArrowDown" && next?.dataset.cardMore !== undefined) setMore(true);
+    else next?.focus();
   };
 
   const rootRef = useRef<HTMLElement>(null);
@@ -144,10 +147,11 @@ export function AnswerCard({ row, base, onClose }: { row: LookupRow; base: FillB
       {row.cause.length > 0 && ctx && <p className="m-0 text-meta text-muted">Usually: <InlineView parts={row.cause} ctx={ctx} /></p>}
       {shown.length > 0 && (
         <div className="mt-2 grid gap-2">
-          {shown.map((c) => <CardCommand key={c.id} command={c} base={base} />)}
+          {/* The same command can sit twice in one cell: the index keeps the keys apart. */}
+          {shown.map((c, i) => <CardCommand key={`${i}:${c.id}`} command={c} base={base} />)}
           {hidden > 0 && (
             <button
-              type="button" data-card-stop="" onClick={() => setMore(true)}
+              type="button" data-card-stop="" data-card-more="" onClick={() => setMore(true)}
               className="cursor-pointer justify-self-start rounded-sm border-0 bg-transparent p-0 text-meta text-muted-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid"
             >
               + {hidden} more
