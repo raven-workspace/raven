@@ -1,0 +1,139 @@
+import { useMemo, type ReactNode } from "react";
+import { Link } from "react-router";
+import { classifyExam } from "../../engines/fieldManual/classifyExam";
+import type { CardMeta } from "../../engines/library/store";
+import type { LibraryCommand } from "../../engines/library/types";
+import type { ManualNote } from "../../engines/manual";
+import { resolveLink } from "../../engines/manual/links";
+import { parseMarkdown, type Block, type Inline } from "../../engines/manual/markdown";
+import { useArsenalStore } from "../arsenal/useArsenalStore";
+import { useFillBase } from "../palette/fillData";
+import { ManualCommand, type FillBase } from "./ManualCommand";
+
+/** Prose keeps a reading measure; tables, code and commands take the full width of the note pane. */
+const PROSE = "m-0 max-w-[760px] text-body/6 text-fg-2";
+const PLACEHOLDER = /\{[A-Za-z][A-Za-z0-9_]*\}/;
+const LINK_CLASS = "text-fg-2 underline decoration-line-2 underline-offset-2 hover:text-accent hover:decoration-accent";
+
+interface Ctx {
+  note: ManualNote;
+  notes: ManualNote[];
+  cards: CardMeta[];
+}
+
+function InlineView({ parts, ctx }: { parts: Inline[]; ctx: Ctx }): ReactNode {
+  return parts.map((p, i) => {
+    if ("text" in p) return p.text;
+    if ("code" in p) return <code key={i} className="font-mono text-code text-fg [overflow-wrap:anywhere]">{p.code}</code>;
+    if ("strong" in p) return <strong key={i} className="font-semibold text-fg"><InlineView parts={p.strong} ctx={ctx} /></strong>;
+    if ("em" in p) return <em key={i}><InlineView parts={p.em} ctx={ctx} /></em>;
+    const { target, heading, label } = p.link;
+    const to = resolveLink(target, ctx.notes, ctx.cards, heading);
+    if (to.kind === "note") {
+      return <Link key={i} to={`/manual/${encodeURIComponent(to.noteId)}${to.heading ? `#${to.heading}` : ""}`} className={LINK_CLASS}>{label}</Link>;
+    }
+    if (to.kind === "card") {
+      const card = ctx.cards.find((c) => c.id === to.cardId);
+      return (
+        <button
+          key={i} type="button" title={`Open the card ${card?.title ?? label} in the Arsenal`}
+          onClick={() => useArsenalStore.getState().openCard(to.cardId)}
+          className={`cursor-pointer border-0 bg-transparent p-0 text-left font-[inherit] ${LINK_CLASS}`}
+        >
+          {label}
+        </button>
+      );
+    }
+    // Unresolved: plain muted text, never a dead link.
+    return <span key={i} className="text-muted">{label}</span>;
+  });
+}
+
+/** The first line of a code block, shortened: it names a block that has no title. */
+const firstLine = (text: string) => {
+  const line = text.split("\n").find((l) => l.trim() !== "")?.trim() ?? "";
+  return line.length > 80 ? `${line.slice(0, 79)}…` : line;
+};
+
+function BlockView({ block, n, ctx, base }: { block: Block; n: number; ctx: Ctx; base: FillBase }) {
+  switch (block.kind) {
+    case "heading": {
+      const inner = <InlineView parts={block.inline} ctx={ctx} />;
+      if (block.level === 1) return <h1 id={block.id} className="m-0 max-w-[760px] scroll-mt-4 text-title text-fg">{inner}</h1>;
+      if (block.level === 2) return <h2 id={block.id} className="m-0 mt-4 max-w-[760px] scroll-mt-4 text-title text-fg">{inner}</h2>;
+      if (block.level === 3) return <h3 id={block.id} className="m-0 mt-2 max-w-[760px] scroll-mt-4 text-heading text-fg">{inner}</h3>;
+      return <h4 id={block.id} className="m-0 mt-1 max-w-[760px] scroll-mt-4 text-body font-semibold text-fg">{inner}</h4>;
+    }
+    case "paragraph":
+      return (
+        <p id={block.anchor} className={block.anchor ? "m-0 mt-2 max-w-[760px] scroll-mt-4 text-heading text-fg" : PROSE}>
+          <InlineView parts={block.inline} ctx={ctx} />
+        </p>
+      );
+    case "list": {
+      const items = block.items.map((it, i) => <li key={i}><InlineView parts={it} ctx={ctx} /></li>);
+      const cls = `${PROSE} grid gap-1 pl-6 marker:text-muted`;
+      return block.ordered ? <ol className={`${cls} list-decimal`}>{items}</ol> : <ul className={`${cls} list-disc`}>{items}</ul>;
+    }
+    case "table":
+      return (
+        // Cells wrap (long values break anywhere), so a wide table never scrolls the page sideways.
+        <table className="w-full border-collapse text-meta">
+          <thead>
+            <tr>
+              {block.head.map((c, i) => (
+                <th key={i} className="border-b border-line-2 px-2 py-1 text-left align-bottom text-label text-muted [overflow-wrap:anywhere]">
+                  <InlineView parts={c} ctx={ctx} />
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {block.rows.map((r, i) => (
+              <tr key={i}>
+                {r.map((c, j) => (
+                  <td key={j} className="border-b border-line px-2 py-2 align-top text-fg-2 [overflow-wrap:anywhere]">
+                    <InlineView parts={c} ctx={ctx} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      );
+    case "code": {
+      const command: LibraryCommand = {
+        id: `manual:${ctx.note.id}:${n}`, title: block.title ?? ctx.note.title, tool: block.text.trim().split(/\s+/)[0] ?? "",
+        template: block.text, os: "any", runFrom: "attacker", goals: [], source: "field-manual",
+      };
+      const exam = classifyExam(block.text);
+      if (exam) command.exam = exam;
+      return (
+        <ManualCommand
+          command={command} label={block.title ?? firstLine(block.text)} caption={block.title} fill={PLACEHOLDER.test(block.text)} base={base}
+        />
+      );
+    }
+  }
+}
+
+/**
+ * A Manual note as a reading view: its Markdown as React elements (never injected HTML), its `[[links]]` resolved (a
+ * note opens in the Manual at its heading, a card opens in the Arsenal drawer, anything else is muted text), and its
+ * code blocks as commands filled for the host in view. `query` is the search the note was opened from.
+ */
+export function NoteView({ note, notes, cards, hostId, engagementId }: {
+  note: ManualNote; notes: ManualNote[]; cards: CardMeta[]; hostId: string | null; engagementId: string; query?: string;
+}) {
+  const blocks = useMemo(() => parseMarkdown(note.body), [note.body]);
+  const base = useFillBase(engagementId, hostId);
+  const ctx: Ctx = { note, notes, cards };
+  let code = 0;
+  return (
+    <article aria-label={note.title} className="grid grid-cols-[minmax(0,1fr)] content-start gap-3">
+      {blocks.map((b, i) => (
+        <BlockView key={i} block={b} n={b.kind === "code" ? code++ : -1} ctx={ctx} base={base} />
+      ))}
+    </article>
+  );
+}

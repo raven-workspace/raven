@@ -46,7 +46,7 @@ describe("parseNote", () => {
     const n = parseNote("04-Foundations/Zz-Errors.md", NOTE)!;
     expect(n.outline).toEqual([
       { id: "symptoms", text: "Symptoms", kind: "h2" },
-      { id: "table-2", text: "Table 2 · Kerberos", kind: "table" },
+      { id: "table-2", text: "Kerberos", kind: "table", number: "2" },
       { id: "detail", text: "Detail", kind: "h3" },
       { id: "symptoms-2", text: "Symptoms", kind: "h2" },
     ]);

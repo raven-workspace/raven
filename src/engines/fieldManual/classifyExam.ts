@@ -2,7 +2,7 @@ import { isMetasploitLine } from '../checklist/examRules';
 import type { ExamRule } from '../library/types';
 
 /** A Meterpreter payload (staged `.../meterpreter/...` or stageless `meterpreter_reverse_*`) or a meterpreter prompt. */
-const METERPRETER = /meterpreter[/_]|^\s*meterpreter\s*>/i;
+export const METERPRETER = /meterpreter[/_]|^\s*meterpreter\s*>/i;
 const BANNED_BINS = /^(?:sqlmap|sqlninja|nosqlmap|nessus|nessuscli|openvas|nexpose|gvm-.*)$/;
 
 /** Wrapper commands that run the next word, and their options that take a value. */

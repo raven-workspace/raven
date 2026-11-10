@@ -5,7 +5,7 @@ import type { PayloadDef } from "./types";
  * unrestricted. Only `breach: true` is a warning; `breach: false` is information.
  */
 export function msfLockLine(input: {
-  exam: boolean; def: PayloadDef; hostId: string | null; msfHostId: string | null; hostName: (id: string) => string;
+  exam: boolean; def: Pick<PayloadDef, "meterpreter">; hostId: string | null; msfHostId: string | null; hostName: (id: string) => string;
 }): { text: string; breach: boolean } | null {
   const { exam, def, hostId, msfHostId, hostName } = input;
   if (!exam || !def.meterpreter) return null;

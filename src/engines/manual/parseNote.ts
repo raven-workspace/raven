@@ -1,5 +1,8 @@
 import { splitFrontmatter } from "../fieldManual/frontmatter";
+import { anchorIds, FENCE, OUTLINE_HEADING, slug, TABLE_CAPTION } from "./anchors";
 import type { ManualFolder, ManualNote, OutlineEntry } from "./types";
+
+export { slug };
 
 const FOLDERS: Record<string, ManualFolder> = {
   "03-Tools": "tools",
@@ -7,43 +10,28 @@ const FOLDERS: Record<string, ManualFolder> = {
   "05-Reporting": "reporting",
 };
 
-/** The shared anchor slugger: lower-case, runs of non-alphanumerics become one hyphen. */
-export function slug(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-const TABLE = /^\*\*Table\s+(\d+)\s*[—–-]\s*(.+?)\s*\*\*\s*$/;
-
 function outlineOf(body: string): { outline: OutlineEntry[]; h1?: string } {
   const outline: OutlineEntry[] = [];
-  const seen = new Map<string, number>();
-  const unique = (base: string): string => {
-    const n = (seen.get(base) ?? 0) + 1;
-    seen.set(base, n);
-    return n === 1 ? base : `${base}-${n}`;
-  };
+  const ids = anchorIds();
   let h1: string | undefined;
   let fence: string | null = null;
   for (const line of body.split("\n")) {
-    const f = /^\s*(`{3,}|~{3,})/.exec(line);
+    const f = FENCE.exec(line);
     if (f) {
       if (fence === null) fence = f[1][0];
       else if (f[1][0] === fence) fence = null;
       continue;
     }
     if (fence !== null) continue;
-    const h = /^(#{1,3})\s+(.*?)\s*#*\s*$/.exec(line);
+    const h = OUTLINE_HEADING.exec(line);
     if (h) {
       const text = h[2];
       if (h[1] === "#") h1 ??= text;
-      else outline.push({ id: unique(slug(text)), text, kind: h[1] === "##" ? "h2" : "h3" });
+      else outline.push({ id: ids.heading(text), text, kind: h[1] === "##" ? "h2" : "h3" });
       continue;
     }
-    const t = TABLE.exec(line.trim());
-    if (t) outline.push({ id: unique(`table-${t[1]}`), text: `Table ${t[1]} · ${t[2]}`, kind: "table" });
+    const t = TABLE_CAPTION.exec(line.trim());
+    if (t) outline.push({ id: ids.table(t[1]), text: t[2], kind: "table", number: t[1] });
   }
   return { outline, h1 };
 }
