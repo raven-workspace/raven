@@ -40,3 +40,8 @@ None of these appear in the synthetic fixtures. Check each against the real vaul
 - The drift report's "Placeholders Raven can't fill" counts card commands only. A `{TOKEN}` in a Manual note's command that
   Raven can't fill isn't listed, so a typo in a note (`{TARGETIP}`) shows up only when its first copy is held back. Count note
   command tokens there too, marked as coming from a note.
+
+## From the last review (2026-11-09)
+
+- [ ] **Search snippets use a regex approximation of the renderer.** `readable()` in `src/engines/manual/search.ts` differs from the note on `__bold__`, `___x___`, stray `**`, `*`/`_` inside code spans and `\*` escapes. Highlights in the note are unaffected (they come from the DOM); only the ⌘K snippet text can differ. Build the line from `parseInline` instead, so search and the note share one parser.
+- [ ] **Emphasis matching can be quadratic on hostile lines** (`src/engines/manual/markdown.ts`): about 3–4 s on a 200,000-character line of unmatched closers. The vault's longest line is 985 characters, so it doesn't bite today. Add CommonMark's openers_bottom bound and build a tree instead of splicing.
