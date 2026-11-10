@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router";
 import { api } from "../../lib/api";
 import { Button, Disclosure, Field, Input, Panel } from "../../ui";
 import type { Drift } from "../../engines/fieldManual/drift";
@@ -14,6 +15,11 @@ export function FieldManualSection() {
   useEffect(() => {
     void qc.invalidateQueries({ queryKey: ["fieldManualMtime"] });
   }, [qc]);
+  // The Manual's empty state links here: `/settings#field-manual` brings this panel into view.
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (hash === "#field-manual") document.getElementById("field-manual")?.scrollIntoView?.({ block: "start" });
+  }, [hash]);
   const saved = settings.data?.fieldManualPath;
   const [draft, setPath] = useState<string | null>(null);
   const path = draft ?? saved ?? "";
@@ -45,6 +51,7 @@ export function FieldManualSection() {
   const r = s?.report;
   return (
     <Panel
+      id="field-manual"
       title="Field Manual"
       actions={
         <Button size="sm" onClick={() => void importNow()} disabled={imp.isPending || !settings.data} aria-busy={imp.isPending}>
@@ -59,11 +66,13 @@ export function FieldManualSection() {
       {s && (
         <p className="m-0 mt-3 text-meta text-fg-2">
           Last import {new Date(s.importedAt).toLocaleString()}: {s.cards.length} cards,{" "}
-          {Object.keys(s.overlay ?? {}).length + (s.added?.length ?? 0)} commands.
+          {Object.keys(s.overlay ?? {}).length + (s.added?.length ?? 0)} commands
+          {s.notes ? `, ${s.notes.length} notes` : ""}.
         </p>
       )}
       {r && (
         <ul className="m-0 mt-2 grid list-none gap-1 p-0 text-meta text-muted">
+          {r.warnings?.map((w) => <li key={w} className="text-warn">{w}</li>)}
           <li>Cards: {r.cardsAdded} added, {r.cardsChanged} changed, {r.cardsRemoved} gone from the vault</li>
           <li>Commands: {r.commandsAdded} added, {r.commandsChanged} changed</li>
           {r.commandsRemovedKept.length > 0 && (

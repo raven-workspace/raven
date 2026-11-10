@@ -6,6 +6,7 @@ import type { Drift } from './drift';
 import type { ParsedBlock, ParsedCard } from './parseCard';
 import type { PlaybookItem } from './parsePlaybook';
 import type { ToolkitEntry } from './parseToolkit';
+import type { ManualNote } from '../manual/types';
 
 export interface ImportReport {
   cardsAdded: number;
@@ -21,6 +22,8 @@ export interface ImportReport {
   addedRemoved?: string[];
   /** Vault vs Raven (spec §5). Absent on reports saved before the drift report existed. */
   drift?: Drift;
+  /** Things the import worked around and the owner should check (e.g. the Manual's notes kept from the last import). */
+  warnings?: string[];
 }
 
 /** What the vault changes about one built-in field-manual command. Everything else comes from the code. */
@@ -45,6 +48,8 @@ export interface FieldManualSnapshot {
   commands?: LibraryCommand[];
   playbook: PlaybookItem[];
   toolkit: ToolkitEntry[];
+  /** Tools, Foundations and Reporting notes. Absent on snapshots saved before the Manual existed. */
+  notes?: ManualNote[];
   report: ImportReport;
 }
 

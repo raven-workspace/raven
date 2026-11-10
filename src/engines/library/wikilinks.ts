@@ -1,9 +1,12 @@
 import type { CardMeta } from "./store";
 
-/** A piece of note text: plain text, or an Obsidian `[[link]]` (its target without `#heading`, and what it shows). */
-export type WikiPiece = { text: string } | { target: string; label: string };
+/**
+ * A piece of note text: plain text, or an Obsidian `[[link]]` (its target without `#heading`, the heading when there is
+ * one, and what it shows).
+ */
+export type WikiPiece = { text: string } | { target: string; heading?: string; label: string };
 
-const LINK = /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g;
+const LINK = /\[\[([^\]|#]+)(?:#([^\]|]*))?(?:\|([^\]]+))?\]\]/g;
 
 /** Splits note text around `[[Target]]`, `[[Target#Heading]]` and `[[Target|alias]]`. */
 export function splitWikilinks(text: string): WikiPiece[] {
@@ -12,7 +15,8 @@ export function splitWikilinks(text: string): WikiPiece[] {
   for (const m of text.matchAll(LINK)) {
     if (m.index > at) out.push({ text: text.slice(at, m.index) });
     const target = m[1].trim();
-    out.push({ target, label: (m[2] ?? target).trim() });
+    const heading = m[2]?.trim();
+    out.push({ target, ...(heading ? { heading } : {}), label: (m[3] ?? target).trim() });
     at = m.index + m[0].length;
   }
   if (at < text.length || out.length === 0) out.push({ text: text.slice(at) });

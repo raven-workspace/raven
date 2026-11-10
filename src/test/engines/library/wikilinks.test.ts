@@ -16,12 +16,12 @@ describe("splitWikilinks", () => {
       { text: "." },
     ]);
   });
-  it("uses an alias as the label and drops a heading from the target", () => {
+  it("uses an alias as the label and keeps a heading apart from the target", () => {
     expect(splitWikilinks("[[AS-REP-Roasting#Crack|roast]] it")).toEqual([
-      { target: "AS-REP-Roasting", label: "roast" },
+      { target: "AS-REP-Roasting", heading: "Crack", label: "roast" },
       { text: " it" },
     ]);
-    expect(splitWikilinks("[[Kerberoasting#Crack]]")).toEqual([{ target: "Kerberoasting", label: "Kerberoasting" }]);
+    expect(splitWikilinks("[[Kerberoasting#Crack]]")).toEqual([{ target: "Kerberoasting", heading: "Crack", label: "Kerberoasting" }]);
   });
   it("leaves text without links as one piece", () => {
     expect(splitWikilinks("plain [not] a link")).toEqual([{ text: "plain [not] a link" }]);

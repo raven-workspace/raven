@@ -43,17 +43,27 @@ export function TitleBarButton({
   children,
   hint,
   icon: Glyph,
+  current,
   onClick,
 }: {
   children: ReactNode;
   hint: string;
   icon?: Icon;
+  /** This control's destination is the page on screen: its icon and word turn accent. */
+  current?: boolean;
   onClick?: () => void;
 }) {
-  return (
-    <Button size="sm" onClick={onClick}>
+  const body = (
+    <>
       {Glyph && <Glyph size={16} weight="regular" aria-hidden />}
-      {children} <Kbd variant="inline" aria-hidden="true">{hint}</Kbd>
+      {children}
+    </>
+  );
+  return (
+    <Button size="sm" onClick={onClick} aria-current={current ? "page" : undefined}>
+      {/* Button's own text colour can't be overridden by a class (cx doesn't merge): the accent sits on an inner run. */}
+      {current ? <span className="inline-grid grid-flow-col items-center gap-2 text-accent">{body}</span> : body}{" "}
+      <Kbd variant="inline" aria-hidden="true">{hint}</Kbd>
     </Button>
   );
 }

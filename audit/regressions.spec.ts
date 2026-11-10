@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { AUDIT_NOW } from "../src/audit/fixtures";
+import { AUDIT_NOTE_IDS, AUDIT_NOW } from "../src/audit/fixtures";
 import { SCREENS } from "./screens";
 
 // Hard regressions: unlike the audit checks, these fail the run.
@@ -969,4 +969,106 @@ test("payloads: the Other… port field opens under the Port chip and keeps the 
     await page.keyboard.press("Enter");
     await expect(aside.getByRole("button", { name: /^Port: 8443/ })).toBeVisible();
   }
+});
+
+// The Manual's five-column table: as a table its auto layout squeezed the code columns until every status code broke
+// mid-token. Now a table that can't fit its codes stacks each row as name/value lines; one that can stays a table.
+test("Manual: a wide table stacks when its codes don't fit, stays a table when they do, and no code breaks", async ({ page }) => {
+  for (const [width, stacked] of [[900, true], [1024, true], [1280, true], [1440, false]] as const) {
+    await open(page, `/manual/${AUDIT_NOTE_IDS.long}`, width);
+    const pane = page.getByRole("region", { name: "Note" });
+    const table = pane.locator("[id='table-1'] + div table");
+    await table.waitFor();
+    expect(await table.getAttribute("data-stacked"), `stacked at ${width}`).toBe(stacked ? "" : null);
+    // Stacked, each value shows its column name; as a table the header row does.
+    await expect(table.getByRole("cell").first().locator("[data-column-label]")).toBeVisible({ visible: stacked });
+    await expect(table.getByRole("columnheader").first()).toBeVisible({ visible: !stacked });
+    const [t, p] = await Promise.all([table.boundingBox(), pane.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { right: r.left + el.clientWidth - parseFloat(getComputedStyle(el).paddingRight) };
+    })]);
+    expect(t!.x + t!.width, `table inside the pane at ${width}`).toBeLessThanOrEqual(p.right + 0.5);
+    const broken = await table.evaluate((el) => [...el.querySelectorAll("code")].filter((c) => {
+      const tops = new Set([...c.getClientRects()].map((r) => Math.round(r.top)));
+      return tops.size > 1;
+    }).map((c) => c.textContent));
+    expect(broken, `codes on one line at ${width}`).toEqual([]);
+  }
+});
+
+// A flags table (Flag | Does): auto layout squeezed the flag column until `-m MODE` broke at its space while the
+// description column had room to spare. A short key cell now keeps to one line and its column sizes to it.
+test("Manual: short key cells in a flags table stay on one line", async ({ page }) => {
+  for (const width of [1280, 1440]) {
+    await open(page, `/manual/${AUDIT_NOTE_IDS.long}`, width);
+    const pane = page.getByRole("region", { name: "Note" });
+    const table = pane.locator("[id='table-6'] + div table");
+    await table.scrollIntoViewIfNeeded();
+    expect(await table.getAttribute("data-stacked"), `a table at ${width}`).toBeNull();
+    const keys = await table.evaluate((el) => [...el.querySelectorAll("tbody tr")].map((tr) => {
+      const code = tr.querySelector("td code")!;
+      const lineHeight = parseFloat(getComputedStyle(code).lineHeight);
+      const tops = new Set([...code.getClientRects()].map((r) => Math.round(r.top)));
+      return { text: code.textContent, lines: tops.size, oneLine: code.getBoundingClientRect().height <= lineHeight * 1.5 };
+    }));
+    expect(keys.length, `flag rows at ${width}`).toBe(5);
+    for (const k of keys) {
+      expect(k.lines, `${k.text} on one line at ${width}`).toBe(1);
+      expect(k.oneLine, `${k.text} one line tall at ${width}`).toBe(true);
+    }
+    const [t, p] = await Promise.all([table.boundingBox(), pane.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { right: r.left + el.clientWidth - parseFloat(getComputedStyle(el).paddingRight) };
+    })]);
+    expect(t!.x + t!.width, `table inside the pane at ${width}`).toBeLessThanOrEqual(p.right + 0.5);
+  }
+});
+
+// Note links and card links sat in 16-18px lines: under the 24px target floor when they stand alone (a list item, a cell).
+test("Manual: every link in a note is a 24px target", async ({ page }) => {
+  await open(page, `/manual/${AUDIT_NOTE_IDS.links}`, 1280);
+  const note = page.locator("section[aria-label='Note'] article");
+  await note.getByRole("button", { name: "the card" }).waitFor();
+  const small = await note.evaluate((el) => [...el.querySelectorAll("a, button")]
+    .map((c) => ({ name: c.textContent, h: c.getBoundingClientRect().height }))
+    .filter((c) => c.h < 24));
+  expect(small).toEqual([]);
+});
+
+// The outline's scroll-spy and lime bar, in a real layout: the current entry follows the reading, the bar sits beside
+// it, and a pick scrolls the note in place without a history entry (Esc leaves the Manual in one press).
+test("Manual: On this page follows the scroll, and a pick adds no history entry", async ({ page }) => {
+  await open(page, `/manual/${AUDIT_NOTE_IDS.long}`, 1440);
+  const aside = page.locator("aside[aria-label='Outline']");
+  const current = aside.locator("[aria-current=location]");
+  await expect(current).toHaveText("Core concept");
+  const pane = page.getByRole("region", { name: "Note" });
+  await pane.evaluate((el) => (el.scrollTop = el.querySelector("#kerberos")!.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop));
+  await expect(current).toHaveText("Kerberos");
+  await pane.evaluate((el) => (el.scrollTop = el.scrollHeight));
+  await expect(current).toHaveText("Related");
+  // The aside followed the outline to its end; its label stays on top, and the current entry clear of it.
+  await expect.poll(() => aside.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  const [box, head, row] = await Promise.all([
+    aside.boundingBox(), aside.getByRole("heading", { name: "On this page" }).boundingBox(), current.boundingBox(),
+  ]);
+  expect(Math.abs(head!.y - box!.y)).toBeLessThan(1);
+  expect(row!.y).toBeGreaterThanOrEqual(head!.y + head!.height - 1);
+  const bar = aside.getByTestId("section-indicator");
+  await expect(async () => {
+    const [b, c] = await Promise.all([bar.boundingBox(), current.boundingBox()]);
+    expect(Math.abs(b!.y - c!.y)).toBeLessThan(1);
+    expect(Math.abs(b!.height - c!.height)).toBeLessThan(1);
+  }).toPass();
+  const before = await page.evaluate(() => history.length);
+  await aside.getByRole("button", { name: "Is this normal?", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Is this normal?" })).toBeFocused();
+  await expect(current).toHaveText("Is this normal?");
+  await expect.poll(() => pane.evaluate((el) => {
+    const h = el.querySelector("#is-this-normal")!;
+    return Math.round(h.getBoundingClientRect().top - el.getBoundingClientRect().top);
+  })).toBeLessThan(40);
+  expect(await page.evaluate(() => history.length)).toBe(before);
+  expect(new URL(page.url()).hash).toBe("");
+  await page.screenshot({ path: "audit-output/shots/manual-outline-pick@1440.png" });
 });

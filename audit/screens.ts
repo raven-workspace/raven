@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { AUDIT_IDS } from "../src/audit/fixtures";
+import { AUDIT_IDS, AUDIT_NOTE_IDS } from "../src/audit/fixtures";
 import { AUDIT_PNGS } from "../src/audit/images";
 
 export interface Screen {
@@ -44,6 +44,8 @@ const pickUploaded = (root: string) => async (page: Page) => {
   } else await page.locator(root).getByRole("button", { name: "Uploaded file" }).click();
 };
 const openPayloads = async (page: Page) => { await focusBody(page); await page.keyboard.press("p"); };
+const MANUAL_LONG = `/manual/${AUDIT_NOTE_IDS.long}`;
+const NOTE_PANE = "section[aria-label='Note']";
 
 export const SCREENS: Screen[] = [
   { id: "dashboard", path: "/", ready: "role=heading[name='Engagements']" },
@@ -352,4 +354,28 @@ export const SCREENS: Screen[] = [
       await page.locator(DRAWER).getByRole("listbox", { name: "Fits" }).getByRole("option", { name: /Meterpreter \(staged\)/ }).first().click();
     },
   },
+  // The Manual: a long note (five tables, one five columns wide with long cells) with no engagement in view.
+  { id: "manual-long", path: MANUAL_LONG, ready: `${NOTE_PANE} article[aria-label='Zz Status Codes'] table` },
+  {
+    // Opened from ⌘K: the address the palette builds, with the match bar and the current match in Table 1.
+    id: "manual-search", path: `${MANUAL_LONG}?q=access%20denied#table-1`, ready: `${NOTE_PANE} mark[data-current]`,
+  },
+  {
+    // A tool page reached with M from a host: the host chip shows the host and the commands are filled for it.
+    id: "manual-tool", path: H, ready: `${NOTE_PANE} article[aria-label='Zz Scanner']`,
+    setup: async (page) => {
+      await page.getByRole("tablist").first().waitFor();
+      await focusBody(page);
+      await page.keyboard.press("m");
+      await page.getByRole("navigation", { name: "Manual notes" }).getByRole("button", { name: "Zz Scanner" }).click();
+    },
+  },
+  {
+    // A card link in a note opens the Arsenal drawer over the Manual.
+    id: "manual-card-drawer", path: `/manual/${AUDIT_NOTE_IDS.links}`, ready: "aside[aria-label='Arsenal'] >> text=Kerberos Enumeration",
+    setup: async (page) => {
+      await page.locator(`${NOTE_PANE} button`, { hasText: "Kerberos-Enumeration" }).first().click();
+    },
+  },
+  { id: "manual-empty", path: "/manual?audit=empty", ready: "text=Import your Field Manual to fill the Manual" },
 ];

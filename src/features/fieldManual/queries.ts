@@ -5,6 +5,8 @@ import { applyOverlay, mergeImport, normalizeSnapshot, type FieldManualSnapshot 
 import { parseCard, type ParsedCard } from "../../engines/fieldManual/parseCard";
 import { parsePlaybook, type PlaybookItem } from "../../engines/fieldManual/parsePlaybook";
 import { parseToolkit, type ToolkitEntry } from "../../engines/fieldManual/parseToolkit";
+import { parseNote } from "../../engines/manual";
+import type { ManualNote } from "../../engines/manual";
 import { BUILTIN_LIBRARY } from "../../engines/library/data";
 import { setImported } from "../../engines/library/store";
 import { api } from "../../lib/api";
@@ -31,12 +33,14 @@ export function applySnapshot(s: FieldManualSnapshot): void {
 
 /**
  * Scan, parse, merge, save, then (only once everything succeeded) update the library. A failure at any step
- * leaves the library and the stored snapshot as they were. A scan that yields no cards is a failure.
+ * leaves the library and the stored snapshot as they were. A scan that yields no cards is a failure; one that yields
+ * no notes keeps the previous import's notes (with a warning in the report).
  */
 export async function runImport(path: string, previous: FieldManualSnapshot | null): Promise<FieldManualSnapshot> {
   const files = await api.fieldManualScan(path);
   const cards: ParsedCard[] = [];
   const playbook: PlaybookItem[] = [];
+  const notes: ManualNote[] = [];
   let toolkit: ToolkitEntry[] = [];
   for (const f of files) {
     if (f.relPath === "00-Home/Toolkit.md") toolkit = parseToolkit(f.text);
@@ -44,6 +48,9 @@ export async function runImport(path: string, previous: FieldManualSnapshot | nu
     else if (f.relPath.startsWith("02-Cards/")) {
       const c = parseCard(f.relPath, f.text);
       if (c && c.meta.id) cards.push(c);
+    } else {
+      const n = parseNote(f.relPath, f.text);
+      if (n) notes.push(n);
     }
   }
   // A wrong folder or an iCloud-evicted vault parses to nothing: never save that over a good import.
@@ -53,6 +60,11 @@ export async function runImport(path: string, previous: FieldManualSnapshot | nu
   const { commands, overlay, added, report } = mergeImport(BUILTIN_LIBRARY, cards, previous ?? undefined);
   const goals = [...HOST_GOALS, ...ENGAGEMENT_SETUP, ...LATERAL_MOVEMENT_GOALS, ...AD_PLAYBOOKS.flatMap((p) => p.goals)];
   report.drift = computeDrift(goals, playbook, commands, cards, toolkit);
+  // Cards came through but no note did (an iCloud vault half downloaded): keep the last import's notes, and say so.
+  const kept = notes.length === 0 && (previous?.notes?.length ?? 0) > 0 ? previous!.notes! : null;
+  if (kept) {
+    report.warnings = [`No notes found; kept the last import's ${kept.length} notes. Check iCloud has downloaded the vault.`];
+  }
   const snapshot: FieldManualSnapshot = {
     importedAt: Date.now(),
     cards: cards.map((c) => c.meta),
@@ -60,6 +72,7 @@ export async function runImport(path: string, previous: FieldManualSnapshot | nu
     added,
     playbook,
     toolkit,
+    notes: kept ?? notes,
     report,
   };
   await api.fieldManualSave(snapshot);
