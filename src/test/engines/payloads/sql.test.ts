@@ -185,6 +185,13 @@ describe("buildSql", () => {
     const tokens = (b: { parts: { token: string }[] }) => b.parts.map((p) => p.token);
     const explain = (b: { parts: { token: string; explain: string }[] }, t: string) => b.parts.find((p) => p.token === t)?.explain ?? "";
 
+    it("MSSQL listings explain +, and the CONCAT remark is MySQL's", () => {
+      const b = buildSql("tables", "mssql", "form-field", V);
+      expect(b.text).toMatch(/\w\+' \| '/);
+      expect(b.parts.find((p) => p.token === "+")?.explain).toBe("MSSQL joins strings with +.");
+      expect(explain(buildSql("rows", "mysql", "form-field", V), "CONCAT")).toMatch(/MySQL.*there \+ would do arithmetic/);
+    });
+
     it("CONCAT( does not match inside GROUP_CONCAT(", () => {
       const one = buildSql("rows", "mysql", "form-field", { ...V, column: "username" });
       expect(one.text).toBe("' AND 1=2 UNION SELECT NULL,GROUP_CONCAT(username SEPARATOR ' | '),NULL FROM users-- -");
