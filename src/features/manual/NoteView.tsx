@@ -44,6 +44,8 @@ export interface Ctx {
   section: string;
   /** Set in a row of a lookup table: the log title of its inline commands ("Table name: key"). */
   rowTitle?: string;
+  /** Set in a table's key cell: its code is plain code, never an inline command. */
+  plainCode?: boolean;
 }
 
 /** Plain text with the search's matches marked. */
@@ -72,7 +74,7 @@ export function InlineView({ parts, ctx }: { parts: Inline[]; ctx: Ctx }): React
 function InlinePart({ p, ctx }: { p: Exclude<Inline, { text: string }>; ctx: Ctx }): ReactNode {
   if ("code" in p) {
     // A short single token (a status code, a flag, a path) never breaks inside: not at a backslash or dot either.
-    if (isInlineCommand(p.code)) return <InlineCommand command={inlineOf(p.code, ctx)} base={ctx.base} highlight={ctx.re} />;
+    if (!ctx.plainCode && isInlineCommand(p.code)) return <InlineCommand command={inlineOf(p.code, ctx)} base={ctx.base} highlight={ctx.re} />;
     const token = p.code.length <= TOKEN_MAX && !/\s/.test(p.code);
     return <code className={cx("font-mono text-code text-fg [overflow-wrap:break-word]", token && "whitespace-nowrap")}>{marked(p.code, ctx.re)}</code>;
   }
@@ -203,9 +205,10 @@ function BlockView({ block, n, ctx: shared, base, section, tableName, tableAncho
       return (
         <NoteTable
           head={block.head} rows={block.rows} anchor={tableAnchor}
-          cell={(parts, row) => {
+          cell={(parts, row, isKey) => {
             const key = tableName && row !== undefined ? plain(block.rows[row]?.[0] ?? []).trim() : null;
-            return <InlineView parts={parts} ctx={key === null ? ctx : { ...ctx, rowTitle: `${tableName}: ${key}` }} />;
+            const rowCtx = key === null ? ctx : { ...ctx, rowTitle: `${tableName}: ${key}` };
+            return <InlineView parts={parts} ctx={isKey ? { ...rowCtx, plainCode: true } : rowCtx} />;
           }}
         />
       );

@@ -706,6 +706,15 @@ const TOOL_NOTE = [
   "- Read [[Zz-Status-Codes]] when a logon fails.",
   "- The [[Port-Scanning]] card has the full scan sequence.",
   "",
+  "## Quick checks",
+  "",
+  "Plain prose line with nothing in it to run.",
+  "",
+  "Prose line with `zzscan --list {TARGET_IP}` in it.",
+  "",
+  "- Plain list item with nothing in it to run.",
+  "- List item with `zzscan --list {TARGET_IP}` in it.",
+  "",
 ].join("\n");
 
 const LINKS_NOTE = [

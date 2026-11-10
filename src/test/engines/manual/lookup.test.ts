@@ -27,6 +27,7 @@ describe("isInlineCommand", () => {
     expect(isInlineCommand("nxc smb {DC_IP} --pass-pol")).toBe(true);
     expect(isInlineCommand("ip -br addr")).toBe(true);
     expect(isInlineCommand("--local-auth")).toBe(false);
+    expect(isInlineCommand("-m MODE")).toBe(false);
     expect(isInlineCommand("STATUS_LOGON_FAILURE")).toBe(false);
   });
 });

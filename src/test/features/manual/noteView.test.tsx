@@ -386,6 +386,14 @@ describe("NoteView tables", () => {
     for (const c of [desc1, desc2, cells[5], cells[7]]) expect(c).not.toHaveClass("whitespace-nowrap");
   });
 
+  it("code in a key cell is plain code, never an inline command", () => {
+    widths(500, 600);
+    const { container } = mount(FLAGS);
+    const key = cellsOf(container)[0]!;
+    expect(key.querySelector("code")).toHaveTextContent("-m MODE");
+    expect(key.querySelector('button[aria-label^="Copy command"]')).toBeNull();
+  });
+
   it("a code cell longer than the key limit still wraps", () => {
     widths(500, 600);
     const { container } = mount(FLAGS);

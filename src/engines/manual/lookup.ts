@@ -28,8 +28,8 @@ export const shortTitle = (title: string): string => title.replace(/\s+[—–-]
 
 const PLACEHOLDER = /\{[A-Za-z][A-Za-z0-9_]*\}/;
 
-/** A code span worth offering as a command: it has a `{PLACEHOLDER}` or a space (a bare flag or error code does not). */
-export const isInlineCommand = (code: string): boolean => PLACEHOLDER.test(code) || /\s/.test(code);
+/** A code span worth offering as a command: it has a `{PLACEHOLDER}` or a space. A bare flag or error code does not, and neither does anything starting with "-" (`-m MODE` is a flag with its value, not a command). */
+export const isInlineCommand = (code: string): boolean => !code.startsWith("-") && (PLACEHOLDER.test(code) || /\s/.test(code));
 
 export const ACTION_HEADER = /^(do( this)?|what to try next|fix)$/i;
 export const MEANS_HEADER = /^(means( for an attacker)?|what it means)$/i;

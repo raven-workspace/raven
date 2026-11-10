@@ -19,7 +19,7 @@ const TD =
  * grid-laid-out table can lose its table semantics in WebKit; stacked, each cell starts with its column name as real
  * text, so it is read as "Code 0xC0000022".
  */
-export function NoteTable({ head, rows, anchor, cell }: { head: Inline[][]; rows: Inline[][][]; anchor?: string; cell: (parts: Inline[], row?: number) => ReactNode }) {
+export function NoteTable({ head, rows, anchor, cell }: { head: Inline[][]; rows: Inline[][][]; anchor?: string; cell: (parts: Inline[], row?: number, isKey?: boolean) => ReactNode }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   useLayoutEffect(() => {
@@ -82,7 +82,7 @@ export function NoteTable({ head, rows, anchor, cell }: { head: Inline[][]; rows
                     {/* Its column name: shown (and read) only when stacked, as the table header is then hidden. A key cell is the row's heading line instead: the name stays for screen readers only. */}
                     <span data-column-label="" className={key ? "hidden group-data-stacked/nt:block group-data-stacked/nt:sr-only" : "hidden text-muted group-data-stacked/nt:block"}>{labels[j] ?? ""}</span>
                     {/* One grid item when stacked: text, code and links stay in one flow. */}
-                    <span className={key ? "min-w-0 group-data-stacked/nt:col-span-2 group-data-stacked/nt:text-body group-data-stacked/nt:font-semibold group-data-stacked/nt:text-fg" : "min-w-0"}>{cell(c, i)}</span>
+                    <span className={key ? "min-w-0 group-data-stacked/nt:col-span-2 group-data-stacked/nt:text-body group-data-stacked/nt:font-semibold group-data-stacked/nt:text-fg" : "min-w-0"}>{cell(c, i, key)}</span>
                   </td>
                 );
               })}

@@ -974,6 +974,7 @@ test("payloads: the Other… port field opens under the Port chip and keeps the 
 // The Manual's five-column table: as a table its auto layout squeezed the code columns until every status code broke
 // mid-token. Now a table that can't fit its codes stacks each row as name/value lines; one that can stays a table.
 test("Manual: a wide table stacks when its codes don't fit, stays a table when they do, and no code breaks", async ({ page }) => {
+  // Not monotonic: the outline column appears at 1100px, so the pane is wider at 1024 (no outline) than at 1280 (with it).
   for (const [width, stacked] of [[900, true], [1024, false], [1280, true], [1440, false]] as const) {
     await open(page, `/manual/${AUDIT_NOTE_IDS.long}`, width);
     const pane = page.getByRole("region", { name: "Note" });
@@ -1006,8 +1007,7 @@ test("Manual: short key cells in a flags table stay on one line", async ({ page 
     await table.scrollIntoViewIfNeeded();
     expect(await table.getAttribute("data-stacked"), `a table at ${width}`).toBeNull();
     const keys = await table.evaluate((el) => [...el.querySelectorAll("tbody tr")].map((tr) => {
-      // A key with a space (`-m MODE`) is an inline command: a button, not a code span.
-      const code = tr.querySelector("td code, td button")!;
+      const code = tr.querySelector("td code")!;
       const lineHeight = parseFloat(getComputedStyle(code).lineHeight);
       const tops = new Set([...code.getClientRects()].map((r) => Math.round(r.top)));
       return { text: code.textContent, lines: tops.size, oneLine: code.getBoundingClientRect().height <= lineHeight * 1.5 };
@@ -1073,4 +1073,18 @@ test("Manual: On this page follows the scroll, and a pick adds no history entry"
   expect(await page.evaluate(() => history.length)).toBe(before);
   expect(new URL(page.url()).hash).toBe("");
   await page.screenshot({ path: "audit-output/shots/manual-outline-pick@1440.png" });
+});
+
+// An inline command is a 24px target, but must not make its line taller than a line without one (text-read is 26px).
+test("Manual: a prose line or list item holding an inline command is as tall as one without", async ({ page }) => {
+  await open(page, `/manual/${AUDIT_NOTE_IDS.tool}`, 1280);
+  const article = page.locator("section[aria-label='Note'] article[aria-label='Zz Scanner']");
+  await article.getByRole("button", { name: /^Copy command: zzscan --list/ }).first().waitFor();
+  const h = await article.evaluate((el) => {
+    const pick = (sel: string, withCmd: boolean) => [...el.querySelectorAll(sel)].find((n) => !!n.querySelector('button[aria-label^="Copy command"]') === withCmd && /(Plain|with nothing|in it)/.test(n.textContent ?? ""))!.getBoundingClientRect().height;
+    return { p: [pick("p", false), pick("p", true)], li: [pick("li", false), pick("li", true)] };
+  });
+  console.log("line heights", JSON.stringify(h));
+  expect(h.p[1], "paragraph with an inline command").toBe(h.p[0]);
+  expect(h.li[1], "list item with an inline command").toBe(h.li[0]);
 });
