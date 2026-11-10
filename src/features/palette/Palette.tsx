@@ -287,10 +287,11 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
         )}
       </header>
       <div className="grid max-h-[44vh] overflow-y-auto">
-        {results.length === 0 && <p className="m-0 px-1 py-2 text-meta text-muted">Nothing matches</p>}
-        {/* The Manual was searched too: said only when the whole list is empty, never under other results. */}
-        {results.length === 0 && notes.length > 0 && query.trim().length > 0 && (
-          <p className="m-0 px-1 pb-2 text-meta text-muted">No match in the Manual</p>
+        {/* One line for an empty list; with notes imported it says the Manual was searched too. */}
+        {results.length === 0 && (
+          <p className="m-0 px-1 py-2 text-meta text-muted">
+            {notes.length > 0 && query.trim().length > 0 ? "Nothing matches, the Manual included" : "Nothing matches"}
+          </p>
         )}
         <ResultList
           id="palette-results" label="Results" groups={rowGroups} selected={index}

@@ -145,7 +145,7 @@ describe("⌘K finds Manual text", () => {
     expect(copyPlain).not.toHaveBeenCalled();
   });
 
-  it("\"No match in the Manual\" shows only when nothing at all matches", async () => {
+  it("an empty list is one line that says the Manual was searched too", async () => {
     const user = userEvent.setup();
     mount();
     await ready();
@@ -153,10 +153,12 @@ describe("⌘K finds Manual text", () => {
     const search = await screen.findByRole("combobox", { name: "Search" });
     await user.type(search, "zzprobe");
     expect(await screen.findByRole("option", { name: /Zz access denied probe/ })).toBeInTheDocument();
-    expect(screen.queryByText("No match in the Manual")).toBeNull();
+    expect(screen.queryByText(/^Nothing matches/)).toBeNull();
     await user.clear(search);
     await user.type(search, "zz-nowhere-at-all");
-    expect(await screen.findByText("No match in the Manual")).toBeInTheDocument();
+    expect(await screen.findByText("Nothing matches, the Manual included")).toBeInTheDocument();
+    expect(screen.queryByText("Nothing matches")).toBeNull();
+    expect(screen.queryByText("No match in the Manual")).toBeNull();
     expect(screen.queryByRole("group", { name: "Manual" })).toBeNull();
   });
 
