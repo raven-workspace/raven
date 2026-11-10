@@ -18,6 +18,7 @@ import { logCommand } from "../../../features/capture/logCommand";
 import { api } from "../../../lib/api";
 import { makeQueryClient } from "../../../lib/queryClient";
 import type { Engagement } from "../../../types/engagement";
+import { RavenError } from "../../../types/errors";
 import type { Host } from "../../../types/host";
 
 vi.mock("../../../lib/api");
@@ -333,6 +334,15 @@ describe("Manual: empty states", () => {
     expect(screen.getByRole("button", { name: /settings/ })).toBeInTheDocument();
   });
 
+  it("a failed load says so and offers Retry, rather than asking for an import", async () => {
+    m.fieldManualLoad.mockRejectedValueOnce(new RavenError("io", "disk read failed"));
+    mount(["/manual"]);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't load the Manual");
+    expect(screen.queryByText(/Import your Field Manual/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await openNote("Bb Basics");
+  });
+
   it("an import with no notes shows the empty state", async () => {
     m.fieldManualLoad.mockResolvedValue(snapshot([]));
     mount(["/manual"]);
@@ -380,6 +390,21 @@ describe("Manual: the host commands fill for", () => {
     await pre("zzscan -t 198.51.100.21");
     press("˙", { altKey: true, code: "KeyH" });
     expect(await screen.findByRole("option", { name: /zzdb02/ })).toBeInTheDocument();
+  });
+
+  it("⌥H with the Arsenal drawer open over the Manual opens the drawer's host picker, not the Manual's", async () => {
+    withEngagement();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
+    mount([`/manual/${TOOL.id}`]);
+    await pre("zzscan -t 198.51.100.21");
+    act(() => useArsenalStore.setState({ open: true }));
+    const drawer = await screen.findByRole("complementary", { name: "Arsenal" });
+    await within(drawer).findByRole("button", { name: /^Fill for host/ });
+    press("˙", { altKey: true, code: "KeyH" });
+    expect(await within(drawer).findByRole("listbox", { name: "Fill for host" })).toBeInTheDocument();
+    expect(screen.getAllByRole("listbox", { name: "Fill for host" })).toHaveLength(1);
+    const manualChip = within(screen.getByRole("main", { name: "Manual" })).getByRole("button", { name: /^Fill for host/ });
+    expect(manualChip).not.toHaveAttribute("aria-expanded", "true");
   });
 
   it("no engagement: says so, and commands keep their placeholders", async () => {

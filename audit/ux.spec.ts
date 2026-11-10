@@ -14,7 +14,8 @@ import { CHECK_IDS, gateFailures } from "./types";
 const WIDTH = 1280;
 const SHOTS = fileURLToPath(new URL("../audit-output/shots/", import.meta.url));
 const SCENARIOS: AuditState[] = ["empty", "loading", "error"];
-const STATE_SCREENS = SCREENS.filter((s) => s.path.startsWith("/e/") || s.path.startsWith("/arsenal"));
+// A screen that already names its scenario (`?audit=`) is its own state run.
+const STATE_SCREENS = SCREENS.filter((s) => /^\/(e|arsenal|manual)\b/.test(s.path) && !s.path.includes("audit="));
 
 test.beforeAll(async () => { await mkdir(SHOTS, { recursive: true }); });
 
@@ -45,6 +46,8 @@ const NEEDS_DATA = new Set([
   "payloads-drawer-misfits",
   // The rail tip is a host's tooltip; with no hosts there is nothing to focus.
   "sidebar-rail-tip",
+  // No import under `empty`: the Manual shows its empty state, with no note or link to open.
+  "manual-tool", "manual-card-drawer",
 ]);
 
 for (const screen of STATE_SCREENS) {
@@ -58,7 +61,9 @@ for (const screen of STATE_SCREENS) {
       page.setDefaultTimeout(2000);
       await page.setViewportSize({ width: WIDTH, height: 900 });
       await page.clock.install({ time: AUDIT_NOW });
-      await page.goto(`${screen.path}${screen.path.includes("?") ? "&" : "?"}audit=${scenario}`);
+      // The scenario goes in the query, before any #anchor.
+      const [where, hash = ""] = screen.path.split("#");
+      await page.goto(`${where}${where.includes("?") ? "&" : "?"}audit=${scenario}${hash ? `#${hash}` : ""}`);
       await page.locator("body").waitFor();
       const setup = screen.setup?.(page);
       if (scenario === "empty") await setup;

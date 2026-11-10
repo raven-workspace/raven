@@ -3,7 +3,8 @@ import { useLocation, useNavigate, useParams, useSearchParams } from "react-rout
 import type { ManualNote } from "../../engines/manual";
 import { getCards, useLibraryVersion } from "../../engines/library/store";
 import { isFreeKey, isTypingTarget, useKeydown } from "../../lib/keys";
-import { Button, Disclosure, EmptyState, HintLine, labelClass, type Hint } from "../../ui";
+import { RavenError } from "../../types/errors";
+import { Button, Disclosure, EmptyState, ErrorState, HintLine, labelClass, type Hint } from "../../ui";
 import { HostChip, isHostPickKey, type HostChipHandle } from "../arsenal/HostChip";
 import { useFillScope, useLastEngagementStore } from "../arsenal/useFillScope";
 import { useFillBase } from "../palette/fillData";
@@ -42,7 +43,7 @@ const HINTS_SEARCH: Hint[] = [
   { keys: "Esc", label: "clear search", priority: 1 },
 ];
 
-const EMPTY_TITLE: Record<Exclude<ManualStatus, "loading" | "ready">, string> = {
+const EMPTY_TITLE: Record<Exclude<ManualStatus, "loading" | "ready" | "error">, string> = {
   "never-imported": "Import your Field Manual to fill the Manual",
   "old-import": "Your last import is from before the Manual: import again to bring the notes in",
   empty: "Your last import found no Tools, Foundations or Reporting notes",
@@ -360,7 +361,7 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
  * the outline stay put; only the note scrolls. Opens at the remembered place; Esc leaves to where the owner came from.
  */
 export function ManualPage() {
-  const { notes, status } = useManualNotes();
+  const { notes, status, error, retry } = useManualNotes();
   const { noteId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -383,7 +384,18 @@ export function ManualPage() {
 
   let body = null;
   if (status === "ready") body = <Reader notes={notes} noteId={noteId} />;
-  else if (status !== "loading") body = <ManualEmpty status={status} />;
+  else if (status === "error") {
+    body = (
+      <div className="grid content-start px-6 py-6">
+        <ErrorState
+          title="Couldn't load the Manual"
+          hint="Retry. If it keeps failing, import the Field Manual again from Settings."
+          onRetry={retry}
+          detail={RavenError.from(error).message}
+        />
+      </div>
+    );
+  } else if (status !== "loading") body = <ManualEmpty status={status} />;
   return (
     <main aria-label="Manual" data-hint-surface="" className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto]">
       {body ?? <div />}

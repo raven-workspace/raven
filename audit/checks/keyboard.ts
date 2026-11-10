@@ -1,10 +1,12 @@
 import type { Page } from "@playwright/test";
-import { AUDIT_IDS } from "../../src/audit/fixtures";
+import { AUDIT_IDS, AUDIT_NOTE_IDS } from "../../src/audit/fixtures";
 import type { RawIssue } from "../types";
 
 const E = `/e/${AUDIT_IDS.labEngagement}`;
 const H = `${E}/h/${AUDIT_IDS.webHost}`;
 const IIS = `/e/${AUDIT_IDS.payloadsEngagement}/h/${AUDIT_IDS.iisHost}`;
+const MANUAL_LINKS = `/manual/${AUDIT_NOTE_IDS.links}`;
+const NOTE = (title: string) => `section[aria-label='Note'] article[aria-label='${title}']`;
 
 export interface ShortcutCase {
   id: string;
@@ -312,6 +314,26 @@ function payloadChip(code: string, name: string) {
   };
 }
 
+/** `/` on the Manual focuses the rail's filter. */
+async function manualFilter(page: Page): Promise<RawIssue[]> {
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press("/");
+  const ok = await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Filter the Manual", null, { timeout: 1000 })
+    .then(() => true, () => false);
+  return ok ? [] : [{ check: "shortcut", selector: "input[aria-label='Filter the Manual']", detail: "/ did not focus the Manual's filter" }];
+}
+
+/** ⌘[ on the Manual returns to the note a link left. */
+async function manualBack(page: Page): Promise<RawIssue[]> {
+  await page.locator(NOTE("Zz Protocol")).getByRole("link", { name: "Zz-Status-Codes", exact: true }).first().click();
+  const moved = await page.locator(NOTE("Zz Status Codes")).waitFor({ timeout: 1000 }).then(() => true, () => false);
+  if (!moved) return [{ check: "shortcut", selector: "a[href*='zz-status-codes']", detail: "the note link did not open the linked note" }];
+  await page.locator("section[aria-label='Note']").focus();
+  await page.keyboard.press("Meta+BracketLeft");
+  const back = await page.locator(NOTE("Zz Protocol")).waitFor({ timeout: 1000 }).then(() => true, () => false);
+  return back ? [] : [{ check: "shortcut", selector: "section[aria-label='Note']", detail: "⌘[ did not return to the previous note" }];
+}
+
 export const SHORTCUTS: ShortcutCase[] = [
   { id: "palette", path: H, keys: ["Meta+K"], opens: 'role=dialog[name="Search"]', focusInside: true, closesWithEscape: true },
   { id: "palette-hostpick", path: H, keys: ["Meta+K", "Alt+H"], opens: "role=listbox[name='Fill for host']", focusInside: true, closesWithEscape: true },
@@ -330,6 +352,10 @@ export const SHORTCUTS: ShortcutCase[] = [
   { id: "payloads-callbacks", path: IIS, keys: ["p", "Alt+B"], opens: "the Callbacks list", focusInside: false, closesWithEscape: false, ready: "role=tablist >> visible=true", custom: payloadChip("Alt+KeyB", "Callbacks") },
   { id: "payloads-filter", path: IIS, keys: ["p", "Alt+F"], opens: "the Filter list", focusInside: false, closesWithEscape: false, ready: "role=tablist >> visible=true", custom: payloadChip("Alt+KeyF", "Filter") },
   { id: "payloads-tools", path: IIS, keys: ["p", "Alt+T"], opens: "the Tools list", focusInside: false, closesWithEscape: false, ready: "role=tablist >> visible=true", custom: payloadChip("Alt+KeyT", "Tools") },
+  // M opens the Manual from a host; Esc leaves it back to the host.
+  { id: "manual", path: H, keys: ["m"], opens: "main[aria-label='Manual']", focusInside: false, closesWithEscape: true },
+  { id: "manual-filter", path: MANUAL_LINKS, keys: ["/"], opens: "the Manual's filter", focusInside: false, closesWithEscape: false, ready: NOTE("Zz Protocol"), custom: manualFilter },
+  { id: "manual-back", path: MANUAL_LINKS, keys: ["follow a note link", "Meta+["], opens: "the previous note", focusInside: false, closesWithEscape: false, ready: NOTE("Zz Protocol"), custom: manualBack },
   {
     id: "board-move", path: E, keys: ["focus first board card", "]"], opens: "the moved board card",
     focusInside: false, closesWithEscape: false, custom: boardMove,

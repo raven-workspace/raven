@@ -1,5 +1,9 @@
 // In-memory stand-in for src/lib/api.ts, swapped in by the audit-mode Vite plugin. Reads return the fixtures,
 // writes mutate a private copy and return the resulting record. Reloading the page restores the fixtures.
+import type { CommandOverlay, FieldManualSnapshot } from "../engines/fieldManual/merge";
+import { BUILTIN_LIBRARY } from "../engines/library/data";
+import { FIELD_MANUAL_CARDS } from "../engines/library/data/fieldManual";
+import { parseNote } from "../engines/manual";
 import type { Api } from "../lib/api";
 import type { ChecklistItem } from "../types/checklist";
 import type { TriedPair } from "../types/credentials";
@@ -8,7 +12,7 @@ import type { NvdRecord } from "../types/findings";
 import { RavenError } from "../types/errors";
 import type { ServiceVerdict } from "../types/hostFacts";
 import type { Extraction, Progress } from "../types/log";
-import { AUDIT_NOW, FIXTURES, FIXTURE_PROGRESS, type AuditFixtures } from "./fixtures";
+import { AUDIT_NOTE_SOURCES, AUDIT_NOW, FIXTURES, FIXTURE_PROGRESS, type AuditFixtures } from "./fixtures";
 
 export type { Api };
 
@@ -26,25 +30,24 @@ resetAuditState();
 
 const nid = (prefix: string) => `${prefix}-new-${++seq}`;
 const now = () => AUDIT_NOW;
-import type { FieldManualSnapshot } from "../engines/fieldManual/merge";
-import { parseNote } from "../engines/manual";
 
-const AUDIT_NOTE_SOURCES: [string, string][] = [
-  ["03-Tools/Zz-Scanner.md", "---\nid: tool-zz-scanner\ntitle: Zz Scanner\ntype: tool\n---\n## Overview\nA synthetic scanner.\n\n**Table 1 \u2014 Flags**\n\n| Flag | Meaning |\n|---|---|\n| -a | all |\n\n### Tips\n"],
-  ["04-Foundations/Zz-Protocol.md", "---\nid: fnd-zz-protocol\ntitle: Zz Protocol\ntype: foundation\n---\n## How it works\nSynthetic text.\n\n## Failure modes\n"],
-  ["05-Reporting/Zz-Finding-Template.md", "---\nid: rep-zz-finding\ntitle: Zz Finding Template\ntype: reporting\n---\n## Structure\nSynthetic text.\n"],
-];
-
-/** A synthetic Field Manual snapshot: no cards, three invented Manual notes. */
+/**
+ * What a real import stores: the built-in cards, every field-manual command overlaid as the vault has it (here unchanged,
+ * so the library reads the same), the synthetic Manual notes, and a plausible report of a re-import.
+ */
 const AUDIT_FIELD_MANUAL: FieldManualSnapshot = {
-  importedAt: AUDIT_NOW,
-  cards: [],
-  overlay: {},
+  importedAt: AUDIT_NOW - 26 * 60 * 60_000,
+  cards: FIELD_MANUAL_CARDS,
+  overlay: Object.fromEntries(
+    BUILTIN_LIBRARY.filter((c) => c.source === "field-manual").map((c): [string, CommandOverlay] => [
+      c.id, c.why === undefined ? { title: c.title, template: c.template } : { title: c.title, template: c.template, why: c.why },
+    ]),
+  ),
   added: [],
   playbook: [],
   toolkit: [],
   notes: AUDIT_NOTE_SOURCES.flatMap(([p, t]) => parseNote(p, t) ?? []),
-  report: { cardsAdded: 0, cardsChanged: 0, cardsRemoved: 0, commandsAdded: 0, commandsChanged: 0, commandsRemovedKept: [], classified: [] },
+  report: { cardsAdded: 0, cardsChanged: 2, cardsRemoved: 0, commandsAdded: 0, commandsChanged: 5, commandsRemovedKept: [], classified: [] },
 };
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -549,6 +552,8 @@ function forScenario(name: string, fn: (...a: never[]) => Promise<unknown>): (..
     if (scenario === "error") return Promise.reject(new RavenError("io", "Audit: simulated failure"));
     if (scenario === "empty") {
       if (LISTS.test(name)) return Promise.resolve([]);
+      // No import yet: the Manual shows its empty state.
+      if (name === "fieldManualLoad") return Promise.resolve(null);
       if (COUNT_MAPS.has(name)) return Promise.resolve({});
     }
     return fn(...a);

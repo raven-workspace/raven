@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { AUDIT_NOW } from "../src/audit/fixtures";
+import { AUDIT_NOTE_IDS, AUDIT_NOW } from "../src/audit/fixtures";
 import { SCREENS } from "./screens";
 
 // Hard regressions: unlike the audit checks, these fail the run.
@@ -969,4 +969,37 @@ test("payloads: the Other… port field opens under the Port chip and keeps the 
     await page.keyboard.press("Enter");
     await expect(aside.getByRole("button", { name: /^Port: 8443/ })).toBeVisible();
   }
+});
+
+// The Manual's five-column table: as a table its auto layout squeezed the code columns until every status code broke
+// mid-token. Now a table that can't fit its codes stacks each row as name/value lines; one that can stays a table.
+test("Manual: a wide table stacks when its codes don't fit, stays a table when they do, and no code breaks", async ({ page }) => {
+  for (const [width, stacked] of [[900, true], [1024, true], [1440, false]] as const) {
+    await open(page, `/manual/${AUDIT_NOTE_IDS.long}`, width);
+    const pane = page.getByRole("region", { name: "Note" });
+    const table = pane.locator("[id='table-1'] + div table");
+    await table.waitFor();
+    expect(await table.getAttribute("data-stacked"), `stacked at ${width}`).toBe(stacked ? "" : null);
+    const [t, p] = await Promise.all([table.boundingBox(), pane.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { right: r.left + el.clientWidth - parseFloat(getComputedStyle(el).paddingRight) };
+    })]);
+    expect(t!.x + t!.width, `table inside the pane at ${width}`).toBeLessThanOrEqual(p.right + 0.5);
+    const broken = await table.evaluate((el) => [...el.querySelectorAll("code")].filter((c) => {
+      const tops = new Set([...c.getClientRects()].map((r) => Math.round(r.top)));
+      return tops.size > 1;
+    }).map((c) => c.textContent));
+    expect(broken, `codes on one line at ${width}`).toEqual([]);
+  }
+});
+
+// Note links and card links sat in 16-18px lines: under the 24px target floor when they stand alone (a list item, a cell).
+test("Manual: every link in a note is a 24px target", async ({ page }) => {
+  await open(page, `/manual/${AUDIT_NOTE_IDS.links}`, 1280);
+  const note = page.locator("section[aria-label='Note'] article");
+  await note.getByRole("button", { name: "the card" }).waitFor();
+  const small = await note.evaluate((el) => [...el.querySelectorAll("a, button")]
+    .map((c) => ({ name: c.textContent, h: c.getBoundingClientRect().height }))
+    .filter((c) => c.h < 24));
+  expect(small).toEqual([]);
 });

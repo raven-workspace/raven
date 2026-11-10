@@ -7,8 +7,9 @@ import { useFieldManual } from "../fieldManual/queries";
  * - `never-imported`: no Field Manual import yet.
  * - `old-import`: the last import predates the Manual (its snapshot has no notes): import again.
  * - `empty`: imported with the Manual, but the vault has no Tools, Foundations or Reporting notes.
+ * - `error`: the stored snapshot could not be read (not the same as "never imported").
  */
-export type ManualStatus = "loading" | "ready" | "empty" | "never-imported" | "old-import";
+export type ManualStatus = "loading" | "ready" | "empty" | "never-imported" | "old-import" | "error";
 
 /** The rail's group order. */
 export const MANUAL_GROUPS: { folder: ManualFolder; label: string }[] = [
@@ -20,7 +21,7 @@ export const MANUAL_GROUPS: { folder: ManualFolder; label: string }[] = [
 const ORDER: Record<ManualFolder, number> = { foundations: 0, tools: 1, reporting: 2 };
 
 /** The Manual's notes from the last import, grouped Foundations, Tools, Reporting and alphabetical within each group. */
-export function useManualNotes(): { notes: ManualNote[]; status: ManualStatus } {
+export function useManualNotes(): { notes: ManualNote[]; status: ManualStatus; error: unknown; retry: () => void } {
   const q = useFieldManual();
   const raw = q.data?.notes;
   const notes = useMemo(
@@ -29,10 +30,11 @@ export function useManualNotes(): { notes: ManualNote[]; status: ManualStatus } 
   );
   let status: ManualStatus;
   if (q.isPending) status = "loading";
+  else if (q.isError) status = "error";
   else if (!q.data) status = "never-imported";
   else if (!raw) status = "old-import";
   else status = notes.length ? "ready" : "empty";
-  return { notes, status };
+  return { notes, status, error: q.error, retry: () => void q.refetch() };
 }
 
 /** Where the Manual opens when nothing better is known: the first Foundations note (else the first note). */

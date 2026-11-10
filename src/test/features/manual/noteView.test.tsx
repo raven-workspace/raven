@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CardMeta } from "../../../engines/library/store";
 import { parseNote, type ManualNote } from "../../../engines/manual";
 import { useArsenalStore } from "../../../features/arsenal/useArsenalStore";
@@ -218,10 +218,44 @@ describe("NoteView output blocks", () => {
   });
 });
 
+describe("NoteView tables", () => {
+  afterEach(() => vi.restoreAllMocks());
+  /** jsdom has no layout: the table is `table` px wide in a pane `room` px wide. */
+  function widths(table: number, room: number) {
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (this: HTMLElement) {
+      return this.tagName === "TABLE" ? table : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+      return this.tagName === "DIV" ? room : 0;
+    });
+  }
+
+  it("a table wider than the pane stacks, each cell carrying its column name", () => {
+    widths(900, 600);
+    const { container } = mount();
+    const table = container.querySelector("table")!;
+    expect(table).toHaveAttribute("data-stacked");
+    expect([...table.querySelectorAll("tbody td")].map((td) => td.getAttribute("data-label"))).toEqual(["A", "B"]);
+  });
+
+  it("a table that fits stays a table", () => {
+    widths(500, 600);
+    const { container } = mount();
+    expect(container.querySelector("table")).not.toHaveAttribute("data-stacked");
+  });
+
+  it("a short inline code token never wraps inside; a long or spaced one may", () => {
+    const note = parseNote("04-Foundations/Zz-Codes.md", "# Zz Codes\nSee `\\\\zzfs01.example.test\\pipe\\zz` and `zz --flag value`.\n")!;
+    mount(note);
+    expect(screen.getByText("\\\\zzfs01.example.test\\pipe\\zz")).toHaveClass("whitespace-nowrap");
+    expect(screen.getByText("zz --flag value")).not.toHaveClass("whitespace-nowrap");
+  });
+});
+
 describe("safe Markdown", () => {
   it("the Manual never injects HTML", () => {
     const root = join(__dirname, "..", "..", "..", "..");
-    for (const f of ["src/engines/manual/anchors.ts", "src/engines/manual/markdown.ts", "src/engines/manual/links.ts", "src/features/manual/NoteView.tsx", "src/features/manual/ManualCommand.tsx"]) {
+    for (const f of ["src/engines/manual/anchors.ts", "src/engines/manual/markdown.ts", "src/engines/manual/links.ts", "src/features/manual/NoteView.tsx", "src/features/manual/NoteTable.tsx", "src/features/manual/ManualCommand.tsx"]) {
       expect(readFileSync(join(root, f), "utf8"), f).not.toMatch(/dangerouslySetInnerHTML|innerHTML|outerHTML|insertAdjacentHTML/);
     }
   });

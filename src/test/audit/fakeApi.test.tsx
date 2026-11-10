@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "../../App";
 import { api, resetAuditState, scenarioFromSearch, setAuditScenario } from "../../audit/fakeApi";
 import { RavenError } from "../../types/errors";
-import { FIXTURES } from "../../audit/fixtures";
+import { AUDIT_NOTE_SOURCES, FIXTURES } from "../../audit/fixtures";
 import { AUDIT_PNGS } from "../../audit/images";
 import { makeQueryClient } from "../../lib/queryClient";
 
@@ -144,7 +144,11 @@ describe("audit fake api", () => {
   it("covers the archived engagement, rejects the inert commands", async () => {
     expect((await api.engagementGet("e-old")).status).toBe("archived");
     expect(await api.vaultStatus()).toEqual({ exists: true, unlocked: true });
-    expect((await api.fieldManualLoad())?.notes).toHaveLength(3);
+    const fm = await api.fieldManualLoad();
+    expect(fm?.notes).toHaveLength(AUDIT_NOTE_SOURCES.length);
+    // A realistic import: the built-in cards and a command overlay, so Settings reads like a real import.
+    expect(fm?.cards.length).toBeGreaterThan(0);
+    expect(Object.keys(fm?.overlay ?? {}).length).toBeGreaterThan(0);
     await expect(api.backupNow()).rejects.toMatchObject({ code: "unsupported" });
     await expect(api.fieldManualScan()).rejects.toMatchObject({ code: "unsupported" });
   });
@@ -183,6 +187,8 @@ describe("audit scenarios", () => {
     expect(await api.credentialsList("e-lab")).toEqual([]);
     expect((await api.engagementGet("e-lab")).id).toBe("e-lab");
     expect((await api.engagementsList()).map((e) => e.id)).toEqual(["e-lab"]);
+    // No import yet: the Manual's empty state.
+    expect(await api.fieldManualLoad()).toBeNull();
   });
 
   it("error: data commands reject, the shell commands do not", async () => {

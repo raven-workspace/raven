@@ -5,18 +5,22 @@ import type { CardMeta } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
 import type { ManualNote } from "../../engines/manual";
 import { resolveLink } from "../../engines/manual/links";
+import { cx } from "../../lib/cx";
 import { parseMarkdown, type Block, type Inline } from "../../engines/manual/markdown";
 import { matchRanges, matchRegex } from "../../engines/manual/search";
 import { highlight } from "../../ui";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useFillBase } from "../palette/fillData";
 import { ManualCommand, type FillBase } from "./ManualCommand";
+import { NoteTable } from "./NoteTable";
 
 /** Prose keeps a reading measure; tables, code and commands take the full width of the note pane. */
 const PROSE = "m-0 max-w-[760px] text-body/6 text-fg-2";
 const PLACEHOLDER = /\{[A-Za-z][A-Za-z0-9_]*\}/;
 /** Fence languages that hold output to read, not a command to run: Copy only (no fill, no log, no exam rule). */
 const OUTPUT_LANGS = new Set(["text", "txt", "output", "console", "plaintext", "plain"]);
+/** Inline code up to this length with no space is one token: it keeps to one line (the narrowest line holds 40 characters). */
+const TOKEN_MAX = 40;
 const LINK_CLASS = "text-fg-2 underline decoration-line-2 underline-offset-2 hover:text-accent hover:decoration-accent";
 
 interface Ctx {
@@ -33,13 +37,17 @@ const marked = (text: string, re: RegExp | null): ReactNode => (re ? highlight(t
 function InlineView({ parts, ctx }: { parts: Inline[]; ctx: Ctx }): ReactNode {
   return parts.map((p, i) => {
     if ("text" in p) return <Fragment key={i}>{marked(p.text, ctx.re)}</Fragment>;
-    if ("code" in p) return <code key={i} className="font-mono text-code text-fg [overflow-wrap:anywhere]">{marked(p.code, ctx.re)}</code>;
+    if ("code" in p) {
+      // A short single token (a status code, a flag, a path) never breaks inside: not at a backslash or dot either.
+      const token = p.code.length <= TOKEN_MAX && !/\s/.test(p.code);
+      return <code key={i} className={cx("font-mono text-code text-fg [overflow-wrap:break-word]", token && "whitespace-nowrap")}>{marked(p.code, ctx.re)}</code>;
+    }
     if ("strong" in p) return <strong key={i} className="font-semibold text-fg"><InlineView parts={p.strong} ctx={ctx} /></strong>;
     if ("em" in p) return <em key={i}><InlineView parts={p.em} ctx={ctx} /></em>;
     const { target, heading, label } = p.link;
     const to = resolveLink(target, ctx.notes, ctx.cards, heading);
     if (to.kind === "note") {
-      return <Link key={i} to={`/manual/${encodeURIComponent(to.noteId)}${to.heading ? `#${to.heading}` : ""}`} className={LINK_CLASS}>{marked(label, ctx.re)}</Link>;
+      return <Link key={i} to={`/manual/${encodeURIComponent(to.noteId)}${to.heading ? `#${to.heading}` : ""}`} className={`py-1 ${LINK_CLASS}`}>{marked(label, ctx.re)}</Link>;
     }
     if (to.kind === "card") {
       const card = ctx.cards.find((c) => c.id === to.cardId);
@@ -47,7 +55,7 @@ function InlineView({ parts, ctx }: { parts: Inline[]; ctx: Ctx }): ReactNode {
         <button
           key={i} type="button" title={`Open the card ${card?.title ?? label} in the Arsenal`}
           onClick={() => useArsenalStore.getState().openCard(to.cardId)}
-          className={`cursor-pointer border-0 bg-transparent p-0 text-left font-[inherit] ${LINK_CLASS}`}
+          className={`inline-block cursor-pointer border-0 bg-transparent p-0 text-left font-[inherit] leading-6 ${LINK_CLASS}`}
         >
           {marked(label, ctx.re)}
         </button>
@@ -85,31 +93,7 @@ function BlockView({ block, n, ctx, base }: { block: Block; n: number; ctx: Ctx;
       return block.ordered ? <ol className={`${cls} list-decimal`}>{items}</ol> : <ul className={`${cls} list-disc`}>{items}</ul>;
     }
     case "table":
-      return (
-        // Cells wrap (long values break anywhere), so a wide table never scrolls the page sideways.
-        <table className="w-full border-collapse text-meta">
-          <thead>
-            <tr>
-              {block.head.map((c, i) => (
-                <th key={i} className="border-b border-line-2 px-2 py-1 text-left align-bottom text-label text-muted [overflow-wrap:anywhere]">
-                  <InlineView parts={c} ctx={ctx} />
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {block.rows.map((r, i) => (
-              <tr key={i}>
-                {r.map((c, j) => (
-                  <td key={j} className="border-b border-line px-2 py-2 align-top text-fg-2 [overflow-wrap:anywhere]">
-                    <InlineView parts={c} ctx={ctx} />
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      );
+      return <NoteTable head={block.head} rows={block.rows} cell={(parts) => <InlineView parts={parts} ctx={ctx} />} />;
     case "code": {
       const command: LibraryCommand = {
         id: `manual:${ctx.note.id}:${n}`, title: block.title ?? ctx.note.title, tool: block.text.trim().split(/\s+/)[0] ?? "",
