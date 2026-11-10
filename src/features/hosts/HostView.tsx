@@ -217,8 +217,13 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   const facts = <FactsColumn engagementId={engagementId} host={host} variant={stacked ? "stacked" : "column"} onOpenEntry={openInLog} />;
 
   return (
-    <div ref={rootRef} data-hint-surface data-host-layout={width === undefined ? undefined : stacked ? "stacked" : "columns"} className="@container/host grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-4">
-      <HostHeader host={host} onStuck={toggleStuck} />
+    <div ref={rootRef} data-hint-surface data-host-layout={width === undefined ? undefined : stacked ? "stacked" : "columns"} className="@container/host grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4">
+      {/* No hint row: it cost a full line of log and facts. The keys are on their buttons' tooltips and in the `?` list. */}
+      <HostHeader
+        host={host}
+        onStuck={toggleStuck}
+        shortcuts={<HintLine hints={split ? HINTS.filter((h) => h.keys !== "J" && h.keys !== "⌥1–3") : HINTS} max={0} ariaLabel="Host shortcuts" />}
+      />
       {split ? (
         <FindingSplit
           key={split === "new" ? "new" : split.id}
@@ -271,7 +276,6 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
           </Tabs>
         </div>
       )}
-      <HintLine hints={split ? HINTS.filter((h) => h.keys !== "J" && h.keys !== "⌥1–3") : HINTS} ariaLabel="Host shortcuts" />
       <StuckView
         engagementId={engagementId}
         host={host}

@@ -148,7 +148,8 @@ describe("host view", () => {
     const facts = await screen.findByRole("region", { name: "Facts" });
     const root = screen.getByRole("region", { name: "Host" }).parentElement!;
     expect(root.className).toMatch(/@container\/host/);
-    expect(root.className).toMatch(/grid-rows-\[auto_minmax\(0,1fr\)_auto\]/);
+    // Header, then the work area: no hint row (the shortcuts live behind the header's ?).
+    expect(root.className).toMatch(/grid-rows-\[auto_minmax\(0,1fr\)\]/);
     const body = facts.parentElement!.parentElement!;
     expect(body.className).toContain("@min-[760px]/host:grid-cols-[minmax(16rem,1fr)_minmax(0,1.4fr)]");
     expect(body).toContainElement(screen.getByRole("tablist"));

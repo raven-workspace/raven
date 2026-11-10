@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Lifebuoy, PencilSimple } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { api } from "../../lib/api";
 import { useNarrow } from "../../lib/useNarrow";
 import type { Host } from "../../types/host";
@@ -9,7 +9,8 @@ import { threadsLabel, useThreadCounts } from "../notes/useThreadCounts";
 import { HostDialog } from "./HostDialog";
 import { COLUMN_LABELS, OS_LABELS } from "./columns";
 
-export function HostHeader({ host, onStuck }: { host: Host; onStuck?: () => void }) {
+/** `shortcuts`: the page's `?` (all shortcuts), first in the actions. */
+export function HostHeader({ host, onStuck, shortcuts }: { host: Host; onStuck?: () => void; shortcuts?: ReactNode }) {
   const [editing, setEditing] = useState(false);
   // Under 1000px of pane (952 here: this section sits inside the page's 24px side padding) the actions become icons before the title truncates, at the same window width as the engagement header.
   const [headerRef, narrow] = useNarrow<HTMLElement>(952);
@@ -27,6 +28,7 @@ export function HostHeader({ host, onStuck }: { host: Host; onStuck?: () => void
         {host.name}
       </h1>
       <Toolbar>
+        {shortcuts}
         {narrow ? (
           <>
             {onStuck && <IconButton icon={Lifebuoy} label="Stuck?" shortcut="H" onClick={onStuck} />}

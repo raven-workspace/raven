@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -177,10 +177,14 @@ describe("J: next open step", () => {
     expect(screen.getByRole("button", { name: "Full checklist" })).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("is listed in the host page hint line", async () => {
+  it("is listed in the host page's shortcut list, which has no hint row of its own", async () => {
+    const user = userEvent.setup();
     mount([]);
     const hints = await screen.findByLabelText("Host shortcuts");
-    expect(hints).toHaveTextContent("J");
-    expect(hints).toHaveTextContent("next step");
+    expect(hints).not.toHaveTextContent("next step");
+    await user.click(within(hints).getByRole("button", { name: "All shortcuts" }));
+    const list = await screen.findByRole("dialog");
+    expect(list).toHaveTextContent("J");
+    expect(list).toHaveTextContent("next step");
   });
 });
