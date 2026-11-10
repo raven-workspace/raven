@@ -8,6 +8,7 @@ import type { Finding } from "../../types/findings";
 import { FindingSplit } from "../findings/FindingSplit";
 import { HostFindings } from "../findings/HostFindings";
 import { useLog } from "../log/queries";
+import { LogDays } from "../log/LogDays";
 import { LogEntryRow } from "../log/LogEntryRow";
 import { OrderButton } from "../log/OrderButton";
 import { byOrder, usePersistedOrder } from "../log/usePersistedOrder";
@@ -257,9 +258,9 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
                 ) : entries.length === 0 ? (
                   <p className="text-meta text-muted">Nothing logged on this host yet. Press L to capture.</p>
                 ) : (
-                  <ul className="m-0 list-none p-0">
-                    {entries.map((e) => <LogEntryRow key={e.id} entry={e} hosts={hosts.data} currentHostId={hostId} defaultOpen={e.id === openEntry} />)}
-                  </ul>
+                  <div className="grid gap-3">
+                    <LogDays entries={entries} row={(e) => <LogEntryRow key={e.id} entry={e} hosts={hosts.data} currentHostId={hostId} defaultOpen={e.id === openEntry} />} />
+                  </div>
                 )
               ) : tab === "next" ? (
                 <NextTab engagementId={engagementId} host={host} full={fullChecklist} onShowFull={() => setFullChecklist(true)} focusGoal={focusGoal} onOpenEntry={openInLog} />

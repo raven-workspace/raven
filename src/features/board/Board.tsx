@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router";
+import { api } from "../../lib/api";
 import type { BoardColumn, Host } from "../../types/host";
 import { Button, EmptyState, labelClass, queryState } from "../../ui";
 import { cx } from "../../lib/cx";
@@ -29,6 +31,7 @@ function softHyphenate(label: string): string {
 export function Board() {
   const { id = "" } = useParams();
   const hosts = useHosts(id);
+  const msfHostId = useQuery({ queryKey: ["engagement", id], queryFn: () => api.engagementGet(id) }).data?.msfHostId ?? null;
   const { move } = useHostMutations(id);
   const [over, setOver] = useState<BoardColumn | null>(null);
   const [adding, setAdding] = useState(false);
@@ -148,7 +151,7 @@ export function Board() {
               </header>
               <div data-lane-body className="@container grid min-w-0 content-start gap-2">
                 {cards.map((h) => (
-                  <BoardCard key={h.id} host={h} onShift={shift} />
+                  <BoardCard key={h.id} host={h} onShift={shift} msf={h.id === msfHostId} />
                 ))}
               </div>
             </section>

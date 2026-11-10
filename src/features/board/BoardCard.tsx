@@ -11,9 +11,11 @@ export interface BoardCardProps {
   host: Host;
   /** Move one column (-1 left, +1 right). */
   onShift: (host: Host, delta: -1 | 1) => void;
+  /** This host holds the exam's one Metasploit lock. */
+  msf?: boolean;
 }
 
-export function BoardCard({ host, onShift }: BoardCardProps) {
+export function BoardCard({ host, onShift, msf = false }: BoardCardProps) {
   const threads = useThreadCounts(host.engagementId).byHost.get(host.id) ?? 0;
   function onDragStart(e: DragEvent) {
     e.dataTransfer.setData("text/plain", host.id);
@@ -39,8 +41,14 @@ export function BoardCard({ host, onShift }: BoardCardProps) {
     >
       {/* Two groups, spaced apart: who it is (name, IP), then what it is and what's held (OS, access). */}
       <span className="grid min-w-0 gap-1">
-        <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_8px] items-start gap-1">
+        <span className={cx("grid min-w-0 items-start gap-1", msf ? "grid-cols-[minmax(0,1fr)_16px_8px]" : "grid-cols-[minmax(0,1fr)_8px]")}>
           <span title={host.name} className="line-clamp-2 break-words text-body font-semibold">{host.name}</span>
+          {msf && (
+            // The exam's one Metasploit host, so it's never used on a second box by mistake. Sits on the name's first line.
+            <span role="img" aria-label="Metasploit host" title="Metasploit host" className="grid h-5 items-center">
+              <BrandIcon brand="metasploit" />
+            </span>
+          )}
           <ThreadDot count={threads} />
         </span>
         {host.ip && <span className="whitespace-nowrap font-mono text-code text-muted-2 [overflow-wrap:anywhere]">{host.ip}</span>}

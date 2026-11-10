@@ -241,6 +241,20 @@ describe("host view", () => {
     expect(screen.queryByText("other host")).not.toBeInTheDocument();
   });
 
+  it("log tab groups entries under a heading per day", async () => {
+    const user = userEvent.setup();
+    m.logList.mockResolvedValue([
+      entry("o", "older on dc01", T, ["h1"]),
+      entry("d", "next day on dc01", T + 86_400_000, ["h1"]),
+    ]);
+    mount();
+    await openLog(user);
+    const days = await screen.findAllByRole("heading", { level: 3 });
+    expect(days).toHaveLength(2);
+    expect(within(screen.getByRole("region", { name: days[0]!.textContent! })).getByText("older on dc01")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: days[1]!.textContent! })).getByText("next day on dc01")).toBeInTheDocument();
+  });
+
   it("log order flips to newest first", async () => {
     const user = userEvent.setup();
     mount();

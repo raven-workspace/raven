@@ -142,6 +142,16 @@ describe("board", () => {
       expect(column(l)).toBeInTheDocument();
   });
 
+  it("the Metasploit host's card carries the Metasploit mark; others don't", async () => {
+    m.engagementGet.mockResolvedValue({ ...E1, msfHostId: "h1" });
+    mount();
+    await ready();
+    const dc01 = within(column("Vulnerability detection")).getByRole("link", { name: /dc01/ });
+    expect(await within(dc01).findByRole("img", { name: "Metasploit host" })).toBeInTheDocument();
+    const web07 = within(column("Reporting")).getByRole("link", { name: /web07/ });
+    expect(within(web07).queryByRole("img", { name: "Metasploit host" })).toBeNull();
+  });
+
   it("drop on another column calls move", async () => {
     mount();
     await ready();
