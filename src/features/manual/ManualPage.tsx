@@ -249,10 +249,11 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
   const [match, setMatch] = useState({ at: 0, count: 0 });
   const matchAt = useRef(0);
   /** The lookup row the current match sits in, and whether Esc closed its card (until the match moves). */
-  const [card, setCard] = useState<{ row: LookupRow | null; closed: boolean }>({ row: null, closed: false });
+  const [card, setCard] = useState<{ row: LookupRow | null; closed: boolean; land?: boolean }>({ row: null, closed: false });
   const cardRow = query && !card.closed ? card.row : null;
   /** `focus`: the current match's block takes focus (a search landing, ⌥↓ ⌥↑), so the next Tab continues there. */
-  const showMatch = (at: number, scroll: boolean, focus = false) => {
+  /** `land`: a `?q=` landing, whose answer card (if any) then takes focus on its first command. */
+  const showMatch = (at: number, scroll: boolean, focus = false, land = false) => {
     const pane = paneRef.current;
     if (!pane) return;
     // A landing or ⌥↓ ⌥↑ (`focus`) shows the card afresh; a quiet re-show of the same match (late fill data) keeps it closed.
@@ -261,7 +262,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
     const { count, el } = markCurrent(pane, at);
     setMatch({ at, count });
     const row = note ? rowOf(note, el) : null;
-    setCard((c) => (same && c.row === row ? c : { row, closed: false }));
+    setCard((c) => (same && c.row === row ? c : { row, closed: false, land }));
     if (scroll) el?.scrollIntoView?.({ block: "center" });
     if (focus && el) focusTarget(blockOf(el));
   };
@@ -271,7 +272,8 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
     if (!query) pane?.querySelectorAll("tr[data-current-row]").forEach((r) => r.removeAttribute("data-current-row"));
     if (!note || !pane || !query) return;
     const inRail = filterRef.current?.closest("nav")?.contains(document.activeElement) ?? false;
-    showMatch(firstAfter(pane, decodeURIComponent(location.hash.slice(1))), true, !inRail);
+    // A landing whose match gets an answer card with a command puts focus on that command instead (↵ copies it).
+    showMatch(firstAfter(pane, decodeURIComponent(location.hash.slice(1))), true, !inRail, !inRail);
   }, [note?.id, query, location.key]); // eslint-disable-line react-hooks/exhaustive-deps
   // Exam lines and filled text arrive late and move the note: bring the current match back into view once.
   useLayoutEffect(() => {
@@ -289,10 +291,16 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
     return () => obs.disconnect();
   }, [note, query]);
 
+  const cardBoxRef = useRef<HTMLDivElement>(null);
+  // A `?q=` landing's card takes focus on its first command row, if it has one (⌥↓ ⌥↑ leave focus on the note).
+  useEffect(() => {
+    if (card.land) cardBoxRef.current?.querySelector<HTMLElement>("[data-card-stop][role=group]")?.focus({ preventScroll: true });
+  }, [card]);
+
   const closeCard = () => {
     // Focus in the card would be lost with it: it goes back to the note.
     if (document.activeElement?.closest("[aria-label=Answer]")) focusQuietly(paneRef.current);
-    setCard((c) => ({ ...c, closed: true }));
+    setCard((c) => ({ ...c, closed: true, land: false }));
   };
   const shownCard = !!(cardRow && note);
   useEffect(() => {
@@ -394,7 +402,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
         {query && note && <MatchBar query={query} at={match.at} count={match.count} />}
         {/* The answer card: fixed above the note's scroll (it never moves with the note), its own scroll past 40vh. */}
         {cardRow && note && (
-          <div className="grid min-w-0 border-b border-line px-8 py-3">
+          <div ref={cardBoxRef} className="grid min-w-0 border-b border-line px-8 py-3">
             <AnswerCard key={`${cardRow.anchor}:${cardRow.row}`} row={cardRow} base={base} onClose={closeCard} />
           </div>
         )}

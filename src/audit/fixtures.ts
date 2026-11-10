@@ -728,7 +728,7 @@ const LINKS_NOTE = [
   "",
 ].join("\n");
 
-/** A lookup table: key cells, an action column with placeholder commands (one with a secret, rows with none, one with four). */
+/** A lookup table: key cells, an action column with placeholder commands (one with a secret, rows with none, one with four, one with words between two), one row linking a real card. */
 const LOOKUP_NOTE = [
   "# Zz Error Lookup",
   "## Login errors",
@@ -740,7 +740,8 @@ const LOOKUP_NOTE = [
   "| `STATUS_ZZ_EXPIRED` | The secret is right and has expired. | A service account nobody used for months. | Check the password policy: `nxc smb {TARGET_IP} --pass-pol` | |",
   "| `STATUS_ZZ_LOCKED` | The account is locked for the lockout window. | A spray without a delay. | Stop spraying that account and wait out the window. | |",
   "| `STATUS_ZZ_DISABLED` | The secret is right; the account is switched off. | A leaver kept for audit. | Keep the secret: an enabled sibling often reuses it. | |",
-  "| `STATUS_ZZ_SKEW` | The clocks are too far apart for Kerberos. | A VM that was suspended. | Sync with the DC: `ntpdate {DC_IP}` | |",
+  "| `STATUS_ZZ_SKEW` | The clocks are too far apart for Kerberos. | A VM that was suspended. | Sync with the DC: `ntpdate {DC_IP}` | [[Kerberos-Enumeration]] |",
+  "| `STATUS_ZZ_NOSVC` | The service the login needs is stopped. | A box rebooted mid-test. | Restart it: `zzsvc stop {TARGET_IP}`, then `zzsvc start {TARGET_IP}`; or retry with `--local-auth`. | |",
   "| `STATUS_ZZ_RELAY` | The share asks for signing the relay can't give. | A file server with signing on. | `zzrelay check {TARGET_IP}`, `zzrelay sign {TARGET_IP}`, `zzrelay pin {TARGET_IP}`, `zzrelay drop {TARGET_IP}` | |",
   "",
 ].join("\n");

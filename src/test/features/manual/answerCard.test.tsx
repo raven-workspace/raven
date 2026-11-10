@@ -119,8 +119,34 @@ describe("answer card", () => {
     await waitFor(() => expect(rows(c)).toHaveLength(1));
     await waitFor(() =>
       expect(within(rows(c)[0]!).getByRole("button", { name: "Copy command: nxc smb 198.51.100.21 --pass-pol" })).toBeInTheDocument());
-    // The action has words beyond its command: the whole cell reads as one line under the rows.
-    expect(within(c).getByText(/Check the password policy:/)).toBeInTheDocument();
+    // The action's words read as one line under the rows, without repeating the command.
+    expect(c.querySelector("[data-card-action]")).toHaveTextContent(/^Check the password policy:$/);
+    expect(within(c).getAllByRole("button", { name: /^Copy command: / })).toHaveLength(1);
+  });
+
+  it("a landing puts focus on the card's first command", async () => {
+    mount([at("STATUS_ZZ_EXPIRED")]);
+    const c = await card();
+    await waitFor(() => expect(rows(c)[0]).toHaveFocus());
+  });
+
+  it("the action line keeps only what is not a command, separators folded", async () => {
+    mount([at("STATUS_ZZ_NOSVC")]);
+    const c = await card();
+    await waitFor(() => expect(rows(c)).toHaveLength(2));
+    const line = c.querySelector<HTMLElement>("[data-card-action]")!;
+    expect(line).toHaveTextContent(/^Restart it: then; or retry with --local-auth\.$/);
+    expect(within(line).queryByRole("button")).toBeNull();
+    expect(line.querySelector("code")).toHaveTextContent("--local-auth");
+  });
+
+  it("the card link opens the Arsenal drawer at that card", async () => {
+    const user = userEvent.setup();
+    mount([at("STATUS_ZZ_SKEW")]);
+    const c = await card();
+    expect(within(c).getByText("↗ Arsenal")).toBeInTheDocument();
+    await user.click(within(c).getByRole("button", { name: "Kerberos Enumeration" }));
+    expect(useArsenalStore.getState()).toMatchObject({ open: true, cardId: "enum-kerberos" });
   });
 
   it("card follows the row the current match is in", async () => {
@@ -159,6 +185,17 @@ describe("answer card", () => {
     press("Escape");
     await waitFor(() => expect(screen.queryByRole("status", { name: "Search in this note" })).toBeNull());
     expect(where()).toBe(`/manual/${AUDIT_NOTE_IDS.lookup}`);
+    press("Escape");
+    await waitFor(() => expect(where()).toBe("/"));
+  });
+
+  it("Esc with focus in the card returns focus to the note", async () => {
+    mount([at("STATUS_ZZ_EXPIRED")]);
+    const c = await card();
+    await waitFor(() => expect(rows(c)[0]).toHaveFocus());
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Answer" })).toBeNull());
+    expect(screen.getByRole("region", { name: "Note" })).toHaveFocus();
   });
 
   it("more than three commands collapse", async () => {

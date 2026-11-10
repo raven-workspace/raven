@@ -22,12 +22,28 @@ const plain = (parts: Inline[]): string =>
   parts.map((p) => ("text" in p ? p.text : "code" in p ? p.code : "strong" in p ? plain(p.strong) : "em" in p ? plain(p.em) : p.link.label)).join("");
 
 /**
- * The action cell says more than its commands ("or `faketime`", "disable … AND …", "List the shares it can read:"): a
- * letter or digit is left once its commands and punctuation are taken out.
+ * What the action cell says besides its commands (they have rows of their own): links and single-token code stay, the
+ * text left between removed commands has its orphaned separators folded ("or , then" reads "or, then", "it: , then" reads "it: then"), and separators
+ * at either end go. Null when nothing but punctuation is left.
  */
-function hasWords(action: Inline[], commands: string[]): boolean {
-  const rest = action.filter((p) => !("code" in p && commands.includes(p.code)));
-  return /[\p{L}\p{N}]/u.test(plain(rest));
+function leftover(action: Inline[], commands: string[]): Inline[] | null {
+  const kept: Inline[] = [];
+  for (const p of action) {
+    if ("code" in p && commands.includes(p.code)) continue;
+    const last = kept[kept.length - 1];
+    if ("text" in p && last && "text" in last) kept[kept.length - 1] = { text: last.text + p.text };
+    else kept.push(p);
+  }
+  const out = kept
+    .map((p, i) => {
+      if (!("text" in p)) return p;
+      let t = p.text.replace(/\s*([:,;])(?:\s*[,;])+\s*|\s*([,;])\s*/g, (_, a: string | undefined, b: string | undefined) => `${a ?? b} `).replace(/\s{2,}/g, " ");
+      if (i === 0) t = t.replace(/^[\s,;]+/, "");
+      if (i === kept.length - 1) t = t.replace(/[\s,;]+$/, "");
+      return { text: t };
+    })
+    .filter((p) => !("text" in p) || p.text !== "");
+  return /[\p{L}\p{N}]/u.test(plain(out)) ? out : null;
 }
 
 /** One of the row's commands: filled for the host in view, one focus stop; ↵ copies, ⌘↵ copies and logs. */
@@ -83,9 +99,11 @@ export function AnswerCard({ row, base, onClose }: { row: LookupRow; base: FillB
   const ctx: Ctx | null = note ? { note, notes, cards, re: null, base, section: "", rowTitle } : null;
   const commands = useMemo(
     () => (note ? row.commands.map((c) => inlineOf(c, { note, notes: [], cards: [], re: null, base, section: "", rowTitle })) : []),
-    // `inlineOf` reads only the note and the row title; the fill base is passed to each row on its own.
+    // Complete: `inlineOf` reads only `ctx.note` and `ctx.rowTitle` (the id, the log title, the exam rule), and the
+    // row title comes from `row`; `base` is not read here (each CardCommand fills with the live base it is given).
     [row, note], // eslint-disable-line react-hooks/exhaustive-deps
   );
+  const rest = useMemo(() => leftover(row.action, row.commands), [row]);
   const shown = more ? commands : commands.slice(0, SHOWN);
   const hidden = commands.length - shown.length;
   const link = row.card ? resolveLink(row.card.target, notes, cards, row.card.heading) : null;
@@ -137,8 +155,8 @@ export function AnswerCard({ row, base, onClose }: { row: LookupRow; base: FillB
           )}
         </div>
       )}
-      {ctx && hasWords(row.action, row.commands) && (
-        <p data-card-action="" className="m-0 mt-1 text-meta text-muted-2"><InlineView parts={row.action} ctx={ctx} /></p>
+      {ctx && rest && (
+        <p data-card-action="" className="m-0 mt-1 text-meta text-muted-2"><InlineView parts={rest} ctx={ctx} /></p>
       )}
       {cardId && (
         <p className="m-0 mt-1 text-meta text-muted">
