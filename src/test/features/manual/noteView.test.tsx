@@ -340,6 +340,46 @@ describe("NoteView tables", () => {
     expect(container.querySelector("table")).not.toHaveAttribute("data-stacked");
   });
 
+  /** A flags table: short code keys (some with a space inside), a long code key, and prose descriptions. */
+  const FLAGS = parseNote("03-Tools/Zz-Relay.md", [
+    "# Zz Relay",
+    "| Flag | Does |",
+    "|---|---|",
+    "| `-m MODE` | Picks the relay mode; the default listens and forwards every request it is given. |",
+    "| `-o \"OPTIONS\"` | Passes options through to the program it starts. |",
+    "| `-u`, `-w` | Name and secret for the relay. |",
+    "| `--zz-listen-address 192.0.2.10:8443` | Where it listens when the default port is taken. |",
+    "",
+  ].join("\n"))!;
+  const cellsOf = (container: HTMLElement) => [...container.querySelectorAll("tbody td")] as HTMLElement[];
+
+  it("short key cells (a code span, even with a space) stay on one line; description cells wrap", () => {
+    widths(500, 600);
+    const { container } = mount(FLAGS);
+    const cells = cellsOf(container);
+    const [key1, desc1, key2, desc2, key3] = cells;
+    for (const c of [key1, key2, key3]) expect(c).toHaveClass("whitespace-nowrap");
+    for (const c of [desc1, desc2, cells[5], cells[7]]) expect(c).not.toHaveClass("whitespace-nowrap");
+  });
+
+  it("a code cell longer than the key limit still wraps", () => {
+    widths(500, 600);
+    const { container } = mount(FLAGS);
+    const long = cellsOf(container)[6];
+    expect(long).toHaveTextContent("--zz-listen-address 192.0.2.10:8443");
+    expect(long).not.toHaveClass("whitespace-nowrap");
+  });
+
+  it("when the one-line keys can't fit, the table stacks instead of overflowing, and its keys may wrap again", () => {
+    widths(700, 400);
+    const { container } = mount(FLAGS);
+    const table = container.querySelector("table")!;
+    expect(table).toHaveAttribute("data-stacked");
+    // Stacked, the no-wrap is lifted so a key never overflows its value track.
+    expect(cellsOf(container)[0]).toHaveClass("group-data-stacked/nt:whitespace-normal");
+    expect(cellsOf(container)[0]).toHaveAccessibleName(/^Flag\s*-m MODE$/);
+  });
+
   it("a short inline code token never wraps inside; a long or spaced one may", () => {
     const note = parseNote("04-Foundations/Zz-Codes.md", "# Zz Codes\nSee `\\\\zzfs01.example.test\\pipe\\zz` and `zz --flag value`.\n")!;
     mount(note);

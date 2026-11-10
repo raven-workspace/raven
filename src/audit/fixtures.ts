@@ -563,7 +563,7 @@ export const FIXTURE_PROGRESS = progress;
 
 /**
  * Synthetic Field Manual notes (relative path, file text) for the Manual. Invented wording throughout; addresses are
- * RFC 5737 and names end in example.test. Shapes cover the real range: a long note with five tables (one five columns
+ * RFC 5737 and names end in example.test. Shapes cover the real range: a long note with six tables (one five columns
  * wide with long cells), a tool page whose commands carry placeholders, a note with every link kind, short filler notes
  * so the rail is as full as a real import's.
  */
@@ -602,6 +602,14 @@ const NORMAL_ROWS: [string, string, string, string][] = [
   ["Null session lists shares", "No, on a modern host", "Anonymous access left on", "Read every share it lists"],
   ["Signing not required", "Common on member servers", "Relay is possible", "Note it for the report"],
   ["Guest account enabled", "No", "A weak default left on", "Try guest with an empty password"],
+];
+
+const RELAY_FLAGS: [string, string][] = [
+  ["-s *", "Listen on every address the host has, so the relay answers on the lab network and on loopback alike; narrow it to one address when another service already holds the port there."],
+  ["-m MODE", "The relay mode. The default forwards each request to the program it starts, unchanged; the other modes rewrite the request first, which some older targets refuse outright."],
+  ["-o \"OPTIONS\"", "Options passed through to that program, quoted as one value. Anything with a space in it needs the quotes, or the relay reads the second word as a flag of its own and stops."],
+  ["-n PORT", "The local port the relay listens on. Pick one the target can reach back to; a closed port here looks exactly like a failed relay in the output, so check it first."],
+  ["-g {GUID}", "The class identifier of the object to ask for. Leave it unset to try the built-in list in order, which is slower but works on most builds without any lookup beforehand."],
 ];
 
 function longNote(): string {
@@ -649,6 +657,11 @@ function longNote(): string {
   L.push("**Table 5 — Quick lookup**", "");
   L.push("| Number | Name |", "|---|---|");
   for (const r of STATUS_ROWS) L.push(`| \`${r[0]}\` | ${r[1]} |`);
+  L.push("");
+  // A key-column table: short flags, some with a space inside, next to long descriptions with room to spare.
+  L.push("**Table 6 — Zzrelay flags**", "");
+  L.push("| Flag | Does |", "|---|---|");
+  for (const r of RELAY_FLAGS) L.push(`| \`${r[0]}\` | ${r[1]} |`);
   L.push("");
   L.push("## Related", "", "- [[Zz-Protocol]]", "- [[Zz-Scanner]]", "");
   return L.join("\n");

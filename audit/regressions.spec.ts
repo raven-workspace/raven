@@ -996,6 +996,34 @@ test("Manual: a wide table stacks when its codes don't fit, stays a table when t
   }
 });
 
+// A flags table (Flag | Does): auto layout squeezed the flag column until `-m MODE` broke at its space while the
+// description column had room to spare. A short key cell now keeps to one line and its column sizes to it.
+test("Manual: short key cells in a flags table stay on one line", async ({ page }) => {
+  for (const width of [1280, 1440]) {
+    await open(page, `/manual/${AUDIT_NOTE_IDS.long}`, width);
+    const pane = page.getByRole("region", { name: "Note" });
+    const table = pane.locator("[id='table-6'] + div table");
+    await table.scrollIntoViewIfNeeded();
+    expect(await table.getAttribute("data-stacked"), `a table at ${width}`).toBeNull();
+    const keys = await table.evaluate((el) => [...el.querySelectorAll("tbody tr")].map((tr) => {
+      const code = tr.querySelector("td code")!;
+      const lineHeight = parseFloat(getComputedStyle(code).lineHeight);
+      const tops = new Set([...code.getClientRects()].map((r) => Math.round(r.top)));
+      return { text: code.textContent, lines: tops.size, oneLine: code.getBoundingClientRect().height <= lineHeight * 1.5 };
+    }));
+    expect(keys.length, `flag rows at ${width}`).toBe(5);
+    for (const k of keys) {
+      expect(k.lines, `${k.text} on one line at ${width}`).toBe(1);
+      expect(k.oneLine, `${k.text} one line tall at ${width}`).toBe(true);
+    }
+    const [t, p] = await Promise.all([table.boundingBox(), pane.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { right: r.left + el.clientWidth - parseFloat(getComputedStyle(el).paddingRight) };
+    })]);
+    expect(t!.x + t!.width, `table inside the pane at ${width}`).toBeLessThanOrEqual(p.right + 0.5);
+  }
+});
+
 // Note links and card links sat in 16-18px lines: under the 24px target floor when they stand alone (a list item, a cell).
 test("Manual: every link in a note is a 24px target", async ({ page }) => {
   await open(page, `/manual/${AUDIT_NOTE_IDS.links}`, 1280);
