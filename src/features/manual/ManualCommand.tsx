@@ -29,7 +29,7 @@ const noop = () => {};
  */
 export function ManualCommand({ command, label, caption, fill, output = false, base, highlight }: {
   command: LibraryCommand;
-  /** Names the block and its Copy button for screen readers. */
+  /** Names the block (one labelled group per command) and its Copy button for screen readers. */
   label: string;
   /** The fence's `title:"…"`, shown over the block. */
   caption?: string;
@@ -112,7 +112,6 @@ export function ManualCommand({ command, label, caption, fill, output = false, b
         {...(cmd.copyText !== undefined ? { copyText: cmd.copyText } : {})}
         tokens={cmd.tokens ?? []}
         highlight={highlight ?? null}
-        name={label}
         copyLabel={`Copy command: ${label}`}
         onCopyAction={(button) =>
           copy().then((r) => {
