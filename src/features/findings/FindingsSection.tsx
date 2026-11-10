@@ -52,28 +52,51 @@ export function FindingsSection() {
       {sorted.length === 0 ? (
         <EmptyState title="No findings yet" />
       ) : (
-        <ul className="m-0 grid list-none grid-cols-[max-content_minmax(0,1fr)_max-content_max-content_max-content] gap-x-3 p-0">
-          {sorted.map((f) => (
-            <li key={f.id} className="col-span-full grid grid-cols-subgrid items-start border-b border-line py-2">
-              <span className="grid h-5 content-center justify-self-start"><SeverityChip severity={f.severity} /></span>
-              <span className="grid min-w-0 gap-1">
-                <span data-testid="finding-title" className="line-clamp-2 break-words text-body text-fg" title={f.title}>{f.title}</span>
-                {f.hostIds.length > 0 && (
-                  <span className="grid grid-cols-[minmax(0,max-content)_max-content] justify-start gap-2 text-meta text-muted" title={names(f)}>
-                    <span className="truncate">{hostLabel(hosts.find((h) => h.id === f.hostIds[0]))}</span>
-                    {f.hostIds.length > 1 && <span>{`+${f.hostIds.length - 1}`}</span>}
-                  </span>
-                )}
-              </span>
-              <span className="text-meta text-fg-2">{f.status}</span>
-              <span className="min-w-[3ch] text-right font-mono text-code tabular-nums text-fg-2">{f.cvssScore !== null ? f.cvssScore.toFixed(1) : ""}</span>
-              <ActionCell>
-                <IconButton icon={PencilSimple} label={`Edit ${f.title}`} onClick={() => setEditor({ edit: f })} />
-                <IconButton icon={Trash} tone="destructive" label={`Delete ${f.title}`} onClick={() => setDeleting(f)} />
-              </ActionCell>
-            </li>
-          ))}
-        </ul>
+        // One grid for the header and the rows, so every column lines up with its name.
+        <div className="grid grid-cols-[max-content_minmax(0,1fr)_max-content_max-content_max-content] gap-x-3">
+          <div aria-hidden className={`col-span-full grid grid-cols-subgrid border-b border-line px-2 pb-2 ${labelClass} text-faint`}>
+            <span>Severity</span>
+            <span>Finding</span>
+            <span>Status</span>
+            <span className="text-right">CVSS</span>
+            <span />
+          </div>
+          <ul className="col-span-full m-0 grid list-none grid-cols-subgrid p-0">
+            {sorted.map((f) => (
+              <li key={f.id} className="col-span-full grid grid-cols-subgrid items-start border-b border-line p-2 hover:bg-surface has-[:focus-visible]:bg-surface">
+                <span className="grid h-5 content-center justify-self-start"><SeverityChip severity={f.severity} /></span>
+                <span className="grid min-w-0 gap-1">
+                  {/* The title opens the finding: the whole name is the target, not only the pencil. */}
+                  <button
+                    type="button"
+                    data-testid="finding-title"
+                    title={f.title}
+                    onClick={() => setEditor({ edit: f })}
+                    className="-my-1 line-clamp-2 cursor-default break-words rounded-sm bg-transparent px-0 py-1 text-left text-body text-fg"
+                  >
+                    {f.title}
+                  </button>
+                  {f.hostIds.length > 0 && (
+                    <span className="grid grid-cols-[minmax(0,max-content)_max-content] justify-start gap-2 text-meta text-muted-2" title={names(f)}>
+                      <span className="truncate">{hostLabel(hosts.find((h) => h.id === f.hostIds[0]))}</span>
+                      {f.hostIds.length > 1 && <span>{`+${f.hostIds.length - 1}`}</span>}
+                    </span>
+                  )}
+                </span>
+                {/* A draft is still unconfirmed, so it sits a step quieter than confirmed and reported. */}
+                <span className={`grid h-5 content-center text-meta ${f.status === "draft" ? "text-muted-2" : "text-fg-2"}`}>{f.status}</span>
+                <span className="min-w-[3ch] text-right font-mono text-code tabular-nums text-fg-2">{f.cvssScore !== null ? f.cvssScore.toFixed(1) : ""}</span>
+                {/* 28px buttons centred on the 20px first line. */}
+                <span className="-my-1">
+                  <ActionCell>
+                    <IconButton icon={PencilSimple} label={`Edit ${f.title}`} onClick={() => setEditor({ edit: f })} />
+                    <IconButton icon={Trash} tone="destructive" label={`Delete ${f.title}`} onClick={() => setDeleting(f)} />
+                  </ActionCell>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {deleting && (

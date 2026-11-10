@@ -45,16 +45,18 @@ export function AttemptsList({ eid, hostId, onOpenEntry }: {
             const host = a.hostId && showHost ? hostLabel(hosts.find((h) => h.id === a.hostId)) : "";
             const reason = `${REASON_LABELS[a.reasonKind]}: ${a.reason}`;
             return (
-              <li key={a.id} className="col-span-full grid grid-cols-subgrid items-center border-b border-line py-2">
+              <li key={a.id} className="col-span-full grid grid-cols-subgrid items-start border-b border-line p-2 hover:bg-surface has-[:focus-visible]:bg-surface">
                 <span className="grid min-w-0 gap-1">
-                  <span className="grid grid-cols-[minmax(0,max-content)_max-content] items-center justify-start gap-2">
-                    <span data-testid="attempt-title" className="truncate text-body text-fg" title={a.title}>{a.title}</span>
+                  <span className="grid h-5 grid-cols-[minmax(0,max-content)_max-content] items-center justify-start gap-2">
+                    <button type="button" data-testid="attempt-title" title={a.title} onClick={() => setEditor({ edit: a })} className="-my-1 cursor-default truncate rounded-sm bg-transparent px-0 py-1 text-left text-body text-fg">{a.title}</button>
                     {a.private && <Chip>Private</Chip>}
                   </span>
-                  <span className="truncate text-meta text-muted" title={reason}>{reason}</span>
+                  {/* Why it failed is the point of an attempt: up to two lines, not one. */}
+                  <span className="line-clamp-2 break-words text-meta text-muted" title={reason}>{reason}</span>
                 </span>
-                {showHost && <span className="max-w-[24ch] truncate font-mono text-code text-fg-2" title={host}>{host}</span>}
-                <ActionCell>
+                {showHost && <span className="grid h-5 max-w-[24ch] min-w-0 content-center"><span className="truncate text-meta text-muted-2" title={host}>{host}</span></span>}
+                <span className="-my-1">
+                  <ActionCell>
                   {a.logEntryId && entryIds.has(a.logEntryId) ? (
                     <IconButton icon={ArrowSquareOut} label={`Open log entry for ${a.title}`} onClick={() => onOpenEntry(a.logEntryId!)} />
                   ) : (
@@ -63,6 +65,7 @@ export function AttemptsList({ eid, hostId, onOpenEntry }: {
                   <IconButton icon={PencilSimple} label={`Edit ${a.title}`} onClick={() => setEditor({ edit: a })} />
                   <IconButton icon={Trash} tone="destructive" label={`Delete ${a.title}`} onClick={() => setDeleting(a)} />
                 </ActionCell>
+                </span>
               </li>
             );
           })}

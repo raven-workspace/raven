@@ -108,6 +108,13 @@ describe("findings section", () => {
     expect(within(screen.getByText("Low one").closest("li")!).getByText("low")).toHaveAttribute("data-variant", "default");
   });
 
+  it("clicking a finding's title opens it in the editor", async () => {
+    const user = userEvent.setup();
+    mount([finding({ id: "a", title: "Open share" })]);
+    await user.click(await screen.findByRole("button", { name: "Open share" }));
+    expect(await screen.findByRole("form", { name: "Edit finding" })).toBeInTheDocument();
+  });
+
   it("a valid CVSS vector shows the score and suggests the severity; an invalid one shows an error and saves no score", async () => {
     const user = userEvent.setup();
     mount();
