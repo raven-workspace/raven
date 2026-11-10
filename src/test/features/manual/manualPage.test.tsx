@@ -341,6 +341,141 @@ describe("Manual: leaving, sections and place", () => {
   });
 });
 
+describe("Manual: On this page follows the reading", () => {
+  /** The IntersectionObserver the scroll-spy makes; tests report headings entering and leaving the band. */
+  let observer: { cb: IntersectionObserverCallback; root: Element | null; margin: string | undefined; seen: Element[] } | null = null;
+  class FakeObserver {
+    constructor(cb: IntersectionObserverCallback, opts?: IntersectionObserverInit) {
+      observer = { cb, root: (opts?.root as Element | null) ?? null, margin: opts?.rootMargin, seen: [] };
+    }
+    observe(el: Element) { observer!.seen.push(el); }
+    unobserve() {}
+    disconnect() {}
+    takeRecords() { return []; }
+  }
+  const band = (visible: string[]) =>
+    act(() => observer!.cb(
+      observer!.seen.map((el) => ({ target: el, isIntersecting: visible.includes(el.id) }) as unknown as IntersectionObserverEntry),
+      observer as unknown as IntersectionObserver,
+    ));
+  /** A 2000px note in a 500px pane, scrolled to `top`. */
+  const scrollPane = (top: number) => {
+    const p = pane();
+    Object.defineProperty(p, "scrollHeight", { configurable: true, value: 2000 });
+    Object.defineProperty(p, "clientHeight", { configurable: true, value: 500 });
+    act(() => {
+      p.scrollTop = top;
+      fireEvent.scroll(p);
+    });
+  };
+  const outline = () => within(screen.getByRole("navigation", { name: "On this page" }));
+  const currentEntry = () => outline().getAllByRole("button").find((b) => b.getAttribute("aria-current") === "location")?.textContent;
+
+  beforeEach(() => {
+    observer = null;
+    globalThis.IntersectionObserver = FakeObserver as unknown as typeof IntersectionObserver;
+  });
+  afterEach(() => {
+    delete (globalThis as Partial<typeof globalThis>).IntersectionObserver;
+  });
+
+  it("watches the note pane's band and marks the first heading inside it", async () => {
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    expect(observer!.root).toBe(pane());
+    expect(observer!.margin).toBe("-20px 0px -40% 0px");
+    expect(observer!.seen.map((el) => el.id)).toEqual(["alpha", "beta", "beta-two", "table-1"]);
+    scrollPane(600);
+    band(["beta"]);
+    expect(currentEntry()).toBe("Beta");
+    band(["beta-two", "table-1"]);
+    expect(currentEntry()).toBe("Beta Two");
+  });
+
+  it("pins the first entry at the top of the note and the last at its end", async () => {
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    scrollPane(600);
+    band(["beta"]);
+    scrollPane(30);
+    await waitFor(() => expect(currentEntry()).toBe("Alpha"));
+    scrollPane(1470);
+    await waitFor(() => expect(currentEntry()).toBe("Table 1Zz codes"));
+  });
+
+  it("a jump near the end keeps its entry current while the note sits at its end", async () => {
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    scrollPane(1500);
+    await waitFor(() => expect(currentEntry()).toBe("Table 1Zz codes"));
+    press("[");
+    expect(currentEntry()).toBe("Beta Two");
+    scrollPane(1490);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(currentEntry()).toBe("Beta Two");
+  });
+
+  it("the lime bar slides to the current entry", async () => {
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    const bar = screen.getByTestId("section-indicator");
+    expect(bar).not.toBeVisible();
+    expect(bar).toHaveClass("bg-accent", "transition-[transform,height]", "motion-reduce:transition-none");
+    const rect = Element.prototype.getBoundingClientRect;
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      const i = this.getAttribute("data-index");
+      if (i !== null) return new DOMRect(0, 100 + 28 * Number(i), 180, 28);
+      if (this === bar.parentElement) return new DOMRect(0, 100, 180, 112);
+      return rect.call(this);
+    });
+    press("]");
+    expect(bar).toBeVisible();
+    expect(bar.style.transform).toBe("translateY(0px)");
+    expect(bar.style.height).toBe("28px");
+    press("]");
+    expect(currentEntry()).toBe("Beta");
+    expect(bar.style.transform).toBe("translateY(28px)");
+    vi.restoreAllMocks();
+  });
+
+  it("clicking an entry scrolls smoothly in place: no history entry, and Esc still leaves in one press", async () => {
+    const user = userEvent.setup();
+    const scrolls = vi.fn();
+    Element.prototype.scrollIntoView = scrolls;
+    const pushState = vi.spyOn(window.history, "pushState");
+    mount();
+    await ready();
+    press("m");
+    await openNote("Bb Basics");
+    const path = where();
+    await user.click(outline().getByRole("button", { name: "Beta" }));
+    expect(scrolls).toHaveBeenLastCalledWith({ block: "start", behavior: "smooth" });
+    expect(screen.getByRole("heading", { name: "Beta" })).toHaveFocus();
+    expect(currentEntry()).toBe("Beta");
+    expect(pushState).not.toHaveBeenCalled();
+    expect(where()).toBe(path);
+    act(() => (document.activeElement as HTMLElement | null)?.blur());
+    press("Escape");
+    await waitFor(() => expect(where()).toBe("/"));
+    pushState.mockRestore();
+    Element.prototype.scrollIntoView = () => {};
+  });
+
+  it("with reduced motion an entry jumps instantly", async () => {
+    const user = userEvent.setup();
+    const scrolls = vi.fn();
+    Element.prototype.scrollIntoView = scrolls;
+    const media = window.matchMedia;
+    window.matchMedia = ((q: string) => ({ ...media(q), matches: q.includes("prefers-reduced-motion") })) as typeof window.matchMedia;
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    await user.click(outline().getByRole("button", { name: "Beta" }));
+    expect(scrolls).toHaveBeenLastCalledWith({ block: "start", behavior: "instant" });
+    window.matchMedia = media;
+    Element.prototype.scrollIntoView = () => {};
+  });
+});
+
 describe("Manual: empty states", () => {
   it("never imported: says what the Manual holds and links to Settings", async () => {
     m.fieldManualLoad.mockResolvedValue(null);

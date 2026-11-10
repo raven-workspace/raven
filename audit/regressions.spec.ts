@@ -1006,3 +1006,34 @@ test("Manual: every link in a note is a 24px target", async ({ page }) => {
     .filter((c) => c.h < 24));
   expect(small).toEqual([]);
 });
+
+// The outline's scroll-spy and lime bar, in a real layout: the current entry follows the reading, the bar sits beside
+// it, and a pick scrolls the note in place without a history entry (Esc leaves the Manual in one press).
+test("Manual: On this page follows the scroll, and a pick adds no history entry", async ({ page }) => {
+  await open(page, `/manual/${AUDIT_NOTE_IDS.long}`, 1440);
+  const aside = page.locator("aside[aria-label='Outline']");
+  const current = aside.locator("[aria-current=location]");
+  await expect(current).toHaveText("Core concept");
+  const pane = page.getByRole("region", { name: "Note" });
+  await pane.evaluate((el) => (el.scrollTop = el.querySelector("#kerberos")!.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop));
+  await expect(current).toHaveText("Kerberos");
+  await pane.evaluate((el) => (el.scrollTop = el.scrollHeight));
+  await expect(current).toHaveText("Related");
+  const bar = aside.getByTestId("section-indicator");
+  await expect(async () => {
+    const [b, c] = await Promise.all([bar.boundingBox(), current.boundingBox()]);
+    expect(Math.abs(b!.y - c!.y)).toBeLessThan(1);
+    expect(Math.abs(b!.height - c!.height)).toBeLessThan(1);
+  }).toPass();
+  const before = await page.evaluate(() => history.length);
+  await aside.getByRole("button", { name: "Is this normal?", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Is this normal?" })).toBeFocused();
+  await expect(current).toHaveText("Is this normal?");
+  await expect.poll(() => pane.evaluate((el) => {
+    const h = el.querySelector("#is-this-normal")!;
+    return Math.round(h.getBoundingClientRect().top - el.getBoundingClientRect().top);
+  })).toBeLessThan(40);
+  expect(await page.evaluate(() => history.length)).toBe(before);
+  expect(new URL(page.url()).hash).toBe("");
+  await page.screenshot({ path: "audit-output/shots/manual-outline-pick@1440.png" });
+});

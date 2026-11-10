@@ -10,14 +10,12 @@ import { useFillScope, useLastEngagementStore } from "../arsenal/useFillScope";
 import { useFillBase } from "../palette/fillData";
 import { MANUAL_NOTE_ID, manualKeysBlocked } from "./keys";
 import { MANUAL_QUERY } from "./searchPath";
-import { ManualOutline } from "./ManualOutline";
+import { jumpBehavior, ManualOutline, useOutlineSpy } from "./ManualOutline";
 import { ManualRail } from "./ManualRail";
 import { NoteView } from "./NoteView";
 import { useManualStore, type ManualPlace } from "./useManualStore";
 import { firstNote, useManualNotes, type ManualStatus } from "./useManualNotes";
 
-/** How far below the pane's top a heading may sit and still be the current section. */
-const CURRENT_SLACK = 24;
 /** Saving the place waits for the scroll to settle. */
 const SAVE_MS = 200;
 
@@ -63,17 +61,6 @@ function ManualEmpty({ status }: { status: keyof typeof EMPTY_TITLE }) {
       />
     </div>
   );
-}
-
-/** The geometry read of the current section: the last entry whose element is at or above the pane's top. */
-function sectionAt(pane: HTMLElement, ids: string[]): number {
-  const top = pane.getBoundingClientRect().top;
-  let at = -1;
-  ids.forEach((id, i) => {
-    const el = pane.querySelector(`[id="${CSS.escape(id)}"]`);
-    if (el && el.getBoundingClientRect().top - top <= CURRENT_SLACK) at = i;
-  });
-  return at;
 }
 
 /**
@@ -147,7 +134,6 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
   const query = params.get(MANUAL_QUERY)?.trim() ?? "";
   const filterRef = useRef<HTMLInputElement>(null);
   const [filter, setFilter] = useState("");
-  const [current, setCurrent] = useState(-1);
   const [outlineOpen, setOutlineOpen] = useState(false);
   /** The note on screen and its live scroll offset. */
   const shown = useRef<ManualPlace | null>(null);
@@ -155,8 +141,6 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
   const pendingScroll = useRef<ManualPlace | null>(null);
   /** ⌘[ is returning: the note being left is not pushed onto the history. */
   const returning = useRef(false);
-  /** The last section reached by [ ] or the outline: near the end of a note the pane can't scroll it to the top. */
-  const jumped = useRef(-1);
   /** A restored scroll waiting for late layout (exam lines, filled text) to settle: applied once more then. */
   const restored = useRef<ManualPlace | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -211,10 +195,6 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
       else focusQuietly(pane);
     }
     shown.current = { noteId: note.id, scrollTop: pane.scrollTop };
-    if (left?.noteId !== note.id) {
-      setCurrent(-1);
-      jumped.current = -1;
-    }
     savePlace();
     // location.key: a link to a heading in the same note scrolls again.
   }, [note?.id, location.key]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -231,6 +211,7 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
   }, [base.examReady]);
 
   const ids = useMemo(() => note?.outline.map((o) => o.id) ?? [], [note]);
+  const spy = useOutlineSpy(paneRef, ids);
 
   const [match, setMatch] = useState({ at: 0, count: 0 });
   const matchAt = useRef(0);
@@ -273,22 +254,15 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
     shown.current = { noteId: shown.current.noteId, scrollTop: pane.scrollTop };
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(savePlace, SAVE_MS);
-    let at = sectionAt(pane, ids);
-    const atEnd = pane.scrollTop + pane.clientHeight >= pane.scrollHeight - 2;
-    if (atEnd && jumped.current > at) at = jumped.current;
-    setCurrent(at);
   };
 
-  const goSection = (i: number) => {
-    const id = ids[i];
-    const pane = paneRef.current;
-    if (id === undefined || !pane) return;
-    jumped.current = i;
-    setCurrent(i);
-    const el = pane.querySelector(`[id="${CSS.escape(id)}"]`);
-    el?.scrollIntoView?.({ block: "start" });
+  /**
+   * [ ] jump at once; an outline pick glides (instant under reduced motion). No navigation: the address and the
+   * history stay as they are, so Esc still leaves the Manual in one press.
+   */
+  const goSection = (i: number, behavior?: ScrollBehavior) => {
     // The next Tab continues from the section, and ↓ PgDn Space scroll the note.
-    focusTarget(el);
+    focusTarget(spy.jump(i, behavior));
   };
 
   const open = (id: string) => {
@@ -336,12 +310,11 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
       filterRef.current?.select();
     } else if (e.key === "]" || e.key === "[") {
       e.preventDefault();
-      const next = e.key === "]" ? Math.min(ids.length - 1, current + 1) : Math.max(0, current - 1);
-      goSection(next);
+      if (ids.length > 0) goSection(spy.step(e.key === "]" ? 1 : -1));
     }
   });
 
-  const outline = note ? <ManualOutline outline={note.outline} current={current} onPick={goSection} /> : null;
+  const pick = (i: number) => goSection(i, jumpBehavior());
 
   return (
     <div className="grid min-h-0 grid-cols-[260px_minmax(0,1fr)] min-[1100px]:grid-cols-[260px_minmax(0,1fr)_220px]">
@@ -370,7 +343,9 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
               {note.outline.length > 0 && (
                 <div className="min-[1100px]:hidden">
                   <Disclosure label="On this page" count={note.outline.length} open={outlineOpen} onOpenChange={setOutlineOpen}>
-                    <nav aria-label="On this page" className="grid pt-2">{outline}</nav>
+                    <nav aria-label="On this page" className="grid pt-2">
+                      <ManualOutline outline={note.outline} current={spy.current} onPick={pick} />
+                    </nav>
                   </Disclosure>
                 </div>
               )}
@@ -382,8 +357,12 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
         </section>
       </div>
       <aside aria-label="Outline" className="hidden min-h-0 content-start gap-2 overflow-y-auto overflow-x-hidden border-l border-line px-3 py-4 min-[1100px]:grid">
-        <h2 className={`${labelClass} m-0 px-2`}>On this page</h2>
-        <nav aria-label="On this page" className="grid">{outline}</nav>
+        <h2 className={`${labelClass} m-0 px-3`}>On this page</h2>
+        {note && (
+          <nav aria-label="On this page" className="grid">
+            <ManualOutline outline={note.outline} current={spy.current} onPick={pick} follow />
+          </nav>
+        )}
       </aside>
     </div>
   );
