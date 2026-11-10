@@ -39,10 +39,11 @@ const enumIds = stages.find((a) => a.stage.id === "information-gathering")!.goal
 const allIds = stages.flatMap((a) => a.goals.map((g) => g.id));
 const done = (ids: string[]) => ids.map((id) => item(id, "done"));
 
-function mount(items: ChecklistItem[], pending = false) {
+function mount(items: ChecklistItem[], pending = false, slowServices = false) {
   m.engagementGet.mockResolvedValue(E1);
   m.hostsList.mockResolvedValue([H1]);
-  m.servicesListEngagement.mockResolvedValue([SMB]);
+  if (slowServices) m.servicesListEngagement.mockReturnValue(new Promise(() => {}));
+  else m.servicesListEngagement.mockResolvedValue([SMB]);
   if (pending) m.checklistList.mockReturnValue(new Promise(() => {}));
   else m.checklistList.mockResolvedValue(items);
   return render(
@@ -156,6 +157,15 @@ describe("J: next open step", () => {
     await user.keyboard("j");
     expect(screen.queryByText("Every step is done")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Full checklist" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("J from the Log tab while the checklist loads says so", async () => {
+    const user = userEvent.setup();
+    mount([], true, true);
+    await user.click(await screen.findByRole("tab", { name: "Log" }));
+    await user.keyboard("j");
+    expect(await screen.findByText("Checklist loading")).toBeInTheDocument();
+    expect(screen.queryByText("Every step is done")).not.toBeInTheDocument();
   });
 
   it("after a genuine all-done J puts the Full checklist toggle back", async () => {

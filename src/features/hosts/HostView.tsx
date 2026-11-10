@@ -150,7 +150,10 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
     if (!isFreeKey(e) || drawerOpen() || useNotesStore.getState().open || (e.key !== "j" && e.key !== "J") || split || stuckOpen) return;
     e.preventDefault();
     // The Next tab's checklist is not on screen yet (loading): nothing to jump to, and no false "all done".
-    if (tab === "next" && !document.querySelector("[data-checklist-ready]")) return;
+    if (tab === "next" && !document.querySelector("[data-checklist-ready]")) {
+      setJumpNote("Checklist loading");
+      return;
+    }
     widened.current = false;
     setJumpNote(undefined);
     setTab("next");
@@ -161,7 +164,10 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
     if (jump === 0 || tab !== "next") return;
     // State changes go through a microtask: this effect reacts to the render, it does not feed another one back.
     if (!document.querySelector("[data-checklist-ready]")) {
-      queueMicrotask(() => setJump(0));
+      queueMicrotask(() => {
+        setJump(0);
+        setJumpNote("Checklist loading");
+      });
     } else if (focusFirstOpenStep()) {
       queueMicrotask(() => setJump(0));
     } else if (!fullChecklist) {
