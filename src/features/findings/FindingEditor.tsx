@@ -17,6 +17,7 @@ import { CvssBuilder } from "./CvssBuilder";
 import { FindingFiles, type FileFormDraft } from "./FindingFiles";
 import { FindingSteps, liveSteps } from "./FindingSteps";
 import { useFindingMutations } from "./queries";
+import { useFindingDraftStore } from "./useFindingDraftStore";
 import { RefSuggestions } from "./RefSuggestions";
 import { ServicePicker } from "./ServicePicker";
 
@@ -42,6 +43,8 @@ export interface Draft {
   stepEntryIds: string[];
   /** Typed into "Add reference" but not added yet. */
   newRef: string;
+  /** CVEs added whose NVD lookup has not answered: closing within the debounce, or mid-lookup, resumes on reopen. */
+  nvdPending: string[];
   /** The file form while open (a file is saved on its own, not with the finding): kept so no close path loses it. */
   fileForm: FileFormDraft | null;
   /** The finding's `updatedAt` when this draft was opened; null for a new finding. */
@@ -53,7 +56,7 @@ export interface Draft {
  * input (`fileDirty`, reported by the form itself).
  */
 export function draftChanged(d: Draft, base: Draft, fileDirty: boolean): boolean {
-  return fileDirty || JSON.stringify({ ...d, fileForm: null }) !== JSON.stringify({ ...base, fileForm: null });
+  return fileDirty || JSON.stringify({ ...d, fileForm: null, nvdPending: [] }) !== JSON.stringify({ ...base, fileForm: null, nvdPending: [] });
 }
 
 /** The draft for `f`, or a new one on `hostId` (the host page it was opened from). */
@@ -72,6 +75,7 @@ export const toDraft = (f?: Finding, hostId?: string | null): Draft => ({
   lessons: f?.lessons ?? "",
   stepEntryIds: f?.stepEntryIds ?? [],
   newRef: "",
+  nvdPending: [],
   fileForm: null,
   baseUpdatedAt: f?.updatedAt ?? null,
 });
@@ -146,12 +150,21 @@ function useNvdLookup(draft: Draft, update: (fn: (d: Draft) => Draft) => void) {
       (rec) => {
         if (!live.current) return;
         records.current.set(cve, rec);
+        // The merge runs against the draft as it is when the update lands, not a snapshot from before the await.
+        const merge = (p: Draft): Draft => {
+          const kept = [...records.current.keys()].filter((id) => p.refs.includes(id)).flatMap((id) => records.current.get(id) ?? []);
+          const { apply } = nvdFill({ cvssVector: p.cvssVector, description: p.description, refs: p.refs }, kept);
+          return {
+            ...p,
+            ...apply,
+            refs: apply.refs ? [...p.refs, ...apply.refs.filter((r) => !p.refs.includes(r))] : p.refs,
+            nvdPending: p.nvdPending.filter((c) => c !== cve),
+          };
+        };
         const d = latest.current;
-        // Only CVEs still in the references count (one removed meanwhile no longer competes for the vector).
         const keptIds = [...records.current.keys()].filter((id) => d.refs.includes(id));
-        const kept = keptIds.flatMap((id) => records.current.get(id) ?? []);
-        const { apply, diffs: next } = nvdFill({ cvssVector: d.cvssVector, description: d.description, refs: d.refs }, kept);
-        update((p) => ({ ...p, ...apply, refs: apply.refs ? [...p.refs, ...apply.refs.filter((r) => !p.refs.includes(r))] : p.refs }));
+        const { diffs: next } = nvdFill({ cvssVector: d.cvssVector, description: d.description, refs: d.refs }, keptIds.flatMap((id) => records.current.get(id) ?? []));
+        update(merge);
         setDiffs({ cves: keptIds, items: next });
         setLine(undefined);
         setLooking((c) => (c === cve ? undefined : c));
@@ -159,16 +172,27 @@ function useNvdLookup(draft: Draft, update: (fn: (d: Draft) => Draft) => void) {
       (e: unknown) => {
         reportError(e);
         if (!live.current) return;
+        update((p) => (p.nvdPending.includes(cve) ? { ...p, nvdPending: p.nvdPending.filter((c) => c !== cve) } : p));
         setLine({ cve, text: lookupLine(cve, e) });
         setLooking((c) => (c === cve ? undefined : c));
       },
     );
   };
 
-  const lookup = (cve: string) => {
+  const schedule = (cve: string) => {
     clearTimeout(timers.current.get(cve));
     timers.current.set(cve, setTimeout(() => run(cve), NVD_DEBOUNCE_MS));
   };
+  const lookup = (cve: string) => {
+    // Kept in the draft until answered, so an editor closed before the debounce fires still looks it up on reopen.
+    update((p) => (p.nvdPending.includes(cve) ? p : { ...p, nvdPending: [...p.nvdPending, cve] }));
+    schedule(cve);
+  };
+  // A kept draft that comes back resumes the lookups it had not finished.
+  useEffect(() => {
+    for (const cve of latest.current.nvdPending) schedule(cve);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const present = (cve: string) => draft.refs.includes(cve);
   // A diff whose field now holds NVD's text (taken, or typed the same) is settled; one from a removed CVE is gone.
   const open = diffs.cves.every(present) ? diffs.items.filter((df) => draft[df.field].trim() !== df.nvd.trim()) : [];
@@ -272,6 +296,8 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
     const opts = {
       onSuccess: onSaved,
       onError: (e: Error) => {
+        // Shown here, so the store's after-close record is not needed.
+        if (draftKey) useFindingDraftStore.getState().takeSaveError(draftKey);
         const field = (e as { field?: string }).field;
         if (field === "title") setTitleError(e.message);
         else setFormError(e.message);
@@ -385,7 +411,7 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
                   <span className="truncate font-mono text-code text-fg" title={r}>{r}</span>
                   <ActionCell>
                     {isUrl(r) ? <CopyRef value={r} /> : <span aria-hidden className="size-7" />}
-                    <IconButton icon={X} tone="destructive" label={`Remove ${r}`} onClick={() => set("refs", d.refs.filter((x) => x !== r))} />
+                    <IconButton icon={X} tone="destructive" label={`Remove ${r}`} onClick={() => update((p) => ({ ...p, refs: p.refs.filter((x) => x !== r), nvdPending: p.nvdPending.filter((x) => x !== r) }))} />
                   </ActionCell>
                 </li>
               ))}

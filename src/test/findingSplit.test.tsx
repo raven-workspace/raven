@@ -538,3 +538,101 @@ describe("finding split: layout and keys (review round 1)", () => {
     expect(within(form).queryByText("CVE not found on NVD")).not.toBeInTheDocument();
   });
 });
+
+describe("finding split: services list inside the editor pane", () => {
+  it("scrolls on its own and pads like a scroll pane", async () => {
+    const user = userEvent.setup();
+    mount();
+    const form = await openSplit(user);
+    const list = await within(form).findByTestId("service-list");
+    // jsdom has no layout: the classes are the contract here. The list is its own scroll pane, so it pads like one
+    // (overlay scrollbars sit over its own content, not the editor pane's); Playwright checks pixels.
+    expect(list).toHaveClass("overflow-y-auto", "p-1", "pr-3");
+  });
+});
+
+describe("finding split: NVD lookup and failed saves (UX round 1 leftovers)", () => {
+  it("a CVE is looked up once typing settles, not before, and only once", async () => {
+    const user = userEvent.setup();
+    m.nvdLookup.mockResolvedValue(record());
+    mount();
+    const form = await openSplit(user);
+    await addRef(user, form, "CVE-2021-41773");
+    expect(m.nvdLookup).not.toHaveBeenCalled();
+    await waitFor(() => expect(m.nvdLookup).toHaveBeenCalledTimes(1));
+    expect(m.nvdLookup).toHaveBeenCalledWith("CVE-2021-41773");
+  });
+
+  it("closing before the debounce fires keeps the lookup: it runs when the draft comes back", async () => {
+    const user = userEvent.setup();
+    m.nvdLookup.mockResolvedValue(record());
+    mount();
+    let form = await openSplit(user);
+    await addRef(user, form, "CVE-2021-41773");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("form", { name: "New finding" })).not.toBeInTheDocument();
+    expect(m.nvdLookup).not.toHaveBeenCalled();
+    expect(useFindingDraftStore.getState().drafts["e1:h1:new"]?.nvdPending).toEqual(["CVE-2021-41773"]);
+    form = await openSplit(user);
+    await waitFor(() => expect(m.nvdLookup).toHaveBeenCalledWith("CVE-2021-41773"));
+    await waitFor(() => expect(within(form).getByLabelText("CVSS vector")).toHaveValue(V31));
+    expect(useFindingDraftStore.getState().drafts["e1:h1:new"]?.nvdPending).toEqual([]);
+  });
+
+  it("adding and removing a CVE before the lookup fires leaves the draft unchanged", async () => {
+    const user = userEvent.setup();
+    mount();
+    const form = await openSplit(user);
+    await addRef(user, form, "CVE-2021-41773");
+    await user.click(within(form).getByRole("button", { name: "Remove CVE-2021-41773" }));
+    expect(useFindingDraftStore.getState().drafts["e1:h1:new"]).toBeUndefined();
+    await user.keyboard("{Escape}");
+    expect(useFindingDraftStore.getState().drafts["e1:h1:new"]).toBeUndefined();
+  });
+
+  it("an NVD answer merges into what is typed by the time it lands", async () => {
+    const user = userEvent.setup();
+    let answer!: () => void;
+    m.nvdLookup.mockImplementation(() => new Promise((r) => (answer = () => r(record()))));
+    mount();
+    const form = await openSplit(user);
+    await addRef(user, form, "CVE-2021-41773");
+    await waitFor(() => expect(m.nvdLookup).toHaveBeenCalled());
+    await user.type(within(form).getByLabelText("Description"), "Typed meanwhile.");
+    await act(async () => answer());
+    await waitFor(() => expect(within(form).getByLabelText("CVSS vector")).toHaveValue(V31));
+    expect(within(form).getByLabelText("Description")).toHaveValue("Typed meanwhile.");
+    expect(within(form).getByText(/NVD has a different description/)).toBeInTheDocument();
+  });
+
+  it("a save that fails after the split is gone is reported when the draft comes back", async () => {
+    const user = userEvent.setup();
+    let fail!: () => void;
+    m.findingCreate.mockImplementationOnce(() => new Promise((_r, rej) => (fail = () => rej(new RavenError("db", "disk full")))));
+    const first = mount();
+    const form = await openSplit(user);
+    await user.type(within(form).getByLabelText("Title"), "Kerberoastable svc_sql");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.findingCreate).toHaveBeenCalledTimes(1));
+    first.unmount();
+    await act(async () => fail());
+    mount();
+    const again = await openSplit(user);
+    expect(within(again).getByLabelText("Title")).toHaveValue("Kerberoastable svc_sql");
+    expect(await within(again).findByText(/The last save didn't go through: disk full/)).toBeInTheDocument();
+  });
+
+  it("a save that fails with the form open shows its error once, and not again on reopen", async () => {
+    const user = userEvent.setup();
+    m.findingCreate.mockRejectedValueOnce(new RavenError("db", "disk full"));
+    mount();
+    let form = await openSplit(user);
+    await user.type(within(form).getByLabelText("Title"), "Kerberoastable svc_sql");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+    expect(await within(form).findByRole("alert")).toHaveTextContent("disk full");
+    await user.keyboard("{Escape}");
+    form = await openSplit(user);
+    expect(within(form).queryByText(/The last save didn't go through/)).not.toBeInTheDocument();
+  });
+});
+

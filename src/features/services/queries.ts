@@ -38,7 +38,14 @@ export function useServiceMutations(engagementId: string, hostId: string) {
       onSuccess,
     }),
     unconfirm: useMutation({ mutationFn: (id: string) => api.serviceUnconfirm(id), onSuccess }),
-    remove: useMutation({ mutationFn: (id: string) => api.serviceDelete(id), onSuccess }),
+    // Deleting a service also removes the ruled-out item its dead-end verdict made.
+    remove: useMutation({
+      mutationFn: (id: string) => api.serviceDelete(id),
+      onSuccess: () => {
+        onSuccess();
+        invalidateRuledOut(qc, engagementId);
+      },
+    }),
     /** A verdict changes no goal: only the services and the ruled-out items (dead end creates one) refresh. */
     setVerdict: useMutation({
       mutationFn: (v: { id: string; verdict: ServiceVerdict | null; reason?: string }) => api.serviceSetVerdict(v.id, v.verdict, v.reason),

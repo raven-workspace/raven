@@ -223,7 +223,7 @@ describe("host checklist tab", () => {
     mount();
     m.servicesListEngagement.mockRejectedValue(new Error("boom"));
     await openChecklist(user);
-    expect(await within(await screen.findByRole("tabpanel")).findByRole("alert")).toHaveTextContent("boom");
+    expect(await within(await screen.findByRole("tabpanel")).findByRole("alert")).toHaveTextContent("Couldn't load the checklist");
   });
 
   it("a failed tick after the hop was created retries only the tick (hopCreate called once)", async () => {

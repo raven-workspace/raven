@@ -6,6 +6,7 @@ import type { Host } from "../../types/host";
 import type { HostIdentity } from "../../types/hostFacts";
 import type { ExtractionSummary, LogContent, LogEntry, LogKind, NewAttachment } from "../../types/log";
 import type { Service } from "../../types/service";
+import type { ResolvedInterpretation } from "../../engines/interpret/resolve";
 import { applyInterpretation, ExtractionError, interpretEntry, type Applied, type FiledBySave } from "./applyInterpretation";
 import { newHostScans } from "./resolve";
 
@@ -24,6 +25,37 @@ export interface CaptureEdits {
   content: LogContent;
   payloadId?: string;
   payloadValues?: Record<string, string>;
+  /** Credentials the pasted note is made of (`user:pass` lines), added on save; each linked to its host when one is. */
+  credentials?: CapturedCredential[];
+}
+
+/** A credential read from a capture paste, placed on the host the capture is linked to (null: none). */
+export interface CapturedCredential {
+  username: string;
+  domain: string | null;
+  secret: string;
+  type: "password" | "hash";
+  /** Windows local notation (`.\user`): local to its host. */
+  local?: boolean;
+  hostId: string | null;
+}
+
+/**
+ * The pasted credentials as interpretation results, so they are filed, deduped, summarised and undone like any other.
+ * Scoped as the Credentials form does (domain), so they dedupe against what was added there; `.\user` is local to
+ * its host.
+ */
+export function pastedCredentials(list: CapturedCredential[]): ResolvedInterpretation["credentials"] {
+  return list.map((c) => ({
+    username: c.username,
+    domain: c.domain,
+    type: c.type,
+    secret: c.type === "hash" ? c.secret.toLowerCase() : c.secret,
+    hashType: c.type === "hash" ? "NTLM" : null,
+    scope: c.local ? ("local" as const) : ("domain" as const),
+    source: "paste",
+    hostId: c.hostId,
+  }));
 }
 
 export const IDENTITY_FAILED = "Saved the entry, but the host's identity didn't update. Paste the output again to retry.";
@@ -191,6 +223,10 @@ export async function saveCapture(args: SaveCaptureArgs): Promise<SaveCaptureRes
   let applied: Applied | null = null;
   try {
     const resolved = interpretEntry(entry, hosts, draftInput?.domain ?? "", draftInput?.scope ?? []);
+    if (edits.credentials?.length) {
+      resolved.parsers.push("paste");
+      resolved.credentials.push(...pastedCredentials(edits.credentials));
+    }
     applied = await applyInterpretation(engagementId, entry, resolved, { hosts, createdHostIds, scans: filedScans, identity });
   } catch (e) {
     if (e instanceof ExtractionError) applied = e.applied;

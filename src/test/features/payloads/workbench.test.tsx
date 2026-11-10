@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -333,6 +333,39 @@ describe("Payloads Workbench", () => {
     expect(await screen.findByRole("tab", { name: "Next" })).toBeInTheDocument();
   });
 
+  it("Esc with /payloads as the first history entry goes home, not out of the app", async () => {
+    const user = userEvent.setup();
+    mount(["/payloads"]);
+    await workbench();
+    await user.keyboard("{Escape}");
+    await vi.waitFor(() => expect(screen.queryByRole("main", { name: "Payloads" })).not.toBeInTheDocument());
+  });
+
+  it("P typed in a field types, and does not jump to the generator list", async () => {
+    const user = userEvent.setup();
+    mount(["/payloads"]);
+    const w = within(await workbench());
+    await w.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    const field = read().getByRole("textbox", { name: "LHOST" });
+    await user.clear(field);
+    await user.type(field, "pP");
+    expect(field).toHaveValue("pP");
+    expect(field).toHaveFocus();
+    expect(read().getByRole("listbox", { name: "Generator" })).not.toHaveFocus();
+  });
+
+  it("paste-context choices carry their full label as a title; the host chip has a minimum width", async () => {
+    mount(["/payloads"]);
+    const w = within(await workbench());
+    await w.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    for (const label of ["URL / form parameter", "Inside a SQL string", "Jenkins / Groovy console"]) {
+      expect(read().getByRole("button", { name: label })).toHaveAttribute("title", label);
+    }
+    // The chip's column never shrinks below 10rem, so a short or missing name still reads as a control.
+    const chip = read().getByRole("button", { name: "Fill for host: zzweb01" });
+    expect(chip.closest("[data-host-chip-cell]")).toHaveClass("grid-cols-[minmax(10rem,max-content)]");
+  });
+
   it("Esc leaves the Workbench", async () => {
     const user = userEvent.setup();
     mount(["/e/e1/h/h1", "/payloads"]);
@@ -340,5 +373,192 @@ describe("Payloads Workbench", () => {
     await user.keyboard("{Escape}");
     expect(await screen.findByRole("tab", { name: "Next" })).toBeInTheDocument();
     expect(screen.queryByRole("main", { name: "Payloads" })).not.toBeInTheDocument();
+  });
+});
+
+describe("SQL panel folds finished steps", () => {
+  const sqlIn = async () => within(await within(await workbench()).findByRole("region", { name: "SQL injection" }));
+  const stepItems = (sql: ReturnType<typeof within>) => within(sql.getByRole("list", { name: "SQL steps" })).getAllByRole("listitem");
+  /** The fold lines (folded steps): buttons that say they are collapsed. */
+  const folded = (li: HTMLElement) => [...li.querySelectorAll(":scope > h3 > button[aria-expanded='false']")];
+
+  it("a copied step folds to its number, title and 'copied'; focus moves to the next step", async () => {
+    const user = userEvent.setup();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h2" });
+    mount(["/payloads?generator=sql"]);
+    const sql = await sqlIn();
+    await user.click(sql.getByRole("button", { name: "Copy Break the query" }));
+    expect(await navigator.clipboard.readText()).toBe(buildSql("detect-error", "postgres", "url-param", {}).text);
+    const fold = sql.getByRole("button", { name: "1. Break the query: copied" });
+    expect(fold).toHaveAttribute("aria-expanded", "false");
+    expect(sql.queryByRole("button", { name: "Copy Break the query" })).not.toBeInTheDocument();
+    expect(sql.getByRole("button", { name: "Copy Boolean test" })).toHaveFocus();
+    // Another engine or injection point is other text, not yet copied: open again; back, it is folded again.
+    await user.click(sql.getByRole("button", { name: "MySQL" }));
+    expect(sql.queryByRole("button", { name: /^1\. Break the query/ })).not.toBeInTheDocument();
+    expect(sql.getByRole("button", { name: "Copy Break the query" })).toBeInTheDocument();
+    await user.click(sql.getByRole("button", { name: "PostgreSQL" }));
+    expect(sql.getByRole("button", { name: "1. Break the query: copied" })).toHaveAttribute("aria-expanded", "false");
+    await user.click(sql.getByRole("button", { name: "Form field" }));
+    expect(sql.getByRole("button", { name: "Copy Break the query" })).toBeInTheDocument();
+  });
+
+  it("a step held open by typing folds by keyboard at once, by mouse only once the click is done", async () => {
+    const user = userEvent.setup();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h2" });
+    mount(["/payloads?generator=sql"]);
+    const sql = await sqlIn();
+    await user.type(sql.getByRole("textbox", { name: "Columns" }), "3");
+    const target = sql.getByRole("button", { name: "Copy Find the shown columns" });
+    // Pressed, not yet released: focus has left the field, but the step does not fold under the pointer.
+    await user.pointer({ keys: "[MouseLeft>]", target });
+    expect(target).toHaveFocus();
+    expect(sql.getByRole("textbox", { name: "Columns" })).toBeInTheDocument();
+    await user.pointer({ keys: "[/MouseLeft]", target });
+    expect(await navigator.clipboard.readText()).toBe(buildSql("reflected-columns", "postgres", "url-param", { columns: 3 }).text);
+    expect(await sql.findByRole("button", { name: "4. Count the columns: 3" })).toHaveAttribute("aria-expanded", "false");
+    // By keyboard: ⇥ out of a held field folds it straight away.
+    await user.click(sql.getByRole("button", { name: "4. Count the columns: 3" }));
+    expect(sql.getByRole("textbox", { name: "Columns" })).toHaveFocus();
+    await user.tab();
+    expect(sql.getByRole("button", { name: "4. Count the columns: 3" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("a step held open on one host is not held on another", async () => {
+    const user = userEvent.setup();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h2" });
+    usePayloadsStore.setState({ overrides: { h1: { sqlValues: { columns: 5 } } } });
+    mount(["/payloads?generator=sql"]);
+    const sql = await sqlIn();
+    await user.type(sql.getByRole("textbox", { name: "Columns" }), "3");
+    expect(sql.getByRole("button", { name: "4. Count the columns" })).toHaveAttribute("aria-expanded", "true");
+    await user.click(read().getByRole("button", { name: "Fill for host: zzdb02" }));
+    await user.click(await screen.findByRole("option", { name: /zzweb01/ }));
+    expect(await sql.findByRole("button", { name: "4. Count the columns: 5" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("a step held on host A is not held again after A → B → A", async () => {
+    const user = userEvent.setup();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h2" });
+    usePayloadsStore.setState({ overrides: { h1: { sqlValues: { columns: 5 } } } });
+    mount(["/payloads?generator=sql"]);
+    const sql = await sqlIn();
+    await user.type(sql.getByRole("textbox", { name: "Columns" }), "3");
+    expect(sql.getByRole("button", { name: "4. Count the columns" })).toHaveAttribute("aria-expanded", "true");
+    // The host in scope moves while focus stays in the field (no leave to release the hold), then comes back.
+    act(() => useLastEngagementStore.setState({ hostId: "h1" }));
+    expect(await sql.findByRole("button", { name: "4. Count the columns: 5" })).toHaveAttribute("aria-expanded", "false");
+    act(() => useLastEngagementStore.setState({ hostId: "h2" }));
+    // Back on A, its old hold is gone: the filled step reads folded.
+    expect(await sql.findByRole("button", { name: "4. Count the columns: 3" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it.each([
+    ["a cancelled press", (el: HTMLElement) => fireEvent.pointerCancel(el)],
+    ["the window losing focus", () => fireEvent.blur(window)],
+  ])("after %s, a pending fold runs and keyboard folds are immediate again", async (_, end) => {
+    const user = userEvent.setup();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h2" });
+    mount(["/payloads?generator=sql"]);
+    const sql = await sqlIn();
+    await user.type(sql.getByRole("textbox", { name: "Columns" }), "3");
+    const target = sql.getByRole("button", { name: "Copy Find the shown columns" });
+    await user.pointer({ keys: "[MouseLeft>]", target });
+    expect(sql.getByRole("textbox", { name: "Columns" })).toBeInTheDocument();
+    end(target);
+    const fold = await sql.findByRole("button", { name: "4. Count the columns: 3" });
+    expect(fold).toHaveAttribute("aria-expanded", "false");
+    // No click since: ↵ reopens the step at its field, and ⇥ out folds it at once.
+    fold.focus();
+    await user.keyboard("{Enter}");
+    expect(sql.getByRole("textbox", { name: "Columns" })).toHaveFocus();
+    await user.tab();
+    expect(sql.getByRole("button", { name: "4. Count the columns: 3" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("a filled value folds its step showing the value; ↵ on the fold line reopens it; clearing it unfolds", async () => {
+    const user = userEvent.setup();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h2" });
+    mount(["/payloads?generator=sql"]);
+    const sql = await sqlIn();
+    // Typing holds the step open; ↵ copies it and folds it.
+    await user.type(sql.getByRole("textbox", { name: "Columns" }), "3");
+    expect(sql.getByRole("textbox", { name: "Columns" })).toHaveValue("3");
+    await user.keyboard("{Enter}");
+    expect(await navigator.clipboard.readText()).toBe(buildSql("column-count", "postgres", "url-param", { columns: 3 }).text);
+    const fold = sql.getByRole("button", { name: "4. Count the columns: 3" });
+    expect(fold).toHaveAttribute("aria-expanded", "false");
+    expect(sql.queryByRole("textbox", { name: "Columns" })).not.toBeInTheDocument();
+    expect(sql.getByRole("textbox", { name: "Shown column" })).toHaveFocus();
+    // ↵ on the fold line reopens the step, at its field.
+    fold.focus();
+    await user.keyboard("{Enter}");
+    expect(sql.getByRole("button", { name: "4. Count the columns" })).toHaveAttribute("aria-expanded", "true");
+    expect(sql.getByRole("textbox", { name: "Columns" })).toHaveFocus();
+    // Cleared, it is unfinished again: open, and moving on does not fold it.
+    await user.clear(sql.getByRole("textbox", { name: "Columns" }));
+    await user.tab();
+    await user.tab();
+    expect(within(stepItems(sql)[3]!).getByRole("heading").textContent).toBe("4. Count the columns");
+    expect(sql.getByRole("textbox", { name: "Columns" })).toBeInTheDocument();
+    expect(folded(stepItems(sql)[3]!)).toHaveLength(0);
+  });
+
+  it("a value cleared elsewhere unfolds its step", async () => {
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h2" });
+    usePayloadsStore.setState({ overrides: { h2: { sqlValues: { columns: 3, table: "users" } } } });
+    mount(["/payloads?generator=sql"]);
+    const sql = await sqlIn();
+    expect(sql.getByRole("button", { name: "4. Count the columns: 3" })).toHaveAttribute("aria-expanded", "false");
+    expect(sql.getByRole("button", { name: "8. Tables: users" })).toHaveAttribute("aria-expanded", "false");
+    act(() => usePayloadsStore.getState().override("h2", { sqlValues: { table: "users" } }));
+    expect(sql.queryByRole("button", { name: /^4\. Count the columns/ })).not.toBeInTheDocument();
+    expect(sql.getByRole("textbox", { name: "Columns" })).toHaveValue("");
+    expect(sql.getByRole("button", { name: "8. Tables: users" })).toBeInTheDocument();
+  });
+
+  it("run commands fold the same way when copied", async () => {
+    const user = userEvent.setup();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h2" });
+    mount(["/payloads?generator=sql"]);
+    const sql = await sqlIn();
+    await user.click(sql.getByRole("button", { name: "Copy COPY FROM PROGRAM reverse shell" }));
+    expect(sql.getByRole("button", { name: "COPY FROM PROGRAM reverse shell: copied" })).toHaveAttribute("aria-expanded", "false");
+    await user.click(sql.getByRole("button", { name: "COPY FROM PROGRAM reverse shell: copied" }));
+    expect(sql.getByRole("button", { name: "Copy COPY FROM PROGRAM reverse shell" })).toBeInTheDocument();
+  });
+
+  it("the base64 script's parts get their own list, apart from the text's", async () => {
+    const user = userEvent.setup();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h2" });
+    mount(["/payloads?generator=sql"]);
+    const sql = await sqlIn();
+    await user.click(sql.getByRole("button", { name: "MSSQL" }));
+    const item = within(within(sql.getByRole("list", { name: "Run commands" })).getAllByRole("listitem").find((li) => within(li).queryByRole("heading", { name: "xp_cmdshell reverse shell" }))!);
+    await user.click(item.getByRole("button", { name: "What each part does" }));
+    await user.click(item.getByRole("button", { name: "Inside the base64 script" }));
+    const lists = item.getAllByRole("definition").map((d) => d.closest("dl")!);
+    const [text, decoded] = [...new Set(lists)];
+    expect(within(text!).getByText("xp_cmdshell")).toBeInTheDocument();
+    expect(within(text!).queryByText("iex $data")).not.toBeInTheDocument();
+    expect(within(decoded!).getByText("iex $data")).toBeInTheDocument();
+  });
+
+  it("in the drawer, finished steps are fold lines and the first open step follows them, focused", async () => {
+    usePayloadsStore.setState({ generator: "sql" });
+    const user = userEvent.setup();
+    mount(["/e/e1/h/h2"]);
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("p");
+    const d = within(await screen.findByRole("complementary", { name: "Payloads" }));
+    const sql = within(await d.findByRole("region", { name: "SQL injection" }));
+    for (const t of ["Break the query", "Boolean test", "Time test"]) await user.click(sql.getByRole("button", { name: `Copy ${t}` }));
+    const items = stepItems(sql);
+    const open = items.filter((li) => folded(li).length === 0);
+    expect(items.length - open.length).toBe(3);
+    expect(open).toHaveLength(7);
+    // Nothing above the open step but fold lines.
+    expect(items.indexOf(open[0]!)).toBe(3);
+    expect(sql.getByRole("textbox", { name: "Columns" })).toHaveFocus();
   });
 });

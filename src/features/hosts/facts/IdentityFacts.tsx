@@ -2,7 +2,6 @@ import { PencilSimpleIcon } from "@phosphor-icons/react";
 import { useId, useMemo, useState, type FormEvent } from "react";
 import { credLabel, dedupeHashCaptures, foldCrackedHashes, usernameLabel } from "../../../engines/credentials";
 import { vectorsFromIdentity } from "../../../engines/facts";
-import { api } from "../../../lib/api";
 import { cx } from "../../../lib/cx";
 import type { HostIdentity } from "../../../types/hostFacts";
 import type { Host } from "../../../types/host";
@@ -105,12 +104,13 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
   const identity = identityQ.data ?? null;
   const fromLog = useMemo(() => (logQ.data ? identityFromLog(logQ.data, host) : null), [logQ.data, host]);
   const readFromLog = async () => {
-    if (!fromLog?.identity || setIdentity.isPending) return;
+    // The button shows only while no identity is stored, so there is no stored name to keep; but not before it has loaded.
+    if (!fromLog?.identity || setIdentity.isPending || identityQ.isPending) return;
     setReadError(undefined);
     const { username, privileges, groups, entryId } = fromLog.identity;
     try {
-      // Same fallback as capture: a log with only `whoami /priv` has no name, so keep the stored one.
-      const name = username ?? (await api.hostIdentityGet(host.id))?.username ?? "unknown";
+      // Same placeholder as capture: a log with only `whoami /priv` names no one.
+      const name = username ?? "unknown";
       await setIdentity.mutateAsync({ hostId: host.id, username: name, privileges, groups, entryId });
       for (const title of vectorsFromIdentity({ privileges, groups })) {
         await upsertVector.mutateAsync({ title, status: "try", source: "auto" });

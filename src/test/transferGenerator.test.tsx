@@ -260,12 +260,11 @@ describe("Transfer a file: several target blocks share one guard", () => {
     mount("/payloads?generator=transfer");
     const g = within(await generator());
     await user.type(g.getByRole("combobox", { name: "Value for FILE" }), "linpeas.sh");
-    const copies = await vi.waitFor(() => {
-      const c = g.getAllByRole("button", { name: /^Copy command/ });
-      expect(c.length).toBeGreaterThanOrEqual(3);
-      return c;
-    });
-    const targetCopies = copies.slice(-2);
+    // The two target-side blocks, by name: adding a block never changes which ones this checks.
+    const targetCopies = await vi.waitFor(() => [
+      g.getByRole("button", { name: "Copy command: Download with wget" }),
+      g.getByRole("button", { name: "Copy command: Make the file executable" }),
+    ]);
     await navigator.clipboard.writeText("untouched");
     await user.click(targetCopies[1]!);
     expect(await g.findAllByText(/^\{LHOST\} not filled/)).toHaveLength(1);

@@ -77,8 +77,10 @@ export function ServicePicker({ hosts, servicesByHost, error, value, onChange }:
       ) : withServices.length === 0 ? (
         <span className="text-meta text-muted">No services on {hosts.length === 1 ? "this host" : "these hosts"} yet.</span>
       ) : (
-        // Its own scroll past ~10 rows, so a host with many ports doesn't push the rest of the form away.
-        <div className={`grid max-h-[17rem] content-start gap-2 ${SCROLL_PANE}`}>
+        // Its own scroll past ~10 rows, so a host with many ports doesn't push the rest of the form away. It is a scroll
+        // pane of its own, so it pads like one (SCROLL_PANE): the editor pane's padding can't keep this list's overlay
+        // scrollbar off its rows or leave room for a row's focus ring (audit: "scroll panes never clip focus").
+        <div data-testid="service-list" className={`grid max-h-[17rem] content-start gap-2 ${SCROLL_PANE}`}>
           {withServices.map((h) => {
             const { rows, rpc, udp } = foldServices(servicesByHost.get(h.id) ?? []);
             const has = (list: Service[]) => list.some((s) => value.includes(s.id));

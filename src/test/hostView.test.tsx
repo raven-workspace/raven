@@ -110,7 +110,22 @@ describe("host view", () => {
     expect(screen.getByRole("tab", { name: "Next" })).toHaveAttribute("aria-selected", "true");
   });
 
-  it("⌥2 does nothing while typing in a field", async () => {
+  it("⌥2 does nothing while typing in a field outside a dialog", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByRole("tab", { name: "Next" });
+    const field = document.createElement("input");
+    document.body.appendChild(field);
+    try {
+      field.focus();
+      await user.keyboard("{Alt>}2{/Alt}");
+      expect(screen.getByRole("tab", { name: "Next" })).toHaveAttribute("aria-selected", "true");
+    } finally {
+      field.remove();
+    }
+  });
+
+  it("⌥2 does nothing while a dialog is open", async () => {
     const user = userEvent.setup();
     mount();
     await screen.findByRole("tab", { name: "Next" });
@@ -133,7 +148,7 @@ describe("host view", () => {
     const facts = await screen.findByRole("region", { name: "Facts" });
     const root = screen.getByRole("region", { name: "Host" }).parentElement!;
     expect(root.className).toMatch(/@container\/host/);
-    expect(root.className).toMatch(/grid-rows-\[auto_minmax\(0,1fr\)\]/);
+    expect(root.className).toMatch(/grid-rows-\[auto_minmax\(0,1fr\)_auto\]/);
     const body = facts.parentElement!.parentElement!;
     expect(body.className).toContain("@min-[760px]/host:grid-cols-[minmax(16rem,1fr)_minmax(0,1.4fr)]");
     expect(body).toContainElement(screen.getByRole("tablist"));

@@ -18,9 +18,15 @@ export function useFindingMutations(eid: string, opts: { draftKey?: string } = {
   const qc = useQueryClient();
   const done = () => void qc.invalidateQueries({ queryKey: findingsKey(eid) });
   const { draftKey } = opts;
+  // `mutate`'s own onError never fires once the form is gone, so a save that fails then is recorded here; a form still
+  // mounted shows the error itself and clears this (`takeSaveError`).
+  const failed = (e: Error) => {
+    if (draftKey) useFindingDraftStore.getState().setSaveError(draftKey, e.message);
+  };
   return {
     create: useMutation({
       mutationFn: (input: FindingInput) => api.findingCreate(eid, input),
+      onError: failed,
       onSuccess: () => {
         if (draftKey) useFindingDraftStore.getState().drop(draftKey);
         done();
@@ -28,6 +34,7 @@ export function useFindingMutations(eid: string, opts: { draftKey?: string } = {
     }),
     update: useMutation({
       mutationFn: (v: { id: string; input: FindingInput }) => api.findingUpdate(v.id, v.input),
+      onError: failed,
       onSuccess: (_f, v) => {
         useFindingDraftStore.getState().dropFinding(v.id);
         done();

@@ -11,8 +11,10 @@ export type HostChipHandle = ChipPickerHandle;
  * The host picker: a bordered "Host  dc01" trigger in the Tab order. A click, Enter or ⌥H (see `isHostPickKey`, `ref.open()`) opens a listbox of "No host" plus each host with its IP.
  * `engagementName` is added to the tooltip when the engagement is not the route's (full-screen Arsenal).
  */
-export function HostChip({ hosts, value, onChange, engagementName, align = "end", className = "max-w-2/5", ref }: {
+export function HostChip({ hosts, value, onChange, onMousePick, engagementName, align = "end", className = "max-w-2/5", ref }: {
   hosts: Host[]; value: string | null; onChange: (hostId: string | null) => void; engagementName?: string;
+  /** After a click on a host (not a key): where focus goes next (ChipPicker's `onMousePick`). */
+  onMousePick?: (id: string | null) => void;
   /** Which edge of the chip the list lines up with; "end" for a chip at the right edge of a bar. */
   align?: "start" | "end";
   /** Width limits for the chip as a whole (a share of its row by default). */
@@ -28,6 +30,7 @@ export function HostChip({ hosts, value, onChange, engagementName, align = "end"
         options={options}
         value={value}
         onPick={onChange}
+        {...(onMousePick ? { onMousePick } : {})}
         label={`Fill for host: ${shortName}`}
         listLabel="Fill for host"
         title={`${current ? current.name : "No host"}${engagementName ? ` in ${engagementName}` : ""}: fill for another host (⌥H)`}

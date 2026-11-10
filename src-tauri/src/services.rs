@@ -285,10 +285,14 @@ pub fn set_verdict(conn: &Connection, id: &str, verdict: Option<&str>, reason: O
     get(conn, id)
 }
 
+/// Deleting a service also removes the ruled-out item its dead-end verdict created.
 pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
-    if conn.execute("DELETE FROM services WHERE id = ?1", [id])? == 0 {
+    let tx = conn.unchecked_transaction()?;
+    if tx.execute("DELETE FROM services WHERE id = ?1", [id])? == 0 {
         return Err(AppError::NotFound);
     }
+    crate::notes::unlink_ruled_out(&tx, "service", id)?;
+    tx.commit()?;
     Ok(())
 }
 
@@ -574,5 +578,25 @@ mod tests {
         assert!(left.iter().any(|r| r.reason == "by hand" && r.source_id.is_none()));
         assert!(left.iter().any(|r| r.source_id.as_deref() == Some(other.id.as_str())));
         assert_eq!(set_verdict(c, &s.id, None, None).unwrap().verdict, None);
+    }
+
+    #[test]
+    fn deleting_a_dead_end_service_removes_its_ruled_out_item() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let h = host(c, &e, "web");
+        let s = create(c, &h, sin(21)).unwrap();
+        crate::notes::ruled_out_create(
+            c,
+            crate::notes::RuledOutInput { engagement_id: e, host_id: Some(h.clone()), text: "by hand".into(), reason: "r".into(), private: false },
+        )
+        .unwrap();
+        set_verdict(c, &s.id, Some("dead_end"), Some("anon off")).unwrap();
+        assert_eq!(ruled(c, &h).len(), 2);
+        delete(c, &s.id).unwrap();
+        let left = ruled(c, &h);
+        assert_eq!((left.len(), left[0].text.as_str()), (1, "by hand"));
+        assert_eq!(delete(c, &s.id), Err(AppError::NotFound));
     }
 }

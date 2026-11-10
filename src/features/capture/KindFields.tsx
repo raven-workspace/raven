@@ -17,11 +17,15 @@ export interface KindFieldsProps {
 export function KindFields({ content, caption, onCaption, flagKind, onFlagKind, onKeyDown, captionRef }: KindFieldsProps) {
   if (content.kind === "screenshot") {
     return (
-      <div className="grid gap-1">
+      <div className="grid gap-2">
         <Field label="Caption">
           <Input ref={captionRef} value={caption} onChange={(e) => onCaption(e.target.value)} onKeyDown={onKeyDown} />
         </Field>
-        <p className="m-0 text-code text-muted">{content.fileName}</p>
+        {/* Labelled, so the file name reads as where the image is saved, not as help text for the caption. */}
+        <p data-testid="capture-file-name" className="m-0 grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-2">
+          <span className="text-meta text-muted">Saved as</span>
+          <span className="break-all text-code text-fg-2">{content.fileName}</span>
+        </p>
       </div>
     );
   }

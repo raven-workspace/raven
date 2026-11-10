@@ -141,10 +141,15 @@ export const api = {
   serviceSetVerdict: (id: string, verdict: ServiceVerdict | null, reason?: string) =>
     call<Service>("service_set_verdict", { id, verdict, reason: reason ?? null }),
   hostIdentityGet: (hostId: string) => call<HostIdentity | null>("host_identity_get", { hostId }),
+  /** `updatedAt` is stamped by the backend; the 0 sent here is ignored. */
   hostIdentitySet: (input: Omit<HostIdentity, "updatedAt">) =>
     call<HostIdentity>("host_identity_set", { input: { ...input, updatedAt: 0 } }),
   vectorsList: (hostId: string) => call<PrivescVector[]>("vectors_list", { hostId }),
-  /** An `auto` upsert never changes a vector the user set by hand. */
+  /**
+   * An `auto` upsert never changes a vector the user set by hand. It rejects `status: "ruled_out"`: rule a vector out
+   * with `vectorSetStatus`, which needs a reason and adds the linked ruled-out item. A manual upsert over a ruled-out
+   * vector reopens it and removes that item. Deleting a vector (or a service) removes its linked item too.
+   */
   vectorUpsert: (hostId: string, input: VectorInput) => call<PrivescVector>("vector_upsert", { hostId, input }),
   vectorSetStatus: (id: string, status: VectorStatus, reason?: string) =>
     call<PrivescVector>("vector_set_status", { id, status, reason: reason ?? null }),

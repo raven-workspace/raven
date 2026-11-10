@@ -60,7 +60,7 @@ export interface LogEntryInput {
   returnedNothing: boolean;
   private: boolean;
   content: LogContent;
-  /** Omitted on update keeps the stored values. */
+  /** Omitted (or null) on update keeps the stored values; "" clears the payload id and its values. */
   payloadId?: string | null;
   payloadValues?: Record<string, string> | null;
   at?: number | null;

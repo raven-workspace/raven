@@ -81,7 +81,8 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
         <h2 className={`${labelClass} m-0`}>Raven's read</h2>
         <ReadItem label="Target">
           {engagementId ? (
-            <div className="grid justify-start">
+            // The chip's column never shrinks below 10rem, so a short name (or "No host") still reads as a control.
+            <div data-host-chip-cell="" className="grid grid-cols-[minmax(10rem,max-content)] justify-start">
               <HostChip ref={hostRef} hosts={fit.d.hosts} value={fit.host?.id ?? null} onChange={s.setHostId} align="start" className="max-w-80" />
             </div>
           ) : (
@@ -98,7 +99,8 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
         <ReadItem label="Where you paste it" why={fit.evidence.context} unknown="Not known: pick one">
           <div ref={choiceGroup(contextRef)} className="grid grid-cols-2 gap-2">
             {contexts.map((c) => (
-              <Toggle key={c.id} on={fit.context === c.id} onChange={() => override({ context: c.id })} className="min-w-0 justify-center">
+              // A long label truncates in its half of the column: the title keeps it whole.
+              <Toggle key={c.id} on={fit.context === c.id} onChange={() => override({ context: c.id })} title={c.label} className="min-w-0 justify-center">
                 <span className="min-w-0 truncate">{c.label}</span>
               </Toggle>
             ))}
@@ -135,7 +137,7 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
           <ReadItem label="Filter">
             <div ref={choiceGroup(filterRef)} className="grid grid-cols-2 gap-2">
               {filterChoices(fit.os).map((f) => (
-                <Toggle key={f} on={fit.filter === f} onChange={() => override({ filter: f })} className="min-w-0 justify-center">
+                <Toggle key={f} on={fit.filter === f} onChange={() => override({ filter: f })} title={f === "off" ? "Off" : FILTER_LABEL[f]} className="min-w-0 justify-center">
                   <span className="min-w-0 truncate">{f === "off" ? "Off" : FILTER_LABEL[f]}</span>
                 </Toggle>
               ))}

@@ -78,39 +78,46 @@ export function buildPayload(
     trigger = { text: filler(triggerUnresolved)(def.upload.trigger), unresolved: triggerUnresolved };
   }
 
-  // Notes may name {LPORT}, {LHOST}, {TARGET_IP} or {BIND_PORT}; a blank one stays visible, like in a listener.
+  // Notes may name {LPORT}, {LHOST}, {TARGET_IP}, {BIND_PORT}, {FILE}, {FILE_NAME} (FILE without its folder) or
+  // {FILE_STEM} (and without its extension: a WAR's context path); a blank one stays visible, like in a listener.
   const noteValues: Record<string, string> = {};
-  for (const name of ["LHOST", "LPORT", "TARGET_IP", "BIND_PORT"]) noteValues[name] = value(name) ?? "";
-  const notes: string[] = (def.notes ?? []).map((n) => fillListener(n, noteValues));
+  for (const name of ["LHOST", "LPORT", "TARGET_IP", "BIND_PORT", "FILE"]) noteValues[name] = value(name) ?? "";
+  noteValues.FILE_NAME = noteValues.FILE!.replace(/^.*[\\/]/, "");
+  noteValues.FILE_STEM = noteValues.FILE_NAME.replace(/\.[^.]*$/, "");
+  const notes: string[] = [...(def.notes ?? []), ...(def.contextNotes?.[ctx] ?? [])].map((n) => fillListener(n, noteValues));
   const os = def.os === "any" ? (opts.os ?? "linux") : def.os;
   const asked = opts.filter && opts.filter !== "off" && FILTER_CONTEXTS.includes(ctx) ? opts.filter : null;
   const filter = asked && filterFitsOs(asked, os) ? asked : null;
-  let parts = def.parts;
+  // Part tokens are filled like the template, so a token follows its value (FILE renamed to nc64.exe, LHOST=…).
+  const parts0 = def.parts.map((p) => ({ ...p, token: filler([])(p.token) }));
+  let parts = parts0;
   let text: string;
-  if (unresolved.length > 0) {
-    // Keep the placeholder visible; encoding or wrapping it would hide the gap.
-    text = def.encodePowerShell
-      ? `powershell -nop -w hidden -e <UTF-16LE base64 of the script, once ${unresolved.map((n) => `{${n}}`).join(" ")} is set>`
-      : filled;
-    notes.push(`Set ${unresolved.join(", ")} first: the payload is not wrapped for ${ctx} until it is.`);
-  } else if (filter && !(filter === "ps-b64" && def.encodePowerShell)) {
+  const setFirst = `Set ${unresolved.join(", ")} first`;
+  if (unresolved.length > 0 && def.encodePowerShell) {
+    // The base64 of a half-filled script would hide the gap, so the stub stays until it is set.
+    text = `powershell -nop -w hidden -e <UTF-16LE base64 of the script, once ${unresolved.map((n) => `{${n}}`).join(" ")} is set>`;
+    notes.push(`${setFirst}: the script is encoded and wrapped for ${ctx} once it is.`);
+  } else if (unresolved.length === 0 && filter && !(filter === "ps-b64" && def.encodePowerShell)) {
     const f = applyFilter(filled, filter);
     text = ctx === "injected-linux" ? f.text : urlEncodeFiltered(f.text);
     // Keep only def parts whose token still shows in the filtered text (outside the encoded blob), and not ones the
     // filter explains itself, so "what each part does" describes the shown output.
     const shown = f.text.replace(/[A-Za-z0-9+/=]{16,}|(?:\\x[0-9a-f]{2})+/g, " ");
     const own = new Set(f.parts.map((p) => p.token));
-    parts = [...def.parts.filter((p) => shown.includes(p.token) && !own.has(p.token)), ...f.parts];
+    parts = [...parts0.filter((p) => shown.includes(p.token) && !own.has(p.token)), ...f.parts];
     notes.push(f.note);
     if (ctx !== "injected-linux") notes.push("Then URL-encoded (spaces as +).");
   } else {
+    // Wrapped for the context even with a placeholder unfilled; a URL encoding leaves the {NAME} readable.
     const raw = def.encodePowerShell ? `powershell -nop -w hidden -e ${utf16leBase64(filled)}` : filled;
-    const wrapped = wrapForContext(raw, ctx, os);
+    const wrapped = wrapForContext(raw, ctx, os, unresolved);
     text = wrapped.text;
     // A file made on Kali: the text is the Kali command, so say what to do with the file it makes.
     if (def.upload?.kali && ctx === "uploaded-file") notes.push(`Upload ${value("FILE") ?? "{FILE}"} to the target, then open the trigger URL.`);
     else notes.push(...wrapped.notes);
-    if (filter) notes.push("Already base64 (-e).");
+    if (unresolved.length > 0) notes.push(`${setFirst}.`);
+    if (filter && def.encodePowerShell) notes.push("Already base64 (-e).");
+    else if (filter) notes.push(`Filter applies once ${unresolved.join(", ")} ${unresolved.length > 1 ? "are" : "is"} set.`);
     // A filter picked while the OS is unknown can be for the other OS than this payload's: say it is off here.
     else if (asked) notes.push(`Filter is for ${asked === "ps-b64" ? "Windows" : "Linux"} payloads: not applied.`);
   }

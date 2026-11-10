@@ -217,7 +217,7 @@ describe("service preference (spec §4.2): a soft sort key, never a fold", () =>
   it("Tomcat puts the WAR first", () => {
     const s = situationFor([svc(22, "ssh", "OpenSSH 8.9p1 Ubuntu 3"), svc(8080, "http", "Apache Tomcat/Coyote JSP engine 1.1")]);
     expect(s.os).toBe("linux");
-    expect(ids(rankPayloads(MSFVENOM, s, null).fits)).toEqual(["msf-java-war-linux", ...ids(MSFVENOM.filter((d) => (d.os === "linux" || d.os === "any") && d.id !== "msf-java-war-linux"))]);
+    expect(ids(rankPayloads(MSFVENOM, s, null).fits)).toEqual(["msf-java-war", ...ids(MSFVENOM.filter((d) => (d.os === "linux" || d.os === "any") && d.id !== "msf-java-war"))]);
   });
 
   it("Apache/PHP leaves msfvenom alone and puts php-exec first among the reverse shells", () => {
@@ -343,5 +343,68 @@ describe("marks: toggles and tools never fold", () => {
     const r = rankPayloads(SHELLS, { ...s, failedPayloadIds: ["php-exec", "bash-tcp"] }, null);
     expect(r.fits[0]!.id).not.toBe("php-exec");
     expect(ids(r.fits).slice(-2)).toEqual(["bash-tcp", "php-exec"]);
+  });
+});
+
+describe("fit inference cases (prelab batch)", () => {
+  it("a raw HTTP request line with a Host header reads as a web shell URL", () => {
+    const req = "GET /s.aspx?cmd=id HTTP/1.1\r\nHost: 192.0.2.5\r\nUser-Agent: curl/8.0\r\n\r\n";
+    const { situation, evidence } = inferSituation({
+      host: host(), services: [], entries: [cmdEntry(req, "uid=0(root)", at1402, "http")], examKind: false,
+    });
+    expect(situation.webShellUrl).toBe("http://192.0.2.5/s.aspx?cmd=");
+    expect(evidence.webShellUrl).toBe("from your 14:02 log entry");
+  });
+
+  it("a raw request line with a Host port; port 443 is https; no Host header reads nothing", () => {
+    const withPort = inferSituation({
+      host: host(), services: [],
+      entries: [cmdEntry("POST /up/run.php?exec=whoami HTTP/1.1\nHost: web.example.test:8080\n", "", at1402, "http")], examKind: false,
+    });
+    expect(withPort.situation.webShellUrl).toBe("http://web.example.test:8080/up/run.php?exec=");
+    const tls = inferSituation({
+      host: host(), services: [], entries: [cmdEntry("GET /s.aspx?cmd=id HTTP/1.1\nHost: web.example.test:443\n", "", at1402, "http")], examKind: false,
+    });
+    expect(tls.situation.webShellUrl).toBe("https://web.example.test:443/s.aspx?cmd=");
+    const noHost = inferSituation({
+      host: host(), services: [], entries: [cmdEntry("GET /s.aspx?cmd=id HTTP/1.1\n", "", at1402, "http")], examKind: false,
+    });
+    expect(noHost.situation.webShellUrl).toBeNull();
+  });
+
+  it("ANSI colour codes in linPEAS output do not defeat tool detection", () => {
+    const peas = "\x1b[1;34m╔══════════╣ \x1b[1;32mUseful software\x1b[0m\n\x1b[1;31m/usr/bin/python3\x1b[0m\n/usr/bin/socat\n"
+      + "\x1b[1;34m╔══════════╣ \x1b[1;32mOther\x1b[0m\n/usr/bin/curl";
+    const { situation } = inferSituation({ host: host(), services: [], entries: [cmdEntry("./linpeas.sh", peas)], examKind: false });
+    expect(situation.tools.present.sort()).toEqual(["python3", "socat"]);
+  });
+
+  it("OpenSSH for_Windows reads as Windows", () => {
+    const { situation, evidence } = inferSituation({
+      host: host(), services: [svc(22, "ssh", "OpenSSH for_Windows_8.1 (protocol 2.0)")], entries: [], examKind: false,
+    });
+    expect(situation.os).toBe("windows");
+    expect(evidence.os).toBe("from nmap (OpenSSH for_Windows_8.1 (protocol 2.0) on 22)");
+  });
+
+  it("which python3>/dev/null reads python3, not python", () => {
+    const { situation } = inferSituation({
+      host: host(), services: [], entries: [cmdEntry("which python3>/dev/null && which perl 2>/dev/null", "/usr/bin/python3")], examKind: false,
+    });
+    expect(situation.tools.present).toEqual(["python3"]);
+    expect(situation.tools.absent).toEqual(["perl"]);
+  });
+
+  it("a confirmed product is the evidence, named as confirmed, not the nmap string", () => {
+    const { evidence } = inferSituation({
+      host: host(),
+      services: [svc(80, "http", "Microsoft IIS httpd 10.0 (Microsoft-IIS/10.0; ASP.NET)", { confirmedProduct: "Microsoft IIS", confirmedVersion: "10.0" })],
+      entries: [], examKind: false,
+    });
+    expect(evidence.os).toBe("from the confirmed service (Microsoft IIS 10.0 on 80)");
+    const db = inferSituation({
+      host: host(), services: [svc(3306, "mysql", "MySQL 8.0.36-0ubuntu0.22.04.1", { confirmedProduct: "MariaDB" })], entries: [], examKind: false,
+    });
+    expect(db.evidence.dbEngine).toBe("from the confirmed service (MariaDB on 3306)");
   });
 });

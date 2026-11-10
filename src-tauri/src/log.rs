@@ -102,7 +102,8 @@ pub struct LogEntryInput {
     #[serde(default)]
     pub private: bool,
     pub content: LogContent,
-    /// On update, `None` keeps the stored value (an edit never wipes where a payload came from).
+    /// On update, `None` keeps the stored value (an edit never wipes where a payload came from); a blank string clears
+    /// it, and its `payload_values` with it.
     #[serde(default)]
     pub payload_id: Option<String>,
     #[serde(default)]
@@ -360,6 +361,11 @@ pub fn update(conn: &Connection, id: &str, input: LogEntryInput) -> AppResult<Lo
         _ => {}
     }
     let json = serde_json::to_string(&content).map_err(|e| AppError::Db(e.to_string()))?;
+    // None keeps the stored payload; a blank string clears it, and the values it was built with go with it.
+    let payload_id = match input.payload_id.as_deref() {
+        None => old.payload_id.clone(),
+        Some(_) => opt_trim(&input.payload_id),
+    };
     let tx = conn.unchecked_transaction()?;
     tx.execute(
         "UPDATE log_entries SET title=?2, title_edited=?3, ran_on=?4, observations=?5, returned_nothing=?6, \
@@ -375,10 +381,11 @@ pub fn update(conn: &Connection, id: &str, input: LogEntryInput) -> AppResult<Lo
             json,
             input.at.unwrap_or(old.at),
             system_now_ms(),
-            opt_trim(&input.payload_id).or(old.payload_id.clone()),
-            match &input.payload_values {
-                Some(_) => values_json(&input.payload_values)?,
-                None => values_json(&old.payload_values)?,
+            payload_id,
+            match (&payload_id, &input.payload_values) {
+                (None, _) => None,
+                (Some(_), Some(_)) => values_json(&input.payload_values)?,
+                (Some(_), None) => values_json(&old.payload_values)?,
             }
         ],
     )?;
@@ -498,6 +505,27 @@ mod tests {
         assert_eq!(up.payload_values.unwrap()["LHOST"], "192.0.2.10");
         let json = serde_json::to_value(&listed[0]).unwrap();
         assert_eq!(json["payloadId"], "nc-exe");
+    }
+
+    #[test]
+    fn log_update_clears_payload_id_on_empty_string() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let mut i = input(cmd());
+        i.payload_id = Some("nc-exe".into());
+        i.payload_values = Some(BTreeMap::from([("LHOST".into(), "192.0.2.10".into())]));
+        let en = create(c, &e, i).unwrap();
+        // None keeps; a blank string clears the id and the values it was built with.
+        let kept = update(c, &en.id, input(cmd())).unwrap();
+        assert_eq!(kept.payload_id.as_deref(), Some("nc-exe"));
+        let mut clear = input(cmd());
+        clear.payload_id = Some("  ".into());
+        let cleared = update(c, &en.id, clear).unwrap();
+        assert_eq!((cleared.payload_id, cleared.payload_values), (None, None));
+        // And it stays cleared on a later edit that omits it.
+        let later = update(c, &en.id, input(cmd())).unwrap();
+        assert_eq!(later.payload_id, None);
     }
 
     fn cmd() -> LogContent {

@@ -145,7 +145,13 @@ const base = {
     h.boardDerived = derived;
     return clone(h);
   },
-  hostDelete: async (id: string) => remove(db.hosts, id),
+  hostDelete: async (id: string) => {
+    db.services = db.services.filter((x) => x.hostId !== id);
+    db.vectors = db.vectors.filter((v) => v.hostId !== id);
+    db.hostIdentity = db.hostIdentity.filter((i) => i.hostId !== id);
+    db.ruledOut = db.ruledOut.filter((r) => r.hostId !== id);
+    return remove(db.hosts, id);
+  },
 
   servicesList: async (hostId: string) => clone(db.services.filter((s) => s.hostId === hostId)),
   servicesListEngagement: async (engagementId: string) => {
@@ -171,7 +177,10 @@ const base = {
     clone(assign(find(db.services, id), {}, { confirmedProduct: input.product, confirmedVersion: input.version ?? null, confirmedEntryId: input.entryId ?? null, updatedAt: now() })),
   serviceUnconfirm: async (id: string) =>
     clone(assign(find(db.services, id), {}, { confirmedProduct: null, confirmedVersion: null, confirmedEntryId: null, updatedAt: now() })),
-  serviceDelete: async (id: string) => remove(db.services, id),
+  serviceDelete: async (id: string) => {
+    db.ruledOut = db.ruledOut.filter((r) => !(r.sourceKind === "service" && r.sourceId === id));
+    return remove(db.services, id);
+  },
   serviceSetVerdict: async (id: string, verdict: ServiceVerdict | null, reason?: string) => {
     const s = find(db.services, id);
     if (verdict === "dead_end" && !reason?.trim()) throw new RavenError("validation", "a dead end needs a reason");
@@ -188,15 +197,22 @@ const base = {
   },
   hostIdentityGet: async (hostId: string) => clone(db.hostIdentity.find((i) => i.hostId === hostId) ?? null),
   hostIdentitySet: async (input) => {
-    const row = { ...input, updatedAt: now() };
+    // As the Rust command: trimmed username, privileges and groups trimmed and de-duplicated.
+    const clean = (xs: string[]) => [...new Set(xs.map((x) => x.trim()).filter(Boolean))];
+    const username = input.username.trim();
+    if (!username) throw new RavenError("validation", "username must be 1-200 characters");
+    const row = { ...input, username, privileges: clean(input.privileges), groups: clean(input.groups), updatedAt: now() };
     db.hostIdentity = [...db.hostIdentity.filter((i) => i.hostId !== input.hostId), row];
     return clone(row);
   },
   vectorsList: async (hostId: string) => clone(db.vectors.filter((v) => v.hostId === hostId)),
   vectorUpsert: async (hostId: string, input) => {
+    if (input.status === "ruled_out") throw new RavenError("validation", "rule a vector out with a reason");
     const existing = db.vectors.find((v) => v.hostId === hostId && v.title === input.title.trim());
     if (existing) {
       if (input.source === "auto" && (existing.status === "ruled_out" || existing.source === "manual")) return clone(existing);
+      // A manual re-add after a ruling-out reopens it and drops the linked ruled-out item.
+      if (existing.status === "ruled_out") db.ruledOut = db.ruledOut.filter((r) => !(r.sourceKind === "vector" && r.sourceId === existing.id));
       return clone(assign(existing, {}, { status: input.status, source: input.source, updatedAt: now() }));
     }
     const v = { id: nid("pv"), hostId, title: input.title.trim(), status: input.status, source: input.source, createdAt: now(), updatedAt: now() };
@@ -216,7 +232,10 @@ const base = {
     }
     return clone(assign(v, {}, { status, source: "manual", updatedAt: now() }));
   },
-  vectorDelete: async (id: string) => remove(db.vectors, id),
+  vectorDelete: async (id: string) => {
+    db.ruledOut = db.ruledOut.filter((r) => !(r.sourceKind === "vector" && r.sourceId === id));
+    return remove(db.vectors, id);
+  },
 
   logList: async (engagementId: string) => clone(db.log.filter((e) => e.engagementId === engagementId)),
   logCreate: async (engagementId: string, input) => {
@@ -235,6 +254,11 @@ const base = {
   logUpdate: async (id: string, input) => {
     const { at, ...rest } = input;
     delete rest.attachment; // ignored on update
+    // As the Rust update: an omitted payload id keeps the stored one; a blank one clears it and its values.
+    const clearPayload = typeof rest.payloadId === "string" && rest.payloadId.trim() === "";
+    if (rest.payloadId === null) delete rest.payloadId;
+    if (rest.payloadValues === null) delete rest.payloadValues;
+    if (clearPayload) Object.assign(rest, { payloadId: null, payloadValues: null });
     return clone(assign(find(db.log, id), rest, { kind: rest.content.kind, ...(at != null ? { at } : {}), updatedAt: now() }));
   },
   logDelete: async (id: string) => remove(db.log, id),
@@ -341,6 +365,7 @@ const base = {
   credAttemptDelete: async (id: string) => remove(db.credAttempts, id),
   payloadBuildsList: async (engagementId: string) => clone(db.payloadBuilds.filter((b) => b.engagementId === engagementId)),
   payloadBuildRecord: async (input) => {
+    if (!input.payloadId.trim()) throw new RavenError("validation", "payload id is required", "payloadId");
     const host = db.hosts.find((h) => h.id === input.hostId && h.engagementId === input.engagementId);
     if (!host) throw new RavenError("not_found", "Not found");
     db.payloadBuilds = db.payloadBuilds.filter((b) => !(b.hostId === input.hostId && b.payloadId === input.payloadId));

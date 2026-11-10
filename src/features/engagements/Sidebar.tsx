@@ -124,7 +124,7 @@ function HostItem({ engagementId, host: h, threads, collapsed }: {
           className={cx(
             "cursor-default",
             collapsed
-              ? "grid grid-cols-[minmax(0,1fr)] justify-items-center gap-1"
+              ? "relative grid grid-cols-[minmax(0,1fr)] justify-items-center gap-1"
               : "grid grid-cols-[16px_minmax(0,1fr)_auto] gap-2 px-2",
           )}
         >
@@ -137,6 +137,12 @@ function HostItem({ engagementId, host: h, threads, collapsed }: {
                 <span aria-hidden className="font-mono text-meta">
                   {railName(h.name, h.ip)}
                 </span>
+                {/* Pinned to the glyph's corner so the rail's 56px column keeps its layout. */}
+                {threads > 0 && (
+                  <span className="absolute top-1.5 right-2 grid">
+                    <ThreadDot count={threads} />
+                  </span>
+                )}
               </>
             ) : (
               <>

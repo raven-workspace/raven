@@ -19,7 +19,8 @@ import type { Engagement } from "../../../types/engagement";
 import type { Host } from "../../../types/host";
 import type { LogEntry } from "../../../types/log";
 import type { Service } from "../../../types/service";
-import { MemoryRouter } from "react-router";
+import { useEffect } from "react";
+import { MemoryRouter, useNavigate, type NavigateFunction } from "react-router";
 
 vi.mock("../../../lib/api");
 vi.mock("../../../features/checklist/ticks", async (orig) => ({
@@ -58,15 +59,26 @@ const WEBSHELL_LOG = entry({});
 
 const def = (id: string) => REVERSE_SHELLS.find((d) => d.id === id)!;
 
-function mount(path: string, settings: { attackerIp?: string } = {}) {
+/** The router's navigate, so a test can move the route (and the host in scope) without moving focus. */
+const nav: { to: NavigateFunction } = { to: () => undefined };
+function GrabNavigate() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    nav.to = navigate;
+  }, [navigate]);
+  return null;
+}
+
+function mount(path: string, settings: { attackerIp?: string; listenerPort?: string } = {}) {
   m.settingsGet.mockResolvedValue({
-    autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: settings.attackerIp ?? LHOST, listenerPort: LPORT, kaliUser: "kali",
+    autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: settings.attackerIp ?? LHOST, listenerPort: settings.listenerPort ?? LPORT, kaliUser: "kali",
     windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false,
   });
   return render(
     <QueryClientProvider client={makeQueryClient()}>
       <MemoryRouter initialEntries={[path]}>
         <App />
+        <GrabNavigate />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -110,7 +122,7 @@ const shownHints = (surface: HTMLElement) =>
   );
 const payloadText = (d: ReturnType<typeof within>) => d.getByLabelText("Command: Payload").textContent;
 
-async function openOn(path: string, settings?: { attackerIp?: string }) {
+async function openOn(path: string, settings?: { attackerIp?: string; listenerPort?: string }) {
   const user = userEvent.setup();
   mount(path, settings);
   await screen.findByRole("tab", { name: "Next" });
@@ -229,19 +241,27 @@ describe("Payloads drawer", () => {
     expect(body).not.toHaveFocus();
   });
 
-  it("⇥ from the body eventually reaches the misfit disclosure and Full screen", async () => {
+  it("⇥ from the body reaches the misfit disclosure and Full screen without leaving the drawer", async () => {
     const { user, d } = await openOn("/e/e1/h/h1");
     await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    const aside = screen.getByRole("complementary", { name: "Payloads" });
     const show = d.getByRole("button", { name: "Don't fit here (27)" });
     const full = d.getByRole("button", { name: "Full screen" });
-    const reached = new Set<Element>();
-    // Past the body's last control Tab runs on through the page behind (the drawer is not modal) and comes round.
-    for (let i = 0; i < 300 && !(reached.has(show) && reached.has(full)); i++) {
+    const reached: Element[] = [];
+    // Past the drawer's last control Tab comes round to its first: focus never runs on through the page behind.
+    for (let i = 0; i < 60 && !reached.includes(full); i++) {
       await user.keyboard("{Tab}");
-      if (document.activeElement) reached.add(document.activeElement);
+      reached.push(document.activeElement!);
+      expect(aside.contains(document.activeElement)).toBe(true);
     }
-    expect(reached.has(show)).toBe(true);
-    expect(reached.has(full)).toBe(true);
+    expect(reached).toContain(show);
+    expect(reached).toContain(full);
+    expect(reached.indexOf(show)).toBeLessThan(reached.indexOf(full));
+    // And ⇧⇥ from the first control comes round to the last.
+    d.getByRole("tab", { name: "Shell" }).focus();
+    await user.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(aside.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).not.toBe(d.getByRole("tab", { name: "Shell" }));
   }, 30_000);
 
   it("⇧⇥ always moves focus out of the body, never the fit", async () => {
@@ -439,7 +459,7 @@ describe("Payloads drawer", () => {
     expect(await d.findByRole("heading", { name: "Windows x64 ASPX" })).toBeInTheDocument();
     await user.click(d.getByRole("button", { name: /^Fill for host/ }));
     await user.click(d.getByRole("option", { name: /zzbare02/ }));
-    expect(await d.findByRole("heading", { name: "Java WAR (Tomcat on Windows)" })).toBeInTheDocument();
+    expect(await d.findByRole("heading", { name: "Java WAR (Tomcat)" })).toBeInTheDocument();
   });
 
   it("SQL tab, blank LHOST: an exec payload's Copy jumps to an LHOST field on the SQL tab", async () => {
@@ -470,5 +490,199 @@ describe("Payloads drawer", () => {
     expect(d.getByRole("heading", { name: "1. Spawn a PTY (python3)" })).toBeInTheDocument();
     await user.keyboard("{Alt>}5{/Alt}");
     expect(d.getByRole("textbox", { name: "PowerShell command" })).toBeInTheDocument();
+  });
+});
+
+describe("Payloads drawer: chips and keys", () => {
+  it("Port: 'Other…' opens a numeric field; ↵ sets the port for this host and gives focus back to the payload", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    await user.click(d.getByRole("button", { name: `Port: ${LPORT}` }));
+    await user.click(d.getByRole("option", { name: /^Other…/ }));
+    const field = d.getByRole("textbox", { name: "Custom port" });
+    expect(field).toHaveFocus();
+    expect(field).toHaveAttribute("inputmode", "numeric");
+    // Digits only.
+    await user.keyboard("90x01");
+    expect(field).toHaveValue("9001");
+    await user.keyboard("{Enter}");
+    expect(d.queryByRole("textbox", { name: "Custom port" })).not.toBeInTheDocument();
+    expect(d.getByRole("button", { name: "Port: 9001" })).toBeInTheDocument();
+    expect(d.getByLabelText("Command: Listener")).toHaveTextContent("penelope -O -p 9001");
+    expect(usePayloadsStore.getState().overrides.h1?.port).toBe("9001");
+    // ↵ now copies the payload with that port.
+    await user.keyboard("{Enter}");
+    expect(await navigator.clipboard.readText()).toBe(buildPayload(def("ps-b64"), "webshell-param", { LHOST, LPORT: "9001" }).text);
+  });
+
+  it("Port: Esc in the 'Other…' field drops it, keeps the drawer open, and leaves the port as it was", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    const chip = d.getByRole("button", { name: `Port: ${LPORT}` });
+    chip.focus();
+    await user.keyboard("{Enter}{End}{Enter}");
+    const field = d.getByRole("textbox", { name: "Custom port" });
+    expect(field).toHaveFocus();
+    await user.keyboard("8080{Escape}");
+    expect(screen.getByRole("complementary", { name: "Payloads" })).toBeInTheDocument();
+    expect(d.queryByRole("textbox", { name: "Custom port" })).not.toBeInTheDocument();
+    expect(d.getByRole("button", { name: `Port: ${LPORT}` })).toHaveFocus();
+    expect(usePayloadsStore.getState().overrides.h1?.port).toBeUndefined();
+  });
+
+  it("Port: an out-of-range port and ↵ keep the field open, marked, and copy nothing", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    await user.click(d.getByRole("button", { name: `Port: ${LPORT}` }));
+    await user.click(d.getByRole("option", { name: /^Other…/ }));
+    await navigator.clipboard.writeText("untouched");
+    for (const typed of ["70000", "0", ""]) {
+      const field = d.getByRole("textbox", { name: "Custom port" });
+      await user.clear(field);
+      if (typed) await user.type(field, typed);
+      await user.keyboard("{Enter}");
+      expect(field).toHaveFocus();
+      expect(field).toHaveAttribute("aria-invalid", "true");
+      expect(field).toHaveAccessibleDescription("1–65535");
+      expect(d.getByText("1–65535")).toHaveClass("text-warn");
+      expect(usePayloadsStore.getState().overrides.h1?.port).toBeUndefined();
+    }
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    // Typing again clears the mark; Esc still drops the field.
+    await user.type(d.getByRole("textbox", { name: "Custom port" }), "8");
+    expect(d.getByRole("textbox", { name: "Custom port" })).not.toHaveAttribute("aria-invalid", "true");
+    await user.keyboard("{Escape}");
+    expect(d.queryByRole("textbox", { name: "Custom port" })).not.toBeInTheDocument();
+    expect(usePayloadsStore.getState().overrides.h1?.port).toBeUndefined();
+  });
+
+  it("Port: a custom port is stored without leading zeros", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    await user.click(d.getByRole("button", { name: `Port: ${LPORT}` }));
+    await user.click(d.getByRole("option", { name: /^Other…/ }));
+    await user.type(d.getByRole("textbox", { name: "Custom port" }), "00080{Enter}");
+    expect(usePayloadsStore.getState().overrides.h1?.port).toBe("80");
+    expect(d.getByRole("button", { name: "Port: 80" })).toBeInTheDocument();
+  });
+
+  it("Port: a field opened for one host closes when the host changes, and never sets the other host's port", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    await user.click(d.getByRole("button", { name: `Port: ${LPORT}` }));
+    await user.click(d.getByRole("option", { name: /^Other…/ }));
+    await user.type(d.getByRole("textbox", { name: "Custom port" }), "9001");
+    act(() => void nav.to("/e/e1/h/h2"));
+    const after = within(await drawer());
+    expect(await after.findByRole("button", { name: "Fill for host: zzbare02" })).toBeInTheDocument();
+    expect(after.queryByRole("textbox", { name: "Custom port" })).not.toBeInTheDocument();
+    expect(usePayloadsStore.getState().overrides.h2?.port).toBeUndefined();
+  });
+
+  it("picking an OS drops a paste override that does not exist there; one that does (Web shell ?cmd=) stays", async () => {
+    usePayloadsStore.setState({ overrides: { h1: { context: "cmd" } } });
+    const { user, d } = await openOn("/e/e1/h/h1");
+    expect(await d.findByRole("button", { name: "Paste into: cmd.exe" })).toBeInTheDocument();
+    await user.click(d.getByRole("button", { name: "OS: Windows" }));
+    await user.click(d.getByRole("option", { name: /^Linux/ }));
+    // cmd.exe is Windows-only: the override goes, and the log's paste context reads again.
+    expect(usePayloadsStore.getState().overrides.h1).toEqual({ os: "linux" });
+    expect(d.getByRole("button", { name: "Paste into: Web shell ?cmd=" })).toBeInTheDocument();
+    // An any-OS override survives the OS pick.
+    act(() => usePayloadsStore.getState().override("h1", { context: "url-param" }));
+    await user.click(d.getByRole("button", { name: "OS: Linux" }));
+    await user.click(d.getByRole("option", { name: /^Windows/ }));
+    expect(usePayloadsStore.getState().overrides.h1).toEqual({ os: "windows", context: "url-param" });
+  });
+
+  it("after a mouse pick on a chip, ↵ copies the payload instead of reopening the chip", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    await user.click(d.getByRole("button", { name: "Paste into: Web shell ?cmd=" }));
+    await user.click(d.getByRole("option", { name: /^cmd\.exe/ }));
+    const chip = d.getByRole("button", { name: "Paste into: cmd.exe" });
+    expect(chip).not.toHaveFocus();
+    await navigator.clipboard.writeText("untouched");
+    await user.keyboard("{Enter}");
+    expect(chip).toHaveAttribute("aria-expanded", "false");
+    expect(await navigator.clipboard.readText()).toBe(buildPayload(def("ps-b64"), "cmd", { LHOST, LPORT }).text);
+  });
+
+  it("↵ inside an open chip list picks and copies nothing; Esc closes only the list and ↵ then copies", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    await navigator.clipboard.writeText("untouched");
+    await user.keyboard("{Alt>}w{/Alt}");
+    await user.keyboard("{Home}{Enter}");
+    expect(d.getByRole("button", { name: "Paste into: URL / form parameter" })).toBeInTheDocument();
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    await user.keyboard("{Alt>}o{/Alt}");
+    expect(d.getByRole("listbox", { name: "OS" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(d.queryByRole("listbox", { name: "OS" })).not.toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Payloads" })).toBeInTheDocument();
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+    await user.keyboard("{Enter}");
+    expect(await navigator.clipboard.readText()).not.toBe("untouched");
+  });
+
+  it("⌥L with no port set goes through the guard: held once, the Port chip opens", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1", { listenerPort: "" });
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    expect(d.getByLabelText("Command: Listener")).toHaveTextContent("penelope -O -p {LPORT}");
+    await navigator.clipboard.writeText("untouched");
+    await user.keyboard("{Alt>}l{/Alt}");
+    expect(await d.findByText("{LPORT} not filled. Press ⌥L again to copy anyway")).toBeInTheDocument();
+    expect(d.getByRole("button", { name: "Port: not set" })).toHaveAttribute("aria-expanded", "true");
+    expect(await navigator.clipboard.readText()).toBe("untouched");
+  });
+
+  it("⌘↵ on Encode logs the command without LHOST or LPORT values", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    await user.keyboard("{Alt>}5{/Alt}");
+    await user.type(d.getByRole("textbox", { name: "PowerShell command" }), "whoami");
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await vi.waitFor(() => expect(logCommand).toHaveBeenCalled());
+    const args = vi.mocked(logCommand).mock.calls[0]![1];
+    expect(args).toMatchObject({ payloadId: "encode-ps" });
+    expect(args.payloadValues).toBeUndefined();
+  });
+
+  it("P typed in a field types, and neither closes the drawer nor moves focus", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1", { attackerIp: "" });
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    const field = d.getByRole("textbox", { name: "LHOST" });
+    await user.click(field);
+    await user.keyboard("pP");
+    expect(field).toHaveValue("pP");
+    expect(field).toHaveFocus();
+    expect(screen.getByRole("complementary", { name: "Payloads" })).toBeInTheDocument();
+  });
+
+  it("⌥1–⌥3 switch the generator over a host view, never the host view's own tabs", async () => {
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    const next = screen.getByRole("tab", { name: "Next" });
+    expect(next).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{Alt>}2{/Alt}");
+    expect(d.getByRole("tab", { name: "Transfer" })).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{Alt>}3{/Alt}");
+    expect(d.getByRole("tab", { name: "SQL injection" })).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{Alt>}1{/Alt}");
+    expect(d.getByRole("tab", { name: "Shell" })).toHaveAttribute("aria-selected", "true");
+    expect(next).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Log" })).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("tab", { name: "Findings" })).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("tool ticks in another key order are the same list: the fit in view stays", async () => {
+    usePayloadsStore.setState({ overrides: { h1: { tools: { python3: "present", perl: "missing" } } } });
+    const { user, d } = await openOn("/e/e1/h/h1");
+    await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
+    await user.keyboard("{Tab}");
+    expect(d.getByRole("heading", { name: "nc.exe -e" })).toBeInTheDocument();
+    act(() => usePayloadsStore.getState().override("h1", { tools: { perl: "missing", python3: "present" } }));
+    expect(d.getByRole("heading", { name: "nc.exe -e" })).toBeInTheDocument();
   });
 });

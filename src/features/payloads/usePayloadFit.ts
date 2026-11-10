@@ -33,7 +33,7 @@ export const contextLabel = (c: PasteContext) => PASTE_CONTEXTS.find((p) => p.id
  * The host key for overrides is the host id, or "" with no host.
  */
 export function usePayloadFit(engagementId: string, hostId: string | null) {
-  const { d, host, engagement } = useFillBase(engagementId, hostId);
+  const { d, host, engagement, examReady } = useFillBase(engagementId, hostId);
   const hostKey = host?.id ?? "";
   const ov = usePayloadsStore((s) => s.overrides[hostKey]);
   const lhostOverride = usePayloadsStore((s) => s.lhost);
@@ -76,13 +76,17 @@ export function usePayloadFit(engagementId: string, hostId: string | null) {
   /** Your filter, or "off" when it is not one for this OS (switching OS never shows a filter that is not applied). */
   const filter: FilterId = ov?.filter && filterChoices(os).includes(ov.filter) ? ov.filter : "off";
 
-  const ranked = useMemo<Record<"shell" | "msfvenom" | "upgrade", Ranked>>(() => ({
-    shell: { ...rankPayloads(SHELLS, situation, context, toggles), ordered: false },
+  /**
+   * Each catalogue ranked for this host. Fails closed like the Arsenal: until the engagement (so its kind and exam rules)
+   * is known, Shell and msfvenom rank nothing (null), so nothing is offered that the exam could restrict.
+   */
+  const ranked = useMemo<Record<"shell" | "msfvenom" | "upgrade", Ranked | null>>(() => ({
+    shell: examReady ? { ...rankPayloads(SHELLS, situation, context, toggles), ordered: false } : null,
     // msfvenom runs at your own bash prompt: where the target pastes things does not apply.
-    msfvenom: { ...rankPayloads(MSFVENOM, situation, null, toggles), ordered: false },
+    msfvenom: examReady ? { ...rankPayloads(MSFVENOM, situation, null, toggles), ordered: false } : null,
     // Upgrade steps run in order, whatever the host.
     upgrade: { fits: UPGRADE, misfits: [], marks: {}, ordered: true },
-  }), [situation, context, toggles]);
+  }), [situation, context, toggles, examReady]);
 
   /**
    * Built with the paste context when the def works there, else the first context it declares; for the OS in view, the

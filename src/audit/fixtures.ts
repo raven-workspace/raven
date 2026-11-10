@@ -278,8 +278,10 @@ const cmd = (title: string, command: string, output: string, hostIds: string[] =
   entry({ kind: "command", title, hostIds, content: { kind: "command", blocks: [{ command, output }] }, ...over });
 const note = (title: string, text: string, hostIds: string[] = [], over: Partial<LogEntry> = {}) =>
   entry({ kind: "note", title, hostIds, content: { kind: "note", text }, ...over });
-const shot = (key: keyof typeof AUDIT_PNGS, title: string, hostIds: string[]) =>
-  entry({ kind: "screenshot", title, hostIds, content: { kind: "screenshot", attachmentId: `a-${key}`, caption: `${title} (${AUDIT_PNGS[key].width}x${AUDIT_PNGS[key].height})`, fileName: `${key}.png` } });
+// As saved by capture, the title is the caption (so the log shows it once); `caption` overrides that for a shot whose
+// caption says more than its title.
+const shot = (key: keyof typeof AUDIT_PNGS, title: string, hostIds: string[], caption = title) =>
+  entry({ kind: "screenshot", title, hostIds, content: { kind: "screenshot", attachmentId: `a-${key}`, caption, fileName: `${key}.png` } });
 
 const labLog: LogEntry[] = [
   cmd("Full TCP scan of the web host", "nmap -p- -sV -sC -T4 10.10.20.15 -oA scans/web-full", MULTILINE_OUTPUT),
@@ -307,7 +309,7 @@ const labLog: LogEntry[] = [
   entry({ kind: "flag", title: "proof.txt on dc01", hostIds: ["h-dc01"], content: { kind: "flag", flagKind: "proof", value: "fedcba9876543210fedcba9876543210", attachmentId: "a-tiny", proof: null } }),
   shot("wide", "Terminal strip: full nmap output on one line", ["h-web"]),
   shot("tall", "Long tool output captured top to bottom", ["h-dc01"]),
-  shot("hd", "Desktop of the file server", ["h-fs01"]),
+  shot("hd", "Desktop of the file server", ["h-fs01"], "Desktop of the file server: the finance share is mapped as F:"),
   shot("tiny", "Cropped proof of the hostname", ["h-dc01"]),
   cmd("Local administrators on fs01", "net localgroup administrators", "Alias name     administrators\nMembers\n---\nAdministrator\nACME\\Domain Admins\nACME\\svc_backup", ["h-fs01"]),
   cmd("Share with a long UNC path", "dir \\\\fs01.acme.corp\\Finance$\\Quarterly Reports\\2026\\Q3\\Board Pack — Draft v7 (Reviewed by Legal).xlsx", " Volume in drive \\\\fs01 has no label.\n 11/04/2026  09:14 AM    18,204,672 Board Pack — Draft v7 (Reviewed by Legal).xlsx", ["h-fs01"]),

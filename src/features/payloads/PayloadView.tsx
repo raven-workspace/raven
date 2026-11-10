@@ -1,8 +1,8 @@
-import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
 import { LISTENERS } from "../../engines/payloads/listeners";
-import type { BuiltPayload, ListenerId, PayloadDef } from "../../engines/payloads/types";
+import type { BuiltPayload, ListenerId, PayloadDef, PayloadPart } from "../../engines/payloads/types";
 import { cx } from "../../lib/cx";
-import { CommandBlock, Disclosure, labelClass } from "../../ui";
+import { CommandBlock, Disclosure, Kbd, labelClass } from "../../ui";
 import { ChipPicker } from "../arsenal/ChipPicker";
 
 type CopyResult = Promise<"copied" | "guarded">;
@@ -62,12 +62,15 @@ export function PayloadBlock({
   const staleLine = (step: Step) => first === step && <p className="m-0 text-meta text-warn">{stale}</p>;
 
   const listeners = built.def.listeners;
+  // A bind shell's "listener" is the client you connect with, so its chip says so under "Connect from Kali".
+  const pickName = built.listenerHeading === "Connect from Kali" ? "Connect with" : "Listener";
   const listenerPicker = onPickListener && listeners.length > 1 && built.listenerId && (
     <ChipPicker
       options={listeners.map((l) => ({ id: l, name: LISTENERS[l].label }))} value={built.listenerId}
       onPick={(id) => id && onPickListener(id as ListenerId)}
-      label={`Listener: ${LISTENERS[built.listenerId].label}`} listLabel="Listener" title="Pick the listener for this payload (this session)"
-      prefix="Listener" shown={LISTENERS[built.listenerId].label}
+      label={`${pickName}: ${LISTENERS[built.listenerId].label}`} listLabel={pickName}
+      title={pickName === "Listener" ? "Pick the listener for this payload (this session)" : "Pick what you connect with from Kali (this session)"}
+      prefix={pickName} shown={LISTENERS[built.listenerId].label}
     />
   );
   const blocks: Record<Step, () => ReactNode> = {
@@ -97,7 +100,10 @@ export function PayloadBlock({
         {staleLine("payload")}
         {lock && <p className={`m-0 text-meta ${lock.breach ? "text-warn" : "text-muted"}`}>{lock.text}</p>}
         <h3 className={`${labelClass} m-0`}>{payloadHeading()}</h3>
-        <CommandBlock text={built.text} name="Payload" copyLabel="Copy payload" onCopyAction={onCopy} placeholders />
+        {/* A key to press (Ctrl-Z) is shown as a key, with no Copy. */}
+        {built.def.keypress
+          ? <p className="m-0"><Kbd className="h-7 px-2 text-code">{built.text}</Kbd></p>
+          : <CommandBlock text={built.text} name="Payload" copyLabel="Copy payload" onCopyAction={onCopy} placeholders />}
         <Note text={note} warn={noteWarn} />
       </section>
     ),
@@ -113,25 +119,33 @@ export function PayloadBlock({
     <div className="grid gap-4">
       {fields}
       {order.map((step) => blocks[step]())}
-      {built.parts.length > 0 && (
-        <section className="grid gap-2">
-          <h3 className={`${labelClass} m-0`}>What each part does</h3>
-          <dl className="m-0 grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] gap-x-3 gap-y-1 text-meta">
-            {built.parts.map((p) => (
-              <div key={p.token} className="contents">
-                <dt className="break-all font-mono text-code text-fg">{p.token}</dt>
-                <dd className="m-0 text-muted">{p.explain}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-      )}
+      <PartsList title="What each part does" parts={built.parts.filter((p) => !p.decoded)} />
+      <PartsList title="Inside the base64 script" parts={built.parts.filter((p) => p.decoded)} />
       {built.notes.length > 0 && (
         <ul className="m-0 grid list-none gap-1 p-0 text-meta text-muted">
           {built.notes.map((n) => <li key={n}>{n}</li>)}
         </ul>
       )}
     </div>
+  );
+}
+
+/** A "what each part does" list; decoded parts (inside an encoded blob) get their own list. Nothing when empty. */
+function PartsList({ title, parts }: { title: string; parts: PayloadPart[] }) {
+  const id = useId();
+  if (parts.length === 0) return null;
+  return (
+    <section aria-labelledby={id} className="grid gap-2">
+      <h3 id={id} className={`${labelClass} m-0`}>{title}</h3>
+      <dl className="m-0 grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] gap-x-3 gap-y-1 text-meta">
+        {parts.map((p) => (
+          <div key={p.token} className="contents">
+            <dt className="break-all font-mono text-code text-fg">{p.token}</dt>
+            <dd className="m-0 text-muted">{p.explain}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 

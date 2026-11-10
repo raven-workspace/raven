@@ -27,12 +27,17 @@ const WORKS = new Set<CredAttempt["result"]>(["admin", "valid"]);
 /** What works on this host (results that got in, access without a secret) and how many credentials are still untried here. */
 export function hostCredentialCounts(host: Host, services: Service[], creds: Credential[], attempts: CredAttempt[], grants: AccessGrant[]) {
   const here = attempts.filter((a) => a.hostId === host.id);
-  const working = new Set(here.filter((a) => WORKS.has(a.result)).map((a) => `${a.credId}|${a.usernameId ?? ""}`));
+  const worked = here.filter((a) => WORKS.has(a.result));
+  const working = new Set(worked.map((a) => `${a.credId}|${a.usernameId ?? ""}`));
+  // A grant for a username that already has a working result here is the same access, so it counts once.
+  const viaResult = new Set(worked.flatMap((a) => (a.usernameId ? [a.usernameId] : [])));
+  // Deduped by usernameId on purpose: one access per user, however it was shown.
+  const grantsHere = grants.filter((g) => g.hostId === host.id && !viaResult.has(g.usernameId));
   const spray = hostSprayServices(host, services);
   const untested = creds
     .filter(isSprayable)
     .filter((c) => spray.some((s) => cellFor(c, host, services, s, attempts).state === "untested")).length;
-  return { works: working.size + grants.filter((g) => g.hostId === host.id).length, untested };
+  return { works: working.size + grantsHere.length, untested };
 }
 
 /**

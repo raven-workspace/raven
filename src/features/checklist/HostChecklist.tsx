@@ -3,7 +3,7 @@ import { Fragment, useMemo, useRef, useState } from "react";
 import { applicableGoals, currentStage, hostViewStages, type FillInput } from "../../engines/checklist";
 import { api } from "../../lib/api";
 import type { Host } from "../../types/host";
-import { Button, Input, Select, fieldLabelClass, labelClass } from "../../ui";
+import { Button, Input, Select, fieldLabelClass, labelClass, queryState } from "../../ui";
 import { COLUMN_LABELS } from "../hosts/columns";
 import { useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
@@ -93,8 +93,8 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
     [host, eng, hosts, servicesByHost],
   );
 
-  const failed = hostsQ.error ?? engagement.error ?? servicesQ.error;
-  if (failed) return <p role="alert" className="py-3 text-meta text-warn">Couldn't load the checklist: {failed.message}</p>;
+  const loadState = queryState([hostsQ, engagement, servicesQ], "the checklist");
+  if (loadState) return loadState;
   if (!hosts || !eng || !servicesQ.data) return null;
   const state = byOwner.get(host.id) ?? {};
   const entries = log.data ?? [];
@@ -140,7 +140,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
   };
 
   return (
-    <div className="grid gap-6 py-3">
+    <div data-checklist-ready className="grid gap-6 py-3">
       <CredentialPicker credentials={creds.credentials} value={creds.cred} onChange={creds.pick} />
       {nothingNext && <p className="m-0 text-meta text-muted">{nothingNext}</p>}
       {doneWithNewCreds > 0 && onShowFull && (

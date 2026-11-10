@@ -23,8 +23,10 @@ const TYPEAHEAD_MS = 700;
  * focus back, typeahead works only inside the open list. A pick that changes `value` flashes the trigger once
  * (`data-flash`). In the open list the pointer moves the highlight like the arrow keys (a popup, not a pane).
  */
-export function ChipPicker({ options, value, onPick, label, listLabel, title, align = "end", wide, prefix, shown, warn, ref }: {
+export function ChipPicker({ options, value, onPick, onMousePick, label, listLabel, title, align = "end", wide, prefix, shown, warn, ref }: {
   options: ChipOption[]; value: string | null; onPick: (id: string | null) => void;
+  /** After a click on an option (not a key): where focus goes next, so ↵ does not land on the chip and reopen it. */
+  onMousePick?: (id: string | null) => void;
   /** The button's accessible name. */
   label: string; listLabel: string; title: string;
   /** Which edge of the chip the list lines up with. */
@@ -67,9 +69,10 @@ export function ChipPicker({ options, value, onPick, label, listLabel, title, al
     if (restore && prev instanceof HTMLElement && prev.isConnected) prev.focus();
   };
 
-  const pick = (i: number) => {
+  const pick = (i: number, mouse = false) => {
     const id = options[i]?.id ?? null;
     close(true);
+    if (mouse) onMousePick?.(id);
     if (id === value) return;
     onPick(id);
     setFlash(true);
@@ -152,7 +155,7 @@ export function ChipPicker({ options, value, onPick, label, listLabel, title, al
               aria-selected={i === active}
               // Keeps focus on the chip so its keys keep working and blur does not close the list first.
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => pick(i)}
+              onClick={() => pick(i, true)}
               onMouseMove={() => setActive(i)}
               className={`grid cursor-default grid-cols-[minmax(0,1fr)_auto_auto] gap-4 rounded-sm px-2 py-1 whitespace-pre ${i === active ? "bg-accent/10 text-accent shadow-[inset_2px_0_0_var(--accent)]" : "text-fg-2"}`}
             >

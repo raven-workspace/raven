@@ -13,6 +13,11 @@ interface FindingDraftState {
   /** Drops every draft of one finding, whichever host page it was opened from (after it is saved). */
   dropFinding: (findingId: string) => void;
   clearAll: () => void;
+  /** Why a save failed after its form was gone (H, navigating away): shown once, when the draft comes back. */
+  saveErrors: Record<string, string>;
+  setSaveError: (key: string, message: string) => void;
+  /** Returns and clears the failure for `key`. */
+  takeSaveError: (key: string) => string | undefined;
 }
 
 /**
@@ -21,6 +26,19 @@ interface FindingDraftState {
  */
 export const useFindingDraftStore = create<FindingDraftState>()((set, get) => ({
   drafts: {},
+  saveErrors: {},
+  setSaveError: (key, message) => set((s) => ({ saveErrors: { ...s.saveErrors, [key]: message } })),
+  takeSaveError: (key) => {
+    const message = get().saveErrors[key];
+    if (message !== undefined) {
+      set((s) => {
+        const saveErrors = { ...s.saveErrors };
+        delete saveErrors[key];
+        return { saveErrors };
+      });
+    }
+    return message;
+  },
   get: (key) => get().drafts[key],
   set: (key, d) => set((s) => ({ drafts: { ...s.drafts, [key]: d } })),
   drop: (key) =>
@@ -38,5 +56,5 @@ export const useFindingDraftStore = create<FindingDraftState>()((set, get) => ({
       for (const k of keys) delete drafts[k];
       return { drafts };
     }),
-  clearAll: () => set({ drafts: {} }),
+  clearAll: () => set({ drafts: {}, saveErrors: {} }),
 }));

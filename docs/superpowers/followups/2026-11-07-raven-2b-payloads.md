@@ -11,54 +11,55 @@ These are left over from the 2b-B Payloads build (branch `interpreters-payloads`
 
 ## Payload content
 
-- [ ] **The Java WAR shows twice when the OS is unknown** (2b-C made `os: "any"` possible for a def, so the duplicate can go now; one entry for Linux, one for Windows). When the OS is known, the other entry folds as "Wrong OS", which is wrong because a WAR runs on either. Allow `os: "any"` in `types.ts` and `fit.ts`. (`msfvenom.ts`)
-- [ ] **Two hints are unverified:** the WAR's "browse to /rev/" and the dll's `rundll32 rev.dll,<export>`. Also, hta-psh is labelled x64, but mshta may run as 32-bit. (`msfvenom.ts`)
-- [ ] **The ps-b64 parts explain the flags but not the encoded script** (TCPClient, `iex`, the `PS >` prompt). (`reverseShells.ts`)
-- [ ] **The nc-exe part token breaks if FILE is renamed** (for example to `nc64.exe`). The Nishang note "quotes doubled" shows in every context, not only sql-string. (`reverseShells.ts`)
-- [ ] **Shell upgrade:**
+- [x] **The Java WAR shows twice when the OS is unknown** (2b-C made `os: "any"` possible for a def, so the duplicate can go now; one entry for Linux, one for Windows). When the OS is known, the other entry folds as "Wrong OS", which is wrong because a WAR runs on either. Allow `os: "any"` in `types.ts` and `fit.ts`. (`msfvenom.ts`) Done (pre-lab batch): one `msf-java-war` with `os: "any"`; failures and builds logged under the old ids still count (`memory.ts`).
+- [x] **Two hints are unverified:** the WAR's "browse to /rev/" and the dll's `rundll32 rev.dll,<export>`. Also, hta-psh is labelled x64, but mshta may run as 32-bit. (`msfvenom.ts`) Done (pre-lab batch): the WAR note browses to FILE's stem (the owner's card confirms the path), the DLL note says any export works (DllMain), and the HTA note names the 64-bit mshta and says to check which one a double-click uses.
+- [x] **The ps-b64 parts explain the flags but not the encoded script** (TCPClient, `iex`, the `PS >` prompt). (`reverseShells.ts`)
+- [x] **The nc-exe part token breaks if FILE is renamed** (for example to `nc64.exe`). The Nishang note "quotes doubled" shows in every context, not only sql-string. (`reverseShells.ts`)
+- [x] **Shell upgrade:**
   - The `export TERM` step isn't labelled as running on the target.
   - `Ctrl-Z` shows as a copyable "payload".
   - Step 3 runs on Kali, but ⌘↵ logs it as run on the target.
   - No test checks that every step has parts, or that `{USER}` is unresolved. (`upgrade.ts`)
-- [ ] **Unresolved payloads show unwrapped.** If you type the IP in by hand, the result is the wrong shape for its context. Wrap them anyway, and keep the stub only for the base64 PowerShell. (`build.ts`)
-- [ ] **URL encoding still leaves newlines and non-ASCII characters raw.** Uppercase `{…}` text in a custom SQL `cmd` (for example `${IFS}`) also stays raw, because placeholders are exempt from encoding. (`encode.ts`)
-- [ ] **The macro wrapper only doubles `"`.** `injected-linux` applies `bash -c` whatever `os` is passed. (`context.ts`)
+- [x] **Unresolved payloads show unwrapped.** If you type the IP in by hand, the result is the wrong shape for its context. Wrap them anyway, and keep the stub only for the base64 PowerShell. (`build.ts`)
+- [x] **URL encoding still leaves newlines and non-ASCII characters raw.** Uppercase `{…}` text in a custom SQL `cmd` (for example `${IFS}`) also stays raw, because placeholders are exempt from encoding. (`encode.ts`)
+- [x] **The macro wrapper only doubles `"`.** `injected-linux` applies `bash -c` whatever `os` is passed. (`context.ts`)
+- [ ] **msfvenom's baked note says "the served script"** ("LHOST and LPORT are baked into the served script"), but an msfvenom def is a file you make and upload. Name the file instead, as the upload.kali note does. (`build.ts`) Found in the pre-lab batch.
 
 ## SQL
 
-- [ ] **`CONCAT(` also matches `GROUP_CONCAT(`,** which adds a spurious "CONCAT" part. (`sqlKeywords.ts`)
-- [ ] **The keyword scan also reads embedded data,** so `NULL`/`AS`/`FROM` inside base64 or a custom cmd add spurious parts. Scan only the SQL skeleton. (`sql.ts`)
-- [ ] **Some explanations assume a stacked injection** ("the leading ;") even in a client session.
-- [ ] **Smaller correctness gaps:**
+- [x] **`CONCAT(` also matches `GROUP_CONCAT(`,** which adds a spurious "CONCAT" part. (`sqlKeywords.ts`)
+- [x] **The keyword scan also reads embedded data,** so `NULL`/`AS`/`FROM` inside base64 or a custom cmd add spurious parts. Scan only the SQL skeleton. (`sql.ts`)
+- [x] **Some explanations assume a stacked injection** ("the leading ;") even in a client session.
+- [x] **Smaller correctness gaps:**
   - The LOAD_FILE "defaults to /etc/passwd" note shows even when a path is given.
   - INTO OUTFILE doesn't check the bounds of the reflected column.
   - `%2d` is skipped when nc.exe is passed through `cmd`.
-- [ ] **Databases, tables and columns return many rows but the page shows one.** Add string_agg / LISTAGG / group_concat or a paging note.
-- [ ] **Engine gaps:**
+- [x] **Databases, tables and columns return many rows but the page shows one.** Add string_agg / LISTAGG / group_concat or a paging note.
+- [x] **Engine gaps:**
   - MySQL 5.7 needs `FROM DUAL` for `SELECT 1 WHERE 1=1`.
   - Oracle's `dbms_pipe` sleep needs an EXECUTE grant (mention it).
   - On strict engines, reflected-columns with no column count takes the old unknown-column path.
-- [ ] **The SQL panel is long** (10 steps plus exec payloads), especially in the 560px drawer. Consider a compact mode, or collapsing finished steps.
+- [x] **The SQL panel is long** (10 steps plus exec payloads), especially in the 560px drawer. Consider a compact mode, or collapsing finished steps. Done (pre-lab batch): finished steps and run commands fold to one line with their result; ↵ or a click reopens.
 
 ## Fit and memory
 
-- [ ] **More cases fit inference doesn't handle:**
+- [x] **More cases fit inference doesn't handle:**
   - a raw HTTP request (`GET /s.aspx?cmd=id`) isn't read as a web shell;
   - linPEAS output with ANSI colour codes defeats tool detection;
   - `OpenSSH for_Windows` isn't seen as Windows;
   - `which python3>/dev/null` (no space) reads the tool as `python`. (`fit.ts`)
-- [ ] **`REQUIRE_TOOL` covers only six requirement ids, and this isn't documented.** Evidence uses the full nmap product string. (`fit.ts`)
-- [ ] **A log entry's payload id can't be cleared once set.** The failure text "cannot find" is broad. `staleBaked` reports a false stale warning if a stored value lacks LHOST or LPORT. (`log.rs`, `memory.ts`)
-- [ ] **Ranking doesn't wait for the engagement kind to load** (it isn't fail-closed like the Arsenal's). This is harmless while no payload is exam-banned. (`usePayloadFit.ts`)
+- [x] **`REQUIRE_TOOL` covers only six requirement ids, and this isn't documented.** Evidence uses the full nmap product string. (`fit.ts`)
+- [x] **A log entry's payload id can't be cleared once set.** The failure text "cannot find" is broad. `staleBaked` reports a false stale warning if a stored value lacks LHOST or LPORT. (`log.rs`, `memory.ts`)
+- [x] **Ranking doesn't wait for the engagement kind to load** (it isn't fail-closed like the Arsenal's). This is harmless while no payload is exam-banned. (`usePayloadFit.ts`)
 
 ## Drawer and Workbench
 
-- [ ] **The drawer's Port chip only offers 443, 80 and the Settings port.** A custom LPORT needs the Workbench. (`ContextChips.tsx`)
-- [ ] **Overrides are independent:** after you pick OS = Linux, an earlier `cmd` paste override still applies.
-- [ ] **After a mouse pick, ↵ can reopen the chip instead of copying.** ⌥L copies `penelope -O -p {LPORT}` without the guard when no port is set. ⌘↵ on the Encode tab logs LHOST/LPORT, which don't apply there.
-- [ ] **Tabbing past the drawer body goes through the page before reaching Full screen.** Shift+Tab gets there in a few presses, but nothing says so.
-- [ ] **Paste-context labels truncate in the Workbench with no `title`.** The host chip has no minimum width.
-- [ ] **Test gaps:**
+- [x] **The drawer's Port chip only offers 443, 80 and the Settings port.** A custom LPORT needs the Workbench. (`ContextChips.tsx`) Done (prelab batch): an "Other…" option opens an inline numeric field; ↵ sets the port for this host and goes back to the payload, Esc drops it.
+- [x] **Overrides are independent:** after you pick OS = Linux, an earlier `cmd` paste override still applies. Done (prelab batch): picking an OS drops a paste override that does not exist for that OS (cmd.exe on Linux); an any-OS one (Web shell ?cmd=) stays.
+- [x] **After a mouse pick, ↵ can reopen the chip instead of copying.** ⌥L copies `penelope -O -p {LPORT}` without the guard when no port is set. ⌘↵ on the Encode tab logs LHOST/LPORT, which don't apply there. Done (prelab batch): a mouse pick gives focus back to the payload body; ⌥L with no port was already guarded (test added); ⌘↵ on Encode logs no LHOST/LPORT values.
+- [x] **Tabbing past the drawer body goes through the page before reaching Full screen.** Shift+Tab gets there in a few presses, but nothing says so. Done (prelab batch): Tab and ⇧⇥ wrap inside the drawer, so focus never leaves it for the page behind.
+- [x] **Paste-context labels truncate in the Workbench with no `title`.** The host chip has no minimum width. Done (prelab batch): paste-context and filter choices carry a title; the host chip's column is at least 10rem.
+- [x] **Test gaps:** Done (prelab batch): a test for each; all already behaved. The audit's `nc.exe` check was already positive (`toHaveCount(1)` + "Failed here before", 4202644), so no edit.
   - `P` while typing in a field;
   - ↵ or Esc inside an open chip list;
   - ⌥1 against HostView's tabs;
@@ -72,11 +73,11 @@ These are left over from the 2b-B Payloads build (branch `interpreters-payloads`
 
 ## Found in 2b-C (payloads breadth, 2026-11-09)
 
-- [ ] **The CommandList multi-block Transfer test picks blocks by position,** so adding a block silently changes what it checks. Pick them by name.
-- [ ] **Listener placeholders (`TARGET_IP`, `BIND_PORT`) are not reported as unresolved.** A bind-shell listener with no host IP copies with the placeholder in it and no warning.
-- [ ] **The Filter chip shows on msfvenom in injection contexts,** though msfvenom never takes a filter. Show it only for Shell.
-- [ ] **The "Listener" chip label under "Connect from Kali" reads oddly.** Rename it for bind shells.
-- [ ] **Tools inferred from the log can be overridden but not cleared.** Add a way back to "from your log".
-- [ ] **`listKey` uses `JSON.stringify(tools)`,** which depends on key order. Sort the entries first.
-- [ ] **`fakeApi` `payloadBuildRecord` lacks the empty-`payloadId` check** the real command has, so the audit backend accepts a record the app would refuse.
-- [ ] **The WAR duplicate can now use `os: "any"`.** Merge the Linux and Windows WAR entries into one (see the Java WAR item above).
+- [x] **The CommandList multi-block Transfer test picks blocks by position,** so adding a block silently changes what it checks. Pick them by name. Done (prelab batch): it picks "Download with wget" and "Make the file executable" by name.
+- [x] **Listener placeholders (`TARGET_IP`, `BIND_PORT`) are not reported as unresolved.** A bind-shell listener with no host IP copies with the placeholder in it and no warning. Already closed by the 2b-C fix wave: they are fill fields and ⌥L holds the listener back once (toggles test "a bind shell on a host with no IP").
+- [x] **The Filter chip shows on msfvenom in injection contexts,** though msfvenom never takes a filter. Show it only for Shell. Already closed by the 2b-C fix wave: `showsFilter` is Shell only (toggles test "Filter and ⌥F are Shell's only").
+- [x] **The "Listener" chip label under "Connect from Kali" reads oddly.** Rename it for bind shells. Done (prelab batch): it reads "Connect with" for bind shells.
+- [x] **Tools inferred from the log can be overridden but not cleared.** Add a way back to "from your log". Done (prelab batch): a row's first choice reads "from your log" ("unknown" where the log says nothing) and hands the row back to inference; the log's value shows under the name.
+- [x] **`listKey` uses `JSON.stringify(tools)`,** which depends on key order. Sort the entries first. Done (prelab batch): entries sort first.
+- [x] **`fakeApi` `payloadBuildRecord` lacks the empty-`payloadId` check** the real command has, so the audit backend accepts a record the app would refuse. Done (prelab batch): it refuses a blank id with a validation error on `payloadId`.
+- [x] **The WAR duplicate can now use `os: "any"`.** Merge the Linux and Windows WAR entries into one (see the Java WAR item above).

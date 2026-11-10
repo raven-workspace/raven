@@ -24,6 +24,9 @@ function unknownTarget(entry: LogEntry, hosts: Host[]): string | null {
   return ip;
 }
 
+/** Host chips shown on a row; the rest fold into one "+N" so a many-host entry never squeezes its title. */
+const MAX_CHIPS = 2;
+
 interface LogEntryRowProps {
   entry: LogEntry;
   hosts: Host[];
@@ -83,11 +86,17 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
       {hasExtras && (
         <span className={`grid grid-flow-col auto-cols-max items-center gap-2 ${picking ? "min-w-0 justify-end overflow-hidden" : ""}`}>
           {target && <span className="whitespace-nowrap font-mono text-code text-muted">{target}</span>}
-          {names.map((n) => (
+          {names.slice(0, MAX_CHIPS).map((n) => (
             <Chip key={n} className={`${picking ? "max-w-[10ch]" : "max-w-[16ch]"} truncate`}>
               <span className="truncate">{n}</span>
             </Chip>
           ))}
+          {names.length > MAX_CHIPS && (
+            <Chip title={names.slice(MAX_CHIPS).join(", ")}>
+              +{names.length - MAX_CHIPS}
+              <span className="sr-only">, also {names.slice(MAX_CHIPS).join(", ")}</span>
+            </Chip>
+          )}
           {entry.private && <Chip>private</Chip>}
           {entry.returnedNothing &&
             (picking ? (

