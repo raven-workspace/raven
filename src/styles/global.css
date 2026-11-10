@@ -82,6 +82,16 @@
     opacity: 1;
   }
 
+  /* Number fields are typed, or stepped with ↑ ↓: the browser's spin buttons are chrome Ink doesn't draw. */
+  input[type="number"] {
+    appearance: textfield;
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
   * {
     scrollbar-width: thin;
     scrollbar-color: var(--line-2) transparent;
