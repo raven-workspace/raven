@@ -1,5 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
-import type { ManualNote } from "../../engines/manual";
+import { shortTitle, type ManualNote } from "../../engines/manual";
 import { cx } from "../../lib/cx";
 import { Input, labelClass } from "../../ui";
 import { ON } from "../arsenal/styles";
@@ -9,9 +9,6 @@ export const MANUAL_FILTER_ID = "manual-filter";
 
 const items = (list: HTMLElement | null) => [...(list?.querySelectorAll<HTMLButtonElement>("button[data-note]") ?? [])];
 
-
-/** The vault suffixes most Foundations titles with " — Reference"; in the rail it only crowds out the name. */
-const railTitle = (title: string) => title.replace(/\s+[—–-]\s+Reference$/i, "");
 /**
  * The Manual's left rail: a title filter (`/` focuses it) over the notes in three groups. ↓ from the filter moves into
  * the list, ↑↓ move along it, ↵ (or a click) opens a note; ↵ in the filter opens the first match.
@@ -78,7 +75,7 @@ export function ManualRail({ notes, currentId, filter, onFilter, filterRef, onOp
                       on ? ON : "text-fg-2 hover:bg-surface-hi",
                     )}
                   >
-                    <span className="truncate">{railTitle(n.title)}</span>
+                    <span className="truncate">{shortTitle(n.title)}</span>
                   </button>
                 );
               })}
