@@ -24,16 +24,14 @@ const SAVE_MS = 200;
 
 export const manualPath = (noteId: string) => `/manual/${encodeURIComponent(noteId)}`;
 
-/** The line shows all of them while they fit; a narrow window drops the highest numbers first. */
-const HINT_MAX = 8;
-
 const HINTS: Hint[] = [
-  { keys: "/", label: "filter", priority: 1 },
+  // The line keeps five (DESIGN.md); the rest wait in the ? list, and "/" and "⌘[" take a slot when copy hints go.
+  { keys: "/", label: "filter", priority: 4 },
   { keys: "↵", label: "copy command", priority: 2 },
-  { keys: "⌘↵", label: "copy and log", priority: 3 },
-  { keys: "⌘[", label: "previous note", priority: 2 },
-  { keys: "[ ]", label: "section", priority: 2 },
-  { keys: "⌥H", label: "host", priority: 2 },
+  { keys: "⌘↵", label: "copy and log", priority: 2 },
+  { keys: "⌘[", label: "previous note", priority: 4 },
+  { keys: "[ ]", label: "section", priority: 3 },
+  { keys: "⌥H", label: "host", priority: 3 },
   { keys: "Esc", label: "back", priority: 1 },
 ];
 
@@ -528,7 +526,7 @@ export function ManualPage() {
     <main aria-label="Manual" data-hint-surface="" className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto]">
       {body ?? <div />}
       <footer className="grid border-t border-line px-6 py-2">
-        <HintLine hints={hints} more={status === "ready" ? MORE.filter((h) => !hints.some((x) => x.keys === h.keys)) : []} max={HINT_MAX} ariaLabel="Manual shortcuts" />
+        <HintLine hints={hints} more={status === "ready" ? MORE.filter((h) => !hints.some((x) => x.keys === h.keys)) : []} ariaLabel="Manual shortcuts" />
       </footer>
     </main>
   );

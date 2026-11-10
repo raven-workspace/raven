@@ -884,11 +884,25 @@ describe("Manual: focus follows intent, one Tab stop, hints", () => {
     expect(await screen.findByText("No previous note")).toBeInTheDocument();
   });
 
-  it("the hint line keeps [ ] and ⌥H, and drops the copy hints on a note with no commands", async () => {
+  it("the hint line keeps five; [ ] and ⌥H stay, / and ⌘[ wait in the ? list", async () => {
+    const user = userEvent.setup();
+    mount([`/manual/${TOOL.id}`]);
+    await openNote("Aa Tool");
+    const line = within(screen.getByRole("group", { name: "Manual shortcuts" }));
+    for (const label of ["copy command", "log (no host)", "section", "host", "back"]) expect(line.getByText(label)).toBeInTheDocument();
+    expect(line.queryByText("filter")).toBeNull();
+    expect(line.queryByText("previous note")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "All shortcuts" }));
+    const list = within((await screen.findByText("focus the note")).closest("[role=dialog]") as HTMLElement);
+    expect(list.getByText("filter")).toBeInTheDocument();
+    expect(list.getByText("previous note")).toBeInTheDocument();
+  });
+
+  it("a note with no commands drops the copy hints; / and ⌘[ take their slots", async () => {
     mount(["/manual"]);
     await openNote("Bb Basics");
     const hints = within(screen.getByRole("group", { name: "Manual shortcuts" }));
-    for (const label of ["section", "host", "previous note"]) expect(hints.getByText(label)).toBeInTheDocument();
+    for (const label of ["section", "host", "filter", "previous note", "back"]) expect(hints.getByText(label)).toBeInTheDocument();
     expect(hints.queryByText("copy command")).toBeNull();
     expect(hints.queryByText(/copy and log|log \(no host\)/)).toBeNull();
   });
@@ -898,8 +912,6 @@ describe("Manual: focus follows intent, one Tab stop, hints", () => {
     await openNote("Aa Tool");
     let hints = within(screen.getByRole("group", { name: "Manual shortcuts" }));
     expect(hints.getByText("copy command")).toBeInTheDocument();
-    expect(hints.getByText("section")).toBeInTheDocument();
-    expect(hints.getByText("host")).toBeInTheDocument();
     cleanup();
     m.fieldManualLoad.mockResolvedValue(snapshot([...NOTES, INLINEY]));
     mount([`/manual/${INLINEY.id}`]);
