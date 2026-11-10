@@ -572,6 +572,7 @@ export const AUDIT_NOTE_IDS = {
   tool: "tool-zz-scanner",
   links: "fnd-zz-protocol",
   report: "rep-zz-finding",
+  lookup: "fnd-zz-error-lookup",
 } as const;
 
 const fm = (id: string, title: string, type: string) => `---\nid: ${id}\ntitle: ${title}\ntype: ${type}\n---\n`;
@@ -727,6 +728,22 @@ const LINKS_NOTE = [
   "",
 ].join("\n");
 
+/** A lookup table: key cells, an action column with placeholder commands (one with a secret, one row with none). */
+const LOOKUP_NOTE = [
+  "# Zz Error Lookup",
+  "## Login errors",
+  "**Table 1 — Zz login errors**",
+  "| Error | Means | Usually caused by | Do this | Card |",
+  "| - | - | - | - | - |",
+  "| `STATUS_ZZ_DENIED` | The account has no right to the share. | A low-privilege user against an admin share on zzfs01.example.test. | List the shares it can read: `nxc smb {TARGET_IP} -u '{USER}' -p '{PASS}' --shares` | [[Zz-Share-Card]] |",
+  "| `STATUS_ZZ_LOGON` | The name or the secret is wrong. | A local account tried as a domain one. | Retry as local: `nxc smb {TARGET_IP} -u '{USER}' -p '{PASS}' --local-auth` | |",
+  "| `STATUS_ZZ_EXPIRED` | The secret is right and has expired. | A service account nobody used for months. | Check the password policy: `nxc smb {TARGET_IP} --pass-pol` | |",
+  "| `STATUS_ZZ_LOCKED` | The account is locked for the lockout window. | A spray without a delay. | Stop spraying that account and wait out the window. | |",
+  "| `STATUS_ZZ_DISABLED` | The secret is right; the account is switched off. | A leaver kept for audit. | Keep the secret: an enabled sibling often reuses it. | |",
+  "| `STATUS_ZZ_SKEW` | The clocks are too far apart for Kerberos. | A VM that was suspended. | Sync with the DC: `ntpdate {DC_IP}` | |",
+  "",
+].join("\n");
+
 const FILLER: [string, string][] = [
   ["04-Foundations", "Name Resolution Order"], ["04-Foundations", "Ports at a Glance"], ["04-Foundations", "Tokens and Privileges"],
   ["04-Foundations", "Hash Formats"], ["04-Foundations", "Shells and TTYs"], ["04-Foundations", "Web Request Anatomy"],
@@ -739,6 +756,7 @@ export const AUDIT_NOTE_SOURCES: [string, string][] = [
   ["04-Foundations/Zz-Status-Codes.md", fm(AUDIT_NOTE_IDS.long, "Zz Status Codes", "foundation") + longNote()],
   ["03-Tools/Zz-Scanner.md", fm(AUDIT_NOTE_IDS.tool, "Zz Scanner", "tool") + TOOL_NOTE],
   ["04-Foundations/Zz-Protocol.md", fm(AUDIT_NOTE_IDS.links, "Zz Protocol", "foundation") + LINKS_NOTE],
+  ["04-Foundations/Zz-Error-Lookup.md", fm(AUDIT_NOTE_IDS.lookup, "Zz Error Lookup", "foundation") + LOOKUP_NOTE],
   ["05-Reporting/Zz-Finding-Template.md", fm(AUDIT_NOTE_IDS.report, "Zz Finding Template", "reporting") + "# Zz Finding Template\n## Structure\nTitle, impact, evidence, fix.\n"],
   ...FILLER.map(([dir, title]): [string, string] => [`${dir}/${title.replace(/ /g, "-")}.md`, `# ${title}\nA short synthetic note.\n## Summary\nTwo lines of invented text.\n`]),
 ];

@@ -13,6 +13,7 @@ import { MANUAL_QUERY } from "./searchPath";
 import { jumpBehavior, ManualOutline, useOutlineSpy } from "./ManualOutline";
 import { ManualRail } from "./ManualRail";
 import { NoteView } from "./NoteView";
+import { useManualStatus } from "./useManualStatus";
 import { useManualStore, type ManualPlace } from "./useManualStore";
 import { firstNote, useManualNotes, type ManualStatus } from "./useManualNotes";
 
@@ -117,6 +118,12 @@ function MatchBar({ query, at, count }: { query: string; at: number; count: numb
   );
 }
 
+/** The one status line: what the last copy or hold-back said, right-aligned in the host row. Gone when the note changes. */
+function StatusSlot() {
+  const { text, tone } = useManualStatus();
+  return <span role="status" className={`truncate text-right text-meta ${tone === "warn" ? "text-warn" : "text-accent"}`}>{text}</span>;
+}
+
 function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undefined }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -127,6 +134,8 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
   const setHostId = (id: string | null) => useLastEngagementStore.setState({ engagementId: engagementId || null, hostId: id });
   useLibraryVersion();
   const cards = getCards();
+  const noteKey = note?.id;
+  useEffect(() => useManualStatus.getState().clear(), [noteKey]);
 
   const paneRef = useRef<HTMLElement>(null);
   // The match bar: `?q=` marks every match in the note; the current one starts in the hash's section.
@@ -322,16 +331,17 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
       <ManualRail notes={notes} currentId={note?.id ?? null} filter={filter} onFilter={setFilter} filterRef={filterRef} onOpen={open} />
       <div className={`grid min-h-0 ${query ? "grid-rows-[auto_auto_minmax(0,1fr)]" : "grid-rows-[auto_minmax(0,1fr)]"}`}>
         {/* What the note's commands fill for, and where ⌘↵ logs: kept above the scroll so it never moves. */}
-        <div className="grid min-h-12 grid-cols-[minmax(10rem,max-content)_minmax(0,1fr)] items-center gap-3 border-b border-line px-8 py-2 text-meta">
+        <div className="grid min-h-12 grid-cols-[minmax(10rem,max-content)_minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-8 py-2 text-meta">
           {engagementId ? (
             <>
               <div data-host-chip-cell="" className="grid">
                 <HostChip ref={hostRef} hosts={base.d.hosts} value={base.host?.id ?? null} onChange={setHostId} align="start" className="max-w-80" />
               </div>
               <span data-testid="manual-host-ip" className="truncate font-mono text-code text-muted">{base.host?.ip ?? ""}</span>
+              <StatusSlot />
             </>
           ) : (
-            !scopePending && <span className="col-span-2 text-muted">No active engagement</span>
+            !scopePending && <span className="col-span-3 text-muted">No active engagement</span>
           )}
         </div>
         {query && note && <MatchBar query={query} at={match.at} count={match.count} />}

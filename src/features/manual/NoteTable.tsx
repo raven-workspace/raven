@@ -23,7 +23,7 @@ const TD =
  * grid-laid-out table can lose its table semantics in WebKit; stacked, each cell starts with its column name as real
  * text, so it is read as "Code 0xC0000022".
  */
-export function NoteTable({ head, rows, cell }: { head: Inline[][]; rows: Inline[][][]; cell: (parts: Inline[]) => ReactNode }) {
+export function NoteTable({ head, rows, cell }: { head: Inline[][]; rows: Inline[][][]; cell: (parts: Inline[], row?: number) => ReactNode }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   useLayoutEffect(() => {
@@ -78,7 +78,7 @@ export function NoteTable({ head, rows, cell }: { head: Inline[][]; rows: Inline
                   {/* Its column name: shown (and read) only when stacked, as the table header is then hidden. */}
                   <span data-column-label="" className="hidden text-muted group-data-stacked/nt:block">{labels[j] ?? ""}</span>
                   {/* One grid item when stacked: text, code and links stay in one flow. */}
-                  <span className="min-w-0">{cell(c)}</span>
+                  <span className="min-w-0">{cell(c, i)}</span>
                 </td>
               ))}
             </tr>

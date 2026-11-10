@@ -5,12 +5,14 @@ import type { CardMeta } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
 import type { ManualNote } from "../../engines/manual";
 import { resolveLink } from "../../engines/manual/links";
+import { isInlineCommand, lookupColumns, shortTitle } from "../../engines/manual/lookup";
 import { cx } from "../../lib/cx";
 import { parseMarkdown, type Block, type Inline } from "../../engines/manual/markdown";
 import { matchRanges, matchRegex } from "../../engines/manual/search";
 import { highlight } from "../../ui";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useFillBase } from "../palette/fillData";
+import { InlineCommand } from "./InlineCommand";
 import { ManualCommand, type FillBase } from "./ManualCommand";
 import { NoteTable } from "./NoteTable";
 
@@ -37,6 +39,11 @@ interface Ctx {
   cards: CardMeta[];
   /** The search the note was opened from: its matches are marked. */
   re: RegExp | null;
+  base: FillBase;
+  /** The `##`/`###` section the text sits in ("" before the first): the log title of an inline command. */
+  section: string;
+  /** Set in a row of a lookup table: the log title of its inline commands ("Table name: key"). */
+  rowTitle?: string;
 }
 
 /** Plain text with the search's matches marked. */
@@ -65,6 +72,7 @@ function InlineView({ parts, ctx }: { parts: Inline[]; ctx: Ctx }): ReactNode {
 function InlinePart({ p, ctx }: { p: Exclude<Inline, { text: string }>; ctx: Ctx }): ReactNode {
   if ("code" in p) {
     // A short single token (a status code, a flag, a path) never breaks inside: not at a backslash or dot either.
+    if (isInlineCommand(p.code)) return <InlineCommand command={inlineOf(p.code, ctx)} base={ctx.base} highlight={ctx.re} />;
     const token = p.code.length <= TOKEN_MAX && !/\s/.test(p.code);
     return <code className={cx("font-mono text-code text-fg [overflow-wrap:break-word]", token && "whitespace-nowrap")}>{marked(p.code, ctx.re)}</code>;
   }
@@ -91,6 +99,18 @@ function InlinePart({ p, ctx }: { p: Exclude<Inline, { text: string }>; ctx: Ctx
   return <span className="text-muted">{marked(label, ctx.re)}</span>;
 }
 
+/** An inline code span as a library command: it runs from Kali, and logs as its table row, else as its note and section. */
+function inlineOf(code: string, ctx: Ctx): LibraryCommand {
+  const { note, section, rowTitle } = ctx;
+  const command: LibraryCommand = {
+    id: `manual:${note.id}:inline:${code}`, title: rowTitle ?? (section ? `${shortTitle(note.title)}: ${section}` : shortTitle(note.title)),
+    tool: code.trim().split(/\s+/)[0] ?? "", template: code, os: "any", runFrom: "attacker", goals: [], source: "field-manual",
+  };
+  const exam = classifyExam(code);
+  if (exam) command.exam = exam;
+  return command;
+}
+
 /** The first line of a code block, shortened: it names a block that has no title. */
 const firstLine = (text: string) => {
   const line = text.split("\n").find((l) => l.trim() !== "")?.trim() ?? "";
@@ -115,7 +135,8 @@ function commandOf(block: Extract<Block, { kind: "code" }>, note: ManualNote, n:
   const kali = block.title ? /^kali\b/i.test(block.title) : !WINDOWS_LANGS.has(lang);
   const os = WINDOWS_LANGS.has(lang) ? "windows" : LINUX_LANGS.has(lang) && !kali ? "linux" : "any";
   return {
-    id: `manual:${note.id}:${n}`, title: section || note.title, tool: block.text.trim().split(/\s+/)[0] ?? "",
+    id: `manual:${note.id}:${n}`,
+    title: block.title ? `${shortTitle(note.title)}: ${block.title}` : section ? `${shortTitle(note.title)}: ${section}` : shortTitle(note.title), tool: block.text.trim().split(/\s+/)[0] ?? "",
     template: block.text, os, runFrom: kali ? "attacker" : "target", goals: [], source: "field-manual",
   };
 }
@@ -131,8 +152,28 @@ function sectionsOf(blocks: Block[]): string[] {
   return out;
 }
 
+/**
+ * Each block's table name: a caption's name carries to the next table across code, paragraphs and lists, and a heading
+ * ends its reach (the same rule as the lookup engine). Only a lookup table has one.
+ */
+function tableNamesOf(blocks: Block[], note: ManualNote): (string | undefined)[] {
+  let anchor: string | undefined;
+  return blocks.map((b) => {
+    if (b.kind === "paragraph" && b.anchor) anchor = b.anchor;
+    else if (b.kind === "heading") anchor = undefined;
+    if (b.kind !== "table") return undefined;
+    const caption = anchor;
+    anchor = undefined;
+    if (!caption || !lookupColumns(b.head, b.rows)) return undefined;
+    return note.outline.find((o) => o.kind === "table" && o.id === caption)?.text || undefined;
+  });
+}
+
 /** `section`: the nearest `##`/`###` heading above the block, as plain text ("" before the first). */
-function BlockView({ block, n, ctx, base, section }: { block: Block; n: number; ctx: Ctx; base: FillBase; section: string }) {
+function BlockView({ block, n, ctx: shared, base, section, tableName }: {
+  block: Block; n: number; ctx: Ctx; base: FillBase; section: string; tableName: string | undefined;
+}) {
+  const ctx: Ctx = { ...shared, section };
   switch (block.kind) {
     case "heading": {
       const inner = <InlineView parts={block.inline} ctx={ctx} />;
@@ -155,7 +196,15 @@ function BlockView({ block, n, ctx, base, section }: { block: Block; n: number; 
       return block.ordered ? <ol className={`${cls} list-decimal`}>{items}</ol> : <ul className={`${cls} list-disc`}>{items}</ul>;
     }
     case "table":
-      return <NoteTable head={block.head} rows={block.rows} cell={(parts) => <InlineView parts={parts} ctx={ctx} />} />;
+      return (
+        <NoteTable
+          head={block.head} rows={block.rows}
+          cell={(parts, row) => {
+            const key = tableName && row !== undefined ? plain(block.rows[row]?.[0] ?? []).trim() : null;
+            return <InlineView parts={parts} ctx={key === null ? ctx : { ...ctx, rowTitle: `${tableName}: ${key}` }} />;
+          }}
+        />
+      );
     case "code": {
       const command = commandOf(block, ctx.note, n, section);
       const output = OUTPUT_LANGS.has(block.lang.toLowerCase());
@@ -183,13 +232,14 @@ export function NoteView({ note, notes, cards, hostId, engagementId, query }: {
   const blocks = useMemo(() => parseMarkdown(note.body), [note.body]);
   const base = useFillBase(engagementId, hostId);
   const re = useMemo(() => (query ? matchRegex(query) : null), [query]);
-  const ctx: Ctx = { note, notes, cards, re };
+  const ctx: Ctx = { note, notes, cards, re, base, section: "" };
   const sections = useMemo(() => sectionsOf(blocks), [blocks]);
+  const tableNames = useMemo(() => tableNamesOf(blocks, note), [blocks, note]);
   let code = 0;
   return (
     <article aria-label={note.title} className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 [&_[tabindex='-1']]:outline-none">
       {blocks.map((b, i) => (
-        <BlockView key={i} block={b} n={b.kind === "code" ? code++ : -1} ctx={ctx} base={base} section={sections[i]} />
+        <BlockView key={i} block={b} n={b.kind === "code" ? code++ : -1} ctx={ctx} base={base} section={sections[i] ?? ""} tableName={tableNames[i]} />
       ))}
     </article>
   );

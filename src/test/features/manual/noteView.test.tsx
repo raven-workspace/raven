@@ -10,6 +10,7 @@ import { parseNote, type ManualNote } from "../../../engines/manual";
 import { useArsenalStore } from "../../../features/arsenal/useArsenalStore";
 import { logCommand } from "../../../features/capture/logCommand";
 import { NoteTable } from "../../../features/manual/NoteTable";
+import { useManualStatus } from "../../../features/manual/useManualStatus";
 import { NoteView } from "../../../features/manual/NoteView";
 import { api } from "../../../lib/api";
 import { makeQueryClient } from "../../../lib/queryClient";
@@ -169,7 +170,7 @@ describe("NoteView commands", () => {
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("zzscan -t 198.51.100.20"));
     await waitFor(() => expect(logCommand).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      engagementId: "e1", host: expect.objectContaining({ id: "h1" }), command: "zzscan -t 198.51.100.20", title: "Usage", ranOn: "kali",
+      engagementId: "e1", host: expect.objectContaining({ id: "h1" }), command: "zzscan -t 198.51.100.20", title: "Zz Tool: Kali", ranOn: "kali",
     })));
   });
 
@@ -192,12 +193,12 @@ describe("NoteView commands", () => {
     act(() => target.focus());
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await waitFor(() => expect(logCommand).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
-      command: "Get-ZzThing -Name 198.51.100.20", title: "Find the zz service", ranOn: "zzdc01.example.test",
+      command: "Get-ZzThing -Name 198.51.100.20", title: "Zz Where: Target — PowerShell", ranOn: "zzdc01.example.test",
     })));
     act(() => screen.getByRole("group", { name: "Note command: Scan from Kali: zzscan {TARGET_IP}" }).focus());
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await waitFor(() => expect(logCommand).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
-      command: "zzscan 198.51.100.20", title: "Scan from Kali", ranOn: "kali",
+      command: "zzscan 198.51.100.20", title: "Zz Where: Kali", ranOn: "kali",
     })));
   });
 
@@ -220,12 +221,12 @@ describe("NoteView commands", () => {
     act(() => target.focus());
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await waitFor(() => expect(logCommand).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
-      command: "Get-ZzThing -Name 198.51.100.20", title: "Query the zz service", ranOn: "zzdc01.example.test",
+      command: "Get-ZzThing -Name 198.51.100.20", title: "Zz Bare: Query the zz service", ranOn: "zzdc01.example.test",
     })));
     act(() => screen.getByRole("group", { name: "Note command: Scan it: zzscan {TARGET_IP}" }).focus());
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await waitFor(() => expect(logCommand).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
-      command: "zzscan 198.51.100.20", title: "Scan it", ranOn: "kali",
+      command: "zzscan 198.51.100.20", title: "Zz Bare: Scan it", ranOn: "kali",
     })));
   });
 
@@ -252,7 +253,8 @@ describe("NoteView commands", () => {
     await navigator.clipboard.writeText("untouched");
     const copy = screen.getByRole("button", { name: "Copy command: Banned: sqlmap -u http://{TARGET_IP}/zz" });
     await user.click(copy);
-    expect(await screen.findByRole("status")).toHaveTextContent("Not allowed in the exam. Press ↵ again to copy anyway");
+    await waitFor(() => expect(useManualStatus.getState().text).toBe("Not allowed in the exam. Press ↵ again to copy anyway"));
+    expect(useManualStatus.getState().tone).toBe("warn");
     expect(await navigator.clipboard.readText()).toBe("untouched");
     await user.click(copy);
     await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("sqlmap -u http://198.51.100.20/zz"));
