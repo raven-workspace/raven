@@ -156,22 +156,22 @@ function sectionsOf(blocks: Block[]): string[] {
  * Each block's table name: a caption's name carries to the next table across code, paragraphs and lists, and a heading
  * ends its reach (the same rule as the lookup engine). Only a lookup table has one.
  */
-function tableNamesOf(blocks: Block[], note: ManualNote): (string | undefined)[] {
+function tableNamesOf(blocks: Block[], note: ManualNote): { name: string | undefined; anchor: string | undefined }[] {
   let anchor: string | undefined;
   return blocks.map((b) => {
     if (b.kind === "paragraph" && b.anchor) anchor = b.anchor;
     else if (b.kind === "heading") anchor = undefined;
-    if (b.kind !== "table") return undefined;
+    if (b.kind !== "table") return { name: undefined, anchor: undefined };
     const caption = anchor;
     anchor = undefined;
-    if (!caption || !lookupColumns(b.head, b.rows)) return undefined;
-    return note.outline.find((o) => o.kind === "table" && o.id === caption)?.text || undefined;
+    if (!caption || !lookupColumns(b.head, b.rows)) return { name: undefined, anchor: caption };
+    return { name: note.outline.find((o) => o.kind === "table" && o.id === caption)?.text || undefined, anchor: caption };
   });
 }
 
 /** `section`: the nearest `##`/`###` heading above the block, as plain text ("" before the first). */
-function BlockView({ block, n, ctx: shared, base, section, tableName }: {
-  block: Block; n: number; ctx: Ctx; base: FillBase; section: string; tableName: string | undefined;
+function BlockView({ block, n, ctx: shared, base, section, tableName, tableAnchor }: {
+  block: Block; n: number; ctx: Ctx; base: FillBase; section: string; tableName: string | undefined; tableAnchor: string | undefined;
 }) {
   const ctx: Ctx = { ...shared, section };
   switch (block.kind) {
@@ -198,7 +198,7 @@ function BlockView({ block, n, ctx: shared, base, section, tableName }: {
     case "table":
       return (
         <NoteTable
-          head={block.head} rows={block.rows}
+          head={block.head} rows={block.rows} anchor={tableAnchor}
           cell={(parts, row) => {
             const key = tableName && row !== undefined ? plain(block.rows[row]?.[0] ?? []).trim() : null;
             return <InlineView parts={parts} ctx={key === null ? ctx : { ...ctx, rowTitle: `${tableName}: ${key}` }} />;
@@ -239,7 +239,7 @@ export function NoteView({ note, notes, cards, hostId, engagementId, query }: {
   return (
     <article aria-label={note.title} className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 [&_[tabindex='-1']]:outline-none">
       {blocks.map((b, i) => (
-        <BlockView key={i} block={b} n={b.kind === "code" ? code++ : -1} ctx={ctx} base={base} section={sections[i] ?? ""} tableName={tableNames[i]} />
+        <BlockView key={i} block={b} n={b.kind === "code" ? code++ : -1} ctx={ctx} base={base} section={sections[i] ?? ""} tableName={tableNames[i]?.name} tableAnchor={tableNames[i]?.anchor} />
       ))}
     </article>
   );

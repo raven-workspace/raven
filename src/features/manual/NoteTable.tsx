@@ -23,7 +23,7 @@ const TD =
  * grid-laid-out table can lose its table semantics in WebKit; stacked, each cell starts with its column name as real
  * text, so it is read as "Code 0xC0000022".
  */
-export function NoteTable({ head, rows, cell }: { head: Inline[][]; rows: Inline[][][]; cell: (parts: Inline[], row?: number) => ReactNode }) {
+export function NoteTable({ head, rows, anchor, cell }: { head: Inline[][]; rows: Inline[][][]; anchor?: string; cell: (parts: Inline[], row?: number) => ReactNode }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   useLayoutEffect(() => {
@@ -56,7 +56,7 @@ export function NoteTable({ head, rows, cell }: { head: Inline[][]; rows: Inline
   const labels = head.map(plain);
   return (
     <div ref={wrapRef} className="grid min-w-0">
-      <table ref={tableRef} role="table" className="group/nt w-full border-collapse text-body/5.5 data-stacked:grid">
+      <table ref={tableRef} role="table" data-table={anchor} className="group/nt w-full border-collapse text-body/5.5 data-stacked:grid">
         <thead role="rowgroup" className="group-data-stacked/nt:hidden">
           <tr role="row">
             {head.map((c, i) => (
@@ -69,8 +69,8 @@ export function NoteTable({ head, rows, cell }: { head: Inline[][]; rows: Inline
         <tbody role="rowgroup" className="group-data-stacked/nt:grid">
           {rows.map((r, i) => (
             <tr
-              key={i} role="row"
-              className="group-data-stacked/nt:grid group-data-stacked/nt:grid-cols-[fit-content(12rem)_minmax(0,1fr)] group-data-stacked/nt:gap-x-3 group-data-stacked/nt:gap-y-1 group-data-stacked/nt:border-b group-data-stacked/nt:border-line group-data-stacked/nt:py-3"
+              key={i} role="row" data-row={i}
+              className="[&[data-current-row]>td]:bg-surface-hi [&[data-current-row]>td:first-child]:shadow-[inset_2px_0_0_var(--accent)] group-data-stacked/nt:[&[data-current-row]]:bg-surface-hi group-data-stacked/nt:[&[data-current-row]]:shadow-[inset_2px_0_0_var(--accent)] group-data-stacked/nt:[&[data-current-row]>td]:bg-transparent group-data-stacked/nt:[&[data-current-row]>td:first-child]:shadow-none group-data-stacked/nt:grid group-data-stacked/nt:grid-cols-[fit-content(12rem)_minmax(0,1fr)] group-data-stacked/nt:gap-x-3 group-data-stacked/nt:gap-y-1 group-data-stacked/nt:border-b group-data-stacked/nt:border-line group-data-stacked/nt:py-3"
             >
               {r.map((c, j) => (
                 // A key cell never wraps as a table (the stacked check then sees its full width); stacked, it may again.

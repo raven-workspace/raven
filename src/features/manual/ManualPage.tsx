@@ -71,6 +71,7 @@ function ManualEmpty({ status }: { status: keyof typeof EMPTY_TITLE }) {
 function markCurrent(pane: HTMLElement, at: number): { count: number; el: HTMLElement | null } {
   let n = -1;
   let el: HTMLElement | null = null;
+  for (const r of pane.querySelectorAll("tr[data-current-row]")) r.removeAttribute("data-current-row");
   for (const m of pane.querySelectorAll<HTMLElement>("mark[data-match]")) {
     if (m.dataset.match === "start") n++;
     const on = n === at;
@@ -78,6 +79,8 @@ function markCurrent(pane: HTMLElement, at: number): { count: number; el: HTMLEl
     if (on) m.setAttribute("data-current", "");
     else m.removeAttribute("data-current");
   }
+  // A match in a table lights its row.
+  el?.closest("tr")?.setAttribute("data-current-row", "");
   return { count: n + 1, el };
 }
 
@@ -237,6 +240,7 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
   // After the hash's scroll above: a search lands on its match, not the section top.
   useLayoutEffect(() => {
     const pane = paneRef.current;
+    if (!query) pane?.querySelectorAll("tr[data-current-row]").forEach((r) => r.removeAttribute("data-current-row"));
     if (!note || !pane || !query) return;
     const inRail = filterRef.current?.closest("nav")?.contains(document.activeElement) ?? false;
     showMatch(firstAfter(pane, decodeURIComponent(location.hash.slice(1))), true, !inRail);
