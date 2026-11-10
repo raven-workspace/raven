@@ -1,7 +1,6 @@
 import { Link } from "react-router";
 import { cx } from "../../lib/cx";
 import type { Engagement } from "../../types/engagement";
-import { Chip, ChipSet } from "../../ui";
 import { useCleanupCounts } from "../cleanup/queries";
 import { useThreadCounts } from "../notes/useThreadCounts";
 import { useProgress } from "../hosts/queries";
@@ -39,47 +38,89 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Above this many hosts the pips stop reading at a glance; the counts carry it alone. */
+const MAX_PIPS = 24;
+
+/** One square per host, lit for each rooted one: rooted is held access, so it takes the accent. */
+function HostPips({ rooted, total }: { rooted: number; total: number }) {
+  if (total === 0 || total > MAX_PIPS) return null;
+  return (
+    <span aria-hidden className="grid auto-cols-[10px] grid-flow-col justify-start gap-1">
+      {Array.from({ length: total }, (_, i) => (
+        <span key={i} className={cx("size-2.5", i < rooted ? "bg-accent" : "border border-line-strong")} />
+      ))}
+    </span>
+  );
+}
+
+/**
+ * An active engagement. Five rows, one per job, laid on the parent grid's subgrid so every card's rows line up:
+ * name, what it is, when and where, progress, last activity.
+ */
 export function ActiveCard({ engagement: e, now }: { engagement: Engagement; now: number }) {
   const scope = scopeSummary(e.scopeCidrs);
   const lastActivity = e.lastActivityAt;
   const progress = useProgress().data?.[e.id] ?? EMPTY_PROGRESS;
   const threads = useThreadCounts(e.id).total;
   const cleanup = useCleanupCounts().data?.[e.id] ?? 0;
+  const dated = e.startsAt !== null || e.endsAt !== null;
+  // Kind first, then who it's for and the sub-label: plain metadata, as on the engagement's own header.
+  const about = [e.kind === "client" ? e.client : null, e.subLabel].filter((v): v is string => !!v);
 
   return (
     <Link
       to={`/e/${e.id}`}
       className={cx(
-        "group grid min-w-0 content-start gap-3 rounded border border-line bg-bg px-4 py-3 no-underline",
+        "group row-span-5 grid min-w-0 grid-rows-subgrid rounded border border-line bg-bg px-4 py-3 no-underline",
         "cursor-default transition-colors duration-100 hover:border-line-strong hover:bg-surface",
       )}
     >
-      <div className="grid min-w-0 gap-2">
-        <h3 className="m-0 truncate text-heading text-fg" title={e.name}>{e.name}</h3>
-        <ChipSet className="items-center">
-          <Chip>{KIND_LABEL[e.kind]}</Chip>
-          {e.subLabel && <Chip>{e.subLabel}</Chip>}
-          {e.kind === "client" && e.client && <span className="truncate text-meta text-muted-2">{e.client}</span>}
-        </ChipSet>
-      </div>
+      <h3 className="m-0 truncate text-heading text-fg" title={e.name}>{e.name}</h3>
+
+      <p
+        className={cx(
+          "m-0 grid min-w-0 items-baseline gap-4 text-meta text-muted-2",
+          about.length === 0 && "grid-cols-[max-content]",
+          about.length === 1 && "grid-cols-[max-content_minmax(0,1fr)]",
+          about.length === 2 && "grid-cols-[max-content_max-content_minmax(0,1fr)]",
+        )}
+      >
+        <span>{KIND_LABEL[e.kind]}</span>
+        {about.map((v, i) => (
+          <span key={i} className={cx(i === about.length - 1 && "truncate")} title={v}>
+            {v}
+          </span>
+        ))}
+      </p>
 
       {hasTimebox(e) ? (
         <TimeboxLine engagement={e} now={now} />
-      ) : (
-        <p className="m-0 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] items-baseline gap-4 text-meta text-muted-2">
-          <span>{dateRange(e.startsAt, e.endsAt, now)}</span>
+      ) : dated || scope ? (
+        <p className="m-0 grid min-w-0 grid-flow-col auto-cols-max items-baseline justify-start gap-4 text-meta text-muted-2">
+          {dated && <span>{dateRange(e.startsAt, e.endsAt, now)}</span>}
           {scope && <span className="truncate font-mono text-code" title={e.scopeCidrs.join(", ")}>{scope}</span>}
         </p>
+      ) : (
+        <span />
       )}
 
-      <p className="m-0 grid grid-flow-col justify-start gap-4 text-meta">
-        <Stat label="Rooted" value={`${progress.hostsRooted}/${progress.hostsTotal}`} />
-        <Stat label="Flags" value={`${progress.flagsFound}/${progress.flagsTotal}`} />
-        {threads > 0 && <Stat label="Threads" value={String(threads)} />}
-        {cleanup > 0 && <Stat label="Cleanup" value={String(cleanup)} />}
-      </p>
+      <div className="grid content-start gap-2">
+        <HostPips rooted={progress.hostsRooted} total={progress.hostsTotal} />
+        <p className="m-0 grid grid-flow-col justify-start gap-4 text-meta">
+          {progress.hostsTotal === 0 ? (
+            <span className="text-muted">No hosts yet</span>
+          ) : (
+            <>
+              <Stat label="Rooted" value={`${progress.hostsRooted}/${progress.hostsTotal}`} />
+              <Stat label="Flags" value={`${progress.flagsFound}/${progress.flagsTotal}`} />
+            </>
+          )}
+          {threads > 0 && <Stat label="Threads" value={String(threads)} />}
+          {cleanup > 0 && <Stat label="Cleanup" value={String(cleanup)} />}
+        </p>
+      </div>
 
-      <p className="m-0 grid grid-flow-col justify-start gap-1 border-t border-line pt-2 text-meta text-muted">
+      <p className="m-0 grid grid-flow-col justify-start gap-1 self-end border-t border-line pt-2 text-meta text-muted">
         {lastActivity === null ? (
           "No activity yet"
         ) : (

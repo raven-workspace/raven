@@ -107,6 +107,24 @@ describe("format", () => {
 });
 
 describe("dashboard", () => {
+  it("cards and the past table show rooted and flags; the past table's Result too", async () => {
+    m.engagementsProgress.mockResolvedValue({
+      e1: { hostsTotal: 3, hostsRooted: 1, flagsFound: 2, flagsTotal: 4 },
+      e2: { hostsTotal: 2, hostsRooted: 2, flagsFound: 3, flagsTotal: 4 },
+    });
+    mount();
+    const active = await screen.findByRole("region", { name: "Active" });
+    expect(await within(active).findByText("1/3")).toBeInTheDocument();
+    expect(within(active).getByText("2/4")).toBeInTheDocument();
+    expect(within(active).getAllByText("No hosts yet")).toHaveLength(1);
+
+    const row = screen.getByRole("row", { name: /Acme/ });
+    expect(within(row).getByText("2/2")).toHaveClass("text-accent"); // every host rooted
+    expect(within(row).getByText("3/4")).toBeInTheDocument();
+    // No hosts, no result.
+    expect(within(screen.getByRole("row", { name: /Internal/ })).queryByText("Rooted")).not.toBeInTheDocument();
+  });
+
   it("lists active as cards and archived in past table", async () => {
     mount();
     const active = await screen.findByRole("region", { name: "Active" });
@@ -115,10 +133,9 @@ describe("dashboard", () => {
     expect(within(active).getByText("exam sim")).toBeInTheDocument();
     expect(within(active).getByText("AD + 3 standalone")).toBeInTheDocument();
     expect(within(active).getByText(/^21h 4[45]m left$/)).toBeInTheDocument();
-    // Each card: labelled Rooted and Flags counts (never one middot-joined line).
-    expect(within(active).getAllByText("Rooted")).toHaveLength(2);
-    expect(within(active).getAllByText("Flags")).toHaveLength(2);
-    expect(within(active).getAllByText("0/0")).toHaveLength(4);
+    // No hosts yet: one plain line, not "Rooted 0/0 Flags 0/0".
+    expect(within(active).getAllByText("No hosts yet")).toHaveLength(2);
+    expect(within(active).queryByText("Rooted")).not.toBeInTheDocument();
     expect(within(active).getByText(/12m ago/)).toBeInTheDocument();
     expect(within(active).queryByText("Acme")).not.toBeInTheDocument();
 
