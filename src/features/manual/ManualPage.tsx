@@ -338,11 +338,11 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
                 <HostChip ref={hostRef} hosts={base.d.hosts} value={base.host?.id ?? null} onChange={setHostId} align="start" className="max-w-80" />
               </div>
               <span data-testid="manual-host-ip" className="truncate font-mono text-code text-muted">{base.host?.ip ?? ""}</span>
-              <StatusSlot />
             </>
           ) : (
-            !scopePending && <span className="col-span-3 text-muted">No active engagement</span>
+            !scopePending && <span className="col-span-2 text-muted">No active engagement</span>
           )}
+          <StatusSlot />
         </div>
         {query && note && <MatchBar query={query} at={match.at} count={match.count} />}
         <section

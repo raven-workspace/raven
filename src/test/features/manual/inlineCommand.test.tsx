@@ -141,5 +141,6 @@ describe("inline commands", () => {
     act(() => within(screen.getByRole("group", { name: /Note command/ })).getByRole("button", { name: /Copy command/ }).focus());
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await waitFor(() => expect(logCommand).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(logCommand).mock.calls[1]?.[1]).toMatchObject({ command: "zzscan 192.0.2.10", title: "Zz Tool: Shares" });
   });
 });

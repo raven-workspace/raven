@@ -136,7 +136,7 @@ function commandOf(block: Extract<Block, { kind: "code" }>, note: ManualNote, n:
   const os = WINDOWS_LANGS.has(lang) ? "windows" : LINUX_LANGS.has(lang) && !kali ? "linux" : "any";
   return {
     id: `manual:${note.id}:${n}`,
-    title: block.title ? `${shortTitle(note.title)}: ${block.title}` : section ? `${shortTitle(note.title)}: ${section}` : shortTitle(note.title), tool: block.text.trim().split(/\s+/)[0] ?? "",
+    title: section ? `${shortTitle(note.title)}: ${section}` : shortTitle(note.title), tool: block.text.trim().split(/\s+/)[0] ?? "",
     template: block.text, os, runFrom: kali ? "attacker" : "target", goals: [], source: "field-manual",
   };
 }
