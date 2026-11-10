@@ -1,4 +1,4 @@
-import type { DragEvent, KeyboardEvent } from "react";
+import { Fragment, type DragEvent, type KeyboardEvent } from "react";
 import { Link } from "react-router";
 import type { Host } from "../../types/host";
 import { cx } from "../../lib/cx";
@@ -51,7 +51,14 @@ export function BoardCard({ host, onShift, msf = false }: BoardCardProps) {
           )}
           <ThreadDot count={threads} />
         </span>
-        {host.ip && <span className="whitespace-nowrap font-mono text-code text-muted-2 [overflow-wrap:anywhere]">{host.ip}</span>}
+        {host.ip && (
+          // One line wherever the window can be; in a lane narrower than the address it breaks only after a dot, never mid-octet.
+          <span className="font-mono text-code text-muted-2">
+            {host.ip.split(".").map((part, i, all) => (
+              <Fragment key={i}>{part}{i < all.length - 1 && <>.<wbr /></>}</Fragment>
+            ))}
+          </span>
+        )}
       </span>
       {(host.os || host.access !== "none") && (
         // Wide enough (a lane body of 150px: "Windows" and a chip need about 124px inside 12px padding), the access

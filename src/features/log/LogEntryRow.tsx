@@ -94,7 +94,7 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
             </span>
           ))}
           {names.length > MAX_HOSTS && (
-            <span title={names.slice(MAX_HOSTS).join(", ")} className="whitespace-nowrap text-meta text-muted">
+            <span title={names.slice(MAX_HOSTS).join(", ")} className="relative whitespace-nowrap text-meta text-muted">
               +{names.length - MAX_HOSTS}
               <span className="sr-only">, also {names.slice(MAX_HOSTS).join(", ")}</span>
             </span>

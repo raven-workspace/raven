@@ -313,6 +313,8 @@ const labLog: LogEntry[] = [
   shot("tiny", "Cropped proof of the hostname", ["h-dc01"]),
   cmd("Local administrators on fs01", "net localgroup administrators", "Alias name     administrators\nMembers\n---\nAdministrator\nACME\\Domain Admins\nACME\\svc_backup", ["h-fs01"]),
   cmd("Share with a long UNC path", "dir \\\\fs01.acme.corp\\Finance$\\Quarterly Reports\\2026\\Q3\\Board Pack — Draft v7 (Reviewed by Legal).xlsx", " Volume in drive \\\\fs01 has no label.\n 11/04/2026  09:14 AM    18,204,672 Board Pack — Draft v7 (Reviewed by Legal).xlsx", ["h-fs01"]),
+  // More hosts than a row shows: the "+N" keeps its screen-reader names, which must not scroll the window (sr-only escape).
+  cmd("Password spray across the subnet", "nxc smb 10.10.20.0/24 -u svc_backup -p 'Autumn2026!'", "SMB 10.10.20.15 [+] acme.corp\\svc_backup:Autumn2026!", ["h-web", "h-dc01", "h-fs01", "h-sql01"]),
 ];
 
 const examLog: LogEntry[] = [
