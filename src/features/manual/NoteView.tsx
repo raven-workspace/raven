@@ -94,6 +94,17 @@ function commandOf(block: Extract<Block, { kind: "code" }>, note: ManualNote, n:
   };
 }
 
+/** Each block's section: the nearest `##`/`###` heading at or above it, as plain text ("" before the first). */
+function sectionsOf(blocks: Block[]): string[] {
+  const out: string[] = [];
+  let at = "";
+  for (const b of blocks) {
+    if (b.kind === "heading" && (b.level === 2 || b.level === 3)) at = plain(b.inline).trim();
+    out.push(at);
+  }
+  return out;
+}
+
 /** `section`: the nearest `##`/`###` heading above the block, as plain text ("" before the first). */
 function BlockView({ block, n, ctx, base, section }: { block: Block; n: number; ctx: Ctx; base: FillBase; section: string }) {
   switch (block.kind) {
@@ -147,14 +158,13 @@ export function NoteView({ note, notes, cards, hostId, engagementId, query }: {
   const base = useFillBase(engagementId, hostId);
   const re = useMemo(() => (query ? matchRegex(query) : null), [query]);
   const ctx: Ctx = { note, notes, cards, re };
+  const sections = useMemo(() => sectionsOf(blocks), [blocks]);
   let code = 0;
-  let section = "";
   return (
     <article aria-label={note.title} className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 [&_[tabindex='-1']]:outline-none">
-      {blocks.map((b, i) => {
-        if (b.kind === "heading" && (b.level === 2 || b.level === 3)) section = plain(b.inline).trim();
-        return <BlockView key={i} block={b} n={b.kind === "code" ? code++ : -1} ctx={ctx} base={base} section={section} />;
-      })}
+      {blocks.map((b, i) => (
+        <BlockView key={i} block={b} n={b.kind === "code" ? code++ : -1} ctx={ctx} base={base} section={sections[i]} />
+      ))}
     </article>
   );
 }
