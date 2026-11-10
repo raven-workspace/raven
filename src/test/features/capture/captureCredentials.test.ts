@@ -20,6 +20,18 @@ const resolve = (text: string, over: Partial<PanelDraft> = {}, hosts: Host[] = [
   });
 
 describe("credentialsInPaste", () => {
+  it("never offers ordinary notes", () => {
+    for (const note of ["todo:enumerate smb", "ftp:anon login ok", "Gobuster:found /admin", "creds:in /var/www/config.php", "C:\\Users\\bob:x", "web:/admin", "svc:\\\\share\\x"]) {
+      expect(credentialsInPaste(note), note).toEqual([]);
+    }
+  });
+
+  it("still offers real credentials", () => {
+    for (const c of ["admin:Summer2026!", "CORP\\svc_sql:P@ss", ".\\Administrator:Passw0rd!", "admin:1234"]) {
+      expect(credentialsInPaste(c), c).toHaveLength(1);
+    }
+  });
+
   it("reads user:pass", () => {
     expect(credentialsInPaste("admin:Summer2026!")).toEqual([{ username: "admin", domain: null, secret: "Summer2026!", type: "password" }]);
   });
