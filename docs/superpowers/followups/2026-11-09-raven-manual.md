@@ -34,3 +34,9 @@ None of these appear in the synthetic fixtures. Check each against the real vaul
 
 - Stacking is decided by the widest unbreakable value. A table whose widest code is only a little too wide stacks every
   row. Dropping low-priority columns first is the DESIGN.md alternative, but notes don't declare column priorities.
+
+## Import report
+
+- The drift report's "Placeholders Raven can't fill" counts card commands only. A `{TOKEN}` in a Manual note's command that
+  Raven can't fill isn't listed, so a typo in a note (`{TARGETIP}`) shows up only when its first copy is held back. Count note
+  command tokens there too, marked as coming from a note.

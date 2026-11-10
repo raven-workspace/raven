@@ -66,7 +66,8 @@ export function FieldManualSection() {
       {s && (
         <p className="m-0 mt-3 text-meta text-fg-2">
           Last import {new Date(s.importedAt).toLocaleString()}: {s.cards.length} cards,{" "}
-          {Object.keys(s.overlay ?? {}).length + (s.added?.length ?? 0)} commands.
+          {Object.keys(s.overlay ?? {}).length + (s.added?.length ?? 0)} commands
+          {s.notes ? `, ${s.notes.length} notes` : ""}.
         </p>
       )}
       {r && (

@@ -61,6 +61,19 @@ describe("Field Manual import", () => {
     expect(getLibrary().some((c) => c.id === "fm-zz-new-card-v0")).toBe(true);
   });
 
+  it("the report counts the imported notes", async () => {
+    const user = userEvent.setup();
+    m.fieldManualScan.mockResolvedValue([
+      { relPath: "02-Cards/zz.md", mtimeMs: 5, text: CARD },
+      { relPath: "03-Tools/Zz-Tool.md", mtimeMs: 5, text: "---\nid: tool-zz\ntitle: Zz Tool\n---\n## Use\n" },
+      { relPath: "04-Foundations/Zz-Fnd.md", mtimeMs: 5, text: "---\nid: fnd-zz\ntitle: Zz Fnd\n---\n## A\n" },
+    ]);
+    m.fieldManualSave.mockResolvedValue(null);
+    mount(<FieldManualSection />);
+    await user.click(await screen.findByRole("button", { name: "Import now" }));
+    expect(await screen.findByText(/1 cards, \d+ commands, 2 notes\./)).toBeInTheDocument();
+  });
+
   it("a failed scan shows an error and leaves the library and snapshot unchanged", async () => {
     const user = userEvent.setup();
     const before = getLibrary();
