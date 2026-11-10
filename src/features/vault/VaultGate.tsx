@@ -12,7 +12,8 @@ import { discardNotes, flushNotes, hasPendingNotes, sessionGeneration, setNotesQ
 import type { UnlockResult, VaultStatus } from "../../types/vault";
 import { Button, IconButton, TitleBar, TitleBarButton, TitleBarIconButton, Wordmark } from "../../ui";
 import { SetupScreen } from "./SetupScreen";
-import { UnlockScreen } from "./UnlockScreen";
+import { UnlockScreen, type CipherControls } from "./UnlockScreen";
+import { CipherBackdrop, type CipherHandle } from "./CipherBackdrop";
 import { setImported } from "../../engines/library/store";
 import { applySnapshot, FIELD_MANUAL_KEY, useVaultNewer } from "../fieldManual/queries";
 import { useAutoLock } from "./useAutoLock";
@@ -225,7 +226,28 @@ export function VaultGate({ children }: { children: ReactNode }) {
 
   const ctx = useMemo(() => ({ lock, markLocked }), [lock, markLocked]);
 
+  // The lock screen's ciphertext field. It outlives the unlock form by one sweep, which reveals the app.
+  const cipherRef = useRef<CipherHandle>(null);
+  const [calm, setCalm] = useState(false);
+  const [sweeping, setSweeping] = useState(false);
+  const cipher = useMemo<CipherControls>(() => ({ pulse: (k) => cipherRef.current?.pulse(k), setCalm }), []);
+
+  /** The unlock sweep. Start it while the password field is still on screen: it's where the sweep starts from. */
+  const startSweep = () => {
+    const sweep = cipherRef.current?.sweep();
+    if (!sweep) return;
+    setSweeping(true);
+    void sweep.then(() => setSweeping(false));
+  };
+
+  // Creating the vault leaves it open, so setup ends in the same sweep as an unlock.
+  const onCreated = async () => {
+    startSweep();
+    await refresh();
+  };
+
   const onUnlocked = (r: UnlockResult) => {
+    startSweep();
     clearTimeout(retryTimer.current);
     startNotesSession();
     setLockRetrying(false);
@@ -265,6 +287,8 @@ export function VaultGate({ children }: { children: ReactNode }) {
     </>
   ) : undefined;
 
+  const showCipher = (!!status && !unlocked && !loadFailed && !calm) || sweeping;
+
   let body: ReactNode = null;
   if (loadFailed) {
     body = (
@@ -277,8 +301,16 @@ export function VaultGate({ children }: { children: ReactNode }) {
         </div>
       </main>
     );
-  } else if (status && !status.exists) body = <SetupScreen onCreated={refresh} />;
-  else if (status && !status.unlocked) body = <UnlockScreen onUnlocked={onUnlocked} notice={lockRetrying ? "Couldn't lock fully, Raven is retrying" : undefined} />;
+  } else if (status && !status.exists) body = <SetupScreen onCreated={onCreated} cipher={cipher} />;
+  else if (status && !status.unlocked) {
+    body = (
+      <UnlockScreen
+        onUnlocked={onUnlocked}
+        notice={lockRetrying ? "Couldn't lock fully, Raven is retrying" : undefined}
+        cipher={cipher}
+      />
+    );
+  }
   else if (status) {
     body = (
       <VaultContext.Provider value={ctx}>
@@ -317,10 +349,14 @@ export function VaultGate({ children }: { children: ReactNode }) {
             </Link>
           ) : undefined
         }
-        title={unlocked ? undefined : <Wordmark className="h-3" />}
+        // Setup and unlock carry the wordmark themselves; only the load error needs this one.
+        title={!unlocked && (!status || loadFailed) ? <Wordmark className="h-3" /> : undefined}
         right={right}
       />
-      <div className="min-h-0 overflow-auto">{body}</div>
+      <div className="relative min-h-0">
+        {showCipher && <CipherBackdrop ref={cipherRef} front={sweeping} />}
+        <div className="relative h-full overflow-auto">{body}</div>
+      </div>
     </div>
   );
 }

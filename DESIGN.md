@@ -189,6 +189,18 @@ A section view fits its primary job in one viewport at 900×800, and the whole p
 - The only shadow is on floating menus and popovers: `0 12px 32px rgba(0,0,0,.6)`.
 - No glows, gradients or glass.
 
+## The lock screen
+
+The lock screen (and the one-time setup screen, which shares it) is the one place Raven performs. It is sparse, seen once per session, and has nothing to compete with, so it is the single exception to "accent is meaning" and "no decorative motion". Nothing here sets a precedent for other views.
+
+- **Ciphertext field.** A canvas of faint hex pairs (`--line`, `--line-2`, rarely `--line-strong`) in JetBrains Mono, with a dithered clearing round the form. It decodes outward from the form once on entry (about 1s), then holds still.
+- **Wordmark.** The full-width wordmark is the screen's only wordmark (the title bar carries none here). Each letter cycles through cipher glyphs, then snaps to its shape.
+- **Pulse.** Each keystroke sends an accent ring out from the focused password field's centre. A wrong password sends a `--warn` ring and a small shake; a setup validation error sends the `--warn` ring.
+- **Sweep.** On unlock, and when setup creates the vault, an accent ring clears the field outward from the password field and reveals the app (about 400ms). It plays over the app and never delays it.
+- **Never blocks.** The password field is focused at once and accepts typing during the intro.
+- **Reduced motion.** The field is drawn settled; there are no rings and no sweep.
+- **Calm on failure.** The damaged-database restore panel has no field.
+
 ## Shapes
 
 - Radius 6px for controls, 8px for panels, dialogs and cards, and full for chips.

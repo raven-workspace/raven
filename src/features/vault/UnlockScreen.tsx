@@ -4,6 +4,9 @@ import { cx } from "../../lib/cx";
 import type { BackupInfo } from "../../types/backup";
 import type { UnlockResult } from "../../types/vault";
 import { Button, Chip, Field, Input, Wordmark } from "../../ui";
+import { CIPHER_CLEAR, CIPHER_ORIGIN } from "./CipherBackdrop";
+import type { PulseKind } from "./cipherField";
+import { DecodingWordmark } from "./DecodingWordmark";
 
 function errorText(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
@@ -11,9 +14,37 @@ function errorText(err: unknown, fallback: string): string {
 
 type OnUnlocked = (r: UnlockResult) => void;
 
-export function UnlockScreen({ onUnlocked, notice }: { onUnlocked: OnUnlocked; notice?: string | undefined }) {
+/** The ciphertext field behind the form (see CipherBackdrop). */
+export interface CipherControls {
+  pulse: (kind: PulseKind) => void;
+  /** Hides the field: a damaged database is a recovery moment, not a show. */
+  setCalm: (calm: boolean) => void;
+}
+
+const SHAKE: Keyframe[] = [
+  { transform: "translateX(0)" },
+  { transform: "translateX(-4px)" },
+  { transform: "translateX(4px)" },
+  { transform: "translateX(-2px)" },
+  { transform: "translateX(0)" },
+];
+
+export function UnlockScreen({
+  onUnlocked,
+  notice,
+  cipher,
+}: {
+  onUnlocked: OnUnlocked;
+  notice?: string | undefined;
+  cipher?: CipherControls | undefined;
+}) {
   const [damaged, setDamaged] = useState(false);
   const [restored, setRestored] = useState(false);
+  const setCalm = cipher?.setCalm;
+
+  useEffect(() => {
+    setCalm?.(damaged);
+  }, [damaged, setCalm]);
 
   if (damaged) {
     return (
@@ -33,6 +64,7 @@ export function UnlockScreen({ onUnlocked, notice }: { onUnlocked: OnUnlocked; n
         setDamaged(true);
       }}
       notice={restored ? "Restored. Unlock to continue." : notice}
+      pulse={cipher?.pulse}
     />
   );
 }
@@ -42,15 +74,18 @@ function UnlockForm({
   onUnlocked,
   onDamaged,
   notice,
+  pulse,
 }: {
   onUnlocked: OnUnlocked;
   onDamaged: () => void;
   notice: string | undefined;
+  pulse: ((kind: PulseKind) => void) | undefined;
 }) {
   const [pw, setPw] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
+  const fieldRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     ref.current?.focus();
@@ -71,26 +106,34 @@ function UnlockForm({
         return;
       }
       setError(code === "wrong_password" ? "Wrong password" : errorText(err, "Couldn't unlock"));
+      pulse?.("error");
+      if (!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+        fieldRef.current?.animate?.(SHAKE, { duration: 260, easing: "ease-out" });
+      }
       ref.current?.focus();
     }
   }
 
   return (
     <main className="grid h-full place-items-center px-6">
-      <form onSubmit={submit} className="grid w-[320px] gap-4">
-        <h1 className="m-0"><Wordmark className="h-6" /></h1>
-        <Field label="Password" error={error ?? undefined}>
-          <Input
-            ref={ref}
-            type="password"
-            autoComplete="current-password"
-            value={pw}
-            onChange={(e) => {
-              setPw(e.target.value);
-              setError(null);
-            }}
-          />
-        </Field>
+      <form onSubmit={submit} className="grid w-[320px] gap-4" {...CIPHER_CLEAR}>
+        <h1 className="m-0 mb-2"><DecodingWordmark className="block h-auto w-full" /></h1>
+        <div ref={fieldRef} className="grid">
+          <Field label="Password" error={error ?? undefined}>
+            <Input
+              ref={ref}
+              type="password"
+              autoComplete="current-password"
+              value={pw}
+              onChange={(e) => {
+                setPw(e.target.value);
+                setError(null);
+                pulse?.("key");
+              }}
+              {...CIPHER_ORIGIN}
+            />
+          </Field>
+        </div>
         {notice && <p className="m-0 text-meta text-muted">{notice}</p>}
         <Button type="submit" variant="primary" disabled={busy} aria-busy={busy}>
           {busy ? "Unlocking…" : "Unlock"}
