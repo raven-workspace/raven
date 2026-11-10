@@ -72,6 +72,7 @@ export function FieldManualSection() {
       )}
       {r && (
         <ul className="m-0 mt-2 grid list-none gap-1 p-0 text-meta text-muted">
+          {r.warnings?.map((w) => <li key={w} className="text-warn">{w}</li>)}
           <li>Cards: {r.cardsAdded} added, {r.cardsChanged} changed, {r.cardsRemoved} gone from the vault</li>
           <li>Commands: {r.commandsAdded} added, {r.commandsChanged} changed</li>
           {r.commandsRemovedKept.length > 0 && (

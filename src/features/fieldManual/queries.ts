@@ -33,7 +33,8 @@ export function applySnapshot(s: FieldManualSnapshot): void {
 
 /**
  * Scan, parse, merge, save, then (only once everything succeeded) update the library. A failure at any step
- * leaves the library and the stored snapshot as they were. A scan that yields no cards is a failure.
+ * leaves the library and the stored snapshot as they were. A scan that yields no cards is a failure; one that yields
+ * no notes keeps the previous import's notes (with a warning in the report).
  */
 export async function runImport(path: string, previous: FieldManualSnapshot | null): Promise<FieldManualSnapshot> {
   const files = await api.fieldManualScan(path);
@@ -59,6 +60,11 @@ export async function runImport(path: string, previous: FieldManualSnapshot | nu
   const { commands, overlay, added, report } = mergeImport(BUILTIN_LIBRARY, cards, previous ?? undefined);
   const goals = [...HOST_GOALS, ...ENGAGEMENT_SETUP, ...LATERAL_MOVEMENT_GOALS, ...AD_PLAYBOOKS.flatMap((p) => p.goals)];
   report.drift = computeDrift(goals, playbook, commands, cards, toolkit);
+  // Cards came through but no note did (an iCloud vault half downloaded): keep the last import's notes, and say so.
+  const kept = notes.length === 0 && (previous?.notes?.length ?? 0) > 0 ? previous!.notes! : null;
+  if (kept) {
+    report.warnings = [`No notes found; kept the last import's ${kept.length} notes. Check iCloud has downloaded the vault.`];
+  }
   const snapshot: FieldManualSnapshot = {
     importedAt: Date.now(),
     cards: cards.map((c) => c.meta),
@@ -66,7 +72,7 @@ export async function runImport(path: string, previous: FieldManualSnapshot | nu
     added,
     playbook,
     toolkit,
-    notes,
+    notes: kept ?? notes,
     report,
   };
   await api.fieldManualSave(snapshot);

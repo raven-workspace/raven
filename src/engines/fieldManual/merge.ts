@@ -22,6 +22,8 @@ export interface ImportReport {
   addedRemoved?: string[];
   /** Vault vs Raven (spec §5). Absent on reports saved before the drift report existed. */
   drift?: Drift;
+  /** Things the import worked around and the owner should check (e.g. the Manual's notes kept from the last import). */
+  warnings?: string[];
 }
 
 /** What the vault changes about one built-in field-manual command. Everything else comes from the code. */

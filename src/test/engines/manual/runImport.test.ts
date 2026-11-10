@@ -39,4 +39,30 @@ describe("runImport notes", () => {
     ]);
     setImported({ commands: [], cards: [] });
   });
+
+  it("a scan with cards but no notes keeps the last import's notes and warns", async () => {
+    m.fieldManualScan.mockResolvedValue([
+      { relPath: "02-Cards/zz.md", mtimeMs: 1, text: CARD },
+      { relPath: "03-Tools/Zz-Tool.md", mtimeMs: 1, text: "---\nid: tool-zz\ntitle: Zz Tool\n---\n## Use\n" },
+      { relPath: "04-Foundations/Zz-Fnd.md", mtimeMs: 1, text: "---\nid: fnd-zz\ntitle: Zz Fnd\n---\n## A\n" },
+    ]);
+    const first = await runImport("~/fm", null);
+    expect(first.report.warnings).toBeUndefined();
+    m.fieldManualScan.mockResolvedValue([{ relPath: "02-Cards/zz.md", mtimeMs: 2, text: CARD }]);
+    const second = await runImport("~/fm", first);
+    expect(second.notes?.map((n) => n.id)).toEqual(["tool-zz", "fnd-zz"]);
+    expect(second.report.warnings).toEqual([
+      "No notes found; kept the last import's 2 notes. Check iCloud has downloaded the vault.",
+    ]);
+    expect(m.fieldManualSave).toHaveBeenLastCalledWith(expect.objectContaining({ notes: first.notes }));
+    setImported({ commands: [], cards: [] });
+  });
+
+  it("no notes now and none before: an empty Manual, no warning", async () => {
+    m.fieldManualScan.mockResolvedValue([{ relPath: "02-Cards/zz.md", mtimeMs: 1, text: CARD }]);
+    const snap = await runImport("~/fm", null);
+    expect(snap.notes).toEqual([]);
+    expect(snap.report.warnings).toBeUndefined();
+    setImported({ commands: [], cards: [] });
+  });
 });
