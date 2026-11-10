@@ -211,7 +211,7 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
   }, [base.examReady]);
 
   const ids = useMemo(() => note?.outline.map((o) => o.id) ?? [], [note]);
-  const spy = useOutlineSpy(paneRef, ids);
+  const spy = useOutlineSpy(paneRef, note?.id ?? "", ids);
 
   const [match, setMatch] = useState({ at: 0, count: 0 });
   const matchAt = useRef(0);
@@ -310,7 +310,8 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
       filterRef.current?.select();
     } else if (e.key === "]" || e.key === "[") {
       e.preventDefault();
-      if (ids.length > 0) goSection(spy.step(e.key === "]" ? 1 : -1));
+      const to = spy.step(e.key === "]" ? 1 : -1);
+      if (to >= 0) goSection(to);
     }
   });
 
@@ -344,7 +345,7 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
                 <div className="min-[1100px]:hidden">
                   <Disclosure label="On this page" count={note.outline.length} open={outlineOpen} onOpenChange={setOutlineOpen}>
                     <nav aria-label="On this page" className="grid pt-2">
-                      <ManualOutline outline={note.outline} current={spy.current} onPick={pick} />
+                      <ManualOutline key={note.id} outline={note.outline} current={spy.current} onPick={pick} />
                     </nav>
                   </Disclosure>
                 </div>
@@ -361,7 +362,7 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
         <h2 data-outline-head="" className={`${labelClass} sticky top-0 z-10 m-0 bg-bg px-3 pt-4 pb-2`}>On this page</h2>
         {note && (
           <nav aria-label="On this page" className="grid">
-            <ManualOutline outline={note.outline} current={spy.current} onPick={pick} follow />
+            <ManualOutline key={note.id} outline={note.outline} current={spy.current} onPick={pick} follow />
           </nav>
         )}
       </aside>

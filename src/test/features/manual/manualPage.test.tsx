@@ -506,8 +506,10 @@ describe("Manual: On this page follows the reading", () => {
   it("clicking an entry scrolls smoothly in place: no history entry, and Esc still leaves in one press", async () => {
     const user = userEvent.setup();
     const scrolls = vi.fn();
+    const into = Element.prototype.scrollIntoView;
     Element.prototype.scrollIntoView = scrolls;
     const pushState = vi.spyOn(window.history, "pushState");
+    try {
     mount();
     await ready();
     press("m");
@@ -522,22 +524,78 @@ describe("Manual: On this page follows the reading", () => {
     act(() => (document.activeElement as HTMLElement | null)?.blur());
     press("Escape");
     await waitFor(() => expect(where()).toBe("/"));
-    pushState.mockRestore();
-    Element.prototype.scrollIntoView = () => {};
+    } finally {
+      pushState.mockRestore();
+      Element.prototype.scrollIntoView = into;
+    }
   });
 
-  it("with reduced motion an entry jumps instantly", async () => {
+  it("with reduced motion an entry jumps at once", async () => {
     const user = userEvent.setup();
     const scrolls = vi.fn();
-    Element.prototype.scrollIntoView = scrolls;
+    const into = Element.prototype.scrollIntoView;
     const media = window.matchMedia;
+    Element.prototype.scrollIntoView = scrolls;
     window.matchMedia = ((q: string) => ({ ...media(q), matches: q.includes("prefers-reduced-motion") })) as typeof window.matchMedia;
+    try {
+      mount(["/manual"]);
+      await openNote("Bb Basics");
+      await user.click(outline().getByRole("button", { name: "Beta" }));
+      expect(scrolls).toHaveBeenLastCalledWith({ block: "start", behavior: "auto" });
+    } finally {
+      window.matchMedia = media;
+      Element.prototype.scrollIntoView = into;
+    }
+  });
+
+  it("a note with the same headings as the last one is watched afresh", async () => {
+    const body = (t: string) => `# ${t}\n## Install\ntext\n## Key Flags\ntext\n## Examples\ntext\n`;
+    const one = parseNote("03-Tools/Zz One.md", body("Zz One"))!;
+    const two = parseNote("03-Tools/Zz Two.md", body("Zz Two"))!;
+    m.fieldManualLoad.mockResolvedValue(snapshot([one, two, BASICS]));
+    const user = userEvent.setup();
+    mount([`/manual/${one.id}`]);
+    await openNote("Zz One");
+    scrollPane(600);
+    band(["key-flags"]);
+    expect(currentEntry()).toBe("Key Flags");
+    await user.click(rail().getByRole("button", { name: "Zz Two" }));
+    const article = await openNote("Zz Two");
+    // Nothing carries over: no entry current, and the observer watches the new note's own headings.
+    expect(currentEntry()).toBeUndefined();
+    expect(observer!.seen.map((el) => el.id)).toEqual(["install", "key-flags", "examples"]);
+    expect(observer!.seen.every((el) => el.isConnected && article.contains(el))).toBe(true);
+    scrollPane(600);
+    band(["examples"]);
+    expect(currentEntry()).toBe("Examples");
+  });
+
+  it("a scroll inside a jump's settle time ends the jump's hold", async () => {
     mount(["/manual"]);
     await openNote("Bb Basics");
-    await user.click(outline().getByRole("button", { name: "Beta" }));
-    expect(scrolls).toHaveBeenLastCalledWith({ block: "start", behavior: "instant" });
-    window.matchMedia = media;
-    Element.prototype.scrollIntoView = () => {};
+    layOut();
+    scrollPane(600);
+    press("[");
+    expect(currentEntry()).toBe("Beta Two");
+    scrollPane(320);
+    await settled();
+    // The owner moved on to Beta's section: ] reads the pane again (Beta Two below the top), not Beta Two + 1.
+    press("]");
+    expect(currentEntry()).toBe("Beta Two");
+  });
+
+  it("[ above the first heading and ] in the last section do nothing", async () => {
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    layOut();
+    scrollPane(60);
+    await settled();
+    press("[");
+    expect(pane().scrollTop).toBe(60);
+    scrollPane(900);
+    await settled();
+    press("]");
+    expect(pane().scrollTop).toBe(900);
   });
 });
 

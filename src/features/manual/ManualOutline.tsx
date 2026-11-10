@@ -10,12 +10,14 @@ const BAND_MARGIN = "-20px 0px -40% 0px";
 const BAND_TOP = 20;
 /** A heading within this many px of the pane's top edge is on it (sub-pixel scroll positions). */
 const EDGE_PX = 1;
+/** A jump's heading within this many px of the pane's top was reached (scroll-margin, rounding). */
+const SLACK = 24;
 /** A jump owns the current entry until its scroll has been quiet this long. */
 const SETTLE_MS = 150;
 
-/** How a jump scrolls: smooth, or instant when the owner asks for reduced motion. */
+/** How a jump scrolls: smooth, or at once ("auto", which WKWebView takes) when the owner asks for reduced motion. */
 export const jumpBehavior = (): ScrollBehavior =>
-  window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth";
+  window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
 
 const entryEl = (pane: HTMLElement, id: string) => pane.querySelector<HTMLElement>(`[id="${CSS.escape(id)}"]`);
 
@@ -23,10 +25,13 @@ const entryEl = (pane: HTMLElement, id: string) => pane.querySelector<HTMLElemen
  * The scroll-spy for the note pane. The current entry is the first heading inside the band (an IntersectionObserver on
  * the pane), or the last one above it when none is; the first entry is pinned current at the top of the pane and the
  * last at its end. A jump owns the current entry while its scroll runs, and keeps it where the pane can't scroll the
- * heading to the top (the start or the end of a note) until the owner scrolls.
+ * heading to the top (the end of a note, or a short one) until the owner scrolls.
+ *
+ * Keyed by the note as well as its ids: tool notes share headings (Install, Key Flags), and a new note must observe its
+ * own heading elements and start with nothing current.
  */
-export function useOutlineSpy(paneRef: RefObject<HTMLElement | null>, ids: string[]) {
-  const key = ids.join("\n");
+export function useOutlineSpy(paneRef: RefObject<HTMLElement | null>, noteId: string, ids: string[]) {
+  const key = [noteId, ...ids].join("\n");
   const [spy, setSpy] = useState({ key, at: -1 });
   const current = spy.key === key ? spy.at : -1;
   const jumped = useRef(-1);
@@ -37,7 +42,7 @@ export function useOutlineSpy(paneRef: RefObject<HTMLElement | null>, ids: strin
 
   useEffect(() => {
     const pane = paneRef.current;
-    const list = key ? key.split("\n") : [];
+    const list = key.split("\n").slice(1);
     jumped.current = -1;
     locked.current = false;
     if (!pane || list.length === 0) return;
@@ -65,8 +70,17 @@ export function useOutlineSpy(paneRef: RefObject<HTMLElement | null>, ids: strin
     const sync = (byScroll: boolean) => {
       if (!locked.current) set(read(byScroll));
     };
+    /** The jumped heading sits on the pane's top, or the pane is at its end (or can't scroll at all). */
+    const holds = (i: number) => {
+      const el = entryEl(pane, list[i] ?? "");
+      const left = pane.scrollHeight - pane.scrollTop - pane.clientHeight;
+      if (left <= EDGE) return true;
+      return !!el && Math.abs(el.getBoundingClientRect().top - pane.getBoundingClientRect().top) <= SLACK;
+    };
     unlock.current = () => {
       locked.current = false;
+      // A scroll by the owner inside the jump's settle time moved the note on: the jump no longer holds.
+      if (jumped.current >= 0 && !holds(jumped.current)) jumped.current = -1;
       sync(false);
     };
 
@@ -132,23 +146,23 @@ export function useOutlineSpy(paneRef: RefObject<HTMLElement | null>, ids: strin
    * The entry `]` (+1) or `[` (-1) goes to, read from what's at the top of the note pane, not from the marked entry:
    * `]` the first heading strictly below the pane's top edge, `[` the last one strictly above it (the start of the
    * section being read, or the one before when a heading sits on the edge). A jump the pane couldn't bring to the top
-   * (the end of a note) still holds, so [ ] step on from it until the owner scrolls.
+   * (the end of a note) still holds, so [ ] step on from it until the owner scrolls. -1: nowhere to go (`[` above the
+   * first heading, `]` in the last section).
    */
   const step = (dir: 1 | -1): number => {
-    const last = ids.length - 1;
-    if (jumped.current >= 0) return Math.min(last, Math.max(0, jumped.current + dir));
+    if (jumped.current >= 0) {
+      const to = jumped.current + dir;
+      return to >= 0 && to < ids.length ? to : -1;
+    }
     const pane = paneRef.current;
-    if (!pane) return dir > 0 ? 0 : last;
+    if (!pane) return -1;
     const top = pane.getBoundingClientRect().top;
     const at = ids.map((id) => {
       const el = entryEl(pane, id);
       return el ? el.getBoundingClientRect().top - top : Number.NaN;
     });
-    if (dir > 0) {
-      const next = at.findIndex((y) => y > EDGE_PX);
-      return next < 0 ? last : next;
-    }
-    let prev = 0;
+    if (dir > 0) return at.findIndex((y) => y > EDGE_PX);
+    let prev = -1;
     at.forEach((y, i) => {
       if (y < -EDGE_PX) prev = i;
     });
