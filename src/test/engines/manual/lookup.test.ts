@@ -56,6 +56,20 @@ describe("lookupRows", () => {
   });
 });
 
+describe("lookupRows caption reach", () => {
+  const table = ["| Error | Do this |", "| --- | --- |", "| `ZZ_A` | `zzscan {TARGET}` |"];
+  const note = (mid: string[]) => parseNote("04-Foundations/Zz Reach.md", ["# Zz", "", "**Table 2 — Zz codes**", "", ...mid, "", ...table].join("\n"))!;
+  it("keeps the caption across a code block", () => {
+    expect(lookupRows(note(["```text", "sample", "```"])).map((r) => r.anchor)).toEqual(["table-2"]);
+  });
+  it("keeps the caption across a paragraph", () => {
+    expect(lookupRows(note(["Some words."])).map((r) => r.anchor)).toEqual(["table-2"]);
+  });
+  it("loses the caption at a heading", () => {
+    expect(lookupRows(note(["## Next"]))).toEqual([]);
+  });
+});
+
 describe("shortTitle", () => {
   it("strips a trailing Reference", () => {
     expect(shortTitle("Networking Basics — Reference")).toBe("Networking Basics");

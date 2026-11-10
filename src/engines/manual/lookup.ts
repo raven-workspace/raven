@@ -92,7 +92,8 @@ export function lookupRows(note: ManualNote): LookupRow[] {
       continue;
     }
     if (b.kind !== "table") {
-      anchor = undefined;
+      // A caption names the next table even across a code block, a paragraph or a list; a heading ends its reach.
+      if (b.kind === "heading") anchor = undefined;
       continue;
     }
     const caption = anchor;
