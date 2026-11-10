@@ -1,5 +1,5 @@
 import { splitFrontmatter } from "../fieldManual/frontmatter";
-import { anchorIds, FENCE, OUTLINE_HEADING, slug, TABLE_CAPTION } from "./anchors";
+import { anchorIds, FENCE, OUTLINE_HEADING, slug, tableCaption } from "./anchors";
 import type { ManualFolder, ManualNote, OutlineEntry } from "./types";
 
 export { slug };
@@ -10,7 +10,11 @@ const FOLDERS: Record<string, ManualFolder> = {
   "05-Reporting": "reporting",
 };
 
-function outlineOf(body: string): { outline: OutlineEntry[]; h1?: string } {
+/**
+ * A note body's outline (`##`, `###` and table captions, fenced code skipped) and its first `#` heading. Notes re-derive
+ * their outline from the body when they load, so a fix here reaches notes imported before it.
+ */
+export function outlineOf(body: string): { outline: OutlineEntry[]; h1?: string } {
   const outline: OutlineEntry[] = [];
   const ids = anchorIds();
   let h1: string | undefined;
@@ -30,8 +34,8 @@ function outlineOf(body: string): { outline: OutlineEntry[]; h1?: string } {
       else outline.push({ id: ids.heading(text), text, kind: h[1] === "##" ? "h2" : "h3" });
       continue;
     }
-    const t = TABLE_CAPTION.exec(line.trim());
-    if (t) outline.push({ id: ids.table(t[1]), text: t[2], kind: "table", number: t[1] });
+    const t = tableCaption(line);
+    if (t) outline.push({ id: ids.table(t.number), text: t.name, kind: "table", number: t.number });
   }
   return { outline, h1 };
 }

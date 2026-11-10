@@ -1,5 +1,18 @@
+import type { ReactNode } from "react";
 import type { OutlineEntry } from "../../engines/manual";
+import { parseInline, type Inline } from "../../engines/manual/markdown";
 import { cx } from "../../lib/cx";
+
+/** An entry's inline Markdown as the note shows it: code in mono, emphasis and link markers gone. */
+function OutlineText({ parts }: { parts: Inline[] }): ReactNode {
+  return parts.map((p, i) => {
+    if ("text" in p) return p.text;
+    if ("code" in p) return <code key={i} className="font-mono text-code">{p.code}</code>;
+    if ("strong" in p) return <OutlineText key={i} parts={p.strong} />;
+    if ("em" in p) return <OutlineText key={i} parts={p.em} />;
+    return p.link.label;
+  });
+}
 
 /**
  * "On this page": the note's headings and named tables, the current one marked in the accent. A table shows "Table N"
@@ -25,10 +38,10 @@ export function ManualOutline({ outline, current, onPick }: { outline: OutlineEn
               {o.kind === "table" ? (
                 <>
                   <span className={on ? undefined : "text-muted"}>Table {o.number}</span>
-                  <span className="min-w-0 [overflow-wrap:anywhere]">{o.text}</span>
+                  <span className="min-w-0 [overflow-wrap:anywhere]"><OutlineText parts={parseInline(o.text)} /></span>
                 </>
               ) : (
-                <span className="min-w-0 [overflow-wrap:anywhere]">{o.text}</span>
+                <span className="min-w-0 [overflow-wrap:anywhere]"><OutlineText parts={parseInline(o.text)} /></span>
               )}
             </button>
           </li>

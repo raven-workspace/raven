@@ -85,6 +85,8 @@ function BlockView({ block, n, ctx, base }: { block: Block; n: number; ctx: Ctx;
       return (
         <p id={block.anchor} className={block.anchor ? "m-0 mt-2 max-w-[760px] scroll-mt-4 text-heading text-fg" : PROSE}>
           <InlineView parts={block.inline} ctx={ctx} />
+          {/* A caption's note after its bold name reads as body text, not as part of the heading. */}
+          {block.trail && <span className="text-body text-muted-2"> <InlineView parts={block.trail} ctx={ctx} /></span>}
         </p>
       );
     case "list": {

@@ -1,5 +1,5 @@
 import { splitWikilinks } from "../library/wikilinks";
-import { anchorIds, FENCE, OUTLINE_HEADING, TABLE_CAPTION } from "./anchors";
+import { anchorIds, FENCE, OUTLINE_HEADING, tableCaption } from "./anchors";
 
 /**
  * A small, safe Markdown reader for Manual notes: it turns a note body into plain data that the renderer maps to React
@@ -14,8 +14,8 @@ export type Inline =
 
 export type Block =
   | { kind: "heading"; level: 1 | 2 | 3 | 4; id: string; inline: Inline[] }
-  /** `anchor`: "table-N" on a table caption line. */
-  | { kind: "paragraph"; inline: Inline[]; anchor?: string }
+  /** `anchor`: "table-N" on a table caption line; `trail`: the caption's text after its bold name, if any. */
+  | { kind: "paragraph"; inline: Inline[]; anchor?: string; trail?: Inline[] }
   | { kind: "list"; ordered: boolean; items: Inline[][] }
   | { kind: "table"; head: Inline[][]; rows: Inline[][][] }
   | { kind: "code"; lang: string; title?: string; text: string };
@@ -28,7 +28,7 @@ const QUOTE = /^\s*>\s?/;
 
 /** Lines that always start a block of their own (so the outline and the renderer agree on every anchor). */
 const startsBlock = (line: string): boolean =>
-  FENCE.test(line) || OUTLINE_HEADING.test(line) || DEEP_HEADING.test(line) || TABLE_CAPTION.test(line.trim());
+  FENCE.test(line) || OUTLINE_HEADING.test(line) || DEEP_HEADING.test(line) || tableCaption(line) !== null;
 
 const isTableRow = (line: string) => line.trim().startsWith("|");
 
@@ -104,9 +104,14 @@ export function parseMarkdown(body: string): Block[] {
       i++;
       continue;
     }
-    const caption = TABLE_CAPTION.exec(line.trim());
+    const caption = tableCaption(line);
     if (caption) {
-      out.push({ kind: "paragraph", anchor: ids.table(caption[1]), inline: parseInline(line.trim()) });
+      const trimmed = line.trim();
+      const head = trimmed.slice(0, trimmed.length - caption.trail.length).trim();
+      out.push({
+        kind: "paragraph", anchor: ids.table(caption.number), inline: parseInline(head),
+        ...(caption.trail ? { trail: parseInline(caption.trail) } : {}),
+      });
       i++;
       continue;
     }

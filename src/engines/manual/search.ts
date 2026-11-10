@@ -1,5 +1,5 @@
 import { splitWikilinks } from "../library/wikilinks";
-import { FENCE, OUTLINE_HEADING, TABLE_CAPTION } from "./anchors";
+import { FENCE, OUTLINE_HEADING, tableCaption } from "./anchors";
 import { cells, TABLE_SEPARATOR } from "./markdown";
 import type { ManualNote } from "./types";
 
@@ -88,7 +88,7 @@ function linesOf(note: ManualNote): Line[] {
       // The h1 repeats the title: a title hit already covers it.
       if (h?.[1] === "#") continue;
       // Same walk as the outline (`parseNote`): each `##`, `###` and table caption is the next outline entry.
-      if (h || TABLE_CAPTION.test(raw.trim())) section++;
+      if (h || tableCaption(raw)) section++;
       if (TABLE_SEPARATOR.test(raw) && raw.includes("-")) continue;
       text = readable(raw);
     }

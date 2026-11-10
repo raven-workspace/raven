@@ -63,6 +63,23 @@ describe("searchManual", () => {
   });
 });
 
+describe("searchManual: captions with trailing text", () => {
+  it("a caption with text after its bold name starts its table's section", () => {
+    const n = parseNote("04-Foundations/Zz Caps.md", [
+      "# Zz Caps",
+      "## Intro",
+      "**Table 1 — Zz codes** (zztool, zzother)",
+      "| Code | Means |",
+      "| --- | --- |",
+      "| `ZZ_DENIED` | no |",
+      "**Table 2 — Zz `more`** — notes",
+      "zzneedle here",
+    ].join("\n"))!;
+    expect(searchManual("zz denied", [n])[0]).toMatchObject({ anchor: "table-1" });
+    expect(searchManual("zzneedle", [n])[0]).toMatchObject({ anchor: "table-2" });
+  });
+});
+
 describe("searchManual: links", () => {
   it("a wikilink reads as the label the note shows (alias, else target without its heading)", () => {
     const n = parseNote("04-Foundations/Zz Links.md", "# Zz Links\nSee [[Zz Kerberoast#Steps]] and [[Zz-Other|zz delegation abuse]].\n")!;

@@ -115,6 +115,20 @@ describe("parseMarkdown", () => {
     expect(ids).toEqual(note.outline.map((o) => o.id));
   });
 
+  it("a caption with trailing text keeps its anchor; the trail is its own inline run, and no table swallows the line", () => {
+    const body = "**Table 1 — Zz `codes`** (zztool; prefixes `NT_`)\n| A | B |\n| - | - |\n| x | y |\n**Table 2 — Zz more** see below";
+    const blocks = parseMarkdown(body);
+    expect(blocks[0]).toEqual({
+      kind: "paragraph", anchor: "table-1", inline: [{ strong: [{ text: "Table 1 — Zz " }, { code: "codes" }] }],
+      trail: [{ text: "(zztool; prefixes " }, { code: "NT_" }, { text: ")" }],
+    });
+    expect(blocks[1].kind).toBe("table");
+    expect(blocks[1].kind === "table" && blocks[1].rows).toHaveLength(1);
+    expect(blocks[2]).toMatchObject({ kind: "paragraph", anchor: "table-2", trail: [{ text: "see below" }] });
+    const note = parseNote("04-Foundations/Zz.md", body)!;
+    expect(note.outline.map((o) => o.id)).toEqual(["table-1", "table-2"]);
+  });
+
   it("never gives an h1 or h4 an outline id", () => {
     const ids = parseMarkdown("# Usage\n## Usage\n#### Usage\n#### Usage").map((b) => (b.kind === "heading" ? b.id : ""));
     expect(ids).toEqual(["h1-usage", "usage", "h4-usage", "h4-usage-2"]);

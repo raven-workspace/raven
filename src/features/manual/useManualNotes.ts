@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { ManualFolder, ManualNote } from "../../engines/manual";
+import { outlineOf, type ManualFolder, type ManualNote } from "../../engines/manual";
 import { useFieldManual } from "../fieldManual/queries";
 
 /**
@@ -20,12 +20,23 @@ export const MANUAL_GROUPS: { folder: ManualFolder; label: string }[] = [
 
 const ORDER: Record<ManualFolder, number> = { foundations: 0, tools: 1, reporting: 2 };
 
+/** A stored note with its outline re-derived from the body: older imports pick up outline fixes without a re-import. */
+const fresh = new WeakMap<ManualNote, ManualNote>();
+function withOutline(n: ManualNote): ManualNote {
+  let out = fresh.get(n);
+  if (!out) {
+    out = { ...n, outline: outlineOf(n.body).outline };
+    fresh.set(n, out);
+  }
+  return out;
+}
+
 /** The Manual's notes from the last import, grouped Foundations, Tools, Reporting and alphabetical within each group. */
 export function useManualNotes(): { notes: ManualNote[]; status: ManualStatus; error: unknown; retry: () => void } {
   const q = useFieldManual();
   const raw = q.data?.notes;
   const notes = useMemo(
-    () => [...(raw ?? [])].sort((a, b) => ORDER[a.folder] - ORDER[b.folder] || a.title.localeCompare(b.title, undefined, { sensitivity: "base" })),
+    () => (raw ?? []).map(withOutline).sort((a, b) => ORDER[a.folder] - ORDER[b.folder] || a.title.localeCompare(b.title, undefined, { sensitivity: "base" })),
     [raw],
   );
   let status: ManualStatus;

@@ -6,8 +6,56 @@ export function slug(text: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-/** A `**Table N — Name**` caption line (trimmed): it gets the anchor `table-N`. */
-export const TABLE_CAPTION = /^\*\*Table\s+(\d+)\s*[—–-]\s*(.+?)\s*\*\*\s*$/;
+const CAPTION_START = /^\*\*Table\s+(\d+)\s*[—–-]\s*/;
+
+export interface TableCaption {
+  /** The caption's number: its anchor is `table-N`. */
+  number: string;
+  /** The bold name after "Table N —", inline Markdown (code, emphasis) kept. */
+  name: string;
+  /** Any text after the closing `**` (a parenthetical, a note), inline Markdown kept; "" when none. */
+  trail: string;
+}
+
+/**
+ * A `**Table N — Name**` caption line, optionally followed by more text (`**Table 1 — Codes** (nxc, impacket)`): it
+ * gets the anchor `table-N`. The name runs to the bold's closing `**`; a `**` inside a code span or after a backslash
+ * does not close it, and a nested bold run inside the name is skipped whole. Null for any other line.
+ */
+export function tableCaption(line: string): TableCaption | null {
+  const s = line.trim();
+  const m = CAPTION_START.exec(s);
+  if (!m) return null;
+  let depth = 0;
+  for (let j = m[0].length; j < s.length; j++) {
+    if (s[j] === "\\") {
+      j++;
+      continue;
+    }
+    if (s[j] === "`") {
+      const run = /^`+/.exec(s.slice(j))![0];
+      const end = s.indexOf(run, j + run.length);
+      if (end > 0) j = end + run.length - 1;
+      else j += run.length - 1;
+      continue;
+    }
+    if (!s.startsWith("**", j)) continue;
+    if (/\s/.test(s[j - 1])) {
+      // Opens a nested bold run (`**Table 1 — The **zz** codes**`) when a word follows.
+      if (s[j + 2] !== undefined && !/\s/.test(s[j + 2])) depth++;
+      j++;
+      continue;
+    }
+    if (depth > 0) {
+      depth--;
+      j++;
+      continue;
+    }
+    const name = s.slice(m[0].length, j).trim();
+    return name ? { number: m[1], name, trail: s.slice(j + 2).trim() } : null;
+  }
+  return null;
+}
 
 /** A fence line: three or more backticks or tildes. A fence closes on the next fence line of the same character. */
 export const FENCE = /^\s*(`{3,}|~{3,})/;

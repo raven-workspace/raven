@@ -287,6 +287,29 @@ describe("Manual: leaving, sections and place", () => {
     expect(outline.getByRole("button", { name: "Alpha" })).toHaveAttribute("aria-current", "location");
   });
 
+  it("an older import's stale outline is re-derived from the body: a caption with trailing text shows", async () => {
+    const body = "# Cc Caps\n## Intro\n**Table 1 — Zz codes** (zztool; prefixes `ZZ_`)\n| A |\n| - |\n| x |\n";
+    const stale: ManualNote = { ...parseNote("04-Foundations/Cc Caps.md", body)!, outline: [{ id: "intro", text: "Intro", kind: "h2" }] };
+    m.fieldManualLoad.mockResolvedValue(snapshot([stale]));
+    mount([`/manual/${stale.id}`]);
+    await openNote("Cc Caps");
+    const outline = within(screen.getByRole("navigation", { name: "On this page" }));
+    expect(outline.getAllByRole("button").map((b) => b.textContent)).toEqual(["Intro", "Table 1Zz codes"]);
+  });
+
+  it("outline entries read as the note does: code in mono, no backticks or asterisks", async () => {
+    const body = "# Cc Marks\n## Reading `zz route` *fast*\n**Table 2 — The **zz** `flags`** (more)\n";
+    m.fieldManualLoad.mockResolvedValue(snapshot([parseNote("04-Foundations/Cc Marks.md", body)!]));
+    mount(["/manual"]);
+    await openNote("Cc Marks");
+    const outline = within(screen.getByRole("navigation", { name: "On this page" }));
+    const [h, t] = outline.getAllByRole("button");
+    expect(h).toHaveTextContent(/^Reading zz route fast$/);
+    expect(within(h!).getByText("zz route").tagName).toBe("CODE");
+    expect(t!.textContent).not.toMatch(/[`*]/);
+    expect(t).toHaveTextContent("Table 2");
+  });
+
   it("] does nothing while typing in the filter", async () => {
     const user = userEvent.setup();
     mount(["/manual"]);
