@@ -80,23 +80,27 @@ function InlinePart({ p, ctx }: { p: Exclude<Inline, { text: string }>; ctx: Ctx
   if ("em" in p) return <em><InlineView parts={p.em} ctx={ctx} /></em>;
   const { target, heading, label } = p.link;
   const to = resolveLink(target, ctx.notes, ctx.cards, heading);
+  // An alias is kept; otherwise a link reads as what it points at (the note's or card's title), never its file name.
+  const aliased = label !== target;
   if (to.kind === "note") {
-    return <Link to={`/manual/${encodeURIComponent(to.noteId)}${to.heading ? `#${to.heading}` : ""}`} className={`py-1 ${LINK_CLASS}`}>{marked(label, ctx.re)}</Link>;
+    const title = aliased ? label : shortTitle(ctx.notes.find((n) => n.id === to.noteId)?.title ?? label);
+    return <Link to={`/manual/${encodeURIComponent(to.noteId)}${to.heading ? `#${to.heading}` : ""}`} className={`py-1 ${LINK_CLASS}`}>{marked(title, ctx.re)}</Link>;
   }
   if (to.kind === "card") {
     const card = ctx.cards.find((c) => c.id === to.cardId);
+    const title = aliased ? label : (card?.title ?? label);
     return (
       <button
         type="button" title={`Open the card ${card?.title ?? label} in the Arsenal`}
         onClick={() => useArsenalStore.getState().openCard(to.cardId, undefined, { from: "manual" })}
         className={`inline-block cursor-pointer border-0 bg-transparent p-0 text-left font-[inherit] leading-6 ${LINK_CLASS}`}
       >
-        {marked(label, ctx.re)}
+        {marked(title, ctx.re)}
       </button>
     );
   }
   // Unresolved: plain muted text, never a dead link.
-  return <span className="text-muted">{marked(label, ctx.re)}</span>;
+  return <span className="text-muted">{marked(aliased ? label : label.replace(/-/g, " "), ctx.re)}</span>;
 }
 
 /** An inline code span as a library command: it runs from Kali, and logs as its table row, else as its note and section. */

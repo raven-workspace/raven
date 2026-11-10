@@ -35,7 +35,7 @@ const CARDS: CardMeta[] = [{ id: "some-card", title: "Some Card", stage: "initia
 
 const BODY = [
   "# Zz Tool",
-  "Read [[Zz-Errors#Core Concept|the concept]], then [[Some-Card]] or [[Missing Page]].",
+  "Read [[Zz-Errors#Core Concept|the concept]], then [[Some-Card]] or [[Missing Page]], [[Shell-Stabilization]] and [[Zz-Errors]].",
   "## Usage",
   "```bash title:\"Kali\"",
   "zzscan -t {TARGET_IP}",
@@ -112,7 +112,7 @@ describe("NoteView links", () => {
   it("a card link opens the card in the Arsenal drawer", async () => {
     const user = userEvent.setup();
     mount();
-    await user.click(screen.getByRole("button", { name: "Some-Card" }));
+    await user.click(screen.getByRole("button", { name: "Some Card" }));
     expect(useArsenalStore.getState()).toMatchObject({ open: true, cardId: "some-card" });
     expect(screen.getByTestId("where")).toHaveTextContent("/manual/zz-tool");
   });
@@ -120,6 +120,28 @@ describe("NoteView links", () => {
   it("an unresolved link is muted text, not a link", () => {
     mount();
     const el = screen.getByText("Missing Page");
+    expect(el.closest("a,button")).toBeNull();
+    expect(el).toHaveClass("text-muted");
+  });
+});
+
+describe("NoteView link titles", () => {
+  it("a note link shows the note's title, not the file name", () => {
+    mount();
+    expect(screen.getByRole("link", { name: "Zz Errors" })).toBeInTheDocument();
+    expect(screen.queryByText("Zz-Errors")).toBeNull();
+  });
+
+  it("a card link shows the card's title, and an alias is kept", () => {
+    mount();
+    expect(screen.getByRole("button", { name: "Some Card" })).toBeInTheDocument();
+    expect(screen.queryByText("Some-Card")).toBeNull();
+    expect(screen.getByRole("link", { name: "the concept" })).toBeInTheDocument();
+  });
+
+  it("an unresolved link reads with spaces, muted", () => {
+    mount();
+    const el = screen.getByText("Shell Stabilization");
     expect(el.closest("a,button")).toBeNull();
     expect(el).toHaveClass("text-muted");
   });

@@ -39,6 +39,12 @@ describe("searchManual", () => {
     expect(searchManual("  ATTEMPT got ", [ERRORS])[0]).toMatchObject({ anchor: "core-concept", line: "An error says how far the attempt got." });
   });
 
+  it("Manual line has no middle dots: table cells are joined with two spaces", () => {
+    const [hit] = searchManual("access denied", [ERRORS]);
+    expect(hit!.line).not.toContain(" · ");
+    expect(hit!.line).toBe("STATUS_ACCESS_DENIED  Authenticated, not allowed");
+  });
+
   it("a code-block line matches, under its heading", () => {
     expect(searchManual("--zz-flagonly", [ERRORS, TOOL])).toEqual([
       { noteId: TOOL.id, title: "Zz Tool", anchor: "usage", line: "zzscan --zz-flagonly -t {TARGET_IP}", inTitle: false },

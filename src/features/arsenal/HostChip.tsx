@@ -21,7 +21,8 @@ export function HostChip({ hosts, value, onChange, onMousePick, engagementName, 
   className?: string; ref?: Ref<HostChipHandle>;
 }) {
   const current = value ? hosts.find((h) => h.id === value) : undefined;
-  const shortName = current ? shortHostName(current.name) : "no host";
+  const shortName = current ? shortHostName(current.name) : "";
+  const shown = current ? (engagementName ? `${shortName} in ${engagementName}` : shortName) : "No host";
   const options: ChipOption[] = [{ id: null, name: "No host" }, ...hosts.map((h) => ({ id: h.id, name: h.name, detail: h.ip ?? "" }))];
   return (
     <div className={cx("grid min-w-0", className)}>
@@ -31,12 +32,12 @@ export function HostChip({ hosts, value, onChange, onMousePick, engagementName, 
         value={value}
         onPick={onChange}
         {...(onMousePick ? { onMousePick } : {})}
-        label={`Fill for host: ${shortName}`}
+        label={current ? `Host ${shown}` : shown}
         listLabel="Fill for host"
         title={`${current ? current.name : "No host"}${engagementName ? ` in ${engagementName}` : ""}: fill for another host (⌥H)`}
         align={align}
-        prefix="Host"
-        shown={current ? (engagementName ? `${shortName} in ${engagementName}` : shortName) : "No host"}
+        prefix={current ? "Host" : ""}
+        shown={shown}
       />
     </div>
   );

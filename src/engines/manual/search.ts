@@ -40,7 +40,7 @@ const MAX_LINE = 120;
 /** A source line as it reads on screen: heading, quote and list markers, table pipes, emphasis and link syntax gone. */
 function readable(line: string): string {
   let s = line.trim();
-  if (s.startsWith("|")) return cells(s).filter(Boolean).map(readable).join(" · ");
+  if (s.startsWith("|")) return cells(s).filter(Boolean).map(readable).join("  ");
   // A wikilink reads as the label the note shows: its alias, else its target (never the `#heading`).
   s = splitWikilinks(s).map((p) => ("text" in p ? p.text : p.label)).join("");
   s = s

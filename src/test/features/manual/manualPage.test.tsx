@@ -313,17 +313,33 @@ describe("Manual: leaving, sections and place", () => {
     await openNote("Bb Basics");
     layOut();
     const outline = within(screen.getByRole("navigation", { name: "On this page" }));
+    press("]");
+    expect(outline.getByRole("button", { name: "Alpha" })).toHaveAttribute("aria-current", "location");
+    press("]");
+    expect(outline.getByRole("button", { name: "Beta" })).toHaveAttribute("aria-current", "location");
     const entries = outline.getAllByRole("button");
     expect(entries.map((b) => b.textContent)).toEqual(["Alpha", "Beta", "Beta Two", "Table 1Zz codes"]);
     const table = entries[3]!;
     expect(within(table).getByText("Table 1")).toBeInTheDocument();
     expect(within(table).getByText("Zz codes")).toBeInTheDocument();
     press("]");
-    expect(outline.getByRole("button", { name: "Alpha" })).toHaveAttribute("aria-current", "location");
-    press("]");
-    expect(outline.getByRole("button", { name: "Beta" })).toHaveAttribute("aria-current", "location");
+    expect(outline.getByRole("button", { name: "Beta Two" })).toHaveAttribute("aria-current", "location");
+    press("[");
     press("[");
     expect(outline.getByRole("button", { name: "Alpha" })).toHaveAttribute("aria-current", "location");
+  });
+
+  it("outline shows h3s of the current section only", async () => {
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    layOut();
+    const outline = () => within(screen.getByRole("navigation", { name: "On this page" }));
+    press("]");
+    expect(outline().getAllByRole("button").map((b) => b.textContent)).toEqual(["Alpha", "Beta"]);
+    press("]");
+    expect(outline().getAllByRole("button").map((b) => b.textContent)).toEqual(["Alpha", "Beta", "Beta Two", "Table 1Zz codes"]);
+    press("[");
+    expect(outline().getAllByRole("button").map((b) => b.textContent)).toEqual(["Alpha", "Beta"]);
   });
 
   it("an older import's stale outline is re-derived from the body: a caption with trailing text shows", async () => {
@@ -633,6 +649,22 @@ describe("Manual: empty states", () => {
   });
 });
 
+describe("Manual: loading and layout", () => {
+  it("loading line after 300ms, never before", async () => {
+    m.fieldManualLoad.mockReturnValue(new Promise(() => {}));
+    mount(["/manual"]);
+    await screen.findByRole("main", { name: "Manual" });
+    expect(screen.queryByText("Opening the Manual…")).toBeNull();
+    expect(await screen.findByText("Opening the Manual…", {}, { timeout: 1500 })).toHaveClass("text-muted");
+  });
+
+  it("the rail track narrows with the window", async () => {
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    expect(screen.getByRole("main", { name: "Manual" }).querySelector("[class*='clamp(200px,20vw,260px)']")).not.toBeNull();
+  });
+});
+
 describe("Manual: the host commands fill for", () => {
   const pre = (text: string) => screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === text);
 
@@ -643,7 +675,7 @@ describe("Manual: the host commands fill for", () => {
     await screen.findByRole("tab", { name: "Next" });
     press("m");
     await openNote("Aa Tool");
-    expect(await screen.findByRole("button", { name: "Fill for host: zzweb01" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Host zzweb01" })).toBeInTheDocument();
     expect(await pre("zzscan -t 198.51.100.21")).toBeInTheDocument();
   });
 
@@ -653,7 +685,7 @@ describe("Manual: the host commands fill for", () => {
     useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
     mount([`/manual/${TOOL.id}`]);
     await pre("zzscan -t 198.51.100.21");
-    await user.click(screen.getByRole("button", { name: "Fill for host: zzweb01" }));
+    await user.click(screen.getByRole("button", { name: "Host zzweb01" }));
     await user.click(await screen.findByRole("option", { name: /zzdb02/ }));
     expect(await pre("zzscan -t 198.51.100.22")).toBeInTheDocument();
     expect(screen.getByTestId("manual-host-ip")).toHaveTextContent("198.51.100.22");
@@ -681,18 +713,18 @@ describe("Manual: the host commands fill for", () => {
     await pre("zzscan -t 198.51.100.21");
     act(() => useArsenalStore.setState({ open: true }));
     const drawer = await screen.findByRole("complementary", { name: "Arsenal" });
-    await within(drawer).findByRole("button", { name: /^Fill for host/ });
+    await within(drawer).findByRole("button", { name: /^(Host |No host)/ });
     press("˙", { altKey: true, code: "KeyH" });
     expect(await within(drawer).findByRole("listbox", { name: "Fill for host" })).toBeInTheDocument();
     expect(screen.getAllByRole("listbox", { name: "Fill for host" })).toHaveLength(1);
-    const manualChip = within(screen.getByRole("main", { name: "Manual" })).getByRole("button", { name: /^Fill for host/ });
+    const manualChip = within(screen.getByRole("main", { name: "Manual" })).getByRole("button", { name: /^(Host |No host)/ });
     expect(manualChip).not.toHaveAttribute("aria-expanded", "true");
   });
 
   it("no engagement: says so, and commands keep their placeholders", async () => {
     mount([`/manual/${TOOL.id}`]);
     expect(await screen.findByText("No active engagement")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Fill for host/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^(Host |No host)/ })).toBeNull();
     expect(await screen.findByText((_, el) => el?.tagName === "PRE" && (el.textContent ?? "").includes("{TARGET_IP}"))).toBeInTheDocument();
   });
 
@@ -765,6 +797,7 @@ describe("Manual: title bar and focus", () => {
     expect(alpha).toHaveFocus();
     expect(alpha).toHaveAttribute("tabindex", "-1");
     const outline = within(screen.getByRole("navigation", { name: "On this page" }));
+    press("]");
     await user.click(outline.getByRole("button", { name: /^Table 1/ }));
     expect(document.getElementById("table-1")).toHaveFocus();
   });
@@ -846,7 +879,7 @@ describe("Manual: focus follows intent, one Tab stop, hints", () => {
     } as FieldManualSnapshot);
     mount([`/manual/${CARDY.id}`]);
     await openNote("Cc Card");
-    await user.click(screen.getByRole("button", { name: "Some-Card" }));
+    await user.click(screen.getByRole("button", { name: "Some Card" }));
     expect(useArsenalStore.getState()).toMatchObject({ open: true, cardId: "some-card" });
     press("Escape");
     expect(useArsenalStore.getState().open).toBe(false);

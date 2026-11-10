@@ -146,7 +146,7 @@ describe("three-pane browse", () => {
     let release!: (e: Engagement) => void;
     useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
     mount((r) => (release = r));
-    await screen.findByRole("button", { name: /^Fill for host/ });
+    await screen.findByRole("button", { name: /^(Host |No host)/ });
     expect(categories().queryAllByRole("tab")).toHaveLength(0);
     expect(screen.queryAllByRole("option")).toHaveLength(0);
     await act(async () => release({ ...E1, kind: "exam-sim" }));

@@ -97,7 +97,7 @@ afterEach(() => setImported({ commands: [], cards: [] }));
 
 /** What the host scope shows (its visible text, without the hidden native select's options). */
 const scopeText = (chip: HTMLElement): string => [...chip.children].map((n) => n.textContent).join(" ").trim();
-const hostChip = (scope: { getByRole: typeof screen.getByRole }) => scope.getByRole("button", { name: /^Fill for host/ });
+const hostChip = (scope: { getByRole: typeof screen.getByRole }) => scope.getByRole("button", { name: /^(Host |No host)/ });
 
 describe("⌘K palette", () => {
   it("⌘K opens with the host chip and Enter copies the filled command", async () => {
@@ -106,7 +106,7 @@ describe("⌘K palette", () => {
     await screen.findByRole("tab", { name: "Next" });
     await user.keyboard(cmdK);
     const box = await screen.findByRole("combobox", { name: "Search" });
-    expect(hostChip(screen)).toHaveAccessibleName("Fill for host: dc01");
+    expect(hostChip(screen)).toHaveAccessibleName("Host dc01");
     await user.type(box, "zzprobe");
     await user.keyboard("{Enter}");
     expect(await navigator.clipboard.readText()).toBe("zzprobe 10.10.10.5 from 10.10.14.9");
@@ -146,7 +146,7 @@ describe("⌘K palette", () => {
     mount("/");
     await screen.findByText("Lab A");
     await user.keyboard(cmdK);
-    expect(screen.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^(Host |No host)/ })).not.toBeInTheDocument();
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzprobe");
     await user.keyboard("{Enter}");
     // The unfilled {TARGET_IP} holds the first Enter back; the second copies anyway.
@@ -268,7 +268,7 @@ describe("host picker in the palette (U3)", () => {
     const opts = within(screen.getByRole("listbox", { name: "Fill for host" })).getAllByRole("option");
     expect(opts.map((o) => o.textContent)).toEqual(["No host", "dc0110.10.10.5", "web0710.10.10.6"]);
     await user.click(opts[0]!);
-    expect(scopeText(chip)).toBe("Host No host");
+    expect(scopeText(chip)).toBe("No host");
   });
 
   it("on the dashboard the bar reads for no host", async () => {
@@ -278,7 +278,7 @@ describe("host picker in the palette (U3)", () => {
     await user.keyboard(cmdK);
     const bar = await screen.findByRole("search", { name: "Search" });
     expect(within(bar).getByText("for no host")).toBeInTheDocument();
-    expect(within(bar).queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
+    expect(within(bar).queryByRole("button", { name: /^(Host |No host)/ })).not.toBeInTheDocument();
   });
   const preview = () => screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent!.startsWith("zz"));
 
@@ -439,7 +439,7 @@ describe("token suggestions (U4)", () => {
     expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzuser carol@10.10.10.5 ••••••••")).toBeInTheDocument();
     box.focus();
     await user.keyboard("{Tab}");
-    expect(screen.getByRole("button", { name: /^Fill for host/ })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /^(Host |No host)/ })).toHaveFocus();
   });
 
   it("Esc with the suggestion list open closes only the list; the next Esc closes the palette", async () => {
@@ -624,7 +624,7 @@ describe("⌘K groups, hosts and contained suggestions", () => {
     await screen.findByRole("tab", { name: "Next" });
     await user.keyboard(cmdK);
     const bar = within(await screen.findByRole("search", { name: "Search" }));
-    expect(bar.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
+    expect(bar.queryByRole("button", { name: /^(Host |No host)/ })).not.toBeInTheDocument();
     expect(hostChip(screen)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Fill with credential/ })).toBeInTheDocument();
   });

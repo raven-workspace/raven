@@ -225,6 +225,13 @@ export function ManualOutline({ outline, current, onPick, follow = false }: {
     return () => ro.disconnect();
   }, [current, outline, follow]);
 
+  // Every h2 shows; the h3s and tables under an h2 show only while the current section is that h2 or one of them.
+  const owner = (i: number) => {
+    for (let k = i; k >= 0; k--) if (outline[k]?.kind === "h2") return k;
+    return -1;
+  };
+  // Before a section is current the note sits at its top: the first h2's own entries show.
+  const open = owner(Math.max(current, 0));
   if (outline.length === 0) return <p className="m-0 px-3 text-meta text-muted">No sections</p>;
   return (
     <div ref={listRef} className="relative grid">
@@ -236,6 +243,7 @@ export function ManualOutline({ outline, current, onPick, follow = false }: {
       <ul className="m-0 grid list-none gap-0 p-0">
         {outline.map((o, i) => {
           const on = i === current;
+          if (o.kind !== "h2" && owner(i) !== open) return null;
           return (
             <li key={o.id} className="grid">
               <button

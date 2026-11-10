@@ -19,6 +19,8 @@ import { useManualStatus } from "./useManualStatus";
 import { useManualStore, type ManualPlace } from "./useManualStore";
 import { firstNote, useManualNotes, type ManualStatus } from "./useManualNotes";
 
+/** The "Opening the Manual…" line waits this long, so a quick load shows nothing. */
+const LOADING_MS = 300;
 /** Saving the place waits for the scroll to settle. */
 const SAVE_MS = 200;
 
@@ -407,7 +409,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
   const pick = (i: number) => goSection(i, jumpBehavior());
 
   return (
-    <div className="grid min-h-0 grid-cols-[260px_minmax(0,1fr)] min-[1100px]:grid-cols-[260px_minmax(0,1fr)_220px]">
+    <div className="grid min-h-0 grid-cols-[clamp(200px,20vw,260px)_minmax(0,1fr)] min-[1100px]:grid-cols-[clamp(200px,20vw,260px)_minmax(0,1fr)_220px]">
       <ManualRail notes={notes} currentId={note?.id ?? null} filter={filter} onFilter={setFilter} filterRef={filterRef} onOpen={open} />
       <div className={`grid min-h-0 ${ROWS[(query && note ? 1 : 0) + (shownCard ? 1 : 0)]}`}>
         {/* What the note's commands fill for, and where ⌘↵ logs: kept above the scroll so it never moves. */}
@@ -487,6 +489,13 @@ export function ManualPage() {
   const { host } = useFillBase(scope.engagementId, scope.hostId);
   const cardEscRef: CardEsc = useRef(null);
   const [cardShown, setCardShown] = useState(false);
+  // A load that is still going after 300ms says so; a fast one shows nothing.
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (status !== "loading") return;
+    const t = setTimeout(() => setSlow(true), LOADING_MS);
+    return () => clearTimeout(t);
+  }, [status]);
 
   useKeydown((e) => {
     if (e.key !== "Escape" || e.defaultPrevented || manualKeysBlocked()) return;
@@ -522,6 +531,7 @@ export function ManualPage() {
       </div>
     );
   } else if (status !== "loading") body = <ManualEmpty status={status} />;
+  else if (slow) body = <p className="m-0 content-start px-8 py-4 text-meta text-muted">Opening the Manual…</p>;
   return (
     <main aria-label="Manual" data-hint-surface="" className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto]">
       {body ?? <div />}

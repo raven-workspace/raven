@@ -47,7 +47,7 @@ export function ResultList<R extends ResultRow>({ id, label, groups, selected, o
         className={`grid cursor-default ${r.stack ? "grid-cols-[minmax(0,1fr)] gap-0" : "grid-cols-[minmax(0,1fr)_auto] items-center gap-2"} rounded-sm px-2 py-1 text-left text-body ${i === selected ? ON : "text-fg-2 hover:bg-surface-hi"}`}
       >
         <span className="min-w-0 truncate">{r.title}</span>
-        {r.tag && <span className={`min-w-0 truncate text-meta text-muted ${r.mono ? "font-mono" : ""} ${r.stack ? "" : "max-w-40"}`}>{r.tag}</span>}
+        {r.tag && <span className={`min-w-0 truncate text-meta text-muted ${r.mono ? "font-mono" : ""} ${r.stack ? "whitespace-pre" : "max-w-40"}`}>{r.tag}</span>}
       </div>
     );
   };

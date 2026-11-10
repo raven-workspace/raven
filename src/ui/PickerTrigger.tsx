@@ -24,7 +24,7 @@ export function PickerTrigger({ prefix, value, placeholder = "Pick one", icon, w
       {...rest}
     >
       {icon}
-      <span className="text-meta text-muted-2">{prefix}</span>
+      {prefix && <span className="text-meta text-muted-2">{prefix}</span>}
       {value ? (
         <span className={cx("min-w-0 truncate text-body", warn ? "text-warn" : "text-fg")}>{value}</span>
       ) : (

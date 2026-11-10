@@ -145,7 +145,7 @@ export function ChipPicker({ options, value, onPick, onMousePick, label, listLab
           id={listId}
           role="listbox"
           aria-label={listLabel}
-          className={`absolute top-full z-30 ${align === "end" ? "right-0" : "left-0"} m-0 mt-1 grid max-h-60 ${wide ? "min-w-80" : "min-w-48"} list-none overflow-y-auto rounded-md border border-line-2 bg-surface p-1 text-body shadow-lg`}
+          className={`absolute top-full z-30 ${align === "end" ? "right-0" : "left-0"} m-0 mt-1 grid max-h-60 ${wide ? "min-w-80" : "min-w-[max(100%,12rem)]"} list-none overflow-y-auto rounded-md border border-line-2 bg-surface p-1 text-body shadow-lg`}
         >
           {options.map((o, i) => (
             <li
