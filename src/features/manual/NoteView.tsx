@@ -33,7 +33,7 @@ const OUTPUT_LANGS = new Set(["text", "txt", "output", "console", "plaintext", "
 const TOKEN_MAX = 40;
 const LINK_CLASS = "text-fg-2 underline decoration-line-2 underline-offset-2 hover:text-accent hover:decoration-accent";
 
-interface Ctx {
+export interface Ctx {
   note: ManualNote;
   notes: ManualNote[];
   cards: CardMeta[];
@@ -52,7 +52,7 @@ const marked = (text: string, re: RegExp | null): ReactNode => (re ? highlight(t
 /** Punctuation right after a link: it stays on the link's line (a card link is an inline-block, so a line may break before it). */
 const TRAIL = /^[,.;:!?)\]]+/;
 
-function InlineView({ parts, ctx }: { parts: Inline[]; ctx: Ctx }): ReactNode {
+export function InlineView({ parts, ctx }: { parts: Inline[]; ctx: Ctx }): ReactNode {
   let cut = 0;
   return parts.map((p, i) => {
     if ("text" in p) {
@@ -100,7 +100,7 @@ function InlinePart({ p, ctx }: { p: Exclude<Inline, { text: string }>; ctx: Ctx
 }
 
 /** An inline code span as a library command: it runs from Kali, and logs as its table row, else as its note and section. */
-function inlineOf(code: string, ctx: Ctx): LibraryCommand {
+export function inlineOf(code: string, ctx: Ctx): LibraryCommand {
   const { note, section, rowTitle } = ctx;
   const command: LibraryCommand = {
     id: `manual:${note.id}:inline:${code}`, title: rowTitle ?? (section ? `${shortTitle(note.title)}: ${section}` : shortTitle(note.title)),

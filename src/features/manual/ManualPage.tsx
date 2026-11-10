@@ -1,6 +1,7 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import type { ManualNote } from "../../engines/manual";
+import { lookupRows, type LookupRow } from "../../engines/manual/lookup";
 import { getCards, useLibraryVersion } from "../../engines/library/store";
 import { isFreeKey, isTypingTarget, useKeydown } from "../../lib/keys";
 import { RavenError } from "../../types/errors";
@@ -8,6 +9,7 @@ import { Button, Disclosure, EmptyState, ErrorState, HintLine, labelClass, type 
 import { HostChip, isHostPickKey, type HostChipHandle } from "../arsenal/HostChip";
 import { useFillScope, useLastEngagementStore } from "../arsenal/useFillScope";
 import { useFillBase } from "../palette/fillData";
+import { AnswerCard } from "./AnswerCard";
 import { MANUAL_NOTE_ID, manualKeysBlocked } from "./keys";
 import { MANUAL_QUERY } from "./searchPath";
 import { jumpBehavior, ManualOutline, useOutlineSpy } from "./ManualOutline";
@@ -41,6 +43,9 @@ const HINTS_SEARCH: Hint[] = [
   ...HINTS.slice(0, -1),
   { keys: "Esc", label: "clear search", priority: 1 },
 ];
+
+/** With an answer card: the first Esc closes the card (the match bar stays). */
+const HINTS_CARD: Hint[] = HINTS_SEARCH.map((h) => (h.keys === "Esc" ? { ...h, label: "close card" } : h));
 
 /** No engagement or no host: ⌘↵ copies but has nowhere to log, worded as the Arsenal drawer words it. */
 const noHost = (hints: Hint[]): Hint[] => hints.map((h) => (h.keys === "⌘↵" ? { ...h, label: "log (no host)" } : h));
@@ -93,6 +98,17 @@ function firstAfter(pane: HTMLElement, anchor: string): number {
   return Math.max(0, i);
 }
 
+/** The reader column's rows: the host row, then the match bar and the answer card when they show, then the note. */
+const ROWS = ["grid-rows-[auto_minmax(0,1fr)]", "grid-rows-[auto_auto_minmax(0,1fr)]", "grid-rows-[auto_auto_auto_minmax(0,1fr)]"];
+
+/** The lookup row a match sits in (by its table's anchor and its row), or null in prose or any other table. */
+function rowOf(note: ManualNote, el: HTMLElement | null): LookupRow | null {
+  const anchor = el?.closest<HTMLElement>("[data-table]")?.dataset.table;
+  const at = el?.closest<HTMLElement>("tr[data-row]")?.dataset.row;
+  if (!anchor || at === undefined) return null;
+  return lookupRows(note).find((r) => r.anchor === anchor && r.row === Number(at)) ?? null;
+}
+
 /** Focus without scrolling: the scroll is already where it should be. */
 const focusQuietly = (el: HTMLElement | null | undefined) => el?.focus({ preventScroll: true });
 
@@ -127,7 +143,12 @@ function StatusSlot() {
   return <span role="status" className={`truncate text-right text-meta ${tone === "warn" ? "text-warn" : "text-accent"}`}>{text}</span>;
 }
 
-function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undefined }) {
+/** What the page's Esc needs of the answer card: close it if one shows (true when it did). */
+type CardEsc = RefObject<(() => boolean) | null>;
+
+function Reader({ notes, noteId, cardEscRef, onCard }: {
+  notes: ManualNote[]; noteId: string | undefined; cardEscRef: CardEsc; onCard: (shown: boolean) => void;
+}) {
   const navigate = useNavigate();
   const location = useLocation();
   const note = noteId ? notes.find((n) => n.id === noteId) : undefined;
@@ -227,13 +248,20 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
 
   const [match, setMatch] = useState({ at: 0, count: 0 });
   const matchAt = useRef(0);
+  /** The lookup row the current match sits in, and whether Esc closed its card (until the match moves). */
+  const [card, setCard] = useState<{ row: LookupRow | null; closed: boolean }>({ row: null, closed: false });
+  const cardRow = query && !card.closed ? card.row : null;
   /** `focus`: the current match's block takes focus (a search landing, ⌥↓ ⌥↑), so the next Tab continues there. */
   const showMatch = (at: number, scroll: boolean, focus = false) => {
     const pane = paneRef.current;
     if (!pane) return;
+    // A landing or ⌥↓ ⌥↑ (`focus`) shows the card afresh; a quiet re-show of the same match (late fill data) keeps it closed.
+    const same = !focus && matchAt.current === at;
     matchAt.current = at;
     const { count, el } = markCurrent(pane, at);
     setMatch({ at, count });
+    const row = note ? rowOf(note, el) : null;
+    setCard((c) => (same && c.row === row ? c : { row, closed: false }));
     if (scroll) el?.scrollIntoView?.({ block: "center" });
     if (focus && el) focusTarget(blockOf(el));
   };
@@ -260,6 +288,21 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
     obs.observe(pane, { childList: true, subtree: true, characterData: true });
     return () => obs.disconnect();
   }, [note, query]);
+
+  const closeCard = () => {
+    // Focus in the card would be lost with it: it goes back to the note.
+    if (document.activeElement?.closest("[aria-label=Answer]")) focusQuietly(paneRef.current);
+    setCard((c) => ({ ...c, closed: true }));
+  };
+  const shownCard = !!(cardRow && note);
+  useEffect(() => {
+    cardEscRef.current = shownCard ? () => (closeCard(), true) : null;
+    onCard(shownCard);
+  });
+  useEffect(() => () => {
+    cardEscRef.current = null;
+    onCard(false);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onScroll = () => {
     const pane = paneRef.current;
@@ -333,7 +376,7 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
   return (
     <div className="grid min-h-0 grid-cols-[260px_minmax(0,1fr)] min-[1100px]:grid-cols-[260px_minmax(0,1fr)_220px]">
       <ManualRail notes={notes} currentId={note?.id ?? null} filter={filter} onFilter={setFilter} filterRef={filterRef} onOpen={open} />
-      <div className={`grid min-h-0 ${query ? "grid-rows-[auto_auto_minmax(0,1fr)]" : "grid-rows-[auto_minmax(0,1fr)]"}`}>
+      <div className={`grid min-h-0 ${ROWS[(query && note ? 1 : 0) + (shownCard ? 1 : 0)]}`}>
         {/* What the note's commands fill for, and where ⌘↵ logs: kept above the scroll so it never moves. */}
         <div className="grid min-h-12 grid-cols-[minmax(10rem,max-content)_minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-8 py-2 text-meta">
           {engagementId ? (
@@ -349,6 +392,12 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
           <StatusSlot />
         </div>
         {query && note && <MatchBar query={query} at={match.at} count={match.count} />}
+        {/* The answer card: fixed above the note's scroll (it never moves with the note), its own scroll past 40vh. */}
+        {cardRow && note && (
+          <div className="grid min-w-0 border-b border-line px-8 py-3">
+            <AnswerCard key={`${cardRow.anchor}:${cardRow.row}`} row={cardRow} base={base} onClose={closeCard} />
+          </div>
+        )}
         <section
           id={MANUAL_NOTE_ID} ref={paneRef} aria-label="Note" tabIndex={-1} onScroll={onScroll}
           className="grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden px-8 py-4 outline-none [--pane-bg:var(--bg)] focus-visible:shadow-[inset_0_0_0_2px_var(--accent)]"
@@ -399,6 +448,8 @@ export function ManualPage() {
   const searching = !!params.get(MANUAL_QUERY)?.trim();
   const scope = useFillScope();
   const { host } = useFillBase(scope.engagementId, scope.hostId);
+  const cardEscRef: CardEsc = useRef(null);
+  const [cardShown, setCardShown] = useState(false);
 
   useKeydown((e) => {
     if (e.key !== "Escape" || e.defaultPrevented || manualKeysBlocked()) return;
@@ -407,16 +458,18 @@ export function ManualPage() {
       return;
     }
     e.preventDefault();
+    // An answer card closes first (the match bar stays).
+    if (cardEscRef.current?.()) return;
     // The first Esc clears the match bar (the note stays where it is), the next leaves.
     if (searching) void navigate({ pathname: location.pathname }, { replace: true });
     else void (firstEntry ? navigate("/") : navigate(-1));
   });
 
-  const pageHints = searching ? HINTS_SEARCH : HINTS;
+  const pageHints = searching ? (cardShown ? HINTS_CARD : HINTS_SEARCH) : HINTS;
   const hints = status !== "ready" ? HINTS_EMPTY : scope.engagementId && host ? pageHints : noHost(pageHints);
 
   let body = null;
-  if (status === "ready") body = <Reader notes={notes} noteId={noteId} />;
+  if (status === "ready") body = <Reader notes={notes} noteId={noteId} cardEscRef={cardEscRef} onCard={setCardShown} />;
   else if (status === "error") {
     body = (
       <div className="grid content-start px-6 py-6">
