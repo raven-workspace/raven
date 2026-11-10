@@ -1,0 +1,143 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Field Manual notes in Raven — where they live</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"><style>
+*{box-sizing:border-box;margin:0}
+body{background:#050505;color:#e8e8e8;font:14px/1.45 "Instrument Sans",sans-serif;padding:28px 32px 60px;display:grid;gap:40px;justify-content:center}
+.mono{font-family:"JetBrains Mono",monospace}
+.mut{color:#a8a8a8}.fnt{color:#8a8a8a}.acc{color:#c6ff00}
+.lab{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#a8a8a8;font-weight:600}
+.kbd{border:1px solid #3a3a3a;border-radius:3px;padding:0 4px;font:11px "JetBrains Mono",monospace;color:#a8a8a8}
+.btn{display:inline-grid;grid-auto-flow:column;gap:8px;align-items:center;border:1px solid #3a3a3a;border-radius:6px;padding:3px 10px;font-size:13px;background:#000;color:#e8e8e8;white-space:nowrap}
+.btn.on{border-color:#c6ff00;color:#c6ff00}
+.intro{width:1440px;display:grid;gap:8px}
+.intro h1{font-size:20px;font-weight:600}
+.option{width:1440px;display:grid;gap:12px}
+.optHead{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:baseline}
+.optHead b{font-size:18px}
+.notes{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;font-size:13px}
+.notes div{border-top:1px solid #2a2a2a;padding-top:8px;display:grid;gap:4px}
+.frame{width:1440px;height:860px;background:#000;border:1px solid #2a2a2a;border-radius:10px;overflow:hidden;display:grid;grid-template-rows:38px minmax(0,1fr)}
+.bar{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;border-bottom:1px solid #1f1f1f;padding:0 24px 0 94px;font-size:13px;color:#c4c4c4}
+.wm{font-weight:600;letter-spacing:.32em;font-size:13px;color:#fff}
+.bar .ctl{display:grid;grid-auto-flow:column;gap:8px}
+.body{display:grid;grid-template-columns:260px minmax(0,1fr) 220px;min-height:0}
+.rail{border-right:1px solid #1f1f1f;padding:14px 12px;display:grid;align-content:start;gap:14px;overflow:hidden}
+.rail .grp{display:grid;gap:2px}
+.rail .it{padding:4px 8px;border-radius:4px;font-size:13px;color:#c4c4c4;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+.rail .it.sel{background:#111;color:#c6ff00;box-shadow:inset 2px 0 0 #c6ff00}
+.rail .it .n{color:#8a8a8a;font-size:12px}
+.search{border:1px solid #2a2a2a;border-radius:6px;padding:5px 9px;font-size:13px;color:#8a8a8a;display:grid;grid-template-columns:1fr auto}
+.read{overflow:hidden;padding:18px 40px 0;display:grid;align-content:start;gap:14px}
+.crumb{font-size:13px;color:#a8a8a8;display:grid;grid-auto-flow:column;justify-content:start;gap:8px}
+.matchbar{display:grid;grid-template-columns:auto auto 1fr auto;gap:12px;align-items:center;border:1px solid #2a2a2a;border-radius:6px;padding:6px 10px;font-size:13px;background:#0b0b0b}
+.read h2{font-size:20px;font-weight:600;color:#fff}
+.read h3{font-size:15px;font-weight:600;color:#fff;margin-top:4px}
+.prose{max-width:760px;color:#e8e8e8;font-size:14px;line-height:1.6}
+.pre{background:#0b0b0b;border:1px solid #1f1f1f;border-radius:6px;padding:10px 12px;font:13px/1.6 "JetBrains Mono",monospace;color:#fff;white-space:pre;max-width:760px}
+table{border-collapse:collapse;font-size:13px;line-height:1.5;width:100%}
+th{text-align:left;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#a8a8a8;font-weight:600;padding:6px 10px;border-bottom:1px solid #2a2a2a}
+td{padding:8px 10px;border-bottom:1px solid #1f1f1f;vertical-align:top;color:#e8e8e8}
+td code{font:12.5px "JetBrains Mono",monospace;color:#fff}
+tr.hit td{background:#0f1400}
+tr.hit td:first-child{box-shadow:inset 2px 0 0 #c6ff00}
+mark{background:#c6ff00;color:#000;padding:0 2px;border-radius:2px}
+.cmd{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;background:#0b0b0b;border:1px solid #1f1f1f;border-radius:4px;padding:3px 6px;margin-top:4px}
+.cmd .copy{font-size:11px;color:#a8a8a8;border:1px solid #3a3a3a;border-radius:3px;padding:0 5px}
+.toc{border-left:1px solid #1f1f1f;padding:18px 14px;display:grid;align-content:start;gap:4px;font-size:13px;color:#a8a8a8}
+.toc .on{color:#c6ff00}
+.toc .sub{padding-left:10px;font-size:12px}
+.foot{border-top:1px solid #1f1f1f;padding:7px 40px;font-size:12px;color:#a8a8a8;display:grid;grid-auto-flow:column;justify-content:start;gap:16px}
+.mid{display:grid;grid-template-rows:minmax(0,1fr) auto;min-height:0}
+.tag{font-size:11px;color:#8a8a8a;border:1px solid #2a2a2a;border-radius:3px;padding:0 5px}
+</style></head><body>
+
+<div class="intro">
+  <h1>Where should your Field Manual notes live?</h1>
+  <p class="mut">Same moment in both: you're on DC01, nxc printed <span class="mono">STATUS_ACCESS_DENIED</span>, you press ⌘K, type <span class="mono">access_denied</span> and press ↵ on the hit. The note opens at that row. Commands in the note fill from the host, like cards do. The difference is where the note lives and how you get around.</p>
+</div>
+
+<!-- ============ A ============ -->
+<section class="option">
+  <div class="optHead"><b>A · In the Arsenal</b><span class="mut">One library. Cards, tool pages, foundations and reporting notes together; long notes open in a reading view inside it.</span></div>
+  <div class="frame">
+    <div class="bar"><span class="wm">RAVEN</span><span></span><span class="ctl"><span class="btn on">Arsenal <span class="kbd">A</span></span><span class="btn">Payloads <span class="kbd">P</span></span><span class="btn">Search <span class="kbd">⌘K</span></span><span class="btn">Lock <span class="kbd">⌘L</span></span></span></div>
+    <div class="body">
+      <nav class="rail">
+        <span class="search">Filter the library <span class="kbd">/</span></span>
+        <div class="grp"><span class="lab" style="padding:0 8px 4px">Cards</span>
+          <span class="it">Recon &amp; enumeration <span class="n">31</span></span><span class="it">SMB &amp; AD <span class="n">28</span></span><span class="it">Shells &amp; transfers <span class="n">9</span></span><span class="it">Privilege escalation <span class="n">22</span></span><span class="it fnt">+ 5 more</span></div>
+        <div class="grp"><span class="lab" style="padding:0 8px 4px">Tool pages</span>
+          <span class="it">netexec <span class="n">tool</span></span><span class="it">impacket <span class="n">tool</span></span><span class="it fnt">+ 58 tools</span></div>
+        <div class="grp"><span class="lab" style="padding:0 8px 4px">Foundations</span>
+          <span class="it">Decision — I Have a Hash</span><span class="it sel">Error Message Lookup</span><span class="it">Networking Basics</span><span class="it">Windows Privileges</span><span class="it fnt">+ 18 notes</span></div>
+        <div class="grp"><span class="lab" style="padding:0 8px 4px">Reporting</span><span class="it">Finding Write-Up</span><span class="it fnt">+ 3 notes</span></div>
+      </nav>
+      <div class="mid">
+        <article class="read">
+          <span class="crumb"><span>Arsenal</span><span>›</span><span>Foundations</span><span>›</span><span style="color:#fff">Error Message Lookup</span><span class="tag">filled for DC01 · 198.51.100.20</span></span>
+          <div class="matchbar"><span class="mono">access_denied</span><span class="mut">match 1 of 4</span><span></span><span class="mut"><span class="kbd">⌥↓</span> next · <span class="kbd">⌥↑</span> previous</span></div>
+          <h2>Error Message Lookup</h2>
+          <p class="prose">An error tells you how far the attempt got. Read it as a position on this ladder, not as "it failed".</p>
+          <div class="pre">5. Credentials valid?   -> STATUS_LOGON_FAILURE / KDC_ERR_PREAUTH_FAILED
+6. Account usable?      -> LOCKED_OUT / DISABLED / LOGON_TYPE_NOT_GRANTED
+7. Enough rights?       -> STATUS_<mark>ACCESS_DENIED</mark> / rpc_s_access_denied</div>
+          <h3>Table 1 · SMB / NTLM status codes</h3>
+          <table><thead><tr><th style="width:22%">Error</th><th style="width:26%">Means</th><th>Do this</th><th style="width:16%">Card</th></tr></thead><tbody>
+            <tr><td><code>STATUS_PASSWORD_EXPIRED</code></td><td><b>Password is correct</b> but expired.</td><td>Change it, then log in with the new one.</td><td class="mut">New Credential Routine</td></tr>
+            <tr class="hit"><td><code>STATUS_<mark>ACCESS_DENIED</mark></code></td><td><b>Authenticated fine</b>, not allowed to do this action. Does not mean bad creds.</td><td>Enumerate what you can read; try RDP or WinRM.<div class="cmd"><code>nxc smb 198.51.100.20 -u 'svc_sql' -p '•••••' --shares</code><span class="copy">↵ copy</span></div></td><td class="mut">UAC and Token Filtering</td></tr>
+            <tr><td><code>STATUS_BAD_NETWORK_NAME</code></td><td>The share doesn't exist on that host.</td><td>List shares first.</td><td class="mut">SMB Enumeration</td></tr>
+          </tbody></table>
+        </article>
+        <div class="foot"><span><span class="kbd">↵</span> copy command</span><span><span class="kbd">⌥↓</span> next match</span><span><span class="kbd">[ ]</span> previous / next section</span><span><span class="kbd">Esc</span> back to DC01</span></div>
+      </div>
+      <aside class="toc"><span class="lab" style="margin-bottom:4px">On this page</span><span>What this is for</span><span>Core concept</span><span class="on">Reference tables</span><span class="sub on">1 · SMB / NTLM</span><span class="sub">2 · nxc / impacket</span><span class="sub">3 · Kerberos</span><span class="sub">4 · WinRM</span><span class="sub fnt">+ 9 tables</span><span>How to spot it on a host</span><span>Common confusions</span></aside>
+    </div>
+  </div>
+  <div class="notes">
+    <div><span class="lab">How you get here</span><span>⌘K, <span class="kbd">A</span> then pick, or a link from a card ("netexec page", "see Error Lookup").</span></div>
+    <div><span class="lab">Good</span><span>One place to remember. A tool page sits next to the cards that use it. The A drawer can open a note too, but long notes jump to this full reading view.</span></div>
+    <div><span class="lab">Risk</span><span>The Arsenal grows from ~140 cards to ~230 items, and its rail gets longer. The drawer (560px) is too narrow for these tables, so notes always open full-screen.</span></div>
+  </div>
+</section>
+
+<!-- ============ B ============ -->
+<section class="option">
+  <div class="optHead"><b>B · Its own place: the Manual</b><span class="mut">A separate reader for Foundations, Tools and Reporting. The Arsenal stays commands only.</span></div>
+  <div class="frame">
+    <div class="bar"><span class="wm">RAVEN</span><span></span><span class="ctl"><span class="btn">Arsenal <span class="kbd">A</span></span><span class="btn on">Manual <span class="kbd">M</span></span><span class="btn">Payloads <span class="kbd">P</span></span><span class="btn">Search <span class="kbd">⌘K</span></span><span class="btn">Lock <span class="kbd">⌘L</span></span></span></div>
+    <div class="body">
+      <nav class="rail">
+        <span class="search">Filter the Manual <span class="kbd">/</span></span>
+        <div class="grp"><span class="lab" style="padding:0 8px 4px">Foundations</span>
+          <span class="it">Decision — I Have a Hash</span><span class="it">Decision — I Have a Shell</span><span class="it sel">Error Message Lookup</span><span class="it">Hash Identification</span><span class="it">Networking Basics</span><span class="it">Ports and Services</span><span class="it">Windows Privileges</span><span class="it fnt">+ 15 notes</span></div>
+        <div class="grp"><span class="lab" style="padding:0 8px 4px">Tools</span>
+          <span class="it">netexec</span><span class="it">impacket</span><span class="it">chisel</span><span class="it fnt">+ 57 tools</span></div>
+        <div class="grp"><span class="lab" style="padding:0 8px 4px">Reporting</span><span class="it">Report Structure</span><span class="it">Finding Write-Up</span><span class="it fnt">+ 2 notes</span></div>
+      </nav>
+      <div class="mid">
+        <article class="read">
+          <span class="crumb"><span>Manual</span><span>›</span><span>Foundations</span><span>›</span><span style="color:#fff">Error Message Lookup</span><span class="tag">filled for DC01 · 198.51.100.20</span></span>
+          <div class="matchbar"><span class="mono">access_denied</span><span class="mut">match 1 of 4</span><span></span><span class="mut"><span class="kbd">⌥↓</span> next · <span class="kbd">⌥↑</span> previous</span></div>
+          <h2>Error Message Lookup</h2>
+          <p class="prose">An error tells you how far the attempt got. Read it as a position on this ladder, not as "it failed".</p>
+          <div class="pre">5. Credentials valid?   -> STATUS_LOGON_FAILURE / KDC_ERR_PREAUTH_FAILED
+6. Account usable?      -> LOCKED_OUT / DISABLED / LOGON_TYPE_NOT_GRANTED
+7. Enough rights?       -> STATUS_<mark>ACCESS_DENIED</mark> / rpc_s_access_denied</div>
+          <h3>Table 1 · SMB / NTLM status codes</h3>
+          <table><thead><tr><th style="width:22%">Error</th><th style="width:26%">Means</th><th>Do this</th><th style="width:16%">Card</th></tr></thead><tbody>
+            <tr><td><code>STATUS_PASSWORD_EXPIRED</code></td><td><b>Password is correct</b> but expired.</td><td>Change it, then log in with the new one.</td><td class="mut">New Credential Routine ↗ Arsenal</td></tr>
+            <tr class="hit"><td><code>STATUS_<mark>ACCESS_DENIED</mark></code></td><td><b>Authenticated fine</b>, not allowed to do this action. Does not mean bad creds.</td><td>Enumerate what you can read; try RDP or WinRM.<div class="cmd"><code>nxc smb 198.51.100.20 -u 'svc_sql' -p '•••••' --shares</code><span class="copy">↵ copy</span></div></td><td class="mut">UAC and Token Filtering ↗ Arsenal</td></tr>
+            <tr><td><code>STATUS_BAD_NETWORK_NAME</code></td><td>The share doesn't exist on that host.</td><td>List shares first.</td><td class="mut">SMB Enumeration ↗ Arsenal</td></tr>
+          </tbody></table>
+        </article>
+        <div class="foot"><span><span class="kbd">↵</span> copy command</span><span><span class="kbd">⌥↓</span> next match</span><span><span class="kbd">[ ]</span> previous / next section</span><span><span class="kbd">Esc</span> back to DC01</span></div>
+      </div>
+      <aside class="toc"><span class="lab" style="margin-bottom:4px">On this page</span><span>What this is for</span><span>Core concept</span><span class="on">Reference tables</span><span class="sub on">1 · SMB / NTLM</span><span class="sub">2 · nxc / impacket</span><span class="sub">3 · Kerberos</span><span class="sub">4 · WinRM</span><span class="sub fnt">+ 9 tables</span><span>How to spot it on a host</span><span>Common confusions</span></aside>
+    </div>
+  </div>
+  <div class="notes">
+    <div><span class="lab">How you get here</span><span>⌘K (results labelled "Manual"), <span class="kbd">M</span>, or a link from a card. Card links in a note jump back to the Arsenal.</span></div>
+    <div><span class="lab">Good</span><span>The Arsenal stays a quick command picker. The Manual's rail is only reading material, close to your Obsidian folders.</span></div>
+    <div><span class="lab">Risk</span><span>One more key and one more title-bar button. Tool pages live apart from the cards that use them, so you hop between two places.</span></div>
+  </div>
+</section>
+</body></html>

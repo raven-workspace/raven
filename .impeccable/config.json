@@ -29,6 +29,33 @@
         ],
         "createdAt": "2026-11-08T08:12:45.869Z",
         "reason": "Claude: throwaway mock loads the static Google Fonts builds of DESIGN.md's Instrument Sans / JetBrains Mono (the app uses the Variable builds); same faces"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/fm-notes-home.html"
+        ],
+        "createdAt": "2026-11-10T00:33:42.088Z",
+        "reason": "Claude: throwaway decision mock uses the project's own faces (Instrument Sans, JetBrains Mono per PRODUCT.md) loaded by plain family name"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/fm-notes-home.html"
+        ],
+        "createdAt": "2026-11-10T00:34:03.308Z",
+        "reason": "Claude: throwaway decision mock; the 2px inset accent bar is Raven's existing selection marker (FitRow, Workbench generator list)"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/fm-notes-home.html"
+        ],
+        "createdAt": "2026-11-10T00:34:03.328Z",
+        "reason": "Claude: throwaway decision mock; key caps and tags copy Raven's existing Kbd/tag sizes"
       }
     ]
   }
