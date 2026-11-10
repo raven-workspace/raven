@@ -78,7 +78,12 @@ export const useCaptureStore = create<CaptureState>()((set, get) => ({
   },
   close: () => set({ open: false, notice: null }),
   update: (engagementId, patch) =>
-    set((s) => ({ drafts: { ...s.drafts, [engagementId]: { ...(s.drafts[engagementId] ?? EMPTY_DRAFT), ...patch } } })),
+    set((s) => {
+      const prev = s.drafts[engagementId] ?? EMPTY_DRAFT;
+      // New text is a new paste: "keep as note" was a choice about the old one.
+      const next = patch.text !== undefined && patch.text !== prev.text && patch.asNote === undefined ? { ...patch, asNote: false } : patch;
+      return { drafts: { ...s.drafts, [engagementId]: { ...prev, ...next } } };
+    }),
   discard: (engagementId) => {
     const { drafts } = get();
     releaseImage(drafts[engagementId]?.image);
