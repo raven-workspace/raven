@@ -1,6 +1,8 @@
 import { matches, searchArsenal, wordsOf, type ArsenalGroup, type ArsenalHit } from "../../engines/library/arsenalSearch";
 import type { CardMeta } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
+import type { ManualNote } from "../../engines/manual";
+import { searchManual } from "../../engines/manual/search";
 import type { EngagementKind } from "../../types/engagement";
 
 /** Something in the open engagement the palette can jump to. Credential items carry a label only, never a secret. */
@@ -21,11 +23,15 @@ export interface PaletteContext {
   exam?: { kind: EngagementKind; hostId: string; msfHostId?: string | null };
   /** The engagement (so its exam rules) is not known yet: no commands are offered (fail closed). */
   examPending?: boolean;
+  /** The Manual's notes: searched in full text, after commands and cards. */
+  notes?: ManualNote[];
 }
 
 export type PaletteResult =
   | ArsenalHit
   | { type: "item"; id: string; title: string; item: EngagementItem }
+  /** A Manual note: `line` is its matching line, `anchor` the section it sits in. */
+  | { type: "manual"; id: string; title: string; noteId: string; anchor?: string; line: string }
   /** The matches the dialog's height cap left out: opens the same search in the full Arsenal. */
   | { type: "more"; id: string; title: string; count: number };
 
@@ -65,13 +71,22 @@ export function capGroups(groups: ArsenalGroup[], max: number): ArsenalGroup[] {
   return out;
 }
 
-/** Arsenal hits grouped by category, plus matching engagement items (log, notes, credential labels, hosts). */
-export function searchPalette(query: string, ctx: PaletteContext): { groups: ArsenalGroup[]; items: PaletteResult[] } {
+/** How many Manual notes ⌘K lists. */
+export const MANUAL_MAX = 8;
+
+/**
+ * Arsenal hits grouped by category, plus matching engagement items (log, notes, credential labels, hosts) and Manual
+ * notes (title matches before body matches).
+ */
+export function searchPalette(query: string, ctx: PaletteContext): { groups: ArsenalGroup[]; items: PaletteResult[]; manual: PaletteResult[] } {
   const groups = searchArsenal(query, ctx);
   const q = wordsOf(query);
   const items = (ctx.engagementItems ?? [])
     .filter((it) => matches(q, it.title, it.text))
     .sort((a, b) => ITEM_RANK[a.kind] - ITEM_RANK[b.kind])
     .map<PaletteResult>((it) => ({ type: "item", id: it.id, title: it.title, item: it }));
-  return { groups, items };
+  const manual = searchManual(query, ctx.notes ?? [], MANUAL_MAX).map<PaletteResult>((h) => ({
+    type: "manual", id: h.noteId, title: h.title, noteId: h.noteId, line: h.line, ...(h.anchor ? { anchor: h.anchor } : {}),
+  }));
+  return { groups, items, manual };
 }

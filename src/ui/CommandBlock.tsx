@@ -2,6 +2,7 @@ import { Check, Copy } from "@phosphor-icons/react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { copyPlain, copySecret } from "../lib/clipboard";
 import { reportError } from "../lib/lockSignal";
+import { highlight as highlightText, rangesOf } from "./highlight";
 import { IconButton } from "./IconButton";
 
 export interface CommandBlockProps {
@@ -23,6 +24,8 @@ export interface CommandBlockProps {
    * when the copy was held back, so the button does not show the done check.
    */
   onCopyAction?: (button: HTMLButtonElement) => Promise<"copied" | "guarded"> | void;
+  /** A search to mark in the shown text (`<mark data-match>`); what copies is never changed. */
+  highlight?: RegExp | null;
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -36,12 +39,16 @@ function marks(token: string, re: RegExp | null): { text: string; warn: boolean 
     .filter((m) => m.text !== "");
 }
 
-export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, copyText, copyLabel, onCopyAction }: CommandBlockProps) {
+export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, copyText, copyLabel, onCopyAction, highlight }: CommandBlockProps) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
   const pattern = [...(placeholders ? ["\\{[A-Za-z0-9_]+\\}"] : []), ...[...(tokens ?? [])].sort((a, b) => b.length - a.length).map(escapeRe)];
   const re = pattern.length > 0 ? new RegExp(`(${pattern.join("|")})`) : null;
+  const found = rangesOf(text, highlight);
+  const pieces = text.split(/(\s+)/);
+  // Where each piece starts in `text`, so a match is marked across the token spans.
+  const starts = pieces.map((_, i) => pieces.slice(0, i).join("").length);
   const flashDone = () => {
     setCopied(true);
     clearTimeout(timer.current);
@@ -56,14 +63,20 @@ export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, 
           {...(name ? { role: "group", "aria-label": `Command: ${name}` } : {})}
         >
           <code>
-            {text.split(/(\s+)/).map((t, i) => {
+            {pieces.map((t, i) => {
+              const at = starts[i];
               if (t === "") return null;
-              if (/^\s+$/.test(t)) return <Fragment key={i}>{t}</Fragment>;
+              if (/^\s+$/.test(t)) return <Fragment key={i}>{highlightText(t, at, found)}</Fragment>;
+              const parts = marks(t, re);
+              const partStarts = parts.map((_, j) => at + parts.slice(0, j).reduce((n, p) => n + p.text.length, 0));
               // Each space-separated token never breaks (browsers would otherwise break after a hyphen), even around a
               // placeholder; the spaces between tokens are the only break points.
               return (
                 <span key={i} data-token className="inline-block max-w-full [overflow-wrap:anywhere]">
-                  {marks(t, re).map((m, j) => (m.warn ? <mark key={j} className="bg-transparent text-warn">{m.text}</mark> : m.text))}
+                  {parts.map((m, j) => {
+                    const shown = highlightText(m.text, partStarts[j], found);
+                    return m.warn ? <mark key={j} className="bg-transparent text-warn">{shown}</mark> : <Fragment key={j}>{shown}</Fragment>;
+                  })}
                 </span>
               );
             })}

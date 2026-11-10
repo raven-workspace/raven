@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LibraryCommand } from '../../../engines/library/types';
+import { parseNote } from '../../../engines/manual';
 import { searchPalette, withoutSecrets, type PaletteContext } from '../../../features/palette/search';
 
 const cmd = (id: string, over: Partial<LibraryCommand> = {}): LibraryCommand =>
@@ -10,6 +11,19 @@ const ctx = (library: LibraryCommand[], over: Partial<PaletteContext> = {}): Pal
 });
 
 describe('searchPalette', () => {
+  it('Manual notes come back on their own, title hits first, with the matching line and section', () => {
+    // Synthetic notes only.
+    const body = parseNote('04-Foundations/Zz Codes.md', '# Zz Codes\n## Status\n| `ZZ_LOGON_FAILED` | wrong password |\n')!;
+    const titled = parseNote('04-Foundations/Logon Failed Zz.md', '# Logon Failed Zz\n')!;
+    const r = searchPalette('logon failed', ctx([cmd('c1', { title: 'Logon failed check' })], { notes: [body, titled] }));
+    expect(r.groups.flatMap((g) => g.hits).map((h) => h.id)).toEqual(['c1']);
+    expect(r.manual).toEqual([
+      { type: 'manual', id: titled.id, title: 'Logon Failed Zz', noteId: titled.id, line: '' },
+      { type: 'manual', id: body.id, title: 'Zz Codes', noteId: body.id, anchor: 'status', line: 'ZZ_LOGON_FAILED · wrong password' },
+    ]);
+    expect(searchPalette('logon failed', ctx([])).manual).toEqual([]);
+  });
+
   it('every query word must prefix-match', () => {
     const lib = [
       cmd('a', { title: 'Enumerate SMB shares', tool: 'smbclient' }),

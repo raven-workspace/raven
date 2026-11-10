@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { Fragment, useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
 import { classifyExam } from "../../engines/fieldManual/classifyExam";
 import type { CardMeta } from "../../engines/library/store";
@@ -6,6 +6,8 @@ import type { LibraryCommand } from "../../engines/library/types";
 import type { ManualNote } from "../../engines/manual";
 import { resolveLink } from "../../engines/manual/links";
 import { parseMarkdown, type Block, type Inline } from "../../engines/manual/markdown";
+import { matchRanges, matchRegex } from "../../engines/manual/search";
+import { highlight } from "../../ui";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useFillBase } from "../palette/fillData";
 import { ManualCommand, type FillBase } from "./ManualCommand";
@@ -21,12 +23,17 @@ interface Ctx {
   note: ManualNote;
   notes: ManualNote[];
   cards: CardMeta[];
+  /** The search the note was opened from: its matches are marked. */
+  re: RegExp | null;
 }
+
+/** Plain text with the search's matches marked. */
+const marked = (text: string, re: RegExp | null): ReactNode => (re ? highlight(text, 0, matchRanges(text, re)) : text);
 
 function InlineView({ parts, ctx }: { parts: Inline[]; ctx: Ctx }): ReactNode {
   return parts.map((p, i) => {
-    if ("text" in p) return p.text;
-    if ("code" in p) return <code key={i} className="font-mono text-code text-fg [overflow-wrap:anywhere]">{p.code}</code>;
+    if ("text" in p) return <Fragment key={i}>{marked(p.text, ctx.re)}</Fragment>;
+    if ("code" in p) return <code key={i} className="font-mono text-code text-fg [overflow-wrap:anywhere]">{marked(p.code, ctx.re)}</code>;
     if ("strong" in p) return <strong key={i} className="font-semibold text-fg"><InlineView parts={p.strong} ctx={ctx} /></strong>;
     if ("em" in p) return <em key={i}><InlineView parts={p.em} ctx={ctx} /></em>;
     const { target, heading, label } = p.link;
@@ -114,7 +121,7 @@ function BlockView({ block, n, ctx, base }: { block: Block; n: number; ctx: Ctx;
       return (
         <ManualCommand
           command={command} label={block.title ?? firstLine(block.text)} caption={block.title}
-          fill={!output && PLACEHOLDER.test(block.text)} output={output} base={base}
+          fill={!output && PLACEHOLDER.test(block.text)} output={output} base={base} highlight={ctx.re}
         />
       );
     }
@@ -126,12 +133,13 @@ function BlockView({ block, n, ctx, base }: { block: Block; n: number; ctx: Ctx;
  * note opens in the Manual at its heading, a card opens in the Arsenal drawer, anything else is muted text), and its
  * code blocks as commands filled for the host in view. `query` is the search the note was opened from.
  */
-export function NoteView({ note, notes, cards, hostId, engagementId }: {
+export function NoteView({ note, notes, cards, hostId, engagementId, query }: {
   note: ManualNote; notes: ManualNote[]; cards: CardMeta[]; hostId: string | null; engagementId: string; query?: string;
 }) {
   const blocks = useMemo(() => parseMarkdown(note.body), [note.body]);
   const base = useFillBase(engagementId, hostId);
-  const ctx: Ctx = { note, notes, cards };
+  const re = useMemo(() => (query ? matchRegex(query) : null), [query]);
+  const ctx: Ctx = { note, notes, cards, re };
   let code = 0;
   return (
     <article aria-label={note.title} className="grid grid-cols-[minmax(0,1fr)] content-start gap-3">

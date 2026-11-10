@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { useLocation, useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import type { ManualNote } from "../../engines/manual";
 import { getCards, useLibraryVersion } from "../../engines/library/store";
 import { isFreeKey, isTypingTarget, useKeydown } from "../../lib/keys";
@@ -8,6 +8,7 @@ import { HostChip, isHostPickKey, type HostChipHandle } from "../arsenal/HostChi
 import { useFillScope, useLastEngagementStore } from "../arsenal/useFillScope";
 import { useFillBase } from "../palette/fillData";
 import { MANUAL_NOTE_ID, manualKeysBlocked } from "./keys";
+import { MANUAL_QUERY } from "./searchPath";
 import { ManualOutline } from "./ManualOutline";
 import { ManualRail } from "./ManualRail";
 import { NoteView } from "./NoteView";
@@ -33,6 +34,13 @@ const HINTS: Hint[] = [
 
 /** Without notes only Esc applies. */
 const HINTS_EMPTY: Hint[] = HINTS.slice(-1);
+
+/** With a match bar: ⌥↓ ⌥↑ step through the matches and the first Esc clears the bar. */
+const HINTS_SEARCH: Hint[] = [
+  { keys: "⌥↓ ⌥↑", label: "next / previous match", priority: 1 },
+  ...HINTS.slice(0, -1),
+  { keys: "Esc", label: "clear search", priority: 1 },
+];
 
 const EMPTY_TITLE: Record<Exclude<ManualStatus, "loading" | "ready">, string> = {
   "never-imported": "Import your Field Manual to fill the Manual",
@@ -64,6 +72,44 @@ function sectionAt(pane: HTMLElement, ids: string[]): number {
   return at;
 }
 
+/**
+ * Marks the `at`-th match current (`data-current` on each of its pieces) and returns the match count and its first
+ * piece. Matches are counted by their `start` pieces, in document order.
+ */
+function markCurrent(pane: HTMLElement, at: number): { count: number; el: HTMLElement | null } {
+  let n = -1;
+  let el: HTMLElement | null = null;
+  for (const m of pane.querySelectorAll<HTMLElement>("mark[data-match]")) {
+    if (m.dataset.match === "start") n++;
+    const on = n === at;
+    if (on && !el) el = m;
+    if (on) m.setAttribute("data-current", "");
+    else m.removeAttribute("data-current");
+  }
+  return { count: n + 1, el };
+}
+
+/** The first match after `anchor`'s element in document order (0 without one, or with none after it). */
+function firstAfter(pane: HTMLElement, anchor: string): number {
+  const el = anchor ? pane.querySelector(`[id="${CSS.escape(anchor)}"]`) : null;
+  if (!el) return 0;
+  const starts = [...pane.querySelectorAll("mark[data-match=start]")];
+  const i = starts.findIndex((m) => el.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_FOLLOWING);
+  return Math.max(0, i);
+}
+
+function MatchBar({ query, at, count }: { query: string; at: number; count: number }) {
+  return (
+    <div
+      role="status" aria-label="Search in this note"
+      className="grid min-h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-line px-8 py-2 text-meta"
+    >
+      <span className="truncate"><span className="text-muted">Search </span><span className="font-mono text-code text-fg">{query}</span></span>
+      <span className={count === 0 ? "text-warn" : "text-fg-2"}>{count === 0 ? "No match in this note" : `match ${at + 1} of ${count}`}</span>
+    </div>
+  );
+}
+
 function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undefined }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -76,6 +122,9 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
   const cards = getCards();
 
   const paneRef = useRef<HTMLElement>(null);
+  // The match bar: `?q=` marks every match in the note; the current one starts in the hash's section.
+  const [params] = useSearchParams();
+  const query = params.get(MANUAL_QUERY)?.trim() ?? "";
   const filterRef = useRef<HTMLInputElement>(null);
   const [filter, setFilter] = useState("");
   const [current, setCurrent] = useState(-1);
@@ -155,6 +204,38 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
 
   const ids = useMemo(() => note?.outline.map((o) => o.id) ?? [], [note]);
 
+  const [match, setMatch] = useState({ at: 0, count: 0 });
+  const matchAt = useRef(0);
+  const showMatch = (at: number, scroll: boolean) => {
+    const pane = paneRef.current;
+    if (!pane) return;
+    matchAt.current = at;
+    const { count, el } = markCurrent(pane, at);
+    setMatch({ at, count });
+    if (scroll) el?.scrollIntoView?.({ block: "center" });
+  };
+  // After the hash's scroll above: a search lands on its match, not the section top.
+  useLayoutEffect(() => {
+    const pane = paneRef.current;
+    if (!note || !pane || !query) return;
+    showMatch(firstAfter(pane, decodeURIComponent(location.hash.slice(1))), true);
+  }, [note?.id, query, location.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Exam lines and filled text arrive late and move the note: bring the current match back into view once.
+  useLayoutEffect(() => {
+    if (base.examReady && query) showMatch(matchAt.current, true);
+  }, [base.examReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Fill data and exam lines re-render the note's text: keep the current match marked (and the count right).
+  useEffect(() => {
+    const pane = paneRef.current;
+    if (!note || !pane || !query) return;
+    const obs = new MutationObserver(() => {
+      const { count } = markCurrent(pane, matchAt.current);
+      setMatch((m) => (m.count === count ? m : { at: matchAt.current, count }));
+    });
+    obs.observe(pane, { childList: true, subtree: true, characterData: true });
+    return () => obs.disconnect();
+  }, [note, query]);
+
   const onScroll = () => {
     const pane = paneRef.current;
     if (!pane || !shown.current) return;
@@ -202,6 +283,13 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
       void navigate(manualPath(prev.noteId), { replace: true });
       return;
     }
+    if (query && e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && (e.code === "ArrowDown" || e.code === "ArrowUp")) {
+      if (isTypingTarget(e.target)) return;
+      e.preventDefault();
+      if (match.count === 0) return;
+      showMatch((match.at + (e.code === "ArrowDown" ? 1 : -1) + match.count) % match.count, true);
+      return;
+    }
     if (engagementId && isHostPickKey(e) && !isTypingTarget(e.target)) {
       e.preventDefault();
       hostRef.current?.open();
@@ -224,7 +312,7 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
   return (
     <div className="grid min-h-0 grid-cols-[260px_minmax(0,1fr)] min-[1100px]:grid-cols-[260px_minmax(0,1fr)_220px]">
       <ManualRail notes={notes} currentId={note?.id ?? null} filter={filter} onFilter={setFilter} filterRef={filterRef} onOpen={open} />
-      <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+      <div className={`grid min-h-0 ${query ? "grid-rows-[auto_auto_minmax(0,1fr)]" : "grid-rows-[auto_minmax(0,1fr)]"}`}>
         {/* What the note's commands fill for, and where ⌘↵ logs: kept above the scroll so it never moves. */}
         <div className="grid min-h-12 grid-cols-[minmax(10rem,max-content)_minmax(0,1fr)] items-center gap-3 border-b border-line px-8 py-2 text-meta">
           {engagementId ? (
@@ -238,6 +326,7 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
             !scopePending && <span className="col-span-2 text-muted">No active engagement</span>
           )}
         </div>
+        {query && note && <MatchBar query={query} at={match.at} count={match.count} />}
         <section
           id={MANUAL_NOTE_ID} ref={paneRef} aria-label="Note" tabIndex={-1} onScroll={onScroll}
           className="grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden px-8 py-4 outline-none [--pane-bg:var(--bg)] focus-visible:shadow-[inset_0_0_0_2px_var(--accent)]"
@@ -252,7 +341,7 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
                 </div>
               )}
               <div onClickCapture={onClickCapture} className="grid min-w-0">
-                <NoteView key={note.id} note={note} notes={notes} cards={cards} hostId={hostId} engagementId={engagementId} />
+                <NoteView key={note.id} note={note} notes={notes} cards={cards} hostId={hostId} engagementId={engagementId} query={query} />
               </div>
             </>
           )}
@@ -277,6 +366,8 @@ export function ManualPage() {
   const location = useLocation();
   // Fixed at entry: moves inside the Manual replace its one history entry, so going back always leaves it.
   const [firstEntry] = useState(() => location.key === "default");
+  const [params] = useSearchParams();
+  const searching = !!params.get(MANUAL_QUERY)?.trim();
 
   useKeydown((e) => {
     if (e.key !== "Escape" || e.defaultPrevented || manualKeysBlocked()) return;
@@ -285,7 +376,9 @@ export function ManualPage() {
       return;
     }
     e.preventDefault();
-    void (firstEntry ? navigate("/") : navigate(-1));
+    // The first Esc clears the match bar (the note stays where it is), the next leaves.
+    if (searching) void navigate({ pathname: location.pathname }, { replace: true });
+    else void (firstEntry ? navigate("/") : navigate(-1));
   });
 
   let body = null;
@@ -295,7 +388,7 @@ export function ManualPage() {
     <main aria-label="Manual" data-hint-surface="" className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto]">
       {body ?? <div />}
       <footer className="grid border-t border-line px-6 py-2">
-        <HintLine hints={status === "ready" ? HINTS : HINTS_EMPTY} ariaLabel="Manual shortcuts" />
+        <HintLine hints={status !== "ready" ? HINTS_EMPTY : searching ? HINTS_SEARCH : HINTS} ariaLabel="Manual shortcuts" />
       </footer>
     </main>
   );

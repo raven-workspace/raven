@@ -27,7 +27,7 @@ const noop = () => {};
  * In an exam sim (or until the engagement's rules are known) the text is never hidden: a banned command says so in
  * amber and its first copy is held back, and a Meterpreter command shows the Metasploit lock line.
  */
-export function ManualCommand({ command, label, caption, fill, output = false, base }: {
+export function ManualCommand({ command, label, caption, fill, output = false, base, highlight }: {
   command: LibraryCommand;
   /** Names the block and its Copy button for screen readers. */
   label: string;
@@ -37,6 +37,8 @@ export function ManualCommand({ command, label, caption, fill, output = false, b
   /** Output to read (a `text`/`output`/`console` fence): Copy only, no log and no exam rule. */
   output?: boolean;
   base: FillBase;
+  /** The note's search: its matches are marked in the shown text. */
+  highlight?: RegExp | null;
 }) {
   const { d, host, makeInput, examReady } = base;
   const qc = useQueryClient();
@@ -109,6 +111,7 @@ export function ManualCommand({ command, label, caption, fill, output = false, b
         text={cmd.text}
         {...(cmd.copyText !== undefined ? { copyText: cmd.copyText } : {})}
         tokens={cmd.tokens ?? []}
+        highlight={highlight ?? null}
         name={label}
         copyLabel={`Copy command: ${label}`}
         onCopyAction={(button) =>

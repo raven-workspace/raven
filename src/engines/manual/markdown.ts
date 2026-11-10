@@ -22,7 +22,7 @@ export type Block =
 
 const DEEP_HEADING = /^(#{4,6})\s+(.*?)\s*#*\s*$/;
 const LIST_ITEM = /^\s*([-*+]|\d+[.)])\s+(.*)$/;
-const TABLE_SEPARATOR = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+export const TABLE_SEPARATOR = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
 const RULE = /^\s*([-*_])(\s*\1){2,}\s*$/;
 const QUOTE = /^\s*>\s?/;
 
@@ -33,7 +33,7 @@ const startsBlock = (line: string): boolean =>
 const isTableRow = (line: string) => line.trim().startsWith("|");
 
 /** Cells of a pipe-table row: split on unescaped pipes; `\|` is a literal pipe. */
-function cells(line: string): string[] {
+export function cells(line: string): string[] {
   let s = line.trim();
   if (s.startsWith("|")) s = s.slice(1);
   if (s.endsWith("|") && !s.endsWith("\\|")) s = s.slice(0, -1);

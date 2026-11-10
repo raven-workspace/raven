@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { fillCommand } from "../../engines/checklist";
 import { credLabel } from "../../engines/credentials/labels";
 import { getCards, getLibrary, getToolkit, useLibraryVersion } from "../../engines/library/store";
@@ -25,6 +25,8 @@ import { useFillBase } from "./fillData";
 import { GENERATORS } from "./generators";
 import type { GeneratorId } from "../../engines/payloads/types";
 import { usePayloadsStore } from "../payloads/usePayloadsStore";
+import { useManualNotes } from "../manual/useManualNotes";
+import { manualSearchPath } from "../manual/searchPath";
 import { capGroups, searchPalette, withoutSecrets, type EngagementItem, type PaletteResult } from "./search";
 import { usePaletteStore } from "./usePaletteStore";
 import type { SuggestContext } from "./suggest";
@@ -34,13 +36,17 @@ const MAX_RESULTS = 30;
 type PaletteRow = ResultRow & { result: PaletteResult };
 const paletteRow = (result: PaletteResult): PaletteRow => ({
   result, id: `palette-${result.type}-${result.id}`, title: result.title,
-  tag: result.type === "command" ? result.command.tool : result.type === "item" ? result.item.kind : result.type === "more" ? "" : result.type,
+  tag: result.type === "command" ? result.command.tool : result.type === "item" ? result.item.kind : result.type === "more" ? "" : result.type === "manual" ? result.line : result.type,
   mono: result.type === "command",
+  // A Manual hit's matching line goes under its title, so the title stays whole.
+  stack: result.type === "manual",
 });
 
 function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }: { engagementId: string; hostId: string | null; remembered: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { notes } = useManualNotes();
   const libraryVersion = useLibraryVersion();
   // The chip picks another host for this search only; typed values never carry over to it.
   const [hostId, setHostId] = useState(openedHostId);
@@ -76,15 +82,16 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const found = useMemo(
     () =>
       searchPalette(query, {
-        library: getLibrary(), cards: getCards(), generators: GENERATORS, engagementItems: items,
+        library: getLibrary(), cards: getCards(), generators: GENERATORS, engagementItems: items, notes,
         ...(d.engagement ? { exam: { kind: d.engagement.kind, hostId: host?.id ?? "", msfHostId: d.engagement.msfHostId } } : {}),
         examPending: !examReady,
       }),
     // getLibrary()/getCards() change only with the library version.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [query, items, host, d.engagement, examReady, libraryVersion],
+    [query, items, notes, host, d.engagement, examReady, libraryVersion],
   );
-  // Arsenal categories first (the drawer's rows), then one group for the engagement. Each list stops at MAX_RESULTS.
+  // Arsenal categories first (the drawer's rows), then one group for the engagement, then the Manual. Each list stops
+  // at MAX_RESULTS.
   const rowGroups = useMemo<ResultGroup<PaletteRow>[]>(() => {
     const out: ResultGroup<PaletteRow>[] = capGroups(found.groups, MAX_RESULTS)
       .map((g) => ({ key: g.category, label: g.label, rows: g.hits.map(paletteRow) }));
@@ -92,6 +99,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     const left = found.groups.reduce((n, g) => n + g.hits.length, 0) - out.reduce((n, g) => n + g.rows.length, 0);
     if (left > 0) out.push({ key: "more", rows: [paletteRow({ type: "more", id: "more", count: left, title: `${left} more, open in the Arsenal` })] });
     if (found.items.length > 0) out.push({ key: "engagement", label: "This engagement", rows: found.items.slice(0, MAX_RESULTS).map(paletteRow) });
+    if (found.manual.length > 0) out.push({ key: "manual", label: "Manual", rows: found.manual.map(paletteRow) });
     return out;
   }, [found]);
   const results = useMemo(() => rowGroups.flatMap((g) => g.rows.map((r) => r.result)), [rowGroups]);
@@ -129,6 +137,12 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     setStatus(undefined);
     if (current?.type === "item") {
       void navigate(current.item.kind === "host" ? `/e/${engagementId}/h/${current.item.id}` : `/e/${engagementId}/s/${current.item.kind === "credential" ? "credentials" : "log"}`);
+      onClose();
+      return;
+    }
+    if (current?.type === "manual") {
+      // Inside the Manual a move replaces its one history entry, so Esc still leaves the Manual.
+      void navigate(manualSearchPath(current.noteId, query, current.anchor), { replace: location.pathname.startsWith("/manual") });
       onClose();
       return;
     }
@@ -185,7 +199,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
       // The dialog's focus trap would otherwise see Tab leave its last field and loop back to the top.
       e.stopPropagation();
       firstUnfilled()?.focus();
-    } else if (e.key === "ArrowRight" && e.currentTarget.selectionStart === e.currentTarget.value.length && current?.type !== "item" && current?.type !== "more") {
+    } else if (e.key === "ArrowRight" && e.currentTarget.selectionStart === e.currentTarget.value.length && current?.type !== "item" && current?.type !== "more" && current?.type !== "manual") {
       // Goes in: a card opens in the Arsenal drawer, a command at its block, or alone when it has no card. Never a no-op.
       if (!current) return;
       e.preventDefault();
@@ -228,14 +242,14 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   const hasUnfilled = filled?.tokens.some((n) => filled.auto[n]?.unresolved && !overrides[n]) ?? false;
   const hints = useMemo<Hint[]>(
     () => [
-      { keys: "↵", label: "copy", priority: 1 },
+      { keys: "↵", label: current?.type === "manual" ? "open note" : "copy", priority: 1 },
       { keys: "⌘↵", label: host ? "copy and log" : "log (no host)", priority: 2 },
       ...(engagementId ? [{ keys: "⌥H", label: "host", priority: 3 }, { keys: "⌥C", label: "credential", priority: 3 }] : []),
       { keys: "→", label: "in card", priority: 4 },
       // ⇥ jumps only to a value still missing; with every value filled Tab moves on to the host picker, so no hint.
       ...(hasUnfilled ? [{ keys: "⇥", label: "edit a value", priority: 5 }] : []),
     ],
-    [engagementId, host, hasUnfilled],
+    [engagementId, host, hasUnfilled, current?.type],
   );
   return (
     <div data-hint-surface="" className="grid gap-3" onKeyDown={onKey} onKeyDownCapture={onKeyCapture}>
@@ -247,7 +261,7 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
           aria-expanded="true"
           aria-controls="palette-results"
           aria-activedescendant={current ? `palette-${current.type}-${current.id}` : undefined}
-          placeholder="Search commands, cards, this engagement"
+          placeholder="Search commands, cards, this engagement, the Manual"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -278,6 +292,9 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
             searchRef.current?.focus();
           }}
         />
+        {results.length > 0 && found.manual.length === 0 && notes.length > 0 && query.trim().length > 0 && (
+          <p className="m-0 border-t border-line px-2 pt-2 text-meta text-muted">No match in the Manual</p>
+        )}
       </div>
       {filled && (
         <CommandPreview
