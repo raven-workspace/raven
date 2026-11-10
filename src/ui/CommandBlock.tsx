@@ -33,6 +33,8 @@ export interface CommandBlockProps {
   wrap?: boolean;
   /** The Copy button's tab index; `-1` takes it out of the Tab order when the block around it is the one stop. */
   copyTabIndex?: number;
+  /** Squares the bottom corners so the command's output can join the box from below (a logged step). */
+  attached?: boolean;
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -46,7 +48,7 @@ function marks(token: string, re: RegExp | null): { text: string; warn: boolean 
     .filter((m) => m.text !== "");
 }
 
-export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, copyText, copyLabel, onCopyAction, highlight, wrap = true, copyTabIndex }: CommandBlockProps) {
+export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, copyText, copyLabel, onCopyAction, highlight, wrap = true, copyTabIndex, attached }: CommandBlockProps) {
   const token = wrap ? "inline-block max-w-full [overflow-wrap:anywhere]" : "inline-block";
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -66,7 +68,7 @@ export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, 
   return (
     <div className="grid gap-1">
       {label && <span className="text-meta text-muted-2">{label}</span>}
-      <div className="grid grid-cols-[minmax(0,1fr)_28px] items-start gap-2 rounded-sm border border-line bg-surface px-2 py-2">
+      <div className={`grid grid-cols-[minmax(0,1fr)_28px] items-start gap-2 rounded-sm border border-line bg-surface px-2 py-2${attached ? " rounded-b-none" : ""}`}>
         <pre
           className={wrap ? "m-0 min-w-0 overflow-x-hidden font-mono text-code whitespace-pre-wrap text-fg-2" : "m-0 min-w-0 overflow-x-auto overflow-y-hidden pr-6 pb-3 font-mono text-code whitespace-pre text-fg-2 [mask-image:linear-gradient(to_right,#000_calc(100%-24px),transparent)]"}
           {...(name ? { role: "group", "aria-label": `Command: ${name}` } : {})}

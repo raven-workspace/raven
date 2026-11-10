@@ -319,6 +319,19 @@ const examLog: LogEntry[] = [
   note("Exam started", "Timebox running. Metasploit reserved for ms01 only.", [], { engagementId: "e-exam", at: ago(3 * HOUR) }),
   cmd("Initial scan", "nmap -p- -sV 10.10.30.0/24", "Nmap done: 256 IP addresses (5 hosts up)", ["h-exam-ms01"], { engagementId: "e-exam", at: ago(2.5 * HOUR) }),
   cmd("Web enumeration", "gobuster dir -u http://10.10.30.20 -w common.txt", "/admin (Status: 301)", ["h-exam-web"], { engagementId: "e-exam", at: ago(2 * HOUR) }),
+  // Several commands in one step: each command must read as one unit with its own output.
+  entry({
+    kind: "command", title: "Admin check, proof and identity on ms01", hostIds: ["h-exam-ms01"], engagementId: "e-exam", at: ago(1.5 * HOUR),
+    observations: "Root proof captured.",
+    content: {
+      kind: "command",
+      blocks: [
+        { command: 'whoami /groups | findstr /i "High"', output: "Mandatory Label\\High Mandatory Level    Label    S-1-16-12288" },
+        { command: "type C:\\Users\\Administrator\\Desktop\\proof.txt", output: "0123456789abcdef0123456789abcdef" },
+        { command: "whoami; hostname; ipconfig", output: "exam\\administrator\nMS01\n\nWindows IP Configuration\n\nEthernet adapter Ethernet0:\n\n   IPv4 Address. . . . . . . . . . . : 10.10.30.5\n   Subnet Mask . . . . . . . . . . . : 255.255.255.0\n   Default Gateway . . . . . . . . . : 10.10.30.254" },
+      ],
+    },
+  }),
 ].map((e, i) => ({ ...e, id: `l-exam-${i + 1}` }));
 
 // The IIS host: a ?cmd= web shell that answers (so the paste context is "Web shell ?cmd="), then an nc.exe payload
