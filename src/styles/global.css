@@ -28,6 +28,12 @@
     height: 100%;
   }
 
+  /* Desktop app: the window itself never scrolls; every screen scrolls inside its own pane. */
+  html,
+  body {
+    overflow: hidden;
+  }
+
   body {
     margin: 0;
     background: var(--bg);

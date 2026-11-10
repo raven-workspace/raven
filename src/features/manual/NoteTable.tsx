@@ -56,7 +56,7 @@ export function NoteTable({ head, rows, anchor, cell }: { head: Inline[][]; rows
   const colClass = (j: number) => (kind[j] === "action" ? " min-w-[32ch]" : kind[j] === "cause" ? " group-data-[dropped=low]/nt:hidden!" : "");
   const colAttr = (j: number) => (kind[j] === "cause" ? { "data-col": "low" } : {});
   return (
-    <div ref={wrapRef} className="grid min-w-0">
+    <div ref={wrapRef} className="relative grid min-w-0">
       <table ref={tableRef} role="table" data-table={anchor} className="group/nt w-full border-collapse text-body/5.5 data-stacked:grid">
         <thead role="rowgroup" className="group-data-stacked/nt:hidden">
           <tr role="row">
@@ -80,7 +80,7 @@ export function NoteTable({ head, rows, anchor, cell }: { head: Inline[][]; rows
                 return (
                   <td key={j} role="cell" {...colAttr(j)} className={base + colClass(j)}>
                     {/* Its column name: shown (and read) only when stacked, as the table header is then hidden. A key cell is the row's heading line instead: the name stays for screen readers only. */}
-                    <span data-column-label="" className={key ? "sr-only" : "hidden text-muted group-data-stacked/nt:block"}>{labels[j] ?? ""}</span>
+                    <span data-column-label="" className={key ? "hidden group-data-stacked/nt:block group-data-stacked/nt:sr-only" : "hidden text-muted group-data-stacked/nt:block"}>{labels[j] ?? ""}</span>
                     {/* One grid item when stacked: text, code and links stay in one flow. */}
                     <span className={key ? "min-w-0 group-data-stacked/nt:col-span-2 group-data-stacked/nt:text-body group-data-stacked/nt:font-semibold group-data-stacked/nt:text-fg" : "min-w-0"}>{cell(c, i)}</span>
                   </td>

@@ -439,7 +439,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
         <section
           id={MANUAL_NOTE_ID} ref={paneRef} aria-label="Note" tabIndex={-1} onScroll={onScroll}
           onFocus={() => setPaneFocused(true)} onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setPaneFocused(false)}
-          className="grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden px-8 py-4 outline-none [--pane-bg:var(--bg)]"
+          className="relative grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden px-8 py-4 outline-none [--pane-bg:var(--bg)]"
         >
           {note && (
             <>
@@ -459,7 +459,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
           )}
         </section>
       </div>
-      <aside aria-label="Outline" className="hidden min-h-0 content-start overflow-y-auto overflow-x-hidden border-l border-line px-3 pb-4 min-[1100px]:grid">
+      <aside aria-label="Outline" className="relative hidden min-h-0 content-start overflow-y-auto overflow-x-hidden border-l border-line px-3 pb-4 min-[1100px]:grid">
         {/* Sticky, so the label never scrolls away while the aside follows a long outline. */}
         <h2 data-outline-head="" className={`${labelClass} sticky top-0 z-10 m-0 bg-bg px-3 pt-4 pb-2`}>On this page</h2>
         {note && (

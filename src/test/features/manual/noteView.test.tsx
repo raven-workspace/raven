@@ -433,8 +433,10 @@ describe("NoteView tables", () => {
     expect(container.querySelector("table")).toHaveAttribute("data-stacked");
     const key = cellsOf(container)[0];
     const label = key.querySelector("[data-column-label]")!;
-    expect(label).toHaveClass("sr-only");
-    expect(label).not.toHaveClass("group-data-stacked/nt:block");
+    // Never a bare `sr-only` (position:absolute escapes the note's scroller and stretches the document): display:none as a
+    // table (the th names the column), screen-reader-only only while stacked.
+    expect(label).toHaveClass("hidden", "group-data-stacked/nt:block", "group-data-stacked/nt:sr-only");
+    expect(label.classList.contains("sr-only")).toBe(false);
     const value = key.querySelector("span:not([data-column-label])")!;
     expect(value).toHaveClass("group-data-stacked/nt:font-semibold", "group-data-stacked/nt:text-fg");
     expect(key).toHaveClass("group-data-stacked/nt:col-span-2");

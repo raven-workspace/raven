@@ -57,7 +57,7 @@ export function ManualRail({ notes, currentId, filter, onFilter, filterRef, onOp
         id={MANUAL_FILTER_ID} ref={filterRef} type="search" aria-label="Filter the Manual" placeholder="Filter the Manual"
         value={filter} onChange={(e) => onFilter(e.target.value)} onKeyDown={onFilterKey}
       />
-      <div ref={listRef} onKeyDown={onListKey} className="grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden">
+      <div ref={listRef} onKeyDown={onListKey} className="relative grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden">
         {shown.length === 0 && <p className="m-0 px-2 text-meta text-muted">No note matches</p>}
         {MANUAL_GROUPS.map(({ folder, label }) => {
           const group = shown.filter((n) => n.folder === folder);
