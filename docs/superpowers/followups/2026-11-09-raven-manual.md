@@ -32,8 +32,5 @@ None of these appear in the synthetic fixtures. Check each against the real vaul
 
 ## Tables
 
-- A stacked table (too narrow for its codes) keeps its `<table>` elements but is laid out as a grid, so screen readers may
-  no longer announce it as a table. Each value still carries its column name visually (`data-label`). Add explicit
-  `role="table"`/`row`/`cell` if this matters.
 - Stacking is decided by the widest unbreakable value. A table whose widest code is only a little too wide stacks every
   row. Dropping low-priority columns first is the DESIGN.md alternative, but notes don't declare column priorities.

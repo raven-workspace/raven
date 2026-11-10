@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -9,6 +9,7 @@ import type { CardMeta } from "../../../engines/library/store";
 import { parseNote, type ManualNote } from "../../../engines/manual";
 import { useArsenalStore } from "../../../features/arsenal/useArsenalStore";
 import { logCommand } from "../../../features/capture/logCommand";
+import { NoteTable } from "../../../features/manual/NoteTable";
 import { NoteView } from "../../../features/manual/NoteView";
 import { api } from "../../../lib/api";
 import { makeQueryClient } from "../../../lib/queryClient";
@@ -230,12 +231,45 @@ describe("NoteView tables", () => {
     });
   }
 
-  it("a table wider than the pane stacks, each cell carrying its column name", () => {
+  it("a table wider than the pane stacks and stays a table to screen readers, each cell named with its column", () => {
     widths(900, 600);
     const { container } = mount();
     const table = container.querySelector("table")!;
     expect(table).toHaveAttribute("data-stacked");
-    expect([...table.querySelectorAll("tbody td")].map((td) => td.getAttribute("data-label"))).toEqual(["A", "B"]);
+    const t = within(screen.getAllByRole("table")[0]);
+    expect(t.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["A", "B"]);
+    const cells = t.getAllByRole("cell");
+    expect(cells).toHaveLength(2);
+    // The column name comes first (a block of its own when stacked, so read apart from the value).
+    expect(cells[0]).toHaveAccessibleName(/^A\s*x$/);
+    expect(cells[1]).toHaveAccessibleName(/^B\s*y$/);
+  });
+
+  it("new content while stacked is measured afresh: widened, it unstacks", () => {
+    const fits: (() => void)[] = [];
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(cb: () => void) { fits.push(cb); }
+      observe() {}
+      disconnect() {}
+    });
+    let room = 600;
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (this: HTMLElement) {
+      return this.tagName === "TABLE" ? 900 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+      return this.tagName === "DIV" ? room : 0;
+    });
+    const head = [[{ text: "A" }], [{ text: "B" }]];
+    const cell = (parts: { text: string }[]) => parts.map((p) => p.text).join("");
+    const { container, rerender } = render(<NoteTable head={head} rows={[[[{ text: "x" }], [{ text: "y" }]]]} cell={cell as never} />);
+    const table = container.querySelector("table")!;
+    expect(table).toHaveAttribute("data-stacked");
+    rerender(<NoteTable head={head} rows={[[[{ text: "z" }], [{ text: "w" }]]]} cell={cell as never} />);
+    expect(table).toHaveAttribute("data-stacked");
+    room = 1000;
+    act(() => fits.at(-1)!());
+    expect(table).not.toHaveAttribute("data-stacked");
+    vi.unstubAllGlobals();
   });
 
   it("a table that fits stays a table", () => {

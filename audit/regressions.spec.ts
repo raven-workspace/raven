@@ -974,12 +974,15 @@ test("payloads: the Other… port field opens under the Port chip and keeps the 
 // The Manual's five-column table: as a table its auto layout squeezed the code columns until every status code broke
 // mid-token. Now a table that can't fit its codes stacks each row as name/value lines; one that can stays a table.
 test("Manual: a wide table stacks when its codes don't fit, stays a table when they do, and no code breaks", async ({ page }) => {
-  for (const [width, stacked] of [[900, true], [1024, true], [1440, false]] as const) {
+  for (const [width, stacked] of [[900, true], [1024, true], [1280, true], [1440, false]] as const) {
     await open(page, `/manual/${AUDIT_NOTE_IDS.long}`, width);
     const pane = page.getByRole("region", { name: "Note" });
     const table = pane.locator("[id='table-1'] + div table");
     await table.waitFor();
     expect(await table.getAttribute("data-stacked"), `stacked at ${width}`).toBe(stacked ? "" : null);
+    // Stacked, each value shows its column name; as a table the header row does.
+    await expect(table.getByRole("cell").first().locator("[data-column-label]")).toBeVisible({ visible: stacked });
+    await expect(table.getByRole("columnheader").first()).toBeVisible({ visible: !stacked });
     const [t, p] = await Promise.all([table.boundingBox(), pane.evaluate((el) => {
       const r = el.getBoundingClientRect();
       return { right: r.left + el.clientWidth - parseFloat(getComputedStyle(el).paddingRight) };
