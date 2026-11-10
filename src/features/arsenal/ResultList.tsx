@@ -13,10 +13,12 @@ export interface ResultRow {
   stack?: boolean;
 }
 
-/** A labelled group of rows; without a label the rows are listed plain. */
+/** A labelled group of rows; without a label (or a lead) the rows are listed plain. */
 export interface ResultGroup<R extends ResultRow> {
   key: string;
   label?: string;
+  /** Shown above the rows and names the group: a key in mono and a line under it. Never an option, never focusable. */
+  lead?: { code: string; text: string };
   rows: R[];
 }
 
@@ -52,11 +54,21 @@ export function ResultList<R extends ResultRow>({ id, label, groups, selected, o
   return (
     <div ref={listRef} id={id} role="listbox" aria-label={label} className="grid grid-cols-[minmax(0,1fr)] gap-2 outline-none" {...listProps}>
       {groups.map((g) => {
-        if (g.label === undefined) return g.rows.map(option);
+        if (g.label === undefined && g.lead === undefined) return g.rows.map(option);
         const headingId = `${id}-group-${g.key}`;
         return (
-          <div key={g.key} role="group" aria-labelledby={headingId} className="grid grid-cols-[minmax(0,1fr)] border-t border-line pt-2 first:border-t-0 first:pt-0">
-            <div id={headingId} className={`px-2 pb-1 ${labelClass}`}>{g.label}</div>
+          <div
+            key={g.key} role="group" className="grid grid-cols-[minmax(0,1fr)] border-t border-line pt-2 first:border-t-0 first:pt-0"
+            // A lead names its group by key, then its line ("KRB_AP_ERR_SKEW The clocks…"), so the key is heard first.
+            aria-labelledby={g.lead ? `${headingId}-code${g.lead.text ? ` ${headingId}-text` : ""}` : headingId}
+          >
+            {g.label !== undefined && <div id={g.lead ? undefined : headingId} className={`px-2 pb-1 ${labelClass}`}>{g.label}</div>}
+            {g.lead && (
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-0 px-2 pb-1">
+                <code id={`${headingId}-code`} className="min-w-0 truncate font-mono text-body text-fg">{g.lead.code}</code>
+                {g.lead.text && <span id={`${headingId}-text`} className="min-w-0 text-meta text-muted-2">{g.lead.text}</span>}
+              </div>
+            )}
             {g.rows.map(option)}
           </div>
         );

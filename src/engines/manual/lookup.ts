@@ -2,7 +2,7 @@ import { parseMarkdown, type Inline } from "./markdown";
 import type { ManualNote } from "./types";
 
 /** An inline value's plain text. */
-const plain = (parts: Inline[]): string =>
+export const plain = (parts: Inline[]): string =>
   parts.map((p) => ("text" in p ? p.text : "code" in p ? p.code : "strong" in p ? plain(p.strong) : "em" in p ? plain(p.em) : p.link.label)).join("");
 
 /** A key cell (a flag, an error code, a port, a privilege, a path) up to this many characters keeps to one line. */

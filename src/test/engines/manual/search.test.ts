@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseNote } from "../../../engines/manual";
-import { matchRanges, searchManual } from "../../../engines/manual/search";
+import { matchRanges, searchLookups, searchManual } from "../../../engines/manual/search";
+import { AUDIT_NOTE_SOURCES } from "../../../audit/fixtures";
 
 // Synthetic note text only (RFC 5737 addresses, invented names).
 const ERRORS = parseNote("04-Foundations/Zz-Errors.md", [
@@ -100,5 +101,44 @@ describe("matchRanges", () => {
   it("treats `_` and spaces alike, case-insensitively", () => {
     expect(matchRanges("STATUS_ACCESS_DENIED and access denied", "access denied")).toEqual([[7, 20], [25, 38]]);
     expect(matchRanges("anything", " ")).toEqual([]);
+  });
+});
+
+describe("searchLookups", () => {
+  const LOOKUP = AUDIT_NOTE_SOURCES.flatMap(([p, t]) => (p.includes("Zz-Error-Lookup") ? [parseNote(p, t)!] : []))[0]!;
+  // Key matches rank before means matches, whatever the note order.
+  const ORDERED = parseNote("04-Foundations/Zz-Order.md", [
+    "# Zz Order",
+    "**Table 1 — Zz order**",
+    "| Error | Means | Do this |",
+    "| - | - | - |",
+    "| `ZZ_FIRST` | The zzneedle is in the means. | `zzone {TARGET_IP}` |",
+    "| `ZZ_ZZNEEDLE` | Nothing to see. | `zztwo {TARGET_IP}` |",
+  ].join("\n"))!;
+
+  it("finds a row by its key, `_` and spaces alike", () => {
+    expect(searchLookups("skew", [LOOKUP]).map((r) => r.key)).toEqual(["STATUS_ZZ_SKEW"]);
+    expect(searchLookups("zz skew", [LOOKUP]).map((r) => r.key)).toEqual(["STATUS_ZZ_SKEW"]);
+  });
+
+  it("finds a row by its means", () => {
+    expect(searchLookups("has expired", [LOOKUP]).map((r) => r.key)).toEqual(["STATUS_ZZ_EXPIRED"]);
+  });
+
+  it("lookup row without commands is not a Lookup hit", () => {
+    expect(searchLookups("STATUS_ZZ_LOCKED", [LOOKUP])).toEqual([]);
+  });
+
+  it("at most `max` rows, 2 by default", () => {
+    expect(searchLookups("STATUS_ZZ", [LOOKUP])).toHaveLength(2);
+    expect(searchLookups("STATUS_ZZ", [LOOKUP], 5)).toHaveLength(5);
+  });
+
+  it("key matches come before means matches", () => {
+    expect(searchLookups("zzneedle", [ORDERED]).map((r) => r.key)).toEqual(["ZZ_ZZNEEDLE", "ZZ_FIRST"]);
+  });
+
+  it("an empty query finds nothing", () => {
+    expect(searchLookups("  ", [LOOKUP])).toEqual([]);
   });
 });

@@ -1,5 +1,6 @@
 import { splitWikilinks } from "../library/wikilinks";
 import { FENCE, OUTLINE_HEADING, tableCaption } from "./anchors";
+import { lookupRows, plain, type LookupRow } from "./lookup";
 import { cells, TABLE_SEPARATOR } from "./markdown";
 import type { ManualNote } from "./types";
 
@@ -129,4 +130,24 @@ export function searchManual(query: string, notes: ManualNote[], max = 8): Manua
     else if (body) bodied.push({ noteId: n.id, title: n.title, ...body, inTitle });
   }
   return [...titled, ...bodied].slice(0, max);
+}
+
+/**
+ * ⌘K's Lookup group: lookup-table rows with at least one command whose key or means matches the query. Key matches
+ * come before means matches, each in note order; at most `max`.
+ */
+export function searchLookups(query: string, notes: ManualNote[], max = 2): LookupRow[] {
+  const re = matchRegex(query);
+  if (!re) return [];
+  const keyed: LookupRow[] = [];
+  const meant: LookupRow[] = [];
+  for (const n of notes) {
+    for (const r of lookupRows(n)) {
+      if (r.commands.length === 0) continue;
+      if (matchRanges(r.key, re).length > 0) keyed.push(r);
+      else if (meant.length < max && matchRanges(plain(r.means), re).length > 0) meant.push(r);
+    }
+    if (keyed.length >= max) break;
+  }
+  return [...keyed, ...meant].slice(0, max);
 }
