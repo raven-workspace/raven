@@ -621,7 +621,7 @@ function longNote(): string {
   L.push("The code is in the reply to the session setup. Most tools print the name; some print only the number.", "");
   L.push("```text title:\"Example reply\"", "SMB  192.0.2.44  445  ZZFS01  [-] zz.example.test\\zzuser:Winter2026 STATUS_LOGON_FAILURE", "```", "");
   L.push("## Kerberos", "");
-  L.push("**Table 2 — Kerberos errors**", "");
+  L.push("**Table 2 — Kerberos errors** (zzkerb prints `KDC_ERR_*` codes with a hex value)", "");
   L.push("| Error | Means | Do |", "|---|---|---|");
   for (const r of KERBEROS_ROWS) L.push(`| \`${r[0]}\` | ${r[1]} | ${r[2]} |`);
   L.push("");
