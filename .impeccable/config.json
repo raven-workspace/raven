@@ -56,6 +56,48 @@
         ],
         "createdAt": "2026-11-10T00:34:03.328Z",
         "reason": "Claude: throwaway decision mock; key caps and tags copy Raven's existing Kbd/tag sizes"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/manual-structure.html"
+        ],
+        "createdAt": "2026-11-10T04:05:55.238Z",
+        "reason": "Claude: mock uses DESIGN.md's Instrument Sans and JetBrains Mono; detector misparses the family strings"
+      },
+      {
+        "rule": "overused-font",
+        "value": "instrument sans",
+        "createdAt": "2026-11-10T04:10:57.734Z",
+        "reason": "PRODUCT.md brand commitment pins Instrument Sans as the interface font"
+      },
+      {
+        "rule": "low-contrast",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/manual-structure.html"
+        ],
+        "createdAt": "2026-11-10T04:10:57.753Z",
+        "reason": "Claude: decision mock only; dimmed host page behind palette, house kbd caps, palette result rows mirror the shipped Palette"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/manual-structure.html"
+        ],
+        "createdAt": "2026-11-10T04:10:57.771Z",
+        "reason": "Claude: decision mock only; dimmed host page behind palette, house kbd caps, palette result rows mirror the shipped Palette"
+      },
+      {
+        "rule": "nested-cards",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/manual-structure.html"
+        ],
+        "createdAt": "2026-11-10T04:10:57.790Z",
+        "reason": "Claude: decision mock only; dimmed host page behind palette, house kbd caps, palette result rows mirror the shipped Palette"
       }
     ]
   }

@@ -30,3 +30,20 @@ States: loading (blank pane, hint line only), never imported or imported before 
 Keys: M opens (and on the Manual focuses the note pane), / filters the rail, ↵ copies the focused command, ⌘↵ copies and logs, ⌘[ previous note, [ ] previous and next section, ⌥H host, ⌥↓ ⌥↑ matches, Esc back.
 
 FINISH: audited at 900, 1024, 1280 and 1440 (long note, search landing, tool page with filled commands, card drawer over the note, empty state) with no gate failures; detector clean over src/features/manual.
+
+## Decision 2026-11-09: answer card (from the critique's structural round)
+
+Mock: .impeccable/mocks/decision/manual-structure.html (option A chosen; B lookup rows in ⌘K and C rail-on-/ declined).
+
+- A ⌘K hit (or ⌥↓/⌥↑) landing on a table row pins that row as an answer card between the match bar and the note: key cell in mono, Means as lead, Usually-caused-by muted, Do-this split into filled command rows (leftover prose as short connectors), Card link marked ↗ Arsenal.
+- ↵ copy, ⌘↵ copy and log (title "{table}: {error}", status says logged), ↓↑ between commands, ⌥↓↑ moves the card with the match. Esc order: card, then search, then leave.
+- Prose/heading/code-block matches: no card. Row without commands: card without command rows. Max 3 command rows, then "+ n more".
+- Fixed above the note scroll; source row stays lit in the table (selection style + accent bar).
+- Depends on the inline-command fill (critique P1) shipping first; fixtures get a lookup table with placeholder commands in Do-this cells.
+
+## Decision 2026-11-09 (later): lookup rows in ⌘K as well (option B)
+
+The owner also wants B from manual-structure.html, alongside the answer card.
+- ⌘K gets a "Lookup" group: a table row from a lookup table is a result of its own, showing the key cell in mono, the Means line, and its Do-this commands filled for the palette's host and credential. ↵ copies the selected command, ⌘↵ copies and logs it (title "{table}: {key}"), ⇥ moves to the next command, → opens the note at that row, where the answer card (A) is already showing.
+- Which tables are lookups: detected from their shape, with no vault edits: the first column holds codes (the key-cell test NoteTable already uses) and there is a "Do this" column (header matching /^do( this)?$/i or "What to try next"). Revisit a `lookup: true` frontmatter opt-in only if detection misfires on real notes.
+- The parsing that splits a row into key, means, cause and commands is shared by A and B, and is built after the inline-command fill.
