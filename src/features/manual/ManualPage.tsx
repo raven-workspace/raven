@@ -43,6 +43,9 @@ const HINTS_SEARCH: Hint[] = [
   { keys: "Esc", label: "clear search", priority: 1 },
 ];
 
+/** No engagement or no host: ⌘↵ copies but has nowhere to log, worded as the Arsenal drawer words it. */
+const noHost = (hints: Hint[]): Hint[] => hints.map((h) => (h.keys === "⌘↵" ? { ...h, label: "log (no host)" } : h));
+
 const EMPTY_TITLE: Record<Exclude<ManualStatus, "loading" | "ready" | "error">, string> = {
   "never-imported": "Import your Field Manual to fill the Manual",
   "old-import": "Your last import is from before the Manual: import again to bring the notes in",
@@ -399,6 +402,8 @@ export function ManualPage() {
   const [firstEntry] = useState(() => location.key === "default");
   const [params] = useSearchParams();
   const searching = !!params.get(MANUAL_QUERY)?.trim();
+  const scope = useFillScope();
+  const { host } = useFillBase(scope.engagementId, scope.hostId);
 
   useKeydown((e) => {
     if (e.key !== "Escape" || e.defaultPrevented || manualKeysBlocked()) return;
@@ -411,6 +416,9 @@ export function ManualPage() {
     if (searching) void navigate({ pathname: location.pathname }, { replace: true });
     else void (firstEntry ? navigate("/") : navigate(-1));
   });
+
+  const pageHints = searching ? HINTS_SEARCH : HINTS;
+  const hints = status !== "ready" ? HINTS_EMPTY : scope.engagementId && host ? pageHints : noHost(pageHints);
 
   let body = null;
   if (status === "ready") body = <Reader notes={notes} noteId={noteId} />;
@@ -430,7 +438,7 @@ export function ManualPage() {
     <main aria-label="Manual" data-hint-surface="" className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto]">
       {body ?? <div />}
       <footer className="grid border-t border-line px-6 py-2">
-        <HintLine hints={status !== "ready" ? HINTS_EMPTY : searching ? HINTS_SEARCH : HINTS} ariaLabel="Manual shortcuts" />
+        <HintLine hints={hints} ariaLabel="Manual shortcuts" />
       </footer>
     </main>
   );

@@ -519,9 +519,21 @@ describe("Manual: title bar and focus", () => {
     await waitFor(() => expect(screen.getByRole("heading", { name: "Core Concept" })).toHaveFocus());
   });
 
-  it("the hint line lists ⌘↵ copy and log", async () => {
+  it("the hint line lists ⌘↵ copy and log with a host", async () => {
+    withEngagement();
+    useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
     mount(["/manual"]);
     await openNote("Bb Basics");
-    expect(within(screen.getByRole("group", { name: "Manual shortcuts" })).getByText("copy and log")).toBeInTheDocument();
+    const hints = within(screen.getByRole("group", { name: "Manual shortcuts" }));
+    expect(await hints.findByText("copy and log")).toBeInTheDocument();
+    expect(hints.queryByText("log (no host)")).toBeNull();
+  });
+
+  it("with no engagement the ⌘↵ hint says there is no host to log to", async () => {
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    const hints = within(screen.getByRole("group", { name: "Manual shortcuts" }));
+    expect(hints.getByText("log (no host)")).toBeInTheDocument();
+    expect(hints.queryByText("copy and log")).toBeNull();
   });
 });
