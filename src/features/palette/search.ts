@@ -1,8 +1,11 @@
 import { matches, searchArsenal, wordsOf, type ArsenalGroup, type ArsenalHit } from "../../engines/library/arsenalSearch";
 import type { CardMeta } from "../../engines/library/store";
 import type { LibraryCommand } from "../../engines/library/types";
+import { filterForKind } from "../../engines/checklist/examRules";
+import { classifyExam } from "../../engines/fieldManual/classifyExam";
 import type { ManualNote } from "../../engines/manual";
-import { searchManual } from "../../engines/manual/search";
+import { plain, type LookupRow } from "../../engines/manual/lookup";
+import { searchLookups, searchManual } from "../../engines/manual/search";
 import type { EngagementKind } from "../../types/engagement";
 
 /** Something in the open engagement the palette can jump to. Credential items carry a label only, never a secret. */
@@ -27,8 +30,20 @@ export interface PaletteContext {
   notes?: ManualNote[];
 }
 
+/** A lookup-table row's command as a ⌘K command: `lookup` is where the row sits in the Manual (its table and row). */
+export type LookupHit = Extract<ArsenalHit, { type: "command" }> & { lookup: { noteId: string; anchor: string; row: number } };
+
+/** One lookup-table row in ⌘K: its key and plain means lead the group, its commands are the results. */
+export interface LookupGroup {
+  key: string;
+  code: string;
+  text: string;
+  results: LookupHit[];
+}
+
 export type PaletteResult =
   | ArsenalHit
+  | LookupHit
   | { type: "item"; id: string; title: string; item: EngagementItem }
   /** A Manual note: `line` is its matching line, `anchor` the section it sits in. */
   | { type: "manual"; id: string; title: string; noteId: string; anchor?: string; line: string }
@@ -74,11 +89,47 @@ export function capGroups(groups: ArsenalGroup[], max: number): ArsenalGroup[] {
 /** How many Manual notes ⌘K lists. */
 export const MANUAL_MAX = 8;
 
+/** A lookup row's commands as library commands: they run from Kali and log as "{table}: {key}", as in the note. */
+function lookupCommands(r: LookupRow): LibraryCommand[] {
+  return r.commands.map((code, i) => {
+    const c: LibraryCommand = {
+      id: `lookup:${r.noteId}:${r.anchor}:${r.row}:${i}`, title: `${r.tableName}: ${r.key}`, tool: code.trim().split(/\s+/)[0] ?? "",
+      template: code, os: "any", runFrom: "attacker", goals: [], source: "field-manual",
+    };
+    const exam = classifyExam(code);
+    if (exam) c.exam = exam;
+    return c;
+  });
+}
+
+/** Lookup rows matching the query, their commands under the same exam rules as the Arsenal's (pending rules: none). */
+function lookupGroups(query: string, ctx: PaletteContext): LookupGroup[] {
+  if (ctx.examPending) return [];
+  const out: LookupGroup[] = [];
+  for (const r of searchLookups(query, ctx.notes ?? [])) {
+    let cmds = lookupCommands(r);
+    let msfMarker = new Set<string>();
+    if (ctx.exam) {
+      const f = filterForKind(cmds, ctx.exam.kind, { hostId: ctx.exam.hostId, msfHostId: ctx.exam.msfHostId ?? null });
+      cmds = f.shown;
+      msfMarker = f.msfMarker;
+    }
+    if (cmds.length === 0) continue;
+    out.push({
+      key: `lookup-${r.noteId}-${r.anchor}-${r.row}`, code: r.key, text: plain(r.means).trim(),
+      results: cmds.map((c) => ({ type: "command", id: c.id, title: c.template, command: c, msfMarker: msfMarker.has(c.id), lookup: { noteId: r.noteId, anchor: r.anchor, row: r.row } })),
+    });
+  }
+  return out;
+}
+
 /**
- * Arsenal hits grouped by category, plus matching engagement items (log, notes, credential labels, hosts) and Manual
+ * Lookup-table rows (their commands), Arsenal hits grouped by category, plus matching engagement items (log, notes, credential labels, hosts) and Manual
  * notes (title matches before body matches).
  */
-export function searchPalette(query: string, ctx: PaletteContext): { groups: ArsenalGroup[]; items: PaletteResult[]; manual: PaletteResult[] } {
+export function searchPalette(
+  query: string, ctx: PaletteContext,
+): { lookups: LookupGroup[]; groups: ArsenalGroup[]; items: PaletteResult[]; manual: PaletteResult[] } {
   const groups = searchArsenal(query, ctx);
   const q = wordsOf(query);
   const items = (ctx.engagementItems ?? [])
@@ -88,5 +139,5 @@ export function searchPalette(query: string, ctx: PaletteContext): { groups: Ars
   const manual = searchManual(query, ctx.notes ?? [], MANUAL_MAX).map<PaletteResult>((h) => ({
     type: "manual", id: h.noteId, title: h.title, noteId: h.noteId, line: h.line, ...(h.anchor ? { anchor: h.anchor } : {}),
   }));
-  return { groups, items, manual };
+  return { lookups: lookupGroups(query, ctx), groups, items, manual };
 }

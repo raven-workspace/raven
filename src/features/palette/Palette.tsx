@@ -90,13 +90,16 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [query, items, notes, host, d.engagement, examReady, libraryVersion],
   );
-  // Arsenal categories first (the drawer's rows), then one group for the engagement, then the Manual. Each list stops
-  // at MAX_RESULTS.
+  // Lookup rows first (the answer, its commands ready to fill), then Arsenal categories (the drawer's rows), then one
+  // group for the engagement, then the Manual. Each list stops at MAX_RESULTS; Lookup rows never count against the Arsenal's.
   const rowGroups = useMemo<ResultGroup<PaletteRow>[]>(() => {
-    const out: ResultGroup<PaletteRow>[] = capGroups(found.groups, MAX_RESULTS)
-      .map((g) => ({ key: g.category, label: g.label, rows: g.hits.map(paletteRow) }));
+    const arsenal = capGroups(found.groups, MAX_RESULTS).map((g) => ({ key: g.category, label: g.label, rows: g.hits.map(paletteRow) }));
+    const out: ResultGroup<PaletteRow>[] = [
+      ...found.lookups.map((g) => ({ key: g.key, lead: { code: g.code, text: g.text }, rows: g.results.map(paletteRow) })),
+      ...arsenal,
+    ];
     // The cap only keeps the dialog short: what it left out is one row away in the Arsenal, never silently dropped.
-    const left = found.groups.reduce((n, g) => n + g.hits.length, 0) - out.reduce((n, g) => n + g.rows.length, 0);
+    const left = found.groups.reduce((n, g) => n + g.hits.length, 0) - arsenal.reduce((n, g) => n + g.rows.length, 0);
     if (left > 0) out.push({ key: "more", rows: [paletteRow({ type: "more", id: "more", count: left, title: `${left} more, open in the Arsenal` })] });
     if (found.items.length > 0) out.push({ key: "engagement", label: "This engagement", rows: found.items.slice(0, MAX_RESULTS).map(paletteRow) });
     if (found.manual.length > 0) out.push({ key: "manual", label: "Manual", rows: found.manual.map(paletteRow) });
@@ -201,9 +204,17 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
       e.stopPropagation();
       firstUnfilled()?.focus();
     } else if (e.key === "ArrowRight" && e.currentTarget.selectionStart === e.currentTarget.value.length && current?.type !== "item" && current?.type !== "more" && current?.type !== "manual") {
-      // Goes in: a card opens in the Arsenal drawer, a command at its block, or alone when it has no card. Never a no-op.
+      // Goes in: a card opens in the Arsenal drawer, a command at its block, or alone when it has no card; a lookup
+      // command opens its note at its row (the answer card). Never a no-op.
       if (!current) return;
       e.preventDefault();
+      if (current.type === "command" && "lookup" in current) {
+        // Inside the Manual a move replaces its one history entry, so Esc still leaves the Manual.
+        void navigate(manualSearchPath(current.lookup.noteId, query, current.lookup.anchor, current.lookup.row), { replace: location.pathname.startsWith("/manual") });
+        // The answer card focuses its first command: focus does not go back to where the palette opened.
+        onClose({ handOff: true });
+        return;
+      }
       if (current.type === "generator") {
         void run(false);
         return;
@@ -242,17 +253,18 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
 
   const hasUnfilled = filled?.tokens.some((n) => filled.auto[n]?.unresolved && !overrides[n]) ?? false;
   const onManual = current?.type === "manual";
+  const onLookup = current?.type === "command" && "lookup" in current;
   const hints = useMemo<Hint[]>(
     () => [
       { keys: "↵", label: onManual ? "open note" : "copy", priority: 1 },
       // A Manual row opens its note: nothing to log, no card to go into.
       ...(onManual ? [] : [{ keys: "⌘↵", label: host ? "copy and log" : "log (no host)", priority: 2 }]),
       ...(engagementId ? [{ keys: "⌥H", label: "host", priority: 3 }, { keys: "⌥C", label: "credential", priority: 3 }] : []),
-      ...(onManual ? [] : [{ keys: "→", label: "in card", priority: 4 }]),
+      ...(onManual ? [] : [{ keys: "→", label: onLookup ? "open in Manual" : "in card", priority: 4 }]),
       // ⇥ jumps only to a value still missing; with every value filled Tab moves on to the host picker, so no hint.
       ...(hasUnfilled ? [{ keys: "⇥", label: "edit a value", priority: 5 }] : []),
     ],
-    [engagementId, host, hasUnfilled, onManual],
+    [engagementId, host, hasUnfilled, onManual, onLookup],
   );
   return (
     <div data-hint-surface="" className="grid gap-3" onKeyDown={onKey} onKeyDownCapture={onKeyCapture}>

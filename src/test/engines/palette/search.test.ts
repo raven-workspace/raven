@@ -19,7 +19,7 @@ describe('searchPalette', () => {
     expect(r.groups.flatMap((g) => g.hits).map((h) => h.id)).toEqual(['c1']);
     expect(r.manual).toEqual([
       { type: 'manual', id: titled.id, title: 'Logon Failed Zz', noteId: titled.id, line: '' },
-      { type: 'manual', id: body.id, title: 'Zz Codes', noteId: body.id, anchor: 'status', line: 'ZZ_LOGON_FAILED · wrong password' },
+      { type: 'manual', id: body.id, title: 'Zz Codes', noteId: body.id, anchor: 'status', line: 'ZZ_LOGON_FAILED  wrong password' },
     ]);
     expect(searchPalette('logon failed', ctx([])).manual).toEqual([]);
   });

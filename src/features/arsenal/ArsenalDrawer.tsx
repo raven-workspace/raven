@@ -203,7 +203,9 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
       if (e.key !== "Escape" || e.defaultPrevented || isDialogOpen()) return;
       if (document.activeElement?.getAttribute("aria-expanded") === "true") return;
       e.preventDefault();
-      if (inCategory) {
+      // Opened from the Manual: one Esc is all it takes to get back to the note.
+      if (useArsenalStore.getState().fromManual) useArsenalStore.getState().close();
+      else if (inCategory) {
         setCategory(null);
         setSelected(0);
       } else if (onList) useArsenalStore.getState().close();

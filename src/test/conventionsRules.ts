@@ -198,7 +198,7 @@ const TOKEN_COLORS = new Set([
 /** Per colour prefix, the values that are NOT colours (sizes, widths, alignment, roles, modes). */
 const NON_COLOR: Record<string, RegExp> = {
   text:
-    /^(title|heading|body|code|meta|label|xs|sm|base|lg|\d*xl|left|center|right|justify|start|end|wrap|nowrap|balance|pretty|ellipsis|clip|shadow-.*)$/,
+    /^(title|heading|body|code|meta|label|read|read-title|xs|sm|base|lg|\d*xl|left|center|right|justify|start|end|wrap|nowrap|balance|pretty|ellipsis|clip|shadow-.*)$/,
   border:
     /^(\d+|[xytblrse](-\d+)?|solid|dashed|dotted|double|hidden|none|collapse|separate|spacing-.*)$/,
   outline: /^(\d+|none|dashed|dotted|double|hidden|solid|offset-.*)$/,

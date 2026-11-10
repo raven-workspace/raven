@@ -22,14 +22,14 @@ function setup(value: string | null = "h1") {
       <input aria-label="last" />
     </form>,
   );
-  return { onChange, ref, chip: () => screen.getByRole("button", { name: /Fill for host/ }) };
+  return { onChange, ref, chip: () => screen.getByRole("button", { name: /^(Host |No host)/ }) };
 }
 
 describe("HostChip", () => {
   it("host and credential pickers are tabbable triggers: labelled with the short host name, in the Tab order", async () => {
     const user = userEvent.setup();
     const { chip } = setup();
-    expect(chip()).toHaveAccessibleName("Fill for host: dc01");
+    expect(chip()).toHaveAccessibleName("Host dc01");
     expect(chip()).toHaveAttribute("aria-haspopup", "listbox");
     expect(chip()).not.toHaveAttribute("tabindex", "-1");
     expect(chip()).toHaveTextContent(/^Host\s*dc01/);
@@ -38,6 +38,27 @@ describe("HostChip", () => {
     expect(chip()).toHaveFocus();
     await user.tab();
     expect(screen.getByLabelText("last")).toHaveFocus();
+  });
+
+  it("host chip with no host reads \"No host\" with no Host prefix, and the name starts with the visible text", () => {
+    render(<HostChip hosts={HOSTS} value={null} onChange={vi.fn()} />);
+    const chip = screen.getByRole("button", { name: /^No host/ });
+    expect(chip).toHaveTextContent(/^No host$/);
+    expect(chip).toHaveAccessibleName("No host");
+  });
+
+  it("with a host the accessible name starts with the visible text", () => {
+    setup("h2");
+    const chip = screen.getByRole("button", { name: /^Host web07/ });
+    expect(chip.textContent!.trim().startsWith("Host")).toBe(true);
+    expect(chip.getAttribute("aria-label")!.startsWith("Host web07")).toBe(true);
+  });
+
+  it("the list is at least as wide as the trigger", async () => {
+    const user = userEvent.setup();
+    const { chip } = setup();
+    await user.click(chip());
+    expect(screen.getByRole("listbox").className).toContain("min-w-[max(100%,12rem)]");
   });
 
   it("typing while focus is elsewhere never changes the host", async () => {

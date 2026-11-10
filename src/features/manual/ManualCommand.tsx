@@ -1,23 +1,9 @@
-import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useRef, type KeyboardEvent } from "react";
-import { fillCommand } from "../../engines/checklist";
-import { METERPRETER } from "../../engines/fieldManual/classifyExam";
+import { useRef, type KeyboardEvent } from "react";
 import type { LibraryCommand } from "../../engines/library/types";
-import { msfLockLine } from "../../engines/payloads/msfLock";
-import { copyPlain, copySecret } from "../../lib/clipboard";
-import { shortHostName } from "../../lib/hostName";
-import { reportError } from "../../lib/lockSignal";
 import { CommandBlock } from "../../ui";
-import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
-import { logCommand } from "../capture/logCommand";
-import type { FilledCommand } from "../checklist/CommandList";
-import { fillLibraryCommand } from "../checklist/goalCommands";
-import type { useFillBase } from "../palette/fillData";
+import { BANNED, useNoteCommand, type FillBase } from "./useNoteCommand";
 
-export type FillBase = ReturnType<typeof useFillBase>;
-
-const BANNED = "Not allowed in the exam";
-const noop = () => {};
+export type { FillBase };
 
 /**
  * One code block of a Manual note as a command. With `fill`, its `{PLACEHOLDERS}` fill for the host in view exactly as
@@ -40,50 +26,19 @@ export function ManualCommand({ command, label, caption, fill, output = false, b
   /** The note's search: its matches are marked in the shown text. */
   highlight?: RegExp | null;
 }) {
-  const { d, host, makeInput, examReady } = base;
-  const qc = useQueryClient();
   const root = useRef<HTMLDivElement>(null);
-  const hostName = host ? shortHostName(host.name) : null;
-  const guard = useCopyGuard({ focusToken: noop, focusCred: noop, hostName });
-  const input = useMemo(() => makeInput({}), [makeInput]);
-
-  const cmd: FilledCommand = useMemo(
-    () => (fill ? fillLibraryCommand(command, input, false) : { id: command.id, title: command.title, text: command.template, unresolved: [], msfMarker: false }),
-    [fill, command, input],
-  );
-
-  // Fail closed: until the engagement's kind is known, a copy is held back as in an exam (the lines show once it is known).
-  const exam = !output && (!examReady || d.engagement?.kind === "exam-sim");
-  const known = examReady && d.engagement?.kind === "exam-sim";
-  const banned = exam && command.exam === "banned";
-  const msf = exam && !banned && command.template.split("\n").some((l) => METERPRETER.test(l))
-    ? msfLockLine({
-      exam, def: { meterpreter: true }, hostId: host?.id ?? null, msfHostId: d.engagement?.msfHostId ?? null,
-      hostName: (id) => shortHostName(d.hosts.find((h) => h.id === id)?.name ?? id),
-    })
-    : null;
-  const warn = banned ? { warn: BANNED, warnKey: "exam" } : msf?.breach ? { warn: msf.text, warnKey: "msf" } : undefined;
-
-  const copy = (): Promise<"copied" | "guarded"> => {
-    const text = cmd.copyText ?? cmd.text;
-    return guard.attempt(cmd, () => (text !== cmd.text ? copySecret : copyPlain)(text), warn);
-  };
-
-  const copyAndLog = async () => {
-    try {
-      if ((await copy()) !== "copied" || output || !host || !d.engagement) return;
-      // The real values, as typed at the shell (not shell-escaped, not masked).
-      const typed = fill ? fillCommand(command.template, input, { commandOs: command.os }).text : command.template;
-      await logCommand(qc, {
-        engagementId: d.engagement.id, host, hosts: d.hosts, command: typed, title: command.title,
-        ranOn: command.runFrom === "attacker" ? (d.settings?.machines[0] ?? "") : host.name,
-      });
-    } catch (e) {
-      reportError(e);
-    }
-  };
+  const { cmd, copy, copyAndLog, banned, msf, known } = useNoteCommand(command, { fill, output, base });
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    // Output keeps its lines whole and scrolls sideways: ← → scroll it while the block has focus.
+    if (output && (e.key === "ArrowLeft" || e.key === "ArrowRight") && e.target === root.current && !e.metaKey && !e.altKey) {
+      const pre = root.current?.querySelector("pre");
+      if (pre && pre.scrollWidth > pre.clientWidth) {
+        e.preventDefault();
+        pre.scrollBy({ left: e.key === "ArrowLeft" ? -80 : 80 });
+      }
+      return;
+    }
     if (e.key !== "Enter" || e.altKey || e.shiftKey || e.nativeEvent.isComposing || e.defaultPrevented) return;
     if (e.metaKey || e.ctrlKey) {
       e.preventDefault();
@@ -95,23 +50,20 @@ export function ManualCommand({ command, label, caption, fill, output = false, b
     }
   };
 
-  const status = guard.forKey === copyKey(cmd) ? (guard.hint ?? guard.confirm) : null;
   return (
     <div
       ref={root} role="group" aria-label={`Note command: ${label}`} tabIndex={0} onKeyDown={onKeyDown}
       className="grid gap-1 rounded-sm outline-accent outline-offset-4 outline-none focus:outline-1 focus:outline-solid"
     >
-      <div className="grid min-h-[18px] grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2">
-        <span className="truncate text-meta text-muted-2">{caption}</span>
-        {status && (
-          <span role="status" className={`text-meta ${guard.hint || cmd.unresolved.length > 0 ? "text-warn" : "text-accent"}`}>{status}</span>
-        )}
-      </div>
+      {/* An untitled block has no caption row (no empty gap above it). Copy results show in the page's status slot. */}
+      {caption && <span className="truncate text-meta text-muted-2">{caption}</span>}
       <CommandBlock
         text={cmd.text}
         {...(cmd.copyText !== undefined ? { copyText: cmd.copyText } : {})}
         tokens={cmd.tokens ?? []}
         highlight={highlight ?? null}
+        wrap={!output}
+        copyTabIndex={-1}
         copyLabel={`Copy command: ${label}`}
         onCopyAction={(button) =>
           copy().then((r) => {

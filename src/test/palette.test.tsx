@@ -1,9 +1,13 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
+import { AUDIT_NOTE_IDS, AUDIT_NOTE_SOURCES } from "../audit/fixtures";
+import type { FieldManualSnapshot } from "../engines/fieldManual/merge";
+import { parseNote, type ManualNote } from "../engines/manual";
+import { searchPalette } from "../features/palette/search";
 import { setImported } from "../engines/library/store";
 import type { LibraryCommand } from "../engines/library/types";
 import { useCredPickStore } from "../features/checklist/credPick";
@@ -93,7 +97,7 @@ afterEach(() => setImported({ commands: [], cards: [] }));
 
 /** What the host scope shows (its visible text, without the hidden native select's options). */
 const scopeText = (chip: HTMLElement): string => [...chip.children].map((n) => n.textContent).join(" ").trim();
-const hostChip = (scope: { getByRole: typeof screen.getByRole }) => scope.getByRole("button", { name: /^Fill for host/ });
+const hostChip = (scope: { getByRole: typeof screen.getByRole }) => scope.getByRole("button", { name: /^(Host |No host)/ });
 
 describe("⌘K palette", () => {
   it("⌘K opens with the host chip and Enter copies the filled command", async () => {
@@ -102,7 +106,7 @@ describe("⌘K palette", () => {
     await screen.findByRole("tab", { name: "Next" });
     await user.keyboard(cmdK);
     const box = await screen.findByRole("combobox", { name: "Search" });
-    expect(hostChip(screen)).toHaveAccessibleName("Fill for host: dc01");
+    expect(hostChip(screen)).toHaveAccessibleName("Host dc01");
     await user.type(box, "zzprobe");
     await user.keyboard("{Enter}");
     expect(await navigator.clipboard.readText()).toBe("zzprobe 10.10.10.5 from 10.10.14.9");
@@ -142,7 +146,7 @@ describe("⌘K palette", () => {
     mount("/");
     await screen.findByText("Lab A");
     await user.keyboard(cmdK);
-    expect(screen.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^(Host |No host)/ })).not.toBeInTheDocument();
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzprobe");
     await user.keyboard("{Enter}");
     // The unfilled {TARGET_IP} holds the first Enter back; the second copies anyway.
@@ -264,7 +268,7 @@ describe("host picker in the palette (U3)", () => {
     const opts = within(screen.getByRole("listbox", { name: "Fill for host" })).getAllByRole("option");
     expect(opts.map((o) => o.textContent)).toEqual(["No host", "dc0110.10.10.5", "web0710.10.10.6"]);
     await user.click(opts[0]!);
-    expect(scopeText(chip)).toBe("Host No host");
+    expect(scopeText(chip)).toBe("No host");
   });
 
   it("on the dashboard the bar reads for no host", async () => {
@@ -274,7 +278,7 @@ describe("host picker in the palette (U3)", () => {
     await user.keyboard(cmdK);
     const bar = await screen.findByRole("search", { name: "Search" });
     expect(within(bar).getByText("for no host")).toBeInTheDocument();
-    expect(within(bar).queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
+    expect(within(bar).queryByRole("button", { name: /^(Host |No host)/ })).not.toBeInTheDocument();
   });
   const preview = () => screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent!.startsWith("zz"));
 
@@ -435,7 +439,7 @@ describe("token suggestions (U4)", () => {
     expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzuser carol@10.10.10.5 ••••••••")).toBeInTheDocument();
     box.focus();
     await user.keyboard("{Tab}");
-    expect(screen.getByRole("button", { name: /^Fill for host/ })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /^(Host |No host)/ })).toHaveFocus();
   });
 
   it("Esc with the suggestion list open closes only the list; the next Esc closes the palette", async () => {
@@ -620,7 +624,7 @@ describe("⌘K groups, hosts and contained suggestions", () => {
     await screen.findByRole("tab", { name: "Next" });
     await user.keyboard(cmdK);
     const bar = within(await screen.findByRole("search", { name: "Search" }));
-    expect(bar.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
+    expect(bar.queryByRole("button", { name: /^(Host |No host)/ })).not.toBeInTheDocument();
     expect(hostChip(screen)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Fill with credential/ })).toBeInTheDocument();
   });
@@ -753,5 +757,155 @@ describe("⌘K cap and copy-guard arm", () => {
     await user.keyboard("{Enter}");
     expect(await screen.findByText(/not filled. Press ↵ again to copy anyway/)).toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toBe("untouched");
+  });
+});
+
+describe("⌘K Lookup group", () => {
+  // Synthetic fixtures only: the audit's invented lookup note.
+  const LOOKUP: ManualNote = AUDIT_NOTE_SOURCES.flatMap(([p, t]) => (p.includes("Zz-Error-Lookup") ? [parseNote(p, t)!] : []))[0]!;
+  const snapshot = (notes: ManualNote[]): FieldManualSnapshot => ({
+    importedAt: 1, cards: [], overlay: {}, added: [], playbook: [], toolkit: [], report: {} as FieldManualSnapshot["report"], notes,
+  });
+  function Where() {
+    const l = useLocation();
+    return <p data-testid="where">{l.pathname + l.search + l.hash}</p>;
+  }
+  const mountAt = (path: string) =>
+    render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <MemoryRouter initialEntries={[path]}>
+          <App />
+          <Where />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  const open = async (query: string) => {
+    const user = userEvent.setup();
+    mountAt("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), query);
+    return user;
+  };
+  const lookupGroup = (key: string) => within(screen.getByRole("listbox", { name: "Results" })).findByRole("group", { name: new RegExp(`^${key}`) });
+
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn() as unknown as Element["scrollIntoView"];
+    m.fieldManualLoad.mockResolvedValue(snapshot([LOOKUP]));
+    m.fieldManualLatestMtime.mockResolvedValue(null);
+    m.payloadBuildsList.mockResolvedValue([]);
+    useArsenalStore.setState({ open: false, cardId: null, blockId: null, solo: null });
+  });
+  afterEach(() => {
+    delete (Element.prototype as Partial<Element>).scrollIntoView;
+  });
+
+  it("a key shows its group first: the lead names the key and means, then one option per command", async () => {
+    await open("STATUS_ZZ_EXPIRED");
+    const g = await lookupGroup("STATUS_ZZ_EXPIRED");
+    expect(g).toHaveAccessibleName("STATUS_ZZ_EXPIRED The secret is right and has expired.");
+    expect(within(g).getByText("STATUS_ZZ_EXPIRED")).toBeInTheDocument();
+    expect(within(g).getByText("The secret is right and has expired.")).toBeInTheDocument();
+    expect(within(g).getAllByRole("option").map((o) => o.textContent)).toEqual(["nxc smb {TARGET_IP} --pass-pol" + "nxc"]);
+    // The lead is not an option, and the Lookup group comes before the rest (the Manual group still lists the note).
+    const groups = within(screen.getByRole("listbox", { name: "Results" })).getAllByRole("group");
+    expect(groups[0]).toBe(g);
+    expect(groups.at(-1)).toHaveAccessibleName("Manual");
+  });
+
+  it("a row with four commands lists four options", async () => {
+    await open("STATUS_ZZ_RELAY");
+    const g = await lookupGroup("STATUS_ZZ_RELAY");
+    expect(within(g).getAllByRole("option")).toHaveLength(4);
+  });
+
+  it("↵ on the first copies the filled command", async () => {
+    const user = await open("STATUS_ZZ_EXPIRED");
+    await lookupGroup("STATUS_ZZ_EXPIRED");
+    await user.keyboard("{Enter}");
+    expect(await navigator.clipboard.readText()).toBe("nxc smb 10.10.10.5 --pass-pol");
+  });
+
+  it("⌘↵ logs under the table's name and the key", async () => {
+    const user = await open("STATUS_ZZ_EXPIRED");
+    await lookupGroup("STATUS_ZZ_EXPIRED");
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalled());
+    expect(m.logCreate.mock.calls[0]![1]).toMatchObject({
+      title: "Zz login errors: STATUS_ZZ_EXPIRED",
+      content: { kind: "command", blocks: [{ command: "nxc smb 10.10.10.5 --pass-pol" }] },
+    });
+  });
+
+  it("→ on a lookup command opens the note at its row", async () => {
+    const user = await open("STATUS_ZZ_EXPIRED");
+    await lookupGroup("STATUS_ZZ_EXPIRED");
+    const line = within(screen.getByRole("dialog", { name: "Search" })).getByRole("group", { name: "Search shortcuts" });
+    expect(within(line).getByText("open in Manual")).toBeInTheDocument();
+    await user.keyboard("{ArrowRight}");
+    await vi.waitFor(() =>
+      expect(screen.getByTestId("where").textContent).toBe(`/manual/${AUDIT_NOTE_IDS.lookup}?q=STATUS_ZZ_EXPIRED&row=2#table-1`));
+    expect(screen.queryByRole("dialog", { name: "Search" })).not.toBeInTheDocument();
+    expect(useArsenalStore.getState().open).toBe(false);
+  });
+
+  /** The Manual's answer card, once the landing has shown it. */
+  const answer = () => screen.findByRole("region", { name: "Answer" });
+  const answerRows = (c: HTMLElement) => within(c).queryAllByRole("group", { name: /^Answer command: / });
+
+  it("→ on the second matching row's command lands on that row, not the first match after the caption", async () => {
+    // "secret" is in STATUS_ZZ_LOGON's and STATUS_ZZ_EXPIRED's means: two groups, LOGON first.
+    const user = await open("secret");
+    await lookupGroup("STATUS_ZZ_EXPIRED");
+    const groups = within(screen.getByRole("listbox", { name: "Results" })).getAllByRole("group");
+    expect(groups[0]).toHaveAccessibleName(/^STATUS_ZZ_LOGON/);
+    expect(groups[1]).toHaveAccessibleName(/^STATUS_ZZ_EXPIRED/);
+    await user.keyboard("{ArrowDown}");
+    expect(within(groups[1]!).getByRole("option")).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{ArrowRight}");
+    await vi.waitFor(() =>
+      expect(screen.getByTestId("where").textContent).toBe(`/manual/${AUDIT_NOTE_IDS.lookup}?q=secret&row=2#table-1`));
+    const c = await answer();
+    expect(within(c).getByText("STATUS_ZZ_EXPIRED")).toBeInTheDocument();
+    await vi.waitFor(() => expect(answerRows(c)[0]).toHaveFocus());
+    expect(answerRows(c)[0]).toHaveAccessibleName("Answer command: nxc smb 10.10.10.5 --pass-pol");
+    // The lit row is the chosen one.
+    expect(document.querySelector("[data-table='table-1'] tr[data-current-row]")).toHaveAttribute("data-row", "2");
+  });
+
+  it("→ lands on the chosen row when the query's first match after the anchor is in the caption", async () => {
+    // "zz" is in the caption ("Zz login errors") before any row: the row, not the caption, is where → lands.
+    const user = await open("zz");
+    await lookupGroup("STATUS_ZZ_LOGON");
+    await user.keyboard("{ArrowDown}{ArrowRight}");
+    await vi.waitFor(() =>
+      expect(screen.getByTestId("where").textContent).toBe(`/manual/${AUDIT_NOTE_IDS.lookup}?q=zz&row=1#table-1`));
+    const c = await answer();
+    expect(within(c).getByText("STATUS_ZZ_LOGON")).toBeInTheDocument();
+    await vi.waitFor(() => expect(answerRows(c)[0]).toHaveFocus());
+  });
+
+  it("more than two matching rows: the Lookup group lists two (key matches in note order)", async () => {
+    // Every row's key holds "ZZ_": seven rows with commands match.
+    await open("ZZ_");
+    await lookupGroup("STATUS_ZZ_DENIED");
+    const keys = within(screen.getByRole("listbox", { name: "Results" })).getAllByRole("group")
+      .flatMap((g) => within(g).queryAllByText(/^STATUS_ZZ_[A-Z]+$/).map((el) => el.textContent));
+    expect(keys).toEqual(["STATUS_ZZ_DENIED", "STATUS_ZZ_LOGON"]);
+  });
+
+  it("exam rules hold back a banned lookup command; pending rules offer none", () => {
+    const BANNED = parseNote("04-Foundations/Zz-Banned.md", [
+      "# Zz Banned",
+      "**Table 1 — Zz web errors**",
+      "| Error | Means | Do this |",
+      "| - | - | - |",
+      "| `ZZ_SQLERR` | The query broke. | `sqlmap -u {URL}` or `zzcurl {URL}` |",
+    ].join("\n"))!;
+    const base = { library: [], cards: [], generators: [], notes: [BANNED] };
+    const titles = (r: ReturnType<typeof searchPalette>) => r.lookups.flatMap((g) => g.results.map((x) => x.title));
+    expect(titles(searchPalette("ZZ_SQLERR", base))).toEqual(["sqlmap -u {URL}", "zzcurl {URL}"]);
+    expect(titles(searchPalette("ZZ_SQLERR", { ...base, exam: { kind: "exam-sim", hostId: "h1" } }))).toEqual(["zzcurl {URL}"]);
+    expect(searchPalette("ZZ_SQLERR", { ...base, examPending: true }).lookups).toEqual([]);
   });
 });

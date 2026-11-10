@@ -167,6 +167,18 @@ test("non-label text under 13px fails; 12px labels, chips and key caps pass", as
   expect(gateFailures(roles)).toEqual([]);
 });
 
+test("a document that scrolls fails the run; one that fits passes", async ({ page }) => {
+  const tall = await gateRun(page, `<div style="height:2000px">Taller than the window</div>`);
+  expect(gateFailures(tall).some((f) => f.startsWith("document-scroll "))).toBe(true);
+  const wide = await gateRun(page, `<div style="width:2000px;height:20px">Wider than the window</div>`);
+  expect(gateFailures(wide).some((f) => f.startsWith("document-scroll "))).toBe(true);
+  // The escape that shipped: an absolutely placed box inside a pane that scrolls, but is not itself positioned.
+  const escaped = await gateRun(page, `<div style="height:300px;overflow:auto"><span style="position:absolute;top:5000px">label</span></div>`);
+  expect(gateFailures(escaped).some((f) => f.startsWith("document-scroll "))).toBe(true);
+  const fits = await gateRun(page, `<div style="height:300px;overflow:auto"><div style="position:relative;height:2000px">Scrolls inside its pane</div></div>`);
+  expect(gateFailures(fits).filter((f) => f.startsWith("document-scroll "))).toEqual([]);
+});
+
 test("data-audit-allow without a reason is itself an error", async ({ page }) => {
   const issues = await gateRun(page, `<p data-audit-allow="tiny-text" style="margin:0;font-size:10px">Tiny but allowed</p>`);
   expect(issues.some((i) => i.check === "tiny-text")).toBe(false);

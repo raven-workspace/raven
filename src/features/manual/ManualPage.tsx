@@ -1,6 +1,7 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import type { ManualNote } from "../../engines/manual";
+import { isInlineCommand, lookupRows, type LookupRow } from "../../engines/manual/lookup";
 import { getCards, useLibraryVersion } from "../../engines/library/store";
 import { isFreeKey, isTypingTarget, useKeydown } from "../../lib/keys";
 import { RavenError } from "../../types/errors";
@@ -8,28 +9,46 @@ import { Button, Disclosure, EmptyState, ErrorState, HintLine, labelClass, type 
 import { HostChip, isHostPickKey, type HostChipHandle } from "../arsenal/HostChip";
 import { useFillScope, useLastEngagementStore } from "../arsenal/useFillScope";
 import { useFillBase } from "../palette/fillData";
+import { AnswerCard } from "./AnswerCard";
 import { MANUAL_NOTE_ID, manualKeysBlocked } from "./keys";
-import { MANUAL_QUERY } from "./searchPath";
+import { MANUAL_QUERY, MANUAL_ROW } from "./searchPath";
 import { jumpBehavior, ManualOutline, useOutlineSpy } from "./ManualOutline";
 import { ManualRail } from "./ManualRail";
 import { NoteView } from "./NoteView";
+import { useManualStatus } from "./useManualStatus";
 import { useManualStore, type ManualPlace } from "./useManualStore";
 import { firstNote, useManualNotes, type ManualStatus } from "./useManualNotes";
 
+/** The "Opening the Manual…" line waits this long, so a quick load shows nothing. */
+const LOADING_MS = 300;
 /** Saving the place waits for the scroll to settle. */
 const SAVE_MS = 200;
 
 export const manualPath = (noteId: string) => `/manual/${encodeURIComponent(noteId)}`;
 
 const HINTS: Hint[] = [
-  { keys: "/", label: "filter", priority: 1 },
+  // The line keeps five (DESIGN.md); the rest wait in the ? list, and "/" and "⌘[" take a slot when copy hints go.
+  { keys: "/", label: "filter", priority: 4 },
   { keys: "↵", label: "copy command", priority: 2 },
   { keys: "⌘↵", label: "copy and log", priority: 2 },
-  { keys: "⌘[", label: "previous note", priority: 2 },
+  { keys: "⌘[", label: "previous note", priority: 4 },
   { keys: "[ ]", label: "section", priority: 3 },
-  { keys: "⌥H", label: "host", priority: 4 },
+  { keys: "⌥H", label: "host", priority: 3 },
   { keys: "Esc", label: "back", priority: 1 },
 ];
+
+/** Only in the `?` list: keys the line has no room for. */
+const MORE: Hint[] = [
+  { keys: "M", label: "focus the note", priority: 1 },
+  { keys: "⌥↓ ⌥↑", label: "next / previous match", priority: 1 },
+];
+
+/** The note holds a command: a code block, or an inline code span that reads as one. */
+const hasCommands = (note: ManualNote | undefined): boolean =>
+  !!note && (/^\s*(```|~~~)/m.test(note.body) || [...note.body.matchAll(/`([^`\n]+)`/g)].some((m) => isInlineCommand(m[1]!)));
+
+/** Hints for copying a command mean nothing on a note without one. */
+const withoutCopy = (hints: Hint[]): Hint[] => hints.filter((h) => h.keys !== "↵" && h.keys !== "⌘↵");
 
 /** Without notes only Esc applies. */
 const HINTS_EMPTY: Hint[] = HINTS.slice(-1);
@@ -40,6 +59,9 @@ const HINTS_SEARCH: Hint[] = [
   ...HINTS.slice(0, -1),
   { keys: "Esc", label: "clear search", priority: 1 },
 ];
+
+/** With an answer card: the first Esc closes the card (the match bar stays). */
+const HINTS_CARD: Hint[] = HINTS_SEARCH.map((h) => (h.keys === "Esc" ? { ...h, label: "close card" } : h));
 
 /** No engagement or no host: ⌘↵ copies but has nowhere to log, worded as the Arsenal drawer words it. */
 const noHost = (hints: Hint[]): Hint[] => hints.map((h) => (h.keys === "⌘↵" ? { ...h, label: "log (no host)" } : h));
@@ -65,19 +87,36 @@ function ManualEmpty({ status }: { status: keyof typeof EMPTY_TITLE }) {
 
 /**
  * Marks the `at`-th match current (`data-current` on each of its pieces) and returns the match count and its first
- * piece. Matches are counted by their `start` pieces, in document order.
+ * piece. Matches are counted by their `start` pieces, in document order. `at` −1 marks no match: then `lit` (a lookup
+ * row a ⌘K landing chose, where the query matches nothing) is the row lit instead.
  */
-function markCurrent(pane: HTMLElement, at: number): { count: number; el: HTMLElement | null } {
+function markCurrent(pane: HTMLElement, at: number, lit: HTMLElement | null = null): { count: number; el: HTMLElement | null } {
   let n = -1;
   let el: HTMLElement | null = null;
+  for (const r of pane.querySelectorAll("tr[data-current-row]")) r.removeAttribute("data-current-row");
   for (const m of pane.querySelectorAll<HTMLElement>("mark[data-match]")) {
     if (m.dataset.match === "start") n++;
-    const on = n === at;
+    const on = at >= 0 && n === at;
     if (on && !el) el = m;
     if (on) m.setAttribute("data-current", "");
     else m.removeAttribute("data-current");
   }
+  // A match in a table lights its row.
+  (el ? el.closest("tr") : lit)?.setAttribute("data-current-row", "");
   return { count: n + 1, el };
+}
+
+/** Row `row` of `anchor`'s table (a lookup row a ⌘K landing named), or null. */
+const tableRow = (pane: HTMLElement, anchor: string, row: number): HTMLElement | null =>
+  pane.querySelector<HTMLElement>(`[data-table="${CSS.escape(anchor)}"] tr[data-row="${row}"]`);
+
+/** The index of the first match inside `el` (−1 with none), and how many matches come before `el`. */
+function matchesIn(pane: HTMLElement, el: HTMLElement): { inside: number; before: number } {
+  const starts = [...pane.querySelectorAll("mark[data-match=start]")];
+  return {
+    inside: starts.findIndex((m) => el.contains(m)),
+    before: starts.filter((m) => !el.contains(m) && el.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_PRECEDING).length,
+  };
 }
 
 /** The first match after `anchor`'s element in document order (0 without one, or with none after it). */
@@ -87,6 +126,17 @@ function firstAfter(pane: HTMLElement, anchor: string): number {
   const starts = [...pane.querySelectorAll("mark[data-match=start]")];
   const i = starts.findIndex((m) => el.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_FOLLOWING);
   return Math.max(0, i);
+}
+
+/** The reader column's rows: the host row, then the match bar and the answer card when they show, then the note. */
+const ROWS = ["grid-rows-[auto_minmax(0,1fr)]", "grid-rows-[auto_auto_minmax(0,1fr)]", "grid-rows-[auto_auto_auto_minmax(0,1fr)]"];
+
+/** The lookup row a match sits in (by its table's anchor and its row), or null in prose or any other table. */
+function rowOf(note: ManualNote, el: HTMLElement | null): LookupRow | null {
+  const anchor = el?.closest<HTMLElement>("[data-table]")?.dataset.table;
+  const at = el?.closest<HTMLElement>("tr[data-row]")?.dataset.row;
+  if (!anchor || at === undefined) return null;
+  return lookupRows(note).find((r) => r.anchor === anchor && r.row === Number(at)) ?? null;
 }
 
 /** Focus without scrolling: the scroll is already where it should be. */
@@ -105,6 +155,7 @@ function focusTarget(el: Element | null | undefined) {
 /** The note's top-level block (a paragraph, table, list or command) that holds `el`. */
 const blockOf = (el: Element | null): Element | null => el?.closest("article > *") ?? null;
 
+/** `at` −1: no match is current (a ⌘K landing lit a row the query does not match). */
 function MatchBar({ query, at, count }: { query: string; at: number; count: number }) {
   return (
     <div
@@ -112,12 +163,28 @@ function MatchBar({ query, at, count }: { query: string; at: number; count: numb
       className="grid min-h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-line px-8 py-2 text-meta"
     >
       <span className="truncate"><span className="text-muted">Search </span><span className="font-mono text-code text-fg">{query}</span></span>
-      <span className={count === 0 ? "text-warn" : "text-fg-2"}>{count === 0 ? "No match in this note" : `match ${at + 1} of ${count}`}</span>
+      <span className={count === 0 ? "text-warn" : "text-fg-2"}>{count === 0 ? "No match in this note" : at < 0 ? `${count} ${count === 1 ? "match" : "matches"}` : `match ${at + 1} of ${count}`}</span>
     </div>
   );
 }
 
-function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undefined }) {
+const TONE = { ok: "text-accent", warn: "text-warn", muted: "text-muted" } as const;
+
+/**
+ * The one status line: what the last copy, hold-back or jump said, right-aligned in the host row. It clears itself
+ * after a moment, and when the note or the host changes. It truncates before the host's IP gives up any room.
+ */
+function StatusSlot() {
+  const { text, tone } = useManualStatus();
+  return <span role="status" className={`col-start-3 min-w-0 truncate text-right text-meta ${TONE[tone]}`}>{text}</span>;
+}
+
+/** What the page's Esc needs of the answer card: close it if one shows (true when it did). */
+type CardEsc = RefObject<(() => boolean) | null>;
+
+function Reader({ notes, noteId, cardEscRef, onCard }: {
+  notes: ManualNote[]; noteId: string | undefined; cardEscRef: CardEsc; onCard: (shown: boolean) => void;
+}) {
   const navigate = useNavigate();
   const location = useLocation();
   const note = noteId ? notes.find((n) => n.id === noteId) : undefined;
@@ -127,12 +194,21 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
   const setHostId = (id: string | null) => useLastEngagementStore.setState({ engagementId: engagementId || null, hostId: id });
   useLibraryVersion();
   const cards = getCards();
+  const noteKey = note?.id;
+  useEffect(() => useManualStatus.getState().clear(), [noteKey]);
+  // What a copy said was about the host it filled for: another host clears it.
+  const hostKey = base.host?.id;
+  useEffect(() => useManualStatus.getState().clear(), [hostKey]);
 
   const paneRef = useRef<HTMLElement>(null);
   // The match bar: `?q=` marks every match in the note; the current one starts in the hash's section.
   const [params] = useSearchParams();
   const query = params.get(MANUAL_QUERY)?.trim() ?? "";
   const filterRef = useRef<HTMLInputElement>(null);
+  /** The pane or anything in it has focus: the host row's hairline shows it. */
+  const [paneFocused, setPaneFocused] = useState(false);
+  /** The next note opened takes focus even from the rail (↵ in the filter). */
+  const readNext = useRef(false);
   const [filter, setFilter] = useState("");
   const [outlineOpen, setOutlineOpen] = useState(false);
   /** The note on screen and its live scroll offset. */
@@ -189,11 +265,12 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
     // Arriving (M, the title-bar button, a link, ⌘[, ⌘K) puts focus in the note, so ↓ PgDn Space scroll it; a link to a
     // heading focuses that heading. A note opened from the rail keeps focus in the rail, to keep moving along it.
     const inRail = filterRef.current?.closest("nav")?.contains(document.activeElement) ?? false;
-    if (!inRail && (left?.noteId !== note.id || pending || location.hash)) {
+    if ((!inRail || readNext.current) && (left?.noteId !== note.id || pending || location.hash)) {
       const heading = !pending && location.hash ? pane.querySelector(`[id="${CSS.escape(decodeURIComponent(location.hash.slice(1)))}"]`) : null;
       if (heading) focusTarget(heading);
       else focusQuietly(pane);
     }
+    readNext.current = false;
     shown.current = { noteId: note.id, scrollTop: pane.scrollTop };
     savePlace();
     // location.key: a link to a heading in the same note scrolls again.
@@ -213,40 +290,113 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
   const ids = useMemo(() => note?.outline.map((o) => o.id) ?? [], [note]);
   const spy = useOutlineSpy(paneRef, note?.id ?? "", ids);
 
-  const [match, setMatch] = useState({ at: 0, count: 0 });
+  /** `before`: with `at` −1 (a lit row, no current match), how many matches come before that row (where ⌥↓ ⌥↑ go on from). */
+  const [match, setMatch] = useState({ at: 0, count: 0, before: 0 });
   const matchAt = useRef(0);
+  /** A ⌘K landing's lookup row the query does not match: lit (with its card) though no match is current. */
+  const litRow = useRef<{ anchor: string; row: number } | null>(null);
+  const lit = () => {
+    const r = litRow.current;
+    return r && paneRef.current ? tableRow(paneRef.current, r.anchor, r.row) : null;
+  };
+  /** The lookup row the current match sits in, and whether Esc closed its card (until the match moves). */
+  const [card, setCard] = useState<{ row: LookupRow | null; closed: boolean; land?: boolean }>({ row: null, closed: false });
+  const cardRow = query && !card.closed ? card.row : null;
   /** `focus`: the current match's block takes focus (a search landing, ⌥↓ ⌥↑), so the next Tab continues there. */
-  const showMatch = (at: number, scroll: boolean, focus = false) => {
+  /** `land`: a `?q=` landing, whose answer card (if any) then takes focus on its first command. */
+  const showMatch = (at: number, scroll: boolean, focus = false, land = false) => {
     const pane = paneRef.current;
     if (!pane) return;
+    // A landing or ⌥↓ ⌥↑ (`focus`) shows the card afresh; a quiet re-show of the same match (late fill data) keeps it closed.
+    const same = !focus && matchAt.current === at;
     matchAt.current = at;
+    litRow.current = null;
     const { count, el } = markCurrent(pane, at);
-    setMatch({ at, count });
+    setMatch({ at, count, before: 0 });
+    const row = note ? rowOf(note, el) : null;
+    setCard((c) => (same && c.row === row ? c : { row, closed: false, land }));
     if (scroll) el?.scrollIntoView?.({ block: "center" });
     if (focus && el) focusTarget(blockOf(el));
+  };
+  /** A ⌘K landing on a lookup row the query matches nothing in: the row lights and its card shows all the same. */
+  const landRow = (el: HTMLElement, anchor: string, row: number, focus: boolean) => {
+    const pane = paneRef.current;
+    if (!pane) return;
+    litRow.current = { anchor, row };
+    matchAt.current = -1;
+    const { count } = markCurrent(pane, -1, el);
+    setMatch({ at: -1, count, before: matchesIn(pane, el).before });
+    setCard({ row: note ? rowOf(note, el) : null, closed: false, land: focus });
+    el.scrollIntoView?.({ block: "center" });
+    if (focus) focusTarget(blockOf(el));
   };
   // After the hash's scroll above: a search lands on its match, not the section top.
   useLayoutEffect(() => {
     const pane = paneRef.current;
+    if (!query) {
+      litRow.current = null;
+      pane?.querySelectorAll("tr[data-current-row]").forEach((r) => r.removeAttribute("data-current-row"));
+    }
     if (!note || !pane || !query) return;
     const inRail = filterRef.current?.closest("nav")?.contains(document.activeElement) ?? false;
-    showMatch(firstAfter(pane, decodeURIComponent(location.hash.slice(1))), true, !inRail);
+    const anchor = decodeURIComponent(location.hash.slice(1));
+    // ⌘K → names the row the owner chose: land on it, never on another row of the same table that matches first.
+    const rowAt = params.get(MANUAL_ROW);
+    const target = anchor && rowAt !== null && /^\d+$/.test(rowAt) ? tableRow(pane, anchor, Number(rowAt)) : null;
+    // A landing whose match gets an answer card with a command puts focus on that command instead (↵ copies it).
+    if (target) {
+      const { inside } = matchesIn(pane, target);
+      if (inside >= 0) showMatch(inside, true, !inRail, !inRail);
+      else landRow(target, anchor, Number(rowAt), !inRail);
+    } else showMatch(firstAfter(pane, anchor), true, !inRail, !inRail);
   }, [note?.id, query, location.key]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Exam lines and filled text arrive late and move the note: bring the current match back into view once.
+  // Exam lines and filled text arrive late and move the note: bring the current match (or lit row) back into view once.
   useLayoutEffect(() => {
-    if (base.examReady && query) showMatch(matchAt.current, true);
+    if (!base.examReady || !query) return;
+    const row = lit();
+    if (row) row.scrollIntoView?.({ block: "center" });
+    else showMatch(matchAt.current, true);
   }, [base.examReady]); // eslint-disable-line react-hooks/exhaustive-deps
   // Fill data and exam lines re-render the note's text: keep the current match marked (and the count right).
   useEffect(() => {
     const pane = paneRef.current;
     if (!note || !pane || !query) return;
     const obs = new MutationObserver(() => {
-      const { count } = markCurrent(pane, matchAt.current);
-      setMatch((m) => (m.count === count ? m : { at: matchAt.current, count }));
+      const { count } = markCurrent(pane, matchAt.current, lit());
+      setMatch((m) => (m.count === count ? m : { ...m, at: matchAt.current, count }));
     });
     obs.observe(pane, { childList: true, subtree: true, characterData: true });
     return () => obs.disconnect();
   }, [note, query]);
+
+  const cardBoxRef = useRef<HTMLDivElement>(null);
+  // A `?q=` landing's card takes focus on its first command row, if it has one (⌥↓ ⌥↑ leave focus on the note).
+  useEffect(() => {
+    if (card.land) cardBoxRef.current?.querySelector<HTMLElement>("[data-card-stop][role=group]")?.focus({ preventScroll: true });
+  }, [card]);
+
+  const closeCard = () => {
+    // Focus in the card would be lost with it: it goes back to the note.
+    if (document.activeElement?.closest("[aria-label=Answer]")) focusQuietly(paneRef.current);
+    setCard((c) => ({ ...c, closed: true, land: false }));
+  };
+  const shownCard = !!(cardRow && note);
+  // The card takes room from the pane above it: put the current match (or lit row) back in the middle, not at the
+  // bottom edge the card pushed it to.
+  const cardKey = cardRow && note ? `${cardRow.anchor}:${cardRow.row}` : "";
+  useLayoutEffect(() => {
+    const pane = paneRef.current;
+    if (!cardKey || !pane) return;
+    (pane.querySelector("mark[data-current]") ?? pane.querySelector("tr[data-current-row]"))?.scrollIntoView?.({ block: "center" });
+  }, [cardKey]);
+  useEffect(() => {
+    cardEscRef.current = shownCard ? () => (closeCard(), true) : null;
+    onCard(shownCard);
+  });
+  useEffect(() => () => {
+    cardEscRef.current = null;
+    onCard(false);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onScroll = () => {
     const pane = paneRef.current;
@@ -265,8 +415,11 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
     focusTarget(spy.jump(i, behavior));
   };
 
-  const open = (id: string) => {
-    if (id !== note?.id) void navigate(manualPath(id), { replace: true });
+  const open = (id: string, read = false) => {
+    if (id !== note?.id) {
+      readNext.current = read;
+      void navigate(manualPath(id), { replace: true });
+    } else if (read) focusQuietly(paneRef.current);
   };
 
   // A note link stays in the Manual's one history entry, so Esc always leaves the Manual.
@@ -284,7 +437,10 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
       if (isTypingTarget(e.target)) return;
       e.preventDefault();
       const prev = useManualStore.getState().back();
-      if (!prev) return;
+      if (!prev) {
+        useManualStatus.getState().set("No previous note", "muted");
+        return;
+      }
       if (!notes.some((n) => n.id === prev.noteId)) return;
       returning.current = true;
       pendingScroll.current = prev;
@@ -295,7 +451,9 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
       if (isTypingTarget(e.target)) return;
       e.preventDefault();
       if (match.count === 0) return;
-      showMatch((match.at + (e.code === "ArrowDown" ? 1 : -1) + match.count) % match.count, true, true);
+      // From a lit row (no current match) the step goes on from the row: the next match after it, or the last before.
+      const from = match.at < 0 ? match.before - (e.code === "ArrowDown" ? 1 : 0) : match.at;
+      showMatch((from + (e.code === "ArrowDown" ? 1 : -1) + match.count) % match.count, true, true);
       return;
     }
     if (engagementId && isHostPickKey(e) && !isTypingTarget(e.target)) {
@@ -318,26 +476,37 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
   const pick = (i: number) => goSection(i, jumpBehavior());
 
   return (
-    <div className="grid min-h-0 grid-cols-[260px_minmax(0,1fr)] min-[1100px]:grid-cols-[260px_minmax(0,1fr)_220px]">
+    <div className="grid min-h-0 grid-cols-[clamp(200px,20vw,260px)_minmax(0,1fr)] min-[1100px]:grid-cols-[clamp(200px,20vw,260px)_minmax(0,1fr)_220px]">
       <ManualRail notes={notes} currentId={note?.id ?? null} filter={filter} onFilter={setFilter} filterRef={filterRef} onOpen={open} />
-      <div className={`grid min-h-0 ${query ? "grid-rows-[auto_auto_minmax(0,1fr)]" : "grid-rows-[auto_minmax(0,1fr)]"}`}>
+      <div className={`grid min-h-0 ${ROWS[(query && note ? 1 : 0) + (shownCard ? 1 : 0)]}`}>
         {/* What the note's commands fill for, and where ⌘↵ logs: kept above the scroll so it never moves. */}
-        <div className="grid min-h-12 grid-cols-[minmax(10rem,max-content)_minmax(0,1fr)] items-center gap-3 border-b border-line px-8 py-2 text-meta">
+        <div
+          data-host-row="" {...(paneFocused ? { "data-pane-focused": "" } : {})}
+          className="grid min-h-12 grid-cols-[minmax(10rem,max-content)_max-content_minmax(0,1fr)] items-center gap-3 border-b border-line px-8 py-2 text-meta data-[pane-focused]:border-accent"
+        >
           {engagementId ? (
             <>
               <div data-host-chip-cell="" className="grid">
                 <HostChip ref={hostRef} hosts={base.d.hosts} value={base.host?.id ?? null} onChange={setHostId} align="start" className="max-w-80" />
               </div>
-              <span data-testid="manual-host-ip" className="truncate font-mono text-code text-muted">{base.host?.ip ?? ""}</span>
+              <span data-testid="manual-host-ip" className="font-mono text-code text-muted">{base.host?.ip ?? ""}</span>
             </>
           ) : (
             !scopePending && <span className="col-span-2 text-muted">No active engagement</span>
           )}
+          <StatusSlot />
         </div>
         {query && note && <MatchBar query={query} at={match.at} count={match.count} />}
+        {/* The answer card: fixed above the note's scroll (it never moves with the note), its own scroll past 40vh. */}
+        {cardRow && note && (
+          <div ref={cardBoxRef} className="grid min-w-0 border-b border-line px-8 py-3">
+            <AnswerCard key={`${cardRow.anchor}:${cardRow.row}`} row={cardRow} base={base} onClose={closeCard} />
+          </div>
+        )}
         <section
           id={MANUAL_NOTE_ID} ref={paneRef} aria-label="Note" tabIndex={-1} onScroll={onScroll}
-          className="grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden px-8 py-4 outline-none [--pane-bg:var(--bg)] focus-visible:shadow-[inset_0_0_0_2px_var(--accent)]"
+          onFocus={() => setPaneFocused(true)} onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setPaneFocused(false)}
+          className="relative grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden px-8 py-4 outline-none [--pane-bg:var(--bg)]"
         >
           {note && (
             <>
@@ -357,7 +526,7 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
           )}
         </section>
       </div>
-      <aside aria-label="Outline" className="hidden min-h-0 content-start overflow-y-auto overflow-x-hidden border-l border-line px-3 pb-4 min-[1100px]:grid">
+      <aside aria-label="Outline" className="relative hidden min-h-0 content-start overflow-y-auto overflow-x-hidden border-l border-line px-3 pb-4 min-[1100px]:grid">
         {/* Sticky, so the label never scrolls away while the aside follows a long outline. */}
         <h2 data-outline-head="" className={`${labelClass} sticky top-0 z-10 m-0 bg-bg px-3 pt-4 pb-2`}>On this page</h2>
         {note && (
@@ -385,6 +554,15 @@ export function ManualPage() {
   const searching = !!params.get(MANUAL_QUERY)?.trim();
   const scope = useFillScope();
   const { host } = useFillBase(scope.engagementId, scope.hostId);
+  const cardEscRef: CardEsc = useRef(null);
+  const [cardShown, setCardShown] = useState(false);
+  // A load that is still going after 300ms says so; a fast one shows nothing.
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (status !== "loading") return;
+    const t = setTimeout(() => setSlow(true), LOADING_MS);
+    return () => clearTimeout(t);
+  }, [status]);
 
   useKeydown((e) => {
     if (e.key !== "Escape" || e.defaultPrevented || manualKeysBlocked()) return;
@@ -393,16 +571,21 @@ export function ManualPage() {
       return;
     }
     e.preventDefault();
+    // An answer card closes first (the match bar stays).
+    if (cardEscRef.current?.()) return;
     // The first Esc clears the match bar (the note stays where it is), the next leaves.
     if (searching) void navigate({ pathname: location.pathname }, { replace: true });
     else void (firstEntry ? navigate("/") : navigate(-1));
   });
 
-  const pageHints = searching ? HINTS_SEARCH : HINTS;
+  const open = noteId ? notes.find((n) => n.id === noteId) : undefined;
+  // An answer card has commands of its own, so only the plain variants lose the copy hints.
+  const base = searching ? (cardShown ? HINTS_CARD : HINTS_SEARCH) : HINTS;
+  const pageHints = cardShown || hasCommands(open) ? base : withoutCopy(base);
   const hints = status !== "ready" ? HINTS_EMPTY : scope.engagementId && host ? pageHints : noHost(pageHints);
 
   let body = null;
-  if (status === "ready") body = <Reader notes={notes} noteId={noteId} />;
+  if (status === "ready") body = <Reader notes={notes} noteId={noteId} cardEscRef={cardEscRef} onCard={setCardShown} />;
   else if (status === "error") {
     body = (
       <div className="grid content-start px-6 py-6">
@@ -415,11 +598,12 @@ export function ManualPage() {
       </div>
     );
   } else if (status !== "loading") body = <ManualEmpty status={status} />;
+  else if (slow) body = <p className="m-0 content-start px-8 py-4 text-meta text-muted">Opening the Manual…</p>;
   return (
     <main aria-label="Manual" data-hint-surface="" className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto]">
       {body ?? <div />}
       <footer className="grid border-t border-line px-6 py-2">
-        <HintLine hints={hints} ariaLabel="Manual shortcuts" />
+        <HintLine hints={hints} more={status === "ready" ? MORE.filter((h) => !hints.some((x) => x.keys === h.keys)) : []} ariaLabel="Manual shortcuts" />
       </footer>
     </main>
   );

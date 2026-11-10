@@ -108,7 +108,7 @@ const drawer = () => screen.findByRole("complementary", { name: "Arsenal" });
 
 /** What the host scope shows (its visible text, without the hidden native select's options). */
 const scopeText = (chip: HTMLElement): string => [...chip.children].map((n) => n.textContent).join(" ").trim();
-const hostChip = (scope: { getByRole: typeof screen.getByRole }) => scope.getByRole("button", { name: /^Fill for host/ });
+const hostChip = (scope: { getByRole: typeof screen.getByRole }) => scope.getByRole("button", { name: /^(Host |No host)/ });
 
 describe("Arsenal", () => {
   it("A opens the drawer filled for the host in view and Esc closes it", async () => {
@@ -117,7 +117,7 @@ describe("Arsenal", () => {
     await screen.findByRole("tab", { name: "Next" });
     await user.keyboard("a");
     const d = within(await drawer());
-    expect(hostChip(d)).toHaveAccessibleName("Fill for host: dc01");
+    expect(hostChip(d)).toHaveAccessibleName("Host dc01");
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "zzprobe");
     await d.findByRole("option", { name: /Zzprobe the target/ });
     await user.keyboard("{ArrowRight}");
@@ -209,7 +209,7 @@ describe("Arsenal", () => {
     expect(await screen.findByRole("heading", { name: "Zz Card" })).toBeInTheDocument();
     // No host until one is picked.
     expect(await block(screen, "zzprobe {TARGET_IP} from 10.10.14.9")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^Fill for host/ }));
+    await user.click(screen.getByRole("button", { name: /^(Host |No host)/ }));
     await user.click(screen.getByRole("option", { name: /dc01/ }));
     expect(await block(screen, "zzprobe 10.10.10.5 from 10.10.14.9")).toBeInTheDocument();
   });
@@ -260,7 +260,7 @@ describe("Arsenal", () => {
     useArsenalStore.setState({ cardId: "zz-card" });
     mount("/arsenal", EXAM);
     m.engagementGet.mockImplementation(() => new Promise<Engagement>((r) => (release = r)));
-    await screen.findByRole("button", { name: "Fill for host: dc01" });
+    await screen.findByRole("button", { name: "Host dc01" });
     // Not even categories or cards until the exam rules are known.
     expect(screen.queryByRole("heading", { name: "Zz Card" })).not.toBeInTheDocument();
     expect(within(screen.getByRole("navigation", { name: "Categories" })).queryAllByRole("button")).toHaveLength(0);
@@ -278,7 +278,7 @@ describe("Arsenal", () => {
     await screen.findByText("Lab A");
     await user.click(screen.getByRole("button", { name: "Arsenal" }));
     const d = within(await drawer());
-    expect(d.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
+    expect(d.queryByRole("button", { name: /^(Host |No host)/ })).not.toBeInTheDocument();
     expect(within(d.getByRole("search", { name: "Search the Arsenal" })).getByText("for no host")).toBeInTheDocument();
     act(() => useArsenalStore.getState().openCard("zz-card"));
     expect(await block(d, "zzprobe {TARGET_IP} from 10.10.14.9")).toBeInTheDocument();
@@ -297,7 +297,7 @@ describe("Arsenal", () => {
     expect(barEl.querySelector('[aria-hidden="true"] svg')).not.toBeNull();
     // Focusing the text field rings the whole bar in the accent, like every other input.
     expect(barEl.className).toMatch(/has-\[input:focus-visible\]:outline-accent/);
-    expect(bar.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
+    expect(bar.queryByRole("button", { name: /^(Host |No host)/ })).not.toBeInTheDocument();
     expect(scopeText(hostChip(d))).toBe("Host dc01");
     const header = d.getByRole("banner");
     for (const el of [bar.getByRole("textbox"), hostChip(d), d.getByRole("button", { name: /^Fill with credential/ }), d.getByRole("button", { name: "Full screen" })]) {
@@ -336,7 +336,7 @@ describe("Arsenal", () => {
     await screen.findByText("Lab A");
     await user.keyboard("a");
     const d = within(await drawer());
-    expect(d.queryByRole("button", { name: /^Fill for host/ })).not.toBeInTheDocument();
+    expect(d.queryByRole("button", { name: /^(Host |No host)/ })).not.toBeInTheDocument();
     await user.type(d.getByRole("textbox", { name: "Search the Arsenal" }), "a");
     expect(screen.getByRole("complementary", { name: "Arsenal" })).toBeInTheDocument();
     expect(d.getByRole("textbox", { name: "Search the Arsenal" })).toHaveValue("a");
@@ -479,7 +479,7 @@ describe("full-screen Arsenal uses the engagement you came from (B4)", () => {
   it("a remembered engagement that no longer exists falls back to the most recently active one", async () => {
     useLastEngagementStore.setState({ engagementId: "gone", hostId: "hx" });
     mountAt("/arsenal");
-    await userEvent.setup().click(await screen.findByRole("button", { name: /^Fill for host/ }));
+    await userEvent.setup().click(await screen.findByRole("button", { name: /^(Host |No host)/ }));
     expect(await screen.findByRole("option", { name: /dc01/ })).toBeInTheDocument();
     expect(screen.getByText("Lab A")).toBeInTheDocument();
     expect(m.engagementGet).not.toHaveBeenCalledWith("gone");
@@ -499,7 +499,7 @@ describe("full-screen Arsenal uses the engagement you came from (B4)", () => {
     mountAt("/e/e2/h/h9");
     await screen.findByRole("tab", { name: "Next" });
     act(() => nav.go("/arsenal"));
-    await userEvent.setup().click(await screen.findByRole("button", { name: /^Fill for host/ }));
+    await userEvent.setup().click(await screen.findByRole("button", { name: /^(Host |No host)/ }));
     expect(await screen.findByRole("option", { name: /web09/ })).toBeInTheDocument();
   });
 });
@@ -871,7 +871,7 @@ describe("drawer list grouped by category (U1)", () => {
     const after = await block(d, "zzprobe 10.10.10.6 from 10.10.14.9");
     expect(after).toHaveAttribute("data-flash");
     expect(d.getByRole("combobox", { name: "Value for TARGET_IP" })).toHaveValue("10.10.10.6");
-    expect(hostChip(d)).toHaveAccessibleName("Fill for host: web07");
+    expect(hostChip(d)).toHaveAccessibleName("Host web07");
   });
 
   it("Esc with the host list open closes only the list", async () => {

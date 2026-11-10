@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { AUDIT_NOTE_IDS, AUDIT_NOW } from "../src/audit/fixtures";
+import { MEANS_HEADER } from "../src/engines/manual/lookup";
 import { SCREENS } from "./screens";
 
 // Hard regressions: unlike the audit checks, these fail the run.
@@ -315,7 +316,7 @@ test("host picker is a Tab stop", async ({ page }) => {
   const search = page.getByRole("dialog").getByRole("combobox", { name: "Search" });
   await search.waitFor();
   await search.fill("smb");
-  const chip = page.getByRole("button", { name: /^Fill for host/ });
+  const chip = page.getByRole("button", { name: /^(Host |No host$)/ });
   await expect(chip).not.toHaveAttribute("tabindex", "-1");
   let reached = false;
   for (let i = 0; i < 8 && !reached; i++) {
@@ -974,6 +975,8 @@ test("payloads: the Other… port field opens under the Port chip and keeps the 
 // The Manual's five-column table: as a table its auto layout squeezed the code columns until every status code broke
 // mid-token. Now a table that can't fit its codes stacks each row as name/value lines; one that can stays a table.
 test("Manual: a wide table stacks when its codes don't fit, stays a table when they do, and no code breaks", async ({ page }) => {
+  // The pane is wider at 1024 (no outline column) than at 1280 (the outline appears at 1100px); at 1024 the table still
+  // stacks, as its means column would fall under its 14ch floor (it sat at ~12ch before the floor).
   for (const [width, stacked] of [[900, true], [1024, true], [1280, true], [1440, false]] as const) {
     await open(page, `/manual/${AUDIT_NOTE_IDS.long}`, width);
     const pane = page.getByRole("region", { name: "Note" });
@@ -1024,6 +1027,44 @@ test("Manual: short key cells in a flags table stay on one line", async ({ page 
   }
 });
 
+// A lookup table's Means column was squeezed to a word or two a line at 900px while the table stayed a table. Prose
+// columns now keep a 14ch floor that counts in the fit: the cause column drops, then the table stacks, before that.
+test("Manual: a lookup table's prose (means) column is never narrower than 14ch in table layout", async ({ page }) => {
+  for (const id of [AUDIT_NOTE_IDS.lookup, AUDIT_NOTE_IDS.long]) {
+    for (const width of [900, 1024, 1280, 1440]) {
+      await open(page, `/manual/${id}`, width);
+      const pane = page.getByRole("region", { name: "Note" });
+      await pane.locator("table").first().waitFor();
+      const r = await pane.evaluate((el, src) => {
+        const means = new RegExp(src, "i");
+        const out: { table: number; text: string; width: number; floor: number }[] = [];
+        let tables = 0;
+        el.querySelectorAll("table").forEach((t, ti) => {
+          if (t.hasAttribute("data-stacked")) return;
+          const heads = [...t.querySelectorAll("thead th")].map((th) => (th.textContent ?? "").trim());
+          const col = heads.findIndex((h) => means.test(h));
+          if (col < 0) return;
+          tables++;
+          for (const tr of t.querySelectorAll("tbody tr")) {
+            const td = tr.children[col] as HTMLElement | undefined;
+            if (!td) continue;
+            const probe = document.createElement("span");
+            probe.style.cssText = "position:absolute;visibility:hidden;width:14ch";
+            td.append(probe);
+            const floor = probe.getBoundingClientRect().width;
+            probe.remove();
+            out.push({ table: ti, text: (td.textContent ?? "").slice(0, 40), width: td.getBoundingClientRect().width, floor });
+          }
+        });
+        return { tables, narrow: out.filter((c) => c.width < c.floor - 0.5) };
+      }, MEANS_HEADER.source);
+      expect(r.narrow, `prose cells under 14ch in ${id} at ${width}`).toEqual([]);
+      // The lookup note's table stays a table at the wide sizes, so the check is not vacuous there.
+      if (id === AUDIT_NOTE_IDS.lookup && width >= 1280) expect(r.tables, `a measured lookup table at ${width}`).toBeGreaterThan(0);
+    }
+  }
+});
+
 // Note links and card links sat in 16-18px lines: under the 24px target floor when they stand alone (a list item, a cell).
 test("Manual: every link in a note is a 24px target", async ({ page }) => {
   await open(page, `/manual/${AUDIT_NOTE_IDS.links}`, 1280);
@@ -1038,7 +1079,8 @@ test("Manual: every link in a note is a 24px target", async ({ page }) => {
 // The outline's scroll-spy and lime bar, in a real layout: the current entry follows the reading, the bar sits beside
 // it, and a pick scrolls the note in place without a history entry (Esc leaves the Manual in one press).
 test("Manual: On this page follows the scroll, and a pick adds no history entry", async ({ page }) => {
-  await open(page, `/manual/${AUDIT_NOTE_IDS.long}`, 1440);
+  // Short window: the outline shows every h2 and only the current section's entries, so it overflows only when short.
+  await open(page, `/manual/${AUDIT_NOTE_IDS.long}`, 1440, 240);
   const aside = page.locator("aside[aria-label='Outline']");
   const current = aside.locator("[aria-current=location]");
   await expect(current).toHaveText("Core concept");
@@ -1071,4 +1113,17 @@ test("Manual: On this page follows the scroll, and a pick adds no history entry"
   expect(await page.evaluate(() => history.length)).toBe(before);
   expect(new URL(page.url()).hash).toBe("");
   await page.screenshot({ path: "audit-output/shots/manual-outline-pick@1440.png" });
+});
+
+// An inline command is a 24px target, but must not make its line taller than a line without one (text-read is 26px).
+test("Manual: a prose line or list item holding an inline command is as tall as one without", async ({ page }) => {
+  await open(page, `/manual/${AUDIT_NOTE_IDS.tool}`, 1280);
+  const article = page.locator("section[aria-label='Note'] article[aria-label='Zz Scanner']");
+  await article.getByRole("button", { name: /^Copy command: zzscan --list/ }).first().waitFor();
+  const h = await article.evaluate((el) => {
+    const pick = (sel: string, withCmd: boolean) => [...el.querySelectorAll(sel)].find((n) => !!n.querySelector('button[aria-label^="Copy command"]') === withCmd && /(Plain|with nothing|in it)/.test(n.textContent ?? ""))!.getBoundingClientRect().height;
+    return { p: [pick("p", false), pick("p", true)], li: [pick("li", false), pick("li", true)] };
+  });
+  expect(h.p[1], "paragraph with an inline command").toBe(h.p[0]);
+  expect(h.li[1], "list item with an inline command").toBe(h.li[0]);
 });

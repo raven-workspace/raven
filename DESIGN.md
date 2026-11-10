@@ -123,6 +123,8 @@ The Ink palette is unchanged: true black, hairlines, and one accent.
 
 There are six roles and nothing else. Each is a token (`text-title`, `text-heading`, `text-body`, `text-code`, `text-meta`, `text-label`), and feature code uses only these.
 
+The Manual is the one reading surface, and it adds two reading roles that nothing else may use: `text-read-title` (24 / 32, 600) for a note's own title, and `text-read` (15 / 26, 400) for a note's prose and lists, held to a 56ch measure (about 70 characters). In a note, section headings are `title` under a hairline, sub-headings, table captions and bold label lines are `heading` weight, inline bold is 500, and table cells are `body` at 22px leading.
+
 | Role | Size / line | Weight | Font | Use |
 |---|---|---|---|---|
 | title | 20 / 28 | 600 | UI | Page and entity titles (engagement, host, settings page) |

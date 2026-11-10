@@ -116,7 +116,7 @@ describe("Payloads Workbench", () => {
     const w = within(await workbench());
     expect(await w.findByRole("heading", { name: "PowerShell base64 (-e)" })).toBeInTheDocument();
     const r = read();
-    expect(r.getByRole("button", { name: "Fill for host: zzweb01" })).toBeInTheDocument();
+    expect(r.getByRole("button", { name: "Host zzweb01" })).toBeInTheDocument();
     expect(r.getByRole("button", { name: "Windows" })).toHaveAttribute("aria-pressed", "true");
     expect(r.getByText("from nmap (Microsoft IIS httpd 10.0 on 80)")).toBeInTheDocument();
     expect(r.getByRole("button", { name: "Web shell ?cmd=" })).toHaveAttribute("aria-pressed", "true");
@@ -249,12 +249,12 @@ describe("Payloads Workbench", () => {
     await user.keyboard("a");
     const a = within(await screen.findByRole("complementary", { name: "Arsenal" }));
     await user.keyboard("{Alt>}h{/Alt}");
-    expect(a.getByRole("button", { name: /^Fill for host/ })).toHaveAttribute("aria-expanded", "true");
-    expect(read().getByRole("button", { name: "Fill for host: zzweb01" })).not.toHaveAttribute("aria-expanded", "true");
+    expect(a.getByRole("button", { name: /^(Host |No host)/ })).toHaveAttribute("aria-expanded", "true");
+    expect(read().getByRole("button", { name: "Host zzweb01" })).not.toHaveAttribute("aria-expanded", "true");
     await user.keyboard("{Escape}");
     await user.keyboard("{Alt>}3{/Alt}");
     expect(usePayloadsStore.getState().generator).toBe("shell");
-    expect(read().getByRole("button", { name: "Fill for host: zzweb01" })).toBeInTheDocument();
+    expect(read().getByRole("button", { name: "Host zzweb01" })).toBeInTheDocument();
   });
 
   it("SQL copy guard: an unfilled token jumps to its field, and a changed payload needs a fresh confirm", async () => {
@@ -362,7 +362,7 @@ describe("Payloads Workbench", () => {
       expect(read().getByRole("button", { name: label })).toHaveAttribute("title", label);
     }
     // The chip's column never shrinks below 10rem, so a short or missing name still reads as a control.
-    const chip = read().getByRole("button", { name: "Fill for host: zzweb01" });
+    const chip = read().getByRole("button", { name: "Host zzweb01" });
     expect(chip.closest("[data-host-chip-cell]")).toHaveClass("grid-cols-[minmax(10rem,max-content)]");
   });
 
@@ -432,7 +432,7 @@ describe("SQL panel folds finished steps", () => {
     const sql = await sqlIn();
     await user.type(sql.getByRole("textbox", { name: "Columns" }), "3");
     expect(sql.getByRole("button", { name: "4. Count the columns" })).toHaveAttribute("aria-expanded", "true");
-    await user.click(read().getByRole("button", { name: "Fill for host: zzdb02" }));
+    await user.click(read().getByRole("button", { name: "Host zzdb02" }));
     await user.click(await screen.findByRole("option", { name: /zzweb01/ }));
     expect(await sql.findByRole("button", { name: "4. Count the columns: 5" })).toHaveAttribute("aria-expanded", "false");
   });

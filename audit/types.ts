@@ -1,6 +1,6 @@
 /** Every check id, at runtime too (an opt-out naming an id that is not here is an error). */
 export const CHECK_IDS = [
-  "page-overflow", "overflow", "truncated", "clipped", "offscreen", "overlap",
+  "page-overflow", "document-scroll", "overflow", "truncated", "clipped", "offscreen", "overlap",
   "squeezed", "oversized-control", "mid-token-wrap", "narrow-wrap",
   "contrast", "label",
   "focus-invisible", "focus-hidden", "unreachable", "focus-trap", "shortcut",
@@ -31,7 +31,7 @@ export interface Issue extends RawIssue {
  * An element opts out of one check with `data-audit-allow="<check>"` plus a `data-audit-reason`.
  */
 export const FAILING_CHECKS: ReadonlySet<CheckId> = new Set<CheckId>([
-  "tiny-text", "small-target", "overlap", "page-overflow", "overflow", "clipped", "mid-token-wrap", "opt-out-unreasoned", "opt-out-invalid",
+  "tiny-text", "small-target", "overlap", "page-overflow", "document-scroll", "overflow", "clipped", "mid-token-wrap", "opt-out-unreasoned", "opt-out-invalid",
 ]);
 
 /** The issues that fail the run, one line each, for the test's failure message. */

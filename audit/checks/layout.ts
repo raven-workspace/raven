@@ -92,6 +92,21 @@ export function collectLayoutIssues(): RawIssue[] {
     add("page-overflow", null, `scrollWidth ${de.scrollWidth} > innerWidth ${window.innerWidth}`, "html");
   }
 
+  // document-scroll: the window itself never scrolls (Raven scrolls inside its own panes). Catches what page-overflow
+  // can't, e.g. absolutely placed children escaping a pane's scroller and growing the document.
+  {
+    const se = document.scrollingElement ?? de;
+    const before = { x: window.scrollX, y: window.scrollY };
+    window.scrollTo(0, 5000);
+    const moved = window.scrollY;
+    window.scrollTo(before.x, before.y);
+    const tall = se.scrollHeight > window.innerHeight + TOL;
+    const wide = se.scrollWidth > window.innerWidth + TOL;
+    if (tall || wide || moved > 0) {
+      add("document-scroll", null, `the window scrolls: scrollHeight ${se.scrollHeight} / innerHeight ${window.innerHeight}, scrollWidth ${se.scrollWidth} / innerWidth ${window.innerWidth}, scrollTo(0, 5000) reached y=${moved}`, "html");
+    }
+  }
+
   const all = Array.from(document.body.querySelectorAll("*")).filter(isVisible);
 
   for (const el of all) {

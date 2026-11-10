@@ -88,7 +88,7 @@ const pre = (root: { findByText: typeof screen.findByText }, text: string) =>
   root.findByText((_, el) => el?.tagName === "PRE" && el.textContent === text);
 /** The generator once its host has loaded (it remounts when the engagement resolves). */
 const generator = async () => {
-  await vi.waitFor(() => expect(screen.getByRole("button", { name: "Fill for host: MS02" })).toBeInTheDocument());
+  await vi.waitFor(() => expect(screen.getByRole("button", { name: "Host MS02" })).toBeInTheDocument());
   return screen.getByRole("region", { name: "Transfer a file" });
 };
 
@@ -282,7 +282,7 @@ describe("Transfer a file: layout", () => {
     mount("/payloads?generator=transfer");
     const g = within(await generator());
     expect(g.queryByRole("combobox", { name: "To host" })).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /^Fill for host/ })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /^(Host |No host)/ })).toHaveLength(1);
   });
 
   it("footnote never reads 'the the'", async () => {

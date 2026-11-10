@@ -1,0 +1,32 @@
+# Manual reading round: follow-ups
+
+- Deferred minor items still open after the final fix wave (each with why it waits):
+  - `lookup.test.ts` has duplicate imports to merge: test tidy only, no behaviour.
+  - A zero-row table with lookup headers still counts as a lookup table: harmless (no rows means no card and no ⌘K hit).
+  - `plain(Inline[])` is still written out in `NoteView.tsx` and `AnswerCard.tsx` besides `lookup.ts`: a refactor, no behaviour change.
+  - No test that a second caption replaces the first across blocks: covered by the rule's code path, not yet pinned by a test.
+  - A caption reaches across long prose until the next heading: by design (the vault's captions sit right above their tables).
+  - Banned and Metasploit lines do not show on inline commands until the first copy: inline commands have no room for a line under them; the copy guard still holds them back.
+  - The host row keeps one grid gap after the status track when the slot is empty: a few pixels, no visible effect.
+  - No test that clearing the query removes `data-current-row`: the layout effect does it; untested only.
+  - The long current-row class list is repeated in `NoteTable`: a tidy-up.
+  - `leftover()` in the answer card rewrites every `,`/`;` as "x, y" (even "TCP,UDP") and can leave a dangling "or ": cosmetic, needs real-vault examples before changing the rule.
+  - No test that ⌥↓ ⌥↑ steps and quiet re-shows keep focus where it was; `land: true` lingers in card state after the landing: no visible effect.
+  - The ⌘K Lookup cap is applied before the exam filter (no backfill when a row's commands are all banned), and the keyed list grows past `max` before the slice: a third row can go unshown in an exam sim.
+  - No test for the table's re-measure recovering from narrow to wide; `hasLow` is recomputed on each effect run: cheap; recovery is seen in the audit at four widths.
+  - The Arsenal drawer's `fromManual` flag is inherited by a card opened from elsewhere while a Manual-origin drawer is open, and `openSolo` keeps it: Esc may return to the Manual once more than expected.
+  - No test for the search and card hint sets; width overflow is untested in jsdom (the audit checks it).
+  - The loading line's `slow` flag never resets, so a retry can flash "Opening the Manual…": rare (error then retry).
+  - Outline focus unmounts on a group change: harmless.
+  - The ⌘K Manual tag's `whitespace-pre` + `truncate`: check in the real browser.
+  - The outline regression runs at a 240px height; the flag-key lookup selector and the line-height `pick` helper are coupled to the fixture's wording: audit tidy-ups.
+  - No selftest for the `document-scroll` check yet.
+  - A short placeholder command alone in a table's first column renders as plain code (the key-cell rule): no such row in the vault today.
+- Verify in the real Tauri/WKWebView build: the tables' `min-width` floors (32ch action, 14ch means) on `th`/`td`; the scrollbar room under scrolling output blocks; the 1px focus hairline on the host row is legible.
+- HostChip name idea: its accessible name ("Host zzweb01") does not say what choosing does; consider "Fill for host zzweb01" (palette, Arsenal and Manual share the chip, so their tests move with it).
+- Final fix wave: ⌘K → carries the chosen row (`&row=N`) and lands on it (its first match, or the row itself when the query matches nothing in it); the status slot clears after 2.5s (the copy guard's `CONFIRM_MS`) and on a host change, "No previous note" is muted; prose (means) columns keep a 14ch floor, so the long note's table 1 now stacks at 1024 too (its means column sat at ~12ch).
+- Audit: `document-scroll` is a failing check (the window must never scroll); screens `manual-lookup-card` and `palette-lookup` added.
+- Inline command buttons are `min-h-6` (24px target); a command alone in a cell is a real target, not an inline-text exemption.
+- Regression specs updated for the new policy: at 1440 the long note's table 1 stays a table (cause column dropped), at 900, 1024 and 1280 it stacks (1024 since the 14ch means floor).
+- WebKit: spot-checked with Playwright webkit; `min-width: 32ch` is honoured on `th`/`td`. Re-check in the real WKWebView build.
+- Impeccable detector: `[]` for src/features/manual, src/features/palette, src/ui/CommandBlock.tsx.

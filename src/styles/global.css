@@ -3,6 +3,21 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/*
+ * JetBrains Mono's own arrows, box drawing, blocks and geometric shapes (U+2190–21FF, U+2500–25FF). The @fontsource
+ * subsets leave them out, so they fell back to another font whose ▶ ◀ are wider than one cell and pushed text diagrams
+ * out of line. Same family name, so it fills in only these code points; every glyph is one 600-unit cell. OFL 1.1
+ * (src/assets/fonts/JetBrainsMono-OFL.txt), cut from the variable font with its weight axis.
+ */
+@font-face {
+  font-family: "JetBrains Mono Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 800;
+  src: url("../assets/fonts/jetbrains-mono-symbols.woff2") format("woff2-variations");
+  unicode-range: U+2190-21FF, U+2500-25FF;
+}
+
 /* Raven is dark-only, so shadcn's `dark:` styles always apply. */
 @custom-variant dark (&:is(:root *));
 
@@ -11,6 +26,12 @@
   body,
   #root {
     height: 100%;
+  }
+
+  /* Desktop app: the window itself never scrolls; every screen scrolls inside its own pane. */
+  html,
+  body {
+    overflow: hidden;
   }
 
   body {

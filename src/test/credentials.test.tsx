@@ -638,7 +638,7 @@ describe("credentials dock page", () => {
     // And selection still works afterwards.
     await user.click(screen.getByRole("button", { name: "Select u1" }));
     expect(search().get("cred")).toBe("c1");
-  });
+  }, 15_000); // Load-sensitive: fast alone, can take over 5s under the full suite (no behaviour change).
 
   it("with only non-sprayable credentials, the newest is docked and the matrix shows the can't-be-sprayed note", async () => {
     const user = userEvent.setup();

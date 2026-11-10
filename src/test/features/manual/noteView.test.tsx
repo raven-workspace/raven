@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -10,6 +10,7 @@ import { parseNote, type ManualNote } from "../../../engines/manual";
 import { useArsenalStore } from "../../../features/arsenal/useArsenalStore";
 import { logCommand } from "../../../features/capture/logCommand";
 import { NoteTable } from "../../../features/manual/NoteTable";
+import { useManualStatus } from "../../../features/manual/useManualStatus";
 import { NoteView } from "../../../features/manual/NoteView";
 import { api } from "../../../lib/api";
 import { makeQueryClient } from "../../../lib/queryClient";
@@ -34,7 +35,7 @@ const CARDS: CardMeta[] = [{ id: "some-card", title: "Some Card", stage: "initia
 
 const BODY = [
   "# Zz Tool",
-  "Read [[Zz-Errors#Core Concept|the concept]], then [[Some-Card]] or [[Missing Page]].",
+  "Read [[Zz-Errors#Core Concept|the concept]], then [[Some-Card]] or [[Missing Page]], [[Shell-Stabilization]] and [[Zz-Errors]].",
   "## Usage",
   "```bash title:\"Kali\"",
   "zzscan -t {TARGET_IP}",
@@ -111,7 +112,7 @@ describe("NoteView links", () => {
   it("a card link opens the card in the Arsenal drawer", async () => {
     const user = userEvent.setup();
     mount();
-    await user.click(screen.getByRole("button", { name: "Some-Card" }));
+    await user.click(screen.getByRole("button", { name: "Some Card" }));
     expect(useArsenalStore.getState()).toMatchObject({ open: true, cardId: "some-card" });
     expect(screen.getByTestId("where")).toHaveTextContent("/manual/zz-tool");
   });
@@ -119,6 +120,28 @@ describe("NoteView links", () => {
   it("an unresolved link is muted text, not a link", () => {
     mount();
     const el = screen.getByText("Missing Page");
+    expect(el.closest("a,button")).toBeNull();
+    expect(el).toHaveClass("text-muted");
+  });
+});
+
+describe("NoteView link titles", () => {
+  it("a note link shows the note's title, not the file name", () => {
+    mount();
+    expect(screen.getByRole("link", { name: "Zz Errors" })).toBeInTheDocument();
+    expect(screen.queryByText("Zz-Errors")).toBeNull();
+  });
+
+  it("a card link shows the card's title, and an alias is kept", () => {
+    mount();
+    expect(screen.getByRole("button", { name: "Some Card" })).toBeInTheDocument();
+    expect(screen.queryByText("Some-Card")).toBeNull();
+    expect(screen.getByRole("link", { name: "the concept" })).toBeInTheDocument();
+  });
+
+  it("an unresolved link reads with spaces, muted", () => {
+    mount();
+    const el = screen.getByText("Shell Stabilization");
     expect(el.closest("a,button")).toBeNull();
     expect(el).toHaveClass("text-muted");
   });
@@ -169,7 +192,7 @@ describe("NoteView commands", () => {
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("zzscan -t 198.51.100.20"));
     await waitFor(() => expect(logCommand).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      engagementId: "e1", host: expect.objectContaining({ id: "h1" }), command: "zzscan -t 198.51.100.20", title: "Usage", ranOn: "kali",
+      engagementId: "e1", host: expect.objectContaining({ id: "h1" }), command: "zzscan -t 198.51.100.20", title: "Zz Tool: Usage", ranOn: "kali",
     })));
   });
 
@@ -192,12 +215,12 @@ describe("NoteView commands", () => {
     act(() => target.focus());
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await waitFor(() => expect(logCommand).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
-      command: "Get-ZzThing -Name 198.51.100.20", title: "Find the zz service", ranOn: "zzdc01.example.test",
+      command: "Get-ZzThing -Name 198.51.100.20", title: "Zz Where: Find the zz service", ranOn: "zzdc01.example.test",
     })));
     act(() => screen.getByRole("group", { name: "Note command: Scan from Kali: zzscan {TARGET_IP}" }).focus());
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await waitFor(() => expect(logCommand).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
-      command: "zzscan 198.51.100.20", title: "Scan from Kali", ranOn: "kali",
+      command: "zzscan 198.51.100.20", title: "Zz Where: Scan from Kali", ranOn: "kali",
     })));
   });
 
@@ -220,12 +243,12 @@ describe("NoteView commands", () => {
     act(() => target.focus());
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await waitFor(() => expect(logCommand).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
-      command: "Get-ZzThing -Name 198.51.100.20", title: "Query the zz service", ranOn: "zzdc01.example.test",
+      command: "Get-ZzThing -Name 198.51.100.20", title: "Zz Bare: Query the zz service", ranOn: "zzdc01.example.test",
     })));
     act(() => screen.getByRole("group", { name: "Note command: Scan it: zzscan {TARGET_IP}" }).focus());
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await waitFor(() => expect(logCommand).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
-      command: "zzscan 198.51.100.20", title: "Scan it", ranOn: "kali",
+      command: "zzscan 198.51.100.20", title: "Zz Bare: Scan it", ranOn: "kali",
     })));
   });
 
@@ -252,7 +275,8 @@ describe("NoteView commands", () => {
     await navigator.clipboard.writeText("untouched");
     const copy = screen.getByRole("button", { name: "Copy command: Banned: sqlmap -u http://{TARGET_IP}/zz" });
     await user.click(copy);
-    expect(await screen.findByRole("status")).toHaveTextContent("Not allowed in the exam. Press ↵ again to copy anyway");
+    await waitFor(() => expect(useManualStatus.getState().text).toBe("Not allowed in the exam. Press ↵ again to copy anyway"));
+    expect(useManualStatus.getState().tone).toBe("warn");
     expect(await navigator.clipboard.readText()).toBe("untouched");
     await user.click(copy);
     await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("sqlmap -u http://198.51.100.20/zz"));
@@ -362,6 +386,14 @@ describe("NoteView tables", () => {
     for (const c of [desc1, desc2, cells[5], cells[7]]) expect(c).not.toHaveClass("whitespace-nowrap");
   });
 
+  it("code in a key cell is plain code, never an inline command", () => {
+    widths(500, 600);
+    const { container } = mount(FLAGS);
+    const key = cellsOf(container)[0]!;
+    expect(key.querySelector("code")).toHaveTextContent("-m MODE");
+    expect(key.querySelector('button[aria-label^="Copy command"]')).toBeNull();
+  });
+
   it("a code cell longer than the key limit still wraps", () => {
     widths(500, 600);
     const { container } = mount(FLAGS);
@@ -378,6 +410,68 @@ describe("NoteView tables", () => {
     // Stacked, the no-wrap is lifted so a key never overflows its value track.
     expect(cellsOf(container)[0]).toHaveClass("group-data-stacked/nt:whitespace-normal");
     expect(cellsOf(container)[0]).toHaveAccessibleName(/^Flag\s*-m MODE$/);
+  });
+
+  const COLS = parseNote("04-Foundations/Zz-Cols.md", [
+    "# Zz Cols",
+    "| Code | Usually caused by | Do |",
+    "|---|---|---|",
+    "| `0x1` | A stale ticket on the host. | Renew it and retry. |",
+    "",
+  ].join("\n"))!;
+
+  it("the action column holds a floor width and the cause column is low priority, on any table", () => {
+    widths(500, 600);
+    const { container } = mount(COLS);
+    const ths = [...container.querySelectorAll("thead th")] as HTMLElement[];
+    expect(ths[2]).toHaveClass("min-w-[32ch]");
+    expect(ths[1]).toHaveAttribute("data-col", "low");
+    expect(ths[0]).not.toHaveAttribute("data-col");
+    const tds = cellsOf(container);
+    expect(tds[2]).toHaveClass("min-w-[32ch]");
+    expect(tds[1]).toHaveAttribute("data-col", "low");
+    expect(tds[0]).not.toHaveAttribute("data-col");
+    expect(ths[1]).toHaveClass("group-data-[dropped=low]/nt:hidden!");
+  });
+
+  it("drops the cause column only when that is what makes the table fit; else stacks", () => {
+    const fitsOnlyDropped = (room: number) => {
+      vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (this: HTMLElement) {
+        return this.tagName === "TABLE" ? (this.dataset.dropped === "low" ? 500 : 900) : 0;
+      });
+      vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+        return this.tagName === "DIV" ? room : 0;
+      });
+      return mount(COLS).container.querySelector("table")!;
+    };
+    let table = fitsOnlyDropped(1000);
+    expect(table).not.toHaveAttribute("data-dropped");
+    expect(table).not.toHaveAttribute("data-stacked");
+    cleanup(); vi.restoreAllMocks();
+    table = fitsOnlyDropped(600);
+    expect(table).toHaveAttribute("data-dropped", "low");
+    expect(table).not.toHaveAttribute("data-stacked");
+    cleanup(); vi.restoreAllMocks();
+    table = fitsOnlyDropped(400);
+    expect(table).toHaveAttribute("data-dropped", "low");
+    expect(table).toHaveAttribute("data-stacked");
+  });
+
+  it("stacked, the key cell is the row's heading line with no visible column name", () => {
+    widths(900, 600);
+    const { container } = mount(COLS);
+    expect(container.querySelector("table")).toHaveAttribute("data-stacked");
+    const key = cellsOf(container)[0];
+    const label = key.querySelector("[data-column-label]")!;
+    // Never a bare `sr-only` (position:absolute escapes the note's scroller and stretches the document): display:none as a
+    // table (the th names the column), screen-reader-only only while stacked.
+    expect(label).toHaveClass("hidden", "group-data-stacked/nt:block", "group-data-stacked/nt:sr-only");
+    expect(label.classList.contains("sr-only")).toBe(false);
+    const value = key.querySelector("span:not([data-column-label])")!;
+    expect(value).toHaveClass("group-data-stacked/nt:font-semibold", "group-data-stacked/nt:text-fg");
+    expect(key).toHaveClass("group-data-stacked/nt:col-span-2");
+    // Other cells keep their visible name.
+    expect(cellsOf(container)[2].querySelector("[data-column-label]")).toHaveClass("group-data-stacked/nt:block");
   });
 
   it("a short inline code token never wraps inside; a long or spaced one may", () => {

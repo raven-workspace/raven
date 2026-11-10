@@ -1,5 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
-import type { ManualNote } from "../../engines/manual";
+import { shortTitle, type ManualNote } from "../../engines/manual";
 import { cx } from "../../lib/cx";
 import { Input, labelClass } from "../../ui";
 import { ON } from "../arsenal/styles";
@@ -11,7 +11,7 @@ const items = (list: HTMLElement | null) => [...(list?.querySelectorAll<HTMLButt
 
 /**
  * The Manual's left rail: a title filter (`/` focuses it) over the notes in three groups. ↓ from the filter moves into
- * the list, ↑↓ move along it, ↵ (or a click) opens a note; ↵ in the filter opens the first match.
+ * the list, ↑↓ move along it, ↵ (or a click) opens a note; ↵ in the filter opens the first match and moves on to the note.
  */
 export function ManualRail({ notes, currentId, filter, onFilter, filterRef, onOpen }: {
   notes: ManualNote[];
@@ -19,7 +19,8 @@ export function ManualRail({ notes, currentId, filter, onFilter, filterRef, onOp
   filter: string;
   onFilter: (q: string) => void;
   filterRef: RefObject<HTMLInputElement | null>;
-  onOpen: (id: string) => void;
+  /** `read`: focus moves on to the note (↵ in the filter). */
+  onOpen: (id: string, read?: boolean) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   const q = filter.trim().toLowerCase();
@@ -38,7 +39,7 @@ export function ManualRail({ notes, currentId, filter, onFilter, filterRef, onOp
       items(listRef.current)[0]?.focus();
     } else if (e.key === "Enter" && !e.nativeEvent.isComposing && shown[0]) {
       e.preventDefault();
-      onOpen(shown[0].id);
+      onOpen(shown[0].id, true);
     }
   };
   const onListKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -56,7 +57,7 @@ export function ManualRail({ notes, currentId, filter, onFilter, filterRef, onOp
         id={MANUAL_FILTER_ID} ref={filterRef} type="search" aria-label="Filter the Manual" placeholder="Filter the Manual"
         value={filter} onChange={(e) => onFilter(e.target.value)} onKeyDown={onFilterKey}
       />
-      <div ref={listRef} onKeyDown={onListKey} className="grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden">
+      <div ref={listRef} onKeyDown={onListKey} className="relative grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden">
         {shown.length === 0 && <p className="m-0 px-2 text-meta text-muted">No note matches</p>}
         {MANUAL_GROUPS.map(({ folder, label }) => {
           const group = shown.filter((n) => n.folder === folder);
@@ -75,7 +76,7 @@ export function ManualRail({ notes, currentId, filter, onFilter, filterRef, onOp
                       on ? ON : "text-fg-2 hover:bg-surface-hi",
                     )}
                   >
-                    <span className="truncate">{n.title}</span>
+                    <span className="truncate">{shortTitle(n.title)}</span>
                   </button>
                 );
               })}

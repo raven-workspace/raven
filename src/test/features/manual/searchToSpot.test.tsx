@@ -209,6 +209,21 @@ describe("the note at the match", () => {
     expect(bar).toHaveTextContent("match 2 of 3");
   });
 
+  it("match in a table lights its row", async () => {
+    open();
+    await screen.findByRole("article", { name: "Zz Errors" });
+    await waitFor(() => expect(current()).toHaveLength(1));
+    const rows = () => [...pane().querySelectorAll("tr[data-current-row]")];
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toBe(current()[0]!.closest("tr"));
+    expect(rows()[0]).toHaveAttribute("data-row", "0");
+    expect(rows()[0]!.closest("[data-table]")).toHaveAttribute("data-table", "table-1");
+    altDown();
+    expect(rows()).toHaveLength(0);
+    altUp();
+    expect(rows()).toHaveLength(1);
+  });
+
   it("highlights the displayed code without changing what copies", async () => {
     const user = userEvent.setup();
     open();
