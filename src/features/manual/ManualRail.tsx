@@ -11,7 +11,7 @@ const items = (list: HTMLElement | null) => [...(list?.querySelectorAll<HTMLButt
 
 /**
  * The Manual's left rail: a title filter (`/` focuses it) over the notes in three groups. ↓ from the filter moves into
- * the list, ↑↓ move along it, ↵ (or a click) opens a note; ↵ in the filter opens the first match.
+ * the list, ↑↓ move along it, ↵ (or a click) opens a note; ↵ in the filter opens the first match and moves on to the note.
  */
 export function ManualRail({ notes, currentId, filter, onFilter, filterRef, onOpen }: {
   notes: ManualNote[];
@@ -19,7 +19,8 @@ export function ManualRail({ notes, currentId, filter, onFilter, filterRef, onOp
   filter: string;
   onFilter: (q: string) => void;
   filterRef: RefObject<HTMLInputElement | null>;
-  onOpen: (id: string) => void;
+  /** `read`: focus moves on to the note (↵ in the filter). */
+  onOpen: (id: string, read?: boolean) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   const q = filter.trim().toLowerCase();
@@ -38,7 +39,7 @@ export function ManualRail({ notes, currentId, filter, onFilter, filterRef, onOp
       items(listRef.current)[0]?.focus();
     } else if (e.key === "Enter" && !e.nativeEvent.isComposing && shown[0]) {
       e.preventDefault();
-      onOpen(shown[0].id);
+      onOpen(shown[0].id, true);
     }
   };
   const onListKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {

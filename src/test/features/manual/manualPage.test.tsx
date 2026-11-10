@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -92,6 +92,7 @@ const where = () => screen.getByTestId("where").textContent;
 const pane = () => screen.getByRole("region", { name: "Note" });
 const rail = () => within(screen.getByRole("navigation", { name: "Manual notes" }));
 const press = (key: string, init: KeyboardEventInit = {}) => fireEvent.keyDown(document.body, { key, ...init });
+const user0 = () => userEvent.setup();
 const openNote = (title: string) => screen.findByRole("article", { name: title });
 
 /** Where Bb Basics' headings sit down the note, in px: jsdom lays nothing out, so [ ] and the bar read these. */
@@ -726,7 +727,6 @@ describe("Manual: title bar and focus", () => {
     await openNote("Bb Basics");
     press("m");
     expect(pane()).toHaveFocus();
-    expect(pane().className).toMatch(/focus-visible:/);
   });
 
   it("M from elsewhere puts focus in the note pane", async () => {
@@ -783,6 +783,8 @@ describe("Manual: title bar and focus", () => {
     useLastEngagementStore.setState({ engagementId: "e1", hostId: "h1" });
     mount(["/manual"]);
     await openNote("Bb Basics");
+    await user0().click(rail().getByRole("button", { name: "Aa Tool" }));
+    await openNote("Aa Tool");
     const hints = within(screen.getByRole("group", { name: "Manual shortcuts" }));
     expect(await hints.findByText("copy and log")).toBeInTheDocument();
     expect(hints.queryByText("log (no host)")).toBeNull();
@@ -791,8 +793,135 @@ describe("Manual: title bar and focus", () => {
   it("with no engagement the ⌘↵ hint says there is no host to log to", async () => {
     mount(["/manual"]);
     await openNote("Bb Basics");
+    await user0().click(rail().getByRole("button", { name: "Aa Tool" }));
+    await openNote("Aa Tool");
     const hints = within(screen.getByRole("group", { name: "Manual shortcuts" }));
     expect(hints.getByText("log (no host)")).toBeInTheDocument();
     expect(hints.queryByText("copy and log")).toBeNull();
+  });
+});
+
+const CARDY = parseNote("03-Tools/Cc Card.md", "# Cc Card\nSee [[Some-Card]].\n")!;
+const INLINEY = parseNote("03-Tools/Dd Inline.md", "# Dd Inline\nRun `zzscan -t {TARGET_IP}` now.\n")!;
+
+describe("Manual: focus follows intent, one Tab stop, hints", () => {
+  it("filter Enter opens the first match and focuses the note", async () => {
+    const user = userEvent.setup();
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    press("/");
+    await user.keyboard("err{Enter}");
+    await openNote("Zz Errors");
+    await waitFor(() => expect(pane()).toHaveFocus());
+  });
+
+  it("filter Enter on the open note still focuses the note", async () => {
+    const user = userEvent.setup();
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    press("/");
+    await user.keyboard("bb{Enter}");
+    await waitFor(() => expect(pane()).toHaveFocus());
+  });
+
+  it("the pane focus cue is the host row's hairline, not an inset frame", async () => {
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    expect(pane().className).not.toMatch(/shadow-\[inset/);
+    const row = document.querySelector("[data-host-row]") as HTMLElement;
+    expect(row.className).toMatch(/data-\[pane-focused\]:border-accent/);
+    act(() => (document.activeElement as HTMLElement | null)?.blur());
+    expect(row).not.toHaveAttribute("data-pane-focused");
+    act(() => pane().focus());
+    expect(row).toHaveAttribute("data-pane-focused");
+    act(() => (screen.getByRole("searchbox", { name: "Filter the Manual" }) as HTMLElement).focus());
+    expect(row).not.toHaveAttribute("data-pane-focused");
+  });
+
+  it("a card link's drawer closes on the first Esc, back on the note", async () => {
+    const user = userEvent.setup();
+    m.fieldManualLoad.mockResolvedValue({
+      ...snapshot([...NOTES, CARDY]),
+      cards: [{ id: "some-card", title: "Some Card", stage: "initial-foothold", category: "Active-Directory", os: "windows", file: "02-Cards/AD/Some-Card.md" }],
+    } as FieldManualSnapshot);
+    mount([`/manual/${CARDY.id}`]);
+    await openNote("Cc Card");
+    await user.click(screen.getByRole("button", { name: "Some-Card" }));
+    expect(useArsenalStore.getState()).toMatchObject({ open: true, cardId: "some-card" });
+    press("Escape");
+    expect(useArsenalStore.getState().open).toBe(false);
+    expect(where()).toBe(`/manual/${CARDY.id}`);
+  });
+
+  it("a card opened from elsewhere still steps back inside the drawer first", async () => {
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    act(() => useArsenalStore.getState().openCard("some-card"));
+    press("Escape");
+    expect(useArsenalStore.getState()).toMatchObject({ open: true, cardId: null });
+  });
+
+  it("a command block is one Tab stop: its Copy button is out of the order, ↵ still copies", async () => {
+    const user = userEvent.setup();
+    mount([`/manual/${TOOL.id}`]);
+    const block = await screen.findByRole("group", { name: /Note command/ });
+    const copy = within(block).getByRole("button", { name: /Copy command/ });
+    expect(copy).toHaveAttribute("tabindex", "-1");
+    act(() => block.focus());
+    await user.tab();
+    expect(copy).not.toHaveFocus();
+    act(() => block.focus());
+    const click = vi.fn();
+    copy.addEventListener("click", click);
+    await user.keyboard("{Enter}");
+    expect(click).toHaveBeenCalled();
+  });
+
+  it("⌘[ with no history says so in the status slot", async () => {
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    press("[", { metaKey: true });
+    expect(await screen.findByText("No previous note")).toBeInTheDocument();
+  });
+
+  it("the hint line keeps [ ] and ⌥H, and drops the copy hints on a note with no commands", async () => {
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    const hints = within(screen.getByRole("group", { name: "Manual shortcuts" }));
+    for (const label of ["section", "host", "previous note"]) expect(hints.getByText(label)).toBeInTheDocument();
+    expect(hints.queryByText("copy command")).toBeNull();
+    expect(hints.queryByText(/copy and log|log \(no host\)/)).toBeNull();
+  });
+
+  it("a note with a code block or an inline command keeps the copy hints", async () => {
+    mount([`/manual/${TOOL.id}`]);
+    await openNote("Aa Tool");
+    let hints = within(screen.getByRole("group", { name: "Manual shortcuts" }));
+    expect(hints.getByText("copy command")).toBeInTheDocument();
+    expect(hints.getByText("section")).toBeInTheDocument();
+    expect(hints.getByText("host")).toBeInTheDocument();
+    cleanup();
+    m.fieldManualLoad.mockResolvedValue(snapshot([...NOTES, INLINEY]));
+    mount([`/manual/${INLINEY.id}`]);
+    await openNote("Dd Inline");
+    hints = within(screen.getByRole("group", { name: "Manual shortcuts" }));
+    expect(hints.getByText("copy command")).toBeInTheDocument();
+  });
+
+  it("the ? list adds M and ⌥↓ ⌥↑, and single-character caps share one width", async () => {
+    const user = userEvent.setup();
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    await user.click(screen.getByRole("button", { name: "All shortcuts" }));
+    const list = (await screen.findByText("focus the note")).closest("[role=dialog]") as HTMLElement;
+    expect(within(list).getByText("M")).toBeInTheDocument();
+    expect(within(list).getByText("next / previous match")).toBeInTheDocument();
+    expect(within(list).getByText("⌥↓")).toBeInTheDocument();
+    const caps = [...list.querySelectorAll("kbd")].filter((k) => (k.textContent ?? "").length === 1);
+    expect(caps.length).toBeGreaterThan(2);
+    for (const k of caps) {
+      expect(k.className).toBe(caps[0]!.className);
+      expect(k.className).not.toMatch(/w-full|stretch/);
+    }
   });
 });

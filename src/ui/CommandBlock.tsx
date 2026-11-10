@@ -31,6 +31,8 @@ export interface CommandBlockProps {
    * whose columns are the content). Commands wrap, so a long one is seen whole before it is copied.
    */
   wrap?: boolean;
+  /** The Copy button's tab index; `-1` takes it out of the Tab order when the block around it is the one stop. */
+  copyTabIndex?: number;
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -44,7 +46,7 @@ function marks(token: string, re: RegExp | null): { text: string; warn: boolean 
     .filter((m) => m.text !== "");
 }
 
-export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, copyText, copyLabel, onCopyAction, highlight, wrap = true }: CommandBlockProps) {
+export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, copyText, copyLabel, onCopyAction, highlight, wrap = true, copyTabIndex }: CommandBlockProps) {
   const token = wrap ? "inline-block max-w-full [overflow-wrap:anywhere]" : "inline-block";
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -101,6 +103,7 @@ export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, 
         <IconButton
           icon={copied ? Check : Copy}
           label={copyLabel ?? "Copy"}
+          {...(copyTabIndex !== undefined ? { tabIndex: copyTabIndex } : {})}
           onClick={(e) => {
             // A failed copy (a locked vault included) goes to the shared error path, never an unhandled rejection, and
             // the done check shows only once the copy succeeded.

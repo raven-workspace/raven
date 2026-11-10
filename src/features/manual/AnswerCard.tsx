@@ -162,7 +162,7 @@ export function AnswerCard({ row, base, onClose }: { row: LookupRow; base: FillB
         <p className="m-0 mt-1 text-meta text-muted">
           Card:{" "}
           <button
-            type="button" onClick={() => useArsenalStore.getState().openCard(cardId)}
+            type="button" onClick={() => useArsenalStore.getState().openCard(cardId, undefined, { from: "manual" })}
             className="cursor-pointer rounded-sm border-0 bg-transparent p-0 font-[inherit] text-fg-2 underline decoration-line-2 underline-offset-2 hover:text-accent hover:decoration-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid"
           >
             {cardTitle}

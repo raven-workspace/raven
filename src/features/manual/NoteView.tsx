@@ -88,7 +88,7 @@ function InlinePart({ p, ctx }: { p: Exclude<Inline, { text: string }>; ctx: Ctx
     return (
       <button
         type="button" title={`Open the card ${card?.title ?? label} in the Arsenal`}
-        onClick={() => useArsenalStore.getState().openCard(to.cardId)}
+        onClick={() => useArsenalStore.getState().openCard(to.cardId, undefined, { from: "manual" })}
         className={`inline-block cursor-pointer border-0 bg-transparent p-0 text-left font-[inherit] leading-6 ${LINK_CLASS}`}
       >
         {marked(label, ctx.re)}

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import type { ManualNote } from "../../engines/manual";
-import { lookupRows, type LookupRow } from "../../engines/manual/lookup";
+import { isInlineCommand, lookupRows, type LookupRow } from "../../engines/manual/lookup";
 import { getCards, useLibraryVersion } from "../../engines/library/store";
 import { isFreeKey, isTypingTarget, useKeydown } from "../../lib/keys";
 import { RavenError } from "../../types/errors";
@@ -24,15 +24,31 @@ const SAVE_MS = 200;
 
 export const manualPath = (noteId: string) => `/manual/${encodeURIComponent(noteId)}`;
 
+/** The line shows all of them while they fit; a narrow window drops the highest numbers first. */
+const HINT_MAX = 8;
+
 const HINTS: Hint[] = [
   { keys: "/", label: "filter", priority: 1 },
   { keys: "↵", label: "copy command", priority: 2 },
-  { keys: "⌘↵", label: "copy and log", priority: 2 },
+  { keys: "⌘↵", label: "copy and log", priority: 3 },
   { keys: "⌘[", label: "previous note", priority: 2 },
-  { keys: "[ ]", label: "section", priority: 3 },
-  { keys: "⌥H", label: "host", priority: 4 },
+  { keys: "[ ]", label: "section", priority: 2 },
+  { keys: "⌥H", label: "host", priority: 2 },
   { keys: "Esc", label: "back", priority: 1 },
 ];
+
+/** Only in the `?` list: keys the line has no room for. */
+const MORE: Hint[] = [
+  { keys: "M", label: "focus the note", priority: 1 },
+  { keys: "⌥↓ ⌥↑", label: "next / previous match", priority: 1 },
+];
+
+/** The note holds a command: a code block, or an inline code span that reads as one. */
+const hasCommands = (note: ManualNote | undefined): boolean =>
+  !!note && (/^\s*(```|~~~)/m.test(note.body) || [...note.body.matchAll(/`([^`\n]+)`/g)].some((m) => isInlineCommand(m[1]!)));
+
+/** Hints for copying a command mean nothing on a note without one. */
+const withoutCopy = (hints: Hint[]): Hint[] => hints.filter((h) => h.keys !== "↵" && h.keys !== "⌘↵");
 
 /** Without notes only Esc applies. */
 const HINTS_EMPTY: Hint[] = HINTS.slice(-1);
@@ -166,6 +182,10 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
   const [params] = useSearchParams();
   const query = params.get(MANUAL_QUERY)?.trim() ?? "";
   const filterRef = useRef<HTMLInputElement>(null);
+  /** The pane or anything in it has focus: the host row's hairline shows it. */
+  const [paneFocused, setPaneFocused] = useState(false);
+  /** The next note opened takes focus even from the rail (↵ in the filter). */
+  const readNext = useRef(false);
   const [filter, setFilter] = useState("");
   const [outlineOpen, setOutlineOpen] = useState(false);
   /** The note on screen and its live scroll offset. */
@@ -222,11 +242,12 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
     // Arriving (M, the title-bar button, a link, ⌘[, ⌘K) puts focus in the note, so ↓ PgDn Space scroll it; a link to a
     // heading focuses that heading. A note opened from the rail keeps focus in the rail, to keep moving along it.
     const inRail = filterRef.current?.closest("nav")?.contains(document.activeElement) ?? false;
-    if (!inRail && (left?.noteId !== note.id || pending || location.hash)) {
+    if ((!inRail || readNext.current) && (left?.noteId !== note.id || pending || location.hash)) {
       const heading = !pending && location.hash ? pane.querySelector(`[id="${CSS.escape(decodeURIComponent(location.hash.slice(1)))}"]`) : null;
       if (heading) focusTarget(heading);
       else focusQuietly(pane);
     }
+    readNext.current = false;
     shown.current = { noteId: note.id, scrollTop: pane.scrollTop };
     savePlace();
     // location.key: a link to a heading in the same note scrolls again.
@@ -329,8 +350,11 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
     focusTarget(spy.jump(i, behavior));
   };
 
-  const open = (id: string) => {
-    if (id !== note?.id) void navigate(manualPath(id), { replace: true });
+  const open = (id: string, read = false) => {
+    if (id !== note?.id) {
+      readNext.current = read;
+      void navigate(manualPath(id), { replace: true });
+    } else if (read) focusQuietly(paneRef.current);
   };
 
   // A note link stays in the Manual's one history entry, so Esc always leaves the Manual.
@@ -348,7 +372,10 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
       if (isTypingTarget(e.target)) return;
       e.preventDefault();
       const prev = useManualStore.getState().back();
-      if (!prev) return;
+      if (!prev) {
+        useManualStatus.getState().set("No previous note", "ok");
+        return;
+      }
       if (!notes.some((n) => n.id === prev.noteId)) return;
       returning.current = true;
       pendingScroll.current = prev;
@@ -386,7 +413,10 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
       <ManualRail notes={notes} currentId={note?.id ?? null} filter={filter} onFilter={setFilter} filterRef={filterRef} onOpen={open} />
       <div className={`grid min-h-0 ${ROWS[(query && note ? 1 : 0) + (shownCard ? 1 : 0)]}`}>
         {/* What the note's commands fill for, and where ⌘↵ logs: kept above the scroll so it never moves. */}
-        <div className="grid min-h-12 grid-cols-[minmax(10rem,max-content)_minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-8 py-2 text-meta">
+        <div
+          data-host-row="" {...(paneFocused ? { "data-pane-focused": "" } : {})}
+          className="grid min-h-12 grid-cols-[minmax(10rem,max-content)_minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-8 py-2 text-meta data-[pane-focused]:border-accent"
+        >
           {engagementId ? (
             <>
               <div data-host-chip-cell="" className="grid">
@@ -408,7 +438,8 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
         )}
         <section
           id={MANUAL_NOTE_ID} ref={paneRef} aria-label="Note" tabIndex={-1} onScroll={onScroll}
-          className="grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden px-8 py-4 outline-none [--pane-bg:var(--bg)] focus-visible:shadow-[inset_0_0_0_2px_var(--accent)]"
+          onFocus={() => setPaneFocused(true)} onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setPaneFocused(false)}
+          className="grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden px-8 py-4 outline-none [--pane-bg:var(--bg)]"
         >
           {note && (
             <>
@@ -473,7 +504,10 @@ export function ManualPage() {
     else void (firstEntry ? navigate("/") : navigate(-1));
   });
 
-  const pageHints = searching ? (cardShown ? HINTS_CARD : HINTS_SEARCH) : HINTS;
+  const open = noteId ? notes.find((n) => n.id === noteId) : undefined;
+  // An answer card has commands of its own, so only the plain variants lose the copy hints.
+  const base = searching ? (cardShown ? HINTS_CARD : HINTS_SEARCH) : HINTS;
+  const pageHints = cardShown || hasCommands(open) ? base : withoutCopy(base);
   const hints = status !== "ready" ? HINTS_EMPTY : scope.engagementId && host ? pageHints : noHost(pageHints);
 
   let body = null;
@@ -494,7 +528,7 @@ export function ManualPage() {
     <main aria-label="Manual" data-hint-surface="" className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto]">
       {body ?? <div />}
       <footer className="grid border-t border-line px-6 py-2">
-        <HintLine hints={hints} ariaLabel="Manual shortcuts" />
+        <HintLine hints={hints} more={status === "ready" ? MORE.filter((h) => !hints.some((x) => x.keys === h.keys)) : []} max={HINT_MAX} ariaLabel="Manual shortcuts" />
       </footer>
     </main>
   );

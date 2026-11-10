@@ -12,9 +12,9 @@ export interface Hint {
 
 function HintUnit({ hint }: { hint: Hint }) {
   return (
-    <span data-hint className="inline-grid grid-flow-col items-center gap-[6px] whitespace-nowrap text-meta text-muted-2">
+    <span data-hint className="inline-grid grid-flow-col items-center justify-start gap-[6px] whitespace-nowrap text-meta text-muted-2">
       {/* "⌥H ⌥C" is two caps side by side in one unit. */}
-      <span className="inline-grid grid-flow-col items-center gap-1">
+      <span className="inline-grid grid-flow-col items-center justify-start gap-1">
         {hint.keys.split(" ").map((k) => (
           <Kbd key={k}>{k}</Kbd>
         ))}
@@ -34,7 +34,7 @@ function HintUnit({ hint }: { hint: Hint }) {
  * A final `?` opens the full list. The `?` key does the same while focus is inside the
  * closest `[data-hint-surface]` ancestor and not in a text field.
  */
-export function HintLine({ hints, max = 5, ariaLabel }: { hints: Hint[]; max?: number; ariaLabel: string }) {
+export function HintLine({ hints, more, max = 5, ariaLabel }: { hints: Hint[]; /** Listed only in the `?` list, never on the line. */ more?: Hint[]; max?: number; ariaLabel: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [dropped, setDropped] = useState(0);
@@ -119,7 +119,7 @@ export function HintLine({ hints, max = 5, ariaLabel }: { hints: Hint[]; max?: n
             sideOffset={6}
             className="z-50 grid gap-2 rounded-md border border-line-strong bg-surface p-3 shadow-lg"
           >
-            {hints.map((h, i) => (
+            {[...hints, ...(more ?? [])].map((h, i) => (
               <HintUnit key={i} hint={h} />
             ))}
           </Popover.Content>

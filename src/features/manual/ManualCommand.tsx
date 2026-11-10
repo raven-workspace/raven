@@ -63,6 +63,7 @@ export function ManualCommand({ command, label, caption, fill, output = false, b
         tokens={cmd.tokens ?? []}
         highlight={highlight ?? null}
         wrap={!output}
+        copyTabIndex={-1}
         copyLabel={`Copy command: ${label}`}
         onCopyAction={(button) =>
           copy().then((r) => {
