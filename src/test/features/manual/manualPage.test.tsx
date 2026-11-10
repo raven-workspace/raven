@@ -94,6 +94,43 @@ const rail = () => within(screen.getByRole("navigation", { name: "Manual notes" 
 const press = (key: string, init: KeyboardEventInit = {}) => fireEvent.keyDown(document.body, { key, ...init });
 const openNote = (title: string) => screen.findByRole("article", { name: title });
 
+/** Where Bb Basics' headings sit down the note, in px: jsdom lays nothing out, so [ ] and the bar read these. */
+const HEADING_AT: Record<string, number> = { alpha: 100, beta: 300, "beta-two": 500, "table-1": 700 };
+let undoLayout: (() => void) | null = null;
+/**
+ * A laid-out Bb Basics: the pane's top at 0, each heading at its spot less the pane's scroll, outline rows 28px apart
+ * from 100, and scrollIntoView putting a heading on the pane's top (as far as the pane can scroll).
+ */
+function layOut() {
+  const rect = Element.prototype.getBoundingClientRect;
+  const into = Element.prototype.scrollIntoView;
+  const rects = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const row = this.getAttribute("data-index");
+    if (row !== null) return new DOMRect(0, 100 + 28 * Number(row), 180, 28);
+    if (this.querySelector(":scope > [data-testid=section-indicator]")) return new DOMRect(0, 100, 180, 112);
+    if (this.getAttribute("aria-label") === "Note") return new DOMRect(0, 0, 600, 500);
+    const note = this.closest<HTMLElement>("[aria-label=Note]");
+    const y = HEADING_AT[this.id];
+    if (note && y !== undefined) return new DOMRect(0, y - note.scrollTop, 600, 22);
+    return rect.call(this);
+  });
+  Element.prototype.scrollIntoView = function (this: Element) {
+    const note = this.closest<HTMLElement>("[aria-label=Note]");
+    const y = HEADING_AT[this.id];
+    if (!note || y === undefined) return;
+    const max = note.scrollHeight - note.clientHeight;
+    note.scrollTop = max > 0 ? Math.min(y, max) : y;
+  };
+  undoLayout = () => {
+    rects.mockRestore();
+    Element.prototype.scrollIntoView = into;
+  };
+}
+afterEach(() => {
+  undoLayout?.();
+  undoLayout = null;
+});
+
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
@@ -273,6 +310,7 @@ describe("Manual: leaving, sections and place", () => {
   it("] and [ step through the outline; a table entry shows its number and name apart", async () => {
     mount(["/manual"]);
     await openNote("Bb Basics");
+    layOut();
     const outline = within(screen.getByRole("navigation", { name: "On this page" }));
     const entries = outline.getAllByRole("button");
     expect(entries.map((b) => b.textContent)).toEqual(["Alpha", "Beta", "Beta Two", "Table 1Zz codes"]);
@@ -369,6 +407,8 @@ describe("Manual: On this page follows the reading", () => {
     });
   };
   const outline = () => within(screen.getByRole("navigation", { name: "On this page" }));
+  /** A jump's scroll has gone quiet: the owner's next scroll is theirs. */
+  const settled = () => act(() => new Promise((r) => setTimeout(r, 200)));
   const currentEntry = () => outline().getAllByRole("button").find((b) => b.getAttribute("aria-current") === "location")?.textContent;
 
   beforeEach(() => {
@@ -403,11 +443,14 @@ describe("Manual: On this page follows the reading", () => {
     await waitFor(() => expect(currentEntry()).toBe("Table 1Zz codes"));
   });
 
-  it("a jump near the end keeps its entry current while the note sits at its end", async () => {
+  it("a jump near the end keeps its entry current while the note sits at its end, and [ ] step on from it", async () => {
     mount(["/manual"]);
     await openNote("Bb Basics");
+    layOut();
     scrollPane(1500);
     await waitFor(() => expect(currentEntry()).toBe("Table 1Zz codes"));
+    press("[");
+    expect(currentEntry()).toBe("Table 1Zz codes");
     press("[");
     expect(currentEntry()).toBe("Beta Two");
     scrollPane(1490);
@@ -421,13 +464,7 @@ describe("Manual: On this page follows the reading", () => {
     const bar = screen.getByTestId("section-indicator");
     expect(bar).not.toBeVisible();
     expect(bar).toHaveClass("bg-accent", "transition-[transform,height]", "motion-reduce:transition-none");
-    const rect = Element.prototype.getBoundingClientRect;
-    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
-      const i = this.getAttribute("data-index");
-      if (i !== null) return new DOMRect(0, 100 + 28 * Number(i), 180, 28);
-      if (this === bar.parentElement) return new DOMRect(0, 100, 180, 112);
-      return rect.call(this);
-    });
+    layOut();
     press("]");
     expect(bar).toBeVisible();
     expect(bar.style.transform).toBe("translateY(0px)");
@@ -435,7 +472,35 @@ describe("Manual: On this page follows the reading", () => {
     press("]");
     expect(currentEntry()).toBe("Beta");
     expect(bar.style.transform).toBe("translateY(28px)");
-    vi.restoreAllMocks();
+  });
+
+  it("] goes to the first heading below the pane's top, never the section being read; [ to the start of the one being read", async () => {
+    mount(["/manual"]);
+    await openNote("Bb Basics");
+    layOut();
+    // Reading Beta: its heading is 50px above the top, Beta Two's 150px below.
+    scrollPane(350);
+    await waitFor(() => expect(currentEntry()).toBe("Beta"));
+    press("]");
+    expect(currentEntry()).toBe("Beta Two");
+    expect(pane().scrollTop).toBe(500);
+    await settled();
+    scrollPane(350);
+    await waitFor(() => expect(currentEntry()).toBe("Beta"));
+    press("[");
+    expect(currentEntry()).toBe("Beta");
+    expect(pane().scrollTop).toBe(300);
+    await settled();
+    // Beta's heading on the top edge: ] skips it, [ goes to the one before.
+    scrollPane(300);
+    await settled();
+    press("]");
+    expect(currentEntry()).toBe("Beta Two");
+    await settled();
+    scrollPane(300);
+    await settled();
+    press("[");
+    expect(currentEntry()).toBe("Alpha");
   });
 
   it("clicking an entry scrolls smoothly in place: no history entry, and Esc still leaves in one press", async () => {
@@ -636,6 +701,7 @@ describe("Manual: title bar and focus", () => {
     const user = userEvent.setup();
     mount(["/manual"]);
     await openNote("Bb Basics");
+    layOut();
     press("]");
     const alpha = screen.getByRole("heading", { name: "Alpha" });
     expect(alpha).toHaveFocus();

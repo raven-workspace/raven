@@ -81,12 +81,13 @@ const plain = (parts: Inline[]): string =>
 
 /**
  * A code block as a library command. The fence title is where it runs, as on a card (`parseCard`): `Kali…` is the
- * attacker, any other title (`Target — PowerShell`, `Pivot — bash`) the target; an untitled block runs from Kali. The
- * fence language gives the OS (Windows shells, Unix shells off Kali), and the log title is the section it sits in.
+ * attacker, any other title (`Target — PowerShell`, `Pivot — bash`) the target. An untitled block runs from Kali,
+ * unless its language is a Windows shell (Kali has none): then it runs on the target. The fence language gives the OS
+ * (Windows shells, Unix shells off Kali), and the log title is the section it sits in.
  */
 function commandOf(block: Extract<Block, { kind: "code" }>, note: ManualNote, n: number, section: string): LibraryCommand {
-  const kali = !block.title || /^kali\b/i.test(block.title);
   const lang = block.lang.toLowerCase();
+  const kali = block.title ? /^kali\b/i.test(block.title) : !WINDOWS_LANGS.has(lang);
   const os = WINDOWS_LANGS.has(lang) ? "windows" : LINUX_LANGS.has(lang) && !kali ? "linux" : "any";
   return {
     id: `manual:${note.id}:${n}`, title: section || note.title, tool: block.text.trim().split(/\s+/)[0] ?? "",

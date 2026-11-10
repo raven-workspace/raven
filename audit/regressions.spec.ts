@@ -1019,6 +1019,13 @@ test("Manual: On this page follows the scroll, and a pick adds no history entry"
   await expect(current).toHaveText("Kerberos");
   await pane.evaluate((el) => (el.scrollTop = el.scrollHeight));
   await expect(current).toHaveText("Related");
+  // The aside followed the outline to its end; its label stays on top, and the current entry clear of it.
+  await expect.poll(() => aside.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  const [box, head, row] = await Promise.all([
+    aside.boundingBox(), aside.getByRole("heading", { name: "On this page" }).boundingBox(), current.boundingBox(),
+  ]);
+  expect(Math.abs(head!.y - box!.y)).toBeLessThan(1);
+  expect(row!.y).toBeGreaterThanOrEqual(head!.y + head!.height - 1);
   const bar = aside.getByTestId("section-indicator");
   await expect(async () => {
     const [b, c] = await Promise.all([bar.boundingBox(), current.boundingBox()]);

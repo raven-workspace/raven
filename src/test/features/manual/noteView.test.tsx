@@ -201,6 +201,34 @@ describe("NoteView commands", () => {
     })));
   });
 
+  it("an untitled Windows block logs as run on the host; an untitled bash block stays on Kali", async () => {
+    const note = parseNote("03-Tools/Zz Bare.md", [
+      "# Zz Bare",
+      "## Query the zz service",
+      "```powershell",
+      "Get-ZzThing -Name {TARGET_IP}",
+      "```",
+      "## Scan it",
+      "```bash",
+      "zzscan {TARGET_IP}",
+      "```",
+    ].join("\n"))!;
+    const user = userEvent.setup();
+    mount(note);
+    const target = await cmdGroup("Query the zz service: Get-ZzThing -Name {TARGET_IP}");
+    await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "Get-ZzThing -Name 198.51.100.20");
+    act(() => target.focus());
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await waitFor(() => expect(logCommand).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
+      command: "Get-ZzThing -Name 198.51.100.20", title: "Query the zz service", ranOn: "zzdc01.example.test",
+    })));
+    act(() => screen.getByRole("group", { name: "Note command: Scan it: zzscan {TARGET_IP}" }).focus());
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await waitFor(() => expect(logCommand).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
+      command: "zzscan 198.51.100.20", title: "Scan it", ranOn: "kali",
+    })));
+  });
+
   it("each command is one labelled group (no group nested inside it)", async () => {
     mount();
     const group = await cmdGroup("Usage: zzscan -t {TARGET_IP}");

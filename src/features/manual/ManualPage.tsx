@@ -356,8 +356,9 @@ function Reader({ notes, noteId }: { notes: ManualNote[]; noteId: string | undef
           )}
         </section>
       </div>
-      <aside aria-label="Outline" className="hidden min-h-0 content-start gap-2 overflow-y-auto overflow-x-hidden border-l border-line px-3 py-4 min-[1100px]:grid">
-        <h2 className={`${labelClass} m-0 px-3`}>On this page</h2>
+      <aside aria-label="Outline" className="hidden min-h-0 content-start overflow-y-auto overflow-x-hidden border-l border-line px-3 pb-4 min-[1100px]:grid">
+        {/* Sticky, so the label never scrolls away while the aside follows a long outline. */}
+        <h2 data-outline-head="" className={`${labelClass} sticky top-0 z-10 m-0 bg-bg px-3 pt-4 pb-2`}>On this page</h2>
         {note && (
           <nav aria-label="On this page" className="grid">
             <ManualOutline outline={note.outline} current={spy.current} onPick={pick} follow />

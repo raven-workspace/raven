@@ -8,8 +8,8 @@ const EDGE = 48;
 /** The band the scroll-spy watches: 20px in from the pane's top, down to 60% of its height. */
 const BAND_MARGIN = "-20px 0px -40% 0px";
 const BAND_TOP = 20;
-/** How far below the pane's top a heading may sit and still count as reached by a jump. */
-const SLACK = 24;
+/** A heading within this many px of the pane's top edge is on it (sub-pixel scroll positions). */
+const EDGE_PX = 1;
 /** A jump owns the current entry until its scroll has been quiet this long. */
 const SETTLE_MS = 150;
 
@@ -129,16 +129,30 @@ export function useOutlineSpy(paneRef: RefObject<HTMLElement | null>, ids: strin
   };
 
   /**
-   * The entry `]` (+1) or `[` (-1) goes to. A current heading still below the pane's top (the band marks it before
-   * it's reached) is where `]` goes first.
+   * The entry `]` (+1) or `[` (-1) goes to, read from what's at the top of the note pane, not from the marked entry:
+   * `]` the first heading strictly below the pane's top edge, `[` the last one strictly above it (the start of the
+   * section being read, or the one before when a heading sits on the edge). A jump the pane couldn't bring to the top
+   * (the end of a note) still holds, so [ ] step on from it until the owner scrolls.
    */
   const step = (dir: 1 | -1): number => {
-    if (current < 0) return 0;
-    if (dir < 0) return Math.max(0, current - 1);
+    const last = ids.length - 1;
+    if (jumped.current >= 0) return Math.min(last, Math.max(0, jumped.current + dir));
     const pane = paneRef.current;
-    const el = pane ? entryEl(pane, ids[current] ?? "") : null;
-    const ahead = !!pane && !!el && el.getBoundingClientRect().top - pane.getBoundingClientRect().top > SLACK;
-    return ahead ? current : Math.min(ids.length - 1, current + 1);
+    if (!pane) return dir > 0 ? 0 : last;
+    const top = pane.getBoundingClientRect().top;
+    const at = ids.map((id) => {
+      const el = entryEl(pane, id);
+      return el ? el.getBoundingClientRect().top - top : Number.NaN;
+    });
+    if (dir > 0) {
+      const next = at.findIndex((y) => y > EDGE_PX);
+      return next < 0 ? last : next;
+    }
+    let prev = 0;
+    at.forEach((y, i) => {
+      if (y < -EDGE_PX) prev = i;
+    });
+    return prev;
   };
 
   return { current, jump, step };
@@ -185,8 +199,10 @@ export function ManualOutline({ outline, current, onPick, follow = false }: {
     const el = list.querySelector<HTMLElement>(`[data-index="${current}"]`);
     if (scroller && el) {
       const s = scroller.getBoundingClientRect();
+      // The aside's sticky label covers its top: an entry under it is out of view.
+      const top = Math.max(s.top, scroller.querySelector("[data-outline-head]")?.getBoundingClientRect().bottom ?? s.top);
       const r = el.getBoundingClientRect();
-      if (r.top < s.top) scroller.scrollTop -= s.top - r.top;
+      if (r.top < top) scroller.scrollTop -= top - r.top;
       else if (r.bottom > s.bottom) scroller.scrollTop += r.bottom - s.bottom;
     }
     // The disclosure's list measures 0 until it is laid out; a wrapped entry moves the ones below it.
