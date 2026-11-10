@@ -84,6 +84,15 @@ export function ManualCommand({ command, label, caption, fill, output = false, b
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    // Output keeps its lines whole and scrolls sideways: ← → scroll it while the block has focus.
+    if (output && (e.key === "ArrowLeft" || e.key === "ArrowRight") && e.target === root.current && !e.metaKey && !e.altKey) {
+      const pre = root.current?.querySelector("pre");
+      if (pre && pre.scrollWidth > pre.clientWidth) {
+        e.preventDefault();
+        pre.scrollBy({ left: e.key === "ArrowLeft" ? -80 : 80 });
+      }
+      return;
+    }
     if (e.key !== "Enter" || e.altKey || e.shiftKey || e.nativeEvent.isComposing || e.defaultPrevented) return;
     if (e.metaKey || e.ctrlKey) {
       e.preventDefault();
@@ -101,17 +110,21 @@ export function ManualCommand({ command, label, caption, fill, output = false, b
       ref={root} role="group" aria-label={`Note command: ${label}`} tabIndex={0} onKeyDown={onKeyDown}
       className="grid gap-1 rounded-sm outline-accent outline-offset-4 outline-none focus:outline-1 focus:outline-solid"
     >
-      <div className="grid min-h-[18px] grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2">
-        <span className="truncate text-meta text-muted-2">{caption}</span>
-        {status && (
-          <span role="status" className={`text-meta ${guard.hint || cmd.unresolved.length > 0 ? "text-warn" : "text-accent"}`}>{status}</span>
-        )}
-      </div>
+      {/* An untitled block has no caption row (no empty gap above it) until a copy has something to say. */}
+      {(caption || status) && (
+        <div className="grid min-h-[18px] grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2">
+          <span className="truncate text-meta text-muted-2">{caption}</span>
+          {status && (
+            <span role="status" className={`text-meta ${guard.hint || cmd.unresolved.length > 0 ? "text-warn" : "text-accent"}`}>{status}</span>
+          )}
+        </div>
+      )}
       <CommandBlock
         text={cmd.text}
         {...(cmd.copyText !== undefined ? { copyText: cmd.copyText } : {})}
         tokens={cmd.tokens ?? []}
         highlight={highlight ?? null}
+        wrap={!output}
         copyLabel={`Copy command: ${label}`}
         onCopyAction={(button) =>
           copy().then((r) => {

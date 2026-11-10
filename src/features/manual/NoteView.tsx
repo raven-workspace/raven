@@ -15,7 +15,15 @@ import { ManualCommand, type FillBase } from "./ManualCommand";
 import { NoteTable } from "./NoteTable";
 
 /** Prose keeps a reading measure; tables, code and commands take the full width of the note pane. */
-const PROSE = "m-0 max-w-[760px] text-body/6 text-fg-2";
+const PROSE = "m-0 max-w-[56ch] text-read text-fg-2 [text-wrap:pretty]";
+/** A caption or bold label opens a group: room above it, close to what it names (none extra right under a heading). */
+const LEADS = "mt-4 -mb-1 first:mt-0 [:is(h2,h3,h4)+&]:mt-0";
+/** A paragraph that is only bold text (with at most a closing colon or full stop) labels what follows it. */
+const isLabel = (parts: Inline[]) => {
+  const solid = parts.filter((p) => !("text" in p) || p.text.trim() !== "");
+  if (!solid.length || !("strong" in solid[0])) return false;
+  return solid.slice(1).every((p) => "text" in p && /^[:.]$/.test(p.text.trim()));
+};
 const PLACEHOLDER = /\{[A-Za-z][A-Za-z0-9_]*\}/;
 /** Fence languages that hold output to read, not a command to run: Copy only (no fill, no log, no exam rule). */
 const OUTPUT_LANGS = new Set(["text", "txt", "output", "console", "plaintext", "plain"]);
@@ -34,36 +42,53 @@ interface Ctx {
 /** Plain text with the search's matches marked. */
 const marked = (text: string, re: RegExp | null): ReactNode => (re ? highlight(text, 0, matchRanges(text, re)) : text);
 
+/** Punctuation right after a link: it stays on the link's line (a card link is an inline-block, so a line may break before it). */
+const TRAIL = /^[,.;:!?)\]]+/;
+
 function InlineView({ parts, ctx }: { parts: Inline[]; ctx: Ctx }): ReactNode {
+  let cut = 0;
   return parts.map((p, i) => {
-    if ("text" in p) return <Fragment key={i}>{marked(p.text, ctx.re)}</Fragment>;
-    if ("code" in p) {
-      // A short single token (a status code, a flag, a path) never breaks inside: not at a backslash or dot either.
-      const token = p.code.length <= TOKEN_MAX && !/\s/.test(p.code);
-      return <code key={i} className={cx("font-mono text-code text-fg [overflow-wrap:break-word]", token && "whitespace-nowrap")}>{marked(p.code, ctx.re)}</code>;
+    if ("text" in p) {
+      const text = p.text.slice(cut);
+      cut = 0;
+      return <Fragment key={i}>{marked(text, ctx.re)}</Fragment>;
     }
-    if ("strong" in p) return <strong key={i} className="font-semibold text-fg"><InlineView parts={p.strong} ctx={ctx} /></strong>;
-    if ("em" in p) return <em key={i}><InlineView parts={p.em} ctx={ctx} /></em>;
-    const { target, heading, label } = p.link;
-    const to = resolveLink(target, ctx.notes, ctx.cards, heading);
-    if (to.kind === "note") {
-      return <Link key={i} to={`/manual/${encodeURIComponent(to.noteId)}${to.heading ? `#${to.heading}` : ""}`} className={`py-1 ${LINK_CLASS}`}>{marked(label, ctx.re)}</Link>;
-    }
-    if (to.kind === "card") {
-      const card = ctx.cards.find((c) => c.id === to.cardId);
-      return (
-        <button
-          key={i} type="button" title={`Open the card ${card?.title ?? label} in the Arsenal`}
-          onClick={() => useArsenalStore.getState().openCard(to.cardId)}
-          className={`inline-block cursor-pointer border-0 bg-transparent p-0 text-left font-[inherit] leading-6 ${LINK_CLASS}`}
-        >
-          {marked(label, ctx.re)}
-        </button>
-      );
-    }
-    // Unresolved: plain muted text, never a dead link.
-    return <span key={i} className="text-muted">{marked(label, ctx.re)}</span>;
+    const next = parts[i + 1];
+    const trail = "link" in p && next && "text" in next ? TRAIL.exec(next.text)?.[0] : undefined;
+    if (!trail) return <InlinePart key={i} p={p} ctx={ctx} />;
+    cut = trail.length;
+    return <span key={i} className="whitespace-nowrap"><InlinePart p={p} ctx={ctx} />{marked(trail, ctx.re)}</span>;
   });
+}
+
+/** One non-text inline part: code, emphasis, or a link (to a note, to a card, or unresolved). */
+function InlinePart({ p, ctx }: { p: Exclude<Inline, { text: string }>; ctx: Ctx }): ReactNode {
+  if ("code" in p) {
+    // A short single token (a status code, a flag, a path) never breaks inside: not at a backslash or dot either.
+    const token = p.code.length <= TOKEN_MAX && !/\s/.test(p.code);
+    return <code className={cx("font-mono text-code text-fg [overflow-wrap:break-word]", token && "whitespace-nowrap")}>{marked(p.code, ctx.re)}</code>;
+  }
+  if ("strong" in p) return <strong className="font-medium text-fg"><InlineView parts={p.strong} ctx={ctx} /></strong>;
+  if ("em" in p) return <em><InlineView parts={p.em} ctx={ctx} /></em>;
+  const { target, heading, label } = p.link;
+  const to = resolveLink(target, ctx.notes, ctx.cards, heading);
+  if (to.kind === "note") {
+    return <Link to={`/manual/${encodeURIComponent(to.noteId)}${to.heading ? `#${to.heading}` : ""}`} className={`py-1 ${LINK_CLASS}`}>{marked(label, ctx.re)}</Link>;
+  }
+  if (to.kind === "card") {
+    const card = ctx.cards.find((c) => c.id === to.cardId);
+    return (
+      <button
+        type="button" title={`Open the card ${card?.title ?? label} in the Arsenal`}
+        onClick={() => useArsenalStore.getState().openCard(to.cardId)}
+        className={`inline-block cursor-pointer border-0 bg-transparent p-0 text-left font-[inherit] leading-6 ${LINK_CLASS}`}
+      >
+        {marked(label, ctx.re)}
+      </button>
+    );
+  }
+  // Unresolved: plain muted text, never a dead link.
+  return <span className="text-muted">{marked(label, ctx.re)}</span>;
 }
 
 /** The first line of a code block, shortened: it names a block that has no title. */
@@ -111,22 +136,22 @@ function BlockView({ block, n, ctx, base, section }: { block: Block; n: number; 
   switch (block.kind) {
     case "heading": {
       const inner = <InlineView parts={block.inline} ctx={ctx} />;
-      if (block.level === 1) return <h1 id={block.id} className="m-0 max-w-[760px] scroll-mt-4 text-title text-fg">{inner}</h1>;
-      if (block.level === 2) return <h2 id={block.id} className="m-0 mt-4 max-w-[760px] scroll-mt-4 text-title text-fg">{inner}</h2>;
-      if (block.level === 3) return <h3 id={block.id} className="m-0 mt-2 max-w-[760px] scroll-mt-4 text-heading text-fg">{inner}</h3>;
-      return <h4 id={block.id} className="m-0 mt-1 max-w-[760px] scroll-mt-4 text-body font-semibold text-fg">{inner}</h4>;
+      if (block.level === 1) return <h1 id={block.id} className="m-0 mb-2 max-w-[760px] scroll-mt-4 text-read-title text-fg [text-wrap:balance]">{inner}</h1>;
+      if (block.level === 2) return <h2 id={block.id} className="m-0 mt-4 max-w-[760px] scroll-mt-4 border-t border-line pt-4 text-title text-fg [text-wrap:balance] first:mt-0 first:border-t-0 first:pt-0 [h1+&]:mt-0 [h1+&]:border-t-0 [h1+&]:pt-0">{inner}</h2>;
+      if (block.level === 3) return <h3 id={block.id} className="m-0 mt-4 max-w-[760px] scroll-mt-4 text-heading text-fg [text-wrap:balance] first:mt-0">{inner}</h3>;
+      return <h4 id={block.id} className="m-0 mt-2 max-w-[760px] scroll-mt-4 text-body font-semibold text-fg first:mt-0">{inner}</h4>;
     }
     case "paragraph":
       return (
-        <p id={block.anchor} className={block.anchor ? "m-0 mt-2 max-w-[760px] scroll-mt-4 text-heading text-fg" : PROSE}>
+        <p id={block.anchor} className={block.anchor ? `m-0 max-w-[760px] scroll-mt-4 text-heading text-fg [text-wrap:balance] ${LEADS}` : isLabel(block.inline) ? `${PROSE} ${LEADS} [&_strong]:font-semibold` : PROSE}>
           <InlineView parts={block.inline} ctx={ctx} />
           {/* A caption's note after its bold name reads as body text, not as part of the heading. */}
-          {block.trail && <span className="text-body text-muted-2"> <InlineView parts={block.trail} ctx={ctx} /></span>}
+          {block.trail && <span className="text-body font-normal text-muted-2"> <InlineView parts={block.trail} ctx={ctx} /></span>}
         </p>
       );
     case "list": {
       const items = block.items.map((it, i) => <li key={i}><InlineView parts={it} ctx={ctx} /></li>);
-      const cls = `${PROSE} grid gap-1 pl-6 marker:text-muted`;
+      const cls = `${PROSE} grid gap-2 pl-6 marker:text-muted`;
       return block.ordered ? <ol className={`${cls} list-decimal`}>{items}</ol> : <ul className={`${cls} list-disc`}>{items}</ul>;
     }
     case "table":

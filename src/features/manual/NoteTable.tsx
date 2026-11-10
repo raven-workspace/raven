@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import type { Inline } from "../../engines/manual/markdown";
+import { labelClass } from "../../ui/Label";
 
 /** A cell's plain text, for its column name in the stacked layout. */
 const plain = (parts: Inline[]): string =>
@@ -72,11 +73,11 @@ export function NoteTable({ head, rows, cell }: { head: Inline[][]; rows: Inline
   const labels = head.map(plain);
   return (
     <div ref={wrapRef} className="grid min-w-0">
-      <table ref={tableRef} role="table" className="group/nt w-full border-collapse text-meta data-stacked:grid">
+      <table ref={tableRef} role="table" className="group/nt w-full border-collapse text-body/5.5 data-stacked:grid">
         <thead role="rowgroup" className="group-data-stacked/nt:hidden">
           <tr role="row">
             {head.map((c, i) => (
-              <th key={i} role="columnheader" className="border-b border-line-2 px-2 py-1 text-left align-bottom text-label text-muted [overflow-wrap:break-word]">
+              <th key={i} role="columnheader" className={`border-b border-line-strong px-2 pt-1 pb-2 text-left align-bottom ${labelClass} [overflow-wrap:break-word]`}>
                 {cell(c)}
               </th>
             ))}

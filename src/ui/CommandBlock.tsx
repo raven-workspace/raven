@@ -26,6 +26,11 @@ export interface CommandBlockProps {
   onCopyAction?: (button: HTMLButtonElement) => Promise<"copied" | "guarded"> | void;
   /** A search to mark in the shown text (`<mark data-match>`); what copies is never changed. */
   highlight?: RegExp | null;
+  /**
+   * `false` keeps every line whole and scrolls the block sideways instead (output, tables and diagrams drawn in text,
+   * whose columns are the content). Commands wrap, so a long one is seen whole before it is copied.
+   */
+  wrap?: boolean;
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -39,7 +44,8 @@ function marks(token: string, re: RegExp | null): { text: string; warn: boolean 
     .filter((m) => m.text !== "");
 }
 
-export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, copyText, copyLabel, onCopyAction, highlight }: CommandBlockProps) {
+export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, copyText, copyLabel, onCopyAction, highlight, wrap = true }: CommandBlockProps) {
+  const token = wrap ? "inline-block max-w-full [overflow-wrap:anywhere]" : "inline-block";
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -60,7 +66,7 @@ export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, 
       {label && <span className="text-meta text-muted-2">{label}</span>}
       <div className="grid grid-cols-[minmax(0,1fr)_28px] items-start gap-2 rounded-sm border border-line bg-surface px-2 py-2">
         <pre
-          className="m-0 min-w-0 overflow-x-hidden font-mono text-code whitespace-pre-wrap text-fg-2"
+          className={wrap ? "m-0 min-w-0 overflow-x-hidden font-mono text-code whitespace-pre-wrap text-fg-2" : "m-0 min-w-0 overflow-x-auto overflow-y-hidden pr-6 pb-3 font-mono text-code whitespace-pre text-fg-2 [mask-image:linear-gradient(to_right,#000_calc(100%-24px),transparent)]"}
           {...(name ? { role: "group", "aria-label": `Command: ${name}` } : {})}
         >
           <code>
@@ -69,7 +75,7 @@ export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, 
               if (found.length === 0) {
                 if (/^\s+$/.test(t)) return <Fragment key={i}>{t}</Fragment>;
                 return (
-                  <span key={i} data-token className="inline-block max-w-full [overflow-wrap:anywhere]">
+                  <span key={i} data-token className={token}>
                     {marks(t, re).map((m, j) => (m.warn ? <mark key={j} className="bg-transparent text-warn">{m.text}</mark> : m.text))}
                   </span>
                 );
@@ -82,7 +88,7 @@ export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, 
               // Each space-separated token never breaks (browsers would otherwise break after a hyphen), even around a
               // placeholder; the spaces between tokens are the only break points.
               return (
-                <span key={i} data-token className="inline-block max-w-full [overflow-wrap:anywhere]">
+                <span key={i} data-token className={token}>
                   {parts.map((m, j) => {
                     const shown = highlightText(m.text, partStarts[j], found);
                     return m.warn ? <mark key={j} className="bg-transparent text-warn">{shown}</mark> : <Fragment key={j}>{shown}</Fragment>;
