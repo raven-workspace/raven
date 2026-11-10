@@ -27,13 +27,15 @@ const noop = () => {};
  * In an exam sim (or until the engagement's rules are known) the text is never hidden: a banned command says so in
  * amber and its first copy is held back, and a Meterpreter command shows the Metasploit lock line.
  */
-export function ManualCommand({ command, label, caption, fill, base }: {
+export function ManualCommand({ command, label, caption, fill, output = false, base }: {
   command: LibraryCommand;
   /** Names the block and its Copy button for screen readers. */
   label: string;
   /** The fence's `title:"…"`, shown over the block. */
   caption?: string;
   fill: boolean;
+  /** Output to read (a `text`/`output`/`console` fence): Copy only, no log and no exam rule. */
+  output?: boolean;
   base: FillBase;
 }) {
   const { d, host, makeInput, examReady } = base;
@@ -49,7 +51,7 @@ export function ManualCommand({ command, label, caption, fill, base }: {
   );
 
   // Fail closed: until the engagement's kind is known, a copy is held back as in an exam (the lines show once it is known).
-  const exam = !examReady || d.engagement?.kind === "exam-sim";
+  const exam = !output && (!examReady || d.engagement?.kind === "exam-sim");
   const known = examReady && d.engagement?.kind === "exam-sim";
   const banned = exam && command.exam === "banned";
   const msf = exam && !banned && command.template.split("\n").some((l) => METERPRETER.test(l))
@@ -67,7 +69,7 @@ export function ManualCommand({ command, label, caption, fill, base }: {
 
   const copyAndLog = async () => {
     try {
-      if ((await copy()) !== "copied" || !host || !d.engagement) return;
+      if ((await copy()) !== "copied" || output || !host || !d.engagement) return;
       // The real values, as typed at the shell (not shell-escaped, not masked).
       const typed = fill ? fillCommand(command.template, input, { commandOs: command.os }).text : command.template;
       await logCommand(qc, {

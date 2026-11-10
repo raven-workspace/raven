@@ -13,6 +13,8 @@ import { ManualCommand, type FillBase } from "./ManualCommand";
 /** Prose keeps a reading measure; tables, code and commands take the full width of the note pane. */
 const PROSE = "m-0 max-w-[760px] text-body/6 text-fg-2";
 const PLACEHOLDER = /\{[A-Za-z][A-Za-z0-9_]*\}/;
+/** Fence languages that hold output to read, not a command to run: Copy only (no fill, no log, no exam rule). */
+const OUTPUT_LANGS = new Set(["text", "txt", "output", "console", "plaintext", "plain"]);
 const LINK_CLASS = "text-fg-2 underline decoration-line-2 underline-offset-2 hover:text-accent hover:decoration-accent";
 
 interface Ctx {
@@ -106,11 +108,13 @@ function BlockView({ block, n, ctx, base }: { block: Block; n: number; ctx: Ctx;
         id: `manual:${ctx.note.id}:${n}`, title: block.title ?? ctx.note.title, tool: block.text.trim().split(/\s+/)[0] ?? "",
         template: block.text, os: "any", runFrom: "attacker", goals: [], source: "field-manual",
       };
-      const exam = classifyExam(block.text);
+      const output = OUTPUT_LANGS.has(block.lang.toLowerCase());
+      const exam = output ? undefined : classifyExam(block.text);
       if (exam) command.exam = exam;
       return (
         <ManualCommand
-          command={command} label={block.title ?? firstLine(block.text)} caption={block.title} fill={PLACEHOLDER.test(block.text)} base={base}
+          command={command} label={block.title ?? firstLine(block.text)} caption={block.title}
+          fill={!output && PLACEHOLDER.test(block.text)} output={output} base={base}
         />
       );
     }

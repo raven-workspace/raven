@@ -63,6 +63,9 @@ function fenceInfo(info: string): { lang: string; title?: string } {
 export function parseMarkdown(body: string): Block[] {
   const lines = body.replace(/\r\n?/g, "\n").split("\n");
   const ids = anchorIds();
+  // h1 and h4+ are not in the outline: their ids come from a counter of their own, namespaced (`h1-…`, `h4-…`), so they
+  // never take an outline id that a link or the outline jumps to.
+  const minor = anchorIds();
   const out: Block[] = [];
   let i = 0;
   while (i < lines.length) {
@@ -71,12 +74,16 @@ export function parseMarkdown(body: string): Block[] {
     if (fence) {
       // Same rule as the outline: a fence closes on the next fence line of the same character (or the end of the note).
       const ch = fence[1][0];
+      // CommonMark: the opening fence's indent (a fence inside a list item) comes off each content line, so a copied
+      // command never starts with a space.
+      const indent = /^[ \t]*/.exec(line)![0].length;
+      const dedent = (l: string) => l.replace(new RegExp(`^[ \\t]{0,${indent}}`), "");
       const text: string[] = [];
       i++;
       while (i < lines.length) {
         const f = FENCE.exec(lines[i]);
         if (f && f[1][0] === ch) break;
-        text.push(lines[i]);
+        text.push(dedent(lines[i]));
         i++;
       }
       i++;
@@ -86,15 +93,14 @@ export function parseMarkdown(body: string): Block[] {
     const h = OUTLINE_HEADING.exec(line);
     if (h) {
       const level = h[1].length as 1 | 2 | 3;
-      // h1 is not in the outline, so it takes no part in the shared counter.
-      const id = level === 1 ? anchorIds().heading(h[2]) : ids.heading(h[2]);
+      const id = level === 1 ? minor.heading(`h1 ${h[2]}`) : ids.heading(h[2]);
       out.push({ kind: "heading", level, id, inline: parseInline(h[2]) });
       i++;
       continue;
     }
     const deep = DEEP_HEADING.exec(line);
     if (deep) {
-      out.push({ kind: "heading", level: 4, id: anchorIds().heading(deep[2]), inline: parseInline(deep[2]) });
+      out.push({ kind: "heading", level: 4, id: minor.heading(`h4 ${deep[2]}`), inline: parseInline(deep[2]) });
       i++;
       continue;
     }

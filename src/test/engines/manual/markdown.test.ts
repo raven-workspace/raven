@@ -50,9 +50,9 @@ describe("parseMarkdown", () => {
   });
 
   it("gives headings slug ids and levels", () => {
-    expect(blocks[0]).toMatchObject({ kind: "heading", level: 1, id: "zz-errors" });
+    expect(blocks[0]).toMatchObject({ kind: "heading", level: 1, id: "h1-zz-errors" });
     expect(blocks[2]).toEqual({ kind: "heading", level: 2, id: "core-concept", inline: [{ text: "Core Concept" }] });
-    expect(blocks[8]).toMatchObject({ kind: "heading", level: 4, id: "small-heading" });
+    expect(blocks[8]).toMatchObject({ kind: "heading", level: 4, id: "h4-small-heading" });
   });
 
   it("parses lists, inline code and nested emphasis", () => {
@@ -113,5 +113,16 @@ describe("parseMarkdown", () => {
     const ids = parseMarkdown(body).flatMap((b) => (b.kind === "heading" ? [b.id] : b.kind === "paragraph" && b.anchor ? [b.anchor] : []));
     expect(note.outline.map((o) => o.id)).toEqual(["usage", "usage-2", "section", "table-1", "table-1-2", "table-1-3", "usage-3"]);
     expect(ids).toEqual(note.outline.map((o) => o.id));
+  });
+
+  it("never gives an h1 or h4 an outline id", () => {
+    const ids = parseMarkdown("# Usage\n## Usage\n#### Usage\n#### Usage").map((b) => (b.kind === "heading" ? b.id : ""));
+    expect(ids).toEqual(["h1-usage", "usage", "h4-usage", "h4-usage-2"]);
+  });
+
+  it("strips the opening fence's indent from its lines", () => {
+    const [list, code] = parseMarkdown(["- step one", "  ```bash", "  zz {TARGET_IP}", "    --flag", " x", "  ```"].join("\n"));
+    expect(list.kind).toBe("list");
+    expect(code).toEqual({ kind: "code", lang: "bash", text: "zz {TARGET_IP}\n  --flag\nx" });
   });
 });

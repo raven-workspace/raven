@@ -55,6 +55,10 @@ const BODY = [
   "| - | - |",
   "| x | y |",
   "**Table 1 — Zz codes**",
+  "#### Usage",
+  "```text",
+  "sqlmap output {TARGET_IP} zz",
+  "```",
 ].join("\n");
 const NOTE = parseNote("03-Tools/Zz Tool.md", BODY)!;
 const ERRORS = parseNote("04-Foundations/Zz-Errors.md", "# Zz Errors\n## Core Concept\n")!;
@@ -123,6 +127,14 @@ describe("NoteView anchors", () => {
     expect(NOTE.outline.map((o) => o.id)).toEqual(["usage", "banned", "meterpreter", "usage-2", "table-1", "table-1-2"]);
     for (const o of NOTE.outline) expect(container.querySelector(`[id="${o.id}"]`), o.id).not.toBeNull();
   });
+
+  it("has no duplicate element ids (h1 and h4 never take an outline id)", () => {
+    const { container } = mount();
+    const ids = [...container.querySelectorAll("[id]")].map((e) => e.id);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(container.querySelector('[id="usage"]')?.tagName).toBe("H2");
+  });
 });
 
 describe("NoteView commands", () => {
@@ -188,10 +200,26 @@ describe("NoteView commands", () => {
   });
 });
 
+describe("NoteView output blocks", () => {
+  it("a text fence is output: no fill, no exam line, copies at once and ⌘↵ never logs", async () => {
+    m.engagementGet.mockResolvedValue({ ...E1, kind: "exam-sim" });
+    const user = userEvent.setup();
+    mount();
+    await screen.findByText("Not allowed in the exam");
+    expect(screen.getAllByText("Not allowed in the exam")).toHaveLength(1);
+    await navigator.clipboard.writeText("untouched");
+    const group = await cmdGroup("sqlmap output {TARGET_IP} zz");
+    act(() => group.focus());
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("sqlmap output {TARGET_IP} zz"));
+    expect(logCommand).not.toHaveBeenCalled();
+  });
+});
+
 describe("safe Markdown", () => {
   it("the Manual never injects HTML", () => {
     const root = join(__dirname, "..", "..", "..", "..");
-    for (const f of ["src/engines/manual/markdown.ts", "src/engines/manual/links.ts", "src/features/manual/NoteView.tsx", "src/features/manual/ManualCommand.tsx"]) {
+    for (const f of ["src/engines/manual/anchors.ts", "src/engines/manual/markdown.ts", "src/engines/manual/links.ts", "src/features/manual/NoteView.tsx", "src/features/manual/ManualCommand.tsx"]) {
       expect(readFileSync(join(root, f), "utf8"), f).not.toMatch(/dangerouslySetInnerHTML|innerHTML|outerHTML|insertAdjacentHTML/);
     }
   });
