@@ -9,7 +9,7 @@ import { isDialogOpen } from "../../lib/keys";
 import type { Host } from "../../types/host";
 import { shortHostName } from "../../lib/hostName";
 import { XIcon } from "@phosphor-icons/react";
-import { Disclosure, HintLine, IconButton, LoadingState, labelClass, queryState, type Hint } from "../../ui";
+import { BELOW_TITLE_BAR, Disclosure, HintLine, IconButton, LoadingState, labelClass, queryState, type Hint } from "../../ui";
 import { useCredFill } from "../checklist/credPick";
 import { CommandList, type FilledCommand } from "../checklist/CommandList";
 import { goalCommands } from "../checklist/goalCommands";
@@ -231,7 +231,7 @@ function Body({ engagementId, host, onClose, onOpenGoal, skipRestoreRef }: { eng
       data-hint-surface
       aria-label={title}
       style={{ width: WIDTH }}
-      className="fixed inset-y-0 right-0 z-30 grid max-w-[70vw] grid-rows-[auto_minmax(0,1fr)_auto] border-l border-line-2 bg-surface text-fg-2 outline-none"
+      className={`fixed ${BELOW_TITLE_BAR} right-0 z-30 grid max-w-[70vw] grid-rows-[auto_minmax(0,1fr)_auto] border-l border-line-2 bg-surface text-fg-2 outline-none`}
     >
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-4 py-2">
         <h2 className="m-0 truncate text-heading text-fg" title={title}>{title}</h2>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, type MouseEvent } from "react";
 import { isDialogOpen } from "../../lib/keys";
 import type { Engagement } from "../../types/engagement";
-import { Kbd, Toolbar, labelClass } from "../../ui";
+import { BELOW_TITLE_BAR, Kbd, Toolbar, labelClass } from "../../ui";
 import { cx } from "../../lib/cx";
 import { useHosts } from "../hosts/queries";
 import { NoteEditor } from "./NoteEditor";
@@ -103,7 +103,7 @@ function PanelBody({
     <aside
       aria-label={title}
       style={{ width }}
-      className="fixed inset-y-0 right-0 z-30 grid max-w-[70vw] grid-rows-[auto_minmax(0,1fr)] border-l border-line-2 bg-surface text-fg-2"
+      className={`fixed ${BELOW_TITLE_BAR} right-0 z-30 grid max-w-[70vw] grid-rows-[auto_minmax(0,1fr)] border-l border-line-2 bg-surface text-fg-2`}
     >
       <div
         role="separator"

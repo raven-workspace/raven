@@ -2,7 +2,7 @@ import { ArrowsOut } from "@phosphor-icons/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useMatch, useNavigate } from "react-router";
 import { isFreeKey, useKeydown } from "../../lib/keys";
-import { HintLine, IconButton, Input } from "../../ui";
+import { BELOW_TITLE_BAR, HintLine, IconButton, Input } from "../../ui";
 import { useFillScope } from "../arsenal/useFillScope";
 import { ContextChips } from "./ContextChips";
 import { PayloadBlock, PayloadView } from "./PayloadView";
@@ -147,7 +147,7 @@ export function PayloadsDrawer() {
 
   if (!open || onFull) return null;
   return (
-    <aside aria-label="Payloads" data-hint-surface="" className="fixed inset-y-0 right-0 z-30 grid w-[560px] max-w-[70vw] border-l border-line-2 bg-surface text-fg-2">
+    <aside aria-label="Payloads" data-hint-surface="" className={`fixed ${BELOW_TITLE_BAR} right-0 z-30 grid w-[560px] max-w-[70vw] border-l border-line-2 bg-surface text-fg-2`}>
       <DrawerBody engagementId={engagementId} hostId={hostId} />
     </aside>
   );

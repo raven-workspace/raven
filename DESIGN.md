@@ -322,7 +322,11 @@ Each table declares its column policy; automatic layout never decides.
 - When space runs out, secondary parts drop first ("of 23h 45m", then the progress bar), then whole cells in this order: Cleanup, Threads, Metasploit lock, LHOST. LHOST is copied often during an exam, so it outlasts the cells shown before it. Nothing wraps or ellipsizes mid-value.
 - The strip carries no hint line.
 - **Headers** (engagement, host, drawer) use `grid-cols-[minmax(0,1fr)_auto]`. Row 1 is the title and its actions; row 2 is the metadata line. The title gets the slack track. Under 1000px, actions collapse to icon buttons before the title truncates.
-- **Title bar:** every destination uses the same control style. The controls sit on the right, with their right edge on the main content column's right edge (the same x where the page header's actions end below). Order: Arsenal, Manual, Payloads, Search, Lock (with the `Lock` icon), then Settings last as a `Gear` icon button.
+- **Title bar:** its controls are chrome, not page buttons: borderless, with the `--surface-hi` background only on hover. The control for the page on screen (Manual, Settings) or an open drawer (Arsenal, Payloads) sits on `--surface` in accent. The controls sit on the right, with their right edge on the main content column's right edge (the same x where the page header's actions end below), in three runs set apart by 16px of space, never a divider:
+  - references: Arsenal, Manual, Payloads (icon, word, inline key);
+  - Search (icon, word, ⌘K);
+  - the app itself: Lock and Settings, as icon buttons with the key in the tooltip.
+- **Drawers dock under the title bar** (`BELOW_TITLE_BAR`), never over it, so its controls stay whole and the window keeps its drag region. A modal panel with an overlay (Capture) covers the whole window.
 
 ### Navigation
 

@@ -10,7 +10,7 @@ import { useCredPickStore } from "../checklist/credPick";
 import { useFindingDraftStore } from "../findings/useFindingDraftStore";
 import { discardNotes, flushNotes, hasPendingNotes, sessionGeneration, setNotesQueryClient, startNotesSession } from "../notes/useNotesStore";
 import type { UnlockResult, VaultStatus } from "../../types/vault";
-import { Button, IconButton, TitleBar, TitleBarButton, TitleBarIconButton, Wordmark } from "../../ui";
+import { Button, IconButton, TitleBar, TitleBarButton, TitleBarGroup, TitleBarIconButton, Wordmark } from "../../ui";
 import { SetupScreen } from "./SetupScreen";
 import { UnlockScreen, type CipherControls } from "./UnlockScreen";
 import { CipherBackdrop, type CipherHandle } from "./CipherBackdrop";
@@ -270,20 +270,27 @@ export function VaultGate({ children }: { children: ReactNode }) {
     e.preventDefault();
     openManual();
   });
+  const arsenalOpen = useArsenalStore((s) => s.open);
+  const payloadsOpen = usePayloadsStore((s) => s.open);
   const right = unlocked ? (
     <>
-      <TitleBarButton hint="A" icon={Stack} onClick={() => useArsenalStore.getState().toggle()}>Arsenal</TitleBarButton>
-      <TitleBarButton hint="M" icon={BookOpenText} current={onManual} onClick={openManual}>Manual</TitleBarButton>
-      <TitleBarButton hint="P" icon={Package} onClick={() => usePayloadsStore.getState().toggle()}>Payloads</TitleBarButton>
+      {/* References, then search, then the app itself (lock, settings): runs set apart by space. */}
+      <TitleBarGroup>
+        <TitleBarButton hint="A" icon={Stack} open={arsenalOpen} onClick={() => useArsenalStore.getState().toggle()}>Arsenal</TitleBarButton>
+        <TitleBarButton hint="M" icon={BookOpenText} current={onManual} onClick={openManual}>Manual</TitleBarButton>
+        <TitleBarButton hint="P" icon={Package} open={payloadsOpen} onClick={() => usePayloadsStore.getState().toggle()}>Payloads</TitleBarButton>
+      </TitleBarGroup>
       <TitleBarButton hint="⌘K" icon={MagnifyingGlass} onClick={() => usePaletteStore.getState().open()}>Search</TitleBarButton>
-      <TitleBarButton hint="⌘L" icon={Lock} onClick={lock}>Lock</TitleBarButton>
-      <span
-        title={vaultNewer ? "The Field Manual has changes to import" : undefined}
-        className="relative grid"
-      >
-        <TitleBarIconButton icon={Gear} label="Settings" current={pathname === "/settings"} onClick={() => navigate("/settings")} />
-        {vaultNewer && <span aria-hidden="true" className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />}
-      </span>
+      <TitleBarGroup>
+        <TitleBarIconButton icon={Lock} label="Lock" shortcut="⌘L" onClick={lock} />
+        <span
+          title={vaultNewer ? "The Field Manual has changes to import" : undefined}
+          className="relative grid"
+        >
+          <TitleBarIconButton icon={Gear} label="Settings" current={pathname === "/settings"} onClick={() => navigate("/settings")} />
+          {vaultNewer && <span aria-hidden="true" className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />}
+        </span>
+      </TitleBarGroup>
     </>
   ) : undefined;
 
