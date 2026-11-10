@@ -159,119 +159,151 @@ export function parseMarkdown(body: string): Block[] {
   return out;
 }
 
-const isWord = (c: string | undefined) => c !== undefined && /[\p{L}\p{N}]/u.test(c);
-const isSpace = (c: string | undefined) => c === undefined || /\s/.test(c);
+const isSpace = (c: string) => /\s/.test(c);
+const isPunct = (c: string) => /[\p{P}\p{S}]/u.test(c);
 const PUNCT = /[\\`*_{}[\]()#+\-.!|<>~]/;
 
-/** Where an emphasis run of `delim` opened at `from` closes, or -1. `_` never opens or closes inside a word. */
-function closing(s: string, from: number, delim: string): number {
-  const n = delim.length;
-  for (let j = from; j < s.length; j++) {
-    if (s[j] === "\\") {
-      j++;
-      continue;
-    }
-    if (s[j] === "`") {
-      // Skip a code span: emphasis markers inside it are literal.
-      const run = /^`+/.exec(s.slice(j))![0];
-      const end = s.indexOf(run, j + run.length);
-      if (end > 0) j = end + run.length - 1;
-      continue;
-    }
-    if (s.startsWith(delim, j) && !isSpace(s[j - 1])) {
-      if (n === 1 && s[j + 1] === delim) {
-        // A double marker inside single emphasis belongs to a nested strong: skip past it.
-        const inner = closing(s, j + 2, delim + delim);
-        if (inner > 0) {
-          j = inner + 1;
-          continue;
-        }
-      }
-      if (delim[0] === "_" && isWord(s[j + n])) continue;
-      return j;
+/**
+ * Anything at `i` that is not an emphasis marker and not a plain character: an escape, a code span, a wikilink, a
+ * `[label](url)` (its label only), a `<br>`. `first`/`last` are what the run reads as on either side for the emphasis
+ * flanking rules: a code span or wikilink is an opaque atom that reads as a letter.
+ */
+type Atom = { node: Inline; len: number; first: string; last: string };
+
+function atomAt(s: string, i: number): Atom | null {
+  const c = s[i];
+  if (c === "\\" && PUNCT.test(s[i + 1] ?? "")) return { node: { text: s[i + 1] }, len: 2, first: s[i + 1], last: s[i + 1] };
+  if (c === "`") {
+    const run = /^`+/.exec(s.slice(i))![0];
+    const end = s.indexOf(run, i + run.length);
+    if (end < 0) return { node: { text: run }, len: run.length, first: "`", last: "`" };
+    const code = s.slice(i + run.length, end);
+    const node = { code: /^ .* $/.test(code) && code.trim() !== "" ? code.slice(1, -1) : code };
+    return { node, len: end + run.length - i, first: "a", last: "a" };
+  }
+  if (s.startsWith("[[", i)) {
+    const end = s.indexOf("]]", i + 2);
+    const piece = end > 0 ? splitWikilinks(s.slice(i, end + 2)) : [];
+    const link = piece.length === 1 && "target" in piece[0] ? piece[0] : null;
+    if (link) {
+      const node = { link: { target: link.target, ...(link.heading ? { heading: link.heading } : {}), label: link.label } };
+      return { node, len: end + 2 - i, first: "a", last: "a" };
     }
   }
-  return -1;
+  if (c === "[") {
+    // External links stay text (Raven is offline): the label is what reads.
+    const m = /^\[([^\]]+)\]\(([^)\s]*)\)/.exec(s.slice(i));
+    if (m) return { node: { text: m[1] }, len: m[0].length, first: m[1][0], last: m[1][m[1].length - 1] };
+  }
+  if (c === "<") {
+    // A line break inside a table cell reads as a space.
+    const br = /^<br\s*\/?>/i.exec(s.slice(i));
+    if (br) return { node: { text: " " }, len: br[0].length, first: " ", last: " " };
+  }
+  return null;
 }
 
-/** Inline Markdown: code spans, `[[wikilinks]]`, `[label](url)` (its label only), strong and em. */
-export function parseInline(s: string): Inline[] {
+/** A run of `*` or `_` waiting to be matched: `n` markers left of `orig`. */
+type Delim = { delim: "*" | "_"; n: number; orig: number; open: boolean; close: boolean };
+type Item = Inline | Delim;
+const isDelim = (x: Item): x is Delim => "delim" in x;
+
+/** Items to inline runs: unmatched markers become text, and neighbouring text joins. */
+function settle(items: Item[]): Inline[] {
   const out: Inline[] = [];
+  for (const x of items) {
+    const node = isDelim(x) ? { text: x.delim.repeat(x.n) } : x;
+    const last = out[out.length - 1];
+    if ("text" in node && last && "text" in last) out[out.length - 1] = { text: last.text + node.text };
+    else if (!("text" in node) || node.text !== "") out.push(node);
+  }
+  return out;
+}
+
+/**
+ * Inline Markdown: code spans, `[[wikilinks]]`, `[label](url)` (its label only), strong and em. Emphasis follows the
+ * CommonMark delimiter rules, with code spans and wikilinks as opaque atoms (so `**`code`** or **`code`**` is two
+ * strongs, and `_` never opens or closes inside a word).
+ */
+export function parseInline(s: string): Inline[] {
+  const items: Item[] = [];
   let buf = "";
   const flush = () => {
-    if (buf !== "") out.push({ text: buf });
+    if (buf !== "") items.push({ text: buf });
     buf = "";
   };
+  let prev = " ";
   let i = 0;
   while (i < s.length) {
     const c = s[i];
-    if (c === "\\" && PUNCT.test(s[i + 1] ?? "")) {
-      buf += s[i + 1];
-      i += 2;
-      continue;
-    }
-    if (c === "`") {
-      const run = /^`+/.exec(s.slice(i))![0];
-      const end = s.indexOf(run, i + run.length);
-      if (end > 0) {
-        flush();
-        const code = s.slice(i + run.length, end);
-        out.push({ code: /^ .* $/.test(code) && code.trim() !== "" ? code.slice(1, -1) : code });
-        i = end + run.length;
-        continue;
-      }
-      buf += run;
-      i += run.length;
-      continue;
-    }
-    if (s.startsWith("[[", i)) {
-      const end = s.indexOf("]]", i + 2);
-      const piece = end > 0 ? splitWikilinks(s.slice(i, end + 2)) : [];
-      const link = piece.length === 1 && "target" in piece[0] ? piece[0] : null;
-      if (link) {
-        flush();
-        out.push({ link: { target: link.target, ...(link.heading ? { heading: link.heading } : {}), label: link.label } });
-        i = end + 2;
-        continue;
-      }
-    }
-    if (c === "[") {
-      const m = /^\[([^\]]+)\]\(([^)\s]*)\)/.exec(s.slice(i));
-      if (m) {
-        // External links stay text (Raven is offline): the label is what reads.
-        buf += m[1];
-        i += m[0].length;
-        continue;
-      }
-    }
     if (c === "*" || c === "_") {
-      const double = s[i + 1] === c;
-      const delim = double ? c + c : c;
-      const after = s[i + delim.length];
-      const opens = !isSpace(after) && !(c === "_" && isWord(s[i - 1]));
-      if (opens) {
-        const end = closing(s, i + delim.length + 1, delim);
-        if (end > 0) {
-          flush();
-          const inner = parseInline(s.slice(i + delim.length, end));
-          out.push(double ? { strong: inner } : { em: inner });
-          i = end + delim.length;
-          continue;
-        }
-      }
-      buf += delim;
-      i += delim.length;
+      let n = 1;
+      while (s[i + n] === c) n++;
+      const before = prev;
+      const after = i + n < s.length ? (atomAt(s, i + n)?.first ?? s[i + n]) : " ";
+      const left = !isSpace(after) && (!isPunct(after) || isSpace(before) || isPunct(before));
+      const right = !isSpace(before) && (!isPunct(before) || isSpace(after) || isPunct(after));
+      flush();
+      items.push({
+        delim: c, n, orig: n,
+        open: c === "*" ? left : left && (!right || isPunct(before)),
+        close: c === "*" ? right : right && (!left || isPunct(after)),
+      });
+      prev = c;
+      i += n;
       continue;
     }
-    if (c === "<" && /^<br\s*\/?>/i.test(s.slice(i))) {
-      // A line break inside a table cell reads as a space.
-      buf += " ";
-      i += /^<br\s*\/?>/i.exec(s.slice(i))![0].length;
+    const atom = atomAt(s, i);
+    if (atom) {
+      if ("text" in atom.node) buf += atom.node.text;
+      else {
+        flush();
+        items.push(atom.node);
+      }
+      prev = atom.last;
+      i += atom.len;
       continue;
     }
     buf += c;
+    prev = c;
     i++;
   }
   flush();
-  return out;
+
+  // Match each closer with the nearest opener of the same marker before it (CommonMark "process emphasis").
+  let c = 0;
+  while (c < items.length) {
+    const closer = items[c];
+    if (!isDelim(closer) || !closer.close) {
+      c++;
+      continue;
+    }
+    let o = c - 1;
+    for (; o >= 0; o--) {
+      const op = items[o];
+      if (!isDelim(op) || op.delim !== closer.delim || !op.open) continue;
+      // The rule of 3: a marker that can both open and close does not pair across a multiple-of-3 total.
+      const both = op.close || closer.open;
+      if (both && (op.orig + closer.orig) % 3 === 0 && !(op.orig % 3 === 0 && closer.orig % 3 === 0)) continue;
+      break;
+    }
+    if (o < 0) {
+      if (!closer.open) closer.close = false;
+      c++;
+      continue;
+    }
+    const opener = items[o] as Delim;
+    const use = opener.n >= 2 && closer.n >= 2 ? 2 : 1;
+    const inner = settle(items.slice(o + 1, c));
+    items.splice(o + 1, c - o - 1, use === 2 ? { strong: inner } : { em: inner });
+    c = o + 2;
+    opener.n -= use;
+    closer.n -= use;
+    if (opener.n === 0) {
+      items.splice(o, 1);
+      c--;
+    }
+    if (closer.n === 0) items.splice(c, 1);
+  }
+  return settle(items);
 }

@@ -348,6 +348,30 @@ describe("NoteView tables", () => {
   });
 });
 
+describe("NoteView emphasis around code", () => {
+  const PRIVS = parseNote("04-Foundations/Zz-Privs.md", "# Zz Privs\nturns **`ZzOnePriv`** or **`ZzTwoPriv`** into **ZZ AUTH\\ZZSYS** by _`zzthree`_.\n")!;
+
+  it("bold and italics around code show no literal markers", () => {
+    const { container } = mount(PRIVS);
+    const p = screen.getByText(/^turns/);
+    expect(p.textContent).toBe("turns ZzOnePriv or ZzTwoPriv into ZZ AUTH\\ZZSYS by zzthree.");
+    expect(container.textContent).not.toMatch(/\*\*|_`|`_/);
+    expect([...p.querySelectorAll("strong")].map((s) => s.textContent)).toEqual(["ZzOnePriv", "ZzTwoPriv", "ZZ AUTH\\ZZSYS"]);
+    expect(p.querySelector("em code")?.textContent).toBe("zzthree");
+  });
+
+  it("a search for the word between two bold groups marks the plain text, not inside a strong", () => {
+    render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <MemoryRouter><NoteView note={PRIVS} notes={NOTES} cards={CARDS} hostId="h1" engagementId="e1" query="or" /></MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const marks = [...document.querySelectorAll("mark")];
+    expect(marks.map((mk) => mk.textContent)).toEqual(["or"]);
+    expect(marks[0]!.closest("strong")).toBeNull();
+  });
+});
+
 describe("safe Markdown", () => {
   it("the Manual never injects HTML", () => {
     const root = join(__dirname, "..", "..", "..", "..");

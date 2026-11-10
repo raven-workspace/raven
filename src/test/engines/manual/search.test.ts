@@ -89,6 +89,13 @@ describe("searchManual: links", () => {
   });
 });
 
+describe("searchManual: emphasis around code", () => {
+  it("a line with bold and italics around code reads as the note shows it", () => {
+    const n = parseNote("04-Foundations/Zz Privs.md", "# Zz Privs\nturns **`ZzOnePriv`** or _`zztwo`_ into **ZZ AUTHORITY\\ZZSYS** by *`zzthree`*.\n")!;
+    expect(searchManual("zztwo", [n])[0]!.line).toBe("turns ZzOnePriv or zztwo into ZZ AUTHORITY\\ZZSYS by zzthree.");
+  });
+});
+
 describe("matchRanges", () => {
   it("treats `_` and spaces alike, case-insensitively", () => {
     expect(matchRanges("STATUS_ACCESS_DENIED and access denied", "access denied")).toEqual([[7, 20], [25, 38]]);

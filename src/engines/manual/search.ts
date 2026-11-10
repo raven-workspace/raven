@@ -49,6 +49,8 @@ function readable(line: string): string {
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/\*\*/g, "")
     .replace(/(^|[^\w*])\*(\S(?:[^*]*\S)?)\*(?=[^\w*]|$)/g, "$1$2")
+    // `_x_` italics (never inside a word, so snake_case stays; never just inside a code span's backticks).
+    .replace(/(^|[^\w_`])_(\S(?:[^_]*\S)?)_(?=[^\w_`]|$)/g, "$1$2")
     .replace(/`/g, "");
   return s.trim();
 }

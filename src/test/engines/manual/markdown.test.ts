@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseNote } from "../../../engines/manual";
-import { parseMarkdown, type Block } from "../../../engines/manual/markdown";
+import { parseInline, parseMarkdown, type Block } from "../../../engines/manual/markdown";
 
 // Synthetic note text only (RFC 5737 addresses, invented names).
 const BODY = [
@@ -138,5 +138,40 @@ describe("parseMarkdown", () => {
     const [list, code] = parseMarkdown(["- step one", "  ```bash", "  zz {TARGET_IP}", "    --flag", " x", "  ```"].join("\n"));
     expect(list.kind).toBe("list");
     expect(code).toEqual({ kind: "code", lang: "bash", text: "zz {TARGET_IP}\n  --flag\nx" });
+  });
+});
+
+describe("parseInline: emphasis around inline code", () => {
+  it("bold around code: each group is its own strong, the text between stays plain", () => {
+    expect(parseInline("a **`X_Y`** or **`Z`** b")).toEqual([
+      { text: "a " }, { strong: [{ code: "X_Y" }] }, { text: " or " }, { strong: [{ code: "Z" }] }, { text: " b" },
+    ]);
+  });
+
+  it("italics around code, with * and with _", () => {
+    expect(parseInline("*`p`*")).toEqual([{ em: [{ code: "p" }] }]);
+    expect(parseInline("_`p`_")).toEqual([{ em: [{ code: "p" }] }]);
+    expect(parseInline("x *`p`* and _`q`_, y")).toEqual([
+      { text: "x " }, { em: [{ code: "p" }] }, { text: " and " }, { em: [{ code: "q" }] }, { text: ", y" },
+    ]);
+  });
+
+  it("bold text with a backslash stays bold", () => {
+    expect(parseInline("into **NT AUTHORITY\\SYSTEM** by")).toEqual([
+      { text: "into " }, { strong: [{ text: "NT AUTHORITY\\SYSTEM" }] }, { text: " by" },
+    ]);
+  });
+
+  it("bold next to code", () => {
+    expect(parseInline("**bold** and `code`")).toEqual([{ strong: [{ text: "bold" }] }, { text: " and " }, { code: "code" }]);
+  });
+
+  it("intraword _ and unmatched markers stay text", () => {
+    expect(parseInline("zz_a_b and x_`y`_z")).toEqual([{ text: "zz_a_b and x_" }, { code: "y" }, { text: "_z" }]);
+    expect(parseInline("a ** b * c")).toEqual([{ text: "a ** b * c" }]);
+  });
+
+  it("triple markers read as em around strong", () => {
+    expect(parseInline("***zz***")).toEqual([{ em: [{ strong: [{ text: "zz" }] }] }]);
   });
 });
