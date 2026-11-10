@@ -146,7 +146,7 @@ describe("NoteView commands", () => {
     mount();
     expect(await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzscan -t 198.51.100.20")).toBeInTheDocument();
     await navigator.clipboard.writeText("untouched");
-    const group = await cmdGroup("Kali");
+    const group = await cmdGroup("Usage: zzscan -t {TARGET_IP}");
     act(() => group.focus());
     await user.keyboard("{Enter}");
     await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("zzscan -t 198.51.100.20"));
@@ -156,7 +156,7 @@ describe("NoteView commands", () => {
     const user = userEvent.setup();
     mount();
     await navigator.clipboard.writeText("untouched");
-    await user.click(screen.getByRole("button", { name: "Copy command: plain output line" }));
+    await user.click(screen.getByRole("button", { name: "Copy command: Usage: plain output line" }));
     await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("plain output line"));
   });
 
@@ -164,13 +164,47 @@ describe("NoteView commands", () => {
     const user = userEvent.setup();
     mount();
     await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "zzscan -t 198.51.100.20");
-    const group = await cmdGroup("Kali");
+    const group = await cmdGroup("Usage: zzscan -t {TARGET_IP}");
     act(() => group.focus());
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("zzscan -t 198.51.100.20"));
     await waitFor(() => expect(logCommand).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      engagementId: "e1", host: expect.objectContaining({ id: "h1" }), command: "zzscan -t 198.51.100.20", title: "Kali", ranOn: "kali",
+      engagementId: "e1", host: expect.objectContaining({ id: "h1" }), command: "zzscan -t 198.51.100.20", title: "Usage", ranOn: "kali",
     })));
+  });
+
+  it("a Target block logs as run on the host, a Kali block on the Kali machine, each titled by its section", async () => {
+    const note = parseNote("03-Tools/Zz Where.md", [
+      "# Zz Where",
+      "## Find the `zz` service",
+      "```powershell title:\"Target — PowerShell\"",
+      "Get-ZzThing -Name {TARGET_IP}",
+      "```",
+      "### Scan from **Kali**",
+      "```bash title:\"Kali\"",
+      "zzscan {TARGET_IP}",
+      "```",
+    ].join("\n"))!;
+    const user = userEvent.setup();
+    mount(note);
+    const target = await cmdGroup("Find the zz service: Get-ZzThing -Name {TARGET_IP}");
+    await screen.findByText((_, el) => el?.tagName === "PRE" && el.textContent === "Get-ZzThing -Name 198.51.100.20");
+    act(() => target.focus());
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await waitFor(() => expect(logCommand).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
+      command: "Get-ZzThing -Name 198.51.100.20", title: "Find the zz service", ranOn: "zzdc01.example.test",
+    })));
+    act(() => screen.getByRole("group", { name: "Note command: Scan from Kali: zzscan {TARGET_IP}" }).focus());
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await waitFor(() => expect(logCommand).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
+      command: "zzscan 198.51.100.20", title: "Scan from Kali", ranOn: "kali",
+    })));
+  });
+
+  it("each command is one labelled group (no group nested inside it)", async () => {
+    mount();
+    const group = await cmdGroup("Usage: zzscan -t {TARGET_IP}");
+    expect(within(group).queryAllByRole("group")).toHaveLength(0);
   });
 
   it("does not mark a banned command outside an exam", async () => {
@@ -188,7 +222,7 @@ describe("NoteView commands", () => {
     // The note text is never hidden.
     expect(screen.getByText((_, el) => el?.tagName === "PRE" && el.textContent === "sqlmap -u http://198.51.100.20/zz")).toBeInTheDocument();
     await navigator.clipboard.writeText("untouched");
-    const copy = screen.getByRole("button", { name: "Copy command: sqlmap -u http://{TARGET_IP}/zz" });
+    const copy = screen.getByRole("button", { name: "Copy command: Banned: sqlmap -u http://{TARGET_IP}/zz" });
     await user.click(copy);
     expect(await screen.findByRole("status")).toHaveTextContent("Not allowed in the exam. Press ↵ again to copy anyway");
     expect(await navigator.clipboard.readText()).toBe("untouched");
@@ -211,7 +245,7 @@ describe("NoteView output blocks", () => {
     await screen.findByText("Not allowed in the exam");
     expect(screen.getAllByText("Not allowed in the exam")).toHaveLength(1);
     await navigator.clipboard.writeText("untouched");
-    const group = await cmdGroup("sqlmap output {TARGET_IP} zz");
+    const group = await cmdGroup("Usage: sqlmap output {TARGET_IP} zz");
     act(() => group.focus());
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await waitFor(async () => expect(await navigator.clipboard.readText()).toBe("sqlmap output {TARGET_IP} zz"));

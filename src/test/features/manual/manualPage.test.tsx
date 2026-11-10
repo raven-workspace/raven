@@ -398,7 +398,7 @@ describe("Manual: the host commands fill for", () => {
     await user.click(await screen.findByRole("option", { name: /zzdb02/ }));
     expect(await pre("zzscan -t 198.51.100.22")).toBeInTheDocument();
     expect(screen.getByTestId("manual-host-ip")).toHaveTextContent("198.51.100.22");
-    const group = await screen.findByRole("group", { name: "Note command: Kali" });
+    const group = await screen.findByRole("group", { name: "Note command: Usage: zzscan -t {TARGET_IP}" });
     act(() => group.focus());
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await waitFor(() => expect(logCommand).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({

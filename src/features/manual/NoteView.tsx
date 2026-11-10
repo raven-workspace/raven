@@ -72,7 +72,30 @@ const firstLine = (text: string) => {
   return line.length > 80 ? `${line.slice(0, 79)}…` : line;
 };
 
-function BlockView({ block, n, ctx, base }: { block: Block; n: number; ctx: Ctx; base: FillBase }) {
+const WINDOWS_LANGS = new Set(["cmd", "bat", "batch", "powershell", "ps1", "ps", "pwsh"]);
+const LINUX_LANGS = new Set(["bash", "sh", "zsh", "shell"]);
+
+/** Inline Markdown as plain text (a heading's words, markers gone). */
+const plain = (parts: Inline[]): string =>
+  parts.map((p) => ("text" in p ? p.text : "code" in p ? p.code : "strong" in p ? plain(p.strong) : "em" in p ? plain(p.em) : p.link.label)).join("");
+
+/**
+ * A code block as a library command. The fence title is where it runs, as on a card (`parseCard`): `Kali…` is the
+ * attacker, any other title (`Target — PowerShell`, `Pivot — bash`) the target; an untitled block runs from Kali. The
+ * fence language gives the OS (Windows shells, Unix shells off Kali), and the log title is the section it sits in.
+ */
+function commandOf(block: Extract<Block, { kind: "code" }>, note: ManualNote, n: number, section: string): LibraryCommand {
+  const kali = !block.title || /^kali\b/i.test(block.title);
+  const lang = block.lang.toLowerCase();
+  const os = WINDOWS_LANGS.has(lang) ? "windows" : LINUX_LANGS.has(lang) && !kali ? "linux" : "any";
+  return {
+    id: `manual:${note.id}:${n}`, title: section || note.title, tool: block.text.trim().split(/\s+/)[0] ?? "",
+    template: block.text, os, runFrom: kali ? "attacker" : "target", goals: [], source: "field-manual",
+  };
+}
+
+/** `section`: the nearest `##`/`###` heading above the block, as plain text ("" before the first). */
+function BlockView({ block, n, ctx, base, section }: { block: Block; n: number; ctx: Ctx; base: FillBase; section: string }) {
   switch (block.kind) {
     case "heading": {
       const inner = <InlineView parts={block.inline} ctx={ctx} />;
@@ -97,16 +120,14 @@ function BlockView({ block, n, ctx, base }: { block: Block; n: number; ctx: Ctx;
     case "table":
       return <NoteTable head={block.head} rows={block.rows} cell={(parts) => <InlineView parts={parts} ctx={ctx} />} />;
     case "code": {
-      const command: LibraryCommand = {
-        id: `manual:${ctx.note.id}:${n}`, title: block.title ?? ctx.note.title, tool: block.text.trim().split(/\s+/)[0] ?? "",
-        template: block.text, os: "any", runFrom: "attacker", goals: [], source: "field-manual",
-      };
+      const command = commandOf(block, ctx.note, n, section);
       const output = OUTPUT_LANGS.has(block.lang.toLowerCase());
       const exam = output ? undefined : classifyExam(block.text);
       if (exam) command.exam = exam;
+      const line = firstLine(block.text);
       return (
         <ManualCommand
-          command={command} label={block.title ?? firstLine(block.text)} caption={block.title}
+          command={command} label={section && line ? `${section}: ${line}` : line || command.title} caption={block.title}
           fill={!output && PLACEHOLDER.test(block.text)} output={output} base={base} highlight={ctx.re}
         />
       );
@@ -127,11 +148,13 @@ export function NoteView({ note, notes, cards, hostId, engagementId, query }: {
   const re = useMemo(() => (query ? matchRegex(query) : null), [query]);
   const ctx: Ctx = { note, notes, cards, re };
   let code = 0;
+  let section = "";
   return (
     <article aria-label={note.title} className="grid grid-cols-[minmax(0,1fr)] content-start gap-3">
-      {blocks.map((b, i) => (
-        <BlockView key={i} block={b} n={b.kind === "code" ? code++ : -1} ctx={ctx} base={base} />
-      ))}
+      {blocks.map((b, i) => {
+        if (b.kind === "heading" && (b.level === 2 || b.level === 3)) section = plain(b.inline).trim();
+        return <BlockView key={i} block={b} n={b.kind === "code" ? code++ : -1} ctx={ctx} base={base} section={section} />;
+      })}
     </article>
   );
 }
