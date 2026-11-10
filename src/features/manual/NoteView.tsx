@@ -39,7 +39,7 @@ function InlineView({ parts, ctx }: { parts: Inline[]; ctx: Ctx }): ReactNode {
     const { target, heading, label } = p.link;
     const to = resolveLink(target, ctx.notes, ctx.cards, heading);
     if (to.kind === "note") {
-      return <Link key={i} to={`/manual/${encodeURIComponent(to.noteId)}${to.heading ? `#${to.heading}` : ""}`} className={LINK_CLASS}>{label}</Link>;
+      return <Link key={i} to={`/manual/${encodeURIComponent(to.noteId)}${to.heading ? `#${to.heading}` : ""}`} className={LINK_CLASS}>{marked(label, ctx.re)}</Link>;
     }
     if (to.kind === "card") {
       const card = ctx.cards.find((c) => c.id === to.cardId);
@@ -49,12 +49,12 @@ function InlineView({ parts, ctx }: { parts: Inline[]; ctx: Ctx }): ReactNode {
           onClick={() => useArsenalStore.getState().openCard(to.cardId)}
           className={`cursor-pointer border-0 bg-transparent p-0 text-left font-[inherit] ${LINK_CLASS}`}
         >
-          {label}
+          {marked(label, ctx.re)}
         </button>
       );
     }
     // Unresolved: plain muted text, never a dead link.
-    return <span key={i} className="text-muted">{label}</span>;
+    return <span key={i} className="text-muted">{marked(label, ctx.re)}</span>;
   });
 }
 

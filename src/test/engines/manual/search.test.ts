@@ -63,6 +63,15 @@ describe("searchManual", () => {
   });
 });
 
+describe("searchManual: links", () => {
+  it("a wikilink reads as the label the note shows (alias, else target without its heading)", () => {
+    const n = parseNote("04-Foundations/Zz Links.md", "# Zz Links\nSee [[Zz Kerberoast#Steps]] and [[Zz-Other|zz delegation abuse]].\n")!;
+    expect(searchManual("zz kerberoast", [n])[0]!.line).toBe("See Zz Kerberoast and zz delegation abuse.");
+    expect(searchManual("kerberoast steps", [n])).toEqual([]);
+    expect(searchManual("zz-other", [n])).toEqual([]);
+  });
+});
+
 describe("matchRanges", () => {
   it("treats `_` and spaces alike, case-insensitively", () => {
     expect(matchRanges("STATUS_ACCESS_DENIED and access denied", "access denied")).toEqual([[7, 20], [25, 38]]);

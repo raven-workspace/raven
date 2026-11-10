@@ -1,3 +1,4 @@
+import { splitWikilinks } from "../library/wikilinks";
 import { FENCE, OUTLINE_HEADING, TABLE_CAPTION } from "./anchors";
 import { cells, TABLE_SEPARATOR } from "./markdown";
 import type { ManualNote } from "./types";
@@ -39,11 +40,12 @@ const MAX_LINE = 120;
 function readable(line: string): string {
   let s = line.trim();
   if (s.startsWith("|")) return cells(s).filter(Boolean).map(readable).join(" · ");
+  // A wikilink reads as the label the note shows: its alias, else its target (never the `#heading`).
+  s = splitWikilinks(s).map((p) => ("text" in p ? p.text : p.label)).join("");
   s = s
     .replace(/^#{1,6}\s+/, "").replace(/\s+#+$/, "")
     .replace(/^>\s?/, "")
     .replace(/^([-*+]|\d+[.)])\s+/, "")
-    .replace(/\[\[([^\]|]+?)(?:\|([^\]]+))?\]\]/g, (_, target: string, label?: string) => label ?? target.replace("#", " "))
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/\*\*/g, "")
     .replace(/(^|[^\w*])\*(\S(?:[^*]*\S)?)\*(?=[^\w*]|$)/g, "$1$2")
@@ -60,8 +62,16 @@ function cut(line: string, at: number): string {
   return `${start > 0 ? "…" : ""}${line.slice(start, end).trim()}${end < line.length ? "…" : ""}`;
 }
 
-/** The note's first body match (fenced code included), with its section, or null. */
-function firstBodyMatch(note: ManualNote, re: RegExp): { anchor?: string; line: string } | null {
+/** A note's searchable lines, as they read, each with the outline id of its section. */
+type Line = { text: string; anchor?: string };
+
+/** Readable lines per note: computed once per imported note, not on every keystroke. */
+const linesCache = new WeakMap<ManualNote, Line[]>();
+
+function linesOf(note: ManualNote): Line[] {
+  const hit = linesCache.get(note);
+  if (hit) return hit;
+  const out: Line[] = [];
   let fence: string | null = null;
   let section = -1;
   for (const raw of note.body.split("\n")) {
@@ -71,8 +81,8 @@ function firstBodyMatch(note: ManualNote, re: RegExp): { anchor?: string; line: 
       else if (f[1][0] === fence) fence = null;
       continue;
     }
-    let line: string;
-    if (fence !== null) line = raw.trim();
+    let text: string;
+    if (fence !== null) text = raw.trim();
     else {
       const h = OUTLINE_HEADING.exec(raw);
       // The h1 repeats the title: a title hit already covers it.
@@ -80,12 +90,21 @@ function firstBodyMatch(note: ManualNote, re: RegExp): { anchor?: string; line: 
       // Same walk as the outline (`parseNote`): each `##`, `###` and table caption is the next outline entry.
       if (h || TABLE_CAPTION.test(raw.trim())) section++;
       if (TABLE_SEPARATOR.test(raw) && raw.includes("-")) continue;
-      line = readable(raw);
+      text = readable(raw);
     }
-    const m = matchRanges(line, re)[0];
-    if (!m) continue;
+    if (!text) continue;
     const anchor = note.outline[section]?.id;
-    return { ...(anchor ? { anchor } : {}), line: cut(line, m[0]) };
+    out.push(anchor ? { text, anchor } : { text });
+  }
+  linesCache.set(note, out);
+  return out;
+}
+
+/** The note's first body match (fenced code included), with its section, or null. */
+function firstBodyMatch(note: ManualNote, re: RegExp): { anchor?: string; line: string } | null {
+  for (const l of linesOf(note)) {
+    const m = matchRanges(l.text, re)[0];
+    if (m) return { ...(l.anchor ? { anchor: l.anchor } : {}), line: cut(l.text, m[0]) };
   }
   return null;
 }

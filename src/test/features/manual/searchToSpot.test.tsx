@@ -42,7 +42,8 @@ const ERRORS = parseNote("04-Foundations/Zz-Errors.md", [
   "```",
 ].join("\n"))!;
 const OTHER = parseNote("04-Foundations/Aa Other.md", "# Aa Other\nNothing here.\n")!;
-const NOTES: ManualNote[] = [OTHER, ERRORS];
+const LINKED = parseNote("04-Foundations/Zz Linked.md", "# Zz Linked\n## One\nplain words\n## Two\nUse [[Aa Other|zz roast]] here, zz roast again.\n")!;
+const NOTES: ManualNote[] = [OTHER, ERRORS, LINKED];
 const ZZCMD: LibraryCommand = {
   id: "zz-denied", title: "Zz access denied probe", tool: "zzprobe", template: "zzprobe {TARGET_IP}", os: "any", runFrom: "attacker", goals: [], source: "field-manual",
 };
@@ -144,14 +145,48 @@ describe("⌘K finds Manual text", () => {
     expect(copyPlain).not.toHaveBeenCalled();
   });
 
-  it("a query nothing in the Manual matches says so", async () => {
+  it("\"No match in the Manual\" shows only when nothing at all matches", async () => {
     const user = userEvent.setup();
     mount();
     await ready();
     await user.keyboard(cmdK);
-    await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzprobe");
+    const search = await screen.findByRole("combobox", { name: "Search" });
+    await user.type(search, "zzprobe");
+    expect(await screen.findByRole("option", { name: /Zz access denied probe/ })).toBeInTheDocument();
+    expect(screen.queryByText("No match in the Manual")).toBeNull();
+    await user.clear(search);
+    await user.type(search, "zz-nowhere-at-all");
     expect(await screen.findByText("No match in the Manual")).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "Manual" })).toBeNull();
+  });
+
+  it("on a Manual row the hints drop copy-and-log and in-card", async () => {
+    const user = userEvent.setup();
+    mount();
+    await ready();
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "STATUS_ACCESS");
+    await screen.findByRole("group", { name: "Manual" });
+    const hints = screen.getByLabelText("Search shortcuts");
+    expect(hints).toHaveTextContent("open note");
+    expect(hints).not.toHaveTextContent("copy and log");
+    expect(hints).not.toHaveTextContent("in card");
+  });
+
+  it("a hit in a link label: ⌘K shows the label as the note does, and the note marks it current", async () => {
+    const user = userEvent.setup();
+    mount();
+    await ready();
+    await user.keyboard(cmdK);
+    await user.type(await screen.findByRole("combobox", { name: "Search" }), "zz roast");
+    const [row] = within(await screen.findByRole("group", { name: "Manual" })).getAllByRole("option");
+    expect(row).toHaveTextContent("Use zz roast here, zz roast again.");
+    await user.keyboard("{Enter}");
+    await screen.findByRole("article", { name: "Zz Linked" });
+    await waitFor(() => expect(current()).toHaveLength(1));
+    expect(marks()).toHaveLength(2);
+    expect(current()[0]!.closest("a")).not.toBeNull();
+    expect(screen.getByRole("status", { name: "Search in this note" })).toHaveTextContent("match 1 of 2");
   });
 });
 

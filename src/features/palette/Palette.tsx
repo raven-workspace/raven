@@ -240,16 +240,18 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
   };
 
   const hasUnfilled = filled?.tokens.some((n) => filled.auto[n]?.unresolved && !overrides[n]) ?? false;
+  const onManual = current?.type === "manual";
   const hints = useMemo<Hint[]>(
     () => [
-      { keys: "↵", label: current?.type === "manual" ? "open note" : "copy", priority: 1 },
-      { keys: "⌘↵", label: host ? "copy and log" : "log (no host)", priority: 2 },
+      { keys: "↵", label: onManual ? "open note" : "copy", priority: 1 },
+      // A Manual row opens its note: nothing to log, no card to go into.
+      ...(onManual ? [] : [{ keys: "⌘↵", label: host ? "copy and log" : "log (no host)", priority: 2 }]),
       ...(engagementId ? [{ keys: "⌥H", label: "host", priority: 3 }, { keys: "⌥C", label: "credential", priority: 3 }] : []),
-      { keys: "→", label: "in card", priority: 4 },
+      ...(onManual ? [] : [{ keys: "→", label: "in card", priority: 4 }]),
       // ⇥ jumps only to a value still missing; with every value filled Tab moves on to the host picker, so no hint.
       ...(hasUnfilled ? [{ keys: "⇥", label: "edit a value", priority: 5 }] : []),
     ],
-    [engagementId, host, hasUnfilled, current?.type],
+    [engagementId, host, hasUnfilled, onManual],
   );
   return (
     <div data-hint-surface="" className="grid gap-3" onKeyDown={onKey} onKeyDownCapture={onKeyCapture}>
@@ -285,6 +287,10 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
       </header>
       <div className="grid max-h-[44vh] overflow-y-auto">
         {results.length === 0 && <p className="m-0 px-1 py-2 text-meta text-muted">Nothing matches</p>}
+        {/* The Manual was searched too: said only when the whole list is empty, never under other results. */}
+        {results.length === 0 && notes.length > 0 && query.trim().length > 0 && (
+          <p className="m-0 px-1 pb-2 text-meta text-muted">No match in the Manual</p>
+        )}
         <ResultList
           id="palette-results" label="Results" groups={rowGroups} selected={index}
           onActivate={(_, i) => {
@@ -292,9 +298,6 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
             searchRef.current?.focus();
           }}
         />
-        {results.length > 0 && found.manual.length === 0 && notes.length > 0 && query.trim().length > 0 && (
-          <p className="m-0 border-t border-line px-2 pt-2 text-meta text-muted">No match in the Manual</p>
-        )}
       </div>
       {filled && (
         <CommandPreview

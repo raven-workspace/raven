@@ -47,8 +47,9 @@ export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, 
   const re = pattern.length > 0 ? new RegExp(`(${pattern.join("|")})`) : null;
   const found = rangesOf(text, highlight);
   const pieces = text.split(/(\s+)/);
-  // Where each piece starts in `text`, so a match is marked across the token spans.
-  const starts = pieces.map((_, i) => pieces.slice(0, i).join("").length);
+  // Where each piece starts in `text`, so a match is marked across the token spans (only worked out with a search).
+  const starts: number[] = [];
+  if (found.length > 0) pieces.reduce((at, t) => (starts.push(at), at + t.length), 0);
   const flashDone = () => {
     setCopied(true);
     clearTimeout(timer.current);
@@ -64,11 +65,20 @@ export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, 
         >
           <code>
             {pieces.map((t, i) => {
-              const at = starts[i];
               if (t === "") return null;
+              if (found.length === 0) {
+                if (/^\s+$/.test(t)) return <Fragment key={i}>{t}</Fragment>;
+                return (
+                  <span key={i} data-token className="inline-block max-w-full [overflow-wrap:anywhere]">
+                    {marks(t, re).map((m, j) => (m.warn ? <mark key={j} className="bg-transparent text-warn">{m.text}</mark> : m.text))}
+                  </span>
+                );
+              }
+              const at = starts[i];
               if (/^\s+$/.test(t)) return <Fragment key={i}>{highlightText(t, at, found)}</Fragment>;
               const parts = marks(t, re);
-              const partStarts = parts.map((_, j) => at + parts.slice(0, j).reduce((n, p) => n + p.text.length, 0));
+              const partStarts: number[] = [];
+              parts.reduce((n, p) => (partStarts.push(n), n + p.text.length), at);
               // Each space-separated token never breaks (browsers would otherwise break after a hyphen), even around a
               // placeholder; the spaces between tokens are the only break points.
               return (
