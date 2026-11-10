@@ -26,6 +26,27 @@ resetAuditState();
 
 const nid = (prefix: string) => `${prefix}-new-${++seq}`;
 const now = () => AUDIT_NOW;
+import type { FieldManualSnapshot } from "../engines/fieldManual/merge";
+import { parseNote } from "../engines/manual";
+
+const AUDIT_NOTE_SOURCES: [string, string][] = [
+  ["03-Tools/Zz-Scanner.md", "---\nid: tool-zz-scanner\ntitle: Zz Scanner\ntype: tool\n---\n## Overview\nA synthetic scanner.\n\n**Table 1 \u2014 Flags**\n\n| Flag | Meaning |\n|---|---|\n| -a | all |\n\n### Tips\n"],
+  ["04-Foundations/Zz-Protocol.md", "---\nid: fnd-zz-protocol\ntitle: Zz Protocol\ntype: foundation\n---\n## How it works\nSynthetic text.\n\n## Failure modes\n"],
+  ["05-Reporting/Zz-Finding-Template.md", "---\nid: rep-zz-finding\ntitle: Zz Finding Template\ntype: reporting\n---\n## Structure\nSynthetic text.\n"],
+];
+
+/** A synthetic Field Manual snapshot: no cards, three invented Manual notes. */
+const AUDIT_FIELD_MANUAL: FieldManualSnapshot = {
+  importedAt: AUDIT_NOW,
+  cards: [],
+  overlay: {},
+  added: [],
+  playbook: [],
+  toolkit: [],
+  notes: AUDIT_NOTE_SOURCES.flatMap(([p, t]) => parseNote(p, t) ?? []),
+  report: { cardsAdded: 0, cardsChanged: 0, cardsRemoved: 0, commandsAdded: 0, commandsChanged: 0, commandsRemovedKept: [], classified: [] },
+};
+
 const clone = <T>(v: T): T => structuredClone(v);
 
 function find<T extends { id: string }>(rows: T[], id: string): T {
@@ -102,7 +123,7 @@ const base = {
   fieldManualScan: async () => unsupported("Field-Manual scan"),
   fieldManualLatestMtime: async () => null,
   fieldManualSave: async () => null,
-  fieldManualLoad: async () => null,
+  fieldManualLoad: async () => clone(AUDIT_FIELD_MANUAL),
   openObsidian: async () => {},
   backupRestore: async () => unsupported("Restore"),
   backupRestoreLocked: async () => unsupported("Restore"),

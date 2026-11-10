@@ -1,7 +1,7 @@
 //! Field-Manual import support: a read-only scan of the vault folder and the stored snapshot of the last import.
 //!
-//! The scan only ever reads, and only these paths: `00-Home/Toolkit.md`, `01-Playbook/*.md` and
-//! `02-Cards/**/*.md`. Parsing and merging happen in TypeScript; this module moves text in and the result out.
+//! The scan only ever reads, and only these paths: `00-Home/Toolkit.md`, `01-Playbook/*.md`,
+//! `02-Cards/**/*.md` and the Manual notes in `03-Tools`, `04-Foundations` and `05-Reporting` (recursive). Parsing and merging happen in TypeScript; this module moves text in and the result out.
 
 use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -95,6 +95,9 @@ fn files(root: &Path) -> AppResult<Vec<PathBuf>> {
     }
     collect(&root.join("01-Playbook"), false, &mut out)?;
     collect(&root.join("02-Cards"), true, &mut out)?;
+    for dir in ["03-Tools", "04-Foundations", "05-Reporting"] {
+        collect(&root.join(dir), true, &mut out)?;
+    }
     out.sort();
     Ok(out)
 }
@@ -165,7 +168,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_reads_only_cards_playbooks_and_toolkit() {
+    fn scan_reads_only_the_imported_folders() {
         let d = tempfile::tempdir().unwrap();
         let r = d.path();
         write(r, "00-Home/Toolkit.md", "t");
@@ -174,12 +177,16 @@ mod tests {
         write(r, "01-Playbook/sub/Deep.md", "no");
         write(r, "02-Cards/a.md", "a");
         write(r, "02-Cards/Group/b.md", "b");
+        write(r, "03-Tools/Nmap.md", "n");
+        write(r, "04-Foundations/sub/Deep.md", "f");
+        write(r, "05-Reporting/Rep.md", "r");
+        write(r, "05-Reporting/img.png", "no");
         write(r, "02-Cards/notes.txt", "no");
         write(r, ".obsidian/x.json", "no");
         write(r, "Elsewhere/note.md", "no");
         let got = scan(r.to_str().unwrap()).unwrap();
         let rels: Vec<&str> = got.iter().map(|f| f.rel_path.as_str()).collect();
-        assert_eq!(rels, ["00-Home/Toolkit.md", "01-Playbook/Enum.md", "02-Cards/Group/b.md", "02-Cards/a.md"]);
+        assert_eq!(rels, ["00-Home/Toolkit.md", "01-Playbook/Enum.md", "02-Cards/Group/b.md", "02-Cards/a.md", "03-Tools/Nmap.md", "04-Foundations/sub/Deep.md", "05-Reporting/Rep.md"]);
         assert_eq!(got[0].text, "t");
         assert!(got.iter().all(|f| f.mtime_ms > 0));
         assert!(latest_mtime(r.to_str().unwrap()).unwrap().is_some());

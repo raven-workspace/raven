@@ -5,6 +5,8 @@ import { applyOverlay, mergeImport, normalizeSnapshot, type FieldManualSnapshot 
 import { parseCard, type ParsedCard } from "../../engines/fieldManual/parseCard";
 import { parsePlaybook, type PlaybookItem } from "../../engines/fieldManual/parsePlaybook";
 import { parseToolkit, type ToolkitEntry } from "../../engines/fieldManual/parseToolkit";
+import { parseNote } from "../../engines/manual";
+import type { ManualNote } from "../../engines/manual";
 import { BUILTIN_LIBRARY } from "../../engines/library/data";
 import { setImported } from "../../engines/library/store";
 import { api } from "../../lib/api";
@@ -37,6 +39,7 @@ export async function runImport(path: string, previous: FieldManualSnapshot | nu
   const files = await api.fieldManualScan(path);
   const cards: ParsedCard[] = [];
   const playbook: PlaybookItem[] = [];
+  const notes: ManualNote[] = [];
   let toolkit: ToolkitEntry[] = [];
   for (const f of files) {
     if (f.relPath === "00-Home/Toolkit.md") toolkit = parseToolkit(f.text);
@@ -44,6 +47,9 @@ export async function runImport(path: string, previous: FieldManualSnapshot | nu
     else if (f.relPath.startsWith("02-Cards/")) {
       const c = parseCard(f.relPath, f.text);
       if (c && c.meta.id) cards.push(c);
+    } else {
+      const n = parseNote(f.relPath, f.text);
+      if (n) notes.push(n);
     }
   }
   // A wrong folder or an iCloud-evicted vault parses to nothing: never save that over a good import.
@@ -60,6 +66,7 @@ export async function runImport(path: string, previous: FieldManualSnapshot | nu
     added,
     playbook,
     toolkit,
+    notes,
     report,
   };
   await api.fieldManualSave(snapshot);

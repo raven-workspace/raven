@@ -144,7 +144,7 @@ describe("audit fake api", () => {
   it("covers the archived engagement, rejects the inert commands", async () => {
     expect((await api.engagementGet("e-old")).status).toBe("archived");
     expect(await api.vaultStatus()).toEqual({ exists: true, unlocked: true });
-    expect(await api.fieldManualLoad()).toBeNull();
+    expect((await api.fieldManualLoad())?.notes).toHaveLength(3);
     await expect(api.backupNow()).rejects.toMatchObject({ code: "unsupported" });
     await expect(api.fieldManualScan()).rejects.toMatchObject({ code: "unsupported" });
   });

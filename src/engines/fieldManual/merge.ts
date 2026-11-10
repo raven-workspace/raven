@@ -6,6 +6,7 @@ import type { Drift } from './drift';
 import type { ParsedBlock, ParsedCard } from './parseCard';
 import type { PlaybookItem } from './parsePlaybook';
 import type { ToolkitEntry } from './parseToolkit';
+import type { ManualNote } from '../manual/types';
 
 export interface ImportReport {
   cardsAdded: number;
@@ -45,6 +46,8 @@ export interface FieldManualSnapshot {
   commands?: LibraryCommand[];
   playbook: PlaybookItem[];
   toolkit: ToolkitEntry[];
+  /** Tools, Foundations and Reporting notes. Absent on snapshots saved before the Manual existed. */
+  notes?: ManualNote[];
   report: ImportReport;
 }
 
