@@ -1,11 +1,7 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
-import { isKeyCell } from "../../engines/manual/lookup";
+import { ACTION_HEADER, CAUSE_HEADER, isKeyCell, plain } from "../../engines/manual/lookup";
 import type { Inline } from "../../engines/manual/markdown";
 import { labelClass } from "../../ui/Label";
-
-/** A cell's plain text, for its column name in the stacked layout. */
-const plain = (parts: Inline[]): string =>
-  parts.map((p) => ("text" in p ? p.text : "code" in p ? p.code : "strong" in p ? plain(p.strong) : "em" in p ? plain(p.em) : p.link.label)).join("");
 
 // `group-data-stacked/nt:` classes apply only while the table is stacked (`data-stacked` on the table). Written out in
 // full so Tailwind finds them.
@@ -54,13 +50,19 @@ export function NoteTable({ head, rows, anchor, cell }: { head: Inline[][]; rows
   }, [head, rows]);
 
   const labels = head.map(plain);
+  // Column policy: the action column keeps a floor width; the cause column is the first to go (hidden in a pane under
+  // 860px, in both layouts: `!` so it beats the stacked cells' `grid`). The hide is CSS, so the fit measurement
+  // (`offsetWidth`, run in a layout effect and on resize) already sees the table without it.
+  const kind = labels.map((l) => (ACTION_HEADER.test(l.trim()) ? "action" : CAUSE_HEADER.test(l.trim()) ? "cause" : ""));
+  const colClass = (j: number) => (kind[j] === "action" ? " min-w-[32ch]" : kind[j] === "cause" ? " @max-[860px]:hidden!" : "");
+  const colAttr = (j: number) => (kind[j] === "cause" ? { "data-col": "low" } : {});
   return (
-    <div ref={wrapRef} className="grid min-w-0">
+    <div ref={wrapRef} className="@container grid min-w-0">
       <table ref={tableRef} role="table" data-table={anchor} className="group/nt w-full border-collapse text-body/5.5 data-stacked:grid">
         <thead role="rowgroup" className="group-data-stacked/nt:hidden">
           <tr role="row">
             {head.map((c, i) => (
-              <th key={i} role="columnheader" className={`border-b border-line-strong px-2 pt-1 pb-2 text-left align-bottom ${labelClass} [overflow-wrap:break-word]`}>
+              <th key={i} role="columnheader" {...colAttr(i)} className={`border-b border-line-strong px-2 pt-1 pb-2 text-left align-bottom ${labelClass} [overflow-wrap:break-word]${colClass(i)}`}>
                 {cell(c)}
               </th>
             ))}
@@ -72,15 +74,19 @@ export function NoteTable({ head, rows, anchor, cell }: { head: Inline[][]; rows
               key={i} role="row" data-row={i}
               className="[&[data-current-row]>td]:bg-surface-hi [&[data-current-row]>td:first-child]:shadow-[inset_2px_0_0_var(--accent)] group-data-stacked/nt:[&[data-current-row]]:bg-surface-hi group-data-stacked/nt:[&[data-current-row]]:shadow-[inset_2px_0_0_var(--accent)] group-data-stacked/nt:[&[data-current-row]>td]:bg-transparent group-data-stacked/nt:[&[data-current-row]>td:first-child]:shadow-none group-data-stacked/nt:grid group-data-stacked/nt:grid-cols-[fit-content(12rem)_minmax(0,1fr)] group-data-stacked/nt:gap-x-3 group-data-stacked/nt:gap-y-1 group-data-stacked/nt:border-b group-data-stacked/nt:border-line group-data-stacked/nt:py-3"
             >
-              {r.map((c, j) => (
+              {r.map((c, j) => {
+                const key = j === 0 && isKeyCell(c);
                 // A key cell never wraps as a table (the stacked check then sees its full width); stacked, it may again.
-                <td key={j} role="cell" className={isKeyCell(c) ? `${TD} whitespace-nowrap group-data-stacked/nt:whitespace-normal` : TD}>
-                  {/* Its column name: shown (and read) only when stacked, as the table header is then hidden. */}
-                  <span data-column-label="" className="hidden text-muted group-data-stacked/nt:block">{labels[j] ?? ""}</span>
-                  {/* One grid item when stacked: text, code and links stay in one flow. */}
-                  <span className="min-w-0">{cell(c, i)}</span>
-                </td>
-              ))}
+                const base = isKeyCell(c) ? `${TD} whitespace-nowrap group-data-stacked/nt:whitespace-normal` : TD;
+                return (
+                  <td key={j} role="cell" {...colAttr(j)} className={base + colClass(j)}>
+                    {/* Its column name: shown (and read) only when stacked, as the table header is then hidden. A key cell is the row's heading line instead: the name stays for screen readers only. */}
+                    <span data-column-label="" className={key ? "sr-only" : "hidden text-muted group-data-stacked/nt:block"}>{labels[j] ?? ""}</span>
+                    {/* One grid item when stacked: text, code and links stay in one flow. */}
+                    <span className={key ? "min-w-0 group-data-stacked/nt:col-span-2 group-data-stacked/nt:text-body group-data-stacked/nt:font-semibold group-data-stacked/nt:text-fg" : "min-w-0"}>{cell(c, i)}</span>
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>

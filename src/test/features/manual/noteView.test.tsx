@@ -382,6 +382,43 @@ describe("NoteView tables", () => {
     expect(cellsOf(container)[0]).toHaveAccessibleName(/^Flag\s*-m MODE$/);
   });
 
+  const COLS = parseNote("04-Foundations/Zz-Cols.md", [
+    "# Zz Cols",
+    "| Code | Usually caused by | Do |",
+    "|---|---|---|",
+    "| `0x1` | A stale ticket on the host. | Renew it and retry. |",
+    "",
+  ].join("\n"))!;
+
+  it("the action column holds a floor width and the cause column is low priority, on any table", () => {
+    widths(500, 600);
+    const { container } = mount(COLS);
+    const ths = [...container.querySelectorAll("thead th")] as HTMLElement[];
+    expect(ths[2]).toHaveClass("min-w-[32ch]");
+    expect(ths[1]).toHaveAttribute("data-col", "low");
+    expect(ths[0]).not.toHaveAttribute("data-col");
+    const tds = cellsOf(container);
+    expect(tds[2]).toHaveClass("min-w-[32ch]");
+    expect(tds[1]).toHaveAttribute("data-col", "low");
+    expect(tds[0]).not.toHaveAttribute("data-col");
+    expect(container.querySelector("table")!.parentElement).toHaveClass("@container");
+  });
+
+  it("stacked, the key cell is the row's heading line with no visible column name", () => {
+    widths(900, 600);
+    const { container } = mount(COLS);
+    expect(container.querySelector("table")).toHaveAttribute("data-stacked");
+    const key = cellsOf(container)[0];
+    const label = key.querySelector("[data-column-label]")!;
+    expect(label).toHaveClass("sr-only");
+    expect(label).not.toHaveClass("group-data-stacked/nt:block");
+    const value = key.querySelector("span:not([data-column-label])")!;
+    expect(value).toHaveClass("group-data-stacked/nt:font-semibold", "group-data-stacked/nt:text-fg");
+    expect(key).toHaveClass("group-data-stacked/nt:col-span-2");
+    // Other cells keep their visible name.
+    expect(cellsOf(container)[2].querySelector("[data-column-label]")).toHaveClass("group-data-stacked/nt:block");
+  });
+
   it("a short inline code token never wraps inside; a long or spaced one may", () => {
     const note = parseNote("04-Foundations/Zz-Codes.md", "# Zz Codes\nSee `\\\\zzfs01.example.test\\pipe\\zz` and `zz --flag value`.\n")!;
     mount(note);
