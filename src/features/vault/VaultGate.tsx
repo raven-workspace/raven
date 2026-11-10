@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Gear, Lock, MagnifyingGlass, Package, Stack, X } from "@phosphor-icons/react";
+import { BookOpenText, Gear, Lock, MagnifyingGlass, Package, Stack, X } from "@phosphor-icons/react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { api } from "../../lib/api";
 import { onLockedError, reportError } from "../../lib/lockSignal";
@@ -17,9 +17,10 @@ import { setImported } from "../../engines/library/store";
 import { applySnapshot, FIELD_MANUAL_KEY, useVaultNewer } from "../fieldManual/queries";
 import { useAutoLock } from "./useAutoLock";
 import { clearSecretClipboard } from "../../lib/clipboard";
-import { isDialogOpen } from "../../lib/keys";
+import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
 import { SaveSummary } from "../capture/SaveSummary";
 import { ArsenalDrawer } from "../arsenal/ArsenalDrawer";
+import { MANUAL_NOTE_ID, manualKeysBlocked } from "../manual/ManualPage";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useLastEngagementStore } from "../arsenal/useFillScope";
 import { PayloadsDrawer } from "../payloads/PayloadsDrawer";
@@ -235,9 +236,22 @@ export function VaultGate({ children }: { children: ReactNode }) {
 
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const onManual = pathname === "/manual" || pathname.startsWith("/manual/");
+  /** The Manual at the remembered place; on the Manual, the note pane takes focus instead. */
+  const openManual = () => {
+    if (onManual) document.getElementById(MANUAL_NOTE_ID)?.focus();
+    else void navigate("/manual");
+  };
+  // M opens the Manual from any unlocked screen: never while typing, or with a drawer or dialog open.
+  useKeydown((e) => {
+    if (!unlocked || !isFreeKey(e) || (e.key !== "m" && e.key !== "M") || manualKeysBlocked()) return;
+    e.preventDefault();
+    openManual();
+  });
   const right = unlocked ? (
     <>
       <TitleBarButton hint="A" icon={Stack} onClick={() => useArsenalStore.getState().toggle()}>Arsenal</TitleBarButton>
+      <TitleBarButton hint="M" icon={BookOpenText} onClick={openManual}>Manual</TitleBarButton>
       <TitleBarButton hint="P" icon={Package} onClick={() => usePayloadsStore.getState().toggle()}>Payloads</TitleBarButton>
       <TitleBarButton hint="⌘K" icon={MagnifyingGlass} onClick={() => usePaletteStore.getState().open()}>Search</TitleBarButton>
       <TitleBarButton hint="⌘L" icon={Lock} onClick={lock}>Lock</TitleBarButton>

@@ -87,7 +87,7 @@ describe("status strip and title bar", () => {
     await mountStrip();
     const controls = [...screen.getByRole("button", { name: "Settings" }).closest("[data-tauri-drag-region] > div")!.querySelectorAll("button")];
     expect(controls.at(-1)).toBe(screen.getByRole("button", { name: "Settings" }));
-    expect(controls.slice(0, -1).map((b) => b.textContent?.replace(/\s*(⌘\w|A|P)$/, "").trim())).toEqual(["Arsenal", "Payloads", "Search", "Lock"]);
+    expect(controls.slice(0, -1).map((b) => b.textContent?.replace(/\s*(⌘\w|A|M|P)$/, "").trim())).toEqual(["Arsenal", "Manual", "Payloads", "Search", "Lock"]);
     expect(screen.getByRole("button", { name: "Settings" }).querySelector("svg")).not.toBeNull();
   });
 

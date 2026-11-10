@@ -89,6 +89,8 @@ beforeEach(() => {
     windowsToolsDir: "", linuxToolsDir: "", fieldManualPath: "/v/fm", nvdKeySet: false,
   });
   m.engagementGet.mockResolvedValue(E1);
+  // On /manual the fill scope waits for the engagement list (exam rules fail closed until it loads).
+  m.engagementsList.mockResolvedValue([E1]);
   m.hostsList.mockResolvedValue([H1]);
   m.servicesListEngagement.mockResolvedValue([]);
   m.tunnelsList.mockResolvedValue([]);

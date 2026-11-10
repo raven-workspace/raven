@@ -52,6 +52,7 @@ The checklist (what they've done, what their options are next) and the host fact
 | `N` | field notes |
 | ⌘K | search |
 | `A` | Arsenal drawer |
+| `M` | the Manual, at the last note read |
 | `H` | stuck view (on a host) |
 | number keys | engagement sections |
 | `Esc` | closes overlays |
@@ -124,6 +125,7 @@ The checklist (what they've done, what their options are next) and the host fact
 
 **Arsenal and search**
 - **Arsenal.** The command library: built-in commands plus the owner's Field Manual vault (cards by stage and category), imported read-only.
+- **Manual.** The Field Manual's Foundations, Tools and Reporting notes as a full-screen reader (`M`): a filterable rail, the note with its commands filled for the host, and an outline; it reopens at the last note and scroll position.
 - **Ways in:**
   - a drawer (`A`);
   - full-screen browse with stage and category filters;

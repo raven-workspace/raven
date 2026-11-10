@@ -16,22 +16,23 @@ export interface FillScope {
   /** "" when nothing applies (the dashboard, settings). */
   engagementId: string;
   hostId: string | null;
-  /** True on /arsenal and /payloads: the engagement is the remembered one, not the route's, so the chip names it. */
+  /** True on /arsenal, /payloads and /manual: the engagement is the remembered one, not the route's, so the chip names it. */
   remembered: boolean;
-  /** True while the engagement is still being decided (on /arsenal or /payloads, until the engagement list has loaded). */
+  /** True while the engagement is still being decided (on /arsenal, /payloads or /manual, until the engagement list has loaded). */
   pending?: boolean;
 }
 
 /**
  * Which engagement and host the palette, drawers, browse and Workbench fill for. In an engagement: the route's. On the
- * full-screen views (`/arsenal`, `/payloads`):
+ * full-screen views (`/arsenal`, `/payloads`, `/manual`):
  * the engagement (and host) you came from, else the most recently active one. Elsewhere: none.
  */
 export function useFillScope(): FillScope {
   const hostMatch = useMatch("/e/:id/h/:hostId");
   const engMatch = useMatch("/e/:id/*");
   const onArsenal = useMatch("/arsenal") !== null;
-  const onFull = useMatch("/payloads") !== null || onArsenal;
+  const onManual = useMatch("/manual/*") !== null;
+  const onFull = useMatch("/payloads") !== null || onManual || onArsenal;
   const routeEngagement = hostMatch?.params.id ?? engMatch?.params.id ?? "";
   const routeHost = hostMatch?.params.hostId ?? null;
   const last = useLastEngagementStore();

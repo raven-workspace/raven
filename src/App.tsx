@@ -4,6 +4,7 @@ import { Dashboard } from "./features/engagements/Dashboard";
 import { SectionView } from "./features/engagements/sections";
 import { EngagementShell, HostRoute, SectionRoute } from "./features/engagements/EngagementShell";
 import { ArsenalBrowse } from "./features/arsenal/ArsenalBrowse";
+import { ManualPage } from "./features/manual/ManualPage";
 import { PayloadsWorkbench } from "./features/payloads/PayloadsWorkbench";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { useEscapeTo } from "./lib/keys";
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="h/:hostId" element={<HostRoute />} />
         </Route>
         <Route path="arsenal" element={<ArsenalBrowse />} />
+        <Route path="manual/:noteId?" element={<ManualPage />} />
         <Route path="payloads" element={<PayloadsWorkbench />} />
         <Route path="settings" element={<SettingsRoute />} />
         {UiGallery && (

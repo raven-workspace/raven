@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router";
 import { api } from "../../lib/api";
 import { Button, Disclosure, Field, Input, Panel } from "../../ui";
 import type { Drift } from "../../engines/fieldManual/drift";
@@ -14,6 +15,11 @@ export function FieldManualSection() {
   useEffect(() => {
     void qc.invalidateQueries({ queryKey: ["fieldManualMtime"] });
   }, [qc]);
+  // The Manual's empty state links here: `/settings#field-manual` brings this panel into view.
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (hash === "#field-manual") document.getElementById("field-manual")?.scrollIntoView?.({ block: "start" });
+  }, [hash]);
   const saved = settings.data?.fieldManualPath;
   const [draft, setPath] = useState<string | null>(null);
   const path = draft ?? saved ?? "";
@@ -45,6 +51,7 @@ export function FieldManualSection() {
   const r = s?.report;
   return (
     <Panel
+      id="field-manual"
       title="Field Manual"
       actions={
         <Button size="sm" onClick={() => void importNow()} disabled={imp.isPending || !settings.data} aria-busy={imp.isPending}>
