@@ -17,7 +17,7 @@ Tick as you go. Each line: do this → you should see that.
 - [ ] Paste into **Uploaded file** → the file to save, then the URL to hit.
 - [ ] Paste into **Jenkins / Groovy**, **Node code**, **Java code** → each gives a shell that runs as pasted.
 - [ ] Paste into PowerShell prompt, pick **PowerShell TcpListener bind (-e)** → one `powershell … -e …` line that runs as pasted.
-- [ ] Pick a bind shell → the second block is **Connect with** `nc <target> <port>`.
+- [ ] Pick a bind shell → the second block is **Connect with**: `rlwrap nc <target> <port>` by default (socat for the socat bind), with penelope or socat in the list.
 - [ ] Open the Listener chip → penelope, rlwrap nc, socat TTY, ncat `--ssl`, multi/handler; the one the payload needs is picked.
 - [ ] `⌥B` (callbacks blocked) → bind shells first, reverse shells marked "needs a callback".
 - [ ] `⌥F` (filter) on a Linux injection context → base64, `${IFS}` and hex wrappers to choose from.
@@ -29,7 +29,7 @@ Tick as you go. Each line: do this → you should see that.
 - [ ] Exam-sim engagement, no lock yet: pick a Meterpreter payload → "Using Meterpreter here makes this your Metasploit machine".
 - [ ] Press ⌘↵ on it → status strip shows Metasploit locked to that host.
 - [ ] Same payload on another host → amber "Metasploit is locked to <host>".
-- [ ] SQL injection (`⌥3`): copy step 1 → it folds to "1. Break the query · copied" and step 2 gets focus.
+- [ ] SQL injection (`⌥3`): copy step 1 → it folds to one line: 1. Break the query — copied, and step 2 gets focus.
 - [ ] Log a payload that fails with "not recognized as a cmdlet" → it's marked "Failed here before" next time.
 
 ## Privesc
@@ -38,6 +38,7 @@ Tick as you go. Each line: do this → you should see that.
 
 ## Post-ex / creds
 - [ ] `L`, paste `DOMAIN\user:pass` → "Adds 1 credential for <host>…" with **Add as credential** on.
+- [ ] Paste a note like `todo:enumerate smb` → saved as a note, no credential offered.
 - [ ] Save it → it's in Credentials; Undo removes it.
 - [ ] Mark a host root → board shows it in Post-exploitation.
 - [ ] `L` with a screenshot → file name shows as "Saved as …"; in the Log the caption isn't repeated.
