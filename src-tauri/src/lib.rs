@@ -150,6 +150,8 @@ pub fn run() {
             commands::cleanup_update,
             commands::cleanup_set_removed,
             commands::cleanup_dismiss,
+            commands::interface_dismissals_list,
+            commands::interface_dismiss,
             commands::cleanup_delete,
             commands::cleanup_counts,
         ])

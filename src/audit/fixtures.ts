@@ -11,7 +11,7 @@ import type { FailedAttempt, Finding, FindingFile } from "../types/findings";
 import type { Host } from "../types/host";
 import type { Attachment, Extraction, LogEntry, Progress } from "../types/log";
 import type { HostIdentity, PrivescVector } from "../types/hostFacts";
-import type { Hop, Tunnel } from "../types/network";
+import type { Hop, InterfaceDismissal, Tunnel } from "../types/network";
 import type { Note, RuledOut } from "../types/notes";
 import type { Service } from "../types/service";
 import type { Settings } from "../types/settings";
@@ -52,6 +52,7 @@ export interface AuditFixtures {
   vectors: PrivescVector[];
   tunnels: Tunnel[];
   hops: Hop[];
+  interfaceDismissals: InterfaceDismissal[];
   credentials: Credential[];
   usernames: Username[];
   credAttempts: CredAttempt[];
@@ -516,6 +517,7 @@ const tunnels: Tunnel[] = [
   { id: "t-1", engagementId: "e-lab", kind: "ligolo", viaHostId: "h-pivot", subnets: ["10.10.21.0/24", "10.10.22.0/24"], callbackIp: "192.0.2.10", status: "up", notes: "ligolo-ng agent, tun interface ligolo", createdAt: ago(50 * MIN), updatedAt: ago(50 * MIN) },
 ];
 
+const interfaceDismissals: InterfaceDismissal[] = [];
 const hops: Hop[] = [
   { id: "hp-1", engagementId: "e-lab", fromHostId: null, toHostId: "h-web", via: "Upload form webshell", logEntryId: "l-16", at: ago(110 * MIN), updatedAt: ago(110 * MIN) },
   { id: "hp-2", engagementId: "e-lab", fromHostId: "h-web", toHostId: "h-pivot", via: "Reused svc_backup over RDP", logEntryId: null, at: ago(75 * MIN), updatedAt: ago(75 * MIN) },
@@ -568,7 +570,7 @@ const settings: Settings = {
 };
 
 export const FIXTURES: AuditFixtures = {
-  engagements, hosts, services, log, attachments, checklist, notes, ruledOut, hostIdentity, vectors, tunnels, hops, credentials, usernames,
+  engagements, hosts, services, log, attachments, checklist, notes, ruledOut, hostIdentity, vectors, tunnels, interfaceDismissals, hops, credentials, usernames,
   credAttempts, triedPairs, payloadBuilds, extractions, accessGrants, findings, findingFiles, failedAttempts, cleanup, backups, settings,
 };
 

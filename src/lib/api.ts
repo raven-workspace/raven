@@ -43,7 +43,7 @@ import type {
   UsernameInput,
 } from "../types/credentials";
 import type { PayloadBuild } from "../types/payloadBuild";
-import type { Hop, HopInput, Tunnel, TunnelInput } from "../types/network";
+import type { Hop, HopInput, InterfaceDismissal, Tunnel, TunnelInput } from "../types/network";
 import type { Host, HostInput, BoardColumn } from "../types/host";
 import type { Engagement, EngagementInput, EngagementStatus } from "../types/engagement";
 import { RavenError } from "../types/errors";
@@ -182,6 +182,10 @@ export const api = {
     call<Tunnel>("tunnel_create", { engagementId, input }),
   tunnelUpdate: (id: string, input: TunnelInput) => call<Tunnel>("tunnel_update", { id, input }),
   tunnelDelete: (id: string) => call<null>("tunnel_delete", { id }),
+  interfaceDismissalsList: (engagementId: string) =>
+    call<InterfaceDismissal[]>("interface_dismissals_list", { engagementId }),
+  interfaceDismiss: (engagementId: string, hostId: string, subnet: string) =>
+    call<null>("interface_dismiss", { engagementId, hostId, subnet }),
   hopsList: (engagementId: string) => call<Hop[]>("hops_list", { engagementId }),
   hopCreate: (engagementId: string, input: HopInput) =>
     call<Hop>("hop_create", { engagementId, input }),

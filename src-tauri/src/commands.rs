@@ -17,7 +17,7 @@ use crate::credentials::{
 };
 use crate::checklist::{self, ChecklistItem, ChecklistItemInput, GoalRef};
 use crate::engagements::{self, Engagement, EngagementInput, Progress};
-use crate::network::{self, Hop, HopInput, Tunnel, TunnelInput};
+use crate::network::{self, Hop, HopInput, InterfaceDismissal, Tunnel, TunnelInput};
 use crate::notes::{self, Note, RuledOut, RuledOutInput};
 use crate::nvd::{self, NvdRecord};
 use crate::log::{self, Attachment, LogEntry, LogEntryInput};
@@ -472,6 +472,16 @@ pub async fn tunnel_update(app: AppHandle, id: String, input: TunnelInput) -> Ap
 #[tauri::command]
 pub async fn tunnel_delete(app: AppHandle, id: String) -> AppResult<()> {
     with_vault(app, move |v| network::tunnel_delete(v.conn()?, &id)).await
+}
+
+#[tauri::command]
+pub async fn interface_dismissals_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<InterfaceDismissal>> {
+    with_vault(app, move |v| network::interface_dismissals_list(v.conn()?, &engagement_id)).await
+}
+
+#[tauri::command]
+pub async fn interface_dismiss(app: AppHandle, engagement_id: String, host_id: String, subnet: String) -> AppResult<()> {
+    with_vault(app, move |v| network::interface_dismiss(v.conn()?, &engagement_id, &host_id, &subnet)).await
 }
 
 #[tauri::command]

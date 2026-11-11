@@ -257,6 +257,46 @@ pub fn hop_delete(conn: &Connection, id: &str) -> AppResult<()> {
     Ok(())
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterfaceDismissal {
+    pub engagement_id: String,
+    pub host_id: String,
+    pub subnet: String,
+    pub created_at: i64,
+}
+
+pub fn interface_dismissals_list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<InterfaceDismissal>> {
+    let mut st = conn.prepare(
+        "SELECT engagement_id, host_id, subnet, created_at FROM interface_dismissals \
+         WHERE engagement_id = ?1 ORDER BY created_at, rowid",
+    )?;
+    let rows = st
+        .query_map([engagement_id], |r| {
+            Ok(InterfaceDismissal { engagement_id: r.get(0)?, host_id: r.get(1)?, subnet: r.get(2)?, created_at: r.get(3)? })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// Remember that the user declined a tunnel nudge for this host and subnet. Dismissing twice is a no-op.
+pub fn interface_dismiss(conn: &Connection, engagement_id: &str, host_id: &str, subnet: &str) -> AppResult<()> {
+    check_scope(conn, engagement_id, None)?;
+    match check_scope(conn, engagement_id, Some(host_id)) {
+        Err(AppError::NotFound) => return Err(invalid("hostId", "host is not in this engagement")),
+        r => r?,
+    }
+    let subnet = subnet.trim();
+    if !valid_cidr(subnet) {
+        return Err(invalid("subnet", &format!("invalid IPv4 CIDR: {subnet}")));
+    }
+    conn.execute(
+        "INSERT OR IGNORE INTO interface_dismissals (engagement_id, host_id, subnet, created_at) VALUES (?1,?2,?3,?4)",
+        params![engagement_id, host_id, subnet, system_now_ms()],
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -381,5 +421,47 @@ mod tests {
         hop_delete(c, &h.id).unwrap();
         assert_eq!(hop_delete(c, &h.id), Err(AppError::NotFound));
         assert_eq!(hops_list(c, &e).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn interface_dismissals_round_trip() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let a = host(c, &e, "10.0.0.5");
+        interface_dismiss(c, &e, &a, "10.10.0.0/24").unwrap();
+        let rows = interface_dismissals_list(c, &e).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!((rows[0].host_id.as_str(), rows[0].subnet.as_str(), rows[0].created_at > 0), (a.as_str(), "10.10.0.0/24", true));
+        interface_dismiss(c, &e, &a, "10.10.0.0/24").unwrap();
+        assert_eq!(interface_dismissals_list(c, &e).unwrap().len(), 1);
+        interface_dismiss(c, &e, &a, "10.20.0.0/24").unwrap();
+        assert_eq!(interface_dismissals_list(c, &e).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn interface_dismiss_validates_host_and_subnet() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let a = host(c, &e, "10.0.0.5");
+        let e2 = eng(c);
+        let foreign = host(c, &e2, "10.0.0.5");
+        assert_eq!(field(interface_dismiss(c, &e, &foreign, "10.10.0.0/24")), "hostId");
+        assert_eq!(field(interface_dismiss(c, &e, "missing", "10.10.0.0/24")), "hostId");
+        assert_eq!(field(interface_dismiss(c, &e, &a, "nope")), "subnet");
+        assert!(interface_dismissals_list(c, &e).unwrap().is_empty());
+        assert!(interface_dismissals_list(c, &e2).unwrap().is_empty());
+    }
+
+    #[test]
+    fn deleting_a_host_removes_its_dismissals() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c);
+        let a = host(c, &e, "10.0.0.5");
+        interface_dismiss(c, &e, &a, "10.10.0.0/24").unwrap();
+        hosts::delete(c, &a).unwrap();
+        assert!(interface_dismissals_list(c, &e).unwrap().is_empty());
     }
 }
