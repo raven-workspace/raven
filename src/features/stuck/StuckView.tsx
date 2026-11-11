@@ -9,7 +9,7 @@ import { isDialogOpen } from "../../lib/keys";
 import type { Host } from "../../types/host";
 import { shortHostName } from "../../lib/hostName";
 import { XIcon } from "@phosphor-icons/react";
-import { BELOW_TITLE_BAR, Disclosure, HintLine, IconButton, LoadingState, labelClass, queryState, type Hint } from "../../ui";
+import { BELOW_TITLE_BAR, Disclosure, HintLine, IconButton, LoadingState, labelClass, queryState, useDrawerPresence, type Hint } from "../../ui";
 import { useCredFill } from "../checklist/credPick";
 import { CommandList, type FilledCommand } from "../checklist/CommandList";
 import { goalCommands } from "../checklist/goalCommands";
@@ -76,9 +76,12 @@ export function StuckView({
 
   // After a jump to a goal, the goal keeps the focus: closing must not hand it back to the opener.
   const skipRestoreRef = useRef(false);
-  if (!open) return null;
+  // Slides in from the right edge like the other drawers, and back out before it unmounts.
+  const [present, root] = useDrawerPresence<HTMLElement>(open);
+  if (!present) return null;
   return (
     <Body
+      root={root}
       engagementId={engagementId}
       host={host}
       onClose={onClose}
@@ -91,7 +94,7 @@ export function StuckView({
   );
 }
 
-function Body({ engagementId, host, onClose, onOpenGoal, skipRestoreRef }: { engagementId: string; host: Host; onClose: () => void; onOpenGoal: (goalId: string) => void; skipRestoreRef: React.RefObject<boolean> }) {
+function Body({ root, engagementId, host, onClose, onOpenGoal, skipRestoreRef }: { root: React.RefObject<HTMLElement | null>; engagementId: string; host: Host; onClose: () => void; onOpenGoal: (goalId: string) => void; skipRestoreRef: React.RefObject<boolean> }) {
   const hostsQ = useHosts(engagementId);
   const engagement = useQuery({ queryKey: ["engagement", engagementId], queryFn: () => api.engagementGet(engagementId) });
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet });
@@ -105,16 +108,19 @@ function Body({ engagementId, host, onClose, onOpenGoal, skipRestoreRef }: { eng
   const credsQ = useCredentials(engagementId);
 
   // Focus the panel on open and give focus back on close, like the notes panel.
-  const root = useRef<HTMLElement>(null);
   useEffect(() => {
     const active = document.activeElement;
     const back = active instanceof HTMLElement && active !== document.body ? active : null;
-    root.current?.focus();
+    const panel = root.current;
+    panel?.focus();
     skipRestoreRef.current = false;
     return () => {
-      if (!skipRestoreRef.current && back?.isConnected) back.focus();
+      // Runs after the exit slide: only take focus back if nothing else has it since.
+      const now = document.activeElement;
+      const idle = now === null || now === document.body || (panel?.contains(now) ?? false);
+      if (!skipRestoreRef.current && idle && back?.isConnected) back.focus();
     };
-  }, [skipRestoreRef]);
+  }, [root, skipRestoreRef]);
 
   const hosts = hostsQ.data;
   const eng = engagement.data;

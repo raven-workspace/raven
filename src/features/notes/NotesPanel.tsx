@@ -1,7 +1,7 @@
 import { useEffect, useRef, type MouseEvent } from "react";
 import { isDialogOpen } from "../../lib/keys";
 import type { Engagement } from "../../types/engagement";
-import { BELOW_TITLE_BAR, Kbd, Toolbar, labelClass } from "../../ui";
+import { BELOW_TITLE_BAR, Kbd, Toolbar, labelClass, useDrawerPresence } from "../../ui";
 import { cx } from "../../lib/cx";
 import { useHosts } from "../hosts/queries";
 import { NoteEditor } from "./NoteEditor";
@@ -60,8 +60,10 @@ export function NotesPanel({ engagement, hostId }: { engagement: Engagement; hos
     return () => window.removeEventListener("keydown", on, true);
   }, []);
 
-  if (!open) return null;
-  return <PanelBody engagement={engagement} hostId={hostId} scope={scope} width={width} textRef={textRef} />;
+  // Slides in from the right edge like the other drawers, and back out before it unmounts.
+  const [present, panelRef] = useDrawerPresence<HTMLElement>(open);
+  if (!present) return null;
+  return <PanelBody engagement={engagement} hostId={hostId} scope={scope} width={width} textRef={textRef} panelRef={panelRef} />;
 }
 
 function PanelBody({
@@ -70,12 +72,14 @@ function PanelBody({
   scope,
   width,
   textRef,
+  panelRef,
 }: {
   engagement: Engagement;
   hostId: string | null;
   scope: NotesScope;
   width: number;
   textRef: React.RefObject<HTMLTextAreaElement | null>;
+  panelRef: React.RefObject<HTMLElement | null>;
 }) {
   const hosts = useHosts(engagement.id);
   const hostName = hosts.data?.find((h) => h.id === hostId)?.name;
@@ -101,6 +105,7 @@ function PanelBody({
 
   return (
     <aside
+      ref={panelRef}
       aria-label={title}
       style={{ width }}
       className={`fixed ${BELOW_TITLE_BAR} right-0 z-30 grid max-w-[70vw] grid-rows-[auto_minmax(0,1fr)] border-l border-line-2 bg-surface text-fg-2`}
