@@ -708,7 +708,7 @@ describe("Manual: the host commands fill for", () => {
     expect(await screen.findByText("Copied for zzweb01")).toBeInTheDocument();
     // The IP keeps its own track; the slot is the one that truncates.
     const row = screen.getByTestId("manual-host-ip").parentElement!;
-    expect(row.className).toMatch(/grid-cols-\[minmax\(10rem,max-content\)_max-content_minmax\(0,1fr\)\]/);
+    expect(row.className).toMatch(/grid-cols-\[max-content_max-content_minmax\(0,1fr\)\]/);
     expect(screen.getByTestId("manual-host-ip")).not.toHaveClass("truncate");
     expect(screen.getByText("Copied for zzweb01")).toHaveClass("truncate", "min-w-0");
     await user.click(screen.getByRole("button", { name: "Host zzweb01" }));

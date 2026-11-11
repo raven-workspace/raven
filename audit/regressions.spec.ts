@@ -716,6 +716,29 @@ async function openIisDrawer(page: Page, width: number) {
   return aside;
 }
 
+// Owner, 2026-11-10: the drawer's pickers flow in runs, so any of them can end a line at the drawer's right edge. Its
+// list must open from that side instead of running past the drawer.
+test("payloads drawer: every picker list stays inside the drawer", async ({ page }) => {
+  for (const path of [IIS, "/e/e-lab/h/h-sql01"]) {
+    for (const width of PAYLOADS_WIDTHS) {
+      const aside = await openDrawer(page, path, width);
+      await aside.getByRole("button", { name: /^Port:/ }).waitFor();
+      const pickers = aside.locator("[data-picker-trigger][aria-haspopup='listbox']");
+      for (let i = 0; i < (await pickers.count()); i++) {
+        const name = await pickers.nth(i).getAttribute("aria-label");
+        await pickers.nth(i).click();
+        const list = page.locator(`[id="${await pickers.nth(i).getAttribute("aria-controls")}"]`);
+        await list.waitFor();
+        const [box, pane] = [(await list.boundingBox())!, (await aside.boundingBox())!];
+        expect(box.x + box.width, `${name} list right edge, ${path} at ${width}`).toBeLessThanOrEqual(pane.x + pane.width);
+        expect(box.x, `${name} list left edge, ${path} at ${width}`).toBeGreaterThanOrEqual(pane.x);
+        await page.keyboard.press("Escape");
+        await list.waitFor({ state: "detached" });
+      }
+    }
+  }
+});
+
 test("payloads drawer and workbench: no pane scrolls sideways or clips focus", async ({ page }) => {
   for (const width of PAYLOADS_WIDTHS) {
     const aside = await openIisDrawer(page, width);

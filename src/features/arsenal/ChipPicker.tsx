@@ -1,4 +1,4 @@
-import { useEffect, useId, useImperativeHandle, useRef, useState } from "react";
+import { useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import type { KeyboardEvent, Ref } from "react";
 import { PickerTrigger } from "../../ui";
 
@@ -49,6 +49,9 @@ export function ChipPicker({ options, value, onPick, onMousePick, label, listLab
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const [flash, setFlash] = useState(false);
+  const listRef = useRef<HTMLUListElement>(null);
+  /** The side the open list lines up with: `align` unless that runs it past its pane's edge (a picker at the end of a wrapping run). */
+  const [side, setSide] = useState(align);
 
   useEffect(() => () => clearTimeout(flashTimer.current), []);
 
@@ -57,8 +60,19 @@ export function ChipPicker({ options, value, onPick, onMousePick, label, listLab
     before.current = prev && prev !== buttonRef.current ? prev : null;
     buttonRef.current?.focus();
     setActive(Math.max(0, options.findIndex((o) => o.id === value)));
+    setSide(align);
     setOpen(true);
   };
+
+  // Before paint: a list that would run past its pane (the drawer, the page or a dialog) opens from the other side.
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!open || !list) return;
+    const pane = (buttonRef.current?.closest("aside, main, [role=dialog]") ?? document.documentElement).getBoundingClientRect();
+    const r = list.getBoundingClientRect();
+    if (side === "start" && r.right > pane.right) setSide("end");
+    else if (side === "end" && r.left < pane.left) setSide("start");
+  }, [open, side]);
   useImperativeHandle(ref, () => ({ open: openList, focus: () => buttonRef.current?.focus() }));
 
   const close = (restore: boolean) => {
@@ -142,10 +156,11 @@ export function ChipPicker({ options, value, onPick, onMousePick, label, listLab
       />
       {open && (
         <ul
+          ref={listRef}
           id={listId}
           role="listbox"
           aria-label={listLabel}
-          className={`absolute top-full z-30 ${align === "end" ? "right-0" : "left-0"} m-0 mt-1 grid max-h-60 ${wide ? "min-w-80" : "min-w-[max(100%,12rem)]"} list-none overflow-y-auto rounded-md border border-line-2 bg-surface p-1 text-body shadow-lg`}
+          className={`absolute top-full z-30 ${side === "end" ? "right-0" : "left-0"} m-0 mt-1 grid max-h-60 ${wide ? "min-w-80" : "min-w-[max(100%,12rem)]"} list-none overflow-y-auto rounded-md border border-line-2 bg-surface p-1 text-body shadow-lg`}
         >
           {options.map((o, i) => (
             <li

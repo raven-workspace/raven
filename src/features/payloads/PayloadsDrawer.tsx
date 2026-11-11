@@ -63,8 +63,9 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
             <button
               key={g.id} type="button" role="tab" aria-selected={generator === g.id} title={`⌥${i + 1}`}
               onClick={() => usePayloadsStore.getState().setGenerator(g.id)}
-              // An inset ring, not a border: six tabs at 13px fit the 560px drawer beside Full screen.
-              className={`h-7 cursor-default whitespace-nowrap rounded-sm px-2 text-meta ring-1 ring-inset ${generator === g.id ? "text-accent ring-accent" : "text-fg-2 ring-line-2 hover:bg-surface-hi"}`}
+              // An inset ring, not a border: six tabs at 13px fit the 560px drawer beside Full screen. Only the selected one
+              // is outlined (accent); the rest are plain until hovered, so the row reads as one choice, not six boxes.
+              className={`h-7 cursor-default whitespace-nowrap rounded-sm px-2 text-meta ring-1 ring-inset ${generator === g.id ? "text-accent ring-accent" : "text-fg-2 ring-transparent hover:bg-surface-hi hover:text-fg"}`}
             >
               {g.label}
             </button>

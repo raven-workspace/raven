@@ -315,6 +315,8 @@ Each table declares its column policy; automatic layout never decides.
 
   An unknown required value shows an amber "Pick one" inside the control.
 
+  A **set** of them (the Payloads drawer's host, OS, paste context, port, then callbacks, filter and tools) isn't a table: it flows like the status strip, as runs of borderless "Label value ⌄" triggers (the background shows on hover), 24px apart, wrapping only when there's no room, never forced into columns. Where each value came from is in its tooltip, not a line of text.
+
 ### Status strip and headers
 
 - The status strip is a grid of labelled cells (`grid-auto-flow: column`, 24px gaps). Each cell is a label and a value, `nowrap`.

@@ -482,7 +482,7 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
         {/* What the note's commands fill for, and where ⌘↵ logs: kept above the scroll so it never moves. */}
         <div
           data-host-row="" {...(paneFocused ? { "data-pane-focused": "" } : {})}
-          className="grid min-h-12 grid-cols-[minmax(10rem,max-content)_max-content_minmax(0,1fr)] items-center gap-3 border-b border-line px-8 py-2 text-meta data-[pane-focused]:border-accent"
+          className="grid min-h-12 grid-cols-[max-content_max-content_minmax(0,1fr)] items-center gap-3 border-b border-line px-8 py-2 text-meta data-[pane-focused]:border-accent"
         >
           {engagementId ? (
             <>

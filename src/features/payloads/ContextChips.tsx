@@ -3,7 +3,7 @@ import { PASTE_CONTEXTS } from "../../engines/payloads/context";
 import { filterChoices, type FilterId } from "../../engines/payloads/filters";
 import { ChipPicker, type ChipOption, type ChipPickerHandle } from "../arsenal/ChipPicker";
 import { HostChip, type HostChipHandle } from "../arsenal/HostChip";
-import { Input } from "../../ui";
+import { ChipSet, Input } from "../../ui";
 import { ToolsPicker } from "./ToolsPicker";
 import { contextLabel, FILTER_LABEL, OS_LABEL, type PayloadFit } from "./usePayloadFit";
 import { usePayloadsStore, type PayloadOverride } from "./usePayloadsStore";
@@ -31,7 +31,7 @@ function Chip({ name, value, options, current, onPick, onMousePick, warn, title,
  * The drawer's context pickers: host (⌥H) on its own line, then OS (⌥O), where you paste it (⌥W) and the listener port
  * (443, 80, Settings', or "Other…": an inline numeric field, ↵ sets it, Esc drops it),
  * then, for Shell and msfvenom, Callbacks (⌥B), Filter (⌥F, Shell only, where the payload goes through an injection point) and Tools (⌥T), each
- * overridable for this host (session only), then one muted line saying where each value came from. Unknown values say
+ * overridable for this host (session only), in two borderless runs; where each value came from is in its tooltip. Unknown values say
  * an amber "Pick one". A callback clue turns the Callbacks value amber and shows in that line; it never flips the
  * chip. All are Tab stops.
  */
@@ -69,38 +69,42 @@ export function ContextChips({ fit, engagementId, onHost, onDone, toggleRow, fil
     setCustom(null);
   };
 
-  const why = [
-    evidence.os ? `OS ${evidence.os}` : "OS not known: pick one",
-    evidence.context ? `paste context ${evidence.context}` : "paste context not known: pick one",
-    evidence.port ? `port ${evidence.port}` : "port not set",
-  ];
+  // Where each value came from, for its picker's tooltip.
+  const why = {
+    os: evidence.os ? `OS ${evidence.os}` : "OS not known",
+    context: evidence.context ? `Paste context ${evidence.context}` : "Paste context not known",
+    port: evidence.port ? `Port ${evidence.port}` : "Port not set",
+  };
   const clue = toggleRow && !toggles.callbacksBlocked ? callbackClue : null;
   return (
     <div className="grid gap-2 border-b border-line px-4 py-3">
-      {/* The host on its own line, so a long name reads instead of being squeezed to nothing beside the other three. */}
-      <div className="grid grid-cols-[minmax(0,max-content)] justify-start">
+      {/* Not a table: labelled settings, mostly inferred, read at a glance. Like the status strip they flow as runs of
+          "Label value ⌄", borderless (the background shows on hover), 24px apart, wrapping only when the drawer is too
+          narrow: the target (host, OS, paste context, port), then what gets out and what the box has. The runs sit 8px
+          out so each label lines up with the text below. */}
+      <div className="-mx-2 grid gap-1 [&_[data-picker-trigger]]:border-transparent">
+      <ChipSet className="items-start">
         {engagementId ? (
           <HostChip ref={hostRef} hosts={fit.d.hosts} value={fit.host?.id ?? null} onChange={onHost} align="start" className="max-w-full" {...mouse} />
         ) : (
-          <span className="py-1 text-meta text-muted">No host</span>
+          <span className="px-2 py-1 text-meta text-muted">No host</span>
         )}
-      </div>
-      {/* OS, paste context and port read in full; the "Other…" port field opens under the Port chip, in its column, so the
-          row never grows wider than the drawer (beside it, a long paste context pushed the field and the list past 560px). */}
-      <div className="grid grid-cols-[repeat(3,max-content)] items-start justify-start gap-2">
         <Chip
           ref={osRef} name="OS" value={os ? OS_LABEL[os] : null} current={os}
           options={(["linux", "windows"] as const).map((o) => ({ id: o, name: OS_LABEL[o] }))}
           onPick={(id) => set({ os: id as "linux" | "windows" })} {...mouse}
+          title={`${why.os}. Pick to override for this host (⌥O)`}
         />
         <Chip
           ref={contextRef} name="Paste into" value={context ? contextLabel(context) : null} current={context}
           options={contexts.map((c) => ({ id: c.id, name: c.label }))}
           onPick={(id) => set({ context: id as (typeof contexts)[number]["id"] })} {...mouse}
+          title={`${why.context}. Pick to override for this host (⌥W)`}
         />
         <div className="grid content-start gap-1">
           <Chip
             ref={portRef} name="Port" value={port || null} current={port || null}
+            title={`${why.port}. Pick to override for this host`}
             options={[
               ...ports.map((p) => ({ id: p, name: p, detail: p === settingsPort ? "Settings" : SUGGESTED_PORTS.includes(p) ? "egress-friendly" : "" })),
               { id: OTHER_PORT, name: "Other…", detail: "type a port" },
@@ -134,10 +138,10 @@ export function ContextChips({ fit, engagementId, onHost, onDone, toggleRow, fil
             </div>
           )}
         </div>
-      </div>
       {/* What gets out and what the box has: callbacks, a filter wrapper where it applies, the tools. */}
-      {toggleRow && (
-        <div className={`grid ${filterChip ? "grid-cols-[repeat(3,max-content)]" : "grid-cols-[repeat(2,max-content)]"} justify-start gap-2`}>
+      </ChipSet>
+        {toggleRow && (
+          <ChipSet className="items-start">
           <Chip
             ref={callbacksRef} name="Callbacks" value={toggles.callbacksBlocked ? "blocked" : "allowed"} current={toggles.callbacksBlocked ? "blocked" : "allowed"}
             options={[{ id: "allowed", name: "allowed" }, { id: "blocked", name: "blocked", detail: "binds first" }]}
@@ -153,13 +157,11 @@ export function ContextChips({ fit, engagementId, onHost, onDone, toggleRow, fil
             />
           )}
           <ToolsPicker ref={toolsRef} own={toggles.tools} log={fit.logTools} onChange={(tools) => set({ tools })} />
-        </div>
-      )}
-      {/* One span per value, so each source reads on its own and a narrow drawer wraps between them first. */}
-      <p className="m-0 text-meta text-muted">
-        {why.map((w) => <span key={w} className="mr-4 inline-block last:mr-0">{w}</span>)}
-        {clue && <span className="inline-block text-warn">{clue}</span>}
-      </p>
+          </ChipSet>
+        )}
+      </div>
+      {/* Where each value came from is in its picker's tooltip; only a callback clue earns a line, in amber. */}
+      {clue && <p className="m-0 text-meta text-warn">{clue}</p>}
     </div>
   );
 }
