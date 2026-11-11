@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useWidth } from "../../lib/useWidth";
 import { SCROLL_PANE } from "../../ui/controlStyles";
 import { useLocation, useNavigate } from "react-router";
 import { isDialogOpen, isFreeKey, isTypingTarget, useKeydown } from "../../lib/keys";
@@ -54,23 +55,6 @@ function focusFirstOpenStep(): boolean {
 
 /** Two columns from this width of the host page (the `@min-[760px]/host` container query); stacked below it. */
 const TWO_COLUMNS_PX = 760;
-
-/**
- * The element's width, once measured; undefined until then (and in tests, which have no layout). Measured as the ref
- * attaches, during the commit, so the first paint already knows it: the fact groups never paint open and then fold.
- */
-function useWidth() {
-  const [width, setWidth] = useState<number>();
-  const ref = useCallback((el: HTMLElement | null) => {
-    if (!el) return;
-    const set = (w: number) => { if (w > 0) setWidth(w); };
-    set(el.getBoundingClientRect().width);
-    const ro = new ResizeObserver(([e]) => set(e.contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  return [ref, width] as const;
-}
 
 export function HostView({ engagementId, hostId }: { engagementId: string; hostId: string }) {
   const hosts = useHosts(engagementId);

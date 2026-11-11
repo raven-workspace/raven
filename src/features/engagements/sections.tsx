@@ -4,6 +4,7 @@ import { Board } from "../board/Board";
 import { LogSection } from "../log/LogSection";
 import { CredentialsSection } from "../credentials/CredentialsSection";
 import { FindingsSection } from "../findings/FindingsSection";
+import { NetworkSection } from "../network/NetworkSection";
 
 export const SECTIONS = [
   { id: "board", label: "Board", empty: "" },
@@ -27,7 +28,7 @@ export function SectionView({ section }: { section: SectionId }) {
   if (section === "log") return <LogSection />;
   if (section === "credentials") return <CredentialsSection />;
   if (section === "findings") return <FindingsSection />;
-  // Temporary: Task 6 replaces this with the Network section.
+  if (section === "network") return <NetworkSection />;
   if (section === "checklist") return <EngagementChecklist />;
   const s = SECTIONS.find((x) => x.id === section)!;
   return <EmptyState title={s.empty} />;

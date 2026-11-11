@@ -76,6 +76,8 @@ beforeEach(() => {
   m.backupsList.mockResolvedValue([]);
   m.engagementsProgress.mockResolvedValue({});
   m.hostsList.mockResolvedValue([]);
+  m.hopsList.mockResolvedValue([]);
+  m.tunnelsList.mockResolvedValue([]);
   m.engagementsList.mockImplementation(async () => list);
   m.engagementGet.mockImplementation(async (id) => {
     const e = list.find((x) => x.id === id);
@@ -347,6 +349,9 @@ describe("engagement shell", () => {
     const nav = await screen.findByRole("navigation", { name: "Engagement" });
     await user.keyboard("2");
     expect(within(nav).getByRole("link", { name: /Log/ })).toHaveAttribute("aria-current", "page");
+    await user.keyboard("5");
+    expect(within(nav).getByRole("link", { name: /Network/ })).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("region", { name: "Network" })).toBeInTheDocument();
     await user.keyboard("7");
     expect(within(nav).getByRole("link", { name: /Report/ })).toHaveAttribute("aria-current", "page");
 

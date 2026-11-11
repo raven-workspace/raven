@@ -14,6 +14,9 @@ const KINDS: { value: TunnelKind; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
+/** The kind as the form names it ("Ligolo", "SSH"). */
+export const tunnelKindLabel = (kind: TunnelKind) => KINDS.find((k) => k.value === kind)?.label ?? kind;
+
 type Errors = Partial<Record<"subnets" | "callbackIp" | "viaHostId" | "form", string>>;
 
 /** `initial` prefills a new tunnel (the Network nudge passes the pivot and the subnets it found). */
