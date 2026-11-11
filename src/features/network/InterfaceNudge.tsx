@@ -1,20 +1,21 @@
-import { X } from "@phosphor-icons/react";
+import { PlusIcon, X } from "@phosphor-icons/react";
 import { useMemo, useRef, useState } from "react";
 import { readInterfaces } from "../../engines/facts";
 import type { Host } from "../../types/host";
-import { Button, IconButton } from "../../ui";
+import { Button, IconButton, labelClass } from "../../ui";
 import { useInterfaceDismiss, useInterfaceDismissals, useTunnels } from "../checklist/queries";
 import { useHostMutations, useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
 import { TunnelForm } from "./TunnelForm";
 
-/** The facts column is narrow: the sentence takes the first line, the action and Dismiss share the second. */
-const ROW = "grid grid-cols-[minmax(0,1fr)_28px] items-center gap-x-2 gap-y-2 border-b border-line py-2 last:border-b-0";
+/** The facts column is narrow: the sentence and Dismiss share the first line, the action takes the second. */
+const ROW = "grid grid-cols-[minmax(0,1fr)_28px] items-start gap-x-2 gap-y-1 border-b border-line py-2 last:border-b-0";
 
 /**
  * Logged `ip a` / `ifconfig` / `ipconfig` output showed a subnet this host reaches and nothing else does yet:
  * offer the tunnel. Accepting marks the host dual-homed first (unless it already is), then opens the tunnel form.
- * Virtual adapters get one quiet line. Renders nothing when there is nothing to say.
+ * Virtual adapters get one quiet line. It is a group like the fact groups below it (label over a hairline, actions
+ * at their weight), not foldable. Renders nothing when there is nothing to say.
  */
 export function InterfaceNudge({ engagementId, host, onOpenEntry }: {
   engagementId: string;
@@ -59,13 +60,16 @@ export function InterfaceNudge({ engagementId, host, onOpenEntry }: {
   if (suggestions.length === 0 && reading.alsoSeen.length === 0 && !adding) return null;
 
   return (
-    <div className="mb-3 grid gap-1" aria-label="Network interfaces" role="region">
+    <section aria-label="Network interfaces" className="grid gap-1 pb-4">
+      <header className="grid min-h-8 grid-cols-[16px_minmax(0,1fr)] items-center gap-x-2 border-b border-line">
+        <h2 className={`${labelClass} col-start-2 m-0 truncate`}>Interfaces</h2>
+      </header>
       {error && <p role="alert" className="m-0 text-meta text-warn">{error}</p>}
       {suggestions.length > 0 && (
         <ul className="m-0 grid list-none p-0">
           {suggestions.map((s) => (
             <li key={s.key} className={ROW}>
-              <p className="col-span-2 m-0 min-w-0 text-body text-fg">
+              <p className="m-0 min-w-0 py-1 text-body text-fg-2">
                 {s.iface} {s.ip}/{s.prefix} reaches{" "}
                 <span className="whitespace-nowrap"><button
                   type="button"
@@ -77,14 +81,14 @@ export function InterfaceNudge({ engagementId, host, onOpenEntry }: {
                   {s.subnet}
                 </button>.</span>
               </p>
-              <Button size="sm" className="justify-self-start" onClick={() => accept(s.key, s.subnet)}>
-                {host.dualHomed ? "Add tunnel" : "Mark dual-homed and add tunnel"}
-              </Button>
               <IconButton
                 icon={X}
                 label={`Dismiss ${s.subnet} on ${host.name}`}
                 onClick={() => act(s.key, (settled) => dismiss.mutate({ hostId: host.id, subnet: s.subnet }, { onError: (e) => setError(e.message), onSettled: settled }))}
               />
+              <Button size="sm" className="justify-self-start" onClick={() => accept(s.key, s.subnet)}>
+                <PlusIcon size={16} weight="regular" aria-hidden /> {host.dualHomed ? "Add tunnel" : "Mark dual-homed and add tunnel"}
+              </Button>
             </li>
           ))}
         </ul>
@@ -100,6 +104,6 @@ export function InterfaceNudge({ engagementId, host, onOpenEntry }: {
       {adding && hosts.data && (
         <TunnelForm engagementId={engagementId} hosts={hosts.data} initial={{ viaHostId: host.id, subnets: [adding] }} onClose={() => setAdding(null)} />
       )}
-    </div>
+    </section>
   );
 }
