@@ -1,5 +1,5 @@
 import * as RD from "@radix-ui/react-dialog";
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { cx } from "../lib/cx";
 import { X } from "@phosphor-icons/react";
 import { IconButton } from "./IconButton";
@@ -21,12 +21,28 @@ export interface DialogProps {
 
 /** Modal on Radix: hairline border, `--surface` panel, Esc closes. */
 export function Dialog({ open, onOpenChange, title, description, children, footer, size = "md", className, onCloseAutoFocus }: DialogProps) {
+  // The open animation's clock starts when the panel is styled, but a heavy body (⌘K search) can hold the first paint
+  // back for most of it: the panel would first appear nearly settled. Rewind both animations on the frame that paints.
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!open) return;
+    const frame = requestAnimationFrame(() => {
+      for (const el of [overlayRef.current, contentRef.current]) {
+        el?.getAnimations?.().forEach((a) => {
+          a.currentTime = 0;
+        });
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [open]);
   return (
     <RD.Root open={open} onOpenChange={onOpenChange}>
       <RD.Portal>
         {/* Overlay and panel share one layer, so a dialog opened from a dialog (a delete confirm) dims the one below. */}
-        <RD.Overlay className="fixed inset-0 z-50 bg-bg/80" />
+        <RD.Overlay ref={overlayRef} className="raven-overlay fixed inset-0 z-50 bg-bg/80" />
         <RD.Content
+          ref={contentRef}
           {...(description ? {} : { "aria-describedby": undefined })}
           {...(onCloseAutoFocus ? { onCloseAutoFocus } : {})}
           // Start on the first control in the body or footer, never the Close button: its tooltip would
@@ -40,7 +56,7 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
             (first ?? root).focus();
           }}
           className={cx(
-            "fixed left-1/2 z-50 flex -translate-x-1/2 flex-col",
+            "raven-dialog fixed left-1/2 z-50 flex -translate-x-1/2 flex-col",
             size === "xl"
               ? "top-[6vh] max-h-[calc(94vh-24px)] w-[min(820px,calc(100vw-32px))]"
               : size === "lg"

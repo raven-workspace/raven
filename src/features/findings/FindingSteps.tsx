@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, X } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LogEntry } from "../../types/log";
-import { ActionCell, Button, IconButton, Input, Toggle, fieldLabelClass } from "../../ui";
+import { ActionCell, Button, Collapse, IconButton, Input, Toggle, fieldLabelClass } from "../../ui";
 import { SCROLL_PANE } from "../../ui/controlStyles";
 import { KIND_LABELS } from "../log/kindLabels";
 import { LogEntryBody } from "../log/LogEntryBody";
@@ -135,7 +135,7 @@ export function FindingSteps({ eid, hostIds, value, onChange }: {
                     <IconButton icon={X} tone="destructive" label={`Remove step ${s.title}`} onClick={() => onChange(ids.filter((x) => x !== s.id))} />
                   </ActionCell>
                 </div>
-                {open && <div className="col-span-3 col-start-2 row-start-3 mt-2 @min-[480px]/steps:col-span-4"><LogEntryBody entry={s} /></div>}
+                <Collapse open={open} className="col-span-3 col-start-2 row-start-3 @min-[480px]/steps:col-span-4" contentClassName="pt-2"><LogEntryBody entry={s} /></Collapse>
               </li>
             );
           })}

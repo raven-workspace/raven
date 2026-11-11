@@ -1,5 +1,6 @@
-import { CaretDown, CaretRight } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
+import { Collapse } from "./Collapse";
+import { DisclosureCaret } from "./DisclosureCaret";
 
 export interface DisclosureProps {
   label: string;
@@ -11,7 +12,6 @@ export interface DisclosureProps {
 
 /** Collapsible secondary content: a full-width row, 28px tall, closed by default at the call site. */
 export function Disclosure({ label, count, open, onOpenChange, children }: DisclosureProps) {
-  const Caret = open ? CaretDown : CaretRight;
   return (
     <div>
       <button
@@ -20,10 +20,10 @@ export function Disclosure({ label, count, open, onOpenChange, children }: Discl
         onClick={() => onOpenChange(!open)}
         className="grid min-h-7 w-full grid-cols-[16px_minmax(0,1fr)] items-center gap-2 rounded-sm border-0 bg-transparent px-1 text-left text-body text-muted-2 select-none cursor-default hover:bg-surface-hi hover:text-fg"
       >
-        <Caret size={16} aria-hidden />
+        <DisclosureCaret open={open} />
         <span className="truncate">{count === undefined ? label : `${label} (${count})`}</span>
       </button>
-      {open && <div>{children}</div>}
+      <Collapse open={open}>{children}</Collapse>
     </div>
   );
 }

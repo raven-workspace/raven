@@ -1,6 +1,6 @@
 import { ArrowUpRightIcon, CaretRightIcon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
-import { Toolbar, labelClass } from "../../../ui";
+import { Collapse, Toolbar, labelClass } from "../../../ui";
 
 /**
  * One phrase of a folded group's summary, written so it reads on its own: a count before its noun ("3 confirmed"),
@@ -50,7 +50,7 @@ export function FactGroup({ title, summary, open, onToggle, shortcut, actions, c
 }) {
   const hint = shortcut ? ` (${shortcut})` : "";
   return (
-    <section aria-label={title} className={open ? "grid gap-2 pb-4" : undefined}>
+    <section aria-label={title}>
       <header className="grid min-h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-line">
         <button
           type="button"
@@ -65,7 +65,7 @@ export function FactGroup({ title, summary, open, onToggle, shortcut, actions, c
         </button>
         {open && actions && <Toolbar>{actions}</Toolbar>}
       </header>
-      {open && children}
+      <Collapse open={open} contentClassName="grid gap-2 pt-2 pb-4">{children}</Collapse>
     </section>
   );
 }

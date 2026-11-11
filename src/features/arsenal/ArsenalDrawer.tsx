@@ -9,7 +9,7 @@ import { copyPlain, copySecret } from "../../lib/clipboard";
 import { shortHostName } from "../../lib/hostName";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
 import { reportError } from "../../lib/lockSignal";
-import { BELOW_TITLE_BAR, Button, HintLine, type Hint } from "../../ui";
+import { BELOW_TITLE_BAR, Button, HintLine, useDrawerPresence, useFadeOnChange, type Hint } from "../../ui";
 import { logCommand } from "../capture/logCommand";
 import { useCredPickStore } from "../checklist/credPick";
 import { useFillBase } from "../palette/fillData";
@@ -135,6 +135,9 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
   const showing = searching ? "results" : solo ? "solo" : cardId ? "card" : category !== null ? "results" : "categories";
   const openLinkedCard = (id: string) => useArsenalStore.getState().openCard(id);
   const onList = showing === "categories" || showing === "results";
+  // A card, a lone command or a category fades in where the last view was; typed search results never do.
+  const viewRef = useRef<HTMLDivElement>(null);
+  useFadeOnChange(viewRef, showing === "card" ? `card:${cardId}` : showing === "solo" ? `solo:${solo?.id}` : searching ? "search" : `list:${category}`);
   const previewRow = onList && listing;
 
   const openCategory = (c: string) => {
@@ -324,7 +327,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
           </div>
         )}
       </header>
-      <div className="min-h-0 overflow-y-auto overflow-x-hidden px-4 py-3">
+      <div ref={viewRef} className="min-h-0 overflow-y-auto overflow-x-hidden px-4 py-3">
         {showing === "card" && cardId && <CardView onOpenCard={openLinkedCard} cardId={cardId} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} focusCred={focusCred} focusBlockId={blockId} />}
         {showing === "solo" && solo && <CommandPane key={solo.id} commands={[solo]} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} focusCred={focusCred} onOpenCard={openLinkedCard} />}
         {onList && (
@@ -384,6 +387,8 @@ export function ArsenalDrawer() {
 
   // A lock unmounts this; the next unlock must not find it open.
   useEffect(() => () => useArsenalStore.getState().close(), []);
+  // Slides in from the edge and back out; the full-screen Arsenal replaces it (it slides out over the page).
+  const [present, drawerRef] = useDrawerPresence<HTMLElement>(open && !onBrowse);
 
   useEffect(() => {
     if (!open) {
@@ -395,9 +400,9 @@ export function ArsenalDrawer() {
     returnFocus.current = active instanceof HTMLElement && active !== document.body ? active : null;
   }, [open]);
 
-  if (!open || onBrowse) return null;
+  if (!present) return null;
   return (
-    <aside aria-label="Arsenal" data-hint-surface="" className={`fixed ${BELOW_TITLE_BAR} right-0 z-30 grid w-[500px] max-w-[70vw] border-l border-line-2 bg-surface text-fg-2`}>
+    <aside ref={drawerRef} aria-label="Arsenal" data-hint-surface="" className={`fixed ${BELOW_TITLE_BAR} right-0 z-30 grid w-[500px] max-w-[70vw] border-l border-line-2 bg-surface text-fg-2`}>
       <DrawerBody engagementId={engagementId} hostId={hostId} />
     </aside>
   );

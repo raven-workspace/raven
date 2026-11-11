@@ -189,7 +189,7 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
   });
 
   return (
-    <div data-testid="settings-root" className="mx-auto grid gap-4 py-6" style={{ maxWidth: SETTINGS_COLUMN.max, paddingInline: SETTINGS_COLUMN.inset }}>
+    <div data-testid="settings-root" className="raven-page mx-auto grid gap-4 py-6" style={{ maxWidth: SETTINGS_COLUMN.max, paddingInline: SETTINGS_COLUMN.inset }}>
       <h1 className="m-0 text-title text-fg">Settings</h1>
       {error && <p role="alert" className="m-0 text-meta text-warn">{error}</p>}
       {queryState([settings], "settings")}

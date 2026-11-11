@@ -144,10 +144,13 @@ describe("sidebar", () => {
     expect(dc).not.toHaveClass("truncate");
     const a = dc.closest("a")!;
     expect(a).toHaveClass("w-full");
-    // Lit = shadcn's active state, styled --surface-hi (sidebar-accent) plus the 2px accent bar (sidebar-primary).
+    // Lit = shadcn's active state. The link draws nothing itself: one marker for the whole sidebar, --surface-hi
+    // (sidebar-accent) plus the 2px accent bar (sidebar-primary), slides to the active link.
     expect(a).toHaveAttribute("data-active", "true");
-    expect(a).toHaveClass("data-active:bg-sidebar-accent");
-    expect(a.className).toContain("data-active:shadow-[inset_2px_0_0_var(--sidebar-primary)]");
+    expect(a).toHaveClass("data-active:bg-transparent", "data-active:shadow-none");
+    const marker = document.querySelector("nav [data-tab-marker]")!;
+    expect(marker).toHaveClass("bg-sidebar-accent");
+    expect(marker.className).toContain("shadow-[inset_2px_0_0_var(--sidebar-primary)]");
     expect(screen.getByText("web").closest("a")).toHaveAttribute("data-active", "false");
   });
 

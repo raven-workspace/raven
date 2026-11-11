@@ -19,9 +19,9 @@ import type { HostChipHandle } from "./HostChip";
 import { ResultList } from "./ResultList";
 import type { ResultGroup, ResultRow } from "./ResultList";
 import { SearchBar } from "./SearchBar";
-import { ON } from "./styles";
 import { useArsenalStore } from "./useArsenalStore";
 import { useFillScope, useLastEngagementStore } from "./useFillScope";
+import { TabMarker } from "../../ui/TabMarker";
 
 type Row = ResultRow & { hit: ArsenalHit };
 type Kind = "card" | "command" | "generator";
@@ -291,7 +291,7 @@ export function ArsenalBrowse() {
   ];
 
   return (
-    <main aria-label="Arsenal" data-arsenal-browse="" data-hint-surface="" className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-6 py-6">
+    <main aria-label="Arsenal" data-arsenal-browse="" data-hint-surface="" className="raven-page grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-6 py-6">
       <header className="grid grid-cols-[minmax(200px,320px)_minmax(0,1fr)] items-center gap-x-4 gap-y-2">
         <SearchBar
           label="Search the Arsenal" id={SEARCH_ID} inputRef={searchRef} placeholder="Search cards and commands" trailing={null}
@@ -327,7 +327,8 @@ export function ArsenalBrowse() {
               className="w-full"
             />
           </div>
-          <div ref={catsRef} role="tablist" aria-label="Categories" aria-orientation="vertical" onKeyDown={onCategoryKey} className="hidden gap-0 min-[1100px]:grid">
+          <div ref={catsRef} role="tablist" aria-label="Categories" aria-orientation="vertical" onKeyDown={onCategoryKey} className="relative isolate hidden gap-0 min-[1100px]:grid">
+            <TabMarker className="rounded-sm bg-accent/10 shadow-[inset_2px_0_0_var(--accent)]" />
             {visible.map((c) => {
               const n = searching ? (hits.get(c) ?? 0) : (counts.get(c) ?? 0);
               const on = c === current;
@@ -337,7 +338,7 @@ export function ArsenalBrowse() {
                   tabIndex={on ? 0 : -1} aria-selected={on} title={categoryLabel(c)} onClick={() => openCategory(c, true)}
                   className={cx(
                     "grid w-full cursor-default grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-sm border-0 bg-transparent px-2 py-1 text-left text-body",
-                    on ? ON : searching && n === 0 ? "text-muted hover:bg-surface-hi" : "text-fg-2 hover:bg-surface-hi",
+                    on ? "text-accent" : searching && n === 0 ? "text-muted hover:bg-surface-hi" : "text-fg-2 hover:bg-surface-hi",
                   )}
                 >
                   <span className="truncate">{categoryLabel(c)}</span>

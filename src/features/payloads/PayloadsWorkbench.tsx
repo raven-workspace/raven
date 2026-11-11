@@ -4,7 +4,7 @@ import { PASTE_CONTEXTS } from "../../engines/payloads/context";
 import { filterChoices } from "../../engines/payloads/filters";
 import { cx } from "../../lib/cx";
 import { isDialogOpen, isTypingTarget, useKeydown } from "../../lib/keys";
-import { HintLine, Input, Kbd, labelClass, Toggle } from "../../ui";
+import { HintLine, Input, Kbd, labelClass, Toggle, useFadeOnChange } from "../../ui";
 import type { ChipPickerHandle } from "../arsenal/ChipPicker";
 import { HostChip } from "../arsenal/HostChip";
 import { useFillScope } from "../arsenal/useFillScope";
@@ -38,6 +38,7 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
   const listRef = useRef<HTMLDivElement>(null);
   const s = usePayloadSession({ engagementId, hostId: scopeHostId, bodyRef, lhostField: false });
   const { generator, fit, ranked, index, setIndex, built, guard, note, hostRef, osRef, contextRef, callbacksRef, filterRef, toolsRef, psRef, fieldEls } = s;
+  useFadeOnChange(bodyRef, generator);
   const hints = useMemo(
     () => hintsFor(generator, "back", [{ keys: "P", label: "generators", priority: 4 }], ranked?.ordered, fit.filterApplies),
     [generator, ranked?.ordered, fit.filterApplies],
@@ -76,7 +77,7 @@ function WorkbenchBody({ engagementId, hostId: scopeHostId }: { engagementId: st
   };
 
   return (
-    <main aria-label="Payloads" data-hint-surface="" className="grid h-full min-h-0 grid-cols-[360px_minmax(0,1fr)]" onKeyDown={s.onKeyDown}>
+    <main aria-label="Payloads" data-hint-surface="" className="raven-page grid h-full min-h-0 grid-cols-[360px_minmax(0,1fr)]" onKeyDown={s.onKeyDown}>
       <aside role="complementary" aria-label="Raven's read" className="grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden border-r border-line px-6 py-4">
         <h2 className={`${labelClass} m-0`}>Raven's read</h2>
         <ReadItem label="Target">

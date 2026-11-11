@@ -1,10 +1,9 @@
-import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { DisclosureCaret } from "../../ui";
 import type { Host } from "../../types/host";
 import { HostChecklist } from "../checklist/HostChecklist";
 
 /** "Full checklist ▸": swaps the Next tab between the current stage's open steps and every stage. Sits in the tab row. */
 export function FullChecklistToggle({ full, onChange }: { full: boolean; onChange: (full: boolean) => void }) {
-  const Caret = full ? CaretDownIcon : CaretRightIcon;
   return (
     <button
       type="button"
@@ -12,7 +11,7 @@ export function FullChecklistToggle({ full, onChange }: { full: boolean; onChang
       onClick={() => onChange(!full)}
       className="grid min-h-7 cursor-default grid-flow-col items-center gap-1 text-meta text-fg-2 hover:text-fg"
     >
-      Full checklist <Caret size={16} weight="regular" aria-hidden />
+      Full checklist <DisclosureCaret open={full} />
     </button>
   );
 }

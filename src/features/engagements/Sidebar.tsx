@@ -15,6 +15,7 @@ import { NavLink, useMatch } from "react-router";
 import { cx } from "../../lib/cx";
 import { shortHostName } from "../../lib/hostName";
 import { IconButton, Tooltip } from "../../ui";
+import { TabMarker } from "../../ui/TabMarker";
 import {
   Sidebar as ShadSidebar,
   SidebarContent,
@@ -53,6 +54,14 @@ const menu = "gap-1 group-data-[collapsible=icon]:items-center";
 
 const LAST_OCTET = /(\d{1,3})$/;
 
+/**
+ * The current section or host is lit by one marker for the whole sidebar (surface and accent bar) that slides from
+ * item to item, sections and hosts alike; the links themselves draw no active background, even on hover.
+ */
+const ACTIVE_MARK = "rounded-md bg-sidebar-accent shadow-[inset_2px_0_0_var(--sidebar-primary)]";
+const SLIDING_ACTIVE = "data-active:bg-transparent data-active:shadow-none data-active:hover:bg-transparent";
+const FOLLOW_ACTIVE = { selected: '[data-sidebar="menu-button"][data-active="true"]', items: '[data-sidebar="menu-button"]', attributes: ["data-active"] };
+
 /** Rail label: the first 4 characters of the name without trailing - _ . ("web-" is "web"), or the last octet when that leaves under 2 characters. */
 export function railName(name: string, ip: string | null): string {
   const n = name.trim().slice(0, 4).replace(/[-_.]+$/, "");
@@ -82,7 +91,7 @@ function SectionItem({ engagementId, id, label, n, collapsed }: {
         <SidebarMenuButton
           asChild
           isActive={active}
-          className={cx("cursor-default", !collapsed && "grid h-[30px] grid-cols-[16px_minmax(0,1fr)_auto] px-2 py-0")}
+          className={cx("cursor-default", SLIDING_ACTIVE, !collapsed && "grid h-[30px] grid-cols-[16px_minmax(0,1fr)_auto] px-2 py-0")}
         >
           <NavLink to={to} end aria-label={collapsed ? label : undefined}>
             <SectionIcon aria-hidden />
@@ -125,6 +134,7 @@ function HostItem({ engagementId, host: h, threads, collapsed }: {
           isActive={active}
           className={cx(
             "cursor-default",
+            SLIDING_ACTIVE,
             collapsed
               ? "relative grid grid-cols-[minmax(0,1fr)] justify-items-center gap-1"
               : "grid grid-cols-[16px_minmax(0,1fr)_auto] gap-2 px-2",
@@ -210,7 +220,8 @@ export function Sidebar({ engagementId }: { engagementId: string }) {
                 onClick={toggle}
               />
             </SidebarHeader>
-            <SidebarContent className="overflow-x-hidden pb-4 group-data-[collapsible=icon]:overflow-y-auto">
+            <SidebarContent className="relative isolate overflow-x-hidden pb-4 group-data-[collapsible=icon]:overflow-y-auto">
+              <TabMarker className={ACTIVE_MARK} follow={FOLLOW_ACTIVE} />
               {collapsed && <SidebarSeparator className="mx-auto mb-2 data-horizontal:w-6" />}
               <SidebarGroup className={group}>
                 <SidebarMenu className={menu}>

@@ -1,4 +1,4 @@
-import { CaretDownIcon, CaretRightIcon, CheckIcon, PlusIcon, QuestionIcon } from "@phosphor-icons/react";
+import { CheckIcon, PlusIcon, QuestionIcon } from "@phosphor-icons/react";
 import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { effectiveVerdict, foldServices, serviceIdentity, sortServices, type EffectiveVerdict } from "../../../engines/facts";
 import { cx } from "../../../lib/cx";
@@ -6,7 +6,7 @@ import { isFreeKey } from "../../../lib/keys";
 import type { ServiceVerdict } from "../../../types/hostFacts";
 import type { LogEntry } from "../../../types/log";
 import type { Service } from "../../../types/service";
-import { Button, Chip, Dialog, Input, Tooltip, type ChipVariant } from "../../../ui";
+import { Button, Chip, Collapse, Dialog, DisclosureCaret, Input, Tooltip, type ChipVariant } from "../../../ui";
 import { ToggleGroup, ToggleGroupItem } from "../../../ui/shadcn/toggle-group";
 import { useServiceMutations, useServices } from "../../services/queries";
 import { ConfirmServiceDialog } from "../ConfirmServiceDialog";
@@ -210,7 +210,6 @@ export function FoldedRows({ label, services, render, defaultOpen = false }: {
 }) {
   const [open, setOpen] = useState(defaultOpen);
   if (services.length === 0) return null;
-  const Caret = open ? CaretDownIcon : CaretRightIcon;
   return (
     <>
       <li className={ROW}>
@@ -221,11 +220,14 @@ export function FoldedRows({ label, services, render, defaultOpen = false }: {
           onClick={() => setOpen(!open)}
           className="col-span-3 grid min-h-8 cursor-default grid-cols-subgrid items-center py-1 text-left text-meta text-muted hover:text-fg"
         >
-          <Caret size={16} weight="regular" aria-hidden />
+          <DisclosureCaret open={open} />
           <span className="col-span-2">{label}</span>
         </button>
       </li>
-      {open && sortServices(services).map(render)}
+      {/* The folded rows sit in their own list item so they can open and close as one; subgrid keeps the columns. */}
+      <Collapse open={open} as="li" className="col-span-3 grid grid-cols-subgrid">
+        <ul aria-label={label} className="col-span-3 m-0 grid list-none grid-cols-subgrid p-0">{sortServices(services).map(render)}</ul>
+      </Collapse>
     </>
   );
 }
