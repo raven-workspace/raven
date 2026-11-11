@@ -885,17 +885,21 @@ test("status strip drops by its own free space: LHOST stays while it fits", asyn
   }
 });
 
-test("headers: actions are icon buttons under 1000px, so the title keeps its room", async ({ page }) => {
+// Owner, 2026-11-10: header actions sit right after the title at every width, never out at the pane's far edge.
+test("headers: actions are icon buttons right after the title, at every width", async ({ page }) => {
   await open(page, LAB_HOST, 900);
   await page.getByRole("tab", { name: "Next" }).waitFor();
   await expect(page.getByRole("button", { name: "Edit host" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Stuck?" })).toBeVisible();
-  await open(page, "/e/e-lab", 900);
-  await expect(page.getByRole("button", { name: "Edit engagement" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Archive" })).toBeVisible();
-  await open(page, "/e/e-lab", 1440);
-  if (await page.getByRole("button", { name: "Expand sidebar" }).isVisible()) await page.keyboard.press("Meta+B");
-  await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
+  for (const width of [900, 1440]) {
+    await open(page, "/e/e-lab", width);
+    const edit = page.getByRole("button", { name: "Edit engagement" });
+    await expect(edit).toBeVisible();
+    await expect(page.getByRole("button", { name: "Archive" })).toBeVisible();
+    const title = (await page.getByRole("heading", { level: 1 }).first().boundingBox())!;
+    const pencil = (await edit.boundingBox())!;
+    expect(pencil.x - (title.x + title.width), `pencil follows the title at ${width}`).toBeLessThanOrEqual(8);
+  }
 });
 
 // Owner, 2026-11-09 (adc414c, 1f74942): the title bar is pinned to the window edges on every screen: the controls at

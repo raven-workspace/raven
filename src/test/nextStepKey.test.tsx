@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -177,14 +177,22 @@ describe("J: next open step", () => {
     expect(screen.getByRole("button", { name: "Full checklist" })).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("is listed in the host page's shortcut list, which has no hint row of its own", async () => {
+  it("is listed in the title bar's shortcut list under This host, with the keys that work everywhere", async () => {
     const user = userEvent.setup();
     mount([]);
-    const hints = await screen.findByLabelText("Host shortcuts");
-    expect(hints).not.toHaveTextContent("next step");
-    await user.click(within(hints).getByRole("button", { name: "All shortcuts" }));
-    const list = await screen.findByRole("dialog");
-    expect(list).toHaveTextContent("J");
-    expect(list).toHaveTextContent("next step");
+    await screen.findByRole("region", { name: "Host" });
+    await user.click(screen.getByRole("button", { name: "Shortcuts" }));
+    const page = await screen.findByRole("region", { name: "This host" });
+    expect(page).toHaveTextContent("J");
+    expect(page).toHaveTextContent("next step");
+    expect(screen.getByRole("region", { name: "Everywhere" })).toHaveTextContent("Arsenal");
+  });
+
+  it("? opens the shortcut list from the host page", async () => {
+    const user = userEvent.setup();
+    mount([]);
+    await screen.findByRole("region", { name: "Host" });
+    await user.keyboard("?");
+    expect(await screen.findByRole("region", { name: "This host" })).toBeInTheDocument();
   });
 });

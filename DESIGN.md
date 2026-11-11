@@ -319,13 +319,14 @@ Each table declares its column policy; automatic layout never decides.
 
 - The status strip is a grid of labelled cells (`grid-auto-flow: column`, 24px gaps). Each cell is a label and a value, `nowrap`.
 - Cells come in a fixed order of importance: timebox, rooted, flags, Metasploit lock, threads, cleanup, LHOST.
-- When space runs out, secondary parts drop first ("of 23h 45m", then the progress bar), then whole cells in this order: Cleanup, Threads, Metasploit lock, LHOST. LHOST is copied often during an exam, so it outlasts the cells shown before it. Nothing wraps or ellipsizes mid-value.
+- When space runs out, secondary parts drop first ("of 23h 45m", then the progress bar), then whole cells in this order: Cleanup, Threads, the engagement name (host pages), Metasploit lock, LHOST. LHOST is copied often during an exam, so it outlasts the cells shown before it. Nothing wraps or ellipsizes mid-value.
 - The strip carries no hint line.
-- **Headers** (engagement, host, drawer) use `grid-cols-[minmax(0,1fr)_auto]`. Row 1 is the title and its actions; row 2 is the metadata line. The title gets the slack track. Under 1000px, actions collapse to icon buttons before the title truncates.
+- **Headers** (engagement, host, drawer): row 1 is the title and its actions; row 2 is the metadata line. On the engagement and host headers the actions are icon buttons right after the title (Edit `PencilSimple`; Archive `Archive`), never out at the pane's far edge where they lose what they act on; the title truncates first. Drawer headers keep `grid-cols-[minmax(0,1fr)_auto]` with the close button at the end.
+- **A host page has no engagement header.** The status strip leads with the engagement's name (`body` 600, `--fg-2`, a link back to the board, truncated at 28ch); its details and actions stay on the engagement's own sections. The host's name is the page's only `title`, and the host header carries no rule of its own. Its Edit host pencil sits right after the name, not at the pane's far edge. Stuck? ends the work column's tab row on every tab, after that tab's own control.
 - **Title bar:** its controls are chrome, not page buttons: borderless, with the `--surface-hi` background only on hover. The control for the page on screen (Manual, Settings) or an open drawer (Arsenal, Payloads) sits on `--surface` in accent. The controls sit on the right, with their right edge on the main content column's right edge (the same x where the page header's actions end below), in three runs set apart by 16px of space, never a divider:
   - references: Arsenal, Manual, Payloads (icon, word, inline key);
   - Search (icon, word, ⌘K);
-  - the app itself: Lock and Settings, as icon buttons with the key in the tooltip.
+  - the app itself: Shortcuts (`Question` icon), Lock and Settings, as icon buttons with the key in the tooltip. Shortcuts lists the page's own keys first (`usePageShortcuts`), then the keys that work everywhere; the `?` key opens it unless focus is in a surface with its own list (a drawer, the Manual, the palette) or a dialog. Pages carry no hint row of their own.
 - **Drawers dock under the title bar** (`BELOW_TITLE_BAR`), never over it, so its controls stay whole and the window keeps its drag region. A modal panel with an overlay (Capture) covers the whole window.
 
 ### Navigation

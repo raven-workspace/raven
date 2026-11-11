@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SCROLL_PANE } from "../../ui/controlStyles";
 import { useLocation, useNavigate } from "react-router";
 import { isDialogOpen, isFreeKey, isTypingTarget, useKeydown } from "../../lib/keys";
-import { Button, EmptyState, HintLine, LoadingState, queryState, type Hint } from "../../ui";
+import { Button, EmptyState, Kbd, LoadingState, queryState, usePageShortcuts, type Hint } from "../../ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/shadcn/tabs";
 import type { Finding } from "../../types/findings";
 import { FindingSplit } from "../findings/FindingSplit";
@@ -35,6 +35,9 @@ const HINTS: Hint[] = [
   { keys: "L", label: "capture", priority: 2 },
   { keys: "⌥1–3", label: "tabs", priority: 4 },
 ];
+
+/** With a finding open in the split, J and the tab keys don't apply. */
+const SPLIT_HINTS = HINTS.filter((h) => h.keys !== "J" && h.keys !== "⌥1–3");
 
 /** The Arsenal or Payloads drawer is open over this page: its keys win (they are not role=dialog). Notes is left out: H and F still work over it, and J below checks it too. */
 const drawerOpen = () => useArsenalStore.getState().open || usePayloadsStore.getState().open;
@@ -88,6 +91,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   const [stuckOpen, setStuckOpen] = useState(false);
   // Adding or editing a finding splits the page; its draft is kept in memory when the split closes.
   const [split, setSplit] = useState<Finding | "new" | null>(null);
+  usePageShortcuts("This host", split ? SPLIT_HINTS : HINTS);
   const [stuckHost, setStuckHost] = useState(hostId);
   if (stuckHost !== hostId) {
     setStuckHost(hostId);
@@ -217,13 +221,9 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   const facts = <FactsColumn engagementId={engagementId} host={host} variant={stacked ? "stacked" : "column"} onOpenEntry={openInLog} />;
 
   return (
-    <div ref={rootRef} data-hint-surface data-host-layout={width === undefined ? undefined : stacked ? "stacked" : "columns"} className="@container/host grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4">
-      {/* No hint row: it cost a full line of log and facts. The keys are on their buttons' tooltips and in the `?` list. */}
-      <HostHeader
-        host={host}
-        onStuck={toggleStuck}
-        shortcuts={<HintLine hints={split ? HINTS.filter((h) => h.keys !== "J" && h.keys !== "⌥1–3") : HINTS} max={0} ariaLabel="Host shortcuts" />}
-      />
+    <div ref={rootRef} data-host-layout={width === undefined ? undefined : stacked ? "stacked" : "columns"} className="@container/host grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4">
+      {/* No hint row: it cost a full line of log and facts. The keys are in the title bar's shortcut list (?). */}
+      <HostHeader host={host} />
       {split ? (
         <FindingSplit
           key={split === "new" ? "new" : split.id}
@@ -248,13 +248,19 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
                   </TabsTrigger>
                 ))}
               </TabsList>
-              {tab === "log" && <OrderButton order={order} onChange={setOrder} />}
-              {tab === "next" && (
-                <div className="grid grid-flow-col items-center gap-3">
-                  {jumpNote && <span role="status" className="text-meta text-muted">{jumpNote}</span>}
-                  <FullChecklistToggle full={fullChecklist} onChange={setFullChecklist} />
-                </div>
-              )}
+              {/* The tab's own control, then Stuck?: the work column's way out when the next steps run dry. */}
+              <div className="grid grid-flow-col items-center gap-4">
+                {tab === "log" && <OrderButton order={order} onChange={setOrder} />}
+                {tab === "next" && (
+                  <div className="grid grid-flow-col items-center gap-3">
+                    {jumpNote && <span role="status" className="text-meta text-muted">{jumpNote}</span>}
+                    <FullChecklistToggle full={fullChecklist} onChange={setFullChecklist} />
+                  </div>
+                )}
+                <Button size="sm" onClick={toggleStuck}>
+                  Stuck? <Kbd variant="inline" aria-hidden>H</Kbd>
+                </Button>
+              </div>
             </div>
             <TabsContent value={tab} aria-label={TABS.find((t) => t.id === tab)!.label} className={`border-t border-line ${SCROLL_PANE}`}>
               {tab === "log" ? (

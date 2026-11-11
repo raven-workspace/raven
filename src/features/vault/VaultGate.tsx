@@ -10,7 +10,7 @@ import { useCredPickStore } from "../checklist/credPick";
 import { useFindingDraftStore } from "../findings/useFindingDraftStore";
 import { discardNotes, flushNotes, hasPendingNotes, sessionGeneration, setNotesQueryClient, startNotesSession } from "../notes/useNotesStore";
 import type { UnlockResult, VaultStatus } from "../../types/vault";
-import { Button, IconButton, TitleBar, TitleBarButton, TitleBarGroup, TitleBarIconButton, Wordmark } from "../../ui";
+import { Button, IconButton, TitleBar, TitleBarButton, TitleBarGroup, TitleBarIconButton, TitleBarShortcuts, type Hint, Wordmark } from "../../ui";
 import { SetupScreen } from "./SetupScreen";
 import { UnlockScreen, type CipherControls } from "./UnlockScreen";
 import { CipherBackdrop, type CipherHandle } from "./CipherBackdrop";
@@ -48,6 +48,15 @@ const DEFAULT_AUTO_LOCK_MINUTES = 30;
 const LOCK_RETRY_MS = 2000;
 /** How long the unlock notice (e.g. "backup saved") stays before it clears itself. A failure stays until dismissed. */
 const NOTICE_MS = 8000;
+
+/** Keys that work on every unlocked screen, listed under the title bar's shortcuts button after the page's own. */
+const EVERYWHERE: Hint[] = [
+  { keys: "A", label: "Arsenal", priority: 1 },
+  { keys: "M", label: "Manual", priority: 1 },
+  { keys: "P", label: "Payloads", priority: 1 },
+  { keys: "⌘K", label: "search", priority: 1 },
+  { keys: "⌘L", label: "lock", priority: 1 },
+];
 
 /**
  * Setup when there is no vault, unlock when locked, children when unlocked.
@@ -282,6 +291,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
       </TitleBarGroup>
       <TitleBarButton hint="⌘K" icon={MagnifyingGlass} onClick={() => usePaletteStore.getState().open()}>Search</TitleBarButton>
       <TitleBarGroup>
+        <TitleBarShortcuts everywhere={EVERYWHERE} />
         <TitleBarIconButton icon={Lock} label="Lock" shortcut="⌘L" onClick={lock} />
         <span
           title={vaultNewer ? "The Field Manual has changes to import" : undefined}

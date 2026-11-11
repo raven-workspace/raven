@@ -350,7 +350,7 @@ describe("engagement shell", () => {
     await user.keyboard("6");
     expect(within(nav).getByRole("link", { name: /Report/ })).toHaveAttribute("aria-current", "page");
 
-    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Edit engagement" }));
     const dialog = await screen.findByRole("dialog", { name: "Edit engagement" });
     await user.type(within(dialog).getByLabelText("Sub-label"), "3");
     // Radix hides the background from the a11y tree while the dialog is open.
@@ -385,20 +385,20 @@ describe("engagement shell", () => {
   });
 
   async function openDeleteConfirm(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.click(await screen.findByRole("button", { name: "Edit engagement" }));
     await user.click(await screen.findByRole("button", { name: "Delete engagement" }));
   }
 
   it("engagement header has no Delete button", async () => {
     mount("/e/e1");
-    await screen.findByRole("button", { name: "Edit" });
+    await screen.findByRole("button", { name: "Edit engagement" });
     expect(screen.queryByRole("button", { name: /^Delete/ })).not.toBeInTheDocument();
   });
 
   it("Tab reaches Delete engagement in the edit dialog; Enter opens the confirm; Esc closes only the confirm", async () => {
     const user = userEvent.setup();
     mount("/e/e1");
-    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.click(await screen.findByRole("button", { name: "Edit engagement" }));
     const edit = await screen.findByRole("dialog", { name: "Edit engagement" });
     const del = within(edit).getByRole("button", { name: "Delete engagement" });
     for (let i = 0; i < 40 && document.activeElement !== del; i++) await user.tab();
@@ -469,7 +469,7 @@ describe("engagement shell", () => {
       async (id, input) => ({ ...list.find((e) => e.id === id)!, ...input }) as Engagement,
     );
     mount("/e/e1");
-    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.click(await screen.findByRole("button", { name: "Edit engagement" }));
     const dialog = await screen.findByRole("dialog", { name: "Edit engagement" });
     expect(within(dialog).getByLabelText("Name")).toHaveValue("Lab A");
     expect(within(dialog).getByRole("radio", { name: "Exam sim" })).toHaveAttribute("aria-checked", "true");

@@ -1,8 +1,9 @@
+import { Link } from "react-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { cx } from "../../lib/cx";
 import { useNow } from "../../lib/keys";
 import type { Engagement } from "../../types/engagement";
-import { labelClass } from "../../ui";
+import { Chip, labelClass } from "../../ui";
 import { useCleanupCounts } from "../cleanup/queries";
 import { useProgress } from "../hosts/queries";
 import { useThreadCounts } from "../notes/useThreadCounts";
@@ -22,8 +23,10 @@ import { MsfLock } from "./MsfLock";
  * Drop steps, in order: each step hides one part when the strip has run out of room (see useFitStrip).
  * Secondary parts go first, then Cleanup, Threads, the Metasploit lock and LHOST: the display order stays, but LHOST (the most-copied value) outlasts the cells before it.
  */
-const STEP = { of: 1, bar: 2, cleanup: 3, threads: 4, msf: 5, lhost: 6, flags: 7, rooted: 8 } as const;
-const LAST_STEP = 8;
+// The engagement's name (host pages) goes after Cleanup and Threads but before Metasploit and LHOST: you know which
+// engagement you're in; the lock and the listener are what you reach for mid-exam.
+const STEP = { of: 1, bar: 2, cleanup: 3, threads: 4, name: 5, msf: 6, lhost: 7, flags: 8, rooted: 9 } as const;
+const LAST_STEP = 9;
 
 /** One labelled value. `step` marks the part as droppable at that step. */
 function Cell({ label, value, step, tone }: { label: string; value: string; step?: number; tone?: "warn" }) {
@@ -76,7 +79,11 @@ function useFitStrip() {
   return { outer, inner };
 }
 
-export function StatusStrip({ engagement: e }: { engagement: Engagement }) {
+/**
+ * `named` (a host page, where there is no engagement header): the engagement's name leads the strip as a link back to
+ * the board. A long name truncates; when space runs out it drops before the Metasploit and LHOST cells.
+ */
+export function StatusStrip({ engagement: e, named = false }: { engagement: Engagement; named?: boolean }) {
   const now = useNow();
   const progressQ = useProgress();
   // A failed or pending progress query must never read as "0/0": show a dash while loading, "unavailable" (amber) on failure.
@@ -94,6 +101,12 @@ export function StatusStrip({ engagement: e }: { engagement: Engagement }) {
       className="h-9 shrink-0 overflow-hidden border-b border-line px-6 text-meta text-muted-2"
     >
       <div ref={inner} className="grid h-full grid-flow-col auto-cols-max items-center justify-start gap-6 whitespace-nowrap">
+        {named && (
+          <Link to={`/e/${e.id}`} title={e.name} data-drop={STEP.name} className="block h-6 max-w-[28ch] truncate rounded-sm text-body leading-6 font-semibold text-fg-2 no-underline hover:text-fg">
+            {e.name}
+          </Link>
+        )}
+        {named && e.status === "archived" && <span data-drop={STEP.name}><Chip>archived</Chip></span>}
         {hasTimebox(e) ? (
           <TimeboxStatus start={e.timeboxStart} minutes={e.timeboxMinutes} now={now} />
         ) : (

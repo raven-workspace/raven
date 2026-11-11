@@ -175,7 +175,7 @@ describe("host view", () => {
     const user = userEvent.setup();
     mount();
     const header = within(await screen.findByRole("region", { name: "Host" }));
-    await user.click(header.getByRole("button", { name: "Edit" }));
+    await user.click(header.getByRole("button", { name: "Edit host" }));
     const edit = await screen.findByRole("dialog", { name: "Edit host" });
     const del = within(edit).getByRole("button", { name: "Delete host" });
     for (let i = 0; i < 40 && document.activeElement !== del; i++) await user.tab();
@@ -207,7 +207,7 @@ describe("host view", () => {
     const user = userEvent.setup();
     mount();
     const header = within(await screen.findByRole("region", { name: "Host" }));
-    await user.click(header.getByRole("button", { name: "Edit" }));
+    await user.click(header.getByRole("button", { name: "Edit host" }));
     await user.click(await screen.findByRole("button", { name: "Delete host" }));
     const confirm = await screen.findByRole("dialog", { name: "Delete dc01?" });
     expect(confirm).toHaveAccessibleDescription(
@@ -223,7 +223,7 @@ describe("host view", () => {
     const user = userEvent.setup();
     mount();
     const header = within(await screen.findByRole("region", { name: "Host" }));
-    await user.click(header.getByRole("button", { name: "Edit" }));
+    await user.click(header.getByRole("button", { name: "Edit host" }));
     await user.click(await screen.findByRole("button", { name: "Delete host" }));
     const confirm = await screen.findByRole("dialog", { name: "Delete dc01?" });
     const text = confirm.getAttribute("aria-describedby") ? document.getElementById(confirm.getAttribute("aria-describedby")!)!.textContent! : "";

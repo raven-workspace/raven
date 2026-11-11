@@ -10,7 +10,7 @@ export interface Hint {
   priority: number;
 }
 
-function HintUnit({ hint }: { hint: Hint }) {
+export function HintUnit({ hint }: { hint: Hint }) {
   return (
     <span data-hint className="inline-grid grid-flow-col items-center justify-start gap-[6px] whitespace-nowrap text-meta text-muted-2">
       {/* "⌥H ⌥C" is two caps side by side in one unit. */}

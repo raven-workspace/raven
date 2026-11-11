@@ -14,6 +14,7 @@ import { CapturePanel } from "../capture/CapturePanel";
 import { NotesPanel } from "../notes/NotesPanel";
 import { useNotesStore } from "../notes/useNotesStore";
 import { useCaptureStore } from "../capture/useCaptureStore";
+import { cx } from "../../lib/cx";
 import { EngagementHeader } from "./EngagementHeader";
 import { Sidebar } from "./Sidebar";
 import { StatusStrip } from "./StatusStrip";
@@ -86,9 +87,10 @@ export function EngagementShell() {
   return (
     <div className="grid h-full min-h-0 grid-cols-[auto_minmax(0,1fr)]">
       <Sidebar engagementId={id} />
-      <div className="grid min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)]">
-        <EngagementHeader engagement={e} />
-        <StatusStrip engagement={e} />
+      {/* On a host page the host is the subject: no engagement header; the strip carries the engagement's name. */}
+      <div className={cx("grid min-h-0 min-w-0", hostId ? "grid-rows-[auto_minmax(0,1fr)]" : "grid-rows-[auto_auto_minmax(0,1fr)]")}>
+        {!hostId && <EngagementHeader engagement={e} />}
+        <StatusStrip engagement={e} named={!!hostId} />
         <main className="min-h-0 overflow-auto px-6 py-6">
           <Outlet />
         </main>

@@ -133,7 +133,7 @@ describe("dual-homed flag", () => {
     await within(await screen.findByRole("tabpanel")).findByText("Check SMB shares and null/guest access");
     expect(screen.queryByText("Tunnel into the next network")).not.toBeInTheDocument();
 
-    await user.click(within(screen.getByRole("region", { name: "Host" })).getByRole("button", { name: "Edit" }));
+    await user.click(within(screen.getByRole("region", { name: "Host" })).getByRole("button", { name: "Edit host" }));
     const dialog = await screen.findByRole("dialog", { name: "Edit host" });
     await user.click(within(dialog).getByRole("button", { name: "Dual-homed (reaches another network)" }));
     await user.click(within(dialog).getByRole("button", { name: "Save" }));

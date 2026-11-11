@@ -61,9 +61,9 @@ export function BoardCard({ host, onShift, msf = false }: BoardCardProps) {
         )}
       </span>
       {(host.os || host.access !== "none") && (
-        // Wide enough (a lane body of 150px: "Windows" and a chip need about 124px inside 12px padding), the access
+        // Wide enough (a lane body of 156px: "Windows" and a "root" or "user" chip need about 130px inside 12px padding), the access
         // chip ends the OS row; narrower, it sits under the OS. Either way every card in a lane has the same shape.
-        <div className="grid min-w-0 items-center justify-items-start gap-x-2 gap-y-1 @min-[150px]:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="grid min-w-0 items-center justify-items-start gap-x-2 gap-y-1 @min-[156px]:grid-cols-[minmax(0,1fr)_auto]">
           {host.os && (
             // OS is metadata, not state: the brand icon and its name as text (DESIGN.md Chips).
             <span

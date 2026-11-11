@@ -1,5 +1,10 @@
-import type { Icon } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
+import * as Popover from "@radix-ui/react-popover";
+import { QuestionIcon, type Icon } from "@phosphor-icons/react";
+import { useEffect, useState, type ReactNode } from "react";
+import { isTypingTarget } from "../lib/keys";
+import { HintUnit, type Hint } from "./HintLine";
+import { labelClass } from "./Label";
+import { usePageShortcutsStore } from "./pageShortcuts";
 import { cx } from "../lib/cx";
 import { Kbd } from "./Kbd";
 import { Tooltip } from "./Tooltip";
@@ -117,4 +122,53 @@ export function TitleBarIconButton({
 /** A run of title-bar controls that belong together; runs are set apart by space, never a divider. */
 export function TitleBarGroup({ children }: { children: ReactNode }) {
   return <div className="grid grid-flow-col items-center gap-1">{children}</div>;
+}
+
+/**
+ * The title bar's shortcut list: the page's own keys first (registered with `usePageShortcuts`), then the keys that
+ * work everywhere. The `?` key opens it too, unless focus is inside a surface with its own list (a drawer, the Manual,
+ * the palette) or a dialog.
+ */
+export function TitleBarShortcuts({ everywhere }: { everywhere: Hint[] }) {
+  const [open, setOpen] = useState(false);
+  const page = usePageShortcutsStore((s) => s.page);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "?" || e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+      const active = document.activeElement;
+      if (active && (isTypingTarget(active) || active.closest("[data-hint-surface], [role=dialog]"))) return;
+      e.preventDefault();
+      setOpen(true);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+  const group = (title: string, hints: Hint[]) => (
+    <section aria-label={title} className="grid gap-2">
+      <h2 className={`m-0 ${labelClass}`}>{title}</h2>
+      {hints.map((h) => <HintUnit key={h.keys} hint={h} />)}
+    </section>
+  );
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Tooltip side="bottom" content={<span>Shortcuts<span className="ml-2 font-mono text-muted">?</span></span>}>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            aria-label="Shortcuts"
+            aria-keyshortcuts="?"
+            className={cx("inline-grid size-7 place-items-center p-0", chrome, chromeState(open))}
+          >
+            <QuestionIcon size={16} weight="regular" aria-hidden className="shrink-0" />
+          </button>
+        </Popover.Trigger>
+      </Tooltip>
+      <Popover.Portal>
+        <Popover.Content align="end" sideOffset={6} className="z-50 grid gap-4 rounded-md border border-line-strong bg-surface p-3 shadow-lg outline-none">
+          {page && group(page.title, page.hints)}
+          {group("Everywhere", everywhere)}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
 }
