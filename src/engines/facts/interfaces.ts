@@ -1,4 +1,8 @@
-import { maskToPrefix } from "../parse/scope";
+import { ipInScope, maskToPrefix, networkOf } from "../parse/scope";
+import type { Host } from "../../types/host";
+import type { LogEntry } from "../../types/log";
+import type { InterfaceDismissal, Tunnel } from "../../types/network";
+import { identityBlocksOf, isIdentityBlockFor, isIdentityEntryFor } from "./identity";
 
 export interface NetInterface {
   name: string;
@@ -69,4 +73,51 @@ export function parseInterfaces(output: string): NetInterface[] {
     }
   }
   return found;
+}
+
+export interface InterfaceSuggestion {
+  key: string;
+  hostId: string;
+  iface: string;
+  ip: string;
+  prefix: number;
+  subnet: string;
+  entryId: string;
+}
+
+export interface InterfaceReading {
+  suggestions: InterfaceSuggestion[];
+  alsoSeen: { iface: string; ip: string; prefix: number; subnet: string }[];
+}
+
+/**
+ * The subnets a host's logged interface output says it reaches, split into tunnel suggestions and virtual adapters.
+ * Newest entry wins per subnet. A non-virtual interface makes no suggestion when the host has no IP, when it is on the
+ * host's own subnet, when a tunnel already covers it, or when the user dismissed that subnet for this host.
+ */
+export function readInterfaces(entries: LogEntry[], host: Host, tunnels: Tunnel[], dismissals: InterfaceDismissal[]): InterfaceReading {
+  const reading: InterfaceReading = { suggestions: [], alsoSeen: [] };
+  const tunnelSubnets = tunnels.flatMap((t) => t.subnets);
+  const dismissed = new Set(dismissals.filter((d) => d.hostId === host.id).map((d) => d.subnet));
+  const done = new Set<string>();
+
+  const newestFirst = entries.filter((e) => isIdentityEntryFor(e, host)).sort((a, b) => b.at - a.at);
+  for (const entry of newestFirst) {
+    for (const block of identityBlocksOf(entry)) {
+      if (!isIdentityBlockFor(entry, host, block)) continue;
+      for (const nic of parseInterfaces(block.output)) {
+        const subnet = networkOf(nic.ip, nic.prefix);
+        if (done.has(subnet)) continue;
+        if (nic.virtual) {
+          done.add(subnet);
+          reading.alsoSeen.push({ iface: nic.name, ip: nic.ip, prefix: nic.prefix, subnet });
+          continue;
+        }
+        if (!host.ip || ipInScope(host.ip, [subnet]) || ipInScope(nic.ip, tunnelSubnets) || dismissed.has(subnet)) continue;
+        done.add(subnet);
+        reading.suggestions.push({ key: `${host.id}|${subnet}`, hostId: host.id, iface: nic.name, ip: nic.ip, prefix: nic.prefix, subnet, entryId: entry.id });
+      }
+    }
+  }
+  return reading;
 }

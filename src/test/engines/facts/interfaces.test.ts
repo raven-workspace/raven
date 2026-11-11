@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isVirtualInterface, parseInterfaces } from "../../../engines/facts/interfaces";
+import { isVirtualInterface, parseInterfaces, readInterfaces } from "../../../engines/facts/interfaces";
 import { maskToPrefix, networkOf } from "../../../engines/parse/scope";
+import type { Host } from "../../../types/host";
+import type { LogEntry } from "../../../types/log";
+import type { Tunnel } from "../../../types/network";
 
 const IP_A = `1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN
     inet 127.0.0.1/8 scope host lo
@@ -63,5 +66,53 @@ describe("networkOf / maskToPrefix", () => {
     expect(maskToPrefix("255.255.255.0")).toBe(24);
     expect(maskToPrefix("255.255.240.0")).toBe(20);
     expect(maskToPrefix("255.0.255.0")).toBeNull();
+  });
+});
+
+describe("readInterfaces", () => {
+  const host = { id: "h1", name: "WEB01", ip: "10.10.5.20" } as Host;
+  const OUT = `2: eth0: <BROADCAST,UP> mtu 1500\n    inet 10.10.5.20/24 brd 10.10.5.255 scope global eth0\n3: eth1: <BROADCAST,UP> mtu 1500\n    inet 172.16.5.10/24 brd 172.16.5.255 scope global eth1\n4: docker0: <BROADCAST,UP> mtu 1500\n    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0`;
+  const entry = (id: string, at: number, over: Partial<LogEntry> = {}): LogEntry => ({
+    id, engagementId: "e1", kind: "command", title: id, titleEdited: false, ranOn: "WEB01", hostIds: ["h1"], observations: null,
+    returnedNothing: false, private: false, content: { kind: "command", blocks: [{ command: "ip a", output: OUT }] },
+    at, createdAt: at, updatedAt: at, ...over,
+  });
+  const tunnel = (subnets: string[]): Tunnel => ({
+    id: "t1", engagementId: "e1", kind: "ligolo", viaHostId: "h1", subnets, callbackIp: "", status: "up", notes: null, createdAt: 1, updatedAt: 1,
+  });
+  const docker = { iface: "docker0", ip: "172.17.0.1", prefix: 16, subnet: "172.17.0.0/16" };
+
+  it("suggests the second subnet and lists virtual adapters apart", () => {
+    const r = readInterfaces([entry("l1", 1)], host, [], []);
+    expect(r.suggestions).toEqual([
+      { key: "h1|172.16.5.0/24", hostId: "h1", iface: "eth1", ip: "172.16.5.10", prefix: 24, subnet: "172.16.5.0/24", entryId: "l1" },
+    ]);
+    expect(r.alsoSeen).toEqual([docker]);
+  });
+
+  it("gives one suggestion per subnet, from the newest entry", () => {
+    const r = readInterfaces([entry("old", 1), entry("new", 2)], host, [], []);
+    expect(r.suggestions).toHaveLength(1);
+    expect(r.suggestions[0].entryId).toBe("new");
+    expect(r.alsoSeen).toHaveLength(1);
+  });
+
+  it("stays quiet for a subnet a tunnel already covers", () => {
+    expect(readInterfaces([entry("l1", 1)], host, [tunnel(["172.16.5.0/24"])], []).suggestions).toEqual([]);
+  });
+
+  it("stays quiet for a dismissed subnet", () => {
+    const d = { engagementId: "e1", hostId: "h1", subnet: "172.16.5.0/24", createdAt: 1 };
+    expect(readInterfaces([entry("l1", 1)], host, [], [d]).suggestions).toEqual([]);
+  });
+
+  it("suggests nothing when the host has no IP, without throwing", () => {
+    const r = readInterfaces([entry("l1", 1)], { ...host, ip: null }, [], []);
+    expect(r).toEqual({ suggestions: [], alsoSeen: [docker] });
+  });
+
+  it("ignores an entry linked to two hosts", () => {
+    const r = readInterfaces([entry("l1", 1, { hostIds: ["h1", "h2"] })], host, [], []);
+    expect(r).toEqual({ suggestions: [], alsoSeen: [] });
   });
 });
