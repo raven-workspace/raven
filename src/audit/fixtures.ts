@@ -306,6 +306,7 @@ const labLog: LogEntry[] = [
   note("A very long note title that keeps going to see how the log row handles a heading with no natural break points at all", "Found the finance DMZ gateway. It has a second NIC on 10.10.21.0/24 which is not in scope yet; confirm with the lab guide before touching it.", ["h-pivot"]),
   note("Password reuse theory", "svc_backup and svc_report share a password pattern: Season+Year+!. Try it against the other service accounts.", [], { private: true }),
   note("Loose end", "Check the NFS export on the web host.", ["h-web"]),
+  cmd("Interfaces on web", "ip a", "2: eth0: <BROADCAST,UP> mtu 1500\n    inet 10.10.20.15/24 brd 10.10.20.255 scope global eth0\n3: eth1: <BROADCAST,UP> mtu 1500\n    inet 172.16.5.10/24 brd 172.16.5.255 scope global eth1\n4: docker0: <NO-CARRIER,UP> mtu 1500\n    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0\n5: virbr0: <NO-CARRIER,UP> mtu 1500\n    inet 192.168.122.1/24 brd 192.168.122.255 scope global virbr0", ["h-web"], { ranOn: null }),
   entry({ kind: "flag", title: "local.txt on web", hostIds: ["h-web"], content: { kind: "flag", flagKind: "local", value: "0123456789abcdef0123456789abcdef", attachmentId: null, proof: "www-data@web:/home/dev$ cat local.txt && hostname && ip a" } }),
   entry({ kind: "flag", title: "proof.txt on dc01", hostIds: ["h-dc01"], content: { kind: "flag", flagKind: "proof", value: "fedcba9876543210fedcba9876543210", attachmentId: "a-tiny", proof: null } }),
   shot("wide", "Terminal strip: full nmap output on one line", ["h-web"]),
