@@ -76,7 +76,7 @@ export function InterfaceNudge({ engagementId, host, onOpenEntry }: {
                   onClick={() => onOpenEntry?.(s.entryId)}
                   disabled={!onOpenEntry}
                   title="Open the logged command"
-                  className="cursor-default border-0 bg-transparent p-0 font-mono text-code text-fg underline decoration-line-strong underline-offset-4 enabled:hover:decoration-fg disabled:no-underline"
+                  className="-my-0.5 inline-grid min-h-6 items-center cursor-default border-0 bg-transparent p-0 font-mono text-code text-fg underline decoration-line-strong underline-offset-4 enabled:hover:decoration-fg disabled:no-underline"
                 >
                   {s.subnet}
                 </button>.</span>

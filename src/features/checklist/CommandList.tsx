@@ -104,7 +104,7 @@ export function CommandList({ commands, hostName = null, focusToken = noToken, f
                 // Outside an engagement there is no Network to open: the note stays a plain chip.
                 if (!engagementId) return <Chip variant={variant}>{label}</Chip>;
                 return (
-                  <Link to={sectionPath(engagementId, "network")} state={{ hostId: c.viaTunnel.viaHostId }} className="rounded-full focus-visible:outline-1 focus-visible:outline-accent [&>span]:hover:underline [&>span]:underline-offset-2">
+                  <Link to={sectionPath(engagementId, "network")} state={{ hostId: c.viaTunnel.viaHostId }} className="inline-grid min-h-6 items-center rounded-full focus-visible:outline-1 focus-visible:outline-accent [&>span]:hover:underline [&>span]:underline-offset-2">
                     <Chip variant={variant}>{label}</Chip>
                   </Link>
                 );

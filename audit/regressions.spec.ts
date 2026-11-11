@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { AUDIT_NOTE_IDS, AUDIT_NOW } from "../src/audit/fixtures";
+import { AUDIT_NOTE_IDS, AUDIT_NOW, FIXTURES } from "../src/audit/fixtures";
 import { MEANS_HEADER } from "../src/engines/manual/lookup";
 import { SCREENS } from "./screens";
 
@@ -208,10 +208,10 @@ test("sidebar collapses without sideways scroll and shows IPs", async ({ page })
   const rows = await hostRows.evaluateAll((els) =>
     els.map((a) => ({ text: (a.textContent ?? "").trim(), title: a.getAttribute("title") ?? "" })),
   );
-  // e-lab has exactly these six hosts in the fixtures; every row must show its own IP.
-  const ips: Record<string, string> = {
-    [WEB_SHORT]: "10.10.20.15", dc01: "10.10.20.10", fs01: "10.10.20.21", sql01: "10.10.20.22", "pivot-gw": "10.10.20.30", ws07: "10.10.20.57",
-  };
+  // One row per e-lab host in the fixtures, each showing its short name and its own IP.
+  const ips: Record<string, string> = Object.fromEntries(
+    FIXTURES.hosts.filter((h) => h.engagementId === "e-lab").map((h) => [h.name.split(".")[0], h.ip ?? ""]),
+  );
   expect(rows).toHaveLength(Object.keys(ips).length);
   for (const r of rows) {
     const short = Object.keys(ips).find((n) => r.text.includes(n));
@@ -248,7 +248,8 @@ test("rail: 32px section boxes on the host glyphs' centre line, names inside the
         labelFits: labels.map((l) => l.scrollWidth <= l.clientWidth + 0.5 && box(l).right <= rail.right),
       };
     });
-    expect(geo.sections).toHaveLength(6);
+    // One box per engagement section (seven since Network).
+    expect(geo.sections).toHaveLength(7);
     for (const s of geo.sections) {
       expect(s.w, `${width}: section box width`).toBe(32);
       expect(s.h, `${width}: section box height`).toBe(32);
@@ -1153,4 +1154,20 @@ test("Manual: a prose line or list item holding an inline command is as tall as 
   });
   expect(h.p[1], "paragraph with an inline command").toBe(h.p[0]);
   expect(h.li[1], "list item with an inline command").toBe(h.li[0]);
+});
+
+// The subnet in "eth1 … reaches 172.16.5.0/24" is a 24px target, but must not make its sentence taller than one line.
+test("Interfaces: the inline subnet is a 24px target and keeps its line height", async ({ page }) => {
+  await open(page, LAB_HOST, 1280);
+  const p = page.locator("section[aria-label='Network interfaces'] li p").first();
+  await p.waitFor();
+  const h = await p.evaluate((el) => {
+    const btn = el.querySelector("button")!;
+    const sized = { btn: btn.getBoundingClientRect().height, line: el.getBoundingClientRect().height };
+    // The same sentence with a plain inline button: the height the line would have without the 24px target.
+    btn.style.cssText = "display:inline;min-height:0;margin:0";
+    return { ...sized, plain: el.getBoundingClientRect().height };
+  });
+  expect(h.btn).toBeGreaterThanOrEqual(24);
+  expect(h.line, "not grown by the button").toBe(h.plain);
 });

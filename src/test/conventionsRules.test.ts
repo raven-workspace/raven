@@ -180,6 +180,11 @@ describe("off-scale-spacing matcher", () => {
     expect(bad('<a className="pl-[94px]" />')).toBe(true);
     expect(bad('<a className="pl-[80px]" />', "src/ui/TitleBar.tsx")).toBe(true);
   });
+  it("allows the inline subnet's -2px target bleed, only in InterfaceNudge", () => {
+    expect(bad('<a className="-my-0.5 min-h-6" />', "src/features/network/InterfaceNudge.tsx")).toBe(false);
+    expect(bad('<a className="-mx-0.5" />', "src/features/network/InterfaceNudge.tsx")).toBe(true);
+    expect(bad('<a className="-my-0.5" />')).toBe(true);
+  });
   it("allows only the documented 6px hint gap, only in HintLine", () => {
     expect(bad('<a className="gap-[6px]" />', "src/ui/HintLine.tsx")).toBe(false);
     expect(bad('<a className="gap-x-5" />', "src/ui/HintLine.tsx")).toBe(true);
