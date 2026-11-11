@@ -57,6 +57,15 @@ Ethernet adapter Ethernet2:
   });
 });
 
+describe("isVirtualInterface", () => {
+  it.each([
+    "docker0", "br-1a2b3c", "veth12ab", "virbr0", "vmnet8", "vboxnet0", "lxcbr0", "lxdbr0", "podman0", "cni0", "flannel.1", "cali123", "tun0", "tap0",
+    "wg0", "tailscale0", "zt0abcd", "lo", "lo0", "vEthernet (WSL)", "VMware Network Adapter VMnet1", "VirtualBox Host-Only Network",
+    "Hyper-V Virtual Ethernet Adapter", "Loopback Pseudo-Interface 1", "Bluetooth Network Connection",
+  ])("treats %s as virtual", (name) => expect(isVirtualInterface(name)).toBe(true));
+  it.each(["Local Area Connection", "Ethernet0", "ens33", "eth1", "Wi-Fi"])("treats %s as real", (name) => expect(isVirtualInterface(name)).toBe(false));
+});
+
 describe("networkOf / maskToPrefix", () => {
   it("masks an address down to its network", () => {
     expect(networkOf("172.16.5.10", 24)).toBe("172.16.5.0/24");

@@ -11,13 +11,16 @@ export interface NetInterface {
   virtual: boolean;
 }
 
-const VIRTUAL_PREFIXES = ["docker", "br-", "veth", "virbr", "vmnet", "vboxnet", "tun", "tap", "wg", "lo"];
-const VIRTUAL_ANYWHERE = ["vethernet", "virtualbox", "vmware", "hyper-v", "wsl", "loopback"];
+const VIRTUAL_PREFIXES = [
+  "docker", "br-", "veth", "virbr", "vmnet", "vboxnet", "lxcbr", "lxdbr", "podman", "cni", "flannel", "cali", "tun", "tap", "wg", "tailscale", "zt",
+];
+const VIRTUAL_ANYWHERE = ["vethernet", "vmware", "virtualbox", "hyper-v", "loopback", "bluetooth"];
+const LOOPBACK_NAME = /^lo\d*$/i;
 
 /** Container, VM, tunnel and loopback adapters: not a second network the host reaches. */
 export function isVirtualInterface(name: string): boolean {
   const n = name.trim().toLowerCase();
-  return VIRTUAL_PREFIXES.some((p) => n.startsWith(p)) || VIRTUAL_ANYWHERE.some((p) => n.includes(p));
+  return LOOPBACK_NAME.test(n) || VIRTUAL_PREFIXES.some((p) => n.startsWith(p)) || VIRTUAL_ANYWHERE.some((p) => n.includes(p));
 }
 
 const IP = String.raw`(\d{1,3}(?:\.\d{1,3}){3})`;
