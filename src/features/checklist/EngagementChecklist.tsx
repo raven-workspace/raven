@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fragment, useEffect, useState, type ReactNode } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router";
+import { Fragment, useState, type ReactNode } from "react";
+import { Link, useNavigate, useParams } from "react-router";
 import {
   AD_PLAYBOOKS,
   ENGAGEMENT_SETUP,
@@ -61,20 +61,6 @@ export function EngagementChecklist() {
   const attempts = useCredAttempts(id).data ?? [];
   const creds = useCredFill(id, { id }, "engagement");
   const { setStatus, setNotes } = useChecklistMutations(id);
-  const location = useLocation();
-  // A Stuck check line arrives with the pivot goal and host to focus; cleared below so back/forward does not repeat it.
-  const arrived = (location.state as { goalId?: string; hostId?: string } | null) ?? null;
-  const [focus, setFocus] = useState<{ goalId: string; hostId?: string; n: number }>();
-  const [seenKey, setSeenKey] = useState<string>();
-  // Every new arrival (even on this already-mounted route) is a fresh request: the counter re-expands the section and row.
-  if (arrived?.goalId && location.key !== seenKey) {
-    setSeenKey(location.key);
-    setFocus({ goalId: arrived.goalId, hostId: arrived.hostId, n: (focus?.n ?? 0) + 1 });
-  }
-  const arrivedGoal = arrived?.goalId;
-  useEffect(() => {
-    if (arrivedGoal) void navigate(location.pathname, { replace: true, state: null });
-  }, [arrivedGoal, location.pathname, navigate]);
   const [tick, setTick] = useState<{ ticking: boolean; message?: string; error?: string }>({ ticking: false });
 
   const hosts = hostsQ.data;
@@ -107,12 +93,10 @@ export function EngagementChecklist() {
     const rowInput = owner ? { ...input, host: owner } : input;
     const { commands, hadAny } = goalCommands(g.id, rowInput, eng);
     const s = (owner ? byOwner.get(owner.id) ?? {} : state)[g.id];
-    const focused = focus?.goalId === g.id && (focus.hostId === undefined || focus.hostId === owner?.id);
     return (
       <GoalRow
         key={`${ownerId}:${g.id}`}
         goal={g}
-        focus={focused ? focus.n : undefined}
         state={s}
         commands={commands}
         evidence={(s?.evidence ?? []).map((ev) => {
@@ -187,7 +171,6 @@ export function EngagementChecklist() {
         title="Lateral movement"
         opensWhen="a host is dual-homed, or a credential hasn't been tried everywhere"
         defaultOpen={opens.lateral}
-        openRequest={focus?.n}
       >
         {dualHomed.map((h) => (
           <Fragment key={h.id}>
