@@ -163,12 +163,13 @@ function IpText({ ip, className }: { ip: string; className?: string }) {
 function KaliNode({ attackerIp, wide }: { attackerIp: string; wide: boolean }) {
   return (
     <div className={cx(BOX, wide ? "w-full" : NODE_W, "border-line-2")}>
-      <div className={cx("grid items-center gap-2", wide ? "grid-cols-[16px_minmax(0,1fr)_auto]" : "grid-cols-[16px_minmax(0,1fr)]")}>
-        <BrandIcon brand="kali" />
+      <div className={cx("grid items-center gap-2", wide ? "grid-cols-[24px_minmax(0,1fr)_auto]" : "grid-cols-[24px_minmax(0,1fr)]")}>
+        {/* Large: the dragon is unreadable at the 16px muted default. */}
+        <BrandIcon brand="kali" large />
         <span className="text-body font-semibold text-fg">Kali</span>
         {wide && attackerIp && <IpText ip={attackerIp} />}
       </div>
-      {!wide && attackerIp && <IpText ip={attackerIp} className="pl-6" />}
+      {!wide && attackerIp && <IpText ip={attackerIp} className="pl-8" />}
     </div>
   );
 }
