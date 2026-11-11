@@ -330,7 +330,7 @@ describe("engagement shell", () => {
     mount("/e/e1");
     expect(await screen.findByRole("heading", { name: "Lab A" })).toBeInTheDocument();
     const nav = screen.getByRole("navigation", { name: "Engagement" });
-    for (const s of ["Board", "Log", "Credentials", "Findings", "Engagement checklist", "Report"]) {
+    for (const s of ["Board", "Log", "Credentials", "Findings", "Network", "Engagement checklist", "Report"]) {
       expect(within(nav).getByRole("link", { name: new RegExp(s) })).toBeInTheDocument();
     }
     expect(within(nav).getByRole("link", { name: /Board/ })).toHaveAttribute("aria-current", "page");
@@ -347,7 +347,7 @@ describe("engagement shell", () => {
     const nav = await screen.findByRole("navigation", { name: "Engagement" });
     await user.keyboard("2");
     expect(within(nav).getByRole("link", { name: /Log/ })).toHaveAttribute("aria-current", "page");
-    await user.keyboard("6");
+    await user.keyboard("7");
     expect(within(nav).getByRole("link", { name: /Report/ })).toHaveAttribute("aria-current", "page");
 
     await user.click(screen.getByRole("button", { name: "Edit engagement" }));

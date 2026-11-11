@@ -6,6 +6,7 @@ import {
   Flag,
   Plus,
   Kanban,
+  ShareNetwork,
   SidebarSimple,
   type Icon,
 } from "@phosphor-icons/react";
@@ -41,6 +42,7 @@ const SECTION_ICONS: Record<SectionId, Icon> = {
   log: ListBullets,
   credentials: Key,
   findings: Flag,
+  network: ShareNetwork,
   checklist: ListChecks,
   report: FileText,
 };

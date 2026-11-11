@@ -2,10 +2,9 @@ import { useId, useState, type FormEvent } from "react";
 import { parseScopeList } from "../../engines/parse/scope";
 import type { Host } from "../../types/host";
 import type { Tunnel, TunnelInput, TunnelKind, TunnelStatus } from "../../types/network";
-import { PencilSimple, Plus, Trash } from "@phosphor-icons/react";
-import { Button, Chip, ChipSet, Dialog, Field, IconButton, Input, Panel, Select, Toggle, fieldLabelClass } from "../../ui";
-import { ConfirmDelete } from "./ConfirmDelete";
-import { useTunnelMutations } from "./queries";
+import { Button, Dialog, Field, Input, Select, Toggle, fieldLabelClass } from "../../ui";
+import { ConfirmDelete } from "../checklist/ConfirmDelete";
+import { useTunnelMutations } from "../checklist/queries";
 
 const KINDS: { value: TunnelKind; label: string }[] = [
   { value: "ligolo", label: "Ligolo" },
@@ -15,19 +14,26 @@ const KINDS: { value: TunnelKind; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.value, k.label])) as Record<TunnelKind, string>;
-
 type Errors = Partial<Record<"subnets" | "callbackIp" | "viaHostId" | "form", string>>;
 
-function TunnelForm({ engagementId, hosts, tunnel, onClose }: { engagementId: string; hosts: Host[]; tunnel?: Tunnel; onClose: () => void }) {
+/** `initial` prefills a new tunnel (the Network nudge passes the pivot and the subnets it found). */
+export function TunnelForm({ engagementId, hosts, tunnel, initial, onClose }: {
+  engagementId: string;
+  hosts: Host[];
+  tunnel?: Tunnel;
+  initial?: { viaHostId?: string; subnets?: string[] };
+  onClose: () => void;
+}) {
   const formId = useId();
-  const { create, update } = useTunnelMutations(engagementId);
+  const { create, update, remove } = useTunnelMutations(engagementId);
   const [kind, setKind] = useState<TunnelKind>(tunnel?.kind ?? "ligolo");
-  const [via, setVia] = useState(tunnel?.viaHostId ?? hosts[0]?.id ?? "");
-  const [subnets, setSubnets] = useState(tunnel?.subnets.join(", ") ?? "");
+  const [via, setVia] = useState(tunnel?.viaHostId ?? initial?.viaHostId ?? hosts[0]?.id ?? "");
+  const [subnets, setSubnets] = useState((tunnel?.subnets ?? initial?.subnets ?? []).join(", "));
   const [callback, setCallback] = useState(tunnel?.callbackIp ?? "");
   const [status, setStatus] = useState<TunnelStatus>(tunnel?.status ?? "up");
   const [errors, setErrors] = useState<Errors>({});
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string>();
   const pending = create.isPending || update.isPending;
 
   function submit(e: FormEvent) {
@@ -60,6 +66,9 @@ function TunnelForm({ engagementId, hosts, tunnel, onClose }: { engagementId: st
       title={tunnel ? "Edit tunnel" : "Add tunnel"}
       footer={
         <>
+          {tunnel && (
+            <Button variant="quiet-danger" className="mr-auto" onClick={() => { setDeleteError(undefined); setDeleting(true); }}>Delete tunnel</Button>
+          )}
           <Button onClick={onClose}>Cancel</Button>
           <Button type="submit" form={formId} variant="primary" disabled={pending}>
             {tunnel ? "Save" : "Add tunnel"}
@@ -88,57 +97,16 @@ function TunnelForm({ engagementId, hosts, tunnel, onClose }: { engagementId: st
         </div>
         {errors.form && <p role="alert" className="m-0 text-meta text-warn">{errors.form}</p>}
       </form>
-    </Dialog>
-  );
-}
-
-export function TunnelsPanel({ engagementId, hosts, tunnels }: { engagementId: string; hosts: Host[]; tunnels: Tunnel[] }) {
-  const [editing, setEditing] = useState<Tunnel | "new" | null>(null);
-  const { remove } = useTunnelMutations(engagementId);
-  const [deleting, setDeleting] = useState<Tunnel | null>(null);
-  const [deleteError, setDeleteError] = useState<string>();
-  const name = (id: string) => hosts.find((h) => h.id === id)?.name ?? "?";
-  return (
-    <Panel title="Tunnels" actions={<IconButton icon={Plus} label="Add tunnel" onClick={() => setEditing("new")} />}>
-      {tunnels.length === 0 ? (
-        <p className="m-0 text-meta text-muted">No tunnels yet.</p>
-      ) : (
-        <ul className="m-0 grid list-none p-0">
-          {tunnels.map((t) => {
-            const where = `${t.kind} tunnel via ${name(t.viaHostId)}`;
-            return (
-              <li key={t.id} className="grid grid-cols-[minmax(0,1fr)_56px_28px_28px] items-start gap-2 border-b border-line py-2 last:border-b-0">
-                <div className="grid min-w-0 gap-1">
-                  <span className="truncate py-1 text-body text-fg" title={`${KIND_LABEL[t.kind]} via ${name(t.viaHostId)}`}>
-                    {KIND_LABEL[t.kind]} via <span className="font-mono text-code">{name(t.viaHostId)}</span>
-                  </span>
-                  <ChipSet>
-                    {t.subnets.map((n) => (
-                      <span key={n} className="text-code text-fg-2">{n}</span>
-                    ))}
-                  </ChipSet>
-                </div>
-                <div className="grid h-7 items-center justify-start">
-                  <Chip variant={t.status === "up" ? "default" : "warn"}>{t.status}</Chip>
-                </div>
-                <IconButton icon={PencilSimple} label={`Edit ${where}`} onClick={() => setEditing(t)} />
-                <IconButton icon={Trash} label={`Delete ${where}`} tone="destructive" onClick={() => { setDeleteError(undefined); setDeleting(t); }} />
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {deleting && (
+      {tunnel && deleting && (
         <ConfirmDelete
-          title={`Delete the ${deleting.kind} tunnel via ${name(deleting.viaHostId)}?`}
+          title={`Delete the ${tunnel.kind} tunnel via ${hosts.find((h) => h.id === tunnel.viaHostId)?.name ?? "?"}?`}
           label="Delete tunnel"
           error={deleteError}
           pending={remove.isPending}
-          onCancel={() => setDeleting(null)}
-          onConfirm={() => remove.mutate(deleting.id, { onSuccess: () => setDeleting(null), onError: (e) => setDeleteError(e.message) })}
+          onCancel={() => setDeleting(false)}
+          onConfirm={() => remove.mutate(tunnel.id, { onSuccess: onClose, onError: (e) => setDeleteError(e.message) })}
         />
       )}
-      {editing && <TunnelForm engagementId={engagementId} hosts={hosts} tunnel={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} />}
-    </Panel>
+    </Dialog>
   );
 }

@@ -218,10 +218,10 @@ describe("cleanup panel", () => {
     mount();
     await panel();
     const nav = screen.getByRole("navigation", { name: "Engagement" });
-    const links = within(nav).getAllByRole("link").filter((l) => /^(Board|Log|Credentials|Findings|Engagement checklist|Report)/.test(l.textContent ?? ""));
-    expect(links).toHaveLength(6);
+    const links = within(nav).getAllByRole("link").filter((l) => /^(Board|Log|Credentials|Findings|Network|Engagement checklist|Report)/.test(l.textContent ?? ""));
+    expect(links).toHaveLength(7);
     expect(within(nav).queryByRole("link", { name: /Cleanup/ })).not.toBeInTheDocument();
-    expect(links[5]).toHaveTextContent("Report");
-    expect(links[5]).toHaveTextContent("6");
+    expect(links[6]).toHaveTextContent("Report");
+    expect(links[6]).toHaveTextContent("7");
   });
 });

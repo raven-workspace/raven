@@ -10,6 +10,7 @@ export const SECTIONS = [
   { id: "log", label: "Log", empty: "Log arrives in a later build step" },
   { id: "credentials", label: "Credentials", empty: "Credentials arrive in a later build step" },
   { id: "findings", label: "Findings", empty: "Findings arrive in a later build step" },
+  { id: "network", label: "Network", empty: "" },
   { id: "checklist", label: "Engagement checklist", empty: "The engagement checklist arrives in a later build step" },
   { id: "report", label: "Report", empty: "Report arrives in phase 3" },
 ] as const;
@@ -26,6 +27,7 @@ export function SectionView({ section }: { section: SectionId }) {
   if (section === "log") return <LogSection />;
   if (section === "credentials") return <CredentialsSection />;
   if (section === "findings") return <FindingsSection />;
+  // Temporary: Task 6 replaces this with the Network section.
   if (section === "checklist") return <EngagementChecklist />;
   const s = SECTIONS.find((x) => x.id === section)!;
   return <EmptyState title={s.empty} />;

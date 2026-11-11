@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
-import { useLocation, useNavigate, useParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 import {
   AD_PLAYBOOKS,
   ENGAGEMENT_SETUP,
@@ -30,11 +30,9 @@ import { usePortPickStore } from "./portPick";
 import { goalCommands } from "./goalCommands";
 import { shortHostName } from "../../lib/hostName";
 import { GoalRow } from "./GoalRow";
-import { HopsPanel } from "./HopsPanel";
 import { PlaybookSection } from "./PlaybookSection";
 import { checklistKey, useChecklist, useChecklistMutations, useEngagementServices, useHops, useTunnels } from "./queries";
 import { loadTickContext, tickFromLog } from "./ticks";
-import { TunnelsPanel } from "./TunnelsPanel";
 
 /** Sub-heading above the first row of each group. */
 const GroupHeading = ({ children }: { children: ReactNode }) => (
@@ -198,10 +196,10 @@ export function EngagementChecklist() {
           </Fragment>
         ))}
         {grouped(LATERAL_MOVEMENT_GOALS)}
+        <li className="pt-2 text-meta text-muted">
+          Tunnels and hops are in <Link to={sectionPath(id, "network")} className="text-fg-2 underline underline-offset-2 hover:text-fg">Network</Link> (5).
+        </li>
       </PlaybookSection>
-
-      <TunnelsPanel engagementId={id} hosts={hosts} tunnels={tunnels} />
-      <HopsPanel engagementId={id} hosts={hosts} hops={hops} />
 
       <CleanupPanel engagementId={id} hosts={hosts} entries={entries} domain={eng.domain} />
     </section>
