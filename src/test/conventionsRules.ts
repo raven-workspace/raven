@@ -330,6 +330,10 @@ const SPACING_ALLOWED: Record<string, { tokens: string[]; reason: string }> = {
     tokens: ["pl-[94px]"],
     reason: "window chrome: the macOS traffic lights' 78px clearance (titleBarStyle Overlay) plus 16px of air, not a spacing step",
   },
+  "src/features/network/InterfaceNudge.tsx": {
+    tokens: ["-my-0.5"],
+    reason: "the inline subnet is a 24px target (min-h-6) in a 20px line: -2px above and below keep the line from growing, not a spacing step",
+  },
 };
 
 /** Drops the variant prefixes (`md:`, `group-data-[x=y]:`, `[&>svg]:`): everything up to the last top-level colon. */
