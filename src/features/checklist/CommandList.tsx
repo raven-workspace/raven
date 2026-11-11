@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { Link, useParams } from "react-router";
 import { ChipSet, Chip, CommandBlock } from "../../ui";
 import { copyPlain, copySecret } from "../../lib/clipboard";
+import { sectionPath } from "../engagements/sections";
 import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
 
 export interface FilledCommand {
@@ -13,7 +15,7 @@ export interface FilledCommand {
   unresolved: string[];
   /** Exam sim, no host locked yet: this command would spend the one Metasploit host. */
   msfMarker: boolean;
-  viaTunnel?: { viaHostName: string; down: boolean };
+  viaTunnel?: { viaHostId: string; viaHostName: string; down: boolean };
   /** The DC in this command was picked by host name only. */
   dcByName?: boolean;
   /** Field-manual commands: the Arsenal card they came from. */
@@ -56,6 +58,8 @@ export function CommandList({ commands, hostName = null, focusToken = noToken, f
   const [pressed, setPressed] = useState<string | null>(null);
   const statusId = guardAs ? (commands.some((x) => x.id === pressed) ? pressed : commands[0]?.id) : null;
 
+  const engagementId = useParams().id;
+
   const copy = (c: FilledCommand, button: HTMLElement) => {
     // A filled command carries a real credential: that copy is a secret.
     setPressed(c.id);
@@ -94,11 +98,17 @@ export function CommandList({ commands, hostName = null, focusToken = noToken, f
             <ChipSet>
               {c.dcByName && !hideDcNote && <Chip title="No Kerberos/LDAP seen: the DC was picked by its host name">DC (by name)</Chip>}
               {c.msfMarker && <Chip>uses your one Metasploit host</Chip>}
-              {c.viaTunnel && (
-                <Chip variant={c.viaTunnel.down ? "warn" : "default"}>
-                  {c.viaTunnel.down ? `via tunnel on ${c.viaTunnel.viaHostName} (down)` : `via tunnel on ${c.viaTunnel.viaHostName}`}
-                </Chip>
-              )}
+              {c.viaTunnel && (() => {
+                const label = c.viaTunnel.down ? `via tunnel on ${c.viaTunnel.viaHostName} (down)` : `via tunnel on ${c.viaTunnel.viaHostName}`;
+                const variant = c.viaTunnel.down ? "warn" : "default";
+                // Outside an engagement there is no Network to open: the note stays a plain chip.
+                if (!engagementId) return <Chip variant={variant}>{label}</Chip>;
+                return (
+                  <Link to={sectionPath(engagementId, "network")} state={{ hostId: c.viaTunnel.viaHostId }} className="rounded-full focus-visible:outline-1 focus-visible:outline-accent [&>span]:hover:underline [&>span]:underline-offset-2">
+                    <Chip variant={variant}>{label}</Chip>
+                  </Link>
+                );
+              })()}
             </ChipSet>
           )}
         </li>

@@ -287,8 +287,8 @@ export function EngagementStuckCheck({ engagementId }: { engagementId: string })
   if (!loaded || !hosts || !eng || !credentials || !attempts || !usernames) return <LoadingState label="the stuck check" />;
 
   const go = (l: StuckLine) => {
-    // Engagement-placed steps (the pivot tunnel) are not on the host view: open the engagement checklist on that host's row.
-    if (l.hostId && l.goalId && PIVOT_IDS.has(l.goalId)) void navigate(sectionPath(engagementId, "checklist"), { state: { goalId: l.goalId, hostId: l.hostId } });
+    // Pivot leads (dual-homed, no tunnel) are answered in Network, with that host focused.
+    if (l.hostId && l.goalId && PIVOT_IDS.has(l.goalId)) void navigate(sectionPath(engagementId, "network"), { state: { hostId: l.hostId } });
     else if (l.hostId) void navigate(`/e/${engagementId}/h/${l.hostId}`, l.goalId ? { state: { goalId: l.goalId } } : undefined);
     else if (l.goalId) document.querySelector(`[data-goal-id="${l.goalId}"]`)?.scrollIntoView?.({ block: "center" });
   };

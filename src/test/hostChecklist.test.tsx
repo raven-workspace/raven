@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -205,6 +205,21 @@ describe("host checklist tab", () => {
     const notes = await screen.findAllByText(/via tunnel on web07/);
     expect(notes[0]).toHaveClass("text-warn");
     expect(notes[0]).toHaveTextContent("(down)");
+  });
+
+  it("the tunnel note is a link: clicking it opens Network with the tunnel's host focused", async () => {
+    const user = userEvent.setup();
+    m.tunnelsList.mockResolvedValue([
+      { id: "t1", engagementId: "e1", kind: "ligolo", viaHostId: "h2", subnets: ["10.10.10.0/24"], callbackIp: "10.20.0.1", status: "up", notes: null, createdAt: 1, updatedAt: 1 },
+    ]);
+    m.hopsList.mockResolvedValue([]);
+    mount();
+    await openChecklist(user);
+    const link = (await screen.findAllByRole("link", { name: /via tunnel on web07/ }))[0]!;
+    expect(link).toHaveAttribute("href", "/e/e1/s/network");
+    await user.click(link);
+    const node = (await screen.findByRole("link", { name: "web07" })).closest<HTMLElement>("[data-host-node]")!;
+    await waitFor(() => expect(node).toHaveAttribute("data-focused"));
   });
 
   it("an up tunnel is not styled as a warning", async () => {
