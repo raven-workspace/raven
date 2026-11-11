@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { buildPath, type NetworkPath } from "../../engines/network/path";
 import { api } from "../../lib/api";
+import { cx } from "../../lib/cx";
 import { useWidth } from "../../lib/useWidth";
 import type { Host } from "../../types/host";
 import type { Hop, Tunnel } from "../../types/network";
@@ -10,7 +11,7 @@ import { Button, labelClass, queryState } from "../../ui";
 import { useHops, useTunnels } from "../checklist/queries";
 import { useHosts } from "../hosts/queries";
 import { HopForm } from "./HopForm";
-import { CONNECTOR_PX, HostNode, NODE_PX, PathTree, type NodeContext } from "./PathTree";
+import { CONNECTOR_PX, HostNode, NODE_MAX_PX, NODE_PX, PathTree, type NodeContext } from "./PathTree";
 import { TunnelForm } from "./TunnelForm";
 
 /** How long an arrival's node keeps its accent outline. */
@@ -20,8 +21,12 @@ type Dialog =
   | { kind: "hop"; hop?: Hop }
   | { kind: "tunnel"; tunnel?: Tunnel; viaHostId?: string };
 
-/** The tree's width: one fixed-width node per column (Kali plus each hop depth), a connector between columns. */
+/** The tree's narrowest width: one node per column (Kali plus each hop depth), a connector between columns. */
 const treeWidth = (columns: number) => (columns + 1) * NODE_PX + columns * CONNECTOR_PX;
+
+/** The shared node width: the pane's spare room goes to the nodes (up to NODE_MAX_PX), so fewer names and subnets truncate. */
+const nodeWidth = (width: number | undefined, columns: number) =>
+  width === undefined ? NODE_PX : Math.max(NODE_PX, Math.min(NODE_MAX_PX, Math.floor((width - columns * CONNECTOR_PX) / (columns + 1))));
 
 /**
  * The attack path: Kali, then hosts by hop depth, each node saying how it was reached and carrying its tunnels, with
@@ -101,6 +106,7 @@ export function NetworkSection() {
       aria-label="Network"
       ref={setRoot}
       className="grid min-w-0 gap-6"
+      style={{ "--node-w": `${nodeWidth(width, path.columns)}px` } as CSSProperties}
     >
       <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
         <h3 className={`m-0 ${labelClass}`}>Network</h3>
@@ -108,7 +114,8 @@ export function NetworkSection() {
         <Button onClick={() => setDialog({ kind: "tunnel" })}>Add tunnel</Button>
       </div>
 
-      <div ref={pathRef} className="grid gap-3 overflow-x-auto">
+      {/* 4px of room (padding, cancelled by the margin) so a focused node's outline is not clipped by the scroller. */}
+      <div ref={pathRef} className="-m-1 grid gap-3 overflow-x-auto p-1">
         <PathTree path={path} attackerIp={settings.data!.attackerIp.trim()} variant={variant} ctx={ctx} />
         {path.roots.length === 0 && <p className="m-0 text-meta text-muted-2">Your first foothold records your first hop.</p>}
       </div>
@@ -116,10 +123,11 @@ export function NetworkSection() {
       {path.unreached.length > 0 && (
         <section aria-label="Not reached" className="grid gap-3">
           <h4 className={`m-0 ${labelClass}`}>Not reached</h4>
-          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,13rem)] gap-3 p-0">
+          {/* Tree: the tree's node width. List: as wide as the list, so both end on the same edge. */}
+          <ul className={cx("m-0 grid list-none gap-3 p-0", variant === "tree" ? "grid-cols-[repeat(auto-fill,var(--node-w))]" : "max-w-144 grid-cols-[repeat(auto-fill,minmax(13rem,1fr))]")}>
             {path.unreached.map((h) => (
               <li key={h.id} className="grid">
-                <HostNode host={h} ctx={ctx} dim />
+                <HostNode host={h} ctx={ctx} dim wide={variant === "list"} />
               </li>
             ))}
           </ul>

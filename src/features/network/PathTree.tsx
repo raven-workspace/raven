@@ -18,20 +18,30 @@ export interface NodeContext {
   onNeedsTunnel: (host: Host) => void;
 }
 
-/** Every node is this wide (13rem), so hop depths line up as columns across the whole tree. */
+/** The narrowest a tree node gets (13rem). Every node in a tree shares one width, so hop depths line up as columns. */
 export const NODE_PX = 208;
+/** The widest a tree node gets when the pane has room to spare (16rem): long names and subnets show whole. */
+export const NODE_MAX_PX = 256;
 /** The connector between a node and its children: a 16px stub into the spine, then a 24px stub into the child. */
 export const CONNECTOR_PX = 40;
 
-/** The node's box: one hairline card, fixed width and padding. Dashed when the host is not reached. */
+/** The tree's shared node width, set on the section; 13rem when nothing sets it. */
+const NODE_W = "w-[var(--node-w,13rem)]";
+/**
+ * The node's box: one hairline card. In the tree every node is the section's `--node-w` wide; in the list a node
+ * fills its row, so right edges line up. Dashed when the host is not reached.
+ */
 const BOX =
-  "grid w-52 min-w-0 gap-1 rounded border bg-bg px-3 py-2 outline-offset-2 outline-accent " +
+  "grid min-w-0 gap-1 rounded border bg-bg px-3 py-2 outline-offset-2 outline-accent " +
   "transition-[outline-color] duration-150 motion-reduce:transition-none data-focused:outline-2 data-focused:outline-solid";
 
-/** A tunnel through this host: kind, subnets and up/down in one badge that edits it. Down is warn. Long subnet lists truncate; all are in the tooltip. */
+/** A tunnel through this host: kind, subnets and up/down in one badge that edits it. Down is warn. The first subnet shows, then `+N` for the rest; all are in the tooltip. */
 function TunnelChip({ tunnel, onEdit }: { tunnel: Tunnel; onEdit: () => void }) {
   const kind = tunnelKindLabel(tunnel.kind);
   const subnets = tunnel.subnets.join(", ");
+  // The first subnet shows whole; the rest are a count, listed in the tooltip.
+  const [first, ...rest] = tunnel.subnets;
+  const more = rest.length;
   return (
     <Tooltip
       content={
@@ -50,8 +60,9 @@ function TunnelChip({ tunnel, onEdit }: { tunnel: Tunnel; onEdit: () => void }) 
       >
         <Chip variant={tunnel.status === "down" ? "warn" : "default"} className="max-w-full group-hover:bg-surface-hi">
           <span>{kind}</span>
-          {subnets && <span aria-hidden className="h-3 w-px shrink-0 bg-line-strong" />}
-          {subnets && <span className="min-w-0 truncate font-mono">{subnets}</span>}
+          {first && <span aria-hidden className="h-3 w-px shrink-0 bg-line-strong" />}
+          {first && <span className="min-w-0 truncate font-mono">{first}</span>}
+          {more > 0 && <span className="shrink-0">+{more}</span>}
           <span aria-hidden className="h-3 w-px shrink-0 bg-line-strong" />
           <span>{tunnel.status}</span>
         </Chip>
@@ -60,8 +71,8 @@ function TunnelChip({ tunnel, onEdit }: { tunnel: Tunnel; onEdit: () => void }) 
   );
 }
 
-/** Longest `via` shown whole in a node; a longer one truncates and reads in full in the tooltip. */
-const VIA_CH = 22;
+/** Longest `via` sure to show whole in a node's two lines; a longer one may clamp, so the tooltip repeats it. */
+const VIA_CH = 40;
 
 /** How the host was reached, under its IP: `via {how}` as a text button that edits the hop, or `not recorded`. */
 function ViaLine({ node, ctx }: { node: PathNode; ctx: NodeContext }) {
@@ -81,9 +92,9 @@ function ViaLine({ node, ctx }: { node: PathNode; ctx: NodeContext }) {
       <button
         type="button"
         onClick={() => ctx.onEditHop(hop)}
-        className="ml-6 block min-w-0 cursor-default truncate rounded-sm border-0 bg-transparent p-0 text-left text-meta text-muted hover:text-fg"
+        className="ml-6 block min-w-0 cursor-default rounded-sm border-0 bg-transparent p-0 text-left text-meta text-muted hover:text-fg"
       >
-        via {hop.via}
+        <span className="line-clamp-2">via {hop.via}</span>
       </button>
     </Tooltip>
   );
@@ -93,16 +104,23 @@ function ViaLine({ node, ctx }: { node: PathNode; ctx: NodeContext }) {
  * A host on the path (or in the Not reached tray): glyph and name to its page, IP, how it was reached (`node`, on the
  * path only), and its tunnels or the need for one.
  */
-export function HostNode({ host, node, ctx, dim = false }: { host: Host; node?: PathNode; ctx: NodeContext; dim?: boolean }) {
+export function HostNode({ host, node, ctx, dim = false, wide = false }: {
+  host: Host;
+  node?: PathNode;
+  ctx: NodeContext;
+  dim?: boolean;
+  /** The list's node: as wide as its row (the list is capped at 36rem), with the IP on the name's line. */
+  wide?: boolean;
+}) {
   const tunnels = ctx.tunnelsVia(host.id);
   const needsTunnel = host.dualHomed && tunnels.length === 0;
   return (
     <div
       data-host-node={host.id}
       data-focused={ctx.focusedId === host.id ? "" : undefined}
-      className={cx(BOX, "border-line-2", dim && "border-dashed")}
+      className={cx(BOX, wide ? "w-full" : NODE_W, "border-line-2", dim && "border-dashed")}
     >
-      <div className="grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2">
+      <div className={cx("grid items-center gap-2", wide ? "grid-cols-[16px_minmax(0,1fr)_auto]" : "grid-cols-[16px_minmax(0,1fr)]")}>
         <HostGlyph column={host.boardColumn} />
         <Link
           to={`/e/${ctx.engagementId}/h/${host.id}`}
@@ -111,8 +129,9 @@ export function HostNode({ host, node, ctx, dim = false }: { host: Host; node?: 
         >
           {host.name}
         </Link>
+        {wide && host.ip && <IpText ip={host.ip} />}
       </div>
-      {host.ip && <span className="pl-6 text-meta text-muted tabular-nums">{host.ip}</span>}
+      {!wide && host.ip && <IpText ip={host.ip} className="pl-6" />}
       {node && <ViaLine node={node} ctx={ctx} />}
       {(tunnels.length > 0 || needsTunnel) && (
         <ChipSet className="min-w-0">
@@ -135,15 +154,21 @@ export function HostNode({ host, node, ctx, dim = false }: { host: Host; node?: 
   );
 }
 
+/** An IP under the name (tree) or at the end of the name's line (list). */
+function IpText({ ip, className }: { ip: string; className?: string }) {
+  return <span className={cx("text-meta text-muted tabular-nums", className)}>{ip}</span>;
+}
+
 /** The root: Kali, with the attacker IP from Settings when it is set. */
-function KaliNode({ attackerIp }: { attackerIp: string }) {
+function KaliNode({ attackerIp, wide }: { attackerIp: string; wide: boolean }) {
   return (
-    <div className={cx(BOX, "border-line-2")}>
-      <div className="grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2">
+    <div className={cx(BOX, wide ? "w-full" : NODE_W, "border-line-2")}>
+      <div className={cx("grid items-center gap-2", wide ? "grid-cols-[16px_minmax(0,1fr)_auto]" : "grid-cols-[16px_minmax(0,1fr)]")}>
         <BrandIcon brand="kali" />
         <span className="text-body font-semibold text-fg">Kali</span>
+        {wide && attackerIp && <IpText ip={attackerIp} />}
       </div>
-      {attackerIp && <span className="pl-6 text-meta text-muted tabular-nums">{attackerIp}</span>}
+      {!wide && attackerIp && <IpText ip={attackerIp} className="pl-6" />}
     </div>
   );
 }
@@ -188,8 +213,8 @@ function ListLevel({ id, kids, ctx }: { id: string; kids: PathNode[]; ctx: NodeC
   return (
     <ol data-children-of={id} className="m-0 ml-4 grid list-none gap-2 border-l border-line-2 p-0 pl-4">
       {kids.map((k) => (
-        <li key={k.host.id} className="grid justify-items-start gap-2">
-          <HostNode host={k.host} node={k} ctx={ctx} />
+        <li key={k.host.id} className="grid gap-2">
+          <HostNode host={k.host} node={k} ctx={ctx} wide />
           {k.children.length > 0 && <ListLevel id={k.host.id} kids={k.children} ctx={ctx} />}
         </li>
       ))}
@@ -204,10 +229,10 @@ export function PathTree({ path, attackerIp, variant, ctx }: {
   variant: "tree" | "list";
   ctx: NodeContext;
 }) {
-  const kali = <KaliNode attackerIp={attackerIp} />;
+  const kali = <KaliNode attackerIp={attackerIp} wide={variant === "list"} />;
   return (
-    <ol aria-label="Attack path" data-variant={variant} className="m-0 grid list-none justify-start p-0">
-      <li className="grid justify-items-start gap-2">
+    <ol aria-label="Attack path" data-variant={variant} className={cx("m-0 grid list-none p-0", variant === "tree" ? "justify-start" : "max-w-144")}>
+      <li className={cx("grid gap-2", variant === "tree" && "justify-items-start")}>
         {variant === "tree" ? (
           <Branch head={kali} id="kali" kids={path.roots} ctx={ctx} />
         ) : (
