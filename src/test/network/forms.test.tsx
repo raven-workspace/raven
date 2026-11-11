@@ -80,10 +80,26 @@ describe("TunnelForm", () => {
     const dialog = await screen.findByRole("dialog", { name: "Edit tunnel" });
     await user.click(within(dialog).getByRole("button", { name: "Delete tunnel" }));
     expect(m.tunnelDelete).not.toHaveBeenCalled();
-    const confirm = await screen.findByRole("dialog", { name: "Delete the chisel tunnel via dc01?" });
+    const confirm = await screen.findByRole("dialog", { name: "Delete the Chisel tunnel via dc01?" });
     await user.click(within(confirm).getByRole("button", { name: "Delete tunnel" }));
     expect(m.tunnelDelete).toHaveBeenCalledWith("t1");
     await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("Esc in the delete confirm closes only the confirm; the next Esc closes the form", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    wrap(<TunnelForm engagementId="e1" hosts={[H1, H2]} tunnel={tunnel} onClose={onClose} />);
+    const dialog = await screen.findByRole("dialog", { name: "Edit tunnel" });
+    await user.click(within(dialog).getByRole("button", { name: "Delete tunnel" }));
+    await screen.findByRole("dialog", { name: "Delete the Chisel tunnel via dc01?" });
+    await user.keyboard("{Escape}");
+    await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: /^Delete the/ })).not.toBeInTheDocument());
+    expect(screen.getByRole("dialog", { name: "Edit tunnel" })).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalled();
+    expect(m.tunnelDelete).not.toHaveBeenCalled();
   });
 });
 

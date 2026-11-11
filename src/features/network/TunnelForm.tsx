@@ -102,7 +102,7 @@ export function TunnelForm({ engagementId, hosts, tunnel, initial, onClose }: {
       </form>
       {tunnel && deleting && (
         <ConfirmDelete
-          title={`Delete the ${tunnel.kind} tunnel via ${hosts.find((h) => h.id === tunnel.viaHostId)?.name ?? "?"}?`}
+          title={`Delete the ${tunnelKindLabel(tunnel.kind)} tunnel via ${hosts.find((h) => h.id === tunnel.viaHostId)?.name ?? "?"}?`}
           label="Delete tunnel"
           error={deleteError}
           pending={remove.isPending}
