@@ -221,7 +221,8 @@ export function PayloadView({ fits, misfits, marks = {}, index, onIndex, ordered
     onIndex(Math.max(0, Math.min(fits.length - 1, to)));
   };
   return (
-    <div className="grid content-start gap-4">
+    // Positioned, so the sr-only heading below stays inside whichever pane scrolls this view.
+    <div className="relative grid content-start gap-4">
       <div className="grid gap-2">
         {fitsLine && <p className="m-0 text-meta text-muted">{fitsLine}</p>}
         <div className="grid overflow-hidden rounded-md border border-line-2">

@@ -179,7 +179,7 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
             <>
               <dt className="text-muted">privs</dt>
               <dd className="m-0 min-w-0">
-                <ChipSet className="text-code">
+                <ChipSet className="gap-y-0 text-code">
                   {identity.privileges.map((p) => (
                     <span key={p} className={isNotablePriv(p) ? "text-accent" : "text-muted"}>{p}</span>
                   ))}
@@ -191,7 +191,7 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
             <>
               <dt className="text-muted">groups</dt>
               <dd className="m-0 min-w-0">
-                <ChipSet className="text-code">
+                <ChipSet className="gap-y-0 text-code">
                   {groups.map((g) => <span key={g} className="text-accent">{g}</span>)}
                   {otherGroups > 0 && <span className="text-muted">{groups.length > 0 ? `+${otherGroups} more` : `${otherGroups} group${otherGroups === 1 ? "" : "s"}`}</span>}
                 </ChipSet>

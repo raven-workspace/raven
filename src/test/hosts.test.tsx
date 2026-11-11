@@ -147,7 +147,7 @@ describe("hosts", () => {
     mount();
     await within(await screen.findByRole("navigation", { name: "Engagement" })).findByRole("link", { name: /dc01/ });
     expect(m.hostsList).toHaveBeenCalledTimes(1);
-    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Edit engagement" }));
     const dialog = await screen.findByRole("dialog", { name: "Edit engagement" });
     hosts = [...hosts, host({ id: "h4", name: "new04", ip: "10.10.10.20" })];
     await user.click(within(dialog).getByRole("button", { name: "Save" }));
@@ -159,7 +159,7 @@ describe("hosts", () => {
     m.hostUpdate.mockImplementation(async (id, input) => ({ ...hosts.find((h) => h.id === id)!, name: input.name }));
     mount("/e/e1/h/h1");
     const header = await screen.findByRole("region", { name: "Host" });
-    await user.click(within(header).getByRole("button", { name: "Edit" }));
+    await user.click(within(header).getByRole("button", { name: "Edit host" }));
     const dialog = await screen.findByRole("dialog", { name: "Edit host" });
     expect(within(dialog).queryByRole("radiogroup", { name: "Part of the AD set" })).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Save" }));
@@ -201,7 +201,7 @@ describe("hosts", () => {
     const header = await screen.findByRole("region", { name: "Host" });
     expect(within(header).getByText("AD set")).toBeInTheDocument();
     const openDialog = async () => {
-      await user.click(within(header).getByRole("button", { name: "Edit" }));
+      await user.click(within(header).getByRole("button", { name: "Edit host" }));
       const dialog = await screen.findByRole("dialog", { name: "Edit host" });
       return { dialog, group: within(dialog).getByRole("radiogroup", { name: "Part of the AD set" }) };
     };

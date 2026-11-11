@@ -1,10 +1,11 @@
-import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, CaretRightIcon, PencilSimpleIcon, TrashIcon } from "@phosphor-icons/react";
 import { useState } from "react";
 import { HOST_IP } from "../../engines/attribution";
 import { shortHostName } from "../../lib/hostName";
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
 import { Button, Chip, Dialog, IconButton, Toolbar } from "../../ui";
+import { cx } from "../../lib/cx";
 import { EditEntryDialog } from "./EditEntryDialog";
 import { KIND_LABELS } from "./kindLabels";
 import { LogEntryBody } from "./LogEntryBody";
@@ -24,8 +25,8 @@ function unknownTarget(entry: LogEntry, hosts: Host[]): string | null {
   return ip;
 }
 
-/** Host chips shown on a row; the rest fold into one "+N" so a many-host entry never squeezes its title. */
-const MAX_CHIPS = 2;
+/** Host names shown on a row; the rest fold into one "+N" so a many-host entry never squeezes its title. */
+const MAX_HOSTS = 2;
 
 interface LogEntryRowProps {
   entry: LogEntry;
@@ -76,7 +77,7 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
         if (!picking) setOpen((o) => !o);
         else if (!stepNumber) onPick(entry.id);
       }}
-      className={`grid w-full items-center gap-3 px-1 py-2 text-left cursor-default hover:bg-surface focus-visible:bg-surface ${cols}`}
+      className={`grid w-full items-center gap-3 px-1 py-2 text-left cursor-default ${cols}`}
     >
       <time dateTime={d.toISOString()} title={d.toLocaleString()} className="text-code text-muted">
         {`${pad(d.getHours())}:${pad(d.getMinutes())}`}
@@ -86,16 +87,17 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
       {hasExtras && (
         <span className={`grid grid-flow-col auto-cols-max items-center gap-2 ${picking ? "min-w-0 justify-end overflow-hidden" : ""}`}>
           {target && <span className="whitespace-nowrap font-mono text-code text-muted">{target}</span>}
-          {names.slice(0, MAX_CHIPS).map((n) => (
-            <Chip key={n} className={`${picking ? "max-w-[10ch]" : "max-w-[16ch]"} truncate`}>
-              <span className="truncate">{n}</span>
-            </Chip>
+          {/* Host names are metadata, so plain text; chips are for state, like "private" (DESIGN.md Chips). */}
+          {names.slice(0, MAX_HOSTS).map((n) => (
+            <span key={n} title={n} className={cx("truncate text-meta text-muted-2", picking ? "max-w-[10ch]" : "max-w-[16ch]")}>
+              {n}
+            </span>
           ))}
-          {names.length > MAX_CHIPS && (
-            <Chip title={names.slice(MAX_CHIPS).join(", ")}>
-              +{names.length - MAX_CHIPS}
-              <span className="sr-only">, also {names.slice(MAX_CHIPS).join(", ")}</span>
-            </Chip>
+          {names.length > MAX_HOSTS && (
+            <span title={names.slice(MAX_HOSTS).join(", ")} className="relative whitespace-nowrap text-meta text-muted">
+              +{names.length - MAX_HOSTS}
+              <span className="sr-only">, also {names.slice(MAX_HOSTS).join(", ")}</span>
+            </span>
           )}
           {entry.private && <Chip>private</Chip>}
           {entry.returnedNothing &&
@@ -117,32 +119,34 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
 
   return (
     <li className="border-b border-line">
-      {picking ? (
-        <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center">
-          <IconButton
-            icon={Caret}
-            label={open ? "Hide the entry" : "Show the entry"}
-            aria-label={open ? `Hide ${entry.title}` : `Show ${entry.title}`}
-            aria-expanded={open}
-            onClick={() => setOpen((o) => !o)}
-          />
-          {row}
-        </div>
-      ) : (
-        row
-      )}
+      {/* An open entry's Edit and Delete end its own row, beside the title, however long the entry below runs. */}
+      {/* The highlight is the whole row's, so it runs under an open entry's Edit and Delete too. */}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center hover:bg-surface has-[:focus-visible]:bg-surface">
+        {picking ? (
+          <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center">
+            <IconButton
+              icon={Caret}
+              label={open ? "Hide the entry" : "Show the entry"}
+              aria-label={open ? `Hide ${entry.title}` : `Show ${entry.title}`}
+              aria-expanded={open}
+              onClick={() => setOpen((o) => !o)}
+            />
+            {row}
+          </div>
+        ) : (
+          row
+        )}
+        {open && (
+          <Toolbar className="pl-2">
+            <IconButton icon={PencilSimpleIcon} label="Edit" onClick={() => setEditing(true)} />
+            <IconButton icon={TrashIcon} label="Delete" tone="destructive" onClick={() => setDeleting(true)} />
+          </Toolbar>
+        )}
+      </div>
       {open && (
         <div className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-3 px-1 pb-3">
           <div className="col-start-2 grid min-w-0 gap-3">
             <LogEntryBody entry={entry} />
-            <Toolbar>
-              <Button size="sm" onClick={() => setEditing(true)}>
-                Edit
-              </Button>
-              <Button size="sm" variant="quiet-danger" onClick={() => setDeleting(true)}>
-                Delete
-              </Button>
-            </Toolbar>
           </div>
         </div>
       )}

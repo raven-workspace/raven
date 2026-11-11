@@ -166,8 +166,9 @@ describe("Payloads drawer", () => {
     expect(await d.findByRole("heading", { name: "PowerShell base64 (-e)" })).toBeInTheDocument();
     expect(d.getByRole("button", { name: "OS: Windows" })).toBeInTheDocument();
     expect(d.getByRole("button", { name: "Paste into: Web shell ?cmd=" })).toBeInTheDocument();
-    expect(d.getByText(/OS from nmap \(Microsoft IIS httpd 10\.0 on 80\)/)).toBeInTheDocument();
-    expect(d.getByText(/paste context from your 14:02 log entry/)).toBeInTheDocument();
+    // Where each value came from is in its picker's tooltip.
+    expect(d.getByRole("button", { name: /^OS:/ })).toHaveAttribute("title", expect.stringMatching(/^OS from nmap \(Microsoft IIS httpd 10\.0 on 80\)/));
+    expect(d.getByRole("button", { name: /^Paste into:/ })).toHaveAttribute("title", expect.stringMatching(/^Paste context from your 14:02 log entry/));
     expect(d.getByLabelText("Command: Listener")).toHaveTextContent(`penelope -O -p ${LPORT}`);
     expect(payloadText(d)).toBe(buildPayload(def("ps-b64"), "webshell-param", { LHOST, LPORT }).text);
     expect(within(d.getByRole("listbox", { name: "Fits" })).getAllByRole("option")).toHaveLength(6);
@@ -209,7 +210,7 @@ describe("Payloads drawer", () => {
     await d.findByRole("heading", { name: "PowerShell base64 (-e)" });
     expect(payloadText(d)).toBe(buildPayload(def("ps-b64"), "webshell-param", { LHOST, LPORT }).text);
     expect(d.getByRole("button", { name: `Port: ${LPORT}` })).toBeInTheDocument();
-    expect(d.getByText(/port from Settings/)).toBeInTheDocument();
+    expect(d.getByRole("button", { name: /^Port:/ })).toHaveAttribute("title", expect.stringMatching(/^Port from Settings/));
     expect(d.getByLabelText("Command: Listener")).toHaveTextContent(`penelope -O -p ${LPORT}`);
     // The field stays empty while you type a new value, with Settings' value as the hint.
     const field = d.getByRole("textbox", { name: "LHOST" });

@@ -189,6 +189,18 @@ A section view fits its primary job in one viewport at 900×800, and the whole p
 - The only shadow is on floating menus and popovers: `0 12px 32px rgba(0,0,0,.6)`.
 - No glows, gradients or glass.
 
+## The lock screen
+
+The lock screen (and the one-time setup screen, which shares it) is the one place Raven performs. It is sparse, seen once per session, and has nothing to compete with, so it is the single exception to "accent is meaning" and "no decorative motion". Nothing here sets a precedent for other views.
+
+- **Ciphertext field.** A canvas of faint hex pairs (`--line`, `--line-2`, rarely `--line-strong`) in JetBrains Mono, with a dithered clearing round the form. It decodes outward from the form once on entry (about 1s), then holds still.
+- **Wordmark.** The full-width wordmark is the screen's only wordmark (the title bar carries none here). Each letter cycles through cipher glyphs, then snaps to its shape.
+- **Pulse.** Each keystroke sends an accent ring out from the focused password field's centre. A wrong password sends a `--warn` ring and a small shake; a setup validation error sends the `--warn` ring.
+- **Sweep.** On unlock, and when setup creates the vault, an accent ring clears the field outward from the password field and reveals the app (about 400ms). It plays over the app and never delays it.
+- **Never blocks.** The password field is focused at once and accepts typing during the intro.
+- **Reduced motion.** The field is drawn settled; there are no rings and no sweep.
+- **Calm on failure.** The damaged-database restore panel has no field.
+
 ## Shapes
 
 - Radius 6px for controls, 8px for panels, dialogs and cards, and full for chips.
@@ -303,14 +315,21 @@ Each table declares its column policy; automatic layout never decides.
 
   An unknown required value shows an amber "Pick one" inside the control.
 
+  A **set** of them (the Payloads drawer's host, OS, paste context, port, then callbacks, filter and tools) isn't a table: it flows like the status strip, as runs of borderless "Label value ⌄" triggers (the background shows on hover), 24px apart, wrapping only when there's no room, never forced into columns. Where each value came from is in its tooltip, not a line of text.
+
 ### Status strip and headers
 
 - The status strip is a grid of labelled cells (`grid-auto-flow: column`, 24px gaps). Each cell is a label and a value, `nowrap`.
 - Cells come in a fixed order of importance: timebox, rooted, flags, Metasploit lock, threads, cleanup, LHOST.
-- When space runs out, secondary parts drop first ("of 23h 45m", then the progress bar), then whole cells in this order: Cleanup, Threads, Metasploit lock, LHOST. LHOST is copied often during an exam, so it outlasts the cells shown before it. Nothing wraps or ellipsizes mid-value.
+- When space runs out, secondary parts drop first ("of 23h 45m", then the progress bar), then whole cells in this order: Cleanup, Threads, the engagement name (host pages), Metasploit lock, LHOST. LHOST is copied often during an exam, so it outlasts the cells shown before it. Nothing wraps or ellipsizes mid-value.
 - The strip carries no hint line.
-- **Headers** (engagement, host, drawer) use `grid-cols-[minmax(0,1fr)_auto]`. Row 1 is the title and its actions; row 2 is the metadata line. The title gets the slack track. Under 1000px, actions collapse to icon buttons before the title truncates.
-- **Title bar:** every destination uses the same control style. The controls sit on the right, with their right edge on the main content column's right edge (the same x where the page header's actions end below). Order: Arsenal, Manual, Payloads, Search, Lock (with the `Lock` icon), then Settings last as a `Gear` icon button.
+- **Headers** (engagement, host, drawer): row 1 is the title and its actions; row 2 is the metadata line. On the engagement and host headers the actions are icon buttons right after the title (Edit `PencilSimple`; Archive `Archive`), never out at the pane's far edge where they lose what they act on; the title truncates first. Drawer headers keep `grid-cols-[minmax(0,1fr)_auto]` with the close button at the end.
+- **A host page has no engagement header.** The status strip leads with the engagement's name (`body` 600, `--fg-2`, a link back to the board, truncated at 28ch); its details and actions stay on the engagement's own sections. The host's name is the page's only `title`, and the host header carries no rule of its own. Its Edit host pencil sits right after the name, not at the pane's far edge. Stuck? ends the work column's tab row on every tab, after that tab's own control.
+- **Title bar:** its controls are chrome, not page buttons: borderless, with the `--surface-hi` background only on hover. The control for the page on screen (Manual, Settings) or an open drawer (Arsenal, Payloads) sits on `--surface` in accent. The controls sit on the right, with their right edge on the main content column's right edge (the same x where the page header's actions end below), in three runs set apart by 16px of space, never a divider:
+  - references: Arsenal, Manual, Payloads (icon, word, inline key);
+  - Search (icon, word, ⌘K);
+  - the app itself: Shortcuts (`Question` icon), Lock and Settings, as icon buttons with the key in the tooltip. Shortcuts lists the page's own keys first (`usePageShortcuts`), then the keys that work everywhere; the `?` key opens it unless focus is in a surface with its own list (a drawer, the Manual, the palette) or a dialog. Pages carry no hint row of their own.
+- **Drawers dock under the title bar** (`BELOW_TITLE_BAR`), never over it, so its controls stay whole and the window keeps its drag region. A modal panel with an overlay (Capture) covers the whole window.
 
 ### Navigation
 

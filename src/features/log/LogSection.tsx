@@ -6,10 +6,12 @@ import type { LogKind } from "../../types/log";
 import { EmptyState, Select, queryState } from "../../ui";
 import { useHosts } from "../hosts/queries";
 import { KIND_LABELS } from "./kindLabels";
+import { LogDays } from "./LogDays";
 import { LogEntryRow } from "./LogEntryRow";
 import { useLog } from "./queries";
 
 const KINDS: LogKind[] = ["command", "screenshot", "http", "note", "flag"];
+
 const sel = "h-7 w-auto";
 const filter = "grid grid-cols-[auto_auto] items-center gap-2";
 const filterLabel = "whitespace-nowrap text-meta text-muted-2";
@@ -56,11 +58,7 @@ export function LogSection() {
         </div>
         <OrderButton className="justify-self-end" order={order} onChange={setOrder} />
       </div>
-      <ul className="m-0 list-none p-0 border-t border-line">
-        {shown.map((e) => (
-          <LogEntryRow key={e.id} entry={e} hosts={hosts} />
-        ))}
-      </ul>
+      <LogDays entries={shown} row={(e) => <LogEntryRow key={e.id} entry={e} hosts={hosts} />} />
       {shown.length === 0 && log.isSuccess && <p className="m-0 text-meta text-muted">No entries match these filters.</p>}
     </section>
   );

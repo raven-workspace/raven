@@ -107,6 +107,22 @@ export function collectLayoutIssues(): RawIssue[] {
     }
   }
 
+  // An absolutely placed element (an sr-only label, a badge) whose containing block lies outside its nearest scroll
+  // pane escapes it: it doesn't scroll with its row and grows an outer scroller instead, so wheeling past the end of
+  // the pane moves the whole layout. The pane, or something inside it, must be positioned.
+  for (const el of Array.from(document.body.querySelectorAll<HTMLElement>("*"))) {
+    if (getComputedStyle(el).position !== "absolute") continue;
+    let pane: HTMLElement | null = null;
+    for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+      const o = getComputedStyle(a).overflowY;
+      if (o === "auto" || o === "scroll") { pane = a; break; }
+    }
+    const cb = el.offsetParent;
+    if (pane && cb && !pane.contains(cb)) {
+      add("document-scroll", el, `absolute element escapes its scroll pane (containing block ${cb.tagName.toLowerCase()} is outside it): position the pane`);
+    }
+  }
+
   const all = Array.from(document.body.querySelectorAll("*")).filter(isVisible);
 
   for (const el of all) {

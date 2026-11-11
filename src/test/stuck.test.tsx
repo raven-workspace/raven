@@ -102,7 +102,7 @@ describe("stuck view", () => {
     const user = userEvent.setup();
     mount();
     const header = await screen.findByRole("region", { name: "Host" });
-    await user.click(within(header).getByRole("button", { name: "Edit" }));
+    await user.click(within(header).getByRole("button", { name: "Edit host" }));
     const name = await screen.findByLabelText(/^Name/);
     await user.click(name);
     await user.keyboard("h");

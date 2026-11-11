@@ -177,10 +177,22 @@ describe("J: next open step", () => {
     expect(screen.getByRole("button", { name: "Full checklist" })).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("is listed in the host page hint line", async () => {
+  it("is listed in the title bar's shortcut list under This host, with the keys that work everywhere", async () => {
+    const user = userEvent.setup();
     mount([]);
-    const hints = await screen.findByLabelText("Host shortcuts");
-    expect(hints).toHaveTextContent("J");
-    expect(hints).toHaveTextContent("next step");
+    await screen.findByRole("region", { name: "Host" });
+    await user.click(screen.getByRole("button", { name: "Shortcuts" }));
+    const page = await screen.findByRole("region", { name: "This host" });
+    expect(page).toHaveTextContent("J");
+    expect(page).toHaveTextContent("next step");
+    expect(screen.getByRole("region", { name: "Everywhere" })).toHaveTextContent("Arsenal");
+  });
+
+  it("? opens the shortcut list from the host page", async () => {
+    const user = userEvent.setup();
+    mount([]);
+    await screen.findByRole("region", { name: "Host" });
+    await user.keyboard("?");
+    expect(await screen.findByRole("region", { name: "This host" })).toBeInTheDocument();
   });
 });

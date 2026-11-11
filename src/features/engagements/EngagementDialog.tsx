@@ -64,6 +64,9 @@ function draftFrom(e: Engagement | undefined): Draft {
   };
 }
 
+/** An empty date field shows its format ("yyyy-mm-dd") as the placeholder colour, not as a value. */
+const emptyDate = (v: string) => (v === "" ? "text-faint! focus:text-fg!" : undefined);
+
 const orNull = (s: string) => (s.trim() === "" ? null : s.trim());
 const sentence = (s: string) => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
 
@@ -124,7 +127,7 @@ function KindPicker({
     group?.querySelector<HTMLElement>(`[data-kind="${next.value}"]`)?.focus();
   };
   return (
-    <div role="radiogroup" aria-labelledby={labelId} className="grid w-fit grid-flow-col rounded-sm border border-line-2">
+    <div role="radiogroup" aria-labelledby={labelId} className="grid h-8 w-fit grid-flow-col rounded-sm border border-line-2">
       {KINDS.map((k, i) => {
         const on = k.value === value;
         return (
@@ -138,9 +141,12 @@ function KindPicker({
             onClick={() => onChange(k.value)}
             onKeyDown={(e) => move(e, i)}
             className={cx(
-              "h-8 cursor-default px-3 text-body transition-colors duration-100",
+              "h-full cursor-default px-3 text-body transition-colors duration-100",
+              i === 0 && "rounded-l-sm",
+              i === KINDS.length - 1 && "rounded-r-sm",
               i > 0 && "border-l border-line-2",
-              on ? "bg-surface-hi text-fg shadow-[inset_0_-1px_0_var(--accent)]" : "text-muted-2 hover:text-fg",
+              // The same selected segment as the shared ToggleGroup: accent text on a faint accent wash.
+              on ? "bg-accent/10 text-accent" : "text-fg-2 hover:bg-surface-hi hover:text-fg",
             )}
           >
             {k.label}
@@ -148,6 +154,15 @@ function KindPicker({
         );
       })}
     </div>
+  );
+}
+
+/** Short context. The example is the placeholder, so the field costs one line. */
+function SubLabel({ value, onChange, error }: { value: string; onChange: (v: string) => void; error: string | undefined }) {
+  return (
+    <Field label="Sub-label" error={error}>
+      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder="AD + 3 standalone, assumed breach" />
+    </Field>
   );
 }
 
@@ -171,6 +186,7 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
   const [errors, setErrors] = useState<Partial<Record<FieldName | "form", string>>>({});
   const [deleting, setDeleting] = useState(false);
   const kindLabelId = useId();
+  const durationId = useId();
   const formId = useId();
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
 
@@ -240,39 +256,43 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
           <Input autoFocus value={d.name} onChange={(e) => set("name", e.target.value)} placeholder="Mock exam A" />
         </Field>
 
-        <div className="grid gap-2">
-          <span id={kindLabelId} className="block text-meta text-muted-2">
-            Kind
-          </span>
-          <KindPicker value={d.kind} onChange={(k) => set("kind", k)} labelId={kindLabelId} />
+        <div className="grid grid-cols-[max-content_minmax(0,1fr)] items-start gap-4">
+          <div className="grid gap-2">
+            <span id={kindLabelId} className="block text-meta text-muted-2">
+              Kind
+            </span>
+            <KindPicker value={d.kind} onChange={(k) => set("kind", k)} labelId={kindLabelId} />
+          </div>
+          {d.kind === "client" ? (
+            <Field label="Client" error={err("client")}>
+              <Input value={d.client} onChange={(e) => set("client", e.target.value)} placeholder="Acme Corp" />
+            </Field>
+          ) : (
+            <SubLabel value={d.subLabel} onChange={(v) => set("subLabel", v)} error={err("subLabel")} />
+          )}
         </div>
 
         {d.kind === "client" && (
-          <Field label="Client" error={err("client")}>
-            <Input value={d.client} onChange={(e) => set("client", e.target.value)} placeholder="Acme Corp" />
-          </Field>
+          <SubLabel value={d.subLabel} onChange={(v) => set("subLabel", v)} error={err("subLabel")} />
         )}
 
-        <Field label="Sub-label" hint="Short context, e.g. AD + 3 standalone, assumed breach" error={err("subLabel")}>
-          <Input value={d.subLabel} onChange={(e) => set("subLabel", e.target.value)} />
-        </Field>
-
         {exam && (
-          <div className="grid grid-cols-[1fr_auto] gap-3">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
             <Field label="Timebox start" hint="Leave empty until you start" error={err("timeboxStart")}>
               <Input
                 type="datetime-local"
                 mono
+                className={emptyDate(d.timeboxStart)}
                 value={d.timeboxStart}
                 onChange={(e) => set("timeboxStart", e.target.value)}
               />
             </Field>
-            <fieldset className="m-0 grid gap-2 border-0 p-0">
-              <legend className="mb-2 p-0 text-meta text-muted-2">
+            <div role="group" aria-labelledby={durationId} className="grid content-start gap-2">
+              <span id={durationId} className="block text-meta text-muted-2">
                 Duration
-              </legend>
+              </span>
               <div className="grid grid-flow-col items-center justify-start gap-2">
-                <div className="w-16">
+                <div className="w-14">
                   <Input
                     type="number"
                     mono
@@ -284,7 +304,7 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
                   />
                 </div>
                 <span className="text-meta text-muted">h</span>
-                <div className="w-16">
+                <div className="w-14">
                   <Input
                     type="number"
                     mono
@@ -299,32 +319,33 @@ function EngagementForm({ engagement, onClose }: { engagement: Engagement | unde
                 <span className="text-meta text-muted">m</span>
               </div>
               {err("timeboxMinutes") && <p className="m-0 text-meta text-warn">{err("timeboxMinutes")}</p>}
-            </fieldset>
+            </div>
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-4">
           <Field label="Start date" error={err("startsAt")}>
-            <Input type="date" mono value={d.startsAt} onChange={(e) => set("startsAt", e.target.value)} />
+            <Input type="date" mono className={emptyDate(d.startsAt)} value={d.startsAt} onChange={(e) => set("startsAt", e.target.value)} />
           </Field>
           <Field label="End date" error={err("endsAt")}>
-            <Input type="date" mono value={d.endsAt} onChange={(e) => set("endsAt", e.target.value)} />
+            <Input type="date" mono className={emptyDate(d.endsAt)} value={d.endsAt} onChange={(e) => set("endsAt", e.target.value)} />
           </Field>
         </div>
 
-        <Field label="Scope" hint="One CIDR or IP per line" error={err("scopeCidrs")}>
-          <Textarea
-            mono
-            rows={3}
-            value={d.scope}
-            onChange={(e) => set("scope", e.target.value)}
-            placeholder={"10.10.61.0/24\n10.10.10.5"}
-          />
-        </Field>
-
-        <Field label="Domain" error={err("domain")}>
-          <Input mono value={d.domain} onChange={(e) => set("domain", e.target.value)} placeholder="mock.exam" />
-        </Field>
+        <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] items-start gap-4">
+          <Field label="Scope" hint="One CIDR or IP per line" error={err("scopeCidrs")}>
+            <Textarea
+              mono
+              rows={3}
+              value={d.scope}
+              onChange={(e) => set("scope", e.target.value)}
+              placeholder={"10.10.61.0/24\n10.10.10.5"}
+            />
+          </Field>
+          <Field label="Domain" error={err("domain")}>
+            <Input mono value={d.domain} onChange={(e) => set("domain", e.target.value)} placeholder="mock.exam" />
+          </Field>
+        </div>
 
         {(errors.form || hidden) && <p className="m-0 text-meta text-warn">{errors.form ?? hidden}</p>}
       </form>

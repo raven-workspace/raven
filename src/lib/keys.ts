@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 
 /** True when the key went to a text field, select or editable element. */
 export function isTypingTarget(target: EventTarget | null): boolean {
@@ -53,6 +53,24 @@ export function useEscapeTo(path: string) {
     }
     e.preventDefault();
     void navigate(path);
+  });
+}
+
+/**
+ * Esc goes back to the screen this one was opened from (the board, a host page, the log…), as the Payloads workbench
+ * does; the session's first entry has nowhere to go back to, so it goes home. Same rules as `useEscapeTo` otherwise.
+ */
+export function useEscapeBack() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  useKeydown((e) => {
+    if (e.key !== "Escape" || e.defaultPrevented || isDialogOpen()) return;
+    if (isTypingTarget(e.target)) {
+      (e.target as HTMLElement).blur();
+      return;
+    }
+    e.preventDefault();
+    void (location.key === "default" ? navigate("/") : navigate(-1));
   });
 }
 

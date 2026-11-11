@@ -9,7 +9,7 @@ import { copyPlain, copySecret } from "../../lib/clipboard";
 import { shortHostName } from "../../lib/hostName";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
 import { reportError } from "../../lib/lockSignal";
-import { Button, HintLine, type Hint } from "../../ui";
+import { BELOW_TITLE_BAR, Button, HintLine, type Hint } from "../../ui";
 import { logCommand } from "../capture/logCommand";
 import { useCredPickStore } from "../checklist/credPick";
 import { useFillBase } from "../palette/fillData";
@@ -397,7 +397,7 @@ export function ArsenalDrawer() {
 
   if (!open || onBrowse) return null;
   return (
-    <aside aria-label="Arsenal" data-hint-surface="" className="fixed inset-y-0 right-0 z-30 grid w-[500px] max-w-[70vw] border-l border-line-2 bg-surface text-fg-2">
+    <aside aria-label="Arsenal" data-hint-surface="" className={`fixed ${BELOW_TITLE_BAR} right-0 z-30 grid w-[500px] max-w-[70vw] border-l border-line-2 bg-surface text-fg-2`}>
       <DrawerBody engagementId={engagementId} hostId={hostId} />
     </aside>
   );

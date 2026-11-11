@@ -1,7 +1,11 @@
-import type { Icon } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
+import * as Popover from "@radix-ui/react-popover";
+import { QuestionIcon, type Icon } from "@phosphor-icons/react";
+import { useEffect, useState, type ReactNode } from "react";
+import { isTypingTarget } from "../lib/keys";
+import { HintUnit, type Hint } from "./HintLine";
+import { labelClass } from "./Label";
+import { usePageShortcutsStore } from "./pageShortcuts";
 import { cx } from "../lib/cx";
-import { Button } from "./Button";
 import { Kbd } from "./Kbd";
 import { Tooltip } from "./Tooltip";
 
@@ -21,6 +25,12 @@ export interface TitleBarProps {
  * wordmark after 94px on the left, which is the macOS traffic lights' 78px (titleBarStyle Overlay) plus 16px of air.
  * A window-chrome constant, not a spacing step, allowed by name in the conventions test (SPACING_ALLOWED).
  */
+/**
+ * Where a non-modal drawer docks: under the title bar, never over it, so the bar's controls stay whole and the window
+ * keeps its drag region. Modal panels with an overlay (Capture) cover the whole window instead.
+ */
+export const BELOW_TITLE_BAR = "top-[38px] bottom-0";
+
 export function TitleBar({ left, title, right, className }: TitleBarProps) {
   return (
     <div
@@ -33,10 +43,17 @@ export function TitleBar({ left, title, right, className }: TitleBarProps) {
       <div className="grid grid-flow-col items-center">{left}</div>
       {/* pointer-events-none so a drag on the text still lands on the drag region */}
       <span className="pointer-events-none truncate">{title}</span>
-      <div className="grid grid-flow-col items-center gap-2">{right}</div>
+      <div className="grid grid-flow-col items-center gap-4">{right}</div>
     </div>
   );
 }
+
+/*
+ * Title-bar controls are chrome, not page buttons: no border, the background only on hover. The control for the page on
+ * screen, or a drawer that's open, sits on the surface tint in accent, so where you are reads without a row of boxes.
+ */
+const chrome = "rounded-sm cursor-default select-none transition-colors duration-100";
+const chromeState = (on: boolean | undefined) => (on ? "bg-surface text-accent" : "text-fg-2 hover:bg-surface-hi hover:text-fg");
 
 /** A title-bar action: the accessible name is the visible word; the key hint is decoration. */
 export function TitleBarButton({
@@ -44,6 +61,7 @@ export function TitleBarButton({
   hint,
   icon: Glyph,
   current,
+  open,
   onClick,
 }: {
   children: ReactNode;
@@ -51,52 +69,106 @@ export function TitleBarButton({
   icon?: Icon;
   /** This control's destination is the page on screen: its icon and word turn accent. */
   current?: boolean;
+  /** For a drawer toggle: the drawer is open. Accent like `current`, and announced as expanded. */
+  open?: boolean;
   onClick?: () => void;
 }) {
-  const body = (
-    <>
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={current ? "page" : undefined}
+      aria-expanded={open}
+      className={cx("inline-grid h-7 grid-flow-col items-center gap-2 px-2 text-body font-medium whitespace-nowrap", chrome, chromeState(current || open))}
+    >
       {Glyph && <Glyph size={16} weight="regular" aria-hidden />}
       {children}
-    </>
-  );
-  return (
-    <Button size="sm" onClick={onClick} aria-current={current ? "page" : undefined}>
-      {/* Button's own text colour can't be overridden by a class (cx doesn't merge): the accent sits on an inner run. */}
-      {current ? <span className="inline-grid grid-flow-col items-center gap-2 text-accent">{body}</span> : body}{" "}
       <Kbd variant="inline" aria-hidden="true">{hint}</Kbd>
-    </Button>
+    </button>
   );
 }
 
-/** The bordered icon-only twin of TitleBarButton (28px box), so the whole row is one style. */
+/** The icon-only twin of TitleBarButton (28px box); its key, if any, is in the tooltip. */
 export function TitleBarIconButton({
   icon: Glyph,
   label,
+  shortcut,
   current,
   onClick,
 }: {
   icon: Icon;
   label: string;
+  shortcut?: string;
   /** This control's destination is the page on screen. */
   current?: boolean;
   onClick?: () => void;
 }) {
   return (
-    <Tooltip content={<span>{label}</span>}>
+    <Tooltip side="bottom" content={<span>{label}{shortcut && <span className="ml-2 font-mono text-muted">{shortcut}</span>}</span>}>
       <button
         type="button"
         aria-label={label}
         aria-current={current ? "page" : undefined}
+        aria-keyshortcuts={shortcut?.replace("⌘", "Meta+")}
         onClick={onClick}
-        className={cx(
-          // Own classes, not Button's: cx does not merge, so size/variant classes would fight w-7/p-0 and the accent.
-          "inline-grid size-7 place-items-center rounded-sm border bg-bg p-0 cursor-default select-none transition-colors duration-100",
-          "hover:bg-surface-hi hover:border-line-strong",
-          current ? "border-line-strong text-accent" : "border-line-2 text-fg-2 hover:text-fg",
-        )}
+        className={cx("inline-grid size-7 place-items-center p-0", chrome, chromeState(current))}
       >
         <Glyph size={16} weight="regular" aria-hidden className="shrink-0" />
       </button>
     </Tooltip>
+  );
+}
+
+/** A run of title-bar controls that belong together; runs are set apart by space, never a divider. */
+export function TitleBarGroup({ children }: { children: ReactNode }) {
+  return <div className="grid grid-flow-col items-center gap-1">{children}</div>;
+}
+
+/**
+ * The title bar's shortcut list: the page's own keys first (registered with `usePageShortcuts`), then the keys that
+ * work everywhere. The `?` key opens it too, unless focus is inside a surface with its own list (a drawer, the Manual,
+ * the palette) or a dialog.
+ */
+export function TitleBarShortcuts({ everywhere }: { everywhere: Hint[] }) {
+  const [open, setOpen] = useState(false);
+  const page = usePageShortcutsStore((s) => s.page);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "?" || e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+      const active = document.activeElement;
+      if (active && (isTypingTarget(active) || active.closest("[data-hint-surface], [role=dialog]"))) return;
+      e.preventDefault();
+      setOpen(true);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+  const group = (title: string, hints: Hint[]) => (
+    <section aria-label={title} className="grid gap-2">
+      <h2 className={`m-0 ${labelClass}`}>{title}</h2>
+      {hints.map((h) => <HintUnit key={h.keys} hint={h} />)}
+    </section>
+  );
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Tooltip side="bottom" content={<span>Shortcuts<span className="ml-2 font-mono text-muted">?</span></span>}>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            aria-label="Shortcuts"
+            aria-keyshortcuts="?"
+            className={cx("inline-grid size-7 place-items-center p-0", chrome, chromeState(open))}
+          >
+            <QuestionIcon size={16} weight="regular" aria-hidden className="shrink-0" />
+          </button>
+        </Popover.Trigger>
+      </Tooltip>
+      <Popover.Portal>
+        <Popover.Content align="end" sideOffset={6} className="z-50 grid gap-4 rounded-md border border-line-strong bg-surface p-3 shadow-lg outline-none">
+          {page && group(page.title, page.hints)}
+          {group("Everywhere", everywhere)}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }

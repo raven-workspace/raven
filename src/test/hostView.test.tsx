@@ -148,7 +148,8 @@ describe("host view", () => {
     const facts = await screen.findByRole("region", { name: "Facts" });
     const root = screen.getByRole("region", { name: "Host" }).parentElement!;
     expect(root.className).toMatch(/@container\/host/);
-    expect(root.className).toMatch(/grid-rows-\[auto_minmax\(0,1fr\)_auto\]/);
+    // Header, then the work area: no hint row (the shortcuts live behind the header's ?).
+    expect(root.className).toMatch(/grid-rows-\[auto_minmax\(0,1fr\)\]/);
     const body = facts.parentElement!.parentElement!;
     expect(body.className).toContain("@min-[760px]/host:grid-cols-[minmax(16rem,1fr)_minmax(0,1.4fr)]");
     expect(body).toContainElement(screen.getByRole("tablist"));
@@ -174,7 +175,7 @@ describe("host view", () => {
     const user = userEvent.setup();
     mount();
     const header = within(await screen.findByRole("region", { name: "Host" }));
-    await user.click(header.getByRole("button", { name: "Edit" }));
+    await user.click(header.getByRole("button", { name: "Edit host" }));
     const edit = await screen.findByRole("dialog", { name: "Edit host" });
     const del = within(edit).getByRole("button", { name: "Delete host" });
     for (let i = 0; i < 40 && document.activeElement !== del; i++) await user.tab();
@@ -206,7 +207,7 @@ describe("host view", () => {
     const user = userEvent.setup();
     mount();
     const header = within(await screen.findByRole("region", { name: "Host" }));
-    await user.click(header.getByRole("button", { name: "Edit" }));
+    await user.click(header.getByRole("button", { name: "Edit host" }));
     await user.click(await screen.findByRole("button", { name: "Delete host" }));
     const confirm = await screen.findByRole("dialog", { name: "Delete dc01?" });
     expect(confirm).toHaveAccessibleDescription(
@@ -222,7 +223,7 @@ describe("host view", () => {
     const user = userEvent.setup();
     mount();
     const header = within(await screen.findByRole("region", { name: "Host" }));
-    await user.click(header.getByRole("button", { name: "Edit" }));
+    await user.click(header.getByRole("button", { name: "Edit host" }));
     await user.click(await screen.findByRole("button", { name: "Delete host" }));
     const confirm = await screen.findByRole("dialog", { name: "Delete dc01?" });
     const text = confirm.getAttribute("aria-describedby") ? document.getElementById(confirm.getAttribute("aria-describedby")!)!.textContent! : "";
@@ -239,6 +240,20 @@ describe("host view", () => {
       expect.stringContaining("newer on dc01"),
     ]);
     expect(screen.queryByText("other host")).not.toBeInTheDocument();
+  });
+
+  it("log tab groups entries under a heading per day", async () => {
+    const user = userEvent.setup();
+    m.logList.mockResolvedValue([
+      entry("o", "older on dc01", T, ["h1"]),
+      entry("d", "next day on dc01", T + 86_400_000, ["h1"]),
+    ]);
+    mount();
+    await openLog(user);
+    const days = await screen.findAllByRole("heading", { level: 3 });
+    expect(days).toHaveLength(2);
+    expect(within(screen.getByRole("region", { name: days[0]!.textContent! })).getByText("older on dc01")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: days[1]!.textContent! })).getByText("next day on dc01")).toBeInTheDocument();
   });
 
   it("log order flips to newest first", async () => {

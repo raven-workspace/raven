@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router";
+import { api } from "../../lib/api";
 import type { BoardColumn, Host } from "../../types/host";
 import { Button, EmptyState, labelClass, queryState } from "../../ui";
 import { cx } from "../../lib/cx";
@@ -17,14 +19,19 @@ const ORDER: BoardColumn[] = [
   "reporting",
 ];
 
-/** Break points for the lane titles longer than a narrow lane ("Vulnerabil-ity"); the section's aria-label keeps the real name. */
+/**
+ * A break point for the one lane title word longer than a narrow lane ("Vulnerabil-ity"); the section's aria-label
+ * keeps the real name. "Post-exploitation" breaks at its own hyphen. Hyphenation is manual: WebKit's automatic
+ * hyphens split titles that fit on two lines ("Gath-ering", "Escala-tion").
+ */
 function softHyphenate(label: string): string {
-  return label.replace("Vulnerability", "Vulnerabil\u00ADity").replace("exploitation", "exploita\u00ADtion");
+  return label.replace("Vulnerability", "Vulnerabil\u00ADity");
 }
 
 export function Board() {
   const { id = "" } = useParams();
   const hosts = useHosts(id);
+  const msfHostId = useQuery({ queryKey: ["engagement", id], queryFn: () => api.engagementGet(id) }).data?.msfHostId ?? null;
   const { move } = useHostMutations(id);
   const [over, setOver] = useState<BoardColumn | null>(null);
   const [adding, setAdding] = useState(false);
@@ -129,21 +136,22 @@ export function Board() {
               onDrop={(e) => onDrop(e, col)}
               style={{ gridRow: "span 2", gridTemplateRows: "subgrid" }}
               className={cx(
-                "grid min-h-40 min-w-0 gap-2 rounded border p-2",
-                over === col ? "border-accent" : "border-line",
+                // A filled surface, not an outline: six tall empty boxes read as a cage. The drop target gets the edge.
+                "grid min-h-40 min-w-0 gap-2 rounded border bg-surface p-2",
+                over === col ? "border-accent" : "border-transparent",
               )}
             >
               {/* Narrow lanes (under 144px inside, i.e. below about 1200px wide) put the count under the title, so
                   "Vulnerability" never collides with it; wider lanes keep it beside. The shared row absorbs both. */}
               <header className="@container">
                 <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-x-2 @min-[144px]:grid-cols-[minmax(0,1fr)_auto]">
-                  <span lang="en" className={cx(labelClass, "min-w-0 break-words hyphens-auto")}>{softHyphenate(COLUMN_LABELS[col])}</span>
-                  <span className="text-meta tabular-nums text-muted">{cards.length}</span>
+                  <span lang="en" className={cx(labelClass, "min-w-0 break-words hyphens-manual")}>{softHyphenate(COLUMN_LABELS[col])}</span>
+                  <span className={cx("text-meta tabular-nums", cards.length ? "text-muted-2" : "text-faint")}>{cards.length}</span>
                 </div>
               </header>
-              <div data-lane-body className="grid min-w-0 content-start gap-2">
+              <div data-lane-body className="@container grid min-w-0 content-start gap-2">
                 {cards.map((h) => (
-                  <BoardCard key={h.id} host={h} onShift={shift} />
+                  <BoardCard key={h.id} host={h} onShift={shift} msf={h.id === msfHostId} />
                 ))}
               </div>
             </section>

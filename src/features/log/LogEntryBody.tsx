@@ -1,23 +1,30 @@
 import { useState } from "react";
 import type { LogEntry } from "../../types/log";
-import { Button } from "../../ui";
+import { cx } from "../../lib/cx";
+import { Button, CommandBlock } from "../../ui";
 import { AttachmentImage } from "./AttachmentImage";
 import { ExtractedLine } from "./ExtractedLine";
 
 const FOLD_LINES = 40;
-const pre = "m-0 max-h-[320px] overflow-auto whitespace-pre-wrap break-words text-code text-muted-2";
+/** Output and HTTP text. The 8px inset lines it up with the command text inside its box above. */
+const pre = "m-0 max-h-[320px] overflow-auto whitespace-pre-wrap break-words px-2 text-code text-muted-2";
 
-/** Output over 40 lines starts folded to its first 40. */
-function Output({ text }: { text: string }) {
+/**
+ * Output over 40 lines starts folded to its first 40. `attached` joins it under its command's box: same border, no
+ * top edge, so a command and what it printed read as one unit.
+ */
+function Output({ text, attached }: { text: string; attached?: boolean }) {
   const [all, setAll] = useState(false);
   if (text === "") return null;
   const lines = text.split("\n");
   const folded = !all && lines.length > FOLD_LINES;
   return (
     <>
-      <pre className={pre}>{folded ? lines.slice(0, FOLD_LINES).join("\n") : text}</pre>
+      <pre className={cx(pre, attached && "rounded-b-sm border border-t-0 border-line py-2")}>
+        {folded ? lines.slice(0, FOLD_LINES).join("\n") : text}
+      </pre>
       {folded && (
-        <Button size="sm" className="justify-self-start" onClick={() => setAll(true)}>
+        <Button size="sm" className={cx("justify-self-start", attached && "mt-2")} onClick={() => setAll(true)}>
           {`Show all ${lines.length} lines`}
         </Button>
       )}
@@ -30,13 +37,24 @@ export function LogEntryBody({ entry }: { entry: LogEntry }) {
   const [showResponse, setShowResponse] = useState(false);
   return (
     <div className="grid gap-3">
-      {c.kind === "command" &&
-        c.blocks.map((b, i) => (
-          <div key={i} className="grid gap-1">
-            <div className="overflow-x-auto text-code text-fg whitespace-pre-wrap">{`$ ${b.command}`}</div>
-            <Output text={b.output} />
-          </div>
-        ))}
+      {c.kind === "command" && (
+        // Each command is one unit: the shared command box (it copies like any other) with its output joined below.
+        // Several commands are numbered in a gutter and spaced apart, so where one ends and the next starts is plain.
+        <ol className="m-0 grid list-none gap-4 p-0">
+          {c.blocks.map((b, i) => {
+            const multi = c.blocks.length > 1;
+            return (
+              <li key={i} className={cx("grid min-w-0 items-start gap-2", multi && "grid-cols-[16px_minmax(0,1fr)]")}>
+                {multi && <span aria-hidden className="pt-2 text-right font-mono text-code tabular-nums text-muted">{i + 1}</span>}
+                <div className="grid min-w-0">
+                  <CommandBlock text={b.command} name={multi ? `${entry.title}, ${i + 1}` : entry.title} attached={b.output !== ""} />
+                  <Output text={b.output} attached />
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
       {c.kind === "http" && (
         <>
           <pre className={pre}>{c.request}</pre>

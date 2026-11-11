@@ -716,6 +716,29 @@ async function openIisDrawer(page: Page, width: number) {
   return aside;
 }
 
+// Owner, 2026-11-10: the drawer's pickers flow in runs, so any of them can end a line at the drawer's right edge. Its
+// list must open from that side instead of running past the drawer.
+test("payloads drawer: every picker list stays inside the drawer", async ({ page }) => {
+  for (const path of [IIS, "/e/e-lab/h/h-sql01"]) {
+    for (const width of PAYLOADS_WIDTHS) {
+      const aside = await openDrawer(page, path, width);
+      await aside.getByRole("button", { name: /^Port:/ }).waitFor();
+      const pickers = aside.locator("[data-picker-trigger][aria-haspopup='listbox']");
+      for (let i = 0; i < (await pickers.count()); i++) {
+        const name = await pickers.nth(i).getAttribute("aria-label");
+        await pickers.nth(i).click();
+        const list = page.locator(`[id="${await pickers.nth(i).getAttribute("aria-controls")}"]`);
+        await list.waitFor();
+        const [box, pane] = [(await list.boundingBox())!, (await aside.boundingBox())!];
+        expect(box.x + box.width, `${name} list right edge, ${path} at ${width}`).toBeLessThanOrEqual(pane.x + pane.width);
+        expect(box.x, `${name} list left edge, ${path} at ${width}`).toBeGreaterThanOrEqual(pane.x);
+        await page.keyboard.press("Escape");
+        await list.waitFor({ state: "detached" });
+      }
+    }
+  }
+});
+
 test("payloads drawer and workbench: no pane scrolls sideways or clips focus", async ({ page }) => {
   for (const width of PAYLOADS_WIDTHS) {
     const aside = await openIisDrawer(page, width);
@@ -885,17 +908,21 @@ test("status strip drops by its own free space: LHOST stays while it fits", asyn
   }
 });
 
-test("headers: actions are icon buttons under 1000px, so the title keeps its room", async ({ page }) => {
+// Owner, 2026-11-10: header actions sit right after the title at every width, never out at the pane's far edge.
+test("headers: actions are icon buttons right after the title, at every width", async ({ page }) => {
   await open(page, LAB_HOST, 900);
   await page.getByRole("tab", { name: "Next" }).waitFor();
   await expect(page.getByRole("button", { name: "Edit host" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Stuck?" })).toBeVisible();
-  await open(page, "/e/e-lab", 900);
-  await expect(page.getByRole("button", { name: "Edit engagement" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Archive" })).toBeVisible();
-  await open(page, "/e/e-lab", 1440);
-  if (await page.getByRole("button", { name: "Expand sidebar" }).isVisible()) await page.keyboard.press("Meta+B");
-  await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
+  for (const width of [900, 1440]) {
+    await open(page, "/e/e-lab", width);
+    const edit = page.getByRole("button", { name: "Edit engagement" });
+    await expect(edit).toBeVisible();
+    await expect(page.getByRole("button", { name: "Archive" })).toBeVisible();
+    const title = (await page.getByRole("heading", { level: 1 }).first().boundingBox())!;
+    const pencil = (await edit.boundingBox())!;
+    expect(pencil.x - (title.x + title.width), `pencil follows the title at ${width}`).toBeLessThanOrEqual(8);
+  }
 });
 
 // Owner, 2026-11-09 (adc414c, 1f74942): the title bar is pinned to the window edges on every screen: the controls at

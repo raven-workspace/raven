@@ -17,6 +17,7 @@ export function PickerTrigger({ prefix, value, placeholder = "Pick one", icon, w
   return (
     <button
       type={type}
+      data-picker-trigger=""
       className={cx(
         "inline-grid h-7 max-w-full grid-flow-col items-center gap-2 rounded-sm border border-line-2 bg-transparent px-2 text-left select-none cursor-default hover:bg-surface-hi",
         className,

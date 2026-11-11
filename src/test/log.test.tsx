@@ -177,11 +177,35 @@ describe("log", () => {
     expect(rows().every((li) => !li.textContent?.includes("nmap scan"))).toBe(true);
   });
 
+  it("groups rows under a heading per day, newest day first", async () => {
+    const now = Date.now();
+    entries = [
+      entry({ id: "t", title: "today's entry", at: now }),
+      entry({ id: "y", title: "yesterday's entry", at: now - 86_400_000 }),
+    ];
+    mount();
+    await screen.findByText("today's entry");
+    const today = log().getByRole("region", { name: "Today" });
+    expect(within(today).getByText("today's entry")).toBeInTheDocument();
+    const yesterday = log().getByRole("region", { name: "Yesterday" });
+    expect(within(yesterday).getByText("yesterday's entry")).toBeInTheDocument();
+    expect(today.compareDocumentPosition(yesterday) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("names hosts as text, keeps private as a chip", async () => {
+    mount();
+    const row = (await screen.findByText("nmap scan")).closest("li")!;
+    expect(row.querySelector("[data-variant]")).toBeNull();
+    const priv = within(screen.getByText("secret thing").closest("li")!).getByText("private");
+    expect(priv).toHaveAttribute("data-variant", "default");
+  });
+
   it("expanding a command entry shows blocks and observations", async () => {
     const user = userEvent.setup();
     mount();
     await user.click(await screen.findByRole("button", { name: /nmap scan/ }));
-    expect(screen.getByText("$ nmap -sV 10.10.10.5")).toHaveClass("text-code");
+    // The command sits in the shared command box, with its own Copy.
+    expect(screen.getByRole("group", { name: "Command: nmap scan" })).toHaveTextContent("nmap -sV 10.10.10.5");
     expect(screen.getByText("445/tcp open smb").tagName).toBe("PRE");
     expect(screen.getByText("Observations")).toBeInTheDocument();
     expect(screen.getByText("port 445 open")).toBeInTheDocument();

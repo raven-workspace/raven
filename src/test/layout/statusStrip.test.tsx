@@ -87,7 +87,7 @@ describe("status strip and title bar", () => {
     await mountStrip();
     const controls = [...screen.getByRole("button", { name: "Settings" }).closest("[data-tauri-drag-region] > div")!.querySelectorAll("button")];
     expect(controls.at(-1)).toBe(screen.getByRole("button", { name: "Settings" }));
-    expect(controls.slice(0, -1).map((b) => b.textContent?.replace(/\s*(⌘\w|A|M|P)$/, "").trim())).toEqual(["Arsenal", "Manual", "Payloads", "Search", "Lock"]);
+    expect(controls.slice(0, -1).map((b) => b.getAttribute("aria-label") ?? b.textContent?.replace(/\s*(⌘\w|A|M|P)$/, "").trim())).toEqual(["Arsenal", "Manual", "Payloads", "Search", "Shortcuts", "Lock"]);
     expect(screen.getByRole("button", { name: "Settings" }).querySelector("svg")).not.toBeNull();
   });
 
@@ -101,11 +101,18 @@ describe("status strip and title bar", () => {
     expect(bar.firstElementChild!.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("lock button shows a lock icon, with an inline key hint", async () => {
+  it("lock is an icon button whose key is in its tooltip and aria-keyshortcuts, not on the bar", async () => {
     await mountStrip();
     const lock = screen.getByRole("button", { name: "Lock" });
     expect(lock.querySelector("svg")).not.toBeNull();
-    expect(lock.querySelector("kbd")!.className).not.toMatch(/border/);
+    expect(lock.querySelector("kbd")).toBeNull();
+    expect(lock).toHaveAttribute("aria-keyshortcuts", "Meta+L");
+  });
+
+  it("title bar controls are borderless chrome; the page on screen sits on the surface tint", async () => {
+    await mountStrip();
+    for (const name of ["Arsenal", "Manual", "Payloads", "Search", "Shortcuts", "Lock", "Settings"])
+      expect(screen.getByRole("button", { name: new RegExp(`^${name}`) }).className).not.toMatch(/\bborder\b/);
   });
   it("Rooted and Flags show a dash, never 0/0, while progress loads or after it fails", async () => {
     m.engagementsProgress.mockImplementation(() => new Promise(() => {}));
