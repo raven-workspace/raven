@@ -102,7 +102,7 @@ describe("audit fake api", () => {
     expect(web.filter((s) => s.protocol === "udp" && s.state === "open|filtered").length).toBeGreaterThanOrEqual(3);
 
     const hosts = await api.hostsList("e-lab");
-    expect(hosts).toHaveLength(6);
+    expect(hosts).toHaveLength(15);
     expect(hosts.some((h) => h.name === "dc01" && h.os === "windows" && h.adSet === true)).toBe(true);
     expect(hosts.find((h) => h.id === "h-web")!.name.length).toBeGreaterThanOrEqual(40);
     expect(hosts.some((h) => h.dualHomed)).toBe(true);

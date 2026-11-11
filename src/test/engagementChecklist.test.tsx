@@ -117,49 +117,21 @@ describe("engagement checklist", () => {
     expect(screen.queryByText("Try null, guest and anonymous SMB")).not.toBeInTheDocument();
   });
 
-  it("adding a tunnel validates subnets and lists it", async () => {
-    const user = userEvent.setup();
-    const created: Tunnel = {
-      id: "t1", engagementId: "e1", kind: "ligolo", viaHostId: "h1", subnets: ["10.20.0.0/24"], callbackIp: "10.10.14.9",
-      status: "up", notes: null, createdAt: 1, updatedAt: 1,
-    };
-    m.tunnelCreate.mockResolvedValue(created);
-    mount();
-    await user.click(await screen.findByRole("button", { name: "Add tunnel" }));
-    const dialog = await screen.findByRole("dialog", { name: "Add tunnel" });
-    await user.type(within(dialog).getByLabelText("Subnets"), "10.20.0.0/24, nonsense");
-    await user.click(within(dialog).getByRole("button", { name: "Add tunnel" }));
-    expect(await within(dialog).findByText(/Not a valid subnet: nonsense/)).toBeInTheDocument();
-    expect(m.tunnelCreate).not.toHaveBeenCalled();
-
-    m.tunnelsList.mockResolvedValue([created]);
-    await user.clear(within(dialog).getByLabelText("Subnets"));
-    await user.type(within(dialog).getByLabelText("Subnets"), "10.20.0.0/24");
-    await user.type(within(dialog).getByLabelText("Callback IP"), "10.10.14.9");
-    await user.click(within(dialog).getByRole("button", { name: "Add tunnel" }));
-    expect(m.tunnelCreate).toHaveBeenCalledWith("e1", {
-      kind: "ligolo", viaHostId: "h1", subnets: ["10.20.0.0/24"], callbackIp: "10.10.14.9", status: "up",
-    });
-    expect(await screen.findByText("10.20.0.0/24")).toBeInTheDocument();
-  });
-
-  it("shows a server field error on the tunnel dialog", async () => {
-    const user = userEvent.setup();
-    m.tunnelCreate.mockRejectedValue(Object.assign(new Error("Not an IPv4 address"), { field: "callbackIp" }));
-    mount();
-    await user.click(await screen.findByRole("button", { name: "Add tunnel" }));
-    const dialog = await screen.findByRole("dialog", { name: "Add tunnel" });
-    await user.type(within(dialog).getByLabelText("Subnets"), "10.20.0.0/24");
-    await user.click(within(dialog).getByRole("button", { name: "Add tunnel" }));
-    expect(await within(dialog).findByText("Not an IPv4 address")).toBeInTheDocument();
-  });
-
   it("a hop to the DC opens the Domain admin playbook", async () => {
     mount({ services: AD, hops: [hop()] });
-    const hopRow = (await screen.findByText("via creds")).closest("li")!;
-    expect(hopRow).toHaveTextContent("Kali");
-    expect(hopRow).toHaveTextContent("dc01");
     expect(await screen.findByRole("button", { name: /Domain admin/, expanded: true })).toBeInTheDocument();
+  });
+
+  it("points to Network for tunnels and hops, without a Tunnels panel", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByText("Add the /etc/hosts lines");
+    await user.click(screen.getByRole("button", { name: /Lateral movement/ }));
+    const link = within(screen.getByRole("main")).getByRole("link", { name: "Network" });
+    expect(link).toHaveAttribute("href", "/e/e1/s/network");
+    expect(link.closest("li")).toHaveTextContent("Tunnels and hops are in Network (5).");
+    expect(screen.queryByRole("heading", { name: "Tunnels" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add tunnel" })).not.toBeInTheDocument();
   });
 
   it("Domain admin stays closed without a hop to the DC", async () => {
@@ -287,55 +259,6 @@ describe("engagement checklist", () => {
     expect(alert).toHaveTextContent("Couldn't load the engagement checklist");
     await user.click(within(alert).getByRole("button", { name: "Details" }));
     expect(alert).toHaveTextContent("settings broke");
-  });
-
-  it("a hop cannot go from a host to itself", async () => {
-    const user = userEvent.setup();
-    mount();
-    await user.click(await screen.findByRole("button", { name: "Add hop" }));
-    const dialog = await screen.findByRole("dialog", { name: "Add hop" });
-    await user.click(within(dialog).getByRole("combobox", { name: /^From/ }));
-    await user.click(await screen.findByRole("option", { name: "dc01" }));
-    await user.type(within(dialog).getByLabelText("Via"), "creds");
-    await user.click(within(dialog).getByRole("button", { name: "Add hop" }));
-    expect(await within(dialog).findByText("A hop needs two different hosts")).toBeInTheDocument();
-    expect(m.hopCreate).not.toHaveBeenCalled();
-  });
-
-  it("deleting a hop or tunnel asks first", async () => {
-    const user = userEvent.setup();
-    const t: Tunnel = { id: "t1", engagementId: "e1", kind: "chisel", viaHostId: "h1", subnets: ["10.20.0.0/24"], callbackIp: "", status: "up", notes: null, createdAt: 1, updatedAt: 1 };
-    m.hopDelete.mockResolvedValue(null);
-    m.tunnelDelete.mockResolvedValue(null);
-    mount({ hops: [hop()], tunnels: [t] });
-    await user.click(await screen.findByRole("button", { name: /^Delete hop/ }));
-    expect(m.hopDelete).not.toHaveBeenCalled();
-    await user.click(await screen.findByRole("button", { name: "Cancel" }));
-    expect(m.hopDelete).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: /^Delete hop/ }));
-    await user.click(await screen.findByRole("button", { name: "Delete hop" }));
-    expect(m.hopDelete).toHaveBeenCalledWith("hp1");
-
-    await user.click(await screen.findByRole("button", { name: /^Delete chisel tunnel/ }));
-    expect(m.tunnelDelete).not.toHaveBeenCalled();
-    await user.click(await screen.findByRole("button", { name: "Delete tunnel" }));
-    expect(m.tunnelDelete).toHaveBeenCalledWith("t1");
-  });
-
-  it("tunnel and hop rows delete with a muted trash icon", async () => {
-    const user = userEvent.setup();
-    const t: Tunnel = { id: "t1", engagementId: "e1", kind: "chisel", viaHostId: "h1", subnets: ["10.20.0.0/24"], callbackIp: "", status: "up", notes: null, createdAt: 1, updatedAt: 1 };
-    mount({ hops: [hop()], tunnels: [t] });
-    for (const name of [/^Delete hop/, /^Delete chisel tunnel/]) {
-      const del = await screen.findByRole("button", { name });
-      expect(del.querySelector("svg")).not.toBeNull();
-      expect(del).toHaveTextContent("");
-      expect(del.className).toMatch(/text-muted/);
-      expect(del.className).toMatch(/hover:text-warn/);
-      expect(del.className).not.toMatch(/(^|\s)text-warn/);
-    }
-    await user.click(screen.getByRole("button", { name: /^Delete hop/ }));
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
   it("setup follows Off-the-Bat order with groups", async () => {

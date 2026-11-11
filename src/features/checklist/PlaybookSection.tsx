@@ -6,23 +6,15 @@ export function PlaybookSection({
   title,
   opensWhen,
   defaultOpen,
-  openRequest,
   children,
 }: {
   title: string;
   opensWhen: string;
   /** Open because its trigger has fired; a hand toggle overrides it. */
   defaultOpen: boolean;
-  /** Changes each time something asks for the section open; it overrides a hand collapse. */
-  openRequest?: number;
   children: ReactNode;
 }) {
-  const [manual, setManual] = useState<boolean | null>(openRequest !== undefined ? true : null);
-  const [seenRequest, setSeenRequest] = useState(openRequest);
-  if (openRequest !== seenRequest) {
-    setSeenRequest(openRequest);
-    if (openRequest !== undefined) setManual(true);
-  }
+  const [manual, setManual] = useState<boolean | null>(null);
   const open = manual ?? defaultOpen;
   const Caret = open ? CaretDown : CaretRight;
   return (

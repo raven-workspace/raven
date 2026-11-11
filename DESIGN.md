@@ -110,7 +110,7 @@ The Ink palette is unchanged: true black, hairlines, and one accent.
   - confirmed facts;
   - focus.
 
-  It is never decoration, and never the rest colour of an action.
+  It is never decoration. It is the rest colour of an action only for a primary action (a section header's main add, a dialog's Save); every other action rests neutral.
 - **Warn (`#e0a030`)** means state that needs you: dead, locked, over time, an unfilled placeholder, a failed save. It is also the colour of a destructive action *while hovered or focused, and in its confirm step*.
 - **No red, anywhere.**
 

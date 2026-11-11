@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { phaseOf } from "../../../engines/facts";
 import { isFreeKey, useKeydown } from "../../../lib/keys";
 import type { Host } from "../../../types/host";
+import { InterfaceNudge } from "../../network/InterfaceNudge";
 import { useLog } from "../../log/queries";
 import { CoverageFacts } from "./CoverageFacts";
 import { HostCredentialsFacts } from "./HostCredentialsFacts";
@@ -51,6 +52,7 @@ export function FactsColumn({ engagementId, host, variant, onOpenEntry }: {
 
   return (
     <div aria-label="Facts" role="region" className="grid">
+      <InterfaceNudge engagementId={engagementId} host={host} onOpenEntry={onOpenEntry} />
       {order.map((g) => groups[g])}
     </div>
   );

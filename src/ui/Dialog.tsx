@@ -24,7 +24,8 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
   return (
     <RD.Root open={open} onOpenChange={onOpenChange}>
       <RD.Portal>
-        <RD.Overlay className="fixed inset-0 z-40 bg-bg/80" />
+        {/* Overlay and panel share one layer, so a dialog opened from a dialog (a delete confirm) dims the one below. */}
+        <RD.Overlay className="fixed inset-0 z-50 bg-bg/80" />
         <RD.Content
           {...(description ? {} : { "aria-describedby": undefined })}
           {...(onCloseAutoFocus ? { onCloseAutoFocus } : {})}

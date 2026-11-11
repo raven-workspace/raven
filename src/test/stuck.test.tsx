@@ -221,36 +221,27 @@ describe("stuck view", () => {
     expect(useNotesStore.getState().open).toBe(false);
   });
 
-  it("the dual-homed line opens the Lateral movement section on that host's tunnel step", async () => {
+  it("the dual-homed line opens Network with that host focused", async () => {
     const user = userEvent.setup();
+    m.hopsList.mockResolvedValue([]);
     mount({ hosts: [host({ dualHomed: true })], path: "/e/e1/s/checklist" });
     await user.click(await screen.findByRole("button", { name: /Stuck check/ }));
     await user.click(await screen.findByRole("button", { name: /dual-homed, no tunnel recorded/ }));
-    expect(await screen.findByRole("button", { name: /Lateral movement/ })).toHaveAttribute("aria-expanded", "true");
-    const row = document.querySelector('li[data-goal-id="h-pivot-tunnel"]') as HTMLElement;
-    expect(row).not.toBeNull();
-    expect(within(row).getByRole("button", { name: /^Collapse/ })).toBeInTheDocument();
+    const node = (await screen.findByRole("link", { name: "web01" })).closest<HTMLElement>("[data-host-node]")!;
+    await waitFor(() => expect(node).toHaveAttribute("data-focused"));
     expect(screen.queryByRole("region", { name: "Host" })).not.toBeInTheDocument();
   });
 
-  it("clicking the dual-homed line again re-opens a collapsed section on that host's tunnel step", async () => {
+  it("each dual-homed line focuses its own host on Network", async () => {
     const user = userEvent.setup();
+    m.hopsList.mockResolvedValue([]);
     const a = host({ id: "h1", name: "web01", dualHomed: true });
     const b = host({ id: "h2", name: "web07", ip: "10.0.0.6", dualHomed: true });
     mount({ hosts: [a, b], path: "/e/e1/s/checklist" });
-    const scroll = vi.fn();
-    Element.prototype.scrollIntoView = scroll;
-    const toggle = await screen.findByRole("button", { name: /Lateral movement/ });
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    await user.click(screen.getByRole("button", { name: /Stuck check/ }));
+    await user.click(await screen.findByRole("button", { name: /Stuck check/ }));
     await user.click(await screen.findByRole("button", { name: "web07 dual-homed, no tunnel recorded" }));
-    expect(await screen.findByRole("button", { name: /Lateral movement/ })).toHaveAttribute("aria-expanded", "true");
-    const rows = [...document.querySelectorAll('li[data-goal-id="h-pivot-tunnel"]')] as HTMLElement[];
-    expect(rows).toHaveLength(2);
-    // Rows are in host order: the second belongs to web07 and is the one scrolled to.
-    expect(within(rows[1]!).getByRole("button", { name: /^Collapse/ })).toBeInTheDocument();
-    await waitFor(() => expect(scroll.mock.contexts).toContain(rows[1]));
-    expect(scroll.mock.contexts).not.toContain(rows[0]);
+    const node = (await screen.findByRole("link", { name: "web07" })).closest<HTMLElement>("[data-host-node]")!;
+    await waitFor(() => expect(node).toHaveAttribute("data-focused"));
+    expect(screen.getByRole("link", { name: "web01" }).closest("[data-host-node]")).not.toHaveAttribute("data-focused");
   });
 });

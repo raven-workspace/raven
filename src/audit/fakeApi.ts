@@ -330,6 +330,14 @@ const base = {
   },
   tunnelUpdate: async (id: string, input) => clone(assign(find(db.tunnels, id), input, { updatedAt: now() })),
   tunnelDelete: async (id: string) => remove(db.tunnels, id),
+  interfaceDismissalsList: async (engagementId: string) =>
+    clone(db.interfaceDismissals.filter((d) => d.engagementId === engagementId)),
+  interfaceDismiss: async (engagementId: string, hostId: string, subnet: string) => {
+    if (!db.interfaceDismissals.some((d) => d.hostId === hostId && d.subnet === subnet)) {
+      db.interfaceDismissals.push({ engagementId, hostId, subnet, createdAt: now() });
+    }
+    return null;
+  },
   hopsList: async (engagementId: string) => clone(db.hops.filter((h) => h.engagementId === engagementId)),
   hopCreate: async (engagementId: string, input) => {
     const h = { fromHostId: null, logEntryId: null, ...input, id: nid("hp"), engagementId, at: input.at ?? now(), updatedAt: now() };

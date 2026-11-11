@@ -128,7 +128,7 @@ describe("hosts", () => {
     await screen.findByRole("navigation", { name: "Engagement" });
     await user.keyboard("2");
     expect(screen.getByTestId("where")).toHaveTextContent("/e/e1/s/log");
-    await user.keyboard("5");
+    await user.keyboard("6");
     expect(screen.getByTestId("where")).toHaveTextContent("/e/e1/s/checklist");
     await user.keyboard("1");
     expect(screen.getByTestId("where")).toHaveTextContent(/^\/e\/e1$/);

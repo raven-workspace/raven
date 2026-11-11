@@ -67,3 +67,22 @@ export function isIgnoredIp(ip: string, lhost?: string): boolean {
   if (lhost && ip === lhost) return true;
   return ip === '0.0.0.0' || ip.startsWith('127.');
 }
+
+/** The network an address sits in, as a CIDR string: `networkOf("172.16.5.10", 24)` is `"172.16.5.0/24"`. */
+export function networkOf(ip: string, prefix: number): string {
+  const n = ipToInt(ip);
+  if (n === null || !Number.isInteger(prefix) || prefix < 0 || prefix > 32) return `${ip}/${prefix}`;
+  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+  const base = (n & mask) >>> 0;
+  return `${base >>> 24}.${(base >>> 16) & 255}.${(base >>> 8) & 255}.${base & 255}/${prefix}`;
+}
+
+/** A dotted netmask as a prefix length (`"255.255.255.0"` is 24); null when not a contiguous mask. */
+export function maskToPrefix(mask: string): number | null {
+  const n = ipToInt(mask);
+  if (n === null) return null;
+  let prefix = 0;
+  while (prefix < 32 && ((n << prefix) & 0x80000000) !== 0) prefix++;
+  const expected = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+  return n === expected ? prefix : null;
+}

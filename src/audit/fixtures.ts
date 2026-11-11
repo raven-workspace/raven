@@ -11,7 +11,7 @@ import type { FailedAttempt, Finding, FindingFile } from "../types/findings";
 import type { Host } from "../types/host";
 import type { Attachment, Extraction, LogEntry, Progress } from "../types/log";
 import type { HostIdentity, PrivescVector } from "../types/hostFacts";
-import type { Hop, Tunnel } from "../types/network";
+import type { Hop, InterfaceDismissal, Tunnel } from "../types/network";
 import type { Note, RuledOut } from "../types/notes";
 import type { Service } from "../types/service";
 import type { Settings } from "../types/settings";
@@ -52,6 +52,7 @@ export interface AuditFixtures {
   vectors: PrivescVector[];
   tunnels: Tunnel[];
   hops: Hop[];
+  interfaceDismissals: InterfaceDismissal[];
   credentials: Credential[];
   usernames: Username[];
   credAttempts: CredAttempt[];
@@ -132,7 +133,18 @@ const hosts: Host[] = [
   host("h-fs01", "e-lab", "fs01", "10.10.20.21", "windows", { boardColumn: "initial-foothold", access: "user", adSet: true, adSetEffective: true }),
   host("h-sql01", "e-lab", "sql01", "10.10.20.22", "windows", { boardColumn: "post-exploitation", access: "user", adSet: true, adSetEffective: true }),
   host("h-pivot", "e-lab", "pivot-gw", "10.10.20.30", "windows", { boardColumn: "reporting", access: "root", dualHomed: true }),
-  host("h-ws07", "e-lab", "ws07", "10.10.20.57", "linux"),
+  host("h-ws07", "e-lab", "ws07", "10.10.20.57", "linux", { access: "user", boardColumn: "privilege-escalation" }),
+  // Lab-sized Network: behind the pivot (10.10.21.0/24), a chain that starts at an unrecorded way in (ws07 → ws12),
+  // a dual-homed host with no tunnel yet (int-db), a second, down tunnel (int-app), and hosts not reached at all.
+  host("h-int-app", "e-lab", "int-app01.internal.acme.corp", "10.10.21.4", "linux", { access: "user", boardColumn: "privilege-escalation", dualHomed: true }),
+  host("h-int-db", "e-lab", "int-db02", "10.10.21.9", "windows", { access: "user", boardColumn: "privilege-escalation", dualHomed: true }),
+  host("h-ws12", "e-lab", "ws12", "10.10.20.62", "windows", { access: "user", boardColumn: "privilege-escalation" }),
+  host("h-mail", "e-lab", "mail01", "10.10.20.25", "windows"),
+  host("h-print", "e-lab", "print01", "10.10.20.40", "windows"),
+  host("h-backup", "e-lab", "backup-nas-finance-replica.acme.corp", "10.10.20.45", "linux"),
+  host("h-jenkins", "e-lab", "dev-jenkins", "10.10.20.50", "linux", { boardColumn: "vulnerability-detection" }),
+  host("h-int-files", "e-lab", "int-files", "10.10.21.12", "windows"),
+  host("h-hr-ws03", "e-lab", "hr-ws03", "10.10.20.73", "windows"),
   host("h-exam-ms01", "e-exam", "ms01", "10.10.30.5", "windows", { boardColumn: "initial-foothold", access: "user" }),
   host("h-exam-dc01", "e-exam", "dc01", "10.10.30.10", "windows", { adSet: true, adSetEffective: true }),
   host("h-exam-ad02", "e-exam", "ad02", "10.10.30.11", "windows", { adSet: true, adSetEffective: true, boardColumn: "vulnerability-detection" }),
@@ -305,6 +317,7 @@ const labLog: LogEntry[] = [
   note("A very long note title that keeps going to see how the log row handles a heading with no natural break points at all", "Found the finance DMZ gateway. It has a second NIC on 10.10.21.0/24 which is not in scope yet; confirm with the lab guide before touching it.", ["h-pivot"]),
   note("Password reuse theory", "svc_backup and svc_report share a password pattern: Season+Year+!. Try it against the other service accounts.", [], { private: true }),
   note("Loose end", "Check the NFS export on the web host.", ["h-web"]),
+  cmd("Interfaces on web", "ip a", "2: eth0: <BROADCAST,UP> mtu 1500\n    inet 10.10.20.15/24 brd 10.10.20.255 scope global eth0\n3: eth1: <BROADCAST,UP> mtu 1500\n    inet 172.16.5.10/24 brd 172.16.5.255 scope global eth1\n4: docker0: <NO-CARRIER,UP> mtu 1500\n    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0\n5: virbr0: <NO-CARRIER,UP> mtu 1500\n    inet 192.168.122.1/24 brd 192.168.122.255 scope global virbr0", ["h-web"], { ranOn: null }),
   entry({ kind: "flag", title: "local.txt on web", hostIds: ["h-web"], content: { kind: "flag", flagKind: "local", value: "0123456789abcdef0123456789abcdef", attachmentId: null, proof: "www-data@web:/home/dev$ cat local.txt && hostname && ip a" } }),
   entry({ kind: "flag", title: "proof.txt on dc01", hostIds: ["h-dc01"], content: { kind: "flag", flagKind: "proof", value: "fedcba9876543210fedcba9876543210", attachmentId: "a-tiny", proof: null } }),
   shot("wide", "Terminal strip: full nmap output on one line", ["h-web"]),
@@ -514,11 +527,20 @@ const vectors: PrivescVector[] = [
 
 const tunnels: Tunnel[] = [
   { id: "t-1", engagementId: "e-lab", kind: "ligolo", viaHostId: "h-pivot", subnets: ["10.10.21.0/24", "10.10.22.0/24"], callbackIp: "192.0.2.10", status: "up", notes: "ligolo-ng agent, tun interface ligolo", createdAt: ago(50 * MIN), updatedAt: ago(50 * MIN) },
+  { id: "t-2", engagementId: "e-lab", kind: "chisel", viaHostId: "h-int-app", subnets: ["10.10.23.0/24"], callbackIp: "192.0.2.10", status: "down", notes: "chisel client died after the box rebooted", createdAt: ago(30 * MIN), updatedAt: ago(15 * MIN) },
 ];
 
+const interfaceDismissals: InterfaceDismissal[] = [];
 const hops: Hop[] = [
   { id: "hp-1", engagementId: "e-lab", fromHostId: null, toHostId: "h-web", via: "Upload form webshell", logEntryId: "l-16", at: ago(110 * MIN), updatedAt: ago(110 * MIN) },
   { id: "hp-2", engagementId: "e-lab", fromHostId: "h-web", toHostId: "h-pivot", via: "Reused svc_backup over RDP", logEntryId: null, at: ago(75 * MIN), updatedAt: ago(75 * MIN) },
+  { id: "hp-3", engagementId: "e-lab", fromHostId: null, toHostId: "h-fs01", via: "Sprayed password over WinRM", logEntryId: null, at: ago(70 * MIN), updatedAt: ago(70 * MIN) },
+  { id: "hp-4", engagementId: "e-lab", fromHostId: "h-fs01", toHostId: "h-sql01", via: "xp_cmdshell", logEntryId: null, at: ago(60 * MIN), updatedAt: ago(60 * MIN) },
+  { id: "hp-5", engagementId: "e-lab", fromHostId: "h-sql01", toHostId: "h-dc01", via: "Kerberoast, then DCSync", logEntryId: null, at: ago(45 * MIN), updatedAt: ago(45 * MIN) },
+  { id: "hp-6", engagementId: "e-lab", fromHostId: "h-pivot", toHostId: "h-int-app", via: "SSH with a key from the share", logEntryId: null, at: ago(40 * MIN), updatedAt: ago(40 * MIN) },
+  { id: "hp-7", engagementId: "e-lab", fromHostId: "h-pivot", toHostId: "h-int-db", via: "MSSQL as svc_sql", logEntryId: null, at: ago(35 * MIN), updatedAt: ago(35 * MIN) },
+  // ws07's own way in was never recorded: the chain starts under Kali as not recorded.
+  { id: "hp-8", engagementId: "e-lab", fromHostId: "h-ws07", toHostId: "h-ws12", via: "Pass the hash", logEntryId: null, at: ago(25 * MIN), updatedAt: ago(25 * MIN) },
 ];
 
 const notes: Note[] = [
@@ -568,7 +590,7 @@ const settings: Settings = {
 };
 
 export const FIXTURES: AuditFixtures = {
-  engagements, hosts, services, log, attachments, checklist, notes, ruledOut, hostIdentity, vectors, tunnels, hops, credentials, usernames,
+  engagements, hosts, services, log, attachments, checklist, notes, ruledOut, hostIdentity, vectors, tunnels, interfaceDismissals, hops, credentials, usernames,
   credAttempts, triedPairs, payloadBuilds, extractions, accessGrants, findings, findingFiles, failedAttempts, cleanup, backups, settings,
 };
 

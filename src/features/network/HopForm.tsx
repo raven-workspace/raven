@@ -1,22 +1,23 @@
 import { useId, useState, type FormEvent } from "react";
 import type { Host } from "../../types/host";
 import type { Hop } from "../../types/network";
-import { ArrowRight, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
-import { Button, Dialog, Field, IconButton, Input, Panel, Select } from "../../ui";
-import { ConfirmDelete } from "./ConfirmDelete";
-import { useHopMutations } from "./queries";
+import { Button, Dialog, Field, Input, Select } from "../../ui";
+import { ConfirmDelete } from "../checklist/ConfirmDelete";
+import { useHopMutations } from "../checklist/queries";
 
 const KALI = "kali";
 
 const hostName = (hosts: Host[], id: string | null) => (id === null ? "Kali" : (hosts.find((h) => h.id === id)?.name ?? "?"));
 
-function HopForm({ engagementId, hosts, hop, onClose }: { engagementId: string; hosts: Host[]; hop?: Hop; onClose: () => void }) {
+export function HopForm({ engagementId, hosts, hop, onClose }: { engagementId: string; hosts: Host[]; hop?: Hop; onClose: () => void }) {
   const formId = useId();
-  const { create, update } = useHopMutations(engagementId);
+  const { create, update, remove } = useHopMutations(engagementId);
   const [from, setFrom] = useState(hop ? (hop.fromHostId ?? KALI) : KALI);
   const [to, setTo] = useState(hop?.toHostId ?? hosts[0]?.id ?? "");
   const [via, setVia] = useState(hop?.via ?? "");
   const [errors, setErrors] = useState<Partial<Record<"via" | "toHostId" | "form", string>>>({});
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string>();
   const pending = create.isPending || update.isPending;
 
   function submit(e: FormEvent) {
@@ -45,6 +46,9 @@ function HopForm({ engagementId, hosts, hop, onClose }: { engagementId: string; 
       title={hop ? "Edit hop" : "Add hop"}
       footer={
         <>
+          {hop && (
+            <Button variant="quiet-danger" className="mr-auto" onClick={() => { setDeleteError(undefined); setDeleting(true); }}>Delete hop</Button>
+          )}
           <Button onClick={onClose}>Cancel</Button>
           <Button type="submit" form={formId} variant="primary" disabled={pending}>
             {hop ? "Save" : "Add hop"}
@@ -66,48 +70,16 @@ function HopForm({ engagementId, hosts, hop, onClose }: { engagementId: string; 
         </Field>
         {errors.form && <p role="alert" className="m-0 text-meta text-warn">{errors.form}</p>}
       </form>
-    </Dialog>
-  );
-}
-
-export function HopsPanel({ engagementId, hosts, hops }: { engagementId: string; hosts: Host[]; hops: Hop[] }) {
-  const [editing, setEditing] = useState<Hop | "new" | null>(null);
-  const { remove } = useHopMutations(engagementId);
-  const [deleting, setDeleting] = useState<Hop | null>(null);
-  const [deleteError, setDeleteError] = useState<string>();
-  return (
-    <Panel title="Hops" actions={<IconButton icon={Plus} label="Add hop" onClick={() => setEditing("new")} />}>
-      {hops.length === 0 ? (
-        <p className="m-0 text-meta text-muted">No hops yet.</p>
-      ) : (
-        <ul className="m-0 grid list-none p-0">
-          {hops.map((h) => {
-            const from = hostName(hosts, h.fromHostId);
-            const to = hostName(hosts, h.toHostId);
-            return (
-              <li key={h.id} className="grid grid-cols-[minmax(0,max-content)_16px_minmax(0,max-content)_minmax(0,1fr)_28px_28px] items-center gap-2 border-b border-line py-2 last:border-b-0">
-                <span className="truncate font-mono text-code text-fg" title={from}>{from}</span>
-                <ArrowRight size={16} className="text-muted" role="img" aria-label="to" />
-                <span className="truncate font-mono text-code text-fg" title={to}>{to}</span>
-                <span className="truncate text-body text-fg-2" title={h.via}>via {h.via}</span>
-                <IconButton icon={PencilSimple} label={`Edit hop to ${to}`} onClick={() => setEditing(h)} />
-                <IconButton icon={Trash} label={`Delete hop to ${to}`} tone="destructive" onClick={() => { setDeleteError(undefined); setDeleting(h); }} />
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {deleting && (
+      {hop && deleting && (
         <ConfirmDelete
-          title={`Delete the hop to ${hostName(hosts, deleting.toHostId)}?`}
+          title={`Delete the hop to ${hostName(hosts, hop.toHostId)}?`}
           label="Delete hop"
           error={deleteError}
           pending={remove.isPending}
-          onCancel={() => setDeleting(null)}
-          onConfirm={() => remove.mutate(deleting.id, { onSuccess: () => setDeleting(null), onError: (e) => setDeleteError(e.message) })}
+          onCancel={() => setDeleting(false)}
+          onConfirm={() => remove.mutate(hop.id, { onSuccess: onClose, onError: (e) => setDeleteError(e.message) })}
         />
       )}
-      {editing && <HopForm engagementId={engagementId} hosts={hosts} hop={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} />}
-    </Panel>
+    </Dialog>
   );
 }

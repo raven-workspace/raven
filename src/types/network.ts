@@ -46,3 +46,11 @@ export interface HopInput {
   logEntryId?: string | null;
   at?: number;
 }
+
+/** Mirrors the Rust `InterfaceDismissal`: a subnet suggestion the user waved away for one host. */
+export interface InterfaceDismissal {
+  engagementId: string;
+  hostId: string;
+  subnet: string;
+  createdAt: number;
+}

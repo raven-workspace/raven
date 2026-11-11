@@ -42,7 +42,7 @@ export function fillLibraryCommand(c: LibraryCommand, input: FillInput, msfMarke
   const fileTok = /(?<![$%])\{(FILE|SCRIPT)\}/.exec(c.template);
   if (fileTok) out.fileToken = { hostId: input.host.id, os: input.host.os === "windows" || input.host.os === "linux" ? input.host.os : null, token: fileTok[1] as "FILE" | "SCRIPT" };
   if (filled.dcByName) out.dcByName = true;
-  if (filled.viaTunnel) out.viaTunnel = { viaHostName: filled.viaTunnel.viaHostName, down: filled.viaTunnel.down };
+  if (filled.viaTunnel) out.viaTunnel = { viaHostId: filled.viaTunnel.tunnel.viaHostId, viaHostName: filled.viaTunnel.viaHostName, down: filled.viaTunnel.down };
   return out;
 }
 
