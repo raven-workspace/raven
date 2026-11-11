@@ -1,10 +1,10 @@
-import { CaretDownIcon, CaretRightIcon, PencilSimpleIcon, TrashIcon } from "@phosphor-icons/react";
+import { CaretRightIcon, PencilSimpleIcon, TrashIcon } from "@phosphor-icons/react";
 import { useState } from "react";
 import { HOST_IP } from "../../engines/attribution";
 import { shortHostName } from "../../lib/hostName";
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
-import { Button, Chip, Dialog, IconButton, Toolbar } from "../../ui";
+import { Button, CARET_TURN, Chip, Collapse, Dialog, IconButton, Toolbar } from "../../ui";
 import { cx } from "../../lib/cx";
 import { EditEntryDialog } from "./EditEntryDialog";
 import { KIND_LABELS } from "./kindLabels";
@@ -65,7 +65,6 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
     : hasExtras
       ? "grid-cols-[2.75rem_6rem_minmax(0,1fr)_auto]"
       : "grid-cols-[2.75rem_6rem_minmax(0,1fr)]";
-  const Caret = open ? CaretDownIcon : CaretRightIcon;
 
   const row = (
     <button
@@ -125,10 +124,11 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
         {picking ? (
           <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center">
             <IconButton
-              icon={Caret}
+              icon={CaretRightIcon}
               label={open ? "Hide the entry" : "Show the entry"}
               aria-label={open ? `Hide ${entry.title}` : `Show ${entry.title}`}
               aria-expanded={open}
+              className={CARET_TURN}
               onClick={() => setOpen((o) => !o)}
             />
             {row}
@@ -143,13 +143,11 @@ export function LogEntryRow({ entry, hosts, defaultOpen = false, currentHostId, 
           </Toolbar>
         )}
       </div>
-      {open && (
-        <div className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-3 px-1 pb-3">
-          <div className="col-start-2 grid min-w-0 gap-3">
-            <LogEntryBody entry={entry} />
-          </div>
+      <Collapse open={open} contentClassName="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-3 px-1 pb-3">
+        <div className="col-start-2 grid min-w-0 gap-3">
+          <LogEntryBody entry={entry} />
         </div>
-      )}
+      </Collapse>
       {editing && <EditEntryDialog entry={entry} hosts={hosts} onClose={() => setEditing(false)} />}
       <Dialog
         open={deleting}

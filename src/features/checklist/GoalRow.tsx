@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { DA_COVER_LABEL, isCoverMarked, type ChecklistGoal } from "../../engines/checklist";
 import { getCards, useLibraryVersion } from "../../engines/library/store";
 import type { ChecklistStatus, ItemState } from "../../types/checklist";
-import { ArrowSquareOut, CaretDown, CaretRight } from "@phosphor-icons/react";
-import { Button, ChipSet, Disclosure, IconButton, Textarea, fieldLabelClass } from "../../ui";
+import { ArrowSquareOut, CaretRightIcon } from "@phosphor-icons/react";
+import { Button, CARET_TURN, ChipSet, Collapse, Disclosure, IconButton, Textarea, fieldLabelClass } from "../../ui";
 import { ToggleGroup, ToggleGroupItem } from "../../ui/shadcn/toggle-group";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { CommandList, type FilledCommand } from "./CommandList";
@@ -106,14 +106,14 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
   }, [focus]);
   const titleClass = status === "done" ? "text-muted line-through" : status === "na" ? "text-muted" : "text-fg";
   const cover = isCoverMarked(state);
-  const Caret = open ? CaretDown : CaretRight;
 
   return (
     <li ref={root} data-goal-id={goal.id} data-status={status} className={`grid items-start gap-x-2 gap-y-3 border-b border-line py-3 ${cover ? "grid-cols-[28px_minmax(0,1fr)_auto_auto]" : "grid-cols-[28px_minmax(0,1fr)_auto]"}`}>
       <IconButton
-        icon={Caret}
+        icon={CaretRightIcon}
         label={`${open ? "Collapse" : "Expand"} ${goal.title}`}
         aria-expanded={open}
+        className={CARET_TURN}
         onClick={() => setOpen((o) => !o)}
       />
       <div data-testid="goal-title-col" className="grid min-w-0 gap-1">
@@ -126,8 +126,7 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
       {status === "done" && newCredLabels && newCredLabels.length > 0 && (
         <div className="col-start-2 col-end-[-1] min-w-0"><NewCredNotice labels={newCredLabels} /></div>
       )}
-      {open && (
-        <div className="col-start-2 col-end-[-1] grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
+      <Collapse open={open} className="col-start-2 col-end-[-1] min-w-0" contentClassName="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
           {goal.why && <p className="m-0 text-meta text-muted">{goal.why}</p>}
           {commands.length > 0 ? (
             <>
@@ -153,8 +152,7 @@ export function GoalRow({ goal, state, commands, evidence, emptyCommandsText, ne
             />
           </div>
           <EvidenceLinks evidence={evidence} onOpen={(id) => onOpenEntry?.(id)} />
-        </div>
-      )}
+      </Collapse>
     </li>
   );
 }

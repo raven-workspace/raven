@@ -2,7 +2,7 @@ import { ArrowsOut } from "@phosphor-icons/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useMatch, useNavigate } from "react-router";
 import { isFreeKey, useKeydown } from "../../lib/keys";
-import { BELOW_TITLE_BAR, HintLine, IconButton, Input } from "../../ui";
+import { BELOW_TITLE_BAR, HintLine, IconButton, Input, useDrawerPresence, useFadeOnChange } from "../../ui";
 import { useFillScope } from "../arsenal/useFillScope";
 import { ContextChips } from "./ContextChips";
 import { PayloadBlock, PayloadView } from "./PayloadView";
@@ -11,6 +11,7 @@ import { TransferPanel } from "./TransferPanel";
 import { hasToggles, showsFilter } from "./usePayloadFit";
 import { GENERATOR_LIST_ID, GENERATORS, hintsFor, usePayloadSession } from "./usePayloadSession";
 import { usePayloadsStore } from "./usePayloadsStore";
+import { TabMarker } from "../../ui/TabMarker";
 
 const TABBABLE = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]";
 /** The drawer's Tab stops, in order. */
@@ -44,6 +45,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
   const bodyRef = useRef<HTMLDivElement>(null);
   const s = usePayloadSession({ engagementId, hostId: routeHostId, bodyRef, onEscape: () => usePayloadsStore.getState().close() });
   const { generator, fit, ranked, index, setIndex, built, guard, note, hostRef, osRef, contextRef, callbacksRef, filterRef, toolsRef, portRef, psRef } = s;
+  useFadeOnChange(bodyRef, generator);
   const hints = useMemo(
     () => hintsFor(generator, "close", [], ranked?.ordered, fit.filterApplies),
     [generator, ranked?.ordered, fit.filterApplies],
@@ -58,14 +60,16 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
       }}
     >
       <header className="grid grid-cols-[minmax(0,1fr)_28px] items-center gap-2 border-b border-line px-4 py-2">
-        <div role="tablist" aria-label="Generator" className="grid grid-flow-col justify-start gap-1 overflow-hidden">
+        <div role="tablist" aria-label="Generator" className="relative isolate grid grid-flow-col justify-start gap-1 overflow-hidden">
+          <TabMarker className="rounded-sm ring-1 ring-inset ring-accent" />
           {GENERATORS.map((g, i) => (
             <button
               key={g.id} type="button" role="tab" aria-selected={generator === g.id} title={`⌥${i + 1}`}
               onClick={() => usePayloadsStore.getState().setGenerator(g.id)}
               // An inset ring, not a border: six tabs at 13px fit the 560px drawer beside Full screen. Only the selected one
-              // is outlined (accent); the rest are plain until hovered, so the row reads as one choice, not six boxes.
-              className={`h-7 cursor-default whitespace-nowrap rounded-sm px-2 text-meta ring-1 ring-inset ${generator === g.id ? "text-accent ring-accent" : "text-fg-2 ring-transparent hover:bg-surface-hi hover:text-fg"}`}
+              // is outlined (accent, the list's TabMarker, which glides to it); the rest are plain until hovered, so the
+              // row reads as one choice, not six boxes.
+              className={`h-7 cursor-default whitespace-nowrap rounded-sm px-2 text-meta ${generator === g.id ? "text-accent" : "text-fg-2 hover:bg-surface-hi hover:text-fg"}`}
             >
               {g.label}
             </button>
@@ -134,6 +138,8 @@ export function PayloadsDrawer() {
 
   // A lock unmounts this; the next unlock must not find it open.
   useEffect(() => () => usePayloadsStore.getState().close(), []);
+  // Slides in from the edge and back out; full-screen Payloads replaces it (it slides out over the page).
+  const [present, drawerRef] = useDrawerPresence<HTMLElement>(open && !onFull);
 
   // A layout effect: it runs before the body's own (passive) effect takes focus, so it sees where focus was before P.
   useLayoutEffect(() => {
@@ -146,9 +152,9 @@ export function PayloadsDrawer() {
     returnFocus.current = active instanceof HTMLElement && active !== document.body ? active : null;
   }, [open]);
 
-  if (!open || onFull) return null;
+  if (!present) return null;
   return (
-    <aside aria-label="Payloads" data-hint-surface="" className={`fixed ${BELOW_TITLE_BAR} right-0 z-30 grid w-[560px] max-w-[70vw] border-l border-line-2 bg-surface text-fg-2`}>
+    <aside ref={drawerRef} aria-label="Payloads" data-hint-surface="" className={`fixed ${BELOW_TITLE_BAR} right-0 z-30 grid w-[560px] max-w-[70vw] border-l border-line-2 bg-surface text-fg-2`}>
       <DrawerBody engagementId={engagementId} hostId={hostId} />
     </aside>
   );

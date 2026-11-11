@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { reportError } from "../../lib/lockSignal";
 import type { LogEntry } from "../../types/log";
-import { Button } from "../../ui";
+import { Button, Collapse } from "../../ui";
 import { undoExtraction, useExtractions } from "./extractions";
 
 /** What this entry's save filed: one collapsed line with Undo, or every line when opened (the line toggles). */
@@ -41,13 +41,13 @@ export function ExtractedLine({ entry }: { entry: LogEntry }) {
           {!open && <span className={lines[0].win ? "text-accent" : undefined}>{lines[0].t}</span>}
           {!open && more > 0 && <span>{`, +${more} more`}</span>}
         </button>
-        {open && (
+        <Collapse open={open}>
           <ul className="m-0 grid list-none gap-1 p-0">
             {lines.map((l, i) => (
               <li key={i} className={l.win ? "text-accent" : "text-muted"}>{l.t}</li>
             ))}
           </ul>
-        )}
+        </Collapse>
       </div>
       <Button size="sm" onClick={() => void undo()} disabled={busy}>Undo</Button>
     </div>

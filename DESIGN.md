@@ -189,6 +189,21 @@ A section view fits its primary job in one viewport at 900×800, and the whole p
 - The only shadow is on floating menus and popovers: `0 12px 32px rgba(0,0,0,.6)`.
 - No glows, gradients or glass.
 
+## Motion
+
+Motion only explains a change: what opened, which tab is now selected. It is short, and nothing loops or performs (the lock screen is the one exception). The values live in `src/ui/motion.ts`.
+
+- **Tabs.** The selected tab's mark is drawn once per tab list by `TabMarker` and glides to the new tab in 180ms (`cubic-bezier(0.16, 1, 0.3, 1)`): the surface and underline, the Payloads ring, the Arsenal category wash. Resizes move it without a glide. The new panel fades in over 120ms, opacity only, never moving. Shared `TabsContent` does this; a hand-rolled panel uses `usePanelFade`.
+- **Sidebar.** The current section or host is lit by one `TabMarker` for the whole sidebar (`--surface-hi` and the accent bar). It slides to the new item in 180ms, between sections and hosts alike, on the rail too. The links draw no active background of their own.
+- **Expand and collapse.** Content under a disclosure goes in `Collapse`: height and opacity open in 200ms and close in 150ms, and the parent's gap is part of the motion, so the rows below slide instead of jumping. While closing it is inert. Padding goes on `contentClassName`, not the wrapper.
+- **Carets.** One right caret that turns 90° in 150ms (`DisclosureCaret`, or `CARET_TURN` on an `IconButton`). Never two icons swapped.
+- **Drawers** (Arsenal `A`, Payloads `P`): slide 16px in from the right edge while fading (180ms), and back out on close (120ms), inert while leaving (`useDrawerPresence`). Going full screen slides the drawer out over the page.
+- **Dialogs, ⌘K search included:** the backdrop fades (140ms) and the panel settles from 98% scale, growing from its top edge (160ms); closing takes 100ms. CSS classes `raven-overlay` and `raven-dialog`.
+- **Full pages** (Arsenal, Manual, Payloads, Settings): the content under the title bar fades in when you arrive (`raven-page`, 140ms). The title bar never moves.
+- **New content in a pane that stays** (a Manual note, an Arsenal drawer card or category, a Payloads generator): a 120ms fade (`useFadeOnChange`). Never keyed to typing or arrow keys: search results and the full-screen Arsenal's arrowed reading pane change instantly.
+- **Not animated:** menus and pickers (they already have their own), the sidebar, content that swaps in place (Full checklist), and anything a keystroke repeats many times a minute.
+- **Reduced motion.** No glide, slide, scale or height change. Opened content, new panels, pages and dialogs still fade in (120–140ms); sections and drawers close at once.
+
 ## The lock screen
 
 The lock screen (and the one-time setup screen, which shares it) is the one place Raven performs. It is sparse, seen once per session, and has nothing to compete with, so it is the single exception to "accent is meaning" and "no decorative motion". Nothing here sets a precedent for other views.
@@ -336,7 +351,7 @@ Each table declares its column policy; automatic layout never decides.
 - **Collapsed rail (56px):**
   - Section icons only, each centred in a fixed box. The key number is in the icon's tooltip ("Board · 1"), not on the rail; the expanded sidebar shows the numbers.
   - Hosts stay listed: the state glyph with a short name (first 4 characters, or the last octet) under it, and name and IP in the tooltip.
-  - The current host is lit with a `--surface-hi` background and the accent bar.
+  - The current host is lit with a `--surface-hi` background and the accent bar: the sidebar's one sliding marker (Motion).
   - Add host is a `Plus` icon button at the end of the host list.
 - **Expanded sidebar:** Add host is an icon-only `Plus` button on its own, below the host list, aligned in the glyph column.
 

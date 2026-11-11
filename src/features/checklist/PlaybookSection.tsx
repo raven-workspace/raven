@@ -1,5 +1,5 @@
-import { CaretDown, CaretRight } from "@phosphor-icons/react";
 import { useState, type ReactNode } from "react";
+import { Collapse, DisclosureCaret } from "../../ui";
 
 /** A collapsible group of goals with a heading and its trigger text. */
 export function PlaybookSection({
@@ -16,7 +16,6 @@ export function PlaybookSection({
 }) {
   const [manual, setManual] = useState<boolean | null>(null);
   const open = manual ?? defaultOpen;
-  const Caret = open ? CaretDown : CaretRight;
   return (
     <section aria-label={title} className="grid gap-1 border-t border-line pt-3">
       <button
@@ -25,11 +24,11 @@ export function PlaybookSection({
         onClick={() => setManual(!open)}
         className="grid min-h-7 w-full cursor-default grid-cols-[16px_minmax(0,1fr)] items-center gap-2 rounded-sm text-left text-body font-semibold text-fg hover:bg-surface-hi"
       >
-        <Caret size={16} className="text-muted" aria-hidden />
+        <DisclosureCaret open={open} className="text-muted" />
         <span className="truncate">{title}</span>
       </button>
       <p className="m-0 pl-6 text-meta text-muted">Opens when {opensWhen}</p>
-      {open && <ul className="m-0 list-none p-0">{children}</ul>}
+      <Collapse open={open}><ul className="m-0 list-none p-0">{children}</ul></Collapse>
     </section>
   );
 }

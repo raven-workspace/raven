@@ -350,7 +350,9 @@ export function Palette() {
         if (usePaletteStore.getState().handOff) e.preventDefault();
       }}
     >
-      {isOpen && <PaletteBody engagementId={engagementId} hostId={hostId} remembered={scope.remembered} onClose={close} />}
+      {/* Always rendered: the dialog mounts it on open and unmounts it once its close animation ends, so the whole
+          panel fades out rather than collapsing to its header. */}
+      <PaletteBody engagementId={engagementId} hostId={hostId} remembered={scope.remembered} onClose={close} />
     </Dialog>
   );
 }

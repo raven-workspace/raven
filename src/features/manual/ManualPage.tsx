@@ -5,7 +5,7 @@ import { isInlineCommand, lookupRows, type LookupRow } from "../../engines/manua
 import { getCards, useLibraryVersion } from "../../engines/library/store";
 import { isFreeKey, isTypingTarget, useKeydown } from "../../lib/keys";
 import { RavenError } from "../../types/errors";
-import { Button, Disclosure, EmptyState, ErrorState, HintLine, labelClass, type Hint } from "../../ui";
+import { Button, Disclosure, EmptyState, ErrorState, HintLine, labelClass, useFadeOnChange, type Hint } from "../../ui";
 import { HostChip, isHostPickKey, type HostChipHandle } from "../arsenal/HostChip";
 import { useFillScope, useLastEngagementStore } from "../arsenal/useFillScope";
 import { useFillBase } from "../palette/fillData";
@@ -201,6 +201,8 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
   useEffect(() => useManualStatus.getState().clear(), [hostKey]);
 
   const paneRef = useRef<HTMLElement>(null);
+  // A newly opened note fades in where the last one was (arrows in the rail only move focus, so this is per open).
+  useFadeOnChange(paneRef, note?.id);
   // The match bar: `?q=` marks every match in the note; the current one starts in the hash's section.
   const [params] = useSearchParams();
   const query = params.get(MANUAL_QUERY)?.trim() ?? "";
@@ -600,7 +602,7 @@ export function ManualPage() {
   } else if (status !== "loading") body = <ManualEmpty status={status} />;
   else if (slow) body = <p className="m-0 content-start px-8 py-4 text-meta text-muted">Opening the Manual…</p>;
   return (
-    <main aria-label="Manual" data-hint-surface="" className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto]">
+    <main aria-label="Manual" data-hint-surface="" className="raven-page grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto]">
       {body ?? <div />}
       <footer className="grid border-t border-line px-6 py-2">
         <HintLine hints={hints} more={status === "ready" ? MORE.filter((h) => !hints.some((x) => x.keys === h.keys)) : []} ariaLabel="Manual shortcuts" />

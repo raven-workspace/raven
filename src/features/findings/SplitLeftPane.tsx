@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { cx } from "../../lib/cx";
 import { ChipSet } from "../../ui";
 import { SCROLL_PANE } from "../../ui/controlStyles";
+import { TAB_MARK } from "../../ui/shadcn/tabs";
+import { TabMarker, usePanelFade } from "../../ui/TabMarker";
 import type { Host } from "../../types/host";
 import { shortHostName } from "../../lib/hostName";
 import { hostLabel } from "../credentials/AccessGrants";
@@ -47,6 +49,7 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
   const entries = (log.data ?? []).filter((e) => !activeId || e.hostIds.includes(activeId)).sort(byOrder(order));
 
   const notesRef = useRef<HTMLTextAreaElement>(null);
+  const panelRef = usePanelFade<HTMLDivElement>(tab);
   useEffect(() => {
     if (tab === "notes") notesRef.current?.focus();
   }, [tab, activeId]);
@@ -72,7 +75,8 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
           ))}
         </ChipSet>
       )}
-      <div role="tablist" aria-label="Finding context" className="grid grid-flow-col auto-cols-max justify-start gap-2">
+      <div role="tablist" aria-label="Finding context" className="relative isolate grid grid-flow-col auto-cols-max justify-start gap-2">
+        <TabMarker className={TAB_MARK} />
         {TABS.map((t) => {
           const disabled = t.id === "facts" && !active;
           return (
@@ -86,7 +90,7 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
               onClick={() => onTab(t.id)}
               className={cx(
                 "h-7 cursor-default rounded-[var(--radius-sm)] px-3 text-body disabled:opacity-40",
-                tab === t.id ? "bg-surface-hi font-semibold text-fg shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-muted hover:text-fg",
+                tab === t.id ? "font-semibold text-fg" : "text-muted hover:text-fg",
               )}
             >
               {t.label}
@@ -95,6 +99,7 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
         })}
       </div>
       <div
+        ref={panelRef}
         role="tabpanel"
         aria-label={TABS.find((t) => t.id === tab)!.label}
         className={`@container/ctx grid grid-rows-[minmax(min-content,1fr)] border-t border-line ${SCROLL_PANE}`}

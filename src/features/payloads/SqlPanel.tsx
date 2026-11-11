@@ -1,10 +1,9 @@
-import { CaretDown, CaretRight } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
 import { buildSql, SQL_ENGINES, SQL_EXEC, SQL_STEPS, sqlExecIds, type SqlEngine, type SqlPoint, type SqlValues } from "../../engines/payloads/sql";
 import type { BuiltPayload, PayloadPart } from "../../engines/payloads/types";
 import { copyPlain } from "../../lib/clipboard";
 import { reportError } from "../../lib/lockSignal";
-import { CommandBlock, Disclosure, Input, labelClass, Toggle } from "../../ui";
+import { CommandBlock, Disclosure, DisclosureCaret, Input, labelClass, Toggle } from "../../ui";
 import type { PayloadFit } from "./usePayloadFit";
 import { lhostPlaceholder } from "./usePayloadSession";
 import { usePayloadsStore, type PayloadOverride } from "./usePayloadsStore";
@@ -93,14 +92,13 @@ function FoldHeading({ label, level, finished, folded, result, mono, onToggle }:
 }) {
   const H = level;
   if (!finished) return <H className="m-0 text-heading text-fg">{label}</H>;
-  const Caret = folded ? CaretRight : CaretDown;
   return (
     <H className="m-0">
       <button
         type="button" aria-expanded={!folded} aria-label={folded ? `${label}: ${result}` : label} onClick={onToggle}
         className="grid min-h-7 w-full grid-cols-[16px_minmax(0,max-content)_minmax(0,1fr)] items-center gap-x-3 rounded-sm border-0 bg-transparent px-1 text-left select-none cursor-default hover:bg-surface-hi"
       >
-        <Caret size={16} aria-hidden className="text-muted-2" />
+        <DisclosureCaret open={!folded} className="text-muted-2" />
         <span className={`truncate ${folded ? "text-body text-fg-2" : "text-heading text-fg"}`}>{label}</span>
         {folded && <span className={`truncate text-muted ${mono ? "font-mono text-code" : "text-meta"}`}>{result}</span>}
       </button>

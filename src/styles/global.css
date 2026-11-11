@@ -115,6 +115,26 @@
   }
 }
 
+/*
+ * Motion (DESIGN.md Motion; JS timings in src/ui/motion.ts). A full page fades in under the title bar when you arrive;
+ * a dialog (⌘K search included) settles from 98% while its backdrop fades, and leaves faster than it came. Reduced
+ * motion keeps the fades and drops the scale.
+ */
+@keyframes raven-fade-in { from { opacity: 0; } }
+@keyframes raven-fade-out { to { opacity: 0; } }
+@keyframes raven-settle-in { from { opacity: 0; scale: 0.98; } }
+@keyframes raven-settle-out { to { opacity: 0; scale: 0.98; } }
+.raven-page { animation: raven-fade-in 140ms ease-out; }
+.raven-overlay[data-state="open"] { animation: raven-fade-in 140ms ease-out; }
+.raven-overlay[data-state="closed"] { animation: raven-fade-out 100ms ease-in; }
+.raven-dialog { transform-origin: 50% 0; }
+.raven-dialog[data-state="open"] { animation: raven-settle-in 160ms cubic-bezier(0.16, 1, 0.3, 1); }
+.raven-dialog[data-state="closed"] { animation: raven-settle-out 100ms ease-in; }
+@media (prefers-reduced-motion: reduce) {
+  .raven-dialog[data-state="open"] { animation: raven-fade-in 120ms ease-out; }
+  .raven-dialog[data-state="closed"] { animation: raven-fade-out 100ms ease-in; }
+}
+
 /* One accent outline fade when a host pick changes the fill (chip, filled preview). */
 @keyframes raven-flash {
   from { outline: 1px solid var(--accent); outline-offset: 1px; }
