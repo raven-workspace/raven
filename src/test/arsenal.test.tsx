@@ -130,6 +130,21 @@ describe("Arsenal", () => {
     expect(screen.queryByRole("complementary", { name: "Arsenal" })).not.toBeInTheDocument();
   });
 
+  it("Esc from the full-screen Arsenal goes back to the page it was opened from, not home", async () => {
+    const user = userEvent.setup();
+    mount("/e/e1/h/h1");
+    await screen.findByRole("tab", { name: "Next" });
+    await user.keyboard("a");
+    const d = within(await screen.findByRole("complementary", { name: "Arsenal" }));
+    await user.click(d.getByRole("button", { name: "Full screen" }));
+    await screen.findByRole("textbox", { name: "Search the Arsenal" });
+    expect(screen.queryByRole("tab", { name: "Next" })).not.toBeInTheDocument();
+    await user.click(document.body);
+    await user.keyboard("{Escape}");
+    expect(await screen.findByRole("tab", { name: "Next" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Host" })).toBeInTheDocument();
+  });
+
   it("A does nothing while typing", async () => {
     const user = userEvent.setup();
     mount("/e/e1/h/h1");

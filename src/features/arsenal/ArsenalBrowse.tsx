@@ -5,7 +5,7 @@ import { searchArsenal, type ArsenalHit } from "../../engines/library/arsenalSea
 import { allCategories, categoryLabel, categoryOf } from "../../engines/library/categories";
 import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/store";
 import { cx } from "../../lib/cx";
-import { isDialogOpen, isTypingTarget, useEscapeTo, useKeydown } from "../../lib/keys";
+import { isDialogOpen, isTypingTarget, useEscapeBack, useKeydown } from "../../lib/keys";
 import { Button, HintLine, Select, type Hint } from "../../ui";
 import { useCredPickStore } from "../checklist/credPick";
 import { useFillBase } from "../palette/fillData";
@@ -163,7 +163,8 @@ export function ArsenalBrowse() {
     e.preventDefault();
     clearSearch();
   });
-  useEscapeTo("/");
+  // Back to wherever full screen was opened from, not always home.
+  useEscapeBack();
   const openCategory = (c: string, move: boolean) => {
     setCategory(c);
     setQuery("");
