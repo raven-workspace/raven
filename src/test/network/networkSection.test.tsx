@@ -89,18 +89,30 @@ describe("Network section", () => {
     expect(within(tree).getByText("10.10.14.9")).toBeInTheDocument();
     const web = within(tree).getByRole("link", { name: "WEB01" });
     expect(web).toHaveAttribute("href", "/e/e1/h/h1");
-    expect(within(tree).getByRole("button", { name: "creds" })).toBeInTheDocument();
+    expect(within(tree).getByRole("button", { name: "via creds" })).toBeInTheDocument();
     // DB01 hangs under WEB01.
     const webItem = web.closest<HTMLElement>("li")!;
     expect(within(webItem).getByRole("link", { name: "DB01" })).toBeInTheDocument();
-    expect(within(webItem).getByRole("button", { name: "exploit" })).toBeInTheDocument();
+    expect(within(webItem).getByRole("button", { name: "via exploit" })).toBeInTheDocument();
+  });
+
+  it("a hop chain reads left to right: B sits in A's children stack, not beside A", async () => {
+    mount();
+    const s = await section();
+    const db = await within(s).findByRole("link", { name: "DB01" });
+    const web = within(s).getByRole("link", { name: "WEB01" });
+    expect(db.closest("[data-children-of]")).toHaveAttribute("data-children-of", "h1");
+    expect(web.closest("[data-children-of]")).toHaveAttribute("data-children-of", "kali");
+    // How each host was reached is inside its own node.
+    expect(within(nodeOf(web)).getByRole("button", { name: "via creds" })).toBeInTheDocument();
+    expect(within(nodeOf(db)).getByRole("button", { name: "via exploit" })).toBeInTheDocument();
   });
 
   it("clicking an edge label edits that hop", async () => {
     const user = userEvent.setup();
     mount();
     const s = await section();
-    await user.click(await within(s).findByRole("button", { name: "creds" }));
+    await user.click(await within(s).findByRole("button", { name: "via creds" }));
     const dialog = await screen.findByRole("dialog", { name: "Edit hop" });
     expect(within(dialog).getByLabelText("Via")).toHaveValue("creds");
   });
@@ -149,7 +161,7 @@ describe("Network section", () => {
     const s = await section();
     expect(await within(s).findByText("Your first foothold records your first hop.")).toBeInTheDocument();
     expect(within(s).getByText("Kali")).toBeInTheDocument();
-    expect(within(s).queryByRole("button", { name: "creds" })).not.toBeInTheDocument();
+    expect(within(s).queryByRole("button", { name: "via creds" })).not.toBeInTheDocument();
   });
 
   it("an unrecorded way in is marked not recorded", async () => {

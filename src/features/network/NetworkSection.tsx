@@ -10,11 +10,9 @@ import { Button, labelClass, queryState } from "../../ui";
 import { useHops, useTunnels } from "../checklist/queries";
 import { useHosts } from "../hosts/queries";
 import { HopForm } from "./HopForm";
-import { HostNode, PathTree, type NodeContext } from "./PathTree";
+import { CONNECTOR_PX, HostNode, NODE_PX, PathTree, type NodeContext } from "./PathTree";
 import { TunnelForm } from "./TunnelForm";
 
-/** Room one hop depth needs in the tree (node plus edge). Narrower than (columns + Kali) of these: the indented list. */
-const COLUMN_PX = 240;
 /** How long an arrival's node keeps its accent outline. */
 const FOCUS_MS = 2000;
 
@@ -22,10 +20,13 @@ type Dialog =
   | { kind: "hop"; hop?: Hop }
   | { kind: "tunnel"; tunnel?: Tunnel; viaHostId?: string };
 
+/** The tree's width: one fixed-width node per column (Kali plus each hop depth), a connector between columns. */
+const treeWidth = (columns: number) => (columns + 1) * NODE_PX + columns * CONNECTOR_PX;
+
 /**
- * The attack path: Kali, then hosts by hop depth, the hops as labelled edges and tunnels as badges on their pivots,
- * with the hosts not yet reached in a tray below. Under 1000px (or whenever the tree is wider than the pane) the same
- * path reads as an indented list.
+ * The attack path: Kali, then hosts by hop depth, each node saying how it was reached and carrying its tunnels, with
+ * the hosts not yet reached in a tray below. When the section is narrower than the tree (`treeWidth`: four columns need
+ * 952px), or the drawn tree still overflows it, the same path reads as an indented list.
  */
 export function NetworkSection() {
   const { id = "" } = useParams();
@@ -61,16 +62,17 @@ export function NetworkSection() {
   const loaded = !!path && !!tunnelsQ.data && !!settings.data;
 
   // Tree when the estimate says it fits and, drawn, it really does; otherwise the list. The width it overflowed at is
-  // remembered for this path, so the pane must grow past it before the tree is tried again (no flip-flopping).
+  // remembered for this path and these tunnels, so the pane must grow past it before the tree is tried again (no flip-flopping).
   const pathRef = useRef<HTMLDivElement>(null);
-  const [overflowAt, setOverflowAt] = useState<{ width: number; path: NetworkPath }>();
-  const fits = width === undefined || width >= ((path?.columns ?? 0) + 1) * COLUMN_PX;
-  const overflowed = !!overflowAt && overflowAt.path === path && width !== undefined && width <= overflowAt.width;
+  const [overflowAt, setOverflowAt] = useState<{ width: number; path: NetworkPath; tunnels: Tunnel[] }>();
+  const fits = width === undefined || width >= treeWidth(path?.columns ?? 0);
+  // Keyed on what is drawn: a new path or a changed tunnel list (a wide chip deleted) tries the tree again.
+  const overflowed = !!overflowAt && overflowAt.path === path && overflowAt.tunnels === tunnels && width !== undefined && width <= overflowAt.width;
   const variant = fits && !overflowed ? "tree" : "list";
   useLayoutEffect(() => {
     const el = pathRef.current;
     if (variant !== "tree" || !el || width === undefined || !path) return;
-    if (el.scrollWidth > el.clientWidth + 1) setOverflowAt({ width, path });
+    if (el.scrollWidth > el.clientWidth + 1) setOverflowAt({ width, path, tunnels });
   }, [variant, width, path, tunnels, settings.data]);
 
   useEffect(() => {
@@ -114,7 +116,7 @@ export function NetworkSection() {
       {path.unreached.length > 0 && (
         <section aria-label="Not reached" className="grid gap-3">
           <h4 className={`m-0 ${labelClass}`}>Not reached</h4>
-          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(176px,1fr))] gap-3 p-0">
+          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,13rem)] gap-3 p-0">
             {path.unreached.map((h) => (
               <li key={h.id} className="grid">
                 <HostNode host={h} ctx={ctx} dim />
