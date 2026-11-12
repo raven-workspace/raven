@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createEditor, Priority, type Editor, type NodeJSON } from "prosekit/core";
 import type { Node as PMNode } from "prosekit/pm/model";
 import { NodeSelection, type Command } from "prosekit/pm/state";
 import { ProseKit, useDocChange, useKeymap } from "prosekit/react";
 import { isFigure, type EvidenceAttrs, type PageHeadings, type ReportData, type ReportNode } from "../../../engines/report";
 import { BlockHandle } from "./BlockHandle";
-import { defineReportExtension } from "./extension";
+import { defineReportExtension, type SubNumbers } from "./extension";
 import { FormatToolbar } from "./FormatToolbar";
 import { PageLayoutContext, useReportData, type PageLayout } from "./ReportDataContext";
 import "../page.css";
@@ -28,6 +28,9 @@ function layoutOf(doc: PMNode, data: ReportData, sectionId: string, figureOffset
   walk(doc, "");
   return { sectionId, figureOf: (n) => figures.get(n) ?? null, pathOf: (n) => paths.get(n) ?? null, touched, heading: (key) => headings?.get(key) ?? null };
 }
+
+/** Each page's numbering holder (see `SubNumbers`), by its editor. */
+const pageNumbers = new WeakMap<Editor, SubNumbers>();
 
 /** Pages the owner has focused: before that the selection is only ProseMirror's default (often the first block). */
 const touched = new WeakSet<Editor>();
@@ -202,7 +205,7 @@ export function ReportEditor({
   sectionId,
   title,
   titleNumber,
-  number,
+  subNumbers,
   doc,
   onChange,
   onReady,
@@ -215,8 +218,9 @@ export function ReportEditor({
   title?: string;
   /** The title's number ("3"), printed before it as OffSec's sample does. */
   titleNumber?: string;
-  /** A numbered report-level page's number ("3"): its headings print as 3.1, 3.2 (OffSec's sample), computed, never stored. */
-  number?: string;
+  /** A numbered report-level page's sub-section numbers (3.1, 3.2, as OffSec's sample), from its live document, by
+   *  top-level index; computed, never stored. */
+  subNumbers?(doc: ReportNode): Map<number, string>;
   doc: ReportNode;
   onChange(doc: ReportNode): void;
   onReady(editor: Editor): void;
@@ -229,10 +233,20 @@ export function ReportEditor({
 }) {
   const value = useReportData();
   const [initialDoc] = useState(doc);
-  const editor = useMemo(
-    () => createEditor({ extension: defineReportExtension(), defaultContent: initialDoc as NodeJSON }),
-    [initialDoc],
-  );
+  const editor = useMemo(() => {
+    const numbers: SubNumbers = { current: undefined };
+    const made = createEditor({ extension: defineReportExtension(numbers), defaultContent: initialDoc as NodeJSON });
+    pageNumbers.set(made, numbers);
+    return made;
+  }, [initialDoc]);
+  // The numbering plugin reads the current numbering as the page redraws; set before the page mounts.
+  useLayoutEffect(() => {
+    const holder = pageNumbers.get(editor);
+    if (!holder || holder.current === subNumbers) return;
+    holder.current = subNumbers;
+    // Redraw so the headings take the numbers now, not at the next keystroke.
+    if (editor.mounted) editor.view.updateState(editor.view.state);
+  });
   const [current, setCurrent] = useState<PMNode>(() => editor.state.doc);
   const figureOffset = value.figureOffset ?? 0;
   // `touched` (what hasPageCursor reads) is the one record; this count only re-renders the page when it changes.
@@ -284,11 +298,7 @@ export function ReportEditor({
         <PageHooks onDoc={onDoc} onRemoveEvidence={value.onRemoveEvidence} />
         <FormatToolbar end={toolbarEnd} className={toolbarClassName} />
         {notices}
-        <div
-          className="report-page"
-          data-numbered={number ? true : undefined}
-          style={number ? ({ "--report-number": JSON.stringify(number) } as CSSProperties) : undefined}
-        >
+        <div className="report-page">
           {title && (
             <h1 className="report-title">
               {titleNumber && <span className="report-num">{titleNumber}</span>}

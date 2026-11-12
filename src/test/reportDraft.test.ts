@@ -182,8 +182,8 @@ describe("buildTargetDraft", () => {
     expect(outline(doc)).toEqual([
       "G:facts",
       "# enum", "G:port-scan", "S", "nmap",
-      "# foothold", "S", "ferox", "shot", "S", "curl",
-      "# privesc", "S", "whoami", "S", "printspoofer",
+      "# foothold", "S:Steps to reproduce the attack:", "S", "ferox", "shot", "S", "curl",
+      "# privesc", "S:Steps to reproduce the attack:", "S", "whoami", "S", "printspoofer",
       "# tested", "G:tested",
       "# post", "flag",
     ]);
@@ -275,21 +275,38 @@ describe("buildTargetDraft", () => {
     expect(phasesOf(buildTargetDraft(d, target([H]), {}))).toEqual(["enum", "foothold", "privesc", "post"]);
   });
 
-  it("opens a phase with its finding's vulnerability and the reproduce slot, its exploit after the steps", () => {
+  it("opens a phase with its finding's vulnerability and the reproduce slot; an exploit no step names goes before the access step", () => {
     const d = windowsHost();
     d.findings = [{ id: "f1", hostIds: [H], serviceIds: [], stepEntryIds: ["whoami", "printspoofer"] } as unknown as Finding];
-    d.findingFiles = [{ id: "file1", findingId: "f1", modified: true } as FindingFile];
+    d.findingFiles = [{ id: "file1", findingId: "f1", name: "exploit.c", modified: true } as FindingFile];
     const doc = buildTargetDraft(d, target([H]), {});
     const lines = outline(doc);
     const privesc = lines.indexOf("# privesc");
     expect(lines.slice(privesc, lines.indexOf("# tested"))).toEqual([
-      "# privesc", "V:f1", "S:Steps to reproduce the attack:", "S", "whoami", "S", "printspoofer", "X:file1", "S",
+      "# privesc", "V:f1", "S:Steps to reproduce the attack:", "S", "whoami", "X:file1", "S", "S", "printspoofer",
     ]);
     expect(doc.content![privesc + 2]).toEqual({
       type: "slot",
       attrs: { hint: "A short summary of the attack, start to finish", label: "Steps to reproduce the attack:" },
     });
     expect(doc.content![lines.indexOf("X:file1") + 1]).toEqual({ type: "slot", attrs: { hint: "Explain each change" } });
+  });
+
+  it("puts an exploit just before the step whose command runs it, else at the end of the phase", () => {
+    const d = windowsHost();
+    d.log[3] = entry("ferox", H, 10, { kind: "command", blocks: [{ command: "python3 46153.py -u admin -i http://10.0.0.5", output: "ok" }] });
+    d.findings = [{ id: "f1", hostIds: [H], serviceIds: [], stepEntryIds: ["ferox"] } as unknown as Finding];
+    d.findingFiles = [
+      { id: "edb", findingId: "f1", name: "exploits/46153.py", modified: true } as FindingFile,
+      { id: "other", findingId: "f1", name: "notes.txt", modified: false } as FindingFile,
+    ];
+    d.grants = [];
+    d.checklist.push(goal(H, ["curl"]));
+    const lines = outline(buildTargetDraft(d, target([H]), {}));
+    const foot = lines.slice(lines.indexOf("# foothold"), lines.indexOf("# tested"));
+    expect(foot.slice(0, 6)).toEqual(["# foothold", "V:f1", "S:Steps to reproduce the attack:", "X:edb", "S", "S"]);
+    expect(foot[6]).toBe("ferox");
+    expect(foot.at(-1)).toBe("X:other");
   });
 
   it("has no generated appendices or old blocks", () => {
@@ -299,6 +316,31 @@ describe("buildTargetDraft", () => {
 });
 
 describe("addNewEvidence", () => {
+  it("adds the Also tested heading and list once something was tried and failed", () => {
+    const d = windowsHost();
+    d.attempts = [];
+    const doc = buildTargetDraft(d, target([H]), {});
+    expect(phasesOf(doc)).not.toContain("tested");
+    d.attempts = [{ id: "a2", hostId: H, title: "Kerberoasting", reasonKind: "precondition", reason: "", private: false, logEntryId: null } as FailedAttempt];
+    const res = addNewEvidence(doc, d, target([H]), {}, []);
+    expect(res.added).toEqual([]);
+    expect(res.addedTested).toEqual([H]);
+    expect(phasesOf(res.doc)).toEqual(["enum", "foothold", "privesc", "tested", "post"]);
+    expect(addNewEvidence(res.doc, d, target([H]), {}, []).addedTested).toEqual([]);
+  });
+
+  it("puts a new step that runs an exploit on the page right after the exploit", () => {
+    const d = windowsHost();
+    d.findings = [{ id: "f1", hostIds: [H], serviceIds: [], stepEntryIds: ["curl"] } as unknown as Finding];
+    d.findingFiles = [{ id: "edb", findingId: "f1", name: "46153.py", modified: true } as FindingFile];
+    const doc = buildTargetDraft(d, target([H]), {});
+    d.log.push(entry("run", H, 19, { kind: "command", blocks: [{ command: "python3 46153.py", output: "ok" }] }));
+    d.checklist.push(goal(H, ["run"]));
+    const lines = outline(addNewEvidence(doc, d, target([H]), {}, []).doc);
+    const x = lines.indexOf("X:edb");
+    expect(lines.slice(x, x + 4)).toEqual(["X:edb", "S", "S", "run"]);
+  });
+
   it("appends a new step to the end of its phase, its slot before it, and leaves everything else alone", () => {
     const d = windowsHost();
     const doc = buildTargetDraft(d, target([H]), {});
@@ -396,7 +438,8 @@ describe("AD set draft", () => {
     expect(nodes[0]).toEqual({ type: "generated", attrs: { kind: "port-scan", hostId: null, appendix: "inline" } });
     expect(nodes[nodes.length - 1].attrs?.kind).toBe("attack-chain");
     const facts = nodes.filter((n) => n.attrs?.kind === "facts").map((n) => n.attrs?.hostId);
-    expect(facts).toEqual(["h-ad02", "h-dc01", "h-ms01"]);
+    // The attack path: the entry machine, then by when each was reached, the DC last.
+    expect(facts).toEqual(["h-ms01", "h-ad02", "h-dc01"]);
     const firstPhase = (hostId: string) => nodes.find((n) => n.type === "phase" && n.attrs?.hostId === hostId)?.attrs?.phase;
     expect(firstPhase("h-ms01")).toBe("foothold");
     expect(firstPhase("h-ad02")).toBe("lateral");

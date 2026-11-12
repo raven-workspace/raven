@@ -95,7 +95,7 @@ const CHAPTERS: Partial<Record<SectionKind, string>> = {
   summary: "High-Level Summary",
   methodology: "Methodologies",
   ad: "Active Directory Set",
-  "engagement-tested": "Also Tested",
+  "engagement-tested": "Also tested",
 };
 const UNNUMBERED: Partial<Record<SectionKind, string>> = {
   considerations: "Testing Considerations",
@@ -132,5 +132,25 @@ export function sectionNumbers(sections: { id: string; kind: SectionKind }[]): M
     const text = UNNUMBERED[s.kind];
     out.set(s.id, { number: null, title: text ? { number: null, text } : null });
   }
+  return out;
+}
+
+/** The sub-sections a report-level page is drafted with, as the sample names them. Only these are numbered: a heading
+ *  the owner adds is theirs and stays unnumbered. */
+const SUBSECTIONS: Partial<Record<SectionKind, string[]>> = {
+  introduction: ["Introduction", "Objective", "Requirements"],
+  summary: ["Recommendations"],
+  methodology: ["Information Gathering", "Service Enumeration", "Penetration", "Maintaining Access", "House Cleaning"],
+};
+
+const textOf = (n: ReportNode): string => (n.text ?? "") + (n.content ?? []).map(textOf).join("");
+
+/** A numbered page's sub-section numbers ("3.1"…), by top-level index, in page order (OffSec's sample: 1.1, 2.1, 3.5). */
+export function subsectionNumbers(kind: SectionKind, number: string, doc: ReportNode): Map<number, string> {
+  const names = new Set((SUBSECTIONS[kind] ?? []).map((n) => n.toLowerCase()));
+  const out = new Map<number, string>();
+  (doc.content ?? []).forEach((n, i) => {
+    if (n.type === "heading" && names.has(textOf(n).trim().toLowerCase())) out.set(i, `${number}.${out.size + 1}`);
+  });
   return out;
 }

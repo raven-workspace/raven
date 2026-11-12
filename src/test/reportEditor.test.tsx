@@ -4,7 +4,7 @@ import { NodeSelection, TextSelection } from "prosekit/pm/state";
 import { useMemo, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Editor } from "prosekit/core";
-import { numberAppendices, targetHeadings, type AppendixIndex, type ReportData, type ReportNode } from "../engines/report";
+import { numberAppendices, subsectionNumbers, targetHeadings, type AppendixIndex, type ReportData, type ReportNode } from "../engines/report";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext";
 import { insertEvidenceAtCursor, removeNodeAt, ReportEditor, setNodeAttrs } from "../features/report/editor/ReportEditor";
 import { api } from "../lib/api";
@@ -137,6 +137,9 @@ describe("ReportEditor evidence", () => {
     await waitFor(() => expect(container.textContent).toContain("Exam network: 10.0.0.5"));
     expect(screen.getByText("Metasploit was used on DC01 (10.0.0.5): exploit/windows/smb/ms17_010_eternalblue.")).toBeInTheDocument();
     expect(screen.getByText("C:\\Users\\Public\\shell.exe on DC01 (file, removed)")).toBeInTheDocument();
+    cleanup();
+    setup(doc(gen("cleanup")), data({ cleanup: [] }));
+    expect(await screen.findByText("No clean-up items recorded.")).toBeInTheDocument();
     expect(container.textContent).not.toContain("backdoor");
     cleanup();
     setup(doc(gen("msf")), data({ log: [] }));
@@ -454,12 +457,12 @@ describe("ReportEditor generated blocks", () => {
   it("prints one Port Scan Results row per machine of the AD set", async () => {
     const svc = (port: number, hostId: string) => ({ id: `${hostId}-${port}`, hostId, port, protocol: "tcp" });
     const ad3 = { ...ad, id: "h3", name: "ms01", ip: "10.0.0.11" } as Host;
-    // Listed by name, as the page lists the machines: dc01, then ms01.
-    const d = data({ hosts: [host, ad3, ad], services: [svc(88, "h2"), svc(389, "h2"), svc(22, "h3")] as never });
+    // In attack-path order, the domain controller (Kerberos and LDAP) last: ms01, then dc01.
+    const d = data({ hosts: [host, ad, ad3], services: [svc(88, "h2"), svc(389, "h2"), svc(22, "h3")] as never });
     const { container } = setup(doc(gen("port-scan")), d);
     await waitFor(() => expect(container.querySelectorAll(".report-table tbody tr")).toHaveLength(2));
     const rows = [...container.querySelectorAll(".report-table tbody tr")].map((tr) => tr.textContent);
-    expect(rows).toEqual(["10.0.0.10TCP: 88, 389", "10.0.0.11TCP: 22"]);
+    expect(rows).toEqual(["10.0.0.11TCP: 22", "10.0.0.10TCP: 88, 389"]);
   });
 
   it("prints Also tested as slim lines, with no commands", async () => {
@@ -499,19 +502,26 @@ describe("ReportEditor generated blocks", () => {
     expect(screen.getByRole("heading", { level: 1, name: "4Independent Challenges" })).toBeInTheDocument();
   });
 
-  it("numbers a report-level page's headings under its number, by CSS", async () => {
-    const page = doc({ type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Information Gathering" }] });
+  it("numbers a report-level page's drafted sub-sections, never a heading the owner added", async () => {
+    const h = (text: string): ReportNode => ({ type: "heading", attrs: { level: 2 }, content: [{ type: "text", text }] });
+    const page = doc(h("Information Gathering"), h("My own notes"), h("Service Enumeration"));
     const { container } = render(
       <QueryClientProvider client={makeQueryClient()}>
         <ReportDataContext.Provider value={{ data: data(), appendix: noRefs, sectionMeta: {}, onRemoveEvidence: vi.fn() }}>
-          <ReportEditor sectionId="s1" title="Methodologies" titleNumber="3" number="3" doc={page} onChange={vi.fn()} onReady={vi.fn()} />
+          <ReportEditor
+            sectionId="s1"
+            title="Methodologies"
+            titleNumber="3"
+            subNumbers={(d) => subsectionNumbers("methodology", "3", d)}
+            doc={page}
+            onChange={vi.fn()}
+            onReady={vi.fn()}
+          />
         </ReportDataContext.Provider>
       </QueryClientProvider>,
     );
     await screen.findByText("Information Gathering");
-    const paper = container.querySelector(".report-page") as HTMLElement;
-    expect(paper).toHaveAttribute("data-numbered", "true");
-    expect(paper.style.getPropertyValue("--report-number")).toBe('"3"');
+    expect([...container.querySelectorAll(".ProseMirror > h2")].map((el) => el.getAttribute("data-number"))).toEqual(["3.1", null, "3.2"]);
   });
 });
 

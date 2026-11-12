@@ -163,6 +163,32 @@ export function phaseSplit(entries: LogEntry[], data: ReportData, hostId: string
 
 const isFlag = (e: LogEntry) => e.content.kind === "flag";
 
+/** A finding file as the page shows it: the exploit, and for a modified one the slot explaining each change. */
+const exploitNodes = (file: { id: string; modified: boolean }): ReportNode[] => [
+  node("exploit", { fileId: file.id, markedLines: [], appendix: "inline" } satisfies ExploitAttrs),
+  ...(file.modified ? [slot(EXPLOIT_HINT)] : []),
+];
+
+const baseName = (name: string) => name.split(/[\\/]/).pop()?.trim() ?? "";
+
+/** Whether an entry's commands name a file by its base name (`python3 46153.py`). */
+function namesFile(entry: LogEntry, fileName: string): boolean {
+  const base = baseName(fileName);
+  if (base === "" || entry.content.kind !== "command") return false;
+  return entry.content.blocks.some((b) => (b.command ?? "").includes(base));
+}
+
+/**
+ * Which of a phase's steps (their first entries, in order) an exploit file goes before: the first whose command names
+ * the file, else the one that granted access, else none (its index is past the end: the end of the phase).
+ */
+function exploitStep(data: ReportData, hostId: string, fileName: string, leads: LogEntry[]): number {
+  const named = leads.findIndex((e) => namesFile(e, fileName));
+  if (named !== -1) return named;
+  const granted = leads.findIndex((e) => data.grants.some((g) => g.hostId === hostId && g.logEntryId === e.id));
+  return granted !== -1 ? granted : leads.length;
+}
+
 /** Entries in time order as steps: each proving entry with the screenshots that came along after it. */
 function stepsOf(entries: LogEntry[], proving: Map<string, unknown>): LogEntry[][] {
   const steps: LogEntry[][] = [];
@@ -214,14 +240,18 @@ function hostBlock(
     if (steps.length === 0 && here.length === 0) continue;
     out.push(phaseNode(phase, hostId));
     for (const f of here) out.push(node("vuln", { findingId: f.id } satisfies VulnAttrs));
-    if (here.length > 0) out.push(slot(REPRODUCE_HINT, REPRODUCE_LABEL));
-    for (const step of steps) if (!isFlag(step[0])) out.push(...stepNodes(step));
+    const walk = steps.filter((st) => !isFlag(st[0]));
+    if (here.length > 0 || walk.length > 0) out.push(slot(REPRODUCE_HINT, REPRODUCE_LABEL));
+    // Each exploit file goes just before the step that runs it, so the code is read before it is used.
+    const before = new Map<number, ReportNode[]>();
     for (const f of here) {
       for (const file of data.findingFiles.filter((ff) => ff.findingId === f.id)) {
-        out.push(node("exploit", { fileId: file.id, markedLines: [], appendix: "inline" } satisfies ExploitAttrs));
-        if (file.modified) out.push(slot(EXPLOIT_HINT));
+        const at = exploitStep(data, hostId, file.name, walk.map((st) => st[0]));
+        before.set(at, [...(before.get(at) ?? []), ...exploitNodes(file)]);
       }
     }
+    walk.forEach((step, i) => out.push(...(before.get(i) ?? []), ...stepNodes(step)));
+    out.push(...(before.get(walk.length) ?? []));
     for (const step of steps) if (isFlag(step[0])) out.push(...stepNodes(step));
   }
   if (testedNotExploited(data, hostId).length > 0) out.push(phaseNode("tested", hostId), generated("tested", hostId));
@@ -235,8 +265,27 @@ function hostBlock(
 }
 
 const hostName = (data: ReportData, id: string) => data.hosts.find((h) => h.id === id)?.name ?? id;
+/**
+ * An AD set's machines in attack-path order: by when each was first reached (its first hop in or access grant, as the
+ * attack chain orders them), so the entry machine comes first; the domain controller last; name breaks ties and
+ * places machines never reached after the rest.
+ */
+export function machineOrder(data: ReportData, hostIds: string[]): string[] {
+  const dc = domainController(data, hostIds);
+  const reached = (id: string) =>
+    Math.min(
+      ...data.hops.filter((h) => h.toHostId === id).map((h) => h.at),
+      ...data.grants.filter((g) => g.hostId === id).map((g) => g.at),
+      Infinity,
+    );
+  return [...hostIds].sort(
+    (a, b) =>
+      Number(a === dc) - Number(b === dc) || reached(a) - reached(b) || hostName(data, a).localeCompare(hostName(data, b)),
+  );
+}
+
 const machinesInOrder = (data: ReportData, target: ReportTarget) =>
-  [...target.hostIds].sort((a, b) => hostName(data, a).localeCompare(hostName(data, b)));
+  target.kind === "standalone" ? [...target.hostIds] : machineOrder(data, target.hostIds);
 
 /** Which machine of an AD set each of its findings is placed under: the machine of its first step logged on one of
  *  them, else the first of its machines in page order. */
@@ -329,6 +378,23 @@ function placeEntry(
   if (heading === -1) return { at: placeForPhase(content, hostId, phase), nodes: [phaseNode(phase, hostId), ...nodes] };
   if (phase === "post" && isFlag(entry)) return { at: heading + 1, nodes };
   const end = regionEnd(content, heading);
+  // A step that runs an exploit on the page goes right after it (and its explanation), when no step runs it yet.
+  const region = content.slice(heading + 1, end);
+  const fileOf = (n: ReportNode) => (n.type === "exploit" ? data.findingFiles.find((f) => f.id === n.attrs?.fileId) : undefined);
+  const exploitAt = region.findIndex((n) => {
+    const file = fileOf(n);
+    return file != null && namesFile(entry, file.name);
+  });
+  if (exploitAt !== -1) {
+    const file = fileOf(region[exploitAt])!;
+    let at = heading + 1 + exploitAt + 1;
+    if (content[at]?.type === "slot" && content[at].attrs?.hint === EXPLOIT_HINT) at++;
+    const runs = content.slice(at, end).some((n) => {
+      const e = n.type === "evidence" ? data.log.find((l) => l.id === n.attrs?.entryId) : undefined;
+      return e != null && namesFile(e, file.name);
+    });
+    if (!runs) return { at, nodes };
+  }
   if (phase !== "post" && !isFlag(entry)) {
     const flagAt = content.slice(heading + 1, end).findIndex((n) => {
       const e = n.type === "evidence" ? data.log.find((l) => l.id === n.attrs?.entryId) : undefined;
@@ -349,10 +415,11 @@ export function addNewEvidence(
   target: ReportTarget,
   _meta: ReportMeta,
   removed: string[],
-): { doc: ReportNode; added: string[] } {
+): { doc: ReportNode; added: string[]; addedTested: string[] } {
   const skip = new Set([...evidenceIdsIn(doc), ...removed]);
   const content = [...(doc.content ?? [])];
   const added: string[] = [];
+  const addedTested: string[] = [];
 
   for (const hostId of machinesInOrder(data, target)) {
     const kept = keptEntries(data, hostId);
@@ -364,8 +431,14 @@ export function addNewEvidence(
       skip.add(e.id);
       added.push(e.id);
     }
+    // Items tried and failed since the draft: the Also tested heading and its list, where the page has none.
+    if (testedNotExploited(data, hostId).length > 0 && !content.some((n) => isPhase(n, hostId, "tested"))) {
+      content.splice(placeForPhase(content, hostId, "tested"), 0, phaseNode("tested", hostId), generated("tested", hostId));
+      addedTested.push(hostId);
+    }
   }
-  return { doc: added.length > 0 ? { ...doc, content } : doc, added };
+  const changed = added.length > 0 || addedTested.length > 0;
+  return { doc: changed ? { ...doc, content } : doc, added, addedTested };
 }
 
 /** Where an entry goes when the page has no cursor (§5.1); `at` is an index into the doc's top-level content. */

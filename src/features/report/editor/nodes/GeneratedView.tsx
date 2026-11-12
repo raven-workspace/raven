@@ -4,6 +4,7 @@ import {
   attackChain,
   CHAIN_KEY,
   machineKey,
+  machineOrder,
   msfModules,
   reportTargets,
   testedLine,
@@ -94,8 +95,9 @@ function Content({ attrs, ctx }: { attrs: GeneratedAttrs; ctx: ReportDataValue }
       return <NumberedHeading label={heading(machineKey(host.id))} fallback={fallback} level={2} />;
     }
     case "port-scan": {
-      // The AD set's machines in the order the page lists them.
-      const hosts = host ? [host] : adHosts.filter((h) => targets.some((t) => t.hostIds.includes(h.id))).sort((a, b) => a.name.localeCompare(b.name));
+      // The AD set's machines in the order the page lists them: the attack path, the DC last.
+      const inSet = adHosts.filter((h) => targets.some((t) => t.hostIds.includes(h.id)));
+      const hosts = host ? [host] : machineOrder(data, inSet.map((h) => h.id)).flatMap((id) => inSet.find((h) => h.id === id) ?? []);
       return (
         <>
           <p className="report-label">Port Scan Results</p>
@@ -136,7 +138,7 @@ function Content({ attrs, ctx }: { attrs: GeneratedAttrs; ctx: ReportDataValue }
     }
     case "cleanup": {
       const rows = data.cleanup.filter((c) => c.status !== "dismissed" && (!attrs.hostId || c.hostId === attrs.hostId));
-      if (rows.length === 0) return <None text="Nothing was left on the targets." />;
+      if (rows.length === 0) return <None text="No clean-up items recorded." />;
       return <List items={rows.map((c) => `${c.target} on ${hostName(data, c.hostId)} (${c.kind}, ${c.status === "removed" ? "removed" : "still to remove"})`)} />;
     }
     case "attack-chain": {

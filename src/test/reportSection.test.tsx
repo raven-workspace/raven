@@ -588,17 +588,20 @@ describe("Report view: the result", () => {
     fireEvent.click(row(/Exam report/));
     await waitFor(() => expect(h1()).toBe("1OffSec Certified Professional Exam Report"));
     expect(paper().firstElementChild?.tagName).toBe("H1");
-    // Section 1's parts number under it by CSS, from the page's number.
-    expect(paper()).toHaveAttribute("data-numbered", "true");
-    expect(paper().style.getPropertyValue("--report-number")).toBe('"1"');
-    expect(within(paper()).getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["Introduction", "Objective", "Requirements"]);
+    // Section 1's parts number under it, from the page's number.
+    await waitFor(() =>
+      expect(within(paper()).getAllByRole("heading", { level: 2 }).map((h) => [h.getAttribute("data-number"), h.textContent])).toEqual([
+        ["1.1", "Introduction"],
+        ["1.2", "Objective"],
+        ["1.3", "Requirements"],
+      ]),
+    );
     fireEvent.click(row(/High-level summary/));
     await waitFor(() => expect(h1()).toBe("2High-Level Summary"));
     fireEvent.click(row(/Methodologies/));
     await waitFor(() => expect(h1()).toBe("3Methodologies"));
     fireEvent.click(row(/Testing considerations/));
     await waitFor(() => expect(h1()).toBe("Testing Considerations"));
-    expect(paper()).not.toHaveAttribute("data-numbered");
     // The first target opens the Independent Challenges chapter; the next carries only its own heading.
     fireEvent.click(rowFor("lnx02"));
     await waitFor(() => expect(h1()).toBe("4Independent Challenges"));

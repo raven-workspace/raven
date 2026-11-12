@@ -37,13 +37,14 @@ export function AddEvidenceButton({
     if (!editor) return;
     const before = editor.getDocJSON() as ReportNode;
     const result = addNewEvidence(before, data, target, meta, removed);
-    if (result.added.length === 0) {
+    if (result.added.length === 0 && result.addedTested.length === 0) {
       setAdded({ text: "Nothing new to add", nodes: null });
       return;
     }
     const nodes = insertAdded(editor, before, result.doc);
     const n = result.added.length;
-    setAdded({ text: `Added ${n} ${n === 1 ? "entry" : "entries"}`, nodes });
+    const parts = [...(n > 0 ? [`${n} ${n === 1 ? "entry" : "entries"}`] : []), ...(result.addedTested.length > 0 ? ["the Also tested list"] : [])];
+    setAdded({ text: `Added ${parts.join(" and ")}`, nodes });
     onAdded();
   };
   const undo = () => {

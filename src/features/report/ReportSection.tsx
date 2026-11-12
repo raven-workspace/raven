@@ -17,6 +17,7 @@ import {
   reportTargets,
   SECTION_NAMES,
   sectionNumbers,
+  subsectionNumbers,
   targetChecks,
   targetHeadings,
   type AppendixEntry,
@@ -497,6 +498,11 @@ function ReportBody({
   // Page numbers and titles from the outline order (OffSec's sample: 1, 2, 3, then 4.N per target), never stored.
   const numbers = useMemo(() => sectionNumbers(entries.filter((e) => e.section.kind !== "details").map((e) => ({ id: e.section.id, kind: e.section.kind }))), [entries]);
   const openNumber = openSection ? numbers.get(openSection.id) : undefined;
+  const pageSubNumbers = useMemo(() => {
+    const kind = openSection?.kind;
+    const n = openNumber?.number;
+    return kind && n && kind !== "target" && kind !== "ad" ? (doc: ReportNode) => subsectionNumbers(kind, n, doc) : undefined;
+  }, [openSection?.kind, openNumber?.number]);
   const standaloneOrdinal = open?.target?.kind === "standalone" ? entries.filter((e) => e.target?.kind === "standalone").findIndex((e) => e === open) + 1 : 0;
   const headingsOf = useMemo(() => {
     const target = open?.target;
@@ -819,7 +825,7 @@ function ReportBody({
                     sectionId={openSection.id}
                     title={openNumber?.title?.text}
                     titleNumber={openNumber?.title?.number ?? undefined}
-                    number={openSection.kind === "target" || openSection.kind === "ad" ? undefined : (openNumber?.number ?? undefined)}
+                    subNumbers={pageSubNumbers}
                     doc={openSection.doc as ReportNode}
                     onChange={onChange}
                     onReady={(editor) => onEditorReady(openSection.id, editor)}

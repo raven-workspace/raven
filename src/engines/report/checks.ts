@@ -6,6 +6,7 @@ import { serviceCoverage } from "./coverage";
 import { byTime, evidenceIdsIn } from "./draft";
 import { expectedFlags, isValidOsid } from "./meta";
 import { proofFacts } from "./proof";
+import { provingEntries } from "./prove";
 import { msfModules } from "./tools";
 import type { CoverageOverride, ReportData, ReportMeta, ReportNode, ReportTarget } from "./types";
 import { absoluteClaims } from "./wording";
@@ -111,6 +112,8 @@ export function targetChecks(input: TargetChecksInput): Check[] {
   const onPage = evidenceIdsIn(doc);
   const hosts = target.hostIds.flatMap((id) => data.hosts.find((h) => h.id === id) ?? []);
   const entryOf = (id: string) => data.log.find((e) => e.id === id);
+  // Entries that proved something on one of the target's machines: a screenshot that isn't one came along with a step.
+  const proving = new Set(hosts.flatMap((h) => [...provingEntries(data, h.id).keys()]));
 
   for (const host of hosts) out.push(...proofChecks(host, expectedFlags(target, host.id, meta), data, onPage));
 
@@ -140,10 +143,24 @@ export function targetChecks(input: TargetChecksInput): Check[] {
         });
       }
     }
-    // The walkthrough explains a step before it: the nearest block above that isn't the same step's evidence. A flag
-    // prints its own label and needs none.
+    // The walkthrough explains a step before it: the block above, past only the same step's evidence (the entry's other
+    // command blocks, or a screenshot that came along with it). Any other step stops the walk. A flag prints its own
+    // label and needs none.
     let lead = at - 1;
-    while (lead >= 0 && siblings[lead].type === "evidence") lead--;
+    const idAt = (i: number) => (siblings[i]?.type === "evidence" ? siblings[i].attrs?.entryId : undefined);
+    const tagsAlong = (id: unknown) => {
+      const e = typeof id === "string" ? entryOf(id) : undefined;
+      return e?.kind === "screenshot" && !proving.has(e.id);
+    };
+    const skipEntry = (id: unknown) => {
+      while (lead >= 0 && idAt(lead) === id) lead--;
+    };
+    skipEntry(entryId);
+    if (tagsAlong(entryId)) {
+      // Past the other screenshots that came along, to the step they came with.
+      while (lead >= 0 && tagsAlong(idAt(lead))) lead--;
+      if (idAt(lead) !== undefined) skipEntry(idAt(lead));
+    }
     if (entry.content.kind !== "flag" && !hasText(siblings[lead])) {
       explain.push({ check: { id: `explain:${entryId}`, level: "soft", text: "A step has no explanation before it.", anchor }, shot: entry.kind === "screenshot" });
     }

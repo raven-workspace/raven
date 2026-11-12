@@ -1,6 +1,9 @@
 import { defineBasicExtension } from "prosekit/basic";
-import { defineNodeSpec, union, type Extension } from "prosekit/core";
+import { defineNodeSpec, definePlugin, union, type Extension } from "prosekit/core";
 import type { Node as PMNode } from "prosekit/pm/model";
+import { Plugin } from "prosekit/pm/state";
+import { Decoration, DecorationSet } from "prosekit/pm/view";
+import type { ReportNode } from "../../../engines/report";
 import { defineReactNodeView, type ReactNodeViewComponent } from "prosekit/react";
 import { EvidenceView } from "./nodes/EvidenceView";
 import { ExploitView } from "./nodes/ExploitView";
@@ -60,9 +63,35 @@ const slotSpec = defineNodeSpec({
   toDOM: (node: PMNode) => ["p", { "data-report": "slot", "data-hint": node.attrs.hint as string, "data-label": node.attrs.label as string }, 0],
 });
 
+/** A numbered page's sub-section numbers by top-level index, read when the page redraws. */
+export type SubNumbers = { current: ((doc: ReportNode) => Map<number, string>) | undefined };
+
+/** Marks each numbered sub-section heading with its number (`data-number="3.1"`), which the page prints before it. */
+function headingNumbers(numbers: SubNumbers) {
+  return definePlugin(
+    new Plugin({
+      props: {
+        decorations: (state) => {
+          const of = numbers.current;
+          if (!of) return null;
+          const map = of(state.doc.toJSON() as ReportNode);
+          if (map.size === 0) return null;
+          const decos: Decoration[] = [];
+          state.doc.forEach((node, offset, i) => {
+            const n = map.get(i);
+            if (n) decos.push(Decoration.node(offset, offset + node.nodeSize, { "data-number": n }));
+          });
+          return DecorationSet.create(state.doc, decos);
+        },
+      },
+    }),
+  );
+}
+
 /** The report page's schema and node views: ProseKit's basic editing (history included; a second defineHistory throws) plus Raven's report vocabulary. */
-export function defineReportExtension(): Extension {
+export function defineReportExtension(numbers: SubNumbers = { current: undefined }): Extension {
   return union(
+    headingNumbers(numbers),
     defineBasicExtension(),
     slotSpec,
     defineReactNodeView({ name: "slot", component: SlotView, as: "div", contentAs: "div" }),

@@ -57,8 +57,8 @@ function textBlocks(text: string): ReportNode[] {
     } else if (BULLET.test(raw)) {
       flushPara();
       items.push(line.replace(BULLET, ""));
-    } else if (items.length > 0 && para.length === 0 && /^\s/.test(raw)) {
-      // A wrapped bullet continues on an indented line.
+    } else if (items.length > 0 && para.length === 0) {
+      // A wrapped bullet (a paste from a PDF) continues on the next line; a blank line ends the list.
       items[items.length - 1] += ` ${line}`;
     } else {
       flushList();

@@ -164,6 +164,15 @@ describe("targetChecks", () => {
     const done = doc(slot("Next, list the shares."), ev("c1"), ...goodDoc().content!);
     expect(find(run(data({ log: [cmd, flag()] }), done), "explain")).toBeUndefined();
   });
+  it("stops at another step: in [slot, A, B] only B is unexplained", () => {
+    const a = entry({ id: "c1" });
+    const b = entry({ id: "c2" });
+    const page = doc(slot("List the shares."), ev("c1"), ev("c2"), ...goodDoc().content!);
+    const c = run(data({ log: [a, b, flag()] }), page).filter((x) => x.id.startsWith("explain"));
+    expect(c.map((x) => x.id)).toEqual(["explain:c2"]);
+    // A command's other blocks share its slot.
+    expect(find(run(data({ log: [a, flag()] }), doc(slot("Scan."), ev("c1", { block: 0 }), ev("c1", { block: 1 }), ...goodDoc().content!)), "explain")).toBeUndefined();
+  });
   it("lets the evidence of one step share the slot before it, and asks nothing of a flag", () => {
     const shot = entry({ id: "s1", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "ok", fileName: "x" } });
     const cmd = entry({ id: "c1" });
