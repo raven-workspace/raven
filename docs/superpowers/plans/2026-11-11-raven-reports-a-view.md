@@ -546,6 +546,35 @@ OffSec's own sample report (v2.0; owner's copy at `a file outside the repo`) rep
 
 ---
 
+### Task 16: Editable content and the full ProseKit editing set
+
+Owner feedback (2026-11-11): inserted blocks aren't editable, so rough in-the-moment notes are frozen on the page; and the toolbar uses almost none of ProseKit's features.
+
+**A. Everything the owner wrote is editable on the page**
+- **Notes** (note entries, observations) insert as ordinary editable paragraphs (text copied, `fromEntry` attr kept for provenance), never as atoms. Existing note atoms on saved pages convert in place (one transaction, undoable) when the page opens.
+- **Screenshot captions** are edited inline on the page (stored on the node, overriding the log caption; the log is untouched).
+- **Command blocks:** an **Edit on page** tool turns the block into an editable code block (prompt line + output text, language set), detached from the log entry (tooltip says so; undo restores the live block). Trim/emphasis stay for live blocks.
+- HTTP blocks: same Edit on page.
+
+**B. ProseKit features to use** (all in `prosekit` already; no new dependency)
+- **Bubble menu on text selection** (`prosekit/react/inline-popover`): bold, italic, underline, strikethrough, inline code, highlight, link (with an inline link editor: open, edit, remove).
+- **Slash menu** (`prosekit/react/autocomplete` + `extensions/autocomplete`): type `/` in a paragraph or slot to insert paragraph, heading (levels 3–4 only, under the section's structure), bulleted / numbered / task list, quote, code block, table, divider, image, and **evidence from the log** (fuzzy search this target's entries; Enter inserts).
+- **Markdown shortcuts** (input rules): `### `, `- `, `1. `, `[ ] `, `> `, ``` `, `---`, `**x**`, `*x*`, `` `x` ``.
+- **Tables** (`extensions/table` + `react/table-handle`): insert, add/remove rows and columns, header row; for owner-written tables (e.g. credentials found).
+- **Code blocks with a language picker** (`extensions/code-block`): language select on the block; syntax colours via the app's existing highlight.js (no shiki).
+- **Images:** paste or drop an image onto the page → saved as a screenshot log entry for this target (existing attachment storage) and inserted as live evidence with a caption to fill; **resizable** width (`react/resizable`) stored on the node.
+- **Find and replace** (`extensions/search`): ⌘F on the page, with next/previous and replace.
+- **Placeholder** extension for empty slots and empty paragraphs.
+- **Underline, strike, highlight, subscript/superscript** marks; **horizontal rule**.
+- **Toolbar** reorganised: block-type select (Paragraph / Heading 3 / Heading 4 / Quote / Code block) | marks | lists | insert (table, image, divider, evidence) | find | undo/redo; "Add new evidence" stays at the end. Shortcuts in tooltips and the Shortcuts sheet.
+- Not used: text colour/background colour, font family, text-align (a report has one style), math, mentions, collaboration (yjs/loro).
+
+**Export implication (Plan B):** every new node and mark must render in the PDF.
+
+- [ ] Steps: failing tests per feature (note insert is editable text; caption edit persists; Edit on page detaches and undo restores; bubble menu marks; slash menu inserts each item and evidence search; markdown rules; table ops; code language persists; pasted image creates an entry + node; find/replace; old note atoms convert); implement; full gate; WebKit 1400 look at a target page in use; commit.
+
+---
+
 ## Spec coverage map (self-review)
 
 | Spec | Task |
