@@ -1,6 +1,7 @@
 import type { SectionKind } from "../../types/report";
 import { serviceCoverage, testedNotExploited } from "./coverage";
 import { toolsUsed } from "./tools";
+import { lineCount } from "./trim";
 import type { GeneratedAttrs, ReportData, ReportNode } from "./types";
 
 export interface AppendixEntry {
@@ -64,8 +65,6 @@ export function numberAppendices(
   const byKey = new Map(entries.map((e) => [e.key, `${e.letter}.${e.n}`]));
   return { entries, refFor: (key) => byKey.get(key) ?? null };
 }
-
-const lineCount = (text: string) => (text === "" ? 0 : text.split(/\r?\n/).length);
 
 function keptLines(node: ReportNode, data: ReportData): number {
   const attrs = node.attrs ?? {};

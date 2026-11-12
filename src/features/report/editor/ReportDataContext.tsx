@@ -11,6 +11,8 @@ export interface ReportDataValue {
   onRemoveEvidence(entryId: string): void;
   /** Report-wide inputs for the report-level tables; defaults stand in when absent. */
   reportMeta?: ReportMeta;
+  /** Figures in the sections before this one, so "Figure N" counts across the document. Default 0. */
+  figureOffset?: number;
   /** Each target section's meta by target key (exploited-systems methods). */
   targetMeta?: Record<string, SectionMeta>;
 }

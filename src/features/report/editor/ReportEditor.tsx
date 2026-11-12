@@ -8,39 +8,38 @@ import { defineReportExtension } from "./extension";
 import { PageLayoutContext, useReportData, type PageLayout } from "./ReportDataContext";
 import "../page.css";
 
-/** Whether an evidence node shows a screenshot, so it takes a figure number. */
+/** Whether an evidence node shows a screenshot on the page, so it takes a figure number (a moved one doesn't). */
 function hasFigure(node: PMNode, data: ReportData): boolean {
-  if (node.type.name !== "evidence") return false;
+  if (node.type.name !== "evidence" || node.attrs.appendix === "moved") return false;
   const entry = data.log.find((e) => e.id === node.attrs.entryId);
   if (!entry || entry.private) return false;
   return entry.content.kind === "screenshot" || (entry.content.kind === "flag" && !!entry.content.attachmentId);
 }
 
 /** Figure numbers and index paths for the current document, keyed by node (nodes are immutable per state). */
-function layoutOf(doc: PMNode, data: ReportData, sectionId: string): PageLayout {
+function layoutOf(doc: PMNode, data: ReportData, sectionId: string, figureOffset: number): PageLayout {
   const figures = new Map<PMNode, number>();
   const paths = new Map<PMNode, string>();
   const walk = (node: PMNode, path: string) =>
     node.forEach((child, _offset, i) => {
       const p = path === "" ? `${i}` : `${path}.${i}`;
       paths.set(child, p);
-      if (hasFigure(child, data)) figures.set(child, figures.size + 1);
+      if (hasFigure(child, data)) figures.set(child, figureOffset + figures.size + 1);
       walk(child, p);
     });
   walk(doc, "");
   return { sectionId, figureOf: (n) => figures.get(n) ?? null, pathOf: (n) => paths.get(n) ?? null };
 }
 
-/** Inserts an evidence block after the block the cursor is in (or over a selected block). */
+/** Inserts an evidence block after the block the cursor is in, or after a selected block; it never replaces one. */
 export function insertEvidenceAtCursor(editor: Editor, attrs: EvidenceAttrs): boolean {
   return editor.exec((state, dispatch) => {
     const node = state.schema.nodes.evidence.create(attrs);
     const { selection } = state;
     if (dispatch) {
-      const tr =
-        selection instanceof NodeSelection || selection.$from.depth === 0
-          ? state.tr.replaceSelectionWith(node)
-          : state.tr.insert(selection.$from.after(1), node);
+      const at =
+        selection instanceof NodeSelection ? selection.to : selection.$from.depth === 0 ? selection.from : selection.$from.after(1);
+      const tr = state.tr.insert(at, node);
       dispatch(tr.scrollIntoView());
     }
     return true;
@@ -123,7 +122,11 @@ export function ReportEditor({
     [initialDoc],
   );
   const [current, setCurrent] = useState<PMNode>(() => editor.state.doc);
-  const layout = useMemo(() => layoutOf(current, value.data, sectionId), [current, value.data, sectionId]);
+  const figureOffset = value.figureOffset ?? 0;
+  const layout = useMemo(
+    () => layoutOf(current, value.data, sectionId, figureOffset),
+    [current, value.data, sectionId, figureOffset],
+  );
 
   const callbacks = useRef({ onChange, onReady });
   useEffect(() => {

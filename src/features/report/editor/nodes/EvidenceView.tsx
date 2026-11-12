@@ -1,18 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNodeViewProps } from "prosekit/react";
-import { applyKeep, type EvidenceAttrs } from "../../../../engines/report";
+import { applyKeep, lineCount, type EvidenceAttrs } from "../../../../engines/report";
 import { api } from "../../../../lib/api";
 import type { CommandBlock, LogEntry } from "../../../../types/log";
 import { AttachmentImage } from "../../../log/AttachmentImage";
 import { useAppendixRef, usePageLayout, useReportData } from "../ReportDataContext";
-import { AppendixRef, Block, Gone, lineCount } from "./parts";
+import { AppendixRef, Block, Gone } from "./parts";
 
 const NO_MACHINES: string[] = [];
 
-/** `kali$` for the attacker's machines, else the machine the command ran on (`DC01$`). */
+/** `kali$` for the attacker's machines (Settings), else the machine the command ran on (`DC01$`). */
 function promptFor(ranOn: string | null, machines: string[]): string {
   if (!ranOn) return "$";
-  if (machines.includes(ranOn) || /kali/i.test(ranOn)) return "kali$";
+  if (machines.includes(ranOn)) return "kali$";
   return `${ranOn}$`;
 }
 

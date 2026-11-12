@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NodeSelection, TextSelection } from "prosekit/pm/state";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Editor } from "prosekit/core";
@@ -61,13 +61,13 @@ const slot = (hint = "What this shows, and why it matters"): ReportNode => ({ ty
 const doc = (...content: ReportNode[]): ReportNode => ({ type: "doc", content });
 const noRefs: AppendixIndex = { entries: [], refFor: () => null };
 
-function setup(page: ReportNode, d: ReportData = data(), appendix: AppendixIndex = noRefs) {
+function setup(page: ReportNode, d: ReportData = data(), appendix: AppendixIndex = noRefs, figureOffset?: number) {
   const onChange = vi.fn();
   const onRemoveEvidence = vi.fn();
   const ref: { editor: Editor | null } = { editor: null };
   const utils = render(
     <QueryClientProvider client={makeQueryClient()}>
-      <ReportDataContext.Provider value={{ data: d, appendix, sectionMeta: {}, onRemoveEvidence }}>
+      <ReportDataContext.Provider value={{ data: d, appendix, sectionMeta: {}, onRemoveEvidence, figureOffset }}>
         <ReportEditor sectionId="s1" doc={page} onChange={onChange} onReady={(e) => (ref.editor = e)} />
       </ReportDataContext.Provider>
     </QueryClientProvider>,
@@ -88,6 +88,21 @@ describe("ReportEditor evidence", () => {
     const { container } = setup(doc(ev("e1"), slot()));
     await waitFor(() => expect(container.querySelector(".report-cmd")).toHaveTextContent("kali$ nmap -p- 10.0.0.5"));
     expect(screen.getByText("22/tcp open ssh", { normalizer: (s) => s.replace(/\s+/g, " ") })).toBeInTheDocument();
+  });
+
+  it("uses the machine name as the prompt when it is not one of the attacker's machines", async () => {
+    const { container } = setup(doc(ev("e1")), data({ log: [entry({ ranOn: "kali-target" })] }));
+    await waitFor(() => expect(container.querySelector(".report-cmd")).toHaveTextContent("kali-target$ nmap"));
+  });
+
+  it("lists the exam restrictions only for exam-sim engagements", async () => {
+    const g: ReportNode = { type: "generated", attrs: { kind: "engagement-details", hostId: null, appendix: "inline" } };
+    setup(doc(g));
+    expect(await screen.findByText("Restrictions")).toBeInTheDocument();
+    cleanup();
+    setup(doc(g), data({ engagement: { id: "eng", kind: "lab" } as ReportData["engagement"] }));
+    expect(await screen.findByText("Accounts created")).toBeInTheDocument();
+    expect(screen.queryByText("Restrictions")).toBeNull();
   });
 
   it("shows only the kept lines with the omitted count", async () => {
@@ -135,13 +150,26 @@ describe("ReportEditor evidence", () => {
     expect(container.querySelector(".report-cmd")).toBeNull();
   });
 
+  const shot = (id: string, caption: string) =>
+    entry({ id, kind: "screenshot", content: { kind: "screenshot", attachmentId: "a1", caption, fileName: "x.png" } });
+
   it("numbers screenshot captions across the section", async () => {
-    const shot = (id: string, caption: string) =>
-      entry({ id, kind: "screenshot", content: { kind: "screenshot", attachmentId: "a1", caption, fileName: "x.png" } });
     const d = data({ log: [shot("s1", "Login page"), shot("s2", "Admin panel")] });
     setup(doc(ev("s1", { block: null }), slot(), ev("s2", { block: null })), d);
     expect(await screen.findByText("Figure 1. Login page")).toBeInTheDocument();
     expect(screen.getByText("Figure 2. Admin panel")).toBeInTheDocument();
+  });
+
+  it("skips moved screenshots when numbering, so figures have no gaps", async () => {
+    const d = data({ log: [shot("s1", "One"), shot("s2", "Two"), shot("s3", "Three")] });
+    setup(doc(ev("s1", { block: null }), ev("s2", { block: null, appendix: "moved" }), ev("s3", { block: null })), d);
+    expect(await screen.findByText("Figure 1. One")).toBeInTheDocument();
+    expect(screen.getByText("Figure 2. Three")).toBeInTheDocument();
+  });
+
+  it("continues figure numbers from the sections before", async () => {
+    setup(doc(ev("s1", { block: null })), data({ log: [shot("s1", "Login page")] }), noRefs, 4);
+    expect(await screen.findByText("Figure 5. Login page")).toBeInTheDocument();
   });
 });
 
@@ -192,6 +220,19 @@ describe("ReportEditor moving blocks and helpers", () => {
       fireEvent.keyDown(view.dom, { key: "ArrowUp", code: "ArrowUp", keyCode: 38, altKey: true });
     });
     await waitFor(() => expect(lastDoc(onChange).content?.map((n) => n.type)).toEqual(["evidence", "slot", "slot"]));
+  });
+
+  it("inserts after a selected block and never replaces it", async () => {
+    const { onChange, editor } = setup(doc(ev("e1"), slot("a")));
+    await waitFor(() => expect(editor()).toBeTruthy());
+    const view = editor().view;
+    act(() => view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, 0))));
+    act(() => {
+      insertEvidenceAtCursor(editor(), { entryId: "e2", block: 0, keep: null, emphasis: [], appendix: "inline" });
+    });
+    await waitFor(() =>
+      expect(lastDoc(onChange).content?.map((n) => n.attrs?.entryId ?? n.type)).toEqual(["e1", "e2", "slot"]),
+    );
   });
 
   it("inserts evidence after the cursor's block, sets its attrs and removes it", async () => {

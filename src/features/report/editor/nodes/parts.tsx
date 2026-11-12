@@ -19,7 +19,4 @@ export function AppendixRef({ label, refText }: { label: string; refText: string
   return <p className="report-ref">{refText ? `${label}: Appendix ${refText}` : `${label}: moved to the appendices`}</p>;
 }
 
-/** Lines of a text, as the appendix engine counts them ("" has none). */
-export const lineCount = (text: string) => (text === "" ? 0 : text.split(/\r?\n/).length);
-
 export const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);

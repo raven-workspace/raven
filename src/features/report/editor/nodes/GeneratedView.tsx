@@ -173,7 +173,7 @@ function Content({ attrs, ctx, attackerIp }: { attrs: GeneratedAttrs; ctx: Repor
             ["Scope", scope.join(", ") || "None"],
             ["Test window", start && end ? `${fmt(start)} to ${fmt(end)} UTC` : "Not set"],
             ["Attacker IP", attackerIp || "Not set"],
-            ["Restrictions", RESTRICTIONS.join("; ")],
+            ...(e.kind === "exam-sim" ? [["Restrictions", RESTRICTIONS.join("; ")]] : []),
             ["Accounts created", accounts.join(", ") || "None"],
           ]}
         />
