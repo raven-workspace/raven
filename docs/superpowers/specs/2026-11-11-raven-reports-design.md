@@ -345,3 +345,25 @@ Each section and sub-section shows a short **guide note** above it in the editor
 ### 10.7 Draft layout
 
 `DRAFT_LAYOUT` becomes 4. Stored pages rebuild on next open, with the existing "Restore your previous page" path kept.
+
+### 10.8 Owner feedback after the rework (2026-11-12, evening): binding, overrides §6.2
+
+The owner tried the rework on real data. Their findings:
+1. The "Nothing new to add" notice opened under the sidebar.
+2. A finding's pasted git diff rendered as markdown garbage (diff `-`/`+` lines became bullets, `*` became italics), and the block couldn't be edited to fix it.
+3. Blocks sat back to back with no space. Additional findings read as one wall, and only a selection outline showed where a block ended.
+
+**Every placed block is the page's own copy (replaces §6.2 "evidence is referenced, not copied").** When a block is placed, its content is copied onto the page and is freely editable there. The log entry and the finding never change. Each block keeps its source (entry, finding, file or generated kind) and has **Refresh from log** (or "from finding" / "from Raven") in its menu. Refresh replaces the block with the source's current content, can be undone, and asks for confirmation when the block was edited. Later log edits don't reach the report unless refreshed. Blocks covered:
+- **Finding blocks:** Explanation, Fix and Severity, as editable labelled paragraphs. Pasted terminal text (diff, commit, code lines) becomes a code block instead of markdown lists or italics.
+- **Generated tables** (ports, scope, findings, attack path, Also tested, cleanup, references): real editable tables.
+- **The Result line:** an editable paragraph.
+- **Command output, HTTP, exploit code and flag proof:** editable text when the chip is open. Trim and highlight still work on the copy.
+- **Screenshots:** the image stays a reference; the caption is already editable.
+
+Checks read what the page prints (the copy). Gone or private sources still mark the block (§4.5).
+
+**Existing pages upgrade in place** (layout 5): layout-4 pages are converted block by block into copies, keeping everything the owner wrote. They are not rebuilt.
+
+**Rhythm:** consecutive blocks have visible space between them. Every finding under Additional findings is a numbered sub-heading (4.N.5.1 …) with space before it. Steps have space between them. A chip shows "N lines" when nothing is cut, and "K of N lines" only when lines are cut. Empty labelled fields show their hint only in the editor, never as "Not written yet." on the page.
+
+**Notices** (TimedNotice) render above everything, in the bottom-left of the content area, clear of the sidebar in both its expanded and collapsed states.
