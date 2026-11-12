@@ -98,9 +98,9 @@ function FileForm({ findingId, file, value, onChange, onDone, onDirty, register 
       language: d.language === AUTO ? guessLanguage(name) : d.language,
       content: d.content,
       modified: d.modified,
-      // Blank clears; the original only means something while the file is marked modified.
-      originalUrl: d.modified ? d.originalUrl.trim() : "",
-      originalContent: d.modified ? d.originalContent : "",
+      // Blank clears. Unmodified sends neither, so the backend keeps the stored original for when the toggle goes back on.
+      originalUrl: d.modified ? d.originalUrl.trim() : undefined,
+      originalContent: d.modified ? d.originalContent : undefined,
     };
     try {
       if (file) await update.mutateAsync({ id: file.id, input });

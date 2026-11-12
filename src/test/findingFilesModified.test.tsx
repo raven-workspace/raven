@@ -47,6 +47,22 @@ describe("finding files: modified exploit", () => {
     }));
   });
 
+  it("turning Modified exploit off keeps the stored original URL and code", async () => {
+    m.findingFilesList.mockResolvedValue([{ ...FILE, modified: true, originalUrl: "https://x.test/1", originalContent: "print(1)" }]);
+    const user = userEvent.setup();
+    render(<QueryClientProvider client={makeQueryClient()}><Host /></QueryClientProvider>);
+    await user.click(await screen.findByRole("button", { name: "Edit exploit.py" }));
+    const group = screen.getByRole("group", { name: "Finding files" });
+    await user.click(within(group).getByRole("button", { name: "Modified exploit" }));
+    await user.click(within(group).getByRole("button", { name: "Save file" }));
+    await waitFor(() => expect(m.findingFileUpdate).toHaveBeenCalledTimes(1));
+    const input = m.findingFileUpdate.mock.calls[0][1];
+    expect(input.modified).toBe(false);
+    // Absent means keep: the original stays stored for when the toggle goes back on.
+    expect(input.originalUrl).toBeUndefined();
+    expect(input.originalContent).toBeUndefined();
+  });
+
   it("marks a modified file in its row", async () => {
     m.findingFilesList.mockResolvedValue([{ ...FILE, modified: true, originalUrl: "https://x.test/1" }]);
     render(<QueryClientProvider client={makeQueryClient()}><Host /></QueryClientProvider>);

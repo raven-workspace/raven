@@ -217,7 +217,7 @@ describe("unsaved file drafts", () => {
     const dlg = await openEdit(user, "Shell upload");
     await pasteDraft(user, dlg);
     await user.click(within(dlg).getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(m.findingFileCreate).toHaveBeenCalledWith("f1", { name: "poc.lua", language: "lua", content: "print(1)", modified: false, originalUrl: "", originalContent: "" }));
+    await waitFor(() => expect(m.findingFileCreate).toHaveBeenCalledWith("f1", { name: "poc.lua", language: "lua", content: "print(1)", modified: false, originalUrl: undefined, originalContent: undefined }));
     await waitFor(() => expect(m.findingUpdate).toHaveBeenCalled());
     expect(m.findingFileCreate.mock.invocationCallOrder[0]).toBeLessThan(m.findingUpdate.mock.invocationCallOrder[0]);
   });
@@ -336,7 +336,7 @@ describe("finding files", () => {
     await user.click(within(dlg).getByLabelText("File content"));
     await user.paste("print('hi')");
     await user.click(within(dlg).getByRole("button", { name: "Save file" }));
-    await waitFor(() => expect(m.findingFileCreate).toHaveBeenCalledWith("f1", { name: "exploit.py", language: "python", content: "print('hi')", modified: false, originalUrl: "", originalContent: "" }));
+    await waitFor(() => expect(m.findingFileCreate).toHaveBeenCalledWith("f1", { name: "exploit.py", language: "python", content: "print('hi')", modified: false, originalUrl: undefined, originalContent: undefined }));
   });
 
   it("files over 1 MiB are refused with a message", async () => {
