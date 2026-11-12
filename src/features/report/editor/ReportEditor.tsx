@@ -204,6 +204,8 @@ export function ReportEditor({
   onChange,
   onReady,
   toolbarEnd,
+  toolbarClassName,
+  notices,
 }: {
   sectionId: string;
   doc: ReportNode;
@@ -211,6 +213,10 @@ export function ReportEditor({
   onReady(editor: Editor): void;
   /** The page's own action, at the right end of the formatting bar. */
   toolbarEnd?: ReactNode;
+  /** Extra classes for the bar (the section pulls it up over the pane's top padding where it comes first). */
+  toolbarClassName?: string;
+  /** Lines about the page (save warnings, "nothing logged yet"), between the bar and the paper. */
+  notices?: ReactNode;
 }) {
   const value = useReportData();
   const [initialDoc] = useState(doc);
@@ -266,7 +272,8 @@ export function ReportEditor({
     <PageLayoutContext.Provider value={layout}>
       <ProseKit editor={editor}>
         <PageHooks onDoc={onDoc} onRemoveEvidence={value.onRemoveEvidence} />
-        <FormatToolbar shown={pageTouched} end={toolbarEnd} />
+        <FormatToolbar end={toolbarEnd} className={toolbarClassName} />
+        {notices}
         <div className="report-page">
           <div ref={mount} className="report-page-doc" />
           <BlockHandle />

@@ -99,7 +99,11 @@ const BLOCKS: Tool[] = [
   {
     icon: CodeBlock,
     label: "Code block",
-    run: (e) => e.commands.toggleCodeBlock(),
+    // Off again it goes back to a slot, the page's prose block (what the owner writes in), never a bare paragraph.
+    run: (e) =>
+      e.nodes.codeBlock.isActive()
+        ? e.commands.setBlockType({ type: "slot", attrs: { hint: "" } })
+        : e.commands.setBlockType({ type: "codeBlock" }),
     active: (e) => e.nodes.codeBlock.isActive(),
   },
 ];
@@ -108,11 +112,11 @@ const BLOCKS: Tool[] = [
 const keepFocus = (e: MouseEvent) => e.preventDefault();
 
 /**
- * The bar pinned to the top of the page pane (Ink chrome, not paper): the page's formatting controls, shown once the
- * owner has put a cursor on the page, and the page's own action (`end`, Add new evidence) at the right, always shown.
- * Section headings are structural, so there is no heading control.
+ * The bar pinned to the top of the page pane (Ink chrome, not paper): the page's formatting controls, which act on the
+ * page's selection and disable themselves where they don't apply, and the page's own action (`end`, Add new evidence)
+ * at the right. Section headings are structural: no heading control, and a heading never becomes a list or code block.
  */
-export function FormatToolbar({ shown, end }: { shown: boolean; end?: ReactNode }) {
+export function FormatToolbar({ end, className }: { end?: ReactNode; className?: string }) {
   const editor = useEditor<ReturnType<typeof defineBasicExtension>>({
     update: true,
   });
@@ -120,6 +124,7 @@ export function FormatToolbar({ shown, end }: { shown: boolean; end?: ReactNode 
   const [href, setHref] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const block = editor.mounted && editor.state.selection instanceof NodeSelection;
+  const inHeading = editor.mounted && editor.state.selection.$from.parent.type.name === "heading";
 
   const openLink = () => {
     setHref(linkAt(editor));
@@ -144,14 +149,14 @@ export function FormatToolbar({ shown, end }: { shown: boolean; end?: ReactNode 
   );
   useKeymap(keymap, { priority: Priority.high });
 
-  const button = (t: Tool) => (
+  const button = (t: Tool, off = block) => (
     <IconButton
       key={t.label}
       icon={t.icon}
       label={t.label}
       shortcut={t.shortcut}
-      disabled={block}
-      active={editor.mounted && !block ? (t.active?.(editor) ?? false) : false}
+      disabled={!editor.mounted || off}
+      active={editor.mounted && !off ? (t.active?.(editor) ?? false) : false}
       onMouseDown={keepFocus}
       onClick={() => {
         t.run(editor);
@@ -173,26 +178,26 @@ export function FormatToolbar({ shown, end }: { shown: boolean; end?: ReactNode 
 
   return (
     // The pane's 24px top padding is part of the sticky inset, so -top-6 pins the bar to the pane's very top edge.
-    <div className="sticky -top-6 z-20 -mx-6 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-line bg-bg px-6 py-1">
-      <div
-        role="toolbar"
-        aria-label="Formatting"
-        inert={!shown}
-        className={cx("grid grid-cols-[auto_auto_auto_minmax(0,1fr)] items-center gap-4", !shown && "invisible")}
-      >
+    <div
+      className={cx(
+        "sticky -top-6 z-20 -mx-6 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-line bg-bg px-6 py-1",
+        className,
+      )}
+    >
+      <div role="toolbar" aria-label="Formatting" className="grid grid-cols-[auto_auto_auto_minmax(0,1fr)] items-center gap-4">
         <Toolbar>
-          {MARKS.map(button)}
+          {MARKS.map((t) => button(t))}
           <IconButton
             icon={Link}
             label="Link"
             shortcut="⌘⇧K"
-            disabled={block}
+            disabled={!editor.mounted || block}
             active={linkOpen || (editor.mounted && !block && linkAt(editor) !== "")}
             onMouseDown={keepFocus}
             onClick={() => (linkOpen ? closeLink() : openLink())}
           />
         </Toolbar>
-        <Toolbar>{BLOCKS.map(button)}</Toolbar>
+        <Toolbar>{BLOCKS.map((t) => button(t, block || inHeading))}</Toolbar>
         <Toolbar>
           <IconButton
             icon={ArrowCounterClockwise}

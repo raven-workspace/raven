@@ -716,6 +716,16 @@ function ReportBody({
     />
   );
   const fails = openChecks.filter((c) => c.level === "fail").length;
+  // With a page open its bar comes first (wide, flush with the pane's top edge) and these lines sit under it.
+  const editorShown = !appendixView && openSection?.kind !== "details" && !!openSection?.doc && !!contextValue;
+  const notices = (
+    <>
+      {ensureFailed && <WarnLine text={`Couldn't add the report's new sections: ${ensureFailed}`} onRetry={() => setEnsureFailed(null)} />}
+      {saveFailed && <p className="m-0 text-meta text-warn">Some typing isn't saved yet. Raven tries again with your next change; keep Raven open until this goes.</p>}
+      {draftFailed && <WarnLine text={`Couldn't build this page's draft: ${draftFailed}`} onRetry={() => setDraftFailed(null)} />}
+      {notStarted && open?.target && <p className="m-0 text-meta text-muted-2">Nothing logged on {open.item.label} yet. The page fills in as you work.</p>}
+    </>
+  );
 
   return (
     <section ref={sectionRef} aria-label="Report" className="@container/report grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
@@ -762,12 +772,7 @@ function ReportBody({
                 </Disclosure>
               )}
             </div>
-            {ensureFailed && (
-              <WarnLine text={`Couldn't add the report's new sections: ${ensureFailed}`} onRetry={() => setEnsureFailed(null)} />
-            )}
-            {saveFailed && <p className="m-0 text-meta text-warn">Some typing isn't saved yet. Raven tries again with your next change; keep Raven open until this goes.</p>}
-            {draftFailed && <WarnLine text={`Couldn't build this page's draft: ${draftFailed}`} onRetry={() => setDraftFailed(null)} />}
-            {notStarted && open?.target && <p className="m-0 text-meta text-muted-2">Nothing logged on {open.item.label} yet. The page fills in as you work.</p>}
+            {!editorShown && notices}
             {appendixView ?? (openSection?.kind === "details" ? (
               <ReportDetails
                 key={report.id}
@@ -786,6 +791,8 @@ function ReportBody({
                     doc={openSection.doc as ReportNode}
                     onChange={onChange}
                     onReady={(editor) => onEditorReady(openSection.id, editor)}
+                    toolbarClassName="@min-[1000px]/report:-mt-6"
+                    notices={notices}
                     toolbarEnd={
                       open?.target && (
                         <AddEvidenceButton

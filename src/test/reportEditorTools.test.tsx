@@ -177,13 +177,42 @@ describe("Formatting toolbar", () => {
     return s;
   }
 
-  it("is hidden until the owner puts a cursor on the page", async () => {
-    const { editor } = setup(doc(slot("Intro")));
+  it("is there before the owner touches the page, its tools off while the selection is a block", async () => {
+    const { editor } = setup(doc(ev("e1"), slot("Intro")));
     await waitFor(() => expect(editor()?.mounted).toBe(true));
     const bar = screen.getByRole("toolbar", { name: "Formatting" });
-    expect(bar).toHaveAttribute("inert");
-    fireEvent.focusIn(editor().view.dom);
-    await waitFor(() => expect(bar).not.toHaveAttribute("inert"));
+    expect(bar).not.toHaveAttribute("inert");
+    expect(bar).not.toHaveClass("invisible");
+    act(() => {
+      const view = editor().view;
+      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.doc.child(0).nodeSize + 2)));
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Bold" })).toBeEnabled());
+  });
+
+  it("keeps structural headings out of lists and code blocks", async () => {
+    const { editor } = await ready(doc({ type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Penetration" }] }, slot("x")));
+    act(() => {
+      const view = editor().view;
+      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)));
+    });
+    for (const name of ["Bulleted list", "Numbered list", "Code block"])
+      await waitFor(() => expect(screen.getByRole("button", { name })).toBeDisabled());
+    expect(screen.getByRole("button", { name: "Bold" })).toBeEnabled();
+  });
+
+  it("Code block turns a slot into a code block and back into a slot, never a paragraph", async () => {
+    const { editor } = await ready(doc(slot("id; whoami")));
+    act(() => {
+      const view = editor().view;
+      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)));
+    });
+    const code = screen.getByRole("button", { name: "Code block" });
+    fireEvent.click(code);
+    expect(editor().getDocJSON().content?.[0]).toMatchObject({ type: "codeBlock", content: [{ text: "id; whoami" }] });
+    await waitFor(() => expect(code).toHaveAttribute("aria-pressed", "true"));
+    fireEvent.click(code);
+    expect(editor().getDocJSON().content?.[0]).toMatchObject({ type: "slot", content: [{ text: "id; whoami" }] });
   });
 
   it("Bold toggles the bold mark on a text selection in a slot, and shows as pressed", async () => {

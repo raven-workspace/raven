@@ -22,7 +22,7 @@ export function BlockHandle() {
                 </>
               }
             >
-              <BlockHandleDraggable aria-label="Drag to move" role="button" className="report-handle-grip">
+              <BlockHandleDraggable aria-label="Drag to move" className="report-handle-grip">
                 <DotsSixVertical size={16} weight="bold" aria-hidden />
               </BlockHandleDraggable>
             </Tooltip>
