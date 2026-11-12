@@ -126,6 +126,7 @@ pub fn run() {
             commands::report_section_upsert,
             commands::report_section_save,
             commands::report_sections_reorder,
+            commands::report_section_delete,
             commands::payload_build_record,
             commands::tried_pairs_list,
             commands::tried_pairs_upsert,

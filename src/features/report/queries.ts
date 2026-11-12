@@ -1,8 +1,9 @@
-import { useQueries, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient, type QueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
 import {
   DRAFT_LAYOUT,
   testedNotExploited,
+  type PageMeta,
   type ReportData,
   type ReportNode,
   type ReportTarget,
@@ -155,8 +156,68 @@ export async function ensureSections(
 
 export { patchCachedSection, pruneRemoved };
 
-/** A stored page built with the current draft layout; any other (older, or none yet) is built afresh when it opens. */
-export const hasCurrentPage = (s: ReportSection) => s.doc != null && (s.meta as SectionMeta).layout === DRAFT_LAYOUT;
+/** The title a new page starts with, per placement. */
+export const pageTitle = (placement: PageMeta["placement"]) => (placement === "appendix" ? "Untitled appendix" : "Untitled page");
+
+/**
+ * + Page (§10.4): an owner-written page, kind `page`, keyed by a fresh id (keeps the unique index), with one empty
+ * paragraph. Stored under the current draft layout, so it is never rebuilt.
+ */
+export function createPage(report: Report, placement: PageMeta["placement"], position: number): Promise<ReportSection> {
+  const meta: PageMeta & { layout: number } = { title: pageTitle(placement), placement, layout: DRAFT_LAYOUT };
+  return api.reportSectionUpsert(report.id, {
+    kind: "page",
+    targetKey: crypto.randomUUID(),
+    position,
+    doc: { type: "doc", content: [{ type: "paragraph" }] },
+    meta: meta as unknown as Record<string, unknown>,
+    draftBuiltAt: Date.now(),
+  });
+}
+
+/**
+ * Renames a page that is not open: its cached page with the new title goes through the save queue (the queue patches
+ * the cache before every write, so the cached page is the latest one). The open page renames through its own editor's
+ * meta instead, so a keystroke's save never carries the old title.
+ */
+export function renamePage(qc: QueryClient, section: ReportSection, title: string) {
+  const cached = qc.getQueryData<ReportSection[]>(reportSectionsKey(section.reportId))?.find((s) => s.id === section.id) ?? section;
+  const meta = { ...cached.meta, title } as SectionMeta;
+  patchCachedSection(qc, section.id, { meta: meta as Record<string, unknown> });
+  queueReportSave(qc, section.id, (cached.doc ?? { type: "doc", content: [] }) as ReportNode, meta);
+}
+
+/**
+ * Deletes a page: queued typing is written first, so the section kept for Undo holds every word, and no write for it is
+ * left to land after the delete. Returns that kept section; `restorePage` brings it back for the session.
+ */
+export async function deletePage(qc: QueryClient, section: ReportSection): Promise<ReportSection> {
+  await flushReports();
+  const key = reportSectionsKey(section.reportId);
+  const kept = qc.getQueryData<ReportSection[]>(key)?.find((s) => s.id === section.id) ?? section;
+  await api.reportSectionDelete(section.reportId, section.id);
+  qc.setQueryData<ReportSection[]>(key, (list = []) => list.filter((s) => s.id !== section.id));
+  return kept;
+}
+
+/** Undo of `deletePage`: the kept page comes back under its key, title, place and text. */
+export async function restorePage(qc: QueryClient, kept: ReportSection): Promise<ReportSection> {
+  const back = await api.reportSectionUpsert(kept.reportId, {
+    kind: "page",
+    targetKey: kept.targetKey,
+    position: kept.position,
+    doc: kept.doc,
+    meta: kept.meta,
+    draftBuiltAt: kept.draftBuiltAt,
+  });
+  qc.setQueryData<ReportSection[]>(reportSectionsKey(kept.reportId), (list = []) => [...list.filter((s) => s.id !== back.id), back]);
+  return back;
+}
+
+/** A stored page built with the current draft layout; any other (older, or none yet) is built afresh when it opens. An
+ *  owner-written page (+ Page) is never built, so it is always current. */
+export const hasCurrentPage = (s: ReportSection) =>
+  s.doc != null && (s.kind === "page" || (s.meta as SectionMeta).layout === DRAFT_LAYOUT);
 
 /**
  * Autosave for the open section, through the report save queue (`saveQueue.ts`): `save` queues the latest page and

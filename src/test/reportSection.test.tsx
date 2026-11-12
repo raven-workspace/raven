@@ -120,8 +120,9 @@ describe("Report view", () => {
     expect(stateOf(tab("Front matter"))).toBe("ready");
     expect(stateOf(rowFor("lnx02"))).toBe("not started");
     expect(stateOf(rowFor("ms01"))).toBe("ready");
-    // + Page arrives with the pages round: nothing offers it until then.
-    expect(screen.queryByRole("button", { name: "+ Page" })).toBeNull();
+    // + Page sits after the tabs, outside the tablist.
+    expect(screen.getByRole("button", { name: "+ Page" })).toBeInTheDocument();
+    expect(tabRow()).not.toContainElement(screen.getByRole("button", { name: "+ Page" }));
   });
 
   it("the selected tab is scrolled into view", async () => {
@@ -969,6 +970,129 @@ describe("Report view: the result", () => {
     expect(checks.querySelector("code")).toBeNull();
   });
 
+});
+
+describe("Report view: appendix pages and free pages (+ Page)", () => {
+  const paper = () => document.querySelector<HTMLElement>(".report-page")!;
+  const h1 = () => within(paper()).queryByRole("heading", { level: 1 })?.textContent;
+  const detailOf = (t: HTMLElement) => t.querySelector("[data-tab-state]")?.textContent ?? "";
+  const addPage = async (kind: "Appendix page" | "Free page") => {
+    fireEvent.click(screen.getByRole("button", { name: "+ Page" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: kind }));
+  };
+  const pages = async () => {
+    const report = await api.reportGetOrCreate("e-exam");
+    return (await api.reportSectionsList(report.id)).filter((s) => s.kind === "page");
+  };
+  /** lnx02's page with its scan moved out, so it has Appendix A. */
+  async function seedMoved() {
+    await seedLnx();
+    const report = await api.reportGetOrCreate("e-exam");
+    const lnx = (await api.reportSectionsList(report.id)).find((s) => s.targetKey === LNX)!;
+    const doc = JSON.parse(JSON.stringify(lnx.doc).replace('"appendix":"inline"', '"appendix":"moved"')) as ReportDoc;
+    await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: lnx.position, doc, meta: lnx.meta, draftBuiltAt: lnx.draftBuiltAt });
+  }
+
+  it("+ Page → Appendix page adds a lettered tab after the targets' appendices, and opens it", async () => {
+    await seedMoved();
+    mount();
+    await ready();
+    await appendixTab("Appendix A");
+    await addPage("Appendix page");
+    await waitFor(() => expect(tabLabels()).toEqual(["Front matter", ...TARGETS, "Closing", "Appendix A", "Appendix B"]));
+    expect(detailOf(tab("Appendix B"))).toBe("Untitled appendix");
+    expect(tab("Appendix B")).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => expect(h1()).toBe("Appendix B – Untitled appendix"));
+    const [stored] = await pages();
+    expect(stored.meta).toMatchObject({ title: "Untitled appendix", placement: "appendix", layout: DRAFT_LAYOUT });
+    expect(stored.targetKey).toBeTruthy();
+    expect(stored.doc).toEqual({ type: "doc", content: [{ type: "paragraph" }] });
+  });
+
+  it("+ Page → Free page adds a numbered tab after the targets, before Closing", async () => {
+    mount();
+    await ready();
+    await addPage("Free page");
+    await waitFor(() => expect(tabLabels()).toEqual(["Front matter", ...TARGETS, "Untitled page", "Closing"]));
+    expect(detailOf(tab("Untitled page"))).toBe("Section 6");
+    await waitFor(() => expect(h1()).toBe("6Untitled page"));
+  });
+
+  it("Rename edits the title on the tab; the tab and the page's heading follow", async () => {
+    mount();
+    await ready();
+    await addPage("Free page");
+    await waitFor(() => expect(h1()).toBe("6Untitled page"));
+    // The page's actions sit outside the tablist (a tablist owns only tabs).
+    const actions = screen.getByRole("button", { name: "Page actions" });
+    expect(tabRow()).not.toContainElement(actions);
+    fireEvent.click(actions);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Rename" }));
+    const input = screen.getByRole("textbox", { name: "Page title" });
+    expect(input).toHaveValue("Untitled page");
+    expect(document.activeElement).toBe(input);
+    fireEvent.change(input, { target: { value: "Port knocking" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(tabLabels()).toContain("Port knocking"));
+    await waitFor(() => expect(h1()).toBe("6Port knocking"));
+    expect(document.activeElement).toBe(tab("Port knocking"));
+    // F2 on the focused tab renames too; Esc keeps the title.
+    fireEvent.keyDown(tab("Port knocking"), { key: "F2" });
+    const again = screen.getByRole("textbox", { name: "Page title" });
+    fireEvent.change(again, { target: { value: "Something else" } });
+    fireEvent.keyDown(again, { key: "Escape" });
+    expect(tabLabels()).toContain("Port knocking");
+    await waitFor(async () => expect((await pages())[0].meta).toMatchObject({ title: "Port knocking", placement: "body" }));
+  });
+
+  it("⌥→ on an appendix page's tab moves it later: the letters follow; ⌫ on the tab asks to delete", async () => {
+    mount();
+    await ready();
+    await addPage("Appendix page");
+    await waitFor(() => expect(tabLabels()).toContain("Appendix A"));
+    await addPage("Appendix page");
+    await waitFor(() => expect(tabLabels()).toContain("Appendix B"));
+    // Tell them apart: rename the open one (B).
+    fireEvent.keyDown(tab("Appendix B"), { key: "F2" });
+    const input = screen.getByRole("textbox", { name: "Page title" });
+    fireEvent.change(input, { target: { value: "Second" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(detailOf(tab("Appendix B"))).toBe("Second"));
+    fireEvent.keyDown(tab("Appendix A"), { key: "ArrowRight", altKey: true });
+    await waitFor(() => expect(detailOf(tab("Appendix A"))).toBe("Second"));
+    expect(detailOf(tab("Appendix B"))).toBe("Untitled appendix");
+    fireEvent.keyDown(tab("Appendix B"), { key: "Backspace" });
+    expect(await screen.findByRole("dialog", { name: "Delete Untitled appendix? Its text goes with it." })).toBeInTheDocument();
+  });
+
+  it("Delete asks first, then Undo brings the page back with its text", async () => {
+    mount();
+    await ready();
+    await addPage("Appendix page");
+    await waitFor(() => expect(h1()).toBe("Appendix A – Untitled appendix"));
+    await waitFor(() => expect(editors.length).toBeGreaterThan(0));
+    act(() => {
+      const view = pageEditor().view;
+      view.dispatch(view.state.tr.insertText("Every user dumped from the DC", 1));
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Page actions" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+    const dialog = await screen.findByRole("dialog", { name: "Delete Untitled appendix? Its text goes with it." });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete page" }));
+    await waitFor(() => expect(tabLabels()).not.toContain("Appendix A"));
+    expect(await pages()).toEqual([]);
+    // The first target opens in its place.
+    expect(rowFor("lnx02")).toHaveAttribute("aria-selected", "true");
+
+    const notice = (await screen.findAllByRole("status")).find((n) => n.textContent?.includes("Deleted Untitled appendix"))!;
+    fireEvent.click(within(notice).getByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(tabLabels()).toContain("Appendix A"));
+    expect(tab("Appendix A")).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => expect(paper()).toHaveTextContent("Every user dumped from the DC"));
+    const [back] = await pages();
+    expect(JSON.stringify(back.doc)).toContain("Every user dumped from the DC");
+    expect(back.meta).toMatchObject({ title: "Untitled appendix", placement: "appendix" });
+  });
 });
 
 describe("CheckList", () => {

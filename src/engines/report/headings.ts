@@ -1,5 +1,5 @@
 import type { SectionKind } from "../../types/report";
-import type { Phase, ReportData, ReportNode, ReportTarget } from "./types";
+import type { PageMeta, Phase, ReportData, ReportNode, ReportTarget } from "./types";
 
 /** A heading as the page prints it: its number ("4.1.2", or null for an unnumbered one) and its words. */
 export interface HeadingLabel {
@@ -120,9 +120,10 @@ const UNNUMBERED: Partial<Record<SectionKind, string>> = {
 /**
  * Numbers the report's pages in outline order, as OffSec's sample does: 1 the exam report, 2 the summary, 3
  * Methodologies, then the standalone targets as one chapter (Independent Challenges, each target `4.N`, the chapter
- * title on the first), the AD set and engagement-level Also tested as chapters of their own.
+ * title on the first), the AD set and engagement-level Also tested as chapters of their own. A free page (+ Page) is a
+ * chapter of its own under its title; an appendix page takes no number (its letter comes from `numberAppendices`).
  */
-export function sectionNumbers(sections: { id: string; kind: SectionKind }[]): Map<string, SectionNumber> {
+export function sectionNumbers(sections: { id: string; kind: SectionKind; meta?: unknown }[]): Map<string, SectionNumber> {
   const out = new Map<string, SectionNumber>();
   let chapter = 0;
   let targetsChapter = 0;
@@ -135,6 +136,14 @@ export function sectionNumbers(sections: { id: string; kind: SectionKind }[]): M
         number: `${targetsChapter}.${targets}`,
         title: targets === 1 ? { number: `${targetsChapter}`, text: "Independent Challenges" } : null,
       });
+      continue;
+    }
+    if (s.kind === "page") {
+      const meta = (s.meta ?? {}) as Partial<PageMeta>;
+      if (meta.placement === "body") {
+        chapter++;
+        out.set(s.id, { number: `${chapter}`, title: { number: `${chapter}`, text: meta.title?.trim() || "Untitled page" } });
+      } else out.set(s.id, { number: null, title: null });
       continue;
     }
     const name = CHAPTERS[s.kind];

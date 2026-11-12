@@ -432,7 +432,7 @@ const base = {
   reportSectionUpsert: async (reportId: string, input) => {
     if (!db.reports.some((r) => r.id === reportId)) throw new RavenError("not_found", "Not found");
     const key = input.targetKey ?? null;
-    const needsKey = input.kind === "target" ? !!key?.trim() : input.kind === "ad" ? key === "ad-set" : key === null;
+    const needsKey = input.kind === "target" || input.kind === "page" ? !!key?.trim() : input.kind === "ad" ? key === "ad-set" : key === null;
     if (!needsKey) throw new RavenError("validation", "invalid target key for this section", "targetKey");
     let section = db.reportSections.find((s) => s.reportId === reportId && s.kind === input.kind && s.targetKey === key);
     if (section) Object.assign(section, clone(input), { targetKey: key, updatedAt: now() });
@@ -454,6 +454,13 @@ const base = {
     mine.forEach((s, i) => {
       if (s) s.position = i;
     });
+    return null;
+  },
+  reportSectionDelete: async (reportId: string, id: string) => {
+    const at = db.reportSections.findIndex((s) => s.id === id && s.reportId === reportId);
+    if (at === -1) throw new RavenError("not_found", "Not found");
+    if (db.reportSections[at].kind !== "page") throw new RavenError("validation", "only pages can be deleted", "kind");
+    db.reportSections.splice(at, 1);
     return null;
   },
   triedPairsList: async (engagementId: string) => clone(db.triedPairs.filter((t) => t.engagementId === engagementId)),

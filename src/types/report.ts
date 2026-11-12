@@ -16,7 +16,9 @@ export type SectionKind =
   | "appendix-msf"
   | "appendix-cleanup"
   | "further"
-  | "references";
+  | "references"
+  /** An owner-written page (+ Page): an appendix page or a free page, keyed by a fresh id. */
+  | "page";
 
 export interface Report {
   id: string;
@@ -43,7 +45,7 @@ export interface ReportSection {
   id: string;
   reportId: string;
   kind: SectionKind;
-  /** A host id for `target`, "ad-set" for `ad`, otherwise null. */
+  /** A host id for `target`, "ad-set" for `ad`, a fresh id for `page`, otherwise null. */
   targetKey: string | null;
   position: number;
   doc: ReportDoc | null;

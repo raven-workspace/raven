@@ -1,7 +1,7 @@
 import type { SectionKind } from "../../types/report";
 import { testedNotExploited } from "./coverage";
 import { lineCount } from "./trim";
-import type { GeneratedAttrs, ReportData, ReportNode } from "./types";
+import type { GeneratedAttrs, PageMeta, ReportData, ReportNode } from "./types";
 
 export interface AppendixEntry {
   key: string;
@@ -10,8 +10,15 @@ export interface AppendixEntry {
   title: string;
   sectionId: string;
 }
+/** An owner-written appendix page (+ Page) and its letter. */
+export interface AppendixPageLetter {
+  sectionId: string;
+  letter: string;
+}
 export interface AppendixIndex {
   entries: AppendixEntry[];
+  /** Appendix pages, lettered after the targets' appendices (absent where only references matter). */
+  pages?: AppendixPageLetter[];
   /** "E.2", or null for a key that is not moved. */
   refFor(key: string): string | null;
 }
@@ -36,9 +43,17 @@ function movedNodes(doc: ReportNode): { path: string; node: ReportNode }[] {
   return found;
 }
 
-/** Appendix references (§5.6): appendices hold only moved-out content. Each target section with moved content gets the next letter from A, in report order, its moved nodes numbered in document order. */
+/** Whether a section is an owner-written appendix page (kind `page`, placement `appendix`). */
+export const isAppendixPage = (s: { kind: SectionKind; meta?: unknown }) =>
+  s.kind === "page" && (s.meta as Partial<PageMeta> | undefined)?.placement === "appendix";
+
+/**
+ * Appendix letters (§5.6, §10.4). Each target section with moved content gets the next letter from A, in report order,
+ * its moved nodes numbered in document order; then each appendix page (+ Page) takes the next letter, by position.
+ * An appendix page is one page: its own blocks are not numbered.
+ */
 export function numberAppendices(
-  sections: { id: string; kind: SectionKind; targetKey: string | null; doc: ReportNode | null }[],
+  sections: { id: string; kind: SectionKind; targetKey: string | null; doc: ReportNode | null; meta?: unknown; position?: number }[],
   titleOf: (node: ReportNode) => string,
 ): AppendixIndex {
   const entries: AppendixEntry[] = [];
@@ -52,8 +67,12 @@ export function numberAppendices(
       entries.push({ key: `${s.id}:${path}`, letter, n: i + 1, title: titleOf(node), sectionId: s.id }),
     );
   }
+  const pages = sections
+    .filter(isAppendixPage)
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+    .map((s) => ({ sectionId: s.id, letter: String.fromCharCode(next++) }));
   const byKey = new Map(entries.map((e) => [e.key, `${e.letter}.${e.n}`]));
-  return { entries, refFor: (key) => byKey.get(key) ?? null };
+  return { entries, pages, refFor: (key) => byKey.get(key) ?? null };
 }
 
 function keptLines(node: ReportNode, data: ReportData): number {

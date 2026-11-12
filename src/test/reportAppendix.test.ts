@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { numberAppendices, suggestMoves } from "../engines/report";
+import { numberAppendices, sectionNumbers, suggestMoves } from "../engines/report";
 import type { ReportData, ReportNode } from "../engines/report";
 
 const ev = (appendix: string, entryId = "e1", extra = {}): ReportNode => ({ type: "evidence", attrs: { entryId, block: 0, keep: null, emphasis: [], appendix, ...extra } });
@@ -38,6 +38,56 @@ describe("numberAppendices", () => {
       title,
     );
     expect([idx.refFor("t1:0"), idx.refFor("ad:0")]).toEqual(["A.1", "B.1"]);
+  });
+});
+
+describe("appendix pages and free pages (+ Page)", () => {
+  const page = (id: string, placement: "appendix" | "body", position: number, d: ReportNode = doc()) => ({
+    id,
+    kind: "page" as const,
+    targetKey: `k-${id}`,
+    position,
+    doc: d,
+    meta: { title: `Page ${id}`, placement },
+  });
+  it("letters appendix pages after the targets' appendices, by position; their own content is not numbered", () => {
+    const idx = numberAppendices(
+      [
+        { id: "t1", kind: "target", targetKey: "h1", doc: doc(ev("moved", "a")) },
+        // Listed out of position order: letters follow position.
+        page("p3", "appendix", 9),
+        page("p2", "appendix", 7, doc(ev("moved", "x"))),
+        page("b1", "body", 8),
+        { id: "ad", kind: "ad", targetKey: "ad-set", doc: doc(ev("moved", "b")) },
+      ],
+      title,
+    );
+    expect([idx.refFor("t1:0"), idx.refFor("ad:0")]).toEqual(["A.1", "B.1"]);
+    expect(idx.pages).toEqual([
+      { sectionId: "p2", letter: "C" },
+      { sectionId: "p3", letter: "D" },
+    ]);
+    // A page's blocks are its own: no entries, no references.
+    expect(idx.entries.some((e) => e.sectionId.startsWith("p"))).toBe(false);
+    expect(idx.refFor("p2:0")).toBeNull();
+  });
+  it("with no target appendices an appendix page is Appendix A", () => {
+    expect(numberAppendices([page("p1", "appendix", 0)], title).pages).toEqual([{ sectionId: "p1", letter: "A" }]);
+  });
+  it("numbers a free page as a body section after the targets; an appendix page takes no number", () => {
+    const n = sectionNumbers([
+      { id: "i", kind: "introduction" },
+      { id: "s", kind: "summary" },
+      { id: "m", kind: "methodology" },
+      { id: "t1", kind: "target" },
+      { id: "ad", kind: "ad" },
+      { id: "b1", kind: "page", meta: { title: "Port knocking", placement: "body" } },
+      { id: "et", kind: "engagement-tested" },
+      { id: "a1", kind: "page", meta: { title: "Users", placement: "appendix" } },
+    ]);
+    expect(n.get("b1")).toEqual({ number: "6", title: { number: "6", text: "Port knocking" } });
+    expect(n.get("et")?.number).toBe("7");
+    expect(n.get("a1")).toEqual({ number: null, title: null });
   });
 });
 

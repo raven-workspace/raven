@@ -222,6 +222,8 @@ export const api = {
   reportSectionSave: (id: string, doc: ReportDoc, meta: Record<string, unknown>) =>
     call<ReportSection>("report_section_save", { id, doc, meta }),
   reportSectionsReorder: (reportId: string, ids: string[]) => call<null>("report_sections_reorder", { reportId, ids }),
+  /** Owner-written pages only (kind `page`); any other section is refused. */
+  reportSectionDelete: (reportId: string, id: string) => call<null>("report_section_delete", { reportId, id }),
   triedPairsList: (engagementId: string) => call<TriedPair[]>("tried_pairs_list", { engagementId }),
   triedPairsUpsert: (engagementId: string, inputs: TriedPairInput[]) =>
     call<TriedPair[]>("tried_pairs_upsert", { engagementId, inputs }),

@@ -8,6 +8,7 @@ import {
   legibilityChecks,
   DRAFT_LAYOUT,
   expectedFlags,
+  isAppendixPage,
   isFigure,
   isReady,
   isValidOsid,
@@ -25,6 +26,7 @@ import {
   type AppendixIndex,
   type Check,
   type FlagKind,
+  type PageMeta,
   type ReportData,
   type ReportMeta,
   type ReportNode,
@@ -37,7 +39,7 @@ import { useNarrow } from "../../lib/useNarrow";
 import { reportError } from "../../lib/lockSignal";
 import type { Report, ReportDoc, ReportPatch, ReportSection } from "../../types/report";
 import type { Settings } from "../../types/settings";
-import { Button, EmptyState, ErrorState, LoadingState, queryState, usePageShortcuts, type Hint } from "../../ui";
+import { Button, Dialog, EmptyState, ErrorState, LoadingState, queryState, TimedNotice, usePageShortcuts, type Hint } from "../../ui";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useNotesStore } from "../notes/useNotesStore";
 import { usePayloadsStore } from "../payloads/usePayloadsStore";
@@ -52,6 +54,8 @@ import { focusReportTab, PartTabs, ReportTabs, type TabItem } from "./ReportTabs
 import { ExpectedFlags, TodoPanel, type CheckAction } from "./TodoPanel";
 import {
   BACK_KINDS,
+  createPage,
+  deletePage,
   ensureSections,
   FRONT_KINDS,
   hasCurrentPage,
@@ -59,6 +63,8 @@ import {
   patchCachedSection,
   reportKey,
   reportSectionsKey,
+  renamePage,
+  restorePage,
   sectionKey,
   useReport,
   useReportData,
@@ -71,7 +77,7 @@ import { trackReportWrite, useReportSaveStore } from "./saveQueue";
 const HINTS: Hint[] = [
   { keys: "← →", label: "move along the tabs (J K from anywhere)", priority: 1 },
   { keys: "↵", label: "open the tab", priority: 2 },
-  { keys: "⌥← ⌥→", label: "reorder targets", priority: 3 },
+  { keys: "⌥← ⌥→", label: "reorder targets and pages", priority: 3 },
   { keys: "⌥1–3", label: "tabs, page, evidence", priority: 4 },
   { keys: "⌘↵", label: "insert evidence", priority: 6 },
   { keys: "/", label: "insert on the page", priority: 7 },
@@ -84,6 +90,7 @@ const HINTS: Hint[] = [
   { keys: "# ## ###", label: "at a line's start: heading 1, 2, 3", priority: 13 },
   { keys: "- 1. []", label: "at a line's start: bulleted, numbered, task list", priority: 14 },
   { keys: "> ``` ---", label: "at a line's start: quote, code block, divider", priority: 15 },
+  { keys: "F2 ⌫", label: "on a page's tab: rename, delete", priority: 16 },
 ];
 /** Under 1200px the evidence rail is a drawer, which E opens. */
 const NARROW_HINTS: Hint[] = [...HINTS, { keys: "E", label: "evidence", priority: 5 }];
@@ -169,7 +176,7 @@ function WarnLine({ text, retryLabel, onRetry }: { text: string; retryLabel: str
 
 /** The appendix index, kept as the same object while its entries are unchanged, so node views don't re-render per keystroke. */
 function useStableAppendix(index: AppendixIndex): AppendixIndex {
-  const sig = JSON.stringify(index.entries);
+  const sig = JSON.stringify([index.entries, index.pages]);
   const [kept, setKept] = useState({ sig, index });
   if (kept.sig !== sig) {
     setKept({ sig, index });
@@ -243,7 +250,19 @@ function usePageEdits(
     saver.save(previous, meta);
     return { doc: previous, meta };
   }, [openSection, docOf, saver, setLive, setLiveMeta]);
-  return { onChange, onRemoveEvidence, onRestoreEvidence, swapPrevious };
+  /** Merges `patch` into the open page's meta (a page's title) and saves it with the page as it is now. */
+  const patchMeta = useCallback(
+    (patch: Partial<SectionMeta> & Record<string, unknown>) => {
+      if (!openSection) return;
+      const cur = current.current?.id === openSection.id ? current.current : { id: openSection.id, doc: docOf(openSection), meta: openSection.meta as SectionMeta };
+      const meta: SectionMeta = { ...cur.meta, ...patch };
+      current.current = { ...cur, meta };
+      setLiveMeta({ id: openSection.id, meta });
+      saver.save(cur.doc, meta);
+    },
+    [openSection, docOf, saver, setLiveMeta],
+  );
+  return { onChange, onRemoveEvidence, onRestoreEvidence, swapPrevious, patchMeta };
 }
 
 /** The engagement's Report section: client engagements get a placeholder this round. */
@@ -264,8 +283,9 @@ export function ReportSectionView() {
 /** The section's states (loading, empty, error) keep the margins the shell gives other sections; the report itself runs edge to edge. */
 const Padded = ({ children }: { children: ReactNode }) => <div className="px-6 py-6">{children}</div>;
 
-/** Which tab a section sits under: Front matter's parts, the targets, or Closing's parts. */
-type EntryGroup = "front" | "targets" | "closing";
+/** Which tab a section sits under: Front matter's parts, the targets, Closing's parts, or a page of its own (a free
+ *  page after the targets, an appendix page after the targets' appendices). */
+type EntryGroup = "front" | "targets" | "pages" | "closing" | "appendix-pages";
 
 interface Entry {
   item: { id: string; group: EntryGroup; label: string; reorderable?: boolean };
@@ -379,12 +399,20 @@ function ReportBody({
     const ad = targets.find((t) => t.kind === "ad-set");
     const adSection = byKey.get(sectionKey("ad", "ad-set"));
     if (ad && adSection) out.push({ section: adSection, target: ad, item: { id: adSection.id, group: "targets", label: "AD set" } });
+    // Owner-written pages (+ Page), each group in its own order (position).
+    const pages = sections.filter((s) => s.kind === "page").sort((a, b) => a.position - b.position);
+    const pageEntry = (s: ReportSection, group: EntryGroup): Entry => ({
+      section: s,
+      item: { id: s.id, group, label: (s.meta as Partial<PageMeta>).title || (isAppendixPage(s) ? "Untitled appendix" : "Untitled page"), reorderable: true },
+    });
+    for (const s of pages) if (!isAppendixPage(s)) out.push(pageEntry(s, "pages"));
     const tested = byKey.get(sectionKey("engagement-tested", null));
     if (tested && hasEngagementTested(data)) out.push({ section: tested, item: { id: tested.id, group: "closing", label: LABEL["engagement-tested"]! } });
     for (const kind of BACK_KINDS) {
       const s = byKey.get(sectionKey(kind, null));
       if (s) out.push({ section: s, item: { id: s.id, group: "closing", label: LABEL[kind]! } });
     }
+    for (const s of pages) if (isAppendixPage(s)) out.push(pageEntry(s, "appendix-pages"));
     return out;
   }, [sections, targets, data]);
 
@@ -393,7 +421,7 @@ function ReportBody({
   const drafts = useMemo(() => {
     const out = new Map<string, ReportNode>();
     for (const e of entries) {
-      if (hasCurrentPage(e.section) || e.section.kind === "details") continue;
+      if (hasCurrentPage(e.section) || e.section.kind === "details" || e.section.kind === "page") continue;
       out.set(e.section.id, e.target ? buildTargetDraft(data, e.target, reportMeta) : buildSectionDraft(e.section.kind, data, settings));
     }
     return out;
@@ -407,7 +435,14 @@ function ReportBody({
   const appendixDocs = useCallback(
     (docOf: (s: ReportSection) => ReportNode) =>
       numberAppendices(
-        entries.map((e) => ({ id: e.section.id, kind: e.section.kind, targetKey: e.section.targetKey, doc: e.section.kind === "details" ? null : docOf(e.section) })),
+        entries.map((e) => ({
+          id: e.section.id,
+          kind: e.section.kind,
+          targetKey: e.section.targetKey,
+          doc: e.section.kind === "details" ? null : docOf(e.section),
+          meta: e.section.meta,
+          position: e.section.position,
+        })),
         (n) => appendixTitle(n, data),
       ),
     [entries, data],
@@ -493,8 +528,23 @@ function ReportBody({
   const gaps = [...checks.values(), reportLevel].reduce((n, list) => n + failsIn(list), 0);
   const started = (t: ReportTarget) => data.log.some((l) => !l.private && l.hostIds.some((h) => t.hostIds.includes(h)));
 
-  // The tab row (§10.1): Front matter, the targets in grading order, Closing, then the appendices (they follow the live
-  // page). Front matter and Closing each hold several sections, switched by their segmented row.
+  // A page's title as it is now (a rename of the open page is in its live meta before it is saved).
+  const pageTitleOf = (s: ReportSection) => (metaOf(s) as Partial<PageMeta>).title || (isAppendixPage(s) ? "Untitled appendix" : "Untitled page");
+  // Page numbers and titles from the outline order (OffSec's sample: 1, 2, 3, then 4.N per target), never stored.
+  const numbers = useMemo(
+    () =>
+      sectionNumbers(
+        entries
+          .filter((e) => e.section.kind !== "details")
+          .map((e) => ({ id: e.section.id, kind: e.section.kind, meta: e.section.kind === "page" ? metaOf(e.section) : undefined })),
+      ),
+    [entries, metaOf],
+  );
+  const pageLetter = (id: string) => appendix.pages?.find((p) => p.sectionId === id)?.letter ?? "?";
+
+  // The tab row (§10.1): Front matter, the targets in grading order, the free pages, Closing, then the appendices (they
+  // follow the live page) and the appendix pages. Front matter and Closing each hold several sections, switched by their
+  // segmented row.
   const appendixPages = appendixPagesOf(appendix);
   const frontParts = entries.filter((e) => e.item.group === "front");
   const closingParts = entries
@@ -511,10 +561,18 @@ function ReportBody({
     const state: TabItem["state"] = !started(e.target!) ? "not-started" : fails > 0 ? "todo" : "ready";
     tabs.push({ id: e.section.id, label: `${i + 1} ${e.item.label}`, state, todo: fails, reorderable: e.item.reorderable });
   });
+  for (const e of entries.filter((x) => x.item.group === "pages")) {
+    const title = pageTitleOf(e.section);
+    tabs.push({ id: e.section.id, label: title, state: "none", detail: `Section ${numbers.get(e.section.id)?.number ?? ""}`, page: true, title, reorderable: true });
+  }
   if (closingParts.length > 0) tabs.push({ id: CLOSING_TAB, label: "Closing", state: "none" });
   for (const p of appendixPages) {
     const n = p.entries.length;
     tabs.push({ id: p.id, label: `Appendix ${p.letter}`, state: "none", detail: `${p.entry.item.label}, ${n} ${n === 1 ? "item" : "items"}` });
+  }
+  for (const e of entries.filter((x) => x.item.group === "appendix-pages")) {
+    const title = pageTitleOf(e.section);
+    tabs.push({ id: e.section.id, label: `Appendix ${pageLetter(e.section.id)}`, state: "none", detail: title, page: true, title, reorderable: true });
   }
   const openTabId = openAppendix?.id ?? groupOf(open) ?? "";
 
@@ -527,9 +585,12 @@ function ReportBody({
     return n;
   }, [entries, openSection?.id, savedDocOf, data]);
 
-  // Page numbers and titles from the outline order (OffSec's sample: 1, 2, 3, then 4.N per target), never stored.
-  const numbers = useMemo(() => sectionNumbers(entries.filter((e) => e.section.kind !== "details").map((e) => ({ id: e.section.id, kind: e.section.kind }))), [entries]);
   const openNumber = openSection ? numbers.get(openSection.id) : undefined;
+  // The title at the top of the page: an appendix page is "Appendix C – <title>", unnumbered.
+  const openTitle: { text?: string; number?: string } =
+    openSection && isAppendixPage(openSection)
+      ? { text: `Appendix ${pageLetter(openSection.id)} – ${pageTitleOf(openSection)}` }
+      : { text: openNumber?.title?.text, number: openNumber?.title?.number ?? undefined };
   const pageSubNumbers = useMemo(() => {
     const kind = openSection?.kind;
     const n = openNumber?.number;
@@ -557,7 +618,7 @@ function ReportBody({
     [openId_],
   );
 
-  const { onChange, onRemoveEvidence, onRestoreEvidence, swapPrevious } = usePageEdits(openSection, savedDocOf, saver, setLive, setLiveMeta);
+  const { onChange, onRemoveEvidence, onRestoreEvidence, swapPrevious, patchMeta } = usePageEdits(openSection, savedDocOf, saver, setLive, setLiveMeta);
   // Each swap with the previous page remounts the editor on the page swapped in (it reads its document once).
   const [swaps, setSwaps] = useState(0);
   // The document a page mounts with: the sections cache as it is now, which the save queue patches with every write.
@@ -671,13 +732,16 @@ function ReportBody({
 
   const reorder = useCallback(
     (id: string, dir: -1 | 1) => {
-      const movable = entries.filter((e) => e.item.reorderable).map((e) => e.section.id);
+      // Targets reorder among the targets, free pages among the free pages, appendix pages among the appendix pages.
+      const group = entries.find((e) => e.section.id === id)?.item.group;
+      const inGroup = (e: Entry) => e.item.reorderable && e.item.group === group;
+      const movable = entries.filter(inGroup).map((e) => e.section.id);
       const at = movable.indexOf(id);
       const to = at + dir;
       if (at === -1 || to < 0 || to >= movable.length) return;
       [movable[at], movable[to]] = [movable[to], movable[at]];
-      // Every section gets a position: the outline order with the moved targets, then the hidden ones as they were.
-      const shown = entries.map((e) => (e.item.reorderable ? movable.shift()! : e.section.id));
+      // Every section gets a position: the outline order with the moved ones swapped, then the hidden ones as they were.
+      const shown = entries.map((e) => (inGroup(e) ? movable.shift()! : e.section.id));
       const hidden = [...sections].sort((a, b) => a.position - b.position).map((s) => s.id).filter((s) => !shown.includes(s));
       const ids = [...shown, ...hidden];
       qc.setQueryData<ReportSection[]>(reportSectionsKey(report.id), (list = []) =>
@@ -690,6 +754,55 @@ function ReportBody({
     },
     [entries, sections, qc, report.id],
   );
+
+  // + Page (§10.4): a new page goes after every section (last among its kind) and opens.
+  const addPage = (placement: PageMeta["placement"]) => {
+    const cached = qc.getQueryData<ReportSection[]>(reportSectionsKey(report.id)) ?? sections;
+    const position = cached.length === 0 ? 0 : Math.max(...cached.map((s) => s.position)) + 1;
+    createPage(report, placement, position)
+      .then((created) => {
+        qc.setQueryData<ReportSection[]>(reportSectionsKey(report.id), (list = []) => [...list.filter((s) => s.id !== created.id), created]);
+        openItem(created.id);
+      })
+      .catch(reportError);
+  };
+  const renameTo = (id: string, title: string) => {
+    const s = sections.find((x) => x.id === id);
+    if (!s) return;
+    if (id === openSection?.id) patchMeta({ title });
+    else renamePage(qc, s, title);
+  };
+  // Delete asks first; Undo brings the page back, from the kept copy, for this session.
+  const [deleting, setDeleting] = useState<ReportSection | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleted, setDeleted] = useState<ReportSection | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const confirmDelete = () => {
+    const s = deleting;
+    if (!s || deleteBusy) return;
+    setDeleteBusy(true);
+    deletePage(qc, s)
+      .then((kept) => {
+        setDeleting(null);
+        setDeleteError(null);
+        if (openId === s.id) setOpenId(null);
+        setDeleted(kept);
+      })
+      .catch((e: unknown) => {
+        reportError(e);
+        setDeleteError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => setDeleteBusy(false));
+  };
+  const undoDelete = () => {
+    const kept = deleted;
+    setDeleted(null);
+    if (!kept) return;
+    restorePage(qc, kept)
+      .then((back) => openItem(back.id))
+      .catch(reportError);
+  };
+  const closeDeleted = useCallback(() => setDeleted(null), []);
 
   // Keys: J/K move along the tabs; ⌥1/⌥2/⌥3 focus the tab row, the page and the evidence column.
   const navRef = useRef<HTMLDivElement | null>(null);
@@ -956,6 +1069,12 @@ function ReportBody({
             onReorder={reorder}
             // A click doesn't focus a button in WebKit: the way back is the tab itself.
             onTodo={(id) => openTodo([...(navRef.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find((t) => t.dataset.id === id) ?? null)}
+            onAddPage={addPage}
+            onRenamePage={renameTo}
+            onDeletePage={(id) => {
+              const s = sections.find((x) => x.id === id);
+              if (s) setDeleting(s);
+            }}
             exportSlot={null}
             listRef={navRef}
           />
@@ -980,8 +1099,8 @@ function ReportBody({
                   <ReportEditor
                     key={`${openSection.id}:${swaps}`}
                     sectionId={openSection.id}
-                    title={openNumber?.title?.text}
-                    titleNumber={openNumber?.title?.number ?? undefined}
+                    title={openTitle.text}
+                    titleNumber={openTitle.number}
                     subNumbers={pageSubNumbers}
                     doc={mountDoc(openSection)}
                     onChange={onChange}
@@ -1025,6 +1144,42 @@ function ReportBody({
             )}
           </div>
         </>
+      )}
+      <Dialog
+        open={deleting !== null}
+        onOpenChange={(o) => {
+          if (o) return;
+          setDeleting(null);
+          setDeleteError(null);
+        }}
+        title={deleting ? `Delete ${pageTitleOf(deleting)}? Its text goes with it.` : ""}
+        description={deleteError ? <span role="alert" className="text-warn">{deleteError}</span> : undefined}
+        onCloseAutoFocus={(e) => {
+          // Back to the tab row, on the open tab (the first target's after a delete of the open page).
+          e.preventDefault();
+          focusReportTab(navRef.current, 0);
+        }}
+        footer={
+          <>
+            <Button onClick={() => setDeleting(null)}>Cancel</Button>
+            <Button variant="danger" disabled={deleteBusy} onClick={confirmDelete}>
+              Delete page
+            </Button>
+          </>
+        }
+      />
+      {deleted && (
+        <TimedNotice
+          timerKey={deleted}
+          onClose={closeDeleted}
+          action={
+            <Button size="sm" onClick={undoDelete}>
+              Undo
+            </Button>
+          }
+        >
+          <p className="m-0 text-muted">{`Deleted ${pageTitleOf(deleted)}`}</p>
+        </TimedNotice>
       )}
     </section>
   );

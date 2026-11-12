@@ -3,9 +3,10 @@ import * as Popover from "@radix-ui/react-popover";
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import { cx } from "../../lib/cx";
 import { TAB_MARK } from "../../ui/shadcn/tabs";
+import { IconButton } from "../../ui/IconButton";
 import { TabMarker } from "../../ui/TabMarker";
 
-/** One tab of the report's tab row (§10.1): Front matter, a target, Closing, an appendix or (later) a page. */
+/** One tab of the report's tab row (§10.1): Front matter, a target, Closing, an appendix or an owner-written page. */
 export interface TabItem {
   id: string;
   label: string;
@@ -15,10 +16,12 @@ export interface TabItem {
   todo?: number;
   /** A tab without checks says what it holds ("lnx02, 2 items"). */
   detail?: string;
-  /** Targets: ⌥←/⌥→ change the grading order. */
+  /** Targets and pages: ⌥←/⌥→ change their order. */
   reorderable?: boolean;
-  /** An owner-written page: it has a ⋯ menu (Rename, Delete). */
+  /** An owner-written page: Rename and Delete in the Page actions menu, F2 and Delete on the focused tab. */
   page?: boolean;
+  /** A page's own title, which Rename edits (the label may add its letter: "Appendix C"). */
+  title?: string;
 }
 
 const TAB = '[role="tab"]';
@@ -67,9 +70,13 @@ function walkItems(e: KeyboardEvent<HTMLDivElement>) {
   items[(at + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
 }
 
+/** A menu item; `movesFocus` items put focus somewhere themselves (an input, a dialog), so it doesn't go back to the trigger. */
+type MenuItem = { label: string; run(): void; destructive?: boolean; movesFocus?: boolean };
+
 /** A small menu of text items in a popover: its own portal, so the scrolling tab row never clips it. */
-function MenuPopover({ trigger, label, items }: { trigger: ReactNode; label: string; items: { label: string; run(): void; destructive?: boolean }[] }) {
+function MenuPopover({ trigger, label, items }: { trigger: ReactNode; label: string; items: MenuItem[] }) {
   const [open, setOpen] = useState(false);
+  const focusMoved = useRef(false);
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>{trigger}</Popover.Trigger>
@@ -81,6 +88,10 @@ function MenuPopover({ trigger, label, items }: { trigger: ReactNode; label: str
           role="menu"
           aria-label={label}
           onKeyDown={walkItems}
+          onCloseAutoFocus={(e) => {
+            if (focusMoved.current) e.preventDefault();
+            focusMoved.current = false;
+          }}
           className="z-50 grid min-w-40 gap-1 rounded-md border border-line-strong bg-surface p-1 shadow-[0_12px_32px_rgba(0,0,0,.6)]"
         >
           {items.map((it) => (
@@ -90,6 +101,7 @@ function MenuPopover({ trigger, label, items }: { trigger: ReactNode; label: str
               role="menuitem"
               className={cx(ITEM, it.destructive && "hover:text-warn focus-visible:text-warn")}
               onClick={() => {
+                focusMoved.current = !!it.movesFocus;
                 setOpen(false);
                 it.run();
               }}
@@ -155,9 +167,38 @@ function Tab({
   );
 }
 
+/** A page's title, edited in place of its tab: ↵ keeps it, Esc (or an empty title) leaves the old one. */
+function RenameInput({ initial, onDone }: { initial: string; onDone(title: string | null, byKey: boolean): void }) {
+  const [value, setValue] = useState(initial);
+  const done = useRef(false);
+  const finish = (title: string | null, byKey: boolean) => {
+    if (done.current) return;
+    done.current = true;
+    onDone(title?.trim() ? title.trim() : null, byKey);
+  };
+  return (
+    <input
+      aria-label="Page title"
+      autoFocus
+      value={value}
+      maxLength={200}
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => finish(value, false)}
+      onKeyDown={(e) => {
+        // The tab row's own keys (arrows, ↵, F2) never reach it while typing.
+        e.stopPropagation();
+        if (e.key === "Enter") finish(value, true);
+        else if (e.key === "Escape") finish(null, true);
+      }}
+      className="h-9 w-48 self-center rounded-sm border border-line-strong bg-bg px-2 text-body text-fg outline-none focus-visible:border-accent"
+    />
+  );
+}
+
 /**
  * The report's tab row under the status strip (§10.1, mock A): Front matter, the targets in grading order, Closing and
- * the appendices, then + Page. It is a roving-tabindex tablist (←/→ move, ↵ opens, ⌥←/⌥→ reorder a target) that
+ * the appendices, then + Page. It is a roving-tabindex tablist (←/→ move, ↵ opens, ⌥←/⌥→ reorder a target or a page) that
  * scrolls sideways when it overflows, keeping the open tab in view; the export slot sits outside the scroller, so it
  * never scrolls away.
  */
@@ -168,7 +209,8 @@ export function ReportTabs({
   onReorder,
   onTodo,
   onAddPage,
-  onPageMenu,
+  onRenamePage,
+  onDeletePage,
   exportSlot,
   listRef,
 }: {
@@ -178,13 +220,19 @@ export function ReportTabs({
   onReorder(id: string, delta: -1 | 1): void;
   /** A tab's `N to do` was clicked: open its To do panel (the tab itself opens through `onOpen`). */
   onTodo?(id: string): void;
-  /** Offered as + Page only when given (pages arrive with the pages round). */
+  /** Offered as + Page only when given. */
   onAddPage?(placement: "appendix" | "body"): void;
-  onPageMenu?(id: string, action: "rename" | "delete"): void;
+  /** A page's new title (trimmed, never empty). */
+  onRenamePage?(id: string, title: string): void;
+  /** Delete was asked for a page: the caller confirms. */
+  onDeletePage?(id: string): void;
   exportSlot: ReactNode;
   listRef?: Ref<HTMLDivElement>;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
+  // The page whose title is being edited in place of its tab.
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const openPage = tabs.find((t) => t.id === openId && t.page);
   // A reordered tab keeps focus: the row re-renders with it elsewhere, and a moved node can lose focus in WebKit.
   const refocus = useRef<string | null>(null);
   useLayoutEffect(() => {
@@ -201,6 +249,21 @@ export function ReportTabs({
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (walkTabs(e, onOpen)) return;
+    // A focused page tab: F2 renames, Delete (or ⌫) asks to delete.
+    const focused = (e.target as HTMLElement).closest<HTMLElement>(TAB);
+    const page = focused && tabs.find((t) => t.id === focused.dataset.id && t.page);
+    if (page && !e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+      if (e.key === "F2" && onRenamePage) {
+        e.preventDefault();
+        setRenaming(page.id);
+        return;
+      }
+      if ((e.key === "Delete" || e.key === "Backspace") && onDeletePage) {
+        e.preventDefault();
+        onDeletePage(page.id);
+        return;
+      }
+    }
     if (!e.altKey || e.metaKey || e.ctrlKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
     const tab = (e.target as HTMLElement).closest<HTMLElement>(TAB);
     const item = tab && tabs.find((t) => t.id === tab.dataset.id);
@@ -218,27 +281,33 @@ export function ReportTabs({
           <div ref={listRef} role="tablist" aria-label="Report pages" onKeyDown={onKeyDown} className="relative isolate grid grid-flow-col auto-cols-max items-stretch gap-1">
             <TabMarker className={TAB_MARK} />
             {tabs.map((t) =>
-              t.page && onPageMenu ? (
-                <div key={t.id} role="presentation" className="grid grid-cols-[auto_auto] items-center">
-                  <Tab tab={t} selected={t.id === openId} onOpen={() => onOpen(t.id)} onTodo={onTodo && (() => onTodo(t.id))} />
-                  <MenuPopover
-                    label={`${t.label} actions`}
-                    trigger={
-                      <button type="button" aria-label={`${t.label} actions`} className="inline-grid size-7 cursor-default place-items-center rounded-sm border-0 bg-transparent text-muted-2 hover:bg-surface-hi hover:text-fg">
-                        <DotsThree size={16} weight="bold" aria-hidden />
-                      </button>
-                    }
-                    items={[
-                      { label: "Rename", run: () => onPageMenu(t.id, "rename") },
-                      { label: "Delete", run: () => onPageMenu(t.id, "delete"), destructive: true },
-                    ]}
-                  />
-                </div>
+              t.id === renaming ? (
+                <RenameInput
+                  key={t.id}
+                  initial={t.title ?? t.label}
+                  onDone={(title, byKey) => {
+                    setRenaming(null);
+                    if (title !== null && title !== t.title) onRenamePage?.(t.id, title);
+                    // ↵ or Esc: focus goes back to the tab once it is back in the row (a click elsewhere keeps its focus).
+                    if (byKey) refocus.current = t.id;
+                  }}
+                />
               ) : (
                 <Tab key={t.id} tab={t} selected={t.id === openId} onOpen={() => onOpen(t.id)} onTodo={onTodo && (() => onTodo(t.id))} />
               ),
             )}
           </div>
+          {/* The open page's actions sit outside the tablist, which owns only tabs (F2 and Delete work on the tab itself). */}
+          {openPage && (onRenamePage || onDeletePage) && (
+            <MenuPopover
+              label="Page actions"
+              trigger={<IconButton icon={DotsThree} label="Page actions" shortcut="F2" />}
+              items={[
+                ...(onRenamePage ? [{ label: "Rename", run: () => setRenaming(openPage.id), movesFocus: true }] : []),
+                ...(onDeletePage ? [{ label: "Delete", run: () => onDeletePage(openPage.id), destructive: true, movesFocus: true }] : []),
+              ]}
+            />
+          )}
           {onAddPage && (
             <MenuPopover
               label="Add a page"

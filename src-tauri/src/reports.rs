@@ -24,6 +24,8 @@ const KINDS: &[&str] = &[
     "appendix-cleanup",
     "further",
     "references",
+    // An owner-written page (appendix or free page), keyed by a fresh id so the unique index holds.
+    "page",
 ];
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -240,9 +242,10 @@ fn validate(input: &SectionInput) -> AppResult<()> {
     }
     let key = input.target_key.as_deref();
     match input.kind.as_str() {
-        "target" if key.map_or(true, |k| k.trim().is_empty()) => bad("targetKey", "a target section needs a host id"),
+        "target" if key.is_none_or(|k| k.trim().is_empty()) => bad("targetKey", "a target section needs a host id"),
         "ad" if key != Some("ad-set") => bad("targetKey", "the AD section uses the key ad-set"),
-        "target" | "ad" => Ok(()),
+        "page" if key.is_none_or(|k| k.trim().is_empty()) => bad("targetKey", "a page needs a key"),
+        "target" | "ad" | "page" => Ok(()),
         _ if key.is_some() => bad("targetKey", "this section takes no target key"),
         _ => Ok(()),
     }
@@ -295,6 +298,20 @@ pub fn section_save(conn: &Connection, id: &str, doc: Value, meta: Value) -> App
         return Err(AppError::NotFound);
     }
     section_get(conn, id)
+}
+
+/// Deletes an owner-written page of the report. Other sections are part of the report's outline and are never deleted.
+pub fn section_delete(conn: &Connection, report_id: &str, id: &str) -> AppResult<()> {
+    let kind: String = match conn.query_row("SELECT kind FROM report_sections WHERE id = ?1 AND report_id = ?2", params![id, report_id], |r| r.get(0)) {
+        Ok(k) => k,
+        Err(rusqlite::Error::QueryReturnedNoRows) => return Err(AppError::NotFound),
+        Err(e) => return Err(e.into()),
+    };
+    if kind != "page" {
+        return Err(AppError::Validation { field: "kind".into(), message: "only pages can be deleted".into() });
+    }
+    conn.execute("DELETE FROM report_sections WHERE id = ?1", [id])?;
+    Ok(())
 }
 
 /// `position` becomes the index in `ids`. Any id outside the report fails with NotFound and changes nothing.
@@ -494,6 +511,57 @@ mod tests {
         // Nothing changed.
         let ids: Vec<_> = sections_list(c, &r.id).unwrap().into_iter().map(|s| s.id).collect();
         assert_eq!(ids, vec![b.id, a.id]);
+    }
+
+    #[test]
+    fn page_kind_requires_key() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "e");
+        let r = get_or_create(c, &e, &defaults()).unwrap();
+        for bad in [input("page", None, 0), input("page", Some(" "), 0)] {
+            match section_upsert(c, &r.id, bad) {
+                Err(AppError::Validation { field, .. }) => assert_eq!(field, "targetKey"),
+                other => panic!("expected a validation error, got {other:?}"),
+            }
+        }
+        // Each page has its own key, so two pages are two rows.
+        let a = section_upsert(c, &r.id, input("page", Some("p1"), 0)).unwrap();
+        let b = section_upsert(c, &r.id, input("page", Some("p2"), 1)).unwrap();
+        assert_ne!(a.id, b.id);
+        assert_eq!(sections_list(c, &r.id).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn delete_refuses_non_page() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "e");
+        let r = get_or_create(c, &e, &defaults()).unwrap();
+        let s = section_upsert(c, &r.id, input("summary", None, 0)).unwrap();
+        match section_delete(c, &r.id, &s.id) {
+            Err(AppError::Validation { field, message }) => assert_eq!((field.as_str(), message.as_str()), ("kind", "only pages can be deleted")),
+            other => panic!("expected a validation error, got {other:?}"),
+        }
+        assert_eq!(sections_list(c, &r.id).unwrap().len(), 1);
+        assert!(matches!(section_delete(c, &r.id, "missing"), Err(AppError::NotFound)));
+    }
+
+    #[test]
+    fn delete_removes_page() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "e");
+        let r = get_or_create(c, &e, &defaults()).unwrap();
+        let keep = section_upsert(c, &r.id, input("page", Some("p1"), 0)).unwrap();
+        let gone = section_upsert(c, &r.id, input("page", Some("p2"), 1)).unwrap();
+        // A page of another report is out of reach.
+        let e2 = eng(c, "e2");
+        let r2 = get_or_create(c, &e2, &defaults()).unwrap();
+        assert!(matches!(section_delete(c, &r2.id, &gone.id), Err(AppError::NotFound)));
+        section_delete(c, &r.id, &gone.id).unwrap();
+        let ids: Vec<_> = sections_list(c, &r.id).unwrap().into_iter().map(|s| s.id).collect();
+        assert_eq!(ids, vec![keep.id]);
     }
 
     #[test]
