@@ -249,6 +249,25 @@ describe("serviceCoverage from access", () => {
     expect(by(d, 8080)).toMatchObject({ result: "exploited", via: "WAR upload" });
   });
 
+  it("reads a port that ends a sentence, but never one inside an IP or a decimal", () => {
+    const d = base();
+    d.services = [...d.services, svc(3389, { nmapService: "unknown" })] as never;
+    d.hops = [
+      { fromHostId: "h2", toHostId: H, via: "Logged in via ssh on 22.", logEntryId: null, at: 1 },
+      { fromHostId: "h2", toHostId: H, via: "Tomcat manager on 8080.", logEntryId: null, at: 2 },
+      { fromHostId: "h2", toHostId: H, via: "Pivot from 10.0.445.5 and 5985.5", logEntryId: null, at: 3 },
+    ] as never;
+    d.attempts = [attempt("Default creds tried on 3389.", { reason: "locked out" }), attempt("Swept 10.0.22.5", { reason: "" })] as never;
+    expect(by(d, 22)).toMatchObject({ result: "exploited", via: "Logged in via ssh on 22." });
+    expect(by(d, 8080)).toMatchObject({ result: "exploited", via: "Tomcat manager on 8080." });
+    expect(by(d, 3389)).toMatchObject({ result: "tested", via: "Default creds tried on 3389." });
+    expect(by(d, 445).result).toBe("untested");
+    expect(by(d, 5985).result).toBe("untested");
+    // "10.0.22.5" never marks 22 as tested.
+    d.hops = [];
+    expect(by(d, 22).result).toBe("untested");
+  });
+
   it("ignores a private linked entry, other hosts' grants, and lets a finding and an override win", () => {
     const d = base();
     d.log = [cmdEntry("l1", "ssh dev@10.0.0.5", { private: true })];

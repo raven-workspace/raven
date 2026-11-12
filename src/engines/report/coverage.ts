@@ -38,9 +38,13 @@ const ACCESS_FAMILIES: { ports: number[]; names: string[]; words: RegExp }[] = [
   { ports: [5900], names: ["vnc"], words: /\bvnc(viewer)?\b/i },
 ];
 
-const portPattern = (port: number) => new RegExp(`(?<![\\d.])${port}(?![\\d.])`);
-/** A port standing alone in a command or title ("on 8080", ":8080/"): not inside a word, an IP or a base64 payload. */
-const barePort = (port: number) => new RegExp(`(?<![\\w.])${port}(?![\\w.])`);
+/** A port in a note: not inside a number, an IP or a decimal; a sentence's full stop after it ("on 22.") is fine. */
+const portPattern = (port: number) => new RegExp(`(?<!\\d\\.?)${port}(?!\\.?\\d)`);
+/**
+ * A port standing alone in a command or title ("on 8080", ":8080/", "on 8080."): not inside a word, an IP or a base64
+ * payload.
+ */
+const barePort = (port: number) => new RegExp(`(?<!\\w\\.?)${port}(?!\\.?\\w)`);
 
 /**
  * What the steps into a host say: `words` is each access grant's and hop's `via` with its linked entry's title, where a
