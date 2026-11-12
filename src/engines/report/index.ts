@@ -7,3 +7,5 @@ export * from "./types";
 export * from "./coverage";
 export * from "./frontMatter";
 export * from "./tools";
+export * from "./diff";
+export * from "./appendix";
