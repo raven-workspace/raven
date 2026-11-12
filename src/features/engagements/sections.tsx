@@ -5,6 +5,7 @@ import { LogSection } from "../log/LogSection";
 import { CredentialsSection } from "../credentials/CredentialsSection";
 import { FindingsSection } from "../findings/FindingsSection";
 import { NetworkSection } from "../network/NetworkSection";
+import { ReportSectionView } from "../report/ReportSection";
 
 export const SECTIONS = [
   { id: "board", label: "Board", empty: "" },
@@ -13,7 +14,7 @@ export const SECTIONS = [
   { id: "findings", label: "Findings", empty: "Findings arrive in a later build step" },
   { id: "network", label: "Network", empty: "" },
   { id: "checklist", label: "Engagement checklist", empty: "The engagement checklist arrives in a later build step" },
-  { id: "report", label: "Report", empty: "Report arrives in phase 3" },
+  { id: "report", label: "Report", empty: "" },
 ] as const;
 
 export type SectionId = (typeof SECTIONS)[number]["id"];
@@ -30,6 +31,7 @@ export function SectionView({ section }: { section: SectionId }) {
   if (section === "findings") return <FindingsSection />;
   if (section === "network") return <NetworkSection />;
   if (section === "checklist") return <EngagementChecklist />;
+  if (section === "report") return <ReportSectionView />;
   const s = SECTIONS.find((x) => x.id === section)!;
   return <EmptyState title={s.empty} />;
 }
