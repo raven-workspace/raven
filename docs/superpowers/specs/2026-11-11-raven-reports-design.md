@@ -59,7 +59,7 @@ It lives at the engagement's **Report** section (sidebar, its existing number ke
 - *Report:* Report details, High-level summary, Methodology.
 - *Targets, in grading order:* each standalone host, then the AD set as one entry (its machines named). Each target shows a state glyph (ready / gaps / not started) and its IP's last octet. The current target is selected (surface-hi + accent bar).
 - *Under the current target, its checks* (6.5) in plain words, each with a pass or amber mark. Clicking a check scrolls the page to the place it concerns and focuses it.
-- *Appendices:* Proof table, Metasploit usage, House cleaning (and Tools, if kept; builder's call). Marked "auto" when generated.
+- *Appendices:* Proof table, Tools and payloads, Metasploit usage, House cleaning, and any long exploit code moved out of a target section. Marked "auto" when generated.
 - Targets can be reordered (drag, and ⌥↑/⌥↓ on the focused target). The order is the grading order.
 
 **Page (centre).** A light page on Ink's black, styled as the PDF will look (house style, 4.3). The owner types directly on it. It shows one target (or one front-matter section, or one appendix) at a time: the item selected in the outline. Evidence blocks (commands with output, screenshots with captions, flags) sit on the page as non-editable blocks the owner can move, remove or insert between; prose is freely editable around them.
@@ -83,7 +83,8 @@ Keyboard-first, listed in the Shortcuts sheet (`usePageShortcuts`), not a hint r
 
 The owner's own clean house style, not a copy of OffSec's Word template:
 - Light paper, near-black ink, Instrument Sans for text and JetBrains Mono for commands, output and code. One accent colour used sparingly (it must work on paper and in greyscale print; Ink's lime is a screen colour, so the paper accent is a darker relative or a neutral — decided in the style round).
-- Section structure follows OffSec's required content and the clibetoe OSCP template the owner liked (link in the desktop spec, phase 3): title page, high-level summary with an exploited-systems table, methodology, one section per target (services with coverage, vulnerabilities with severity and fix, initial access, privilege escalation, tested-not-exploitable, proof), the AD set with its attack chain, house cleaning, appendices.
+- Section structure: see 5.6 (the outline is binding). It follows OffSec's required content, PEN-200 Module 5, the owner's Field Manual `05-Reporting` notes, and the template in the owner's old template (a PentestReportAI template, not OffSec's own; used as a reasonable structure, not as authority).
+- Cover: "OSCP Exam Report", OSID, email, exam date, report date, "Confidential". Every page: header "OSCP Exam Report - OS-XXXXX", footer "Page N | Confidential". A table of contents after the cover.
 - Commands render as `prompt$ command` above their output in a tinted code block; long lines wrap, never clip. Screenshots fit the page width with "Figure N." captions, numbered across the document.
 - **A short style round comes before the export work:** two or three page-style mockups (title page, a target section with code and a screenshot, the proof table) in the decision page, owner picks one. The page in the editor and the PDF share that one stylesheet.
 
@@ -120,7 +121,7 @@ Per target, in time order, split into **Initial access**, **Privilege escalation
   - a flag entry;
   - steps of a finding linked to the host (`finding_steps`).
 - A screenshot entry whose time falls between two kept entries, or within a few minutes after one (builder picks the window), comes along with it.
-- **Left out of the step-by-step (in Unused):** entries with a failed attempt linked (`failed_attempts.log_entry_id`), "returned nothing" entries, notes, and anything not matched above. Failed attempts are still reported, as the "Tested, not exploitable" list (5.4); Unused only decides whether their full command and output also appear as a step.
+- **Left out of the step-by-step (in Unused):** entries with a failed attempt linked (`failed_attempts.log_entry_id`), "returned nothing" entries, notes, and anything not matched above. Failed attempts are still reported, as the "Tested, not exploited" list (5.4); Unused only decides whether their full command and output also appear as a step.
 - **Never anywhere:** private entries.
 
 **The foothold/privesc split:** the first entry that granted user-level access (or the first `local.txt` flag) closes Initial access; everything after it up to the root/SYSTEM/admin access goes to Privilege escalation; flags go to Proof. If Raven can't tell, everything goes to Initial access and the owner moves the divider (the sub-section heading is a block they can move like any other). Where the target was entered via a hop rather than its own foothold (AD set), the hop is the foothold.
@@ -129,10 +130,10 @@ Per target, in time order, split into **Initial access**, **Privilege escalation
 
 - **Target heading:** host name, IP, OS, and one line of facts (ports, access reached).
 - **Services table:** port, protocol, the confirmed product and version where proven, otherwise nmap's guess marked as such.
-- **Each command block:** each `{command, output}` pair from the entry, with the prompt shown as the `ran_on` machine (`kali$` or the host's shell). Very long outputs fold to a head and tail with a "lines omitted" marker the owner can expand for the PDF (builder's call on thresholds).
+- **Each command block:** each `{command, output}` pair from the entry, with the prompt shown as the `ran_on` machine (`kali$` or the host's shell). The owner trims output by **keeping chosen line ranges**; Raven puts "… N lines omitted" between them (head-and-tail folding would hide the line that matters, often in the middle). The owner can also emphasise key lines. Long outputs start trimmed to a builder-chosen head with a prompt to pick the relevant lines; trimming is per placement and never changes the log entry.
 - **Each screenshot:** the image and a caption from the entry's caption, numbered at render time.
 - **Proof:** each flag entry with its value, the pasted proof text and its screenshot.
-- **Exploits:** `finding_files` gain two fields (migration): **modified** (yes/no) and **original URL**, editable in the finding's Files section and on the page. A modified file attached to a finding linked to the host appears in the section as code, with its original URL and an "explain each change" prose slot (the check in 6.5 enforces it). An unmodified exploit appears as its URL only, as OffSec asks: from the file's original URL, or from the finding's `refs` (EDB IDs and URLs) when there's no file. Raven does not diff automatically this round.
+- **Exploits:** `finding_files` gain two fields (migration): **modified** (yes/no) and **original URL**, editable in the finding's Files section and on the page. A modified file attached to a finding linked to the host appears in the section as code, with its original URL and an "explain each change" prose slot (the check in 6.5 enforces it). An unmodified exploit appears as its URL only, as OffSec asks: from the file's original URL, or from the finding's `refs` (EDB IDs and URLs) when there's no file. OffSec requires the changes **highlighted**, so a modified file also takes the **original** (pasted or loaded as text; no network) and Raven renders a local line diff with changes marked. Where the owner has no original, they mark changed lines on the code block by hand. Code too long for the flow (course p.113) moves to an appendix, leaving a reference in the target section.
 - **Empty prose slots** after each block, so the cursor has an obvious place to go. They carry quiet placeholder text ("What this shows, and why it matters") that never exports.
 
 ### 5.3 Which targets
@@ -146,21 +147,37 @@ Per target, in time order, split into **Initial access**, **Privilege escalation
 The owner's rule (2026-11-11): treat the exam report as a real pentest report. What didn't work is reported too, because it gives the client coverage assurance and shows a complete testing methodology. The only things left out are private ones; a failed attempt whose reason is **operator** (the owner's own inexperience) is private by design and never appears.
 
 So each target section also carries, generated from live data and editable around:
-- **Vulnerabilities:** for each finding linked to the host, its title, severity (and CVSS where set), description as the vulnerability explanation, impact, and remediation as the fix, placed with the sub-section it enabled (foothold or privesc; by the finding's steps, or the owner moves it). This is the template's "Vulnerability Explanation / Vulnerability Fix / Severity" block. Lessons stay private.
-- **Tested, not exploitable:** the target's non-private failed attempts (title, reason kind as plain words: "blocked by a control", "precondition not met", "no access", and the reason text) and non-private ruled-out items (text and reason), as a list. A failed attempt's log entry can still be inserted as full evidence from Unused where showing the command helps.
-- **Coverage per service:** the services table gains a result column: exploited (with which finding), tested and not exploitable (with the attempt or ruled-out reason), or not tested. Derived from findings, attempts, ruled-out items and service verdicts; the owner can correct a row.
+- **Vulnerabilities:** for each finding linked to the host: title, severity (and CVSS vector where set), **affected** (host, IP, port, URL or parameter, from the finding's hosts and services), description as the vulnerability explanation, impact, remediation as the fix (rendered as a list: one distinct step per item, remediation and mitigation both where a fix takes time), and **references** (from `refs`). It sits at the **top** of the sub-section it enabled (foothold or privesc, by the finding's steps, or the owner moves it), before the steps. This is the template's "Vulnerability Explanation / Vulnerability Fix / Severity" block. Lessons stay private.
+- **Tested, not exploited:** terse one-line entries, no command blocks by default (course p.105: don't bury the reader in the technical detail of attempts): the target's non-private failed attempts (title, reason kind as plain words: "blocked by a control", "precondition not met", "no access", and the reason text) and non-private ruled-out items (text and reason), as a list. A failed attempt's log entry can still be inserted as full evidence from Unused where showing the command helps.
+- **Coverage per service:** the services table gains a result column: exploited (with which finding), tested, no exploitable issue found (with the attempt or ruled-out reason; never an absolute claim, course p.108), or not tested. Derived from findings, attempts, ruled-out items and service verdicts; the owner can correct a row.
 
-Engagement-level failed attempts and ruled-out items with no host go in a **Tested, not exploitable** sub-section of the AD set (if domain-related) or a report-level one before the appendices (builder decides the placement rule).
+Engagement-level failed attempts and ruled-out items with no host go in a **Tested, not exploited** sub-section of the AD set (if domain-related) or a report-level one before the appendices (builder decides the placement rule).
 
 New checks (6.5), soft: a service with no result ("not tested") and a finding with an empty description or remediation.
 
 ### 5.5 Report-level sections
 
-- **Report details:** candidate name, email, OSID; report title; dates. Name and email default from Settings (a new "Report details" group; OSID too), and are editable per report.
-- **High-level summary:** generated exploited-systems table (target, IP, access reached, flags) above an empty prose area. No generated prose.
-- **Methodology:** a short default text the owner can edit (stored as a Settings default so it is written once), naming the PEN-200 stages.
-- **AD set:** one target section with a sub-section per machine plus an **attack chain** generated from `hops` and `access_grants` (from → to, via what credential or technique, at which step), rendered as a simple ordered list (a diagram is a later round).
-- **Appendices (auto):** proof table (target, IP, local.txt, proof.txt values), Metasploit usage (the locked host, or "not used"), house cleaning (from the cleanup list, with removed/open status). The owner can add prose to each.
+- **Report details:** candidate name, email, OSID; report title; exam date and report date. Name and email default from Settings (a new "Report details" group; OSID too), and are editable per report.
+- **High-level summary:**
+  - a generated **Engagement details** block first (course §5.2.3): scope (every target and IP), test window (from the timebox), the attacker IP, restrictions in force (Metasploit on one target, banned techniques, no AI), and accounts or credentials created (from the cleanup list);
+  - prose slots in the course's order, as labelled empty placeholders only: what the engagement was; hardening observed (things done well); vulnerabilities and trends; wrap-up. The rail surfaces "blocked by a control" attempts for the "done well" slot;
+  - the exploited-systems table: target, IP, access level, **method** (defaults to the finding title; editable). No flag columns; those are in the proof table;
+  - **Recommendations**, an empty prose slot.
+- **Testing considerations:** after the summary, one prose slot for anything that affected testing (course §5.2.4), placeholder naming positive, neutral and negative outcomes (e.g. VPN drops, machine reverts, time).
+- **Methodology:** a default text the owner can edit (stored as a Settings default so it is written once), with sub-sections Information gathering, Service enumeration, Penetration, Post-exploitation (maintaining access), House cleaning, and a **severity legend** (Critical/High/Medium/Low/Info, one line each), stating that ratings are technical severity, not business risk.
+- **AD set:** an **AD overview** first (domain, a machine/IP/role/OS table, a prose slot for the path); then a sub-section per machine whose phases are named by how it was entered: **Initial access** (the first machine), **Lateral movement** (entered by a hop), **Domain compromise** (the DC), replacing the foothold/privesc split for these machines; the DC's proof adds a "Domain admin: yes/no" row; then the **attack chain** generated from `hops` and `access_grants` (from → to, via what credential or technique, at which step), rendered as a simple ordered list (a diagram is a later round).
+- **Appendices (auto):** proof table (target, IP, hostname, local.txt, proof.txt values; "N/A" where a flag isn't expected), tools and payloads (tool, purpose, URL; generated from command first words, purpose and URL editable), Metasploit usage (target, module, purpose; modules found in that host's commands, or "not used"), house cleaning (from the cleanup list, with removed/open status). The owner can add prose to each.
+
+### 5.6 Report outline (binding)
+
+1. Cover, then table of contents.
+2. High-level summary: engagement details; summary prose slots; exploited-systems table; recommendations.
+3. Testing considerations.
+4. Methodology, with the severity legend.
+5. Independent targets, in grading order. Each: heading and facts; services with coverage; Initial access (vulnerability block, then steps); Privilege escalation (vulnerability block, then steps); Tested, not exploited; Proof (item/value table: local.txt, proof.txt, IP address, hostname; then the proof screenshot and text).
+6. Active Directory set: AD overview; each machine (services, Initial access / Lateral movement / Domain compromise, tested-not-exploited, proof); attack chain.
+7. Engagement-level tested-not-exploited, if any.
+8. Appendices: proof table; tools and payloads; Metasploit usage; house cleaning; long exploit code.
 
 ## 6. How it works
 
@@ -196,13 +213,19 @@ Per target, computed live, each a plain sentence that names what's wrong and how
 - **Proof shows the IP:** the flag's proof text includes `ipconfig`/`ifconfig`/`ip a(ddr)` output containing the host's IP, **and** the flag has a screenshot. (Raven can't read the image; the text check plus "has a screenshot" is the proxy, and the check's wording says so.)
 - **Proof from an interactive shell:** warn if the flag entry looks like it came from a web request (an HTTP entry) rather than a shell.
 - **Every command has its output:** each command block on the page has output, or the entry is marked "returned nothing".
-- **Every step is explained:** no evidence block without owner prose after it (a soft check: amber but doesn't block export).
+- **Every step is explained:** no evidence block without owner prose after it (soft). Screenshots without supporting text are listed first (course: never let a screenshot speak for itself).
+- **Proof is complete:** besides the IP, the proof text shows identity (`whoami`/`id`) and hostname, and the `cat`/`type` path is the usual location (`/root`, `/home/*`, `C:\Users\*\Desktop`) (soft). The fix text offers the one-liners from the owner's Evidence note: `id; hostname; cat /root/proof.txt; ip addr` and `whoami && hostname && type C:\Users\Administrator\Desktop\proof.txt && ipconfig`.
+- **Access has a screenshot:** a foothold or privesc access grant with no screenshot near it (soft).
+- **Captions:** over ten words (soft; course p.103). A screenshot narrower than would print legibly at page width (soft).
+- **Findings:** a linked finding with no severity, a title that is just a tool name, or no affected location (soft).
+- **Wording:** absolute claims in owner prose ("impossible", "not vulnerable", "fully secure") (soft; a fixed word list, no AI).
+- **Modified exploit highlighted:** a modified file with no original and no marked lines.
 - **Modified exploit explained:** each finding file marked *modified* has its original URL and an explanation.
 - **Metasploit:** if Metasploit was used on more than one host according to the log (msf modules or Meterpreter in commands), a loud warning.
 
 Report-level: details complete; OSID matches the file name pattern; at least one target.
 
-Checks never block export outright; export shows the open gaps in its confirm step and requires an explicit "Export anyway" when any exist.
+Checks never block export outright; export shows the open gaps in its confirm step and requires an explicit "Export anyway" when any exist. The confirm step also lists every expected flag with a **Submitted in the control panel** tick (OffSec scores zero without it); unticked ones are a gap.
 
 ### 6.6 Deadline
 
@@ -231,6 +254,7 @@ Checks never block export outright; export shows the open gaps in its confirm st
 - Expected flags per machine: standalone local.txt + proof.txt, AD machines proof.txt, editable per machine (6.5).
 - Labs: owner picks report hosts (default: hosts with a flag); clients get a placeholder this round (5.3).
 - Finding files gain "modified" and "original URL"; unmodified exploits are cited by URL (5.2).
+- Aligned with PEN-200 Module 5, the template and the owner's `05-Reporting` notes (2026-11-11 review): see 5.2, 5.4, 5.5, 5.6 and 6.5. Failed attempts are terse one-liners by default (course p.105), named "Tested, not exploited" to avoid absolute claims (p.108).
 - (Owner's rule, not a call) Report like a real engagement: failed attempts, ruled-out items and findings' severity/impact/remediation all appear; only private content, including operator-reason attempts, stays out (5.4).
 - Checks warn and gate export behind "Export anyway", never hard-block.
 - The .7z and MD5 are produced by Raven, since OffSec requires both and the owner wants every clerical step removed.
@@ -242,5 +266,4 @@ Checks never block export outright; export shows the open gaps in its confirm st
 - The screenshot-attachment window and long-output folding thresholds.
 - Unused sort order default; pane-focus keys and Export key, avoiding collisions.
 - PDF production technique within 6.7's constraints.
-- Whether a Tools appendix (first words of commands) is worth including.
 - Task order, as long as the style round precedes export styling and the data migration precedes UI that saves.
