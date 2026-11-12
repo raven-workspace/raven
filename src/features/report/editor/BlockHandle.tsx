@@ -4,7 +4,7 @@ import type { Node as PMNode } from "prosekit/pm/model";
 import { useEditor } from "prosekit/react";
 import { BlockHandleDraggable, BlockHandlePopup, BlockHandlePositioner, BlockHandleRoot } from "prosekit/react/block-handle";
 import { DropIndicator } from "prosekit/react/drop-indicator";
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { AppendixPlacement } from "../../../engines/report";
 import { Tooltip } from "../../../ui";
 import { moveLabel } from "./nodes/parts";
@@ -44,6 +44,15 @@ export function BlockHandle() {
     setMenu(null);
     editor.focus();
   };
+  // The handle hides while the page scrolls, and its menu would lose its anchor (Radix then pins it to the window's
+  // corner): a scroll closes the menu, as the pointer leaving a hovered block does not.
+  const open = menu !== null;
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setMenu(null);
+    window.addEventListener("scroll", close, { capture: true, passive: true });
+    return () => window.removeEventListener("scroll", close, { capture: true });
+  }, [open]);
 
   return (
     <>

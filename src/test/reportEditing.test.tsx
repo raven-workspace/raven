@@ -254,6 +254,18 @@ describe("Markdown shortcuts", () => {
       expect(json(editor()).content?.[0]).toMatchObject(expected);
     });
 
+  it('"# " in a step\'s second paragraph makes the heading there, not at the top of the page', async () => {
+    const step = { type: "step", attrs: { entryId: null }, content: [para("Read the notes"), para()] };
+    const { editor } = await ready(doc(para("Intro"), { type: "steps", content: [step] }));
+    // Intro is 7 wide (0..7); steps opens at 7, the step at 8, its first paragraph at 9 ("Read the notes", 14 chars),
+    // so the empty second paragraph's inside is at 9 + 16 + 1.
+    cursorAt(editor(), 26);
+    type(editor(), "# Owner");
+    const top = json(editor()).content!;
+    expect(top[0]).toMatchObject({ type: "paragraph", content: [{ text: "Intro" }] });
+    expect(top[1].content?.[0].content?.[1]).toMatchObject({ type: "heading", content: [{ text: "Owner" }] });
+  });
+
   it("stops at heading 3: #### stays text", async () => {
     const { editor } = await ready(doc(para()));
     cursorAt(editor(), 1);
@@ -770,6 +782,15 @@ describe("Block handle menu", () => {
     openMenu();
     fireEvent.click(await screen.findByRole("menuitem", { name: "Back inline" }));
     await waitFor(() => expect(json(editor()).content?.[0].content?.[0].content?.[1].attrs?.appendix).toBe("inline"));
+  });
+
+  it("a scroll closes the block menu, so it never stays open without its handle", async () => {
+    const { container, editor } = await ready(doc(para("Intro"), ev("e1")));
+    hover(container, editor(), "paragraph");
+    openMenu();
+    expect(await screen.findByRole("menu", { name: "Block actions" })).toBeInTheDocument();
+    act(() => void editor().view.dom.dispatchEvent(new Event("scroll")));
+    await waitFor(() => expect(screen.queryByRole("menu", { name: "Block actions" })).toBeNull());
   });
 
   it("deletes the hovered block; a paragraph offers no Move to appendix", async () => {
