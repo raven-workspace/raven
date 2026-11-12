@@ -1,6 +1,6 @@
 import { XIcon } from "@phosphor-icons/react";
 import type { Editor } from "prosekit/core";
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   entryPhase,
   evidenceIdsIn,
@@ -16,7 +16,7 @@ import {
 import { openThreads } from "../../engines/notes/threads";
 import { detectAndParseScan } from "../../engines/parse/scan";
 import { cx } from "../../lib/cx";
-import { isDialogOpen, useKeydown } from "../../lib/keys";
+import { isDialogOpen } from "../../lib/keys";
 import type { Credential } from "../../types/credentials";
 import type { LogEntry } from "../../types/log";
 import { BELOW_TITLE_BAR, Button, IconButton, labelClass, Tooltip, useDrawerPresence } from "../../ui";
@@ -436,12 +436,22 @@ export function EvidenceDrawer({
   useEffect(() => {
     if (open && present) ref.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
   }, [open, present, focusKey, ref]);
-  useKeydown((e) => {
-    if (open && e.key === "Escape" && !e.defaultPrevented && !isDialogOpen()) {
-      e.preventDefault();
-      onClose();
-    }
+  // Esc closes the drawer before anything else hears it: in the capture phase, so the engagement's own Esc (back to
+  // the dashboard), registered before the drawer mounted, never runs first.
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
   });
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || isDialogOpen()) return;
+      e.preventDefault();
+      close.current();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [open]);
   if (!present) return null;
   return (
     <aside
