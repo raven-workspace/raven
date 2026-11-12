@@ -2,6 +2,8 @@
 
 Date: 2026-11-11. Branch: `feat/reports`. Status: approved brief, written design.
 
+**Amended 2026-11-12 (rework round, §10).** After the owner tried Plan A, §10 replaces the parts it names: the outline becomes a tab row (§4.1), target pages become numbered steps (§5.1, §5.2), the AD set opens with an attack-path table (§5.5), appendices return as first-class pages (§5.6, §5.7), and the summary, scope and service tables are generated (§5.5). Where §10 and an earlier section disagree, §10 wins.
+
 ## 1. Intent
 
 Raven's fourth job (PRODUCT.md) is to "produce a polished report afterwards from what was recorded". The Report section is still a placeholder (`src/features/engagements/sections.tsx`, "Report arrives in phase 3"). This round builds it.
@@ -295,3 +297,51 @@ Checks never block export outright; export shows the open gaps in its confirm st
 - Unused sort order default; pane-focus keys and Export key, avoiding collisions.
 - PDF production technique within 6.7's constraints.
 - Task order, as long as the style round precedes export styling and the data migration precedes UI that saves.
+
+## 10. Rework round (2026-11-12): binding, overrides earlier sections
+
+**Why.** The owner tried Plan A on real data. They found two problems: (1) target pages were a log dump, every proving entry at full height under its own "What you did and why" placeholder (ms01 was about 8,700 px); (2) the Task 15 ruling that removed appendices overrode their explicit call. They chose **option A · Steps** from `.impeccable/mocks/decision/report-target-rethink.html`. They also added a model report, `docs/Mock exam A — model report.md` (their Mock exam A lab written up from their vault notes), which they rate above OffSec's sample. Its shape is now the reference for target pages and the summary, alongside OffSec's section order and numbering, which still hold.
+
+### 10.1 View layout (replaces the left outline of §4.1)
+
+- **Tab row** under the status strip, as in mock A: `Front matter`, each target in grading order (`1 lnx02`, `2 ms01`, …, `4 AD set`), then each appendix (`Appendix A · ms01 · 2 items`, `Appendix B · <title>`), then **+ Page**. Each tab shows its state in small text (`ready`, `N to do` in amber, `not started`). **Export PDF** sits at the row's right. The row scrolls horizontally when it overflows; the selected tab stays in view.
+- Targets reorder with ⌥←/⌥→ on the focused tab (grading order). Tabs are a roving-tabindex tablist (←/→ move, ↵ opens). Pane-focus keys stay as built.
+- **Front matter** is one tab: the Report details form, then 1 (Introduction, Objective, Requirements, Scope), 2 High-Level Summary, Testing considerations and 3 Methodologies, one after another on one scrolling page. Each part keeps its own stored section and editor.
+- **Checks** (§6.5) move out of the outline. A tab's `N to do` and the strip's `TO DO` cell open a **To do** panel at the top of the page pane listing that tab's checks; clicking one scrolls to its place and focuses it, as before. Esc closes it. Under ~1000px of pane width the tab row stays (it scrolls); the picker and Checks disclosure of §4.4 go away.
+- The **rail** (right) is the target's log that is not in the report: `<host> log · not in the report`, grouped by phase (Service enumeration, Initial access, Privilege escalation, Post-exploitation), time order inside each group. Each row: time, the command or title, one line of what it showed, and **+ add**. A row whose output is longer than the appendix threshold offers **+ to appendix** instead (it adds the step and moves the output to the appendix in one action). A failed attempt's row says it is already in Also tested. A scan whose ports are in the port table says so ("in the port table already"). Notes and Creds stay as rail tabs.
+- **+ add** puts the entry into the **current step**, the step that holds the cursor. With no cursor in a step, it becomes a new step at the end of its phase (`endOfPhase`). ⌘↵ on a focused row does the same.
+
+### 10.2 Target page: numbered steps (replaces the step layout of §5.1 and §5.2)
+
+- **Short draft.** Only these entries are placed: access grants, hops, flags (with their companions) and finding steps. Checklist-goal evidence and service-confirming entries no longer place an entry on the page; they stay in the rail. Port scans are not steps: the port table covers them. Screenshots still come along with a placed entry (§5.1 window).
+- **Steps.** Each finding's walkthrough is a numbered **Steps to reproduce** list (a `steps` node of `step` nodes; numbers computed at render, restarting per list). A step is the owner's sentence (one paragraph slot, hint "Say what this step does") followed by its evidence. One step per placed entry, screenshots joining the entry before them. A flag is a step ("Read local.txt"), the last step of its phase, with its companions. The old reproduce-summary slot is dropped. **+ Step** under each list adds an empty step.
+- **Evidence chips.** In the editor, evidence in a step shows collapsed as a chip: a command chip shows `$ <command>` and `N of M lines`; a screenshot chip shows a thumbnail and its caption (with figure number); an exploit chip shows the file name and `modified · N lines changed` or `unmodified · <URL>`; a moved block shows `→ Appendix A.1`. ↵ or a click opens the chip in place to the full block exactly as it prints, with **Trim**, **Highlight**, **Edit text** and **Move to appendix** in its bar, plus "N lines cut. The PDF prints exactly what's shown here." Esc or the bar's close collapses it. Collapse is editor view state only (not stored); a toolbar toggle opens or closes all. The PDF always prints every block in full (trimmed lines, captions, figures).
+- **Port table** (replaces the two-column Port Scan Results of §5.2): under Service Enumeration on every machine, standalone and AD alike. Columns: Port (`445/tcp`), Service, Version, Notes. Rows are the host's open services in port order. Version is the confirmed product and version, else nmap's. **Notes** is the owner's, typed into the cell on the page and stored on the node (`notes` keyed by service id), empty by default. The old set-wide table of the AD set is dropped.
+- **Result line** right under each machine's heading: "**Result:** <access>. <flags>." Access comes from the host's access grants in time order ("shell as `ronan`, then root"; hop-entered: "WinRM as `sam.rivera`"). Flags print as "local.txt `<value>`, proof.txt `<value>`", and a missing expected flag prints nothing. It is live; **Edit text** detaches it into an owner paragraph prefixed "Result:" (the existing detach pattern).
+- Vulnerability lines (§5.4) stay as built (Explanation, Fix, Severity), above the steps.
+
+### 10.3 Report-level tables (replaces the scope line of §5.5 and "no generated table here")
+
+- **1.4 Scope:** a generated table: Host, IP address, OS, Set (`Independent` / `AD`). One row per report target machine in grading order. The 3.1 scope line is removed.
+- **High-Level Summary findings table:** after the summary's prose slots, before 2.1 Recommendations. Columns: #, Host, Finding, Severity, Result. Rows: every finding on a report target, most severe first (the existing severity order), then by host grading order. **Result** is what the finding gave, from the phase the draft engine assigns it: entry phase → `Initial access` (`Foothold` when the machine was entered by a hop); privilege escalation → the grant level reached (`Root`, `SYSTEM`, `Administrator`); domain compromise → `Domain Admin`; Additional findings → `None`. Live, never stored.
+- **AD attack-path table** opens the AD set, before its first machine (it replaces the closing attack-chain list). Columns: Step, From, Technique, To, Access gained. One row per hop and per access grant on the set's machines, in time order. From is `Kali` when the hop has no source host. Technique is the hop's or grant's `via`. Access gained is the grant's identity and level.
+
+### 10.4 Appendices and free pages (replaces §5.6's "one letter per target" and §5.5's "no generated appendices")
+
+- **Move to appendix** is visible: in an open chip's bar, and in every block's ⋯ menu (the block handle). It works as §5.6 describes (moved / split, live references).
+- **Appendix tabs:** a target's moved content is its appendix (as built). Each appears as a tab, lettered in report order.
+- **+ Page** offers **Appendix page** or **Free page**. Both are owner-written pages with an editable title. An appendix page is lettered with the other appendices (after the targets' appendices, in creation order, reorderable with ⌥←/⌥→). A free page sits after the targets and before the appendices, numbered as a body section. Stored as `report_sections` kind `page`, with `target_key` = a fresh id (keeps the unique index), and meta `{ title, placement: "appendix" | "body" }`. No migration: `kind` is free text. Delete is in the tab's ⋯ menu, with confirm and undo for the session.
+- Auto appendices (proof table, tools list) do **not** return (owner, 2026-11-12).
+
+### 10.5 Guide notes
+
+Each section and sub-section shows a short **guide note** above it in the editor (never in the PDF), in the spirit of the mock report's "From your notes" callouts. It says what the part is for, what goes in it, where Raven filled it from, and a tip (neutral third-person voice; keep only the ports that mattered; list every exploit change). Guide notes are fixed text written into Raven. They never suggest wording for the owner's prose and are never generated (§3 anti-goal). Each has a dismiss button (hides that note, in every report) and a "Hide all guide notes" action; a Settings toggle brings them back. Stored in Settings (`reportGuidesHidden`: list of note ids, `"*"` = all).
+
+### 10.6 New checks (adds to §6.5)
+
+- **Step not replayable** (soft): a step with owner text but no evidence block. "Step N of <heading> has no command or output under it, so a reader can't replay it. Add it from the log column." A step holding only a screenshot passes.
+- **Credential that moved you** (soft): a non-private credential found on one machine (`sourceHostId`) that gave access to another (an access grant for its username on a different host, or a hop logged with it), where no finding on either machine names the credential's username or has the grant's or hop's entry as a step. "<user>'s credential from <source> got you onto <host>, but no finding covers it. A credential that lets you move is a finding too."
+
+### 10.7 Draft layout
+
+`DRAFT_LAYOUT` becomes 4. Stored pages rebuild on next open, with the existing "Restore your previous page" path kept.
