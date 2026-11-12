@@ -186,13 +186,13 @@ describe("Evidence rail: the log column", () => {
     await seed();
     mount();
     await ready();
-    expect(screen.getByRole("heading", { name: "lnx02 log · not in the report" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "lnx02 log not in the report" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Unused (6)" })).toBeInTheDocument();
     expect(rowTitles(group("Service enumeration"))).toEqual(["nmap scan"]);
     expect(rowTitles(group("Initial access"))).toEqual(["hydra login", "ftp anonymous", "ssh shell screenshot"]);
     expect(rowTitles(group("Privilege escalation"))).toEqual(["smbclient list", "winpeas run"]);
     expect(screen.getAllByRole("heading", { level: 4 }).map((h) => h.textContent)).toEqual(["Service enumeration", "Initial access", "Privilege escalation"]);
-    // Each row: time · command, then one line of what it showed (the output's first line, else the observations).
+    // Each row: time, command, then one line of what it showed (the output's first line, else the observations).
     expect(within(row("hydra login")).getByText("[22][ssh] host: 10.10.30.21 login: svc_web password: Summer2026")).toBeInTheDocument();
     expect(within(row("hydra login")).getByText(/hydra -L users.txt/)).toBeInTheDocument();
     expect(within(row("ftp anonymous")).getByText("anonymous login refused")).toBeInTheDocument();

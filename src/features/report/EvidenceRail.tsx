@@ -165,12 +165,11 @@ function RailItem({ row, onAct }: { row: RailRow; onAct(row: RailRow, from: HTML
       className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-sm border-l-2 border-line-2 py-1 pr-1 pl-3 outline-none hover:bg-surface-hi focus-visible:bg-surface-hi focus-visible:ring-1 focus-visible:ring-accent"
     >
       <span className="grid min-w-0 gap-1">
-        <span className="truncate text-code text-muted" title={lead}>
+        <span className="grid grid-cols-[auto_minmax(0,1fr)] gap-2 text-code text-muted" title={lead}>
           <time dateTime={new Date(entry.at).toISOString()} className="tabular-nums">
             {clock(entry.at)}
-          </time>
-          {" · "}
-          {lead}
+          </time>{" "}
+          <span className="truncate">{lead}</span>
         </span>
         <span className="truncate text-meta text-fg-2" title={line}>
           {line}
@@ -225,7 +224,10 @@ function LogTab({
     <div role="group" aria-label="Unused log entries" data-rail-log="" className="grid gap-4">
       {hosts.map((hostId) => (
         <section key={hostId} aria-label={`${name(hostId)} log`} className="grid gap-3">
-          <h3 className={cx(labelClass, "m-0")}>{`${name(hostId)} log · not in the report`}</h3>
+          <h3 className={cx(labelClass, "m-0 grid grid-flow-col justify-start gap-2")}>
+            <span>{`${name(hostId)} log`}</span>{" "}
+            <span className="text-muted-2">not in the report</span>
+          </h3>
           {groups
             .filter((g) => g.hostId === hostId)
             .map((g) => (
