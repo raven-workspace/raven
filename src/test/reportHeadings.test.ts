@@ -11,11 +11,13 @@ const data = {
   findings: [
     { id: "f1", title: "SMB share to WordPress RCE" },
     { id: "f2", title: "AlwaysInstallElevated" },
+    { id: "f3", title: "Reused password over SSH" },
+    { id: "f4", title: "Directory listing" },
   ],
 } as unknown as ReportData;
 
 const g = (kind: string, hostId: string | null): ReportNode => ({ type: "generated", attrs: { kind, hostId, appendix: "inline" } });
-const ph = (phase: string, hostId: string): ReportNode => ({ type: "phase", attrs: { phase, hostId } });
+const ph = (phase: string, hostId: string, findingId?: string): ReportNode => ({ type: "phase", attrs: { phase, hostId, ...(findingId ? { findingId } : {}) } });
 const vuln = (findingId: string): ReportNode => ({ type: "vuln", attrs: { findingId } });
 const slot: ReportNode = { type: "slot", attrs: { hint: "" } };
 const doc = (...content: ReportNode[]): ReportNode => ({ type: "doc", content });
@@ -25,6 +27,24 @@ const label = (h: ReturnType<typeof targetHeadings>, key: string) => {
 };
 
 describe("targetHeadings", () => {
+  it("gives a second finding that enabled a phase a numbered heading of its own, and each additional finding its title", () => {
+    const page = doc(
+      g("facts", "h1"),
+      ph("foothold", "h1"), vuln("f1"), slot,
+      ph("foothold", "h1", "f3"), vuln("f3"), slot,
+      ph("post", "h1"),
+      ph("additional", "h1"), ph("additional", "h1", "f4"), vuln("f4"),
+      ph("tested", "h1"), g("tested", "h1"),
+    );
+    const h = targetHeadings(page, data, { key: "h1", kind: "standalone", hostIds: ["h1"] }, "4.1", 1);
+    expect(label(h, phaseKey("h1", "foothold"))).toBe("4.1.1 Initial Access – SMB share to WordPress RCE");
+    expect(label(h, phaseKey("h1", "foothold", "f3"))).toBe("4.1.2 Initial Access – Reused password over SSH");
+    expect(label(h, phaseKey("h1", "post"))).toBe("4.1.3 Post-Exploitation");
+    expect(label(h, phaseKey("h1", "additional"))).toBe("4.1.4 Additional findings");
+    expect(label(h, phaseKey("h1", "additional", "f4"))).toBe("- Directory listing");
+    expect(label(h, phaseKey("h1", "tested"))).toBe("- Also tested");
+  });
+
   it("numbers a standalone target's sub-sections in page order and names the vulnerability that opened each", () => {
     const page = doc(
       g("facts", "h1"),

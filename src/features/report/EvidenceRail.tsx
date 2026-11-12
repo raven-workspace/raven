@@ -1,7 +1,7 @@
 import { XIcon } from "@phosphor-icons/react";
 import type { Editor } from "prosekit/core";
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { endOfPhase, evidenceIdsIn, evidenceNodes, type ReportData, type ReportNode, type ReportTarget } from "../../engines/report";
+import { endOfPhase, evidenceIdsIn, evidenceNodes, targetCredentials, type ReportData, type ReportNode, type ReportTarget } from "../../engines/report";
 import { openThreads } from "../../engines/notes/threads";
 import { cx } from "../../lib/cx";
 import { isDialogOpen, useKeydown } from "../../lib/keys";
@@ -196,26 +196,23 @@ const who = (c: Pick<Credential, "username" | "domain">) => (c.domain ? `${c.dom
 
 function CredsTab({ data, target }: { data: ReportData; target: ReportTarget }) {
   const name = (id: string) => data.hosts.find((h) => h.id === id)?.name ?? "Host";
-  const ids = new Set(target.hostIds);
-  // Each credential with the target host it belongs to: where it works (local), else where it was found.
-  const creds = data.credentials.flatMap((c) => {
-    const hostId = c.localHostId && ids.has(c.localHostId) ? c.localHostId : c.sourceHostId && ids.has(c.sourceHostId) ? c.sourceHostId : null;
-    return hostId ? [{ c, hostId }] : [];
-  });
-  const grants = data.grants.filter((g) => ids.has(g.hostId)).map((g) => ({ g, user: data.usernames.find((u) => u.id === g.usernameId) }));
-  if (creds.length === 0 && grants.length === 0) return <p className="m-0 text-meta text-muted-2">No credentials or access tied to this target.</p>;
+  // Found here, local here, or tried here and it worked (nxc, hydra); and the access gained on the target.
+  const { credentials: creds, access: grants } = useMemo(() => targetCredentials(data, target.hostIds), [data, target.hostIds]);
+  if (creds.length === 0 && grants.length === 0) {
+    return <p className="m-0 text-meta text-muted-2">No credential found on, local to or working on this target, and no access recorded.</p>;
+  }
   return (
     <div className="grid gap-4">
       {creds.length > 0 && (
         <Block label="Credentials">
           <ul className="m-0 grid list-none gap-2 p-0">
-            {creds.map(({ c, hostId }) => (
-              <li key={c.id} className="grid min-w-0 gap-1">
+            {creds.map((c) => (
+              <li key={c.key} className="grid min-w-0 gap-1">
                 <span className="truncate text-code text-fg" title={who(c)}>
                   {who(c)}
                 </span>
                 <span className="text-meta text-muted-2">
-                  {c.type} on {name(hostId)}
+                  {c.type}, {c.ties.join("; ")}
                 </span>
               </li>
             ))}
@@ -225,7 +222,7 @@ function CredsTab({ data, target }: { data: ReportData; target: ReportTarget }) 
       {grants.length > 0 && (
         <Block label="Access">
           <ul className="m-0 grid list-none gap-2 p-0">
-            {grants.map(({ g, user }) => (
+            {grants.map(({ grant: g, user }) => (
               <li key={g.id} className="grid gap-1">
                 <span className="text-body text-fg-2">
                   {user ? who(user) : "Unknown user"} on {name(g.hostId)}: {g.level}

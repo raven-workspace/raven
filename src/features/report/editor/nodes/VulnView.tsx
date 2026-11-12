@@ -1,12 +1,17 @@
 import type { ReactNodeViewProps } from "prosekit/react";
-import { fixSteps, type VulnAttrs } from "../../../../engines/report";
+import { fixSteps, splitAffected, type VulnAttrs } from "../../../../engines/report";
 import { useReportData } from "../ReportDataContext";
+import { FindingProse, InlineText } from "./FindingProse";
 import { Block, capitalize, Gone } from "./parts";
 
+const notWritten = <span className="report-missing">Not written yet.</span>;
+
 /**
- * A finding as OffSec's sample prints it at the top of the sub-section it enabled: Vulnerability Explanation (the
- * description), Vulnerability Fix (the remediation, one step per item), Severity (with the CVSS vector). The heading
- * above names it; Steps to reproduce the attack follows as the owner's slot. `lessons` is private and never read here.
+ * A finding as OffSec's sample prints it under its heading: Vulnerability Explanation (the description), Vulnerability
+ * Fix (the remediation, one step per item), Severity (with the CVSS vector); an "Affected: …" line the description
+ * opened with is a labelled line of its own, never part of the explanation. Finding text is Markdown. The heading
+ * above names the finding; Steps to reproduce the attack follows as the owner's slot. `lessons` is private and never
+ * read here.
  */
 export function VulnView({ node, selected }: ReactNodeViewProps) {
   const { data } = useReportData();
@@ -18,13 +23,12 @@ export function VulnView({ node, selected }: ReactNodeViewProps) {
       </Block>
     );
   const severity = finding.severity ? capitalize(finding.severity) : "Not rated";
+  const { affected, explanation } = splitAffected(finding.description);
   const fixes = fixSteps(finding.remediation);
   return (
     <Block selected={selected} kind="vuln">
       <div className="report-vuln">
-        <p className="report-prose">
-          <strong>Vulnerability Explanation:</strong> {finding.description || <span className="report-missing">Not written yet.</span>}
-        </p>
+        <FindingProse label="Vulnerability Explanation:" text={explanation} missing={notWritten} />
         {fixes.length > 1 ? (
           <>
             <p>
@@ -32,19 +36,26 @@ export function VulnView({ node, selected }: ReactNodeViewProps) {
             </p>
             <ul>
               {fixes.map((f, i) => (
-                <li key={i}>{f}</li>
+                <li key={i}>
+                  <InlineText text={f} />
+                </li>
               ))}
             </ul>
           </>
         ) : (
-          <p className="report-prose">
-            <strong>Vulnerability Fix:</strong> {fixes[0] ?? <span className="report-missing">Not written yet.</span>}
+          <p>
+            <strong>Vulnerability Fix:</strong> {fixes[0] ? <InlineText text={fixes[0]} /> : notWritten}
           </p>
         )}
         <p>
           <strong>Severity:</strong> {severity}
           {finding.cvssVector && <span className="report-cvss"> ({finding.cvssVector})</span>}
         </p>
+        {affected && (
+          <p>
+            <strong>Affected:</strong> <InlineText text={affected} />
+          </p>
+        )}
       </div>
     </Block>
   );

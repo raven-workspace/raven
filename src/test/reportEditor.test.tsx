@@ -49,7 +49,7 @@ function data(o: Partial<ReportData> = {}): ReportData {
     hops: [],
     cleanup: [],
     notes: [],
-    credentials: [],
+    credentials: [], credAttempts: [],
     ...o,
   } as unknown as ReportData;
 }
@@ -324,6 +324,26 @@ describe("ReportEditor vulnerabilities and exploits", () => {
     expect(screen.getByText("Restrict the upload directory.")).toBeInTheDocument();
     expect(line("Severity:")).toHaveTextContent("Severity: High (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H)");
     expect(container.innerHTML).not.toContain("I forgot to check FTP first");
+  });
+
+  it("renders finding text as Markdown, and an imported Affected line as its own labelled line", async () => {
+    const md = {
+      ...finding,
+      description: "Affected: 22/tcp OpenSSH\n\nThe server takes **password** logins as `root`. See [the manual](https://man.example.test/sshd).\n\n- one\n- two",
+      remediation: "Set `PasswordAuthentication no`.",
+    } as Finding;
+    const { container } = setup(doc({ type: "vuln", attrs: { findingId: "f1" } }), data({ findings: [md] }));
+    const line = (label: string) => [...container.querySelectorAll(".report-vuln p")].find((p) => p.textContent?.startsWith(label));
+    await waitFor(() => expect(line("Vulnerability Explanation:")).toBeTruthy());
+    const explain = line("Vulnerability Explanation:")!;
+    expect(explain).toHaveTextContent("Vulnerability Explanation: The server takes password logins as root. See the manual (https://man.example.test/sshd).");
+    expect(explain.textContent).not.toMatch(/Affected|\*\*|`/);
+    expect(explain.querySelector("code")).toHaveTextContent("root");
+    expect([...explain.querySelectorAll("strong")].map((b) => b.textContent)).toEqual(["Vulnerability Explanation:", "password"]);
+    expect([...container.querySelectorAll(".report-vuln ul li")].map((li) => li.textContent)).toEqual(["one", "two"]);
+    expect(line("Vulnerability Fix:")?.querySelector("code")).toHaveTextContent("PasswordAuthentication no");
+    expect(line("Affected:")).toHaveTextContent("Affected: 22/tcp OpenSSH");
+    expect(container.innerHTML).not.toContain("**");
   });
 
   it("puts a one-step fix on the Vulnerability Fix line itself", async () => {

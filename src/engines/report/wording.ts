@@ -43,3 +43,13 @@ export function fixSteps(remediation: string): string[] {
   flush();
   return steps;
 }
+
+/** A leading "Affected: …" line (imported findings start their description with one). */
+const AFFECTED = /^\s*Affected:[ \t]*([^\n]*)\n?/i;
+
+/** A finding's description as the page tells it: the "Affected: …" line it may start with, apart from the explanation. */
+export function splitAffected(description: string): { affected: string | null; explanation: string } {
+  const m = AFFECTED.exec(description);
+  if (!m) return { affected: null, explanation: description.trim() };
+  return { affected: m[1].trim() || null, explanation: description.slice(m[0].length).trim() };
+}

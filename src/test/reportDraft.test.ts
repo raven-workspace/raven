@@ -70,7 +70,7 @@ const empty = (): ReportData =>
     hops: [],
     cleanup: [],
     notes: [],
-    credentials: [],
+    credentials: [], credAttempts: [],
   }) as unknown as ReportData;
 
 const H = "h-web";
@@ -184,8 +184,8 @@ describe("buildTargetDraft", () => {
       "# enum", "G:port-scan", "S", "nmap",
       "# foothold", "S:Steps to reproduce the attack:", "S", "ferox", "shot", "S", "curl",
       "# privesc", "S:Steps to reproduce the attack:", "S", "whoami", "S", "printspoofer",
-      "# tested", "G:tested",
       "# post", "flag",
+      "# tested", "G:tested",
     ]);
   });
 
@@ -257,7 +257,7 @@ describe("buildTargetDraft", () => {
     const d = windowsHost();
     d.grants = [{ ...grant(H, "user", "", -60), logEntryId: null }];
     d.checklist.push(goal(H, ["curl", "printspoofer"]));
-    expect(phasesOf(buildTargetDraft(d, target([H]), {}))).toEqual(["enum", "foothold", "tested", "post"]);
+    expect(phasesOf(buildTargetDraft(d, target([H]), {}))).toEqual(["enum", "foothold", "post", "tested"]);
   });
 
   it("puts every step under Initial Access when no access was granted", () => {
@@ -265,7 +265,7 @@ describe("buildTargetDraft", () => {
     d.grants = [];
     d.checklist.push(goal(H, ["curl", "printspoofer"]));
     const doc = buildTargetDraft(d, target([H]), {});
-    expect(phasesOf(doc)).toEqual(["enum", "foothold", "tested", "post"]);
+    expect(phasesOf(doc)).toEqual(["enum", "foothold", "post", "tested"]);
     expect(evidenceUnder(doc, "foothold")).toEqual(["ferox", "shot", "curl", "whoami", "printspoofer"]);
   });
 
@@ -282,7 +282,7 @@ describe("buildTargetDraft", () => {
     const doc = buildTargetDraft(d, target([H]), {});
     const lines = outline(doc);
     const privesc = lines.indexOf("# privesc");
-    expect(lines.slice(privesc, lines.indexOf("# tested"))).toEqual([
+    expect(lines.slice(privesc, lines.indexOf("# post"))).toEqual([
       "# privesc", "V:f1", "S:Steps to reproduce the attack:", "S", "whoami", "X:file1", "S", "S", "printspoofer",
     ]);
     expect(doc.content![privesc + 2]).toEqual({
@@ -303,10 +303,80 @@ describe("buildTargetDraft", () => {
     d.grants = [];
     d.checklist.push(goal(H, ["curl"]));
     const lines = outline(buildTargetDraft(d, target([H]), {}));
-    const foot = lines.slice(lines.indexOf("# foothold"), lines.indexOf("# tested"));
+    const foot = lines.slice(lines.indexOf("# foothold"), lines.indexOf("# post"));
     expect(foot.slice(0, 6)).toEqual(["# foothold", "V:f1", "S:Steps to reproduce the attack:", "X:edb", "S", "S"]);
     expect(foot[6]).toBe("ferox");
     expect(foot.at(-1)).toBe("X:other");
+  });
+
+  describe("findings, one per heading", () => {
+    const f = (id: string, over: Partial<Finding>) => ({ id, title: id, hostIds: [H], serviceIds: [], stepEntryIds: [], severity: "high", createdAt: 1, ...over }) as Finding;
+
+    it("puts a second finding that enabled the phase under its own heading, with its own steps", () => {
+      const d = windowsHost();
+      d.findings = [f("f1", { stepEntryIds: ["ferox"] }), f("f2", { stepEntryIds: ["curl"] })];
+      const lines = outline(buildTargetDraft(d, target([H]), {}));
+      const at = lines.indexOf("# foothold");
+      expect(lines.slice(at, lines.indexOf("# privesc"))).toEqual([
+        "# foothold", "V:f1", "S:Steps to reproduce the attack:", "S", "ferox", "shot",
+        "# foothold", "V:f2", "S:Steps to reproduce the attack:", "S", "curl",
+      ]);
+      const second = buildTargetDraft(d, target([H]), {}).content!.filter((n) => n.type === "phase" && n.attrs?.phase === "foothold");
+      expect(second.map((n) => n.attrs?.findingId ?? null)).toEqual([null, "f2"]);
+    });
+
+    it("puts findings that enabled no phase under Additional findings, after Post-Exploitation, info last", () => {
+      const d = windowsHost();
+      d.findings = [
+        f("rce", { stepEntryIds: ["curl"] }),
+        f("winrm", { severity: "info", stepEntryIds: [] }),
+        f("relay", { severity: "low", stepEntryIds: ["curl"] }),
+        f("old", { severity: "medium", stepEntryIds: ["nmap"] }),
+      ];
+      const doc = buildTargetDraft(d, target([H]), {});
+      const lines = (doc.content ?? []).map((n) => (n.type === "phase" ? `# ${n.attrs?.phase}${n.attrs?.findingId ? `:${n.attrs.findingId}` : ""}` : n.type === "vuln" ? `V:${n.attrs?.findingId}` : null)).filter(Boolean);
+      expect(lines).toEqual([
+        "# enum", "# foothold", "V:rce", "# privesc", "# post",
+        "# additional", "# additional:old", "V:old", "# additional:relay", "V:relay", "# additional:winrm", "V:winrm",
+        "# tested",
+      ]);
+    });
+
+    it("keeps an unlinked finding (an imported one) as the one that opened the box when no finding did", () => {
+      const d = windowsHost();
+      d.findings = [f("note", { severity: "info" }), f("rce", { severity: "critical" }), f("weak", { severity: "medium" })];
+      const lines = outline(buildTargetDraft(d, target([H]), {}));
+      expect(lines.slice(lines.indexOf("# foothold"), lines.indexOf("# foothold") + 2)).toEqual(["# foothold", "V:rce"]);
+      expect(lines.filter((l) => l.startsWith("V:"))).toEqual(["V:rce", "V:weak", "V:note"]);
+    });
+  });
+
+  describe("a flag's companions", () => {
+    const HASH = "0123456789abcdef0123456789abcdef";
+    const withBareFlag = () => {
+      const d = windowsHost();
+      d.log = d.log.map((e) => (e.id === "flag" ? { ...e, content: { kind: "flag", flagKind: "proof", value: HASH, attachmentId: "", proof: null } } as LogEntry : e));
+      d.log.push(
+        entry("read", H, 56, { kind: "command", blocks: [{ command: "type proof.txt; whoami; ipconfig", output: `${HASH}\nnt authority\\system` }] }),
+        entry("proofshot", H, 57, shot),
+      );
+      return d;
+    };
+
+    it("go into the flag's block, once, and never as steps of their own", () => {
+      const doc = buildTargetDraft(withBareFlag(), target([H]), {});
+      expect(evidenceUnder(doc, "post")).toEqual(["flag", "read", "proofshot"]);
+      expect(outline(doc).filter((l) => l === "read")).toHaveLength(1);
+    });
+
+    it("join a flag already on the page when they come later, right after it", () => {
+      const d = withBareFlag();
+      const later = d.log.filter((e) => e.id !== "read");
+      const doc = buildTargetDraft({ ...d, log: later }, target([H]), {});
+      const res = addNewEvidence(doc, d, target([H]), {}, []);
+      expect(res.added).toEqual(["read"]);
+      expect(evidenceUnder(res.doc, "post")).toEqual(["flag", "proofshot", "read"]);
+    });
   });
 
   it("has no generated appendices or old blocks", () => {
@@ -325,7 +395,7 @@ describe("addNewEvidence", () => {
     const res = addNewEvidence(doc, d, target([H]), {}, []);
     expect(res.added).toEqual([]);
     expect(res.addedTested).toEqual([H]);
-    expect(phasesOf(res.doc)).toEqual(["enum", "foothold", "privesc", "tested", "post"]);
+    expect(phasesOf(res.doc)).toEqual(["enum", "foothold", "privesc", "post", "tested"]);
     expect(addNewEvidence(res.doc, d, target([H]), {}, []).addedTested).toEqual([]);
   });
 
@@ -402,12 +472,12 @@ describe("addNewEvidence", () => {
     const d = windowsHost();
     d.grants = [];
     const doc = buildTargetDraft(d, target([H]), {});
-    expect(phasesOf(doc)).toEqual(["enum", "foothold", "tested", "post"]);
+    expect(phasesOf(doc)).toEqual(["enum", "foothold", "post", "tested"]);
     d.grants = [grant(H, "user", "curl", 20), grant(H, "system", "printspoofer", 50)];
     d.checklist.push(goal(H, ["curl", "printspoofer"]));
     const { doc: next, added } = addNewEvidence(doc, d, target([H]), {}, []);
     expect(added).toEqual(["curl", "printspoofer"]);
-    expect(phasesOf(next)).toEqual(["enum", "foothold", "privesc", "tested", "post"]);
+    expect(phasesOf(next)).toEqual(["enum", "foothold", "privesc", "post", "tested"]);
     expect(evidenceUnder(next, "foothold")).toEqual(["ferox", "shot", "whoami", "curl"]);
     expect(evidenceUnder(next, "privesc")).toEqual(["printspoofer"]);
   });

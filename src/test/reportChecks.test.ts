@@ -23,7 +23,7 @@ const target: ReportTarget = { key: "h1", kind: "standalone", hostIds: ["h1"] };
 const noRefs: AppendixIndex = { entries: [], refFor: () => null };
 
 function data(o: Partial<ReportData> = {}): ReportData {
-  return { engagement: { id: "eng" }, hosts: [host()], services: [], log: [], checklist: [], findings: [], findingFiles: [], attempts: [], ruledOut: [], grants: [], usernames: [], hops: [], cleanup: [], notes: [], credentials: [], ...o } as unknown as ReportData;
+  return { engagement: { id: "eng" }, hosts: [host()], services: [], log: [], checklist: [], findings: [], findingFiles: [], attempts: [], ruledOut: [], grants: [], usernames: [], hops: [], cleanup: [], notes: [], credentials: [], credAttempts: [], ...o } as unknown as ReportData;
 }
 function run(d: ReportData, page: ReportNode, extra: Record<string, unknown> = {}, flags: ("local" | "proof")[] = ["proof"]): Check[] {
   return targetChecks({ data: d, target, doc: page, meta: { expectedFlags: { h1: flags } }, appendixRefs: noRefs, sectionId: "t1", ...extra });
@@ -35,7 +35,7 @@ const goodDoc = () => doc(ev("f1", { block: null }), slot("Proof of root"));
 describe("proofFacts", () => {
   it("reads the pasted proof", () => {
     const f = proofFacts(flag(), host());
-    expect(f).toEqual({ showsIp: true, showsIdentity: true, showsHostname: true, usualPath: true, hasScreenshot: true });
+    expect(f).toEqual({ showsIp: true, showsIdentity: true, showsHostname: true, usualPath: true, pathKnown: true, hasScreenshot: true, hasText: true });
   });
   it("needs the IP and a command, and a usual path", () => {
     const f = proofFacts(flag({}, { proof: "ipconfig\ncat /tmp/x", attachmentId: null }), host());
@@ -95,13 +95,13 @@ describe("targetChecks", () => {
   it("proof-missing when the flag exists but is not on the page", () => {
     expect(find(run(good(), doc()), "proof-missing")).toBeDefined();
   });
-  it("proof-ip fails with a fix by OS", () => {
-    const d = data({ log: [flag({}, { proof: "whoami" })] });
+  it("proof-ip fails with a fix by OS when there is no screenshot", () => {
+    const d = data({ log: [flag({}, { proof: "whoami", attachmentId: null })] });
     const c = find(run(d, goodDoc()), "proof-ip")!;
     expect(c).toMatchObject({ id: "proof-ip:DC01:proof", level: "fail" });
     expect(c.text).toContain("10.0.0.5");
     expect(c.fix).toContain("ipconfig");
-    const lin = find(run(data({ hosts: [host({ os: "linux" })], log: [flag({}, { proof: "x" })] }), goodDoc()), "proof-ip")!;
+    const lin = find(run(data({ hosts: [host({ os: "linux" })], log: [flag({}, { proof: "x", attachmentId: null })] }), goodDoc()), "proof-ip")!;
     expect(lin.fix).toContain("ip addr");
   });
   it("proof-screenshot fails without an attachment", () => {
@@ -115,19 +115,83 @@ describe("targetChecks", () => {
     const ok = data({ log: [entry({ id: "w", kind: "http", at: 4000, content: { kind: "http", request: "GET /" } }), entry({ id: "c", at: 4500 }), flag()] });
     expect(find(run(ok, goodDoc()), "proof-web")).toBeUndefined();
   });
-  it("proof-identity and proof-path are soft", () => {
-    const d = data({ log: [flag({}, { proof: "ipconfig\n10.0.0.5\ncat /tmp/proof.txt" })] });
+  it("proof-identity, proof-hostname and proof-path are soft; identity and hostname only without a screenshot", () => {
+    const d = data({ log: [flag({}, { proof: "ipconfig\n10.0.0.5\ncat /tmp/proof.txt", attachmentId: null })] });
     const c = run(d, goodDoc());
     expect(find(c, "proof-identity")).toMatchObject({ id: "proof-identity:DC01:proof", level: "soft" });
     expect(find(c, "proof-path")).toMatchObject({ id: "proof-path:DC01:proof", level: "soft" });
     expect(find(c, "proof-hostname")).toMatchObject({ id: "proof-hostname:DC01:proof", level: "soft", text: "The proof.txt proof for DC01 doesn't show hostname." });
     for (const id of ["proof-identity", "proof-path", "proof-hostname"]) expect(find(c, id)!.fix).toContain("ipconfig");
-    expect(isReady(c)).toBe(true);
-    const lin = run(data({ hosts: [host({ os: "linux" })], log: [flag({}, { proof: "id\nip addr\n10.0.0.5\ncat /root/proof.txt" })] }), goodDoc());
+    const lin = run(data({ hosts: [host({ os: "linux" })], log: [flag({}, { proof: "id\nip addr\n10.0.0.5\ncat /root/proof.txt", attachmentId: null })] }), goodDoc());
     expect(find(lin, "proof-hostname")!.fix).toContain("ip addr");
-    const noHost = run(data({ log: [flag({}, { proof: "whoami\nipconfig\n10.0.0.5\ntype C:\\Users\\Administrator\\Desktop\\proof.txt" })] }), goodDoc());
-    expect(noHost.map((c) => c.id)).toEqual(["proof-hostname:DC01:proof"]);
+    // With a screenshot, what the text lacks may be on it: only a read from a known odd folder is said.
+    const shot = run(data({ log: [flag({}, { proof: "ipconfig\n10.0.0.5\ncat /tmp/proof.txt" })] }), goodDoc());
+    expect(shot.map((x) => x.id)).toEqual(["proof-path:DC01:proof"]);
+    expect(isReady(shot)).toBe(true);
   });
+  it("never says a relative read was from an odd folder when the folder isn't shown", () => {
+    const c = run(data({ log: [flag({}, { proof: "whoami\nhostname\ntype proof.txt\nipconfig\n10.0.0.5" })] }), goodDoc());
+    expect(c).toEqual([]);
+  });
+  it("with a screenshot and no IP in the text: one soft line per host, never a fail", () => {
+    const local = flag({ id: "f0", at: 4000 }, { flagKind: "local", value: "a".repeat(32), proof: null });
+    const proof = flag({}, { value: "b".repeat(32), proof: null });
+    const c = run(data({ log: [local, proof] }), doc(ev("f0", { block: null }), ...goodDoc().content!), {}, ["local", "proof"]);
+    expect(c.map((x) => [x.id, x.level, x.text])).toEqual([
+      ["proof-shot:DC01", "soft", "Raven can't read screenshots; make sure the proof screenshot shows ipconfig and 10.0.0.5."],
+    ]);
+  });
+  describe("real capture shapes", () => {
+    const HASH = "0123456789abcdef0123456789abcdef";
+    const bare = (content: Record<string, unknown> = {}) => flag({ at: 600_000 }, { value: HASH, proof: null, attachmentId: "", ...content });
+    const read = (o: Record<string, unknown> = {}) =>
+      entry({
+        id: "r1",
+        at: 660_000,
+        content: { kind: "command", blocks: [{ command: "cat C:\\Users\\Administrator\\Desktop\\proof.txt; whoami; hostname; ipconfig", output: `${HASH}\nnt authority\\system\nDC01\nIPv4 Address. . . : 10.0.0.5` }] },
+        ...o,
+      });
+    const shot = (o: Record<string, unknown> = {}) =>
+      entry({ id: "s1", kind: "screenshot", at: 700_000, content: { kind: "screenshot", attachmentId: "a9", caption: "root shell", fileName: "x.png" }, ...o });
+
+    it("(b) a bare flag value with a separate proof command and screenshot: no proof check", () => {
+      const page = doc(ev("f1", { block: null }), ev("r1"), ev("s1", { block: null }));
+      expect(run(data({ log: [bare(), read(), shot()] }), page)).toEqual([]);
+    });
+    it("(b) the command alone: the text passes, only the missing screenshot is said", () => {
+      const c = run(data({ log: [bare(), read()] }), doc(ev("f1", { block: null }), ev("r1")));
+      expect(c.map((x) => x.id)).toEqual(["proof-screenshot:DC01:proof"]);
+    });
+    it("(b) the screenshot alone: one soft reminder, no fail and no whoami or hostname line", () => {
+      const c = run(data({ log: [bare(), shot()] }), doc(ev("f1", { block: null }), ev("s1", { block: null })));
+      expect(c.map((x) => [x.id, x.level])).toEqual([["proof-shot:DC01", "soft"]]);
+    });
+    it("(b) a screenshot taken more than 15 minutes away, or nearer another step, is not the proof", () => {
+      const far = run(data({ log: [bare(), shot({ at: 600_000 + 16 * 60_000 })] }), doc(ev("f1", { block: null })));
+      expect(far.map((x) => x.id)).toContain("proof-screenshot:DC01:proof");
+      const step = entry({ id: "c9", at: 710_000 });
+      const nearer = run(data({ log: [bare(), step, shot()], checklist: [{ ownerId: "h1", evidence: [{ entryId: "c9" }] }] as never }), doc(ev("f1", { block: null })));
+      expect(nearer.map((x) => x.id)).toContain("proof-screenshot:DC01:proof");
+    });
+    it("(c) a flag with its own screenshot and no text: one soft reminder", () => {
+      const c = run(data({ log: [bare({ attachmentId: "a1" })] }), doc(ev("f1", { block: null })));
+      expect(c.map((x) => x.id)).toEqual(["proof-shot:DC01"]);
+    });
+    it("a proof read pasted only as a command still puts the flag on the page", () => {
+      const only = entry({ id: "r2", content: { kind: "command", blocks: [{ command: "type proof.txt", output: HASH }] } });
+      const c = run(data({ log: [only] }), doc(slot("Read the proof."), ev("r2")));
+      expect(find(c, "proof-missing")).toBeUndefined();
+    });
+    it("a shell's own output beside the flag is no web request", () => {
+      const web = entry({ id: "w", kind: "http", at: 590_000, content: { kind: "http", request: "GET /" } });
+      expect(find(run(data({ log: [web, bare(), read(), shot()] }), doc(ev("f1", { block: null }), ev("r1"), ev("s1", { block: null }))), "proof-web")).toBeUndefined();
+    });
+    it("asks no explanation of a flag's companions", () => {
+      const page = doc(ev("f1", { block: null }), ev("r1"), ev("s1", { block: null }));
+      expect(find(run(data({ log: [bare(), read(), shot()] }), page), "explain")).toBeUndefined();
+    });
+  });
+
   it("names which flag's proof falls short, one check per flag", () => {
     const local = flag({ id: "f0", at: 4000 }, { flagKind: "local", proof: "dev@web01:/tmp$ cat local.txt\nid\nhostname\nip addr\n10.0.0.5" });
     const proof = flag({}, { proof: "root@web01:/tmp# cat proof.txt\nid\nhostname\nip addr\n10.0.0.5" });
@@ -153,7 +217,8 @@ describe("targetChecks", () => {
     expect(find(run(data({ log: [two, flag()] }), doc(ev("c2", { block: 0 }), slot("x"), ...goodDoc().content!)), "output")).toBeUndefined();
   });
   it("explain is soft, screenshots first", () => {
-    const shot = entry({ id: "s1", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "ok", fileName: "x" } });
+    // Taken an hour before the flag: a step of its own, not the flag's screenshot.
+    const shot = entry({ id: "s1", kind: "screenshot", at: -3_600_000, content: { kind: "screenshot", attachmentId: "a", caption: "ok", fileName: "x" } });
     const cmd = entry({ id: "c1" });
     const page = doc(slot(""), ev("c1"), slot(""), ev("s1", { block: null }), ...goodDoc().content!);
     const c = run(data({ log: [cmd, shot, flag()] }), page).filter((x) => x.id.startsWith("explain"));

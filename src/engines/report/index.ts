@@ -14,3 +14,4 @@ export * from "./wording";
 export * from "./checks";
 export * from "./figures";
 export * from "./headings";
+export * from "./creds";

@@ -1,4 +1,5 @@
 import type { ReasonKind } from "../../types/findings";
+import { isPortScan } from "./tools";
 import type { ReportData, CoverageOverride, CoverageResult } from "./types";
 
 export interface CoverageRow {
@@ -71,7 +72,38 @@ function namesService(st: { words: string; commands: string }, port: number, nma
   return ACCESS_FAMILIES.some((f) => (f.ports.includes(port) || f.names.includes(name)) && (f.words.test(st.words) || f.words.test(st.commands)));
 }
 
-/** A service's coverage on one host (§5.5): exploited, tested, or untested; an override wins. */
+/** Whether a credential attempt was on this service: its port, else its service word in the service's family. */
+function attemptOn(a: { port: number | null; service: string }, port: number, nmapService: string | null): boolean {
+  if (a.port != null) return a.port === port;
+  const name = (nmapService ?? "").toLowerCase();
+  return ACCESS_FAMILIES.some((f) => (f.ports.includes(port) || f.names.includes(name)) && f.words.test(a.service));
+}
+
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const HTTP_URL = /\bhttps?:\/\/([^\s/:'"]+)(?::(\d+))?/gi;
+
+/**
+ * Whether a command works this service of a host (`ip`, `name`): a URL to the host (80 or 443 unless it names a
+ * port), `<host>:<port>`, a `-p`/`--port` of the port with the host named, or its family's tool or protocol word with
+ * the host named. Port scans don't count: a scan finds a service, it doesn't test it.
+ */
+function commandWorks(command: string, hosts: string[], port: number, nmapService: string | null): boolean {
+  const lc = command.toLowerCase();
+  const named = hosts.filter((h) => h !== "").some((h) => new RegExp(`(?<![\\w.-])${esc(h)}(?![\\w-]|\\.\\w)`, "i").test(command));
+  if (!named) return false;
+  for (const m of command.matchAll(HTTP_URL)) {
+    if (!hosts.some((h) => h.toLowerCase() === m[1].toLowerCase())) continue;
+    const p = m[2] ? Number(m[2]) : lc.slice(m.index ?? 0).startsWith("https") ? 443 : 80;
+    if (p === port) return true;
+  }
+  if (hosts.some((h) => h !== "" && new RegExp(`${esc(h)}:${port}(?!\\d)`, "i").test(command))) return true;
+  if (new RegExp(`(?:^|\\s)(?:-p|--port)[\\s=]?${port}(?!\\d)`).test(command)) return true;
+  const name = (nmapService ?? "").toLowerCase();
+  return ACCESS_FAMILIES.some((f) => (f.ports.includes(port) || f.names.includes(name)) && f.words.test(command));
+}
+
+/** A service's coverage on one host (§5.5): exploited, tested, or untested; an override wins. Tested includes what
+ *  real work shows without a ruled-out item: credentials tried on it (nxc, hydra), and commands run against it. */
 export function serviceCoverage(
   data: ReportData,
   hostId: string,
@@ -84,6 +116,12 @@ export function serviceCoverage(
       .map((r) => ({ text: r.text, via: r.text })),
   ];
   const steps = accessSteps(data, hostId);
+  const host = data.hosts.find((h) => h.id === hostId);
+  const names = [host?.ip ?? "", host?.name ?? ""];
+  const commands = data.log.filter(
+    (e) => !e.private && e.hostIds.includes(hostId) && e.content.kind === "command" && !isPortScan(e),
+  );
+  const attempts = (data.credAttempts ?? []).filter((a) => a.hostId === hostId);
   return data.services
     .filter((s) => s.hostId === hostId)
     .sort((a, b) => a.port - b.port)
@@ -109,6 +147,16 @@ export function serviceCoverage(
       } else if (hit) {
         result = "tested";
         via = hit.via;
+      } else {
+        const tried = attempts.find((a) => attemptOn(a, s.port, s.nmapService));
+        const ran = tried ? undefined : commands.find((e) => e.content.kind === "command" && e.content.blocks.some((b) => commandWorks(b.command ?? "", names, s.port, s.nmapService)));
+        if (tried) {
+          result = "tested";
+          via = `credentials tried on ${tried.service.toUpperCase()}`;
+        } else if (ran) {
+          result = "tested";
+          via = ran.title;
+        }
       }
       const override = overrides[s.id];
       if (override) {

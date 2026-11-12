@@ -74,3 +74,11 @@ export function msfModules(
   }
   return out;
 }
+
+/** Hosts Metasploit was used against by any non-private entry: a module selected with `use`, or a Meterpreter
+ *  session or payload (which names no module). */
+export function msfHosts(log: LogEntry[], engagement: Engagement, hosts: Host[]): string[] {
+  const out = new Set<string>();
+  for (const e of log) if (!e.private) for (const id of metasploitHostIds(e, engagement, hosts)) out.add(id);
+  return [...out];
+}

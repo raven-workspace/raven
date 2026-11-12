@@ -216,6 +216,34 @@ describe("Evidence rail", () => {
     expect(screen.queryByRole("button", { name: /Copy/ })).not.toBeInTheDocument();
   });
 
+  it("lists a credential found elsewhere that nxc showed works on the target, with no source host or grant", async () => {
+    await seed();
+    const found = await api.credentialCreate("e-exam", { type: "password", username: "svc_backup", secret: "Backup#2026", source: "paste" });
+    await api.credAttemptsUpsert("e-exam", [{ credId: found.id, hostId: LNX, service: "ssh", port: 22, result: "valid", authMode: "local" }]);
+    const failed = await api.credentialCreate("e-exam", { type: "password", username: "eve", secret: "nope" });
+    await api.credAttemptsUpsert("e-exam", [{ credId: failed.id, hostId: LNX, service: "ssh", port: 22, result: "failed" }]);
+    mount();
+    await ready();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Creds" }), { button: 0, ctrlKey: false });
+    await waitFor(() => expect(screen.getByText("svc_backup")).toBeInTheDocument());
+    expect(screen.getByText("password, works on SSH, lnx02")).toBeInTheDocument();
+    expect(screen.getByText("password, local to lnx02; found on lnx02")).toBeInTheDocument();
+    expect(screen.queryByText("eve")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^No credential/)).not.toBeInTheDocument();
+  });
+
+  it("says no credential or access only when nothing ties one to the target", async () => {
+    await seed();
+    const found = await api.credentialCreate("e-exam", { type: "password", username: "svc_backup", secret: "Backup#2026" });
+    await api.credAttemptsUpsert("e-exam", [{ credId: found.id, hostId: "h-exam-ms01", service: "ssh", result: "valid" }]);
+    for (const c of await api.credentialsList("e-exam")) if (c.localHostId === LNX || c.sourceHostId === LNX) await api.credentialDelete(c.id);
+    for (const g of await api.accessGrantsList("e-exam")) if (g.hostId === LNX) await api.accessGrantDelete(g.id);
+    mount();
+    await ready();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Creds" }), { button: 0, ctrlKey: false });
+    expect(await screen.findByText("No credential found on, local to or working on this target, and no access recorded.")).toBeInTheDocument();
+  });
+
   it("is a drawer under 1200px, toggled by E", async () => {
     await seed();
     const width = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {

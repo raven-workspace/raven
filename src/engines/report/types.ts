@@ -1,4 +1,4 @@
-import type { AccessGrant, Credential, Username } from "../../types/credentials";
+import type { AccessGrant, CredAttempt, Credential, Username } from "../../types/credentials";
 import type { CleanupItem } from "../../types/cleanup";
 import type { ChecklistItem } from "../../types/checklist";
 import type { Engagement } from "../../types/engagement";
@@ -28,6 +28,8 @@ export interface ReportData {
   cleanup: CleanupItem[];
   notes: Note[];
   credentials: Credential[];
+  /** Results of trying credentials on hosts (nxc, hydra): a valid or admin one ties the credential to that host. */
+  credAttempts: CredAttempt[];
 }
 
 /** Stored in `reports.meta`. Dates are ISO yyyy-mm-dd. */
@@ -77,8 +79,9 @@ export type ReportNode = {
 /* Node vocabulary: the contract the editor schema implements. */
 
 /** A sub-section heading of a machine, in OffSec's sample order: Service Enumeration (standalone only), the entry
- *  phase (Initial Access, Lateral Movement or Domain Compromise), Privilege Escalation, Also tested, Post-Exploitation. */
-export type Phase = "enum" | "foothold" | "privesc" | "lateral" | "domain" | "tested" | "post";
+ *  phase (Initial Access, Lateral Movement or Domain Compromise), Privilege Escalation, Post-Exploitation; then Raven's
+ *  own: Additional findings (findings that enabled no phase) and Also tested. */
+export type Phase = "enum" | "foothold" | "privesc" | "lateral" | "domain" | "post" | "additional" | "tested";
 
 /**
  * Blocks rendered from live data. `facts` is a machine's numbered heading ("Target #1 – 10.0.0.5"); `port-scan` the
@@ -100,6 +103,9 @@ export interface SlotAttrs {
 export interface PhaseAttrs {
   phase: Phase;
   hostId: string;
+  /** A finding's own heading: a second finding that enabled the phase ("Initial Access – <title>", numbered), or one
+   *  under Additional findings ("<title>"). Null (or absent) = the phase's heading. */
+  findingId?: string | null;
 }
 
 export interface EvidenceAttrs {

@@ -152,7 +152,7 @@ The owner's rule (2026-11-11): treat the exam report as a real pentest report. W
 
 So each target section also carries, generated from live data and editable around:
 - **Vulnerabilities:** for each finding linked to the host, the sample's labelled lines: **Vulnerability Explanation:** (the description), **Vulnerability Fix:** (the remediation, as a list of distinct steps), **Severity:** (with the CVSS vector where set), then **Steps to reproduce the attack:** with an empty prose slot for a short summary. It sits at the top of the sub-section it enabled (Initial Access or Privilege Escalation, by the finding's steps, or the owner moves it), before the walkthrough, and its title names that sub-section: "Initial Access – <finding title>". With no finding the heading is the phase name alone. Lessons stay private; references are listed in the References section.
-- **Also tested** (the slim form of "Tested, not exploited"): one line per item, "<what> on <port>: <reason words>" (the port only when the item names one), with no commands and no steps: a client wants to know it was tested, not how to repeat a non-issue. The items are the target's non-private failed attempts (reason kind as plain words: "blocked by a control", "precondition not met", "no access", then the reason text) and non-private ruled-out items. It closes the target, before Post-Exploitation, and is left out when there is nothing to list. A failed attempt's log entry can still be inserted as full evidence from Unused where showing the command helps.
+- **Also tested** (the slim form of "Tested, not exploited"): one line per item, "<what> on <port>: <reason words>" (the port only when the item names one), with no commands and no steps: a client wants to know it was tested, not how to repeat a non-issue. The items are the target's non-private failed attempts (reason kind as plain words: "blocked by a control", "precondition not met", "no access", then the reason text) and non-private ruled-out items. It closes the target, after Post-Exploitation and Additional findings (task 17), and is left out when there is nothing to list. A failed attempt's log entry can still be inserted as full evidence from Unused where showing the command helps.
 - There is no per-service coverage table on the page: the Port Scan Results table says what was open, the steps say what was exploited, Also tested says what was tried. Coverage is still derived (findings, attempts, ruled-out items, service verdicts) for the "untested service" check.
 
 Engagement-level failed attempts and ruled-out items with no host go in a report-level **Also tested** section after the targets, in the same slim form.
@@ -194,9 +194,10 @@ The outline follows OffSec's sample report. Numbers are computed from the outlin
 6. **4 Independent Challenges**, the standalone targets in grading order. Each is **4.N Target #N – <IP>** with:
    - 4.N.1 Service Enumeration: Port Scan Results, then the scan steps;
    - 4.N.2 Initial Access – <vulnerability>: the vulnerability's labelled lines, Steps to reproduce the attack, the walkthrough (a prose slot before each step), then Local.txt value: with its proof;
-   - 4.N.3 Privilege Escalation – <vulnerability>: the same;
-   - Also tested (slim, unnumbered, left out when empty);
-   - 4.N.4 Post-Exploitation: Proof.txt value: with its proof, then any steps after admin access.
+   - 4.N.3 Privilege Escalation – <vulnerability>: the same. One finding per heading: a second finding that enabled the same phase gets its own numbered heading "<Phase> – <title>" with its own steps;
+   - 4.N.4 Post-Exploitation: Proof.txt value: with its proof (the flag's companions: a command printing it, a screenshot taken with it), then any steps after admin access;
+   - Additional findings: findings that enabled no phase (info/low observations, unlinked ones), each under its own title, info last (task 17);
+   - Also tested (slim, unnumbered, left out when empty), closing the target.
    A sub-section with nothing in it is left out, and the numbers close up.
 7. **5 Active Directory Set:** Port Scan Results for all its machines; 5.N <name> – <IP> per machine (Initial Access or Lateral Movement or Domain Compromise, Privilege Escalation, Post-Exploitation); the attack chain.
 8. Also tested at engagement level, if any.

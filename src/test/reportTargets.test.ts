@@ -36,7 +36,7 @@ const data = (kind: EngagementKind, hosts: Host[], log: LogEntry[] = []): Report
     hops: [],
     cleanup: [],
     notes: [],
-    credentials: [],
+    credentials: [], credAttempts: [],
   }) as ReportData;
 
 const hosts = [

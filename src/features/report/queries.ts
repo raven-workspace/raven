@@ -13,7 +13,7 @@ import type { FindingFile } from "../../types/findings";
 import type { Report, ReportSection, SectionInput, SectionKind } from "../../types/report";
 import { useChecklist, useEngagementServices, useHops } from "../checklist/queries";
 import { useCleanup } from "../cleanup/queries";
-import { useAccessGrants, useCredentials, useUsernames } from "../credentials/queries";
+import { useAccessGrants, useCredAttempts, useCredentials, useUsernames } from "../credentials/queries";
 import { findingFilesKey, useFailedAttempts, useFindings } from "../findings/queries";
 import { useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
@@ -62,20 +62,22 @@ export function useReportData(eid: string): { data: ReportData | undefined; isLo
   const cleanup = useCleanup(eid);
   const notes = useNotes(eid);
   const credentials = useCredentials(eid);
+  const credAttempts = useCredAttempts(eid);
   const files = useQueries({
     queries: (findings.data ?? []).map((f) => ({ queryKey: findingFilesKey(f.id), queryFn: () => api.findingFilesList(f.id) })),
     combine: combineFiles,
   });
   const findingFiles = files.data;
 
-  const queries = [engagement, hosts, services, log, checklist, findings, attempts, ruledOut, grants, usernames, hops, cleanup, notes, credentials];
+  const queries = [engagement, hosts, services, log, checklist, findings, attempts, ruledOut, grants, usernames, hops, cleanup, notes, credentials, credAttempts];
   const isLoading = files.isPending || queries.some((q) => q.isPending);
   const error = queries.find((q) => q.error)?.error ?? files.error;
 
   const data = useMemo((): ReportData | undefined => {
     if (
       !engagement.data || !hosts.data || !services.data || !log.data || !checklist.data || !findings.data || !findingFiles ||
-      !attempts.data || !ruledOut.data || !grants.data || !usernames.data || !hops.data || !cleanup.data || !notes.data || !credentials.data
+      !attempts.data || !ruledOut.data || !grants.data || !usernames.data || !hops.data || !cleanup.data || !notes.data || !credentials.data ||
+      !credAttempts.data
     ) {
       return undefined;
     }
@@ -95,10 +97,11 @@ export function useReportData(eid: string): { data: ReportData | undefined; isLo
       cleanup: cleanup.data,
       notes: notes.data,
       credentials: credentials.data,
+      credAttempts: credAttempts.data,
     };
   }, [
     engagement.data, hosts.data, services.data, log.data, checklist.data, findings.data, findingFiles, attempts.data,
-    ruledOut.data, grants.data, usernames.data, hops.data, cleanup.data, notes.data, credentials.data,
+    ruledOut.data, grants.data, usernames.data, hops.data, cleanup.data, notes.data, credentials.data, credAttempts.data,
   ]);
   const refetch = () => {
     queries.filter((q) => q.error).forEach((q) => void q.refetch());

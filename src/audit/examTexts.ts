@@ -40,6 +40,8 @@ export const FLAGS = {
   web01Proof: "e4da3b7fbbce2345d7772b0674a318d5",
   ad02Proof: "1679091c5a880faf6fb5e6087eb1b2dc",
   dc01Proof: "8f14e45fceea167a5a36dedd4bea2543",
+  xfer03Local: "a87ff679a2f3e71d9181a67b7542122c",
+  xfer03Proof: "e7d31fc0602fb2ede144d18cdffd816b",
 } as const;
 
 export const DA_NTLM = "7f1e4bd3c2a95e608d1f2b4c6a8e0d93";
@@ -111,6 +113,31 @@ export const PROOF = {
   ].join("\n"),
 } as const;
 
+/**
+ * xfer03 as the owner really captures a box: each flag pasted as just its value, the proof shown by a screenshot
+ * taken next to it and (for proof.txt) a separate command paste. This is what the screenshots show.
+ */
+export const XFER03 = {
+  localShot: [
+    "svc_backup@xfer03:~$ cat local.txt",
+    FLAGS.xfer03Local,
+    "svc_backup@xfer03:~$ id",
+    "uid=1001(svc_backup) gid=1001(svc_backup) groups=1001(svc_backup)",
+    "svc_backup@xfer03:~$ hostname",
+    "xfer03",
+    "svc_backup@xfer03:~$ ip a",
+    linuxIp("10.10.30.22"),
+  ].join("\n"),
+  /** The proof read pasted as a command (prompt and all), after the flag value was logged on its own. */
+  proofPaste: [
+    "root@xfer03:~# cat /root/proof.txt; whoami; hostname; ip a",
+    FLAGS.xfer03Proof,
+    "root",
+    "xfer03",
+    linuxIp("10.10.30.22"),
+  ].join("\n"),
+} as const;
+
 /** Terminal output of the steps a screenshot was taken of. */
 export const OUTPUT = {
   ms01Shell: [
@@ -167,4 +194,6 @@ export const EXAM_SHOTS: Record<string, ShotText> = {
   "ad02-winrm": { kind: "terminal", title: "kali@kali: ~/exam/ad", text: `kali@kali:~/exam/ad$ evil-winrm -i 10.10.30.11 -u j.ellis -p 'Welcome2026!'\n\n${OUTPUT.ad02Winrm}` },
   "ad02-proof": { kind: "terminal", title: "kali@kali: ~/exam/ad", text: PROOF.ad02Proof },
   "dc01-proof": { kind: "terminal", title: "kali@kali: ~/exam/ad", text: PROOF.dc01Proof },
+  "xfer03-local": { kind: "terminal", title: "svc_backup@xfer03: ~", text: XFER03.localShot },
+  "xfer03-proof": { kind: "terminal", title: "root@xfer03: ~", text: XFER03.proofPaste },
 };

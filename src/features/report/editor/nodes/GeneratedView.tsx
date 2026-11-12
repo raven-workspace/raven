@@ -5,6 +5,7 @@ import {
   CHAIN_KEY,
   machineKey,
   machineOrder,
+  msfHosts,
   msfModules,
   reportTargets,
   testedLine,
@@ -137,8 +138,9 @@ function Content({ attrs, ctx }: { attrs: GeneratedAttrs; ctx: ReportDataValue }
     }
     case "msf": {
       const rows = msfModules(data.log, data.engagement, data.hosts);
-      if (rows.length === 0) return <p>Metasploit was not used.</p>;
-      const hostIds = [...new Set(rows.map((r) => r.hostId))];
+      // A Meterpreter session or payload is Metasploit use too, though it names no module.
+      const hostIds = [...new Set([...rows.map((r) => r.hostId), ...msfHosts(data.log, data.engagement, data.hosts)])];
+      if (hostIds.length === 0) return <p>Metasploit was not used.</p>;
       const named = hostIds.map((id) => {
         const h = data.hosts.find((x) => x.id === id);
         return h?.ip ? `${h.name} (${h.ip})` : hostName(data, id);
@@ -146,7 +148,8 @@ function Content({ attrs, ctx }: { attrs: GeneratedAttrs; ctx: ReportDataValue }
       const modules = [...new Set(rows.map((r) => r.module))];
       return (
         <p>
-          Metasploit was used on {named.join(" and ")}: {modules.join(", ")}.
+          Metasploit was used on {named.join(" and ")}
+          {modules.length > 0 ? `: ${modules.join(", ")}.` : "."}
         </p>
       );
     }

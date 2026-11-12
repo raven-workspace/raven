@@ -6,11 +6,12 @@ import { serviceCoverage } from "./coverage";
 import { byTime, evidenceIdsIn } from "./draft";
 import { captionOf } from "./figures";
 import { expectedFlags, isValidOsid } from "./meta";
-import { proofFacts } from "./proof";
+import { findFlagInPaste } from "../capture/flag";
+import { proofCompanions, proofFacts } from "./proof";
 import { provingEntries } from "./prove";
-import { msfModules } from "./tools";
+import { msfHosts, msfModules } from "./tools";
 import type { CoverageOverride, ReportData, ReportMeta, ReportNode, ReportTarget } from "./types";
-import { absoluteClaims } from "./wording";
+import { absoluteClaims, splitAffected } from "./wording";
 
 export type CheckLevel = "fail" | "soft";
 export interface Check {
@@ -66,43 +67,82 @@ const textOf = (n: ReportNode): string => (n.text ?? "") + (n.content ?? []).map
 const hasText = (n: ReportNode | undefined) => n != null && (n.type === "slot" || n.type === "paragraph") && textOf(n).trim() !== "";
 const words = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
 
+/**
+ * Each expected flag's proof, read from the flag entry and its companions (`proofCompanions`): the flag's own paste and
+ * screenshot, the commands that print its value, the screenshots taken with it.
+ */
 function proofChecks(host: Host, flags: ("local" | "proof")[], data: ReportData, onPage: Set<string>): Check[] {
   const out: Check[] = [];
+  // Raven can't read a screenshot: when one may show what the text doesn't, the host gets one soft line, not one per gap.
+  let unreadShot = false;
   for (const flag of flags) {
     const entries = data.log
       .filter((e) => e.kind === "flag" && e.content.kind === "flag" && e.content.flagKind === flag && !e.private && e.hostIds.includes(host.id))
       .sort(byTime);
     const entry = entries.find((e) => onPage.has(e.id));
     if (!entry) {
-      out.push({ id: `proof-missing:${host.name}:${flag}`, level: "fail", text: `No ${flag}.txt for ${host.name} on the page.` });
+      // A proof read pasted as a command (no flag entry) still shows the flag on the page.
+      if (!readOnPage(data, host.id, flag, onPage)) {
+        out.push({ id: `proof-missing:${host.name}:${flag}`, level: "fail", text: `No ${flag}.txt for ${host.name} on the page.` });
+      }
       continue;
     }
-    const facts = proofFacts(entry, host);
+    const companions = proofCompanions(data, host.id, entry);
+    const facts = proofFacts(entry, host, companions);
     const anchor = { entryId: entry.id };
     // One check per flag: with local.txt and proof.txt both expected, the text says which proof falls short.
     const key = `${host.name}:${flag}`;
     const which = `The ${flag}.txt proof for ${host.name}`;
     const fix = host.os === "windows" ? WIN_FIX : LINUX_FIX;
-    if (!facts.showsIp) {
-      out.push({
-        id: `proof-ip:${key}`,
-        level: "fail",
-        text: `${which} doesn't show ipconfig, ifconfig or ip addr with ${host.ip ?? "its IP"}. Raven can't read the screenshot, so this checks the pasted proof.`,
-        fix,
-        anchor,
-      });
+    const soft = (id: string, text: string) => out.push({ id: `${id}:${key}`, level: "soft", text, fix, anchor });
+    if (facts.hasScreenshot) {
+      if (!facts.showsIp) unreadShot = true;
+    } else {
+      if (!facts.showsIp) {
+        out.push({
+          id: `proof-ip:${key}`,
+          level: "fail",
+          text: `${which} doesn't show ipconfig, ifconfig or ip addr with ${host.ip ?? "its IP"}. Raven can't read the screenshot, so this checks the pasted proof.`,
+          fix,
+          anchor,
+        });
+      }
+      out.push({ id: `proof-screenshot:${key}`, level: "fail", text: `${which} has no screenshot.`, anchor });
     }
-    if (!facts.hasScreenshot) out.push({ id: `proof-screenshot:${key}`, level: "fail", text: `${which} has no screenshot.`, anchor });
+    // A shell's own output (a companion command) shows it came from a shell, whatever was logged before the flag.
     const before = data.log.filter((e) => e.id !== entry.id && e.hostIds.includes(host.id) && byTime(e, entry) < 0).sort(byTime).pop();
-    if (before?.kind === "http") {
+    if (before?.kind === "http" && !companions.some((e) => e.kind === "command")) {
       out.push({ id: `proof-web:${key}`, level: "fail", text: `${which} looks like it came from a web request, not an interactive shell.`, anchor });
     }
-    const soft = (id: string, text: string) => out.push({ id: `${id}:${key}`, level: "soft", text, fix, anchor });
-    if (!facts.showsIdentity) soft("proof-identity", `${which} doesn't show whoami or id.`);
-    if (!facts.showsHostname) soft("proof-hostname", `${which} doesn't show hostname.`);
-    if (!facts.usualPath) soft("proof-path", `${which} doesn't read the flag from its usual location.`);
+    // What the text lacks may be in the screenshot: those gaps are only named when there is no screenshot.
+    if (!facts.hasScreenshot) {
+      if (!facts.showsIdentity) soft("proof-identity", `${which} doesn't show whoami or id.`);
+      if (!facts.showsHostname) soft("proof-hostname", `${which} doesn't show hostname.`);
+    }
+    // Said only when the text shows the folder it read from.
+    if (facts.pathKnown && !facts.usualPath) soft("proof-path", `${which} doesn't read the flag from its usual location.`);
+  }
+  if (unreadShot) {
+    out.push({
+      id: `proof-shot:${host.name}`,
+      level: "soft",
+      text: `Raven can't read screenshots; make sure the proof screenshot shows ipconfig and ${host.ip || "the target IP"}.`,
+      fix: host.os === "windows" ? WIN_FIX : LINUX_FIX,
+    });
   }
   return out;
+}
+
+/** Whether a command on the page reads the flag file and prints a flag value (`cat /root/proof.txt` then the hash). */
+function readOnPage(data: ReportData, hostId: string, flag: "local" | "proof", onPage: Set<string>): boolean {
+  return data.log.some(
+    (e) =>
+      onPage.has(e.id) &&
+      !e.private &&
+      e.hostIds.includes(hostId) &&
+      e.content.kind === "command" &&
+      e.content.blocks.some((b) => findFlagInPaste(`${b.command ?? ""}\n${b.output ?? ""}`)?.flagKind === flag),
+  );
 }
 
 /** Per-target checks: what would lose OSCP exam points before export. Ids are stable and unique. */
@@ -115,6 +155,12 @@ export function targetChecks(input: TargetChecksInput): Check[] {
   const entryOf = (id: string) => data.log.find((e) => e.id === id);
   // Entries that proved something on one of the target's machines: a screenshot that isn't one came along with a step.
   const proving = new Set(hosts.flatMap((h) => [...provingEntries(data, h.id).keys()]));
+  // A flag's companions (the command printing it, its screenshot) are part of the flag's block: no explanation needed.
+  const companions = new Set(
+    hosts.flatMap((h) =>
+      data.log.filter((e) => e.kind === "flag" && !e.private && e.hostIds.includes(h.id)).flatMap((f) => proofCompanions(data, h.id, f).map((c) => c.id)),
+    ),
+  );
 
   for (const host of hosts) out.push(...proofChecks(host, expectedFlags(target, host.id, meta), data, onPage));
 
@@ -162,7 +208,7 @@ export function targetChecks(input: TargetChecksInput): Check[] {
       while (lead >= 0 && tagsAlong(idAt(lead))) lead--;
       if (idAt(lead) !== undefined) skipEntry(idAt(lead));
     }
-    if (entry.content.kind !== "flag" && !hasText(siblings[lead])) {
+    if (entry.content.kind !== "flag" && !companions.has(entry.id) && !hasText(siblings[lead])) {
       explain.push({ check: { id: `explain:${entryId}`, level: "soft", text: "A step has no explanation before it.", anchor }, shot: entry.kind === "screenshot" });
     }
     if (entry.content.kind === "screenshot" && !seenEvidence.has(entryId)) {
@@ -195,7 +241,8 @@ export function targetChecks(input: TargetChecksInput): Check[] {
     if (f.severity == null) problem("severity", `The finding "${f.title}" has no severity.`);
     if (f.title.trim() !== "" && !/\s/.test(f.title.trim())) problem("title", `The finding title "${f.title}" is a single word. Name the vulnerability, not the tool.`);
     if (f.hostIds.length === 0 && f.serviceIds.length === 0) problem("affected", `The finding "${f.title}" has no affected host or service.`);
-    if (f.description.trim() === "") problem("description", `The finding "${f.title}" has no description.`);
+    // An "Affected: …" line alone is no description.
+    if (splitAffected(f.description).explanation === "") problem("description", `The finding "${f.title}" has no description.`);
     if (f.remediation.trim() === "") problem("remediation", `The finding "${f.title}" has no remediation.`);
   }
 
@@ -268,6 +315,7 @@ const PLURAL: Record<string, (n: number) => string> = {
   "proof-identity": (n) => `${n} proofs don't show whoami or id.`,
   "proof-hostname": (n) => `${n} proofs don't show hostname.`,
   "proof-path": (n) => `${n} proofs don't read the flag from its usual location.`,
+  "proof-shot": (n) => `Raven can't read screenshots; make sure ${n} proof screenshots show ipconfig and the target IP.`,
   gone: (n) => `${n} blocks on the page use deleted or private content.`,
   output: (n) => `${n} commands on the page show no output.`,
   explain: (n) => `${n} steps have no explanation.`,
@@ -300,6 +348,7 @@ const SHORT: Record<string, (c: Check) => string> = {
   "proof-identity": (c) => `${part(c, 2)}.txt proof lacks whoami`,
   "proof-hostname": (c) => `${part(c, 2)}.txt proof lacks hostname`,
   "proof-path": (c) => `${part(c, 2)}.txt read from an odd place`,
+  "proof-shot": (c) => `${part(c, 1)}: check ipconfig in the screenshot`,
   gone: () => "Deleted or private entry on the page",
   output: () => "A command shows no output",
   explain: () => "A step has no explanation",
@@ -367,9 +416,11 @@ export function reportChecks(input: { report: Report; targets: ReportTarget[]; d
   if (targets.length === 0) out.push({ id: "no-targets", level: "fail", text: "The report has no targets." });
   {
     const ids = new Set(targets.flatMap((t) => t.hostIds));
-    const hostsWithMsf = new Set(msfModules(data.log, data.engagement, data.hosts).filter((m) => ids.has(m.hostId)).map((m) => m.hostId));
+    const hostsWithMsf = new Set(
+      [...msfModules(data.log, data.engagement, data.hosts).map((m) => m.hostId), ...msfHosts(data.log, data.engagement, data.hosts)].filter((id) => ids.has(id)),
+    );
     if (hostsWithMsf.size > 1) {
-      out.push({ id: "msf-many", level: "fail", text: "Metasploit modules are attributed to more than one host. The exam allows Metasploit against one machine only." });
+      out.push({ id: "msf-many", level: "fail", text: "Metasploit is attributed to more than one host. The exam allows Metasploit against one machine only." });
     }
   }
   return out;

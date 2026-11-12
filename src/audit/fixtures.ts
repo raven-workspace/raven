@@ -16,6 +16,7 @@ import type { Hop, InterfaceDismissal, Tunnel } from "../types/network";
 import type { Note, RuledOut } from "../types/notes";
 import type { Service } from "../types/service";
 import type { Settings } from "../types/settings";
+import { capturedHost } from "./capturedHost";
 import { examFixtures } from "./examFixtures";
 import { AUDIT_PNGS } from "./images";
 
@@ -147,7 +148,7 @@ const hosts: Host[] = [
   host("h-print", "e-lab", "print01", "10.10.20.40", "windows"),
   host("h-backup", "e-lab", "backup-nas-finance-replica.acme.corp", "10.10.20.45", "linux"),
   host("h-jenkins", "e-lab", "dev-jenkins", "10.10.20.50", "linux", { boardColumn: "vulnerability-detection" }),
-  host("h-int-files", "e-lab", "int-files", "10.10.21.12", "windows"),
+  host("h-int-xfer", "e-lab", "int-xfer", "10.10.21.12", "windows"),
   host("h-hr-ws03", "e-lab", "hr-ws03", "10.10.20.73", "windows"),
   // The mock exam as it stands near the end: ms01, web01 and the AD set rooted, lnx02 never started (examFixtures.ts).
   host("h-exam-ms01", "e-exam", "ms01", "10.10.30.5", "windows", { boardColumn: "post-exploitation", access: "root" }),
@@ -155,6 +156,8 @@ const hosts: Host[] = [
   host("h-exam-ad02", "e-exam", "ad02", "10.10.30.11", "windows", { adSet: true, adSetEffective: true, boardColumn: "post-exploitation", access: "root" }),
   host("h-exam-web", "e-exam", "web01", "10.10.30.20", "linux", { boardColumn: "post-exploitation", access: "root" }),
   host("h-exam-lnx", "e-exam", "lnx02", "10.10.30.21", "linux"),
+  // Captured as the owner really captures (capturedHost.ts): bare flag values, proof in separate entries, no grants.
+  host("h-exam-xfer", "e-exam", "xfer03", "10.10.30.22", "linux", { boardColumn: "post-exploitation", access: "root" }),
   // A long name, so the drawer's host chip is at its widest next to "Paste into Web shell ?cmd=".
   host("h-pay-iis", "e-pay", "intranet-gateway-iis-frontend-07.corp.example.test", "198.51.100.20", "windows", { boardColumn: "initial-foothold", access: "user" }),
   host("h-pay-pg", "e-pay", "pg01.example.test", "198.51.100.30", "linux"),
@@ -349,7 +352,8 @@ const payloadBuilds: PayloadBuild[] = [
 ];
 
 const exam = examFixtures(AUDIT_NOW);
-const log: LogEntry[] = [...labLog, ...exam.log, ...payLog];
+const xfer = capturedHost(AUDIT_NOW, hosts.filter((h) => h.engagementId === "e-exam"));
+const log: LogEntry[] = [...labLog, ...exam.log, ...xfer.log, ...payLog];
 
 const attachments: Attachment[] = (Object.keys(AUDIT_PNGS) as (keyof typeof AUDIT_PNGS)[]).map((k) => ({
   id: `a-${k}`, mime: "image/png", dataBase64: AUDIT_PNGS[k].base64,
@@ -546,7 +550,7 @@ const checklist: ChecklistItem[] = [
 
 const progress: Record<string, Progress> = {
   "e-lab": { hostsTotal: 6, hostsRooted: 2, flagsFound: 2, flagsTotal: 12 },
-  "e-exam": { hostsTotal: 5, hostsRooted: 4, flagsFound: 6, flagsTotal: 8 },
+  "e-exam": { hostsTotal: 6, hostsRooted: 5, flagsFound: 8, flagsTotal: 10 },
   "e-old": { hostsTotal: 1, hostsRooted: 1, flagsFound: 2, flagsTotal: 2 },
   "e-pay": { hostsTotal: 2, hostsRooted: 0, flagsFound: 0, flagsTotal: 4 },
   "e-board": { hostsTotal: 23, hostsRooted: 1, flagsFound: 0, flagsTotal: 0 },
@@ -579,11 +583,13 @@ const settings: Settings = {
 };
 
 export const FIXTURES: AuditFixtures = {
-  engagements, hosts, services: [...services, ...exam.services], log, attachments, checklist: [...checklist, ...exam.checklist],
+  engagements, hosts, services: [...services, ...exam.services, ...xfer.services], log, attachments,
+  checklist: [...checklist, ...exam.checklist, ...xfer.checklist],
   notes: [...notes, ...exam.notes], ruledOut: [...ruledOut, ...exam.ruledOut], hostIdentity, vectors, tunnels, interfaceDismissals,
-  hops: [...hops, ...exam.hops], credentials: [...credentials, ...exam.credentials], usernames: [...usernames, ...exam.usernames], credAttempts,
-  triedPairs, payloadBuilds, reports: exam.reports, reportSections: [], extractions, accessGrants: [...accessGrants, ...exam.accessGrants],
-  findings: [...findings, ...exam.findings], findingFiles: [...findingFiles, ...exam.findingFiles], failedAttempts: [...failedAttempts, ...exam.failedAttempts],
+  hops: [...hops, ...exam.hops], credentials: [...credentials, ...exam.credentials, ...xfer.credentials],
+  usernames: [...usernames, ...exam.usernames, ...xfer.usernames], credAttempts: [...credAttempts, ...xfer.credAttempts],
+  triedPairs: [...triedPairs, ...xfer.triedPairs], payloadBuilds, reports: exam.reports, reportSections: [], extractions,
+  accessGrants: [...accessGrants, ...exam.accessGrants], findings: [...findings, ...exam.findings, ...xfer.findings], findingFiles: [...findingFiles, ...exam.findingFiles], failedAttempts: [...failedAttempts, ...exam.failedAttempts],
   cleanup: [...cleanup, ...exam.cleanup], backups, settings,
 };
 

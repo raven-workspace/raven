@@ -16,23 +16,27 @@ export const PHASE_TITLES: Record<Phase, string> = {
   domain: "Domain Compromise",
   tested: "Also tested",
   post: "Post-Exploitation",
+  additional: "Additional findings",
 };
 
 /** Phases a vulnerability opens, so the heading names it: "Initial Access – SMB share to WordPress RCE". */
 const TITLED = new Set<Phase>(["foothold", "privesc", "lateral", "domain"]);
 
-/** The numbers of a target page's headings, keyed `facts:<hostId>`, `phase:<hostId>:<phase>` and `attack-chain`. */
+/** The numbers of a target page's headings, keyed `facts:<hostId>`, `phase:<hostId>:<phase>` (with
+ *  `:<findingId>` for a finding's own heading) and `attack-chain`. */
 export type PageHeadings = Map<string, HeadingLabel>;
 
-export const phaseKey = (hostId: string, phase: Phase) => `phase:${hostId}:${phase}`;
+/** A phase heading's key; a finding's own heading (`findingId`) has one of its own. */
+export const phaseKey = (hostId: string, phase: Phase, findingId?: string | null) =>
+  findingId ? `phase:${hostId}:${phase}:${findingId}` : `phase:${hostId}:${phase}`;
 export const machineKey = (hostId: string) => `facts:${hostId}`;
 export const CHAIN_KEY = "attack-chain";
 
 /**
  * Numbers a target page's headings from its document, never stored: a standalone target is `base` ("4.2", printed
  * "Target #2 – <IP>"), its sub-sections `base.1`, `base.2` in page order; in the AD set (`base` "5") each machine is
- * `5.N <name> – <IP>`, its sub-sections `5.N.1`…, and the attack chain the next machine number. Also tested takes no
- * number. A titled phase names the first vulnerability under it.
+ * `5.N <name> – <IP>`, its sub-sections `5.N.1`…, and the attack chain the next machine number. Also tested and a finding's
+ * own heading under Additional findings take no number. A titled phase names the first vulnerability under it.
  */
 export function targetHeadings(doc: ReportNode, data: ReportData, target: ReportTarget, base: string, ordinal: number): PageHeadings {
   const out: PageHeadings = new Map();
@@ -59,10 +63,20 @@ export function targetHeadings(doc: ReportNode, data: ReportData, target: Report
     if (n.type !== "phase" || typeof attrs.hostId !== "string") return;
     const hostId = attrs.hostId;
     const phase = attrs.phase as Phase;
-    const key = phaseKey(hostId, phase);
+    const findingId = typeof attrs.findingId === "string" && attrs.findingId !== "" ? attrs.findingId : null;
+    const key = phaseKey(hostId, phase, findingId);
     if (out.has(key)) return;
     let text = PHASE_TITLES[phase] ?? String(phase);
-    if (TITLED.has(phase)) {
+    if (findingId) {
+      // A finding's own heading: under Additional findings its title alone, unnumbered; a further finding that enabled
+      // the phase, the phase named after it and numbered like the phase.
+      const title = data.findings.find((f) => f.id === findingId)?.title.trim() || "Finding";
+      if (phase === "additional") {
+        out.set(key, { number: null, text: title });
+        return;
+      }
+      text = `${text} – ${title}`;
+    } else if (TITLED.has(phase)) {
       // The first vulnerability before the region ends (the next heading or the next machine).
       const vuln = content.slice(i + 1).find((m) => m.type === "vuln" || m.type === "phase" || (m.type === "generated" && m.attrs?.kind !== "tested"));
       const finding = vuln?.type === "vuln" ? data.findings.find((f) => f.id === vuln.attrs?.findingId) : undefined;

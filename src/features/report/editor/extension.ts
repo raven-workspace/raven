@@ -56,7 +56,7 @@ import { VulnView } from "./nodes/VulnView";
 
 /** The atom blocks the page is built from, with their attribute defaults (types.ts holds the contract). */
 const ATOMS: { name: string; attrs: Record<string, unknown>; component: ReactNodeViewComponent }[] = [
-  { name: "phase", attrs: { phase: "foothold", hostId: "" }, component: PhaseView },
+  { name: "phase", attrs: { phase: "foothold", hostId: "", findingId: null }, component: PhaseView },
   {
     name: "evidence",
     attrs: { entryId: "", block: null, keep: null, emphasis: [], appendix: "inline", caption: null, width: null },

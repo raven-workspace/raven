@@ -63,7 +63,7 @@ const data = (log: LogEntry[], hosts: Host[] = [host("h1", "ms01")]) =>
     hops: [],
     cleanup: [],
     notes: [],
-    credentials: [],
+    credentials: [], credAttempts: [],
   }) as unknown as ReportData;
 
 const ev = (entryId: string, extra: Record<string, unknown> = {}): ReportNode => ({

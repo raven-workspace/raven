@@ -50,7 +50,7 @@ const data = (log: LogEntry[]) =>
     hops: [],
     cleanup: [],
     notes: [],
-    credentials: [],
+    credentials: [], credAttempts: [],
   }) as unknown as ReportData;
 
 const ev = (entryId: string, extra: Record<string, unknown> = {}): ReportNode => ({
