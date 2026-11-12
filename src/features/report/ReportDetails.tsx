@@ -39,7 +39,8 @@ export function ReportDetails({
     const v = value.trim();
     if (v !== report[key] && !(key === "title" && v === "")) onSave({ [key]: v });
   };
-  const saveMeta = (patch: Partial<ReportMeta>) => onSave({ meta: { ...report.meta, ...patch } });
+  /** Only the changed keys: the view merges them over the latest stored meta. */
+  const saveMeta = (patch: Partial<ReportMeta>) => onSave({ meta: patch });
   const toggleHost = (id: string, on: boolean) => {
     const next = on ? [...includedHostIds, id] : includedHostIds.filter((x) => x !== id);
     saveMeta({ includedHostIds: hosts.map((h) => h.id).filter((h) => next.includes(h)) });

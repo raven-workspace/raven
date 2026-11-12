@@ -154,6 +154,76 @@ describe("Report view", () => {
     await waitFor(() => expect(draftUpserts(upsert, created)).toHaveLength(1));
   });
 
+  it("keeps a failed save queued per section and retries it until it is written", async () => {
+    const real = api.reportSectionSave;
+    let failA = true;
+    let aId = "";
+    const save = vi.spyOn(api, "reportSectionSave").mockImplementation(async (id, doc, meta) => {
+      if (id === aId && failA) throw new Error("disk full");
+      return real(id, doc, meta);
+    });
+    mount();
+    await ready();
+    await waitFor(() => expect(editors.length).toBe(1));
+    aId = rowFor("lnx02").dataset.id!;
+    const type = (text: string) =>
+      act(() => {
+        const view = editors[editors.length - 1].view;
+        view.dispatch(view.state.tr.insertText(text, 1));
+      });
+    const warning = () => screen.queryByText(/Some typing isn't saved yet/);
+    const writesOf = (id: string) => save.mock.calls.filter(([sid]) => sid === id);
+
+    type("A text");
+    fireEvent.click(rowFor("ms01"));
+    await waitFor(() => expect(warning()).toBeInTheDocument());
+    expect(writesOf(aId)).toHaveLength(1);
+
+    // B saves fine, A is tried again and still fails: the warning stays.
+    await waitFor(() => expect(editors.length).toBe(2));
+    const bId = rowFor("ms01").dataset.id!;
+    type("B text");
+    fireEvent.click(rowFor("web01"));
+    await waitFor(() => expect(writesOf(aId)).toHaveLength(2));
+    expect(writesOf(bId).some(([, doc]) => JSON.stringify(doc).includes("B text"))).toBe(true);
+    await act(async () => {});
+    expect(warning()).toBeInTheDocument();
+
+    // Once A's write goes through, the warning clears.
+    failA = false;
+    await waitFor(() => expect(editors.length).toBe(3));
+    type("C text");
+    fireEvent.click(rowFor("lnx02"));
+    await waitFor(() => expect(writesOf(aId).length).toBeGreaterThanOrEqual(3));
+    expect(JSON.stringify(writesOf(aId).at(-1)![1])).toContain("A text");
+    await waitFor(() => expect(warning()).not.toBeInTheDocument());
+  });
+
+  it("shows a failed section setup with Retry, keeping the outline", async () => {
+    const real = api.reportSectionUpsert;
+    let fail = false;
+    vi.spyOn(api, "reportSectionUpsert").mockImplementation(async (rid, input) => {
+      if (fail && input.draftBuiltAt === null) throw new Error("db busy");
+      return real(rid, input);
+    });
+    const { qc } = mount();
+    await ready();
+    await waitFor(() => expect(targetRows()).toHaveLength(4));
+
+    fail = true;
+    await act(async () => {
+      await api.hostCreate("e-exam", { name: "files03", ip: "10.10.30.33", os: "linux" } as never);
+      await qc.invalidateQueries();
+    });
+    expect(await screen.findByText(/Couldn't add the report's new sections/)).toBeInTheDocument();
+    expect(targetRows()).toHaveLength(4);
+
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(targetRows().some((r) => r.textContent === "files03.33")).toBe(true));
+    expect(screen.queryByText(/Couldn't add the report's new sections/)).not.toBeInTheDocument();
+  });
+
   it("shows a placeholder for client engagements", async () => {
     mount("e-old");
     expect(await screen.findByText("Client reports come after the exam")).toBeInTheDocument();

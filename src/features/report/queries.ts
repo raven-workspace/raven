@@ -170,6 +170,10 @@ const SAVE_DEBOUNCE_MS = 600;
 /**
  * Autosave for the open section: `save` queues the latest page and meta and writes them 600 ms after the last change.
  * The queue is flushed when the section changes and on unmount, so a switch or leaving never drops typing.
+ *
+ * Unsaved writes are kept per section: a failed write stays queued (a later save of another section never replaces
+ * it) and is retried on every flush, so on the next change anywhere. `onError` fires while any write is unsaved,
+ * `onSaved` only once every section is written.
  */
 export function useSectionSaver(
   sectionId: string,
@@ -180,38 +184,49 @@ export function useSectionSaver(
   useEffect(() => {
     callbacks.current = opts;
   });
-  const pending = useRef<{ id: string; doc: ReportNode; meta: SectionMeta } | null>(null);
+  type Write = { doc: ReportNode; meta: SectionMeta };
+  const unsaved = useRef(new Map<string, Write>());
+  // Writes on their way: a flush doesn't send the same write twice.
+  const inFlight = useRef(new Set<Write>());
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flush = useCallback(async () => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
-    const p = pending.current;
-    pending.current = null;
-    if (!p) return;
-    const meta = pruneRemoved(p.doc, p.meta);
-    patchCachedSection(qc, p.id, { doc: p.doc as ReportDoc, meta: meta as Record<string, unknown> });
-    try {
-      await api.reportSectionSave(p.id, p.doc as ReportDoc, meta as Record<string, unknown>);
-      callbacks.current.onSaved?.();
-    } catch (e) {
-      // Keep the page for the next attempt unless a newer change is already queued.
-      pending.current ??= p;
-      reportError(e);
-      callbacks.current.onError?.(e);
-    }
+    const writes = [...unsaved.current].filter(([, w]) => !inFlight.current.has(w));
+    if (writes.length === 0) return;
+    let failure: unknown = null;
+    await Promise.all(
+      writes.map(async ([id, w]) => {
+        const meta = pruneRemoved(w.doc, w.meta);
+        patchCachedSection(qc, id, { doc: w.doc as ReportDoc, meta: meta as Record<string, unknown> });
+        inFlight.current.add(w);
+        try {
+          await api.reportSectionSave(id, w.doc as ReportDoc, meta as Record<string, unknown>);
+          // A newer change queued meanwhile stays for its own write.
+          if (unsaved.current.get(id) === w) unsaved.current.delete(id);
+        } catch (e) {
+          failure = e;
+          reportError(e);
+        } finally {
+          inFlight.current.delete(w);
+        }
+      }),
+    );
+    if (failure !== null) callbacks.current.onError?.(failure);
+    else if (unsaved.current.size === 0) callbacks.current.onSaved?.();
   }, [qc]);
 
   const save = useCallback(
     (doc: ReportNode, meta: SectionMeta) => {
-      pending.current = { id: sectionId, doc, meta };
+      unsaved.current.set(sectionId, { doc, meta });
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => void flush(), SAVE_DEBOUNCE_MS);
     },
     [sectionId, flush],
   );
 
-  // Section change and unmount: write what is queued for the section being left.
+  // Section change and unmount: write what is queued for the section being left (and retry anything unsaved).
   useEffect(() => () => void flush(), [sectionId, flush]);
   return useMemo(() => ({ save, flush }), [save, flush]);
 }

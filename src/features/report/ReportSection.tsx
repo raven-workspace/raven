@@ -7,6 +7,7 @@ import {
   buildSectionDraft,
   buildTargetDraft,
   expectedFlags,
+  isFigure,
   isReady,
   isValidOsid,
   numberAppendices,
@@ -15,6 +16,7 @@ import {
   reportFileName,
   reportTargets,
   targetChecks,
+  type AppendixIndex,
   type Check,
   type FlagKind,
   type ReportData,
@@ -28,7 +30,7 @@ import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
 import { reportError } from "../../lib/lockSignal";
 import type { Report, ReportPatch, ReportSection, SectionKind } from "../../types/report";
 import type { Settings } from "../../types/settings";
-import { Disclosure, EmptyState, ErrorState, labelClass, LoadingState, queryState, Select, usePageShortcuts, type Hint } from "../../ui";
+import { Button, Disclosure, EmptyState, ErrorState, labelClass, LoadingState, queryState, Select, usePageShortcuts, type Hint } from "../../ui";
 import { ReportDataContext, type ReportDataValue } from "./editor/ReportDataContext";
 import { ReportEditor } from "./editor/ReportEditor";
 import { ReportDetails } from "./ReportDetails";
@@ -91,18 +93,39 @@ function appendixTitle(node: ReportNode, data: ReportData): string {
   return GENERATED_TITLE[String(a.kind)] ?? "Table";
 }
 
-/** Figures a section's page shows: screenshots and flag screenshots that sit on the page, not moved out, not private. */
+/** Figures a section's page shows, in the editor's own terms (`isFigure`). */
 function countFigures(doc: ReportNode, data: ReportData): number {
+  const entryOf = (id: string) => data.log.find((e) => e.id === id);
   let n = 0;
   const walk = (node: ReportNode) => {
-    if (node.type === "evidence" && node.attrs?.appendix !== "moved") {
-      const entry = data.log.find((e) => e.id === node.attrs?.entryId);
-      if (entry && !entry.private && (entry.content.kind === "screenshot" || (entry.content.kind === "flag" && !!entry.content.attachmentId))) n++;
-    }
+    if (isFigure(node, entryOf)) n++;
     node.content?.forEach(walk);
   };
   walk(doc);
   return n;
+}
+
+/** A warning with its Retry, above the page. */
+function WarnLine({ text, onRetry }: { text: string; onRetry(): void }) {
+  return (
+    <div role="alert" className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+      <p className="m-0 text-meta text-warn">{text}</p>
+      <Button size="sm" onClick={onRetry}>
+        Retry
+      </Button>
+    </div>
+  );
+}
+
+/** The appendix index, kept as the same object while its entries are unchanged, so node views don't re-render per keystroke. */
+function useStableAppendix(index: AppendixIndex): AppendixIndex {
+  const sig = JSON.stringify(index.entries);
+  const [kept, setKept] = useState({ sig, index });
+  if (kept.sig !== sig) {
+    setKept({ sig, index });
+    return index;
+  }
+  return kept.index;
 }
 
 const lastOctet = (ip: string | null | undefined) => (ip && ip.includes(".") ? `.${ip.split(".").pop()}` : undefined);
@@ -225,6 +248,8 @@ function ReportBody({
       })
       .catch((e: unknown) => {
         reportError(e);
+        // Sections created before the failure are stored: reload the list so the outline shows them.
+        void qc.invalidateQueries({ queryKey: reportSectionsKey(report.id) });
         setEnsureFailed(e instanceof Error ? e.message : String(e));
       })
       .finally(() => {
@@ -285,36 +310,59 @@ function ReportBody({
     return out;
   }, [entries, data, reportMeta, settings]);
 
-  const docOf = useCallback(
-    (s: ReportSection): ReportNode =>
-      live?.id === s.id ? live.doc : ((s.doc as ReportNode | null) ?? drafts.get(s.id) ?? EMPTY_DOC),
-    [live, drafts],
+  // Every section's stored page (or the draft it will get). Only the open page changes per keystroke; it is read live.
+  const savedDocOf = useCallback(
+    (s: ReportSection): ReportNode => (s.doc as ReportNode | null) ?? drafts.get(s.id) ?? EMPTY_DOC,
+    [drafts],
   );
   const metaOf = useCallback(
     (s: ReportSection): SectionMeta => (liveMeta?.id === s.id ? liveMeta.meta : (s.meta as SectionMeta)),
     [liveMeta],
   );
+  const openLiveDoc = openSection && live?.id === openSection.id ? live.doc : null;
 
-  const appendix = useMemo(
-    () =>
+  const appendixDocs = useCallback(
+    (docOf: (s: ReportSection) => ReportNode) =>
       numberAppendices(
         entries.map((e) => ({ id: e.section.id, kind: e.section.kind, targetKey: e.section.targetKey, doc: e.section.kind === "details" ? null : docOf(e.section) })),
         (n) => appendixTitle(n, data),
       ),
-    [entries, docOf, data],
+    [entries, data],
+  );
+  const savedAppendix = useMemo(() => appendixDocs(savedDocOf), [appendixDocs, savedDocOf]);
+  // With the open page live, so references stay right while editing; kept as the same object while its entries don't change.
+  const appendix = useStableAppendix(
+    useMemo(
+      () => (openLiveDoc && openSection ? appendixDocs((s) => (s.id === openSection.id ? openLiveDoc : savedDocOf(s))) : savedAppendix),
+      [openLiveDoc, openSection, appendixDocs, savedDocOf, savedAppendix],
+    ),
   );
 
-  const checks = useMemo(() => {
+  // Other targets' checks read their stored pages; only the open target's are recomputed as you type.
+  const savedChecks = useMemo(() => {
     const out = new Map<string, Check[]>();
     for (const e of entries) {
       if (!e.target) continue;
       out.set(
         e.section.id,
-        targetChecks({ data, target: e.target, doc: docOf(e.section), meta: reportMeta, appendixRefs: appendix, sectionId: e.section.id, coverage: metaOf(e.section).coverage }),
+        targetChecks({ data, target: e.target, doc: savedDocOf(e.section), meta: reportMeta, appendixRefs: savedAppendix, sectionId: e.section.id, coverage: (e.section.meta as SectionMeta).coverage }),
       );
     }
     return out;
-  }, [entries, data, docOf, metaOf, reportMeta, appendix]);
+  }, [entries, data, savedDocOf, reportMeta, savedAppendix]);
+  const openTarget = open?.target;
+  const openSectionMeta = openSection ? metaOf(openSection) : undefined;
+  const openChecksLive = useMemo(
+    () =>
+      openTarget && openSection
+        ? targetChecks({ data, target: openTarget, doc: openLiveDoc ?? savedDocOf(openSection), meta: reportMeta, appendixRefs: appendix, sectionId: openSection.id, coverage: openSectionMeta?.coverage })
+        : null,
+    [openTarget, openSection, data, openLiveDoc, savedDocOf, reportMeta, appendix, openSectionMeta],
+  );
+  const checks = useMemo(
+    () => (openChecksLive && openSection ? new Map(savedChecks).set(openSection.id, openChecksLive) : savedChecks),
+    [savedChecks, openChecksLive, openSection],
+  );
   const reportLevel = useMemo(() => reportChecks({ report, targets, data }), [report, targets, data]);
 
   const targetEntries = entries.filter((e) => e.target);
@@ -331,10 +379,10 @@ function ReportBody({
     let n = 0;
     for (const e of entries) {
       if (e.section.id === openSection?.id) break;
-      if (e.section.kind !== "details") n += countFigures(docOf(e.section), data);
+      if (e.section.kind !== "details") n += countFigures(savedDocOf(e.section), data);
     }
     return n;
-  }, [entries, openSection?.id, docOf, data]);
+  }, [entries, openSection?.id, savedDocOf, data]);
 
   const targetMeta = useMemo(() => {
     const out: Record<string, SectionMeta> = {};
@@ -353,14 +401,14 @@ function ReportBody({
     [openId_],
   );
 
-  const { onChange, onRemoveEvidence } = usePageEdits(openSection, docOf, saver, setLive, setLiveMeta);
+  const { onChange, onRemoveEvidence } = usePageEdits(openSection, savedDocOf, saver, setLive, setLiveMeta);
 
   // A section opened with no page yet gets its first draft, built and stored once (draftBuiltAt marks it).
   const building = useRef(new Set<string>());
   const [draftFailed, setDraftFailed] = useState<string | null>(null);
   useEffect(() => {
     const s = openSection;
-    if (!s || s.doc || s.kind === "details" || building.current.has(s.id)) return;
+    if (!s || s.doc || s.kind === "details" || draftFailed || building.current.has(s.id)) return;
     const doc = drafts.get(s.id);
     if (!doc) return;
     building.current.add(s.id);
@@ -372,7 +420,7 @@ function ReportBody({
         reportError(e);
         setDraftFailed(e instanceof Error ? e.message : String(e));
       });
-  }, [openSection, drafts, report.id, qc]);
+  }, [openSection, drafts, report.id, qc, draftFailed]);
 
   const saveReport = useCallback(
     (patch: ReportPatch) => {
@@ -390,8 +438,10 @@ function ReportBody({
     },
     [qc, report.engagementId, report.id],
   );
-  const setFlags = (hostId: string, flags: FlagKind[]) =>
-    saveReport({ meta: { expectedFlags: { ...(reportMeta.expectedFlags ?? {}), [hostId]: flags } } });
+  const setFlags = (hostId: string, flags: FlagKind[]) => {
+    const cached = (qc.getQueryData<Report>(reportKey(report.engagementId))?.meta ?? report.meta) as ReportMeta;
+    saveReport({ meta: { expectedFlags: { ...(cached.expectedFlags ?? {}), [hostId]: flags } } });
+  };
 
   const reorder = useCallback(
     (id: string, dir: -1 | 1) => {
@@ -470,17 +520,11 @@ function ReportBody({
     </>
   ) : undefined;
 
-  const contextValue: ReportDataValue | null = openSection
-    ? {
-        data,
-        appendix,
-        sectionMeta: metaOf(openSection),
-        onRemoveEvidence,
-        reportMeta,
-        targetMeta,
-        figureOffset,
-      }
-    : null;
+  const contextValue = useMemo(
+    (): ReportDataValue | null =>
+      openSectionMeta ? { data, appendix, sectionMeta: openSectionMeta, onRemoveEvidence, reportMeta, targetMeta, figureOffset } : null,
+    [data, appendix, openSectionMeta, onRemoveEvidence, reportMeta, targetMeta, figureOffset],
+  );
 
   const notStarted = open?.target && stateOf(open.target, open.section.id) === "not-started";
   const includedHostIds = targets.flatMap((t) => t.hostIds);
@@ -499,7 +543,7 @@ function ReportBody({
       />
       {entries.length === 0 ? (
         ensureFailed ? (
-          <ErrorState title="Couldn't set up the report" hint="Reopen the Report section to try again." onRetry={() => setEnsureFailed(null)} detail={ensureFailed} />
+          <ErrorState title="Couldn't set up the report" hint="Retry. If it keeps failing, lock and unlock Raven." onRetry={() => setEnsureFailed(null)} detail={ensureFailed} />
         ) : (
           <LoadingState label="the report" />
         )
@@ -531,8 +575,11 @@ function ReportBody({
                 </Disclosure>
               )}
             </div>
-            {saveFailed && <p className="m-0 text-meta text-warn">Couldn't save this page. It saves again on your next change.</p>}
-            {draftFailed && <p className="m-0 text-meta text-warn">Couldn't build this page's draft: {draftFailed}</p>}
+            {ensureFailed && (
+              <WarnLine text={`Couldn't add the report's new sections: ${ensureFailed}`} onRetry={() => setEnsureFailed(null)} />
+            )}
+            {saveFailed && <p className="m-0 text-meta text-warn">Some typing isn't saved yet. Raven tries again with your next change; keep Raven open until this goes.</p>}
+            {draftFailed && <WarnLine text={`Couldn't build this page's draft: ${draftFailed}`} onRetry={() => setDraftFailed(null)} />}
             {notStarted && open?.target && <p className="m-0 text-meta text-muted-2">Nothing logged on {open.item.label} yet. The page fills in as you work.</p>}
             {openSection?.kind === "details" ? (
               <ReportDetails
@@ -556,7 +603,7 @@ function ReportBody({
                     }}
                   />
                 </ReportDataContext.Provider>
-              ) : (
+              ) : draftFailed ? null : (
                 <LoadingState label="the draft" />
               )
             ) : null}

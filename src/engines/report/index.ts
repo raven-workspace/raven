@@ -12,3 +12,4 @@ export * from "./appendix";
 export * from "./proof";
 export * from "./wording";
 export * from "./checks";
+export * from "./figures";

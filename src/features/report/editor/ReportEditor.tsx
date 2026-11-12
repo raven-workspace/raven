@@ -3,18 +3,14 @@ import { createEditor, Priority, type Editor, type NodeJSON } from "prosekit/cor
 import type { Node as PMNode } from "prosekit/pm/model";
 import { NodeSelection, type Command } from "prosekit/pm/state";
 import { ProseKit, useDocChange, useKeymap } from "prosekit/react";
-import type { EvidenceAttrs, ReportData, ReportNode } from "../../../engines/report";
+import { isFigure, type EvidenceAttrs, type ReportData, type ReportNode } from "../../../engines/report";
 import { defineReportExtension } from "./extension";
 import { PageLayoutContext, useReportData, type PageLayout } from "./ReportDataContext";
 import "../page.css";
 
 /** Whether an evidence node shows a screenshot on the page, so it takes a figure number (a moved one doesn't). */
-function hasFigure(node: PMNode, data: ReportData): boolean {
-  if (node.type.name !== "evidence" || node.attrs.appendix === "moved") return false;
-  const entry = data.log.find((e) => e.id === node.attrs.entryId);
-  if (!entry || entry.private) return false;
-  return entry.content.kind === "screenshot" || (entry.content.kind === "flag" && !!entry.content.attachmentId);
-}
+const hasFigure = (node: PMNode, data: ReportData) =>
+  isFigure({ type: node.type.name, attrs: node.attrs }, (id) => data.log.find((e) => e.id === id));
 
 /** Figure numbers and index paths for the current document, keyed by node (nodes are immutable per state). */
 function layoutOf(doc: PMNode, data: ReportData, sectionId: string, figureOffset: number): PageLayout {
