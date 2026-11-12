@@ -314,7 +314,7 @@ describe("ReportEditor vulnerabilities and exploits", () => {
 });
 
 /** The editor with its appendix index recomputed from the live page, as the Report view does. */
-function setupLive(page: ReportNode, d: ReportData = data()) {
+function setupLive(page: ReportNode, d: ReportData = data(), canMove = true) {
   const onChange = vi.fn();
   const onRemoveEvidence = vi.fn();
   const onImageWidth = vi.fn();
@@ -327,7 +327,7 @@ function setupLive(page: ReportNode, d: ReportData = data()) {
       [current],
     );
     return (
-      <ReportDataContext.Provider value={{ data: d, appendix, sectionMeta: {}, onRemoveEvidence, onImageWidth }}>
+      <ReportDataContext.Provider value={{ data: d, appendix, sectionMeta: {}, onRemoveEvidence, onImageWidth, canMove }}>
         <ReportEditor
           sectionId="s1"
           doc={page}
@@ -379,6 +379,10 @@ describe("ReportEditor block tools", () => {
     await waitFor(() => expect(editor()).toBeTruthy());
     selectBlock(editor(), 0);
     fireEvent.click(await screen.findByRole("button", { name: "Trim" }));
+    // Nothing picked yet: a hint, no line pressed, no Keep all.
+    expect(screen.getByText("Pick the lines to keep")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Keep all" })).toBeNull();
+    expect(screen.getAllByRole("button", { pressed: true }).filter((b) => b.getAttribute("aria-label")?.startsWith("Keep line"))).toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: "Keep line 3" }));
     fireEvent.click(screen.getByRole("button", { name: "Keep line 5" }), { shiftKey: true });
     fireEvent.click(screen.getByRole("button", { name: "Keep line 8" }));
@@ -462,5 +466,38 @@ describe("ReportEditor block tools", () => {
     Object.defineProperty(img, "naturalWidth", { value: 420 });
     fireEvent.load(img);
     expect(onImageWidth).toHaveBeenCalledWith("s1", 420);
+  });
+
+  it("stops picking lines when the block is deselected", async () => {
+    const d = data({ log: [longEntry("e1", "Big file", 4)] });
+    const { editor } = setupLive(doc(ev("e1"), slot()), d);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    selectBlock(editor(), 0);
+    fireEvent.click(await screen.findByRole("button", { name: "Trim" }));
+    expect(screen.getByRole("button", { name: "Keep line 1" })).toBeInTheDocument();
+    const view = editor().view;
+    act(() => view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.doc.child(0).nodeSize + 1))));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Keep line 1" })).toBeNull());
+    selectBlock(editor(), 0);
+    await screen.findByRole("button", { name: "Trim" });
+    expect(screen.queryByRole("button", { name: "Keep line 1" })).toBeNull();
+  });
+
+  it("offers no Move to appendix outside target pages", async () => {
+    const g: ReportNode = { type: "generated", attrs: { kind: "severity-legend", hostId: null, appendix: "inline" } };
+    const { editor } = setupLive(doc(ev("e1"), g), data(), false);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    selectBlock(editor(), 0);
+    expect(await screen.findByRole("button", { name: "Remove" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Move to appendix" })).toBeNull();
+    selectBlock(editor(), 1);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Remove" })).toBeNull());
+    expect(screen.queryByRole("button", { name: "Move to appendix" })).toBeNull();
+  });
+
+  it("names a moved screenshot's reference as a screenshot", async () => {
+    const d = data({ log: [entry({ id: "s1", title: "Login page", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a1", caption: "Login", fileName: "x.png" } })] });
+    setupLive(doc(ev("s1", { block: null, appendix: "moved" })), d);
+    expect(await screen.findByText("Screenshot: Appendix E.1, Login page")).toBeInTheDocument();
   });
 });

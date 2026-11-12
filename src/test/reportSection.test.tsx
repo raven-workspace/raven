@@ -349,7 +349,7 @@ describe("Report view: appendices and new evidence", () => {
     Object.defineProperty(img, "naturalWidth", { value: 480 });
     fireEvent.load(img);
     const checks = screen.getAllByRole("list", { name: "Checks" })[0];
-    expect(await within(checks).findByText("A screenshot is narrower than would print legibly.")).toBeInTheDocument();
+    expect(await within(checks).findByText('The screenshot "Login page" is narrower than would print legibly. Retake it larger or crop it tighter.')).toBeInTheDocument();
   });
 
   it("Add new evidence appends a newly proving entry, skips removed ones, and Undo takes it off again", async () => {
@@ -367,9 +367,29 @@ describe("Report view: appendices and new evidence", () => {
     expect(evidenceIds()).toEqual([scan.id, localFlag.id]);
     await waitFor(() => expect(save.mock.calls.some(([, doc]) => JSON.stringify(doc).includes(localFlag.id))).toBe(true));
 
+    const writes = save.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await waitFor(() => expect(evidenceIds()).toEqual([scan.id]));
+    await waitFor(() => expect(save.mock.calls.length).toBeGreaterThan(writes));
+    expect(JSON.stringify(save.mock.calls.at(-1)![1])).not.toContain(localFlag.id);
     expect(screen.queryByText("Added 1 entry")).not.toBeInTheDocument();
+  });
+
+  it("offers no Move to appendix on a report-level page", async () => {
+    mount();
+    await ready();
+    fireEvent.click(row(/Methodology/));
+    await waitFor(() => expect(editors.length).toBeGreaterThan(1));
+    const view = pageEditor().view;
+    let pos = -1;
+    view.state.doc.forEach((n, offset) => {
+      if (pos === -1 && n.type.name === "generated") pos = offset;
+    });
+    expect(pos).toBeGreaterThanOrEqual(0);
+    fireEvent.pointerDown(view.dom);
+    act(() => view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos))));
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: "Move to appendix" })).toBeNull();
   });
 
   it("Add new evidence says when there is nothing new", async () => {

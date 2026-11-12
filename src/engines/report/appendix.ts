@@ -108,8 +108,9 @@ export function suggestMoves(doc: ReportNode, data: ReportData): { key: string; 
         const n = keptLines(node, data);
         if (n > MAX_INLINE_LINES) out.push({ key: path, reason: `${n} lines of output` });
       } else if (node.type === "exploit") {
+        // An unmodified exploit is shown as its URL, never its code: nothing to move.
         const file = data.findingFiles.find((f) => f.id === attrs.fileId);
-        const n = file ? lineCount(file.content) : 0;
+        const n = file?.modified ? lineCount(file.content) : 0;
         if (n > MAX_INLINE_LINES) out.push({ key: path, reason: `${n} lines of exploit code` });
       } else if (node.type === "generated") {
         const g = attrs as unknown as GeneratedAttrs;

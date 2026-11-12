@@ -32,3 +32,4 @@ export { PickerTrigger, type PickerTriggerProps } from "./PickerTrigger";
 export { queryState, type QueryLike } from "./QueryState";
 export { highlight, rangesOf, MATCH_CLASS } from "./highlight";
 export { usePageShortcuts } from "./pageShortcuts";
+export { TimedNotice } from "./TimedNotice";

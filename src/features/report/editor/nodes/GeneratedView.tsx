@@ -269,7 +269,7 @@ export function GeneratedView({ node, selected, setAttrs }: ReactNodeViewProps) 
   const attrs = node.attrs as GeneratedAttrs;
   return (
     <Block selected={selected} kind="generated">
-      {selected && touched && (
+      {selected && touched && ctx.canMove && (
         <BlockTools>
           <MoveButton place={attrs.appendix} canSplit={false} onMove={(next) => setAttrs({ appendix: next })} />
         </BlockTools>

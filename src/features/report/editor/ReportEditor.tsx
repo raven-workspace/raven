@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { createEditor, Priority, type Editor, type NodeJSON } from "prosekit/core";
 import type { Node as PMNode } from "prosekit/pm/model";
 import { NodeSelection, type Command } from "prosekit/pm/state";
@@ -212,7 +212,9 @@ export function ReportEditor({
   );
   const [current, setCurrent] = useState<PMNode>(() => editor.state.doc);
   const figureOffset = value.figureOffset ?? 0;
-  const [pageTouched, setPageTouched] = useState(false);
+  // `touched` (what hasPageCursor reads) is the one record; this count only re-renders the page when it changes.
+  const [touches, countTouch] = useReducer((n: number) => n + 1, 0);
+  const pageTouched = touches > 0 && touched.has(editor);
   const layout = useMemo(
     () => layoutOf(current, value.data, sectionId, figureOffset, pageTouched),
     [current, value.data, sectionId, figureOffset, pageTouched],
@@ -237,8 +239,9 @@ export function ReportEditor({
     (el: HTMLDivElement) => {
       editor.mount(el);
       const mark = () => {
+        if (touched.has(editor)) return;
         touched.add(editor);
-        setPageTouched(true);
+        countTouch();
       };
       el.addEventListener("focusin", mark);
       el.addEventListener("pointerdown", mark);

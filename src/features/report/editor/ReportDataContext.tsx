@@ -17,6 +17,8 @@ export interface ReportDataValue {
   targetMeta?: Record<string, SectionMeta>;
   /** A screenshot's image loaded: its natural width, for the legibility check (view state, never stored). */
   onImageWidth?(entryId: string, width: number): void;
+  /** Blocks may move to an appendix: only on target and AD pages, the only ones with appendix pages (spec §5.6). Default false. */
+  canMove?: boolean;
 }
 
 export const ReportDataContext = createContext<ReportDataValue | null>(null);

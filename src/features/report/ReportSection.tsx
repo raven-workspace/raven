@@ -120,13 +120,20 @@ function countFigures(doc: ReportNode, data: ReportData): number {
 const MIN_PRINT_WIDTH = 600;
 
 /** Soft checks for screenshots on the page whose loaded image is too narrow to print legibly. */
-function legibilityChecks(doc: ReportNode, widths: Record<string, number>): Check[] {
+function legibilityChecks(doc: ReportNode, data: ReportData, widths: Record<string, number>): Check[] {
   const out: Check[] = [];
   const walk = (node: ReportNode) => {
     const id = node.type === "evidence" ? String(node.attrs?.entryId ?? "") : "";
     const width = widths[id];
     if (width !== undefined && width < MIN_PRINT_WIDTH && !out.some((c) => c.id === `legible:${id}`)) {
-      out.push({ id: `legible:${id}`, level: "soft", text: "A screenshot is narrower than would print legibly.", anchor: { entryId: id } });
+      const entry = data.log.find((e) => e.id === id);
+      const name = (entry?.content.kind === "screenshot" && entry.content.caption) || entry?.title || "A screenshot";
+      out.push({
+        id: `legible:${id}`,
+        level: "soft",
+        text: `The screenshot "${name}" is narrower than would print legibly. Retake it larger or crop it tighter.`,
+        anchor: { entryId: id },
+      });
     }
     node.content?.forEach(walk);
   };
@@ -145,6 +152,8 @@ function nodeAtPath(doc: ReportNode, path: string): ReportNode | null {
 interface AppendixPage {
   id: string;
   label: string;
+  /** The target as the appendix names it: "lnx02", "AD set (ad02, dc01)". */
+  name: string;
   entry: Entry;
   entries: AppendixEntry[];
 }
@@ -379,9 +388,15 @@ function ReportBody({
     (index: AppendixIndex): AppendixPage[] =>
       entries.flatMap((e) => {
         const list = e.target ? index.entries.filter((a) => a.sectionId === e.section.id) : [];
-        return list.length === 0 ? [] : [{ id: `${APPENDIX_ID}${e.section.id}`, label: `Appendix ${list[0].letter}: ${e.item.label}`, entry: e, entries: list }];
+        if (list.length === 0 || !e.target) return [];
+        // "lnx02", or "AD set (ad02, dc01)" for the AD set.
+        const name =
+          e.target.kind === "ad-set"
+            ? `AD set (${e.target.hostIds.map((id) => data.hosts.find((h) => h.id === id)?.name ?? "Host").join(", ")})`
+            : e.item.label;
+        return [{ id: `${APPENDIX_ID}${e.section.id}`, label: `Appendix ${list[0].letter}: ${name}`, name, entry: e, entries: list }];
       }),
-    [entries],
+    [entries, data],
   );
 
   // The open section: the one picked, else the first target, else the first item. An open appendix page has none.
@@ -433,7 +448,7 @@ function ReportBody({
     const doc = openLiveDoc ?? savedDocOf(openSection);
     return [
       ...targetChecks({ data, target: openTarget, doc, meta: reportMeta, appendixRefs: appendix, sectionId: openSection.id, coverage: openSectionMeta?.coverage }),
-      ...legibilityChecks(doc, shotWidths),
+      ...legibilityChecks(doc, data, shotWidths),
     ];
   }, [openTarget, openSection, data, openLiveDoc, savedDocOf, reportMeta, appendix, openSectionMeta, shotWidths]);
   const checks = useMemo(
@@ -661,8 +676,10 @@ function ReportBody({
 
   const contextValue = useMemo(
     (): ReportDataValue | null =>
-      openSectionMeta ? { data, appendix, sectionMeta: openSectionMeta, onRemoveEvidence, reportMeta, targetMeta, figureOffset, onImageWidth } : null,
-    [data, appendix, openSectionMeta, onRemoveEvidence, reportMeta, targetMeta, figureOffset, onImageWidth],
+      openSectionMeta
+        ? { data, appendix, sectionMeta: openSectionMeta, onRemoveEvidence, reportMeta, targetMeta, figureOffset, onImageWidth, canMove: Boolean(openTarget) }
+        : null,
+    [data, appendix, openSectionMeta, onRemoveEvidence, reportMeta, targetMeta, figureOffset, onImageWidth, openTarget],
   );
 
   const notStarted = open?.target && stateOf(open.target, open.section.id) === "not-started";
@@ -670,7 +687,7 @@ function ReportBody({
     <AppendixSection
       key={openAppendix.id}
       title={openAppendix.label}
-      source={openAppendix.entry.item.label}
+      source={openAppendix.name}
       entries={openAppendix.entries.flatMap((a): AppendixPageEntry[] => {
         const path = a.key.slice(openAppendix.entry.section.id.length + 1);
         const node = nodeAtPath(savedDocOf(openAppendix.entry.section), path);

@@ -48,7 +48,11 @@ describe("suggestMoves", () => {
       { id: "long", kind: "command", private: false, hostIds: ["h1"], content: { kind: "command", blocks: [{ command: "nmap x", output: lines(100) }] } },
       { id: "short", kind: "command", private: false, hostIds: ["h1"], content: { kind: "command", blocks: [{ command: "id", output: lines(10) }] } },
     ],
-    findingFiles: [{ id: "f1", content: lines(80) }, { id: "f2", content: lines(5) }],
+    findingFiles: [
+      { id: "f1", content: lines(80), modified: true },
+      { id: "f2", content: lines(5), modified: true },
+      { id: "f3", content: lines(80), modified: false },
+    ],
   } as unknown as ReportData;
 
   it("flags long kept output, long exploits, and not short ones or already-moved nodes", () => {
@@ -61,5 +65,10 @@ describe("suggestMoves", () => {
       { type: "exploit", attrs: { fileId: "f2", markedLines: [], appendix: "inline" } },
     );
     expect(suggestMoves(d, data).map((s) => s.key)).toEqual(["0", "4"]);
+  });
+
+  it("never flags an unmodified exploit: the page shows it as its URL, never its code", () => {
+    const d = doc({ type: "exploit", attrs: { fileId: "f3", markedLines: [], appendix: "inline" } });
+    expect(suggestMoves(d, data)).toEqual([]);
   });
 });

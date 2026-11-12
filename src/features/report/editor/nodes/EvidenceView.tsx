@@ -12,6 +12,15 @@ import { AppendixRef, Block, BlockTools, Gone, MoveButton } from "./parts";
 
 const NO_MACHINES: string[] = [];
 
+/** What a moved block's one-line reference calls the content it points at. */
+const REF_LABEL: Record<LogEntry["content"]["kind"], string> = {
+  command: "Full output",
+  screenshot: "Screenshot",
+  flag: "Screenshot",
+  http: "Full request",
+  note: "Full note",
+};
+
 /** `kali$` for the attacker's machines (Settings), else the machine the command ran on (`DC01$`). */
 function promptFor(ranOn: string | null, machines: string[]): string {
   if (!ranOn) return "$";
@@ -70,7 +79,8 @@ function CommandBody({
               </div>
             );
             if (!mode || !onLine) return text;
-            const on = mode === "trim" ? kept === null || kept.has(n) : emphasis.has(n);
+            // With nothing trimmed yet, no line reads as picked: the first click keeps one line.
+            const on = mode === "trim" ? kept !== null && kept.has(n) : emphasis.has(n);
             return (
               <div className="report-pick" key={k}>
                 <button
@@ -197,12 +207,18 @@ export function FullEvidence({ attrs }: { attrs: EvidenceAttrs }) {
  * it shows its tools: Trim and Emphasise lines (command output), Move to appendix, Remove.
  */
 export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNodeViewProps) {
-  const { data, onRemoveEvidence } = useReportData();
+  const { data, onRemoveEvidence, canMove = false } = useReportData();
   const { figureOf, touched } = usePageLayout();
   const ref = useAppendixRef(node);
   const machines = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet }).data?.machines ?? NO_MACHINES;
   const tools = selected && touched;
   const [picking, setPicking] = useState<PickMode>(null);
+  // Picking ends when the block's tools hide (deselected), so it doesn't come back on the next selection.
+  const [hadTools, setHadTools] = useState(tools);
+  if (hadTools !== tools) {
+    setHadTools(tools);
+    if (!tools) setPicking(null);
+  }
   const lastLine = useRef<number | null>(null);
   const attrs = node.attrs as EvidenceAttrs;
   const entry = data.log.find((e) => e.id === attrs.entryId);
@@ -234,10 +250,11 @@ export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNo
     view.focus();
   };
 
+  const refLabel = REF_LABEL[shown?.content.kind ?? "command"];
   let body;
   if (!entry) body = <Gone text="This entry was deleted" />;
   else if (entry.private) body = <Gone text="This entry is now private" />;
-  else if (attrs.appendix === "moved") body = <AppendixRef label="Full output" refText={ref} />;
+  else if (attrs.appendix === "moved") body = <AppendixRef label={refLabel} refText={ref} />;
   else {
     body = (
       <EntryBody entry={entry} attrs={attrs} figure={figureOf(node)} prompt={promptFor(entry.ranOn, machines)} mode={mode} onLine={onLine} />
@@ -246,7 +263,7 @@ export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNo
       body = (
         <>
           {body}
-          <AppendixRef label="Full output" refText={ref} />
+          <AppendixRef label={refLabel} refText={ref} />
         </>
       );
   }
@@ -254,11 +271,14 @@ export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNo
     <Block selected={selected} kind="evidence">
       {tools && (
         <BlockTools>
-          {mode === "trim" && (
-            <Button size="sm" onClick={() => setAttrs({ keep: null })}>
-              Keep all
-            </Button>
-          )}
+          {mode === "trim" &&
+            (attrs.keep === null ? (
+              <span className="px-2 text-meta text-muted-2">Pick the lines to keep</span>
+            ) : (
+              <Button size="sm" onClick={() => setAttrs({ keep: null })}>
+                Keep all
+              </Button>
+            ))}
           {isCommand && (
             <>
               <IconButton icon={Scissors} label="Trim" active={mode === "trim"} disabled={attrs.appendix === "moved"} onClick={() => pickMode("trim")} />
@@ -271,7 +291,7 @@ export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNo
               />
             </>
           )}
-          {shown && <MoveButton place={attrs.appendix} canSplit={isCommand} onMove={(next) => setAttrs({ appendix: next })} />}
+          {shown && canMove && <MoveButton place={attrs.appendix} canSplit={isCommand} onMove={(next) => setAttrs({ appendix: next })} />}
           <IconButton icon={Trash} label="Remove" shortcut="⌫" tone="destructive" onClick={remove} />
         </BlockTools>
       )}
