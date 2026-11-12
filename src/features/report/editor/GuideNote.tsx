@@ -31,7 +31,7 @@ export function GuideNote({ id, onHide, onHideAll }: { id: GuideId; onHide(): vo
       <button
         type="button"
         onClick={onHideAll}
-        className="col-span-2 justify-self-start rounded-sm border-0 bg-transparent p-0 text-meta text-muted underline-offset-2 cursor-default hover:text-fg hover:underline focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+        className="col-span-2 min-h-6 justify-self-start rounded-sm border-0 bg-transparent p-0 text-meta text-muted underline-offset-2 cursor-default hover:text-fg hover:underline focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
       >
         Hide all guide notes
       </button>

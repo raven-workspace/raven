@@ -277,7 +277,7 @@ export function ReportTabs({
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center border-b border-line">
       <div ref={scroller} className="min-w-0 overflow-x-auto overflow-y-hidden">
-        <div className="grid grid-flow-col auto-cols-max items-center justify-start gap-2 py-1 pl-4 pr-4">
+        <div className="grid w-max min-w-full grid-flow-col auto-cols-max items-center justify-start gap-2 py-1 pl-4 pr-4">
           <div ref={listRef} role="tablist" aria-label="Report pages" onKeyDown={onKeyDown} className="relative isolate grid grid-flow-col auto-cols-max items-stretch gap-1">
             <TabMarker className={TAB_MARK} />
             {tabs.map((t) =>
