@@ -540,9 +540,9 @@ OffSec's own sample report (v2.0; owner's copy at `a file outside the repo`) rep
 
 **Walkthrough style:** the prose slot comes **before** each step ("what you're about to do and why"), as in the sample, not after. Only steps get a slot; consecutive evidence from the same step (a command and its screenshot) shares one slot. Screenshots keep "Figure N." captions.
 
-**Migration of existing drafts:** documents already saved keep working: the renderer must accept the old node layout. A **Rebuild layout** action per section (confirm + undo) rebuilds the structure around the owner's existing text: owner-written slot text is carried over in order (never dropped).
+**Existing drafts:** the owner confirmed (2026-11-11) nothing written so far needs keeping. Store a draft layout version in SectionMeta (`layout: 2`); a section saved with an older or missing layout is rebuilt from scratch the first time it opens. No carry-over of old text, no compatibility rendering for the old layout.
 
-- [ ] Steps: update spec §4.3/§5.2/§5.4/§5.5/§5.7 to this structure; failing engine tests for the new draft layout (numbering, phase titles from findings, local/proof placement, post-exploitation split, slim tested lines, port scan table, slot-before-step, no auto appendices); renderer tests (labelled vuln lines, port scan table, numbered headings); Rebuild layout carries owner text; full gate; re-shoot `audit-output/report-result/` in WebKit 1400 and compare page by page against the sample PDF; commit.
+- [ ] Steps: update spec §4.3/§5.2/§5.4/§5.5/§5.7 to this structure; failing engine tests for the new draft layout (numbering, phase titles from findings, local/proof placement, post-exploitation split, slim tested lines, port scan table, slot-before-step, no auto appendices); renderer tests (labelled vuln lines, port scan table, numbered headings); old-layout sections rebuild on open; full gate; re-shoot `audit-output/report-result/` in WebKit 1400 and compare page by page against the sample PDF; commit.
 
 ---
 
