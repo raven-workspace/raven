@@ -7,6 +7,7 @@ import {
   endOfPhase,
   evidenceBlocks,
   evidenceNodes,
+  MAX_INLINE_LINES,
   type AppendixPlacement,
   type DocPath,
   type ReportData,
@@ -168,19 +169,32 @@ export function pathPos(doc: PMNode, path: DocPath): number | null {
   return at;
 }
 
-/** `nodes` with the entry's evidence blocks (at any depth) set to `place`. */
-function withAppendix(nodes: ReportNode[], entryId: string, place: AppendixPlacement): ReportNode[] {
+/** Lines in an output, as the rail counts them (a trailing newline ends the last line, it opens none). */
+const outputLines = (text: string) => (text === "" ? 0 : text.replace(/\n$/, "").split(/\r?\n/).length);
+
+/** Whether an evidence block of `entry` prints more than `MAX_INLINE_LINES` lines of output. */
+function tooLong(entry: LogEntry, attrs: Record<string, unknown> | undefined): boolean {
+  if (entry.content.kind !== "command") return false;
+  const block = typeof attrs?.block === "number" ? attrs.block : null;
+  const blocks = block === null ? entry.content.blocks : entry.content.blocks.slice(block, block + 1);
+  return blocks.some((b) => outputLines(b.output ?? "") > MAX_INLINE_LINES);
+}
+
+/** `nodes` with the entry's evidence blocks (at any depth) that are too long to print set to `place`; the rest of
+ *  its blocks stay inline. */
+function withAppendix(nodes: ReportNode[], entry: LogEntry, place: AppendixPlacement): ReportNode[] {
   return nodes.map((n) => ({
     ...n,
-    ...(n.type === "evidence" && n.attrs?.entryId === entryId ? { attrs: { ...n.attrs, appendix: place } } : {}),
-    ...(n.content ? { content: withAppendix(n.content, entryId, place) } : {}),
+    ...(n.type === "evidence" && n.attrs?.entryId === entry.id && tooLong(entry, n.attrs) ? { attrs: { ...n.attrs, appendix: place } } : {}),
+    ...(n.content ? { content: withAppendix(n.content, entry, place) } : {}),
   }));
 }
 
 /**
  * The rail's + add (§10.1): the entry's evidence into the step that holds the cursor (no new step; `cursor` says the
  * owner has put one on the page), else a new step at the end of its phase (`endOfPhase`). + to appendix (`toAppendix`)
- * places it the same way with its evidence split: trimmed inline, in full in the appendix. One undoable step.
+ * places it the same way with its long evidence split (trimmed inline, in full in the appendix); its short blocks stay
+ * inline. One undoable step.
  */
 export function addEntryCommand(
   state: EditorState,
@@ -190,7 +204,7 @@ export function addEntryCommand(
   entry: LogEntry,
   toAppendix = false,
 ): Command {
-  const finish = (nodes: ReportNode[]) => (toAppendix ? withAppendix(nodes, entry.id, "split") : nodes).map((n) => state.schema.nodeFromJSON(n));
+  const finish = (nodes: ReportNode[]) => (toAppendix ? withAppendix(nodes, entry, "split") : nodes).map((n) => state.schema.nodeFromJSON(n));
   const inStep = cursor ? insertIntoCurrentStep(state, finish(evidenceBlocks(entry))) : null;
   if (inStep) return inStep;
   return (s, dispatch) => {

@@ -301,6 +301,24 @@ describe("Evidence rail: the log column", () => {
     expect((await shapeOf(editor)).slice(6, 8)).toEqual(["phase:privesc", "steps:[winpeas run]"]);
   });
 
+  it("+ to appendix splits only the blocks too long to print; the short ones stay inline", async () => {
+    await seed();
+    const multi = await api.logCreate("e-exam", {
+      ...cmd("enum script", "id", { at: 3_600 }),
+      content: { kind: "command", blocks: [{ command: "id", output: "uid=1001(svc_web)" }, { command: "./linpeas.sh", output: WINPEAS_OUT }] },
+    });
+    mount();
+    await ready();
+    const editor = editors[0];
+    fireEvent.click(within(row("enum script")).getByRole("button", { name: "Add enum script to appendix" }));
+    const placed: Record<string, unknown>[] = [];
+    editor.state.doc.descendants((n) => void (n.type.name === "evidence" && n.attrs.entryId === multi.id && placed.push(n.attrs)));
+    expect(placed.map((a) => [a.block, a.appendix])).toEqual([
+      [0, "inline"],
+      [1, "split"],
+    ]);
+  });
+
   it("a failed attempt's row says it is in Also tested", async () => {
     await seed();
     mount();
