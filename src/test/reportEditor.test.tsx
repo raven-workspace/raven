@@ -102,17 +102,24 @@ describe("ReportEditor evidence", () => {
       { command: "whoami", output: "corp\\bob", shell: "evil-winrm" },
       { command: "hostname", output: "DC01", shell: "powershell" },
       { command: "id", output: "uid=0", shell: "sh" },
+      { command: "whoami", output: "nt authority\\system", shell: "cmd" },
+      { command: "id", output: "uid=0(root)", shell: "root@web01" },
+      { command: "id", output: "uid=1000(dev)", shell: "dev@web01" },
     ];
     const { container } = setup(doc(ev("e1", { block: null })), data({ log: [entry({ content: { kind: "command", blocks } })] }));
-    await waitFor(() => expect(container.querySelectorAll(".report-cmd")).toHaveLength(4));
+    await waitFor(() => expect(container.querySelectorAll(".report-cmd")).toHaveLength(7));
     // The attacker's machines come from Settings, so the entry's own prompt settles once they load.
     await waitFor(() => expect(container.querySelectorAll(".report-cmd")[3]).toHaveTextContent("kali$ id"));
     expect([...container.querySelectorAll(".report-cmd")].map((n) => n.textContent)).toEqual([
-      "kali@kali$ evil-winrm -i 10.0.0.5 -u bob -p x",
+      // The attacker's own shell reads as the entry prompt does ("Kali (VM)" in Settings names kali).
+      "kali$ evil-winrm -i 10.0.0.5 -u bob -p x",
       "*Evil-WinRM* PS> whoami",
       "PS> hostname",
       // A plain shell prompt says nothing more than the entry's machine.
       "kali$ id",
+      "C:\\> whoami",
+      "root@web01# id",
+      "dev@web01$ id",
     ]);
   });
 

@@ -95,6 +95,8 @@ test("report: ms01's proof passes its checks", async ({ page }) => {
   await page.locator(".report-page .report-code").first().waitFor();
   const checks = await reportChecks(page);
   await expect(checks).toBeVisible();
+  // The list is the real one: the silent download step's check is on it.
+  await expect(checks.getByText("A command on the page has no output.")).toBeVisible();
   // ipconfig with 10.10.30.5, whoami, hostname, type from the Desktop, a screenshot: no proof check is left.
   await expect(checks.getByText(/proof/i)).toHaveCount(0);
   await expect(checks.getByText(/No (local|proof)\.txt/)).toHaveCount(0);
@@ -117,4 +119,42 @@ test("report: an OSID that is not OS- and digits turns the file name amber", asy
   // The warn tone: #e0a030.
   await expect.poll(amber).toBe("rgb(224, 160, 48)");
   expect(before).not.toBe("rgb(224, 160, 48)");
+});
+
+// Private items of the mock exam: a private entry, an operator attempt, a private ruled-out item, a finding's lessons,
+// a private note. None may show on any page, check or evidence tab.
+const PRIVATE_TEXT = [
+  "Reused a password from my lab notes", "Lab-Notes-Pass1!",
+  "Ran the 32-bit PrintSpoofer build", "Picked the wrong binary",
+  "The sa password is the Umbraco one", "Hunch only",
+  "Read every file feroxbuster finds",
+  "Felt slow on this one",
+];
+
+test("report: nothing private shows on any page, check or evidence tab", async ({ page }) => {
+  // Every page, every tab, every string: slower than one screen.
+  test.setTimeout(120_000);
+  // Wide enough for the outline and the evidence rail to sit beside the page.
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.clock.install({ time: AUDIT_NOW });
+  await page.goto("/e/e-exam/s/report");
+  const rows = page.locator("[data-outline-row]");
+  await rows.first().waitFor();
+  const labels = await rows.evaluateAll((els) => els.map((e) => e.getAttribute("data-id")!));
+  expect(labels.length).toBeGreaterThan(10);
+  const rail = page.getByRole("tablist", { name: "Evidence" });
+  // A public item from the same sources does show: the search below would find a private one.
+  let publicSeen = 0;
+  for (const id of labels) {
+    await page.locator(`[data-outline-row][data-id='${id}']`).click();
+    await page.locator(".report-page").or(page.getByLabel("OSID")).first().waitFor();
+    const tabs = rail.getByRole("tab");
+    const count = await tabs.count();
+    for (let t = 0; t < Math.max(1, count); t++) {
+      if (count > 0) await tabs.nth(t).click();
+      for (const text of PRIVATE_TEXT) await expect(page.getByText(text), `${text} on ${id}, tab ${t}`).toHaveCount(0);
+      publicSeen += await page.getByText("Anonymous access is refused").count();
+    }
+  }
+  expect(publicSeen).toBeGreaterThan(0);
 });

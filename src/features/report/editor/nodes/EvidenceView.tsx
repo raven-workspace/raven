@@ -28,13 +28,34 @@ function promptFor(ranOn: string | null, machines: string[]): string {
   return `${ranOn}$`;
 }
 
-/** A pasted block's own shell, when the paste recorded one (`evil-winrm`, `powershell`, `user@host`), else the entry's prompt. */
-function blockPrompt(shell: string | undefined, entryPrompt: string): string {
+/** Whether a pasted `user@host` prompt's host is one of the attacker's machines (Settings), as "Kali (VM)" names "kali". */
+const isAttacker = (host: string, machines: string[]) =>
+  machines.some((m) => {
+    const name = m.toLowerCase();
+    return name === host.toLowerCase() || name.split(/[\s(]/)[0] === host.toLowerCase();
+  });
+
+/**
+ * A pasted block's own shell, when the paste recorded one, else the entry's prompt: `*Evil-WinRM* PS>`, `PS>`, `C:\>`
+ * for cmd (the paste keeps no folder), `user@host$` (`#` for root), and the attacker's own shell as `kali$` like the
+ * entry prompt beside it.
+ */
+function blockPrompt(shell: string | undefined, entryPrompt: string, machines: string[]): string {
   if (!shell || shell === "sh") return entryPrompt;
   if (shell === "evil-winrm") return "*Evil-WinRM* PS>";
   if (shell === "powershell") return "PS>";
-  return `${shell}$`;
+  if (shell === "cmd") return "C:\\>";
+  const [user, host = ""] = shell.split("@");
+  const end = user === "root" ? "#" : "$";
+  return isAttacker(host, machines) ? `kali${end}` : `${shell}${end}`;
 }
+
+/** Each block's prompt: its own shell when the paste recorded one, else the entry's. */
+type Prompt = (shell?: string) => string;
+const promptsFor = (ranOn: string | null, machines: string[]): Prompt => {
+  const entry = promptFor(ranOn, machines);
+  return (shell) => blockPrompt(shell, entry, machines);
+};
 
 /** How the owner is picking lines on a selected command block, if at all. */
 type PickMode = "trim" | "emphasis" | null;
@@ -53,7 +74,7 @@ function CommandBody({
 }: {
   blocks: CommandBlock[];
   attrs: EvidenceAttrs;
-  prompt: string;
+  prompt: Prompt;
   mode?: PickMode;
   onLine?(n: number, shift: boolean): void;
 }) {
@@ -70,7 +91,7 @@ function CommandBody({
     return (
       <div className="report-code" key={i}>
         <div className="report-cmd">
-          <span className="report-prompt">{blockPrompt(b.shell, prompt)}</span> {b.command}
+          <span className="report-prompt">{prompt(b.shell)}</span> {b.command}
         </div>
         {output !== "" &&
           applyKeep(output, keep).map((item, k) => {
@@ -166,7 +187,7 @@ function EntryBody({
   entry: LogEntry;
   attrs: EvidenceAttrs;
   figure: number | null;
-  prompt: string;
+  prompt: Prompt;
   mode?: PickMode;
   onLine?(n: number, shift: boolean): void;
 }) {
@@ -207,7 +228,7 @@ export function FullEvidence({ attrs }: { attrs: EvidenceAttrs }) {
   const entry = data.log.find((e) => e.id === attrs.entryId);
   if (!entry) return <Gone text="This entry was deleted" />;
   if (entry.private) return <Gone text="This entry is now private" />;
-  return <EntryBody entry={entry} attrs={{ ...attrs, keep: null }} figure={null} prompt={promptFor(entry.ranOn, machines)} />;
+  return <EntryBody entry={entry} attrs={{ ...attrs, keep: null }} figure={null} prompt={promptsFor(entry.ranOn, machines)} />;
 }
 
 /**
@@ -265,7 +286,7 @@ export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNo
   else if (attrs.appendix === "moved") body = <AppendixRef label={refLabel} refText={ref} />;
   else {
     body = (
-      <EntryBody entry={entry} attrs={attrs} figure={figureOf(node)} prompt={promptFor(entry.ranOn, machines)} mode={mode} onLine={onLine} />
+      <EntryBody entry={entry} attrs={attrs} figure={figureOf(node)} prompt={promptsFor(entry.ranOn, machines)} mode={mode} onLine={onLine} />
     );
     if (attrs.appendix === "split")
       body = (

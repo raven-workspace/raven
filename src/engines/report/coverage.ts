@@ -66,7 +66,8 @@ export interface ExploitedSystem {
   hostId: string;
   name: string;
   ip: string | null;
-  access: "user" | "root" | "none";
+  /** The access reached, as the report words it: "user", "SYSTEM" on Windows, else "root". */
+  access: "user" | "SYSTEM" | "root";
   method: string;
 }
 
@@ -83,7 +84,8 @@ export function exploitedSystems(
       if (!host || host.access === "none") return [];
       const method =
         sectionMeta[t.key]?.method ?? data.findings.find((f) => f.hostIds.includes(id))?.title ?? "";
-      return [{ hostId: id, name: host.name, ip: host.ip, access: host.access, method }];
+      const access = host.access === "user" ? "user" : host.os === "windows" ? "SYSTEM" : "root";
+      return [{ hostId: id, name: host.name, ip: host.ip, access, method }];
     }),
   );
 }

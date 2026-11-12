@@ -70,6 +70,12 @@ describe("exploitedSystems", () => {
     expect(exploitedSystems(data(), t, {})[0]).toMatchObject({ name: "web01", access: "root", method: "RCE in app" });
     expect(exploitedSystems(data(), t, { [H]: { method: "Manual" } })[0].method).toBe("Manual");
   });
+  it("words full access as SYSTEM on Windows and root elsewhere", () => {
+    const d = data();
+    d.hosts = [{ id: H, name: "web01", ip: "10.0.0.5", access: "root", os: "windows" }] as never;
+    const t = [{ key: H, kind: "standalone" as const, hostIds: [H] }];
+    expect(exploitedSystems(d, t, {})[0].access).toBe("SYSTEM");
+  });
   it("lists only hosts where access was gained", () => {
     const t = [{ key: "ad-set", kind: "ad-set" as const, hostIds: [H, "h2"] }];
     expect(exploitedSystems(data(), t, {}).map((r) => r.name)).toEqual(["web01"]);

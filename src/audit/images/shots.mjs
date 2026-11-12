@@ -1,14 +1,15 @@
-// Renders the mock exam's screenshots (terminal windows and one browser page) from src/audit/examTexts.ts into
-// shots/<key>.png, then runs make.py, which embeds them in index.ts. Synthetic text only.
+// Renders the mock exam's screenshots (terminal windows and one browser page) from src/audit/examTexts.ts into a
+// temporary folder, then runs make.py, which embeds them in index.ts (the only stored copy). Synthetic text only.
 // Run: node --experimental-strip-types src/audit/images/shots.mjs
 import { execFileSync } from "node:child_process";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { EXAM_SHOTS } from "../examTexts.ts";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
-const OUT = `${HERE}shots/`;
+
 
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -46,8 +47,7 @@ const CSS = `
   .muted { margin: 0; font-size: 12px; color: #6b6b75; }
 `;
 
-await rm(OUT, { recursive: true, force: true });
-await mkdir(OUT, { recursive: true });
+const OUT = `${await mkdtemp(`${tmpdir()}/raven-shots-`)}/`;
 const browser = await chromium.launch();
 const tab = await browser.newPage({ viewport: { width: 920, height: 600 }, deviceScaleFactor: 1 });
 for (const [key, shot] of Object.entries(EXAM_SHOTS)) {
@@ -55,4 +55,5 @@ for (const [key, shot] of Object.entries(EXAM_SHOTS)) {
   await tab.locator(".win").screenshot({ path: `${OUT}${key}.png` });
 }
 await browser.close();
-execFileSync("python3", [`${HERE}make.py`], { stdio: "inherit" });
+execFileSync("python3", [`${HERE}make.py`, OUT], { stdio: "inherit" });
+await rm(OUT, { recursive: true, force: true });

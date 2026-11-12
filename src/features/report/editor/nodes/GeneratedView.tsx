@@ -189,11 +189,7 @@ function Content({ attrs, ctx, attackerIp }: { attrs: GeneratedAttrs; ctx: Repor
     case "exploited-systems": {
       const rows = exploitedSystems(data, targets, ctx.targetMeta ?? {});
       if (rows.length === 0) return <None />;
-      const access = (hostId: string) => {
-        const h = data.hosts.find((x) => x.id === hostId);
-        return h ? accessWords(h) : "";
-      };
-      return <Table head={["Target", "IP", "Access", "Method"]} fit={[1]} rows={rows.map((r) => [r.name, r.ip ?? "", access(r.hostId), r.method])} />;
+      return <Table head={["Target", "IP", "Access", "Method"]} fit={[1]} rows={rows.map((r) => [r.name, r.ip ?? "", r.access, r.method])} />;
     }
     case "severity-legend":
       return (
