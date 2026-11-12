@@ -16,7 +16,7 @@ import {
 import { openThreads } from "../../engines/notes/threads";
 import { detectAndParseScan } from "../../engines/parse/scan";
 import { cx } from "../../lib/cx";
-import { isDialogOpen } from "../../lib/keys";
+import { isDialogOpen, isTypingTarget } from "../../lib/keys";
 import type { Credential } from "../../types/credentials";
 import type { LogEntry } from "../../types/log";
 import { BELOW_TITLE_BAR, Button, IconButton, labelClass, Tooltip, useDrawerPresence } from "../../ui";
@@ -411,6 +411,11 @@ export function EvidenceRail({
   );
 }
 
+/** Whether a menu, a list or a Radix popover is open: Esc closes that first. ProseKit keeps its closed menus and
+ *  lists in the DOM, marked closed. */
+const popupOpen = () =>
+  document.querySelector(':is([role="menu"], [role="listbox"]):not([data-state="closed"], [hidden]), [data-radix-popper-content-wrapper]') !== null;
+
 /** The rail as a drawer from the right edge (under 1200px): E or the strip button toggles it, Esc and the X close it. */
 export function EvidenceDrawer({
   open,
@@ -445,7 +450,8 @@ export function EvidenceDrawer({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented || isDialogOpen()) return;
+      // Esc meant for something else stays its: typing in a field or the page, an open menu, list or popover.
+      if (e.key !== "Escape" || e.defaultPrevented || isDialogOpen() || isTypingTarget(e.target) || popupOpen()) return;
       e.preventDefault();
       close.current();
     };

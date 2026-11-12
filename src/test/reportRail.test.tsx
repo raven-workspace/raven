@@ -436,4 +436,42 @@ describe("Evidence rail: the log column", () => {
     await waitFor(() => expect(screen.queryByRole("tab", { name: /Unused/ })).not.toBeInTheDocument());
     act(() => useNotesStore.setState({ open: false }));
   });
+
+  it("Esc meant for a field, a menu, a list or a popover leaves the drawer open", async () => {
+    await seed();
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const w = this.getAttribute("aria-label") === "Report" ? 1100 : 0;
+      return { width: w, height: 0, top: 0, left: 0, right: w, bottom: 0, x: 0, y: 0, toJSON: () => ({}) };
+    });
+    mount();
+    await waitFor(() => expect(editors.length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("button", { name: "Evidence" }));
+    expect(await screen.findByRole("tab", { name: /Unused/ })).toBeInTheDocument();
+    const drawerOpen = () => screen.queryByRole("complementary", { name: "Evidence" }) !== null;
+
+    // Typing: a text field, a textarea, the page itself.
+    const input = document.createElement("input");
+    const area = document.createElement("textarea");
+    document.body.append(input, area);
+    for (const target of [input, area, editors[0].view.dom]) {
+      fireEvent.keyDown(target, { key: "Escape" });
+      expect(drawerOpen()).toBe(true);
+    }
+    input.remove();
+    area.remove();
+
+    // An open menu, list or Radix popover hears it instead.
+    for (const attrs of [{ role: "menu" }, { role: "listbox" }, { "data-radix-popper-content-wrapper": "" }]) {
+      const popup = document.createElement("div");
+      for (const [k, v] of Object.entries(attrs)) popup.setAttribute(k, v);
+      document.body.append(popup);
+      fireEvent.keyDown(window, { key: "Escape" });
+      expect(drawerOpen()).toBe(true);
+      popup.remove();
+    }
+
+    // Nothing else open (the page's closed ProseKit menus and lists stay in the DOM, marked closed): Esc closes it.
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(drawerOpen()).toBe(false));
+  });
 });
