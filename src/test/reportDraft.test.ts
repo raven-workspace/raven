@@ -353,6 +353,19 @@ describe("buildTargetDraft", () => {
       expect(lines[lines.indexOf("# privesc") + 1]).toBe("V:potato");
     });
 
+    it("never lets a privilege escalation finding open Initial Access on severity, even when Privilege Escalation has its own", () => {
+      const d = windowsHost();
+      d.findings = [
+        f("linked", { severity: "high", title: "Unquoted service path", stepEntryIds: ["whoami", "printspoofer"] }),
+        f("potato", { severity: "critical", title: "SeImpersonatePrivilege to SYSTEM" }),
+        f("rce", { severity: "medium", title: "File upload to RCE" }),
+      ];
+      const lines = outline(buildTargetDraft(d, target([H]), {}));
+      expect(lines[lines.indexOf("# foothold") + 1]).toBe("V:rce");
+      expect(lines[lines.indexOf("# privesc") + 1]).toBe("V:linked");
+      expect(lines.indexOf("V:potato")).toBeGreaterThan(lines.indexOf("# additional"));
+    });
+
     it("puts a new step under the finding it belongs to, not the phase's last finding", () => {
       const d = windowsHost();
       d.findings = [f("f1", { stepEntryIds: ["ferox", "late"] }), f("f2", { stepEntryIds: ["curl"] })];

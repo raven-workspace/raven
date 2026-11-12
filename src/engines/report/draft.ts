@@ -270,7 +270,8 @@ const readsPrivesc = (f: Finding) => PRIVESC_WORDS.test([f.title, f.description 
  * such step, and observations (info, low), enabled none: they are Additional findings. One exception keeps findings
  * that were never linked to their steps (imported ones) in the story: an entry phase or privilege escalation with no
  * finding takes the most severe unlinked medium-or-worse finding whose words fit it (privilege escalation words:
- * SeImpersonate, sudo, SUID…); among equals, the one whose words fit, then the oldest.
+ * SeImpersonate, sudo, SUID…; the entry phase takes only findings without them), then the oldest. Words come before
+ * severity: a privilege escalation finding never opens the entry phase.
  */
 function findingPhases(
   findings: Finding[],
@@ -285,16 +286,17 @@ function findingPhases(
     out.set(f.id, !isObservation(f) && steps.length > 0 ? split.get(steps[0])! : null);
   }
   const unlinked = findings.filter((f) => !isObservation(f) && f.severity != null && f.stepEntryIds.length === 0);
+  const twoPhases = second !== entryPhase;
+  // Phase words before severity: a finding that reads as privilege escalation only ever opens Privilege Escalation
+  // (when the host has one), whatever its severity, even when that phase already has its own finding.
   const fill = (phase: Phase, privesc: boolean) => {
     if ([...out.values()].includes(phase)) return;
-    const fits = (f: Finding) => readsPrivesc(f) === privesc;
     const pick = unlinked
-      .filter((f) => out.get(f.id) == null && (privesc ? fits(f) : true))
-      .sort((a, b) => severityRank(a) - severityRank(b) || Number(fits(b)) - Number(fits(a)) || a.createdAt - b.createdAt)[0];
+      .filter((f) => out.get(f.id) == null && (!twoPhases || readsPrivesc(f) === privesc))
+      .sort((a, b) => severityRank(a) - severityRank(b) || a.createdAt - b.createdAt)[0];
     if (pick) out.set(pick.id, phase);
   };
-  // Privilege escalation first, so a privesc-worded finding never opens the entry phase when another one could.
-  if (second !== entryPhase) fill(second, true);
+  if (twoPhases) fill(second, true);
   fill(entryPhase, false);
   return out;
 }

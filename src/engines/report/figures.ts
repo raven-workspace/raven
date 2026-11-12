@@ -11,8 +11,28 @@ export function isFigure(node: { type: string; attrs?: Record<string, unknown> }
   return entry.content.kind === "screenshot" || (entry.content.kind === "flag" && !!entry.content.attachmentId);
 }
 
-/** A figure's caption: the one written on the page (the node's `caption`), else the log's caption, else the entry's title. */
-export function captionOf(attrs: Record<string, unknown> | undefined, entry: LogEntry): string {
+/** A caption that says nothing: empty, or the bare "Screenshot" an uncaptioned paste is titled. */
+export const isWeakCaption = (caption: string) => /^\s*(?:screenshot)?\s*$/i.test(caption);
+
+/**
+ * A figure's caption: the one written on the page (the node's `caption`), else the log's caption, else the entry's
+ * title; for an uncaptioned screenshot (titled just "Screenshot"), the title of the step it tags along with
+ * (`stepTitle`) when there is one.
+ */
+export function captionOf(attrs: Record<string, unknown> | undefined, entry: LogEntry, stepTitle?: string | null): string {
   if (typeof attrs?.caption === "string") return attrs.caption;
-  return (entry.content.kind === "screenshot" && entry.content.caption) || entry.title;
+  const own = (entry.content.kind === "screenshot" && entry.content.caption) || entry.title;
+  return isWeakCaption(own) && stepTitle?.trim() ? stepTitle.trim() : own;
+}
+
+/** The step a screenshot at `index` of the page's top-level blocks tags along with: the nearest evidence block above
+ *  it, past other screenshots, whose entry is not a screenshot. */
+export function stepTitleBefore(content: { type: string; attrs?: Record<string, unknown> }[], index: number, entryOf: (id: string) => LogEntry | undefined): string | null {
+  for (let i = index - 1; i >= 0; i--) {
+    const n = content[i];
+    if (n.type !== "evidence") return null;
+    const e = entryOf(String(n.attrs?.entryId));
+    if (e && e.kind !== "screenshot") return e.title;
+  }
+  return null;
 }

@@ -98,6 +98,22 @@ describe("serviceCoverage from real work", () => {
     expect(at(d, 8443).result).toBe("untested");
     expect(requestPort("GET https://10.0.0.5/ HTTP/1.1")).toBe(443);
     expect(requestPort("GET / HTTP/1.1\nHost: web01")).toBe(80);
+    expect(requestPort("GET / HTTP/1.1\nHost: web01:443")).toBe(443);
+    expect(requestPort("GET / HTTP/2\nHost: web01")).toBe(443);
+    expect(requestPort("GET http://web01:8080/x HTTP/1.1")).toBe(8080);
+    // A portless request goes to the host's only web service when it has one.
+    expect(requestPort("GET / HTTP/1.1\nHost: web01", 8080)).toBe(8080);
+  });
+
+  it("counts a portless request against the host's only web service, an HTTPS one against 443", () => {
+    const d = base();
+    d.services = [svc(22, { nmapService: "ssh" }), svc(8080, { nmapService: "http-proxy" })] as never;
+    d.log = [http("q", "GET /admin HTTP/1.1\nHost: 10.0.0.5")];
+    expect(at(d, 8080)).toMatchObject({ result: "tested", via: "q" });
+    d.services = [svc(8080, { nmapService: "http-proxy" }), svc(443, { nmapService: "ssl/http" })] as never;
+    expect(at(d, 8080).result).toBe("untested");
+    d.log = [http("tls", "GET / HTTP/2\nHost: 10.0.0.5")];
+    expect(at(d, 443)).toMatchObject({ result: "tested", via: "tls" });
   });
 });
 

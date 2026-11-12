@@ -129,15 +129,28 @@ describe("ReportEditor evidence", () => {
       { command: "id", output: "uid=0(root) gid=0(root)", shell: "sh", root: true as const },
       { command: "whoami", output: "nt authority\\system" },
       { command: "whoami", output: "dev" },
+      { command: "ls -l /etc", output: "drwxr-xr-x 2 root root 4096 x\nroot" },
+      { command: "sudo id", output: "uid=0(root) gid=0(root)" },
     ];
     const { container } = setup(doc(ev("e1", { block: null })), data({ log: [entry({ ranOn: "xfer03", content: { kind: "command", blocks } })] }));
-    await waitFor(() => expect(container.querySelectorAll(".report-cmd")).toHaveLength(4));
+    await waitFor(() => expect(container.querySelectorAll(".report-cmd")).toHaveLength(6));
     expect([...container.querySelectorAll(".report-cmd")].map((n) => n.textContent)).toEqual([
       "svc_backup@xfer03$ sudo rsync -e sh 127.0.0.1:/dev/null",
       "xfer03# id",
       "xfer03# whoami",
       "xfer03$ whoami",
+      // A bare "root" line with no whoami is a listing, not a root shell.
+      "xfer03$ ls -l /etc",
+      "xfer03# sudo id",
     ]);
+  });
+
+  it("captions an uncaptioned screenshot with the step it tags along with", async () => {
+    const shot = entry({ id: "s1", kind: "screenshot", title: "Screenshot", content: { kind: "screenshot", attachmentId: "a1", caption: "", fileName: "x.png" } });
+    const { container } = setup(doc(ev("e1"), ev("s1", { block: null })), data({ log: [entry({}), shot] }));
+    await waitFor(() => expect(container.querySelector(".report-figure figcaption")).toBeTruthy());
+    const caption = container.querySelector<HTMLInputElement>(".report-figure .report-caption-input");
+    expect(caption?.value ?? container.querySelector(".report-figure figcaption")?.textContent).toBe("Full port scan");
   });
 
   it("prints Methodologies' facts: the exam network, the Metasploit target and the cleanup list", async () => {

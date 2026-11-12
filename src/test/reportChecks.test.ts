@@ -281,6 +281,15 @@ describe("targetChecks", () => {
       expect(check([shell, flagShot], grant(), doc(slot("x"), ev("sh"), ev("fs", { block: null })))).toBeUndefined();
     });
   });
+  it("caption-weak flags a screenshot with no caption of its own, or a bare \"Screenshot\"", () => {
+    const bare = entry({ id: "s1", kind: "screenshot", title: "Screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "", fileName: "x" } });
+    const page = doc(ev("s1", { block: null }), slot("x"), ...goodDoc().content!);
+    expect(find(run(data({ log: [bare, flag()] }), page), "caption-weak")).toMatchObject({ id: "caption-weak:s1", level: "soft" });
+    // A caption written on the page is its own.
+    const named = doc(ev("s1", { block: null, caption: "Root shell on DC01" }), slot("x"), ...goodDoc().content!);
+    expect(find(run(data({ log: [bare, flag()] }), named), "caption-weak")).toBeUndefined();
+    expect(groupChecks(run(data({ log: [bare, flag()] }), page).filter((c) => c.id.startsWith("caption-weak"))).map((g) => g.text)).toEqual(["A screenshot has no caption"]);
+  });
   it("caption is soft over 10 words", () => {
     const long = entry({ id: "s1", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "one two three four five six seven eight nine ten eleven", fileName: "x" } });
     const page = doc(ev("s1", { block: null }), slot("x"), ...goodDoc().content!);

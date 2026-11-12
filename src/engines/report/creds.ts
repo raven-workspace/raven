@@ -15,14 +15,40 @@ export interface TargetAccess {
   user: Username | undefined;
 }
 
+const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** A command that passes a secret: `-p`, `-H`, `-hashes`, `--password`, `--hashes`, `/p:`, `/pth:`, or `user:pw@host`. */
+const SECRET_ARG = /(?:^|\s)(?:-p|-H|-hashes|--password|--hashes|--pass)(?:\s|=|$)|\/p(?:th)?:|[^\s:/@]:[^\s@]+@/i;
+/** Whether a command passes a secret. ssh, scp and sftp take `-p`/`-P` as a port, not a password. */
+const passesAnySecret = (cmd: string) =>
+  SECRET_ARG.test(/^\s*(?:sudo\s+)?(?:ssh|scp|sftp)\b/i.test(cmd) ? cmd.replace(/(?:^|\s)-[pP]\s*\d+(?=\s|$)/g, " ") : cmd);
+/** Characters that can't sit next to a secret inside one shell word: it stands alone or behind `-p `, `:`, `/p:`, quotes. */
+const AROUND = `\\s'"=:/@\\\\`;
+
+/** The username as a whole word of the command (not `bobby` for `bob`). */
+const namesUser = (cmd: string, username: string) => new RegExp(`(?<![\\w.-])${esc(username)}(?![\\w-])`, "i").test(cmd);
+
+/**
+ * Whether the command passes the credential's secret as a whole word (a hash also by its NT half). A secret under 4
+ * characters only counts as the exact argument of `-p`/`--password` or `/p:`.
+ */
+function passesSecret(cmd: string, c: Credential): boolean {
+  const secrets = c.type === "hash" ? [c.secret, c.secret.split(":").pop() ?? ""].filter((x) => x.length >= 16) : [c.secret];
+  return secrets.some((x) => {
+    if (x.length < 4) return new RegExp(`(?:(?:^|\\s)(?:-p|--password)\\s+['"]?|/p:['"]?)${esc(x)}['"]?(?:\\s|$)`).test(cmd);
+    return new RegExp(`(?<![^${AROUND}])${esc(x)}(?![^${AROUND}])`).test(cmd);
+  });
+}
+
 /**
  * Everything that ties credentials and access to a target's hosts (`hostIds`), however it was captured:
  *  - a credential (or a username tried with its secret) with a valid or admin result on one of them (nxc, hydra:
  *    found elsewhere, it worked here; it often has no source host and no access grant);
  *  - a credential local to one of them, or found on one of them;
- *  - a credential used in a non-private command on one of them: its username and secret both in the command (`evil-winrm
- *    -u bob -p pw`, `xfreerdp /u:bob /p:pw`, `psexec corp/bob:pw@ip`), or its username at one of their IPs or names
- *    (`ssh bob@10.0.0.5`, whose password is typed at the prompt). A direct login leaves no attempt or grant;
+ *  - a credential used in a non-private command on one of them: its username and secret both in the command, the secret
+ *    as a whole word (`evil-winrm -u bob -p pw`, `xfreerdp /u:bob /p:pw`, `psexec corp/bob:pw@ip`, `-hashes :<nt>`);
+ *    or, when the command passes no secret at all, its username at one of their IPs or names (`ssh bob@10.0.0.5`, the
+ *    password typed at the prompt), only when that username has exactly one credential. A direct login leaves no
+ *    attempt or grant;
  *  - access grants on them, with their usernames.
  * In the order the credentials were added; access in time order.
  */
@@ -54,24 +80,25 @@ export function targetCredentials(data: ReportData, hostIds: string[]): { creden
   }
   // Direct logins: the command names the credential.
   const hosts = data.hosts.filter((h) => ids.has(h.id));
-  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const word = (x: string) => new RegExp(`(?<![\\w.-])${esc(x)}(?![\\w-])`, "i");
   const commands = data.log.filter((e) => !e.private && e.content.kind === "command" && e.hostIds.some((h) => ids.has(h)));
-  for (const c of data.credentials) {
-    if (c.username.trim() === "" || c.secret.trim() === "") continue;
-    // A hash is passed as its NT half (`-H <nt>`, `-hashes :<nt>`).
-    const secrets = c.type === "hash" ? [c.secret, c.secret.split(":").pop() ?? ""].filter((x) => x.length >= 16) : [c.secret];
-    const user = word(c.username);
-    for (const e of commands) {
-      if (e.content.kind !== "command") continue;
-      const on = e.hostIds.find((h) => ids.has(h))!;
-      const used = e.content.blocks.some((b) => {
-        const cmd = b.command ?? "";
-        if (!user.test(cmd)) return false;
-        if (secrets.some((x) => cmd.includes(x))) return true;
-        return hosts.some((h) => [h.ip, h.name].some((t) => t && new RegExp(`(?<![\\w.-])${esc(c.username)}@${esc(t)}(?![\\w-]|\\.\\d)`, "i").test(cmd)));
-      });
-      if (used) tie(c.id, { username: c.username, domain: c.domain, type: c.type, at: c.createdAt }, `used on ${name(on)}`);
+  const sameUser = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  for (const e of commands) {
+    if (e.content.kind !== "command") continue;
+    const on = e.hostIds.find((h) => ids.has(h))!;
+    for (const b of e.content.blocks) {
+      const cmd = b.command ?? "";
+      const named = data.credentials.filter((c) => c.username.trim() !== "" && c.secret.trim() !== "" && namesUser(cmd, c.username));
+      const bySecret = named.filter((c) => passesSecret(cmd, c));
+      for (const c of bySecret) tie(c.id, { username: c.username, domain: c.domain, type: c.type, at: c.createdAt }, `used on ${name(on)}`);
+      // `ssh bob@10.0.0.5`: the password is typed at the prompt, so the command names only the account. It ties the
+      // credential only when no secret is passed at all, none matched, and the account has exactly one credential.
+      if (passesAnySecret(cmd)) continue;
+      for (const c of named) {
+        if (bySecret.some((x) => sameUser(x.username, c.username))) continue;
+        if (data.credentials.filter((x) => sameUser(x.username, c.username)).length !== 1) continue;
+        const atHost = hosts.some((h) => [h.ip, h.name].some((t) => t && new RegExp(`(?<![\\w.-])${esc(c.username)}@${esc(t)}(?![\\w-]|\\.\\d)`, "i").test(cmd)));
+        if (atHost) tie(c.id, { username: c.username, domain: c.domain, type: c.type, at: c.createdAt }, `used on ${name(on)}`);
+      }
     }
   }
   const credentials = [...byKey.values()]

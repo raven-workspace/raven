@@ -1,4 +1,5 @@
 import type { ReasonKind } from "../../types/findings";
+import { httpParts } from "../capture/http";
 import { isPortScan } from "./tools";
 import type { ReportData, CoverageOverride, CoverageResult } from "./types";
 
@@ -102,16 +103,21 @@ function commandWorks(command: string, hosts: string[], port: number, nmapServic
   return ACCESS_FAMILIES.some((f) => (f.ports.includes(port) || f.names.includes(name)) && f.words.test(command));
 }
 
-/** The port a captured HTTP request went to: its Host header's port, else its URL's, else 80 (443 for https). */
-export function requestPort(request: string): number {
-  const [first = "", ...headers] = request.split(/\r?\n/);
-  const host = headers.find((h) => /^host:/i.test(h))?.replace(/^host:\s*/i, "").trim() ?? "";
-  const hostPort = /:(\d+)$/.exec(host)?.[1];
-  if (hostPort) return Number(hostPort);
-  const url = /\b(https?):\/\/[^\s/:]+(?::(\d+))?/i.exec(first);
-  if (url?.[2]) return Number(url[2]);
-  return url?.[1].toLowerCase() === "https" ? 443 : 80;
+/**
+ * The port a captured HTTP request went to, read as the capture parser reads it (`httpParts`): the Host header's or
+ * absolute URL's port; an HTTPS request with none (an https:// URL, HTTP/2) is 443; a portless request is the host's
+ * only web service when it has exactly one (`webPort`), else 80.
+ */
+export function requestPort(request: string, webPort: number | null = null): number {
+  const parts = httpParts(request);
+  if (parts.port !== null) return parts.port;
+  const first = request.split(/\r?\n/)[0] ?? "";
+  if (/^\S+\s+https:\/\//i.test(first) || /\bHTTP\/2(?:\.0)?\s*$/i.test(first)) return 443;
+  return webPort ?? 80;
 }
+
+/** A web service: nmap names it http (http, https, ssl/http, http-proxy) or it sits on a usual web port. */
+const isWeb = (s: { port: number; nmapService: string | null }) => /http/i.test(s.nmapService ?? "") || [80, 443, 8000, 8080, 8443].includes(s.port);
 
 /** A service's coverage on one host (§5.5): exploited, tested, or untested; an override wins. Tested includes what
  *  real work shows without a ruled-out item: credentials tried on it (nxc, hydra), commands run against it, and HTTP
@@ -133,6 +139,8 @@ export function serviceCoverage(
   // The host by IP, name, and name in the engagement's domain (`ms01.exam.corp`).
   const names = [host?.ip ?? "", host?.name ?? "", host?.name && domain && !host.name.includes(".") ? `${host.name}.${domain}` : ""];
   const requests = data.log.filter((e) => !e.private && e.hostIds.includes(hostId) && e.content.kind === "http");
+  const web = data.services.filter((s) => s.hostId === hostId && isWeb(s));
+  const webPort = web.length === 1 ? web[0].port : null;
   const commands = data.log.filter(
     (e) => !e.private && e.hostIds.includes(hostId) && e.content.kind === "command" && !isPortScan(e),
   );
@@ -165,7 +173,7 @@ export function serviceCoverage(
       } else {
         const tried = attempts.find((a) => attemptOn(a, s.port, s.nmapService));
         const ran = tried ? undefined : commands.find((e) => e.content.kind === "command" && e.content.blocks.some((b) => commandWorks(b.command ?? "", names, s.port, s.nmapService)));
-        const asked = tried || ran ? undefined : requests.find((e) => e.content.kind === "http" && requestPort(e.content.request) === s.port);
+        const asked = tried || ran ? undefined : requests.find((e) => e.content.kind === "http" && requestPort(e.content.request, webPort) === s.port);
         if (asked) {
           result = "tested";
           via = asked.title;

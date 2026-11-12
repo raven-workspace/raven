@@ -3,7 +3,7 @@ import type { Host } from "../../types/host";
 import type { AppendixIndex } from "./appendix";
 import { suggestMoves } from "./appendix";
 import { serviceCoverage } from "./coverage";
-import { captionOf } from "./figures";
+import { captionOf, isWeakCaption } from "./figures";
 import { expectedFlags, isValidOsid } from "./meta";
 import { findFlagInPaste } from "../capture/flag";
 import { blockCompanions, byTime, evidenceIdsIn } from "./draft";
@@ -206,6 +206,9 @@ export function targetChecks(input: TargetChecksInput): Check[] {
       explain.push({ check: { id: `explain:${entryId}`, level: "soft", text: "A step has no explanation before it.", anchor }, shot: entry.kind === "screenshot" });
     }
     if (entry.content.kind === "screenshot" && !seenEvidence.has(entryId)) {
+      if (isWeakCaption(captionOf(node.attrs, entry))) {
+        out.push({ id: `caption-weak:${entryId}`, level: "soft", text: "A screenshot has no caption of its own. Say what it shows.", anchor });
+      }
       if (words(captionOf(node.attrs, entry)) > MAX_CAPTION_WORDS) {
         out.push({ id: `caption:${entryId}`, level: "soft", text: `A screenshot caption is over ${MAX_CAPTION_WORDS} words.`, anchor });
       }
@@ -326,6 +329,7 @@ const PLURAL: Record<string, (n: number) => string> = {
   output: (n) => `${n} commands on the page show no output.`,
   explain: (n) => `${n} steps have no explanation.`,
   caption: (n) => `${n} screenshot captions are over ${MAX_CAPTION_WORDS} words.`,
+  "caption-weak": (n) => `${n} screenshots have no caption of their own.`,
   "access-shot": (n) => `${n} access levels have no screenshot of them on the page.`,
   "finding-severity": (n) => `${n} findings have no severity.`,
   "finding-title": (n) => `${n} finding titles are a single word.`,
@@ -359,6 +363,7 @@ const SHORT: Record<string, (c: Check) => string> = {
   output: () => "A command shows no output",
   explain: () => "A step has no explanation",
   caption: () => "Caption over 10 words",
+  "caption-weak": () => "A screenshot has no caption",
   "access-shot": (c) => `${part(c, 1)}: no ${part(c, 2)} screenshot`,
   "finding-severity": () => "A finding has no severity",
   "finding-title": () => "A finding title is one word",

@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import type { Editor } from "prosekit/core";
 import { NodeSelection, TextSelection } from "prosekit/pm/state";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useMemo, useState } from "react";
 import { addNewEvidence, evidenceIdsIn, evidenceNodes, type AppendixIndex, type ReportData, type ReportNode, type ReportTarget } from "../engines/report";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext";
 import { openFindBar, ReportEditor } from "../features/report/editor/ReportEditor";
@@ -670,19 +671,35 @@ describe("Find in log blocks", () => {
 describe("Find after the log changes", () => {
   it("collects the matches again when the log data behind the blocks is fetched again", async () => {
     const page = doc(para("the port list"), ev("e1"));
-    const s = await ready(page);
-    await waitFor(() => expect(document.querySelector(".report-cmd")).toBeInTheDocument());
-    act(() => void openFindBar(s.editor()));
-    fireEvent.change(await screen.findByLabelText("Find"), { target: { value: "port" } });
-    await waitFor(() => expect(screen.getByText("1 of 2")).toBeInTheDocument());
-    const edited = entry({ content: { kind: "command", blocks: [{ command: "nmap -p- 10.0.0.5", output: "PORT STATE\n22/tcp open ssh\nport 80 too" }] } });
-    s.rerender(
-      <QueryClientProvider client={s.qc}>
-        <ReportDataContext.Provider value={{ data: data([edited]), appendix: noRefs, sectionMeta: {}, onRemoveEvidence: vi.fn(), target: standalone, canMove: true }}>
-          <ReportEditor sectionId="s1" doc={page} onChange={s.onChange} onReady={() => {}} />
-        </ReportDataContext.Provider>
+    const ref: { editor: Editor | null } = { editor: null };
+    let swap: (log: LogEntry[]) => void = () => {};
+    const onChange = vi.fn();
+    const onReady = (e: Editor) => (ref.editor = e);
+    const editorEl = <ReportEditor sectionId="s1" doc={page} onChange={onChange} onReady={onReady} />;
+    // Only the context value changes: the editor element and its props stay the same object.
+    function Host() {
+      const [log, setLog] = useState<LogEntry[]>([entry({})]);
+      swap = setLog;
+      const value = useMemo(() => ({ data: data(log), appendix: noRefs, sectionMeta: {}, onRemoveEvidence: onChange, target: standalone, canMove: true }), [log]);
+      return <ReportDataContext.Provider value={value}>{editorEl}</ReportDataContext.Provider>;
+    }
+    render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <Host />
       </QueryClientProvider>,
     );
+    await waitFor(() => expect(ref.editor?.mounted).toBe(true));
+    await waitFor(() => expect(document.querySelector(".report-cmd")).toBeInTheDocument());
+    const before = ref.editor!.state.doc;
+    act(() => void openFindBar(ref.editor!));
+    fireEvent.change(await screen.findByLabelText("Find"), { target: { value: "port" } });
+    await waitFor(() => expect(screen.getByText("1 of 2")).toBeInTheDocument());
+    // Let the find bar's own collection (on the next frame) settle first, so only the data change can recount.
+    await act(() => new Promise((r) => setTimeout(r, 100)));
+    const edited = entry({ content: { kind: "command", blocks: [{ command: "nmap -p- 10.0.0.5", output: "PORT STATE\n22/tcp open ssh\nport 80 too" }] } });
+    act(() => swap([edited]));
+    await waitFor(() => expect(document.querySelector(".report-page")?.textContent).toContain("port 80 too"));
+    expect(ref.editor!.state.doc).toBe(before);
     await waitFor(() => expect(screen.getByText("1 of 3")).toBeInTheDocument());
   });
 });

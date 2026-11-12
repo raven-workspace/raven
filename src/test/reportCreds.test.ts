@@ -37,6 +37,30 @@ describe("targetCredentials: direct logins", () => {
     expect(tied(d)).toEqual([["da_admin", "used on ms01"]]);
   });
 
+  it("ties only the credential whose secret a login passes, never every one of that username", () => {
+    const nt = "7f1e4bd3c2a95e608d1f2b4c6a8e0d93";
+    const creds = [cred("a1", "administrator", nt, { type: "hash" }), cred("a2", "administrator", "aad3b435b51404eeaad3b435b51404ee:0123456789abcdef0123456789abcdef", { type: "hash" })];
+    const d = data([cmd("e", `impacket-psexec corp/administrator@10.0.0.5 -hashes :${nt}`)], creds);
+    expect(targetCredentials(d, [H]).credentials.map((c) => c.key)).toEqual(["a1"]);
+  });
+
+  it("ties nothing by user@host when that username has more than one credential, or the command passes a secret", () => {
+    const roots = [cred("r1", "root", "toor1234"), cred("r2", "root", "Other#2026")];
+    expect(tied(data([cmd("e", "ssh root@10.0.0.5")], roots))).toEqual([]);
+    // A secret passed that isn't the credential's: the account alone proves nothing.
+    expect(tied(data([cmd("e", "sshpass -p 'Wrong1!' ssh bob@10.0.0.5")]))).toEqual([]);
+    // ssh's -p is a port.
+    expect(tied(data([cmd("e", "ssh -p 2222 bob@10.0.0.5")]))).toEqual([["bob", "used on ms01"]]);
+  });
+
+  it("matches a secret as a whole word, a short one only as the exact -p or /p: argument", () => {
+    const short = [cred("s", "bob", "pw1")];
+    expect(tied(data([cmd("e", "evil-winrm -i 10.0.0.5 -u bob -p pw1")], short))).toEqual([["bob", "used on ms01"]]);
+    expect(tied(data([cmd("e", "xfreerdp /v:10.0.0.5 /u:bob /p:pw1")], short))).toEqual([["bob", "used on ms01"]]);
+    expect(tied(data([cmd("e", "evil-winrm -i 10.0.0.5 -u bob -p pw12")], short))).toEqual([]);
+    expect(tied(data([cmd("e", "nxc smb 10.0.0.5 -u bob -p 'Spring2026!x'")]))).toEqual([]);
+  });
+
   it("ignores a username alone, another host, a private entry, and a username inside a longer word", () => {
     expect(tied(data([cmd("e", "ssh bob@10.0.0.10")]))).toEqual([]);
     expect(tied(data([cmd("e", "evil-winrm -i 10.0.0.5 -u bob -p wrong")]))).toEqual([]);

@@ -4,7 +4,7 @@ import { TextSelection } from "prosekit/pm/state";
 import type { ReactNodeViewProps } from "prosekit/react";
 import { ResizableHandle, ResizableRoot } from "prosekit/react/resizable";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { applyKeep, captionOf, lineCount, type EvidenceAttrs, type ReportNode } from "../../../../engines/report";
+import { applyKeep, captionOf, lineCount, stepTitleBefore, type EvidenceAttrs, type ReportNode } from "../../../../engines/report";
 import { api } from "../../../../lib/api";
 import type { CommandBlock, LogEntry } from "../../../../types/log";
 import { Button, HintLine, IconButton, Toolbar, type Hint } from "../../../../ui";
@@ -37,20 +37,26 @@ const isAttacker = (host: string, machines: string[]) =>
     return name === host.toLowerCase() || name.split(/[\s(]/)[0] === host.toLowerCase();
   });
 
-/** Output that shows a root shell when no prompt was captured: `id` as uid 0, `whoami` as root or SYSTEM. */
-const ROOT_OUTPUT = /^\s*(?:uid=0\(|root\s*$|nt authority\\system\s*$)/im;
+/** Whether a block with no prompt captured shows a root shell: `id` printing uid 0, or a `whoami` in it printing
+ *  exactly root or SYSTEM. A line that merely says "root" (a file listing, a group) is not enough. */
+function showsRoot(block: Pick<CommandBlock, "command" | "output">): boolean {
+  const output = block.output ?? "";
+  if (/(?:^|\s)uid=0\(/m.test(output)) return true;
+  if (!/\bwhoami\b/i.test(block.command ?? "")) return false;
+  return output.split(/\r?\n/).some((l) => /^\s*(?:root|nt authority\\system)\s*$/i.test(l));
+}
 
 /**
  * A pasted block's own shell, when the paste recorded one, else the entry's prompt: `*Evil-WinRM* PS>`, `PS>`, `C:\>`
  * for cmd (the paste keeps no folder), `user@host$` (`#` for root), and the attacker's own shell as `kali$` like the
  * entry prompt beside it. A root shell ends in `#`: a bare `#` prompt (`root`), or, with no prompt captured, output
- * that shows root (`uid=0`, `whoami` root or SYSTEM).
+ * that shows root (`showsRoot`).
  */
-function blockPrompt(block: Pick<CommandBlock, "shell" | "root" | "output"> | undefined, entryPrompt: string, machines: string[]): string {
+function blockPrompt(block: Pick<CommandBlock, "shell" | "root" | "output" | "command"> | undefined, entryPrompt: string, machines: string[]): string {
   const shell = block?.shell;
   const asRoot = (p: string) => p.replace(/\$$/, "#");
   if (!shell || shell === "sh") {
-    const root = block?.root === true || (!shell && ROOT_OUTPUT.test(block?.output ?? ""));
+    const root = block?.root === true || (!shell && block != null && showsRoot(block));
     return root ? asRoot(entryPrompt) : entryPrompt;
   }
   if (shell === "evil-winrm") return "*Evil-WinRM* PS>";
@@ -62,7 +68,7 @@ function blockPrompt(block: Pick<CommandBlock, "shell" | "root" | "output"> | un
 }
 
 /** Each block's prompt: its own shell when the paste recorded one, else the entry's. */
-type Prompt = (block?: Pick<CommandBlock, "shell" | "root" | "output">) => string;
+type Prompt = (block?: Pick<CommandBlock, "shell" | "root" | "output" | "command">) => string;
 const promptsFor = (ranOn: string | null, machines: string[]): Prompt => {
   const entry = promptFor(ranOn, machines);
   return (block) => blockPrompt(block, entry, machines);
@@ -297,11 +303,14 @@ function EntryBody({
   onLine,
   edit,
   trim,
+  stepTitle,
 }: {
   entry: LogEntry;
   attrs: EvidenceAttrs;
   figure: number | null;
   prompt: Prompt;
+  /** For an uncaptioned screenshot: the title of the step it tags along with, its caption's fallback. */
+  stepTitle?: string | null;
   mode?: PickMode;
   onLine?(n: number, shift: boolean): void;
   /** On the page (not the appendix): the screenshot's caption and size are edited in place. */
@@ -318,9 +327,9 @@ function EntryBody({
         <Figure
           entryId={entry.id}
           attachmentId={c.attachmentId}
-          caption={captionOf(attrs as unknown as Record<string, unknown>, entry)}
+          caption={captionOf(attrs as unknown as Record<string, unknown>, entry, stepTitle)}
           n={figure}
-          edit={edit && { ...edit, caption: captionOf(attrs as unknown as Record<string, unknown>, entry), width: attrs.width ?? null }}
+          edit={edit && { ...edit, caption: captionOf(attrs as unknown as Record<string, unknown>, entry, stepTitle), width: attrs.width ?? null }}
         />
       );
     case "flag":
@@ -617,6 +626,19 @@ export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNo
     view.focus();
   };
 
+  // An uncaptioned screenshot's caption falls back to the step it tags along with (the block above it on the page).
+  let stepTitle: string | null = null;
+  if (shown?.content.kind === "screenshot") {
+    const pos = getPos();
+    if (pos !== undefined) {
+      const $pos = view.state.doc.resolve(pos);
+      if ($pos.depth === 0) {
+        const top: { type: string; attrs: Record<string, unknown> }[] = [];
+        view.state.doc.forEach((n) => top.push({ type: n.type.name, attrs: n.attrs }));
+        stepTitle = stepTitleBefore(top, $pos.index(0), (id) => data.log.find((e) => e.id === id));
+      }
+    }
+  }
   const refLabel = REF_LABEL[shown?.content.kind ?? "command"];
   let body;
   if (!entry) body = <Gone text="This entry was deleted" />;
@@ -632,6 +654,7 @@ export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNo
         mode={mode}
         onLine={onLine}
         trim={trim.lines}
+        stepTitle={stepTitle}
         edit={{ onCaption: (caption) => setAttrs({ caption }), onWidth: (width) => setAttrs({ width }), onDone: backToPage }}
       />
     );
