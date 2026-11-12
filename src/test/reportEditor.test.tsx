@@ -605,6 +605,121 @@ describe("ReportEditor generated blocks", () => {
     expect(container.querySelector(".report-code")).toBeNull();
   });
 
+  const svcRow = (id: string, port: number, o: Record<string, unknown> = {}) => ({
+    id,
+    hostId: "h1",
+    port,
+    protocol: "tcp",
+    state: "open",
+    nmapService: "ssh",
+    nmapVersion: "OpenSSH 8.2",
+    confirmedProduct: null,
+    confirmedVersion: null,
+    ...o,
+  });
+
+  it("prints the ports table as Port, Service, Version and Notes, in port order", async () => {
+    const d = data({ services: [svcRow("s80", 80, { nmapService: "http", nmapVersion: "Apache 2.4" }), svcRow("s22", 22)] as never });
+    const { container } = setup(doc({ type: "generated", attrs: { kind: "ports", hostId: "h1", appendix: "inline", notes: { s80: "Login page" } } }), d);
+    await waitFor(() => expect(container.querySelector(".report-table")).toBeTruthy());
+    expect([...container.querySelectorAll(".report-table th")].map((th) => th.textContent)).toEqual(["Port", "Service", "Version", "Notes"]);
+    const rows = [...container.querySelectorAll(".report-table tbody tr")].map((tr) => [...tr.querySelectorAll("td")].map((td) => td.textContent));
+    expect(rows.map((r) => r.slice(0, 3))).toEqual([
+      ["22/tcp", "ssh", "OpenSSH 8.2"],
+      ["80/tcp", "http", "Apache 2.4"],
+    ]);
+    expect(screen.getByRole("textbox", { name: "Notes for 80/tcp" })).toHaveValue("Login page");
+  });
+
+  it("says when a machine has no open ports recorded", async () => {
+    setup(doc({ type: "generated", attrs: { kind: "ports", hostId: "h1", appendix: "inline", notes: {} } }));
+    expect(await screen.findByText("No open ports recorded for DC01")).toBeInTheDocument();
+  });
+
+  it("the ports table's Notes cell saves into the node", async () => {
+    const d = data({ services: [svcRow("s22", 22)] as never });
+    const { onChange } = setup(doc({ type: "generated", attrs: { kind: "ports", hostId: "h1", appendix: "inline", notes: {} } }), d);
+    const input = await screen.findByRole("textbox", { name: "Notes for 22/tcp" });
+    fireEvent.change(input, { target: { value: "Password reuse" } });
+    await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.notes).toEqual({ s22: "Password reuse" }));
+    expect(screen.getByRole("textbox", { name: "Notes for 22/tcp" })).toHaveValue("Password reuse");
+  });
+
+  const resultData = () =>
+    data({
+      grants: [
+        { id: "g1", hostId: "h1", usernameId: "u1", level: "user", via: "SSH", at: 1, logEntryId: null },
+        { id: "g2", hostId: "h1", usernameId: "u2", level: "system", via: "PrintSpoofer", at: 2, logEntryId: null },
+      ] as never,
+      usernames: [
+        { id: "u1", username: "ronan" },
+        { id: "u2", username: "system" },
+      ] as never,
+      log: [
+        entry({}),
+        entry({ id: "f1", kind: "flag", title: "local", content: { kind: "flag", flagKind: "local", value: "abc123" } }),
+      ],
+    });
+
+  it("prints the result line: bold Result:, the access in time order, then the flags in mono", async () => {
+    const { container } = setup(doc({ type: "generated", attrs: { kind: "result", hostId: "h1", appendix: "inline" } }), resultData());
+    await waitFor(() => expect(container.querySelector(".report-result")).toBeTruthy());
+    const line = container.querySelector(".report-result")!;
+    expect(line.textContent).toBe("Result: shell as ronan, then SYSTEM. local.txt abc123.");
+    expect(line.querySelector("strong")).toHaveTextContent("Result:");
+    expect([...line.querySelectorAll("code")].map((c) => c.textContent)).toEqual(["ronan", "abc123"]);
+  });
+
+  it("Edit text on the result line turns it into an editable paragraph", async () => {
+    const { onChange, editor } = setupLive(doc({ type: "generated", attrs: { kind: "result", hostId: "h1", appendix: "inline" } }, slot()), resultData());
+    await waitFor(() => expect(editor()).toBeTruthy());
+    selectBlock(editor(), 0);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit text" }));
+    await waitFor(() => expect(lastDoc(onChange).content?.[0].type).toBe("paragraph"));
+    const para = editor().state.doc.child(0);
+    expect(para.type.name).toBe("paragraph");
+    expect(para.attrs.fromEntry).toBeNull();
+    expect(para.textContent).toBe("Result: shell as ronan, then SYSTEM. local.txt abc123.");
+    expect(para.child(0).marks.map((mk) => mk.type.name)).toEqual(["bold"]);
+    // Typing goes into the paragraph: it is the owner's text now.
+    act(() => {
+      const view = editor().view;
+      view.dispatch(view.state.tr.insertText(" Done.", para.nodeSize - 1));
+    });
+    expect(editor().state.doc.child(0).textContent).toBe("Result: shell as ronan, then SYSTEM. local.txt abc123. Done.");
+  });
+
+  it("prints the summary's findings table, the scope table and the AD attack path", async () => {
+    const ad = { ...host, id: "h2", name: "dc01", ip: "10.0.0.10", adSetEffective: true, os: "windows" } as Host;
+    const d = data({
+      hosts: [host, ad],
+      hops: [{ id: "hp", fromHostId: null, toHostId: "h2", via: "Kerberoasting", logEntryId: null, at: 1 }] as never,
+    });
+    const { container } = setup(doc(gen("findings"), gen("scope-table"), gen("attack-path")), d);
+    await waitFor(() => expect(container.querySelectorAll(".report-table").length).toBe(2));
+    const heads = [...container.querySelectorAll(".report-table")].map((t) => [...t.querySelectorAll("th")].map((th) => th.textContent));
+    expect(heads).toEqual([
+      ["Host", "IP address", "OS", "Set"],
+      ["Step", "From", "Technique", "To", "Access gained"],
+    ]);
+    // No findings yet: the table's place says so.
+    expect(screen.getByText("No findings recorded yet.")).toBeInTheDocument();
+    const scope = [...container.querySelectorAll(".report-table")[0].querySelectorAll("tbody tr")].map((tr) => tr.textContent);
+    expect(scope).toEqual(["DC0110.0.0.5WindowsIndependent", "dc0110.0.0.10WindowsAD"]);
+    const path = [...container.querySelectorAll(".report-table")[1].querySelectorAll("tbody td")].map((td) => td.textContent);
+    expect(path).toEqual(["1", "Kali", "Kerberoasting", "dc01", ""]);
+  });
+
+  it("prints the findings table with #, Host, Finding, Severity and Result", async () => {
+    const d = data({
+      findings: [{ id: "f1", title: "Anonymous FTP write", severity: "high", description: "", remediation: "", hostIds: ["h1"], serviceIds: [], refs: [], stepEntryIds: [], createdAt: 1 }] as never,
+    });
+    const { container } = setup(doc(gen("findings")), d);
+    await waitFor(() => expect(container.querySelector(".report-table")).toBeTruthy());
+    expect([...container.querySelectorAll(".report-table th")].map((th) => th.textContent)).toEqual(["#", "Host", "Finding", "Severity", "Result"]);
+    expect([...container.querySelectorAll(".report-table tbody td")].slice(0, 4).map((td) => td.textContent)).toEqual(["1", "DC01", "Anonymous FTP write", "High"]);
+  });
+
   it("numbers a target page's headings from its document and names the vulnerability that opened a phase", async () => {
     const d = data({ findings: [{ id: "f1", title: "Anonymous FTP write", description: "", remediation: "", hostIds: ["h1"], serviceIds: [], refs: [] }] as never });
     const page = doc(

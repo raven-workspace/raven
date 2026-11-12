@@ -1,21 +1,33 @@
-import type { ReactNode } from "react";
+import { PencilSimpleLine } from "@phosphor-icons/react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 import type { ReactNodeViewProps } from "prosekit/react";
+import type { Node as PMNode, Schema } from "prosekit/pm/model";
+import { TextSelection } from "prosekit/pm/state";
 import {
   attackChain,
+  attackPathRows,
   CHAIN_KEY,
+  findingRows,
   machineKey,
   machineOrder,
   msfHosts,
   msfModules,
+  portRows,
   reportTargets,
+  resultLine,
+  scopeRows,
   testedLine,
   testedNotExploited,
   type GeneratedAttrs,
   type HeadingLabel,
+  type PortsAttrs,
   type ReportData,
+  type ReportTarget,
+  type ResultLine,
 } from "../../../../engines/report";
+import { IconButton } from "../../../../ui";
 import { useAppendixRef, usePageLayout, useReportData, type ReportDataValue } from "../ReportDataContext";
-import { AppendixRef, Block, BlockTools, MoveButton } from "./parts";
+import { AppendixRef, Block, BlockTools, capitalize, MoveButton } from "./parts";
 
 /**
  * A generated table. Columns in `fit` (IPs, host names) are as wide as their longest text and never wrap; the others
@@ -95,7 +107,97 @@ function NumberedHeading({ label, fallback, level }: { label: HeadingLabel | nul
   );
 }
 
-function Content({ attrs, ctx }: { attrs: GeneratedAttrs; ctx: ReportDataValue }) {
+/** A run of text: plain, or `code` (mono), as the result line and the attack path's access print it. */
+interface Run {
+  text: string;
+  code?: boolean;
+}
+
+/** Text with `backtick` spans as code runs ("shell as `ronan`"). */
+function ticked(text: string): Run[] {
+  return text.split(/`([^`]*)`/).flatMap((t, i) => (t === "" ? [] : [{ text: t, code: i % 2 === 1 }]));
+}
+
+const Runs = ({ runs }: { runs: Run[] }) => (
+  <>
+    {runs.map((r, i) => (r.code ? <code key={i}>{r.text}</code> : <span key={i}>{r.text}</span>))}
+  </>
+);
+
+/** The result line after its bold "Result:": "shell as `ronan`, then root. local.txt `<value>`, proof.txt `<value>`." */
+function resultRuns(line: ResultLine): Run[] {
+  const out: Run[] = [];
+  if (line.access) out.push({ text: " " }, ...ticked(line.access), { text: "." });
+  line.flags.forEach((f, i) => {
+    out.push({ text: i === 0 ? " " : ", " }, { text: `${f.kind}.txt ` }, { text: f.value, code: true });
+    if (i === line.flags.length - 1) out.push({ text: "." });
+  });
+  return out;
+}
+
+/**
+ * A port's Notes cell, typed in place on the paper and kept on the node. The field keeps its own text while focused, so
+ * the node's round trip never moves the caret; an undo shows here once the field is left. ↵ or Esc goes back to the page.
+ */
+function NotesCell({ port, value, onChange, onDone }: { port: string; value: string; onChange(v: string): void; onDone(): void }) {
+  const [text, setText] = useState(value);
+  const [was, setWas] = useState(value);
+  const [focused, setFocused] = useState(false);
+  if (was !== value) {
+    setWas(value);
+    if (!focused) setText(value);
+  }
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter" && e.key !== "Escape") return;
+    e.preventDefault();
+    onDone();
+  };
+  return (
+    <input
+      className="report-cell-input"
+      aria-label={`Notes for ${port}`}
+      value={text}
+      onFocus={() => setFocused(true)}
+      onBlur={() => {
+        setFocused(false);
+        setText(value);
+      }}
+      onChange={(e) => {
+        setText(e.target.value);
+        onChange(e.target.value);
+      }}
+      onKeyDown={onKey}
+    />
+  );
+}
+
+/** The target a machine belongs to: the page's own, else the report's target holding it, else the machine alone. */
+function targetOf(ctx: ReportDataValue, hostId: string): ReportTarget {
+  if (ctx.target?.hostIds.includes(hostId)) return ctx.target;
+  return reportTargets(ctx.data, ctx.reportMeta ?? {}).find((t) => t.hostIds.includes(hostId)) ?? { key: hostId, kind: "standalone", hostIds: [hostId] };
+}
+
+/** The result line as the owner's own paragraph: the same words, "Result:" bold and the mono parts as inline code. */
+function resultParagraph(schema: Schema, runs: Run[]): PMNode {
+  const bold = schema.marks.bold;
+  const code = schema.marks.code;
+  const text = [
+    schema.text("Result:", bold ? [bold.create()] : []),
+    ...runs.map((r) => schema.text(r.text, r.code && code ? [code.create()] : [])),
+  ];
+  return schema.nodes.paragraph.create({ fromEntry: null }, text);
+}
+
+function Content({
+  attrs,
+  ctx,
+  notesEdit,
+}: {
+  attrs: GeneratedAttrs;
+  ctx: ReportDataValue;
+  /** On the page, a port table's Notes are typed in place; elsewhere (the appendix page) they print as text. */
+  notesEdit?: { onChange(serviceId: string, text: string): void; onDone(): void };
+}) {
   const { data } = ctx;
   const meta = ctx.reportMeta ?? {};
   const host = attrs.hostId ? data.hosts.find((h) => h.id === attrs.hostId) : undefined;
@@ -117,6 +219,72 @@ function Content({ attrs, ctx }: { attrs: GeneratedAttrs; ctx: ReportDataValue }
         <>
           <p className="report-label">Port Scan Results</p>
           <Table head={["IP Address", "Ports Open"]} fit={[0]} rows={hosts.map((h) => [h.ip ?? h.name, portsOpen(data, h.id)])} />
+        </>
+      );
+    }
+    case "ports": {
+      if (!host) return <None text="This host was deleted." />;
+      const rows = portRows(data, host.id);
+      if (rows.length === 0) return <None text={`No open ports recorded for ${host.name}`} />;
+      const notes = (attrs as PortsAttrs).notes ?? {};
+      return (
+        <>
+          <p className="report-label">Port Scan Results</p>
+          <Table
+            head={["Port", "Service", "Version", "Notes"]}
+            fit={[0]}
+            rows={rows.map((r) => [
+              r.port,
+              r.service,
+              r.version,
+              notesEdit ? (
+                <NotesCell port={r.port} value={notes[r.serviceId] ?? ""} onChange={(v) => notesEdit.onChange(r.serviceId, v)} onDone={notesEdit.onDone} />
+              ) : (
+                (notes[r.serviceId] ?? "")
+              ),
+            ])}
+          />
+        </>
+      );
+    }
+    case "result": {
+      if (!host) return <None text="This host was deleted." />;
+      const runs = resultRuns(resultLine(data, targetOf(ctx, host.id), host.id, meta));
+      return (
+        <p className="report-result">
+          <strong>Result:</strong>
+          {runs.length > 0 ? <Runs runs={runs} /> : <span className="report-none"> No access or flags recorded yet.</span>}
+        </p>
+      );
+    }
+    case "findings": {
+      const rows = findingRows(data, targets);
+      if (rows.length === 0) return <None text="No findings recorded yet." />;
+      return (
+        <Table
+          head={["#", "Host", "Finding", "Severity", "Result"]}
+          fit={[0, 1]}
+          rows={rows.map((r) => [String(r.n), r.host, r.title, r.severity ? capitalize(r.severity) : "Not set", r.result])}
+        />
+      );
+    }
+    case "scope-table": {
+      const rows = scopeRows(data, targets);
+      if (rows.length === 0) return <None text="No targets in the report yet." />;
+      return <Table head={["Host", "IP address", "OS", "Set"]} fit={[0, 1]} rows={rows.map((r) => [r.host, r.ip, r.os, r.set])} />;
+    }
+    case "attack-path": {
+      const set = ctx.target?.kind === "ad-set" ? ctx.target : targets.find((t) => t.kind === "ad-set");
+      const rows = attackPathRows(data, set?.hostIds ?? []);
+      if (rows.length === 0) return <None text="No hops or access recorded on the AD set yet." />;
+      return (
+        <>
+          <p className="report-label">Attack path</p>
+          <Table
+            head={["Step", "From", "Technique", "To", "Access gained"]}
+            fit={[0]}
+            rows={rows.map((r) => [String(r.step), r.from, r.technique, r.to, <Runs key="a" runs={ticked(r.access)} />])}
+          />
         </>
       );
     }
@@ -197,20 +365,40 @@ export function GeneratedContent({ attrs, ctx }: { attrs: GeneratedAttrs; ctx: R
   return <Content attrs={attrs} ctx={ctx} />;
 }
 
-/** A table or list generated from live data; moved to an appendix, it leaves a one-line reference. */
-export function GeneratedView({ node, selected, setAttrs }: ReactNodeViewProps) {
+/** A table or list generated from live data; moved to an appendix, it leaves a one-line reference. A port table's Notes
+ *  cells are the owner's, typed on the page and kept on the node; a result line's Edit text makes it the owner's
+ *  paragraph, which no longer follows the log. */
+export function GeneratedView({ node, selected, setAttrs, view, getPos }: ReactNodeViewProps) {
   const ctx = useReportData();
   const ref = useAppendixRef(node);
   const { touched } = usePageLayout();
   const attrs = node.attrs as GeneratedAttrs;
+  const host = attrs.hostId ? ctx.data.hosts.find((h) => h.id === attrs.hostId) : undefined;
+  const onNotes = (serviceId: string, text: string) => {
+    const notes = { ...((node.attrs as PortsAttrs).notes ?? {}) };
+    if (text === "") delete notes[serviceId];
+    else notes[serviceId] = text;
+    setAttrs({ notes });
+  };
+  const detachResult = () => {
+    const pos = getPos();
+    if (pos === undefined || !host) return;
+    const runs = resultRuns(resultLine(ctx.data, targetOf(ctx, host.id), host.id, ctx.reportMeta ?? {}));
+    const para = resultParagraph(view.state.schema, runs);
+    const tr = view.state.tr.replaceWith(pos, pos + node.nodeSize, para);
+    view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(pos + para.nodeSize - 1), -1)).scrollIntoView());
+    view.focus();
+  };
+  const canDetach = attrs.kind === "result" && !!host && attrs.appendix !== "moved";
   return (
     <Block selected={selected} kind="generated">
-      {selected && touched && ctx.canMove && (
+      {selected && touched && (ctx.canMove || canDetach) && (
         <BlockTools>
-          <MoveButton place={attrs.appendix} canSplit={false} onMove={(next) => setAttrs({ appendix: next })} />
+          {canDetach && <IconButton icon={PencilSimpleLine} label="Edit text" onClick={detachResult} />}
+          {ctx.canMove && <MoveButton place={attrs.appendix} canSplit={false} onMove={(next) => setAttrs({ appendix: next })} />}
         </BlockTools>
       )}
-      {attrs.appendix === "moved" ? <AppendixRef label="Full list" refText={ref} /> : <GeneratedContent attrs={attrs} ctx={ctx} />}
+      {attrs.appendix === "moved" ? <AppendixRef label="Full list" refText={ref} /> : <Content attrs={attrs} ctx={ctx} notesEdit={{ onChange: onNotes, onDone: () => view.focus() }} />}
     </Block>
   );
 }

@@ -355,6 +355,34 @@
   border-bottom-color: var(--page-ink);
 }
 
+/* A port table's Notes cell: the owner's words, typed straight into the cell. It reads as the table's text; hovered,
+   it shows the code tint so the empty cell can be found, and typed in, a ring. */
+.report-page .report-cell-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  border-radius: 2px;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.report-page .report-cell-input:hover {
+  background: var(--page-code-bg);
+}
+
+.report-page .report-cell-input:focus-visible {
+  outline-color: var(--page-ink);
+}
+
+/* "Result: shell as `ronan`, then root. local.txt `…`." right under a machine's heading. */
+.report-page .report-result {
+  margin: 0;
+}
+
 /* Steps to reproduce (§10.2): the bold label, then numbered steps, each number in a column of its own beside the
    step's sentence and evidence; "+ Step" under the list. The label and the button are the page's chrome. */
 

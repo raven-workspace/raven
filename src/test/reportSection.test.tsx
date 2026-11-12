@@ -11,7 +11,8 @@ import { ReportSectionView } from "../features/report/ReportSection";
 import { pruneRemoved } from "../features/report/queries";
 import { DRAFT_LAYOUT } from "../engines/report";
 import { discardReports } from "../features/report/saveQueue";
-import { CheckList } from "../features/report/ReportOutline";
+import { ReportTabs, type TabItem } from "../features/report/ReportTabs";
+import { CheckList, TodoPanel } from "../features/report/TodoPanel";
 import { makeQueryClient } from "../lib/queryClient";
 import type { LogContent, LogEntryInput } from "../types/log";
 import type { ReportDoc } from "../types/report";
@@ -60,16 +61,32 @@ function mount(eid = "e-exam", qc: QueryClient = makeQueryClient()) {
   return { ...utils, qc };
 }
 
-const outline = () => screen.getByRole("navigation", { name: "Report outline" });
-const targetGroup = () => within(outline()).getByRole("group", { name: "Targets, in grading order" });
-const targetRows = () => [...targetGroup().querySelectorAll<HTMLElement>("[data-outline-row]")];
-const row = (name: string | RegExp) => within(outline()).getByRole("button", { name });
-const rowFor = (label: string) => targetRows().find((r) => r.textContent?.startsWith(label))!;
+const tabRow = () => screen.getByRole("tablist", { name: "Report pages" });
+const tabEls = () => within(tabRow()).getAllByRole("tab");
+const labelOf = (t: HTMLElement) => t.querySelector("[data-tab-label]")?.textContent ?? "";
+const tabLabels = () => tabEls().map(labelOf);
+/** The target tabs, numbered in grading order ("1 lnx02", "5 AD set"). */
+const targetRows = () => tabEls().filter((t) => /^\d+ /.test(labelOf(t)));
+const targetLabels = () => targetRows().map(labelOf);
+const tab = (label: string) => tabEls().find((t) => labelOf(t) === label)!;
+const rowFor = (name: string) => targetRows().find((t) => labelOf(t).replace(/^\d+ /, "") === name)!;
+/** Opens a part of Front matter or Closing: the tab, then the part in its segmented row. */
+const openPart = (group: "Front matter" | "Closing", part: RegExp) => {
+  fireEvent.click(tab(group));
+  fireEvent.click(within(screen.getByRole("tablist", { name: `${group} parts` })).getByRole("tab", { name: part }));
+};
+const TARGETS = ["1 lnx02", "2 ms01", "3 web01", "4 xfer03", "5 AD set"];
+/** Opens the To do panel from the strip (unless it is open) and returns its checks. */
+const openTodo = () => {
+  if (!screen.queryByRole("region", { name: "To do" })) fireEvent.click(screen.getByRole("button", { name: /^To do/ }));
+  return within(screen.getByRole("region", { name: "To do" })).getByRole("list", { name: "Checks" });
+};
 
 async function ready() {
   await waitFor(() => expect(targetRows().length).toBeGreaterThan(0));
 }
 
+const LNX_ID = "h-exam-lnx";
 type UpsertInput = { targetKey: string | null; draftBuiltAt: number | null };
 const draftUpserts = (spy: { mock: { calls: unknown[][] } }, targetKey: string) =>
   spy.mock.calls.filter((call) => {
@@ -81,17 +98,132 @@ describe("Report view", () => {
   it("lists the targets in grading order with the AD set last, and names the file from the OSID", async () => {
     mount();
     await ready();
-    // The engagement-level "Tested, not exploited" closes the targets.
-    await waitFor(() =>
-      expect(targetRows().map((r) => r.textContent)).toEqual(["lnx02.21", "ms01.5", "web01.20", "xfer03.22", "AD set: ad02, dc01", "Also tested"]),
-    );
+    await waitFor(() => expect(targetLabels()).toEqual(TARGETS));
     expect(screen.getByRole("group", { name: "Report OSCP-OS-48213-Exam-Report.pdf" })).toBeInTheDocument();
 
-    fireEvent.click(row(/Report details/));
+    openPart("Front matter", /Details/);
     const osid = await screen.findByLabelText("OSID");
     fireEvent.change(osid, { target: { value: "os-1" } });
     fireEvent.blur(osid);
     expect(await screen.findByRole("group", { name: "Report OSCP-OS-?????-Exam-Report.pdf" })).toBeInTheDocument();
+  });
+
+  it("shows a tab row in grading order: Front matter first, the targets, then Closing", async () => {
+    mount();
+    await ready();
+    await waitFor(() => expect(tabLabels()).toEqual(["Front matter", ...TARGETS, "Closing"]));
+    // The first target is open, and only it is in the tab order (roving tabindex).
+    expect(rowFor("lnx02")).toHaveAttribute("aria-selected", "true");
+    expect(tabEls().filter((t) => t.tabIndex === 0)).toEqual([rowFor("lnx02")]);
+    // Each tab says where it stands; a target with failing checks shows its count.
+    const stateOf = (t: HTMLElement) => t.querySelector("[data-tab-state]")?.textContent;
+    expect(stateOf(tab("Front matter"))).toBe("ready");
+    expect(stateOf(rowFor("lnx02"))).toBe("not started");
+    expect(stateOf(rowFor("ms01"))).toBe("ready");
+    // + Page arrives with the pages round: nothing offers it until then.
+    expect(screen.queryByRole("button", { name: "+ Page" })).toBeNull();
+  });
+
+  it("the selected tab is scrolled into view", async () => {
+    const into = vi.spyOn(Element.prototype, "scrollIntoView");
+    mount();
+    await ready();
+    into.mockClear();
+    fireEvent.click(rowFor("AD set"));
+    await waitFor(() => expect(into.mock.contexts).toContain(rowFor("AD set")));
+    const call = into.mock.calls[into.mock.contexts.indexOf(rowFor("AD set"))];
+    expect(call[0]).toEqual({ block: "nearest", inline: "nearest" });
+  });
+
+  it("←/→ move focus along the tab row and ↵ opens the focused tab", async () => {
+    mount();
+    await ready();
+    rowFor("lnx02").focus();
+    fireEvent.keyDown(rowFor("lnx02"), { key: "ArrowRight", code: "ArrowRight" });
+    expect(document.activeElement).toBe(rowFor("ms01"));
+    expect(rowFor("lnx02")).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(rowFor("ms01"), { key: "Enter", code: "Enter" });
+    await waitFor(() => expect(rowFor("ms01")).toHaveAttribute("aria-selected", "true"));
+    fireEvent.keyDown(rowFor("ms01"), { key: "ArrowLeft", code: "ArrowLeft" });
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowLeft", code: "ArrowLeft" });
+    expect(document.activeElement).toBe(tab("Front matter"));
+  });
+
+  it("clicking '3 to do' opens the To do panel with that target's checks; a check click focuses its block", async () => {
+    // lnx02 has a long scan on its page and none of its flags: failing checks to do.
+    await seedLnx(80);
+    mount();
+    await ready();
+    await waitFor(() => expect(editors.length).toBe(1));
+    fireEvent.click(rowFor("ms01"));
+    await waitFor(() => expect(editors.length).toBe(2));
+    expect(screen.queryByRole("region", { name: "To do" })).toBeNull();
+    const state = rowFor("lnx02").querySelector<HTMLElement>("[data-tab-state]")!;
+    expect(state.textContent).toMatch(/^\d+ to do$/);
+    expect(state).toHaveClass("text-warn");
+    fireEvent.click(state);
+    const panel = await screen.findByRole("region", { name: "To do" });
+    await waitFor(() => expect(rowFor("lnx02")).toHaveAttribute("aria-selected", "true"));
+    const checks = within(panel).getByRole("list", { name: "Checks" });
+    expect(within(checks).getByText("2 flags are not on the page")).toBeInTheDocument();
+    // lnx02's expected flags are set in the panel too.
+    expect(within(panel).getByRole("group", { name: "Expected flags" })).toBeInTheDocument();
+    await waitFor(() => expect(editors.length).toBe(3));
+    fireEvent.click(within(checks).getByText("Long block (80 lines of output)"));
+    await waitFor(() => expect(pageEditor().state.selection instanceof NodeSelection).toBe(true));
+    expect(pageEditor().view.hasFocus() || pageEditor().view.dom.contains(document.activeElement)).toBe(true);
+    // Esc in the panel closes it.
+    fireEvent.keyDown(within(panel).getByRole("button", { name: "Close To do" }), { key: "Escape", code: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("region", { name: "To do" })).toBeNull());
+  });
+
+  it("Front matter's segmented row switches between Details, Introduction, Summary, Considerations, Methodology", async () => {
+    mount();
+    await ready();
+    fireEvent.click(tab("Front matter"));
+    const parts = () => within(screen.getByRole("tablist", { name: "Front matter parts" })).getAllByRole("tab");
+    expect(parts().map((p) => p.textContent)).toEqual(["Details", "1 Introduction", "2 Summary", "Testing considerations", "3 Methodology"]);
+    expect(parts()[0]).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByLabelText("OSID")).toBeInTheDocument();
+    fireEvent.click(parts()[1]);
+    const h1 = () => within(document.querySelector<HTMLElement>(".report-page")!).queryByRole("heading", { level: 1 })?.textContent;
+    await waitFor(() => expect(h1()).toBe("1OffSec Certified Professional Exam Report"));
+    expect(parts()[1]).toHaveAttribute("aria-selected", "true");
+    expect(tab("Front matter")).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(parts()[4]);
+    await waitFor(() => expect(h1()).toBe("3Methodologies"));
+    // Away and back, Front matter opens on the part last shown.
+    fireEvent.click(rowFor("lnx02"));
+    fireEvent.click(tab("Front matter"));
+    await waitFor(() => expect(h1()).toBe("3Methodologies"));
+    // Closing holds Further information, References and the engagement's Also tested.
+    fireEvent.click(tab("Closing"));
+    expect(within(screen.getByRole("tablist", { name: "Closing parts" })).getAllByRole("tab").map((p) => p.textContent)).toEqual([
+      "Further information",
+      "References",
+      // The engagement's Also tested is numbered after the targets (§5.7).
+      "6 Also tested",
+    ]);
+  });
+
+  it("a layout-3 target page and a layout-3 summary page both rebuild and offer Restore your previous page", async () => {
+    const report = await api.reportGetOrCreate("e-exam");
+    const old = (text: string) => ({ type: "doc", content: [{ type: "slot", attrs: { hint: "x" }, content: [{ type: "text", text }] }] });
+    await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX_ID, position: 0, doc: old("Old lnx02 page") as unknown as ReportDoc, meta: { layout: 3 }, draftBuiltAt: 1 });
+    await api.reportSectionUpsert(report.id, { kind: "summary", targetKey: null, position: 0, doc: old("Old summary page") as unknown as ReportDoc, meta: { layout: 3 }, draftBuiltAt: 1 });
+    mount();
+    await ready();
+    const paper = () => document.querySelector<HTMLElement>(".report-page")!;
+    await waitFor(() => expect(screen.getByText("This page was rebuilt for a new layout.")).toBeInTheDocument());
+    expect(paper().textContent).not.toContain("Old lnx02 page");
+    fireEvent.click(screen.getByRole("button", { name: "Restore your previous page" }));
+    await waitFor(() => expect(paper().textContent).toContain("Old lnx02 page"));
+
+    openPart("Front matter", /Summary/);
+    await waitFor(() => expect(screen.getByText("This page was rebuilt for a new layout.")).toBeInTheDocument());
+    await waitFor(() => expect(paper().textContent).not.toContain("Old summary page"));
+    fireEvent.click(screen.getByRole("button", { name: "Restore your previous page" }));
+    await waitFor(() => expect(paper().textContent).toContain("Old summary page"));
   });
 
   it("builds a target's draft once, on its first open", async () => {
@@ -144,20 +276,20 @@ describe("Report view", () => {
     const upsert = vi.spyOn(api, "reportSectionUpsert");
     const { qc } = mount();
     await ready();
-    await waitFor(() => expect(targetRows()).toHaveLength(6));
+    await waitFor(() => expect(targetRows()).toHaveLength(5));
 
     await act(async () => {
       await api.hostDelete("h-exam-web");
       await qc.invalidateQueries();
     });
-    await waitFor(() => expect(targetRows().map((r) => r.textContent)).toEqual(["lnx02.21", "ms01.5", "xfer03.22", "AD set: ad02, dc01", "Also tested"]));
+    await waitFor(() => expect(targetLabels()).toEqual(["1 lnx02", "2 ms01", "3 xfer03", "4 AD set"]));
 
     let created = "";
     await act(async () => {
       created = (await api.hostCreate("e-exam", { name: "files03", ip: "10.10.30.33", os: "linux" } as never)).id;
       await qc.invalidateQueries();
     });
-    await waitFor(() => expect(targetRows().some((r) => r.textContent === "files03.33")).toBe(true));
+    await waitFor(() => expect(rowFor("files03")).toBeTruthy());
     await waitFor(() => expect(upsert.mock.calls.some(([, i]) => (i as { targetKey: string | null }).targetKey === created)).toBe(true));
     fireEvent.click(rowFor("files03"));
     await waitFor(() => expect(draftUpserts(upsert, created)).toHaveLength(1));
@@ -280,15 +412,15 @@ describe("Report view", () => {
     });
     mount();
     await ready();
-    await waitFor(() => expect(targetRows()).toHaveLength(6));
+    await waitFor(() => expect(targetRows()).toHaveLength(5));
     const first = rowFor("lnx02");
     first.focus();
-    fireEvent.keyDown(first, { key: "ArrowDown", code: "ArrowDown", altKey: true });
-    const order = ["ms01.5", "lnx02.21", "web01.20", "xfer03.22", "AD set: ad02, dc01", "Also tested"];
-    await waitFor(() => expect(targetRows().map((r) => r.textContent)).toEqual(order));
+    fireEvent.keyDown(first, { key: "ArrowRight", code: "ArrowRight", altKey: true });
+    const order = ["1 ms01", "2 lnx02", "3 web01", "4 xfer03", "5 AD set"];
+    await waitFor(() => expect(targetLabels()).toEqual(order));
     await act(async () => release());
     await waitFor(() => expect(editors.length).toBeGreaterThan(0));
-    expect(targetRows().map((r) => r.textContent)).toEqual(order);
+    expect(targetLabels()).toEqual(order);
   });
 
   it("a slower earlier report-details save never overwrites a later one", async () => {
@@ -302,7 +434,7 @@ describe("Report view", () => {
     });
     const { qc } = mount();
     await ready();
-    fireEvent.click(row(/Report details/));
+    openPart("Front matter", /Details/);
     const osid = await screen.findByLabelText("OSID");
     fireEvent.change(osid, { target: { value: "OS-11111" } });
     fireEvent.blur(osid);
@@ -315,7 +447,7 @@ describe("Report view", () => {
     expect((qc.getQueryData(["report", "e-exam"]) as { osid: string }).osid).toBe("OS-22222");
   });
 
-  it("shows a failed section setup with Retry, keeping the outline", async () => {
+  it("shows a failed section setup with Retry, keeping the tabs", async () => {
     const real = api.reportSectionUpsert;
     let fail = false;
     vi.spyOn(api, "reportSectionUpsert").mockImplementation(async (rid, input) => {
@@ -324,7 +456,7 @@ describe("Report view", () => {
     });
     const { qc } = mount();
     await ready();
-    await waitFor(() => expect(targetRows()).toHaveLength(6));
+    await waitFor(() => expect(targetRows()).toHaveLength(5));
 
     fail = true;
     await act(async () => {
@@ -332,11 +464,11 @@ describe("Report view", () => {
       await qc.invalidateQueries();
     });
     expect(await screen.findByText(/Couldn't add the report's new sections/)).toBeInTheDocument();
-    expect(targetRows()).toHaveLength(6);
+    expect(targetRows()).toHaveLength(5);
 
     fail = false;
     fireEvent.click(screen.getByRole("button", { name: "Retry setting up sections" }));
-    await waitFor(() => expect(targetRows().some((r) => r.textContent === "files03.33")).toBe(true));
+    await waitFor(() => expect(rowFor("files03")).toBeTruthy());
     expect(screen.queryByText(/Couldn't add the report's new sections/)).not.toBeInTheDocument();
   });
 
@@ -361,19 +493,17 @@ describe("Report view", () => {
     expect(await screen.findByText("Client reports come after the exam")).toBeInTheDocument();
   });
 
-  it("moves a target down the grading order with ⌥↓", async () => {
+  it("⌥→ on a target tab moves it later in grading order", async () => {
     const reorder = vi.spyOn(api, "reportSectionsReorder");
     mount();
     await ready();
-    await waitFor(() => expect(targetRows()).toHaveLength(6));
+    await waitFor(() => expect(targetRows()).toHaveLength(5));
     const first = rowFor("lnx02");
     const lnxId = first.dataset.id!;
     const msId = rowFor("ms01").dataset.id!;
     first.focus();
-    fireEvent.keyDown(first, { key: "ArrowDown", code: "ArrowDown", altKey: true });
-    await waitFor(() =>
-      expect(targetRows().map((r) => r.textContent)).toEqual(["ms01.5", "lnx02.21", "web01.20", "xfer03.22", "AD set: ad02, dc01", "Also tested"]),
-    );
+    fireEvent.keyDown(first, { key: "ArrowRight", code: "ArrowRight", altKey: true });
+    await waitFor(() => expect(targetLabels()).toEqual(["1 ms01", "2 lnx02", "3 web01", "4 xfer03", "5 AD set"]));
     expect(reorder).toHaveBeenCalledTimes(1);
     const ids = reorder.mock.calls[0][1];
     expect(ids.indexOf(msId)).toBeLessThan(ids.indexOf(lnxId));
@@ -423,10 +553,10 @@ const evidenceIds = () => {
   });
   return ids;
 };
-const appendixGroup = () => within(outline()).getByRole("group", { name: "Appendices" });
+const appendixTab = (label: string) => within(tabRow()).findByRole("tab", { name: new RegExp(`^${label}`) });
 
 describe("Report view: appendices and new evidence", () => {
-  it("Move to appendix adds Appendix A to the outline; its page lists the moved block and links back", async () => {
+  it("Move to appendix adds an Appendix A tab; its page lists the moved block and links back", async () => {
     await seedLnx();
     mount();
     await ready();
@@ -437,7 +567,9 @@ describe("Report view: appendices and new evidence", () => {
     act(() => view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, view.state.doc.child(0).nodeSize + view.state.doc.child(1).nodeSize))));
     fireEvent.click(await screen.findByRole("button", { name: "Move to appendix" }));
     expect(await screen.findByText("Full output: Appendix A.1, nmap scan")).toBeInTheDocument();
-    const appendixRow = await within(appendixGroup()).findByRole("button", { name: "Appendix A: lnx02" });
+    const appendixRow = await appendixTab("Appendix A");
+    expect(appendixRow).toHaveTextContent("lnx02");
+    expect(appendixRow).toHaveTextContent("1 item");
 
     fireEvent.click(appendixRow);
     expect(await screen.findByRole("heading", { name: "Appendix A: lnx02" })).toBeInTheDocument();
@@ -447,7 +579,7 @@ describe("Report view: appendices and new evidence", () => {
     const before = editors.length;
     fireEvent.click(screen.getByRole("button", { name: "Referenced from lnx02" }));
     await waitFor(() => expect(editors.length).toBe(before + 1));
-    expect(rowFor("lnx02")).toHaveAttribute("aria-current", "page");
+    expect(rowFor("lnx02")).toHaveAttribute("aria-selected", "true");
     await waitFor(() => {
       const sel = pageEditor().state.selection;
       expect(sel instanceof NodeSelection && sel.node.type.name === "evidence").toBe(true);
@@ -459,7 +591,7 @@ describe("Report view: appendices and new evidence", () => {
     mount();
     await ready();
     await waitFor(() => expect(editors.length).toBeGreaterThan(0));
-    const checks = screen.getAllByRole("list", { name: "Checks" })[0];
+    const checks = openTodo();
     // The fix is offered for the picked check only.
     expect(within(checks).queryByRole("button", { name: "Move to appendix" })).toBeNull();
     fireEvent.click(within(checks).getByText("Long block (80 lines of output)"));
@@ -467,7 +599,7 @@ describe("Report view: appendices and new evidence", () => {
     expect(within(checks).getByText(/This block is long \(80 lines of output\)/)).toBeInTheDocument();
     fireEvent.click(within(checks).getByRole("button", { name: "Move to appendix" }));
     await waitFor(() => expect(pageEditor().state.doc.child(2).attrs.appendix).toBe("moved"));
-    expect(await within(appendixGroup()).findByRole("button", { name: "Appendix A: lnx02" })).toBeInTheDocument();
+    expect(await appendixTab("Appendix A")).toBeInTheDocument();
   });
 
   it("flags a screenshot too narrow to print legibly once its image loads", async () => {
@@ -487,7 +619,7 @@ describe("Report view: appendices and new evidence", () => {
     const img = container.querySelector<HTMLImageElement>(".report-figure img")!;
     Object.defineProperty(img, "naturalWidth", { value: 480 });
     fireEvent.load(img);
-    const checks = screen.getAllByRole("list", { name: "Checks" })[0];
+    const checks = openTodo();
     fireEvent.click(await within(checks).findByText("Screenshot too narrow to print"));
     expect(within(checks).getByText('The screenshot "Login page" is narrower than would print legibly. Retake it larger or crop it tighter.')).toBeInTheDocument();
   });
@@ -523,7 +655,7 @@ describe("Report view: appendices and new evidence", () => {
   it("offers no Move to appendix on a report-level page", async () => {
     mount();
     await ready();
-    fireEvent.click(row(/Methodologies/));
+    openPart("Front matter", /Methodology/);
     await waitFor(() => expect(editors.length).toBeGreaterThan(1));
     const view = pageEditor().view;
     let pos = -1;
@@ -592,7 +724,7 @@ describe("Report view: the result", () => {
     mount();
     await ready();
     const h1 = () => within(paper()).queryByRole("heading", { level: 1 })?.textContent;
-    fireEvent.click(row(/Exam report/));
+    openPart("Front matter", /Introduction/);
     await waitFor(() => expect(h1()).toBe("1OffSec Certified Professional Exam Report"));
     expect(paper().firstElementChild?.tagName).toBe("H1");
     // Section 1's parts number under it, from the page's number.
@@ -604,11 +736,11 @@ describe("Report view: the result", () => {
         ["1.4", "Scope"],
       ]),
     );
-    fireEvent.click(row(/High-level summary/));
+    openPart("Front matter", /Summary/);
     await waitFor(() => expect(h1()).toBe("2High-Level Summary"));
-    fireEvent.click(row(/Methodologies/));
+    openPart("Front matter", /Methodology/);
     await waitFor(() => expect(h1()).toBe("3Methodologies"));
-    fireEvent.click(row(/Testing considerations/));
+    openPart("Front matter", /Testing considerations/);
     await waitFor(() => expect(h1()).toBe("Testing Considerations"));
     // The first target opens the Independent Challenges chapter; the next carries only its own heading.
     fireEvent.click(rowFor("lnx02"));
@@ -622,16 +754,16 @@ describe("Report view: the result", () => {
     expect(subs[1]).toMatch(/^4\.2\.2Initial Access – /);
     expect(subs[2]).toMatch(/^4\.2\.3Privilege Escalation/);
     expect(subs).toContain("4.2.4Post-Exploitation");
-    fireEvent.click(row(/AD set/));
+    fireEvent.click(rowFor("AD set"));
     await waitFor(() => expect(h1()).toBe("5Active Directory Set"));
   });
 
-  it("lists no generated appendices in the outline", async () => {
+  it("lists no generated appendices in the tab row", async () => {
     mount();
     await ready();
-    expect(within(outline()).queryByRole("button", { name: /Proof table|Tools and payloads|Metasploit usage|House cleaning/ })).toBeNull();
-    expect(within(outline()).queryByRole("group", { name: "Appendices" })).toBeNull();
-    expect(row(/Further information/)).toBeInTheDocument();
+    expect(within(tabRow()).queryByRole("tab", { name: /Proof table|Tools and payloads|Metasploit usage|House cleaning|Appendix/ })).toBeNull();
+    openPart("Closing", /Further information/);
+    await waitFor(() => expect(within(paper()).queryByRole("heading", { level: 1 })?.textContent).toBe("Further Information"));
   });
 
   it("prints a flag inline: Local.txt value: closes Initial Access, Proof.txt value: opens Post-Exploitation", async () => {
@@ -648,12 +780,17 @@ describe("Report view: the result", () => {
     expect(at((t) => t === "Proof.txt value:")).toBe(at((t) => t.includes("Post-Exploitation")) + 1);
   });
 
-  it("prints the Port Scan Results at the top of Service Enumeration", async () => {
+  it("prints the port table at the top of Service Enumeration, with a Notes cell per port", async () => {
     mount();
     await ready();
     await waitFor(() => expect(paper().querySelector(".report-table")).toBeTruthy());
-    const cells = [...paper().querySelectorAll(".report-table tbody td")].map((td) => td.textContent);
-    expect(cells).toEqual(["10.10.30.21", "TCP: 22, 8080"]);
+    const table = paper().querySelector(".report-table")!;
+    expect([...table.querySelectorAll("th")].map((th) => th.textContent)).toEqual(["Port", "Service", "Version", "Notes"]);
+    expect([...table.querySelectorAll("tbody tr")].map((tr) => tr.querySelector("td")?.textContent)).toEqual(["22/tcp", "8080/tcp"]);
+    expect(within(table as HTMLElement).getByRole("textbox", { name: "Notes for 22/tcp" })).toBeInTheDocument();
+    // Enumeration's heading comes first, the table under it.
+    const order = [...paper().querySelectorAll("h3, .report-table")].map((el) => el.tagName);
+    expect(order.slice(0, 2)).toEqual(["H3", "TABLE"]);
     expect(paper().querySelector(".report-facts")).toBeNull();
   });
 
@@ -741,7 +878,7 @@ describe("Report view: the result", () => {
     mount();
     await ready();
     await waitFor(() => expect(paper().querySelector('[data-source-gone="private"]')).toBeTruthy());
-    const checks = screen.getAllByRole("list", { name: "Checks" })[0];
+    const checks = openTodo();
     fireEvent.click(within(checks).getByText("Text from a now-private entry"));
     fireEvent.click(within(checks).getByRole("button", { name: "Keep the text" }));
     await waitFor(() => expect(paper().querySelector("[data-source-gone]")).toBeNull());
@@ -758,8 +895,9 @@ describe("Report view: the result", () => {
     mount();
     await ready();
     fireEvent.click(rowFor("ms01"));
-    await waitFor(() => expect(screen.getAllByRole("list", { name: "Checks" })[0]).toHaveTextContent(/steps have no explanation/));
-    const checks = screen.getAllByRole("list", { name: "Checks" })[0];
+    await waitFor(() => expect(editors.length).toBeGreaterThan(1));
+    await waitFor(() => expect(openTodo()).toHaveTextContent(/steps have no explanation/));
+    const checks = openTodo();
     const explain = within(checks).getByText(/^\d+ steps have no explanation$/);
     expect(within(checks).queryAllByText("A step has no explanation before it.")).toHaveLength(0);
     const total = Number(explain.textContent!.split(" ")[0]);
@@ -815,6 +953,77 @@ describe("CheckList", () => {
     expect(screen.getByText("80/tcp on ms01 is untested.")).toBeInTheDocument();
     expect(onPick).toHaveBeenLastCalledWith(expect.objectContaining({ id: "coverage:s2" }));
     expect(screen.queryByRole("button", { name: "Fix" })).toBeNull();
+  });
+});
+
+describe("ReportTabs", () => {
+  const tabs: TabItem[] = [
+    { id: "front", label: "Front matter", state: "ready" },
+    { id: "a", label: "1 lnx02", state: "todo", todo: 3, reorderable: true },
+    { id: "b", label: "2 ms01", state: "not-started", reorderable: true },
+    { id: "app", label: "Appendix A", state: "none", detail: "ms01, 2 items" },
+  ];
+  const renderTabs = (props: Partial<ComponentProps<typeof ReportTabs>> = {}) => {
+    const onOpen = vi.fn();
+    const onReorder = vi.fn();
+    const onTodo = vi.fn();
+    const onAddPage = vi.fn();
+    render(
+      <TooltipProvider>
+        <ReportTabs tabs={tabs} openId="a" onOpen={onOpen} onReorder={onReorder} onTodo={onTodo} onAddPage={onAddPage} exportSlot={<button type="button">Export PDF</button>} {...props} />
+      </TooltipProvider>,
+    );
+    return { onOpen, onReorder, onTodo, onAddPage };
+  };
+
+  it("puts + Page after the last tab and Export at the row's end; + Page offers an appendix page or a free page", () => {
+    const { onAddPage } = renderTabs();
+    const row = screen.getByRole("tablist", { name: "Report pages" });
+    expect(within(row).getAllByRole("tab").map((t) => t.querySelector("[data-tab-label]")?.textContent)).toEqual(["Front matter", "1 lnx02", "2 ms01", "Appendix A"]);
+    const add = screen.getByRole("button", { name: "+ Page" });
+    // In document order: the last tab, + Page, then Export.
+    const appendix = within(row).getAllByRole("tab")[3];
+    expect(appendix.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(add.compareDocumentPosition(screen.getByRole("button", { name: "Export PDF" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(appendix).toHaveTextContent("ms01, 2 items");
+    fireEvent.click(add);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Free page" }));
+    expect(onAddPage).toHaveBeenCalledWith("body");
+  });
+
+  it("states: ready, N to do, not started; N to do opens its tab and the To do panel", () => {
+    const { onOpen, onTodo } = renderTabs({ openId: "front" });
+    const state = (label: string) => screen.getAllByRole("tab").find((t) => t.textContent?.startsWith(label))!.querySelector("[data-tab-state]")!;
+    expect(state("Front matter").textContent).toBe("ready");
+    expect(state("1 lnx02").textContent).toBe("3 to do");
+    expect(state("2 ms01").textContent).toBe("not started");
+    fireEvent.click(state("1 lnx02"));
+    expect(onOpen).toHaveBeenCalledWith("a");
+    expect(onTodo).toHaveBeenCalledWith("a");
+  });
+
+  it("⌥← and ⌥→ reorder only reorderable tabs", () => {
+    const { onReorder } = renderTabs();
+    const [front, a] = screen.getAllByRole("tab");
+    fireEvent.keyDown(a, { key: "ArrowRight", altKey: true });
+    expect(onReorder).toHaveBeenCalledWith("a", 1);
+    fireEvent.keyDown(front, { key: "ArrowRight", altKey: true });
+    expect(onReorder).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("TodoPanel", () => {
+  it("lists the checks and closes on Esc", () => {
+    const onClose = vi.fn();
+    render(
+      <TooltipProvider>
+        <TodoPanel checks={[{ id: "details", level: "fail", text: "Report details are missing the OSID." }]} onPick={() => {}} onClose={onClose} />
+      </TooltipProvider>,
+    );
+    const panel = screen.getByRole("region", { name: "To do" });
+    expect(within(panel).getByRole("list", { name: "Checks" })).toBeInTheDocument();
+    fireEvent.keyDown(within(panel).getAllByRole("button")[0], { key: "Escape" });
+    expect(onClose).toHaveBeenCalled();
   });
 });
 

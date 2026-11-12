@@ -65,7 +65,7 @@ const ATOMS: { name: string; attrs: Record<string, unknown>; component: ReactNod
     attrs: { entryId: "", block: null, keep: null, emphasis: [], appendix: "inline", caption: null, width: null },
     component: EvidenceView,
   },
-  { name: "generated", attrs: { kind: "facts", hostId: null, appendix: "inline" }, component: GeneratedView },
+  { name: "generated", attrs: { kind: "facts", hostId: null, appendix: "inline", notes: {} }, component: GeneratedView },
   { name: "vuln", attrs: { findingId: "" }, component: VulnView },
   { name: "exploit", attrs: { fileId: "", markedLines: [], appendix: "inline" }, component: ExploitView },
 ];

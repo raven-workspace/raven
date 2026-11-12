@@ -37,7 +37,7 @@ import { useNarrow } from "../../lib/useNarrow";
 import { reportError } from "../../lib/lockSignal";
 import type { Report, ReportDoc, ReportPatch, ReportSection } from "../../types/report";
 import type { Settings } from "../../types/settings";
-import { Button, Disclosure, EmptyState, ErrorState, LoadingState, queryState, Select, usePageShortcuts, type Hint } from "../../ui";
+import { Button, EmptyState, ErrorState, LoadingState, queryState, usePageShortcuts, type Hint } from "../../ui";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useNotesStore } from "../notes/useNotesStore";
 import { usePayloadsStore } from "../payloads/usePayloadsStore";
@@ -47,8 +47,9 @@ import { keepCopiedText, openFindBar, posAtPath, ReportEditor, selectBlockAt, se
 import { AddEvidenceButton } from "./AddEvidenceButton";
 import { EvidenceDrawer, EvidenceRail } from "./EvidenceRail";
 import { ReportDetails } from "./ReportDetails";
-import { CheckList, ExpectedFlags, focusOutlineRow, ReportOutline, type CheckAction, type OutlineItem, type TargetState } from "./ReportOutline";
 import { ReportStrip } from "./ReportStrip";
+import { focusReportTab, PartTabs, ReportTabs, type TabItem } from "./ReportTabs";
+import { ExpectedFlags, TodoPanel, type CheckAction } from "./TodoPanel";
 import {
   BACK_KINDS,
   ensureSections,
@@ -68,10 +69,10 @@ import {
 import { trackReportWrite, useReportSaveStore } from "./saveQueue";
 
 const HINTS: Hint[] = [
-  { keys: "J K", label: "move in the outline", priority: 1 },
-  { keys: "↵", label: "open", priority: 2 },
-  { keys: "⌥↑ ⌥↓", label: "reorder targets", priority: 3 },
-  { keys: "⌥1–3", label: "outline, page, evidence", priority: 4 },
+  { keys: "← →", label: "move along the tabs (J K from anywhere)", priority: 1 },
+  { keys: "↵", label: "open the tab", priority: 2 },
+  { keys: "⌥← ⌥→", label: "reorder targets", priority: 3 },
+  { keys: "⌥1–3", label: "tabs, page, evidence", priority: 4 },
   { keys: "⌘↵", label: "insert evidence", priority: 6 },
   { keys: "/", label: "insert on the page", priority: 7 },
   { keys: "⌘F", label: "find and replace", priority: 8 },
@@ -89,6 +90,22 @@ const NARROW_HINTS: Hint[] = [...HINTS, { keys: "E", label: "evidence", priority
 const RAIL_BREAKPOINT = 1200;
 
 const LABEL = SECTION_NAMES;
+
+/** Front matter's and Closing's parts as their segmented rows name them (with the part's number, where it has one). */
+const PART_LABEL: Partial<Record<string, string>> = {
+  details: "Details",
+  introduction: "Introduction",
+  summary: "Summary",
+  considerations: "Testing considerations",
+  methodology: "Methodology",
+  further: "Further information",
+  references: "References",
+  "engagement-tested": "Also tested",
+};
+/** Closing's parts in their row's order. */
+const CLOSING_ORDER = ["further", "references", "engagement-tested"];
+const FRONT_TAB = "tab:front";
+const CLOSING_TAB = "tab:closing";
 
 const GENERATED_TITLE: Record<string, string> = {
   "port-scan": "Port Scan Results",
@@ -128,6 +145,7 @@ function nodeAtPath(doc: ReportNode, path: string): ReportNode | null {
 /** A target's appendix page (letters from A): the target and its moved entries, in page order. */
 interface AppendixPage {
   id: string;
+  letter: string;
   label: string;
   /** The target as the appendix names it: "lnx02", "AD set (ad02, dc01)". */
   name: string;
@@ -159,8 +177,6 @@ function useStableAppendix(index: AppendixIndex): AppendixIndex {
   }
   return kept.index;
 }
-
-const lastOctet = (ip: string | null | undefined) => (ip && ip.includes(".") ? `.${ip.split(".").pop()}` : undefined);
 
 /**
  * The open page's edit handlers: every change queues an autosave of the page with its meta, and a removed evidence
@@ -248,8 +264,11 @@ export function ReportSectionView() {
 /** The section's states (loading, empty, error) keep the margins the shell gives other sections; the report itself runs edge to edge. */
 const Padded = ({ children }: { children: ReactNode }) => <div className="px-6 py-6">{children}</div>;
 
+/** Which tab a section sits under: Front matter's parts, the targets, or Closing's parts. */
+type EntryGroup = "front" | "targets" | "closing";
+
 interface Entry {
-  item: OutlineItem;
+  item: { id: string; group: EntryGroup; label: string; reorderable?: boolean };
   section: ReportSection;
   target?: ReportTarget;
 }
@@ -338,14 +357,14 @@ function ReportBody({
       });
   }, [report, targets, data, sections, qc, ensureFailed]);
 
-  // The outline, in §5.7 order. Sections whose target is gone (deleted host, unticked lab host) are hidden, never deleted.
+  // The report's sections in §5.7 order (numbering, figures and appendix letters follow it). Sections whose target is
+  // gone (deleted host, unticked lab host) are hidden, never deleted.
   const entries = useMemo((): Entry[] => {
     const byKey = new Map(sections.map((s) => [sectionKey(s.kind, s.targetKey), s]));
     const out: Entry[] = [];
-    const detailsMissing = !report.candidateName.trim() || !report.email.trim() || !isValidOsid(report.osid.trim());
     for (const kind of FRONT_KINDS) {
       const s = byKey.get(sectionKey(kind, null));
-      if (s) out.push({ section: s, item: { id: s.id, group: "report", label: LABEL[kind]!, warn: kind === "details" && detailsMissing } });
+      if (s) out.push({ section: s, item: { id: s.id, group: "front", label: LABEL[kind]! } });
     }
     const standalone = targets.filter((t) => t.kind === "standalone");
     const order = new Map(standalone.map((t, i) => [t.key, i]));
@@ -355,22 +374,19 @@ function ReportBody({
     for (const s of targetSections) {
       const target = standalone.find((t) => t.key === s.targetKey)!;
       const host = data.hosts.find((h) => h.id === target.key);
-      out.push({ section: s, target, item: { id: s.id, group: "targets", label: host?.name ?? "Host", octet: lastOctet(host?.ip), reorderable: true } });
+      out.push({ section: s, target, item: { id: s.id, group: "targets", label: host?.name ?? "Host", reorderable: true } });
     }
     const ad = targets.find((t) => t.kind === "ad-set");
     const adSection = byKey.get(sectionKey("ad", "ad-set"));
-    if (ad && adSection) {
-      const names = ad.hostIds.map((id) => data.hosts.find((h) => h.id === id)?.name).filter(Boolean);
-      out.push({ section: adSection, target: ad, item: { id: adSection.id, group: "targets", label: `AD set: ${names.join(", ")}` } });
-    }
+    if (ad && adSection) out.push({ section: adSection, target: ad, item: { id: adSection.id, group: "targets", label: "AD set" } });
     const tested = byKey.get(sectionKey("engagement-tested", null));
-    if (tested && hasEngagementTested(data)) out.push({ section: tested, item: { id: tested.id, group: "targets", label: LABEL["engagement-tested"]! } });
+    if (tested && hasEngagementTested(data)) out.push({ section: tested, item: { id: tested.id, group: "closing", label: LABEL["engagement-tested"]! } });
     for (const kind of BACK_KINDS) {
       const s = byKey.get(sectionKey(kind, null));
       if (s) out.push({ section: s, item: { id: s.id, group: "closing", label: LABEL[kind]! } });
     }
     return out;
-  }, [sections, targets, data, report]);
+  }, [sections, targets, data]);
 
   // First drafts for sections not built yet, or built with an older layout (rebuilt from scratch; the page written before
   // is kept in the meta, `previousDoc`): what their page will hold, so checks and numbering read it already.
@@ -408,7 +424,7 @@ function ReportBody({
           e.target.kind === "ad-set"
             ? `AD set (${e.target.hostIds.map((id) => data.hosts.find((h) => h.id === id)?.name ?? "Host").join(", ")})`
             : e.item.label;
-        return [{ id: `${APPENDIX_ID}${e.section.id}`, label: `Appendix ${list[0].letter}: ${name}`, name, entry: e, entries: list }];
+        return [{ id: `${APPENDIX_ID}${e.section.id}`, letter: list[0].letter, label: `Appendix ${list[0].letter}: ${name}`, name, entry: e, entries: list }];
       }),
     [entries, data],
   );
@@ -473,19 +489,34 @@ function ReportBody({
 
   const targetEntries = entries.filter((e) => e.target);
   const readyCount = targetEntries.filter((e) => isReady(checks.get(e.section.id) ?? [])).length;
-  const gaps = [...checks.values(), reportLevel].reduce((n, list) => n + list.filter((c) => c.level === "fail").length, 0);
-  const stateOf = (t: ReportTarget, sectionId: string): TargetState => {
-    const started = data.log.some((l) => !l.private && l.hostIds.some((h) => t.hostIds.includes(h)));
-    if (!started) return "not-started";
-    return isReady(checks.get(sectionId) ?? []) ? "ready" : "gaps";
-  };
-  // Appendix pages follow the fixed appendices, before the closing sections; they follow the live page.
+  const failsIn = (list: Check[]) => list.filter((c) => c.level === "fail").length;
+  const gaps = [...checks.values(), reportLevel].reduce((n, list) => n + failsIn(list), 0);
+  const started = (t: ReportTarget) => data.log.some((l) => !l.private && l.hostIds.some((h) => t.hostIds.includes(h)));
+
+  // The tab row (§10.1): Front matter, the targets in grading order, Closing, then the appendices (they follow the live
+  // page). Front matter and Closing each hold several sections, switched by their segmented row.
   const appendixPages = appendixPagesOf(appendix);
-  const sectionItems = entries.map((e) => (e.target ? { ...e.item, state: stateOf(e.target, e.section.id) } : e.item));
-  const closingAt = sectionItems.findIndex((i) => i.group === "closing");
-  const pageItems: OutlineItem[] = appendixPages.map((p) => ({ id: p.id, group: "appendices", label: p.label }));
-  const items = closingAt === -1 ? [...sectionItems, ...pageItems] : [...sectionItems.slice(0, closingAt), ...pageItems, ...sectionItems.slice(closingAt)];
-  const openItemId = openAppendix?.id ?? open?.item.id ?? null;
+  const frontParts = entries.filter((e) => e.item.group === "front");
+  const closingParts = entries
+    .filter((e) => e.item.group === "closing")
+    .sort((a, b) => CLOSING_ORDER.indexOf(a.section.kind) - CLOSING_ORDER.indexOf(b.section.kind));
+  const groupOf = (e: Entry | undefined): string | null => (e?.item.group === "front" ? FRONT_TAB : e?.item.group === "closing" ? CLOSING_TAB : (e?.section.id ?? null));
+  const tabs: TabItem[] = [];
+  if (frontParts.length > 0) {
+    const fails = failsIn(reportLevel);
+    tabs.push({ id: FRONT_TAB, label: "Front matter", state: fails > 0 ? "todo" : "ready", todo: fails });
+  }
+  targetEntries.forEach((e, i) => {
+    const fails = failsIn(checks.get(e.section.id) ?? []);
+    const state: TabItem["state"] = !started(e.target!) ? "not-started" : fails > 0 ? "todo" : "ready";
+    tabs.push({ id: e.section.id, label: `${i + 1} ${e.item.label}`, state, todo: fails, reorderable: e.item.reorderable });
+  });
+  if (closingParts.length > 0) tabs.push({ id: CLOSING_TAB, label: "Closing", state: "none" });
+  for (const p of appendixPages) {
+    const n = p.entries.length;
+    tabs.push({ id: p.id, label: `Appendix ${p.letter}`, state: "none", detail: `${p.entry.item.label}, ${n} ${n === 1 ? "item" : "items"}` });
+  }
+  const openTabId = openAppendix?.id ?? groupOf(open) ?? "";
 
   const figureOffset = useMemo(() => {
     let n = 0;
@@ -553,10 +584,21 @@ function ReportBody({
     patchCachedSection(qc, s.id, { doc: next.doc as ReportDoc, meta: next.meta as Record<string, unknown> });
     setSwaps((n) => n + 1);
   };
+  // Front matter and Closing reopen on the part last shown in them.
+  const lastPart = useRef<Partial<Record<string, string>>>({});
   // An appendix page reads the stored pages: write the open page first, so a block moved a moment ago is on it.
   const openItem = (id: string) => {
     if (id.startsWith(APPENDIX_ID)) void saver.flush();
+    const group = groupOf(entries.find((e) => e.section.id === id));
+    if (group === FRONT_TAB || group === CLOSING_TAB) lastPart.current[group] = id;
     setOpenId(id);
+  };
+  const openTab = (id: string) => {
+    if (id === FRONT_TAB || id === CLOSING_TAB) {
+      const parts = id === FRONT_TAB ? frontParts : closingParts;
+      const last = lastPart.current[id];
+      openItem(parts.some((p) => p.section.id === last) ? last! : parts[0].section.id);
+    } else openItem(id);
   };
   // An appendix entry's link back: the block to select once its section's page has mounted.
   const pendingPick = useRef<{ id: string; path: string } | null>(null);
@@ -649,8 +691,8 @@ function ReportBody({
     [entries, sections, qc, report.id],
   );
 
-  // Keys: J/K move in the outline; ⌥1/⌥2/⌥3 focus the outline, the page and the evidence column.
-  const navRef = useRef<HTMLElement | null>(null);
+  // Keys: J/K move along the tabs; ⌥1/⌥2/⌥3 focus the tab row, the page and the evidence column.
+  const navRef = useRef<HTMLDivElement | null>(null);
   const pageRef = useRef<HTMLDivElement | null>(null);
   const railRef = useRef<HTMLElement | null>(null);
   const [sectionRef, narrow] = useNarrow<HTMLElement>(RAIL_BREAKPOINT);
@@ -678,7 +720,7 @@ function ReportBody({
     if (!isFreeKey(e) || (e.key !== "j" && e.key !== "k" && e.key !== "J" && e.key !== "K")) return;
     e.preventDefault();
     const from = navRef.current?.contains(document.activeElement) ? document.activeElement : null;
-    focusOutlineRow(navRef.current, e.key.toLowerCase() === "j" ? 1 : -1, from);
+    focusReportTab(navRef.current, e.key.toLowerCase() === "j" ? 1 : -1, from);
   });
   // ⌘F: the page's find bar, while focus is anywhere in the Report view (⌘K stays the app's search).
   useKeydown((e) => {
@@ -690,10 +732,10 @@ function ReportBody({
   });
   useKeydown((e) => {
     if (!e.altKey || e.metaKey || e.ctrlKey || e.defaultPrevented || isDialogOpen()) return;
-    const pane = { Digit1: "outline", Digit2: "page", Digit3: "rail" }[e.code];
+    const pane = { Digit1: "tabs", Digit2: "page", Digit3: "rail" }[e.code];
     if (!pane) return;
     e.preventDefault();
-    if (pane === "outline") focusOutlineRow(navRef.current, 0);
+    if (pane === "tabs") focusReportTab(navRef.current, 0);
     else if (pane === "rail") {
       if (narrow) {
         toggleRail(true);
@@ -707,6 +749,13 @@ function ReportBody({
 
   // A check takes the page to the block it concerns and selects it.
   const pickCheck = (check: Check) => {
+    // Report-level checks name a Front matter part: the details (name, email, OSID, a lab's hosts) or Methodology.
+    const part = check.id === "msf-many" ? "methodology" : ["details", "osid", "no-targets"].includes(check.id) ? "details" : null;
+    const partSection = part ? frontParts.find((e) => e.section.kind === part) : undefined;
+    if (partSection) {
+      openItem(partSection.section.id);
+      return;
+    }
     const editor = openEditor();
     if (!editor) return;
     const doc = editor.state.doc;
@@ -751,14 +800,24 @@ function ReportBody({
     };
   };
 
-  const openChecks = open?.target ? (checks.get(open.section.id) ?? []) : [];
+  // The To do panel lists the open tab's checks: a target's own, Front matter's report-level ones.
+  const [todoOpen, setTodoOpen] = useState(false);
+  const openChecks = openAppendix ? [] : open?.target ? (checks.get(open.section.id) ?? []) : open?.item.group === "front" ? reportLevel : [];
   const machines = open?.target ? open.target.hostIds.map((id) => ({ hostId: id, name: data.hosts.find((h) => h.id === id)?.name ?? "Host" })) : [];
-  const targetExtra = open?.target ? (
-    <>
-      <CheckList checks={openChecks} onPick={pickCheck} actionFor={checkAction} />
-      <ExpectedFlags machines={machines} flagsOf={(id) => expectedFlags(open.target!, id, reportMeta)} onChange={setFlags} />
-    </>
-  ) : undefined;
+  const todoPanel = todoOpen ? (
+    <TodoPanel
+      className="row-start-2"
+      checks={openChecks}
+      onPick={pickCheck}
+      actionFor={checkAction}
+      onClose={() => setTodoOpen(false)}
+      flags={
+        !openAppendix && open?.target ? (
+          <ExpectedFlags machines={machines} flagsOf={(id) => expectedFlags(open.target!, id, reportMeta)} onChange={setFlags} />
+        ) : undefined
+      }
+    />
+  ) : null;
 
   const contextValue = useMemo(
     (): ReportDataValue | null =>
@@ -779,7 +838,7 @@ function ReportBody({
     [data, appendix, openSectionMeta, onRemoveEvidence, reportMeta, figureOffset, onImageWidth, openTarget, headingsOf],
   );
 
-  const notStarted = open?.target && stateOf(open.target, open.section.id) === "not-started";
+  const notStarted = open?.target && !started(open.target);
   const appendixView = openAppendix ? (
     <AppendixSection
       key={openAppendix.id}
@@ -798,7 +857,23 @@ function ReportBody({
     />
   ) : null;
   const includedHostIds = targets.flatMap((t) => t.hostIds);
-  const [checksOpen, setChecksOpen] = useState(false);
+  // Front matter's and Closing's segmented row, at the top of the page.
+  const parts = openAppendix ? null : open?.item.group === "front" ? frontParts : open?.item.group === "closing" ? closingParts : null;
+  const partRow =
+    parts && open ? (
+      <div className="row-start-1 grid border-b border-line px-6 py-1">
+        <PartTabs
+          label={open.item.group === "front" ? "Front matter parts" : "Closing parts"}
+          parts={parts.map((e) => {
+            const number = numbers.get(e.section.id)?.number;
+            const name = PART_LABEL[e.section.kind] ?? e.item.label;
+            return { id: e.section.id, label: number ? `${number} ${name}` : name };
+          })}
+          openId={open.section.id}
+          onOpen={openItem}
+        />
+      </div>
+    ) : null;
   const railDoc = openSection ? (openLiveDoc ?? savedDocOf(openSection)) : EMPTY_DOC;
   const rail = (
     <EvidenceRail
@@ -810,7 +885,6 @@ function ReportBody({
       onInserted={onRestoreEvidence}
     />
   );
-  const fails = openChecks.filter((c) => c.level === "fail").length;
   // With a page open its bar comes first (wide, flush with the pane's top edge) and these lines sit under it.
   const editorShown = !appendixView && openSection?.kind !== "details" && !!openSection && hasCurrentPage(openSection) && !!contextValue;
   const notices = (
@@ -818,7 +892,7 @@ function ReportBody({
       {ensureFailed && <WarnLine text={`Couldn't add the report's new sections: ${ensureFailed}`} retryLabel="Retry setting up sections" onRetry={() => setEnsureFailed(null)} />}
       {saveRefused && (
         <p role="alert" className="m-0 text-meta text-warn">
-          {`${items.find((i) => i.id === saveRefused.sectionId)?.label ?? "A page"}: ${saveRefused.message}`}
+          {`${entries.find((e) => e.section.id === saveRefused.sectionId)?.item.label ?? "A page"}: ${saveRefused.message}`}
         </p>
       )}
       {saveFailed && <p className="m-0 text-meta text-warn">Some typing isn't saved yet. Raven keeps trying; keep Raven open until this goes.</p>}
@@ -839,14 +913,16 @@ function ReportBody({
   );
 
   return (
-    <section ref={sectionRef} aria-label="Report" className="@container/report grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+    <section ref={sectionRef} aria-label="Report" className="@container/report grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)]">
       <ReportStrip
         fileName={reportFileName(report.osid.trim())}
         osidValid={isValidOsid(report.osid.trim())}
         dueAt={reportDueAt(data.engagement, reportMeta)}
         ready={readyCount}
         targets={targetEntries.length}
-        gaps={gaps}
+        todo={gaps}
+        todoOpen={todoOpen}
+        onTodo={() => setTodoOpen((was) => !was)}
         rail={narrow ? { open: railOpen, onToggle: () => toggleRail(!railOpen) } : undefined}
       />
       {entries.length === 0 ? (
@@ -860,33 +936,21 @@ function ReportBody({
           </Padded>
         )
       ) : (
-        <div className="grid min-h-0 grid-cols-[minmax(0,1fr)] @min-[1000px]/report:grid-cols-[272px_minmax(0,1fr)] @min-[1200px]/report:grid-cols-[272px_minmax(0,1fr)_320px]">
-          <div className="hidden min-h-0 overflow-y-auto border-r border-line @min-[1000px]/report:block">
-            <ReportOutline
-              items={items}
-              openId={openItemId}
-              onOpen={openItem}
-              onReorder={reorder}
-              openExtra={targetExtra}
-              navRef={(el) => {
-                navRef.current = el;
-              }}
-            />
-          </div>
-          <div ref={pageRef} className="grid min-h-0 content-start gap-4 overflow-y-auto px-6 py-6">
-            <div className="grid gap-2 @min-[1000px]/report:hidden">
-              <Select
-                aria-label="Report section"
-                options={items.map((i) => ({ value: i.id, label: i.label }))}
-                value={openItemId ?? undefined}
-                onValueChange={openItem}
-              />
-              {open?.target && (
-                <Disclosure label="Checks" count={fails} open={checksOpen} onOpenChange={setChecksOpen}>
-                  {targetExtra}
-                </Disclosure>
-              )}
-            </div>
+        <>
+          <ReportTabs
+            tabs={tabs}
+            openId={openTabId}
+            onOpen={openTab}
+            onReorder={reorder}
+            onTodo={() => setTodoOpen(true)}
+            exportSlot={null}
+            listRef={navRef}
+          />
+          <div className="grid min-h-0 grid-cols-[minmax(0,1fr)] @min-[1200px]/report:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)]">
+              {partRow}
+              {todoPanel}
+              <div ref={pageRef} className="row-start-3 grid min-h-0 content-start gap-4 overflow-y-auto px-6 py-6">
             {!editorShown && notices}
             {appendixView ?? (openSection?.kind === "details" ? (
               <ReportDetails
@@ -909,7 +973,7 @@ function ReportBody({
                     doc={mountDoc(openSection)}
                     onChange={onChange}
                     onReady={(editor) => onEditorReady(openSection.id, editor)}
-                    toolbarClassName="@min-[1000px]/report:-mt-6"
+                    toolbarClassName="-mt-6"
                     notices={notices}
                     toolbarEnd={
                       open?.target && (
@@ -930,22 +994,24 @@ function ReportBody({
                 <LoadingState label="the draft" />
               )
             ) : null)}
+              </div>
+            </div>
+            {narrow ? (
+              <EvidenceDrawer open={railOpen} focusKey={railFocus} onClose={() => setRailOpen(false)}>
+                {rail}
+              </EvidenceDrawer>
+            ) : (
+              <aside
+                ref={railRef}
+                tabIndex={-1}
+                aria-label="Evidence"
+                className="hidden min-h-0 content-start overflow-y-auto border-l border-line px-4 py-4 outline-none @min-[1200px]/report:grid"
+              >
+                {rail}
+              </aside>
+            )}
           </div>
-          {narrow ? (
-            <EvidenceDrawer open={railOpen} focusKey={railFocus} onClose={() => setRailOpen(false)}>
-              {rail}
-            </EvidenceDrawer>
-          ) : (
-            <aside
-              ref={railRef}
-              tabIndex={-1}
-              aria-label="Evidence"
-              className="hidden min-h-0 content-start overflow-y-auto border-l border-line px-4 py-4 outline-none @min-[1200px]/report:grid"
-            >
-              {rail}
-            </aside>
-          )}
-        </div>
+        </>
       )}
     </section>
   );
