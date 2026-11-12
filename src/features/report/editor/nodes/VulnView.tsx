@@ -1,32 +1,8 @@
 import type { ReactNodeViewProps } from "prosekit/react";
-import type { ReportData, VulnAttrs } from "../../../../engines/report";
+import { fixSteps, type ReportData, type VulnAttrs } from "../../../../engines/report";
 import type { Finding } from "../../../../types/findings";
 import { useReportData } from "../ReportDataContext";
 import { Block, capitalize, Gone } from "./parts";
-
-/** One fix step per item: blank lines, bullets ("-", "*", "•", "1.") and a line that ends a sentence start a new one;
- *  a line broken mid-sentence carries on the same step. */
-function fixSteps(remediation: string): string[] {
-  const steps: string[] = [];
-  let current: string[] = [];
-  const flush = () => {
-    if (current.length > 0) steps.push(current.join(" "));
-    current = [];
-  };
-  for (const raw of remediation.split(/\r?\n/)) {
-    const line = raw.trim();
-    if (line === "") {
-      flush();
-      continue;
-    }
-    const bullet = /^(?:[-*•]|\d+[.)])\s+/.exec(line);
-    if (bullet) flush();
-    current.push(bullet ? line.slice(bullet[0].length) : line);
-    if (/[.!?]$/.test(line)) flush();
-  }
-  flush();
-  return steps;
-}
 
 /** Host (IP) and port/protocol of each host and service the finding is linked to. */
 function affected(finding: Finding, data: ReportData): string[] {
