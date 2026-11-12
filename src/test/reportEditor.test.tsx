@@ -153,6 +153,22 @@ describe("ReportEditor evidence", () => {
     expect(caption?.value ?? container.querySelector(".report-figure figcaption")?.textContent).toBe("Full port scan");
   });
 
+  it("keeps the fallback caption true after the blocks above change, and never shows a private step's title", async () => {
+    const shot = entry({ id: "s1", kind: "screenshot", title: "Screenshot", content: { kind: "screenshot", attachmentId: "a1", caption: "", fileName: "x.png" } });
+    const login = entry({ id: "e2", title: "Login page" });
+    const { container, editor } = setup(doc(ev("e2"), ev("e1"), ev("s1", { block: null })), data({ log: [login, entry({}), shot] }));
+    const caption = () => container.querySelector<HTMLInputElement>(".report-figure .report-caption-input")?.value;
+    await waitFor(() => expect(caption()).toBe("Full port scan"));
+    // The step it tagged along with is removed: it now follows the login page.
+    act(() => void removeNodeAt(editor(), editor().state.doc.child(0).nodeSize));
+    await waitFor(() => expect(caption()).toBe("Login page"));
+    cleanup();
+    const hidden = setup(doc(ev("e1"), ev("s1", { block: null })), data({ log: [entry({ private: true }), shot] }));
+    await waitFor(() => expect(hidden.container.querySelector(".report-figure")).toBeTruthy());
+    expect(hidden.container.textContent).not.toContain("Full port scan");
+    expect(hidden.container.querySelector<HTMLInputElement>(".report-caption-input")?.value).not.toBe("Full port scan");
+  });
+
   it("prints Methodologies' facts: the exam network, the Metasploit target and the cleanup list", async () => {
     const gen = (kind: string): ReportNode => ({ type: "generated", attrs: { kind, hostId: null, appendix: "inline" } });
     const msf = entry({ id: "m1", content: { kind: "command", blocks: [{ command: "msfconsole -q\nuse exploit/windows/smb/ms17_010_eternalblue", output: "" }] } });

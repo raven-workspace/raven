@@ -39,13 +39,22 @@ export interface PageLayout {
   figureOf(node: PMNode): number | null;
   /** The node's index path from the doc root ("0.2.1"), the appendix key's second half. */
   pathOf(node: PMNode): string | null;
+  /** A top-level screenshot node's step title, its caption's fallback (`stepTitleBefore`); null when there is none. */
+  stepTitleOf(node: PMNode): string | null;
   /** The owner has focused or clicked into the page; until then a selection is only ProseMirror's default, so blocks show no tools. */
   touched: boolean;
   /** A numbered heading of a target page by its key (`facts:<hostId>`, `phase:<hostId>:<phase>`, `attack-chain`). */
   heading(key: string): HeadingLabel | null;
 }
 
-export const PageLayoutContext = createContext<PageLayout>({ sectionId: "", figureOf: () => null, pathOf: () => null, touched: false, heading: () => null });
+export const PageLayoutContext = createContext<PageLayout>({
+  sectionId: "",
+  figureOf: () => null,
+  pathOf: () => null,
+  stepTitleOf: () => null,
+  touched: false,
+  heading: () => null,
+});
 
 export const usePageLayout = () => useContext(PageLayoutContext);
 

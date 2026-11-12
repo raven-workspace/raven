@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { absoluteClaims, groupChecks, isReady, proofFacts, reportChecks, targetChecks, fixSteps } from "../engines/report";
+import { absoluteClaims, groupChecks, isReady, legibilityChecks, proofFacts, reportChecks, stepTitleBefore, targetChecks, fixSteps } from "../engines/report";
 import type { AppendixIndex, Check, ReportData, ReportNode, ReportTarget } from "../engines/report";
 import type { Host } from "../types/host";
 import type { LogEntry } from "../types/log";
@@ -323,6 +323,32 @@ describe("targetChecks", () => {
     expect(find(run(data({ log: [bare, flag()] }), named), "caption-weak")).toBeUndefined();
     expect(groupChecks(run(data({ log: [bare, flag()] }), page).filter((c) => c.id.startsWith("caption-weak"))).map((g) => g.text)).toEqual(["A screenshot has no caption"]);
   });
+  describe("printed captions", () => {
+    const bare = entry({ id: "s1", kind: "screenshot", title: "Screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "", fileName: "x" } });
+    const step = (o: Record<string, unknown> = {}) => entry({ id: "c1", title: "Full port scan", ...o });
+    const page = doc(slot("Scan."), ev("c1"), ev("s1", { block: null }), ...goodDoc().content!);
+    const ids = (log: LogEntry[], p = page) => run(data({ log: [...log, flag()] }), p).filter((c) => c.id.startsWith("caption")).map((c) => [c.id, c.level, c.text]);
+
+    it("an uncaptioned screenshot that prints its step's title is said softly as that, not as uncaptioned", () => {
+      expect(ids([step(), bare])).toEqual([["caption-step:s1", "soft", "Screenshot uses its step's title as caption."]]);
+      const groups = groupChecks(run(data({ log: [step(), bare, flag()] }), page).filter((c) => c.id.startsWith("caption")));
+      expect(groups.map((g) => g.text)).toEqual(["Caption is its step's title"]);
+    });
+    it("counts the words of the caption the page prints", () => {
+      const long = step({ title: "one two three four five six seven eight nine ten eleven" });
+      expect(ids([long, bare]).map((x) => x[0])).toEqual(["caption-step:s1", "caption:s1"]);
+    });
+    it("never prints, or counts, a private or deleted step's title", () => {
+      expect(ids([step({ private: true }), bare]).map((x) => x[0])).toEqual(["caption-weak:s1"]);
+      expect(ids([bare]).map((x) => x[0])).toEqual(["caption-weak:s1"]);
+    });
+    it("names a too-narrow screenshot by the caption the page prints, never a private step's", () => {
+      const named = legibilityChecks(page, data({ log: [step(), bare] }), { s1: 300 });
+      expect(named.map((c) => c.text)).toEqual(['The screenshot "Full port scan" is narrower than would print legibly. Retake it larger or crop it tighter.']);
+      const hidden = legibilityChecks(page, data({ log: [step({ title: "secret box", private: true }), bare] }), { s1: 300 });
+      expect(hidden[0].text).not.toContain("secret");
+    });
+  });
   it("caption is soft over 10 words", () => {
     const long = entry({ id: "s1", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "one two three four five six seven eight nine ten eleven", fileName: "x" } });
     const page = doc(ev("s1", { block: null }), slot("x"), ...goodDoc().content!);
@@ -460,6 +486,24 @@ describe("groupChecks", () => {
       const [g] = groupChecks([c(id(1), "soft", "one"), c(id(2), "soft", "two")]);
       expect(g.text, k).toMatch(/^2 /);
     }
+  });
+});
+
+describe("stepTitleBefore", () => {
+  const top = (...ids: string[]) => ids.map((id) => ({ type: "evidence", attrs: { entryId: id } }));
+  const log = [
+    entry({ id: "c1", title: "Full port scan" }),
+    entry({ id: "p1", title: "secret box", private: true }),
+    entry({ id: "s0", kind: "screenshot", title: "Screenshot", private: true }),
+    entry({ id: "s1", kind: "screenshot", title: "Screenshot" }),
+  ];
+  const of = (id: string) => log.find((e) => e.id === id);
+  it("takes the nearest step above, past screenshots (private ones too)", () => {
+    expect(stepTitleBefore(top("c1", "s0", "s1"), 2, of)).toBe("Full port scan");
+  });
+  it("never borrows a title when the step above is private or deleted", () => {
+    expect(stepTitleBefore(top("c1", "p1", "s1"), 2, of)).toBeNull();
+    expect(stepTitleBefore(top("c1", "gone", "s1"), 2, of)).toBeNull();
   });
 });
 

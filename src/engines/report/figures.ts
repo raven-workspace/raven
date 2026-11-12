@@ -25,14 +25,19 @@ export function captionOf(attrs: Record<string, unknown> | undefined, entry: Log
   return isWeakCaption(own) && stepTitle?.trim() ? stepTitle.trim() : own;
 }
 
-/** The step a screenshot at `index` of the page's top-level blocks tags along with: the nearest evidence block above
- *  it, past other screenshots, whose entry is not a screenshot. */
+/**
+ * The step a screenshot at `index` of the page's top-level blocks tags along with: the nearest evidence block above
+ * it, past other screenshots (private ones too), whose entry is not a screenshot. Its title is the caption's fallback,
+ * so a step that is private or deleted gives none: the screenshot came with that step, and no other step's title is
+ * true of it.
+ */
 export function stepTitleBefore(content: { type: string; attrs?: Record<string, unknown> }[], index: number, entryOf: (id: string) => LogEntry | undefined): string | null {
   for (let i = index - 1; i >= 0; i--) {
     const n = content[i];
     if (n.type !== "evidence") return null;
     const e = entryOf(String(n.attrs?.entryId));
-    if (e && e.kind !== "screenshot") return e.title;
+    if (e?.kind === "screenshot") continue;
+    return e && !e.private ? e.title : null;
   }
   return null;
 }

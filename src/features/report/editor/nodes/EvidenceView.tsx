@@ -4,7 +4,7 @@ import { TextSelection } from "prosekit/pm/state";
 import type { ReactNodeViewProps } from "prosekit/react";
 import { ResizableHandle, ResizableRoot } from "prosekit/react/resizable";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { applyKeep, captionOf, lineCount, stepTitleBefore, type EvidenceAttrs, type ReportNode } from "../../../../engines/report";
+import { applyKeep, captionOf, lineCount, type EvidenceAttrs, type ReportNode } from "../../../../engines/report";
 import { api } from "../../../../lib/api";
 import type { CommandBlock, LogEntry } from "../../../../types/log";
 import { Button, HintLine, IconButton, Toolbar, type Hint } from "../../../../ui";
@@ -571,7 +571,7 @@ function TrimBar({ trim, total, onLeave }: { trim: ReturnType<typeof useTrim>; t
  */
 export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNodeViewProps) {
   const { data, onRemoveEvidence, canMove = false } = useReportData();
-  const { figureOf, touched } = usePageLayout();
+  const { figureOf, stepTitleOf, touched } = usePageLayout();
   const ref = useAppendixRef(node);
   const machines = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet }).data?.machines ?? NO_MACHINES;
   const tools = selected && touched;
@@ -627,18 +627,7 @@ export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNo
   };
 
   // An uncaptioned screenshot's caption falls back to the step it tags along with (the block above it on the page).
-  let stepTitle: string | null = null;
-  if (shown?.content.kind === "screenshot") {
-    const pos = getPos();
-    if (pos !== undefined) {
-      const $pos = view.state.doc.resolve(pos);
-      if ($pos.depth === 0) {
-        const top: { type: string; attrs: Record<string, unknown> }[] = [];
-        view.state.doc.forEach((n) => top.push({ type: n.type.name, attrs: n.attrs }));
-        stepTitle = stepTitleBefore(top, $pos.index(0), (id) => data.log.find((e) => e.id === id));
-      }
-    }
-  }
+  const stepTitle = shown?.content.kind === "screenshot" ? stepTitleOf(node) : null;
   const refLabel = REF_LABEL[shown?.content.kind ?? "command"];
   let body;
   if (!entry) body = <Gone text="This entry was deleted" />;

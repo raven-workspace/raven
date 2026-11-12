@@ -4,7 +4,7 @@ import type { LogEntry } from "../../types/log";
 import type { AppendixIndex } from "./appendix";
 import { suggestMoves } from "./appendix";
 import { serviceCoverage } from "./coverage";
-import { captionOf, isWeakCaption } from "./figures";
+import { captionOf, isWeakCaption, stepTitleBefore } from "./figures";
 import { expectedFlags, isValidOsid } from "./meta";
 import { findFlagInPaste } from "../capture/flag";
 import { blockCompanions, byTime, evidenceIdsIn } from "./draft";
@@ -144,6 +144,39 @@ function readOnPage(data: ReportData, hostId: string, flag: "local" | "proof", o
   return undefined;
 }
 
+/** The caption a screenshot node prints: its own, else (top-level only, as the page does) its step's title. */
+function printedCaption(node: ReportNode, path: string, siblings: ReportNode[], at: number, entry: LogEntry, entryOf: (id: string) => LogEntry | undefined): string {
+  const step = path.includes(".") ? null : stepTitleBefore(siblings, at, entryOf);
+  return captionOf(node.attrs, entry, step);
+}
+
+/** Under this natural width a screenshot is upscaled or tiny at page width (spec §6.5). */
+const MIN_PRINT_WIDTH = 600;
+
+/**
+ * Soft checks for screenshots on the page whose loaded image (`widths`, natural px by entry id) is too narrow to print
+ * legibly, each named by the caption the page prints.
+ */
+export function legibilityChecks(doc: ReportNode, data: ReportData, widths: Record<string, number>): Check[] {
+  const out: Check[] = [];
+  const entryOf = (id: string) => data.log.find((e) => e.id === id);
+  for (const { node, path, siblings, at } of visit(doc)) {
+    const id = node.type === "evidence" ? String(node.attrs?.entryId ?? "") : "";
+    const width = widths[id];
+    if (width === undefined || width >= MIN_PRINT_WIDTH || out.some((c) => c.id === `legible:${id}`)) continue;
+    const entry = entryOf(id);
+    if (!entry || entry.private) continue;
+    const name = printedCaption(node, path, siblings, at, entry, entryOf).trim() || "A screenshot";
+    out.push({
+      id: `legible:${id}`,
+      level: "soft",
+      text: `The screenshot "${name}" is narrower than would print legibly. Retake it larger or crop it tighter.`,
+      anchor: { entryId: id },
+    });
+  }
+  return out;
+}
+
 /** Per-target checks: what would lose OSCP exam points before export. Ids are stable and unique. */
 export function targetChecks(input: TargetChecksInput): Check[] {
   const { data, target, doc, meta, appendixRefs, sectionId } = input;
@@ -165,7 +198,7 @@ export function targetChecks(input: TargetChecksInput): Check[] {
 
   const explain: { check: Check; shot: boolean }[] = [];
   const seenEvidence = new Set<string>();
-  for (const { node, index, siblings, at } of nodes) {
+  for (const { node, path, index, siblings, at } of nodes) {
     if (node.type !== "evidence") continue;
     const rawId = node.attrs?.entryId;
     const entryId = typeof rawId === "string" ? rawId : "";
@@ -211,10 +244,14 @@ export function targetChecks(input: TargetChecksInput): Check[] {
       explain.push({ check: { id: `explain:${entryId}`, level: "soft", text: "A step has no explanation before it.", anchor }, shot: entry.kind === "screenshot" });
     }
     if (entry.content.kind === "screenshot" && !seenEvidence.has(entryId)) {
-      if (isWeakCaption(captionOf(node.attrs, entry))) {
+      // The caption the page prints: an uncaptioned screenshot's falls back to its step's title.
+      const printed = printedCaption(node, path, siblings, at, entry, entryOf);
+      if (printed !== captionOf(node.attrs, entry)) {
+        out.push({ id: `caption-step:${entryId}`, level: "soft", text: "Screenshot uses its step's title as caption.", anchor });
+      } else if (isWeakCaption(printed)) {
         out.push({ id: `caption-weak:${entryId}`, level: "soft", text: "A screenshot has no caption of its own. Say what it shows.", anchor });
       }
-      if (words(captionOf(node.attrs, entry)) > MAX_CAPTION_WORDS) {
+      if (words(printed) > MAX_CAPTION_WORDS) {
         out.push({ id: `caption:${entryId}`, level: "soft", text: `A screenshot caption is over ${MAX_CAPTION_WORDS} words.`, anchor });
       }
     }
@@ -335,6 +372,7 @@ const PLURAL: Record<string, (n: number) => string> = {
   explain: (n) => `${n} steps have no explanation.`,
   caption: (n) => `${n} screenshot captions are over ${MAX_CAPTION_WORDS} words.`,
   "caption-weak": (n) => `${n} screenshots have no caption of their own.`,
+  "caption-step": (n) => `${n} screenshots use their step's title as caption.`,
   "access-shot": (n) => `${n} access levels have no screenshot of them on the page.`,
   "finding-severity": (n) => `${n} findings have no severity.`,
   "finding-title": (n) => `${n} finding titles are a single word.`,
@@ -369,6 +407,7 @@ const SHORT: Record<string, (c: Check) => string> = {
   explain: () => "A step has no explanation",
   caption: () => "Caption over 10 words",
   "caption-weak": () => "A screenshot has no caption",
+  "caption-step": () => "Caption is its step's title",
   "access-shot": (c) => `${part(c, 1)}: no ${part(c, 2)} screenshot`,
   "finding-severity": () => "A finding has no severity",
   "finding-title": () => "A finding title is one word",

@@ -5,7 +5,7 @@ import { useParams } from "react-router";
 import {
   buildSectionDraft,
   buildTargetDraft,
-  captionOf,
+  legibilityChecks,
   DRAFT_LAYOUT,
   expectedFlags,
   isFigure,
@@ -116,31 +116,6 @@ function countFigures(doc: ReportNode, data: ReportData): number {
   };
   walk(doc);
   return n;
-}
-
-/** Under this natural width a screenshot is upscaled or tiny at page width (spec §6.5). */
-const MIN_PRINT_WIDTH = 600;
-
-/** Soft checks for screenshots on the page whose loaded image is too narrow to print legibly. */
-function legibilityChecks(doc: ReportNode, data: ReportData, widths: Record<string, number>): Check[] {
-  const out: Check[] = [];
-  const walk = (node: ReportNode) => {
-    const id = node.type === "evidence" ? String(node.attrs?.entryId ?? "") : "";
-    const width = widths[id];
-    if (width !== undefined && width < MIN_PRINT_WIDTH && !out.some((c) => c.id === `legible:${id}`)) {
-      const entry = data.log.find((e) => e.id === id);
-      const name = (entry && captionOf(node.attrs, entry)) || "A screenshot";
-      out.push({
-        id: `legible:${id}`,
-        level: "soft",
-        text: `The screenshot "${name}" is narrower than would print legibly. Retake it larger or crop it tighter.`,
-        anchor: { entryId: id },
-      });
-    }
-    node.content?.forEach(walk);
-  };
-  walk(doc);
-  return out;
 }
 
 /** The node at an index path ("0.2.1") of a stored page. */

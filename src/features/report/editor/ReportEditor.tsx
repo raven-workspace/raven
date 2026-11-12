@@ -5,7 +5,7 @@ import { defineFileDropHandler, defineFilePasteHandler } from "prosekit/extensio
 import type { Node as PMNode } from "prosekit/pm/model";
 import { NodeSelection, type Command } from "prosekit/pm/state";
 import { ProseKit, useDocChange, useExtension, useKeymap } from "prosekit/react";
-import { ownerParagraphs, isFigure, type EvidenceAttrs, type PageHeadings, type ReportData, type ReportNode } from "../../../engines/report";
+import { ownerParagraphs, isFigure, stepTitleBefore, type EvidenceAttrs, type PageHeadings, type ReportData, type ReportNode } from "../../../engines/report";
 import { reportError } from "../../../lib/lockSignal";
 import { RavenError } from "../../../types/errors";
 import { BlockHandle } from "./BlockHandle";
@@ -23,7 +23,7 @@ import "../page.css";
 const hasFigure = (node: PMNode, data: ReportData) =>
   isFigure({ type: node.type.name, attrs: node.attrs }, (id) => data.log.find((e) => e.id === id));
 
-/** Figure numbers and index paths for the current document, keyed by node (nodes are immutable per state). */
+/** Figure numbers, index paths and fallback captions' step titles for the current document, keyed by node (nodes are immutable per state). */
 function layoutOf(doc: PMNode, data: ReportData, sectionId: string, figureOffset: number, touched: boolean, headings: PageHeadings | null): PageLayout {
   const figures = new Map<PMNode, number>();
   const paths = new Map<PMNode, string>();
@@ -35,7 +35,22 @@ function layoutOf(doc: PMNode, data: ReportData, sectionId: string, figureOffset
       walk(child, p);
     });
   walk(doc, "");
-  return { sectionId, figureOf: (n) => figures.get(n) ?? null, pathOf: (n) => paths.get(n) ?? null, touched, heading: (key) => headings?.get(key) ?? null };
+  // An uncaptioned screenshot's caption falls back to the step it tags along with: the block above it, as it is now.
+  const entryOf = (id: string) => data.log.find((e) => e.id === id);
+  const top: { type: string; attrs: Record<string, unknown> }[] = [];
+  doc.forEach((n) => top.push({ type: n.type.name, attrs: n.attrs }));
+  const steps = new Map<PMNode, string | null>();
+  doc.forEach((child, _offset, i) => {
+    if (child.type.name === "evidence" && entryOf(String(child.attrs.entryId))?.kind === "screenshot") steps.set(child, stepTitleBefore(top, i, entryOf));
+  });
+  return {
+    sectionId,
+    figureOf: (n) => figures.get(n) ?? null,
+    pathOf: (n) => paths.get(n) ?? null,
+    stepTitleOf: (n) => steps.get(n) ?? null,
+    touched,
+    heading: (key) => headings?.get(key) ?? null,
+  };
 }
 
 /** Each page's held positions (see `HeldPositions`), by its editor. */
