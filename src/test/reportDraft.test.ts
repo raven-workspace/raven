@@ -872,3 +872,29 @@ describe("AD set draft", () => {
     expect(firstPhase(doc, "h-ad02")).toBe("lateral");
   });
 });
+
+describe("a screenshot that came along never crosses into another phase", () => {
+  it("a privesc screenshot with no privesc step on the page lands under Privilege Escalation, in both placers", () => {
+    const d = windowsHost();
+    const page = buildTargetDraft(d, target([H]), {});
+    // Every privilege escalation step taken off the page; its heading stays.
+    const content = topLevel(page);
+    const pe = content.findIndex((n) => n.type === "phase" && n.attrs?.phase === "privesc");
+    expect(pe).toBeGreaterThan(-1);
+    const without: ReportNode = { ...page, content: content.filter((n, i) => !(i > pe && n.type === "steps")) };
+    expect(outline(without).join("\n")).not.toContain("printspoofer");
+    const s9 = entry("s9", H, 51, shot);
+    d.log.push(s9);
+
+    const placed = endOfPhase(without, d, target([H]), s9);
+    const after = topLevel(without);
+    const peAt = after.findIndex((n) => n.type === "phase" && n.attrs?.phase === "privesc");
+    expect(placed.at[0]).toBeGreaterThan(peAt);
+
+    const added = addNewEvidence(without, d, target([H]), {}, ["whoami", "printspoofer", "flag"]);
+    expect(added.added).toContain("s9");
+    const lines = outline(added.doc);
+    const shotLine = lines.findIndex((l) => l.includes("s9"));
+    expect(shotLine).toBeGreaterThan(lines.indexOf("# privesc"));
+  });
+});

@@ -633,8 +633,10 @@ export function addNewEvidence(
       if (skip.has(e.id)) return;
       let placed: { at: DocPath; nodes: ReportNode[] } | null = null;
       if (e.kind === "screenshot" && !placing.has(e.id)) {
-        // It came along with the entry logged before it: into that entry's step, when the page has it.
+        // It came along with the entry logged before it: into that entry's step, when the page has it. Never across a
+        // phase: the walk stops at the first earlier entry of another phase, and the screenshot goes to its own phase.
         for (let j = i - 1; j >= 0 && placed == null; j--) {
+          if (split.get(kept[j].id) !== split.get(e.id)) break;
           const path = stepPath(content, kept[j].id);
           if (path) placed = { at: [...path, (content[path[0]].content![path[1]].content ?? []).length], nodes: evidenceBlocks(e) };
         }
@@ -713,8 +715,10 @@ export function endOfPhase(doc: ReportNode, data: ReportData, target: ReportTarg
   const placed = placeEntry(content, data, hostId, entry, phase);
   if (entry.kind === "screenshot" && !placingEntries(data, hostId).has(entry.id)) {
     const endOf = (path: DocPath): DocPath => [...path, (content[path[0]].content![path[1]].content ?? []).length];
+    // The walk back stops at the first earlier entry of another phase, as `addNewEvidence`'s does.
     const before = kept.filter((e) => e.id !== entry.id && byTime(e, entry) < 0).reverse();
     for (const e of before) {
+      if (entryPhase(data, target, e).phase !== phase) break;
       const path = stepPath(content, e.id);
       if (path) return { at: endOf(path), nodes: evidenceBlocks(entry) };
     }
