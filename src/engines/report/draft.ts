@@ -51,8 +51,8 @@ function evidenceNodes(entry: LogEntry): ReportNode[] {
   ]);
 }
 
-/** The host's entries that land on the page, in time order: proving ones (notes aside) and screenshots taken
- *  within a few minutes after one of them. */
+/** The host's entries that land on the page, in time order: proving ones (notes aside), and screenshots taken
+ *  between two of them or within a few minutes after one (each goes with the proving entry before it). */
 function keptEntries(data: ReportData, hostId: string): LogEntry[] {
   const proving = provingEntries(data, hostId);
   const proven = data.log.filter((e) => proving.has(e.id) && e.kind !== "note");
@@ -63,7 +63,8 @@ function keptEntries(data: ReportData, hostId: string): LogEntry[] {
       !e.private &&
       e.hostIds.includes(hostId) &&
       !isDeadEnd(e, data) &&
-      proven.some((k) => e.at >= k.at && e.at - k.at <= SCREENSHOT_WINDOW_MS),
+      (proven.some((k) => e.at >= k.at && e.at - k.at <= SCREENSHOT_WINDOW_MS) ||
+        (proven.some((k) => k.at <= e.at) && proven.some((k) => k.at >= e.at))),
   );
   return [...proven, ...shots].sort(byTime);
 }
@@ -97,13 +98,15 @@ function phaseNames(data: ReportData, hostId: string, entry: HostEntry): [Phase,
 /**
  * §5.1: entries up to and including the first access on the host (a grant, the first local flag, or the hop that
  * entered it) are the entry phase; the rest are privilege escalation (domain compromise on the DC); flags are proof.
- * With no boundary, every non-flag entry is the entry phase.
+ * With no boundary, every non-flag entry is the entry phase. A screenshot that only came along with a proving entry
+ * takes that entry's phase (the proving entry logged before it).
  */
 export function phaseSplit(entries: LogEntry[], data: ReportData, hostId: string, entry: HostEntry): Map<string, Phase> {
   const sorted = [...entries].sort(byTime);
   const [first, second] = phaseNames(data, hostId, entry);
 
-  /** The entry's position when it is on the list, else the last one logged at or before `at`. */
+  /** The entry's position when it is on the list, else the last one logged at or before `at`; -1 when it was
+   *  before everything (access given up front, such as starting credentials, is no boundary). */
   const indexOf = (logEntryId: string | null, at: number) => {
     const i = sorted.findIndex((e) => e.id === logEntryId);
     if (i !== -1) return i;
@@ -122,10 +125,21 @@ export function phaseSplit(entries: LogEntry[], data: ReportData, hostId: string
   sorted.forEach((e, i) => {
     if (e.content.kind === "flag" && e.content.flagKind === "local") candidates.push(i);
   });
-  const boundary = candidates.length > 0 ? Math.min(...candidates) : Infinity;
+  const found = candidates.filter((i) => i !== -1);
+  const boundary = found.length > 0 ? Math.min(...found) : Infinity;
 
+  const proving = provingEntries(data, hostId);
   const out = new Map<string, Phase>();
-  sorted.forEach((e, i) => out.set(e.id, e.kind === "flag" ? "proof" : i <= boundary ? first : second));
+  let anchor: Phase | null = null;
+  sorted.forEach((e, i) => {
+    if (e.kind === "screenshot" && !proving.has(e.id)) {
+      out.set(e.id, anchor ?? first);
+      return;
+    }
+    const phase = e.kind === "flag" ? "proof" : i <= boundary ? first : second;
+    out.set(e.id, phase);
+    anchor = phase;
+  });
   return out;
 }
 

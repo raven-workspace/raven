@@ -214,6 +214,32 @@ describe("buildTargetDraft", () => {
     expect(nodes.map((n) => n.attrs?.keep)).toEqual([[[0, 39]], null]);
   });
 
+  it("keeps a brought-along screenshot with the entry it followed", () => {
+    const d = windowsHost();
+    d.log.push(entry("curlshot", H, 22, shot), entry("flagshot", H, 56, shot));
+    const doc = buildTargetDraft(d, target([H]), {});
+    expect(evidenceUnder(doc, "foothold")).toEqual(["nmap", "ferox", "shot", "curl", "curlshot"]);
+    expect(evidenceUnder(doc, "privesc")).toEqual(["whoami", "printspoofer"]);
+    expect(evidenceUnder(doc, "proof")).toEqual(["flag", "flagshot"]);
+  });
+
+  it("brings along a screenshot taken between two kept entries, not one outside them", () => {
+    const d = windowsHost();
+    d.log.push(entry("midshot", H, 17, shot), entry("lateshot", H, 90, shot), entry("earlyshot", H, -10, shot));
+    const doc = buildTargetDraft(d, target([H]), {});
+    expect(evidenceUnder(doc, "foothold")).toEqual(["nmap", "ferox", "shot", "midshot", "curl"]);
+    expect(evidenceIdsIn(doc).has("lateshot")).toBe(false);
+    expect(evidenceIdsIn(doc).has("earlyshot")).toBe(false);
+  });
+
+  it("does not treat access given before anything was logged as the foothold", () => {
+    const d = windowsHost();
+    d.grants = [{ ...grant(H, "user", "", -60), logEntryId: null }];
+    d.checklist.push(goal(H, ["curl", "printspoofer"]));
+    const doc = buildTargetDraft(d, target([H]), {});
+    expect(phasesOf(doc)).toEqual(["foothold", "tested", "proof"]);
+  });
+
   it("puts all non-flag evidence under foothold when no access was granted", () => {
     const d = windowsHost();
     d.grants = [];
@@ -261,6 +287,16 @@ describe("addNewEvidence", () => {
     expect(next.content!.slice(0, inserted)).toEqual(before.content!.slice(0, inserted));
     expect(next.content![inserted + 1]).toEqual({ type: "slot", attrs: { hint: "What this shows, and why it matters" } });
     expect(next.content!.slice(inserted + 2)).toEqual(before.content!.slice(inserted));
+  });
+
+  it("appends a new flag to the proof region", () => {
+    const d = windowsHost();
+    const doc = buildTargetDraft(d, target([H]), {});
+    d.log.push(entry("local", H, 25, { kind: "flag", flagKind: "local", value: "xyz" }));
+    const { doc: next, added } = addNewEvidence(doc, d, target([H]), {}, []);
+    expect(added).toEqual(["local"]);
+    expect(evidenceUnder(next, "proof")).toEqual(["flag", "local"]);
+    expect(evidenceUnder(next, "privesc")).toEqual(["whoami", "printspoofer"]);
   });
 
   it("does not re-add removed entries or ones already on the page", () => {
