@@ -202,6 +202,25 @@ export function trackReportWrite(p: Promise<unknown>) {
   void settled.then(() => s.writes.delete(settled));
 }
 
+/**
+ * Forgets a section's queued, failed or refused write: its page was deleted, so no retry, flush or lock may send it
+ * again (it would only come back `not_found` and leave a lasting warning). A write already on its way still settles,
+ * but nothing queued follows it.
+ */
+export function forgetReportSave(id: string) {
+  const s = session;
+  s.pending.delete(id);
+  s.failed.delete(id);
+  s.refused.delete(id);
+  s.runs.delete(id);
+  updateUnsaved(s);
+  if (!retryable(s)) {
+    clearTimeout(s.retryTimer);
+    s.retryTimer = undefined;
+    s.retryStep = 0;
+  }
+}
+
 /** True while any report write is queued or on its way. */
 export function hasPendingReports(): boolean {
   return session.pending.size > 0 || session.runs.size > 0 || session.writes.size > 0;

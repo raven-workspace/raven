@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReportNode } from "../engines/report";
-import { discardReports, flushReports, hasPendingReports, queueReportSave, trackReportWrite, useReportSaveStore } from "../features/report/saveQueue";
+import { deletePage } from "../features/report/queries";
+import { discardReports, flushReports, forgetReportSave, hasPendingReports, queueReportSave, trackReportWrite, useReportSaveStore } from "../features/report/saveQueue";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { ReportSection } from "../types/report";
@@ -120,6 +121,45 @@ describe("report save queue", () => {
     expect(useReportSaveStore.getState().refused?.message).toMatch(/no longer exists/);
     await vi.advanceTimersByTimeAsync(120_000);
     expect(m.reportSectionSave).toHaveBeenCalledTimes(1);
+  });
+
+  it("forgetReportSave drops a section's refused or failed write: no banner, no unsaved state, nothing sent again", async () => {
+    vi.useFakeTimers();
+    m.reportSectionSave.mockImplementation(async (id) => {
+      if (id === "big") throw { code: "validation", message: "this page is over 8 MiB", field: "doc" };
+      throw new Error("disk busy");
+    });
+    queueReportSave(qc, "big", page("huge"), {});
+    queueReportSave(qc, "s2", page("two"), {});
+    await vi.advanceTimersByTimeAsync(600);
+    expect(useReportSaveStore.getState()).toMatchObject({ unsaved: true, refused: { sectionId: "big" } });
+    forgetReportSave("big");
+    expect(useReportSaveStore.getState()).toMatchObject({ unsaved: true, refused: null });
+    forgetReportSave("s2");
+    expect(useReportSaveStore.getState()).toMatchObject({ unsaved: false, refused: null });
+    expect(hasPendingReports()).toBe(false);
+    const sent = m.reportSectionSave.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(120_000);
+    await flushReports();
+    expect(m.reportSectionSave).toHaveBeenCalledTimes(sent);
+  });
+
+  it("deleting a page with a refused write leaves no banner, no unsaved state and no later save of its id", async () => {
+    vi.useFakeTimers();
+    m.reportSectionSave.mockRejectedValue({ code: "validation", message: "this page is over 8 MiB", field: "doc" });
+    m.reportSectionDelete.mockResolvedValue(null);
+    queueReportSave(qc, "p1", page("huge"), {});
+    await vi.advanceTimersByTimeAsync(600);
+    expect(useReportSaveStore.getState().refused?.sectionId).toBe("p1");
+    await deletePage(qc, { id: "p1", reportId: "r1", kind: "page", targetKey: "k", position: 0, doc: null, meta: {}, draftBuiltAt: null, updatedAt: 0 });
+    expect(m.reportSectionDelete).toHaveBeenCalledWith("r1", "p1");
+    expect(useReportSaveStore.getState()).toMatchObject({ unsaved: false, refused: null });
+    expect(hasPendingReports()).toBe(false);
+    // Neither a retry nor a lock's flush sends it again.
+    const sent = m.reportSectionSave.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(120_000);
+    await flushReports();
+    expect(m.reportSectionSave).toHaveBeenCalledTimes(sent);
   });
 
   it("a refused page doesn't hide another page's transient failure, nor hold back its backoff", async () => {

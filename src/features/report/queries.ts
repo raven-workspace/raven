@@ -19,7 +19,7 @@ import { findingFilesKey, useFailedAttempts, useFindings } from "../findings/que
 import { useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
 import { useNotes } from "../notes/queries";
-import { flushReports, patchCachedSection, pruneRemoved, queueReportSave } from "./saveQueue";
+import { flushReports, forgetReportSave, patchCachedSection, pruneRemoved, queueReportSave } from "./saveQueue";
 
 export const reportKey = (eid: string) => ["report", eid] as const;
 export const reportSectionsKey = (reportId: string) => ["reportSections", reportId] as const;
@@ -188,14 +188,16 @@ export function renamePage(qc: QueryClient, section: ReportSection, title: strin
 }
 
 /**
- * Deletes a page: queued typing is written first, so the section kept for Undo holds every word, and no write for it is
- * left to land after the delete. Returns that kept section; `restorePage` brings it back for the session.
+ * Deletes a page: queued typing is written first, so the section kept for Undo holds every word; once deleted, any
+ * write the flush couldn't land is forgotten, so none is retried against the deleted id. Returns that kept section; `restorePage` brings it back for the session.
  */
 export async function deletePage(qc: QueryClient, section: ReportSection): Promise<ReportSection> {
   await flushReports();
   const key = reportSectionsKey(section.reportId);
   const kept = qc.getQueryData<ReportSection[]>(key)?.find((s) => s.id === section.id) ?? section;
   await api.reportSectionDelete(section.reportId, section.id);
+  // A write the flush couldn't land (failed, refused) would otherwise be retried against the deleted id forever.
+  forgetReportSave(section.id);
   qc.setQueryData<ReportSection[]>(key, (list = []) => list.filter((s) => s.id !== section.id));
   return kept;
 }
