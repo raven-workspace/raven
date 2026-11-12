@@ -2,9 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../../lib/api";
 import type { BackupInfo } from "../../types/backup";
-import type { SettingsPatch } from "../../types/settings";
+import type { Settings, SettingsPatch } from "../../types/settings";
 import { isValidOsid } from "../../engines/report/meta";
-import type { Settings } from "../../types/settings";
 import { Button, Chip, Dialog, EmptyState, Field, Input, Panel, SETTINGS_COLUMN, Textarea, queryState } from "../../ui";
 import { FieldManualSection } from "./FieldManualSection";
 import { ImportSection } from "./ImportSection";
@@ -146,7 +145,7 @@ function NvdKeySetting({
   );
 }
 
-/** Defaults copied into each new report's cover and methodology. Each field saves on blur. */
+/** Defaults copied into each new report's cover and methodology. Each field saves on blur. Local state is seeded once and never re-synced, so a refetch cannot discard typing in another field. */
 function ReportDetails({
   settings,
   fieldError,
@@ -343,7 +342,6 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
       {settings.data && (
         <Panel title="Report details">
           <ReportDetails
-            key={`${settings.data.reportName}|${settings.data.reportEmail}|${settings.data.reportOsid}|${settings.data.reportMethodology}`}
             settings={settings.data}
             fieldError={fieldError}
             onSave={(patch) => update.mutate(patch)}

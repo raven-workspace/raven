@@ -55,4 +55,28 @@ describe("report details settings", () => {
     await user.tab();
     expect(m.settingsUpdate).toHaveBeenCalledWith({ reportOsid: "12345" });
   });
+
+  it("shows no warning for a valid OSID", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.type(await screen.findByLabelText("OSID"), "OS-12345");
+    expect(screen.queryByText("OSIDs look like OS-12345")).not.toBeInTheDocument();
+  });
+
+  it("keeps text typed in the next field when the save of the previous one resolves", async () => {
+    const user = userEvent.setup();
+    let resolve!: (s: Settings) => void;
+    m.settingsUpdate.mockReturnValue(new Promise<Settings>((r) => (resolve = r)));
+    mount();
+    await user.type(await screen.findByLabelText("OSID"), "OS-12345");
+    await user.tab();
+    const methodology = screen.getByLabelText("Default methodology");
+    expect(methodology).toHaveFocus();
+    await user.type(methodology, "Scoped");
+    resolve({ ...settings, reportOsid: "OS-12345" });
+    await vi.waitFor(() => expect(m.settingsUpdate).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByLabelText("Default methodology")).toHaveValue("Scoped");
+    expect(screen.getByLabelText("Default methodology")).toHaveFocus();
+  });
 });
