@@ -177,7 +177,8 @@ export function FormatToolbar({
       id: "block",
       group: "block",
       priority: 30,
-      width: inCode ? 128 + 8 + 128 : 128,
+      // Measured with the code language picker in, always: the bar doesn't re-fold as the cursor enters a code block.
+      width: 128 + 8 + 128,
       node: (
         <Fragment key="block">
           <Select

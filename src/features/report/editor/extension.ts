@@ -23,7 +23,8 @@ import { defineHardBreak } from "prosekit/extensions/hard-break";
 import { defineHeadingCommands, defineHeadingSpec } from "prosekit/extensions/heading";
 import { defineHighlight } from "prosekit/extensions/highlight";
 import { defineHorizontalRule } from "prosekit/extensions/horizontal-rule";
-import { defineTextBlockInputRule } from "prosekit/extensions/input-rule";
+import { defineInputRule } from "prosekit/extensions/input-rule";
+import { InputRule } from "prosekit/pm/inputrules";
 import { defineItalic } from "prosekit/extensions/italic";
 import { defineLink } from "prosekit/extensions/link";
 import { defineList } from "prosekit/extensions/list";
@@ -39,7 +40,7 @@ import { defineText } from "prosekit/extensions/text";
 import { defineUnderline } from "prosekit/extensions/underline";
 import { defineVirtualSelection } from "prosekit/extensions/virtual-selection";
 import type { Node as PMNode } from "prosekit/pm/model";
-import { Plugin, type EditorState } from "prosekit/pm/state";
+import { Plugin, type Command, type EditorState } from "prosekit/pm/state";
 import { Decoration, DecorationSet } from "prosekit/pm/view";
 import type { ReportNode } from "../../../engines/report";
 import { defineReactNodeView, type ReactNodeViewComponent } from "prosekit/react";
@@ -163,21 +164,43 @@ const activeCodeBlock = definePlugin(
   }),
 );
 
-/** The owner's headings: `# `, `## ` and `### ` at a line's start (they stay unnumbered: only the drafted structure
- *  takes numbers). */
-const headingRule = defineTextBlockInputRule({ regex: /^(#{1,3})\s$/, type: "heading", attrs: (match) => ({ level: match[1]?.length ?? 1 }) });
+/** Whether the cursor is in one of the page's numbered headings (the drafted structure), which keeps its type. */
+function inNumberedHeading(state: EditorState, numbers: SubNumbers): boolean {
+  const { $from } = state.selection;
+  if ($from.parent.type.name !== "heading" || $from.depth !== 1 || !numbers.current) return false;
+  return numbers.current(state.doc.toJSON() as ReportNode).has($from.index(0));
+}
 
-/** The page's keys beyond ProseKit's own: headings 1 to 3, paragraph, sub- and superscript. */
-const pageKeymap = defineKeymap({
-  "Mod-Alt-0": withSkipCodeBlock(setBlockType({ type: "paragraph" })),
-  "Mod-Alt-1": withSkipCodeBlock(toggleNode({ type: "heading", attrs: { level: 1 } })),
-  "Mod-Alt-2": withSkipCodeBlock(toggleNode({ type: "heading", attrs: { level: 2 } })),
-  "Mod-Alt-3": withSkipCodeBlock(toggleNode({ type: "heading", attrs: { level: 3 } })),
-  Tab: moveCell(1),
-  "Shift-Tab": moveCell(-1),
-  "Mod-,": toggleMark({ type: "subscript" }),
-  "Mod-.": toggleMark({ type: "superscript" }),
-});
+/** A command that leaves the page's numbered headings as they are (and swallows its key there). */
+const sparingStructure =
+  (numbers: SubNumbers, command: Command): Command =>
+  (state, dispatch, view) =>
+    inNumberedHeading(state, numbers) ? true : command(state, dispatch, view);
+
+/** The owner's headings: `# `, `## ` and `### ` at a line's start (they stay unnumbered: only the drafted structure
+ *  takes numbers). Never inside a numbered heading. */
+const headingRule = (numbers: SubNumbers) =>
+  defineInputRule(
+    new InputRule(/^(#{1,3})\s$/, (state, match, start, end) => {
+      const $start = state.doc.resolve(start);
+      if (inNumberedHeading(state, numbers) || !$start.node(-1).canReplaceWith($start.index(-1), $start.indexAfter(-1), state.schema.nodes.heading))
+        return null;
+      return state.tr.delete(start, end).setBlockType(start, start, state.schema.nodes.heading, { level: match[1]?.length ?? 1 });
+    }),
+  );
+
+/** The page's keys beyond ProseKit's own: headings 1 to 3, paragraph, sub- and superscript, table cells. */
+const pageKeymap = (numbers: SubNumbers) =>
+  defineKeymap({
+    "Mod-Alt-0": sparingStructure(numbers, withSkipCodeBlock(setBlockType({ type: "paragraph" }))),
+    "Mod-Alt-1": sparingStructure(numbers, withSkipCodeBlock(toggleNode({ type: "heading", attrs: { level: 1 } }))),
+    "Mod-Alt-2": sparingStructure(numbers, withSkipCodeBlock(toggleNode({ type: "heading", attrs: { level: 2 } }))),
+    "Mod-Alt-3": sparingStructure(numbers, withSkipCodeBlock(toggleNode({ type: "heading", attrs: { level: 3 } }))),
+    Tab: moveCell(1),
+    "Shift-Tab": moveCell(-1),
+    "Mod-,": toggleMark({ type: "subscript" }),
+    "Mod-.": toggleMark({ type: "superscript" }),
+  });
 
 /** What an empty block says while the cursor is in it. A slot shows its own hint, so it takes none here. */
 function placeholderFor(state: EditorState): string {
@@ -192,14 +215,14 @@ function placeholderFor(state: EditorState): string {
  * image node: pictures come in as screenshots), plus highlight, sub- and superscript, placeholder, find and replace,
  * and code highlighting from the app's highlight.js. History is included once: a second defineHistory throws.
  */
-function defineEditing() {
+function defineEditing(numbers: SubNumbers = { current: undefined }) {
   return union(
     defineDoc(),
     defineText(),
     defineParagraph(),
     defineHeadingSpec(),
     defineHeadingCommands(),
-    headingRule,
+    headingRule(numbers),
     defineList(),
     defineBlockquote(),
     defineHorizontalRule(),
@@ -224,20 +247,45 @@ function defineEditing() {
     defineModClickPrevention(),
     definePlaceholder({ placeholder: placeholderFor }),
     defineSearchCommands(),
-    pageKeymap,
+    pageKeymap(numbers),
   );
 }
 
 /** The editing set's typed commands, marks and nodes, for the page's chrome (`useEditor<EditingExtension>`). */
 export type EditingExtension = ReturnType<typeof defineEditing>;
 
+/** Positions held while something finishes elsewhere (a pasted image saving): each moves with the page's edits. */
+export type HeldPositions = Set<{ pos: number }>;
+
+function holdPositions(held: HeldPositions) {
+  return definePlugin(
+    new Plugin({
+      state: {
+        init: () => null,
+        apply: (tr) => {
+          if (tr.docChanged) for (const h of held) h.pos = tr.mapping.map(h.pos);
+          return null;
+        },
+      },
+    }),
+  );
+}
+
 /** The report page's schema and node views: the editing set plus Raven's report vocabulary. */
-export function defineReportExtension(numbers: SubNumbers = { current: undefined }): Extension {
+export function defineReportExtension(numbers: SubNumbers = { current: undefined }, held: HeldPositions = new Set()): Extension {
   return union(
     headingNumbers(numbers),
-    defineEditing(),
+    holdPositions(held),
+    defineEditing(numbers),
     activeCodeBlock,
     fromEntryAttr("paragraph"),
+    defineNodeAttr({
+      type: "paragraph",
+      attr: "fromField",
+      default: null,
+      toDOM: (value: string | null) => (value ? ["data-from-field", value] : null),
+      parseDOM: (dom: HTMLElement) => dom.getAttribute("data-from-field"),
+    }),
     fromEntryAttr("codeBlock"),
     defineReactNodeView({ name: "codeBlock", component: CodeBlockView, as: "div", contentAs: "code", stopEvent: stopControlEvents }),
     slotSpec,

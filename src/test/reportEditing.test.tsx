@@ -4,10 +4,12 @@ import userEvent from "@testing-library/user-event";
 import type { Editor } from "prosekit/core";
 import { NodeSelection, TextSelection } from "prosekit/pm/state";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { evidenceIdsIn, evidenceNodes, type AppendixIndex, type ReportData, type ReportNode, type ReportTarget } from "../engines/report";
+import { addNewEvidence, evidenceIdsIn, evidenceNodes, type AppendixIndex, type ReportData, type ReportNode, type ReportTarget } from "../engines/report";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext";
 import { openFindBar, ReportEditor } from "../features/report/editor/ReportEditor";
 import { fuzzyScore } from "../features/report/editor/SlashMenu";
+import { unusedEntries } from "../features/report/EvidenceRail";
+import { pruneRemoved } from "../features/report/saveQueue";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
@@ -74,7 +76,8 @@ const doc = (...content: ReportNode[]): ReportNode => ({ type: "doc", content })
 const noRefs: AppendixIndex = { entries: [], refFor: () => null };
 const standalone: ReportTarget = { key: "h1", kind: "standalone", hostIds: ["h1"] };
 
-function setup(page: ReportNode, log: LogEntry[] = [entry({})], opts: { target?: ReportTarget; hosts?: Host[] } = {}) {
+type Opts = { target?: ReportTarget; hosts?: Host[]; subNumbers?: (doc: ReportNode) => Map<number, string> };
+function setup(page: ReportNode, log: LogEntry[] = [entry({})], opts: Opts = {}) {
   const onChange = vi.fn();
   const ref: { editor: Editor | null } = { editor: null };
   const qc = makeQueryClient();
@@ -84,14 +87,14 @@ function setup(page: ReportNode, log: LogEntry[] = [entry({})], opts: { target?:
       <ReportDataContext.Provider
         value={{ data: data(log, opts.hosts), appendix: noRefs, sectionMeta: {}, onRemoveEvidence: vi.fn(), target: opts.target ?? standalone, canMove: true }}
       >
-        <ReportEditor sectionId="s1" doc={page} onChange={onChange} onReady={(e) => (ref.editor = e)} />
+        <ReportEditor sectionId="s1" doc={page} subNumbers={opts.subNumbers} onChange={onChange} onReady={(e) => (ref.editor = e)} />
       </ReportDataContext.Provider>
     </QueryClientProvider>,
   );
   return { ...utils, onChange, qc, editor: () => ref.editor! };
 }
 
-async function ready(page: ReportNode, log?: LogEntry[], opts?: { target?: ReportTarget; hosts?: Host[] }) {
+async function ready(page: ReportNode, log?: LogEntry[], opts?: Opts) {
   const s = setup(page, log, opts);
   await waitFor(() => expect(s.editor()?.mounted).toBe(true));
   fireEvent.focusIn(s.editor().view.dom);
@@ -139,8 +142,19 @@ describe("Notes are the owner's text on the page", () => {
 
   it("an entry's observations stand in for the step's empty slot, as editable paragraphs", () => {
     const nodes = evidenceNodes(entry({ observations: "SSH and HTTP only" }));
-    expect(nodes[0]).toEqual({ type: "paragraph", attrs: { fromEntry: "e1" }, content: [{ type: "text", text: "SSH and HTTP only" }] });
+    expect(nodes[0]).toEqual({ type: "paragraph", attrs: { fromEntry: "e1", fromField: "observations" }, content: [{ type: "text", text: "SSH and HTTP only" }] });
     expect(nodes[1]).toMatchObject({ type: "evidence", attrs: { entryId: "e1" } });
+  });
+
+  it("an observation left on the page after its command is removed doesn't place the command: it stays removed and listed as unused", () => {
+    const cmd = entry({ observations: "SSH and HTTP only" });
+    // The step went on the page, then the owner removed the command block and kept the observation.
+    const page = doc(evidenceNodes(cmd)[0]);
+    expect(evidenceIdsIn(page).has("e1")).toBe(false);
+    expect(pruneRemoved(page, { removedEntryIds: ["e1"] })).toEqual({ removedEntryIds: ["e1"] });
+    expect(unusedEntries(data([cmd]), standalone, page).map((e) => e.id)).toEqual(["e1"]);
+    const added = addNewEvidence(page, data([cmd]), standalone, {}, ["e1"]);
+    expect(added.added).toEqual([]);
   });
 
   it("text taken from an entry puts the entry on the page", () => {
@@ -149,7 +163,7 @@ describe("Notes are the owner's text on the page", () => {
 
   it("a note saved as a frozen block opens as paragraphs to edit, and one undo brings the block back", async () => {
     const { editor, onChange } = await ready(doc(slot("Before"), ev("n1", { block: null })), [note("n1", "Rough idea")]);
-    await waitFor(() => expect(json(editor()).content?.[1]).toEqual({ type: "paragraph", attrs: { fromEntry: "n1" }, content: [{ type: "text", text: "Rough idea" }] }));
+    await waitFor(() => expect(json(editor()).content?.[1]).toEqual({ type: "paragraph", attrs: { fromEntry: "n1", fromField: null }, content: [{ type: "text", text: "Rough idea" }] }));
     expect(onChange).toHaveBeenCalled();
     // Typing in it edits the page, never the log.
     cursorAt(editor(), editor().state.doc.child(0).nodeSize + 1 + "Rough idea".length);
@@ -199,6 +213,13 @@ describe("Edit on page", () => {
     });
     undo(editor());
     expect(json(editor()).content?.[1]).toMatchObject({ type: "evidence", attrs: { entryId: "e1", keep: [[0, 1]] } });
+  });
+
+  it("isn't offered on a split block, whose full copy lives in the appendix", async () => {
+    const { editor } = await ready(doc(ev("e1", { appendix: "split" })));
+    act(() => editor().view.dispatch(editor().view.state.tr.setSelection(NodeSelection.create(editor().view.state.doc, 0))));
+    await screen.findByRole("button", { name: "Remove" });
+    expect(screen.queryByRole("button", { name: /^Edit on page/ })).toBeNull();
   });
 
   it("does the same for an HTTP block: request, then response", async () => {
@@ -361,6 +382,54 @@ describe("Slash menu", () => {
     expect(json(editor()).content?.map((n) => n.attrs?.entryId ?? n.content?.[0]?.text)).toEqual(["Next we scanned", "s1"]);
   });
 
+  it("never opens mid-sentence: a path typed in a sentence and ↵ stay as text", async () => {
+    const { editor } = await ready(doc(para()));
+    act(() => editor().view.focus());
+    cursorAt(editor(), 1);
+    type(editor(), "Read /etc/passwd");
+    expect(document.querySelector("prosekit-autocomplete-popup")).not.toHaveAttribute("data-state", "open");
+    act(() => void fireEvent.keyDown(editor().view.dom, { key: "Enter", code: "Enter", keyCode: 13 }));
+    expect(json(editor()).content?.[0].content?.[0].text).toBe("Read /etc/passwd");
+  });
+
+  it("closes on a path or file name typed at a line's start", async () => {
+    const { editor } = await slash();
+    type(editor(), "admin.php");
+    await waitFor(() => expect(document.querySelector("prosekit-autocomplete-popup")).not.toHaveAttribute("data-state", "open"));
+    expect(json(editor()).content?.[0].content?.[0].text).toBe("/admin.php");
+  });
+
+  it("↵ keeps the typed text when only a log entry matches loosely", async () => {
+    const { editor } = await slash(doc(para()), [entry({})]);
+    type(editor(), "nmap");
+    const keep = await screen.findByRole("option", { name: /Keep “\/nmap” as text/, hidden: true });
+    expect(keep).toHaveAttribute("data-highlighted");
+    fireEvent.click(keep);
+    expect(json(editor()).content?.map((n) => n.type)).toEqual(["paragraph"]);
+    expect(json(editor()).content?.[0].content?.[0].text).toBe("/nmap");
+  });
+
+  it("a log entry named by the start of its title is the one ↵ takes", async () => {
+    const { editor } = await slash(doc(para()), [entry({})]);
+    type(editor(), "full");
+    const option = await screen.findByRole("option", { name: /Full port scan/, hidden: true });
+    await waitFor(() => expect(option).toHaveAttribute("data-highlighted"));
+    expect(screen.queryByRole("option", { name: /Keep/, hidden: true })).toBeNull();
+    expect(editor()).toBeTruthy();
+  });
+
+  it("the evidence picker closed with Esc takes its / (and the line it added) away again", async () => {
+    const { editor } = await ready(doc(para("Next we scanned")), [entry({})]);
+    act(() => editor().view.focus());
+    cursorAt(editor(), 1 + "Next we scanned".length);
+    const before = json(editor());
+    fireEvent.click(within(screen.getByRole("toolbar", { name: "Formatting" })).getByRole("button", { name: "Insert evidence" }));
+    await waitFor(() => expect(document.querySelector("prosekit-autocomplete-popup")).toHaveAttribute("data-state", "open"));
+    expect(json(editor()).content).toHaveLength(2);
+    act(() => void fireEvent.keyDown(editor().view.dom, { key: "Escape", code: "Escape", keyCode: 27 }));
+    await waitFor(() => expect(json(editor())).toEqual(before));
+  });
+
   it("matches words out of order of their letters, never unrelated text", () => {
     expect(fuzzyScore("nmp", "Full port scan nmap -p-")).not.toBeNull();
     expect(fuzzyScore("zzz", "Full port scan")).toBeNull();
@@ -390,6 +459,15 @@ describe("Headings", () => {
       act(() => void fireEvent.keyDown(editor().view.dom, { key: String(level), code: `Digit${level}`, ctrlKey: true, altKey: true }));
       expect(json(editor()).content?.[0]).toMatchObject({ type: "heading", attrs: { level } });
     }
+  });
+
+  it("leave the page's numbered headings as they are: keys, markdown and the slash menu don't retype them", async () => {
+    const heading = { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Introduction" }] };
+    const { editor } = await ready(doc(heading, para("x")), undefined, { subNumbers: () => new Map([[0, "1.1"]]) });
+    cursorAt(editor(), 1);
+    for (const level of [0, 1, 3]) act(() => void fireEvent.keyDown(editor().view.dom, { key: String(level), code: `Digit${level}`, ctrlKey: true, altKey: true }));
+    type(editor(), "# ");
+    expect(json(editor()).content?.[0]).toMatchObject({ type: "heading", attrs: { level: 2 }, content: [{ text: "# Introduction" }] });
   });
 
   it("are in the bubble menu too", async () => {
@@ -476,6 +554,21 @@ describe("Images", () => {
     expect(qc.getQueryData<LogEntry[]>(["log", "eng"])?.some((e) => e.id === "new-shot")).toBe(true);
   });
 
+  it("lands where it was pasted, though the owner typed above it while it saved", async () => {
+    let save: (e: LogEntry) => void = () => {};
+    m.logCreate.mockImplementation(() => new Promise((r) => (save = r)));
+    const { editor } = await ready(doc(para("First"), slot("Uploaded the shell"), para("Last")));
+    const d = editor().state.doc;
+    cursorAt(editor(), d.child(0).nodeSize + 2);
+    paste(editor(), png());
+    await waitFor(() => expect(m.logCreate).toHaveBeenCalled());
+    // A new paragraph at the top moves everything down while the image saves.
+    act(() => editor().view.dispatch(editor().view.state.tr.insert(0, editor().state.schema.nodes.paragraph.create(null, editor().state.schema.text("Added")))));
+    cursorAt(editor(), editor().state.doc.content.size - 2);
+    await act(async () => save(entry({ id: "new-shot", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a9", caption: "", fileName: "shot.png" } })));
+    await waitFor(() => expect(json(editor()).content?.map((n) => n.attrs?.entryId ?? n.content?.[0]?.text)).toEqual(["Added", "First", "Uploaded the shell", "new-shot", "Last"]));
+  });
+
   it("on an AD set's page, goes to the machine whose section the cursor is in", async () => {
     const target: ReportTarget = { key: "ad", kind: "ad-set", hostIds: ["h1", "h2"] };
     const page = doc(
@@ -516,6 +609,26 @@ describe("Find and replace", () => {
     expect(json(editor()).content?.map((p) => p.content?.[0].text)).toEqual(["PORT 22 and PORT 80", "one more PORT"]);
     fireEvent.keyDown(find, { key: "Escape" });
     await waitFor(() => expect(screen.queryByLabelText("Find")).toBeNull());
+  });
+});
+
+describe("Find in log blocks", () => {
+  it("counts and steps through matches in the log's blocks too, read-only, and Replace leaves them as logged", async () => {
+    const { editor } = await ready(doc(para("the port list"), ev("e1")));
+    // The evidence block draws the nmap output from the log.
+    await waitFor(() => expect(document.querySelector(".report-cmd")).toBeInTheDocument());
+    act(() => void openFindBar(editor()));
+    fireEvent.change(await screen.findByLabelText("Find"), { target: { value: "port" } });
+    // "port" in the owner's paragraph, "PORT" in the output header (case folded).
+    await waitFor(() => expect(screen.getByText("1 of 2")).toBeInTheDocument());
+    expect(screen.getByText(/1 match in log blocks stay as logged/)).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByLabelText("Find"), { key: "Enter" });
+    await waitFor(() => expect(screen.getByText("2 of 2")).toBeInTheDocument());
+    expect(screen.getByText(/This match is in a block from the log: read-only/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Replace with"), { target: { value: "PORT" } });
+    fireEvent.click(screen.getByRole("button", { name: "Replace all" }));
+    expect(json(editor()).content?.[0].content?.[0].text).toBe("the PORT list");
+    expect(json(editor()).content?.[1]).toMatchObject({ type: "evidence", attrs: { entryId: "e1" } });
   });
 });
 

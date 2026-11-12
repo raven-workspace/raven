@@ -335,15 +335,15 @@
   border-bottom: 1px solid var(--page-rule);
 }
 
-/* IPs and host names: their column's width is set from their text (GeneratedView's Table), never broken across lines;
-   digits are tabular so 1ch is exactly one digit. */
+/* IPs and host names: their column's width is set from their text (GeneratedView's Table), so they keep one line;
+   digits are tabular so 1ch is exactly one digit. A name wider than its estimate (capitals run wide) wraps inside its
+   own column as a last resort rather than overprinting the next one. */
 .report-page .report-table[data-fixed] {
   table-layout: fixed;
 }
 
 .report-page .report-table .report-fit {
-  white-space: nowrap;
-  overflow-wrap: normal;
+  overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
 }
 
@@ -498,54 +498,6 @@
 }
 
 /* While trimming: the hint, or Keep all, on its own line above the output. */
-/* The trim bar over the output: the count, the run's actions as underlined words (actions on paper), a hint. It
-   takes the trim keys, so focus shows as an ink ring. */
-.report-page .report-trim-bar {
-  display: grid;
-  grid-auto-flow: column;
-  grid-template-columns: auto;
-  justify-content: start;
-  align-items: center;
-  column-gap: 16px;
-  min-height: 28px;
-  padding: 0 4px;
-  border-radius: 4px;
-  outline: none;
-  color: var(--page-placeholder);
-}
-
-.report-page .report-trim-bar:focus-visible {
-  box-shadow: 0 0 0 2px var(--page-ink);
-}
-
-.report-page .report-trim-count {
-  color: var(--page-ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.report-page .report-trim-action {
-  min-height: 24px;
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  color: var(--page-ink);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-}
-
-.report-page .report-trim-action:focus-visible {
-  outline: 2px solid var(--page-ink);
-  outline-offset: 2px;
-}
-
-.report-page .report-trim-hint {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* The owner's own blocks: quotes, dividers, tables, code blocks, the text marks. One house style, no colours. */
 
 .report-page a {
@@ -585,7 +537,8 @@
 
 .report-page sub,
 .report-page sup {
-  font-size: 11px;
+  /* The floor: nothing on the page under 12px. */
+  font-size: 12px;
   line-height: 0;
 }
 
@@ -866,4 +819,41 @@
   line-height: 22px;
   font-weight: 600;
   letter-spacing: 0.01em;
+}
+
+/* On a target or AD page the numbered sub-sections ("4.2.1 Service Enumeration") are 15px: the owner's headings sit
+   at or under that size and differ by weight and spacing, so they never outrank the structure. */
+.report-page[data-page="target"] .ProseMirror > h1:not([data-number]),
+.report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h1 {
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 700;
+  padding-top: 8px;
+}
+
+.report-page[data-page="target"] .ProseMirror > h2:not([data-number]),
+.report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h2 {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 700;
+  padding-top: 4px;
+}
+
+.report-page[data-page="target"] .ProseMirror > h3,
+.report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h3 {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 600;
+  font-style: italic;
+}
+
+/* Find matches inside log blocks (read-only, drawn from the log): CSS custom highlights, the same tones as the
+   owner's text matches. Names are the find bar's own. */
+::highlight(report-find) {
+  background-color: #ece3b8;
+}
+
+::highlight(report-find-active) {
+  background-color: #16161a;
+  color: #f4f3ef;
 }

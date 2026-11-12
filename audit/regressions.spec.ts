@@ -1229,18 +1229,23 @@ async function openReportAt1400(page: Page, target: string) {
 async function expectFitColumns(page: Page) {
   const tables = page.locator(".report-page .report-table[data-fixed]");
   expect(await tables.count()).toBeGreaterThan(0);
-  const result = await tables.evaluateAll((all) =>
-    all.map((t) => {
-      const row = t.querySelector("tbody tr")!;
-      const [ip, ports] = [...row.querySelectorAll("td")];
-      ip.textContent = "172.31.166.143";
-      ports.textContent = "TCP: 21, 22, 80, 81, 443, 3000, 3001, 3003, 3306, 5432, 8080, 8443, 9090, 10000";
-      const a = ip.getBoundingClientRect();
-      const b = ports.getBoundingClientRect();
-      return { overflows: ip.scrollWidth > ip.clientWidth + 1, overlaps: a.right > b.left + 0.5 };
-    }),
-  );
-  for (const r of result) expect(r).toEqual({ overflows: false, overlaps: false });
+  // A long IP, then a capitalised host name wider than its column's estimate: it wraps in its column, never over the next.
+  for (const value of ["172.31.166.143", "WORKSTATION-FINANCE-WWW-01"]) {
+    const result = await tables.evaluateAll(
+      (all, text) =>
+        all.map((t) => {
+          const row = t.querySelector("tbody tr")!;
+          const [ip, ports] = [...row.querySelectorAll("td")];
+          ip.textContent = text;
+          ports.textContent = "TCP: 21, 22, 80, 81, 443, 3000, 3001, 3003, 3306, 5432, 8080, 8443, 9090, 10000";
+          const a = ip.getBoundingClientRect();
+          const b = ports.getBoundingClientRect();
+          return { overflows: ip.scrollWidth > ip.clientWidth + 1, overlaps: a.right > b.left + 0.5 };
+        }),
+      value,
+    );
+    for (const r of result) expect(r).toEqual({ overflows: false, overlaps: false });
+  }
 }
 
 test("Report: Port Scan Results keeps a long IP in its column, in WebKit too", async ({ page, playwright, baseURL }) => {
@@ -1273,4 +1278,21 @@ test("Report: the formatting bar fits its pane at 1400 with the evidence rail op
   for (const name of kept) await expect(bar.getByRole("button", { name })).toBeVisible();
   await bar.getByRole("button", { name: "More formatting" }).click();
   await expect(page.getByRole("dialog", { name: "More formatting" }).getByRole("button", { name: "Find and replace" })).toBeVisible();
+});
+
+test("Report: on a target page the owner's headings never outrank the numbered sub-sections", async ({ page }) => {
+  await openReportAt1400(page, "ms01");
+  await page.locator(".report-page .report-slot-text").first().click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
+  for (const [marks, text] of [["#", "Owner one"], ["##", "Owner two"], ["###", "Owner three"]]) {
+    await page.keyboard.type(`${marks} ${text}`);
+    await page.keyboard.press("Enter");
+  }
+  const size = (sel: string) => page.locator(sel).first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  const subSection = await size(".report-page .report-h3");
+  for (const level of [1, 2, 3]) {
+    const owner = await size(`.report-page .ProseMirror > h${level}:not([data-number])`);
+    expect(owner, `owner h${level}`).toBeLessThanOrEqual(subSection);
+  }
 });

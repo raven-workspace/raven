@@ -87,6 +87,8 @@ export function toggleHeading(editor: PageEditor, kind: (typeof HEADING_KINDS)[n
 
 /** Turns the cursor's block into `kind`. A quote wraps it; leaving a quote unwraps it first. */
 export function setBlockKind(editor: PageEditor, kind: BlockKind) {
+  // The page's numbered headings are its structure: they keep their type.
+  if (inPageHeading(editor)) return;
   const inQuote = blockKindAt(editor) === "quote";
   if (inQuote && kind !== "quote") editor.commands.toggleBlockquote();
   switch (kind) {

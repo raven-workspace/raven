@@ -95,7 +95,9 @@ describe("report save queue", () => {
     queueReportSave(qc, "s1", page("huge"), {});
     await vi.advanceTimersByTimeAsync(600);
     expect(m.reportSectionSave).toHaveBeenCalledTimes(1);
-    expect(useReportSaveStore.getState().refused).toBe("This page is over 8 MiB and can't be saved. Cut some text.");
+    expect(useReportSaveStore.getState().refused).toEqual({ sectionId: "s1", message: "This page is over 8 MiB and can't be saved. Cut some text." });
+    // Refused is not the transient "keeps trying" kind.
+    expect(useReportSaveStore.getState().unsaved).toBe(false);
     // No backoff: nothing more is sent on its own.
     await vi.advanceTimersByTimeAsync(120_000);
     expect(m.reportSectionSave).toHaveBeenCalledTimes(1);
@@ -115,9 +117,26 @@ describe("report save queue", () => {
     m.reportSectionSave.mockRejectedValue({ code: "not_found", message: "not found" });
     queueReportSave(qc, "s1", page("orphan"), {});
     await vi.advanceTimersByTimeAsync(600);
-    expect(useReportSaveStore.getState().refused).toMatch(/no longer exists/);
+    expect(useReportSaveStore.getState().refused?.message).toMatch(/no longer exists/);
     await vi.advanceTimersByTimeAsync(120_000);
     expect(m.reportSectionSave).toHaveBeenCalledTimes(1);
+  });
+
+  it("a refused page doesn't hide another page's transient failure, nor hold back its backoff", async () => {
+    vi.useFakeTimers();
+    m.reportSectionSave.mockImplementation(async (id) => {
+      if (id === "big") throw { code: "validation", message: "this page is over 8 MiB", field: "doc" };
+      throw new Error("disk busy");
+    });
+    queueReportSave(qc, "big", page("huge"), {});
+    queueReportSave(qc, "s2", page("two"), {});
+    await vi.advanceTimersByTimeAsync(600);
+    expect(useReportSaveStore.getState()).toMatchObject({ unsaved: true, refused: { sectionId: "big" } });
+    // s2 retries on its own schedule: 2 s, then 5 s.
+    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(m.reportSectionSave.mock.calls.filter(([id]) => id === "s2")).toHaveLength(3);
+    expect(m.reportSectionSave.mock.calls.filter(([id]) => id === "big")).toHaveLength(1);
   });
 
   it("a flush waits for report details writes on their way, so a lock saves them first", async () => {

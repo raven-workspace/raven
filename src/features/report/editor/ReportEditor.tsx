@@ -10,7 +10,7 @@ import { reportError } from "../../../lib/lockSignal";
 import { RavenError } from "../../../types/errors";
 import { BlockHandle } from "./BlockHandle";
 import { BubbleMenu } from "./BubbleMenu";
-import { defineReportExtension, type SubNumbers } from "./extension";
+import { defineReportExtension, type HeldPositions, type SubNumbers } from "./extension";
 import { FindBar } from "./FindBar";
 import { FormatToolbar } from "./FormatToolbar";
 import { hostAtPos, PageActionsContext, placeEntry, saveScreenshot, type PageActions } from "./pageActions";
@@ -37,6 +37,9 @@ function layoutOf(doc: PMNode, data: ReportData, sectionId: string, figureOffset
   walk(doc, "");
   return { sectionId, figureOf: (n) => figures.get(n) ?? null, pathOf: (n) => paths.get(n) ?? null, touched, heading: (key) => headings?.get(key) ?? null };
 }
+
+/** Each page's held positions (see `HeldPositions`), by its editor. */
+const heldPositions = new WeakMap<Editor, HeldPositions>();
 
 /** Each page's numbering holder (see `SubNumbers`), by its editor. */
 const pageNumbers = new WeakMap<Editor, SubNumbers>();
@@ -305,8 +308,10 @@ export function ReportEditor({
   const [initialDoc] = useState(doc);
   const editor = useMemo(() => {
     const numbers: SubNumbers = { current: undefined };
-    const made = createEditor({ extension: defineReportExtension(numbers), defaultContent: initialDoc as NodeJSON });
+    const held: HeldPositions = new Set();
+    const made = createEditor({ extension: defineReportExtension(numbers, held), defaultContent: initialDoc as NodeJSON });
     pageNumbers.set(made, numbers);
+    heldPositions.set(made, held);
     return made;
   }, [initialDoc]);
   // The numbering plugin reads the current numbering as the page redraws; set before the page mounts.
@@ -354,15 +359,19 @@ export function ReportEditor({
   const actions = useMemo((): PageActions => {
     const addImage = (file: File, pos?: number) => {
       const { data, target } = live.current;
-      const at = pos ?? editor.state.selection.from;
-      const hostId = hostAtPos(editor, at, target);
+      // Where the paste or drop happened, carried through whatever the owner types while the image saves.
+      const spot = { pos: pos ?? editor.state.selection.from };
+      const held = heldPositions.get(editor);
+      held?.add(spot);
+      const hostId = hostAtPos(editor, spot.pos, target);
       setImageError(null);
       saveScreenshot(qc, data.engagement.id, hostId ? [hostId] : [], file)
         .then((entry) => {
           if (!editor.mounted) return;
-          // The paste's place, as far as the page still has it; the caption is the page's to write.
-          placeEntry(editor, entry, pos === undefined ? undefined : Math.min(at, editor.state.doc.content.size), { caption: "" });
+          // The caption is the page's to write.
+          placeEntry(editor, entry, Math.min(spot.pos, editor.state.doc.content.size), { caption: "" });
         })
+        .finally(() => held?.delete(spot))
         .catch((e: unknown) => {
           reportError(e);
           setImageError(RavenError.from(e).message);
@@ -433,7 +442,7 @@ export function ReportEditor({
               if (file) actions.addImage(file);
             }}
           />
-          <div className="report-page">
+          <div className="report-page" data-page={value.target ? "target" : "report"}>
             {title && (
               <h1 className="report-title">
                 {titleNumber && <span className="report-num">{titleNumber}</span>}

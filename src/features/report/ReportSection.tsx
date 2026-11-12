@@ -783,13 +783,12 @@ function ReportBody({
   const notices = (
     <>
       {ensureFailed && <WarnLine text={`Couldn't add the report's new sections: ${ensureFailed}`} retryLabel="Retry setting up sections" onRetry={() => setEnsureFailed(null)} />}
-      {saveRefused ? (
+      {saveRefused && (
         <p role="alert" className="m-0 text-meta text-warn">
-          {saveRefused}
+          {`${items.find((i) => i.id === saveRefused.sectionId)?.label ?? "A page"}: ${saveRefused.message}`}
         </p>
-      ) : (
-        saveFailed && <p className="m-0 text-meta text-warn">Some typing isn't saved yet. Raven keeps trying; keep Raven open until this goes.</p>
       )}
+      {saveFailed && <p className="m-0 text-meta text-warn">Some typing isn't saved yet. Raven keeps trying; keep Raven open until this goes.</p>}
       {draftFailed && <WarnLine text={`Couldn't build this page's draft: ${draftFailed}`} retryLabel="Retry building the draft" onRetry={() => setDraftFailed(null)} />}
       {notStarted && open?.target && <p className="m-0 text-meta text-muted-2">Nothing logged on {open.item.label} yet. The page fills in as you work.</p>}
     </>

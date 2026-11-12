@@ -7,7 +7,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { applyKeep, captionOf, lineCount, type EvidenceAttrs, type ReportNode } from "../../../../engines/report";
 import { api } from "../../../../lib/api";
 import type { CommandBlock, LogEntry } from "../../../../types/log";
-import { IconButton } from "../../../../ui";
+import { Button, HintLine, IconButton, Toolbar, type Hint } from "../../../../ui";
 import { AttachmentImage } from "../../../log/AttachmentImage";
 import { useAppendixRef, usePageLayout, useReportData } from "../ReportDataContext";
 import { AppendixRef, Block, BlockTools, Gone, MoveButton } from "./parts";
@@ -495,7 +495,18 @@ function useTrim(attrs: EvidenceAttrs, total: number, setAttrs: (a: Partial<Evid
   };
 }
 
-/** The bar over the output while trimming: the count, and what to do with the run picked. Takes the keys. */
+const TRIM_KEYS: Hint[] = [
+  { keys: "↑ ↓", label: "move", priority: 1 },
+  { keys: "⇧↑ ⇧↓", label: "extend", priority: 2 },
+  { keys: "Space", label: "cut or keep", priority: 3 },
+  { keys: "⌫", label: "cut", priority: 4 },
+  { keys: "Esc", label: "done", priority: 5 },
+];
+
+/**
+ * The bar over the output while trimming (Ink chrome on the paper): how many lines are kept, the run's actions, and
+ * the keys. It takes the keys itself, so it has focus while trimming.
+ */
 function TrimBar({ trim, total, onLeave }: { trim: ReturnType<typeof useTrim>; total: number; onLeave(): void }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => ref.current?.focus(), []);
@@ -506,27 +517,32 @@ function TrimBar({ trim, total, onLeave }: { trim: ReturnType<typeof useTrim>; t
       tabIndex={0}
       data-trim=""
       role="toolbar"
-      aria-label="Trim the output: ↑↓ move, ⇧↑↓ extend, Space flips, ⌫ cuts, Esc leaves"
-      className="report-trim-bar"
+      aria-label="Trim the output"
       onKeyDown={(e) => trim.onKey(e, onLeave)}
+      className="grid gap-2 rounded-md border border-line-strong bg-surface px-3 py-2 font-sans outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
     >
-      <span className="report-trim-count" aria-live="polite">{`${trim.keptCount} of ${total} lines kept`}</span>
-      {trim.run.length > 0 && (
-        <>
-          <button type="button" className="report-trim-action" onClick={trim.cutRun}>
-            Cut selection
-          </button>
-          <button type="button" className="report-trim-action" onClick={trim.keepOnlyRun}>
-            Keep only selection
-          </button>
-        </>
-      )}
-      {trim.keptCount < total && (
-        <button type="button" className="report-trim-action" onClick={trim.keepAll}>
-          Keep all
-        </button>
-      )}
-      {trim.run.length === 0 && <span className="report-trim-hint">Drag down the line numbers to cut a run</span>}
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4">
+        <span aria-live="polite" className="text-body text-fg tabular-nums">{`${trim.keptCount} of ${total} lines kept`}</span>
+        <span className="truncate text-meta text-muted-2">{trim.run.length === 0 ? "Drag down the line numbers to cut a run" : ""}</span>
+        <Toolbar>
+          {trim.run.length > 0 && (
+            <>
+              <Button size="sm" onClick={trim.cutRun}>
+                Cut selection
+              </Button>
+              <Button size="sm" onClick={trim.keepOnlyRun}>
+                Keep only selection
+              </Button>
+            </>
+          )}
+          {trim.keptCount < total && (
+            <Button size="sm" onClick={trim.keepAll}>
+              Keep all
+            </Button>
+          )}
+        </Toolbar>
+      </div>
+      <HintLine hints={TRIM_KEYS} ariaLabel="Trim keys" />
     </div>
   );
 }
@@ -634,7 +650,8 @@ export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNo
               />
             </>
           )}
-          {(isCommand || shown?.content.kind === "http") && attrs.appendix !== "moved" && (
+          {/* Inline only: a split block's full copy lives in the appendix, which a code block on the page can't feed. */}
+          {(isCommand || shown?.content.kind === "http") && attrs.appendix === "inline" && (
             <IconButton icon={PencilSimpleLine} label="Edit on page (stops following the log entry)" onClick={detach} />
           )}
           {isShot && attrs.width != null && (

@@ -55,7 +55,10 @@ let session = newSession();
 
 /** Whether a failed write is still unsaved: the Report view shows a warning while it is, and why when it is refused for
  *  good (`refused`). */
-export const useReportSaveStore = create<{ unsaved: boolean; refused: string | null }>()(() => ({ unsaved: false, refused: null }));
+export const useReportSaveStore = create<{ unsaved: boolean; refused: { sectionId: string; message: string } | null }>()(() => ({
+  unsaved: false,
+  refused: null,
+}));
 
 /** What the owner is told when the backend refuses a page for good; null when a retry may land. */
 export function refusalOf(e: unknown): string | null {
@@ -85,10 +88,13 @@ export function pruneRemoved(doc: ReportNode, meta: SectionMeta): SectionMeta {
 
 function updateUnsaved(s: Session) {
   if (s !== session) return;
-  const unsaved = [...s.failed].some((id) => s.pending.has(id));
-  const refused = [...s.refused].find(([id]) => s.pending.has(id))?.[1] ?? null;
+  // `unsaved` is the transient kind (a retry may land); a refused page has its own message.
+  const unsaved = [...s.failed].some((id) => s.pending.has(id) && !s.refused.has(id));
+  const hit = [...s.refused].find(([id]) => s.pending.has(id));
+  const refused = hit ? { sectionId: hit[0], message: hit[1] } : null;
   const st = useReportSaveStore.getState();
-  if (st.unsaved !== unsaved || st.refused !== refused) useReportSaveStore.setState({ unsaved, refused });
+  if (st.unsaved !== unsaved || st.refused?.sectionId !== refused?.sectionId || st.refused?.message !== refused?.message)
+    useReportSaveStore.setState({ unsaved, refused });
 }
 
 /** Failed writes a retry may still land. */
@@ -136,7 +142,8 @@ async function sendRun(s: Session, id: string): Promise<void> {
     }
   } finally {
     s.runs.delete(id);
-    if (s.failed.size === 0) s.retryStep = 0;
+    // The backoff starts again once nothing a retry could land is failing (refused pages wait for a change).
+    if (!retryable(s)) s.retryStep = 0;
     scheduleRetry(s);
   }
 }
@@ -158,7 +165,7 @@ export function queueReportSave(qc: QueryClient, id: string, doc: ReportNode, me
   s.qc = qc;
   s.pending.set(id, { doc, meta });
   // A change to a refused page is the owner's fix: it is sent as usual.
-  s.refused.delete(id);
+  if (s.refused.delete(id)) updateUnsaved(s);
   clearTimeout(s.timer);
   s.timer = setTimeout(() => void flush(true), SAVE_DEBOUNCE_MS);
 }
