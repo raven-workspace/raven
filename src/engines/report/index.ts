@@ -19,3 +19,4 @@ export * from "./tables";
 export * from "./guides";
 export * from "./copies";
 export * from "./terminal";
+export * from "./plain";

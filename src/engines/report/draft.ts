@@ -40,7 +40,7 @@ const blockKind = (n: ReportNode | undefined): GeneratedKind | null =>
 /** A finding on the page: its copy (`finding`), or a layout-4 `vuln`. */
 const isFindingBlock = (n: ReportNode | undefined) => n?.type === "finding" || n?.type === "vuln";
 
-type HostEntry = "foothold" | "hop";
+export type HostEntry = "foothold" | "hop";
 
 export const node = (type: string, attrs: object): ReportNode => ({ type, attrs: attrs as Record<string, unknown> });
 export const slot = (hint: string, label?: string) => node("slot", (label ? { hint, label } : { hint }) satisfies SlotAttrs);
@@ -256,7 +256,7 @@ function exploitStep(data: ReportData, hostId: string, fileName: string, leads: 
 }
 
 /** Entries in time order as steps: each placed entry with the screenshots that came along after it. */
-function stepsOf(entries: LogEntry[], placing: ReadonlySet<string>): LogEntry[][] {
+export function stepsOf(entries: LogEntry[], placing: ReadonlySet<string>): LogEntry[][] {
   const steps: LogEntry[][] = [];
   for (const e of entries) {
     const tagsAlong = e.kind === "screenshot" && !placing.has(e.id) && steps.length > 0;
@@ -342,7 +342,7 @@ const STEP_PHASES = new Set<Phase>(["foothold", "lateral", "privesc", "domain"])
 
 /** What the draft decides for one machine: its kept entries (flag companions taken out), each one's phase, its
  *  findings and the phase each enabled (null: Additional findings). */
-interface HostPlan {
+export interface HostPlan {
   kept: LogEntry[];
   companions: Map<string, LogEntry[]>;
   split: Map<string, Phase>;
@@ -352,7 +352,7 @@ interface HostPlan {
   time: Map<string, number>;
 }
 
-function hostPlan(data: ReportData, hostId: string, entry: HostEntry, enumerate: boolean, owns: (findingId: string) => boolean): HostPlan {
+export function hostPlan(data: ReportData, hostId: string, entry: HostEntry, enumerate: boolean, owns: (findingId: string) => boolean): HostPlan {
   const all = keptEntries(data, hostId);
   const companions = flagCompanions(data, hostId, all);
   const moved = new Set([...companions.values()].flat().map((e) => e.id));

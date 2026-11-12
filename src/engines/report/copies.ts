@@ -68,7 +68,8 @@ function inlineNodes(parts: Inline[], marks: Mark[] = []): ReportNode[] {
 }
 
 /** One line of finding text with its inline Markdown. */
-const inline = (text: string): ReportNode[] => joinText(inlineNodes(parseInlineWith(text, { urls: true })));
+export const inlineMarkdown = (text: string): ReportNode[] => joinText(inlineNodes(parseInlineWith(text, { urls: true })));
+const inline = inlineMarkdown;
 
 const codeBlock = (text: string): ReportNode =>
   text === "" ? { type: "codeBlock", attrs: { language: "" } } : { type: "codeBlock", attrs: { language: "" }, content: [{ type: "text", text }] };
@@ -160,7 +161,7 @@ export function findingBlocks(text: string): ReportNode[] {
 }
 
 /** A labelled part: the bold label leads the first paragraph; before a list, code or table it is a line of its own. */
-function labelled(label: string, blocks: ReportNode[]): ReportNode[] {
+export function labelled(label: string, blocks: ReportNode[]): ReportNode[] {
   const [first, ...rest] = blocks;
   if (first?.type === "paragraph") return [para(joinText([bold(label), textNode(" "), ...(first.content ?? [])])), ...rest];
   return [para([bold(label)]), ...blocks];

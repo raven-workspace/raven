@@ -170,6 +170,36 @@ export const OUTPUT = {
   ].join("\n"),
 } as const;
 
+/** garnet (10.10.30.31): the proof machine shaped like the owner's sample walk-through (exposed .git history, then
+ *  sudo CVE-2021-3156). Invented values throughout. */
+const GARNET_LOCAL = "4c1d8e2f9a7b3065e2c4a9f1d7b80e36";
+const GARNET_PROOF = "e7a2093bd5c14f68a0b9e3d2c71f45a8";
+const garnetLocalOut = ["garnet", "ronan", GARNET_LOCAL, linuxIp("10.10.30.31", "ens3")].join("\n");
+const garnetProofOut = [
+  "uid=0(root) gid=0(root) groups=0(root),4(adm),24(cdrom),30(dip),46(plugdev),1000(ronan)",
+  "garnet",
+  linuxIp("10.10.30.31", "ens3"),
+  GARNET_PROOF,
+].join("\n");
+const garnetExp = [
+  "uid:1000 gid:1000",
+  "[+] mount success",
+  "total 8",
+  "drwxrwxr-x 1 root   root     4096 Nov  9 21:40 .",
+  "drwxrwxr-x 6 root   root     4096 Nov  9 21:40 ..",
+  "-rwsrwxrwx 1 nobody nogroup 16096 Jan  1  1970 file",
+  "[+] exploit success!",
+  "root@garnet:/var/lib/jenkins#",
+].join("\n");
+
+export const GARNET = {
+  local: GARNET_LOCAL,
+  proof: GARNET_PROOF,
+  localOut: garnetLocalOut,
+  proofOut: garnetProofOut,
+  exp: garnetExp,
+};
+
 export type ShotKind = "terminal" | "browser";
 export interface ShotText {
   kind: ShotKind;
@@ -196,4 +226,14 @@ export const EXAM_SHOTS: Record<string, ShotText> = {
   "dc01-proof": { kind: "terminal", title: "kali@kali: ~/exam/ad", text: PROOF.dc01Proof },
   "xfer03-local": { kind: "terminal", title: "svc_backup@xfer03: ~", text: XFER03.localShot },
   "xfer03-proof": { kind: "terminal", title: "root@xfer03: ~", text: XFER03.proofPaste },
+  "garnet-local": {
+    kind: "terminal",
+    title: "ronan@garnet: ~",
+    text: `ronan@garnet:~$ hostname && whoami && cat local.txt && ip a\n${garnetLocalOut}`,
+  },
+  "garnet-proof": {
+    kind: "terminal",
+    title: "root@garnet: /var/lib/jenkins",
+    text: `${garnetExp} id; hostname; ip a; cat /root/proof.txt\n${garnetProofOut}`,
+  },
 };

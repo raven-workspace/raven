@@ -1,0 +1,465 @@
+import type { Finding, FindingFile } from "../../types/findings";
+import type { CommandBlock, LogEntry } from "../../types/log";
+import { findingBlocks, inlineMarkdown, labelled } from "./copies";
+import { testedLine, testedNotExploited } from "./coverage";
+import { findingPhaseMap, hostEntry, hostPlan, machinesInOrder, severityRank, stepsOf } from "./draft";
+import { placingEntries } from "./prove";
+import { portRows, resultLine } from "./tables";
+import { isPortScan } from "./tools";
+import { applyKeep, defaultKeep, lineCount } from "./trim";
+import type { Phase, ReportData, ReportMeta, ReportNode, ReportTarget } from "./types";
+import { splitAffected } from "./wording";
+
+/**
+ * A target written as a plain document (the owner's sample report, §4.1 Quartz): only ordinary editable nodes
+ * (headings, paragraphs, flat lists, code blocks, tables, hard breaks) and one `figure` per screenshot (image plus an
+ * editable caption). No slots, chips or atoms. Each generated block carries a `source` attr ("entry:<id>:<block>",
+ * "finding:<id>:fix", "ports:<hostId>") for a later Refresh and the checks; it never shows on the page.
+ */
+
+/** The node types a plain draft is made of. */
+export const PLAIN_NODE_TYPES: readonly string[] = [
+  "doc",
+  "heading",
+  "paragraph",
+  "text",
+  "hardBreak",
+  "list",
+  "codeBlock",
+  "table",
+  "tableRow",
+  "tableHeaderCell",
+  "tableCell",
+  "figure",
+];
+
+/** The headings of a machine's step phases, in the sample's wording. */
+const PHASE_TITLE: Partial<Record<Phase, string>> = {
+  foothold: "Initial access",
+  lateral: "Lateral movement",
+  privesc: "Privilege escalation",
+  domain: "Domain compromise",
+  post: "Post-exploitation",
+};
+const STEP_PHASES: Phase[] = ["foothold", "lateral", "privesc", "domain"];
+export const ADDITIONAL_HEADING = "Additional findings (not on the path to root)";
+export const TESTED_HEADING = "Also tested";
+export const ENUM_HEADING = "Service enumeration";
+
+type Mark = { type: string };
+const text = (value: string, marks: Mark[] = []): ReportNode => (marks.length > 0 ? { type: "text", text: value, marks } : { type: "text", text: value });
+const bold = (value: string) => text(value, [{ type: "bold" }]);
+const code = (value: string) => text(value, [{ type: "code" }]);
+const para = (content: ReportNode[], source?: string): ReportNode => ({
+  type: "paragraph",
+  ...(source ? { attrs: { source } } : {}),
+  ...(content.length > 0 ? { content } : {}),
+});
+const heading = (level: number, value: string, source: string): ReportNode => ({ type: "heading", attrs: { level, source }, content: [text(value)] });
+const codeBlock = (value: string, language: string, source: string): ReportNode => ({
+  type: "codeBlock",
+  attrs: { language, source },
+  content: [text(value)],
+});
+const listItem = (kind: "ordered" | "bullet", content: ReportNode[], source?: string): ReportNode => ({
+  type: "list",
+  attrs: { kind, ...(source ? { source } : {}) },
+  content,
+});
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Top-level blocks with their source set (inner paragraphs of a list keep none). */
+const sourced = (blocks: ReportNode[], source: string): ReportNode[] => blocks.map((b) => ({ ...b, attrs: { ...(b.attrs ?? {}), source } }));
+
+/** Finding or observation text as blocks (`findingBlocks`: pasted terminal text as code), each code block without the
+ *  indent all its lines share (text pasted as an indented block). */
+function textBlocks(value: string): ReportNode[] {
+  return findingBlocks(value).map((b) => {
+    if (b.type !== "codeBlock" || !b.content?.[0]?.text) return b;
+    const lines = b.content[0].text.split("\n");
+    const indent = Math.min(...lines.filter((l) => l.trim() !== "").map((l) => /^[ \t]*/.exec(l)![0].length));
+    if (!Number.isFinite(indent) || indent === 0) return b;
+    return { ...b, content: [text(lines.map((l) => l.slice(Math.min(indent, /^[ \t]*/.exec(l)![0].length))).join("\n"))] };
+  });
+}
+
+/** An output as the page prints it: trailing blank lines off, long ones cut by `defaultKeep` with one line per cut. */
+export function trimmedOutput(output: string): string {
+  const body = output.replace(/\s+$/, "");
+  if (body === "") return "";
+  return applyKeep(body, defaultKeep(lineCount(body)))
+    .map((item) => (item.kind === "omitted" ? `[… ${item.count} ${item.count === 1 ? "line" : "lines"} omitted …]` : item.text))
+    .join("\n");
+}
+
+/** A port scan's output cut to its open ports and the `|` script lines under each. Empty when it holds none. */
+export function openPortLines(output: string): string {
+  const out: string[] = [];
+  let under = false;
+  for (const line of output.split(/\r?\n/)) {
+    if (/^\d+\/(?:tcp|udp)\s+open\b/.test(line)) {
+      out.push(line);
+      under = true;
+    } else if (under && line.startsWith("|")) out.push(line);
+    else under = false;
+  }
+  return out.join("\n");
+}
+
+/** A command's code block language: PowerShell for a PowerShell or Evil-WinRM prompt, plain for cmd, else bash (a
+ *  command run on a Windows machine with no prompt recorded is PowerShell). */
+function shellLanguage(data: ReportData, entry: LogEntry, block: CommandBlock): string {
+  const shell = (block.shell ?? "").toLowerCase();
+  if (/powershell|pwsh|evil-winrm|^ps\b/.test(shell)) return "powershell";
+  if (/^cmd\b|cmd\.exe/.test(shell)) return "";
+  if (shell === "" && entry.ranOn) {
+    const host = data.hosts.find((h) => h.name.toLowerCase() === entry.ranOn!.toLowerCase());
+    if (host?.os === "windows") return "powershell";
+  }
+  return "bash";
+}
+
+/** An entry's title as a step's sentence: capitalised, ending in ":". */
+export function titleSentence(title: string): string {
+  const body = title.trim().replace(/[\s.:;,]+$/, "");
+  return body === "" ? "Run the following:" : `${capitalize(body)}:`;
+}
+
+/** A step's sentence: the owner's observations when written (as written), else the title as a sentence. Never empty. */
+function sentenceOf(entry: LogEntry): ReportNode[] {
+  const said = entry.observations?.trim() ? textBlocks(entry.observations.trim()) : [];
+  if (said.length > 0 && said[0].type === "paragraph") return sourced(said, `entry:${entry.id}:observations`);
+  return [para(inlineMarkdown(titleSentence(entry.title)), `entry:${entry.id}:title`), ...sourced(said, `entry:${entry.id}:observations`)];
+}
+
+/** One step in progress: its blocks, and the outputs it shows (to leave out a flag proof printed already). */
+interface Step {
+  blocks: ReportNode[];
+  shown: string[];
+}
+
+/** An entry's evidence as plain blocks: each command (consecutive commands that printed nothing join the next one),
+ *  then its trimmed output; an HTTP request and response; a screenshot as a figure; a note as paragraphs. */
+function evidence(data: ReportData, entry: LogEntry, step: Step) {
+  const c = entry.content;
+  if (c.kind === "command") {
+    let pending: { command: string; at: number }[] = [];
+    c.blocks.forEach((b, i) => {
+      const output = trimmedOutput(b.output ?? "");
+      const command = (b.command ?? "").trim();
+      if (command !== "") pending.push({ command, at: i });
+      if (output === "" && i < c.blocks.length - 1) return;
+      if (pending.length > 0) {
+        step.blocks.push(codeBlock(pending.map((p) => p.command).join("\n"), shellLanguage(data, entry, c.blocks[pending[0].at]), `entry:${entry.id}:${pending[0].at}:command`));
+      }
+      pending = [];
+      if (output !== "") {
+        step.blocks.push(codeBlock(output, "", `entry:${entry.id}:${i}:output`));
+        step.shown.push(b.output ?? "");
+      }
+    });
+  } else if (c.kind === "http") {
+    if (c.request.trim()) step.blocks.push(codeBlock(c.request.trim(), "http", `entry:${entry.id}:request`));
+    const response = trimmedOutput(c.response ?? "");
+    if (response) {
+      step.blocks.push(codeBlock(response, "http", `entry:${entry.id}:response`));
+      step.shown.push(c.response ?? "");
+    }
+  } else if (c.kind === "screenshot") {
+    step.blocks.push(figure(c.attachmentId, c.caption.trim() || entry.title, entry.id));
+  } else if (c.kind === "note") {
+    step.blocks.push(...sourced(textBlocks(c.text), `entry:${entry.id}:note`));
+  }
+}
+
+const figure = (attachmentId: string, caption: string, entryId: string): ReportNode => ({
+  type: "figure",
+  attrs: { attachmentId, entryId, source: `entry:${entryId}` },
+  ...(caption.trim() ? { content: [text(caption.trim())] } : {}),
+});
+
+/** A pasted prompt line (`ronan@garnet:~$ id`, `root@x:/tmp# id`, `PS C:\x> whoami`): the command, already shown. */
+const PROMPT_LINE = /^(?:\S+@\S+?:\S*\s*[$#]|PS [A-Za-z]:\\[^>]*>|\*Evil-WinRM\* PS [^>]*>)\s/;
+const linesOf = (s: string) =>
+  s
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+/** Whether a flag's pasted proof is already on the step: every line of it, prompts aside, is a line printed there. */
+function printed(proof: string, shown: string[]): boolean {
+  const lines = new Set(shown.flatMap(linesOf));
+  const own = linesOf(proof).filter((l) => !PROMPT_LINE.test(l));
+  return own.length > 0 && own.every((l) => lines.has(l));
+}
+
+/** A flag's own evidence in a step: its proof text unless the step already prints it, else its value unless printed;
+ *  its picture as a figure. */
+function flagEvidence(entry: LogEntry, step: Step) {
+  const c = entry.content;
+  if (c.kind !== "flag") return;
+  const shown = step.shown.join("\n");
+  const proof = c.proof?.trim() ?? "";
+  if (proof !== "" && !printed(proof, step.shown)) {
+    step.blocks.push(codeBlock(trimmedOutput(proof), "", `entry:${entry.id}:proof`));
+    step.shown.push(proof);
+  } else if (proof === "" && c.value.trim() !== "" && !shown.includes(c.value.trim())) {
+    step.blocks.push(codeBlock(c.value.trim(), "", `entry:${entry.id}:value`));
+    step.shown.push(c.value);
+  }
+  if (c.attachmentId) step.blocks.push(figure(c.attachmentId, `${c.flagKind}.txt`, entry.id));
+}
+
+const isFlag = (e: LogEntry | undefined) => e?.content.kind === "flag";
+const flagValue = (e: LogEntry) => (e.content.kind === "flag" ? e.content.value.trim() : "");
+
+/** A walk step: the lead entry's sentence, then every entry's evidence (screenshots that came along included). */
+function walkStep(data: ReportData, entries: LogEntry[]): Step {
+  const step: Step = { blocks: sentenceOf(entries[0]), shown: [] };
+  for (const e of entries) evidence(data, e, step);
+  return step;
+}
+
+/** A section under a phase heading: its heading, the finding's labelled lines, then its numbered steps. */
+interface Section {
+  heading: ReportNode;
+  header: ReportNode[];
+  steps: Step[];
+}
+
+/** The finding's labelled lines, as the sample prints them: explanation, fix, severity, exploit code. Empty parts are
+ *  left out: the page never holds a placeholder. */
+function findingHeader(f: Finding, files: FindingFile[]): ReportNode[] {
+  const out: ReportNode[] = [];
+  const { affected, explanation } = splitAffected(f.description ?? "");
+  const expl = textBlocks(explanation);
+  if (expl.length > 0) out.push(...sourced(labelled("Vulnerability explanation:", expl), `finding:${f.id}:explanation`));
+  const fix = textBlocks((f.remediation ?? "").trim());
+  if (fix.length > 0) out.push(...sourced(labelled("Vulnerability fix:", fix), `finding:${f.id}:fix`));
+  if (f.severity) out.push(para([bold("Severity:"), text(` ${capitalize(f.severity)}`)], `finding:${f.id}:severity`));
+  if (affected) out.push(...sourced(labelled("Affected:", [para(inlineMarkdown(affected))]), `finding:${f.id}:affected`));
+  out.push(...exploitLines(f, files));
+  return out;
+}
+
+/** "Exploit code:": the public exploit's URL when used unmodified, the code when modified; the finding's exploit notes
+ *  carry on after it. */
+function exploitLines(f: Finding, files: FindingFile[]): ReportNode[] {
+  const notes = textBlocks((f.exploitNotes ?? "").trim());
+  const out: ReportNode[] = [];
+  const lead = (intro: ReportNode[], blocks: ReportNode[]): ReportNode[] => {
+    const [first, ...rest] = blocks;
+    if (first?.type === "paragraph") return [para([...intro, text(" "), ...(first.content ?? [])]), ...rest];
+    return [para(intro), ...blocks];
+  };
+  files.forEach((file, i) => {
+    const source = `file:${file.id}`;
+    const tail = i === files.length - 1 ? notes : [];
+    if (!file.modified) {
+      const intro = file.originalUrl ? [text(`Public exploit from ${file.originalUrl}, used without changes.`)] : [code(file.name), text(", used without changes.")];
+      out.push(...sourced(labelled("Exploit code:", lead(intro, tail)), source));
+    } else {
+      const intro = file.originalUrl ? [text(`Modified from ${file.originalUrl}:`)] : [code(file.name), text(":")];
+      const body = file.content.trim() ? [codeBlock(file.content.replace(/\s+$/, ""), file.language ?? "", source)] : [];
+      out.push(...sourced(labelled("Exploit code:", [para(intro), ...body, ...tail]), source));
+    }
+  });
+  if (files.length === 0 && notes.length > 0) out.push(...sourced(labelled("Exploit code:", notes), `finding:${f.id}:exploit`));
+  return out;
+}
+
+/** The Result line: "low-privilege shell as `ronan`, then root. local.txt `…`, proof.txt `…`." (`resultLine`). */
+function resultParagraph(data: ReportData, target: ReportTarget, hostId: string, meta: ReportMeta): ReportNode | null {
+  const line = resultLine(data, target, hostId, meta);
+  const content: ReportNode[] = [bold("Result:")];
+  if (line.access) {
+    const first = data.grants.filter((g) => g.hostId === hostId).sort((a, b) => a.at - b.at || a.id.localeCompare(b.id))[0];
+    const access = first?.level === "user" ? `low-privilege ${line.access}` : line.access;
+    content.push(text(" "));
+    access.split(/`([^`]*)`/).forEach((t, i) => t !== "" && content.push(i % 2 === 1 ? code(t) : text(t)));
+    content.push(text("."));
+  }
+  line.flags.forEach((f, i) => {
+    content.push(text(i === 0 ? " " : ", "), text(`${f.kind}.txt `), code(f.value));
+    if (i === line.flags.length - 1) content.push(text("."));
+  });
+  return content.length > 1 ? para(content, `result:${hostId}`) : null;
+}
+
+/** An nmap service name as the sample prints it ("ftp" → "FTP"); a product name stays as written. */
+const serviceName = (name: string, fromNmap: boolean) => (fromNmap && /^[a-z0-9]{2,6}$/.test(name) ? name.toUpperCase() : name);
+
+/** Port | Service | Version | Notes, the Notes cells empty for the owner. */
+function portTable(data: ReportData, hostId: string): ReportNode | null {
+  const rows = portRows(data, hostId);
+  if (rows.length === 0) return null;
+  const cell = (type: string, value: string): ReportNode => ({ type, content: [para(value ? [text(value)] : [])] });
+  const row = (type: string, values: string[]): ReportNode => ({ type: "tableRow", content: values.map((v) => cell(type, v)) });
+  const nmapNamed = (serviceId: string) => data.services.find((s) => s.id === serviceId)?.confirmedProduct == null;
+  return {
+    type: "table",
+    attrs: { source: `ports:${hostId}` },
+    content: [
+      row("tableHeaderCell", ["Port", "Service", "Version", "Notes"]),
+      ...rows.map((r) => row("tableCell", [r.port, serviceName(r.service, nmapNamed(r.serviceId)), r.version, ""])),
+    ],
+  };
+}
+
+/** The host's first port scan as a bash block, then its open ports and their script lines. */
+function portScan(data: ReportData, hostId: string): ReportNode[] {
+  const scan = data.log
+    .filter((e) => !e.private && e.hostIds.includes(hostId) && isPortScan(e))
+    .sort((a, b) => a.at - b.at || a.createdAt - b.createdAt)[0];
+  if (!scan || scan.content.kind !== "command") return [];
+  const out: ReportNode[] = [];
+  scan.content.blocks.forEach((b, i) => {
+    if ((b.command ?? "").trim() === "") return;
+    out.push(codeBlock(b.command.trim(), "bash", `entry:${scan.id}:${i}:command`));
+    const output = openPortLines(b.output ?? "") || trimmedOutput(b.output ?? "");
+    if (output) out.push(codeBlock(output, "", `entry:${scan.id}:${i}:output`));
+  });
+  return out;
+}
+
+/** A finding as one Additional findings bullet: "**<title>** (<Severity>): <description>", code runs as code blocks. */
+function additionalItem(f: Finding): ReportNode {
+  const lead = [bold(f.title), text(f.severity ? ` (${capitalize(f.severity)})` : "")];
+  const blocks = textBlocks(splitAffected(f.description ?? "").explanation);
+  const [first, ...rest] = blocks;
+  const content =
+    first?.type === "paragraph"
+      ? [para([...lead, text(": "), ...(first.content ?? [])]), ...rest]
+      : [para(blocks.length > 0 ? [...lead, text(":")] : lead), ...blocks];
+  return listItem("bullet", content, `finding:${f.id}`);
+}
+
+/** One machine of the target, in the sample's order. */
+function machineBlock(data: ReportData, target: ReportTarget, meta: ReportMeta, hostId: string, ordinal: string): ReportNode[] {
+  const host = data.hosts.find((h) => h.id === hostId);
+  const out: ReportNode[] = [heading(1, `${ordinal} ${host?.name ?? hostId}${host?.ip ? ` (${host.ip})` : ""}`, `facts:${hostId}`)];
+  const result = resultParagraph(data, target, hostId, meta);
+  if (result) out.push(result);
+
+  const enumBlocks = [portTable(data, hostId), ...(target.kind === "standalone" ? portScan(data, hostId) : [])].filter((n): n is ReportNode => n !== null);
+  if (enumBlocks.length > 0) out.push(heading(2, ENUM_HEADING, `phase:${hostId}:enum`), ...enumBlocks);
+
+  const phaseOf = findingPhaseMap(data, target);
+  const owns = (findingId: string) => phaseOf.get(findingId)?.hostId === hostId;
+  const plan = hostPlan(data, hostId, hostEntry(data, target, hostId), target.kind === "standalone", owns);
+  const placing = placingEntries(data, hostId);
+  const stepsIn = (phase: Phase) => stepsOf(plan.kept.filter((e) => plan.split.get(e.id) === phase), placing);
+  const firstStep = (f: Finding) => Math.min(...f.stepEntryIds.map((id) => plan.time.get(id) ?? Infinity), Infinity);
+
+  /** A flag as a step's closing evidence, or as a step of its own: "Read local.txt:". Its companions (the commands that
+   *  print it and its screenshots) come with it. A flag the step before it already printed joins that step. */
+  const closeWith = (list: Step[], [flag, ...along]: LogEntry[]) => {
+    const companions = plan.companions.get(flag.id) ?? [];
+    const commands = companions.filter((e) => e.kind !== "screenshot");
+    const shots = [...along, ...companions.filter((e) => e.kind === "screenshot")];
+    const last = list[list.length - 1];
+    const value = flagValue(flag);
+    if (commands.length === 0 && last && value.length >= 8 && last.shown.some((o) => o.includes(value))) {
+      flagEvidence(flag, last);
+      for (const s of shots) evidence(data, s, last);
+      return;
+    }
+    const sentence = flag.observations?.trim()
+      ? sourced(textBlocks(flag.observations.trim()), `entry:${flag.id}:observations`)
+      : [para([text(`Read ${flag.content.kind === "flag" ? flag.content.flagKind : "the"}.txt:`)], `entry:${flag.id}:title`)];
+    const step: Step = { blocks: sentence, shown: [] };
+    for (const c of commands) evidence(data, c, step);
+    flagEvidence(flag, step);
+    for (const s of shots) evidence(data, s, step);
+    list.push(step);
+  };
+
+  const sections: Section[] = [];
+  for (const phase of STEP_PHASES) {
+    const steps = stepsIn(phase);
+    const here = plan.findings
+      .filter((f) => phaseOf.get(f.id)?.phase === phase)
+      .sort((a, b) => firstStep(a) - firstStep(b) || severityRank(a) - severityRank(b));
+    if (steps.length === 0 && here.length === 0) continue;
+    const walk = steps.filter((st) => !isFlag(st[0]));
+    const flags = steps.filter((st) => isFlag(st[0]));
+    // Each step goes under the finding whose step it is; a step of none, under the finding of the step before it.
+    const groupOf: number[] = [];
+    walk.forEach((st, i) => {
+      const owner = here.findIndex((f, k) => k > 0 && st.some((e) => f.stepEntryIds.includes(e.id)));
+      groupOf.push(owner !== -1 ? owner : i > 0 ? groupOf[i - 1] : 0);
+    });
+    const groups: (Finding | null)[] = here.length > 0 ? here : [null];
+    groups.forEach((f, k) => {
+      const title = PHASE_TITLE[phase]!;
+      const section: Section = {
+        heading: heading(2, f ? `${title}: ${f.title}` : title, `phase:${hostId}:${phase}${f ? `:${f.id}` : ""}`),
+        header: f ? findingHeader(f, data.findingFiles.filter((ff) => ff.findingId === f.id)) : [],
+        steps: walk.filter((_, i) => groupOf[i] === k).map((st) => walkStep(data, st)),
+      };
+      // The local flag closes the phase: the last step of its last list.
+      if (k === groups.length - 1) for (const fl of flags) closeWith(section.steps, fl);
+      sections.push(section);
+    });
+  }
+  // Post-exploitation: the proof flag closes the last phase's list (as the sample reads it); anything else done after
+  // root is a section of its own.
+  const post = stepsIn("post");
+  const postFlags = post.filter((st) => isFlag(st[0]));
+  const postWalk = post.filter((st) => !isFlag(st[0]));
+  const closing = sections[sections.length - 1];
+  if (closing) for (const fl of postFlags) closeWith(closing.steps, fl);
+  if (postWalk.length > 0 || (!closing && postFlags.length > 0)) {
+    const section: Section = { heading: heading(2, PHASE_TITLE.post!, `phase:${hostId}:post`), header: [], steps: postWalk.map((st) => walkStep(data, st)) };
+    if (!closing) for (const fl of postFlags) closeWith(section.steps, fl);
+    sections.push(section);
+  }
+  for (const s of sections) {
+    out.push(s.heading, ...s.header);
+    if (s.steps.length > 0) {
+      out.push(para([bold("Steps to reproduce:")], `phase-steps:${hostId}`));
+      out.push(...s.steps.map((st) => listItem("ordered", st.blocks)));
+    }
+  }
+
+  const extra = plan.findings
+    .filter((f) => phaseOf.get(f.id)?.phase === "additional")
+    .sort((a, b) => severityRank(a) - severityRank(b) || a.title.localeCompare(b.title));
+  if (extra.length > 0) out.push(heading(2, ADDITIONAL_HEADING, `phase:${hostId}:additional`), ...extra.map(additionalItem));
+
+  const tested = testedNotExploited(data, hostId);
+  if (tested.length > 0) {
+    out.push(heading(2, TESTED_HEADING, `phase:${hostId}:tested`), ...tested.map((t) => listItem("bullet", [para([text(testedLine(t))])], `tested:${hostId}`)));
+  }
+  return out;
+}
+
+/**
+ * A target as a plain document in the order of the sample's §4.1: "<ordinal> <name> (<IP>)", the Result line, Service
+ * enumeration (ports table, the scan and its open ports), one heading per finding that enabled a phase ("Initial
+ * access: <title>", "Privilege escalation: <title>") with its labelled lines and numbered steps (each step a sentence,
+ * the command, its trimmed output, the screenshots that came with it; the flags close their phase), Additional
+ * findings as bullets, Also tested. An AD set's machines follow one another, numbered "<ordinal>.1", "<ordinal>.2".
+ */
+export function buildPlainTarget(data: ReportData, target: ReportTarget, meta: ReportMeta, ordinal: string): ReportNode {
+  const machines = machinesInOrder(data, target);
+  const content =
+    target.kind === "standalone"
+      ? machineBlock(data, target, meta, machines[0], ordinal)
+      : machines.flatMap((id, i) => machineBlock(data, target, meta, id, `${ordinal}.${i + 1}`));
+  return normalize({ type: "doc", content });
+}
+
+/** Text nodes as ProseMirror stores them: neighbours with the same marks joined, empty ones dropped. */
+function normalize(n: ReportNode): ReportNode {
+  if (!n.content) return n;
+  const out: ReportNode[] = [];
+  for (const child of n.content.map(normalize)) {
+    if (child.type === "text" && !child.text) continue;
+    const last = out[out.length - 1];
+    if (child.type === "text" && last?.type === "text" && JSON.stringify(last.marks ?? []) === JSON.stringify(child.marks ?? [])) {
+      out[out.length - 1] = { ...last, text: (last.text ?? "") + child.text };
+    } else out.push(child);
+  }
+  return { ...n, content: out };
+}

