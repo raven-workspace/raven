@@ -323,6 +323,35 @@ describe("targetChecks", () => {
     expect(find(run(data({ log: [bare, flag()] }), named), "caption-weak")).toBeUndefined();
     expect(groupChecks(run(data({ log: [bare, flag()] }), page).filter((c) => c.id.startsWith("caption-weak"))).map((g) => g.text)).toEqual(["A screenshot has no caption"]);
   });
+  describe("text copied from the log", () => {
+    const para = (fromEntry: string, text = "copied words", extra: Record<string, unknown> = {}): ReportNode => ({
+      type: "paragraph",
+      attrs: { fromEntry, ...extra },
+      content: [{ type: "text", text }],
+    });
+    const code = (fromEntry: string): ReportNode => ({ type: "codeBlock", attrs: { language: "", fromEntry }, content: [{ type: "text", text: "id" }] });
+    const note = (o: Record<string, unknown> = {}) => entry({ id: "n1", kind: "note", content: { kind: "note", text: "copied words" }, ...o });
+    const copied = (cs: Check[]) => cs.filter((c) => c.id.startsWith("copied")).map((c) => [c.id, c.level, c.text, c.anchor?.nodeIndex]);
+
+    it("fails, anchored, when the entry the text came from is now private", () => {
+      const page = doc(para("n1"), para("c1", "said", { fromField: "observations" }), code("c1"), ...goodDoc().content!);
+      expect(copied(run(data({ log: [note({ private: true }), entry({ id: "c1", private: true }), flag()] }), page))).toEqual([
+        ["copied-private:n1", "fail", "Text copied from an entry that is now private.", 0],
+        ["copied-private:c1", "fail", "Text copied from an entry that is now private.", 2],
+      ]);
+      expect(groupChecks(run(data({ log: [note({ private: true }), flag()] }), doc(para("n1"), ...goodDoc().content!))).map((g) => g.text)).toEqual([
+        "Text from a now-private entry",
+      ]);
+    });
+    it("fails when it was deleted, and says nothing while the entry is there", () => {
+      const page = doc(slot("x"), para("n1"), code("c9"), ...goodDoc().content!);
+      expect(copied(run(data({ log: [flag()] }), page))).toEqual([
+        ["copied-deleted:n1", "fail", "Text copied from an entry that was deleted.", 2],
+        ["copied-deleted:c9", "fail", "Text copied from an entry that was deleted.", 4],
+      ]);
+      expect(copied(run(data({ log: [note(), entry({ id: "c9" }), flag()] }), page))).toEqual([]);
+    });
+  });
   describe("printed captions", () => {
     const bare = entry({ id: "s1", kind: "screenshot", title: "Screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "", fileName: "x" } });
     const step = (o: Record<string, unknown> = {}) => entry({ id: "c1", title: "Full port scan", ...o });
@@ -474,7 +503,7 @@ describe("groupChecks", () => {
     expect(one("output:e1")).toBe("A command shows no output");
     expect(one("exploit:f:explain")).toBe("Explain the modified exploit");
     expect(one("move:0.3", "This block is long (80 lines of output). Consider moving it to an appendix.")).toBe("Long block (80 lines of output)");
-    for (const k of ["proof-missing:h:proof", "proof-shot:h:local", "caption-step:1", "proof-screenshot:h:proof", "proof-web:h:proof", "proof-identity:h:proof", "proof-hostname:h:proof", "proof-path:h:proof", "gone:1", "explain:1", "caption:1", "finding:x:severity", "finding:x:title", "finding:x:affected", "finding:x:description", "finding:x:remediation", "wording:1", "exploit:x:url", "exploit:x:original", "appendix-ref:1", "legible:1"]) {
+    for (const k of ["proof-missing:h:proof", "proof-shot:h:local", "caption-step:1", "copied-private:1", "copied-deleted:1", "proof-screenshot:h:proof", "proof-web:h:proof", "proof-identity:h:proof", "proof-hostname:h:proof", "proof-path:h:proof", "gone:1", "explain:1", "caption:1", "finding:x:severity", "finding:x:title", "finding:x:affected", "finding:x:description", "finding:x:remediation", "wording:1", "exploit:x:url", "exploit:x:original", "appendix-ref:1", "legible:1"]) {
       expect(one(k, "the full text"), k).not.toBe("the full text");
       expect(one(k).length, k).toBeLessThanOrEqual(38);
       // Single and counted lines end alike: no full stop.
@@ -482,7 +511,7 @@ describe("groupChecks", () => {
     }
   });
   it("words every kind targetChecks makes when there are two of it", () => {
-    const kinds = ["proof-missing", "proof-ip", "proof-screenshot", "proof-web", "proof-identity", "proof-hostname", "proof-path", "proof-shot", "gone", "output", "explain", "caption", "caption-weak", "caption-step", "access-shot", "finding:x:severity", "finding:x:title", "finding:x:affected", "finding:x:description", "finding:x:remediation", "wording", "exploit:x:url", "exploit:x:explain", "exploit:x:original", "coverage", "appendix-ref", "move", "legible"];
+    const kinds = ["proof-missing", "proof-ip", "proof-screenshot", "proof-web", "proof-identity", "proof-hostname", "proof-path", "proof-shot", "gone", "copied-private", "copied-deleted", "output", "explain", "caption", "caption-weak", "caption-step", "access-shot", "finding:x:severity", "finding:x:title", "finding:x:affected", "finding:x:description", "finding:x:remediation", "wording", "exploit:x:url", "exploit:x:explain", "exploit:x:original", "coverage", "appendix-ref", "move", "legible"];
     for (const k of kinds) {
       const id = (n: number) => (k.includes(":x:") ? k.replace(":x:", `:${n}:`) : `${k}:${n}`);
       const [g] = groupChecks([c(id(1), "soft", "one"), c(id(2), "soft", "two")]);

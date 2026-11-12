@@ -35,7 +35,7 @@ import { api } from "../../lib/api";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
 import { useNarrow } from "../../lib/useNarrow";
 import { reportError } from "../../lib/lockSignal";
-import type { Report, ReportPatch, ReportSection } from "../../types/report";
+import type { Report, ReportDoc, ReportPatch, ReportSection } from "../../types/report";
 import type { Settings } from "../../types/settings";
 import { Button, Disclosure, EmptyState, ErrorState, LoadingState, queryState, Select, usePageShortcuts, type Hint } from "../../ui";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
@@ -43,7 +43,7 @@ import { useNotesStore } from "../notes/useNotesStore";
 import { usePayloadsStore } from "../payloads/usePayloadsStore";
 import { ReportDataContext, type ReportDataValue } from "./editor/ReportDataContext";
 import { AppendixSection, type AppendixPageEntry } from "./editor/AppendixSection";
-import { openFindBar, posAtPath, ReportEditor, selectBlockAt, setNodeAttrs } from "./editor/ReportEditor";
+import { keepCopiedText, openFindBar, posAtPath, ReportEditor, selectBlockAt, setNodeAttrs } from "./editor/ReportEditor";
 import { AddEvidenceButton } from "./AddEvidenceButton";
 import { EvidenceDrawer, EvidenceRail } from "./EvidenceRail";
 import { ReportDetails } from "./ReportDetails";
@@ -210,7 +210,24 @@ function usePageEdits(
     },
     [openSection, docOf, saver, setLiveMeta],
   );
-  return { onChange, onRemoveEvidence, onRestoreEvidence };
+  /**
+   * Swaps the page with the one kept in the meta (`previousDoc`): the page written before a layout rebuild comes back,
+   * and the rebuilt one is kept in its place, so a second swap undoes it. The restored page is stored under the current
+   * layout, so it is never rebuilt again. Returns the page now open, or null when there is none to swap in.
+   */
+  const swapPrevious = useCallback((): { doc: ReportNode; meta: SectionMeta } | null => {
+    if (!openSection) return null;
+    const cur = current.current?.id === openSection.id ? current.current : { id: openSection.id, doc: docOf(openSection), meta: openSection.meta as SectionMeta };
+    const previous = cur.meta.previousDoc;
+    if (!previous) return null;
+    const meta: SectionMeta = { ...cur.meta, layout: DRAFT_LAYOUT, previousDoc: cur.doc, restored: !cur.meta.restored };
+    current.current = { id: openSection.id, doc: previous, meta };
+    setLive({ id: openSection.id, doc: previous });
+    setLiveMeta({ id: openSection.id, meta });
+    saver.save(previous, meta);
+    return { doc: previous, meta };
+  }, [openSection, docOf, saver, setLive, setLiveMeta]);
+  return { onChange, onRemoveEvidence, onRestoreEvidence, swapPrevious };
 }
 
 /** The engagement's Report section: client engagements get a placeholder this round. */
@@ -355,8 +372,8 @@ function ReportBody({
     return out;
   }, [sections, targets, data, report]);
 
-  // First drafts for sections not built yet, or built with an older layout (rebuilt from scratch: the owner confirmed
-  // nothing written before the current layout needs keeping): what their page will hold, so checks and numbering read it already.
+  // First drafts for sections not built yet, or built with an older layout (rebuilt from scratch; the page written before
+  // is kept in the meta, `previousDoc`): what their page will hold, so checks and numbering read it already.
   const drafts = useMemo(() => {
     const out = new Map<string, ReportNode>();
     for (const e of entries) {
@@ -509,7 +526,33 @@ function ReportBody({
     [openId_],
   );
 
-  const { onChange, onRemoveEvidence, onRestoreEvidence } = usePageEdits(openSection, savedDocOf, saver, setLive, setLiveMeta);
+  const { onChange, onRemoveEvidence, onRestoreEvidence, swapPrevious } = usePageEdits(openSection, savedDocOf, saver, setLive, setLiveMeta);
+  // Each swap with the previous page remounts the editor on the page swapped in (it reads its document once).
+  const [swaps, setSwaps] = useState(0);
+  // The document a page mounts with: the sections cache as it is now, which the save queue patches with every write.
+  // The `sections` prop reaches this view a render later, so a page opened (or swapped) right after a change would
+  // otherwise mount on its older document and save over the change.
+  const mountDoc = (s: ReportSection): ReportNode =>
+    (qc.getQueryData<ReportSection[]>(reportSectionsKey(report.id))?.find((x) => x.id === s.id)?.doc ?? s.doc) as ReportNode;
+  const [swapFailed, setSwapFailed] = useState<string | null>(null);
+  const swapPage = () => {
+    const s = openSection;
+    const prev = (s && metaOf(s).previousDoc) || null;
+    const editor = openEditor();
+    if (!s || !prev || !editor) return;
+    // A page from an older layout may hold blocks this one no longer has: say so rather than break the page.
+    try {
+      editor.schema.nodeFromJSON(prev).check();
+    } catch (e) {
+      setSwapFailed(e instanceof Error ? e.message : String(e));
+      return;
+    }
+    setSwapFailed(null);
+    const next = swapPrevious();
+    if (!next) return;
+    patchCachedSection(qc, s.id, { doc: next.doc as ReportDoc, meta: next.meta as Record<string, unknown> });
+    setSwaps((n) => n + 1);
+  };
   // An appendix page reads the stored pages: write the open page first, so a block moved a moment ago is on it.
   const openItem = (id: string) => {
     if (id.startsWith(APPENDIX_ID)) void saver.flush();
@@ -539,8 +582,13 @@ function ReportBody({
     // The position as the sections cache has it now; the reply's position is left out of the cache, so a reorder
     // made while the draft was on its way stays.
     const position = qc.getQueryData<ReportSection[]>(reportSectionsKey(report.id))?.find((x) => x.id === s.id)?.position ?? s.position;
+    // A page written under an older layout is never dropped: it is kept in the meta for "Restore your previous page".
+    const meta: SectionMeta =
+      s.doc != null
+        ? { layout: DRAFT_LAYOUT, previousDoc: s.doc as ReportNode, previousLayout: (s.meta as SectionMeta).layout ?? null, previousAt: Date.now() }
+        : { layout: DRAFT_LAYOUT };
     api
-      .reportSectionUpsert(report.id, { kind: s.kind, targetKey: s.targetKey, position, doc, meta: { layout: DRAFT_LAYOUT } satisfies SectionMeta, draftBuiltAt: Date.now() })
+      .reportSectionUpsert(report.id, { kind: s.kind, targetKey: s.targetKey, position, doc, meta: meta as Record<string, unknown>, draftBuiltAt: Date.now() })
       .then((saved) => patchCachedSection(qc, s.id, { doc: saved.doc, meta: saved.meta, draftBuiltAt: saved.draftBuiltAt }))
       .catch((e: unknown) => {
         building.current.delete(s.id);
@@ -681,6 +729,16 @@ function ReportBody({
   };
   // A suggested move's fix is the Move action itself: the block goes to the appendix, leaving its reference.
   const checkAction = (check: Check): CheckAction | undefined => {
+    const copied = /^copied-(?:private|deleted):(.+)$/.exec(check.id);
+    if (copied) {
+      return {
+        label: "Keep the text",
+        run: () => {
+          const editor = openEditor();
+          if (editor) keepCopiedText(editor, copied[1]);
+        },
+      };
+    }
     if (!check.id.startsWith("move:")) return undefined;
     const path = check.id.slice("move:".length);
     return {
@@ -765,6 +823,17 @@ function ReportBody({
       )}
       {saveFailed && <p className="m-0 text-meta text-warn">Some typing isn't saved yet. Raven keeps trying; keep Raven open until this goes.</p>}
       {draftFailed && <WarnLine text={`Couldn't build this page's draft: ${draftFailed}`} retryLabel="Retry building the draft" onRetry={() => setDraftFailed(null)} />}
+      {openSectionMeta?.previousDoc && (
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+          <p className="m-0 text-meta text-muted-2">
+            {openSectionMeta.restored ? "This is your page from before the new layout." : "This page was rebuilt for a new layout."}
+          </p>
+          <Button size="sm" onClick={swapPage}>
+            {openSectionMeta.restored ? "Use the rebuilt page" : "Restore your previous page"}
+          </Button>
+        </div>
+      )}
+      {swapFailed && <p role="alert" className="m-0 text-meta text-warn">{`Couldn't restore the previous page: ${swapFailed}`}</p>}
       {notStarted && open?.target && <p className="m-0 text-meta text-muted-2">Nothing logged on {open.item.label} yet. The page fills in as you work.</p>}
     </>
   );
@@ -832,12 +901,12 @@ function ReportBody({
               hasCurrentPage(openSection) ? (
                 <ReportDataContext.Provider value={contextValue}>
                   <ReportEditor
-                    key={openSection.id}
+                    key={`${openSection.id}:${swaps}`}
                     sectionId={openSection.id}
                     title={openNumber?.title?.text}
                     titleNumber={openNumber?.title?.number ?? undefined}
                     subNumbers={pageSubNumbers}
-                    doc={openSection.doc as ReportNode}
+                    doc={mountDoc(openSection)}
                     onChange={onChange}
                     onReady={(editor) => onEditorReady(openSection.id, editor)}
                     toolbarClassName="@min-[1000px]/report:-mt-6"

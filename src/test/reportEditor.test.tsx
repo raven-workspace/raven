@@ -169,6 +169,19 @@ describe("ReportEditor evidence", () => {
     expect(hidden.container.querySelector<HTMLInputElement>(".report-caption-input")?.value).not.toBe("Full port scan");
   });
 
+  it("marks text copied from an entry that is now private or deleted in amber, and only those", async () => {
+    const para = (fromEntry: string, text: string): ReportNode => ({ type: "paragraph", attrs: { fromEntry }, content: [{ type: "text", text }] });
+    const code: ReportNode = { type: "codeBlock", attrs: { language: "", fromEntry: "e1" }, content: [{ type: "text", text: "whoami" }] };
+    const hidden = entry({ id: "n1", kind: "note", private: true, content: { kind: "note", text: "kept" } });
+    const { container } = setup(doc(para("n1", "now private"), para("n9", "deleted note"), para("e1", "still here"), code), data({ log: [hidden, entry({})] }));
+    await waitFor(() => expect(container.querySelector("[data-source-gone]")).toBeTruthy());
+    const marked = [...container.querySelectorAll("[data-source-gone]")].map((el) => [el.getAttribute("data-source-gone"), el.textContent]);
+    expect(marked).toEqual([
+      ["private", "now private"],
+      ["deleted", "deleted note"],
+    ]);
+  });
+
   it("lists the references of findings on the report's targets only", async () => {
     const web = { ...host, id: "h2", name: "WEB09", ip: "10.0.0.9" } as Host;
     const finding = (id: string, o: Record<string, unknown>) => ({ id, title: id, hostIds: [], serviceIds: [], refs: [], ...o }) as unknown as Finding;

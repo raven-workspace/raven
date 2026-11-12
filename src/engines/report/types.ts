@@ -51,7 +51,11 @@ export interface CoverageOverride {
 
 /** The draft layout a section's page is built with. A page saved with an older or missing layout is rebuilt from
  *  scratch the first time it opens (2: OffSec's sample report structure; 3: one finding per heading, Additional
- *  findings, flags with their companions). */
+ *  findings, flags with their companions).
+ *
+ *  GUARD: bumping this rebuilds every stored page of every report on its next open. The page written before is kept in
+ *  the section meta (`previousDoc`) and the page offers it back ("Restore your previous page"); a bump must keep that
+ *  path working (reportSection.test.tsx: "a page rebuilt for a new layout offers the previous one back"). */
 export const DRAFT_LAYOUT = 3;
 
 /** Stored in `report_sections.meta`. */
@@ -60,6 +64,15 @@ export interface SectionMeta {
   coverage?: Record<string, CoverageOverride>;
   /** The draft layout the page was built with (`DRAFT_LAYOUT`). */
   layout?: number;
+  /** The page as it was before a rebuild for a new layout, kept so the owner can restore it; after a restore, the
+   *  rebuilt page (swapping again brings it back). */
+  previousDoc?: ReportNode | null;
+  /** The layout the owner's earlier page was written under (null: none recorded). */
+  previousLayout?: number | null;
+  /** When the page was rebuilt. */
+  previousAt?: number | null;
+  /** The owner restored the earlier page: `previousDoc` holds the rebuilt one. */
+  restored?: boolean;
 }
 
 export type TargetKind = "standalone" | "ad-set";

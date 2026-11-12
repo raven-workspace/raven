@@ -147,6 +147,36 @@ function headingNumbers(numbers: SubNumbers) {
   );
 }
 
+/** Why a block's source entry no longer backs its text ("private", "deleted"), or null while it does; read as the page
+ *  redraws. */
+export type SourceGone = { current: ((entryId: string) => "private" | "deleted" | null) | undefined };
+
+/**
+ * Marks text copied from the log whose entry is now private or was deleted (`data-source-gone`): the page shows it in
+ * amber, as it shows an evidence block whose entry went away.
+ */
+function sourceGoneMarks(gone: SourceGone) {
+  return definePlugin(
+    new Plugin({
+      props: {
+        decorations: (state) => {
+          const of = gone.current;
+          if (!of) return null;
+          const decos: Decoration[] = [];
+          state.doc.descendants((node, pos) => {
+            const from = node.attrs.fromEntry as unknown;
+            if (typeof from !== "string" || from === "") return true;
+            const why = of(from);
+            if (why) decos.push(Decoration.node(pos, pos + node.nodeSize, { "data-source-gone": why }));
+            return false;
+          });
+          return decos.length === 0 ? null : DecorationSet.create(state.doc, decos);
+        },
+      },
+    }),
+  );
+}
+
 /** Marks the code block the cursor is in (`data-active`), so its language picker shows while the owner types in it. */
 const activeCodeBlock = definePlugin(
   new Plugin({
@@ -301,9 +331,14 @@ function holdPositions(held: HeldPositions) {
 }
 
 /** The report page's schema and node views: the editing set plus Raven's report vocabulary. */
-export function defineReportExtension(numbers: SubNumbers = { current: undefined }, held: HeldPositions = new Set()): Extension {
+export function defineReportExtension(
+  numbers: SubNumbers = { current: undefined },
+  held: HeldPositions = new Set(),
+  gone: SourceGone = { current: undefined },
+): Extension {
   return union(
     headingNumbers(numbers),
+    sourceGoneMarks(gone),
     holdPositions(held),
     defineEditing(numbers),
     activeCodeBlock,

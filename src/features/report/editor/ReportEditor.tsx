@@ -10,7 +10,7 @@ import { reportError } from "../../../lib/lockSignal";
 import { RavenError } from "../../../types/errors";
 import { BlockHandle } from "./BlockHandle";
 import { BubbleMenu } from "./BubbleMenu";
-import { defineReportExtension, type HeldPositions, type SubNumbers } from "./extension";
+import { defineReportExtension, type HeldPositions, type SourceGone, type SubNumbers } from "./extension";
 import { FindBar } from "./FindBar";
 import { FormatToolbar } from "./FormatToolbar";
 import { hostAtPos, PageActionsContext, placeEntry, saveScreenshot, type PageActions } from "./pageActions";
@@ -58,6 +58,9 @@ const heldPositions = new WeakMap<Editor, HeldPositions>();
 
 /** Each page's numbering holder (see `SubNumbers`), by its editor. */
 const pageNumbers = new WeakMap<Editor, SubNumbers>();
+
+/** Each page's copied-text source lookup (see `SourceGone`), by its editor. */
+const sourcesGone = new WeakMap<Editor, SourceGone>();
 
 /** Pages the owner has focused: before that the selection is only ProseMirror's default (often the first block). */
 const touched = new WeakSet<Editor>();
@@ -115,6 +118,24 @@ export function setNodeAttrs(editor: Editor, pos: number, attrs: Record<string, 
     const node = state.doc.nodeAt(pos);
     if (!node) return false;
     dispatch?.(state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...attrs }));
+    return true;
+  });
+}
+
+/** Makes text copied from a log entry the owner's own: every block that came from `entryId` drops its source, so it
+ *  no longer follows that entry's privacy or deletion. One transaction, so one undo brings the link back. */
+export function keepCopiedText(editor: Editor, entryId: string): boolean {
+  return editor.exec((state, dispatch) => {
+    const tr = state.tr;
+    state.doc.descendants((node, pos) => {
+      if (node.attrs.fromEntry !== entryId) return true;
+      const attrs: Record<string, unknown> = { ...node.attrs, fromEntry: null };
+      if ("fromField" in attrs) attrs.fromField = null;
+      tr.setNodeMarkup(pos, undefined, attrs);
+      return false;
+    });
+    if (!tr.docChanged) return false;
+    dispatch?.(tr);
     return true;
   });
 }
@@ -324,11 +345,24 @@ export function ReportEditor({
   const editor = useMemo(() => {
     const numbers: SubNumbers = { current: undefined };
     const held: HeldPositions = new Set();
-    const made = createEditor({ extension: defineReportExtension(numbers, held), defaultContent: initialDoc as NodeJSON });
+    const gone: SourceGone = { current: undefined };
+    const made = createEditor({ extension: defineReportExtension(numbers, held, gone), defaultContent: initialDoc as NodeJSON });
     pageNumbers.set(made, numbers);
     heldPositions.set(made, held);
+    sourcesGone.set(made, gone);
     return made;
   }, [initialDoc]);
+  // Copied text whose entry went private or was deleted shows in amber, from the live log: redrawn when it changes.
+  const log = value.data.log;
+  useLayoutEffect(() => {
+    const holder = sourcesGone.get(editor);
+    if (!holder) return;
+    holder.current = (id) => {
+      const e = log.find((x) => x.id === id);
+      return !e ? "deleted" : e.private ? "private" : null;
+    };
+    if (editor.mounted) editor.view.updateState(editor.view.state);
+  }, [editor, log]);
   // The numbering plugin reads the current numbering as the page redraws; set before the page mounts.
   useLayoutEffect(() => {
     const holder = pageNumbers.get(editor);

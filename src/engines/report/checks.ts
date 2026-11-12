@@ -259,6 +259,20 @@ export function targetChecks(input: TargetChecksInput): Check[] {
   }
   out.push(...explain.sort((a, b) => Number(b.shot) - Number(a.shot)).map((e) => e.check));
 
+  // Text copied from the log (a note, observations, a command edited on the page) keeps its entry: once that entry is
+  // private or deleted, the words on the page may be what was hidden or meant to go. One check per entry, at its first block.
+  for (const { node, index } of nodes) {
+    const from = node.attrs?.fromEntry;
+    if (typeof from !== "string" || from === "") continue;
+    const source = entryOf(from);
+    if (source && !source.private) continue;
+    out.push(
+      source
+        ? { id: `copied-private:${from}`, level: "fail", text: "Text copied from an entry that is now private.", anchor: { nodeIndex: index } }
+        : { id: `copied-deleted:${from}`, level: "fail", text: "Text copied from an entry that was deleted.", anchor: { nodeIndex: index } },
+    );
+  }
+
   const shotsOnPage = [...onPage].flatMap((id) => entryOf(id) ?? []).filter((e) => !e.private && (e.kind === "screenshot" || (e.content.kind === "flag" && Boolean(e.content.attachmentId))));
   for (const g of data.grants) {
     const host = hosts.find((h) => h.id === g.hostId);
@@ -368,6 +382,8 @@ const PLURAL: Record<string, (n: number) => string> = {
   "proof-path": (n) => `${n} proofs don't read the flag from its usual location`,
   "proof-shot": (n) => `${n} proof screenshots: Raven can't read them; check each shows the target IP`,
   gone: (n) => `${n} blocks on the page use deleted or private content`,
+  "copied-private": (n) => `${n} entries now private had text copied to the page`,
+  "copied-deleted": (n) => `${n} deleted entries had text copied to the page`,
   output: (n) => `${n} commands on the page show no output`,
   explain: (n) => `${n} steps have no explanation`,
   caption: (n) => `${n} screenshot captions are over ${MAX_CAPTION_WORDS} words`,
@@ -403,6 +419,8 @@ const SHORT: Record<string, (c: Check) => string> = {
   "proof-path": (c) => `${part(c, 2)}.txt read from an odd place`,
   "proof-shot": (c) => `${part(c, 2)}.txt: screenshot shows IP?`,
   gone: () => "Deleted or private entry on the page",
+  "copied-private": () => "Text from a now-private entry",
+  "copied-deleted": () => "Text from a deleted entry",
   output: () => "A command shows no output",
   explain: () => "A step has no explanation",
   caption: () => "Caption over 10 words",

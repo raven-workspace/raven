@@ -9,6 +9,7 @@ import App from "../App";
 import { api, resetAuditState } from "../audit/fakeApi";
 import { ReportSectionView } from "../features/report/ReportSection";
 import { pruneRemoved } from "../features/report/queries";
+import { DRAFT_LAYOUT } from "../engines/report";
 import { discardReports } from "../features/report/saveQueue";
 import { CheckList } from "../features/report/ReportOutline";
 import { makeQueryClient } from "../lib/queryClient";
@@ -656,7 +657,8 @@ describe("Report view: the result", () => {
     await ready();
     await waitFor(() => expect(draftUpserts(upsert, LNX)).toHaveLength(1));
     const [, input] = draftUpserts(upsert, LNX)[0] as [string, { meta: unknown; doc: unknown }];
-    expect(input.meta).toEqual({ layout: 3 });
+    // The page written before is kept in the meta, never dropped.
+    expect(input.meta).toEqual({ layout: 3, previousDoc: old, previousLayout: null, previousAt: expect.any(Number) });
     expect(JSON.stringify(input.doc)).not.toContain("Written under the old layout");
     await waitFor(() => expect(paper().querySelector(".report-table")).toBeTruthy());
     expect(paper().textContent).not.toContain("Written under the old layout");
@@ -665,6 +667,79 @@ describe("Report view: the result", () => {
     fireEvent.click(rowFor("lnx02"));
     await waitFor(() => expect(within(paper()).getByRole("heading", { level: 2, name: "4.1Target #1 – 10.10.30.21" })).toBeInTheDocument());
     expect(draftUpserts(upsert, LNX)).toHaveLength(1);
+  });
+
+  it("a page rebuilt for a new layout offers the previous one back, and the swap undoes", async () => {
+    const report = await api.reportGetOrCreate("e-exam");
+    const old = { type: "doc", content: [{ type: "slot", attrs: { hint: "x" }, content: [{ type: "text", text: "Written under the old layout" }] }] };
+    const section = await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: old as unknown as ReportDoc, meta: { layout: 2 }, draftBuiltAt: 1 });
+    const save = vi.spyOn(api, "reportSectionSave");
+    mount();
+    await ready();
+    await waitFor(() => expect(paper().querySelector(".report-table")).toBeTruthy());
+    expect(screen.getByText("This page was rebuilt for a new layout.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Restore your previous page" }));
+    await waitFor(() => expect(paper().textContent).toContain("Written under the old layout"));
+    expect(paper().querySelector(".report-table")).toBeNull();
+    // Stored as the current layout, the rebuilt page kept for the swap back.
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    const [id, doc, meta] = save.mock.calls[save.mock.calls.length - 1] as [string, ReportDoc, Record<string, unknown>];
+    expect(id).toBe(section.id);
+    expect(JSON.stringify(doc)).toContain("Written under the old layout");
+    expect(meta).toMatchObject({ layout: 3, previousLayout: 2, restored: true });
+    expect(JSON.stringify(meta.previousDoc)).toContain('"generated"');
+    // The second swap brings the rebuilt page back.
+    fireEvent.click(screen.getByRole("button", { name: "Use the rebuilt page" }));
+    await waitFor(() => expect(paper().querySelector(".report-table")).toBeTruthy());
+    expect(paper().textContent).not.toContain("Written under the old layout");
+    expect(screen.getByRole("button", { name: "Restore your previous page" })).toBeInTheDocument();
+    // Restored again and typed into, the page keeps the typing when it is opened again.
+    fireEvent.click(screen.getByRole("button", { name: "Restore your previous page" }));
+    await waitFor(() => expect(paper().textContent).toContain("Written under the old layout"));
+    act(() => {
+      const view = pageEditor().view;
+      view.dispatch(view.state.tr.insertText(" and more", 1 + "Written under the old layout".length));
+    });
+    expect(paper().textContent).toContain("Written under the old layout and more");
+    fireEvent.click(rowFor("ms01"));
+    fireEvent.click(rowFor("lnx02"));
+    await waitFor(() => expect(paper().textContent).toContain("Written under the old layout and more"));
+  });
+
+  it("keeps typing across a quick switch away and back: the page mounts on the latest document", async () => {
+    await seedLnx();
+    mount();
+    await ready();
+    await waitFor(() => expect(editors.length).toBeGreaterThan(0));
+    act(() => {
+      const view = pageEditor().view;
+      view.dispatch(view.state.tr.insertText("typed words", 2 + view.state.doc.child(0).nodeSize - 1));
+    });
+    expect(paper().textContent).toContain("typed words");
+    fireEvent.click(rowFor("ms01"));
+    fireEvent.click(rowFor("lnx02"));
+    await waitFor(() => expect(paper().textContent).toContain("typed words"));
+  });
+
+  it("text copied from a now-private entry fails in amber until the owner keeps it as their own", async () => {
+    const note = await api.logCreate("e-exam", { ...logInput("my note", { kind: "note", text: "creds in the share" }, 1_000), private: true });
+    const report = await api.reportGetOrCreate("e-exam");
+    const doc = { type: "doc", content: [{ type: "paragraph", attrs: { fromEntry: note.id }, content: [{ type: "text", text: "creds in the share" }] }] };
+    await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { layout: 3 }, draftBuiltAt: 1 });
+    mount();
+    await ready();
+    await waitFor(() => expect(paper().querySelector('[data-source-gone="private"]')).toBeTruthy());
+    const checks = screen.getAllByRole("list", { name: "Checks" })[0];
+    fireEvent.click(within(checks).getByText("Text from a now-private entry"));
+    fireEvent.click(within(checks).getByRole("button", { name: "Keep the text" }));
+    await waitFor(() => expect(paper().querySelector("[data-source-gone]")).toBeNull());
+    expect(paper().textContent).toContain("creds in the share");
+    expect(within(checks).queryByText("Text from a now-private entry")).toBeNull();
+  });
+
+  it("guards DRAFT_LAYOUT: a bump rebuilds every stored page, so it must keep each one in previousDoc", () => {
+    // Bumping it is a data-safety change: the rebuild test above must still see the old page in `previousDoc`.
+    expect(DRAFT_LAYOUT).toBe(3);
   });
 
   it("groups checks of one kind into one row and cycles through them; the fix sits in a disclosure for the picked one", async () => {

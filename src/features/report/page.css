@@ -397,6 +397,34 @@
   border-radius: 4px;
 }
 
+/* Text copied from the log (a note, observations, a command edited on the page) whose entry is now private or was
+   deleted: amber like the placeholder, with the reason above it. The text stays the owner's to keep or cut. */
+
+.report-page [data-source-gone] {
+  padding: 8px 12px;
+  border: 1px dashed var(--page-amber-line);
+  border-radius: 4px;
+}
+
+.report-page [data-source-gone]::before {
+  display: block;
+  margin-bottom: 4px;
+  font-family: var(--page-sans);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 400;
+  color: var(--page-amber-ink);
+  white-space: normal;
+}
+
+.report-page [data-source-gone="private"]::before {
+  content: "Copied from an entry that is now private";
+}
+
+.report-page [data-source-gone="deleted"]::before {
+  content: "Copied from an entry that was deleted";
+}
+
 /* A target's appendix page (lettered from A): read-only, each moved block under its number. */
 
 .report-page .report-appendix,
