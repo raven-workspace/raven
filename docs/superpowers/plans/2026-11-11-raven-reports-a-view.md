@@ -493,8 +493,9 @@ Owner request (2026-11-11): blocks, especially screenshots, land where their tim
 - [ ] **Step 1:** Add fixtures and screens; run `npm run audit:visual` → the new screens fail until the view is right; fix any overflow/contrast/tiny-text/target-size findings in the feature code (never opt out).
 - [ ] **Step 2:** Run `npm run audit:visual` → PASS, no opt-outs.
 - [ ] **Step 3: WebKit at ~1400px:** run the audit's report screens once with Playwright's `webkit` project at 1400×900 (add a one-off `--project=webkit` run or a temporary config override, not committed if the config doesn't already have webkit) and look at the screenshots: hyphenation, the three-pane grid, the page width. Fix what looks wrong.
-- [ ] **Step 4:** Run `npm run typecheck && npm test && npm run lint && (cd src-tauri && cargo test)` → all PASS.
-- [ ] **Step 5: Commit** `test(reports): audit fixtures and screens for the Report view`
+- [ ] **Step 4: Result review (owner: "the most important thing is the RESULT").** The exam fixture must read like a real exam box, not stubs: realistic commands and outputs (nmap, feroxbuster, an exploit, whoami /priv, PrintSpoofer, linpeas trimmed), real-looking screenshots from `src/audit/images`, a modified exploit with its original, failed attempts, the AD chain. With `npm run dev:audit` (port 5199) and Playwright **WebKit at 1400×900**, open every report page in outline order (details, summary, considerations, methodology, each target, AD set, every appendix, further, references) **without editing anything**, and take a full-page screenshot of each paper page. Save them under `audit-output/report-result/`. Report in the task report, page by page, what a grader would see: correct order and headings; steps in a sensible order with screenshots next to the step they show; proof present with IP; vulnerability blocks complete; tested-not-exploited lines; generated tables filled and correct; figure and appendix numbering continuous; anything dumped, duplicated, empty, mis-placed or private. Fix draft-engine or rendering defects found (with a test each) before committing.
+- [ ] **Step 5:** Run `npm run typecheck && npm test && npm run lint && (cd src-tauri && cargo test)` → all PASS.
+- [ ] **Step 6: Commit** `test(reports): audit fixtures, screens and a full-report result review`
 
 ---
 
