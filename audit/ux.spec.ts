@@ -96,7 +96,7 @@ test("report: ms01's proof passes its checks", async ({ page }) => {
   const checks = await reportChecks(page);
   await expect(checks).toBeVisible();
   // The list is the real one: the silent download step's check is on it, as a soft one (downloads print nothing).
-  await expect(checks.getByText("A command on the page shows no output. Fine if it printed nothing; otherwise paste its output.")).toBeVisible();
+  await expect(checks.getByText("A command shows no output")).toBeVisible();
   // ipconfig with 10.10.30.5, whoami, hostname, type from the Desktop, a screenshot: no proof check is left.
   await expect(checks.getByText(/proof/i)).toHaveCount(0);
   await expect(checks.getByText(/No (local|proof)\.txt/)).toHaveCount(0);

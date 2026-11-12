@@ -14,6 +14,7 @@ import {
   type CoverageResult,
   type FlagKind,
   type GeneratedAttrs,
+  type ToolOverride,
   type ReportData,
   type ReportTarget,
 } from "../../../../engines/report";
@@ -101,13 +102,27 @@ function targetOf(targets: ReportTarget[], host: Host): ReportTarget {
 
 /**
  * One editable cell of the Tools appendix: page text (wrapping, so a long URL reads whole) until clicked, then a field
- * in place; Enter, Esc or leaving it ends the edit. An empty cell says what it wants, on screen only.
+ * in place. Enter or leaving it keeps the edit; Esc puts back what was there. An emptied field drops the owner's value,
+ * so the catalog's returns. An empty cell says what it wants, on screen only.
  */
-function CellInput({ label, empty, value, onChange }: { label: string; empty: string; value: string; onChange(value: string): void }) {
-  const [editing, setEditing] = useState(false);
-  if (!editing) {
+function CellInput({
+  label,
+  empty,
+  value,
+  onChange,
+  onBegin,
+}: {
+  label: string;
+  empty: string;
+  value: string;
+  onChange(value: string): void;
+  /** Called as the edit starts; returns what undoes it. */
+  onBegin(): () => void;
+}) {
+  const [edit, setEdit] = useState<{ draft: string; revert(): void } | null>(null);
+  if (!edit) {
     return (
-      <button type="button" className="report-cell-edit" aria-label={label} onClick={() => setEditing(true)}>
+      <button type="button" className="report-cell-edit" aria-label={label} onClick={() => setEdit({ draft: value, revert: onBegin() })}>
         {value || <span className="report-cell-empty">{empty}</span>}
       </button>
     );
@@ -116,19 +131,33 @@ function CellInput({ label, empty, value, onChange }: { label: string; empty: st
     <input
       className="report-input"
       aria-label={label}
-      value={value}
+      value={edit.draft}
       spellCheck={false}
       autoFocus
-      onChange={(e) => onChange(e.target.value)}
-      onBlur={() => setEditing(false)}
+      onChange={(e) => {
+        setEdit({ ...edit, draft: e.target.value });
+        onChange(e.target.value);
+      }}
+      onBlur={() => setEdit(null)}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === "Escape") {
-          e.preventDefault();
-          setEditing(false);
-        }
+        if (e.key !== "Enter" && e.key !== "Escape") return;
+        e.preventDefault();
+        if (e.key === "Escape") edit.revert();
+        setEdit(null);
       }}
     />
   );
+}
+
+/** The Tools overrides with one field set; an empty value removes the field (and the row's entry once it has none). */
+function setOverride(overrides: Record<string, ToolOverride>, tool: string, field: keyof ToolOverride, value: string): Record<string, ToolOverride> {
+  const row: ToolOverride = { ...overrides[tool] };
+  if (value === "") delete row[field];
+  else row[field] = value;
+  const next = { ...overrides };
+  if (Object.keys(row).length === 0) delete next[tool];
+  else next[tool] = row;
+  return next;
 }
 
 function Content({ attrs, ctx, attackerIp, editable = false }: { attrs: GeneratedAttrs; ctx: ReportDataValue; attackerIp: string; editable?: boolean }) {
@@ -296,7 +325,16 @@ function Content({ attrs, ctx, attackerIp, editable = false }: { attrs: Generate
       const edit = editable ? ctx.onSectionMeta : undefined;
       const cell = (tool: string, field: "purpose" | "url", value: string, label: string) =>
         edit ? (
-          <CellInput label={`${label} of ${tool}`} empty={`Add ${field === "url" ? "the URL" : "its purpose"}`} value={value} onChange={(v) => edit({ tools: { ...overrides, [tool]: { ...overrides[tool], [field]: v } } })} />
+          <CellInput
+            label={`${label} of ${tool}`}
+            empty={`Add ${field === "url" ? "the URL" : "its purpose"}`}
+            value={value}
+            onChange={(v) => edit({ tools: setOverride(overrides, tool, field, v) })}
+            onBegin={() => {
+              const was = overrides;
+              return () => edit({ tools: was });
+            }}
+          />
         ) : (
           value
         );

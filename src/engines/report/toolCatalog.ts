@@ -52,6 +52,7 @@ export const TOOL_CATALOG: CatalogTool[] = [
   { name: "nc", bins: ["nc", "netcat"], purpose: "Listener for reverse shells", url: "https://nc110.sourceforge.io" },
   { name: "ncat", bins: ["ncat"], purpose: "Listener for reverse shells", url: "https://nmap.org/ncat" },
   { name: "socat", bins: ["socat"], purpose: "Listener and port relay", url: "http://www.dest-unreach.org/socat/" },
+  { name: "msfconsole", bins: ["msfconsole"], purpose: "Metasploit console", url: "https://github.com/rapid7/metasploit-framework" },
   { name: "msfvenom", bins: ["msfvenom"], purpose: "Payload generation", url: "https://github.com/rapid7/metasploit-framework" },
   { name: "john", bins: ["john"], purpose: "Password cracking", url: "https://github.com/openwall/john" },
   { name: "hashcat", bins: ["hashcat"], purpose: "Password cracking", url: "https://hashcat.net/hashcat/" },
@@ -80,7 +81,7 @@ export const NOT_TOOLS = new Set([
   "tail", "less", "more", "sort", "uniq", "wc", "cut", "awk", "sed", "tr", "tee", "xargs", "file", "strings", "base64",
   "xxd", "env", "export", "set", "history", "clear", "exit", "sudo", "su", "ps", "kill", "which", "whereis", "ln",
   "nano", "vi", "vim", "bash", "sh", "zsh", "source", "systemctl", "service", "crontab", "netstat", "ss", "getcap", "dig",
-  "nslookup", "host", "ping", "date", "stat", "df", "du", "mount", "openssl",
+  "nslookup", "host", "ping", "date", "stat", "df", "du", "mount", "openssl", "git", "ssh-keygen",
   // Windows cmd and PowerShell
   "type", "dir", "copy", "move", "del", "erase", "md", "rd", "ren", "cls", "ipconfig", "systeminfo", "net", "net1",
   "netsh", "reg", "sc", "schtasks", "tasklist", "taskkill", "icacls", "findstr", "where", "cmd", "powershell", "pwsh",

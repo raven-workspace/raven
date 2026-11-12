@@ -5,6 +5,7 @@ import { NodeSelection, TextSelection } from "prosekit/pm/state";
 import type { ComponentProps } from "react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import App from "../App";
 import { api, resetAuditState } from "../audit/fakeApi";
 import { ReportSectionView } from "../features/report/ReportSection";
 import { pruneRemoved } from "../features/report/queries";
@@ -333,7 +334,9 @@ describe("Report view: appendices and new evidence", () => {
     const checks = screen.getAllByRole("list", { name: "Checks" })[0];
     // The fix is offered for the picked check only.
     expect(within(checks).queryByRole("button", { name: "Move to appendix" })).toBeNull();
-    fireEvent.click(within(checks).getByText(/This block is long \(80 lines of output\)/));
+    fireEvent.click(within(checks).getByText("Long block (80 lines of output)"));
+    // Picked, the check reads in full under its row.
+    expect(within(checks).getByText(/This block is long \(80 lines of output\)/)).toBeInTheDocument();
     fireEvent.click(within(checks).getByRole("button", { name: "Move to appendix" }));
     await waitFor(() => expect(pageEditor().state.doc.child(1).attrs.appendix).toBe("moved"));
     expect(await within(appendixGroup()).findByRole("button", { name: "Appendix E: lnx02" })).toBeInTheDocument();
@@ -357,7 +360,8 @@ describe("Report view: appendices and new evidence", () => {
     Object.defineProperty(img, "naturalWidth", { value: 480 });
     fireEvent.load(img);
     const checks = screen.getAllByRole("list", { name: "Checks" })[0];
-    expect(await within(checks).findByText('The screenshot "Login page" is narrower than would print legibly. Retake it larger or crop it tighter.')).toBeInTheDocument();
+    fireEvent.click(await within(checks).findByText("Screenshot too narrow to print"));
+    expect(within(checks).getByText('The screenshot "Login page" is narrower than would print legibly. Retake it larger or crop it tighter.')).toBeInTheDocument();
   });
 
   it("Add new evidence appends a newly proving entry, skips removed ones, and Undo takes it off again", async () => {
@@ -417,6 +421,18 @@ describe("Report view: appendices and new evidence", () => {
 
 describe("Report view: the result", () => {
   const paper = () => document.querySelector<HTMLElement>(".report-page")!;
+
+  it("has one strip: the report's, in place of the engagement's", async () => {
+    render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <MemoryRouter initialEntries={["/e/e-exam/s/report"]}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByRole("group", { name: "Report status" }, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Engagement status" })).toBeNull();
+  });
 
   it("titles a report-level page from its kind, at the top of the paper", async () => {
     mount();
@@ -490,6 +506,23 @@ describe("Report view: the result", () => {
     );
     fireEvent.keyDown(purpose, { key: "Enter" });
     expect(within(paper()).getByRole("button", { name: "Purpose of nmap" })).toHaveTextContent("Full TCP scans");
+    const lastMeta = () => JSON.stringify(save.mock.calls.at(-1)![2]);
+
+    // Esc puts back what was there.
+    fireEvent.click(within(paper()).getByRole("button", { name: "Purpose of nmap" }));
+    fireEvent.change(within(paper()).getByRole("textbox", { name: "Purpose of nmap" }), { target: { value: "Oops" } });
+    fireEvent.keyDown(within(paper()).getByRole("textbox", { name: "Purpose of nmap" }), { key: "Escape" });
+    expect(within(paper()).getByRole("button", { name: "Purpose of nmap" })).toHaveTextContent("Full TCP scans");
+    await waitFor(() => expect(lastMeta()).toContain('"nmap":{"purpose":"Full TCP scans"}'));
+
+    // Emptied, the field is dropped and the catalog's purpose returns; the field itself stays empty while typing.
+    fireEvent.click(within(paper()).getByRole("button", { name: "Purpose of nmap" }));
+    const field = within(paper()).getByRole("textbox", { name: "Purpose of nmap" });
+    fireEvent.change(field, { target: { value: "" } });
+    expect(field).toHaveValue("");
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(within(paper()).getByRole("button", { name: "Purpose of nmap" })).toHaveTextContent("Port and service scanning");
+    await waitFor(() => expect(lastMeta()).not.toContain('"nmap"'));
   });
 });
 
@@ -510,7 +543,10 @@ describe("CheckList", () => {
     );
     expect(screen.queryByText("ipconfig")).toBeNull();
     expect(screen.queryByRole("button", { name: "Fix" })).toBeNull();
-    fireEvent.click(screen.getByText("The proof.txt proof for ms01 doesn't show ipconfig."));
+    // Short in the row; in full once picked.
+    expect(screen.queryByText("The proof.txt proof for ms01 doesn't show ipconfig.")).toBeNull();
+    fireEvent.click(screen.getByText("proof.txt proof lacks ipconfig"));
+    expect(screen.getByText("The proof.txt proof for ms01 doesn't show ipconfig.")).toBeInTheDocument();
     expect(onPick).toHaveBeenLastCalledWith(expect.objectContaining({ id: "proof-ip:ms01:proof" }));
     const fix = screen.getByRole("button", { name: "Fix" });
     expect(fix).toHaveAttribute("aria-expanded", "false");

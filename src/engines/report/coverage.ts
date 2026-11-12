@@ -42,25 +42,29 @@ const portPattern = (port: number) => new RegExp(`(?<![\\d.])${port}(?![\\d.])`)
 /** A port standing alone in a command or title ("on 8080", ":8080/"): not inside a word, an IP or a base64 payload. */
 const barePort = (port: number) => new RegExp(`(?<![\\w.])${port}(?![\\w.])`);
 
-/** What the steps into a host say: each access grant's and hop's `via`, with its linked entry's title and commands (never a private entry's). */
-function accessSteps(data: ReportData, hostId: string): { text: string; via: string }[] {
-  const entryText = (id: string | null) => {
-    const e = id ? data.log.find((l) => l.id === id) : undefined;
-    if (!e || e.private) return "";
-    const commands = e.content.kind === "command" ? e.content.blocks.map((b) => b.command ?? "") : [];
-    return [e.title, ...commands].join("\n");
+/**
+ * What the steps into a host say: `words` is each access grant's and hop's `via` with its linked entry's title, where a
+ * port may be named outright; `commands` are that entry's commands (never a private entry's), read for tool and
+ * protocol words only, since their numbers are as often the attacker's listener or callback port as the target's.
+ */
+function accessSteps(data: ReportData, hostId: string): { via: string; words: string; commands: string }[] {
+  const step = (via: string, entryId: string | null) => {
+    const e = entryId ? data.log.find((l) => l.id === entryId) : undefined;
+    const shown = e && !e.private ? e : undefined;
+    const commands = shown?.content.kind === "command" ? shown.content.blocks.map((b) => b.command ?? "").join("\n") : "";
+    return { via, words: `${via}\n${shown?.title ?? ""}`, commands };
   };
   return [
-    ...data.grants.filter((g) => g.hostId === hostId).map((g) => ({ via: g.via, text: `${g.via}\n${entryText(g.logEntryId)}` })),
-    ...data.hops.filter((h) => h.toHostId === hostId).map((h) => ({ via: h.via, text: `${h.via}\n${entryText(h.logEntryId)}` })),
+    ...data.grants.filter((g) => g.hostId === hostId).map((g) => step(g.via, g.logEntryId)),
+    ...data.hops.filter((h) => h.toHostId === hostId).map((h) => step(h.via, h.logEntryId)),
   ];
 }
 
-/** Whether an access step's text names this service: its port outright, or its family's tool or protocol. */
-function namesService(text: string, port: number, nmapService: string | null): boolean {
-  if (barePort(port).test(text)) return true;
+/** Whether an access step names this service: its port outright in the via or title, or its family's tool or protocol anywhere. */
+function namesService(st: { words: string; commands: string }, port: number, nmapService: string | null): boolean {
+  if (barePort(port).test(st.words)) return true;
   const name = (nmapService ?? "").toLowerCase();
-  return ACCESS_FAMILIES.some((f) => (f.ports.includes(port) || f.names.includes(name)) && f.words.test(text));
+  return ACCESS_FAMILIES.some((f) => (f.ports.includes(port) || f.names.includes(name)) && (f.words.test(st.words) || f.words.test(st.commands)));
 }
 
 /** A service's coverage on one host (§5.5): exploited, tested, or untested; an override wins. */
@@ -88,7 +92,7 @@ export function serviceCoverage(
       const re = portPattern(s.port);
       const hit = notes.find((n) => re.test(n.text));
       // A port used to get in (an access grant or hop names it) was exploited, whether or not a finding says so.
-      const access = finding ? undefined : steps.find((st) => namesService(st.text, s.port, s.nmapService));
+      const access = finding ? undefined : steps.find((st) => namesService(st, s.port, s.nmapService));
       if (finding) {
         result = "exploited";
         via = finding.title;

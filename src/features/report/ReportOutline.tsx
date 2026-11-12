@@ -142,11 +142,12 @@ export function CheckList({
         const check = g.checks[at];
         const action = isPicked ? actionFor?.(check) : undefined;
         const many = g.checks.length > 1;
-        // Which one of the group: its own words when they differ from the others' ("22/tcp on lnx02 is untested.").
-        const ownText = many && g.checks.some((c) => c.text !== g.checks[0].text);
+        // The picked check in full: always for a single one (its row is the short wording), and for a group when its
+        // checks' words differ ("22/tcp on lnx02 is untested.").
+        const ownText = !many || g.checks.some((c) => c.text !== g.checks[0].text);
         return (
           <li key={g.key} className="grid">
-            <Tooltip content={g.text} side="right">
+            <Tooltip content={g.full} side="right">
               <button
                 type="button"
                 onClick={() => pick(g)}
@@ -163,7 +164,7 @@ export function CheckList({
                 <span className="min-w-0 truncate">{g.text}</span>
               </button>
             </Tooltip>
-            {isPicked && (many || check.fix || action) && (
+            {isPicked && (
               <div className="grid grid-cols-[16px_minmax(0,1fr)] gap-x-2 gap-y-1 pb-2 pl-8 pr-2 text-meta text-muted-2">
                 <span aria-hidden />
                 <div className="grid gap-1">

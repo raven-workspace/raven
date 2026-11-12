@@ -266,13 +266,52 @@ const PLURAL: Record<string, (n: number) => string> = {
   legible: (n) => `${n} screenshots are narrower than would print legibly.`,
 };
 
+/**
+ * How one check of a kind reads in the outline's narrow column: short, the subject first. The check's own text is
+ * its full statement (tooltip, picked detail). Kinds not listed read in full (coverage is short already).
+ */
+const SHORT: Record<string, (c: Check) => string> = {
+  "proof-missing": (c) => `No ${part(c, 2)}.txt for ${part(c, 1)}`,
+  "proof-ip": (c) => `${part(c, 2)}.txt proof lacks ipconfig`,
+  "proof-screenshot": (c) => `${part(c, 2)}.txt proof has no screenshot`,
+  "proof-web": (c) => `${part(c, 2)}.txt proof from a web request`,
+  "proof-identity": (c) => `${part(c, 2)}.txt proof lacks whoami`,
+  "proof-hostname": (c) => `${part(c, 2)}.txt proof lacks hostname`,
+  "proof-path": (c) => `${part(c, 2)}.txt read from an odd place`,
+  gone: () => "Deleted or private entry on the page",
+  output: () => "A command shows no output",
+  explain: () => "A step has no explanation",
+  caption: () => "Caption over 10 words",
+  "access-shot": (c) => `${part(c, 1)}: no ${part(c, 2)} screenshot`,
+  "finding-severity": () => "A finding has no severity",
+  "finding-title": () => "A finding title is one word",
+  "finding-affected": () => "A finding has no affected host",
+  "finding-description": () => "A finding has no description",
+  "finding-remediation": () => "A finding has no remediation",
+  wording: () => "An absolute claim",
+  "exploit-url": () => "Exploit has no original URL",
+  "exploit-explain": () => "Explain the modified exploit",
+  "exploit-original": () => "Exploit has no original",
+  "appendix-ref": () => "A moved block lost its appendix entry",
+  move: (c) => {
+    const why = /\(([^)]+)\)/.exec(c.text)?.[1];
+    return why ? `Long block (${why})` : "Long block";
+  },
+  legible: () => "Screenshot too narrow to print",
+};
+
+/** The id's n-th ":" part ("proof-ip:ms01:local" → 1 "ms01", 2 "local"). */
+const part = (c: Check, n: number) => c.id.split(":")[n] ?? "";
+
 export interface CheckGroup {
   /** The kind the group's checks share. */
   key: string;
   /** Fail when any of its checks fails. */
   level: CheckLevel;
-  /** One check's own text; several read as a count ("12 steps have no explanation."). */
+  /** The outline's line: one check's short wording, or several as a count ("12 steps have no explanation."). */
   text: string;
+  /** The full statement, for the tooltip: one check's own text, or the count. */
+  full: string;
   checks: Check[];
 }
 
@@ -286,7 +325,8 @@ export function groupChecks(checks: Check[]): CheckGroup[] {
   const out = [...groups].map(([key, list]): CheckGroup => ({
     key,
     level: list.some((c) => c.level === "fail") ? "fail" : "soft",
-    text: list.length === 1 ? list[0].text : (PLURAL[key]?.(list.length) ?? `${list.length} × ${list[0].text}`),
+    text: list.length === 1 ? (SHORT[key]?.(list[0]) ?? list[0].text) : (PLURAL[key]?.(list.length) ?? `${list.length} × ${list[0].text}`),
+    full: list.length === 1 ? list[0].text : (PLURAL[key]?.(list.length) ?? `${list.length} × ${list[0].text}`),
     checks: list,
   }));
   return [...out.filter((g) => g.level === "fail"), ...out.filter((g) => g.level !== "fail")];

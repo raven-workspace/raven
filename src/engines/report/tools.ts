@@ -43,6 +43,9 @@ const PYTHON = new Set(["python", "python2", "python3"]);
 function toolsIn(segment: string): string[] {
   const bin = firstBinary(segment);
   if (!bin) return [];
+  // A script run directly (`./46153.py`) is the same exploit runner as `python3 46153.py`; Impacket's own scripts
+  // (`psexec.py`) are named in the catalog.
+  if (/\.py$/.test(bin) && !CATALOG_BY_BIN.has(bin)) return ["python3"];
   if (PYTHON.has(bin)) {
     const script = segment.split(/\s+/).slice(1).find((t) => !t.startsWith("-"));
     return script && /\.py$/i.test(script) && !/(^|\s)-[cm]\b/.test(segment) ? ["python3"] : [];
@@ -91,7 +94,11 @@ export function toolsUsed(
     }
   }
   return [...rows.values()]
-    .map((r) => ({ ...r, ...opts.overrides?.[r.tool] }))
+    // An emptied field is no override: the catalog's value comes back.
+    .map((r) => {
+      const o = opts.overrides?.[r.tool];
+      return { ...r, purpose: o?.purpose || r.purpose, url: o?.url || r.url };
+    })
     .sort((a, b) => a.tool.toLowerCase().localeCompare(b.tool.toLowerCase()));
 }
 

