@@ -68,3 +68,64 @@ export type ReportNode = {
   text?: string;
   marks?: { type: string; attrs?: Record<string, unknown> }[];
 };
+
+/* Node vocabulary: the contract the editor schema implements. */
+
+/** A sub-section heading of a target. `tested` and `proof` close every target. */
+export type Phase = "foothold" | "privesc" | "lateral" | "domain" | "proof" | "tested";
+
+export type GeneratedKind =
+  | "facts"
+  | "services"
+  | "vulns"
+  | "tested"
+  | "proof-table-host"
+  | "engagement-details"
+  | "exploited-systems"
+  | "severity-legend"
+  | "ad-overview"
+  | "attack-chain"
+  | "proof-table"
+  | "tools"
+  | "msf"
+  | "cleanup"
+  | "references";
+
+/** Where a block's content sits: in the flow, moved to an appendix, or trimmed inline with the full copy there. */
+export type AppendixPlacement = "inline" | "moved" | "split";
+
+/** A prose slot; an empty one shows its hint and never exports. */
+export interface SlotAttrs {
+  hint: string;
+}
+
+export interface PhaseAttrs {
+  phase: Phase;
+  hostId: string;
+}
+
+export interface EvidenceAttrs {
+  entryId: string;
+  /** Index into a command entry's `content.blocks`; null = the whole entry. */
+  block: number | null;
+  /** Inclusive line ranges kept inline; null = every line. */
+  keep: [number, number][] | null;
+  emphasis: number[];
+  appendix: AppendixPlacement;
+}
+
+export interface GeneratedAttrs {
+  kind: GeneratedKind;
+  hostId: string | null;
+  appendix: Exclude<AppendixPlacement, "split">;
+}
+
+export interface VulnAttrs {
+  findingId: string;
+}
+
+export interface ExploitAttrs {
+  fileId: string;
+  markedLines: number[];
+  appendix: Exclude<AppendixPlacement, "split">;
+}
