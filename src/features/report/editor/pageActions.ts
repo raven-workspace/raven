@@ -1,7 +1,8 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { Editor } from "prosekit/core";
 import { createContext, useContext } from "react";
-import { evidenceBlocks, evidenceNodes, type ReportNode, type ReportTarget } from "../../../engines/report";
+import type { Node as PMNode } from "prosekit/pm/model";
+import { evidenceBlocks, evidenceNodes, type AppendixPlacement, type ReportData, type ReportNode, type ReportTarget } from "../../../engines/report";
 import { api } from "../../../lib/api";
 import type { LogEntry } from "../../../types/log";
 import { readImage, releaseImage } from "../../capture/imagePaste";
@@ -90,4 +91,50 @@ export async function saveScreenshot(qc: QueryClient, engagementId: string, host
   qc.setQueryData<LogEntry[]>(["log", engagementId], (list) => (list ? [...list, entry] : list));
   void qc.invalidateQueries({ queryKey: ["log", engagementId] });
   return entry;
+}
+
+/** Where `block` (a node the block handle named at `pos`) stands now: there if it still is, else wherever it moved. */
+function currentPos(editor: Editor, block: { node: PMNode; pos: number }): number | null {
+  const doc = editor.state.doc;
+  if (doc.nodeAt(block.pos) === block.node) return block.pos;
+  let found: number | null = null;
+  doc.descendants((node, pos) => {
+    if (found !== null) return false;
+    if (node === block.node) found = pos;
+    return true;
+  });
+  return found;
+}
+
+/**
+ * Whether a block can move to an appendix (§5.6, §10.4): evidence, a generated table, a modified exploit. An unmodified
+ * exploit is one line (its URL), so it stays.
+ */
+export function blockMovable(node: PMNode, data: ReportData): boolean {
+  if (node.type.name === "evidence" || node.type.name === "generated") return true;
+  if (node.type.name !== "exploit") return false;
+  return data.findingFiles.find((f) => f.id === node.attrs.fileId)?.modified === true;
+}
+
+/** Moves a block to the appendix or back inline: its `appendix` attr, one undoable step. */
+export function setBlockAppendix(editor: Editor, block: { node: PMNode; pos: number }, place: AppendixPlacement): boolean {
+  return editor.exec((state, dispatch) => {
+    const pos = currentPos(editor, block);
+    if (pos === null) return false;
+    dispatch?.(state.tr.setNodeMarkup(pos, undefined, { ...block.node.attrs, appendix: place }));
+    return true;
+  });
+}
+
+/** Deletes a block; an evidence block's entry is remembered as removed (`onRemoveEvidence`), as ⌫ does. */
+export function deleteBlockAt(editor: Editor, block: { node: PMNode; pos: number }, onRemoveEvidence: (entryId: string) => void): boolean {
+  return editor.exec((state, dispatch) => {
+    const pos = currentPos(editor, block);
+    if (pos === null) return false;
+    if (dispatch) {
+      if (block.node.type.name === "evidence") onRemoveEvidence(block.node.attrs.entryId as string);
+      dispatch(state.tr.delete(pos, pos + block.node.nodeSize));
+    }
+    return true;
+  });
 }

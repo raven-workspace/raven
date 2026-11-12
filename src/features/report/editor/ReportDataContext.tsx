@@ -41,6 +41,8 @@ export interface PageLayout {
   pathOf(node: PMNode): string | null;
   /** A top-level screenshot node's step title, its caption's fallback (`stepTitleBefore`); null when there is none. */
   stepTitleOf(node: PMNode): string | null;
+  /** Whether the node sits in a step, where evidence shows as a chip (§10.2). */
+  inStep(node: PMNode): boolean;
   /** The owner has focused or clicked into the page; until then a selection is only ProseMirror's default, so blocks show no tools. */
   touched: boolean;
   /** A numbered heading of a target page by its key (`facts:<hostId>`, `phase:<hostId>:<phase>`, `attack-chain`). */
@@ -52,6 +54,7 @@ export const PageLayoutContext = createContext<PageLayout>({
   figureOf: () => null,
   pathOf: () => null,
   stepTitleOf: () => null,
+  inStep: () => false,
   touched: false,
   heading: () => null,
 });

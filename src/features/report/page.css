@@ -460,6 +460,184 @@
   font-weight: 600;
 }
 
+/* Evidence chips (§10.2): evidence in a step, collapsed to one line in the editor; open, the block as it prints
+   under a bar of its actions. View state only: the PDF always prints every block in full. */
+
+.report-page .report-chip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: auto;
+  justify-content: start;
+  align-items: center;
+  gap: 8px;
+  justify-self: start;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 2px 8px;
+  border: 1px solid var(--page-rule);
+  border-radius: 5px;
+  background: var(--page-code-bg);
+  color: var(--page-ink);
+  font: inherit;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms cubic-bezier(0.16, 1, 0.3, 1); /* EASE_OUT, src/ui/motion.ts */
+}
+
+.report-page button.report-chip:hover {
+  border-color: var(--page-placeholder);
+}
+
+.report-page .report-chip:focus-visible {
+  outline: 2px solid var(--page-ink);
+  outline-offset: 2px;
+}
+
+/* A moved block's chip is dashed, as the reference it stands for. */
+.report-page .report-chip[data-moved] {
+  border-style: dashed;
+  background: transparent;
+}
+
+/* A deleted or private entry: the amber placeholder's words, as a chip. */
+.report-page .report-chip[data-gone] {
+  color: var(--page-amber-ink);
+  border: 1px dashed var(--page-amber-line);
+  background: transparent;
+  cursor: default;
+}
+
+.report-page .report-chip-mono,
+.report-page .report-chip-text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.report-page .report-chip-mono {
+  font-family: var(--page-mono);
+}
+
+.report-page .report-chip-meta {
+  color: var(--page-placeholder);
+  white-space: nowrap;
+}
+
+.report-page .report-chip-thumb {
+  display: grid;
+  height: 40px;
+  margin: 2px 0;
+}
+
+.report-page .report-chip-thumb img,
+.report-page .report-chip-thumb > div {
+  height: 40px;
+  width: auto;
+  max-height: 40px;
+  min-width: 40px;
+  border-radius: 3px;
+  border-color: var(--page-rule);
+}
+
+.report-page .report-open {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  border: 1px solid var(--page-rule);
+  border-radius: 5px;
+}
+
+.report-page .report-open-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 4px 2px 10px;
+  border-bottom: 1px solid var(--page-rule);
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  color: var(--page-placeholder);
+}
+
+/* What the block is, then how much shows: set apart by space, never a joining "·". */
+.report-page .report-open-label {
+  display: grid;
+  grid-auto-flow: column;
+  justify-content: start;
+  gap: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.report-page .report-open-actions {
+  display: grid;
+  grid-auto-flow: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.report-page .report-open-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 8px;
+  padding: 8px 10px;
+}
+
+.report-page .report-bar-btn,
+.report-page .report-bar-icon {
+  min-height: 24px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--page-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.report-page .report-bar-btn {
+  padding: 0 6px;
+}
+
+.report-page .report-bar-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+}
+
+.report-page .report-bar-btn:hover,
+.report-page .report-bar-icon:hover,
+.report-page .report-bar-btn[aria-pressed="true"],
+.report-page .report-bar-icon[aria-pressed="true"] {
+  background: var(--page-code-bg);
+}
+
+.report-page .report-bar-btn:disabled {
+  color: var(--page-placeholder);
+  cursor: not-allowed;
+}
+
+.report-page .report-bar-btn:focus-visible,
+.report-page .report-bar-icon:focus-visible {
+  outline: 2px solid var(--page-ink);
+  outline-offset: 1px;
+}
+
+.report-page .report-cut {
+  padding: 0 10px 6px;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  color: var(--page-placeholder);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-page .report-chip {
+    transition: none;
+  }
+}
+
 /* Amber placeholder: a referenced row that was deleted or made private */
 
 .report-page .report-gone {
@@ -582,6 +760,13 @@
 .report-page .report-handle-grip:hover {
   color: var(--page-ink);
   background: var(--page-code-bg);
+}
+
+/* The block menu's ⋯ sits under the grip; a click, not a drag. */
+.report-page .report-handle-menu {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 
 .report-page .report-handle-grip[data-dragging] {

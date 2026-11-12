@@ -638,6 +638,8 @@ describe("Report view: the result", () => {
     mount();
     await ready();
     fireEvent.click(rowFor("ms01"));
+    // Flags in a step are chips in the editor (§10.2): open them all to see the blocks as they print.
+    fireEvent.click(await screen.findByRole("button", { name: "Open all evidence" }));
     await waitFor(() => expect(within(paper()).getByText("Proof.txt value:")).toBeInTheDocument());
     const order = [...paper().querySelectorAll("h3, .report-flag strong")].map((el) => el.textContent ?? "");
     const at = (pred: (t: string) => boolean) => order.findIndex(pred);

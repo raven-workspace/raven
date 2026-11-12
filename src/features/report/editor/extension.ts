@@ -44,7 +44,7 @@ import { defineVirtualSelection } from "prosekit/extensions/virtual-selection";
 import type { Node as PMNode } from "prosekit/pm/model";
 import { Plugin, type Command, type EditorState } from "prosekit/pm/state";
 import { Decoration, DecorationSet } from "prosekit/pm/view";
-import type { ReportNode } from "../../../engines/report";
+import { STEP_HINT, type ReportNode } from "../../../engines/report";
 import { defineReactNodeView, type ReactNodeViewComponent } from "prosekit/react";
 import { hljsParser } from "./codeHighlight";
 import { addStep, moveCell } from "./commands";
@@ -162,6 +162,26 @@ const stepNumbers = definePlugin(
         });
         return decos.length === 0 ? null : DecorationSet.create(state.doc, decos);
       },
+    },
+  }),
+);
+
+/**
+ * A step whose sentence goes while evidence stays (its text deleted up to the chip) is refilled by ProseMirror with a
+ * default slot, whose hint is empty: it takes the step's hint, so the owner still sees what to write there.
+ */
+const stepHints = definePlugin(
+  new Plugin({
+    appendTransaction: (trs, _old, state) => {
+      if (!trs.some((tr) => tr.docChanged)) return null;
+      const tr = state.tr;
+      state.doc.descendants((node, pos) => {
+        if (node.type.name !== "step") return !node.isTextblock && !node.isAtom;
+        const first = node.firstChild;
+        if (first?.type.name === "slot" && first.attrs.hint === "") tr.setNodeMarkup(pos + 1, undefined, { ...first.attrs, hint: STEP_HINT });
+        return false;
+      });
+      return tr.docChanged ? tr : null;
     },
   }),
 );
@@ -414,6 +434,7 @@ export function defineReportExtension(
     stepsSpec,
     stepSpec,
     stepNumbers,
+    stepHints,
     stepsKeymap,
     defineReactNodeView({ name: "steps", component: StepsView, as: "div", contentAs: "div", stopEvent: stopControlEvents }),
     defineReactNodeView({ name: "step", component: StepView, as: "div", contentAs: "div" }),

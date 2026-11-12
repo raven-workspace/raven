@@ -1,6 +1,8 @@
 import {
   ArrowClockwise,
   ArrowCounterClockwise,
+  ArrowsInSimple,
+  ArrowsOutSimple,
   CheckSquare,
   DotsThree,
   FileMagnifyingGlass,
@@ -22,6 +24,7 @@ import { useEditor, useKeymap } from "prosekit/react";
 import { cx } from "../../../lib/cx";
 import { IconButton, Input, Select, Toolbar } from "../../../ui";
 import { HEADING_TOOLS, keepFocus, TEXT_MARKS, type MarkTool } from "./BubbleMenu";
+import { useChipsAll } from "./ChipState";
 import { applyLink, BLOCK_KINDS, blockKindAt, inPageHeading, insertTable, linkAt, setBlockKind, type BlockKind, type PageEditor } from "./commands";
 import type { EditingExtension } from "./extension";
 import { fromPicker, LANGUAGE_OPTIONS, toPicker } from "./nodes/CodeBlockView";
@@ -75,6 +78,7 @@ export function FormatToolbar({
 }) {
   const editor = useEditor<EditingExtension>({ update: true });
   const actions = usePageActions();
+  const chips = useChipsAll();
   const [linkOpen, setLinkOpen] = useState(false);
   const [href, setHref] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -293,6 +297,22 @@ export function FormatToolbar({
       priority: 50,
       width: 28,
       node: <IconButton key="find" icon={MagnifyingGlass} label="Find and replace" shortcut="⌘F" disabled={!ready} onClick={onFind} />,
+    },
+    {
+      id: "chips",
+      group: "find",
+      priority: 52,
+      width: 28,
+      node: (
+        <IconButton
+          key="chips"
+          icon={chips.allOpen ? ArrowsInSimple : ArrowsOutSimple}
+          label={chips.allOpen ? "Close all evidence" : "Open all evidence"}
+          disabled={!ready}
+          onMouseDown={keepFocus}
+          onClick={() => chips.setAll(!chips.allOpen)}
+        />
+      ),
     },
     {
       id: "undo",

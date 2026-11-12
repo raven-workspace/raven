@@ -10,6 +10,7 @@ import { reportError } from "../../../lib/lockSignal";
 import { RavenError } from "../../../types/errors";
 import { BlockHandle } from "./BlockHandle";
 import { BubbleMenu } from "./BubbleMenu";
+import { CHIP_TYPES, chipKey, ChipStateProvider, useChipControls } from "./ChipState";
 import { defineReportExtension, type HeldPositions, type SourceGone, type SubNumbers } from "./extension";
 import { FindBar } from "./FindBar";
 import { FormatToolbar } from "./FormatToolbar";
@@ -27,10 +28,12 @@ const hasFigure = (node: PMNode, data: ReportData) =>
 function layoutOf(doc: PMNode, data: ReportData, sectionId: string, figureOffset: number, touched: boolean, headings: PageHeadings | null): PageLayout {
   const figures = new Map<PMNode, number>();
   const paths = new Map<PMNode, string>();
+  const stepped = new Set<PMNode>();
   const walk = (node: PMNode, path: string) =>
     node.forEach((child, _offset, i) => {
       const p = path === "" ? `${i}` : `${path}.${i}`;
       paths.set(child, p);
+      if (node.type.name === "step") stepped.add(child);
       if (hasFigure(child, data)) figures.set(child, figureOffset + figures.size + 1);
       walk(child, p);
     });
@@ -48,6 +51,7 @@ function layoutOf(doc: PMNode, data: ReportData, sectionId: string, figureOffset
     figureOf: (n) => figures.get(n) ?? null,
     pathOf: (n) => paths.get(n) ?? null,
     stepTitleOf: (n) => steps.get(n) ?? null,
+    inStep: (n) => stepped.has(n),
     touched,
     heading: (key) => headings?.get(key) ?? null,
   };
@@ -323,6 +327,25 @@ function PageHooks({
     return { Backspace: removeEvidence, Delete: removeEvidence, "Alt-ArrowUp": moveSelectedBlock(-1), "Alt-ArrowDown": moveSelectedBlock(1) };
   }, [onRemoveEvidence]);
   useKeymap(keymap, { priority: Priority.high });
+  // A selected chip in a step: ↵ opens it, Esc closes it (the selection stays on it).
+  const chips = useChipControls();
+  const chipKeys = useMemo(() => {
+    const selectedChip = (state: Parameters<Command>[0]) => {
+      const sel = state.selection;
+      if (!(sel instanceof NodeSelection) || !CHIP_TYPES.has(sel.node.type.name) || sel.$from.parent.type.name !== "step") return null;
+      return chipKey(sel.node);
+    };
+    const toggle =
+      (open: boolean): Command =>
+      (state, dispatch) => {
+        const key = selectedChip(state);
+        if (key === null || chips.isOpen(key) === open) return false;
+        if (dispatch) chips.setOpen(key, open);
+        return true;
+      };
+    return { Enter: toggle(true), Escape: toggle(false) };
+  }, [chips]);
+  useKeymap(chipKeys, { priority: Priority.high });
   return null;
 }
 
@@ -483,49 +506,51 @@ export function ReportEditor({
 
   return (
     <PageLayoutContext.Provider value={layout}>
-      <ProseKit editor={editor}>
-        <PageActionsContext.Provider value={actions}>
-          <PageHooks onDoc={onDoc} onRemoveEvidence={value.onRemoveEvidence} onImage={actions.addImage} />
-          <FormatToolbar
-            end={toolbarEnd}
-            className={toolbarClassName}
-            onFind={openFind}
-            findBar={find.open && <FindBar focusKey={find.focus} onClose={() => setFind((f) => ({ ...f, open: false }))} />}
-          />
-          {notices}
-          {imageError && (
-            <p role="alert" className="m-0 text-meta text-warn">
-              Couldn't save the image as a screenshot: {imageError}
-            </p>
-          )}
-          <input
-            ref={fileInput}
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
-            hidden
-            aria-hidden
-            tabIndex={-1}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              if (file) actions.addImage(file);
-            }}
-          />
-          <div className="report-page" data-page={value.target ? "target" : "report"}>
-            {title && (
-              <h1 className="report-title">
-                {titleNumber && <span className="report-num">{titleNumber}</span>}
-                {title}
-              </h1>
+      <ChipStateProvider>
+        <ProseKit editor={editor}>
+          <PageActionsContext.Provider value={actions}>
+            <PageHooks onDoc={onDoc} onRemoveEvidence={value.onRemoveEvidence} onImage={actions.addImage} />
+            <FormatToolbar
+              end={toolbarEnd}
+              className={toolbarClassName}
+              onFind={openFind}
+              findBar={find.open && <FindBar focusKey={find.focus} onClose={() => setFind((f) => ({ ...f, open: false }))} />}
+            />
+            {notices}
+            {imageError && (
+              <p role="alert" className="m-0 text-meta text-warn">
+                Couldn't save the image as a screenshot: {imageError}
+              </p>
             )}
-            <div ref={mount} className="report-page-doc" />
-            <BlockHandle />
-            <TableHandles />
-          </div>
-          <BubbleMenu />
-          <SlashMenu />
-        </PageActionsContext.Provider>
-      </ProseKit>
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              hidden
+              aria-hidden
+              tabIndex={-1}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) actions.addImage(file);
+              }}
+            />
+            <div className="report-page" data-page={value.target ? "target" : "report"}>
+              {title && (
+                <h1 className="report-title">
+                  {titleNumber && <span className="report-num">{titleNumber}</span>}
+                  {title}
+                </h1>
+              )}
+              <div ref={mount} className="report-page-doc" />
+              <BlockHandle />
+              <TableHandles />
+            </div>
+            <BubbleMenu />
+            <SlashMenu />
+          </PageActionsContext.Provider>
+        </ProseKit>
+      </ChipStateProvider>
     </PageLayoutContext.Provider>
   );
 }

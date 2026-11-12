@@ -130,7 +130,7 @@ export function findingRows(data: ReportData, targets: ReportTarget[]): FindingR
     }
   });
   rows.sort((a, b) => a.rank - b.rank || a.targetIndex - b.targetIndex || a.created - b.created || a.title.localeCompare(b.title));
-  return rows.map(({ rank: _r, targetIndex: _t, created: _c, ...r }, i) => ({ n: i + 1, ...r }));
+  return rows.map((r, i) => ({ n: i + 1, findingId: r.findingId, host: r.host, title: r.title, severity: r.severity, result: r.result }));
 }
 
 export interface ScopeRow {
@@ -188,5 +188,5 @@ export function attackPathRows(data: ReportData, hostIds: string[]): AttackPathR
   }
   // Stable sort keeps hops before grants logged at the same moment.
   rows.sort((a, b) => a.at - b.at);
-  return rows.map(({ at: _at, ...r }, i) => ({ step: i + 1, ...r }));
+  return rows.map((r, i) => ({ step: i + 1, from: r.from, technique: r.technique, to: r.to, access: r.access }));
 }

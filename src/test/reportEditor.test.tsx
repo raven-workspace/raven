@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { NodeSelection, TextSelection } from "prosekit/pm/state";
 import { useMemo, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -1039,5 +1039,120 @@ describe("ReportEditor nested insertion helpers", () => {
     });
     await waitFor(() => expect(stepsIn(lastDoc(onChange))[0].content?.[0].content?.map((n) => n.attrs?.entryId ?? n.type)).toEqual(["paragraph", "e2"]));
     expect(insertNodesAt(editor(), [1, 5], [step(para("x"))])).toBe(false);
+  });
+});
+
+/** A 40-line nmap run, trimmed to its first 12 lines on the page. */
+const nmap40 = entry({ id: "n1", title: "Full port scan", content: { kind: "command", blocks: [{ command: "nmap -p- 10.0.0.5", output: lines(40) }] } });
+const shotEntry = entry({ id: "s1", kind: "screenshot", title: "Login page", content: { kind: "screenshot", attachmentId: "a1", caption: "Umbraco back office", fileName: "x.png" } });
+const chipPage = () => doc(steps(step(para("Scan every port"), ev("n1", { keep: [[0, 11]] })), step(para("Log in"), ev("s1", { block: null }))));
+const chipOf = (text: string) => screen.getByText(text).closest("button")!;
+
+describe("ReportEditor evidence chips", () => {
+  it("evidence inside a step shows as a chip with its command and line count", async () => {
+    setupLive(chipPage(), data({ log: [nmap40, shotEntry] }));
+    expect(await screen.findByText("$ nmap -p- 10.0.0.5")).toBeInTheDocument();
+    expect(screen.getByText("12 of 40 lines")).toBeInTheDocument();
+    expect(screen.getByText("Figure 1")).toBeInTheDocument();
+    expect(screen.getByText("Umbraco back office")).toBeInTheDocument();
+    // Closed: none of the output is on the page.
+    expect(screen.queryByText("line 0")).toBeNull();
+  });
+
+  it("evidence at the top level keeps its full block", async () => {
+    setupLive(doc(ev("n1", { keep: [[0, 11]] })), data({ log: [nmap40] }));
+    expect(await screen.findByText("line 0")).toBeInTheDocument();
+    expect(screen.queryByText("12 of 40 lines")).toBeNull();
+  });
+
+  it("clicking a chip opens the full block with Trim, Highlight, Edit text and Move to appendix", async () => {
+    const { onChange, container } = setupLive(chipPage(), data({ log: [nmap40, shotEntry] }));
+    await screen.findByText("$ nmap -p- 10.0.0.5");
+    fireEvent.click(chipOf("$ nmap -p- 10.0.0.5"));
+    expect(await screen.findByText("showing 12 of 40 lines")).toBeInTheDocument();
+    expect(screen.getByText("line 11")).toBeInTheDocument();
+    expect(screen.getByText("28 lines cut. The PDF prints exactly what's shown here.")).toBeInTheDocument();
+    const bar = within(container.querySelector<HTMLElement>(".report-open-bar")!);
+    for (const name of ["Trim", "Highlight", "Edit text", "Move to appendix"]) expect(bar.getByRole("button", { name })).toBeInTheDocument();
+    fireEvent.click(bar.getByRole("button", { name: "Move to appendix" }));
+    await waitFor(() => expect(stepsIn(lastDoc(onChange))[0].content?.[0].content?.[1].attrs?.appendix).toBe("moved"));
+  });
+
+  it("Escape closes an open chip and leaves it selected; ↵ on a selected chip opens it", async () => {
+    const { editor } = setupLive(chipPage(), data({ log: [nmap40, shotEntry] }));
+    await screen.findByText("$ nmap -p- 10.0.0.5");
+    fireEvent.click(chipOf("$ nmap -p- 10.0.0.5"));
+    await screen.findByText("showing 12 of 40 lines");
+    const view = editor().view;
+    act(() => void fireEvent.keyDown(view.dom, { key: "Escape", code: "Escape", keyCode: 27 }));
+    await waitFor(() => expect(screen.queryByText("showing 12 of 40 lines")).toBeNull());
+    expect(screen.getByText("12 of 40 lines")).toBeInTheDocument();
+    const sel = view.state.selection;
+    expect(sel instanceof NodeSelection && sel.node.type.name === "evidence" && sel.node.attrs.entryId === "n1").toBe(true);
+    act(() => void fireEvent.keyDown(view.dom, { key: "Enter", code: "Enter", keyCode: 13 }));
+    expect(await screen.findByText("showing 12 of 40 lines")).toBeInTheDocument();
+    // Esc from a control in the open block's bar closes it too.
+    fireEvent.keyDown(screen.getByRole("button", { name: "Trim" }), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByText("showing 12 of 40 lines")).toBeNull());
+  });
+
+  it("Open all evidence opens every chip; the doc JSON is unchanged", async () => {
+    const { editor } = setupLive(chipPage(), data({ log: [nmap40, shotEntry] }));
+    await screen.findByText("$ nmap -p- 10.0.0.5");
+    const before = editor().getDocJSON();
+    fireEvent.click(screen.getByRole("button", { name: "Open all evidence" }));
+    expect(await screen.findByText("showing 12 of 40 lines")).toBeInTheDocument();
+    expect(screen.getByText("Screenshot")).toBeInTheDocument();
+    expect(editor().getDocJSON()).toEqual(before);
+    fireEvent.click(screen.getByRole("button", { name: "Close all evidence" }));
+    await waitFor(() => expect(screen.queryByText("showing 12 of 40 lines")).toBeNull());
+    expect(screen.getByText("12 of 40 lines")).toBeInTheDocument();
+    expect(editor().getDocJSON()).toEqual(before);
+  });
+
+  it("a private entry in a step shows the amber placeholder chip and the step keeps its number", async () => {
+    const hidden = { ...nmap40, private: true } as LogEntry;
+    const { container } = setupLive(chipPage(), data({ log: [hidden, shotEntry] }));
+    const chip = await screen.findByText("This entry is now private");
+    expect(chip.closest(".report-chip")).toHaveAttribute("data-gone");
+    expect(screen.queryByText("$ nmap -p- 10.0.0.5")).toBeNull();
+    await waitFor(() => expect([...container.querySelectorAll(".report-step-num")].map((n) => n.textContent)).toEqual(["1", "2"]));
+  });
+
+  it("a moved block's chip points at its appendix", async () => {
+    setupLive(doc(steps(step(para("Scan"), ev("n1", { appendix: "moved" })))), data({ log: [nmap40] }));
+    expect(await screen.findByText("→ Appendix A.1, Full port scan")).toBeInTheDocument();
+  });
+
+  it("an exploit in a step shows its name and what changed", async () => {
+    const file = { id: "x1", findingId: "f1", name: "46153.py", content: "a\nb\nc", modified: true, originalUrl: null, originalContent: null } as unknown as FindingFile;
+    const plain = { id: "x2", findingId: "f1", name: "50064.rb", content: "x", modified: false, originalUrl: "https://www.exploit-db.com/exploits/50064", originalContent: null } as unknown as FindingFile;
+    setupLive(
+      doc(
+        steps(
+          step(para("Run it"), { type: "exploit", attrs: { fileId: "x1", markedLines: [0, 2], appendix: "inline" } }),
+          step(para("And this"), { type: "exploit", attrs: { fileId: "x2", markedLines: [], appendix: "inline" } }),
+        ),
+      ),
+      data({ findingFiles: [file, plain] }),
+    );
+    expect(await screen.findByText("46153.py")).toBeInTheDocument();
+    expect(screen.getByText("modified, 2 lines changed")).toBeInTheDocument();
+    expect(screen.getByText("unmodified")).toBeInTheDocument();
+    expect(screen.getByText("https://www.exploit-db.com/exploits/50064")).toBeInTheDocument();
+    fireEvent.click(chipOf("46153.py"));
+    expect(await screen.findByText("showing 3 of 3 lines")).toBeInTheDocument();
+  });
+
+  it("a step whose sentence is deleted before its evidence gets the step hint back", async () => {
+    const { onChange, editor } = setup(doc(steps(step(para("Scan"), ev("e1")))));
+    await waitFor(() => expect(editor()).toBeTruthy());
+    const view = editor().view;
+    act(() => {
+      const at = posOf(editor(), "paragraph");
+      view.dispatch(view.state.tr.delete(at, at + view.state.doc.nodeAt(at)!.nodeSize));
+    });
+    await waitFor(() => expect(stepsIn(lastDoc(onChange))[0].content?.[0].content?.[0]).toEqual({ type: "slot", attrs: { hint: STEP_HINT, label: "" } }));
+    expect(screen.getByText(STEP_HINT)).toBeInTheDocument();
   });
 });

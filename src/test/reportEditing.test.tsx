@@ -741,3 +741,44 @@ describe("Formatting bar on a narrow pane", () => {
     expect(more.map((g) => g.items.map((i) => i.id))).toEqual([["block"], ["Sub", "Underline"], ["find"]]);
   });
 });
+
+describe("Block handle menu", () => {
+  /** What hovering a block does: the handle's root says which block it is beside. */
+  function hover(container: HTMLElement, editor: Editor, type: string) {
+    let found: { node: unknown; pos: number } | null = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (found) return false;
+      if (node.type.name === type) found = { node, pos };
+      return true;
+    });
+    const root = container.querySelector("prosekit-block-handle-root")!;
+    const event = Object.assign(new Event("stateChange"), { detail: found });
+    act(() => void root.dispatchEvent(event));
+  }
+  // The handle shows on a real pointer hover, which jsdom has no layout for: its popup stays display:none here.
+  const openMenu = () => fireEvent.click(screen.getByRole("button", { name: "Block actions", hidden: true }));
+  const step = (...content: ReportNode[]): ReportNode => ({ type: "step", attrs: { entryId: null }, content });
+
+  it("the block handle menu moves a block to the appendix, and back inline", async () => {
+    const { container, onChange, editor } = await ready(doc({ type: "steps", content: [step(para("Scan"), ev("e1"))] }));
+    hover(container, editor(), "evidence");
+    openMenu();
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Move to appendix" }));
+    await waitFor(() => expect(json(editor()).content?.[0].content?.[0].content?.[1].attrs?.appendix).toBe("moved"));
+    expect(onChange).toHaveBeenCalled();
+    hover(container, editor(), "evidence");
+    openMenu();
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Back inline" }));
+    await waitFor(() => expect(json(editor()).content?.[0].content?.[0].content?.[1].attrs?.appendix).toBe("inline"));
+  });
+
+  it("deletes the hovered block; a paragraph offers no Move to appendix", async () => {
+    const { container, editor } = await ready(doc(para("Intro"), ev("e1")));
+    hover(container, editor(), "paragraph");
+    openMenu();
+    expect(await screen.findByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Move to appendix" })).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    await waitFor(() => expect(json(editor()).content?.map((n) => n.type)).toEqual(["evidence"]));
+  });
+});

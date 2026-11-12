@@ -1,16 +1,17 @@
-import { ArrowsOutLineHorizontal, Highlighter, PencilSimpleLine, Scissors, Trash } from "@phosphor-icons/react";
+import { ArrowsOutLineHorizontal, Highlighter, PencilSimpleLine, Scissors, SplitVertical, Trash } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
-import { TextSelection } from "prosekit/pm/state";
+import { NodeSelection, TextSelection } from "prosekit/pm/state";
 import type { ReactNodeViewProps } from "prosekit/react";
 import { ResizableHandle, ResizableRoot } from "prosekit/react/resizable";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { applyKeep, captionOf, lineCount, type EvidenceAttrs, type ReportNode } from "../../../../engines/report";
 import { api } from "../../../../lib/api";
 import type { CommandBlock, LogEntry } from "../../../../types/log";
 import { Button, HintLine, IconButton, Toolbar, type Hint } from "../../../../ui";
 import { AttachmentImage } from "../../../log/AttachmentImage";
+import { chipKey, useChip } from "../ChipState";
 import { useAppendixRef, usePageLayout, useReportData } from "../ReportDataContext";
-import { AppendixRef, Block, BlockTools, Gone, MoveButton } from "./parts";
+import { AppendixRef, appendixPointer, BarButton, BarIcon, Block, BlockTools, Chip, Gone, GoneChip, linesWord, MoveButton, moveLabel, OpenChip } from "./parts";
 
 const NO_MACHINES: string[] = [];
 
@@ -565,22 +566,86 @@ function TrimBar({ trim, total, onLeave }: { trim: ReturnType<typeof useTrim>; t
   );
 }
 
+/** A closed chip's two parts: what the block is (mono for commands), and how much of it shows. */
+function chipFace(entry: LogEntry, attrs: EvidenceAttrs, figure: number | null, kept: number, total: number): { label: ReactNode; meta?: string } {
+  const c = entry.content;
+  switch (c.kind) {
+    case "command": {
+      const first = attrs.block === null ? c.blocks[0] : c.blocks[attrs.block];
+      const more = attrs.block === null && c.blocks.length > 1 ? ` (+${c.blocks.length - 1})` : "";
+      return {
+        label: <span className="report-chip-mono">{`$ ${first?.command ?? ""}${more}`}</span>,
+        meta: total === 0 ? "no output" : `${kept} of ${linesWord(total)}`,
+      };
+    }
+    case "screenshot": {
+      const caption = captionOf(attrs as unknown as Record<string, unknown>, entry);
+      return {
+        label: (
+          <>
+            <span className="report-chip-thumb">
+              <AttachmentImage id={c.attachmentId} alt="" />
+            </span>
+            {figure !== null && <span className="report-chip-meta">{`Figure ${figure}`}</span>}
+            <span className="report-chip-text">{caption}</span>
+          </>
+        ),
+      };
+    }
+    case "flag":
+      return {
+        label: (
+          <>
+            <span className="report-chip-mono">{c.flagKind === "local" ? "Local.txt" : "Proof.txt"}</span>
+            <span className="report-chip-mono">{c.value}</span>
+          </>
+        ),
+      };
+    case "http":
+      return { label: <span className="report-chip-mono">{requestLine(c.request)}</span> };
+    case "note":
+      return { label: <span className="report-chip-text">{entry.title}</span> };
+  }
+}
+
+/** What an open chip's bar says the block is, and how much of it shows. */
+function openLabel(entry: LogEntry, figure: number | null, kept: number, total: number): string[] {
+  switch (entry.content.kind) {
+    case "command":
+      return ["Command output", `showing ${kept} of ${linesWord(total)}`];
+    case "screenshot":
+      return figure === null ? ["Screenshot"] : ["Screenshot", `Figure ${figure}`];
+    case "flag":
+      return [entry.content.flagKind === "local" ? "Local.txt flag" : "Proof.txt flag"];
+    case "http":
+      return ["HTTP request"];
+    case "note":
+      return ["Note"];
+  }
+}
+
 /**
  * A log entry on the page, rendered from the live row; a deleted or private entry leaves only a placeholder. Selected,
  * it shows its tools: Trim and Emphasise lines (command output), Move to appendix, Remove.
  */
 export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNodeViewProps) {
   const { data, onRemoveEvidence, canMove = false } = useReportData();
-  const { figureOf, stepTitleOf, touched } = usePageLayout();
+  const { figureOf, stepTitleOf, touched, inStep } = usePageLayout();
   const ref = useAppendixRef(node);
   const machines = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet }).data?.machines ?? NO_MACHINES;
-  const tools = selected && touched;
+  // In a step the block is a chip (§10.2): closed, one line; open, the full block under its bar.
+  const chipped = inStep(node);
+  const chip = useChip(chipKey(node));
+  const open = chipped && chip.open;
+  const tools = selected && touched && !chipped;
+  // Picking lines works while the block's tools show (selected) or its chip is open.
+  const active = tools || open;
   const [picking, setPicking] = useState<PickMode>(null);
-  // Picking ends when the block's tools hide (deselected), so it doesn't come back on the next selection.
-  const [hadTools, setHadTools] = useState(tools);
-  if (hadTools !== tools) {
-    setHadTools(tools);
-    if (!tools) setPicking(null);
+  // Picking ends when the tools hide (deselected) or the chip closes, so it doesn't come back next time.
+  const [hadTools, setHadTools] = useState(active);
+  if (hadTools !== active) {
+    setHadTools(active);
+    if (!active) setPicking(null);
   }
   const lastLine = useRef<number | null>(null);
   const attrs = node.attrs as EvidenceAttrs;
@@ -588,7 +653,7 @@ export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNo
   const shown = entry && !entry.private ? entry : undefined;
   const isCommand = shown?.content.kind === "command";
   // Picking lines only while the block is selected and its output is on the page.
-  const mode: PickMode = tools && isCommand && attrs.appendix !== "moved" ? picking : null;
+  const mode: PickMode = active && isCommand && attrs.appendix !== "moved" ? picking : null;
 
   const pickMode = (next: PickMode) => {
     lastLine.current = null;
@@ -655,6 +720,84 @@ export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNo
         </>
       );
   }
+  if (chipped) {
+    /** Selects the chip and puts the page's keys on it (↵ opens, Esc closes). */
+    const selectSelf = () => {
+      const pos = getPos();
+      if (pos === undefined) return;
+      view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
+      view.focus();
+    };
+    const close = () => {
+      chip.setOpen(false);
+      selectSelf();
+    };
+    const moved = attrs.appendix !== "inline";
+    let content;
+    if (!entry) content = <GoneChip text="This entry was deleted" />;
+    else if (entry.private) content = <GoneChip text="This entry is now private" />;
+    else if (entry.content.kind === "command" && attrs.block !== null && !entry.content.blocks[attrs.block])
+      content = <GoneChip text="This command was removed from its entry" />;
+    else if (!open) {
+      const { label, meta } = chipFace(entry, attrs, figureOf(node), trim.keptCount, total);
+      content = (
+        <Chip
+          label={label}
+          meta={moved ? appendixPointer(ref) : meta}
+          moved={moved}
+          onOpen={() => {
+            chip.setOpen(true);
+            selectSelf();
+          }}
+        />
+      );
+    } else {
+      const canEdit = (isCommand || entry.content.kind === "http") && attrs.appendix === "inline";
+      content = (
+        <OpenChip
+          label={openLabel(entry, figureOf(node), trim.keptCount, total)}
+          onClose={close}
+          cut={isCommand && attrs.appendix !== "moved" ? total - trim.keptCount : 0}
+          actions={
+            <>
+              {isCommand && (
+                <>
+                  <BarButton pressed={mode === "trim"} disabled={attrs.appendix === "moved"} onClick={() => pickMode("trim")}>
+                    Trim
+                  </BarButton>
+                  <BarButton pressed={mode === "emphasis"} disabled={attrs.appendix === "moved"} onClick={() => pickMode("emphasis")}>
+                    Highlight
+                  </BarButton>
+                </>
+              )}
+              {canEdit && <BarButton onClick={detach}>Edit text</BarButton>}
+              {canMove && (
+                <BarButton onClick={() => setAttrs({ appendix: attrs.appendix === "inline" ? "moved" : "inline" })}>{moveLabel(attrs.appendix)}</BarButton>
+              )}
+              {/* A moved command can keep its trimmed lines here too, its full output in the appendix. */}
+              {canMove && isCommand && moved && (
+                <BarIcon
+                  icon={SplitVertical}
+                  label="Trimmed here, full output in the appendix"
+                  pressed={attrs.appendix === "split"}
+                  onClick={() => setAttrs({ appendix: attrs.appendix === "split" ? "moved" : "split" })}
+                />
+              )}
+            </>
+          }
+        >
+          {mode === "trim" && <TrimBar trim={trim} total={total} onLeave={leaveTrim} />}
+          {body}
+        </OpenChip>
+      );
+    }
+    return (
+      <Block selected={selected} kind="evidence">
+        {content}
+      </Block>
+    );
+  }
+
   return (
     <Block selected={selected} kind="evidence">
       {tools && (
