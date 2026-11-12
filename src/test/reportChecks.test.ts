@@ -26,7 +26,7 @@ function data(o: Partial<ReportData> = {}): ReportData {
   return { engagement: { id: "eng" }, hosts: [host()], services: [], log: [], checklist: [], findings: [], findingFiles: [], attempts: [], ruledOut: [], grants: [], usernames: [], hops: [], cleanup: [], notes: [], credentials: [], ...o } as unknown as ReportData;
 }
 function run(d: ReportData, page: ReportNode, extra: Record<string, unknown> = {}, flags: ("local" | "proof")[] = ["proof"]): Check[] {
-  return targetChecks({ data: d, target, doc: page, meta: { expectedFlags: { h1: flags } }, appendixRefs: noRefs, ...extra });
+  return targetChecks({ data: d, target, doc: page, meta: { expectedFlags: { h1: flags } }, appendixRefs: noRefs, sectionId: "t1", ...extra });
 }
 const find = (cs: Check[], prefix: string) => cs.find((c) => c.id.startsWith(prefix));
 const good = () => data({ log: [flag()] });
@@ -42,6 +42,26 @@ describe("proofFacts", () => {
     expect(f).toMatchObject({ showsIp: false, usualPath: false, hasScreenshot: false });
     expect(proofFacts(flag({}, { proof: "ip a\n inet 10.0.0.5\nid\ncat /home/bob/local.txt" }), host()))
       .toMatchObject({ showsIp: true, showsIdentity: true, usualPath: true });
+  });
+});
+
+describe("proofFacts details", () => {
+  const f = (proof: string, h = host()) => proofFacts(flag({}, { proof }), h);
+  it("matches the IP on a boundary", () => {
+    expect(f("ipconfig\n10.0.0.50").showsIp).toBe(false);
+    expect(f("ipconfig\n110.0.0.5").showsIp).toBe(false);
+    expect(f("ipconfig\nIPv4 10.0.0.5.").showsIp).toBe(true);
+  });
+  it("accepts ip address forms", () => {
+    for (const c of ["ip address", "ip addr show", "ip -br a", "ip -4 a"]) expect(f(`${c}\n10.0.0.5`).showsIp, c).toBe(true);
+    expect(f("ip route\n10.0.0.5").showsIp).toBe(false);
+  });
+  it("accepts a usual directory from the prompt or a cd", () => {
+    expect(f("C:\\Users\\Administrator\\Desktop> type proof.txt").usualPath).toBe(true);
+    expect(f("root@x:/root# cat proof.txt").usualPath).toBe(true);
+    expect(f("cd /root\ncat proof.txt").usualPath).toBe(true);
+    expect(f("cd /tmp\ncat proof.txt").usualPath).toBe(false);
+    expect(f("user@x:/tmp$ cat proof.txt").usualPath).toBe(false);
   });
 });
 
@@ -91,7 +111,13 @@ describe("targetChecks", () => {
     const c = run(d, goodDoc());
     expect(find(c, "proof-identity")).toMatchObject({ id: "proof-identity:DC01", level: "soft" });
     expect(find(c, "proof-path")).toMatchObject({ id: "proof-path:DC01", level: "soft" });
+    expect(find(c, "proof-hostname")).toMatchObject({ id: "proof-hostname:DC01", level: "soft", text: "The proof for DC01 doesn't show hostname." });
+    for (const id of ["proof-identity", "proof-path", "proof-hostname"]) expect(find(c, id)!.fix).toContain("ipconfig");
     expect(isReady(c)).toBe(true);
+    const lin = run(data({ hosts: [host({ os: "linux" })], log: [flag({}, { proof: "id\nip addr\n10.0.0.5\ncat /root/proof.txt" })] }), goodDoc());
+    expect(find(lin, "proof-hostname")!.fix).toContain("ip addr");
+    const noHost = run(data({ log: [flag({}, { proof: "whoami\nipconfig\n10.0.0.5\ntype C:\\Users\\Administrator\\Desktop\\proof.txt" })] }), goodDoc());
+    expect(noHost.map((c) => c.id)).toEqual(["proof-hostname:DC01"]);
   });
   it("output fails on blank output unless it returned nothing", () => {
     const blank = (extra = {}) => entry({ id: "c1", content: { kind: "command", blocks: [{ command: "ls", output: "  " }] }, ...extra });
@@ -99,6 +125,10 @@ describe("targetChecks", () => {
     const c = find(run(data({ log: [blank(), flag()] }), page), "output")!;
     expect(c).toMatchObject({ id: "output:c1", level: "fail", text: "A command on the page has no output." });
     expect(find(run(data({ log: [blank({ returnedNothing: true }), flag()] }), page), "output")).toBeUndefined();
+    const two = entry({ id: "c2", content: { kind: "command", blocks: [{ command: "a", output: "x" }, { command: "b", output: "" }] } });
+    const whole = doc(ev("c2", { block: null }), slot("x"), ...goodDoc().content!);
+    expect(find(run(data({ log: [two, flag()] }), whole), "output")).toMatchObject({ id: "output:c2", level: "fail" });
+    expect(find(run(data({ log: [two, flag()] }), doc(ev("c2", { block: 0 }), slot("x"), ...goodDoc().content!)), "output")).toBeUndefined();
   });
   it("explain is soft, screenshots first", () => {
     const shot = entry({ id: "s1", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "ok", fileName: "x" } });
@@ -113,6 +143,11 @@ describe("targetChecks", () => {
   it("access-shot is soft when no screenshot is within 5 minutes", () => {
     const grant = { id: "g", hostId: "h1", level: "admin", at: 10_000_000, via: "x", logEntryId: null };
     const shot = entry({ id: "s1", kind: "screenshot", at: 10_000_000 + 60_000, content: { kind: "screenshot", attachmentId: "a", caption: "ok", fileName: "x" } });
+    const flagShot = flag({ id: "fs", at: 10_000_000 + 1000 });
+    const privShot = { ...shot, private: true } as LogEntry;
+    const flagPage = doc(ev("fs", { block: null }), slot("x"));
+    expect(find(run(data({ log: [flagShot], grants: [grant] as never }), flagPage), "access-shot")).toBeUndefined();
+    expect(find(run(data({ log: [privShot, flag()], grants: [grant] as never }), doc(ev("s1", { block: null }), slot("x"), ...goodDoc().content!)), "access-shot")).toBeDefined();
     const far = { ...shot, at: 10_000_000 + 600_000 } as LogEntry;
     const page = doc(ev("s1", { block: null }), slot("x"), ...goodDoc().content!);
     expect(find(run(data({ log: [shot, flag()], grants: [grant] as never }), page), "access-shot")).toBeUndefined();
@@ -167,12 +202,16 @@ describe("targetChecks", () => {
     expect(c.filter((x) => x.id.startsWith("gone")).map((x) => [x.id, x.level])).toEqual([["gone:p1", "fail"], ["gone:missing", "fail"]]);
     expect(JSON.stringify(c)).not.toMatch(/SECRET/);
   });
+  it("gone covers missing findings, files and blank entry ids", () => {
+    const page = doc({ type: "vuln", attrs: { findingId: "nf" } }, { type: "exploit", attrs: { fileId: "nx", markedLines: [], appendix: "inline" } }, { type: "evidence", attrs: {} }, slot("x"), ...goodDoc().content!);
+    const ids = run(good(), page).filter((c) => c.id.startsWith("gone")).map((c) => [c.id, c.level]);
+    expect(ids).toEqual([["gone:node-2", "fail"], ["gone:nf", "fail"], ["gone:nx", "fail"]]);
+  });
   it("appendix-ref fails when the moved node has no entry", () => {
     const page = doc({ ...ev("f1", { block: null, appendix: "moved" }) }, slot("x"));
-    expect(find(run(good(), page), "appendix-ref")).toMatchObject({ id: "appendix-ref:0", level: "fail" });
+    expect(find(run(good(), page), "appendix-ref")).toMatchObject({ id: "appendix-ref:t1:0", level: "fail" });
     const refs: AppendixIndex = { entries: [{ key: "t1:0", letter: "E", n: 1, title: "", sectionId: "t1" }], refFor: () => "E.1" };
     expect(find(run(good(), page, { appendixRefs: refs }), "appendix-ref")).toBeUndefined();
-    expect(find(run(good(), page, { appendixRefs: refs, sectionId: "t1" }), "appendix-ref")).toBeUndefined();
     expect(find(run(good(), page, { appendixRefs: refs, sectionId: "t2" }), "appendix-ref")?.id).toBe("appendix-ref:t2:0");
   });
   it("move suggestions are soft with the bare key", () => {
@@ -185,12 +224,12 @@ describe("targetChecks", () => {
 describe("reportChecks", () => {
   const report = (o: Partial<Report> = {}) => ({ candidateName: "A", email: "a@b.c", osid: "OS-123", ...o }) as Report;
   it("is clean for complete details", () => {
-    expect(reportChecks({ report: report(), targets: [target] })).toEqual([]);
+    expect(reportChecks({ report: report(), targets: [target], data: data() })).toEqual([]);
   });
   it("details, osid and no-targets", () => {
-    expect(reportChecks({ report: report({ email: " " }), targets: [target] }).map((c) => [c.id, c.level])).toEqual([["details", "fail"]]);
-    expect(reportChecks({ report: report({ osid: "123" }), targets: [target] }).map((c) => [c.id, c.level])).toEqual([["osid", "fail"]]);
-    expect(reportChecks({ report: report(), targets: [] }).map((c) => c.id)).toEqual(["no-targets"]);
+    expect(reportChecks({ report: report({ email: " " }), targets: [target], data: data() }).map((c) => [c.id, c.level])).toEqual([["details", "fail"]]);
+    expect(reportChecks({ report: report({ osid: "123" }), targets: [target], data: data() }).map((c) => [c.id, c.level])).toEqual([["osid", "fail"]]);
+    expect(reportChecks({ report: report(), targets: [], data: data() }).map((c) => c.id)).toEqual(["no-targets"]);
   });
   it("msf-many when Metasploit modules are attributed to more than one host", () => {
     const msf = (id: string, hostId: string) => entry({ id, hostIds: [hostId], content: { kind: "command", blocks: [{ command: "msfconsole -q\nuse exploit/windows/smb/ms17_010_eternalblue", output: "x" }] } });

@@ -33,7 +33,7 @@ export const generated = (kind: GeneratedKind, hostId: string | null) =>
   node("generated", { kind, hostId, appendix: "inline" } satisfies GeneratedAttrs);
 const phaseNode = (phase: Phase, hostId: string) => node("phase", { phase, hostId } satisfies PhaseAttrs);
 
-const byTime = (a: LogEntry, b: LogEntry) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id);
+export const byTime = (a: LogEntry, b: LogEntry) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id);
 
 function lineCount(output: string): number {
   return output === "" ? 0 : output.replace(/\n$/, "").split("\n").length;
