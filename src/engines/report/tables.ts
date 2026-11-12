@@ -37,6 +37,15 @@ export interface ResultLine {
 
 const isLinux = (data: ReportData, hostId: string) => data.hosts.find((h) => h.id === hostId)?.os === "linux";
 
+/** The word for an elevated access level on a host: Root on Linux, else SYSTEM or Administrator; null for a plain user. */
+function levelWord(data: ReportData, hostId: string, level: AccessGrant["level"]): "Root" | "SYSTEM" | "Administrator" | null {
+  if (level === "user") return null;
+  if (isLinux(data, hostId)) return "Root";
+  return level === "system" ? "SYSTEM" : "Administrator";
+}
+/** The result line's wording of that level. */
+const lineWord = (w: "Root" | "SYSTEM" | "Administrator") => (w === "Root" ? "root" : w === "SYSTEM" ? w : "local administrator");
+
 /** What a machine's result line says: how access was gained and raised (grants in time order), then its flags. */
 export function resultLine(data: ReportData, target: ReportTarget, hostId: string, meta: ReportMeta): ResultLine {
   const grants = data.grants.filter((g) => g.hostId === hostId).sort(byGrantTime);
@@ -47,11 +56,13 @@ export function resultLine(data: ReportData, target: ReportTarget, hostId: strin
       hostEntry(data, target, hostId) === "hop"
         ? data.hops.filter((h) => h.toHostId === hostId && h.fromHostId != null).sort((a, b) => a.at - b.at)[0]
         : undefined;
-    parts.push(`${hop ? hop.via : "shell"} as \`${userName(data, first.usernameId)}\``);
+    const firstWord = levelWord(data, hostId, first.level);
+    // A machine entered already elevated names its level: "shell as `x` (root)", "WinRM as `x` (local administrator)".
+    parts.push(`${hop ? hop.via : "shell"} as \`${userName(data, first.usernameId)}\`${firstWord ? ` (${lineWord(firstWord)})` : ""}`);
     for (const g of grants.slice(1)) {
-      if (g.level === "user") continue;
-      const label =
-        isLinux(data, hostId) ? "root" : g.level === "system" ? "SYSTEM" : `local administrator as \`${userName(data, g.usernameId)}\``;
+      const w = levelWord(data, hostId, g.level);
+      if (!w) continue;
+      const label = w === "Administrator" ? `${lineWord(w)} as \`${userName(data, g.usernameId)}\`` : lineWord(w);
       if (parts[parts.length - 1] !== label) parts.push(label);
     }
   }
@@ -88,8 +99,7 @@ function resultOf(data: ReportData, target: ReportTarget, hostId: string, phase:
     case "privesc": {
       const top = data.grants.filter((g) => g.hostId === hostId).reduce((m, g) => Math.max(m, LEVEL_RANK[g.level]), -1);
       if (top < LEVEL_RANK.admin) return "Privilege escalation";
-      if (isLinux(data, hostId)) return "Root";
-      return top === LEVEL_RANK.system ? "SYSTEM" : "Administrator";
+      return levelWord(data, hostId, top === LEVEL_RANK.system ? "system" : "admin") ?? "None";
     }
     default:
       return "None";

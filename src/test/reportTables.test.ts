@@ -66,8 +66,8 @@ function lab(): ReportData {
     entry("local", "h1", 21, flag("local", "860f")),
     entry("ovl", "h1", 30, cmd),
     entry("root", "h1", 31, cmd),
+    entry("secret", "h1", 29, flag("proof", "private-one"), { private: true }),
     entry("proof", "h1", 32, flag("proof", "ee23")),
-    entry("secret", "h1", 33, flag("proof", "private-one"), { private: true }),
   ];
   d.grants = [grant("h1", "user", "u1", "shell", 20), grant("h1", "admin", "u1", "root", 31)];
   d.findings = [
@@ -106,6 +106,29 @@ describe("resultLine", () => {
       access: "WinRM as `jo.parker`, then local administrator as `jo.parker`, then SYSTEM",
       flags: [],
     });
+  });
+
+  it("never prints a private flag, even when it is the only proof entry", () => {
+    const d = lab();
+    d.log = d.log.filter((e) => e.id !== "proof");
+    expect(resultLine(d, standalone("h1"), "h1", {}).flags).toEqual([{ kind: "local", value: "860f" }]);
+  });
+
+  it("names the level of a first grant that is already elevated", () => {
+    const linux = lab();
+    linux.grants = [grant("h1", "admin", "u1", "root", 31)];
+    expect(resultLine(linux, standalone("h1"), "h1", {}).access).toBe("shell as `ronan` (root)");
+
+    const win = lab();
+    win.grants = [grant("h2", "system", "u2", "x", 5)];
+    expect(resultLine(win, standalone("h2"), "h2", {}).access).toBe("shell as `jo.parker` (SYSTEM)");
+
+    const ad = lab();
+    ad.hosts = [host("ms01", "MS01", { os: "windows", adSetEffective: true }), host("dc01", "DC01", { os: "windows", adSetEffective: true })];
+    ad.hops = [hop("ms01", "dc01", "pth", 90, "pass-the-hash")];
+    ad.grants = [grant("dc01", "admin", "u1", "pth", 90)];
+    const target: ReportTarget = { key: "ad-set", kind: "ad-set", hostIds: ["ms01", "dc01"] };
+    expect(resultLine(ad, target, "dc01", {}).access).toBe("pass-the-hash as `ronan` (local administrator)");
   });
 
   it("is empty with no grants and omits a missing expected flag", () => {
