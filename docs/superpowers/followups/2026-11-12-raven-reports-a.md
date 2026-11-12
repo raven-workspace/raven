@@ -66,3 +66,12 @@ Branch feat/reports. Copied from the SDD ledger on 2026-11-12 before the workspa
 - Task 12b: deferred to Plan B: export of list nodes containing slots
 - Plan B note: export must exclude .report-pick-hint, .report-cell-empty prompts, empty slots, amber placeholders, page titles render from kind.
 - Plan B carry: export drops "Not written yet." markers, empty labelled slots' labels, Testing considerations only if written.
+
+## Owner feedback after handover (2026-11-12) — next round, start here
+
+- **Task 15 appendix ruling was wrong — reverse it.** Owner had explicitly said "we DO want appendices for large items". Restore appendices as a first-class part of the report: "Move to appendix" visible on every block (today it's buried in block tools), appendices listed as tabs beside targets, and **+ Page** on the tab row to add an appendix or a free page the owner writes. Open question to owner: also restore the auto appendices (proof table, tools list)?
+- **Target pages are unusable ("THE WORST").** The draft pastes nearly the whole host log at full height with a "What you did and why" placeholder under each block (ms01 ≈ 8,700 px). Proposed fix, mocked in `.impeccable/mocks/decision/report-target-rethink.html`:
+  - Shared: short draft (only proving entries: exploit run, shell, privesc, flags); the rest of the host's log in the right column grouped by phase with "+ add" into the current step; appendices back; everything editable.
+  - **A · Steps (recommended):** one continuous page; "Steps to reproduce" is a numbered list, each step = owner's sentence + evidence as compact chips that open in place (trim/highlight/edit); long files become a chip pointing to the appendix.
+  - **B · One step at a time:** outline of steps left with ✓/write, current step full-size centre, ⌥↑/⌥↓ to move, ⌘P whole-page preview.
+  - Owner has not yet chosen A or B.
