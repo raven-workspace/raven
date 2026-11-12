@@ -1,6 +1,5 @@
 import type { SectionKind } from "../../types/report";
-import { serviceCoverage, testedNotExploited } from "./coverage";
-import { toolsUsed } from "./tools";
+import { testedNotExploited } from "./coverage";
 import { lineCount } from "./trim";
 import type { GeneratedAttrs, ReportData, ReportNode } from "./types";
 
@@ -17,13 +16,7 @@ export interface AppendixIndex {
   refFor(key: string): string | null;
 }
 
-export const FIXED_LETTERS: Partial<Record<SectionKind, string>> = {
-  "appendix-proof": "A",
-  "appendix-tools": "B",
-  "appendix-msf": "C",
-  "appendix-cleanup": "D",
-};
-const FIRST_TARGET_LETTER = "E".charCodeAt(0);
+const FIRST_LETTER = "A".charCodeAt(0);
 const MOVABLE = new Set(["evidence", "exploit", "generated"]);
 const MAX_INLINE_LINES = 60;
 const MAX_INLINE_ROWS = 15;
@@ -42,22 +35,18 @@ function movedNodes(doc: ReportNode): { path: string; node: ReportNode }[] {
   return found;
 }
 
-/** Appendix references: A-D are fixed; each target section with moved content gets the next letter from E, its moved nodes numbered in document order. */
+/** Appendix references (§5.6): appendices hold only moved-out content. Each target section with moved content gets the next letter from A, in report order, its moved nodes numbered in document order. */
 export function numberAppendices(
   sections: { id: string; kind: SectionKind; targetKey: string | null; doc: ReportNode | null }[],
   titleOf: (node: ReportNode) => string,
 ): AppendixIndex {
   const entries: AppendixEntry[] = [];
-  let next = FIRST_TARGET_LETTER;
+  let next = FIRST_LETTER;
   for (const s of sections) {
-    const fixed = FIXED_LETTERS[s.kind];
-    if (!fixed && s.kind !== "target" && s.kind !== "ad") continue;
+    if (s.kind !== "target" && s.kind !== "ad") continue;
     const moved = s.doc ? movedNodes(s.doc) : [];
-    let letter = fixed;
-    if (!letter) {
-      if (moved.length === 0) continue;
-      letter = String.fromCharCode(next++);
-    }
+    if (moved.length === 0) continue;
+    const letter = String.fromCharCode(next++);
     moved.forEach(({ path, node }, i) =>
       entries.push({ key: `${s.id}:${path}`, letter, n: i + 1, title: titleOf(node), sectionId: s.id }),
     );
@@ -87,12 +76,8 @@ function keptLines(node: ReportNode, data: ReportData): number {
 
 function generatedRows(attrs: GeneratedAttrs, data: ReportData): number {
   switch (attrs.kind) {
-    case "tools":
-      return toolsUsed(data.log, attrs.hostId ? [attrs.hostId] : data.hosts.map((h) => h.id), { attempts: data.attempts }).length;
     case "tested":
       return testedNotExploited(data, attrs.hostId).length;
-    case "services":
-      return attrs.hostId ? serviceCoverage(data, attrs.hostId, {}).length : 0;
     default:
       return 0;
   }
@@ -114,7 +99,7 @@ export function suggestMoves(doc: ReportNode, data: ReportData): { key: string; 
         if (n > MAX_INLINE_LINES) out.push({ key: path, reason: `${n} lines of exploit code` });
       } else if (node.type === "generated") {
         const g = attrs as unknown as GeneratedAttrs;
-        if (g.kind === "tools" || g.kind === "tested" || g.kind === "services") {
+        if (g.kind === "tested") {
           const n = generatedRows(g, data);
           if (n > MAX_INLINE_ROWS) out.push({ key: path, reason: `${n} rows` });
         }

@@ -1,17 +1,24 @@
 import type { SectionKind } from "../../types/report";
 import type { Settings } from "../../types/settings";
-import { FIXED_LETTERS } from "./appendix";
 import { generated, slot } from "./draft";
 import type { ReportData, ReportNode } from "./types";
 
 const CONSIDERATIONS_HINT = "Anything that affected testing: positive, neutral or negative (VPN drops, machine reverts, time)";
 
-const STAGES = [
-  "Information gathering",
-  "Service enumeration",
-  "Penetration",
-  "Post-exploitation and maintaining access",
-  "House cleaning",
+/** Section 1's parts, in the sample's order, with the hint each empty part shows. */
+const INTRO_PARTS: [string, string][] = [
+  ["Introduction", "What this report contains and how it will be graded"],
+  ["Objective", "The objective of the assessment"],
+  ["Requirements", "What the report is required to include"],
+];
+
+/** Methodologies' stages in the sample's order, each with the generated fact it carries, if any. */
+const STAGES: [string, ReportNode | null][] = [
+  ["Information Gathering", generated("scope", null)],
+  ["Service Enumeration", null],
+  ["Penetration", generated("msf", null)],
+  ["Maintaining Access", null],
+  ["House Cleaning", generated("cleanup", null)],
 ];
 
 const heading = (text: string): ReportNode => ({
@@ -22,48 +29,95 @@ const heading = (text: string): ReportNode => ({
 const paragraph = (text: string): ReportNode => ({ type: "paragraph", content: [{ type: "text", text }] });
 const doc = (content: ReportNode[]): ReportNode => ({ type: "doc", content });
 
-/** The methodology text split into paragraphs on blank lines; none when blank. */
-const methodologyParagraphs = (text: string): ReportNode[] =>
-  text
-    .split(/\n\s*\n/)
-    .map((p) => p.trim())
-    .filter(Boolean)
-    .map(paragraph);
+const BULLET = /^\s*[-*•·]\s+/;
 
-/** The starting document of a front-matter or appendix section (§5.4); `target`, `ad` and `details` have none here. */
+/**
+ * Text as page blocks: paragraphs split on blank lines, with a run of hard-wrapped lines (a paste from a PDF) joined
+ * into one paragraph, and lines starting with a bullet (-, *, •, ·) as a bulleted list. None when blank.
+ */
+function textBlocks(text: string): ReportNode[] {
+  const out: ReportNode[] = [];
+  let para: string[] = [];
+  let items: string[] = [];
+  const flushPara = () => {
+    if (para.length > 0) out.push(paragraph(para.join(" ")));
+    para = [];
+  };
+  const flushList = () => {
+    if (items.length > 0) {
+      for (const t of items) out.push({ type: "list", attrs: { kind: "bullet" }, content: [paragraph(t)] });
+    }
+    items = [];
+  };
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line === "") {
+      flushPara();
+      flushList();
+    } else if (BULLET.test(raw)) {
+      flushPara();
+      items.push(line.replace(BULLET, ""));
+    } else if (items.length > 0 && para.length === 0 && /^\s/.test(raw)) {
+      // A wrapped bullet continues on an indented line.
+      items[items.length - 1] += ` ${line}`;
+    } else {
+      flushList();
+      para.push(line);
+    }
+  }
+  flushPara();
+  flushList();
+  return out;
+}
+
+/** A line naming one of section 1's parts, numbered or not ("1.2 Objective"). */
+const PART_LINE = /^\s*(?:\d+(?:\.\d+)*\.?\s+)?(introduction|objective|requirements)\s*:?\s*$/i;
+
+/**
+ * The Settings text split into section 1's parts: a line reading Introduction, Objective or Requirements starts that
+ * part; text before any such line is the introduction.
+ */
+export function introductionParts(text: string): Record<string, string> {
+  const parts: Record<string, string[]> = { Introduction: [], Objective: [], Requirements: [] };
+  let current = "Introduction";
+  for (const line of text.split(/\r?\n/)) {
+    const m = PART_LINE.exec(line);
+    if (m) current = m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase();
+    else parts[current].push(line);
+  }
+  return Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, v.join("\n").trim()]));
+}
+
+/** The starting document of a report-level section (§5.5); `target`, `ad` and `details` have none here. */
 export function buildSectionDraft(kind: SectionKind, _data: ReportData, settings: Settings): ReportNode {
   switch (kind) {
+    case "introduction": {
+      const parts = introductionParts(settings.reportIntroduction ?? "");
+      return doc(
+        INTRO_PARTS.flatMap(([name, hint]) => {
+          const blocks = textBlocks(parts[name]);
+          return [heading(name), ...(blocks.length > 0 ? blocks : [slot(hint)])];
+        }),
+      );
+    }
     case "summary":
       return doc([
-        generated("engagement-details", null),
         slot("What the engagement was"),
         slot("What the targets did well"),
         slot("Vulnerabilities and trends"),
         slot("Wrap-up"),
-        generated("exploited-systems", null),
         heading("Recommendations"),
         slot("Recommendations"),
       ]);
     case "considerations":
       return doc([slot(CONSIDERATIONS_HINT)]);
-    case "methodology": {
-      const text = methodologyParagraphs(settings.reportMethodology ?? "");
+    case "methodology":
       return doc([
-        ...text,
-        ...STAGES.flatMap((stage) => [heading(stage), slot(`How ${stage.toLowerCase()} was done`)]),
-        generated("severity-legend", null),
+        ...textBlocks(settings.reportMethodology ?? ""),
+        ...STAGES.flatMap(([stage, fact]) => [heading(stage), slot(`How ${stage.toLowerCase()} was done`), ...(fact ? [fact] : [])]),
       ]);
-    }
     case "engagement-tested":
       return doc([generated("tested", null)]);
-    case "appendix-proof":
-      return doc([generated("proof-table", null), slot("Notes on the proof files")]);
-    case "appendix-tools":
-      return doc([generated("tools", null), slot("Notes on the tools used")]);
-    case "appendix-msf":
-      return doc([generated("msf", null), slot("Notes on the Metasploit use")]);
-    case "appendix-cleanup":
-      return doc([generated("cleanup", null), slot("Notes on the clean-up")]);
     case "further":
       return doc([slot("Further information")]);
     case "references":
@@ -73,30 +127,14 @@ export function buildSectionDraft(kind: SectionKind, _data: ReportData, settings
   }
 }
 
-
 /** The names of the report-level pages, as the outline lists them. */
 export const SECTION_NAMES: Partial<Record<SectionKind, string>> = {
   details: "Report details",
+  introduction: "Exam report",
   summary: "High-level summary",
   considerations: "Testing considerations",
-  methodology: "Methodology",
-  "engagement-tested": "Tested, not exploited",
-  "appendix-proof": "Proof table",
-  "appendix-tools": "Tools and payloads",
-  "appendix-msf": "Metasploit usage",
-  "appendix-cleanup": "House cleaning",
+  methodology: "Methodologies",
+  "engagement-tested": "Also tested",
   further: "Further information",
   references: "References",
 };
-
-/**
- * The title printed at the top of a report-level page, from its kind (never stored, so every saved page has it):
- * "High-level summary", "Appendix A: Proof table". Targets and the AD set carry their own title; Report details is a form.
- */
-export function pageTitle(kind: SectionKind): string | null {
-  if (kind === "details") return null;
-  const name = SECTION_NAMES[kind];
-  if (!name) return null;
-  const letter = FIXED_LETTERS[kind];
-  return letter ? `Appendix ${letter}: ${name}` : name;
-}

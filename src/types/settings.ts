@@ -21,6 +21,8 @@ export interface Settings {
   reportOsid: string;
   /** Default methodology text for new reports. */
   reportMethodology: string;
+  /** Default text of report section 1 (Introduction, Objective, Requirements) for new reports; empty by default. */
+  reportIntroduction: string;
 }
 
 export type SettingsPatch = Partial<Omit<Settings, "nvdKeySet">> & {

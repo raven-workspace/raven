@@ -159,6 +159,7 @@ function ReportDetails({
   const [email, setEmail] = useState(settings.reportEmail);
   const [osid, setOsid] = useState(settings.reportOsid);
   const [methodology, setMethodology] = useState(settings.reportMethodology);
+  const [introduction, setIntroduction] = useState(settings.reportIntroduction);
   const err = (field: string) => (fieldError?.field === field ? fieldError.msg : undefined);
   const osidTrimmed = osid.trim();
   return (
@@ -192,6 +193,18 @@ function ReportDetails({
       {osidTrimmed !== "" && !isValidOsid(osidTrimmed) && (
         <p className="m-0 text-meta text-warn">OSIDs look like OS-12345</p>
       )}
+      <Field
+        label="Default introduction, objective and requirements"
+        hint="Report section 1. A line reading Introduction, Objective or Requirements starts that part."
+        error={err("reportIntroduction")}
+      >
+        <Textarea
+          rows={6}
+          value={introduction}
+          onChange={(e) => setIntroduction(e.target.value)}
+          onBlur={() => introduction.trim() !== settings.reportIntroduction && onSave({ reportIntroduction: introduction.trim() })}
+        />
+      </Field>
       <Field label="Default methodology" error={err("reportMethodology")}>
         <Textarea
           rows={6}

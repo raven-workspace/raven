@@ -30,6 +30,7 @@ const REPORT_NAME_KEY: &str = "report_candidate_name";
 const REPORT_EMAIL_KEY: &str = "report_email";
 const REPORT_OSID_KEY: &str = "report_osid";
 const REPORT_METHODOLOGY_KEY: &str = "report_methodology";
+const REPORT_INTRODUCTION_KEY: &str = "report_introduction";
 const MAX_REPORT_FIELD_LEN: usize = 2000;
 const MAX_REPORT_METHODOLOGY_LEN: usize = 20000;
 const RETENTION_RANGE: std::ops::RangeInclusive<u32> = 1..=200;
@@ -59,6 +60,8 @@ pub struct Settings {
     pub report_email: String,
     pub report_osid: String,
     pub report_methodology: String,
+    /// Default text of section 1 (Introduction, Objective, Requirements) for new reports.
+    pub report_introduction: String,
 }
 
 #[derive(Clone, Default, Deserialize)]
@@ -79,6 +82,7 @@ pub struct SettingsPatch {
     pub report_email: Option<String>,
     pub report_osid: Option<String>,
     pub report_methodology: Option<String>,
+    pub report_introduction: Option<String>,
 }
 
 /// Debug output never shows the NVD API key, only whether the patch sets one.
@@ -99,6 +103,7 @@ impl std::fmt::Debug for SettingsPatch {
             .field("report_email", &self.report_email)
             .field("report_osid", &self.report_osid)
             .field("report_methodology", &self.report_methodology)
+            .field("report_introduction", &self.report_introduction)
             .finish()
     }
 }
@@ -152,6 +157,7 @@ pub fn get(conn: &Connection) -> AppResult<Settings> {
         report_email: text(REPORT_EMAIL_KEY),
         report_osid: text(REPORT_OSID_KEY),
         report_methodology: text(REPORT_METHODOLOGY_KEY),
+        report_introduction: text(REPORT_INTRODUCTION_KEY),
     })
 }
 
@@ -292,11 +298,13 @@ pub fn update(conn: &Connection, patch: SettingsPatch) -> AppResult<Settings> {
     let report_email = report("reportEmail", &patch.report_email, MAX_REPORT_FIELD_LEN)?;
     let report_osid = report("reportOsid", &patch.report_osid, MAX_REPORT_FIELD_LEN)?;
     let report_methodology = report("reportMethodology", &patch.report_methodology, MAX_REPORT_METHODOLOGY_LEN)?;
+    let report_introduction = report("reportIntroduction", &patch.report_introduction, MAX_REPORT_METHODOLOGY_LEN)?;
     for (key, v) in [
         (REPORT_NAME_KEY, report_name),
         (REPORT_EMAIL_KEY, report_email),
         (REPORT_OSID_KEY, report_osid),
         (REPORT_METHODOLOGY_KEY, report_methodology),
+        (REPORT_INTRODUCTION_KEY, report_introduction),
         (KALI_USER_KEY, kali_user),
         (WINDOWS_TOOLS_KEY, windows_tools),
         (LINUX_TOOLS_KEY, linux_tools),
@@ -555,5 +563,20 @@ mod tests {
             o => panic!("{o:?}"),
         }
         assert_eq!(get(c).unwrap().report_name, "Ada Lovelace");
+    }
+
+    #[test]
+    fn settings_report_introduction_round_trips_and_is_capped() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        assert_eq!(get(c).unwrap().report_introduction, "");
+        let text = "Introduction\nThe report contains all efforts.\nObjective\nAn internal test.";
+        let s = update(c, SettingsPatch { report_introduction: Some(text.into()), ..Default::default() }).unwrap();
+        assert_eq!(s.report_introduction, text);
+        assert_eq!(get(c).unwrap().report_introduction, text);
+        match update(c, SettingsPatch { report_introduction: Some("a".repeat(20001)), ..Default::default() }) {
+            Err(AppError::Validation { field, .. }) => assert_eq!(field, "reportIntroduction"),
+            o => panic!("{o:?}"),
+        }
     }
 }

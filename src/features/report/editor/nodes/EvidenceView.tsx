@@ -202,7 +202,7 @@ function EntryBody({
       return (
         <div className="report-flag">
           <p>
-            <strong>{c.flagKind === "local" ? "local.txt" : "proof.txt"}:</strong> <code>{c.value}</code>
+            <strong>{c.flagKind === "local" ? "Local.txt value:" : "Proof.txt value:"}</strong> <code>{c.value}</code>
           </p>
           {c.proof && <pre className="report-code report-pre">{c.proof}</pre>}
           {c.attachmentId && <Figure entryId={entry.id} attachmentId={c.attachmentId} caption={entry.title} n={figure} />}

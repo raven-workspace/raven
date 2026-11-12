@@ -4,7 +4,7 @@ import { NodeSelection, TextSelection } from "prosekit/pm/state";
 import { useMemo, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Editor } from "prosekit/core";
-import { numberAppendices, type AppendixIndex, type ReportData, type ReportNode } from "../engines/report";
+import { numberAppendices, targetHeadings, type AppendixIndex, type ReportData, type ReportNode } from "../engines/report";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext";
 import { insertEvidenceAtCursor, removeNodeAt, ReportEditor, setNodeAttrs } from "../features/report/editor/ReportEditor";
 import { api } from "../lib/api";
@@ -123,14 +123,24 @@ describe("ReportEditor evidence", () => {
     ]);
   });
 
-  it("lists the exam restrictions only for exam-sim engagements", async () => {
-    const g: ReportNode = { type: "generated", attrs: { kind: "engagement-details", hostId: null, appendix: "inline" } };
-    setup(doc(g));
-    expect(await screen.findByText("Restrictions")).toBeInTheDocument();
+  it("prints Methodologies' facts: the exam network, the Metasploit target and the cleanup list", async () => {
+    const gen = (kind: string): ReportNode => ({ type: "generated", attrs: { kind, hostId: null, appendix: "inline" } });
+    const msf = entry({ id: "m1", content: { kind: "command", blocks: [{ command: "msfconsole -q\nuse exploit/windows/smb/ms17_010_eternalblue", output: "" }] } });
+    const d = data({
+      log: [msf],
+      cleanup: [
+        { id: "c1", hostId: "h1", kind: "file", target: "C:\\Users\\Public\\shell.exe", status: "removed" },
+        { id: "c2", hostId: "h1", kind: "account", target: "backdoor", status: "dismissed" },
+      ] as never,
+    });
+    const { container } = setup(doc(gen("scope"), gen("msf"), gen("cleanup")), d);
+    await waitFor(() => expect(container.textContent).toContain("Exam network: 10.0.0.5"));
+    expect(screen.getByText("Metasploit was used on DC01 (10.0.0.5): exploit/windows/smb/ms17_010_eternalblue.")).toBeInTheDocument();
+    expect(screen.getByText("C:\\Users\\Public\\shell.exe on DC01 (file, removed)")).toBeInTheDocument();
+    expect(container.textContent).not.toContain("backdoor");
     cleanup();
-    setup(doc(g), data({ engagement: { id: "eng", kind: "lab" } as ReportData["engagement"] }));
-    expect(await screen.findByText("Accounts created")).toBeInTheDocument();
-    expect(screen.queryByText("Restrictions")).toBeNull();
+    setup(doc(gen("msf")), data({ log: [] }));
+    expect(await screen.findByText("Metasploit was not used.")).toBeInTheDocument();
   });
 
   it("shows only the kept lines with the omitted count", async () => {
@@ -170,11 +180,11 @@ describe("ReportEditor evidence", () => {
 
   it("leaves a reference to its appendix entry when moved", async () => {
     const appendix: AppendixIndex = {
-      entries: [{ key: "s1:1", letter: "E", n: 2, title: "Full port scan", sectionId: "s1" }],
-      refFor: (key) => (key === "s1:1" ? "E.2" : null),
+      entries: [{ key: "s1:1", letter: "A", n: 2, title: "Full port scan", sectionId: "s1" }],
+      refFor: (key) => (key === "s1:1" ? "A.2" : null),
     };
     const { container } = setup(doc(slot(), ev("e1", { appendix: "moved" })), data(), appendix);
-    expect(await screen.findByText("Full output: Appendix E.2, Full port scan")).toBeInTheDocument();
+    expect(await screen.findByText("Full output: Appendix A.2, Full port scan")).toBeInTheDocument();
     expect(container.querySelector(".report-cmd")).toBeNull();
   });
 
@@ -300,13 +310,33 @@ describe("ReportEditor vulnerabilities and exploits", () => {
     stepEntryIds: [],
   } as unknown as Finding;
 
-  it("renders a vulnerability block without lessons", async () => {
+  it("prints the sample's labelled lines, and no lessons", async () => {
     const { container } = setup(doc({ type: "vuln", attrs: { findingId: "f1" } }), data({ findings: [finding] }));
-    expect(await screen.findByText("Anonymous FTP write")).toBeInTheDocument();
-    expect(screen.getByText("Severity: High (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H)")).toBeInTheDocument();
+    const line = (label: string) => [...container.querySelectorAll(".report-vuln p")].find((p) => p.textContent?.startsWith(label));
+    await waitFor(() => expect(line("Vulnerability Explanation:")).toBeTruthy());
+    expect(line("Vulnerability Explanation:")).toHaveTextContent("Vulnerability Explanation: Anyone can upload.");
+    expect(line("Vulnerability Explanation:")?.querySelector("strong")).toHaveTextContent("Vulnerability Explanation:");
+    expect(line("Vulnerability Fix:")).toBeTruthy();
     expect(screen.getByText("Disable anonymous login.")).toBeInTheDocument();
     expect(screen.getByText("Restrict the upload directory.")).toBeInTheDocument();
+    expect(line("Severity:")).toHaveTextContent("Severity: High (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H)");
     expect(container.innerHTML).not.toContain("I forgot to check FTP first");
+  });
+
+  it("puts a one-step fix on the Vulnerability Fix line itself", async () => {
+    const one = { ...finding, remediation: "Disable anonymous login." } as Finding;
+    const { container } = setup(doc({ type: "vuln", attrs: { findingId: "f1" } }), data({ findings: [one] }));
+    await waitFor(() => expect(container.querySelector(".report-vuln")).toBeTruthy());
+    const fix = [...container.querySelectorAll(".report-vuln p")].find((p) => p.textContent?.startsWith("Vulnerability Fix:"));
+    expect(fix).toHaveTextContent("Vulnerability Fix: Disable anonymous login.");
+    expect(container.querySelector(".report-vuln ul")).toBeNull();
+  });
+
+  it("prints Steps to reproduce the attack as the slot's bold lead-in", async () => {
+    const { container } = setup(doc({ type: "slot", attrs: { hint: "A short summary", label: "Steps to reproduce the attack:" } }));
+    await waitFor(() => expect(container.querySelector(".report-slot-text")).toBeTruthy());
+    expect(container.querySelector(".report-slot-text")).toHaveAttribute("data-label", "Steps to reproduce the attack:");
+    expect(container.querySelector(".report-slot-hint")).toHaveTextContent("Steps to reproduce the attack: A short summary");
   });
 
   it("lists each fix step a line of its own when a line ends a sentence; a wrapped line stays one step", async () => {
@@ -399,21 +429,89 @@ describe("ReportEditor generated blocks", () => {
   const gen = (kind: string): ReportNode => ({ type: "generated", attrs: { kind, hostId: null, appendix: "inline" } });
   const ad = { ...host, id: "h2", name: "dc01", ip: "10.0.0.10", adSetEffective: true } as Host;
 
-  it("titles the AD set page and its attack chain", async () => {
+  it("closes the AD set with its attack chain", async () => {
     const d = data({
       hosts: [host, ad],
       hops: [{ id: "hp", fromHostId: "h1", toHostId: "h2", via: "Pass the hash", logEntryId: null, at: 1 }] as never,
     });
-    setup(doc(gen("ad-overview"), gen("attack-chain")), d);
-    expect(await screen.findByRole("heading", { name: "Active Directory set" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Attack chain" })).toBeInTheDocument();
+    setup(doc(gen("attack-chain")), d);
+    expect(await screen.findByRole("heading", { name: "Attack Chain" })).toBeInTheDocument();
     expect(screen.getByText("DC01 to dc01 via Pass the hash")).toBeInTheDocument();
   });
 
-  it("words a Windows host's full access as SYSTEM in the exploited systems", async () => {
-    const { container } = setup(doc(gen("exploited-systems")), data());
-    await waitFor(() => expect(container.querySelector(".report-table tbody tr")).toBeTruthy());
-    expect(container.querySelector(".report-table tbody tr")?.textContent).toContain("SYSTEM");
+  it("prints Port Scan Results as IP Address and Ports Open, one line per protocol", async () => {
+    const svc = (port: number, protocol: string, hostId = "h1") => ({ id: `${hostId}-${port}-${protocol}`, hostId, port, protocol });
+    const d = data({ services: [svc(80, "tcp"), svc(21, "tcp"), svc(161, "udp"), svc(445, "tcp", "h2")] as never, hosts: [host, ad] });
+    const { container } = setup(doc({ type: "generated", attrs: { kind: "port-scan", hostId: "h1", appendix: "inline" } }), d);
+    await waitFor(() => expect(container.querySelector(".report-table")).toBeTruthy());
+    expect(screen.getByText("Port Scan Results")).toBeInTheDocument();
+    expect([...container.querySelectorAll(".report-table th")].map((th) => th.textContent)).toEqual(["IP Address", "Ports Open"]);
+    const cells = [...container.querySelectorAll(".report-table tbody td")].map((td) => td.textContent);
+    expect(cells).toEqual(["10.0.0.5", "TCP: 21, 80UDP: 161"]);
+    expect(container.querySelector(".report-table tbody td strong")).toHaveTextContent("TCP");
+  });
+
+  it("prints one Port Scan Results row per machine of the AD set", async () => {
+    const svc = (port: number, hostId: string) => ({ id: `${hostId}-${port}`, hostId, port, protocol: "tcp" });
+    const ad3 = { ...ad, id: "h3", name: "ms01", ip: "10.0.0.11" } as Host;
+    // Listed by name, as the page lists the machines: dc01, then ms01.
+    const d = data({ hosts: [host, ad3, ad], services: [svc(88, "h2"), svc(389, "h2"), svc(22, "h3")] as never });
+    const { container } = setup(doc(gen("port-scan")), d);
+    await waitFor(() => expect(container.querySelectorAll(".report-table tbody tr")).toHaveLength(2));
+    const rows = [...container.querySelectorAll(".report-table tbody tr")].map((tr) => tr.textContent);
+    expect(rows).toEqual(["10.0.0.10TCP: 88, 389", "10.0.0.11TCP: 22"]);
+  });
+
+  it("prints Also tested as slim lines, with no commands", async () => {
+    const d = data({
+      services: [{ id: "s80", hostId: "h1", port: 80, protocol: "tcp" }] as never,
+      findings: [{ id: "f1", title: "x", hostIds: ["h1"], serviceIds: ["s80"], refs: [] }] as never,
+      attempts: [{ id: "a1", hostId: "h1", findingId: "f1", title: "Apache path traversal", reasonKind: "precondition", reason: "patched", private: false, logEntryId: "e1" }] as never,
+    });
+    const { container } = setup(doc({ type: "generated", attrs: { kind: "tested", hostId: "h1", appendix: "inline" } }), d);
+    expect(await screen.findByText("Apache path traversal on 80: precondition not met: patched")).toBeInTheDocument();
+    expect(container.querySelector(".report-code")).toBeNull();
+  });
+
+  it("numbers a target page's headings from its document and names the vulnerability that opened a phase", async () => {
+    const d = data({ findings: [{ id: "f1", title: "Anonymous FTP write", description: "", remediation: "", hostIds: ["h1"], serviceIds: [], refs: [] }] as never });
+    const page = doc(
+      { type: "generated", attrs: { kind: "facts", hostId: "h1", appendix: "inline" } },
+      { type: "phase", attrs: { phase: "enum", hostId: "h1" } },
+      { type: "phase", attrs: { phase: "foothold", hostId: "h1" } },
+      { type: "vuln", attrs: { findingId: "f1" } },
+      { type: "phase", attrs: { phase: "post", hostId: "h1" } },
+    );
+    const target = { key: "h1", kind: "standalone" as const, hostIds: ["h1"] };
+    render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <ReportDataContext.Provider
+          value={{ data: d, appendix: noRefs, sectionMeta: {}, onRemoveEvidence: vi.fn(), headingsOf: (x) => targetHeadings(x, d, target, "4.2", 2) }}
+        >
+          <ReportEditor sectionId="s1" title="Independent Challenges" titleNumber="4" doc={page} onChange={vi.fn()} onReady={vi.fn()} />
+        </ReportDataContext.Provider>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByRole("heading", { name: "4.2Target #2 – 10.0.0.5" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "4.2.1Service Enumeration" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "4.2.2Initial Access – Anonymous FTP write" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "4.2.3Post-Exploitation" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "4Independent Challenges" })).toBeInTheDocument();
+  });
+
+  it("numbers a report-level page's headings under its number, by CSS", async () => {
+    const page = doc({ type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Information Gathering" }] });
+    const { container } = render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <ReportDataContext.Provider value={{ data: data(), appendix: noRefs, sectionMeta: {}, onRemoveEvidence: vi.fn() }}>
+          <ReportEditor sectionId="s1" title="Methodologies" titleNumber="3" number="3" doc={page} onChange={vi.fn()} onReady={vi.fn()} />
+        </ReportDataContext.Provider>
+      </QueryClientProvider>,
+    );
+    await screen.findByText("Information Gathering");
+    const paper = container.querySelector(".report-page") as HTMLElement;
+    expect(paper).toHaveAttribute("data-numbered", "true");
+    expect(paper.style.getPropertyValue("--report-number")).toBe('"3"');
   });
 });
 
@@ -481,13 +579,13 @@ describe("ReportEditor block tools", () => {
     await waitFor(() => expect(editor()).toBeTruthy());
     selectBlock(editor(), 2);
     fireEvent.click(await screen.findByRole("button", { name: "Move to appendix" }));
-    expect(await screen.findByText("Full output: Appendix E.1, Full port scan")).toBeInTheDocument();
+    expect(await screen.findByText("Full output: Appendix A.1, Full port scan")).toBeInTheDocument();
     expect(screen.queryByText("cat e1")).toBeNull();
 
     selectBlock(editor(), 0);
     fireEvent.click(await screen.findByRole("button", { name: "Move to appendix" }));
-    expect(await screen.findByText("Full output: Appendix E.1, Web scan")).toBeInTheDocument();
-    expect(screen.getByText("Full output: Appendix E.2, Full port scan")).toBeInTheDocument();
+    expect(await screen.findByText("Full output: Appendix A.1, Web scan")).toBeInTheDocument();
+    expect(screen.getByText("Full output: Appendix A.2, Full port scan")).toBeInTheDocument();
   });
 
   it("split keeps the trimmed lines inline with the reference after them; a third press brings it back inline", async () => {
@@ -500,7 +598,7 @@ describe("ReportEditor block tools", () => {
     await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.appendix).toBe("split"));
     expect(screen.getByText("line 0")).toBeInTheDocument();
     expect(screen.getByText("… 2 lines omitted")).toBeInTheDocument();
-    expect(screen.getByText("Full output: Appendix E.1, Full port scan")).toBeInTheDocument();
+    expect(screen.getByText("Full output: Appendix A.1, Full port scan")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Back inline" }));
     await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.appendix).toBe("inline"));
     expect(screen.queryByText(/Full output: Appendix/)).toBeNull();
@@ -516,13 +614,13 @@ describe("ReportEditor block tools", () => {
   });
 
   it("moves a generated table to the appendix", async () => {
-    const g: ReportNode = { type: "generated", attrs: { kind: "tools", hostId: null, appendix: "inline" } };
+    const g: ReportNode = { type: "generated", attrs: { kind: "tested", hostId: "h1", appendix: "inline" } };
     const { onChange, editor } = setupLive(doc(g));
     await waitFor(() => expect(editor()).toBeTruthy());
     selectBlock(editor(), 0);
     fireEvent.click(await screen.findByRole("button", { name: "Move to appendix" }));
     await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.appendix).toBe("moved"));
-    expect(await screen.findByText("Full list: Appendix E.1, Evidence")).toBeInTheDocument();
+    expect(await screen.findByText("Full list: Appendix A.1, Evidence")).toBeInTheDocument();
   });
 
   it("reports a screenshot's natural width once its image loads", async () => {
@@ -551,7 +649,7 @@ describe("ReportEditor block tools", () => {
   });
 
   it("offers no Move to appendix outside target pages", async () => {
-    const g: ReportNode = { type: "generated", attrs: { kind: "severity-legend", hostId: null, appendix: "inline" } };
+    const g: ReportNode = { type: "generated", attrs: { kind: "scope", hostId: null, appendix: "inline" } };
     const { editor } = setupLive(doc(ev("e1"), g), data(), false);
     await waitFor(() => expect(editor()).toBeTruthy());
     selectBlock(editor(), 0);
@@ -565,6 +663,6 @@ describe("ReportEditor block tools", () => {
   it("names a moved screenshot's reference as a screenshot", async () => {
     const d = data({ log: [entry({ id: "s1", title: "Login page", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a1", caption: "Login", fileName: "x.png" } })] });
     setupLive(doc(ev("s1", { block: null, appendix: "moved" })), d);
-    expect(await screen.findByText("Screenshot: Appendix E.1, Login page")).toBeInTheDocument();
+    expect(await screen.findByText("Screenshot: Appendix A.1, Login page")).toBeInTheDocument();
   });
 });

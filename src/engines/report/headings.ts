@@ -1,0 +1,136 @@
+import type { SectionKind } from "../../types/report";
+import type { Phase, ReportData, ReportNode, ReportTarget } from "./types";
+
+/** A heading as the page prints it: its number ("4.1.2", or null for an unnumbered one) and its words. */
+export interface HeadingLabel {
+  number: string | null;
+  text: string;
+}
+
+/** Phase headings in OffSec's sample wording. */
+export const PHASE_TITLES: Record<Phase, string> = {
+  enum: "Service Enumeration",
+  foothold: "Initial Access",
+  privesc: "Privilege Escalation",
+  lateral: "Lateral Movement",
+  domain: "Domain Compromise",
+  tested: "Also tested",
+  post: "Post-Exploitation",
+};
+
+/** Phases a vulnerability opens, so the heading names it: "Initial Access – SMB share to WordPress RCE". */
+const TITLED = new Set<Phase>(["foothold", "privesc", "lateral", "domain"]);
+
+/** The numbers of a target page's headings, keyed `facts:<hostId>`, `phase:<hostId>:<phase>` and `attack-chain`. */
+export type PageHeadings = Map<string, HeadingLabel>;
+
+export const phaseKey = (hostId: string, phase: Phase) => `phase:${hostId}:${phase}`;
+export const machineKey = (hostId: string) => `facts:${hostId}`;
+export const CHAIN_KEY = "attack-chain";
+
+/**
+ * Numbers a target page's headings from its document, never stored: a standalone target is `base` ("4.2", printed
+ * "Target #2 – <IP>"), its sub-sections `base.1`, `base.2` in page order; in the AD set (`base` "5") each machine is
+ * `5.N <name> – <IP>`, its sub-sections `5.N.1`…, and the attack chain the next machine number. Also tested takes no
+ * number. A titled phase names the first vulnerability under it.
+ */
+export function targetHeadings(doc: ReportNode, data: ReportData, target: ReportTarget, base: string, ordinal: number): PageHeadings {
+  const out: PageHeadings = new Map();
+  const content = doc.content ?? [];
+  const sub = new Map<string, number>();
+  let machines = 0;
+  const hostLabel = (hostId: string): HeadingLabel => {
+    const host = data.hosts.find((h) => h.id === hostId);
+    const ip = host?.ip || host?.name || "Host";
+    if (target.kind === "standalone") return { number: base, text: `Target #${ordinal} – ${ip}` };
+    machines++;
+    return { number: `${base}.${machines}`, text: host?.ip ? `${host.name} – ${host.ip}` : (host?.name ?? "Host") };
+  };
+  content.forEach((n, i) => {
+    const attrs = n.attrs ?? {};
+    if (n.type === "generated" && attrs.kind === "facts" && typeof attrs.hostId === "string") {
+      if (!out.has(machineKey(attrs.hostId))) out.set(machineKey(attrs.hostId), hostLabel(attrs.hostId));
+      return;
+    }
+    if (n.type === "generated" && attrs.kind === "attack-chain") {
+      out.set(CHAIN_KEY, { number: target.kind === "ad-set" ? `${base}.${machines + 1}` : null, text: "Attack Chain" });
+      return;
+    }
+    if (n.type !== "phase" || typeof attrs.hostId !== "string") return;
+    const hostId = attrs.hostId;
+    const phase = attrs.phase as Phase;
+    const key = phaseKey(hostId, phase);
+    if (out.has(key)) return;
+    let text = PHASE_TITLES[phase] ?? String(phase);
+    if (TITLED.has(phase)) {
+      // The first vulnerability before the region ends (the next heading or the next machine).
+      const vuln = content.slice(i + 1).find((m) => m.type === "vuln" || m.type === "phase" || (m.type === "generated" && m.attrs?.kind !== "tested"));
+      const finding = vuln?.type === "vuln" ? data.findings.find((f) => f.id === vuln.attrs?.findingId) : undefined;
+      if (finding?.title.trim()) text = `${text} – ${finding.title.trim()}`;
+    }
+    if (phase === "tested") {
+      out.set(key, { number: null, text });
+      return;
+    }
+    const machine = out.get(machineKey(hostId))?.number ?? base;
+    const k = (sub.get(hostId) ?? 0) + 1;
+    sub.set(hostId, k);
+    out.set(key, { number: `${machine}.${k}`, text });
+  });
+  return out;
+}
+
+/** A report-level page's number and title, from the outline order. */
+export interface SectionNumber {
+  /** "1", "4.2"; null for an unnumbered page (Testing considerations, the closing pages). */
+  number: string | null;
+  /** The title printed at the top of the page ("3", "Methodologies"), or null when the page has none (a target after
+   *  the first). */
+  title: HeadingLabel | null;
+}
+
+/** The sample's chapter titles. */
+const CHAPTERS: Partial<Record<SectionKind, string>> = {
+  introduction: "OffSec Certified Professional Exam Report",
+  summary: "High-Level Summary",
+  methodology: "Methodologies",
+  ad: "Active Directory Set",
+  "engagement-tested": "Also Tested",
+};
+const UNNUMBERED: Partial<Record<SectionKind, string>> = {
+  considerations: "Testing Considerations",
+  further: "Further Information",
+  references: "References",
+};
+
+/**
+ * Numbers the report's pages in outline order, as OffSec's sample does: 1 the exam report, 2 the summary, 3
+ * Methodologies, then the standalone targets as one chapter (Independent Challenges, each target `4.N`, the chapter
+ * title on the first), the AD set and engagement-level Also tested as chapters of their own.
+ */
+export function sectionNumbers(sections: { id: string; kind: SectionKind }[]): Map<string, SectionNumber> {
+  const out = new Map<string, SectionNumber>();
+  let chapter = 0;
+  let targetsChapter = 0;
+  let targets = 0;
+  for (const s of sections) {
+    if (s.kind === "target") {
+      if (targetsChapter === 0) targetsChapter = ++chapter;
+      targets++;
+      out.set(s.id, {
+        number: `${targetsChapter}.${targets}`,
+        title: targets === 1 ? { number: `${targetsChapter}`, text: "Independent Challenges" } : null,
+      });
+      continue;
+    }
+    const name = CHAPTERS[s.kind];
+    if (name) {
+      chapter++;
+      out.set(s.id, { number: `${chapter}`, title: { number: `${chapter}`, text: name } });
+      continue;
+    }
+    const text = UNNUMBERED[s.kind];
+    out.set(s.id, { number: null, title: text ? { number: null, text } : null });
+  }
+  return out;
+}

@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 import type { Node as PMNode } from "prosekit/pm/model";
-import type { AppendixIndex, ReportData, ReportMeta, SectionMeta } from "../../../engines/report";
+import type { AppendixIndex, HeadingLabel, PageHeadings, ReportData, ReportMeta, ReportNode, SectionMeta } from "../../../engines/report";
 
 /** What the section gives the page: the live rows node views render from. */
 export interface ReportDataValue {
@@ -13,14 +13,12 @@ export interface ReportDataValue {
   reportMeta?: ReportMeta;
   /** Figures in the sections before this one, so "Figure N" counts across the document. Default 0. */
   figureOffset?: number;
-  /** Each target section's meta by target key (exploited-systems methods). */
-  targetMeta?: Record<string, SectionMeta>;
   /** A screenshot's image loaded: its natural width, for the legibility check (view state, never stored). */
   onImageWidth?(entryId: string, width: number): void;
-  /** Edits the open section's meta (the Tools appendix's own purposes and URLs); absent where the page is read-only. */
-  onSectionMeta?(patch: Partial<SectionMeta>): void;
   /** Blocks may move to an appendix: only on target and AD pages, the only ones with appendix pages (spec §5.6). Default false. */
   canMove?: boolean;
+  /** A target page's numbered headings ("4.1.2 Initial Access – …"), computed from its live document; absent elsewhere. */
+  headingsOf?(doc: ReportNode): PageHeadings;
 }
 
 export const ReportDataContext = createContext<ReportDataValue | null>(null);
@@ -40,9 +38,11 @@ export interface PageLayout {
   pathOf(node: PMNode): string | null;
   /** The owner has focused or clicked into the page; until then a selection is only ProseMirror's default, so blocks show no tools. */
   touched: boolean;
+  /** A numbered heading of a target page by its key (`facts:<hostId>`, `phase:<hostId>:<phase>`, `attack-chain`). */
+  heading(key: string): HeadingLabel | null;
 }
 
-export const PageLayoutContext = createContext<PageLayout>({ sectionId: "", figureOf: () => null, pathOf: () => null, touched: false });
+export const PageLayoutContext = createContext<PageLayout>({ sectionId: "", figureOf: () => null, pathOf: () => null, touched: false, heading: () => null });
 
 export const usePageLayout = () => useContext(PageLayoutContext);
 

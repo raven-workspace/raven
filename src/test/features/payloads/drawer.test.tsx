@@ -72,7 +72,7 @@ function GrabNavigate() {
 function mount(path: string, settings: { attackerIp?: string; listenerPort?: string } = {}) {
   m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: settings.attackerIp ?? LHOST, listenerPort: settings.listenerPort ?? LPORT, kaliUser: "kali",
-    windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "",
+    windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "", reportIntroduction: "",
   });
   return render(
     <QueryClientProvider client={makeQueryClient()}>

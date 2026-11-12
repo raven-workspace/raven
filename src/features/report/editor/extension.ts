@@ -50,9 +50,14 @@ const slotSpec = defineNodeSpec({
   name: "slot",
   group: "block",
   content: "inline*",
-  attrs: { hint: { default: "" } },
-  parseDOM: [{ tag: "p[data-report=slot]", getAttrs: (dom: HTMLElement) => ({ hint: dom.getAttribute("data-hint") ?? "" }) }],
-  toDOM: (node: PMNode) => ["p", { "data-report": "slot", "data-hint": node.attrs.hint as string }, 0],
+  attrs: { hint: { default: "" }, label: { default: "" } },
+  parseDOM: [
+    {
+      tag: "p[data-report=slot]",
+      getAttrs: (dom: HTMLElement) => ({ hint: dom.getAttribute("data-hint") ?? "", label: dom.getAttribute("data-label") ?? "" }),
+    },
+  ],
+  toDOM: (node: PMNode) => ["p", { "data-report": "slot", "data-hint": node.attrs.hint as string, "data-label": node.attrs.label as string }, 0],
 });
 
 /** The report page's schema and node views: ProseKit's basic editing (history included; a second defineHistory throws) plus Raven's report vocabulary. */

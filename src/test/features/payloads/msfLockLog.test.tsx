@@ -55,7 +55,7 @@ beforeEach(() => {
   m.engagementSetMsfHost.mockImplementation(async (_id, hostId) => (engagement = { ...engagement, msfHostId: hostId }));
   m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: LHOST, listenerPort: LPORT, kaliUser: "kali",
-    windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "",
+    windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "", reportIntroduction: "",
   });
   m.hostIdentityGet.mockResolvedValue(null);
   m.vectorsList.mockResolvedValue([]);

@@ -47,19 +47,16 @@ export interface CoverageOverride {
   note?: string;
 }
 
-/** The owner's own purpose or URL for a row of the Tools appendix. */
-export interface ToolOverride {
-  purpose?: string;
-  url?: string;
-}
+/** The draft layout a section's page is built with. A page saved with an older or missing layout is rebuilt from
+ *  scratch the first time it opens (2: OffSec's sample report structure). */
+export const DRAFT_LAYOUT = 2;
 
 /** Stored in `report_sections.meta`. */
 export interface SectionMeta {
   removedEntryIds?: string[];
   coverage?: Record<string, CoverageOverride>;
-  method?: string;
-  /** The Tools appendix's per-row edits, by the tool name the row prints. */
-  tools?: Record<string, ToolOverride>;
+  /** The draft layout the page was built with (`DRAFT_LAYOUT`). */
+  layout?: number;
 }
 
 export type TargetKind = "standalone" | "ad-set";
@@ -79,32 +76,25 @@ export type ReportNode = {
 
 /* Node vocabulary: the contract the editor schema implements. */
 
-/** A sub-section heading of a target. `tested` and `proof` close every target. */
-export type Phase = "foothold" | "privesc" | "lateral" | "domain" | "proof" | "tested";
+/** A sub-section heading of a machine, in OffSec's sample order: Service Enumeration (standalone only), the entry
+ *  phase (Initial Access, Lateral Movement or Domain Compromise), Privilege Escalation, Also tested, Post-Exploitation. */
+export type Phase = "enum" | "foothold" | "privesc" | "lateral" | "domain" | "tested" | "post";
 
-export type GeneratedKind =
-  | "facts"
-  | "services"
-  | "vulns"
-  | "tested"
-  | "proof-table-host"
-  | "engagement-details"
-  | "exploited-systems"
-  | "severity-legend"
-  | "ad-overview"
-  | "attack-chain"
-  | "proof-table"
-  | "tools"
-  | "msf"
-  | "cleanup"
-  | "references";
+/**
+ * Blocks rendered from live data. `facts` is a machine's numbered heading ("Target #1 – 10.0.0.5"); `port-scan` the
+ * Port Scan Results table (one host, or the whole AD set when `hostId` is null); `tested` the slim Also tested lines;
+ * `scope`, `msf` and `cleanup` the Methodologies facts.
+ */
+export type GeneratedKind = "facts" | "port-scan" | "tested" | "attack-chain" | "scope" | "msf" | "cleanup" | "references";
 
 /** Where a block's content sits: in the flow, moved to an appendix, or trimmed inline with the full copy there. */
 export type AppendixPlacement = "inline" | "moved" | "split";
 
-/** A prose slot; an empty one shows its hint and never exports. */
+/** A prose slot; an empty one shows its hint and never exports. `label` is a bold lead-in printed before the text
+ *  ("Steps to reproduce the attack:"). */
 export interface SlotAttrs {
   hint: string;
+  label?: string;
 }
 
 export interface PhaseAttrs {

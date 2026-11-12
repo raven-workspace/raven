@@ -155,12 +155,20 @@ describe("targetChecks", () => {
   it("explain is soft, screenshots first", () => {
     const shot = entry({ id: "s1", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "ok", fileName: "x" } });
     const cmd = entry({ id: "c1" });
-    const page = doc(ev("c1"), ev("s1", { block: null }), ...goodDoc().content!);
+    const page = doc(slot(""), ev("c1"), slot(""), ev("s1", { block: null }), ...goodDoc().content!);
     const c = run(data({ log: [cmd, shot, flag()] }), page).filter((x) => x.id.startsWith("explain"));
     expect(c.map((x) => [x.id, x.level])).toEqual([["explain:s1", "soft"], ["explain:c1", "soft"]]);
-    expect(c[0].text).toBe("A step has no explanation after it.");
-    const done = doc(ev("c1"), slot("because"), ...goodDoc().content!);
+    expect(c[0].text).toBe("A step has no explanation before it.");
+    // The walkthrough explains a step before it (OffSec's sample): text after a step doesn't count.
+    expect(find(run(data({ log: [cmd, flag()] }), doc(ev("c1"), slot("because"), ...goodDoc().content!)), "explain")).toBeDefined();
+    const done = doc(slot("Next, list the shares."), ev("c1"), ...goodDoc().content!);
     expect(find(run(data({ log: [cmd, flag()] }), done), "explain")).toBeUndefined();
+  });
+  it("lets the evidence of one step share the slot before it, and asks nothing of a flag", () => {
+    const shot = entry({ id: "s1", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "ok", fileName: "x" } });
+    const cmd = entry({ id: "c1" });
+    const page = doc(slot("Read the share."), ev("c1"), ev("s1", { block: null }), ev("f1", { block: null }));
+    expect(find(run(data({ log: [cmd, shot, flag()] }), page), "explain")).toBeUndefined();
   });
   it("access-shot is soft when no screenshot is within 5 minutes", () => {
     const grant = { id: "g", hostId: "h1", level: "admin", at: 10_000_000, via: "x", logEntryId: null };

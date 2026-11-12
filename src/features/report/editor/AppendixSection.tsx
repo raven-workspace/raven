@@ -6,7 +6,7 @@ import { ReportDataContext, type ReportDataValue } from "./ReportDataContext";
 import "../page.css";
 
 export interface AppendixPageEntry {
-  /** "E.1" */
+  /** "A.1" */
   ref: string;
   title: string;
   /** The moved node's index path in its section's page. */
@@ -23,7 +23,7 @@ function MovedBody({ node, ctx }: { node: ReportNode; ctx: ReportDataValue }) {
 }
 
 /**
- * A target's appendix (letters E onwards, spec §5.6): read-only, the content moved out of the target's page in
+ * A target's appendix (lettered from A in report order, spec §5.6): read-only, the content moved out of the target's page in
  * page order, each numbered and linking back to the place that references it.
  */
 export function AppendixSection({
@@ -33,7 +33,7 @@ export function AppendixSection({
   ctx,
   onBack,
 }: {
-  /** "Appendix E: lnx02" */
+  /** "Appendix A: lnx02" */
   title: string;
   /** The referencing section's name ("lnx02"). */
   source: string;

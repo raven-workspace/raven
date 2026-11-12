@@ -563,6 +563,19 @@ const settings: Settings = {
   listenerPort: "4444", kaliUser: "audit", windowsToolsDir: "~/tools/windows", linuxToolsDir: "/opt/tools",
   fieldManualPath: "/Users/audit/Documents/Field-Manual", nvdKeySet: true,
   reportName: "Sam Rivera", reportEmail: "sam.rivera@example.com", reportOsid: "OS-48213", reportMethodology: "",
+  // As the owner pastes it once: their own wording for section 1, split on its part lines.
+  reportIntroduction: [
+    "This report documents the work done in the OffSec Certified Professional exam: every step needed to reproduce",
+    "each compromise, with its evidence and proof.",
+    "Objective",
+    "Perform an internal penetration test against the exam network, methodically, from first scan to full control,",
+    "and report it as a real engagement.",
+    "Requirements",
+    "The report includes:",
+    "· A high-level summary and recommendations",
+    "· The methodology and a walkthrough of every step",
+    "· Each finding with screenshots, commands and the proof files",
+  ].join("\n"),
 };
 
 export const FIXTURES: AuditFixtures = {

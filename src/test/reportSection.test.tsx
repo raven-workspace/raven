@@ -82,7 +82,7 @@ describe("Report view", () => {
     await ready();
     // The engagement-level "Tested, not exploited" closes the targets.
     await waitFor(() =>
-      expect(targetRows().map((r) => r.textContent)).toEqual(["lnx02.21", "ms01.5", "web01.20", "AD set: ad02, dc01", "Tested, not exploited"]),
+      expect(targetRows().map((r) => r.textContent)).toEqual(["lnx02.21", "ms01.5", "web01.20", "AD set: ad02, dc01", "Also tested"]),
     );
     expect(screen.getByRole("group", { name: "Report OSCP-OS-48213-Exam-Report.pdf" })).toBeInTheDocument();
 
@@ -149,7 +149,7 @@ describe("Report view", () => {
       await api.hostDelete("h-exam-web");
       await qc.invalidateQueries();
     });
-    await waitFor(() => expect(targetRows().map((r) => r.textContent)).toEqual(["lnx02.21", "ms01.5", "AD set: ad02, dc01", "Tested, not exploited"]));
+    await waitFor(() => expect(targetRows().map((r) => r.textContent)).toEqual(["lnx02.21", "ms01.5", "AD set: ad02, dc01", "Also tested"]));
 
     let created = "";
     await act(async () => {
@@ -283,7 +283,7 @@ describe("Report view", () => {
     const first = rowFor("lnx02");
     first.focus();
     fireEvent.keyDown(first, { key: "ArrowDown", code: "ArrowDown", altKey: true });
-    const order = ["ms01.5", "lnx02.21", "web01.20", "AD set: ad02, dc01", "Tested, not exploited"];
+    const order = ["ms01.5", "lnx02.21", "web01.20", "AD set: ad02, dc01", "Also tested"];
     await waitFor(() => expect(targetRows().map((r) => r.textContent)).toEqual(order));
     await act(async () => release());
     await waitFor(() => expect(editors.length).toBeGreaterThan(0));
@@ -371,7 +371,7 @@ describe("Report view", () => {
     first.focus();
     fireEvent.keyDown(first, { key: "ArrowDown", code: "ArrowDown", altKey: true });
     await waitFor(() =>
-      expect(targetRows().map((r) => r.textContent)).toEqual(["ms01.5", "lnx02.21", "web01.20", "AD set: ad02, dc01", "Tested, not exploited"]),
+      expect(targetRows().map((r) => r.textContent)).toEqual(["ms01.5", "lnx02.21", "web01.20", "AD set: ad02, dc01", "Also tested"]),
     );
     expect(reorder).toHaveBeenCalledTimes(1);
     const ids = reorder.mock.calls[0][1];
@@ -393,7 +393,7 @@ const logInput = (title: string, content: LogContent, at: number): LogEntryInput
 });
 const evNode = (entryId: string) => ({ type: "evidence", attrs: { entryId, block: 0, keep: null, emphasis: [], appendix: "inline" } });
 
-/** lnx02's page: a foothold heading, a scan with `outputLines` lines of output, a slot, the proof heading. */
+/** lnx02's page (layout 2): a foothold heading, a slot, a scan with `outputLines` lines of output, the post heading. */
 async function seedLnx(outputLines = 3, meta: Record<string, unknown> = {}) {
   const output = Array.from({ length: outputLines }, (_, i) => `line ${i}`).join("\n");
   const scan = await api.logCreate("e-exam", logInput("nmap scan", { kind: "command", blocks: [{ command: "nmap -sV 10.10.30.21", output }] }, 1_000));
@@ -402,13 +402,13 @@ async function seedLnx(outputLines = 3, meta: Record<string, unknown> = {}) {
     type: "doc",
     content: [
       { type: "phase", attrs: { phase: "foothold", hostId: LNX } },
+      { type: "slot", attrs: { hint: "What you do next" } },
       evNode(scan.id),
-      { type: "slot", attrs: { hint: "What this shows" } },
-      { type: "phase", attrs: { phase: "proof", hostId: LNX } },
+      { type: "phase", attrs: { phase: "post", hostId: LNX } },
       { type: "slot", attrs: { hint: "Proof" } },
     ],
   };
-  await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta, draftBuiltAt: Date.now() });
+  await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { layout: 2, ...meta }, draftBuiltAt: Date.now() });
   return scan;
 }
 
@@ -423,22 +423,22 @@ const evidenceIds = () => {
 const appendixGroup = () => within(outline()).getByRole("group", { name: "Appendices" });
 
 describe("Report view: appendices and new evidence", () => {
-  it("Move to appendix adds Appendix E to the outline; its page lists the moved block and links back", async () => {
+  it("Move to appendix adds Appendix A to the outline; its page lists the moved block and links back", async () => {
     await seedLnx();
     mount();
     await ready();
     await waitFor(() => expect(editors.length).toBeGreaterThan(0));
-    // The scan is the page's second block.
+    // The scan is the page's third block.
     const view = pageEditor().view;
     fireEvent.pointerDown(view.dom);
-    act(() => view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, view.state.doc.child(0).nodeSize))));
+    act(() => view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, view.state.doc.child(0).nodeSize + view.state.doc.child(1).nodeSize))));
     fireEvent.click(await screen.findByRole("button", { name: "Move to appendix" }));
-    expect(await screen.findByText("Full output: Appendix E.1, nmap scan")).toBeInTheDocument();
-    const appendixRow = await within(appendixGroup()).findByRole("button", { name: "Appendix E: lnx02" });
+    expect(await screen.findByText("Full output: Appendix A.1, nmap scan")).toBeInTheDocument();
+    const appendixRow = await within(appendixGroup()).findByRole("button", { name: "Appendix A: lnx02" });
 
     fireEvent.click(appendixRow);
-    expect(await screen.findByRole("heading", { name: "Appendix E: lnx02" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "E.1 nmap scan" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Appendix A: lnx02" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "A.1 nmap scan" })).toBeInTheDocument();
     expect(screen.getByText("line 2")).toBeInTheDocument();
 
     const before = editors.length;
@@ -463,8 +463,8 @@ describe("Report view: appendices and new evidence", () => {
     // Picked, the check reads in full under its row.
     expect(within(checks).getByText(/This block is long \(80 lines of output\)/)).toBeInTheDocument();
     fireEvent.click(within(checks).getByRole("button", { name: "Move to appendix" }));
-    await waitFor(() => expect(pageEditor().state.doc.child(1).attrs.appendix).toBe("moved"));
-    expect(await within(appendixGroup()).findByRole("button", { name: "Appendix E: lnx02" })).toBeInTheDocument();
+    await waitFor(() => expect(pageEditor().state.doc.child(2).attrs.appendix).toBe("moved"));
+    expect(await within(appendixGroup()).findByRole("button", { name: "Appendix A: lnx02" })).toBeInTheDocument();
   });
 
   it("flags a screenshot too narrow to print legibly once its image loads", async () => {
@@ -477,7 +477,7 @@ describe("Report view: appendices and new evidence", () => {
     const sections = await api.reportSectionsList(report.id);
     const lnx = sections.find((s) => s.targetKey === LNX)!;
     const doc = lnx.doc as unknown as { content: unknown[] };
-    await api.reportSectionSave(lnx.id, { ...doc, content: [...doc.content, { ...evNode(shot.id), attrs: { ...evNode(shot.id).attrs, block: null } }] } as unknown as ReportDoc, {});
+    await api.reportSectionSave(lnx.id, { ...doc, content: [...doc.content, { ...evNode(shot.id), attrs: { ...evNode(shot.id).attrs, block: null } }] } as unknown as ReportDoc, { layout: 2 });
     const { container } = mount();
     await ready();
     await waitFor(() => expect(container.querySelector(".report-figure img")).toBeTruthy());
@@ -516,7 +516,7 @@ describe("Report view: appendices and new evidence", () => {
   it("offers no Move to appendix on a report-level page", async () => {
     mount();
     await ready();
-    fireEvent.click(row(/Methodology/));
+    fireEvent.click(row(/Methodologies/));
     await waitFor(() => expect(editors.length).toBeGreaterThan(1));
     const view = pageEditor().view;
     let pos = -1;
@@ -581,45 +581,87 @@ describe("Report view: the result", () => {
     expect(save.mock.invocationCallOrder[typed]).toBeLessThan(lock.mock.invocationCallOrder[0]);
   });
 
-  it("titles a report-level page from its kind, at the top of the paper", async () => {
+  it("numbers the pages as OffSec's sample does, titles at the top of the paper", async () => {
     mount();
     await ready();
-    fireEvent.click(row(/High-level summary/));
-    await waitFor(() => expect(within(paper()).getByRole("heading", { level: 1, name: "High-level summary" })).toBeInTheDocument());
-    fireEvent.click(row(/Proof table/));
-    await waitFor(() => expect(within(paper()).getByRole("heading", { level: 1, name: "Appendix A: Proof table" })).toBeInTheDocument());
+    const h1 = () => within(paper()).queryByRole("heading", { level: 1 })?.textContent;
+    fireEvent.click(row(/Exam report/));
+    await waitFor(() => expect(h1()).toBe("1OffSec Certified Professional Exam Report"));
     expect(paper().firstElementChild?.tagName).toBe("H1");
-    // A target keeps its facts title and gets none of its own.
+    // Section 1's parts number under it by CSS, from the page's number.
+    expect(paper()).toHaveAttribute("data-numbered", "true");
+    expect(paper().style.getPropertyValue("--report-number")).toBe('"1"');
+    expect(within(paper()).getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["Introduction", "Objective", "Requirements"]);
+    fireEvent.click(row(/High-level summary/));
+    await waitFor(() => expect(h1()).toBe("2High-Level Summary"));
+    fireEvent.click(row(/Methodologies/));
+    await waitFor(() => expect(h1()).toBe("3Methodologies"));
+    fireEvent.click(row(/Testing considerations/));
+    await waitFor(() => expect(h1()).toBe("Testing Considerations"));
+    expect(paper()).not.toHaveAttribute("data-numbered");
+    // The first target opens the Independent Challenges chapter; the next carries only its own heading.
     fireEvent.click(rowFor("lnx02"));
-    await waitFor(() => expect(within(paper()).getByRole("heading", { level: 2, name: "lnx02" })).toBeInTheDocument());
-    expect(within(paper()).queryByRole("heading", { level: 1 })).toBeNull();
-  });
-
-  it("a target's proof table names the host only once a flag's proof shows its hostname", async () => {
-    mount();
-    await ready();
-    const hostname = () => {
-      const cells = within(paper()).getAllByRole("row").find((r) => r.textContent?.startsWith("Hostname"))?.querySelectorAll("td");
-      return cells?.[cells.length - 1].textContent;
-    };
-    // lnx02 has no flag yet: nothing proves its hostname.
-    await waitFor(() => expect(hostname()).toBe("Not found"));
-    // ms01's proof runs `hostname`.
+    await waitFor(() => expect(h1()).toBe("4Independent Challenges"));
+    expect(within(paper()).getByRole("heading", { level: 2, name: "4.1Target #1 – 10.10.30.21" })).toBeInTheDocument();
     fireEvent.click(rowFor("ms01"));
-    await waitFor(() => expect(hostname()).toBe("ms01"));
+    await waitFor(() => expect(within(paper()).getByRole("heading", { level: 2, name: "4.2Target #2 – 10.10.30.5" })).toBeInTheDocument());
+    expect(h1()).toBeUndefined();
+    const subs = within(paper()).getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(subs[0]).toBe("4.2.1Service Enumeration");
+    expect(subs[1]).toMatch(/^4\.2\.2Initial Access – /);
+    expect(subs[2]).toMatch(/^4\.2\.3Privilege Escalation/);
+    expect(subs).toContain("4.2.4Post-Exploitation");
+    fireEvent.click(row(/AD set/));
+    await waitFor(() => expect(h1()).toBe("5Active Directory Set"));
   });
 
-  it("prints a target's facts as labelled values and marks nmap's guesses once, under the table", async () => {
+  it("lists no generated appendices in the outline", async () => {
     mount();
     await ready();
-    await waitFor(() => expect(paper().querySelector(".report-facts")).toBeTruthy());
-    const facts = paper().querySelector<HTMLElement>(".report-facts")!;
-    expect(facts.textContent).not.toContain("|");
-    expect([...facts.querySelectorAll("dt")].map((d) => d.textContent)).toEqual(["IP", "OS", "Ports", "Access"]);
-    expect([...facts.querySelectorAll("dd")].map((d) => d.textContent)).toEqual(["10.10.30.21", "Linux", "22, 8080", "none"]);
-    expect(paper().textContent).not.toContain("(nmap guess)");
-    expect(paper().querySelectorAll(".report-guess").length).toBe(2);
-    expect(within(paper()).getAllByText("Italic: nmap's guess, not confirmed.")).toHaveLength(1);
+    expect(within(outline()).queryByRole("button", { name: /Proof table|Tools and payloads|Metasploit usage|House cleaning/ })).toBeNull();
+    expect(within(outline()).queryByRole("group", { name: "Appendices" })).toBeNull();
+    expect(row(/Further information/)).toBeInTheDocument();
+  });
+
+  it("prints a flag inline: Local.txt value: closes Initial Access, Proof.txt value: opens Post-Exploitation", async () => {
+    mount();
+    await ready();
+    fireEvent.click(rowFor("ms01"));
+    await waitFor(() => expect(within(paper()).getByText("Proof.txt value:")).toBeInTheDocument());
+    const order = [...paper().querySelectorAll("h3, .report-flag strong")].map((el) => el.textContent ?? "");
+    const at = (pred: (t: string) => boolean) => order.findIndex(pred);
+    expect(at((t) => t === "Local.txt value:")).toBeGreaterThan(at((t) => t.includes("Initial Access")));
+    expect(at((t) => t === "Local.txt value:")).toBeLessThan(at((t) => t.includes("Privilege Escalation")));
+    expect(at((t) => t === "Proof.txt value:")).toBe(at((t) => t.includes("Post-Exploitation")) + 1);
+  });
+
+  it("prints the Port Scan Results at the top of Service Enumeration", async () => {
+    mount();
+    await ready();
+    await waitFor(() => expect(paper().querySelector(".report-table")).toBeTruthy());
+    const cells = [...paper().querySelectorAll(".report-table tbody td")].map((td) => td.textContent);
+    expect(cells).toEqual(["10.10.30.21", "TCP: 22, 8080"]);
+    expect(paper().querySelector(".report-facts")).toBeNull();
+  });
+
+  it("rebuilds a page saved with an older layout from scratch, once", async () => {
+    const report = await api.reportGetOrCreate("e-exam");
+    const old = { type: "doc", content: [{ type: "slot", attrs: { hint: "x" }, content: [{ type: "text", text: "Written under the old layout" }] }] };
+    await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: old as unknown as ReportDoc, meta: { removedEntryIds: ["l-x"] }, draftBuiltAt: 1 });
+    const upsert = vi.spyOn(api, "reportSectionUpsert");
+    mount();
+    await ready();
+    await waitFor(() => expect(draftUpserts(upsert, LNX)).toHaveLength(1));
+    const [, input] = draftUpserts(upsert, LNX)[0] as [string, { meta: unknown; doc: unknown }];
+    expect(input.meta).toEqual({ layout: 2 });
+    expect(JSON.stringify(input.doc)).not.toContain("Written under the old layout");
+    await waitFor(() => expect(paper().querySelector(".report-table")).toBeTruthy());
+    expect(paper().textContent).not.toContain("Written under the old layout");
+    // Opened again, the rebuilt page stays.
+    fireEvent.click(rowFor("ms01"));
+    fireEvent.click(rowFor("lnx02"));
+    await waitFor(() => expect(within(paper()).getByRole("heading", { level: 2, name: "4.1Target #1 – 10.10.30.21" })).toBeInTheDocument());
+    expect(draftUpserts(upsert, LNX)).toHaveLength(1);
   });
 
   it("groups checks of one kind into one row and cycles through them; the fix sits in a disclosure for the picked one", async () => {
@@ -629,7 +671,7 @@ describe("Report view: the result", () => {
     await waitFor(() => expect(screen.getAllByRole("list", { name: "Checks" })[0]).toHaveTextContent(/steps have no explanation/));
     const checks = screen.getAllByRole("list", { name: "Checks" })[0];
     const explain = within(checks).getByText(/^\d+ steps have no explanation\.$/);
-    expect(within(checks).queryAllByText("A step has no explanation after it.")).toHaveLength(0);
+    expect(within(checks).queryAllByText("A step has no explanation before it.")).toHaveLength(0);
     const total = Number(explain.textContent!.split(" ")[0]);
     expect(total).toBeGreaterThan(1);
     const selectedPos = () => {
@@ -647,44 +689,6 @@ describe("Report view: the result", () => {
     expect(checks.querySelector("code")).toBeNull();
   });
 
-  it("lists tools with purpose and URL, and keeps an edited purpose in the appendix section's meta", async () => {
-    const save = vi.spyOn(api, "reportSectionSave");
-    mount();
-    await ready();
-    fireEvent.click(row(/Tools and payloads/));
-    await waitFor(() => expect(within(paper()).getByRole("columnheader", { name: "Purpose" })).toBeInTheDocument());
-    expect(within(paper()).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Tool", "Purpose", "URL"]);
-    expect(within(paper()).queryByText("Times used")).toBeNull();
-    // The cell reads as text until clicked, then takes typing in place.
-    const cell = within(paper()).getByRole("button", { name: "Purpose of nmap" });
-    expect(cell).toHaveTextContent("Port and service scanning");
-    fireEvent.click(cell);
-    const purpose = within(paper()).getByRole("textbox", { name: "Purpose of nmap" });
-    expect(purpose).toHaveValue("Port and service scanning");
-    fireEvent.change(purpose, { target: { value: "Full TCP scans" } });
-    await waitFor(() =>
-      expect(save.mock.calls.some(([, , meta]) => JSON.stringify(meta).includes('"nmap":{"purpose":"Full TCP scans"}'))).toBe(true),
-    );
-    fireEvent.keyDown(purpose, { key: "Enter" });
-    expect(within(paper()).getByRole("button", { name: "Purpose of nmap" })).toHaveTextContent("Full TCP scans");
-    const lastMeta = () => JSON.stringify(save.mock.calls.at(-1)![2]);
-
-    // Esc puts back what was there.
-    fireEvent.click(within(paper()).getByRole("button", { name: "Purpose of nmap" }));
-    fireEvent.change(within(paper()).getByRole("textbox", { name: "Purpose of nmap" }), { target: { value: "Oops" } });
-    fireEvent.keyDown(within(paper()).getByRole("textbox", { name: "Purpose of nmap" }), { key: "Escape" });
-    expect(within(paper()).getByRole("button", { name: "Purpose of nmap" })).toHaveTextContent("Full TCP scans");
-    await waitFor(() => expect(lastMeta()).toContain('"nmap":{"purpose":"Full TCP scans"}'));
-
-    // Emptied, the field is dropped and the catalog's purpose returns; the field itself stays empty while typing.
-    fireEvent.click(within(paper()).getByRole("button", { name: "Purpose of nmap" }));
-    const field = within(paper()).getByRole("textbox", { name: "Purpose of nmap" });
-    fireEvent.change(field, { target: { value: "" } });
-    expect(field).toHaveValue("");
-    fireEvent.keyDown(field, { key: "Enter" });
-    expect(within(paper()).getByRole("button", { name: "Purpose of nmap" })).toHaveTextContent("Port and service scanning");
-    await waitFor(() => expect(lastMeta()).not.toContain('"nmap"'));
-  });
 });
 
 describe("CheckList", () => {
@@ -728,7 +732,7 @@ describe("pruneRemoved", () => {
   const ev = (entryId: string) => ({ type: "evidence", attrs: { entryId } });
   it("drops removed ids whose entry is on the page again (undo) and keeps the rest", () => {
     const doc = { type: "doc", content: [ev("a")] };
-    expect(pruneRemoved(doc, { removedEntryIds: ["a", "b"], method: "x" })).toEqual({ removedEntryIds: ["b"], method: "x" });
+    expect(pruneRemoved(doc, { removedEntryIds: ["a", "b"], layout: 2 })).toEqual({ removedEntryIds: ["b"], layout: 2 });
     const meta = { removedEntryIds: ["b"] };
     expect(pruneRemoved(doc, meta)).toBe(meta);
   });

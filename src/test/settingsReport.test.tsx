@@ -13,8 +13,10 @@ const m = vi.mocked(api, true);
 const settings: Settings = {
   autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali",
   windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false,
-  reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "",
+  reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "", reportIntroduction: "",
 };
+
+const INTRO = "Default introduction, objective and requirements";
 
 function mount() {
   return render(
@@ -70,13 +72,22 @@ describe("report details settings", () => {
     mount();
     await user.type(await screen.findByLabelText("OSID"), "OS-12345");
     await user.tab();
-    const methodology = screen.getByLabelText("Default methodology");
-    expect(methodology).toHaveFocus();
-    await user.type(methodology, "Scoped");
+    const intro = screen.getByLabelText(INTRO);
+    expect(intro).toHaveFocus();
+    await user.type(intro, "Scoped");
     resolve({ ...settings, reportOsid: "OS-12345" });
     await vi.waitFor(() => expect(m.settingsUpdate).toHaveBeenCalled());
     await new Promise((r) => setTimeout(r, 20));
-    expect(screen.getByLabelText("Default methodology")).toHaveValue("Scoped");
-    expect(screen.getByLabelText("Default methodology")).toHaveFocus();
+    expect(screen.getByLabelText(INTRO)).toHaveValue("Scoped");
+    expect(screen.getByLabelText(INTRO)).toHaveFocus();
+  });
+
+  it("saves the default introduction, objective and requirements on blur", async () => {
+    const user = userEvent.setup();
+    m.settingsUpdate.mockResolvedValue({ ...settings, reportIntroduction: "Introduction\nAll efforts." });
+    mount();
+    await user.type(await screen.findByLabelText(INTRO), "Introduction{enter}All efforts.");
+    await user.tab();
+    expect(m.settingsUpdate).toHaveBeenCalledWith({ reportIntroduction: "Introduction\nAll efforts." });
   });
 });

@@ -1,5 +1,7 @@
 import type { LogEntry } from "../../types/log";
+import { testedNotExploited } from "./coverage";
 import { isDeadEnd, provingEntries } from "./prove";
+import { isPortScan } from "./tools";
 import { defaultKeep } from "./trim";
 import type {
   EvidenceAttrs,
@@ -18,18 +20,20 @@ import type {
 
 /** How a screenshot taken after a kept entry still comes along with it. */
 const SCREENSHOT_WINDOW_MS = 5 * 60_000;
-const STEP_HINT = "What this shows, and why it matters";
+/** The slot before each step: the sample's walkthrough explains what comes next, then shows it. */
+export const STEP_HINT = "What you do next, and why";
 const EXPLOIT_HINT = "Explain each change";
-const AD_PATH_HINT = "The path through the domain, machine by machine";
-/** §5.7 order of a target's sub-sections. */
-const PHASE_ORDER: Phase[] = ["foothold", "lateral", "privesc", "domain", "tested", "proof"];
-/** Generated blocks that open a machine or the AD set: a phase's region never runs past one. */
-const REGION_BREAKS = new Set<GeneratedKind>(["facts", "ad-overview", "attack-chain"]);
+const REPRODUCE_HINT = "A short summary of the attack, start to finish";
+export const REPRODUCE_LABEL = "Steps to reproduce the attack:";
+/** OffSec's sample order of a machine's sub-sections. */
+const PHASE_ORDER: Phase[] = ["enum", "foothold", "lateral", "privesc", "domain", "tested", "post"];
+/** Generated blocks that open a machine or close the AD set: a phase's region never runs past one. */
+const REGION_BREAKS = new Set<GeneratedKind>(["facts", "port-scan", "attack-chain"]);
 
 type HostEntry = "foothold" | "hop";
 
 export const node = (type: string, attrs: object): ReportNode => ({ type, attrs: attrs as Record<string, unknown> });
-export const slot = (hint: string) => node("slot", { hint } satisfies SlotAttrs);
+export const slot = (hint: string, label?: string) => node("slot", (label ? { hint, label } : { hint }) satisfies SlotAttrs);
 export const generated = (kind: GeneratedKind, hostId: string | null) =>
   node("generated", { kind, hostId, appendix: "inline" } satisfies GeneratedAttrs);
 const phaseNode = (phase: Phase, hostId: string) => node("phase", { phase, hostId } satisfies PhaseAttrs);
@@ -40,16 +44,19 @@ function lineCount(output: string): number {
   return output === "" ? 0 : output.replace(/\n$/, "").split("\n").length;
 }
 
-/** One evidence node per command block (or one for the whole entry), each followed by an empty slot. */
-export function evidenceNodes(entry: LogEntry): ReportNode[] {
+/** One evidence node per command block (or one for the whole entry). */
+export function evidenceBlocks(entry: LogEntry): ReportNode[] {
   const placements: Pick<EvidenceAttrs, "block" | "keep">[] =
     entry.content.kind === "command" && entry.content.blocks.length > 0
       ? entry.content.blocks.map((b, i) => ({ block: i, keep: defaultKeep(lineCount(b.output)) }))
       : [{ block: null, keep: null }];
-  return placements.flatMap((p) => [
-    node("evidence", { entryId: entry.id, ...p, emphasis: [], appendix: "inline" } satisfies EvidenceAttrs),
-    slot(STEP_HINT),
-  ]);
+  return placements.map((p) => node("evidence", { entryId: entry.id, ...p, emphasis: [], appendix: "inline" } satisfies EvidenceAttrs));
+}
+
+/** An entry as one step: an empty slot first ("what you do next, and why"), then its evidence. A flag prints its own
+ *  "Local.txt value:" line and takes no slot. */
+export function evidenceNodes(entry: LogEntry): ReportNode[] {
+  return entry.kind === "flag" ? evidenceBlocks(entry) : [slot(STEP_HINT), ...evidenceBlocks(entry)];
 }
 
 /** The host's entries that land on the page, in time order: proving ones (notes aside), and screenshots taken
@@ -97,12 +104,14 @@ function phaseNames(data: ReportData, hostId: string, entry: HostEntry): [Phase,
 }
 
 /**
- * §5.1: entries up to and including the first access on the host (a grant, the first local flag, or the hop that
- * entered it) are the entry phase; the rest are privilege escalation (domain compromise on the DC); flags are proof.
- * With no boundary, every non-flag entry is the entry phase. A screenshot that only came along with a proving entry
- * takes that entry's phase (the proving entry logged before it).
+ * §5.1: before the first access on the host (a grant, the first local flag, or the hop that entered it), port scans are
+ * Service Enumeration when `enumerate` (standalone targets); the rest up to and including that access is the entry
+ * phase, local flags included wherever they were logged; then privilege escalation (domain compromise on the DC) up to
+ * and including the first admin or SYSTEM access; the proof flag and every step after that access are
+ * post-exploitation. With no boundary, every step is the entry phase. A screenshot that only came along with a proving
+ * entry takes that entry's phase (the proving entry logged before it).
  */
-export function phaseSplit(entries: LogEntry[], data: ReportData, hostId: string, entry: HostEntry): Map<string, Phase> {
+export function phaseSplit(entries: LogEntry[], data: ReportData, hostId: string, entry: HostEntry, enumerate = false): Map<string, Phase> {
   const sorted = [...entries].sort(byTime);
   const [first, second] = phaseNames(data, hostId, entry);
 
@@ -117,17 +126,21 @@ export function phaseSplit(entries: LogEntry[], data: ReportData, hostId: string
     });
     return last;
   };
+  const earliest = (list: number[]) => {
+    const found = list.filter((i) => i !== -1);
+    return found.length > 0 ? Math.min(...found) : Infinity;
+  };
 
-  const candidates: number[] = [];
-  for (const g of data.grants) if (g.hostId === hostId) candidates.push(indexOf(g.logEntryId, g.at));
+  const grants = data.grants.filter((g) => g.hostId === hostId);
+  const candidates = grants.map((g) => indexOf(g.logEntryId, g.at));
   if (entry === "hop") {
     for (const h of data.hops) if (h.toHostId === hostId) candidates.push(indexOf(h.logEntryId, h.at));
   }
   sorted.forEach((e, i) => {
     if (e.content.kind === "flag" && e.content.flagKind === "local") candidates.push(i);
   });
-  const found = candidates.filter((i) => i !== -1);
-  const boundary = found.length > 0 ? Math.min(...found) : Infinity;
+  const boundary = earliest(candidates);
+  const root = earliest(grants.filter((g) => g.level === "admin" || g.level === "system").map((g) => indexOf(g.logEntryId, g.at)));
 
   const proving = provingEntries(data, hostId);
   const out = new Map<string, Phase>();
@@ -137,48 +150,87 @@ export function phaseSplit(entries: LogEntry[], data: ReportData, hostId: string
       out.set(e.id, anchor ?? first);
       return;
     }
-    const phase = e.kind === "flag" ? "proof" : i <= boundary ? first : second;
+    let phase: Phase;
+    if (e.content.kind === "flag") phase = e.content.flagKind === "local" ? first : "post";
+    else if (i > root) phase = "post";
+    else if (i < boundary && enumerate && isPortScan(e)) phase = "enum";
+    else phase = i <= boundary ? first : second;
     out.set(e.id, phase);
     anchor = phase;
   });
   return out;
 }
 
-/** One machine's block: facts, services, its step phases, tested-not-exploited, proof. `owns` says which of the
- *  host's findings are placed here (in an AD set, a finding on several machines is placed once). */
-function hostBlock(data: ReportData, hostId: string, entry: HostEntry, owns: (findingId: string) => boolean = () => true): ReportNode[] {
+const isFlag = (e: LogEntry) => e.content.kind === "flag";
+
+/** Entries in time order as steps: each proving entry with the screenshots that came along after it. */
+function stepsOf(entries: LogEntry[], proving: Map<string, unknown>): LogEntry[][] {
+  const steps: LogEntry[][] = [];
+  for (const e of entries) {
+    const tagsAlong = e.kind === "screenshot" && !proving.has(e.id) && steps.length > 0;
+    if (tagsAlong) steps[steps.length - 1].push(e);
+    else steps.push([e]);
+  }
+  return steps;
+}
+
+/** A step on the page: one slot before all its evidence; a flag's step prints its own label and takes none. */
+const stepNodes = (step: LogEntry[]): ReportNode[] => [...(isFlag(step[0]) ? [] : [slot(STEP_HINT)]), ...step.flatMap(evidenceBlocks)];
+
+/** One machine's block in the sample's order: its heading; Service Enumeration (standalone: the Port Scan Results
+ *  table and the scans); the entry phase and privilege escalation, each with its vulnerabilities, the reproduce slot,
+ *  the walkthrough and exploits (the local flag closes the entry phase); Also tested; Post-Exploitation, the proof flag
+ *  first. `owns` says which of the host's findings are placed here (in an AD set, a finding on several machines is
+ *  placed once). */
+function hostBlock(
+  data: ReportData,
+  hostId: string,
+  entry: HostEntry,
+  enumerate: boolean,
+  owns: (findingId: string) => boolean = () => true,
+): ReportNode[] {
   const kept = keptEntries(data, hostId);
-  const split = phaseSplit(kept, data, hostId, entry);
+  const split = phaseSplit(kept, data, hostId, entry, enumerate);
+  const proving = provingEntries(data, hostId);
   const entryPhase = phaseNames(data, hostId, entry)[0];
   const time = new Map(kept.map((e) => [e.id, e.at]));
+  const stepPhases = new Set<Phase>(["foothold", "lateral", "privesc", "domain"]);
 
   const findings = data.findings.filter((f) => f.hostIds.includes(hostId) && owns(f.id));
   const findingPhase = (stepIds: string[]): Phase => {
-    const steps = stepIds.filter((id) => split.has(id) && split.get(id) !== "proof");
+    const steps = stepIds.filter((id) => stepPhases.has(split.get(id) as Phase));
     steps.sort((a, b) => (time.get(a) ?? 0) - (time.get(b) ?? 0));
     return steps.length > 0 ? split.get(steps[0])! : entryPhase;
   };
   const placed = findings.map((f) => ({ finding: f, phase: findingPhase(f.stepEntryIds) }));
+  const stepsIn = (phase: Phase) => stepsOf(kept.filter((e) => split.get(e.id) === phase), proving);
 
-  const out: ReportNode[] = [generated("facts", hostId), generated("services", hostId)];
+  const out: ReportNode[] = [generated("facts", hostId)];
+  if (enumerate) out.push(phaseNode("enum", hostId), generated("port-scan", hostId), ...stepsIn("enum").flatMap(stepNodes));
   for (const phase of PHASE_ORDER) {
-    if (phase === "tested" || phase === "proof") continue;
-    const steps = kept.filter((e) => split.get(e.id) === phase);
+    if (!stepPhases.has(phase)) continue;
+    const steps = stepsIn(phase);
     const here = placed.filter((p) => p.phase === phase).map((p) => p.finding);
     if (steps.length === 0 && here.length === 0) continue;
     out.push(phaseNode(phase, hostId));
     for (const f of here) out.push(node("vuln", { findingId: f.id } satisfies VulnAttrs));
-    for (const e of steps) out.push(...evidenceNodes(e));
+    if (here.length > 0) out.push(slot(REPRODUCE_HINT, REPRODUCE_LABEL));
+    for (const step of steps) if (!isFlag(step[0])) out.push(...stepNodes(step));
     for (const f of here) {
       for (const file of data.findingFiles.filter((ff) => ff.findingId === f.id)) {
         out.push(node("exploit", { fileId: file.id, markedLines: [], appendix: "inline" } satisfies ExploitAttrs));
         if (file.modified) out.push(slot(EXPLOIT_HINT));
       }
     }
+    for (const step of steps) if (isFlag(step[0])) out.push(...stepNodes(step));
   }
-  out.push(phaseNode("tested", hostId), generated("tested", hostId));
-  out.push(phaseNode("proof", hostId), generated("proof-table-host", hostId));
-  for (const e of kept) if (split.get(e.id) === "proof") out.push(...evidenceNodes(e));
+  if (testedNotExploited(data, hostId).length > 0) out.push(phaseNode("tested", hostId), generated("tested", hostId));
+  const post = stepsIn("post");
+  if (post.length > 0) {
+    out.push(phaseNode("post", hostId));
+    for (const step of post) if (isFlag(step[0])) out.push(...stepNodes(step));
+    for (const step of post) if (!isFlag(step[0])) out.push(...stepNodes(step));
+  }
   return out;
 }
 
@@ -202,17 +254,17 @@ function findingOwners(data: ReportData, machines: string[]): Map<string, string
   return owners;
 }
 
-/** A target's first draft, in the §5.7 per-target order. Built once; the owner's page is the truth after that.
+/** A target's first draft, in OffSec's sample order (§5.7). Built once; the owner's page is the truth after that.
  *  `meta` is part of the contract for later rounds; nothing in the draft reads it yet. */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function buildTargetDraft(data: ReportData, target: ReportTarget, _meta: ReportMeta): ReportNode {
   if (target.kind === "standalone") {
-    return { type: "doc", content: hostBlock(data, target.hostIds[0], "foothold") };
+    return { type: "doc", content: hostBlock(data, target.hostIds[0], "foothold", true) };
   }
   const machines = machinesInOrder(data, target);
   const owner = findingOwners(data, machines);
-  const content = [generated("ad-overview", null), slot(AD_PATH_HINT)];
-  for (const id of machines) content.push(...hostBlock(data, id, hostEntry(data, target, id), (f) => owner.get(f) === id));
+  const content = [generated("port-scan", null)];
+  for (const id of machines) content.push(...hostBlock(data, id, hostEntry(data, target, id), false, (f) => owner.get(f) === id));
   content.push(generated("attack-chain", null));
   return { type: "doc", content };
 }
@@ -237,7 +289,7 @@ function regionEnd(content: ReportNode[], phaseIndex: number): number {
   while (
     j < content.length &&
     content[j].type !== "phase" &&
-    !(content[j].type === "generated" && REGION_BREAKS.has(content[j].attrs?.kind as GeneratedKind))
+    !(content[j].type === "generated" && REGION_BREAKS.has(content[j].attrs?.kind as GeneratedKind) && content[j].attrs?.hostId !== content[phaseIndex].attrs?.hostId)
   ) {
     j++;
   }
@@ -256,14 +308,40 @@ function placeForPhase(content: ReportNode[], hostId: string, phase: Phase): num
   });
   if (earlier !== -1) return regionEnd(content, earlier);
   const facts = content.findIndex((n) => n.type === "generated" && n.attrs?.kind === "facts" && n.attrs?.hostId === hostId);
-  if (facts === -1) return content.length;
-  const services = content[facts + 1];
-  return services?.type === "generated" && services.attrs?.kind === "services" ? facts + 2 : facts + 1;
+  return facts === -1 ? content.length : facts + 1;
 }
 
 /**
- * Appends entries that now qualify, are not on the page and were not removed, each to the end of its phase
- * (creating the heading if missing), each followed by an empty slot. Never removes or reorders anything.
+ * Where an entry goes on a page with no cursor (§5.1): in its phase (the heading added in front when the page has none),
+ * at the end of it, except that a proof flag opens Post-Exploitation and a step of the entry phase goes before its local
+ * flag. A screenshot that only came along with a step takes no slot of its own.
+ */
+function placeEntry(
+  content: ReportNode[],
+  data: ReportData,
+  hostId: string,
+  entry: LogEntry,
+  phase: Phase,
+): { at: number; nodes: ReportNode[] } {
+  const tagsAlong = entry.kind === "screenshot" && !provingEntries(data, hostId).has(entry.id);
+  const nodes = tagsAlong ? evidenceBlocks(entry) : evidenceNodes(entry);
+  const heading = content.findIndex((n) => isPhase(n, hostId, phase));
+  if (heading === -1) return { at: placeForPhase(content, hostId, phase), nodes: [phaseNode(phase, hostId), ...nodes] };
+  if (phase === "post" && isFlag(entry)) return { at: heading + 1, nodes };
+  const end = regionEnd(content, heading);
+  if (phase !== "post" && !isFlag(entry)) {
+    const flagAt = content.slice(heading + 1, end).findIndex((n) => {
+      const e = n.type === "evidence" ? data.log.find((l) => l.id === n.attrs?.entryId) : undefined;
+      return e != null && isFlag(e);
+    });
+    if (flagAt !== -1) return { at: heading + 1 + flagAt, nodes };
+  }
+  return { at: end, nodes };
+}
+
+/**
+ * Appends entries that now qualify, are not on the page and were not removed, each to its phase (creating the heading
+ * if missing), each step with an empty slot before it. Never removes or reorders anything.
  */
 export function addNewEvidence(
   doc: ReportNode,
@@ -278,16 +356,11 @@ export function addNewEvidence(
 
   for (const hostId of machinesInOrder(data, target)) {
     const kept = keptEntries(data, hostId);
-    const split = phaseSplit(kept, data, hostId, hostEntry(data, target, hostId));
+    const split = phaseSplit(kept, data, hostId, hostEntry(data, target, hostId), target.kind === "standalone");
     for (const e of kept) {
       if (skip.has(e.id)) continue;
-      const phase = split.get(e.id)!;
-      let at = content.findIndex((n) => isPhase(n, hostId, phase));
-      if (at === -1) {
-        at = placeForPhase(content, hostId, phase);
-        content.splice(at, 0, phaseNode(phase, hostId));
-      }
-      content.splice(regionEnd(content, at), 0, ...evidenceNodes(e));
+      const { at, nodes } = placeEntry(content, data, hostId, e, split.get(e.id)!);
+      content.splice(at, 0, ...nodes);
       skip.add(e.id);
       added.push(e.id);
     }
@@ -295,18 +368,12 @@ export function addNewEvidence(
   return { doc: added.length > 0 ? { ...doc, content } : doc, added };
 }
 
-/**
- * Where an entry goes when the page has no cursor: the end of the phase it belongs to (§5.1), with the phase heading
- * added in front when the page has none. `at` is an index into the doc's top-level content.
- */
+/** Where an entry goes when the page has no cursor (§5.1); `at` is an index into the doc's top-level content. */
 export function endOfPhase(doc: ReportNode, data: ReportData, target: ReportTarget, entry: LogEntry): { at: number; nodes: ReportNode[] } {
   const hostId = entry.hostIds.find((h) => target.hostIds.includes(h)) ?? target.hostIds[0];
   const kept = keptEntries(data, hostId);
   const list = kept.some((e) => e.id === entry.id) ? kept : [...kept, entry];
-  const phase = phaseSplit(list, data, hostId, hostEntry(data, target, hostId)).get(entry.id) ?? phaseNames(data, hostId, hostEntry(data, target, hostId))[0];
-  const content = doc.content ?? [];
-  const nodes = evidenceNodes(entry);
-  const heading = content.findIndex((n) => isPhase(n, hostId, phase));
-  if (heading === -1) return { at: placeForPhase(content, hostId, phase), nodes: [phaseNode(phase, hostId), ...nodes] };
-  return { at: regionEnd(content, heading), nodes };
+  const how = hostEntry(data, target, hostId);
+  const phase = phaseSplit(list, data, hostId, how, target.kind === "standalone").get(entry.id) ?? phaseNames(data, hostId, how)[0];
+  return placeEntry(doc.content ?? [], data, hostId, entry, phase);
 }

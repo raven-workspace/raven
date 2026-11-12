@@ -61,13 +61,13 @@ async function seed() {
     type: "doc",
     content: [
       { type: "phase", attrs: { phase: "foothold", hostId: LNX } },
+      { type: "slot", attrs: { hint: "What you do next" } },
       { type: "evidence", attrs: { entryId: nmap.id, block: 0, keep: null, emphasis: [], appendix: "inline" } },
-      { type: "slot", attrs: { hint: "What this shows" } },
-      { type: "phase", attrs: { phase: "proof", hostId: LNX } },
+      { type: "phase", attrs: { phase: "post", hostId: LNX } },
       { type: "slot", attrs: { hint: "Proof" } },
     ],
   };
-  await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { removedEntryIds: [hydra.id] }, draftBuiltAt: Date.now() });
+  await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { removedEntryIds: [hydra.id], layout: 2 }, draftBuiltAt: Date.now() });
   await api.noteSave("e-exam", LNX, "Port 22 open\n? why is 8080 filtered\n", false);
   await api.noteSave("e-exam", null, "Private engagement text", true);
   await api.ruledOutCreate({ engagementId: "e-exam", hostId: LNX, text: "Anonymous FTP", reason: "Not enabled", private: false });
@@ -137,17 +137,17 @@ describe("Evidence rail", () => {
     const nmap = await entryId("nmap scan");
     const save = vi.spyOn(api, "reportSectionSave");
 
-    // The owner clicks into the first slot, so the entry lands right after it.
+    // The owner clicks into the last slot, so the entry lands right after it, its own slot first.
     act(() => {
       editor.view.dom.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
       let at = 0;
       editor.state.doc.descendants((n, p) => {
-        if (n.type.name === "slot" && at === 0) at = p + 1;
+        if (n.type.name === "slot") at = p + 1;
       });
       editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, at)));
     });
     fireEvent.click(screen.getByRole("button", { name: "Insert hydra login" }));
-    expect(shape(editor)).toEqual(["phase:foothold", `evidence:${nmap}`, "slot", `evidence:${hydra}`, "slot", "phase:proof", "slot"]);
+    expect(shape(editor)).toEqual(["phase:foothold", "slot", `evidence:${nmap}`, "phase:post", "slot", "slot", `evidence:${hydra}`]);
     await waitFor(() => expect(titles()).toEqual(["smbclient list"]));
     // The saved page holds the block, and the entry is no longer remembered as removed.
     await waitFor(
@@ -181,9 +181,10 @@ describe("Evidence rail", () => {
     row.focus();
     fireEvent.keyDown(row, { key: "Enter" });
     expect(evidenceIds(editor)).toContain(smb);
-    // No selection was ever made on the page: it goes to the end of the foothold phase, before the proof heading.
+    // No selection was ever made on the page: it goes to the end of the foothold phase, before Post-Exploitation,
+    // its slot before it.
     const nmap = await entryId("nmap scan");
-    expect(shape(editor)).toEqual(["phase:foothold", `evidence:${nmap}`, "slot", `evidence:${smb}`, "slot", "phase:proof", "slot"]);
+    expect(shape(editor)).toEqual(["phase:foothold", "slot", `evidence:${nmap}`, "slot", `evidence:${smb}`, "phase:post", "slot"]);
     await waitFor(() => expect(titles()).toEqual(["hydra login"]));
     // Focus moved on to the next row instead of falling to the page.
     expect(document.activeElement).toBe(within(unusedList()).getByRole("listitem", { name: /hydra login/ }));

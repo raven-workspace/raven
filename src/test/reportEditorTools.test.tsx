@@ -272,12 +272,11 @@ describe("Formatting toolbar", () => {
 });
 
 describe("Generated tables", () => {
-  it("keeps a service's port on one line, as wide as its content; the service column takes the slack", async () => {
-    const svc = { id: "s1", hostId: "h1", port: 3000, protocol: "tcp", nmapService: "http", nmapVersion: "Grafana", confirmedProduct: null, confirmedVersion: null, verdict: null };
-    const { container } = setup(doc({ type: "generated", attrs: { kind: "services", hostId: "h1", appendix: "inline" } }), [entry({})], [svc]);
-    const port = await screen.findByText("3000/tcp");
-    expect(port).toHaveClass("report-fit");
-    expect(container.querySelector("th.report-fit")).toHaveTextContent("Port");
-    expect(screen.getByText(/Grafana/)).not.toHaveClass("report-fit");
+  it("keeps the IP address on one line, as wide as its content; Ports Open takes the slack", async () => {
+    const svc = { id: "s1", hostId: "h1", port: 3000, protocol: "tcp" };
+    const { container } = setup(doc({ type: "generated", attrs: { kind: "port-scan", hostId: "h1", appendix: "inline" } }), [entry({})], [svc]);
+    await waitFor(() => expect(container.querySelector("td.report-fit")).toBeTruthy());
+    expect(container.querySelector("th.report-fit")).toHaveTextContent("IP Address");
+    expect(container.querySelectorAll("td.report-fit")).toHaveLength(1);
   });
 });

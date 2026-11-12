@@ -8,32 +8,36 @@ const title = (n: ReportNode) => String(n.attrs?.entryId);
 
 describe("numberAppendices", () => {
   const sections = (second: ReportNode) => [
-    { id: "s0", kind: "appendix-proof" as const, targetKey: null, doc: null },
+    { id: "s0", kind: "methodology" as const, targetKey: null, doc: doc({ type: "generated", attrs: { kind: "cleanup", hostId: null, appendix: "moved" } }) },
     { id: "t1", kind: "target" as const, targetKey: "h1", doc: doc(ev("inline"), ev("inline")) },
     { id: "t2", kind: "target" as const, targetKey: "h2", doc: second },
   ];
-  it("gives the first target with moved content E and numbers nodes in document order", () => {
+  it("letters only moved-out content, from A, and numbers nodes in document order", () => {
     const idx = numberAppendices(sections(doc(ev("moved", "a"), { type: "phase", content: [ev("split", "b")] })), title);
     expect(idx.entries.map((e) => [e.key, e.letter, e.n, e.sectionId])).toEqual([
-      ["t2:0", "E", 1, "t2"],
-      ["t2:1.0", "E", 2, "t2"],
+      ["t2:0", "A", 1, "t2"],
+      ["t2:1.0", "A", 2, "t2"],
     ]);
-    expect(idx.refFor("t2:0")).toBe("E.1");
-    expect(idx.refFor("t2:1.0")).toBe("E.2");
+    expect(idx.refFor("t2:0")).toBe("A.1");
+    expect(idx.refFor("t2:1.0")).toBe("A.2");
+    expect(idx.refFor("s0:0")).toBeNull();
     expect(idx.refFor("nope")).toBeNull();
   });
   it("renumbers when a node moves earlier", () => {
     const before = numberAppendices(sections(doc(ev("inline", "a"), ev("moved", "b"))), title);
-    expect(before.refFor("t2:1")).toBe("E.1");
+    expect(before.refFor("t2:1")).toBe("A.1");
     const after = numberAppendices(sections(doc(ev("moved", "a"), ev("moved", "b"))), title);
-    expect(after.refFor("t2:1")).toBe("E.2");
+    expect(after.refFor("t2:1")).toBe("A.2");
   });
-  it("uses fixed letters A-D for the fixed appendices", () => {
+  it("gives each target with moved content the next letter, in report order", () => {
     const idx = numberAppendices(
-      [{ id: "m", kind: "appendix-msf", targetKey: null, doc: doc({ type: "generated", attrs: { kind: "msf", hostId: null, appendix: "moved" } }) }],
-      () => "Metasploit",
+      [
+        { id: "t1", kind: "target", targetKey: "h1", doc: doc(ev("moved", "a")) },
+        { id: "ad", kind: "ad", targetKey: "ad-set", doc: doc(ev("moved", "b")) },
+      ],
+      title,
     );
-    expect(idx.refFor("m:0")).toBe("C.1");
+    expect([idx.refFor("t1:0"), idx.refFor("ad:0")]).toEqual(["A.1", "B.1"]);
   });
 });
 

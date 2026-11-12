@@ -1,8 +1,10 @@
 /** A ProseMirror JSON document. Evidence is referenced by id, never copied in. */
 export type ReportDoc = Record<string, unknown>;
 
+/** `appendix-*` kinds are no longer created (layout 2 has no generated appendices); old rows stay hidden. */
 export type SectionKind =
   | "details"
+  | "introduction"
   | "summary"
   | "considerations"
   | "methodology"

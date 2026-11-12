@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createEditor, Priority, type Editor, type NodeJSON } from "prosekit/core";
 import type { Node as PMNode } from "prosekit/pm/model";
 import { NodeSelection, type Command } from "prosekit/pm/state";
 import { ProseKit, useDocChange, useKeymap } from "prosekit/react";
-import { isFigure, type EvidenceAttrs, type ReportData, type ReportNode } from "../../../engines/report";
+import { isFigure, type EvidenceAttrs, type PageHeadings, type ReportData, type ReportNode } from "../../../engines/report";
 import { BlockHandle } from "./BlockHandle";
 import { defineReportExtension } from "./extension";
 import { FormatToolbar } from "./FormatToolbar";
@@ -15,7 +15,7 @@ const hasFigure = (node: PMNode, data: ReportData) =>
   isFigure({ type: node.type.name, attrs: node.attrs }, (id) => data.log.find((e) => e.id === id));
 
 /** Figure numbers and index paths for the current document, keyed by node (nodes are immutable per state). */
-function layoutOf(doc: PMNode, data: ReportData, sectionId: string, figureOffset: number, touched: boolean): PageLayout {
+function layoutOf(doc: PMNode, data: ReportData, sectionId: string, figureOffset: number, touched: boolean, headings: PageHeadings | null): PageLayout {
   const figures = new Map<PMNode, number>();
   const paths = new Map<PMNode, string>();
   const walk = (node: PMNode, path: string) =>
@@ -26,7 +26,7 @@ function layoutOf(doc: PMNode, data: ReportData, sectionId: string, figureOffset
       walk(child, p);
     });
   walk(doc, "");
-  return { sectionId, figureOf: (n) => figures.get(n) ?? null, pathOf: (n) => paths.get(n) ?? null, touched };
+  return { sectionId, figureOf: (n) => figures.get(n) ?? null, pathOf: (n) => paths.get(n) ?? null, touched, heading: (key) => headings?.get(key) ?? null };
 }
 
 /** Pages the owner has focused: before that the selection is only ProseMirror's default (often the first block). */
@@ -201,6 +201,8 @@ function PageHooks({ onDoc, onRemoveEvidence }: { onDoc(doc: PMNode): void; onRe
 export function ReportEditor({
   sectionId,
   title,
+  titleNumber,
+  number,
   doc,
   onChange,
   onReady,
@@ -211,6 +213,10 @@ export function ReportEditor({
   sectionId: string;
   /** A report-level page's title, printed at the top of the paper; it comes from the section kind and is never stored. */
   title?: string;
+  /** The title's number ("3"), printed before it as OffSec's sample does. */
+  titleNumber?: string;
+  /** A numbered report-level page's number ("3"): its headings print as 3.1, 3.2 (OffSec's sample), computed, never stored. */
+  number?: string;
   doc: ReportNode;
   onChange(doc: ReportNode): void;
   onReady(editor: Editor): void;
@@ -232,9 +238,10 @@ export function ReportEditor({
   // `touched` (what hasPageCursor reads) is the one record; this count only re-renders the page when it changes.
   const [touches, countTouch] = useReducer((n: number) => n + 1, 0);
   const pageTouched = touches > 0 && touched.has(editor);
+  const headingsOf = value.headingsOf;
   const layout = useMemo(
-    () => layoutOf(current, value.data, sectionId, figureOffset, pageTouched),
-    [current, value.data, sectionId, figureOffset, pageTouched],
+    () => layoutOf(current, value.data, sectionId, figureOffset, pageTouched, headingsOf ? headingsOf(current.toJSON() as ReportNode) : null),
+    [current, value.data, sectionId, figureOffset, pageTouched, headingsOf],
   );
 
   const callbacks = useRef({ onChange, onReady });
@@ -277,8 +284,17 @@ export function ReportEditor({
         <PageHooks onDoc={onDoc} onRemoveEvidence={value.onRemoveEvidence} />
         <FormatToolbar end={toolbarEnd} className={toolbarClassName} />
         {notices}
-        <div className="report-page">
-          {title && <h1 className="report-title">{title}</h1>}
+        <div
+          className="report-page"
+          data-numbered={number ? true : undefined}
+          style={number ? ({ "--report-number": JSON.stringify(number) } as CSSProperties) : undefined}
+        >
+          {title && (
+            <h1 className="report-title">
+              {titleNumber && <span className="report-num">{titleNumber}</span>}
+              {title}
+            </h1>
+          )}
           <div ref={mount} className="report-page-doc" />
           <BlockHandle />
         </div>

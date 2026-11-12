@@ -140,8 +140,12 @@ export function targetChecks(input: TargetChecksInput): Check[] {
         });
       }
     }
-    if (!hasText(siblings[at + 1])) {
-      explain.push({ check: { id: `explain:${entryId}`, level: "soft", text: "A step has no explanation after it.", anchor }, shot: entry.kind === "screenshot" });
+    // The walkthrough explains a step before it: the nearest block above that isn't the same step's evidence. A flag
+    // prints its own label and needs none.
+    let lead = at - 1;
+    while (lead >= 0 && siblings[lead].type === "evidence") lead--;
+    if (entry.content.kind !== "flag" && !hasText(siblings[lead])) {
+      explain.push({ check: { id: `explain:${entryId}`, level: "soft", text: "A step has no explanation before it.", anchor }, shot: entry.kind === "screenshot" });
     }
     if (entry.content.kind === "screenshot" && !seenEvidence.has(entryId)) {
       if (words(entry.content.caption) > MAX_CAPTION_WORDS) {

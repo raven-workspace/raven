@@ -11,6 +11,7 @@ pub const DEFAULT_TITLE: &str = "OSCP Exam Report";
 
 const KINDS: &[&str] = &[
     "details",
+    "introduction",
     "summary",
     "considerations",
     "methodology",
@@ -412,6 +413,9 @@ mod tests {
             assert!(matches!(section_upsert(c, &r.id, bad), Err(AppError::Validation { .. })));
         }
         assert!(section_upsert(c, &r.id, input("ad", Some("ad-set"), 0)).is_ok());
+        // Section 1 of OffSec's sample (layout 2) is report-level: no target key.
+        assert!(section_upsert(c, &r.id, input("introduction", None, 0)).is_ok());
+        assert!(matches!(section_upsert(c, &r.id, input("introduction", Some("x"), 0)), Err(AppError::Validation { .. })));
     }
 
     #[test]

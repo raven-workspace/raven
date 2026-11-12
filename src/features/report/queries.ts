@@ -1,6 +1,7 @@
 import { useQueries, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
 import {
+  DRAFT_LAYOUT,
   testedNotExploited,
   type ReportData,
   type ReportNode,
@@ -106,10 +107,10 @@ export function useReportData(eid: string): { data: ReportData | undefined; isLo
   return { data, isLoading: isLoading && !data, error, refetch };
 }
 
-/** The front matter, in §5.7 order, before the targets. */
-export const FRONT_KINDS: SectionKind[] = ["details", "summary", "considerations", "methodology"];
-/** After the targets: appendices, then the closing sections. */
-export const BACK_KINDS: SectionKind[] = ["appendix-proof", "appendix-tools", "appendix-msf", "appendix-cleanup", "further", "references"];
+/** The front matter, in §5.7 order (OffSec's sample), before the targets. */
+export const FRONT_KINDS: SectionKind[] = ["details", "introduction", "summary", "considerations", "methodology"];
+/** After the targets and the appendix pages: the closing sections. There are no generated appendices. */
+export const BACK_KINDS: SectionKind[] = ["further", "references"];
 
 /** A section's identity: its kind and target key. */
 export const sectionKey = (kind: SectionKind, targetKey: string | null) => `${kind}:${targetKey ?? ""}`;
@@ -150,6 +151,9 @@ export async function ensureSections(
 }
 
 export { patchCachedSection, pruneRemoved };
+
+/** A stored page built with the current draft layout; any other (older, or none yet) is built afresh when it opens. */
+export const hasCurrentPage = (s: ReportSection) => s.doc != null && (s.meta as SectionMeta).layout === DRAFT_LAYOUT;
 
 /**
  * Autosave for the open section, through the report save queue (`saveQueue.ts`): `save` queues the latest page and

@@ -14,8 +14,6 @@ export interface OutlineItem {
   label: string;
   /** A target's last IP octet (".10"). */
   octet?: string;
-  /** Generated from data (appendices). */
-  auto?: boolean;
   /** Targets only. */
   state?: TargetState;
   /** Report details with name, email or OSID missing. */
@@ -83,13 +81,7 @@ function OutlineRow({ item, open, onOpen, onReorder }: { item: OutlineItem; open
     >
       <StateGlyph state={item.state} warn={item.warn} />
       <span className="min-w-0 truncate">{item.label}</span>
-      {item.octet ? (
-        <span className="font-mono text-code text-faint">{item.octet}</span>
-      ) : item.auto ? (
-        <span className="text-meta text-faint">auto</span>
-      ) : (
-        <span />
-      )}
+      {item.octet ? <span className="font-mono text-code text-faint">{item.octet}</span> : <span />}
     </button>
   );
 }

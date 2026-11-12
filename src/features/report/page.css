@@ -60,6 +60,46 @@
   list-style: decimal;
 }
 
+/* The owner's lists (ProseKit's flat lists, one block per item): a bullet or a number in a 24px hanging indent, items
+   of one list 4px apart rather than a block gap. */
+.report-page .prosemirror-flat-list {
+  position: relative;
+  padding-left: 24px;
+}
+
+.report-page .prosemirror-flat-list > .list-marker {
+  position: absolute;
+  left: 0;
+  width: 24px;
+}
+
+.report-page .prosemirror-flat-list[data-list-kind="bullet"]::before {
+  content: "•";
+  position: absolute;
+  left: 8px;
+}
+
+.report-page .prosemirror-flat-list[data-list-kind="ordered"] {
+  counter-increment: report-list;
+}
+
+.report-page :not(.prosemirror-flat-list[data-list-kind="ordered"]) + .prosemirror-flat-list[data-list-kind="ordered"],
+.report-page .prosemirror-flat-list[data-list-kind="ordered"]:first-child {
+  counter-reset: report-list;
+  counter-increment: report-list;
+}
+
+.report-page .prosemirror-flat-list[data-list-kind="ordered"]::before {
+  content: counter(report-list) ".";
+  position: absolute;
+  left: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-page .prosemirror-flat-list + .prosemirror-flat-list {
+  margin-top: -8px;
+}
+
 .report-page h1,
 .report-page h2,
 .report-page .report-h2 {
@@ -167,41 +207,44 @@
   color: var(--page-placeholder);
 }
 
-/* A report-level page's title, from its kind: above the editor, inside the same side margins. */
+/* A page's chapter title ("3 Methodologies"), numbered from the outline: above the editor, inside the same side
+   margins, a step above the page's own headings. */
 .report-page .report-title {
   padding: 0 40px 16px;
-}
-
-/* A target's facts: labelled values on one row that wraps, 24px apart; the label muted, the value in ink. */
-.report-page .report-facts,
-.report-page .report-facts dd {
-  margin: 0;
-}
-
-.report-page .report-fact {
-  display: inline-block;
-  max-width: 100%;
-  margin-right: 24px;
-}
-
-.report-page .report-fact dt,
-.report-page .report-fact dd {
-  display: inline;
-}
-
-.report-page .report-fact dt {
-  margin-right: 8px;
-  color: var(--page-placeholder);
-}
-
-/* A product only nmap guessed: muted italic, with one note under the table. */
-.report-page .report-guess {
-  font-style: italic;
-  color: var(--page-placeholder);
+  font-size: 26px;
+  line-height: 32px;
 }
 
 .report-page .report-label {
   font-weight: 600;
+}
+
+/* A heading's number, as OffSec's sample sets it: the number, then a fixed gap before the words. */
+.report-page .report-num {
+  display: inline-block;
+  min-width: 48px;
+  margin-right: 8px;
+}
+
+/* A numbered report-level page (1, 2, 3): its headings number under it, 3.1, 3.2, computed here, never stored. */
+.report-page[data-numbered] .ProseMirror {
+  counter-reset: report-sub;
+}
+
+.report-page[data-numbered] .ProseMirror > h2 {
+  counter-increment: report-sub;
+}
+
+.report-page[data-numbered] .ProseMirror > h2::before {
+  content: var(--report-number) "." counter(report-sub);
+  display: inline-block;
+  min-width: 48px;
+  margin-right: 8px;
+}
+
+/* A finding's labelled line with nothing in it yet: a placeholder, like a slot's hint. */
+.report-page .report-missing {
+  color: var(--page-placeholder);
 }
 
 .report-page .report-prose {
@@ -300,6 +343,22 @@
   user-select: none;
 }
 
+/* A labelled slot ("Steps to reproduce the attack:"): the label leads the owner's text in bold, as the sample prints it;
+   the hint sits after it, held in place by an invisible copy. */
+.report-page .report-slot-text[data-label]::before {
+  content: attr(data-label) " ";
+  font-weight: 600;
+}
+
+.report-page .report-slot-text[data-label] > * {
+  display: inline;
+}
+
+.report-page .report-slot-spacer {
+  visibility: hidden;
+  font-weight: 600;
+}
+
 /* Amber placeholder: a referenced row that was deleted or made private */
 
 .report-page .report-gone {
@@ -309,7 +368,7 @@
   border-radius: 4px;
 }
 
-/* A target's appendix page (letters E onwards): read-only, each moved block under its number. */
+/* A target's appendix page (lettered from A): read-only, each moved block under its number. */
 
 .report-page .report-appendix,
 .report-page .report-appendix-entry {
@@ -410,45 +469,6 @@
 /* The block being dragged stays visible in place, faded, until it lands. */
 .report-page .ProseMirror.prosekit-dragging .ProseMirror-selectednode {
   opacity: 0.4;
-}
-
-/* An editable cell (the Tools appendix's purpose and URL): page text that wraps, a field while it is edited. */
-.report-page .report-cell-edit,
-.report-page .report-input {
-  display: block;
-  width: 100%;
-  min-height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 2px;
-  background: none;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-}
-
-.report-page .report-cell-edit {
-  /* A button centres its 22px line in its 24px box: pull it up a pixel so it sits on the row's baseline. */
-  margin: -1px 0;
-  cursor: text;
-}
-
-.report-page .report-cell-edit:hover {
-  background: var(--page-code-bg);
-}
-
-.report-page .report-input {
-  background: var(--page-code-bg);
-}
-
-.report-page .report-cell-edit:focus-visible,
-.report-page .report-input:focus-visible {
-  outline: 2px solid var(--page-ink);
-  outline-offset: 2px;
-}
-
-.report-page .report-cell-empty {
-  color: var(--page-placeholder);
 }
 
 /* While trimming: the hint, or Keep all, on its own line above the output. */

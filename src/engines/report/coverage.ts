@@ -1,5 +1,5 @@
 import type { ReasonKind } from "../../types/findings";
-import type { ReportData, ReportTarget, SectionMeta, CoverageOverride, CoverageResult } from "./types";
+import type { ReportData, CoverageOverride, CoverageResult } from "./types";
 
 export interface CoverageRow {
   serviceId: string;
@@ -119,34 +119,6 @@ export function serviceCoverage(
     });
 }
 
-export interface ExploitedSystem {
-  hostId: string;
-  name: string;
-  ip: string | null;
-  /** The access reached, as the report words it: "user", "SYSTEM" on Windows, else "root". */
-  access: "user" | "SYSTEM" | "root";
-  method: string;
-}
-
-/** The hosts of the given targets with how each was exploited. */
-export function exploitedSystems(
-  data: ReportData,
-  targets: ReportTarget[],
-  sectionMeta: Record<string, SectionMeta>,
-): ExploitedSystem[] {
-  return targets.flatMap((t) =>
-    t.hostIds.flatMap((id) => {
-      const host = data.hosts.find((h) => h.id === id);
-      // Exploited systems only: a host with no access gained is not one.
-      if (!host || host.access === "none") return [];
-      const method =
-        sectionMeta[t.key]?.method ?? data.findings.find((f) => f.hostIds.includes(id))?.title ?? "";
-      const access = host.access === "user" ? "user" : host.os === "windows" ? "SYSTEM" : "root";
-      return [{ hostId: id, name: host.name, ip: host.ip, access, method }];
-    }),
-  );
-}
-
 export interface ChainHop {
   from: string | null;
   to: string;
@@ -171,14 +143,34 @@ export function attackChain(data: ReportData, hostIds: string[]): ChainHop[] {
     .map(({ from, to, via, entryId }) => ({ from, to, via, entryId }));
 }
 
+export interface TestedItem {
+  title: string;
+  /** The reason in plain words: "blocked by a control: WAF", or the ruled-out item's reason. */
+  reason: string;
+  /** The port the item was about, when Raven knows it (a finding's service, a dead-end service verdict). */
+  port: number | null;
+}
+
 /** Non-private attempts and ruled-out items on a host (null = engagement level), with why they went nowhere. */
-export function testedNotExploited(data: ReportData, hostId: string | null): { title: string; reason: string }[] {
+export function testedNotExploited(data: ReportData, hostId: string | null): TestedItem[] {
+  const portOf = (serviceId: string | null | undefined) => data.services.find((s) => s.id === serviceId)?.port ?? null;
   return [
     ...data.attempts
       .filter((a) => !a.private && a.reasonKind !== "operator" && (a.hostId ?? null) === hostId)
-      .map((a) => ({ title: a.title, reason: a.reasonKind === "operator" ? "" : [REASON_WORDS[a.reasonKind], a.reason.trim()].filter(Boolean).join(": ") })),
+      .map((a) => ({
+        title: a.title,
+        reason: a.reasonKind === "operator" ? "" : [REASON_WORDS[a.reasonKind], a.reason.trim()].filter(Boolean).join(": "),
+        port: portOf(data.findings.find((f) => f.id === a.findingId)?.serviceIds[0]),
+      })),
     ...data.ruledOut
       .filter((r) => !r.private && (r.hostId ?? null) === hostId)
-      .map((r) => ({ title: r.text, reason: r.reason })),
+      .map((r) => ({ title: r.text, reason: r.reason, port: r.sourceKind === "service" ? portOf(r.sourceId) : null })),
   ];
+}
+
+/** One slim Also tested line: "<what> on <port>: <reason>". The port is left out when the title already names it. */
+export function testedLine(item: TestedItem): string {
+  const named = item.port != null && portPattern(item.port).test(item.title);
+  const what = item.port != null && !named ? `${item.title} on ${item.port}` : item.title;
+  return item.reason ? `${what}: ${item.reason}` : what;
 }
