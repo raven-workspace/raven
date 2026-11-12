@@ -15,3 +15,4 @@ export * from "./checks";
 export * from "./figures";
 export * from "./headings";
 export * from "./creds";
+export * from "./tables";

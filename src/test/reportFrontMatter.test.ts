@@ -14,8 +14,8 @@ const kinds = (doc: ReportNode) => (doc.content ?? []).map((n) => (n.type === "g
 describe("buildSectionDraft", () => {
   it("lays section 1 out as Introduction, Objective and Requirements, empty slots without a Settings default", () => {
     const doc = buildSectionDraft("introduction", data, settings());
-    expect(headings(doc)).toEqual(["Introduction", "Objective", "Requirements"]);
-    expect(kinds(doc)).toEqual(["heading", "slot", "heading", "slot", "heading", "slot"]);
+    expect(headings(doc)).toEqual(["Introduction", "Objective", "Requirements", "Scope"]);
+    expect(kinds(doc)).toEqual(["heading", "slot", "heading", "slot", "heading", "slot", "heading", "G:scope-table"]);
   });
 
   it("fills section 1 from the Settings default, split on its part lines, bullets as a list", () => {
@@ -31,7 +31,7 @@ describe("buildSectionDraft", () => {
       "  screenshots",
     ].join("\n");
     const doc = buildSectionDraft("introduction", data, settings("", text));
-    expect(kinds(doc)).toEqual(["heading", "paragraph", "heading", "paragraph", "heading", "paragraph", "list", "list"]);
+    expect(kinds(doc)).toEqual(["heading", "paragraph", "heading", "paragraph", "heading", "paragraph", "list", "list", "heading", "G:scope-table"]);
     expect(doc.content?.[1].content?.[0].text).toBe("The exam report contains all efforts that were conducted.");
     expect(doc.content?.[3].content?.[0].text).toBe("Perform an internal penetration test.");
     expect(doc.content?.[6]).toEqual({
@@ -65,11 +65,18 @@ describe("buildSectionDraft", () => {
     expect(introductionParts("Just one paragraph.")).toEqual({ Introduction: "Just one paragraph.", Objective: "", Requirements: "" });
   });
 
-  it("lays out the summary: four prose slots, then 2.1 Recommendations, no generated tables", () => {
+  it("lays out the summary: four prose slots, the findings table, then 2.1 Recommendations", () => {
     const doc = buildSectionDraft("summary", data, settings());
     expect(hints(doc)).toEqual(["What the engagement was", "What the targets did well", "Vulnerabilities and trends", "Wrap-up", "Recommendations"]);
     expect(headings(doc)).toEqual(["Recommendations"]);
-    expect(doc.content?.some((n) => n.type === "generated")).toBe(false);
+    expect(kinds(doc)).toEqual(["slot", "slot", "slot", "slot", "G:findings", "heading", "slot"]);
+  });
+
+  it("ends the introduction with a Scope subheading and the scope table, numbered 1.4", () => {
+    const doc = buildSectionDraft("introduction", data, settings());
+    expect(kinds(doc).slice(-2)).toEqual(["heading", "G:scope-table"]);
+    expect(headings(doc).at(-1)).toBe("Scope");
+    expect(subsectionNumbers("introduction", "1", doc).get((doc.content?.length ?? 0) - 2)).toBe("1.4");
   });
 
   it("lays Methodologies out as the sample's five stages with their generated facts", () => {
@@ -77,7 +84,7 @@ describe("buildSectionDraft", () => {
     expect(headings(filled)).toEqual(["Information Gathering", "Service Enumeration", "Penetration", "Maintaining Access", "House Cleaning"]);
     expect(kinds(filled)).toEqual([
       "paragraph",
-      "heading", "slot", "G:scope",
+      "heading", "slot",
       "heading", "slot",
       "heading", "slot", "G:msf",
       "heading", "slot",

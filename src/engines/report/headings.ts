@@ -152,7 +152,7 @@ export function sectionNumbers(sections: { id: string; kind: SectionKind }[]): M
 /** The sub-sections a report-level page is drafted with, as the sample names them. Only these are numbered: a heading
  *  the owner adds is theirs and stays unnumbered. */
 const SUBSECTIONS: Partial<Record<SectionKind, string[]>> = {
-  introduction: ["Introduction", "Objective", "Requirements"],
+  introduction: ["Introduction", "Objective", "Requirements", "Scope"],
   summary: ["Recommendations"],
   methodology: ["Information Gathering", "Service Enumeration", "Penetration", "Maintaining Access", "House Cleaning"],
 };

@@ -14,7 +14,7 @@ const INTRO_PARTS: [string, string][] = [
 
 /** Methodologies' stages in the sample's order, each with the generated fact it carries, if any. */
 const STAGES: [string, ReportNode | null][] = [
-  ["Information Gathering", generated("scope", null)],
+  ["Information Gathering", null],
   ["Service Enumeration", null],
   ["Penetration", generated("msf", null)],
   ["Maintaining Access", null],
@@ -93,12 +93,14 @@ export function buildSectionDraft(kind: SectionKind, _data: ReportData, settings
   switch (kind) {
     case "introduction": {
       const parts = introductionParts(settings.reportIntroduction ?? "");
-      return doc(
-        INTRO_PARTS.flatMap(([name, hint]) => {
+      return doc([
+        ...INTRO_PARTS.flatMap(([name, hint]) => {
           const blocks = textBlocks(parts[name]);
           return [heading(name), ...(blocks.length > 0 ? blocks : [slot(hint)])];
         }),
-      );
+        heading("Scope"),
+        generated("scope-table", null),
+      ]);
     }
     case "summary":
       return doc([
@@ -106,6 +108,7 @@ export function buildSectionDraft(kind: SectionKind, _data: ReportData, settings
         slot("What the targets did well"),
         slot("Vulnerabilities and trends"),
         slot("Wrap-up"),
+        generated("findings", null),
         heading("Recommendations"),
         slot("Recommendations"),
       ]);

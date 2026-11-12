@@ -145,7 +145,7 @@ export function domainController(data: ReportData, hostIds: string[]): string | 
 const adHostIds = (data: ReportData) => data.hosts.filter((h) => h.adSetEffective).map((h) => h.id);
 
 /** A machine was entered by a hop when some hop from another machine reached it. */
-function hostEntry(data: ReportData, target: ReportTarget, hostId: string): HostEntry {
+export function hostEntry(data: ReportData, target: ReportTarget, hostId: string): HostEntry {
   if (target.kind === "standalone") return "foothold";
   return data.hops.some((h) => h.toHostId === hostId && h.fromHostId != null) ? "hop" : "foothold";
 }
@@ -256,7 +256,7 @@ function stepsOf(entries: LogEntry[], placing: ReadonlySet<string>): LogEntry[][
 
 /** The order findings are told in: most severe first, unrated after rated ones, info last; then by title. */
 const SEVERITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-const severityRank = (f: Finding) => (f.severity == null ? 4 : f.severity === "info" ? 5 : SEVERITY_RANK[f.severity]);
+export const severityRank = (f: Finding) => (f.severity == null ? 4 : f.severity === "info" ? 5 : SEVERITY_RANK[f.severity]);
 /** Observations: they never enable a phase, whatever steps they link. */
 const isObservation = (f: Finding) => f.severity === "info" || f.severity === "low";
 
@@ -446,7 +446,7 @@ export function machineOrder(data: ReportData, hostIds: string[]): string[] {
   );
 }
 
-const machinesInOrder = (data: ReportData, target: ReportTarget) =>
+export const machinesInOrder = (data: ReportData, target: ReportTarget) =>
   target.kind === "standalone" ? [...target.hostIds] : machineOrder(data, target.hostIds);
 
 /** Which machine of an AD set each of its findings is placed under: the machine of its first step logged on one of
