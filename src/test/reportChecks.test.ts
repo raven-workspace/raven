@@ -72,6 +72,14 @@ describe("proofFacts details", () => {
     expect(f("dev@web01:~$ cat local.txt").usualPath).toBe(true);
     expect(f("dev@web01:~/tools$ cat local.txt").usualPath).toBe(false);
   });
+  it("lets a cd before the read on the same line override the prompt's folder", () => {
+    // Relative to the prompt's folder: C:\Users\bob\Desktop.
+    expect(f("PS C:\\Users\\bob> cd Desktop; type proof.txt").usualPath).toBe(true);
+    expect(f("bob@x:/tmp$ cd ~; cat local.txt").usualPath).toBe(true);
+    expect(f("root@x:/root# cd /tmp && cat proof.txt")).toMatchObject({ usualPath: false, pathKnown: true });
+    expect(f("root@x:/root# cd /tmp | cat proof.txt").usualPath).toBe(false);
+    expect(f("bob@x:/home$ cd bob; cat local.txt").usualPath).toBe(true);
+  });
 });
 
 describe("absoluteClaims", () => {
