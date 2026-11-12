@@ -44,8 +44,25 @@ function lineCount(output: string): number {
   return output === "" ? 0 : output.replace(/\n$/, "").split("\n").length;
 }
 
-/** One evidence node per command block (or one for the whole entry). */
+/** The owner's own words from the log as page paragraphs they can edit: one per blank-line-separated paragraph, a single
+ *  line break kept as a hard break. Each keeps the entry it came from (`fromEntry`), so the rail knows it is on the page. */
+export function ownerParagraphs(text: string, entryId: string): ReportNode[] {
+  return text
+    .replace(/\r\n/g, "\n")
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter((p) => p !== "")
+    .map((p) => ({
+      type: "paragraph",
+      attrs: { fromEntry: entryId },
+      content: p.split("\n").flatMap((line, i): ReportNode[] => [...(i > 0 ? [{ type: "hardBreak" }] : []), ...(line ? [{ type: "text", text: line }] : [])]),
+    }));
+}
+
+/** One evidence node per command block (or one for the whole entry). A note is the owner's own text: it lands as
+ *  editable paragraphs, never a frozen block. */
 export function evidenceBlocks(entry: LogEntry): ReportNode[] {
+  if (entry.content.kind === "note") return ownerParagraphs(entry.content.text, entry.id);
   const placements: Pick<EvidenceAttrs, "block" | "keep">[] =
     entry.content.kind === "command" && entry.content.blocks.length > 0
       ? entry.content.blocks.map((b, i) => ({ block: i, keep: defaultKeep(lineCount(b.output)) }))
@@ -54,9 +71,12 @@ export function evidenceBlocks(entry: LogEntry): ReportNode[] {
 }
 
 /** An entry as one step: an empty slot first ("what you do next, and why"), then its evidence. A flag prints its own
- *  "Local.txt value:" line and takes no slot. */
+ *  "Local.txt value:" line and takes no slot; a note is prose already. The entry's observations, when it has any,
+ *  stand in for the empty slot as paragraphs the owner edits. */
 export function evidenceNodes(entry: LogEntry): ReportNode[] {
-  return entry.kind === "flag" ? evidenceBlocks(entry) : [slot(STEP_HINT), ...evidenceBlocks(entry)];
+  if (entry.kind === "flag" || entry.kind === "note") return evidenceBlocks(entry);
+  const said = entry.observations?.trim() ? ownerParagraphs(entry.observations, entry.id) : [];
+  return [...(said.length > 0 ? said : [slot(STEP_HINT)]), ...evidenceBlocks(entry)];
 }
 
 /** The host's entries that land on the page, in time order: proving ones (notes aside), and screenshots taken
@@ -318,11 +338,13 @@ export function buildTargetDraft(data: ReportData, target: ReportTarget, _meta: 
   return { type: "doc", content };
 }
 
-/** Every log entry an evidence node on the page refers to. */
+/** Every log entry on the page: referenced by an evidence node, or text taken from it (`fromEntry`). */
 export function evidenceIdsIn(doc: ReportNode): Set<string> {
   const ids = new Set<string>();
   const walk = (n: ReportNode) => {
     if (n.type === "evidence" && typeof n.attrs?.entryId === "string") ids.add(n.attrs.entryId);
+    // Text the owner took from an entry (a note, observations, a block edited on the page) puts the entry on the page.
+    else if (typeof n.attrs?.fromEntry === "string" && n.attrs.fromEntry !== "") ids.add(n.attrs.fromEntry);
     n.content?.forEach(walk);
   };
   walk(doc);

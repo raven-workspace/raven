@@ -69,8 +69,8 @@ const moveWinPeas = async (page: Page) => {
   await openReportItem("ms01")(page);
   await page.locator(".report-page .report-code", { hasText: "winPEASx64.exe" }).click();
   await page.getByRole("button", { name: "Move to appendix" }).click();
-  await page.getByText(/^Full output: Appendix E\.1/).waitFor();
-  await openReportItem(/^Appendix E: ms01/)(page);
+  await page.getByText(/^Full output: Appendix A\.1/).waitFor();
+  await openReportItem(/^Appendix A: ms01/)(page);
 };
 const NOTE_PANE = "section[aria-label='Note']";
 
@@ -419,9 +419,9 @@ export const SCREENS: Screen[] = [
   { id: "manual-empty", path: "/manual?audit=empty", ready: "text=Import your Field Manual to fill the Manual" },
   // The Report on the mock exam: the report exists with no sections, so opening it drafts every page.
   { id: "report-details", path: REPORT, ready: "role=heading[name='Report details']", setup: openReportItem("Report details") },
-  { id: "report-target", path: REPORT, ready: ".report-page >> role=heading[name='ms01']", setup: openReportItem("ms01") },
-  { id: "report-ad", path: REPORT, ready: ".report-page >> role=heading[name='Attack chain']", setup: openReportItem(/^AD set/) },
-  { id: "report-appendix", path: REPORT, ready: "role=heading[name='Appendix E: ms01']", setup: moveWinPeas },
+  { id: "report-target", path: REPORT, ready: ".report-page >> role=heading[name=/^4\\.\\d+ Target #\\d+ – 10\\.10\\.30\\.5$/]", setup: openReportItem("ms01") },
+  { id: "report-ad", path: REPORT, ready: ".report-page >> role=heading[name=/Attack Chain$/]", setup: openReportItem(/^AD set/) },
+  { id: "report-appendix", path: REPORT, ready: "role=heading[name='Appendix A: ms01']", setup: moveWinPeas },
   {
     // Under 1200px of pane the evidence rail is a drawer, opened from the strip; wider, it is the third column.
     id: "report-narrow", path: REPORT, ready: "role=tablist[name='Evidence'] >> visible=true",

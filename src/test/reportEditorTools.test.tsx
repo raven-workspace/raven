@@ -1,5 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { Editor } from "prosekit/core";
 import { NodeSelection, TextSelection } from "prosekit/pm/state";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -64,13 +65,13 @@ const slot = (text?: string): ReportNode => ({
 const doc = (...content: ReportNode[]): ReportNode => ({ type: "doc", content });
 const noRefs: AppendixIndex = { entries: [], refFor: () => null };
 
-function setup(page: ReportNode, log: LogEntry[] = [entry({})], services: unknown[] = []) {
+function setup(page: ReportNode, log: LogEntry[] = [entry({})], services: unknown[] = [], subNumbers?: (doc: ReportNode) => Map<number, string>) {
   const onChange = vi.fn();
   const ref: { editor: Editor | null } = { editor: null };
   const utils = render(
     <QueryClientProvider client={makeQueryClient()}>
       <ReportDataContext.Provider value={{ data: { ...data(log), services } as ReportData, appendix: noRefs, sectionMeta: {}, onRemoveEvidence: vi.fn() }}>
-        <ReportEditor sectionId="s1" doc={page} onChange={onChange} onReady={(e) => (ref.editor = e)} />
+        <ReportEditor sectionId="s1" doc={page} subNumbers={subNumbers} onChange={onChange} onReady={(e) => (ref.editor = e)} />
       </ReportDataContext.Provider>
     </QueryClientProvider>,
   );
@@ -170,8 +171,8 @@ describe("Block handle", () => {
 });
 
 describe("Formatting toolbar", () => {
-  async function ready(page: ReportNode) {
-    const s = setup(page);
+  async function ready(page: ReportNode, subNumbers?: (doc: ReportNode) => Map<number, string>) {
+    const s = setup(page, undefined, undefined, subNumbers);
     await waitFor(() => expect(s.editor()?.mounted).toBe(true));
     fireEvent.focusIn(s.editor().view.dom);
     return s;
@@ -187,32 +188,42 @@ describe("Formatting toolbar", () => {
       const view = editor().view;
       view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.doc.child(0).nodeSize + 2)));
     });
-    await waitFor(() => expect(screen.getByRole("button", { name: "Bold" })).toBeEnabled());
+    await waitFor(() => expect(within(bar).getByRole("button", { name: "Bold" })).toBeEnabled());
   });
 
-  it("keeps structural headings out of lists and code blocks", async () => {
-    const { editor } = await ready(doc({ type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Penetration" }] }, slot("x")));
+  it("keeps the page's numbered headings out of lists, headings and block types", async () => {
+    const numbered = () => new Map([[0, "3.3"]]);
+    const { editor } = await ready(doc({ type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Penetration" }] }, slot("x")), numbered);
     act(() => {
       const view = editor().view;
       view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)));
     });
-    for (const name of ["Bulleted list", "Numbered list", "Code block"])
-      await waitFor(() => expect(screen.getByRole("button", { name })).toBeDisabled());
-    expect(screen.getByRole("button", { name: "Bold" })).toBeEnabled();
+    const bar = within(screen.getByRole("toolbar", { name: "Formatting" }));
+    for (const name of ["Bulleted list", "Numbered list", "Task list", "Heading 1", "Heading 2", "Heading 3"])
+      await waitFor(() => expect(bar.getByRole("button", { name })).toBeDisabled());
+    expect(bar.getByRole("combobox", { name: "Block type" })).toBeDisabled();
+    expect(bar.getByRole("button", { name: "Bold" })).toBeEnabled();
   });
 
-  it("Code block turns a slot into a code block and back into a slot, never a paragraph", async () => {
+  it("Block type turns a slot into a code block, and Paragraph back into prose", async () => {
+    const user = userEvent.setup();
     const { editor } = await ready(doc(slot("id; whoami")));
     act(() => {
       const view = editor().view;
       view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)));
     });
-    const code = screen.getByRole("button", { name: "Code block" });
-    fireEvent.click(code);
+    const bar = within(screen.getByRole("toolbar", { name: "Formatting" }));
+    await waitFor(() => expect(bar.getByRole("combobox", { name: "Block type" })).toHaveTextContent("Paragraph"));
+    await user.click(bar.getByRole("combobox", { name: "Block type" }));
+    await user.click(await screen.findByRole("option", { name: "Code block" }));
     expect(editor().getDocJSON().content?.[0]).toMatchObject({ type: "codeBlock", content: [{ text: "id; whoami" }] });
-    await waitFor(() => expect(code).toHaveAttribute("aria-pressed", "true"));
-    fireEvent.click(code);
-    expect(editor().getDocJSON().content?.[0]).toMatchObject({ type: "slot", content: [{ text: "id; whoami" }] });
+    await waitFor(() => expect(bar.getByRole("combobox", { name: "Block type" })).toHaveTextContent("Code block"));
+    await user.click(bar.getByRole("combobox", { name: "Block type" }));
+    await user.click(await screen.findByRole("option", { name: "Heading 2" }));
+    expect(editor().getDocJSON().content?.[0]).toMatchObject({ type: "heading", attrs: { level: 2 }, content: [{ text: "id; whoami" }] });
+    await user.click(bar.getByRole("combobox", { name: "Block type" }));
+    await user.click(await screen.findByRole("option", { name: "Paragraph" }));
+    expect(editor().getDocJSON().content?.[0]).toMatchObject({ type: "paragraph", content: [{ text: "id; whoami" }] });
   });
 
   it("Bold toggles the bold mark on a text selection in a slot, and shows as pressed", async () => {
@@ -221,7 +232,7 @@ describe("Formatting toolbar", () => {
       const view = editor().view;
       view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 1, 5)));
     });
-    const bold = screen.getByRole("button", { name: "Bold" });
+    const bold = within(screen.getByRole("toolbar", { name: "Formatting" })).getByRole("button", { name: "Bold" });
     expect(bold).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(bold);
     expect(editor().getDocJSON().content?.[0].content?.[0]).toMatchObject({ text: "Port", marks: [{ type: "bold" }] });
@@ -236,10 +247,11 @@ describe("Formatting toolbar", () => {
       const view = editor().view;
       view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)));
     });
-    fireEvent.click(screen.getByRole("button", { name: "Numbered list" }));
+    const bar = within(screen.getByRole("toolbar", { name: "Formatting" }));
+    fireEvent.click(bar.getByRole("button", { name: "Numbered list" }));
     const top = editor().getDocJSON().content?.[0];
     expect(top).toMatchObject({ type: "list", attrs: { kind: "ordered" }, content: [{ type: "slot" }] });
-    await waitFor(() => expect(screen.getByRole("button", { name: "Numbered list" })).toHaveAttribute("aria-pressed", "true"));
+    await waitFor(() => expect(bar.getByRole("button", { name: "Numbered list" })).toHaveAttribute("aria-pressed", "true"));
   });
 
   it("disables formatting while a block is selected", async () => {
@@ -248,11 +260,14 @@ describe("Formatting toolbar", () => {
       const view = editor().view;
       view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, view.state.doc.child(0).nodeSize)));
     });
-    for (const name of ["Bold", "Italic", "Inline code", "Link", "Bulleted list", "Numbered list", "Code block"])
-      await waitFor(() => expect(screen.getByRole("button", { name })).toBeDisabled());
+    const bar = within(screen.getByRole("toolbar", { name: "Formatting" }));
+    const marks = ["Bold", "Italic", "Underline", "Strikethrough", "Inline code", "Highlight", "Subscript", "Superscript", "Link"];
+    for (const name of [...marks, "Bulleted list", "Numbered list", "Task list"])
+      await waitFor(() => expect(bar.getByRole("button", { name })).toBeDisabled());
+    expect(bar.getByRole("combobox", { name: "Block type" })).toBeDisabled();
   });
 
-  it("⌘⇧K opens the link input, and Enter links the selection", async () => {
+  it("⌘⇧K opens the link field, and Enter links the selection", async () => {
     const { editor } = await ready(doc(slot("the login page")));
     act(() => {
       const view = editor().view;

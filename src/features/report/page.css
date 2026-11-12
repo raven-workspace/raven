@@ -8,6 +8,11 @@
   --page-rule: #d6d3cb;
   --page-amber-ink: #7a5414;
   --page-amber-line: #b3802a;
+  /* Highlight and find matches: a warm tint that prints as a light grey. */
+  --page-mark: #ece3b8;
+  /* Code tokens: ink tones only (house style), strings and values a step lighter. */
+  --page-string: #3d4a2c;
+  --page-token: #2c3a52;
   --page-sans: "Instrument Sans Variable", system-ui, sans-serif;
   --page-mono: "JetBrains Mono Variable", ui-monospace, monospace;
 
@@ -179,8 +184,31 @@
   grid-template-columns: 40px minmax(0, 1fr);
 }
 
+/* While trimming, a cut line is struck through and dimmed; the run picked carries a rule in the number column, the
+   line cursor an ink one. */
 .report-page .report-line[data-dropped] {
   color: var(--page-placeholder);
+  text-decoration: line-through;
+  text-decoration-color: var(--page-rule);
+}
+
+.report-page .report-pick[data-picked] {
+  background: var(--page-paper);
+}
+
+.report-page .report-pick[data-picked] > .report-ln {
+  box-shadow: inset -2px 0 0 var(--page-placeholder);
+}
+
+.report-page .report-pick[data-cursor] > .report-ln {
+  box-shadow: inset -2px 0 0 var(--page-ink);
+  color: var(--page-ink);
+}
+
+/* Dragging down the line numbers picks a run: no text selection on the way. */
+.report-page .report-pick > .report-ln {
+  user-select: none;
+  touch-action: none;
 }
 
 .report-page .report-omitted {
@@ -307,11 +335,16 @@
   border-bottom: 1px solid var(--page-rule);
 }
 
-/* Ports and IPs: as wide as their content, never broken across lines. */
+/* IPs and host names: their column's width is set from their text (GeneratedView's Table), never broken across lines;
+   digits are tabular so 1ch is exactly one digit. */
+.report-page .report-table[data-fixed] {
+  table-layout: fixed;
+}
+
 .report-page .report-table .report-fit {
-  width: 1%;
   white-space: nowrap;
   overflow-wrap: normal;
+  font-variant-numeric: tabular-nums;
 }
 
 .report-page .report-table th {
@@ -465,7 +498,372 @@
 }
 
 /* While trimming: the hint, or Keep all, on its own line above the output. */
-.report-page .report-pick-hint {
+/* The trim bar over the output: the count, the run's actions as underlined words (actions on paper), a hint. It
+   takes the trim keys, so focus shows as an ink ring. */
+.report-page .report-trim-bar {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: auto;
+  justify-content: start;
+  align-items: center;
+  column-gap: 16px;
+  min-height: 28px;
+  padding: 0 4px;
+  border-radius: 4px;
+  outline: none;
   color: var(--page-placeholder);
+}
+
+.report-page .report-trim-bar:focus-visible {
+  box-shadow: 0 0 0 2px var(--page-ink);
+}
+
+.report-page .report-trim-count {
+  color: var(--page-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.report-page .report-trim-action {
   min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--page-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.report-page .report-trim-action:focus-visible {
+  outline: 2px solid var(--page-ink);
+  outline-offset: 2px;
+}
+
+.report-page .report-trim-hint {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The owner's own blocks: quotes, dividers, tables, code blocks, the text marks. One house style, no colours. */
+
+.report-page a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.report-page blockquote {
+  margin: 0;
+  padding-left: 16px;
+  border-left: 2px solid var(--page-rule);
+  display: grid;
+  row-gap: 8px;
+}
+
+.report-page .prosekit-horizontal-rule {
+  padding: 8px 0;
+}
+
+.report-page .prosekit-horizontal-rule hr {
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--page-rule);
+}
+
+.report-page .prosekit-horizontal-rule.ProseMirror-selectednode hr {
+  border-top-color: var(--page-ink);
+}
+
+.report-page mark {
+  background: var(--page-mark);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.report-page sub,
+.report-page sup {
+  font-size: 11px;
+  line-height: 0;
+}
+
+/* A table the owner writes (credentials found, users and hashes): the generated tables' hairlines, a header row in
+   bold over an ink rule, fixed column widths the owner can drag. */
+.report-page .tableWrapper {
+  overflow-x: auto;
+}
+
+/* Scoped to the owner's tables (ProseKit wraps each in .tableWrapper): the generated tables size their columns to
+   content (an IP as wide as itself), which a fixed layout would break. */
+.report-page .tableWrapper table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.report-page .tableWrapper td,
+.report-page .tableWrapper th {
+  position: relative;
+  box-sizing: border-box;
+  vertical-align: top;
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--page-rule);
+}
+
+.report-page .tableWrapper th {
+  font-weight: 600;
+  border-bottom-color: var(--page-ink);
+}
+
+.report-page .ProseMirror .selectedCell {
+  background: var(--page-code-bg);
+}
+
+.report-page .ProseMirror .column-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -2px;
+  width: 4px;
+  z-index: 5;
+  pointer-events: none;
+  background: var(--page-ink);
+}
+
+.report-page .ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+
+/* Where a dragged row or column will land. */
+.report-page .report-table-drop {
+  background: var(--page-ink);
+}
+
+/* A code block the owner writes: the evidence blocks' tint, coloured by token in ink tones only (no colour on paper).
+   Its language picker is Ink chrome in the top right corner, shown while hovered or typed in; it never prints. */
+.report-page .report-codeblock {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.report-page .report-codeblock pre > code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  white-space: pre-wrap;
+}
+
+.report-page .report-codeblock-lang {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms cubic-bezier(0.16, 1, 0.3, 1); /* FADE_MS, EASE_OUT: src/ui/motion.ts */
+}
+
+.report-page .report-codeblock:hover .report-codeblock-lang,
+.report-page .report-codeblock[data-active] .report-codeblock-lang,
+.report-page .report-codeblock-lang:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* The app's own token colours (Ink, global.css) never reach the paper: ink first, then the house tones below. */
+.report-page .report-codeblock [class*="hljs-"] {
+  color: var(--page-ink);
+}
+
+.report-page .report-codeblock .hljs-keyword,
+.report-page .report-codeblock .hljs-selector-tag,
+.report-page .report-codeblock .hljs-built_in,
+.report-page .report-codeblock .hljs-section {
+  font-weight: 700;
+}
+
+.report-page .report-codeblock .hljs-comment,
+.report-page .report-codeblock .hljs-quote,
+.report-page .report-codeblock .hljs-meta {
+  color: var(--page-placeholder);
+  font-style: italic;
+}
+
+.report-page .report-codeblock .hljs-string,
+.report-page .report-codeblock .hljs-regexp {
+  color: var(--page-string);
+}
+
+.report-page .report-codeblock .hljs-number,
+.report-page .report-codeblock .hljs-literal,
+.report-page .report-codeblock .hljs-attr,
+.report-page .report-codeblock .hljs-attribute,
+.report-page .report-codeblock .hljs-variable {
+  color: var(--page-token);
+}
+
+/* Task lists: the checkbox in the 24px hanging indent where a bullet would be. */
+.report-page .prosemirror-flat-list[data-list-kind="task"] > .list-marker {
+  display: grid;
+  place-items: center;
+  height: 22px;
+}
+
+.report-page .prosemirror-flat-list[data-list-kind="task"] > .list-marker input {
+  margin: 0;
+  accent-color: var(--page-ink);
+  cursor: pointer;
+}
+
+.report-page .prosemirror-flat-list[data-list-kind="task"][data-list-checked] > .list-content {
+  color: var(--page-placeholder);
+  text-decoration: line-through;
+}
+
+/* An empty block with the cursor in it says what to do; never printed. */
+.report-page .prosekit-placeholder::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  height: 0;
+  color: var(--page-placeholder);
+  pointer-events: none;
+}
+
+/* The / and query typed for the slash menu. */
+.report-page .prosekit-autocomplete-match {
+  background: var(--page-code-bg);
+  border-radius: 2px;
+}
+
+/* Find and replace: every match tinted, the current one in ink. */
+.report-page .ProseMirror-search-match {
+  background: var(--page-mark);
+}
+
+.report-page .ProseMirror-active-search-match {
+  background: var(--page-ink);
+  color: var(--page-paper);
+}
+
+/* A text selection the bubble menu acts on, kept visible while focus is in the menu. */
+.report-page .prosekit-virtual-selection {
+  background: var(--page-rule);
+}
+
+.report-page .ProseMirror-gapcursor {
+  position: relative;
+  display: none;
+  pointer-events: none;
+}
+
+.report-page .ProseMirror-gapcursor::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  display: block;
+  width: 20px;
+  border-top: 1px solid var(--page-ink);
+}
+
+.report-page .ProseMirror-focused .ProseMirror-gapcursor {
+  display: block;
+}
+
+/* A screenshot's caption, typed in place: it reads as the caption, and its prompt as a placeholder. */
+.report-page .report-caption {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  color: var(--page-placeholder);
+}
+
+.report-page .report-caption > span {
+  white-space: pre;
+}
+
+/* A 24px target, like every control; the caption's own line is 22px. */
+.report-page .report-caption-input {
+  min-width: 0;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  outline: none;
+}
+
+.report-page .report-caption-input::placeholder {
+  color: var(--page-amber-ink);
+}
+
+.report-page .report-caption-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--page-paper), 0 0 0 3px var(--page-ink);
+}
+
+/* A screenshot sized on the page: the corner handle shows while the block is hovered or selected. */
+.report-page .report-resizable {
+  position: relative;
+  display: block;
+  max-width: 100%;
+  justify-self: start;
+}
+
+.report-page .report-resizable img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: none;
+}
+
+/* Inside the image's corner, so it never reaches past the page's measure. */
+.report-page .report-resize-handle {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--page-ink);
+  border-radius: 2px;
+  background: var(--page-paper);
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 120ms cubic-bezier(0.16, 1, 0.3, 1); /* FADE_MS, EASE_OUT: src/ui/motion.ts */
+}
+
+.report-page .report-block:hover .report-resize-handle,
+.report-page .report-block[data-selected] .report-resize-handle,
+.report-page .report-resizable[data-resizing] .report-resize-handle {
+  opacity: 1;
+}
+
+/* The owner's headings (Heading 1 to 3): a step under the page's numbered section headings (22px, with their number),
+   so the drafted structure still reads first; 1 > 2 > 3 by size, 3 by weight alone. They never take a number. Only
+   heading nodes themselves: the machine and phase headings drawn by node views keep their own sizes. */
+.report-page .ProseMirror > h1:not([data-number]),
+.report-page .ProseMirror :is(blockquote, .list-content, td, th) > h1 {
+  font-size: 19px;
+  line-height: 26px;
+  font-weight: 600;
+  padding-top: 4px;
+}
+
+.report-page .ProseMirror > h2:not([data-number]),
+.report-page .ProseMirror :is(blockquote, .list-content, td, th) > h2 {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.report-page .ProseMirror > h3,
+.report-page .ProseMirror :is(blockquote, .list-content, td, th) > h3 {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }

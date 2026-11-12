@@ -5,6 +5,7 @@ import { useParams } from "react-router";
 import {
   buildSectionDraft,
   buildTargetDraft,
+  captionOf,
   DRAFT_LAYOUT,
   expectedFlags,
   isFigure,
@@ -42,7 +43,7 @@ import { useNotesStore } from "../notes/useNotesStore";
 import { usePayloadsStore } from "../payloads/usePayloadsStore";
 import { ReportDataContext, type ReportDataValue } from "./editor/ReportDataContext";
 import { AppendixSection, type AppendixPageEntry } from "./editor/AppendixSection";
-import { posAtPath, ReportEditor, selectBlockAt, setNodeAttrs } from "./editor/ReportEditor";
+import { openFindBar, posAtPath, ReportEditor, selectBlockAt, setNodeAttrs } from "./editor/ReportEditor";
 import { AddEvidenceButton } from "./AddEvidenceButton";
 import { EvidenceDrawer, EvidenceRail } from "./EvidenceRail";
 import { ReportDetails } from "./ReportDetails";
@@ -64,7 +65,7 @@ import {
   useSectionSaver,
   wantedSections,
 } from "./queries";
-import { useReportSaveStore } from "./saveQueue";
+import { trackReportWrite, useReportSaveStore } from "./saveQueue";
 
 const HINTS: Hint[] = [
   { keys: "J K", label: "move in the outline", priority: 1 },
@@ -72,8 +73,16 @@ const HINTS: Hint[] = [
   { keys: "⌥↑ ⌥↓", label: "reorder targets", priority: 3 },
   { keys: "⌥1–3", label: "outline, page, evidence", priority: 4 },
   { keys: "⌘↵", label: "insert evidence", priority: 6 },
+  { keys: "/", label: "insert on the page", priority: 7 },
+  { keys: "⌘F", label: "find and replace", priority: 8 },
   // ⌘K is search, so the page's link key takes Shift.
-  { keys: "⌘⇧K", label: "link", priority: 7 },
+  { keys: "⌘⇧K", label: "link", priority: 9 },
+  { keys: "⌘B ⌘I ⌘U", label: "bold, italic, underline", priority: 10 },
+  { keys: "⌘⇧S ⌘E ⌘⇧H", label: "strikethrough, code, highlight", priority: 11 },
+  { keys: "⌥⌘1 ⌥⌘2 ⌥⌘3 ⌥⌘0", label: "heading 1, 2, 3, paragraph", priority: 12 },
+  { keys: "# ## ###", label: "at a line's start: heading 1, 2, 3", priority: 13 },
+  { keys: "- 1. []", label: "at a line's start: bulleted, numbered, task list", priority: 14 },
+  { keys: "> ``` ---", label: "at a line's start: quote, code block, divider", priority: 15 },
 ];
 /** Under 1200px the evidence rail is a drawer, which E opens. */
 const NARROW_HINTS: Hint[] = [...HINTS, { keys: "E", label: "evidence", priority: 5 }];
@@ -120,7 +129,7 @@ function legibilityChecks(doc: ReportNode, data: ReportData, widths: Record<stri
     const width = widths[id];
     if (width !== undefined && width < MIN_PRINT_WIDTH && !out.some((c) => c.id === `legible:${id}`)) {
       const entry = data.log.find((e) => e.id === id);
-      const name = (entry?.content.kind === "screenshot" && entry.content.caption) || entry?.title || "A screenshot";
+      const name = (entry && captionOf(node.attrs, entry)) || "A screenshot";
       out.push({
         id: `legible:${id}`,
         level: "soft",
@@ -513,6 +522,7 @@ function ReportBody({
 
   // Autosave, flushed when the open section changes and on leaving.
   const saveFailed = useReportSaveStore((s) => s.unsaved);
+  const saveRefused = useReportSaveStore((s) => s.refused);
   const saver = useSectionSaver(openSection?.id ?? "");
   const editorRef = useRef<{ id: string; editor: Editor } | null>(null);
   // The same editor as state too, so the evidence rail re-renders once the page has mounted.
@@ -584,6 +594,8 @@ function ReportBody({
           reportError(e);
           void qc.invalidateQueries({ queryKey: key });
         });
+      // A lock waits for it, as it does for the pages.
+      trackReportWrite(writes.chain);
     },
     [qc, report.engagementId, report.id],
   );
@@ -644,6 +656,14 @@ function ReportBody({
     e.preventDefault();
     const from = navRef.current?.contains(document.activeElement) ? document.activeElement : null;
     focusOutlineRow(navRef.current, e.key.toLowerCase() === "j" ? 1 : -1, from);
+  });
+  // ⌘F: the page's find bar, while focus is anywhere in the Report view (⌘K stays the app's search).
+  useKeydown((e) => {
+    if (!e.metaKey || e.altKey || e.ctrlKey || e.shiftKey || e.key.toLowerCase() !== "f" || e.defaultPrevented || isDialogOpen()) return;
+    const editor = openEditor();
+    if (!editor || !sectionRef.current?.contains(document.activeElement)) return;
+    e.preventDefault();
+    openFindBar(editor);
   });
   useKeydown((e) => {
     if (!e.altKey || e.metaKey || e.ctrlKey || e.defaultPrevented || isDialogOpen()) return;
@@ -710,7 +730,18 @@ function ReportBody({
   const contextValue = useMemo(
     (): ReportDataValue | null =>
       openSectionMeta
-        ? { data, appendix, sectionMeta: openSectionMeta, onRemoveEvidence, reportMeta, figureOffset, onImageWidth, canMove: Boolean(openTarget), headingsOf }
+        ? {
+            data,
+            appendix,
+            sectionMeta: openSectionMeta,
+            onRemoveEvidence,
+            reportMeta,
+            figureOffset,
+            onImageWidth,
+            canMove: Boolean(openTarget),
+            headingsOf,
+            target: openTarget,
+          }
         : null,
     [data, appendix, openSectionMeta, onRemoveEvidence, reportMeta, figureOffset, onImageWidth, openTarget, headingsOf],
   );
@@ -752,7 +783,13 @@ function ReportBody({
   const notices = (
     <>
       {ensureFailed && <WarnLine text={`Couldn't add the report's new sections: ${ensureFailed}`} retryLabel="Retry setting up sections" onRetry={() => setEnsureFailed(null)} />}
-      {saveFailed && <p className="m-0 text-meta text-warn">Some typing isn't saved yet. Raven keeps trying; keep Raven open until this goes.</p>}
+      {saveRefused ? (
+        <p role="alert" className="m-0 text-meta text-warn">
+          {saveRefused}
+        </p>
+      ) : (
+        saveFailed && <p className="m-0 text-meta text-warn">Some typing isn't saved yet. Raven keeps trying; keep Raven open until this goes.</p>
+      )}
       {draftFailed && <WarnLine text={`Couldn't build this page's draft: ${draftFailed}`} retryLabel="Retry building the draft" onRetry={() => setDraftFailed(null)} />}
       {notStarted && open?.target && <p className="m-0 text-meta text-muted-2">Nothing logged on {open.item.label} yet. The page fills in as you work.</p>}
     </>

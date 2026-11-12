@@ -1,13 +1,22 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
-import { createEditor, Priority, type Editor, type NodeJSON } from "prosekit/core";
+import { createEditor, Priority, union, type Editor, type NodeJSON } from "prosekit/core";
+import { defineFileDropHandler, defineFilePasteHandler } from "prosekit/extensions/file";
 import type { Node as PMNode } from "prosekit/pm/model";
 import { NodeSelection, type Command } from "prosekit/pm/state";
-import { ProseKit, useDocChange, useKeymap } from "prosekit/react";
-import { isFigure, type EvidenceAttrs, type PageHeadings, type ReportData, type ReportNode } from "../../../engines/report";
+import { ProseKit, useDocChange, useExtension, useKeymap } from "prosekit/react";
+import { ownerParagraphs, isFigure, type EvidenceAttrs, type PageHeadings, type ReportData, type ReportNode } from "../../../engines/report";
+import { reportError } from "../../../lib/lockSignal";
+import { RavenError } from "../../../types/errors";
 import { BlockHandle } from "./BlockHandle";
+import { BubbleMenu } from "./BubbleMenu";
 import { defineReportExtension, type SubNumbers } from "./extension";
+import { FindBar } from "./FindBar";
 import { FormatToolbar } from "./FormatToolbar";
+import { hostAtPos, PageActionsContext, placeEntry, saveScreenshot, type PageActions } from "./pageActions";
 import { PageLayoutContext, useReportData, type PageLayout } from "./ReportDataContext";
+import { SlashMenu } from "./SlashMenu";
+import { TableHandles } from "./TableHandles";
 import "../page.css";
 
 /** Whether an evidence node shows a screenshot on the page, so it takes a figure number (a moved one doesn't). */
@@ -160,6 +169,40 @@ export function removeExact(editor: Editor, nodes: PMNode[]): boolean {
   });
 }
 
+/**
+ * Turns note entries that a page saved as frozen blocks into the paragraphs the owner edits (text copied, the entry kept
+ * as `fromEntry`): one transaction, so one undo brings the blocks back. A note that is gone or private stays a block,
+ * so its amber placeholder still shows.
+ */
+export function convertNoteBlocks(editor: Editor, data: ReportData): boolean {
+  return editor.exec((state, dispatch) => {
+    const spans: { from: number; to: number; nodes: ReportNode[] }[] = [];
+    state.doc.descendants((node, pos) => {
+      if (node.type.name !== "evidence") return true;
+      const entry = data.log.find((e) => e.id === node.attrs.entryId);
+      if (entry && !entry.private && entry.content.kind === "note") spans.push({ from: pos, to: pos + node.nodeSize, nodes: ownerParagraphs(entry.content.text, entry.id) });
+      return false;
+    });
+    if (spans.length === 0) return false;
+    if (dispatch) {
+      const tr = state.tr;
+      for (const span of spans.reverse()) tr.replaceWith(span.from, span.to, span.nodes.map((n) => state.schema.nodeFromJSON(n)));
+      dispatch(tr);
+    }
+    return true;
+  });
+}
+
+/** Each page's find bar opener, by its editor: ⌘F in the Report view opens it (`openFindBar`). */
+const findOpeners = new WeakMap<Editor, () => void>();
+
+/** Opens the page's find bar, or puts focus back in it when it is open. */
+export function openFindBar(editor: Editor): boolean {
+  const open = findOpeners.get(editor);
+  open?.();
+  return open !== undefined;
+}
+
 /** Moves the selected block one sibling up (-1) or down (1), keeping it selected. */
 const moveSelectedBlock =
   (dir: -1 | 1): Command =>
@@ -178,9 +221,36 @@ const moveSelectedBlock =
     return true;
   };
 
-/** Editor hooks that need the ProseKit context: change reporting and the page's keys. */
-function PageHooks({ onDoc, onRemoveEvidence }: { onDoc(doc: PMNode): void; onRemoveEvidence(entryId: string): void }) {
+/** Editor hooks that need the ProseKit context: change reporting, the page's keys, and images pasted or dropped. */
+function PageHooks({
+  onDoc,
+  onRemoveEvidence,
+  onImage,
+}: {
+  onDoc(doc: PMNode): void;
+  onRemoveEvidence(entryId: string): void;
+  onImage(file: File, pos?: number): void;
+}) {
   useDocChange(onDoc);
+  // `onImage` is the page's own, made once per editor, so the handlers register once.
+  useExtension(
+    useMemo(
+      () =>
+        union(
+          defineFilePasteHandler(({ file }) => {
+            if (!file.type.startsWith("image/")) return false;
+            onImage(file);
+            return true;
+          }),
+          defineFileDropHandler(({ file, pos }) => {
+            if (!file.type.startsWith("image/")) return false;
+            onImage(file, pos);
+            return true;
+          }),
+        ),
+      [onImage],
+    ),
+  );
   const keymap = useMemo(() => {
     const removeEvidence: Command = (state, dispatch) => {
       const sel = state.selection;
@@ -273,6 +343,47 @@ export function ReportEditor({
     },
     [editor],
   );
+  // The page's data for handlers that run outside render (the mount, a paste finishing).
+  const live = useRef(value);
+  useEffect(() => {
+    live.current = value;
+  });
+  const qc = useQueryClient();
+  const [imageError, setImageError] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const actions = useMemo((): PageActions => {
+    const addImage = (file: File, pos?: number) => {
+      const { data, target } = live.current;
+      const at = pos ?? editor.state.selection.from;
+      const hostId = hostAtPos(editor, at, target);
+      setImageError(null);
+      saveScreenshot(qc, data.engagement.id, hostId ? [hostId] : [], file)
+        .then((entry) => {
+          if (!editor.mounted) return;
+          // The paste's place, as far as the page still has it; the caption is the page's to write.
+          placeEntry(editor, entry, pos === undefined ? undefined : Math.min(at, editor.state.doc.content.size), { caption: "" });
+        })
+        .catch((e: unknown) => {
+          reportError(e);
+          setImageError(RavenError.from(e).message);
+        });
+    };
+    return { addImage, pickImage: () => fileInput.current?.click() };
+  }, [editor, qc]);
+
+  // Once the page is up, frozen note blocks become text, saved like any change (the page's change reporting may not
+  // be listening yet).
+  useEffect(() => {
+    if (editor.mounted && convertNoteBlocks(editor, live.current.data)) onDoc(editor.state.doc);
+  }, [editor, onDoc]);
+
+  const [find, setFind] = useState<{ open: boolean; focus: number }>({ open: false, focus: 0 });
+  const openFind = useCallback(() => setFind((f) => ({ open: true, focus: f.focus + 1 })), []);
+  useEffect(() => {
+    findOpeners.set(editor, openFind);
+    return () => void findOpeners.delete(editor);
+  }, [editor, openFind]);
+
   const mount = useCallback(
     (el: HTMLDivElement) => {
       editor.mount(el);
@@ -295,19 +406,47 @@ export function ReportEditor({
   return (
     <PageLayoutContext.Provider value={layout}>
       <ProseKit editor={editor}>
-        <PageHooks onDoc={onDoc} onRemoveEvidence={value.onRemoveEvidence} />
-        <FormatToolbar end={toolbarEnd} className={toolbarClassName} />
-        {notices}
-        <div className="report-page">
-          {title && (
-            <h1 className="report-title">
-              {titleNumber && <span className="report-num">{titleNumber}</span>}
-              {title}
-            </h1>
+        <PageActionsContext.Provider value={actions}>
+          <PageHooks onDoc={onDoc} onRemoveEvidence={value.onRemoveEvidence} onImage={actions.addImage} />
+          <FormatToolbar
+            end={toolbarEnd}
+            className={toolbarClassName}
+            onFind={openFind}
+            findBar={find.open && <FindBar focusKey={find.focus} onClose={() => setFind((f) => ({ ...f, open: false }))} />}
+          />
+          {notices}
+          {imageError && (
+            <p role="alert" className="m-0 text-meta text-warn">
+              Couldn't save the image as a screenshot: {imageError}
+            </p>
           )}
-          <div ref={mount} className="report-page-doc" />
-          <BlockHandle />
-        </div>
+          <input
+            ref={fileInput}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            hidden
+            aria-hidden
+            tabIndex={-1}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) actions.addImage(file);
+            }}
+          />
+          <div className="report-page">
+            {title && (
+              <h1 className="report-title">
+                {titleNumber && <span className="report-num">{titleNumber}</span>}
+                {title}
+              </h1>
+            )}
+            <div ref={mount} className="report-page-doc" />
+            <BlockHandle />
+            <TableHandles />
+          </div>
+          <BubbleMenu />
+          <SlashMenu />
+        </PageActionsContext.Provider>
       </ProseKit>
     </PageLayoutContext.Provider>
   );

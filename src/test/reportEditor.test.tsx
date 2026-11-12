@@ -197,20 +197,20 @@ describe("ReportEditor evidence", () => {
   it("numbers screenshot captions across the section", async () => {
     const d = data({ log: [shot("s1", "Login page"), shot("s2", "Admin panel")] });
     setup(doc(ev("s1", { block: null }), slot(), ev("s2", { block: null })), d);
-    expect(await screen.findByText("Figure 1. Login page")).toBeInTheDocument();
-    expect(screen.getByText("Figure 2. Admin panel")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Figure 1 caption")).toHaveValue("Login page");
+    expect(screen.getByLabelText("Figure 2 caption")).toHaveValue("Admin panel");
   });
 
   it("skips moved screenshots when numbering, so figures have no gaps", async () => {
     const d = data({ log: [shot("s1", "One"), shot("s2", "Two"), shot("s3", "Three")] });
     setup(doc(ev("s1", { block: null }), ev("s2", { block: null, appendix: "moved" }), ev("s3", { block: null })), d);
-    expect(await screen.findByText("Figure 1. One")).toBeInTheDocument();
-    expect(screen.getByText("Figure 2. Three")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Figure 1 caption")).toHaveValue("One");
+    expect(screen.getByLabelText("Figure 2 caption")).toHaveValue("Three");
   });
 
   it("continues figure numbers from the sections before", async () => {
     setup(doc(ev("s1", { block: null })), data({ log: [shot("s1", "Login page")] }), noRefs, 4);
-    expect(await screen.findByText("Figure 5. Login page")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Figure 5 caption")).toHaveValue("Login page");
   });
 });
 
@@ -548,28 +548,87 @@ describe("ReportEditor block tools", () => {
     expect(await screen.findByRole("button", { name: "Remove" })).toBeInTheDocument();
   });
 
-  it("trims by clicking line numbers: shift-click keeps a range, and the page shows what was omitted", async () => {
+  it("trims from every line kept: a click cuts one, and leaving trim shows what was omitted", async () => {
     const d = data({ log: [longEntry("e1", "Big file", 12)] });
     const { onChange, editor, container } = setupLive(doc(ev("e1"), slot()), d);
     await waitFor(() => expect(editor()).toBeTruthy());
     selectBlock(editor(), 0);
     fireEvent.click(await screen.findByRole("button", { name: "Trim" }));
-    // Nothing picked yet: a hint, no line pressed, no Keep all.
-    expect(screen.getByText("Pick the lines to keep")).toBeInTheDocument();
+    expect(screen.getByText("12 of 12 lines kept")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Keep all" })).toBeNull();
-    expect(screen.getAllByRole("button", { pressed: true }).filter((b) => b.getAttribute("aria-label")?.startsWith("Keep line"))).toEqual([]);
-    fireEvent.click(screen.getByRole("button", { name: "Keep line 3" }));
-    fireEvent.click(screen.getByRole("button", { name: "Keep line 5" }), { shiftKey: true });
-    fireEvent.click(screen.getByRole("button", { name: "Keep line 8" }));
-    await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.keep).toEqual([[2, 4], [7, 7]]));
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Cut line 3" }));
+    fireEvent.pointerUp(window);
+    await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.keep).toEqual([[0, 1], [3, 11]]));
+    expect(screen.getByText("11 of 12 lines kept")).toBeInTheDocument();
+    // Clicked again, it comes back.
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Keep line 3" }));
+    fireEvent.pointerUp(window);
+    await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.keep).toBeNull());
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Cut line 12" }));
+    fireEvent.pointerUp(window);
     fireEvent.click(screen.getByRole("button", { name: "Trim" }));
-    await waitFor(() => expect(container.querySelectorAll(".report-line")).toHaveLength(4));
-    expect(screen.getAllByText("… 2 lines omitted")).toHaveLength(2);
-    expect(screen.getByText("… 4 lines omitted")).toBeInTheDocument();
+    await waitFor(() => expect(container.querySelectorAll(".report-line")).toHaveLength(11));
+    expect(screen.getByText("… 1 line omitted")).toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: "Trim" }));
+  it("cuts a quarter of a 400-line output in one drag down the line numbers", async () => {
+    const d = data({ log: [longEntry("e1", "winPEAS", 400)] });
+    const { onChange, editor } = setupLive(doc(ev("e1", { keep: null }), slot()), d);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    selectBlock(editor(), 0);
+    fireEvent.click(await screen.findByRole("button", { name: "Trim" }));
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Cut line 301" }));
+    for (const n of [320, 360, 400]) fireEvent.pointerEnter(screen.getByRole("button", { name: `Cut line ${n}` }));
+    fireEvent.pointerUp(window);
+    await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.keep).toEqual([[0, 299]]));
+    expect(screen.getByText("300 of 400 lines kept")).toBeInTheDocument();
+    // A drag that starts on a cut line keeps the run again.
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Keep line 391" }));
+    fireEvent.pointerEnter(screen.getByRole("button", { name: "Keep line 400" }));
+    fireEvent.pointerUp(window);
+    await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.keep).toEqual([[0, 299], [390, 399]]));
+    // Hovering after the drag ended changes nothing.
+    fireEvent.pointerEnter(screen.getByRole("button", { name: "Cut line 2" }));
+    expect(lastDoc(onChange).content?.[0].attrs?.keep).toEqual([[0, 299], [390, 399]]);
+  });
+
+  it("a shift-click does the same to every line from the last one clicked", async () => {
+    const d = data({ log: [longEntry("e1", "Big file", 12)] });
+    const { onChange, editor } = setupLive(doc(ev("e1"), slot()), d);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    selectBlock(editor(), 0);
+    fireEvent.click(await screen.findByRole("button", { name: "Trim" }));
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Cut line 2" }));
+    fireEvent.pointerUp(window);
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Cut line 6" }), { shiftKey: true });
+    fireEvent.pointerUp(window);
+    await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.keep).toEqual([[0, 0], [6, 11]]));
+    // The run is picked: keep only it, then keep everything again.
+    fireEvent.click(screen.getByRole("button", { name: "Keep only selection" }));
+    await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.keep).toEqual([[1, 5]]));
     fireEvent.click(screen.getByRole("button", { name: "Keep all" }));
     await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.keep).toBeNull());
+  });
+
+  it("trims from the keyboard: ↓ moves, ⇧↓ extends, ⌫ cuts the run, Space flips it, Esc leaves", async () => {
+    const d = data({ log: [longEntry("e1", "Big file", 12)] });
+    const { onChange, editor } = setupLive(doc(ev("e1"), slot()), d);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    selectBlock(editor(), 0);
+    fireEvent.click(await screen.findByRole("button", { name: "Trim" }));
+    const bar = screen.getByRole("toolbar", { name: /^Trim the output/ });
+    expect(bar).toHaveFocus();
+    const key = (k: string, shiftKey = false) => fireEvent.keyDown(bar, { key: k, shiftKey });
+    key("ArrowDown");
+    key("ArrowDown");
+    key("ArrowDown", true);
+    key("ArrowDown", true);
+    key("Backspace");
+    await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.keep).toEqual([[0, 0], [4, 11]]));
+    key(" ");
+    await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.keep).toBeNull());
+    key("Escape");
+    await waitFor(() => expect(screen.queryByRole("toolbar", { name: /^Trim the output/ })).toBeNull());
   });
 
   it("emphasises lines by clicking their numbers", async () => {
@@ -649,13 +708,13 @@ describe("ReportEditor block tools", () => {
     await waitFor(() => expect(editor()).toBeTruthy());
     selectBlock(editor(), 0);
     fireEvent.click(await screen.findByRole("button", { name: "Trim" }));
-    expect(screen.getByRole("button", { name: "Keep line 1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cut line 1" })).toBeInTheDocument();
     const view = editor().view;
     act(() => view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.doc.child(0).nodeSize + 1))));
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Keep line 1" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Cut line 1" })).toBeNull());
     selectBlock(editor(), 0);
     await screen.findByRole("button", { name: "Trim" });
-    expect(screen.queryByRole("button", { name: "Keep line 1" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cut line 1" })).toBeNull();
   });
 
   it("offers no Move to appendix outside target pages", async () => {

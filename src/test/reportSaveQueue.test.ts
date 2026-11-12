@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReportNode } from "../engines/report";
-import { discardReports, flushReports, hasPendingReports, queueReportSave, useReportSaveStore } from "../features/report/saveQueue";
+import { discardReports, flushReports, hasPendingReports, queueReportSave, trackReportWrite, useReportSaveStore } from "../features/report/saveQueue";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { ReportSection } from "../types/report";
@@ -87,5 +87,55 @@ describe("report save queue", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(m.reportSectionSave).toHaveBeenCalledTimes(1);
     expect(useReportSaveStore.getState().unsaved).toBe(false);
+  });
+
+  it("stops retrying a page the backend refuses for good, says why, and sends the owner's next change", async () => {
+    vi.useFakeTimers();
+    m.reportSectionSave.mockRejectedValue({ code: "validation", message: "this page is over 8 MiB", field: "doc" });
+    queueReportSave(qc, "s1", page("huge"), {});
+    await vi.advanceTimersByTimeAsync(600);
+    expect(m.reportSectionSave).toHaveBeenCalledTimes(1);
+    expect(useReportSaveStore.getState().refused).toBe("This page is over 8 MiB and can't be saved. Cut some text.");
+    // No backoff: nothing more is sent on its own.
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(m.reportSectionSave).toHaveBeenCalledTimes(1);
+    // Still queued, so a lock's flush tries it once more.
+    expect(hasPendingReports()).toBe(true);
+
+    m.reportSectionSave.mockResolvedValue(SAVED);
+    queueReportSave(qc, "s1", page("trimmed"), {});
+    await vi.advanceTimersByTimeAsync(600);
+    expect(sentTexts()).toEqual(["s1:huge", "s1:trimmed"]);
+    expect(useReportSaveStore.getState()).toMatchObject({ refused: null, unsaved: false });
+    expect(hasPendingReports()).toBe(false);
+  });
+
+  it("treats a page that no longer exists as refused too", async () => {
+    vi.useFakeTimers();
+    m.reportSectionSave.mockRejectedValue({ code: "not_found", message: "not found" });
+    queueReportSave(qc, "s1", page("orphan"), {});
+    await vi.advanceTimersByTimeAsync(600);
+    expect(useReportSaveStore.getState().refused).toMatch(/no longer exists/);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(m.reportSectionSave).toHaveBeenCalledTimes(1);
+  });
+
+  it("a flush waits for report details writes on their way, so a lock saves them first", async () => {
+    let release: () => void = () => {};
+    const write = new Promise<void>((r) => (release = r));
+    trackReportWrite(write);
+    expect(hasPendingReports()).toBe(true);
+    let done = false;
+    const flushed = flushReports().then(() => (done = true));
+    await Promise.resolve();
+    expect(done).toBe(false);
+    release();
+    await flushed;
+    expect(hasPendingReports()).toBe(false);
+  });
+
+  it("a failed details write never rejects the flush", async () => {
+    trackReportWrite(Promise.reject(new Error("disk full")));
+    await expect(flushReports()).resolves.toBeUndefined();
   });
 });

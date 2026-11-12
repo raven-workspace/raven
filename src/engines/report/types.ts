@@ -110,6 +110,11 @@ export interface EvidenceAttrs {
   keep: [number, number][] | null;
   emphasis: number[];
   appendix: AppendixPlacement;
+  /** A screenshot's caption as written on the page, over the log's; null (or absent) = the log's caption. The log is
+   *  never changed. */
+  caption?: string | null;
+  /** A screenshot's width in CSS px at the page's 760px measure, set by resizing it; null (or absent) = full width. */
+  width?: number | null;
 }
 
 export interface GeneratedAttrs {

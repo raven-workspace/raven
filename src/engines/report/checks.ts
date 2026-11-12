@@ -4,6 +4,7 @@ import type { AppendixIndex } from "./appendix";
 import { suggestMoves } from "./appendix";
 import { serviceCoverage } from "./coverage";
 import { byTime, evidenceIdsIn } from "./draft";
+import { captionOf } from "./figures";
 import { expectedFlags, isValidOsid } from "./meta";
 import { proofFacts } from "./proof";
 import { provingEntries } from "./prove";
@@ -165,7 +166,7 @@ export function targetChecks(input: TargetChecksInput): Check[] {
       explain.push({ check: { id: `explain:${entryId}`, level: "soft", text: "A step has no explanation before it.", anchor }, shot: entry.kind === "screenshot" });
     }
     if (entry.content.kind === "screenshot" && !seenEvidence.has(entryId)) {
-      if (words(entry.content.caption) > MAX_CAPTION_WORDS) {
+      if (words(captionOf(node.attrs, entry)) > MAX_CAPTION_WORDS) {
         out.push({ id: `caption:${entryId}`, level: "soft", text: `A screenshot caption is over ${MAX_CAPTION_WORDS} words.`, anchor });
       }
     }

@@ -6,6 +6,9 @@ import type { Report, ReportPatch } from "../../types/report";
 import { Field, Input, labelClass } from "../../ui";
 import { fromDateTimeInput, toDateTimeInput } from "../engagements/format";
 
+/** The backend's cap on a details field (characters). */
+const MAX_FIELD = 2000;
+
 /**
  * The "Report details" page: the cover's facts, in an Ink form (not paper). Each field saves on blur. Local state is
  * seeded once and never re-synced, so a save's refetch can't discard typing in another field.
@@ -51,16 +54,16 @@ export function ReportDetails({
       <h2 className="m-0 text-title text-fg">Report details</h2>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-4">
         <Field label="Your name">
-          <Input value={name} onChange={(e) => setName(e.target.value)} onBlur={() => saveText("candidateName", name)} />
+          <Input maxLength={MAX_FIELD} value={name} onChange={(e) => setName(e.target.value)} onBlur={() => saveText("candidateName", name)} />
         </Field>
         <Field label="Email">
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} onBlur={() => saveText("email", email)} />
+          <Input type="email" maxLength={MAX_FIELD} value={email} onChange={(e) => setEmail(e.target.value)} onBlur={() => saveText("email", email)} />
         </Field>
         <Field label="OSID" error={osidTrimmed !== "" && !isValidOsid(osidTrimmed) ? "OSIDs look like OS-12345" : undefined}>
-          <Input mono placeholder="OS-12345" value={osid} onChange={(e) => setOsid(e.target.value)} onBlur={() => saveText("osid", osid)} />
+          <Input mono maxLength={MAX_FIELD} placeholder="OS-12345" value={osid} onChange={(e) => setOsid(e.target.value)} onBlur={() => saveText("osid", osid)} />
         </Field>
         <Field label="Report title">
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} onBlur={() => saveText("title", title)} />
+          <Input maxLength={MAX_FIELD} value={title} onChange={(e) => setTitle(e.target.value)} onBlur={() => saveText("title", title)} />
         </Field>
         <Field label="Exam date">
           <Input

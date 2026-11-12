@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 import type { Node as PMNode } from "prosekit/pm/model";
-import type { AppendixIndex, HeadingLabel, PageHeadings, ReportData, ReportMeta, ReportNode, SectionMeta } from "../../../engines/report";
+import type { AppendixIndex, HeadingLabel, PageHeadings, ReportData, ReportMeta, ReportNode, ReportTarget, SectionMeta } from "../../../engines/report";
 
 /** What the section gives the page: the live rows node views render from. */
 export interface ReportDataValue {
@@ -19,6 +19,9 @@ export interface ReportDataValue {
   canMove?: boolean;
   /** A target page's numbered headings ("4.1.2 Initial Access – …"), computed from its live document; absent elsewhere. */
   headingsOf?(doc: ReportNode): PageHeadings;
+  /** The target the page is about: the slash menu's evidence and a pasted image's machine come from it. Absent on
+   *  report-level pages. */
+  target?: ReportTarget;
 }
 
 export const ReportDataContext = createContext<ReportDataValue | null>(null);

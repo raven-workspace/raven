@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { evidenceIdsIn, type ReportNode, type SectionMeta } from "../../engines/report";
 import { api } from "../../lib/api";
 import { reportError } from "../../lib/lockSignal";
+import { RavenError } from "../../types/errors";
 import type { ReportDoc, ReportSection } from "../../types/report";
 
 /**
@@ -13,6 +14,9 @@ import type { ReportDoc, ReportSection } from "../../types/report";
  * - Writes for one section never overlap: while one is on its way, a newer one waits and goes out once it settles,
  *   so an older write can never land after a newer one.
  * - A failed write stays queued and is retried after 2 s, 5 s, 15 s, then every 30 s, until it lands.
+ * - A write the backend refuses for good (the page is too big, the section is gone) stays queued but isn't retried:
+ *   the view says why, and the owner's next change to that page is sent as usual.
+ * - Report details writes (`trackReportWrite`) are awaited by a flush too, so a lock saves them first.
  */
 
 export const SAVE_DEBOUNCE_MS = 600;
@@ -29,16 +33,40 @@ interface Session {
   runs: Map<string, Promise<void>>;
   /** Sections whose last write failed. */
   failed: Set<string>;
+  /** Sections whose last write the backend refused for good, with what to tell the owner: no retry until they change it. */
+  refused: Map<string, string>;
+  /** Report details writes on their way. */
+  writes: Set<Promise<unknown>>;
   timer?: ReturnType<typeof setTimeout>;
   retryTimer?: ReturnType<typeof setTimeout>;
   retryStep: number;
 }
 
-const newSession = (): Session => ({ qc: null, pending: new Map(), runs: new Map(), failed: new Set(), retryStep: 0 });
+const newSession = (): Session => ({
+  qc: null,
+  pending: new Map(),
+  runs: new Map(),
+  failed: new Set(),
+  refused: new Map(),
+  writes: new Set(),
+  retryStep: 0,
+});
 let session = newSession();
 
-/** Whether a failed write is still unsaved: the Report view shows a warning while it is. */
-export const useReportSaveStore = create<{ unsaved: boolean }>()(() => ({ unsaved: false }));
+/** Whether a failed write is still unsaved: the Report view shows a warning while it is, and why when it is refused for
+ *  good (`refused`). */
+export const useReportSaveStore = create<{ unsaved: boolean; refused: string | null }>()(() => ({ unsaved: false, refused: null }));
+
+/** What the owner is told when the backend refuses a page for good; null when a retry may land. */
+export function refusalOf(e: unknown): string | null {
+  const err = RavenError.from(e);
+  if (err.code === "validation")
+    return /8 MiB/.test(err.message)
+      ? "This page is over 8 MiB and can't be saved. Cut some text."
+      : `This page can't be saved: ${err.message}. Change it to save again.`;
+  if (err.code === "not_found") return "This page no longer exists, so it can't be saved. Copy what you need from it, then reopen the report.";
+  return null;
+}
 
 /** Writes a section into every cached sections list that holds it. */
 export function patchCachedSection(qc: QueryClient, id: string, patch: Partial<ReportSection>) {
@@ -58,12 +86,17 @@ export function pruneRemoved(doc: ReportNode, meta: SectionMeta): SectionMeta {
 function updateUnsaved(s: Session) {
   if (s !== session) return;
   const unsaved = [...s.failed].some((id) => s.pending.has(id));
-  if (useReportSaveStore.getState().unsaved !== unsaved) useReportSaveStore.setState({ unsaved });
+  const refused = [...s.refused].find(([id]) => s.pending.has(id))?.[1] ?? null;
+  const st = useReportSaveStore.getState();
+  if (st.unsaved !== unsaved || st.refused !== refused) useReportSaveStore.setState({ unsaved, refused });
 }
+
+/** Failed writes a retry may still land. */
+const retryable = (s: Session) => [...s.failed].some((id) => s.pending.has(id) && !s.refused.has(id));
 
 function scheduleRetry(s: Session) {
   if (s !== session || s.retryTimer) return;
-  if (![...s.failed].some((id) => s.pending.has(id))) {
+  if (!retryable(s)) {
     s.retryStep = 0;
     return;
   }
@@ -71,7 +104,7 @@ function scheduleRetry(s: Session) {
   s.retryStep++;
   s.retryTimer = setTimeout(() => {
     s.retryTimer = undefined;
-    void flushReports();
+    void flush(true);
   }, delay);
 }
 
@@ -91,8 +124,12 @@ async function sendRun(s: Session, id: string): Promise<void> {
         // A newer change queued meanwhile stays for its own write (the next turn of this loop).
         if (s.pending.get(id) === w) s.pending.delete(id);
         s.failed.delete(id);
+        s.refused.delete(id);
       } catch (e) {
         s.failed.add(id);
+        const refused = refusalOf(e);
+        if (refused) s.refused.set(id, refused);
+        else s.refused.delete(id);
         reportError(e);
       }
       updateUnsaved(s);
@@ -104,10 +141,12 @@ async function sendRun(s: Session, id: string): Promise<void> {
   }
 }
 
-function run(s: Session, id: string): Promise<void> {
+function run(s: Session, id: string, skipRefused: boolean): Promise<void> {
   const running = s.runs.get(id);
   if (running) return running;
   if (!s.pending.has(id)) return Promise.resolve();
+  // A refused write waits for the owner's next change; a flush (a lock, leaving the page) still tries it once more.
+  if (skipRefused && s.refused.has(id)) return Promise.resolve();
   const p = sendRun(s, id);
   s.runs.set(id, p);
   return p;
@@ -118,8 +157,10 @@ export function queueReportSave(qc: QueryClient, id: string, doc: ReportNode, me
   const s = session;
   s.qc = qc;
   s.pending.set(id, { doc, meta });
+  // A change to a refused page is the owner's fix: it is sent as usual.
+  s.refused.delete(id);
   clearTimeout(s.timer);
-  s.timer = setTimeout(() => void flushReports(), SAVE_DEBOUNCE_MS);
+  s.timer = setTimeout(() => void flush(true), SAVE_DEBOUNCE_MS);
 }
 
 /**
@@ -127,16 +168,36 @@ export function queueReportSave(qc: QueryClient, id: string, doc: ReportNode, me
  * included). Never rejects: a failed write stays queued for the retry.
  */
 export function flushReports(): Promise<void> {
+  return flush(false);
+}
+
+/** The autosave and the retry skip refused pages; an explicit flush sends them and waits for details writes too. */
+function flush(skipRefused: boolean): Promise<void> {
   const s = session;
   clearTimeout(s.timer);
   s.timer = undefined;
   const ids = new Set([...s.pending.keys(), ...s.runs.keys()]);
-  return Promise.all([...ids].map((id) => run(s, id))).then(() => undefined);
+  const sends = [...ids].map((id) => run(s, id, skipRefused));
+  return Promise.all(skipRefused ? sends : [...sends, ...s.writes]).then(() => undefined);
+}
+
+/**
+ * A report details write on its way (the details chain): a flush, and so a lock, waits for it. Never rejects the
+ * flush: pass a promise that settles either way.
+ */
+export function trackReportWrite(p: Promise<unknown>) {
+  const s = session;
+  const settled = p.then(
+    () => undefined,
+    () => undefined,
+  );
+  s.writes.add(settled);
+  void settled.then(() => s.writes.delete(settled));
 }
 
 /** True while any report write is queued or on its way. */
 export function hasPendingReports(): boolean {
-  return session.pending.size > 0 || session.runs.size > 0;
+  return session.pending.size > 0 || session.runs.size > 0 || session.writes.size > 0;
 }
 
 /**
@@ -147,5 +208,5 @@ export function discardReports() {
   clearTimeout(session.timer);
   clearTimeout(session.retryTimer);
   session = newSession();
-  useReportSaveStore.setState({ unsaved: false });
+  useReportSaveStore.setState({ unsaved: false, refused: null });
 }

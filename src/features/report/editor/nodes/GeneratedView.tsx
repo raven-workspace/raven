@@ -16,11 +16,25 @@ import {
 import { useAppendixRef, usePageLayout, useReportData, type ReportDataValue } from "../ReportDataContext";
 import { AppendixRef, Block, BlockTools, MoveButton } from "./parts";
 
-/** A generated table. Columns in `fit` (ports, IPs) take their content's width and never wrap; the others take the slack. */
+/**
+ * A generated table. Columns in `fit` (IPs, host names) are as wide as their longest text and never wrap; the others
+ * share the rest and wrap. The widths are set up front (fixed layout, in `ch` of tabular digits) rather than left to
+ * the browser's automatic table layout: WebKit kept a column at its first width when its text grew (a late web font, a
+ * value filled in after load), so a long IP (172.31.166.143) overprinted the next column.
+ */
 function Table({ head, rows, fit = [] }: { head: string[]; rows: ReactNode[][]; fit?: number[] }) {
   const cls = (j: number) => (fit.includes(j) ? "report-fit" : undefined);
+  const chars = (j: number) => Math.max(head[j].length, ...rows.map((r) => (typeof r[j] === "string" ? (r[j] as string).length : 0)));
   return (
-    <table className="report-table">
+    <table className="report-table" data-fixed={fit.length > 0 || undefined}>
+      {fit.length > 0 && (
+        <colgroup>
+          {head.map((h, j) => (
+            // Letters run a little wider than a digit's 1ch: 15% spare, plus the cell's 16px of padding.
+            <col key={h} style={fit.includes(j) ? { width: `calc(${Math.ceil(chars(j) * 1.15)}ch + 16px)` } : undefined} />
+          ))}
+        </colgroup>
+      )}
       <thead>
         <tr>
           {head.map((h, j) => (

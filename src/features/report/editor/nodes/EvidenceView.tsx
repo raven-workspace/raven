@@ -1,8 +1,10 @@
-import { Highlighter, Scissors, Trash } from "@phosphor-icons/react";
+import { ArrowsOutLineHorizontal, Highlighter, PencilSimpleLine, Scissors, Trash } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
+import { TextSelection } from "prosekit/pm/state";
 import type { ReactNodeViewProps } from "prosekit/react";
-import { useRef, useState } from "react";
-import { applyKeep, lineCount, type EvidenceAttrs } from "../../../../engines/report";
+import { ResizableHandle, ResizableRoot } from "prosekit/react/resizable";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { applyKeep, captionOf, lineCount, type EvidenceAttrs, type ReportNode } from "../../../../engines/report";
 import { api } from "../../../../lib/api";
 import type { CommandBlock, LogEntry } from "../../../../types/log";
 import { IconButton } from "../../../../ui";
@@ -60,10 +62,20 @@ const promptsFor = (ranOn: string | null, machines: string[]): Prompt => {
 /** How the owner is picking lines on a selected command block, if at all. */
 type PickMode = "trim" | "emphasis" | null;
 
+/** Trimming's view of the lines: the run picked (inclusive, null when none) and the line cursor, with the pointer
+ *  handlers on the line numbers. */
+interface TrimLines {
+  from: number | null;
+  to: number | null;
+  cursor: number | null;
+  onDown(n: number, shift: boolean): void;
+  onEnter(n: number): void;
+}
+
 /**
  * The command blocks of a placement. `keep` and `emphasis` index the placement's output: one block's, or with
  * `block: null` every block's output end to end (as the appendix engine counts it). While trimming, every line shows
- * with a number to keep it; while emphasising, the kept lines show with a number to emphasise them.
+ * with its number, the cut ones struck through; while emphasising, the kept lines show with a number to emphasise them.
  */
 function CommandBody({
   blocks,
@@ -71,12 +83,14 @@ function CommandBody({
   prompt,
   mode = null,
   onLine,
+  trim,
 }: {
   blocks: CommandBlock[];
   attrs: EvidenceAttrs;
   prompt: Prompt;
   mode?: PickMode;
   onLine?(n: number, shift: boolean): void;
+  trim?: TrimLines;
 }) {
   const chosen = attrs.block === null ? blocks : blocks.slice(attrs.block, attrs.block + 1);
   const emphasis = new Set(attrs.emphasis);
@@ -102,20 +116,43 @@ function CommandBody({
                 </div>
               );
             const n = item.n + start;
+            const isKept = kept === null || kept.has(n);
             const text = (
-              <div className="report-line" key={k} data-emphasis={emphasis.has(n) || undefined} data-dropped={(mode === "trim" && kept !== null && !kept.has(n)) || undefined}>
+              <div className="report-line" key={k} data-emphasis={emphasis.has(n) || undefined} data-dropped={(mode === "trim" && !isKept) || undefined}>
                 {item.text}
               </div>
             );
+            if (mode === "trim" && trim) {
+              const picked = trim.from !== null && trim.to !== null && n >= trim.from && n <= trim.to;
+              return (
+                <div className="report-pick" key={k} data-picked={picked || undefined} data-cursor={trim.cursor === n || undefined}>
+                  {/* Pointer only: the trim bar above takes the keys (↑↓ ⇧↑↓ Space ⌫). */}
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    className="report-ln"
+                    aria-label={`${isKept ? "Cut" : "Keep"} line ${n + 1}`}
+                    aria-pressed={isKept}
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      trim.onDown(n, e.shiftKey);
+                    }}
+                    onPointerEnter={() => trim.onEnter(n)}
+                  >
+                    {n + 1}
+                  </button>
+                  {text}
+                </div>
+              );
+            }
             if (!mode || !onLine) return text;
-            // With nothing trimmed yet, no line reads as picked: the first click keeps one line.
-            const on = mode === "trim" ? kept !== null && kept.has(n) : emphasis.has(n);
+            const on = emphasis.has(n);
             return (
               <div className="report-pick" key={k}>
                 <button
                   type="button"
                   className="report-ln"
-                  aria-label={mode === "trim" ? `Keep line ${n + 1}` : `Emphasise line ${n + 1}`}
+                  aria-label={`Emphasise line ${n + 1}`}
                   aria-pressed={on}
                   onClick={(e) => onLine(n, e.shiftKey)}
                 >
@@ -157,12 +194,78 @@ function pickLines(current: number[], n: number, shiftFrom: number | null): numb
   return [...set].sort((a, b) => a - b);
 }
 
-function Figure({ entryId, attachmentId, caption, n }: { entryId: string; attachmentId: string; caption: string; n: number | null }) {
+/** A figure's caption and width as the page sets them: the caption typed on the page, the width it was resized to. */
+interface FigureEdit {
+  caption: string;
+  width: number | null;
+  onCaption(caption: string): void;
+  onWidth(width: number): void;
+  /** Leaves the caption for the page (Enter or Esc in it). */
+  onDone(): void;
+}
+
+/** The caption, typed in place on the paper. It is the node's own (the log keeps its caption); empty shows the prompt. */
+function CaptionField({ value, n, onChange, onDone }: { value: string; n: number | null; onChange(v: string): void; onDone(): void }) {
+  const [text, setText] = useState(value);
+  const [was, setWas] = useState(value);
+  const [focused, setFocused] = useState(false);
+  // An undo or another change from outside the field shows here, but never while the owner is typing in it.
+  if (was !== value) {
+    setWas(value);
+    if (!focused) setText(value);
+  }
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === "Escape") {
+      e.preventDefault();
+      onDone();
+    }
+  };
+  return (
+    <figcaption className="report-caption">
+      {n !== null && <span>{`Figure ${n}. `}</span>}
+      <input
+        className="report-caption-input"
+        aria-label={n === null ? "Caption" : `Figure ${n} caption`}
+        placeholder="Write a caption"
+        value={text}
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          setFocused(false);
+          setText(value);
+        }}
+        onChange={(e) => {
+          setText(e.target.value);
+          onChange(e.target.value);
+        }}
+        onKeyDown={onKey}
+      />
+    </figcaption>
+  );
+}
+
+function Figure({ entryId, attachmentId, caption, n, edit }: { entryId: string; attachmentId: string; caption: string; n: number | null; edit?: FigureEdit }) {
   const { onImageWidth } = useReportData();
+  const image = <AttachmentImage id={attachmentId} alt={caption} onWidth={onImageWidth ? (w) => onImageWidth(entryId, w) : undefined} />;
+  if (!edit) {
+    return (
+      <figure className="report-figure">
+        {image}
+        <figcaption>{n === null ? caption : `Figure ${n}. ${caption}`}</figcaption>
+      </figure>
+    );
+  }
   return (
     <figure className="report-figure">
-      <AttachmentImage id={attachmentId} alt={caption} onWidth={onImageWidth ? (w) => onImageWidth(entryId, w) : undefined} />
-      <figcaption>{n === null ? caption : `Figure ${n}. ${caption}`}</figcaption>
+      {/* Drag the corner to size the screenshot on the page; the width is the node's, in px at the page's measure. */}
+      <ResizableRoot
+        className="report-resizable"
+        width={edit.width ?? undefined}
+        onResizeEnd={(e) => edit.onWidth(Math.round(e.detail.width))}
+      >
+        {image}
+        <ResizableHandle position="bottom-right" className="report-resize-handle" aria-label="Resize the screenshot" />
+      </ResizableRoot>
+      <CaptionField value={edit.caption} n={n} onChange={edit.onCaption} onDone={edit.onDone} />
     </figure>
   );
 }
@@ -183,6 +286,8 @@ function EntryBody({
   prompt,
   mode,
   onLine,
+  edit,
+  trim,
 }: {
   entry: LogEntry;
   attrs: EvidenceAttrs;
@@ -190,14 +295,25 @@ function EntryBody({
   prompt: Prompt;
   mode?: PickMode;
   onLine?(n: number, shift: boolean): void;
+  /** On the page (not the appendix): the screenshot's caption and size are edited in place. */
+  edit?: Omit<FigureEdit, "caption" | "width">;
+  trim?: TrimLines;
 }) {
   const c = entry.content;
   switch (c.kind) {
     case "command":
       if (attrs.block !== null && !c.blocks[attrs.block]) return <Gone text="This command was removed from its entry" />;
-      return <CommandBody blocks={c.blocks} attrs={attrs} prompt={prompt} mode={mode} onLine={onLine} />;
+      return <CommandBody blocks={c.blocks} attrs={attrs} prompt={prompt} mode={mode} onLine={onLine} trim={trim} />;
     case "screenshot":
-      return <Figure entryId={entry.id} attachmentId={c.attachmentId} caption={c.caption || entry.title} n={figure} />;
+      return (
+        <Figure
+          entryId={entry.id}
+          attachmentId={c.attachmentId}
+          caption={captionOf(attrs as unknown as Record<string, unknown>, entry)}
+          n={figure}
+          edit={edit && { ...edit, caption: captionOf(attrs as unknown as Record<string, unknown>, entry), width: attrs.width ?? null }}
+        />
+      );
     case "flag":
       return (
         <div className="report-flag">
@@ -221,6 +337,48 @@ function EntryBody({
   }
 }
 
+/** The language a command block's prompt suggests: PowerShell for `PS>` shells, Bash for Unix ones, else plain. */
+function shellLanguage(prompt: string): string {
+  if (/PS>$/.test(prompt)) return "powershell";
+  if (/[$#]$/.test(prompt)) return "bash";
+  return "";
+}
+
+/**
+ * A command or HTTP evidence block as a code block the owner edits on the page: the text as the page shows it now
+ * (prompt and command, the kept output with its omitted counts; or the request, then the response), the language set,
+ * and the entry kept as provenance (`fromEntry`). It no longer follows the log. Null for other kinds.
+ */
+export function detachedBlock(entry: LogEntry, attrs: EvidenceAttrs, prompt: Prompt): ReportNode | null {
+  const c = entry.content;
+  let text: string;
+  let language: string;
+  if (c.kind === "command") {
+    const chosen = attrs.block === null ? c.blocks : c.blocks.slice(attrs.block, attrs.block + 1);
+    let offset = 0;
+    text = chosen
+      .map((b) => {
+        const output = b.output ?? "";
+        const start = offset;
+        offset += lineCount(output);
+        const keep = attrs.keep === null ? null : attrs.keep.map(([a, z]): [number, number] => [a - start, z - start]);
+        const lines =
+          output === ""
+            ? []
+            : applyKeep(output, keep).map((item) =>
+                item.kind === "omitted" ? `… ${item.count} ${item.count === 1 ? "line" : "lines"} omitted` : item.text,
+              );
+        return [`${prompt(b.shell)} ${b.command}`, ...lines].join("\n");
+      })
+      .join("\n\n");
+    language = shellLanguage(prompt(chosen[0]?.shell));
+  } else if (c.kind === "http") {
+    text = c.response ? `${c.request}\n\n${c.response}` : c.request;
+    language = "http";
+  } else return null;
+  return { type: "codeBlock", attrs: { language, fromEntry: entry.id }, ...(text ? { content: [{ type: "text", text }] } : {}) };
+}
+
 /** An evidence block in full, as the appendix prints it: every line of its output, no figure number. */
 export function FullEvidence({ attrs }: { attrs: EvidenceAttrs }) {
   const { data } = useReportData();
@@ -229,6 +387,148 @@ export function FullEvidence({ attrs }: { attrs: EvidenceAttrs }) {
   if (!entry) return <Gone text="This entry was deleted" />;
   if (entry.private) return <Gone text="This entry is now private" />;
   return <EntryBody entry={entry} attrs={{ ...attrs, keep: null }} figure={null} prompt={promptsFor(entry.ranOn, machines)} />;
+}
+
+/** The output lines a placement shows: one block's, or every block's end to end. */
+function placementLines(entry: LogEntry | undefined, attrs: EvidenceAttrs): number {
+  if (entry?.content.kind !== "command") return 0;
+  const blocks = entry.content.blocks;
+  const chosen = attrs.block === null ? blocks : blocks.slice(attrs.block, attrs.block + 1);
+  return chosen.reduce((n, b) => n + lineCount(b.output ?? ""), 0);
+}
+
+const span = (a: number, b: number) => Array.from({ length: Math.abs(b - a) + 1 }, (_, i) => Math.min(a, b) + i);
+
+/**
+ * Trimming a command's output. Every line starts kept. A click on a line number cuts it (or keeps it again); dragging
+ * down the numbers does the same to the whole run, the way the first line went; a shift-click does it from the last
+ * line clicked. From the keyboard, on the trim bar: ↑↓ move a line cursor, ⇧↑↓ extend the run, Space flips the run,
+ * ⌫ cuts it, Esc leaves. The page keeps the same merged `keep` ranges (null when every line is kept).
+ */
+function useTrim(attrs: EvidenceAttrs, total: number, setAttrs: (a: Partial<EvidenceAttrs>) => void) {
+  const [anchor, setAnchor] = useState<number | null>(null);
+  const [cursor, setCursor] = useState<number | null>(null);
+  // The drag under way: where it started, whether it keeps or cuts, and the lines kept before it.
+  const drag = useRef<{ start: number; keep: boolean; base: Set<number> } | null>(null);
+  const last = useRef<number | null>(null);
+
+  const keptSet = () => new Set(attrs.keep === null ? span(0, total - 1) : expandRanges(attrs.keep));
+  const write = (kept: Set<number>) => setAttrs({ keep: kept.size >= total ? null : toRanges([...kept]) });
+  const apply = (lines: number[], keep: boolean, base = keptSet()) => {
+    const next = new Set(base);
+    for (const n of lines) if (keep) next.add(n);
+    else next.delete(n);
+    write(next);
+  };
+  const pick = (a: number, b: number) => {
+    setAnchor(a);
+    setCursor(b);
+  };
+
+  useEffect(() => {
+    const up = () => (drag.current = null);
+    window.addEventListener("pointerup", up);
+    return () => window.removeEventListener("pointerup", up);
+  }, []);
+
+  const from = anchor === null || cursor === null ? null : Math.min(anchor, cursor);
+  const to = anchor === null || cursor === null ? null : Math.max(anchor, cursor);
+  const run = from === null || to === null ? [] : span(from, to);
+
+  const lines: TrimLines = {
+    from,
+    to,
+    cursor,
+    onDown: (n, shift) => {
+      const base = keptSet();
+      if (shift && last.current !== null) {
+        // The range takes the state the last click left its line in.
+        apply(span(last.current, n), base.has(last.current), base);
+        pick(last.current, n);
+        return;
+      }
+      const keep = !base.has(n);
+      drag.current = { start: n, keep, base };
+      last.current = n;
+      apply([n], keep, base);
+      pick(n, n);
+    },
+    onEnter: (n) => {
+      const d = drag.current;
+      if (!d) return;
+      apply(span(d.start, n), d.keep, d.base);
+      pick(d.start, n);
+    },
+  };
+
+  const onKey = (e: KeyboardEvent<HTMLDivElement>, leave: () => void) => {
+    if (total === 0) return;
+    const at = cursor ?? -1;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const next = Math.max(0, Math.min(total - 1, at + (e.key === "ArrowDown" ? 1 : -1)));
+      if (e.shiftKey) pick(anchor ?? Math.max(0, at), next);
+      else pick(next, next);
+      last.current = next;
+    } else if (e.key === " " && run.length > 0) {
+      e.preventDefault();
+      apply(run, !keptSet().has(cursor!));
+    } else if ((e.key === "Backspace" || e.key === "Delete") && run.length > 0) {
+      e.preventDefault();
+      apply(run, false);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      leave();
+    }
+  };
+
+  const keptCount = attrs.keep === null ? total : expandRanges(attrs.keep).filter((n) => n < total).length;
+  return {
+    lines,
+    run,
+    keptCount,
+    onKey,
+    cutRun: () => apply(run, false),
+    keepOnlyRun: () => write(new Set(run)),
+    keepAll: () => setAttrs({ keep: null }),
+  };
+}
+
+/** The bar over the output while trimming: the count, and what to do with the run picked. Takes the keys. */
+function TrimBar({ trim, total, onLeave }: { trim: ReturnType<typeof useTrim>; total: number; onLeave(): void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => ref.current?.focus(), []);
+  return (
+    <div
+      ref={ref}
+      contentEditable={false}
+      tabIndex={0}
+      data-trim=""
+      role="toolbar"
+      aria-label="Trim the output: ↑↓ move, ⇧↑↓ extend, Space flips, ⌫ cuts, Esc leaves"
+      className="report-trim-bar"
+      onKeyDown={(e) => trim.onKey(e, onLeave)}
+    >
+      <span className="report-trim-count" aria-live="polite">{`${trim.keptCount} of ${total} lines kept`}</span>
+      {trim.run.length > 0 && (
+        <>
+          <button type="button" className="report-trim-action" onClick={trim.cutRun}>
+            Cut selection
+          </button>
+          <button type="button" className="report-trim-action" onClick={trim.keepOnlyRun}>
+            Keep only selection
+          </button>
+        </>
+      )}
+      {trim.keptCount < total && (
+        <button type="button" className="report-trim-action" onClick={trim.keepAll}>
+          Keep all
+        </button>
+      )}
+      {trim.run.length === 0 && <span className="report-trim-hint">Drag down the line numbers to cut a run</span>}
+    </div>
+  );
 }
 
 /**
@@ -263,13 +563,26 @@ export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNo
   const onLine = (n: number, shift: boolean) => {
     const from = shift ? lastLine.current : null;
     lastLine.current = n;
-    if (mode === "trim") {
-      // Picking starts from nothing kept: the first click keeps one line rather than dropping one.
-      const lines = pickLines(attrs.keep === null ? [] : expandRanges(attrs.keep), n, from);
-      setAttrs({ keep: lines.length === 0 ? null : toRanges(lines) });
-    } else if (mode === "emphasis") {
-      setAttrs({ emphasis: pickLines(attrs.emphasis, n, from) });
-    }
+    if (mode === "emphasis") setAttrs({ emphasis: pickLines(attrs.emphasis, n, from) });
+  };
+  const total = placementLines(shown, attrs);
+  const trim = useTrim(attrs, total, setAttrs);
+  const leaveTrim = () => {
+    setPicking(null);
+    view.focus();
+  };
+  const detach = () => {
+    const pos = getPos();
+    if (pos === undefined || !shown) return;
+    const made = detachedBlock(shown, attrs, promptsFor(shown.ranOn, machines));
+    if (!made) return;
+    const tr = view.state.tr.replaceWith(pos, pos + node.nodeSize, view.state.schema.nodeFromJSON(made));
+    view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(pos + 1))).scrollIntoView());
+    view.focus();
+  };
+  const isShot = shown?.content.kind === "screenshot";
+  const backToPage = () => {
+    view.focus();
   };
   const remove = () => {
     const pos = getPos();
@@ -286,7 +599,16 @@ export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNo
   else if (attrs.appendix === "moved") body = <AppendixRef label={refLabel} refText={ref} />;
   else {
     body = (
-      <EntryBody entry={entry} attrs={attrs} figure={figureOf(node)} prompt={promptsFor(entry.ranOn, machines)} mode={mode} onLine={onLine} />
+      <EntryBody
+        entry={entry}
+        attrs={attrs}
+        figure={figureOf(node)}
+        prompt={promptsFor(entry.ranOn, machines)}
+        mode={mode}
+        onLine={onLine}
+        trim={trim.lines}
+        edit={{ onCaption: (caption) => setAttrs({ caption }), onWidth: (width) => setAttrs({ width }), onDone: backToPage }}
+      />
     );
     if (attrs.appendix === "split")
       body = (
@@ -312,22 +634,18 @@ export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNo
               />
             </>
           )}
+          {(isCommand || shown?.content.kind === "http") && attrs.appendix !== "moved" && (
+            <IconButton icon={PencilSimpleLine} label="Edit on page (stops following the log entry)" onClick={detach} />
+          )}
+          {isShot && attrs.width != null && (
+            <IconButton icon={ArrowsOutLineHorizontal} label="Full width" onClick={() => setAttrs({ width: null })} />
+          )}
           {shown && canMove && <MoveButton place={attrs.appendix} canSplit={isCommand} onMove={(next) => setAttrs({ appendix: next })} />}
           <IconButton icon={Trash} label="Remove" shortcut="⌫" tone="destructive" onClick={remove} />
         </BlockTools>
       )}
-      {/* Trimming: what to do, or the way back, on the paper above the output (the gutter holds only icons). */}
-      {mode === "trim" && (
-        <div contentEditable={false} className="report-pick-hint">
-          {attrs.keep === null ? (
-            "Pick the lines to keep"
-          ) : (
-            <button type="button" className="report-backlink" onClick={() => setAttrs({ keep: null })}>
-              Keep all
-            </button>
-          )}
-        </div>
-      )}
+      {/* Trimming: the count and the run's actions, on the paper above the output (the gutter holds only icons). */}
+      {mode === "trim" && <TrimBar trim={trim} total={total} onLeave={leaveTrim} />}
       {body}
     </Block>
   );

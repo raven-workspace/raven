@@ -10,3 +10,9 @@ export function isFigure(node: { type: string; attrs?: Record<string, unknown> }
   if (!entry || entry.private) return false;
   return entry.content.kind === "screenshot" || (entry.content.kind === "flag" && !!entry.content.attachmentId);
 }
+
+/** A figure's caption: the one written on the page (the node's `caption`), else the log's caption, else the entry's title. */
+export function captionOf(attrs: Record<string, unknown> | undefined, entry: LogEntry): string {
+  if (typeof attrs?.caption === "string") return attrs.caption;
+  return (entry.content.kind === "screenshot" && entry.content.caption) || entry.title;
+}

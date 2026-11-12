@@ -1202,8 +1202,8 @@ test("Report: an appendix page keeps the page's side margins", async ({ page }) 
   await openReport(page, "ms01");
   await page.locator(".report-page .report-code", { hasText: "winPEASx64.exe" }).click();
   await page.getByRole("button", { name: "Move to appendix" }).click();
-  await page.locator("[data-outline-row]").filter({ hasText: "Appendix E: ms01" }).click();
-  const heading = page.getByRole("heading", { name: "Appendix E: ms01" });
+  await page.locator("[data-outline-row]").filter({ hasText: "Appendix A: ms01" }).click();
+  const heading = page.getByRole("heading", { name: "Appendix A: ms01" });
   await heading.waitFor();
   // The same 40px gutters as a target page: text never touches the paper's edge.
   const paper = (await page.locator(".report-page").boundingBox())!;
@@ -1211,4 +1211,66 @@ test("Report: an appendix page keeps the page's side margins", async ({ page }) 
   const code = (await page.locator(".report-appendix .report-code").first().boundingBox())!;
   expect(title.x - paper.x).toBeGreaterThanOrEqual(40);
   expect(paper.x + paper.width - (code.x + code.width)).toBeGreaterThanOrEqual(40);
+});
+
+/** The owner's window: about 1400 wide, the sidebar folded to its rail, so the evidence rail is a column. */
+async function openReportAt1400(page: Page, target: string) {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.clock.install({ time: AUDIT_NOW });
+  await page.goto("/e/e-exam/s/report");
+  const fold = page.getByRole("button", { name: "Collapse sidebar" });
+  await fold.first().waitFor();
+  await fold.first().click();
+  await page.locator("[data-outline-row]").filter({ hasText: target }).first().click();
+  await page.locator(".report-page .report-code").first().waitFor();
+}
+
+/** Every generated table with a fit column (IPs): a 15-character IP and a long port list stay in their own columns. */
+async function expectFitColumns(page: Page) {
+  const tables = page.locator(".report-page .report-table[data-fixed]");
+  expect(await tables.count()).toBeGreaterThan(0);
+  const result = await tables.evaluateAll((all) =>
+    all.map((t) => {
+      const row = t.querySelector("tbody tr")!;
+      const [ip, ports] = [...row.querySelectorAll("td")];
+      ip.textContent = "172.31.166.143";
+      ports.textContent = "TCP: 21, 22, 80, 81, 443, 3000, 3001, 3003, 3306, 5432, 8080, 8443, 9090, 10000";
+      const a = ip.getBoundingClientRect();
+      const b = ports.getBoundingClientRect();
+      return { overflows: ip.scrollWidth > ip.clientWidth + 1, overlaps: a.right > b.left + 0.5 };
+    }),
+  );
+  for (const r of result) expect(r).toEqual({ overflows: false, overlaps: false });
+}
+
+test("Report: Port Scan Results keeps a long IP in its column, in WebKit too", async ({ page, playwright, baseURL }) => {
+  await openReportAt1400(page, "ms01");
+  await expectFitColumns(page);
+  // The owner's app is WebKit (WKWebView), where an automatic table layout let the IP overprint the ports.
+  const browser = await playwright.webkit.launch();
+  try {
+    const wk = await browser.newPage({ baseURL });
+    await openReportAt1400(wk, "ms01");
+    await expectFitColumns(wk);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("Report: the formatting bar fits its pane at 1400 with the evidence rail open, the core controls in reach", async ({ page }) => {
+  await openReportAt1400(page, "ms01");
+  await expect(page.getByRole("tablist", { name: "Evidence" })).toBeVisible();
+  const bar = page.getByRole("toolbar", { name: "Formatting" });
+  const add = page.getByRole("button", { name: "Add new evidence" });
+  const barBox = (await bar.boundingBox())!;
+  const addBox = (await add.boundingBox())!;
+  // Every control on the bar ends before Add new evidence; the rest are under More.
+  const rights = await bar.locator("button, [role=combobox]").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().right));
+  for (const r of rights) expect(r).toBeLessThanOrEqual(addBox.x);
+  expect(barBox.x + barBox.width).toBeLessThanOrEqual(addBox.x);
+  // The owner's order of what must stay: the core marks, the headings, the two lists, undo and redo.
+  const kept = ["Bold", "Italic", "Inline code", "Link", "Heading 1", "Heading 2", "Heading 3", "Bulleted list", "Numbered list", "Undo", "Redo"];
+  for (const name of kept) await expect(bar.getByRole("button", { name })).toBeVisible();
+  await bar.getByRole("button", { name: "More formatting" }).click();
+  await expect(page.getByRole("dialog", { name: "More formatting" }).getByRole("button", { name: "Find and replace" })).toBeVisible();
 });
