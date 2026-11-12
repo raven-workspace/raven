@@ -9,6 +9,7 @@ import App from "../App";
 import { api, resetAuditState } from "../audit/fakeApi";
 import { ReportSectionView } from "../features/report/ReportSection";
 import { pruneRemoved } from "../features/report/queries";
+import { discardReports } from "../features/report/saveQueue";
 import { CheckList } from "../features/report/ReportOutline";
 import { makeQueryClient } from "../lib/queryClient";
 import type { LogContent, LogEntryInput } from "../types/log";
@@ -36,6 +37,7 @@ vi.mock("../features/report/editor/ReportEditor", async (importOriginal) => {
 });
 
 afterEach(() => {
+  discardReports();
   vi.restoreAllMocks();
   vi.useRealTimers();
   editors.length = 0;
@@ -205,6 +207,113 @@ describe("Report view", () => {
     await waitFor(() => expect(warning()).not.toBeInTheDocument());
   });
 
+  it("never sends a section's newer write while an older one is on its way", async () => {
+    const real = api.reportSectionSave;
+    let release: () => void = () => {};
+    let aId = "";
+    let hold = true;
+    const save = vi.spyOn(api, "reportSectionSave").mockImplementation(async (id, doc, meta) => {
+      if (id === aId && hold) {
+        hold = false;
+        await new Promise<void>((r) => (release = r));
+      }
+      return real(id, doc, meta);
+    });
+    mount();
+    await ready();
+    await waitFor(() => expect(editors.length).toBe(1));
+    aId = rowFor("lnx02").dataset.id!;
+    const type = (text: string) => act(() => editors[0].view.dispatch(editors[0].view.state.tr.insertText(text, 1)));
+    const writesOfA = () => save.mock.calls.filter(([sid]) => sid === aId);
+
+    type("older");
+    await waitFor(() => expect(writesOfA()).toHaveLength(1));
+    type("newer");
+    // Switching flushes: the newer write must wait for the older one to settle.
+    fireEvent.click(rowFor("ms01"));
+    await act(async () => {});
+    expect(writesOfA()).toHaveLength(1);
+
+    await act(async () => release());
+    await waitFor(() => expect(writesOfA()).toHaveLength(2));
+    expect(JSON.stringify(writesOfA()[1][1])).toContain("newer");
+  });
+
+  it("retries a failed write after leaving the view, and warns on the Report view until it lands", async () => {
+    const real = api.reportSectionSave;
+    let fail = true;
+    let aId = "";
+    const save = vi.spyOn(api, "reportSectionSave").mockImplementation(async (id, doc, meta) => {
+      if (id === aId && fail) throw new Error("disk full");
+      return real(id, doc, meta);
+    });
+    const first = mount();
+    await ready();
+    await waitFor(() => expect(editors.length).toBe(1));
+    aId = rowFor("lnx02").dataset.id!;
+    act(() => editors[0].view.dispatch(editors[0].view.state.tr.insertText("kept text", 1)));
+    const writesOfA = () => save.mock.calls.filter(([sid]) => sid === aId);
+    const warning = () => screen.queryByText(/Some typing isn't saved yet/);
+
+    // Leaving flushes; the write fails.
+    first.unmount();
+    await waitFor(() => expect(writesOfA()).toHaveLength(1));
+
+    // Back on the Report view the warning still shows.
+    mount();
+    await ready();
+    await waitFor(() => expect(warning()).toBeInTheDocument());
+
+    // With no further typing the write is retried on its own, lands, and the warning clears.
+    fail = false;
+    await waitFor(() => expect(warning()).not.toBeInTheDocument(), { timeout: 4000 });
+    expect(JSON.stringify(writesOfA().at(-1)![1])).toContain("kept text");
+  });
+
+  it("a draft landing after a reorder keeps the new order", async () => {
+    const real = api.reportSectionUpsert;
+    let release: () => void = () => {};
+    vi.spyOn(api, "reportSectionUpsert").mockImplementation(async (rid, input) => {
+      if (input.targetKey === "h-exam-lnx" && input.draftBuiltAt !== null) await new Promise<void>((r) => (release = r));
+      return real(rid, input);
+    });
+    mount();
+    await ready();
+    await waitFor(() => expect(targetRows()).toHaveLength(5));
+    const first = rowFor("lnx02");
+    first.focus();
+    fireEvent.keyDown(first, { key: "ArrowDown", code: "ArrowDown", altKey: true });
+    const order = ["ms01.5", "lnx02.21", "web01.20", "AD set: ad02, dc01", "Tested, not exploited"];
+    await waitFor(() => expect(targetRows().map((r) => r.textContent)).toEqual(order));
+    await act(async () => release());
+    await waitFor(() => expect(editors.length).toBeGreaterThan(0));
+    expect(targetRows().map((r) => r.textContent)).toEqual(order);
+  });
+
+  it("a slower earlier report-details save never overwrites a later one", async () => {
+    const real = api.reportUpdate;
+    let release: () => void = () => {};
+    let calls = 0;
+    vi.spyOn(api, "reportUpdate").mockImplementation(async (id, patch) => {
+      const saved = await real(id, patch);
+      if (++calls === 1) await new Promise<void>((r) => (release = r));
+      return saved;
+    });
+    const { qc } = mount();
+    await ready();
+    fireEvent.click(row(/Report details/));
+    const osid = await screen.findByLabelText("OSID");
+    fireEvent.change(osid, { target: { value: "OS-11111" } });
+    fireEvent.blur(osid);
+    fireEvent.change(osid, { target: { value: "OS-22222" } });
+    fireEvent.blur(osid);
+    await waitFor(() => expect(calls).toBeGreaterThanOrEqual(1));
+    await act(async () => release());
+    await waitFor(() => expect(calls).toBe(2));
+    await act(async () => {});
+    expect((qc.getQueryData(["report", "e-exam"]) as { osid: string }).osid).toBe("OS-22222");
+  });
+
   it("shows a failed section setup with Retry, keeping the outline", async () => {
     const real = api.reportSectionUpsert;
     let fail = false;
@@ -225,9 +334,25 @@ describe("Report view", () => {
     expect(targetRows()).toHaveLength(5);
 
     fail = false;
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry setting up sections" }));
     await waitFor(() => expect(targetRows().some((r) => r.textContent === "files03.33")).toBe(true));
     expect(screen.queryByText(/Couldn't add the report's new sections/)).not.toBeInTheDocument();
+  });
+
+  it("names the draft's Retry apart from the section setup's", async () => {
+    const real = api.reportSectionUpsert;
+    let fail = true;
+    vi.spyOn(api, "reportSectionUpsert").mockImplementation(async (rid, input) => {
+      if (fail && input.draftBuiltAt !== null) throw new Error("db busy");
+      return real(rid, input);
+    });
+    mount();
+    await ready();
+    expect(await screen.findByText(/Couldn't build this page's draft/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry setting up sections" })).toBeNull();
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Retry building the draft" }));
+    await waitFor(() => expect(screen.queryByText(/Couldn't build this page's draft/)).not.toBeInTheDocument());
   });
 
   it("shows a placeholder for client engagements", async () => {
@@ -432,6 +557,28 @@ describe("Report view: the result", () => {
     );
     expect(await screen.findByRole("group", { name: "Report status" }, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.queryByRole("status", { name: "Engagement status" })).toBeNull();
+  });
+
+  it("⌘L right after typing saves the page before the vault locks", async () => {
+    const save = vi.spyOn(api, "reportSectionSave");
+    const lock = vi.spyOn(api, "vaultLock");
+    render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <MemoryRouter initialEntries={["/e/e-exam/s/report"]}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(editors.length).toBeGreaterThan(0), { timeout: 5000 });
+    act(() => {
+      const view = pageEditor().view;
+      view.dispatch(view.state.tr.insertText("typed just before locking", 1));
+    });
+    fireEvent.keyDown(document, { key: "l", code: "KeyL", metaKey: true });
+    await waitFor(() => expect(lock).toHaveBeenCalled());
+    const typed = save.mock.calls.findIndex(([, doc]) => JSON.stringify(doc).includes("typed just before locking"));
+    expect(typed).not.toBe(-1);
+    expect(save.mock.invocationCallOrder[typed]).toBeLessThan(lock.mock.invocationCallOrder[0]);
   });
 
   it("titles a report-level page from its kind, at the top of the paper", async () => {

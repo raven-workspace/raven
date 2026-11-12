@@ -60,6 +60,7 @@ import {
   useSectionSaver,
   wantedSections,
 } from "./queries";
+import { useReportSaveStore } from "./saveQueue";
 
 const HINTS: Hint[] = [
   { keys: "J K", label: "move in the outline", priority: 1 },
@@ -153,11 +154,11 @@ interface AppendixPage {
 const APPENDIX_ID = "appendix:";
 
 /** A warning with its Retry, above the page. */
-function WarnLine({ text, onRetry }: { text: string; onRetry(): void }) {
+function WarnLine({ text, retryLabel, onRetry }: { text: string; retryLabel: string; onRetry(): void }) {
   return (
     <div role="alert" className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
       <p className="m-0 text-meta text-warn">{text}</p>
-      <Button size="sm" onClick={onRetry}>
+      <Button size="sm" aria-label={retryLabel} onClick={onRetry}>
         Retry
       </Button>
     </div>
@@ -512,8 +513,8 @@ function ReportBody({
   }, [entries, metaOf]);
 
   // Autosave, flushed when the open section changes and on leaving.
-  const [saveFailed, setSaveFailed] = useState(false);
-  const saver = useSectionSaver(openSection?.id ?? "", { onError: () => setSaveFailed(true), onSaved: () => setSaveFailed(false) });
+  const saveFailed = useReportSaveStore((s) => s.unsaved);
+  const saver = useSectionSaver(openSection?.id ?? "");
   const editorRef = useRef<{ id: string; editor: Editor } | null>(null);
   // The same editor as state too, so the evidence rail re-renders once the page has mounted.
   const [readyEditor, setReadyEditor] = useState<{ id: string; editor: Editor } | null>(null);
@@ -551,9 +552,12 @@ function ReportBody({
     const doc = drafts.get(s.id);
     if (!doc) return;
     building.current.add(s.id);
+    // The position as the sections cache has it now; the reply's position is left out of the cache, so a reorder
+    // made while the draft was on its way stays.
+    const position = qc.getQueryData<ReportSection[]>(reportSectionsKey(report.id))?.find((x) => x.id === s.id)?.position ?? s.position;
     api
-      .reportSectionUpsert(report.id, { kind: s.kind, targetKey: s.targetKey, position: s.position, doc, meta: s.meta, draftBuiltAt: Date.now() })
-      .then((saved) => patchCachedSection(qc, s.id, saved))
+      .reportSectionUpsert(report.id, { kind: s.kind, targetKey: s.targetKey, position, doc, meta: s.meta, draftBuiltAt: Date.now() })
+      .then((saved) => patchCachedSection(qc, s.id, { doc: saved.doc, meta: saved.meta, draftBuiltAt: saved.draftBuiltAt }))
       .catch((e: unknown) => {
         building.current.delete(s.id);
         reportError(e);
@@ -561,15 +565,22 @@ function ReportBody({
       });
   }, [openSection, drafts, report.id, qc, draftFailed]);
 
+  // Report-details writes go out one at a time, in order; only the last one's reply reaches the cache, so a slower
+  // earlier reply never overwrites a later change.
+  const reportWrites = useRef<{ chain: Promise<unknown>; last: number }>({ chain: Promise.resolve(), last: 0 });
   const saveReport = useCallback(
     (patch: ReportPatch) => {
       const key = reportKey(report.engagementId);
       const before = qc.getQueryData<Report>(key);
       const merged: ReportPatch = patch.meta && before ? { ...patch, meta: { ...before.meta, ...patch.meta } } : patch;
       if (before) qc.setQueryData<Report>(key, { ...before, ...merged } as Report);
-      api
-        .reportUpdate(report.id, merged)
-        .then((saved) => qc.setQueryData(key, saved))
+      const writes = reportWrites.current;
+      const n = ++writes.last;
+      writes.chain = writes.chain
+        .then(() => api.reportUpdate(report.id, merged))
+        .then((saved) => {
+          if (n === writes.last) qc.setQueryData(key, saved);
+        })
         .catch((e: unknown) => {
           reportError(e);
           void qc.invalidateQueries({ queryKey: key });
@@ -741,9 +752,9 @@ function ReportBody({
   const editorShown = !appendixView && openSection?.kind !== "details" && !!openSection?.doc && !!contextValue;
   const notices = (
     <>
-      {ensureFailed && <WarnLine text={`Couldn't add the report's new sections: ${ensureFailed}`} onRetry={() => setEnsureFailed(null)} />}
-      {saveFailed && <p className="m-0 text-meta text-warn">Some typing isn't saved yet. Raven tries again with your next change; keep Raven open until this goes.</p>}
-      {draftFailed && <WarnLine text={`Couldn't build this page's draft: ${draftFailed}`} onRetry={() => setDraftFailed(null)} />}
+      {ensureFailed && <WarnLine text={`Couldn't add the report's new sections: ${ensureFailed}`} retryLabel="Retry setting up sections" onRetry={() => setEnsureFailed(null)} />}
+      {saveFailed && <p className="m-0 text-meta text-warn">Some typing isn't saved yet. Raven keeps trying; keep Raven open until this goes.</p>}
+      {draftFailed && <WarnLine text={`Couldn't build this page's draft: ${draftFailed}`} retryLabel="Retry building the draft" onRetry={() => setDraftFailed(null)} />}
       {notStarted && open?.target && <p className="m-0 text-meta text-muted-2">Nothing logged on {open.item.label} yet. The page fills in as you work.</p>}
     </>
   );

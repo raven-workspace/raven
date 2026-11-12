@@ -1,7 +1,6 @@
-import { useQueries, useQuery, useQueryClient, type QueryClient, type UseQueryResult } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useQueries, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo } from "react";
 import {
-  evidenceIdsIn,
   testedNotExploited,
   type ReportData,
   type ReportNode,
@@ -9,9 +8,8 @@ import {
   type SectionMeta,
 } from "../../engines/report";
 import { api } from "../../lib/api";
-import { reportError } from "../../lib/lockSignal";
 import type { FindingFile } from "../../types/findings";
-import type { Report, ReportDoc, ReportSection, SectionInput, SectionKind } from "../../types/report";
+import type { Report, ReportSection, SectionInput, SectionKind } from "../../types/report";
 import { useChecklist, useEngagementServices, useHops } from "../checklist/queries";
 import { useCleanup } from "../cleanup/queries";
 import { useAccessGrants, useCredentials, useUsernames } from "../credentials/queries";
@@ -19,6 +17,7 @@ import { findingFilesKey, useFailedAttempts, useFindings } from "../findings/que
 import { useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
 import { useNotes } from "../notes/queries";
+import { flushReports, patchCachedSection, pruneRemoved, queueReportSave } from "./saveQueue";
 
 export const reportKey = (eid: string) => ["report", eid] as const;
 export const reportSectionsKey = (reportId: string) => ["reportSections", reportId] as const;
@@ -150,83 +149,17 @@ export async function ensureSections(
   return created;
 }
 
-/** Writes a section into every cached sections list that holds it. */
-export function patchCachedSection(qc: QueryClient, id: string, patch: Partial<ReportSection>) {
-  qc.setQueriesData<ReportSection[]>({ queryKey: ["reportSections"] }, (list) =>
-    list?.some((s) => s.id === id) ? list.map((s) => (s.id === id ? { ...s, ...patch } : s)) : list,
-  );
-}
-
-/** Drops removed-entry ids whose entry is on the page again (an undo), so the meta only lists entries really removed. */
-export function pruneRemoved(doc: ReportNode, meta: SectionMeta): SectionMeta {
-  if (!meta.removedEntryIds?.length) return meta;
-  const onPage = evidenceIdsIn(doc);
-  const kept = meta.removedEntryIds.filter((id) => !onPage.has(id));
-  return kept.length === meta.removedEntryIds.length ? meta : { ...meta, removedEntryIds: kept };
-}
-
-const SAVE_DEBOUNCE_MS = 600;
+export { patchCachedSection, pruneRemoved };
 
 /**
- * Autosave for the open section: `save` queues the latest page and meta and writes them 600 ms after the last change.
- * The queue is flushed when the section changes and on unmount, so a switch or leaving never drops typing.
- *
- * Unsaved writes are kept per section: a failed write stays queued (a later save of another section never replaces
- * it) and is retried on every flush, so on the next change anywhere. `onError` fires while any write is unsaved,
- * `onSaved` only once every section is written.
+ * Autosave for the open section, through the report save queue (`saveQueue.ts`): `save` queues the latest page and
+ * meta, written 600 ms after the last change. The queue is flushed when the section changes and on unmount, so a
+ * switch or leaving never waits on the debounce; a failed write stays queued and is retried outside the view.
  */
-export function useSectionSaver(
-  sectionId: string,
-  opts: { onError?(error: unknown): void; onSaved?(): void } = {},
-): { save(doc: ReportNode, meta: SectionMeta): void; flush(): Promise<void> } {
+export function useSectionSaver(sectionId: string): { save(doc: ReportNode, meta: SectionMeta): void; flush(): Promise<void> } {
   const qc = useQueryClient();
-  const callbacks = useRef(opts);
-  useEffect(() => {
-    callbacks.current = opts;
-  });
-  type Write = { doc: ReportNode; meta: SectionMeta };
-  const unsaved = useRef(new Map<string, Write>());
-  // Writes on their way: a flush doesn't send the same write twice.
-  const inFlight = useRef(new Set<Write>());
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const flush = useCallback(async () => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = null;
-    const writes = [...unsaved.current].filter(([, w]) => !inFlight.current.has(w));
-    if (writes.length === 0) return;
-    let failure: unknown = null;
-    await Promise.all(
-      writes.map(async ([id, w]) => {
-        const meta = pruneRemoved(w.doc, w.meta);
-        patchCachedSection(qc, id, { doc: w.doc as ReportDoc, meta: meta as Record<string, unknown> });
-        inFlight.current.add(w);
-        try {
-          await api.reportSectionSave(id, w.doc as ReportDoc, meta as Record<string, unknown>);
-          // A newer change queued meanwhile stays for its own write.
-          if (unsaved.current.get(id) === w) unsaved.current.delete(id);
-        } catch (e) {
-          failure = e;
-          reportError(e);
-        } finally {
-          inFlight.current.delete(w);
-        }
-      }),
-    );
-    if (failure !== null) callbacks.current.onError?.(failure);
-    else if (unsaved.current.size === 0) callbacks.current.onSaved?.();
-  }, [qc]);
-
-  const save = useCallback(
-    (doc: ReportNode, meta: SectionMeta) => {
-      unsaved.current.set(sectionId, { doc, meta });
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => void flush(), SAVE_DEBOUNCE_MS);
-    },
-    [sectionId, flush],
-  );
-
-  // Section change and unmount: write what is queued for the section being left (and retry anything unsaved).
-  useEffect(() => () => void flush(), [sectionId, flush]);
-  return useMemo(() => ({ save, flush }), [save, flush]);
+  const save = useCallback((doc: ReportNode, meta: SectionMeta) => queueReportSave(qc, sectionId, doc, meta), [qc, sectionId]);
+  // Section change and unmount: write what is queued now.
+  useEffect(() => () => void flushReports(), [sectionId]);
+  return useMemo(() => ({ save, flush: flushReports }), [save]);
 }
