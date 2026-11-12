@@ -7,6 +7,7 @@ import {
   expectedFlags,
   exploitedSystems,
   msfModules,
+  proofFacts,
   reportTargets,
   serviceCoverage,
   testedNotExploited,
@@ -83,6 +84,14 @@ const None = ({ text = "None recorded." }: { text?: string }) => <p className="r
 
 const hostName = (data: ReportData, id: string | null) => (id ? (data.hosts.find((h) => h.id === id)?.name ?? id) : "");
 const accessWords = (h: Host) => (h.access === "none" ? "none" : h.access === "user" ? "user" : h.os === "windows" ? "SYSTEM" : "root");
+
+/** The host's name, once a non-private flag's proof shows its hostname; else "Not found". */
+function provenHostname(data: ReportData, host: Host): string {
+  const shown = data.log.some(
+    (e) => !e.private && e.hostIds.includes(host.id) && e.content.kind === "flag" && proofFacts(e, host).showsHostname,
+  );
+  return shown ? host.name : "Not found";
+}
 
 /** The non-private flag value of a kind on a host, or what stands in for it. */
 function flagValue(data: ReportData, host: Host, kind: FlagKind, expected: FlagKind[]): string {
@@ -231,7 +240,7 @@ function Content({ attrs, ctx, attackerIp, editable = false }: { attrs: Generate
         ["local.txt", flagValue(data, host, "local", expected)],
         ["proof.txt", flagValue(data, host, "proof", expected)],
         ["IP address", host.ip ?? ""],
-        ["Hostname", host.name],
+        ["Hostname", provenHostname(data, host)],
       ];
       if (host.adSetEffective && domainController(data, adHosts.map((h) => h.id)) === host.id) {
         const da = data.grants.some((g) => g.hostId === host.id && (g.level === "admin" || g.level === "system"));

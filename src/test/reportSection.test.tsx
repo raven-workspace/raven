@@ -448,6 +448,20 @@ describe("Report view: the result", () => {
     expect(within(paper()).queryByRole("heading", { level: 1 })).toBeNull();
   });
 
+  it("a target's proof table names the host only once a flag's proof shows its hostname", async () => {
+    mount();
+    await ready();
+    const hostname = () => {
+      const cells = within(paper()).getAllByRole("row").find((r) => r.textContent?.startsWith("Hostname"))?.querySelectorAll("td");
+      return cells?.[cells.length - 1].textContent;
+    };
+    // lnx02 has no flag yet: nothing proves its hostname.
+    await waitFor(() => expect(hostname()).toBe("Not found"));
+    // ms01's proof runs `hostname`.
+    fireEvent.click(rowFor("ms01"));
+    await waitFor(() => expect(hostname()).toBe("ms01"));
+  });
+
   it("prints a target's facts as labelled values and marks nmap's guesses once, under the table", async () => {
     mount();
     await ready();
