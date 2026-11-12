@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { applyKeep, lineDiff } from "../engines/report";
 
 const ten = Array.from({ length: 10 }, (_, i) => `line${i}`).join("\n");
@@ -40,6 +40,21 @@ describe("lineDiff", () => {
     expect(lineDiff("", "x\ny").map((d) => [d.op, d.n])).toEqual([["add", 0], ["add", 1]]);
     expect(lineDiff("a\nb\nc\nd", "b\nd\ne").map((d) => `${d.op}:${d.text}:${d.n}`)).toEqual([
       "del:a:null", "same:b:0", "del:c:null", "same:d:1", "add:e:2",
+    ]);
+  });
+  it("diffs fully different files (every edit used) without reading outside its trace", () => {
+    // At d = N + M the trace row once started at index -1, which slice() reads from the end: right only by luck.
+    const slice = vi.spyOn(Int32Array.prototype, "slice");
+    const d = lineDiff("a\nb\nc", "x\ny\nz");
+    const starts = slice.mock.calls.map(([begin]) => begin ?? 0);
+    slice.mockRestore();
+    expect(starts.every((b) => b >= 0)).toBe(true);
+    expect(d.map((x) => `${x.op}:${x.text}:${x.n}`)).toEqual(["del:a:null", "del:b:null", "del:c:null", "add:x:0", "add:y:1", "add:z:2"]);
+  });
+  it("marks a single changed line in a one-line file", () => {
+    expect(lineDiff("a", "b").map((x) => `${x.op}:${x.text}:${x.n}`)).toEqual(["del:a:null", "add:b:0"]);
+    expect(lineDiff("keep\nold\nkeep2", "keep\nnew\nkeep2").map((x) => `${x.op}:${x.text}:${x.n}`)).toEqual([
+      "same:keep:0", "del:old:null", "add:new:1", "same:keep2:2",
     ]);
   });
   it("reconstructs the modified file from same+add lines", () => {

@@ -38,8 +38,9 @@ function myers(a: string[], b: string[]): Edit[] {
   if (N === 0) return b.map((text, j) => ({ op: "add", text, j }));
   if (M === 0) return a.map((text) => ({ op: "del", text, j: -1 }));
   const max = N + M;
-  const offset = max;
-  const v = new Int32Array(2 * max + 2);
+  // One spare slot each side: round d reads k in [-d-1, d+1] and the trace keeps that row, up to d = max.
+  const offset = max + 1;
+  const v = new Int32Array(2 * max + 4);
   const trace: Int32Array[] = [];
   let found = -1;
   for (let d = 0; d <= max && found < 0; d++) {
