@@ -1,5 +1,4 @@
 import type { Report } from "../../types/report";
-import type { LogEntry } from "../../types/log";
 import type { Host } from "../../types/host";
 import type { AppendixIndex } from "./appendix";
 import { suggestMoves } from "./appendix";
