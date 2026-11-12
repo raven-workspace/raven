@@ -575,6 +575,26 @@ Owner feedback (2026-11-11): inserted blocks aren't editable, so rough in-the-mo
 
 ---
 
+### Task 17: Correct on real captures (checks, rail, generated claims)
+
+Owner (2026-11-12, real engagement "Mock exam A", host Vega): the proof checks ("2 proofs don't show ipconfig", "…have no screenshot", "…don't show whoami/hostname", "…don't read the flag from the usual path") and the rail's "No credentials or access tied to this target" are **false**. The checks and fixtures were built around one capture shape; real captures take others.
+
+**Real capture shapes to support** (derive each from the actual capture code, not by hand):
+- Flags: (a) a flag entry from a pasted proof block (`content.proof` holds the terminal text); (b) a flag entry from just the 32-hex value (`proof: null`), with the proof shown by a **separate screenshot entry** and/or a **separate command entry** (`cat proof.txt; whoami; ip a` pasted as a command) on the same host; (c) a flag entry with its own attached screenshot (`attachmentId`).
+- Credentials: creds found elsewhere (wordlists, another host, a share) that **worked on this host** are recorded as `cred_attempts` (result valid/admin, hostId) and tried pairs, often with no `sourceHostId`/`localHostId` and no access grant.
+
+**Fix:**
+1. **Proof evidence = the flag entry plus its companions.** For each flag, gather: its own proof text and attachment; command entries on the same host whose output contains the flag value; screenshot entries on the same host within 15 minutes of the flag (either side) or whose caption names local/proof/flag. Text checks (IP shown, identity, hostname, usual path) read all gathered text. "No screenshot" only when there is no attachment and no companion screenshot.
+2. **Raven can't read images:** when a companion or attached screenshot exists and the text doesn't show `ipconfig`/IP, there is **no fail**. At most one soft line per target: "Raven can't read screenshots; make sure the proof screenshot shows ipconfig and {ip}." Never four separate lines for one proof.
+3. **The page shows the companions:** the Local.txt / Proof.txt value blocks include the companion command and screenshot (moved there by the draft, not duplicated elsewhere).
+4. **Credentials for a target** (rail Creds, any generated claim): include creds with a valid/admin `cred_attempt` on the target's hosts, creds whose source/local host is the target, access grants on the target, and usernames with grants. `ReportData` gains `credAttempts` (load them in `useReportData`; fake API + fixtures).
+5. **Audit every absolute claim** the report and rail make ("No …", "None recorded", "not tested", "untested", "missing") and check what real data could make it false; fix each source.
+6. **Fixtures from the real pipeline:** add a second exam host whose entries are produced by running real pastes through the capture engine (`src/engines/capture` draft + the intake/interpretation used on save): a flag pasted as a bare hash + a separate proof screenshot + a separate `cat proof.txt; ip a` command; creds from an `nxc ssh` success output with no source host. Tests assert no false proof/creds claims on it.
+
+- [ ] Steps: failing tests for each capture shape (proof checks pass for b and c; creds rail lists the nxc-validated cred; no "No credentials" claim); implement; full gate; WebKit re-shoot of the Vega-like host; controller verifies each remaining check on that page by reading the page; commit.
+
+---
+
 ## Spec coverage map (self-review)
 
 | Spec | Task |
