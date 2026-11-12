@@ -35,7 +35,7 @@ export function filterForKind(
 
 const PROMPT_PREFIX = /^msf\d*(?: \w+\([^)]*\))? >\s*/i;
 /** `use <module>`: long form (exploit/, auxiliary/, post/) or any short-form path like `windows/smb/psexec`. */
-const USE_MODULE = /(?:^|[;\s"'`])use\s+([\w-]+(?:\/[\w.-]+)+)/gi;
+export const USE_MODULE = /(?:^|[;\s"'`])use\s+([\w-]+(?:\/[\w.-]+)+)/gi;
 const HANDLER = /(?:^|\/)multi\/handler$/i;
 
 /**

@@ -4,3 +4,6 @@ export * from "./prove";
 export * from "./targets";
 export * from "./trim";
 export * from "./types";
+export * from "./coverage";
+export * from "./frontMatter";
+export * from "./tools";

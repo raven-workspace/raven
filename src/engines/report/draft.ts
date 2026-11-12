@@ -27,9 +27,9 @@ const REGION_BREAKS = new Set<GeneratedKind>(["facts", "ad-overview", "attack-ch
 
 type HostEntry = "foothold" | "hop";
 
-const node = (type: string, attrs: object): ReportNode => ({ type, attrs: attrs as Record<string, unknown> });
-const slot = (hint: string) => node("slot", { hint } satisfies SlotAttrs);
-const generated = (kind: GeneratedKind, hostId: string | null) =>
+export const node = (type: string, attrs: object): ReportNode => ({ type, attrs: attrs as Record<string, unknown> });
+export const slot = (hint: string) => node("slot", { hint } satisfies SlotAttrs);
+export const generated = (kind: GeneratedKind, hostId: string | null) =>
   node("generated", { kind, hostId, appendix: "inline" } satisfies GeneratedAttrs);
 const phaseNode = (phase: Phase, hostId: string) => node("phase", { phase, hostId } satisfies PhaseAttrs);
 
