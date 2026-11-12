@@ -55,7 +55,7 @@ beforeEach(() => {
   vi.mocked(resyncBoards).mockResolvedValue(undefined);
   useCaptureStore.getState().reset();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "" });
   m.engagementsProgress.mockResolvedValue({});
   m.hostsList.mockResolvedValue([SRV11, WEB]);
   m.servicesList.mockResolvedValue([]);
@@ -153,7 +153,7 @@ describe("dual-homed flag", () => {
 
 describe("listener on the strip", () => {
   it("shows LHOST:LPORT from settings, and links to Settings", async () => {
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "10.10.64.160", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "10.10.64.160", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "" });
     const user = userEvent.setup();
     mount("/e/e1", { ...E1, kind: "lab" });
     const link = await screen.findByRole("link", { name: /LHOST 10\.10\.64\.160:4444/ });
@@ -165,7 +165,7 @@ describe("listener on the strip", () => {
     const view = mount("/e/e1", E1);
     expect(await screen.findByRole("link", { name: /LHOST not set/ })).toBeInTheDocument();
     view.unmount();
-    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "443", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
+    m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "", listenerPort: "443", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "" });
     mount("/e/e1", E1);
     expect(await screen.findByRole("link", { name: /LHOST not set, LPORT 443/ })).toBeInTheDocument();
   });

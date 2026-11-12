@@ -3,7 +3,9 @@ import { useState } from "react";
 import { api } from "../../lib/api";
 import type { BackupInfo } from "../../types/backup";
 import type { SettingsPatch } from "../../types/settings";
-import { Button, Chip, Dialog, EmptyState, Field, Input, Panel, SETTINGS_COLUMN, queryState } from "../../ui";
+import { isValidOsid } from "../../engines/report/meta";
+import type { Settings } from "../../types/settings";
+import { Button, Chip, Dialog, EmptyState, Field, Input, Panel, SETTINGS_COLUMN, Textarea, queryState } from "../../ui";
 import { FieldManualSection } from "./FieldManualSection";
 import { ImportSection } from "./ImportSection";
 
@@ -144,6 +146,66 @@ function NvdKeySetting({
   );
 }
 
+/** Defaults copied into each new report's cover and methodology. Each field saves on blur. */
+function ReportDetails({
+  settings,
+  fieldError,
+  onSave,
+}: {
+  settings: Settings;
+  fieldError: { field: string; msg: string } | null;
+  onSave: (patch: SettingsPatch) => void;
+}) {
+  const [name, setName] = useState(settings.reportName);
+  const [email, setEmail] = useState(settings.reportEmail);
+  const [osid, setOsid] = useState(settings.reportOsid);
+  const [methodology, setMethodology] = useState(settings.reportMethodology);
+  const err = (field: string) => (fieldError?.field === field ? fieldError.msg : undefined);
+  const osidTrimmed = osid.trim();
+  return (
+    <div className="grid gap-4">
+      <div className="grid grid-cols-[minmax(0,16rem)_minmax(0,16rem)_minmax(0,10rem)] justify-start gap-6">
+        <Field label="Your name" error={err("reportName")}>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => name.trim() !== settings.reportName && onSave({ reportName: name.trim() })}
+          />
+        </Field>
+        <Field label="Email" error={err("reportEmail")}>
+          <Input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onBlur={() => email.trim() !== settings.reportEmail && onSave({ reportEmail: email.trim() })}
+          />
+        </Field>
+        <Field label="OSID" error={err("reportOsid")}>
+          <Input
+            mono
+            placeholder="OS-12345"
+            value={osid}
+            onChange={(e) => setOsid(e.target.value)}
+            onBlur={() => osidTrimmed !== settings.reportOsid && onSave({ reportOsid: osidTrimmed })}
+          />
+        </Field>
+      </div>
+      {osidTrimmed !== "" && !isValidOsid(osidTrimmed) && (
+        <p className="m-0 text-meta text-warn">OSIDs look like OS-12345</p>
+      )}
+      <Field label="Default methodology" error={err("reportMethodology")}>
+        <Textarea
+          rows={6}
+          value={methodology}
+          onChange={(e) => setMethodology(e.target.value)}
+          onBlur={() => methodology.trim() !== settings.reportMethodology && onSave({ reportMethodology: methodology.trim() })}
+        />
+      </Field>
+      <p className="m-0 text-meta text-muted">Copied into each new report. Edit them per report afterwards.</p>
+    </div>
+  );
+}
+
 /** `onRestored` runs whenever the backend ends up locked (after a restore, or a failed one). */
 export function SettingsPage({ onRestored }: { onRestored: () => void }) {
   const qc = useQueryClient();
@@ -275,6 +337,16 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
             pending={update.isPending}
             error={fieldError?.field === "nvdApiKey" ? fieldError.msg : undefined}
             onSave={(key, done) => update.mutate({ nvdApiKey: key }, { onSuccess: done })}
+          />
+        </Panel>
+      )}
+      {settings.data && (
+        <Panel title="Report details">
+          <ReportDetails
+            key={`${settings.data.reportName}|${settings.data.reportEmail}|${settings.data.reportOsid}|${settings.data.reportMethodology}`}
+            settings={settings.data}
+            fieldError={fieldError}
+            onSave={(patch) => update.mutate(patch)}
           />
         </Panel>
       )}

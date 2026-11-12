@@ -590,6 +590,7 @@ const settings: Settings = {
   autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Windows 11 (VM)"], attackerIp: "192.0.2.10",
   listenerPort: "4444", kaliUser: "audit", windowsToolsDir: "~/tools/windows", linuxToolsDir: "/opt/tools",
   fieldManualPath: "/Users/audit/Documents/Field-Manual", nvdKeySet: true,
+  reportName: "Audit Candidate", reportEmail: "audit@example.com", reportOsid: "OS-100200", reportMethodology: "",
 };
 
 export const FIXTURES: AuditFixtures = {

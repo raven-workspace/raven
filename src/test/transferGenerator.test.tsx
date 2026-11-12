@@ -69,7 +69,7 @@ beforeEach(() => {
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
   m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "192.0.2.9", listenerPort: "4444", kaliUser: "kali",
-    windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false,
+    windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "",
   });
   m.engagementsProgress.mockResolvedValue({});
   m.hostsList.mockResolvedValue([MS02]);
@@ -118,7 +118,7 @@ describe("Transfer a file", () => {
   it("the Kali half serves from the tool folders set in Settings", async () => {
     m.settingsGet.mockResolvedValue({
       autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "192.0.2.9", listenerPort: "4444", kaliUser: "kali",
-      windowsToolsDir: "/opt/win tools", linuxToolsDir: "/opt/lin", fieldManualPath: "~/fm", nvdKeySet: false,
+      windowsToolsDir: "/opt/win tools", linuxToolsDir: "/opt/lin", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "",
     });
     const user = userEvent.setup();
     mount("/payloads?generator=transfer");
@@ -184,7 +184,7 @@ describe("Transfer a file", () => {
 describe("Transfer a file in Payloads: context and copy guard", () => {
   const blankIp = () => m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "4444", kaliUser: "kali",
-    windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false,
+    windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "",
   });
 
   it("follows the Payloads OS override and the session LHOST, not the host's OS and Settings", async () => {
@@ -254,7 +254,7 @@ describe("Transfer a file: several target blocks share one guard", () => {
     usePayloadsStore.setState({ overrides: { ms02: { os: "linux" } }, lhost: null });
     m.settingsGet.mockResolvedValue({
       autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "4444", kaliUser: "kali",
-      windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false,
+      windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "",
     });
     const user = userEvent.setup();
     mount("/payloads?generator=transfer");

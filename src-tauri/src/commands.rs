@@ -827,8 +827,12 @@ pub async fn extraction_undo(app: AppHandle, log_entry_id: String) -> AppResult<
 
 #[tauri::command]
 pub async fn report_get_or_create(app: AppHandle, engagement_id: String) -> AppResult<Report> {
-    // Defaults come from Settings once Task 2 adds them; empty until then.
-    with_vault(app, move |v| reports::get_or_create(v.conn()?, &engagement_id, &ReportDefaults::default())).await
+    with_vault(app, move |v| {
+        let s = settings::get(v.conn()?)?;
+        let defaults = ReportDefaults { candidate_name: s.report_name, email: s.report_email, osid: s.report_osid };
+        reports::get_or_create(v.conn()?, &engagement_id, &defaults)
+    })
+    .await
 }
 
 #[tauri::command]

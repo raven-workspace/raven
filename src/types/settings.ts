@@ -15,6 +15,12 @@ export interface Settings {
   fieldManualPath: string;
   /** Whether an NVD API key is stored. The key itself never leaves Rust. */
   nvdKeySet: boolean;
+  /** Report cover defaults, copied into each new report. Blank allowed. */
+  reportName: string;
+  reportEmail: string;
+  reportOsid: string;
+  /** Default methodology text for new reports. */
+  reportMethodology: string;
 }
 
 export type SettingsPatch = Partial<Omit<Settings, "nvdKeySet">> & {

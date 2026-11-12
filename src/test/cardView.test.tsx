@@ -56,7 +56,7 @@ beforeEach(() => {
   setImported({ commands: [A, B, C, GUARDED, NOTE, RAVEN], cards: [CARD] });
   m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali",
-    windowsToolsDir: "", linuxToolsDir: "", fieldManualPath: "/v/fm", nvdKeySet: false,
+    windowsToolsDir: "", linuxToolsDir: "", fieldManualPath: "/v/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "",
   });
   m.engagementGet.mockResolvedValue(E1);
   m.hostsList.mockResolvedValue([H1]);

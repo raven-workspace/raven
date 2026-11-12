@@ -26,6 +26,12 @@ const MAX_PATH_LEN: usize = 500;
 /// The NIST NVD API key. Stored in the encrypted vault; never sent to the frontend.
 const NVD_KEY_KEY: &str = "nvd_api_key";
 const MAX_NVD_KEY_LEN: usize = 128;
+const REPORT_NAME_KEY: &str = "report_candidate_name";
+const REPORT_EMAIL_KEY: &str = "report_email";
+const REPORT_OSID_KEY: &str = "report_osid";
+const REPORT_METHODOLOGY_KEY: &str = "report_methodology";
+const MAX_REPORT_FIELD_LEN: usize = 2000;
+const MAX_REPORT_METHODOLOGY_LEN: usize = 20000;
 const RETENTION_RANGE: std::ops::RangeInclusive<u32> = 1..=200;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -48,6 +54,11 @@ pub struct Settings {
     pub field_manual_path: String,
     /// Whether an NVD API key is stored. The key itself is never returned.
     pub nvd_key_set: bool,
+    /// Report cover defaults, copied into each new report. Blank allowed.
+    pub report_name: String,
+    pub report_email: String,
+    pub report_osid: String,
+    pub report_methodology: String,
 }
 
 #[derive(Clone, Default, Deserialize)]
@@ -64,6 +75,10 @@ pub struct SettingsPatch {
     pub field_manual_path: Option<String>,
     /// Sets the NVD API key; an empty string clears it.
     pub nvd_api_key: Option<String>,
+    pub report_name: Option<String>,
+    pub report_email: Option<String>,
+    pub report_osid: Option<String>,
+    pub report_methodology: Option<String>,
 }
 
 /// Debug output never shows the NVD API key, only whether the patch sets one.
@@ -80,6 +95,10 @@ impl std::fmt::Debug for SettingsPatch {
             .field("linux_tools_dir", &self.linux_tools_dir)
             .field("field_manual_path", &self.field_manual_path)
             .field("nvd_api_key", &self.nvd_api_key.as_ref().map(|_| "<redacted>"))
+            .field("report_name", &self.report_name)
+            .field("report_email", &self.report_email)
+            .field("report_osid", &self.report_osid)
+            .field("report_methodology", &self.report_methodology)
             .finish()
     }
 }
@@ -129,6 +148,10 @@ pub fn get(conn: &Connection) -> AppResult<Settings> {
         linux_tools_dir,
         field_manual_path,
         nvd_key_set: !zeroize::Zeroizing::new(nvd_api_key(conn)).is_empty(),
+        report_name: text(REPORT_NAME_KEY),
+        report_email: text(REPORT_EMAIL_KEY),
+        report_osid: text(REPORT_OSID_KEY),
+        report_methodology: text(REPORT_METHODOLOGY_KEY),
     })
 }
 
@@ -231,6 +254,16 @@ fn clean_nvd_key(s: &str) -> AppResult<String> {
     }
 }
 
+/// Blank allowed; trimmed; at most `max` characters.
+fn clean_report_text(field: &str, s: &str, max: usize) -> AppResult<String> {
+    let s = s.trim();
+    if s.chars().count() > max {
+        Err(bad(field, &format!("at most {max} characters")))
+    } else {
+        Ok(s.to_string())
+    }
+}
+
 fn put(conn: &Connection, key: &str, v: u32) -> AppResult<()> {
     put_text(conn, key, &v.to_string())
 }
@@ -254,7 +287,16 @@ pub fn update(conn: &Connection, patch: SettingsPatch) -> AppResult<Settings> {
     let linux_tools = patch.linux_tools_dir.as_deref().map(|v| clean_tools_dir("linuxToolsDir", v)).transpose()?;
     let field_manual = patch.field_manual_path.as_deref().map(|v| clean_path("fieldManualPath", v)).transpose()?;
     let nvd_key = patch.nvd_api_key.as_deref().map(clean_nvd_key).transpose()?;
+    let report = |field: &str, v: &Option<String>, max: usize| v.as_deref().map(|v| clean_report_text(field, v, max)).transpose();
+    let report_name = report("reportName", &patch.report_name, MAX_REPORT_FIELD_LEN)?;
+    let report_email = report("reportEmail", &patch.report_email, MAX_REPORT_FIELD_LEN)?;
+    let report_osid = report("reportOsid", &patch.report_osid, MAX_REPORT_FIELD_LEN)?;
+    let report_methodology = report("reportMethodology", &patch.report_methodology, MAX_REPORT_METHODOLOGY_LEN)?;
     for (key, v) in [
+        (REPORT_NAME_KEY, report_name),
+        (REPORT_EMAIL_KEY, report_email),
+        (REPORT_OSID_KEY, report_osid),
+        (REPORT_METHODOLOGY_KEY, report_methodology),
         (KALI_USER_KEY, kali_user),
         (WINDOWS_TOOLS_KEY, windows_tools),
         (LINUX_TOOLS_KEY, linux_tools),
@@ -486,5 +528,32 @@ mod tests {
         assert_eq!(nvd_api_key(c), "");
         let n: i64 = c.query_row("SELECT COUNT(*) FROM settings WHERE key='nvd_api_key'", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn settings_report_defaults_round_trip() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let s = get(c).unwrap();
+        assert_eq!((s.report_name.as_str(), s.report_email.as_str(), s.report_osid.as_str(), s.report_methodology.as_str()), ("", "", "", ""));
+        let p = SettingsPatch {
+            report_name: Some("Ada Lovelace".into()),
+            report_email: Some("ada@example.com".into()),
+            report_osid: Some("OS-12345".into()),
+            report_methodology: Some("Scoped to the lab network.".into()),
+            ..Default::default()
+        };
+        let s = update(c, p).unwrap();
+        assert_eq!((s.report_name.as_str(), s.report_email.as_str(), s.report_osid.as_str(), s.report_methodology.as_str()), ("Ada Lovelace", "ada@example.com", "OS-12345", "Scoped to the lab network."));
+        assert_eq!(get(c).unwrap(), s);
+        match update(c, SettingsPatch { report_name: Some("a".repeat(2001)), ..Default::default() }) {
+            Err(AppError::Validation { field, .. }) => assert_eq!(field, "reportName"),
+            o => panic!("{o:?}"),
+        }
+        match update(c, SettingsPatch { report_methodology: Some("a".repeat(20001)), ..Default::default() }) {
+            Err(AppError::Validation { field, .. }) => assert_eq!(field, "reportMethodology"),
+            o => panic!("{o:?}"),
+        }
+        assert_eq!(get(c).unwrap().report_name, "Ada Lovelace");
     }
 }
