@@ -4,9 +4,27 @@ import { NodeSelection, TextSelection } from "prosekit/pm/state";
 import { useMemo, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Editor } from "prosekit/core";
-import { numberAppendices, subsectionNumbers, targetHeadings, type AppendixIndex, type ReportData, type ReportNode } from "../engines/report";
+import {
+  numberAppendices,
+  REPRODUCE_LABEL,
+  STEP_HINT,
+  subsectionNumbers,
+  targetHeadings,
+  type AppendixIndex,
+  type ReportData,
+  type ReportNode,
+} from "../engines/report";
+import { insertIntoCurrentStep } from "../features/report/editor/commands";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext";
-import { insertEvidenceAtCursor, removeNodeAt, ReportEditor, setNodeAttrs } from "../features/report/editor/ReportEditor";
+import {
+  insertAdded,
+  insertEvidenceAtCursor,
+  insertNodesAt,
+  removeExact,
+  removeNodeAt,
+  ReportEditor,
+  setNodeAttrs,
+} from "../features/report/editor/ReportEditor";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Finding, FindingFile } from "../types/findings";
@@ -844,5 +862,182 @@ describe("ReportEditor block tools", () => {
     const d = data({ log: [entry({ id: "s1", title: "Login page", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a1", caption: "Login", fileName: "x.png" } })] });
     setupLive(doc(ev("s1", { block: null, appendix: "moved" })), d);
     expect(await screen.findByText("Screenshot: Appendix A.1, Login page")).toBeInTheDocument();
+  });
+});
+
+const step = (...content: ReportNode[]): ReportNode => ({ type: "step", attrs: { entryId: null }, content });
+const steps = (...list: ReportNode[]): ReportNode => ({ type: "steps", content: list });
+const para = (text: string): ReportNode => ({ type: "paragraph", content: [{ type: "text", text }] });
+/** The position of the first node of `type` (the nth with `nth`). */
+function posOf(editor: Editor, type: string, nth = 0): number {
+  let found = -1;
+  let seen = 0;
+  editor.state.doc.descendants((n, pos) => {
+    if (found !== -1) return false;
+    if (n.type.name === type && seen++ === nth) found = pos;
+    return true;
+  });
+  return found;
+}
+const stepsIn = (d: ReportNode): ReportNode[] => (d.content ?? []).filter((n) => n.type === "steps");
+
+describe("ReportEditor steps", () => {
+  it("renders a steps list numbered from 1 and restarting per list", async () => {
+    const { container, editor } = setup(doc(steps(step(para("a")), step(para("b"))), slot("between"), steps(step(para("c")))));
+    await waitFor(() => expect(container.querySelectorAll(".report-step-num")).toHaveLength(3));
+    const numbers = () => [...container.querySelectorAll(".report-step-num")].map((n) => n.textContent);
+    expect(numbers()).toEqual(["1", "2", "1"]);
+    expect([...container.querySelectorAll(".report-steps-label")].map((n) => n.textContent)).toEqual([REPRODUCE_LABEL, REPRODUCE_LABEL]);
+    expect(REPRODUCE_LABEL).toBe("Steps to reproduce");
+    // A step added at the top of the first list renumbers the ones after it.
+    act(() => {
+      insertNodesAt(editor(), [0, 0], [step(para("new"))]);
+    });
+    await waitFor(() => expect(numbers()).toEqual(["1", "2", "3", "1"]));
+  });
+
+  it("+ Step adds an empty step after the current one", async () => {
+    const { onChange, editor } = setup(doc(steps(step(para("a")), step(para("b")))));
+    await waitFor(() => expect(editor()).toBeTruthy());
+    const view = editor().view;
+    // Inside the first step's text.
+    act(() => view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, posOf(editor(), "paragraph") + 1))));
+    fireEvent.click(await screen.findByRole("button", { name: "+ Step" }));
+    await waitFor(() => expect(stepsIn(lastDoc(onChange))[0].content).toHaveLength(3));
+    const list = stepsIn(lastDoc(onChange))[0].content!;
+    expect(list[1]).toEqual({ type: "step", attrs: { entryId: null }, content: [{ type: "slot", attrs: { hint: STEP_HINT, label: "" } }] });
+    expect(screen.getByText("Say what this step does")).toBeInTheDocument();
+    // The cursor lands in the new step, so ⌘⇧↵ (Ctrl here: jsdom is not a Mac) adds the next one after it.
+    act(() => {
+      fireEvent.keyDown(view.dom, { key: "Enter", code: "Enter", keyCode: 13, ctrlKey: true, shiftKey: true });
+    });
+    await waitFor(() => expect(stepsIn(lastDoc(onChange))[0].content).toHaveLength(4));
+    expect(stepsIn(lastDoc(onChange))[0].content!.map((s) => s.content?.[0].type)).toEqual(["paragraph", "slot", "slot", "paragraph"]);
+  });
+
+  it("⌘⇧↵ outside a step adds one at the end of the nearest list", async () => {
+    const { onChange, editor } = setup(doc(steps(step(para("a"))), slot("after")));
+    await waitFor(() => expect(editor()).toBeTruthy());
+    const view = editor().view;
+    act(() => view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, posOf(editor(), "slot", 0) + 1))));
+    act(() => {
+      fireEvent.keyDown(view.dom, { key: "Enter", code: "Enter", keyCode: 13, ctrlKey: true, shiftKey: true });
+    });
+    await waitFor(() => expect(stepsIn(lastDoc(onChange))[0].content).toHaveLength(2));
+    expect(stepsIn(lastDoc(onChange))[0].content![1].content?.[0]).toMatchObject({ type: "slot", attrs: { hint: STEP_HINT } });
+  });
+
+  it("backspacing every step of a list leaves a valid document with no empty steps node", async () => {
+    const { onChange, editor } = setup(doc(slot("intro"), steps(step(para("a")), step(para("b"))), slot("after")));
+    await waitFor(() => expect(editor()).toBeTruthy());
+    const view = editor().view;
+    for (let i = 0; i < 2; i++) {
+      act(() => view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, posOf(editor(), "step")))));
+      act(() => {
+        fireEvent.keyDown(view.dom, { key: "Backspace", code: "Backspace", keyCode: 8 });
+      });
+    }
+    await waitFor(() => expect(lastDoc(onChange).content?.map((n) => n.type)).toEqual(["slot", "slot"]));
+    expect(() => editor().state.doc.check()).not.toThrow();
+    let empty = 0;
+    editor().state.doc.descendants((n) => void (n.type.name === "steps" && n.childCount === 0 && empty++));
+    expect(empty).toBe(0);
+  });
+
+  it("dragging the only chip out of a step leaves the step with its sentence", async () => {
+    const { onChange, editor } = setup(doc(steps(step(slot(STEP_HINT), ev("e1"))), slot("after")));
+    await waitFor(() => expect(editor()).toBeTruthy());
+    const view = editor().view;
+    // What a drop does with a moved block: the dragged selection goes, the block lands where it drops.
+    act(() => {
+      const at = posOf(editor(), "evidence");
+      const tr = view.state.tr.setSelection(NodeSelection.create(view.state.doc, at));
+      const moved = (tr.selection as NodeSelection).node;
+      tr.deleteSelection();
+      tr.insert(tr.doc.content.size, moved);
+      view.dispatch(tr);
+    });
+    await waitFor(() => expect(lastDoc(onChange).content?.map((n) => n.type)).toEqual(["steps", "slot", "evidence"]));
+    expect(stepsIn(lastDoc(onChange))[0].content).toEqual([{ type: "step", attrs: { entryId: null }, content: [{ type: "slot", attrs: { hint: STEP_HINT, label: "" } }] }]);
+    expect(() => editor().state.doc.check()).not.toThrow();
+  });
+
+  it("insertIntoCurrentStep returns null when the selection is in a heading or table cell", async () => {
+    const table: ReportNode = {
+      type: "table",
+      content: [{ type: "tableRow", content: [{ type: "tableCell", content: [para("cell")] }] }],
+    };
+    const { onChange, editor } = setup(doc({ type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Title" }] }, table, steps(step(para("a")))));
+    await waitFor(() => expect(editor()).toBeTruthy());
+    const view = editor().view;
+    const made = [view.state.schema.nodeFromJSON(ev("e1"))];
+    act(() => view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2))));
+    expect(insertIntoCurrentStep(view.state, made)).toBeNull();
+    act(() => view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, posOf(editor(), "paragraph", 0) + 2))));
+    expect(view.state.selection.$from.parent.textContent).toBe("cell");
+    expect(insertIntoCurrentStep(view.state, made)).toBeNull();
+    act(() => view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, posOf(editor(), "paragraph", 1) + 1))));
+    const command = insertIntoCurrentStep(view.state, made);
+    expect(command).not.toBeNull();
+    act(() => void editor().exec(command!));
+    await waitFor(() => expect(stepsIn(lastDoc(onChange))[0].content?.[0].content?.map((n) => n.type)).toEqual(["paragraph", "evidence"]));
+  });
+});
+
+describe("ReportEditor nested insertion helpers", () => {
+  it("Add new evidence's insertAdded fills a nested steps list, and removeExact (its Undo) takes exactly those off", async () => {
+    const before = doc(slot("intro"), steps(step(slot(STEP_HINT), ev("e1")), step(para("own"))));
+    const { onChange, editor } = setup(before);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    const after = doc(
+      slot("intro"),
+      steps(step(slot(STEP_HINT), ev("e1"), ev("e2")), step(para("own")), { type: "step", attrs: { entryId: "e3" }, content: [slot(STEP_HINT), ev("e3")] }),
+    );
+    let added: ReturnType<typeof insertAdded> = [];
+    act(() => {
+      added = insertAdded(editor(), before, after);
+    });
+    expect(added.map((n) => n.type.name)).toEqual(["evidence", "step"]);
+    await waitFor(() => expect(lastDoc(onChange)).toEqual(editor().getDocJSON()));
+    expect(JSON.parse(JSON.stringify(stepsIn(lastDoc(onChange))[0].content!.map((s) => s.content!.map((n) => n.attrs?.entryId ?? n.type))))).toEqual([
+      ["slot", "e1", "e2"],
+      ["paragraph"],
+      ["slot", "e3"],
+    ]);
+    act(() => {
+      removeExact(editor(), added);
+    });
+    await waitFor(() => expect(stepsIn(lastDoc(onChange))[0].content).toHaveLength(2));
+    expect(stepsIn(lastDoc(onChange))[0].content!.map((s) => s.content!.map((n) => n.attrs?.entryId ?? n.type))).toEqual([["slot", "e1"], ["paragraph"]]);
+  });
+
+  it("removeExact leaves an added step the owner has since edited", async () => {
+    const before = doc(steps(step(para("own"))));
+    const { onChange, editor } = setup(before);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    let added: ReturnType<typeof insertAdded> = [];
+    act(() => {
+      added = insertAdded(editor(), before, doc(steps(step(para("own")), step(slot(STEP_HINT)))));
+    });
+    const view = editor().view;
+    act(() => view.dispatch(view.state.tr.insertText("Typed", posOf(editor(), "slot") + 1)));
+    act(() => {
+      expect(removeExact(editor(), added)).toBe(false);
+    });
+    await waitFor(() => expect(stepsIn(lastDoc(onChange))[0].content).toHaveLength(2));
+  });
+
+  it("the rail's insertNodesAt puts a step into a nested list at its path, and refuses a path past the end", async () => {
+    const { onChange, editor } = setup(doc(slot("intro"), steps(step(para("a")), step(para("b")))));
+    await waitFor(() => expect(editor()).toBeTruthy());
+    act(() => {
+      expect(insertNodesAt(editor(), [1, 1], [{ type: "step", attrs: { entryId: "e1" }, content: [slot(STEP_HINT), ev("e1")] }])).toBe(true);
+    });
+    await waitFor(() => expect(stepsIn(lastDoc(onChange))[0].content?.map((s) => s.attrs?.entryId)).toEqual([null, "e1", null]));
+    act(() => {
+      expect(insertNodesAt(editor(), [1, 0, 1], [ev("e2")])).toBe(true);
+    });
+    await waitFor(() => expect(stepsIn(lastDoc(onChange))[0].content?.[0].content?.map((n) => n.attrs?.entryId ?? n.type)).toEqual(["paragraph", "e2"]));
+    expect(insertNodesAt(editor(), [1, 5], [step(para("x"))])).toBe(false);
   });
 });

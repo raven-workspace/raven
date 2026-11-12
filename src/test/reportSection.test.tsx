@@ -394,8 +394,9 @@ const logInput = (title: string, content: LogContent, at: number): LogEntryInput
 });
 const evNode = (entryId: string) => ({ type: "evidence", attrs: { entryId, block: 0, keep: null, emphasis: [], appendix: "inline" } });
 
-/** lnx02's page (layout 3): a foothold heading, a slot, a scan with `outputLines` lines of output, the post heading. */
-async function seedLnx(outputLines = 3, meta: Record<string, unknown> = {}) {
+/** lnx02's page, stored at the current layout: a foothold heading, a slot, a scan with `outputLines` lines of output, the post heading.
+ *  `stepped` puts the slot and the scan in a steps list as one step, as drafts do. */
+async function seedLnx(outputLines = 3, meta: Record<string, unknown> = {}, stepped = false) {
   const output = Array.from({ length: outputLines }, (_, i) => `line ${i}`).join("\n");
   const scan = await api.logCreate("e-exam", logInput("nmap scan", { kind: "command", blocks: [{ command: "nmap -sV 10.10.30.21", output }] }, 1_000));
   const report = await api.reportGetOrCreate("e-exam");
@@ -403,13 +404,14 @@ async function seedLnx(outputLines = 3, meta: Record<string, unknown> = {}) {
     type: "doc",
     content: [
       { type: "phase", attrs: { phase: "foothold", hostId: LNX } },
-      { type: "slot", attrs: { hint: "What you do next" } },
-      evNode(scan.id),
+      ...(stepped
+        ? [{ type: "steps", content: [{ type: "step", attrs: { entryId: scan.id }, content: [{ type: "slot", attrs: { hint: "What you do next" } }, evNode(scan.id)] }] }]
+        : [{ type: "slot", attrs: { hint: "What you do next" } }, evNode(scan.id)]),
       { type: "phase", attrs: { phase: "post", hostId: LNX } },
       { type: "slot", attrs: { hint: "Proof" } },
     ],
   };
-  await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { layout: 3, ...meta }, draftBuiltAt: Date.now() });
+  await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { layout: DRAFT_LAYOUT, ...meta }, draftBuiltAt: Date.now() });
   return scan;
 }
 
@@ -478,7 +480,7 @@ describe("Report view: appendices and new evidence", () => {
     const sections = await api.reportSectionsList(report.id);
     const lnx = sections.find((s) => s.targetKey === LNX)!;
     const doc = lnx.doc as unknown as { content: unknown[] };
-    await api.reportSectionSave(lnx.id, { ...doc, content: [...doc.content, { ...evNode(shot.id), attrs: { ...evNode(shot.id).attrs, block: null } }] } as unknown as ReportDoc, { layout: 3 });
+    await api.reportSectionSave(lnx.id, { ...doc, content: [...doc.content, { ...evNode(shot.id), attrs: { ...evNode(shot.id).attrs, block: null } }] } as unknown as ReportDoc, { layout: DRAFT_LAYOUT });
     const { container } = mount();
     await ready();
     await waitFor(() => expect(container.querySelector(".report-figure img")).toBeTruthy());
@@ -492,7 +494,7 @@ describe("Report view: appendices and new evidence", () => {
 
   it("Add new evidence appends a newly proving entry, skips removed ones, and Undo takes it off again", async () => {
     const removedFlag = await api.logCreate("e-exam", logInput("proof flag", { kind: "flag", flagKind: "proof", value: "p".repeat(32) }, 3_000));
-    const scan = await seedLnx(3, { removedEntryIds: [removedFlag.id] });
+    const scan = await seedLnx(3, { removedEntryIds: [removedFlag.id] }, true);
     const localFlag = await api.logCreate("e-exam", logInput("local flag", { kind: "flag", flagKind: "local", value: "l".repeat(32) }, 2_000));
     const save = vi.spyOn(api, "reportSectionSave");
     mount();
@@ -503,12 +505,16 @@ describe("Report view: appendices and new evidence", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
     expect(await screen.findByText("Added 1 entry")).toBeInTheDocument();
     expect(evidenceIds()).toEqual([scan.id, localFlag.id]);
+    // The flag is a new step at the end of the foothold's steps list, not a block beside it.
+    expect(pageEditor().state.doc.child(1).type.name).toBe("steps");
+    expect(pageEditor().state.doc.child(1).childCount).toBe(2);
     await waitFor(() => expect(save.mock.calls.some(([, doc]) => JSON.stringify(doc).includes(localFlag.id))).toBe(true));
 
     const writes = save.mock.calls.length;
     // The notice's Undo, not the formatting toolbar's.
     fireEvent.click(within(screen.getByText("Added 1 entry").closest<HTMLElement>("[role=status]")!).getByRole("button", { name: "Undo" }));
     await waitFor(() => expect(evidenceIds()).toEqual([scan.id]));
+    expect(pageEditor().state.doc.child(1).childCount).toBe(1);
     await waitFor(() => expect(save.mock.calls.length).toBeGreaterThan(writes));
     expect(JSON.stringify(save.mock.calls.at(-1)![1])).not.toContain(localFlag.id);
     expect(screen.queryByText("Added 1 entry")).not.toBeInTheDocument();
@@ -595,6 +601,7 @@ describe("Report view: the result", () => {
         ["1.1", "Introduction"],
         ["1.2", "Objective"],
         ["1.3", "Requirements"],
+        ["1.4", "Scope"],
       ]),
     );
     fireEvent.click(row(/High-level summary/));
@@ -648,6 +655,9 @@ describe("Report view: the result", () => {
     expect(paper().querySelector(".report-facts")).toBeNull();
   });
 
+  /** A drafted machine page shows: its numbered sub-section headings (the old page in these tests has none). */
+  const rebuilt = () => paper().querySelector("h3");
+
   it("rebuilds a page saved with an older layout from scratch, once", async () => {
     const report = await api.reportGetOrCreate("e-exam");
     const old = { type: "doc", content: [{ type: "slot", attrs: { hint: "x" }, content: [{ type: "text", text: "Written under the old layout" }] }] };
@@ -658,9 +668,9 @@ describe("Report view: the result", () => {
     await waitFor(() => expect(draftUpserts(upsert, LNX)).toHaveLength(1));
     const [, input] = draftUpserts(upsert, LNX)[0] as [string, { meta: unknown; doc: unknown }];
     // The page written before is kept in the meta, never dropped.
-    expect(input.meta).toEqual({ layout: 3, previousDoc: old, previousLayout: null, previousAt: expect.any(Number) });
+    expect(input.meta).toEqual({ layout: 4, previousDoc: old, previousLayout: null, previousAt: expect.any(Number) });
     expect(JSON.stringify(input.doc)).not.toContain("Written under the old layout");
-    await waitFor(() => expect(paper().querySelector(".report-table")).toBeTruthy());
+    await waitFor(() => expect(rebuilt()).toBeTruthy());
     expect(paper().textContent).not.toContain("Written under the old layout");
     // Opened again, the rebuilt page stays.
     fireEvent.click(rowFor("ms01"));
@@ -676,21 +686,21 @@ describe("Report view: the result", () => {
     const save = vi.spyOn(api, "reportSectionSave");
     mount();
     await ready();
-    await waitFor(() => expect(paper().querySelector(".report-table")).toBeTruthy());
+    await waitFor(() => expect(rebuilt()).toBeTruthy());
     expect(screen.getByText("This page was rebuilt for a new layout.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Restore your previous page" }));
     await waitFor(() => expect(paper().textContent).toContain("Written under the old layout"));
-    expect(paper().querySelector(".report-table")).toBeNull();
+    expect(rebuilt()).toBeNull();
     // Stored as the current layout, the rebuilt page kept for the swap back.
     await waitFor(() => expect(save).toHaveBeenCalled());
     const [id, doc, meta] = save.mock.calls[save.mock.calls.length - 1] as [string, ReportDoc, Record<string, unknown>];
     expect(id).toBe(section.id);
     expect(JSON.stringify(doc)).toContain("Written under the old layout");
-    expect(meta).toMatchObject({ layout: 3, previousLayout: 2, restored: true });
+    expect(meta).toMatchObject({ layout: 4, previousLayout: 2, restored: true });
     expect(JSON.stringify(meta.previousDoc)).toContain('"generated"');
     // The second swap brings the rebuilt page back.
     fireEvent.click(screen.getByRole("button", { name: "Use the rebuilt page" }));
-    await waitFor(() => expect(paper().querySelector(".report-table")).toBeTruthy());
+    await waitFor(() => expect(rebuilt()).toBeTruthy());
     expect(paper().textContent).not.toContain("Written under the old layout");
     expect(screen.getByRole("button", { name: "Restore your previous page" })).toBeInTheDocument();
     // Restored again and typed into, the page keeps the typing when it is opened again.
@@ -725,7 +735,7 @@ describe("Report view: the result", () => {
     const note = await api.logCreate("e-exam", { ...logInput("my note", { kind: "note", text: "creds in the share" }, 1_000), private: true });
     const report = await api.reportGetOrCreate("e-exam");
     const doc = { type: "doc", content: [{ type: "paragraph", attrs: { fromEntry: note.id }, content: [{ type: "text", text: "creds in the share" }] }] };
-    await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { layout: 3 }, draftBuiltAt: 1 });
+    await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { layout: DRAFT_LAYOUT }, draftBuiltAt: 1 });
     mount();
     await ready();
     await waitFor(() => expect(paper().querySelector('[data-source-gone="private"]')).toBeTruthy());
@@ -739,7 +749,7 @@ describe("Report view: the result", () => {
 
   it("guards DRAFT_LAYOUT: a bump rebuilds every stored page, so it must keep each one in previousDoc", () => {
     // Bumping it is a data-safety change: the rebuild test above must still see the old page in `previousDoc`.
-    expect(DRAFT_LAYOUT).toBe(3);
+    expect(DRAFT_LAYOUT).toBe(4);
   });
 
   it("groups checks of one kind into one row and cycles through them; the fix sits in a disclosure for the picked one", async () => {

@@ -355,6 +355,78 @@
   border-bottom-color: var(--page-ink);
 }
 
+/* Steps to reproduce (§10.2): the bold label, then numbered steps, each number in a column of its own beside the
+   step's sentence and evidence; "+ Step" under the list. The label and the button are the page's chrome. */
+
+.report-page .report-steps,
+.report-page .report-steps-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 12px;
+}
+
+.report-page .report-steps-label {
+  font-weight: 600;
+}
+
+.report-page .report-step {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+}
+
+/* The step's number, set in the meta role and level with the sentence's first line; it is the step's drag handle. */
+.report-page .report-step-num {
+  padding-top: 2px;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  cursor: grab;
+  user-select: none;
+}
+
+.report-page .report-step-num:active {
+  cursor: grabbing;
+}
+
+.report-page .report-step-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 12px;
+}
+
+/* Under the list, in line with the steps' text. */
+.report-page .report-steps-end {
+  display: grid;
+  justify-items: start;
+  padding-left: 2rem;
+}
+
+.report-page .report-add-step {
+  /* A 24px target, like every control. */
+  min-height: 24px;
+  padding: 0 6px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  color: var(--page-placeholder);
+  cursor: pointer;
+}
+
+.report-page .report-add-step:hover {
+  color: var(--page-ink);
+  background: var(--page-code-bg);
+}
+
+.report-page .report-add-step:focus-visible {
+  outline: 2px solid var(--page-ink);
+  outline-offset: 2px;
+}
+
 /* Slots: an empty one shows its hint, which never exports */
 
 .report-page .report-slot {

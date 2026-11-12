@@ -6,6 +6,7 @@ import type { ComponentProps } from "react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, resetAuditState } from "../audit/fakeApi";
+import { DRAFT_LAYOUT } from "../engines/report";
 import { ReportSectionView } from "../features/report/ReportSection";
 import { useNotesStore } from "../features/notes/useNotesStore";
 import { makeQueryClient } from "../lib/queryClient";
@@ -67,7 +68,7 @@ async function seed() {
       { type: "slot", attrs: { hint: "Proof" } },
     ],
   };
-  await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { removedEntryIds: [hydra.id], layout: 3 }, draftBuiltAt: Date.now() });
+  await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { removedEntryIds: [hydra.id], layout: DRAFT_LAYOUT }, draftBuiltAt: Date.now() });
   await api.noteSave("e-exam", LNX, "Port 22 open\n? why is 8080 filtered\n", false);
   await api.noteSave("e-exam", null, "Private engagement text", true);
   await api.ruledOutCreate({ engagementId: "e-exam", hostId: LNX, text: "Anonymous FTP", reason: "Not enabled", private: false });

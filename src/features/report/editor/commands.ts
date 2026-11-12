@@ -1,7 +1,8 @@
 import type { Editor } from "prosekit/core";
 import { addTableRowBelow as addRowAfter, isCellSelection } from "prosekit/extensions/table";
 import type { Node as PMNode } from "prosekit/pm/model";
-import { NodeSelection, TextSelection, type Command } from "prosekit/pm/state";
+import { NodeSelection, TextSelection, type Command, type EditorState } from "prosekit/pm/state";
+import { stepNode } from "../../../engines/report";
 import type { EditingExtension } from "./extension";
 
 export type PageEditor = Editor<EditingExtension>;
@@ -202,3 +203,65 @@ export const toggleHeaderRow: Command = (state, dispatch) => {
   }
   return true;
 };
+
+/* Steps */
+
+/** The step that holds the selection (a selected step counts), with its position; null outside one. */
+function stepAt(state: EditorState): { node: PMNode; pos: number } | null {
+  const sel = state.selection;
+  if (sel instanceof NodeSelection && sel.node.type.name === "step") return { node: sel.node, pos: sel.from };
+  const $from = sel.$from;
+  for (let d = $from.depth; d > 0; d--) if ($from.node(d).type.name === "step") return { node: $from.node(d), pos: $from.before(d) };
+  return null;
+}
+
+/** The steps list nearest the selection: the one holding it, else the one closest to it on the page. */
+function nearestSteps(state: EditorState): { node: PMNode; pos: number } | null {
+  const at = state.selection.from;
+  let best: { node: PMNode; pos: number; distance: number } | null = null;
+  state.doc.descendants((node, pos) => {
+    if (node.type.name !== "steps") return true;
+    const end = pos + node.nodeSize;
+    const distance = at < pos ? pos - at : at > end ? at - end : 0;
+    if (!best || distance < best.distance) best = { node, pos, distance };
+    return false;
+  });
+  return best;
+}
+
+/**
+ * Adds an empty step (its slot asks "Say what this step does") after the step holding the selection, or at the end of
+ * the nearest steps list (`listPos`, the "+ Step" button's own list, when given), and puts the cursor in it. ⌘⇧↵.
+ */
+export const addStep =
+  (listPos?: number): Command =>
+  (state, dispatch) => {
+    const current = stepAt(state);
+    let at: number;
+    if (current && (listPos === undefined || state.doc.resolve(current.pos).before() === listPos)) at = current.pos + current.node.nodeSize;
+    else {
+      const list = listPos !== undefined ? { node: state.doc.nodeAt(listPos), pos: listPos } : nearestSteps(state);
+      if (!list?.node || list.node.type.name !== "steps") return false;
+      at = list.pos + list.node.nodeSize - 1;
+    }
+    if (dispatch) {
+      const tr = state.tr.insert(at, state.schema.nodeFromJSON(stepNode([])));
+      // step > slot: the slot's text starts 2 in.
+      dispatch(tr.setSelection(TextSelection.create(tr.doc, at + 2)).scrollIntoView());
+    }
+    return true;
+  };
+
+/** Appends `nodes` to the end of the step holding the selection; null when the selection is in no step (the caller
+ *  then places them by phase, `endOfPhase`). */
+export function insertIntoCurrentStep(state: EditorState, nodes: PMNode[]): Command | null {
+  const current = stepAt(state);
+  if (!current) return null;
+  const at = current.pos + current.node.nodeSize - 1;
+  return (s, dispatch) => {
+    const step = s.doc.nodeAt(current.pos);
+    if (step !== current.node) return false;
+    dispatch?.(s.tr.insert(at, nodes).scrollIntoView());
+    return true;
+  };
+}

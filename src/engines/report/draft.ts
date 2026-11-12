@@ -30,7 +30,7 @@ export const STEP_HINT = "Say what this step does";
 export const FLAG_STEP_HINT = "Say where you read the flag";
 const EXPLOIT_HINT = "Explain each change";
 /** The `steps` list's bold lead-in, printed by its view. Drafts no longer add a labelled reproduce slot. */
-export const REPRODUCE_LABEL = "Steps to reproduce the attack:";
+export const REPRODUCE_LABEL = "Steps to reproduce";
 /** OffSec's sample order of a machine's sub-sections, then Raven's own: Additional findings, Also tested. */
 const PHASE_ORDER: Phase[] = ["enum", "foothold", "lateral", "privesc", "domain", "post", "additional", "tested"];
 /** Generated blocks that open a machine or close the AD set: a phase's region never runs past one. */

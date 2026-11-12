@@ -47,13 +47,14 @@ import { Decoration, DecorationSet } from "prosekit/pm/view";
 import type { ReportNode } from "../../../engines/report";
 import { defineReactNodeView, type ReactNodeViewComponent } from "prosekit/react";
 import { hljsParser } from "./codeHighlight";
-import { moveCell } from "./commands";
+import { addStep, moveCell } from "./commands";
 import { CodeBlockView } from "./nodes/CodeBlockView";
 import { EvidenceView } from "./nodes/EvidenceView";
 import { ExploitView } from "./nodes/ExploitView";
 import { GeneratedView } from "./nodes/GeneratedView";
 import { PhaseView } from "./nodes/PhaseView";
 import { SlotView } from "./nodes/SlotView";
+import { STEP_NUMBER, StepsView, StepView } from "./nodes/StepsView";
 import { VulnView } from "./nodes/VulnView";
 
 /** The atom blocks the page is built from, with their attribute defaults (types.ts holds the contract). */
@@ -111,6 +112,62 @@ const slotSpec = defineNodeSpec({
   ],
   toDOM: (node: PMNode) => ["p", { "data-report": "slot", "data-hint": node.attrs.hint as string, "data-label": node.attrs.label as string }, 0],
 });
+
+/** A numbered Steps to reproduce list (§10.2). Never empty: deleting its last step deletes the list (ProseMirror's
+ *  deleteRange widens to the parent a deletion would leave invalid). */
+const stepsSpec = defineNodeSpec({
+  name: "steps",
+  group: "block",
+  content: "step+",
+  parseDOM: [{ tag: 'div[data-report="steps"]' }],
+  toDOM: () => ["div", { "data-report": "steps" }, 0],
+});
+
+/** One step: the owner's sentence (a slot until written, or paragraphs), then its evidence. Dragged by its number. */
+const stepSpec = defineNodeSpec({
+  name: "step",
+  content: "(slot | paragraph) block*",
+  attrs: { entryId: { default: null } },
+  defining: true,
+  draggable: true,
+  parseDOM: [
+    {
+      tag: 'div[data-report="step"]',
+      getAttrs: (dom: HTMLElement) => {
+        try {
+          return JSON.parse(dom.getAttribute("data-attrs") ?? "{}") as Record<string, unknown>;
+        } catch {
+          return false;
+        }
+      },
+    },
+  ],
+  toDOM: (node: PMNode) => ["div", { "data-report": "step", "data-attrs": JSON.stringify(node.attrs) }, 0],
+});
+
+/** Gives each step its number in its list (from 1, again in every list), which its view prints: a decoration, so the
+ *  numbers follow every insertion, removal and move. */
+const stepNumbers = definePlugin(
+  new Plugin({
+    props: {
+      decorations: (state) => {
+        const decos: Decoration[] = [];
+        state.doc.descendants((node, pos) => {
+          if (node.type.name !== "steps") return true;
+          node.forEach((step, offset, i) => {
+            const from = pos + 1 + offset;
+            decos.push(Decoration.node(from, from + step.nodeSize, {}, { [STEP_NUMBER]: i + 1 }));
+          });
+          return true;
+        });
+        return decos.length === 0 ? null : DecorationSet.create(state.doc, decos);
+      },
+    },
+  }),
+);
+
+/** ⌘⇧↵ adds a step. */
+const stepsKeymap = defineKeymap({ "Mod-Shift-Enter": addStep() });
 
 /** The log entry a block's text came from (a note, observations, a command edited on the page): provenance only. */
 const fromEntryAttr = (type: string) =>
@@ -354,6 +411,12 @@ export function defineReportExtension(
     defineReactNodeView({ name: "codeBlock", component: CodeBlockView, as: "div", contentAs: "code", stopEvent: stopControlEvents }),
     slotSpec,
     defineReactNodeView({ name: "slot", component: SlotView, as: "div", contentAs: "div" }),
+    stepsSpec,
+    stepSpec,
+    stepNumbers,
+    stepsKeymap,
+    defineReactNodeView({ name: "steps", component: StepsView, as: "div", contentAs: "div", stopEvent: stopControlEvents }),
+    defineReactNodeView({ name: "step", component: StepView, as: "div", contentAs: "div" }),
     ...ATOMS.flatMap(({ name, attrs, component }) => [
       atomSpec(name, attrs),
       defineReactNodeView({ name, component, as: "div", stopEvent: stopControlEvents }),
