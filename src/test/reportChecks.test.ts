@@ -195,6 +195,31 @@ describe("targetChecks", () => {
       const c = run(data({ log: [only] }), doc(slot("Read the proof."), ev("r2")));
       expect(find(c, "proof-missing")).toBeUndefined();
     });
+    it("checks a proof read on the page as the proof when its flag entry isn't there", () => {
+      const only = entry({ id: "r2", at: 660_000, content: { kind: "command", blocks: [{ command: "type proof.txt", output: HASH }] } });
+      const c = run(data({ log: [only] }), doc(slot("Read the proof."), ev("r2")));
+      expect(c.filter((x) => x.id.startsWith("proof")).map((x) => [x.id, x.level, x.anchor?.entryId])).toEqual([
+        ["proof-ip:DC01:proof", "fail", "r2"],
+        ["proof-screenshot:DC01:proof", "fail", "r2"],
+        ["proof-identity:DC01:proof", "soft", "r2"],
+        ["proof-hostname:DC01:proof", "soft", "r2"],
+      ]);
+      // The full read with its screenshot: nothing to say. A flag entry that isn't on the page changes nothing.
+      expect(run(data({ log: [read(), shot()] }), doc(slot("Read the proof."), ev("r1"), ev("s1", { block: null })))).toEqual([]);
+      expect(run(data({ log: [bare(), read(), shot()] }), doc(slot("Read the proof."), ev("r1"), ev("s1", { block: null })))).toEqual([]);
+    });
+    it("counts another proof.txt flag entry's screenshot on the page as the proof's screenshot", () => {
+      const text = flag({ at: 600_000 }, { value: HASH, attachmentId: null });
+      const pic = flag({ id: "f2", at: 610_000 }, { value: HASH, proof: null, attachmentId: "a2" });
+      const c = run(data({ log: [text, pic] }), doc(ev("f1", { block: null }), ev("f2", { block: null })));
+      expect(find(c, "proof-screenshot")).toBeUndefined();
+      // Off the page, it isn't shown.
+      expect(find(run(data({ log: [text, pic] }), doc(ev("f1", { block: null }))), "proof-screenshot")).toBeDefined();
+    });
+    it("never reads a private web request before the flag as the proof's source", () => {
+      const web = entry({ id: "w", kind: "http", at: 4000, private: true, content: { kind: "http", request: "GET /" } });
+      expect(find(run(data({ log: [web, flag()] }), goodDoc()), "proof-web")).toBeUndefined();
+    });
     it("a shell's own output beside the flag is no web request", () => {
       const web = entry({ id: "w", kind: "http", at: 590_000, content: { kind: "http", request: "GET /" } });
       expect(find(run(data({ log: [web, bare(), read(), shot()] }), doc(ev("f1", { block: null }), ev("r1"), ev("s1", { block: null }))), "proof-web")).toBeUndefined();

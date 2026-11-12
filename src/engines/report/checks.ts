@@ -1,5 +1,6 @@
 import type { Report } from "../../types/report";
 import type { Host } from "../../types/host";
+import type { LogEntry } from "../../types/log";
 import type { AppendixIndex } from "./appendix";
 import { suggestMoves } from "./appendix";
 import { serviceCoverage } from "./coverage";
@@ -77,16 +78,18 @@ function proofChecks(host: Host, flags: ("local" | "proof")[], data: ReportData,
     const entries = data.log
       .filter((e) => e.kind === "flag" && e.content.kind === "flag" && e.content.flagKind === flag && !e.private && e.hostIds.includes(host.id))
       .sort(byTime);
-    const entry = entries.find((e) => onPage.has(e.id));
+    // The flag entry on the page; else a proof read pasted as a command (no flag entry on the page), checked as the
+    // proof with its own companions.
+    const entry = entries.find((e) => onPage.has(e.id)) ?? readOnPage(data, host.id, flag, onPage);
     if (!entry) {
-      // A proof read pasted as a command (no flag entry) still shows the flag on the page.
-      if (!readOnPage(data, host.id, flag, onPage)) {
-        out.push({ id: `proof-missing:${host.name}:${flag}`, level: "fail", text: `No ${flag}.txt for ${host.name} on the page.` });
-      }
+      out.push({ id: `proof-missing:${host.name}:${flag}`, level: "fail", text: `No ${flag}.txt for ${host.name} on the page.` });
       continue;
     }
     const companions = proofCompanions(data, host.id, entry);
     const facts = proofFacts(entry, host, companions);
+    // Another of the host's entries for this flag on the page may carry the screenshot (the text and the picture
+    // logged apart).
+    if (entries.some((e) => e.id !== entry.id && onPage.has(e.id) && e.content.kind === "flag" && e.content.attachmentId)) facts.hasScreenshot = true;
     const anchor = { entryId: entry.id };
     // One check per flag: with local.txt and proof.txt both expected, the text says which proof falls short.
     const key = `${host.name}:${flag}`;
@@ -112,7 +115,7 @@ function proofChecks(host: Host, flags: ("local" | "proof")[], data: ReportData,
       out.push({ id: `proof-screenshot:${key}`, level: "fail", text: `${which} has no screenshot.`, anchor });
     }
     // A shell's own output (a companion command) shows it came from a shell, whatever was logged before the flag.
-    const before = data.log.filter((e) => e.id !== entry.id && e.hostIds.includes(host.id) && byTime(e, entry) < 0).sort(byTime).pop();
+    const before = data.log.filter((e) => e.id !== entry.id && !e.private && e.hostIds.includes(host.id) && byTime(e, entry) < 0).sort(byTime).pop();
     if (before?.kind === "http" && !companions.some((e) => e.kind === "command")) {
       out.push({ id: `proof-web:${key}`, level: "fail", text: `${which} looks like it came from a web request, not an interactive shell.`, anchor });
     }
@@ -127,16 +130,18 @@ function proofChecks(host: Host, flags: ("local" | "proof")[], data: ReportData,
   return out;
 }
 
-/** Whether a command on the page reads the flag file and prints a flag value (`cat /root/proof.txt` then the hash). */
-function readOnPage(data: ReportData, hostId: string, flag: "local" | "proof", onPage: Set<string>): boolean {
-  return data.log.some(
-    (e) =>
-      onPage.has(e.id) &&
-      !e.private &&
-      e.hostIds.includes(hostId) &&
-      e.content.kind === "command" &&
-      e.content.blocks.some((b) => findFlagInPaste(`${b.command ?? ""}\n${b.output ?? ""}`)?.flagKind === flag),
-  );
+/**
+ * A command on the page that reads the flag file and prints a flag value (`cat /root/proof.txt` then the hash), the
+ * first in time, as the flag entry it stands for: its value, its terminal text as the proof, no screenshot of its own.
+ */
+function readOnPage(data: ReportData, hostId: string, flag: "local" | "proof", onPage: Set<string>): LogEntry | undefined {
+  for (const e of data.log.filter((x) => onPage.has(x.id) && !x.private && x.hostIds.includes(hostId)).sort(byTime)) {
+    if (e.content.kind !== "command") continue;
+    const blocks = e.content.blocks.map((b) => `${b.command ?? ""}\n${b.output ?? ""}`);
+    const found = blocks.map(findFlagInPaste).find((f) => f?.flagKind === flag);
+    if (found) return { ...e, content: { kind: "flag", flagKind: flag, value: found.value, proof: blocks.join("\n"), attachmentId: null } } as LogEntry;
+  }
+  return undefined;
 }
 
 /** Per-target checks: what would lose OSCP exam points before export. Ids are stable and unique. */
