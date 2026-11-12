@@ -101,6 +101,9 @@ describe("serviceCoverage from real work", () => {
     expect(requestPort("GET / HTTP/1.1\nHost: web01:443")).toBe(443);
     expect(requestPort("GET / HTTP/2\nHost: web01")).toBe(443);
     expect(requestPort("GET http://web01:8080/x HTTP/1.1")).toBe(8080);
+    // An absolute request line's port wins over a portless Host header (a proxy capture); a Host port still wins.
+    expect(requestPort("GET http://web01:8080/x HTTP/1.1\nHost: web01")).toBe(8080);
+    expect(requestPort("GET http://web01:8080/x HTTP/1.1\nHost: web01:9090")).toBe(9090);
     // A portless request goes to the host's only web service when it has one.
     expect(requestPort("GET / HTTP/1.1\nHost: web01", 8080)).toBe(8080);
   });

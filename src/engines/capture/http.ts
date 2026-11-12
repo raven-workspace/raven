@@ -26,7 +26,12 @@ export function httpParts(text: string): HttpParts {
     ({ host, port } = splitHostPort(abs[1]));
   }
   const header = reqLines.slice(1).find((l) => /^host:/i.test(l));
-  if (header) ({ host, port } = splitHostPort(header.replace(/^host:/i, '').trim()));
+  if (header) {
+    // The Host header names the host; a portless one keeps an absolute request line's port.
+    const named = splitHostPort(header.replace(/^host:/i, '').trim());
+    host = named.host ?? host;
+    port = named.port ?? port;
+  }
   return { request, response, method, host, port, path };
 }
 
