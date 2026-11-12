@@ -454,6 +454,31 @@ ALTER TABLE finding_files ADD COLUMN original_content TEXT;
 
 ---
 
+### Task 12b: Block handle (drag any block) and formatting toolbar
+
+Owner request (2026-11-11): blocks, especially screenshots, land where their timestamp puts them; the owner must be able to drag any block to its spot. And a formatting toolbar for prose.
+
+**Files:**
+- Create: `src/features/report/editor/BlockHandle.tsx`, `src/features/report/editor/FormatToolbar.tsx`
+- Modify: `src/features/report/editor/ReportEditor.tsx` (mount both inside the `ProseKit` provider), `src/features/report/page.css` (handle, drop indicator, toolbar-on-page styles only), `src/features/report/ReportSection.tsx` (toolbar placement)
+- Test: `src/test/reportEditorTools.test.tsx`
+
+**Interfaces:**
+- Consumes: ProseKit `prosekit/react/block-handle` (`BlockHandleRoot`, `BlockHandlePositioner`, `BlockHandlePopup`, `BlockHandleDraggable`), `prosekit/react/drop-indicator` (`DropIndicator`), the basic extension's commands (`toggleBold`, `toggleItalic`, `toggleCode`, link, `toggleList`/`wrapInList` for bullet and ordered, `toggleCodeBlock`, `undo`, `redo`) and `editor.marks/nodes.*.isActive()`.
+- Produces: `<BlockHandle />` and `<FormatToolbar />`, both rendered inside `<ReportEditor>`'s ProseKit provider.
+
+**Behaviour:**
+- **Block handle:** hovering any top-level block on the page (evidence, screenshots, generated, vuln, exploit, phase headings, slots, paragraphs) shows a drag handle in the page's left gutter (Phosphor `DotsSixVertical`, 24px target, tooltip "Drag to move"). Dragging moves the block; a `DropIndicator` line shows where it will land. Moving keeps attrs, so references and figure numbers recompute. No "add block" (+) button — insertion stays in the evidence rail. The keyboard path stays ⌥↑/⌥↓ (already built). Undo reverses a drag.
+- **Formatting toolbar:** a fixed toolbar pinned to the top of the page pane (sticky; Ink chrome, not paper), shown when the page has focus or a selection inside it: Bold (⌘B), Italic (⌘I), Inline code (⌘E), Link (⌘K is taken by search — use ⌘⇧K), Bulleted list, Numbered list, Code block, Undo (⌘Z), Redo (⇧⌘Z). Each is an `IconButton` (Phosphor `TextB`, `TextItalic`, `Code`, `Link`, `ListBullets`, `ListNumbers`, `CodeBlock`, `ArrowCounterClockwise`, `ArrowClockwise`) with `aria-label`, Tooltip naming action + shortcut, `aria-pressed` reflecting the active mark/node. Buttons disabled when the selection is a block (atom) node. No heading-level control (section headings are structural).
+- DESIGN.md binds the toolbar: grid/`Toolbar` primitive, 28px icon buttons, groups separated by 16px space (no dividers), one hover state, focus ring.
+
+- [ ] **Step 1: Failing tests** (`reportEditorTools.test.tsx`): the handle renders for a hovered evidence node with label "Drag to move"; simulating a drop (use ProseMirror's drag/drop or a direct `BlockHandleDraggable` dragstart + drop on a target position) moves a screenshot evidence node from after the 3rd block to after the 1st, attrs unchanged; undo restores the order. Toolbar: Bold toggles the strong mark on a text selection in a slot and `aria-pressed` follows; Numbered list wraps the slot paragraph; buttons are disabled with an evidence node selected; ⌘⇧K opens link input.
+- [ ] **Step 2: Run → FAIL. Step 3: Implement. Step 4: Run → PASS** (full gate).
+- [ ] **Step 5: WebKit look at ~1400** in `npm run dev:audit` (port 5199): handle visible in the gutter on hover, drop line visible while dragging, toolbar doesn't overlap the page's first block.
+- [ ] **Step 6: Commit** `feat(reports): drag blocks with a handle, and a formatting toolbar`
+
+---
+
 ### Task 13: Audit fixtures, audit screens and WebKit check
 
 **Files:**
@@ -487,7 +512,7 @@ ALTER TABLE finding_files ADD COLUMN original_content TEXT;
 | §5.6 appendices | 7, 12 |
 | §6.1 data | 1, 2, 3 |
 | §6.2 referenced evidence | 5, 9 |
-| §6.3 editor | 9 |
+| §6.3 editor | 9, 12b |
 | §6.4 rail | 11 |
 | §6.5 checks | 8, 10 (export gating → Plan B) |
 | §6.6 deadline | 4, 10 |

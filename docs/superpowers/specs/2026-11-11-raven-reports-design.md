@@ -211,6 +211,8 @@ The page document holds **evidence nodes** that point at a log entry (and, for c
 
 Required editing: paragraphs, headings (within the section's fixed structure), bold/italic/inline code, bulleted and numbered lists, code blocks (for text the owner writes, distinct from evidence blocks), links, and moving/removing evidence blocks. Tables beyond the generated ones are not needed this round.
 
+Owner addition (2026-11-11): every block has a **drag handle** (ProseKit block handle + drop indicator) so blocks, especially screenshots placed by timestamp, can be dragged to the right spot; and a **formatting toolbar** (bold, italic, inline code, link, lists, code block, undo/redo) pinned to the top of the page pane.
+
 No slash-menu AI, autocomplete or "improve writing" of any kind.
 
 ### 6.4 Rail data
