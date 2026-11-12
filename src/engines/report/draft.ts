@@ -40,7 +40,7 @@ function lineCount(output: string): number {
 }
 
 /** One evidence node per command block (or one for the whole entry), each followed by an empty slot. */
-function evidenceNodes(entry: LogEntry): ReportNode[] {
+export function evidenceNodes(entry: LogEntry): ReportNode[] {
   const placements: Pick<EvidenceAttrs, "block" | "keep">[] =
     entry.content.kind === "command" && entry.content.blocks.length > 0
       ? entry.content.blocks.map((b, i) => ({ block: i, keep: defaultKeep(lineCount(b.output)) }))
@@ -273,4 +273,20 @@ export function addNewEvidence(
     }
   }
   return { doc: added.length > 0 ? { ...doc, content } : doc, added };
+}
+
+/**
+ * Where an entry goes when the page has no cursor: the end of the phase it belongs to (§5.1), with the phase heading
+ * added in front when the page has none. `at` is an index into the doc's top-level content.
+ */
+export function endOfPhase(doc: ReportNode, data: ReportData, target: ReportTarget, entry: LogEntry): { at: number; nodes: ReportNode[] } {
+  const hostId = entry.hostIds.find((h) => target.hostIds.includes(h)) ?? target.hostIds[0];
+  const kept = keptEntries(data, hostId);
+  const list = kept.some((e) => e.id === entry.id) ? kept : [...kept, entry];
+  const phase = phaseSplit(list, data, hostId, hostEntry(data, target, hostId)).get(entry.id) ?? phaseNames(data, hostId, hostEntry(data, target, hostId))[0];
+  const content = doc.content ?? [];
+  const nodes = evidenceNodes(entry);
+  const heading = content.findIndex((n) => isPhase(n, hostId, phase));
+  if (heading === -1) return { at: placeForPhase(content, hostId, phase), nodes: [phaseNode(phase, hostId), ...nodes] };
+  return { at: regionEnd(content, heading), nodes };
 }

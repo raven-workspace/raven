@@ -1,4 +1,6 @@
+import { SidebarSimpleIcon } from "@phosphor-icons/react";
 import { useNow } from "../../lib/keys";
+import { IconButton } from "../../ui";
 import { Cell, useFitStrip } from "../engagements/StatusStrip";
 
 const HOUR = 3_600_000;
@@ -23,6 +25,7 @@ export function ReportStrip({
   ready,
   targets,
   gaps,
+  rail,
 }: {
   fileName: string;
   osidValid: boolean;
@@ -30,18 +33,23 @@ export function ReportStrip({
   ready: number;
   targets: number;
   gaps: number;
+  /** Under 1200px the evidence rail is a drawer: its toggle sits at the strip's right. */
+  rail?: { open: boolean; onToggle(): void };
 }) {
   const now = useNow();
   const { outer, inner } = useFitStrip(LAST_STEP);
   // A group, not a live region: the countdown ticks and must not be announced each minute.
   return (
-    <div ref={outer} role="group" aria-label="Report status" className="h-9 overflow-hidden border-b border-line text-meta text-muted-2">
-      <div ref={inner} className="grid h-full grid-flow-col auto-cols-max items-center justify-start gap-6 whitespace-nowrap">
-        <Cell label="Report" value={fileName} tone={osidValid ? undefined : "warn"} />
-        {dueAt !== null && <Cell label="Due in" value={dueIn(dueAt, now)} step={STEP.due} tone={dueAt <= now ? "warn" : undefined} />}
-        <Cell label="Targets ready" value={`${ready}/${targets}`} step={STEP.ready} />
-        <Cell label="Gaps" value={String(gaps)} tone={gaps > 0 ? "warn" : undefined} />
+    <div className="grid h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-line pr-2">
+      <div ref={outer} role="group" aria-label="Report status" className="h-9 overflow-hidden text-meta text-muted-2">
+        <div ref={inner} className="grid h-full grid-flow-col auto-cols-max items-center justify-start gap-6 whitespace-nowrap">
+          <Cell label="Report" value={fileName} tone={osidValid ? undefined : "warn"} />
+          {dueAt !== null && <Cell label="Due in" value={dueIn(dueAt, now)} step={STEP.due} tone={dueAt <= now ? "warn" : undefined} />}
+          <Cell label="Targets ready" value={`${ready}/${targets}`} step={STEP.ready} />
+          <Cell label="Gaps" value={String(gaps)} tone={gaps > 0 ? "warn" : undefined} />
+        </div>
       </div>
+      {rail && <IconButton icon={SidebarSimpleIcon} label="Evidence" shortcut="E" active={rail.open} onClick={rail.onToggle} />}
     </div>
   );
 }

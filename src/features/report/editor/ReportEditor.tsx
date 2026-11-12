@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createEditor, Priority, type Editor, type NodeJSON } from "prosekit/core";
 import type { Node as PMNode } from "prosekit/pm/model";
-import { NodeSelection, type Command } from "prosekit/pm/state";
+import { NodeSelection, Selection, type Command } from "prosekit/pm/state";
 import { ProseKit, useDocChange, useKeymap } from "prosekit/react";
 import { isFigure, type EvidenceAttrs, type ReportData, type ReportNode } from "../../../engines/report";
 import { defineReportExtension } from "./extension";
@@ -27,19 +27,42 @@ function layoutOf(doc: PMNode, data: ReportData, sectionId: string, figureOffset
   return { sectionId, figureOf: (n) => figures.get(n) ?? null, pathOf: (n) => paths.get(n) ?? null };
 }
 
-/** Inserts an evidence block after the block the cursor is in, or after a selected block; it never replaces one. */
-export function insertEvidenceAtCursor(editor: Editor, attrs: EvidenceAttrs): boolean {
+/** Whether the owner has put a cursor on the page: a block selected, or the caret moved off the start of the page. */
+export function hasPageCursor(editor: Editor): boolean {
+  const { selection, doc } = editor.state;
+  return selection instanceof NodeSelection || !selection.empty || selection.from !== Selection.atStart(doc).from;
+}
+
+/** Inserts nodes after the block the cursor is in, or after a selected block; it never replaces one. */
+export function insertNodesAtCursor(editor: Editor, nodes: ReportNode[]): boolean {
   return editor.exec((state, dispatch) => {
-    const node = state.schema.nodes.evidence.create(attrs);
+    const made = nodes.map((n) => state.schema.nodeFromJSON(n));
     const { selection } = state;
     if (dispatch) {
       const at =
         selection instanceof NodeSelection ? selection.to : selection.$from.depth === 0 ? selection.from : selection.$from.after(1);
-      const tr = state.tr.insert(at, node);
-      dispatch(tr.scrollIntoView());
+      dispatch(state.tr.insert(at, made).scrollIntoView());
     }
     return true;
   });
+}
+
+/** Inserts nodes among the page's top-level blocks, before the one at `index`. */
+export function insertNodesAt(editor: Editor, index: number, nodes: ReportNode[]): boolean {
+  return editor.exec((state, dispatch) => {
+    const made = nodes.map((n) => state.schema.nodeFromJSON(n));
+    let at = 0;
+    state.doc.forEach((child, _offset, i) => {
+      if (i < index) at += child.nodeSize;
+    });
+    dispatch?.(state.tr.insert(at, made).scrollIntoView());
+    return true;
+  });
+}
+
+/** Inserts an evidence block after the block the cursor is in, or after a selected block; it never replaces one. */
+export function insertEvidenceAtCursor(editor: Editor, attrs: EvidenceAttrs): boolean {
+  return insertNodesAtCursor(editor, [{ type: "evidence", attrs: attrs as unknown as Record<string, unknown> }]);
 }
 
 /** Removes the node that starts at `pos`. */

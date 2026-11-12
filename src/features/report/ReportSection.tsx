@@ -27,12 +27,14 @@ import {
 } from "../../engines/report";
 import { api } from "../../lib/api";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
+import { useNarrow } from "../../lib/useNarrow";
 import { reportError } from "../../lib/lockSignal";
 import type { Report, ReportPatch, ReportSection, SectionKind } from "../../types/report";
 import type { Settings } from "../../types/settings";
-import { Button, Disclosure, EmptyState, ErrorState, labelClass, LoadingState, queryState, Select, usePageShortcuts, type Hint } from "../../ui";
+import { Button, Disclosure, EmptyState, ErrorState, LoadingState, queryState, Select, usePageShortcuts, type Hint } from "../../ui";
 import { ReportDataContext, type ReportDataValue } from "./editor/ReportDataContext";
 import { ReportEditor } from "./editor/ReportEditor";
+import { EvidenceDrawer, EvidenceRail } from "./EvidenceRail";
 import { ReportDetails } from "./ReportDetails";
 import { CheckList, ExpectedFlags, focusOutlineRow, ReportOutline, type OutlineItem, type TargetState } from "./ReportOutline";
 import { ReportStrip } from "./ReportStrip";
@@ -58,6 +60,9 @@ const HINTS: Hint[] = [
   { keys: "⌥↑ ⌥↓", label: "reorder targets", priority: 3 },
   { keys: "⌥1–3", label: "outline, page, evidence", priority: 4 },
 ];
+/** Under 1200px the evidence rail is a drawer, which E opens. */
+const NARROW_HINTS: Hint[] = [...HINTS, { keys: "E", label: "evidence", priority: 5 }];
+const RAIL_BREAKPOINT = 1200;
 
 const LABEL: Partial<Record<SectionKind, string>> = {
   details: "Report details",
@@ -165,7 +170,20 @@ function usePageEdits(
     },
     [openSection, docOf, saver, setLiveMeta],
   );
-  return { onChange, onRemoveEvidence };
+  /** An entry went back onto the page: it is no longer "removed". */
+  const onRestoreEvidence = useCallback(
+    (entryId: string) => {
+      if (!openSection) return;
+      const cur = current.current?.id === openSection.id ? current.current : { id: openSection.id, doc: docOf(openSection), meta: openSection.meta as SectionMeta };
+      if (!cur.meta.removedEntryIds?.includes(entryId)) return;
+      const meta: SectionMeta = { ...cur.meta, removedEntryIds: cur.meta.removedEntryIds.filter((id) => id !== entryId) };
+      current.current = { ...cur, meta };
+      setLiveMeta({ id: openSection.id, meta });
+      saver.save(cur.doc, meta);
+    },
+    [openSection, docOf, saver, setLiveMeta],
+  );
+  return { onChange, onRemoveEvidence, onRestoreEvidence };
 }
 
 /** The engagement's Report section: client engagements get a placeholder this round. */
@@ -394,6 +412,8 @@ function ReportBody({
   const [saveFailed, setSaveFailed] = useState(false);
   const saver = useSectionSaver(openSection?.id ?? "", { onError: () => setSaveFailed(true), onSaved: () => setSaveFailed(false) });
   const editorRef = useRef<{ id: string; editor: Editor } | null>(null);
+  // The same editor as state too, so the evidence rail re-renders once the page has mounted.
+  const [readyEditor, setReadyEditor] = useState<{ id: string; editor: Editor } | null>(null);
   /** The open page's editor; null on Report details or before the page mounts. */
   const openId_ = openSection?.id;
   const openEditor = useCallback(
@@ -401,7 +421,7 @@ function ReportBody({
     [openId_],
   );
 
-  const { onChange, onRemoveEvidence } = usePageEdits(openSection, savedDocOf, saver, setLive, setLiveMeta);
+  const { onChange, onRemoveEvidence, onRestoreEvidence } = usePageEdits(openSection, savedDocOf, saver, setLive, setLiveMeta);
 
   // A section opened with no page yet gets its first draft, built and stored once (draftBuiltAt marks it).
   const building = useRef(new Set<string>());
@@ -469,7 +489,14 @@ function ReportBody({
   const navRef = useRef<HTMLElement | null>(null);
   const pageRef = useRef<HTMLDivElement | null>(null);
   const railRef = useRef<HTMLElement | null>(null);
-  usePageShortcuts("Report", HINTS);
+  const [sectionRef, narrow] = useNarrow<HTMLElement>(RAIL_BREAKPOINT);
+  const [railOpen, setRailOpen] = useState(false);
+  usePageShortcuts("Report", narrow ? NARROW_HINTS : HINTS);
+  useKeydown((e) => {
+    if (!narrow || !isFreeKey(e) || e.shiftKey || e.key.toLowerCase() !== "e") return;
+    e.preventDefault();
+    setRailOpen((o) => !o);
+  });
   useKeydown((e) => {
     if (!isFreeKey(e) || (e.key !== "j" && e.key !== "k" && e.key !== "J" && e.key !== "K")) return;
     e.preventDefault();
@@ -482,7 +509,10 @@ function ReportBody({
     if (!pane) return;
     e.preventDefault();
     if (pane === "outline") focusOutlineRow(navRef.current, 0);
-    else if (pane === "rail") railRef.current?.focus();
+    else if (pane === "rail") {
+      if (narrow) setRailOpen(true);
+      else railRef.current?.focus();
+    }
     else if (openEditor()) openEditor()!.focus();
     else pageRef.current?.querySelector<HTMLElement>("input, textarea, button")?.focus();
   });
@@ -529,10 +559,21 @@ function ReportBody({
   const notStarted = open?.target && stateOf(open.target, open.section.id) === "not-started";
   const includedHostIds = targets.flatMap((t) => t.hostIds);
   const [checksOpen, setChecksOpen] = useState(false);
+  const railDoc = openSection ? (openLiveDoc ?? savedDocOf(openSection)) : EMPTY_DOC;
+  const rail = (
+    <EvidenceRail
+      target={open?.target}
+      data={data}
+      doc={railDoc}
+      editor={readyEditor && readyEditor.id === openSection?.id ? readyEditor.editor : null}
+      didWell={openSection?.kind === "summary"}
+      onInserted={onRestoreEvidence}
+    />
+  );
   const fails = openChecks.filter((c) => c.level === "fail").length;
 
   return (
-    <section aria-label="Report" className="@container/report grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+    <section ref={sectionRef} aria-label="Report" className="@container/report grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
       <ReportStrip
         fileName={reportFileName(report.osid.trim())}
         osidValid={isValidOsid(report.osid.trim())}
@@ -540,6 +581,7 @@ function ReportBody({
         ready={readyCount}
         targets={targetEntries.length}
         gaps={gaps}
+        rail={narrow ? { open: railOpen, onToggle: () => setRailOpen((o) => !o) } : undefined}
       />
       {entries.length === 0 ? (
         ensureFailed ? (
@@ -600,6 +642,7 @@ function ReportBody({
                     onChange={onChange}
                     onReady={(editor) => {
                       editorRef.current = { id: openSection.id, editor };
+                      setReadyEditor({ id: openSection.id, editor });
                     }}
                   />
                 </ReportDataContext.Provider>
@@ -608,14 +651,20 @@ function ReportBody({
               )
             ) : null}
           </div>
-          <aside
-            ref={railRef}
-            tabIndex={-1}
-            aria-label="Evidence"
-            className="hidden min-h-0 content-start border-l border-line px-4 py-4 outline-none @min-[1200px]/report:grid"
-          >
-            <h2 className={labelClass}>Evidence</h2>
-          </aside>
+          {narrow ? (
+            <EvidenceDrawer open={railOpen} onClose={() => setRailOpen(false)}>
+              {rail}
+            </EvidenceDrawer>
+          ) : (
+            <aside
+              ref={railRef}
+              tabIndex={-1}
+              aria-label="Evidence"
+              className="hidden min-h-0 content-start overflow-y-auto border-l border-line px-4 py-4 outline-none @min-[1200px]/report:grid"
+            >
+              {rail}
+            </aside>
+          )}
         </div>
       )}
     </section>
