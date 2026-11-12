@@ -119,7 +119,9 @@ function stepChecks(nodes: Visit[], data: ReportData, sectionId: string): Check[
 function credentialChecks(data: ReportData, hosts: Host[]): Check[] {
   const out: Check[] = [];
   const nameOf = (id: string) => data.hosts.find((h) => h.id === id)?.name ?? id;
-  const mentions = (text: string, user: string) => text.toLowerCase().includes(user.toLowerCase());
+  // The username as a whole word, any case: "admin" is not in "Administrator", "sa" is not in "salvador".
+  const mentions = (text: string, user: string) =>
+    new RegExp(`(?<![\\w])${user.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w])`, "i").test(text);
   for (const c of data.credentials) {
     const user = c.username.trim();
     if (user === "" || !c.sourceHostId) continue;

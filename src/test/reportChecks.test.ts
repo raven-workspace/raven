@@ -340,6 +340,16 @@ describe("targetChecks", () => {
       expect(texts(base({ credentials: [cred({ sourceHostId: "h1" })] as never }))).toEqual([]);
       expect(texts(base({ grants: [grant({ hostId: "h2" })] as never, credentials: [cred({ sourceHostId: "h3" })] as never }))).toEqual([]);
     });
+    it("matches the username as a whole word, any case", () => {
+      const admin = (o: Record<string, unknown> = {}) =>
+        base({ credentials: [cred({ username: "admin" })] as never, usernames: [{ id: "u1", username: "admin" }] as never, ...o });
+      expect(texts(admin({ findings: [finding({ title: "Administrator password reuse" })] as never }))).toHaveLength(1);
+      expect(texts(admin({ findings: [finding({ description: "Reused ADMIN's password" })] as never }))).toEqual([]);
+      const sa = (o: Record<string, unknown> = {}) =>
+        base({ credentials: [cred({ username: "sa" })] as never, usernames: [{ id: "u9", username: "nobody" }] as never, grants: [], ...o });
+      expect(texts(sa({ hops: [{ id: "hp", fromHostId: "h2", toHostId: "h1", via: "psexec as salvador", logEntryId: "hx", at: 1 }] as never }))).toEqual([]);
+      expect(texts(sa({ hops: [{ id: "hp", fromHostId: "h2", toHostId: "h1", via: "mssqlclient as sa", logEntryId: "hx", at: 1 }] as never }))).toHaveLength(1);
+    });
     it("never puts the credential's secret in the text", () => {
       const c = texts(base())[0];
       expect(JSON.stringify(c)).not.toContain("Hunter2");
