@@ -13,7 +13,7 @@ const hasFigure = (node: PMNode, data: ReportData) =>
   isFigure({ type: node.type.name, attrs: node.attrs }, (id) => data.log.find((e) => e.id === id));
 
 /** Figure numbers and index paths for the current document, keyed by node (nodes are immutable per state). */
-function layoutOf(doc: PMNode, data: ReportData, sectionId: string, figureOffset: number): PageLayout {
+function layoutOf(doc: PMNode, data: ReportData, sectionId: string, figureOffset: number, touched: boolean): PageLayout {
   const figures = new Map<PMNode, number>();
   const paths = new Map<PMNode, string>();
   const walk = (node: PMNode, path: string) =>
@@ -24,7 +24,7 @@ function layoutOf(doc: PMNode, data: ReportData, sectionId: string, figureOffset
       walk(child, p);
     });
   walk(doc, "");
-  return { sectionId, figureOf: (n) => figures.get(n) ?? null, pathOf: (n) => paths.get(n) ?? null };
+  return { sectionId, figureOf: (n) => figures.get(n) ?? null, pathOf: (n) => paths.get(n) ?? null, touched };
 }
 
 /** Pages the owner has focused: before that the selection is only ProseMirror's default (often the first block). */
@@ -87,6 +87,74 @@ export function setNodeAttrs(editor: Editor, pos: number, attrs: Record<string, 
   });
 }
 
+/** The position of the node at an index path from the doc root ("0.2.1"), as appendix keys and move checks name it. */
+export function posAtPath(doc: PMNode, path: string): number | null {
+  let node = doc;
+  let pos = -1;
+  for (const part of path.split(".")) {
+    const index = Number(part);
+    if (!Number.isInteger(index) || index < 0 || index >= node.childCount) return null;
+    pos += 1;
+    for (let i = 0; i < index; i++) pos += node.child(i).nodeSize;
+    node = node.child(index);
+  }
+  return pos < 0 ? null : pos;
+}
+
+/** Selects the block at `pos`, brings it into view and focuses the page. */
+export function selectBlockAt(editor: Editor, pos: number) {
+  const view = editor.view;
+  view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)).scrollIntoView());
+  (view.nodeDOM(pos) as HTMLElement | null)?.scrollIntoView?.({ block: "center" });
+  view.focus();
+}
+
+/**
+ * Brings the page to `after`, a copy of `before` (the page as it is) with top-level blocks added and none removed or
+ * reordered, by inserting only the new blocks, so the owner's cursor and history stay. Returns the inserted nodes.
+ */
+export function insertAdded(editor: Editor, before: ReportNode, after: ReportNode): PMNode[] {
+  const was = before.content ?? [];
+  const now = after.content ?? [];
+  const inserted: number[] = [];
+  editor.exec((state, dispatch) => {
+    const tr = state.tr;
+    let pos = 0;
+    let j = 0;
+    for (const n of now) {
+      if (j < was.length && (n === was[j] || JSON.stringify(n) === JSON.stringify(was[j]))) {
+        pos += tr.doc.child(j + inserted.length).nodeSize;
+        j++;
+        continue;
+      }
+      const made = state.schema.nodeFromJSON(n);
+      tr.insert(pos, made);
+      inserted.push(pos);
+      pos += made.nodeSize;
+    }
+    dispatch?.(tr);
+    return true;
+  });
+  const doc = editor.state.doc;
+  return inserted.map((p) => doc.nodeAt(p)).filter((n): n is PMNode => n !== null);
+}
+
+/** Removes these exact top-level nodes where they still stand unchanged; ones the owner has since edited stay. */
+export function removeExact(editor: Editor, nodes: PMNode[]): boolean {
+  const set = new Set(nodes);
+  return editor.exec((state, dispatch) => {
+    const spans: [number, number][] = [];
+    state.doc.forEach((child, offset) => {
+      if (set.has(child)) spans.push([offset, offset + child.nodeSize]);
+    });
+    if (spans.length === 0) return false;
+    const tr = state.tr;
+    for (const [from, to] of spans.reverse()) tr.delete(from, to);
+    dispatch?.(tr);
+    return true;
+  });
+}
+
 /** Moves the selected block one sibling up (-1) or down (1), keeping it selected. */
 const moveSelectedBlock =
   (dir: -1 | 1): Command =>
@@ -144,9 +212,10 @@ export function ReportEditor({
   );
   const [current, setCurrent] = useState<PMNode>(() => editor.state.doc);
   const figureOffset = value.figureOffset ?? 0;
+  const [pageTouched, setPageTouched] = useState(false);
   const layout = useMemo(
-    () => layoutOf(current, value.data, sectionId, figureOffset),
-    [current, value.data, sectionId, figureOffset],
+    () => layoutOf(current, value.data, sectionId, figureOffset, pageTouched),
+    [current, value.data, sectionId, figureOffset, pageTouched],
   );
 
   const callbacks = useRef({ onChange, onReady });
@@ -167,7 +236,10 @@ export function ReportEditor({
   const mount = useCallback(
     (el: HTMLDivElement) => {
       editor.mount(el);
-      const mark = () => touched.add(editor);
+      const mark = () => {
+        touched.add(editor);
+        setPageTouched(true);
+      };
       el.addEventListener("focusin", mark);
       el.addEventListener("pointerdown", mark);
       return () => {

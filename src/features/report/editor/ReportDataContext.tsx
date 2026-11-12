@@ -15,6 +15,8 @@ export interface ReportDataValue {
   figureOffset?: number;
   /** Each target section's meta by target key (exploited-systems methods). */
   targetMeta?: Record<string, SectionMeta>;
+  /** A screenshot's image loaded: its natural width, for the legibility check (view state, never stored). */
+  onImageWidth?(entryId: string, width: number): void;
 }
 
 export const ReportDataContext = createContext<ReportDataValue | null>(null);
@@ -32,9 +34,11 @@ export interface PageLayout {
   figureOf(node: PMNode): number | null;
   /** The node's index path from the doc root ("0.2.1"), the appendix key's second half. */
   pathOf(node: PMNode): string | null;
+  /** The owner has focused or clicked into the page; until then a selection is only ProseMirror's default, so blocks show no tools. */
+  touched: boolean;
 }
 
-export const PageLayoutContext = createContext<PageLayout>({ sectionId: "", figureOf: () => null, pathOf: () => null });
+export const PageLayoutContext = createContext<PageLayout>({ sectionId: "", figureOf: () => null, pathOf: () => null, touched: false });
 
 export const usePageLayout = () => useContext(PageLayoutContext);
 

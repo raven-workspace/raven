@@ -2,7 +2,7 @@ import { Check as CheckIcon, Circle, WarningCircle } from "@phosphor-icons/react
 import { Fragment, type KeyboardEvent, type ReactNode } from "react";
 import type { Check, FlagKind } from "../../engines/report";
 import { cx } from "../../lib/cx";
-import { labelClass, Toggle } from "../../ui";
+import { Button, labelClass, Toggle } from "../../ui";
 
 export type OutlineGroup = "report" | "targets" | "appendices" | "closing";
 export type TargetState = "ready" | "gaps" | "not-started";
@@ -94,8 +94,22 @@ function OutlineRow({ item, open, onOpen, onReorder }: { item: OutlineItem; open
   );
 }
 
+/** A check's one-press fix, offered under it (a long block's "Move to appendix"). */
+export interface CheckAction {
+  label: string;
+  run(): void;
+}
+
 /** The open target's checks, in plain words; clicking one takes the page to the place it concerns. */
-export function CheckList({ checks, onPick }: { checks: Check[]; onPick(check: Check): void }) {
+export function CheckList({
+  checks,
+  onPick,
+  actionFor,
+}: {
+  checks: Check[];
+  onPick(check: Check): void;
+  actionFor?(check: Check): CheckAction | undefined;
+}) {
   if (checks.length === 0) {
     return (
       <ul aria-label="Checks" className="m-0 grid list-none p-0">
@@ -108,25 +122,36 @@ export function CheckList({ checks, onPick }: { checks: Check[]; onPick(check: C
   }
   return (
     <ul aria-label="Checks" className="m-0 grid list-none p-0">
-      {checks.map((c) => (
-        <li key={c.id}>
-          <button
-            type="button"
-            onClick={() => onPick(c)}
-            className="grid w-full cursor-default grid-cols-[16px_minmax(0,1fr)] items-start gap-2 rounded-sm border-0 bg-transparent py-1 pl-8 pr-2 text-left text-meta text-muted-2 hover:bg-surface hover:text-fg"
-          >
-            {c.level === "fail" ? (
-              <WarningCircle aria-label="gap" className="size-4 text-warn" />
-            ) : (
-              <Circle aria-label="worth a look" className="size-4 text-muted" />
+      {checks.map((c) => {
+        const action = actionFor?.(c);
+        return (
+          <li key={c.id} className="grid">
+            <button
+              type="button"
+              onClick={() => onPick(c)}
+              className="grid w-full cursor-default grid-cols-[16px_minmax(0,1fr)] items-start gap-2 rounded-sm border-0 bg-transparent py-1 pl-8 pr-2 text-left text-meta text-muted-2 hover:bg-surface hover:text-fg"
+            >
+              {c.level === "fail" ? (
+                <WarningCircle aria-label="gap" className="size-4 text-warn" />
+              ) : (
+                <Circle aria-label="worth a look" className="size-4 text-muted" />
+              )}
+              <span className="grid gap-1">
+                <span>{c.text}</span>
+                {c.fix && <span className="font-mono text-meta text-faint [overflow-wrap:anywhere]">{c.fix}</span>}
+              </span>
+            </button>
+            {action && (
+              <div className="grid grid-cols-[16px_minmax(0,1fr)] gap-2 pb-1 pl-8 pr-2">
+                <span aria-hidden />
+                <Button size="sm" className="justify-self-start" onClick={action.run}>
+                  {action.label}
+                </Button>
+              </div>
             )}
-            <span className="grid gap-1">
-              <span>{c.text}</span>
-              {c.fix && <span className="font-mono text-meta text-faint [overflow-wrap:anywhere]">{c.fix}</span>}
-            </span>
-          </button>
-        </li>
-      ))}
+          </li>
+        );
+      })}
     </ul>
   );
 }

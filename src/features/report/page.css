@@ -90,6 +90,7 @@
 /* Blocks */
 
 .report-page .report-block {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   row-gap: 8px;
@@ -119,6 +120,16 @@
 .report-page .report-line[data-emphasis] {
   font-weight: 700;
   background: var(--page-paper);
+}
+
+/* Picking lines on a selected block: a number column to click, dropped lines faded. */
+.report-page .report-pick {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+}
+
+.report-page .report-line[data-dropped] {
+  color: var(--page-placeholder);
 }
 
 .report-page .report-omitted {
@@ -240,4 +251,43 @@
   color: var(--page-amber-ink);
   border: 1px dashed var(--page-amber-line);
   border-radius: 4px;
+}
+
+/* A target's appendix page (letters E onwards): read-only, each moved block under its number. */
+
+.report-page .report-appendix,
+.report-page .report-appendix-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 12px;
+}
+
+.report-page .report-appendix-entry {
+  row-gap: 8px;
+}
+
+/* A link back to the page that references the entry: underlined, as links in prose are. */
+.report-page .report-backlink {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--page-placeholder);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.report-page .report-backlink:focus-visible {
+  outline: 2px solid var(--page-ink);
+  outline-offset: 2px;
+}
+
+/* A selected block shows its outline, not the browser's text highlight (ProseMirror's own rule; its stylesheet isn't loaded). */
+.report-page .ProseMirror-hideselection *::selection {
+  background: transparent;
+}
+
+.report-page .ProseMirror-hideselection {
+  caret-color: transparent;
 }

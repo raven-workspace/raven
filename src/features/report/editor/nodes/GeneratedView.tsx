@@ -19,8 +19,8 @@ import {
 } from "../../../../engines/report";
 import { api } from "../../../../lib/api";
 import type { Host } from "../../../../types/host";
-import { useAppendixRef, useReportData, type ReportDataValue } from "../ReportDataContext";
-import { AppendixRef, Block, capitalize } from "./parts";
+import { useAppendixRef, usePageLayout, useReportData, type ReportDataValue } from "../ReportDataContext";
+import { AppendixRef, Block, BlockTools, capitalize, MoveButton } from "./parts";
 
 const COVERAGE_WORDS: Record<CoverageResult, string> = {
   exploited: "exploited",
@@ -255,15 +255,26 @@ function Content({ attrs, ctx, attackerIp }: { attrs: GeneratedAttrs; ctx: Repor
   }
 }
 
+/** A generated table or list in full, as the appendix prints it. */
+export function GeneratedContent({ attrs, ctx }: { attrs: GeneratedAttrs; ctx: ReportDataValue }) {
+  const attackerIp = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet }).data?.attackerIp ?? "";
+  return <Content attrs={attrs} ctx={ctx} attackerIp={attackerIp} />;
+}
+
 /** A table or list generated from live data; moved to an appendix, it leaves a one-line reference. */
-export function GeneratedView({ node, selected }: ReactNodeViewProps) {
+export function GeneratedView({ node, selected, setAttrs }: ReactNodeViewProps) {
   const ctx = useReportData();
   const ref = useAppendixRef(node);
-  const attackerIp = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet }).data?.attackerIp ?? "";
+  const { touched } = usePageLayout();
   const attrs = node.attrs as GeneratedAttrs;
   return (
     <Block selected={selected} kind="generated">
-      {attrs.appendix === "moved" ? <AppendixRef label="Full list" refText={ref} /> : <Content attrs={attrs} ctx={ctx} attackerIp={attackerIp} />}
+      {selected && touched && (
+        <BlockTools>
+          <MoveButton place={attrs.appendix} canSplit={false} onMove={(next) => setAttrs({ appendix: next })} />
+        </BlockTools>
+      )}
+      {attrs.appendix === "moved" ? <AppendixRef label="Full list" refText={ref} /> : <GeneratedContent attrs={attrs} ctx={ctx} />}
     </Block>
   );
 }

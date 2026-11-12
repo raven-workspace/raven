@@ -1,6 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Editor } from "prosekit/core";
-import { NodeSelection } from "prosekit/pm/state";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import {
@@ -16,6 +15,7 @@ import {
   reportFileName,
   reportTargets,
   targetChecks,
+  type AppendixEntry,
   type AppendixIndex,
   type Check,
   type FlagKind,
@@ -36,10 +36,12 @@ import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useNotesStore } from "../notes/useNotesStore";
 import { usePayloadsStore } from "../payloads/usePayloadsStore";
 import { ReportDataContext, type ReportDataValue } from "./editor/ReportDataContext";
-import { ReportEditor } from "./editor/ReportEditor";
+import { AppendixSection, type AppendixPageEntry } from "./editor/AppendixSection";
+import { posAtPath, ReportEditor, selectBlockAt, setNodeAttrs } from "./editor/ReportEditor";
+import { AddEvidenceButton } from "./AddEvidenceButton";
 import { EvidenceDrawer, EvidenceRail } from "./EvidenceRail";
 import { ReportDetails } from "./ReportDetails";
-import { CheckList, ExpectedFlags, focusOutlineRow, ReportOutline, type OutlineItem, type TargetState } from "./ReportOutline";
+import { CheckList, ExpectedFlags, focusOutlineRow, ReportOutline, type CheckAction, type OutlineItem, type TargetState } from "./ReportOutline";
 import { ReportStrip } from "./ReportStrip";
 import {
   BACK_KINDS,
@@ -113,6 +115,41 @@ function countFigures(doc: ReportNode, data: ReportData): number {
   walk(doc);
   return n;
 }
+
+/** Under this natural width a screenshot is upscaled or tiny at page width (spec §6.5). */
+const MIN_PRINT_WIDTH = 600;
+
+/** Soft checks for screenshots on the page whose loaded image is too narrow to print legibly. */
+function legibilityChecks(doc: ReportNode, widths: Record<string, number>): Check[] {
+  const out: Check[] = [];
+  const walk = (node: ReportNode) => {
+    const id = node.type === "evidence" ? String(node.attrs?.entryId ?? "") : "";
+    const width = widths[id];
+    if (width !== undefined && width < MIN_PRINT_WIDTH && !out.some((c) => c.id === `legible:${id}`)) {
+      out.push({ id: `legible:${id}`, level: "soft", text: "A screenshot is narrower than would print legibly.", anchor: { entryId: id } });
+    }
+    node.content?.forEach(walk);
+  };
+  walk(doc);
+  return out;
+}
+
+/** The node at an index path ("0.2.1") of a stored page. */
+function nodeAtPath(doc: ReportNode, path: string): ReportNode | null {
+  let node: ReportNode | undefined = doc;
+  for (const part of path.split(".")) node = node?.content?.[Number(part)];
+  return node ?? null;
+}
+
+/** A target's appendix page (letters E onwards): the target and its moved entries, in page order. */
+interface AppendixPage {
+  id: string;
+  label: string;
+  entry: Entry;
+  entries: AppendixEntry[];
+}
+
+const APPENDIX_ID = "appendix:";
 
 /** A warning with its Retry, above the page. */
 function WarnLine({ text, onRetry }: { text: string; onRetry(): void }) {
@@ -313,15 +350,6 @@ function ReportBody({
     return out;
   }, [sections, targets, data, report]);
 
-  // The open section: the one picked, else the first target, else the first item.
-  const [openId, setOpenId] = useState<string | null>(null);
-  const open = entries.find((e) => e.item.id === openId) ?? entries.find((e) => e.target) ?? entries[0];
-  const openSection = open?.section;
-
-  // The open page as it is now (typed but maybe not saved yet) and its meta.
-  const [live, setLive] = useState<{ id: string; doc: ReportNode } | null>(null);
-  const [liveMeta, setLiveMeta] = useState<{ id: string; meta: SectionMeta } | null>(null);
-
   // First drafts for sections not built yet: what their page will hold, so checks and numbering read it already.
   const drafts = useMemo(() => {
     const out = new Map<string, ReportNode>();
@@ -337,12 +365,6 @@ function ReportBody({
     (s: ReportSection): ReportNode => (s.doc as ReportNode | null) ?? drafts.get(s.id) ?? EMPTY_DOC,
     [drafts],
   );
-  const metaOf = useCallback(
-    (s: ReportSection): SectionMeta => (liveMeta?.id === s.id ? liveMeta.meta : (s.meta as SectionMeta)),
-    [liveMeta],
-  );
-  const openLiveDoc = openSection && live?.id === openSection.id ? live.doc : null;
-
   const appendixDocs = useCallback(
     (docOf: (s: ReportSection) => ReportNode) =>
       numberAppendices(
@@ -352,6 +374,32 @@ function ReportBody({
     [entries, data],
   );
   const savedAppendix = useMemo(() => appendixDocs(savedDocOf), [appendixDocs, savedDocOf]);
+  // Each target with moved content has an appendix page, lettered from E (spec §5.6).
+  const appendixPagesOf = useCallback(
+    (index: AppendixIndex): AppendixPage[] =>
+      entries.flatMap((e) => {
+        const list = e.target ? index.entries.filter((a) => a.sectionId === e.section.id) : [];
+        return list.length === 0 ? [] : [{ id: `${APPENDIX_ID}${e.section.id}`, label: `Appendix ${list[0].letter}: ${e.item.label}`, entry: e, entries: list }];
+      }),
+    [entries],
+  );
+
+  // The open section: the one picked, else the first target, else the first item. An open appendix page has none.
+  const [openId, setOpenId] = useState<string | null>(null);
+  const openAppendix = openId?.startsWith(APPENDIX_ID) ? appendixPagesOf(savedAppendix).find((p) => p.id === openId) : undefined;
+  const open = openAppendix ? undefined : (entries.find((e) => e.item.id === openId) ?? entries.find((e) => e.target) ?? entries[0]);
+  const openSection = open?.section;
+
+  // The open page as it is now (typed but maybe not saved yet) and its meta.
+  const [live, setLive] = useState<{ id: string; doc: ReportNode } | null>(null);
+  const [liveMeta, setLiveMeta] = useState<{ id: string; meta: SectionMeta } | null>(null);
+
+  const metaOf = useCallback(
+    (s: ReportSection): SectionMeta => (liveMeta?.id === s.id ? liveMeta.meta : (s.meta as SectionMeta)),
+    [liveMeta],
+  );
+  const openLiveDoc = openSection && live?.id === openSection.id ? live.doc : null;
+
   // With the open page live, so references stay right while editing; kept as the same object while its entries don't change.
   const appendix = useStableAppendix(
     useMemo(
@@ -374,13 +422,20 @@ function ReportBody({
   }, [entries, data, savedDocOf, reportMeta, savedAppendix]);
   const openTarget = open?.target;
   const openSectionMeta = openSection ? metaOf(openSection) : undefined;
-  const openChecksLive = useMemo(
-    () =>
-      openTarget && openSection
-        ? targetChecks({ data, target: openTarget, doc: openLiveDoc ?? savedDocOf(openSection), meta: reportMeta, appendixRefs: appendix, sectionId: openSection.id, coverage: openSectionMeta?.coverage })
-        : null,
-    [openTarget, openSection, data, openLiveDoc, savedDocOf, reportMeta, appendix, openSectionMeta],
+  // Screenshots' natural widths as their images load on the open page: view state for the legibility check, never stored.
+  const [shotWidths, setShotWidths] = useState<Record<string, number>>({});
+  const onImageWidth = useCallback(
+    (entryId: string, width: number) => setShotWidths((was) => (was[entryId] === width ? was : { ...was, [entryId]: width })),
+    [],
   );
+  const openChecksLive = useMemo(() => {
+    if (!openTarget || !openSection) return null;
+    const doc = openLiveDoc ?? savedDocOf(openSection);
+    return [
+      ...targetChecks({ data, target: openTarget, doc, meta: reportMeta, appendixRefs: appendix, sectionId: openSection.id, coverage: openSectionMeta?.coverage }),
+      ...legibilityChecks(doc, shotWidths),
+    ];
+  }, [openTarget, openSection, data, openLiveDoc, savedDocOf, reportMeta, appendix, openSectionMeta, shotWidths]);
   const checks = useMemo(
     () => (openChecksLive && openSection ? new Map(savedChecks).set(openSection.id, openChecksLive) : savedChecks),
     [savedChecks, openChecksLive, openSection],
@@ -395,7 +450,13 @@ function ReportBody({
     if (!started) return "not-started";
     return isReady(checks.get(sectionId) ?? []) ? "ready" : "gaps";
   };
-  const items = entries.map((e) => (e.target ? { ...e.item, state: stateOf(e.target, e.section.id) } : e.item));
+  // Appendix pages follow the fixed appendices, before the closing sections; they follow the live page.
+  const appendixPages = appendixPagesOf(appendix);
+  const sectionItems = entries.map((e) => (e.target ? { ...e.item, state: stateOf(e.target, e.section.id) } : e.item));
+  const closingAt = sectionItems.findIndex((i) => i.group === "closing");
+  const pageItems: OutlineItem[] = appendixPages.map((p) => ({ id: p.id, group: "appendices", label: p.label }));
+  const items = closingAt === -1 ? [...sectionItems, ...pageItems] : [...sectionItems.slice(0, closingAt), ...pageItems, ...sectionItems.slice(closingAt)];
+  const openItemId = openAppendix?.id ?? open?.item.id ?? null;
 
   const figureOffset = useMemo(() => {
     let n = 0;
@@ -426,6 +487,22 @@ function ReportBody({
   );
 
   const { onChange, onRemoveEvidence, onRestoreEvidence } = usePageEdits(openSection, savedDocOf, saver, setLive, setLiveMeta);
+  // An appendix page reads the stored pages: write the open page first, so a block moved a moment ago is on it.
+  const openItem = (id: string) => {
+    if (id.startsWith(APPENDIX_ID)) void saver.flush();
+    setOpenId(id);
+  };
+  // An appendix entry's link back: the block to select once its section's page has mounted.
+  const pendingPick = useRef<{ id: string; path: string } | null>(null);
+  const onEditorReady = (id: string, editor: Editor) => {
+    editorRef.current = { id, editor };
+    setReadyEditor({ id, editor });
+    const pick = pendingPick.current;
+    if (pick?.id !== id) return;
+    pendingPick.current = null;
+    const pos = posAtPath(editor.state.doc, pick.path);
+    if (pos !== null) selectBlockAt(editor, pos);
+  };
 
   // A section opened with no page yet gets its first draft, built and stored once (draftBuiltAt marks it).
   const building = useRef(new Set<string>());
@@ -541,42 +618,71 @@ function ReportBody({
   const pickCheck = (check: Check) => {
     const editor = openEditor();
     if (!editor) return;
-    const view = editor.view;
-    let pos: number | null = null;
+    const doc = editor.state.doc;
+    // A suggested move names its block by index path (`move:0.3`).
+    let pos: number | null = check.id.startsWith("move:") ? posAtPath(doc, check.id.slice("move:".length)) : null;
     let index = 0;
-    view.state.doc.descendants((node, p) => {
-      if (pos !== null) return false;
-      const hit =
-        check.anchor?.entryId !== undefined
-          ? node.type.name === "evidence" && node.attrs.entryId === check.anchor.entryId
-          : check.anchor?.nodeIndex !== undefined && index === check.anchor.nodeIndex;
-      index++;
-      if (hit) pos = p;
-      return true;
-    });
-    if (pos !== null) {
-      view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)).scrollIntoView());
-      (view.nodeDOM(pos) as HTMLElement | null)?.scrollIntoView?.({ block: "center" });
-    }
-    view.focus();
+    if (pos === null)
+      doc.descendants((node, p) => {
+        if (pos !== null) return false;
+        const hit =
+          check.anchor?.entryId !== undefined
+            ? node.type.name === "evidence" && node.attrs.entryId === check.anchor.entryId
+            : check.anchor?.nodeIndex !== undefined && index === check.anchor.nodeIndex;
+        index++;
+        if (hit) pos = p;
+        return true;
+      });
+    if (pos !== null) selectBlockAt(editor, pos);
+    else editor.view.focus();
+  };
+  // A suggested move's fix is the Move action itself: the block goes to the appendix, leaving its reference.
+  const checkAction = (check: Check): CheckAction | undefined => {
+    if (!check.id.startsWith("move:")) return undefined;
+    const path = check.id.slice("move:".length);
+    return {
+      label: "Move to appendix",
+      run: () => {
+        const editor = openEditor();
+        const pos = editor ? posAtPath(editor.state.doc, path) : null;
+        if (editor && pos !== null) setNodeAttrs(editor, pos, { appendix: "moved" });
+      },
+    };
   };
 
   const openChecks = open?.target ? (checks.get(open.section.id) ?? []) : [];
   const machines = open?.target ? open.target.hostIds.map((id) => ({ hostId: id, name: data.hosts.find((h) => h.id === id)?.name ?? "Host" })) : [];
   const targetExtra = open?.target ? (
     <>
-      <CheckList checks={openChecks} onPick={pickCheck} />
+      <CheckList checks={openChecks} onPick={pickCheck} actionFor={checkAction} />
       <ExpectedFlags machines={machines} flagsOf={(id) => expectedFlags(open.target!, id, reportMeta)} onChange={setFlags} />
     </>
   ) : undefined;
 
   const contextValue = useMemo(
     (): ReportDataValue | null =>
-      openSectionMeta ? { data, appendix, sectionMeta: openSectionMeta, onRemoveEvidence, reportMeta, targetMeta, figureOffset } : null,
-    [data, appendix, openSectionMeta, onRemoveEvidence, reportMeta, targetMeta, figureOffset],
+      openSectionMeta ? { data, appendix, sectionMeta: openSectionMeta, onRemoveEvidence, reportMeta, targetMeta, figureOffset, onImageWidth } : null,
+    [data, appendix, openSectionMeta, onRemoveEvidence, reportMeta, targetMeta, figureOffset, onImageWidth],
   );
 
   const notStarted = open?.target && stateOf(open.target, open.section.id) === "not-started";
+  const appendixView = openAppendix ? (
+    <AppendixSection
+      key={openAppendix.id}
+      title={openAppendix.label}
+      source={openAppendix.entry.item.label}
+      entries={openAppendix.entries.flatMap((a): AppendixPageEntry[] => {
+        const path = a.key.slice(openAppendix.entry.section.id.length + 1);
+        const node = nodeAtPath(savedDocOf(openAppendix.entry.section), path);
+        return node ? [{ ref: `${a.letter}.${a.n}`, title: a.title, path, node }] : [];
+      })}
+      ctx={{ data, appendix: savedAppendix, sectionMeta: metaOf(openAppendix.entry.section), onRemoveEvidence: () => {}, reportMeta, targetMeta }}
+      onBack={(path) => {
+        pendingPick.current = { id: openAppendix.entry.section.id, path };
+        setOpenId(openAppendix.entry.section.id);
+      }}
+    />
+  ) : null;
   const includedHostIds = targets.flatMap((t) => t.hostIds);
   const [checksOpen, setChecksOpen] = useState(false);
   const railDoc = openSection ? (openLiveDoc ?? savedDocOf(openSection)) : EMPTY_DOC;
@@ -614,8 +720,8 @@ function ReportBody({
           <div className="hidden min-h-0 overflow-y-auto border-r border-line @min-[1000px]/report:block">
             <ReportOutline
               items={items}
-              openId={open?.item.id ?? null}
-              onOpen={setOpenId}
+              openId={openItemId}
+              onOpen={openItem}
               onReorder={reorder}
               openExtra={targetExtra}
               navRef={(el) => {
@@ -628,8 +734,8 @@ function ReportBody({
               <Select
                 aria-label="Report section"
                 options={items.map((i) => ({ value: i.id, label: i.label }))}
-                value={open?.item.id}
-                onValueChange={setOpenId}
+                value={openItemId ?? undefined}
+                onValueChange={openItem}
               />
               {open?.target && (
                 <Disclosure label="Checks" count={fails} open={checksOpen} onOpenChange={setChecksOpen}>
@@ -642,8 +748,23 @@ function ReportBody({
             )}
             {saveFailed && <p className="m-0 text-meta text-warn">Some typing isn't saved yet. Raven tries again with your next change; keep Raven open until this goes.</p>}
             {draftFailed && <WarnLine text={`Couldn't build this page's draft: ${draftFailed}`} onRetry={() => setDraftFailed(null)} />}
-            {notStarted && open?.target && <p className="m-0 text-meta text-muted-2">Nothing logged on {open.item.label} yet. The page fills in as you work.</p>}
-            {openSection?.kind === "details" ? (
+            {open?.target && openSection?.doc ? (
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+                <p className="m-0 text-meta text-muted-2">{notStarted ? `Nothing logged on ${open.item.label} yet. The page fills in as you work.` : ""}</p>
+                <AddEvidenceButton
+                  key={openSection.id}
+                  editor={readyEditor && readyEditor.id === openSection.id ? readyEditor.editor : null}
+                  data={data}
+                  target={open.target}
+                  meta={reportMeta}
+                  removed={openSectionMeta?.removedEntryIds ?? []}
+                  onAdded={() => void saver.flush()}
+                />
+              </div>
+            ) : (
+              notStarted && open?.target && <p className="m-0 text-meta text-muted-2">Nothing logged on {open.item.label} yet. The page fills in as you work.</p>
+            )}
+            {appendixView ?? (openSection?.kind === "details" ? (
               <ReportDetails
                 key={report.id}
                 report={report}
@@ -660,16 +781,13 @@ function ReportBody({
                     sectionId={openSection.id}
                     doc={openSection.doc as ReportNode}
                     onChange={onChange}
-                    onReady={(editor) => {
-                      editorRef.current = { id: openSection.id, editor };
-                      setReadyEditor({ id: openSection.id, editor });
-                    }}
+                    onReady={(editor) => onEditorReady(openSection.id, editor)}
                   />
                 </ReportDataContext.Provider>
               ) : draftFailed ? null : (
                 <LoadingState label="the draft" />
               )
-            ) : null}
+            ) : null)}
           </div>
           {narrow ? (
             <EvidenceDrawer open={railOpen} focusKey={railFocus} onClose={() => setRailOpen(false)}>

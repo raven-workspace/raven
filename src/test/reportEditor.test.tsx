@@ -1,9 +1,10 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NodeSelection, TextSelection } from "prosekit/pm/state";
+import { useMemo, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Editor } from "prosekit/core";
-import type { AppendixIndex, ReportData, ReportNode } from "../engines/report";
+import { numberAppendices, type AppendixIndex, type ReportData, type ReportNode } from "../engines/report";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext";
 import { insertEvidenceAtCursor, removeNodeAt, ReportEditor, setNodeAttrs } from "../features/report/editor/ReportEditor";
 import { api } from "../lib/api";
@@ -309,5 +310,157 @@ describe("ReportEditor vulnerabilities and exploits", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Mark line 2 as changed" }));
     await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs).toMatchObject({ markedLines: [1] }));
     expect(container.querySelector('[data-diff="add"]')).toHaveTextContent("b");
+  });
+});
+
+/** The editor with its appendix index recomputed from the live page, as the Report view does. */
+function setupLive(page: ReportNode, d: ReportData = data()) {
+  const onChange = vi.fn();
+  const onRemoveEvidence = vi.fn();
+  const onImageWidth = vi.fn();
+  const ref: { editor: Editor | null } = { editor: null };
+  function Live() {
+    const [current, setCurrent] = useState(page);
+    const appendix = useMemo(
+      () =>
+        numberAppendices([{ id: "s1", kind: "target", targetKey: "h1", doc: current }], (n) => d.log.find((e) => e.id === n.attrs?.entryId)?.title ?? "Evidence"),
+      [current],
+    );
+    return (
+      <ReportDataContext.Provider value={{ data: d, appendix, sectionMeta: {}, onRemoveEvidence, onImageWidth }}>
+        <ReportEditor
+          sectionId="s1"
+          doc={page}
+          onChange={(doc) => {
+            setCurrent(doc);
+            onChange(doc);
+          }}
+          onReady={(e) => (ref.editor = e)}
+        />
+      </ReportDataContext.Provider>
+    );
+  }
+  const utils = render(
+    <QueryClientProvider client={makeQueryClient()}>
+      <Live />
+    </QueryClientProvider>,
+  );
+  return { ...utils, onChange, onRemoveEvidence, onImageWidth, editor: () => ref.editor! };
+}
+
+/** Selects the page's top-level block at `index`, as clicking it does. */
+function selectBlock(editor: Editor, index: number) {
+  const view = editor.view;
+  let pos = 0;
+  for (let i = 0; i < index; i++) pos += view.state.doc.child(i).nodeSize;
+  fireEvent.pointerDown(view.dom);
+  act(() => view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos))));
+}
+
+const lines = (n: number) => Array.from({ length: n }, (_, i) => `line ${i}`).join("\n");
+const longEntry = (id: string, title: string, n: number) =>
+  entry({ id, title, content: { kind: "command", blocks: [{ command: `cat ${id}`, output: lines(n) }] } });
+
+describe("ReportEditor block tools", () => {
+  it("shows no tools on ProseMirror's default selection until the owner clicks into the page", async () => {
+    const { editor } = setupLive(doc(ev("e1"), slot()));
+    await waitFor(() => expect(editor()).toBeTruthy());
+    const view = editor().view;
+    act(() => view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, 0))));
+    await screen.findByText("22/tcp open ssh", { normalizer: (t) => t.replace(/\s+/g, " ") });
+    expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+    fireEvent.pointerDown(view.dom);
+    expect(await screen.findByRole("button", { name: "Remove" })).toBeInTheDocument();
+  });
+
+  it("trims by clicking line numbers: shift-click keeps a range, and the page shows what was omitted", async () => {
+    const d = data({ log: [longEntry("e1", "Big file", 12)] });
+    const { onChange, editor, container } = setupLive(doc(ev("e1"), slot()), d);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    selectBlock(editor(), 0);
+    fireEvent.click(await screen.findByRole("button", { name: "Trim" }));
+    fireEvent.click(screen.getByRole("button", { name: "Keep line 3" }));
+    fireEvent.click(screen.getByRole("button", { name: "Keep line 5" }), { shiftKey: true });
+    fireEvent.click(screen.getByRole("button", { name: "Keep line 8" }));
+    await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.keep).toEqual([[2, 4], [7, 7]]));
+    fireEvent.click(screen.getByRole("button", { name: "Trim" }));
+    await waitFor(() => expect(container.querySelectorAll(".report-line")).toHaveLength(4));
+    expect(screen.getAllByText("… 2 lines omitted")).toHaveLength(2);
+    expect(screen.getByText("… 4 lines omitted")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Trim" }));
+    fireEvent.click(screen.getByRole("button", { name: "Keep all" }));
+    await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.keep).toBeNull());
+  });
+
+  it("emphasises lines by clicking their numbers", async () => {
+    const d = data({ log: [longEntry("e1", "Big file", 4)] });
+    const { onChange, editor } = setupLive(doc(ev("e1")), d);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    selectBlock(editor(), 0);
+    fireEvent.click(await screen.findByRole("button", { name: "Emphasise lines" }));
+    fireEvent.click(screen.getByRole("button", { name: "Emphasise line 2" }));
+    await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.emphasis).toEqual([1]));
+    expect(screen.getByText("line 1")).toHaveAttribute("data-emphasis", "true");
+  });
+
+  it("moves a block to the appendix, leaving its reference, and renumbers when an earlier block moves", async () => {
+    const d = data({ log: [longEntry("e1", "Full port scan", 3), longEntry("e2", "Web scan", 3)] });
+    const { editor } = setupLive(doc(ev("e2"), slot(), ev("e1"), slot()), d);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    selectBlock(editor(), 2);
+    fireEvent.click(await screen.findByRole("button", { name: "Move to appendix" }));
+    expect(await screen.findByText("Full output: Appendix E.1, Full port scan")).toBeInTheDocument();
+    expect(screen.queryByText("cat e1")).toBeNull();
+
+    selectBlock(editor(), 0);
+    fireEvent.click(await screen.findByRole("button", { name: "Move to appendix" }));
+    expect(await screen.findByText("Full output: Appendix E.1, Web scan")).toBeInTheDocument();
+    expect(screen.getByText("Full output: Appendix E.2, Full port scan")).toBeInTheDocument();
+  });
+
+  it("split keeps the trimmed lines inline with the reference after them; a third press brings it back inline", async () => {
+    const d = data({ log: [longEntry("e1", "Full port scan", 3)] });
+    const { onChange, editor } = setupLive(doc(ev("e1", { keep: [[0, 0]] })), d);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    selectBlock(editor(), 0);
+    fireEvent.click(await screen.findByRole("button", { name: "Move to appendix" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Trimmed here, full output in the appendix" }));
+    await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.appendix).toBe("split"));
+    expect(screen.getByText("line 0")).toBeInTheDocument();
+    expect(screen.getByText("… 2 lines omitted")).toBeInTheDocument();
+    expect(screen.getByText("Full output: Appendix E.1, Full port scan")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back inline" }));
+    await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.appendix).toBe("inline"));
+    expect(screen.queryByText(/Full output: Appendix/)).toBeNull();
+  });
+
+  it("removes a block with its Remove button, as Backspace does", async () => {
+    const { onChange, onRemoveEvidence, editor } = setupLive(doc(ev("e1"), slot()));
+    await waitFor(() => expect(editor()).toBeTruthy());
+    selectBlock(editor(), 0);
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    expect(onRemoveEvidence).toHaveBeenCalledWith("e1");
+    await waitFor(() => expect(lastDoc(onChange).content?.map((n) => n.type)).toEqual(["slot"]));
+  });
+
+  it("moves a generated table to the appendix", async () => {
+    const g: ReportNode = { type: "generated", attrs: { kind: "tools", hostId: null, appendix: "inline" } };
+    const { onChange, editor } = setupLive(doc(g));
+    await waitFor(() => expect(editor()).toBeTruthy());
+    selectBlock(editor(), 0);
+    fireEvent.click(await screen.findByRole("button", { name: "Move to appendix" }));
+    await waitFor(() => expect(lastDoc(onChange).content?.[0].attrs?.appendix).toBe("moved"));
+    expect(await screen.findByText("Full list: Appendix E.1, Evidence")).toBeInTheDocument();
+  });
+
+  it("reports a screenshot's natural width once its image loads", async () => {
+    const d = data({ log: [entry({ id: "s1", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a1", caption: "Login", fileName: "x.png" } })] });
+    const { onImageWidth, container } = setupLive(doc(ev("s1", { block: null })), d);
+    await waitFor(() => expect(container.querySelector("img")).toBeTruthy());
+    const img = container.querySelector("img")!;
+    Object.defineProperty(img, "naturalWidth", { value: 420 });
+    fireEvent.load(img);
+    expect(onImageWidth).toHaveBeenCalledWith("s1", 420);
   });
 });
