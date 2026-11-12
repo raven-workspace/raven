@@ -3,9 +3,18 @@ import {
   addNewEvidence,
   buildTargetDraft,
   defaultKeep,
+  DRAFT_LAYOUT,
+  endOfPhase,
+  evidenceBlocks,
   evidenceIdsIn,
+  findingPhaseMap,
   isDeadEnd,
+  placingEntries,
   provingEntries,
+  REPRODUCE_LABEL,
+  STEP_HINT,
+  stepNode,
+  stepsNode,
 } from "../engines/report";
 import type { ReportData, ReportNode, ReportTarget } from "../engines/report";
 import type { AccessGrant } from "../types/credentials";
@@ -108,17 +117,6 @@ const target = (hostIds: string[], kind: ReportTarget["kind"] = "standalone"): R
 const phasesOf = (doc: ReportNode) =>
   (doc.content ?? []).filter((n) => n.type === "phase").map((n) => n.attrs?.phase as string);
 
-/** The entry ids of the evidence nodes under one phase heading. */
-function evidenceUnder(doc: ReportNode, phase: string, hostId = H): string[] {
-  const out: string[] = [];
-  let inPhase = false;
-  for (const n of doc.content ?? []) {
-    if (n.type === "phase") inPhase = n.attrs?.phase === phase && n.attrs?.hostId === hostId;
-    else if (inPhase && n.type === "evidence") out.push(n.attrs?.entryId as string);
-  }
-  return out;
-}
-
 describe("provingEntries", () => {
   it("keeps entries that proved something, never dead ends or private ones", () => {
     const ids = [...provingEntries(windowsHost(), H).keys()].sort();
@@ -162,89 +160,310 @@ describe("defaultKeep", () => {
   });
 });
 
-const STEP_SLOT = { type: "slot", attrs: { hint: "What you do next, and why" } };
+const STEP_HINT_TEXT = "Say what this step does";
+const FLAG_HINT_TEXT = "Say where you read the flag";
+const EXPLAIN_HINT_TEXT = "Explain each change";
 
-/** The page as a readable outline: phases, slots (S), evidence ids, vulns (V:id), generated kinds (G:kind). */
-const outline = (doc: ReportNode) =>
-  (doc.content ?? []).map((n) => {
-    if (n.type === "phase") return `# ${n.attrs?.phase}`;
-    if (n.type === "slot") return n.attrs?.label ? `S:${n.attrs.label}` : "S";
-    if (n.type === "evidence") return n.attrs?.entryId as string;
-    if (n.type === "vuln") return `V:${n.attrs?.findingId}`;
-    if (n.type === "exploit") return `X:${n.attrs?.fileId}`;
-    return `G:${n.attrs?.kind}`;
+const topLevel = (doc: ReportNode) => doc.content ?? [];
+
+/** Every node of the page, depth first. */
+function allNodes(doc: ReportNode): ReportNode[] {
+  const out: ReportNode[] = [];
+  const walk = (n: ReportNode) => {
+    out.push(n);
+    n.content?.forEach(walk);
+  };
+  topLevel(doc).forEach(walk);
+  return out;
+}
+
+/** The step that holds an entry's evidence (or was drafted from it). */
+function stepOf(doc: ReportNode, entryId: string): ReportNode {
+  const step = allNodes(doc).find(
+    (n) => n.type === "step" && (n.attrs?.entryId === entryId || (n.content ?? []).some((c) => c.type === "evidence" && c.attrs?.entryId === entryId)),
+  );
+  if (!step) throw new Error(`no step holds ${entryId}`);
+  return step;
+}
+
+const firstSteps = (doc: ReportNode) => topLevel(doc).find((n) => n.type === "steps")!;
+
+/** The page as a readable outline: phases, steps lists ([ … ]) and their steps (-), slots (S: a step's sentence, SF: a
+ *  flag's, S:<hint> any other), evidence ids, vulns (V:id), exploits (X:id), generated kinds (G:kind). */
+function outline(doc: ReportNode): string[] {
+  const out: string[] = [];
+  const walk = (n: ReportNode) => {
+    if (n.type === "phase") out.push(`# ${n.attrs?.phase}`);
+    else if (n.type === "steps") {
+      out.push("[");
+      n.content?.forEach(walk);
+      out.push("]");
+    } else if (n.type === "step") {
+      out.push("-");
+      n.content?.forEach(walk);
+    } else if (n.type === "slot") {
+      const hint = n.attrs?.hint;
+      out.push(hint === STEP_HINT_TEXT ? "S" : hint === FLAG_HINT_TEXT ? "SF" : `S:${hint}`);
+    } else if (n.type === "evidence") out.push(n.attrs?.entryId as string);
+    else if (n.type === "vuln") out.push(`V:${n.attrs?.findingId}`);
+    else if (n.type === "exploit") out.push(`X:${n.attrs?.fileId}`);
+    else if (n.type === "paragraph") out.push("P");
+    else out.push(`G:${n.attrs?.kind}`);
+  };
+  topLevel(doc).forEach(walk);
+  return out;
+}
+
+/** The entry ids of the evidence under one phase heading, steps included. */
+function evidenceUnder(doc: ReportNode, phase: string, hostId = H): string[] {
+  const out: string[] = [];
+  let inPhase = false;
+  const collect = (n: ReportNode) => {
+    if (n.type === "evidence") out.push(n.attrs?.entryId as string);
+    n.content?.forEach(collect);
+  };
+  for (const n of topLevel(doc)) {
+    if (n.type === "phase") inPhase = n.attrs?.phase === phase && n.attrs?.hostId === hostId;
+    else if (inPhase) collect(n);
+  }
+  return out;
+}
+
+const uniquePhases = (doc: ReportNode) => [...new Set(phasesOf(doc))];
+
+const finding = (id: string, over: Partial<Finding>) =>
+  ({ id, title: id, hostIds: [H], serviceIds: [], stepEntryIds: [], severity: "high", refs: [], createdAt: 1, ...over }) as Finding;
+
+/** windowsHost with its walkthrough linked to findings: the upload RCE (ferox, curl) and SeImpersonate (whoami,
+ *  printspoofer). Goal evidence and service confirmation alone no longer place an entry. */
+function walked(): ReportData {
+  const d = windowsHost();
+  d.findings = [
+    finding("rce", { title: "File upload to RCE", stepEntryIds: ["ferox", "curl"], createdAt: 1 }),
+    finding("priv", { title: "SeImpersonatePrivilege to SYSTEM", stepEntryIds: ["whoami", "printspoofer"], createdAt: 2 }),
+  ];
+  return d;
+}
+
+const standalone = (hostId: string): ReportTarget => target([hostId]);
+
+describe("the short draft (layout 4)", () => {
+  const H1 = "h1";
+  function lab(): ReportData {
+    const d = empty();
+    d.hosts = [host(H1, "lnx")];
+    d.log = [
+      entry("e1", H1, 0, { kind: "command", blocks: [{ command: "nmap -sV 10.0.0.9", output: "80/tcp open http" }] }),
+      entry("e2", H1, 10, { kind: "command", blocks: [{ command: "nc -lvnp 443", output: "uid=33(www-data)" }] }),
+      entry("e3", H1, 20, { kind: "flag", flagKind: "local", value: "f00" }),
+    ];
+    d.checklist = [goal(H1, ["e1"])];
+    d.services = [service(H1, 80, "e1")];
+    d.grants = [grant(H1, "user", "e2", 10)];
+    return d;
+  }
+  const data = lab();
+  const doc = buildTargetDraft(data, standalone(H1), {});
+
+  it("places only access, hop, flag and finding-step entries; goal and service entries stay off the page", () => {
+    expect([...placingEntries(data, H1)].sort()).toEqual(["e2", "e3"]);
+    expect([...evidenceIdsIn(doc)].sort()).toEqual(["e2", "e3"]);
   });
+
+  it("puts a finding's walkthrough in one numbered steps list, one step per placed entry", () => {
+    const steps = topLevel(doc).filter((n) => n.type === "steps");
+    expect(steps).toHaveLength(1);
+    expect(steps[0].content!.map((s) => s.attrs!.entryId)).toEqual(["e2", "e3"]);
+    expect(steps[0].content![0].content![0]).toMatchObject({ type: "slot", attrs: { hint: "Say what this step does" } });
+    expect(steps[0].content![1].content![0]).toMatchObject({ type: "slot", attrs: { hint: "Say where you read the flag" } });
+    expect(JSON.stringify(doc)).not.toContain("Steps to reproduce");
+  });
+
+  it("a screenshot joins the step before it", () => {
+    const d = lab();
+    d.log.push(entry("shot1", H1, 12, shot));
+    const withShot = buildTargetDraft(d, standalone(H1), {});
+    expect(stepOf(withShot, "e2").content!.map((n) => n.attrs?.entryId)).toContain("shot1");
+    expect(firstSteps(withShot).content).toHaveLength(2);
+  });
+
+  it("opens every machine with facts, result, enum heading and ports, and never emits port-scan or attack-chain", () => {
+    expect(topLevel(doc).slice(0, 4).map((n) => n.attrs?.kind ?? n.attrs?.phase)).toEqual(["facts", "result", "enum", "ports"]);
+    expect(topLevel(doc)[3]).toEqual({ type: "generated", attrs: { kind: "ports", hostId: H1, appendix: "inline", notes: {} } });
+    const adDoc = buildTargetDraft(adSet(), target(AD_HOSTS, "ad-set"), {});
+    expect(JSON.stringify(adDoc)).not.toMatch(/"port-scan"|"attack-chain"/);
+    for (const id of AD_HOSTS) {
+      const facts = topLevel(adDoc).findIndex((n) => n.attrs?.kind === "facts" && n.attrs?.hostId === id);
+      expect(topLevel(adDoc).slice(facts, facts + 4).map((n) => n.attrs?.kind ?? n.attrs?.phase)).toEqual(["facts", "result", "enum", "ports"]);
+    }
+  });
+
+  it("opens the AD set with the attack-path table", () => {
+    const adDoc = buildTargetDraft(adSet(), target(AD_HOSTS, "ad-set"), {});
+    expect(adDoc.content![0]).toMatchObject({ type: "generated", attrs: { kind: "attack-path", hostId: null } });
+  });
+
+  it("an exploit file sits inside the step whose command names it", () => {
+    const d = lab();
+    d.log.push(entry("run46153", H1, 8, { kind: "command", blocks: [{ command: "python3 46153.py -t 10.0.0.9", output: "sent" }] }));
+    d.findings = [{ id: "f1", title: "RCE", hostIds: [H1], serviceIds: [], stepEntryIds: ["run46153", "e2"], severity: "high", refs: [] } as unknown as Finding];
+    d.findingFiles = [{ id: "edb", findingId: "f1", name: "exploits/46153.py", modified: true } as FindingFile];
+    const withExploit = buildTargetDraft(d, standalone(H1), {});
+    expect(stepOf(withExploit, "run46153").content!.some((n) => n.type === "exploit")).toBe(true);
+    expect(stepOf(withExploit, "e2").content!.some((n) => n.type === "exploit")).toBe(false);
+  });
+
+  it("addNewEvidence appends a new placed entry as the last step of its phase's list, before the local flag step", () => {
+    const withNewStep = lab();
+    withNewStep.log.push(entry("e9", H1, 5, cmd("found creds")));
+    withNewStep.findings = [{ id: "f9", title: "Creds in config", hostIds: [H1], serviceIds: [], stepEntryIds: ["e9"], severity: "high", refs: [] } as unknown as Finding];
+    const { doc: next, added } = addNewEvidence(doc, withNewStep, standalone(H1), {}, []);
+    expect(added).toEqual(["e9"]);
+    const ids = firstSteps(next).content!.map((s) => s.attrs!.entryId);
+    expect(ids).toEqual(["e2", "e9", "e3"]);
+    expect(ids.indexOf("e9")).toBe(ids.indexOf("e3") - 1);
+  });
+
+  it("endOfPhase returns a path inside the phase's steps list", () => {
+    const d = lab();
+    const late = entry("late", H1, 8, cmd("id"));
+    d.log.push(late);
+    const { at, nodes } = endOfPhase(doc, d, standalone(H1), late);
+    expect(at.length).toBe(2);
+    expect(at).toEqual([topLevel(doc).indexOf(firstSteps(doc)), 1]);
+    expect(nodes[0].type).toBe("step");
+    expect(nodes[0].attrs).toEqual({ entryId: "late" });
+  });
+
+  it("endOfPhase puts a flag's companion into the flag's step", () => {
+    const d = lab();
+    d.log = d.log.map((e) => (e.id === "e3" ? ({ ...e, content: { kind: "flag", flagKind: "local", value: "0123456789abcdef", attachmentId: "", proof: null } } as LogEntry) : e));
+    const fresh = buildTargetDraft(d, standalone(H1), {});
+    const read = entry("read", H1, 21, { kind: "command", blocks: [{ command: "cat local.txt", output: "0123456789abcdef" }] });
+    d.log.push(read);
+    const { at, nodes } = endOfPhase(fresh, d, standalone(H1), read);
+    expect(at).toEqual([topLevel(fresh).indexOf(firstSteps(fresh)), 1, 2]);
+    expect(nodes.map((n) => n.type)).toEqual(["evidence"]);
+  });
+
+  it("evidenceIdsIn finds evidence nested in steps", () => {
+    expect(evidenceIdsIn(doc).has("e2")).toBe(true);
+  });
+
+  it("stepNode and stepsNode build the step vocabulary", () => {
+    const e2 = data.log.find((e) => e.id === "e2")!;
+    expect(stepNode([e2])).toEqual({
+      type: "step",
+      attrs: { entryId: "e2" },
+      content: [{ type: "slot", attrs: { hint: STEP_HINT } }, ...evidenceBlocks(e2)],
+    });
+    const said = { ...e2, observations: "The listener caught the shell." };
+    expect(stepNode([said]).content![0]).toMatchObject({ type: "paragraph", attrs: { fromEntry: "e2", fromField: "observations" } });
+    expect(stepNode([])).toEqual({ type: "step", attrs: { entryId: null }, content: [{ type: "slot", attrs: { hint: STEP_HINT } }] });
+    expect(stepsNode([stepNode([])])).toEqual({ type: "steps", content: [stepNode([])] });
+  });
+
+  it("keeps REPRODUCE_LABEL exported and moves the layout to 4", () => {
+    expect(typeof REPRODUCE_LABEL).toBe("string");
+    expect(DRAFT_LAYOUT).toBe(4);
+  });
+});
+
+describe("findingPhaseMap", () => {
+  it("names the machine and phase each finding was placed under; one that enabled none is additional", () => {
+    const d = walked();
+    d.findings.push(finding("info", { severity: "info", stepEntryIds: ["curl"] }));
+    const map = findingPhaseMap(d, target([H]));
+    expect(Object.fromEntries(map)).toEqual({
+      rce: { hostId: H, phase: "foothold" },
+      priv: { hostId: H, phase: "privesc" },
+      info: { hostId: H, phase: "additional" },
+    });
+  });
+
+  it("places an AD finding once, at the machine of its first step", () => {
+    const d = adSet();
+    d.findings = [{ id: "f-da", hostIds: ["h-ad02", "h-dc01"], serviceIds: [], stepEntryIds: ["ad-dump", "dc-psexec"], severity: "critical", refs: [] } as unknown as Finding];
+    expect(findingPhaseMap(d, target(AD_HOSTS, "ad-set")).get("f-da")).toEqual({ hostId: "h-ad02", phase: "privesc" });
+  });
+});
 
 describe("buildTargetDraft", () => {
   it("lays a standalone host out in OffSec's sample order", () => {
-    const doc = buildTargetDraft(windowsHost(), target([H]), {});
+    const doc = buildTargetDraft(walked(), target([H]), {});
     expect(doc.type).toBe("doc");
     expect(outline(doc)).toEqual([
-      "G:facts",
-      "# enum", "G:port-scan", "S", "nmap",
-      "# foothold", "S:Steps to reproduce the attack:", "S", "ferox", "shot", "S", "curl",
-      "# privesc", "S:Steps to reproduce the attack:", "S", "whoami", "S", "printspoofer",
-      "# post", "flag",
+      "G:facts", "G:result",
+      "# enum", "G:ports",
+      "# foothold", "V:rce", "[", "-", "S", "ferox", "shot", "-", "S", "curl", "]",
+      "# privesc", "V:priv", "[", "-", "S", "whoami", "-", "S", "printspoofer", "]",
+      "# post", "[", "-", "SF", "flag", "]",
       "# tested", "G:tested",
     ]);
   });
 
-  it("puts the slot before each step, one per step, and never references the private entry", () => {
-    const doc = buildTargetDraft(windowsHost(), target([H]), {});
-    const nodes = doc.content ?? [];
-    nodes.forEach((n, i) => {
-      if (n.type === "evidence" && n.attrs?.entryId !== "flag" && n.attrs?.entryId !== "shot") expect(nodes[i - 1]).toEqual(STEP_SLOT);
-    });
+  it("starts each step with its sentence slot (a flag's says where it was read) and never references the private entry", () => {
+    const doc = buildTargetDraft(walked(), target([H]), {});
+    for (const step of allNodes(doc).filter((n) => n.type === "step")) {
+      const flag = step.attrs?.entryId === "flag";
+      expect(step.content![0]).toEqual({ type: "slot", attrs: { hint: flag ? FLAG_HINT_TEXT : STEP_HINT_TEXT } });
+    }
     expect(JSON.stringify(doc)).not.toContain('"private"');
     expect(evidenceIdsIn(doc).has("private")).toBe(false);
   });
 
-  it("shares one slot between a command's blocks and the screenshot that came along with it", () => {
-    const d = windowsHost();
+  it("shares one step between a command's blocks and the screenshot that came along with it", () => {
+    const d = walked();
     d.log[3] = entry("ferox", H, 10, cmd("a", "b"));
-    const doc = buildTargetDraft(d, target([H]), {});
-    const at = outline(doc).indexOf("ferox");
-    expect(outline(doc).slice(at - 1, at + 3)).toEqual(["S", "ferox", "ferox", "shot"]);
-    expect(doc.content![at].attrs?.block).toBe(0);
-    expect(doc.content![at + 1].attrs?.block).toBe(1);
+    const step = stepOf(buildTargetDraft(d, target([H]), {}), "ferox");
+    expect(step.content!.map((n) => (n.type === "slot" ? "S" : `${n.attrs?.entryId}:${n.attrs?.block}`))).toEqual(["S", "ferox:0", "ferox:1", "shot:null"]);
   });
 
-  it("puts only port scans in Service Enumeration, after the Port Scan Results table", () => {
-    const d = windowsHost();
+  it("leaves port scans and goal evidence off the page: Service Enumeration holds the ports table only", () => {
+    const d = walked();
     d.log.push(entry("rustscan", H, 1, { kind: "command", blocks: [{ command: "rustscan -a 10.0.0.5", output: "22 open" }] }));
     d.checklist.push(goal(H, ["rustscan"]));
     const doc = buildTargetDraft(d, target([H]), {});
-    expect(evidenceUnder(doc, "enum")).toEqual(["nmap", "rustscan"]);
+    expect(evidenceUnder(doc, "enum")).toEqual([]);
+    expect(outline(doc).slice(2, 5)).toEqual(["# enum", "G:ports", "# foothold"]);
     expect(evidenceUnder(doc, "foothold")).toEqual(["ferox", "shot", "curl"]);
   });
 
-  it("closes Initial Access with the local flag and opens Post-Exploitation with the proof flag", () => {
-    const d = windowsHost();
+  it("keeps a port scan a finding names as a step of Service Enumeration", () => {
+    const d = walked();
+    d.findings[0].stepEntryIds = ["nmap", "ferox", "curl"];
+    const doc = buildTargetDraft(d, target([H]), {});
+    expect(evidenceUnder(doc, "enum")).toEqual(["nmap"]);
+    expect(outline(doc).slice(2, 9)).toEqual(["# enum", "G:ports", "[", "-", "S", "nmap", "]"]);
+  });
+
+  it("ends Initial Access with the local flag's step and starts Post-Exploitation with the proof flag's", () => {
+    const d = walked();
     // The local flag was logged after privesc had started; it still closes Initial Access.
     d.log.push(entry("local", H, 45, { kind: "flag", flagKind: "local", value: "xyz" }), entry("dump", H, 60, cmd("hashes")));
-    d.checklist.push(goal(H, ["dump"]));
-    d.grants = [grant(H, "user", "curl", 20), grant(H, "system", "printspoofer", 50)];
+    d.findings[1].stepEntryIds.push("dump");
     const doc = buildTargetDraft(d, target([H]), {});
     expect(evidenceUnder(doc, "foothold")).toEqual(["ferox", "shot", "curl", "local"]);
     expect(evidenceUnder(doc, "privesc")).toEqual(["whoami", "printspoofer"]);
     expect(evidenceUnder(doc, "post")).toEqual(["flag", "dump"]);
-    // A flag prints its own label: no slot before it.
-    const local = outline(doc).indexOf("local");
-    expect(outline(doc)[local - 1]).toBe("curl");
+    const footSteps = topLevel(doc).filter((n) => n.type === "steps")[0];
+    expect(footSteps.content!.at(-1)!.attrs).toEqual({ entryId: "local" });
+    const postSteps = topLevel(doc).filter((n) => n.type === "steps").at(-1)!;
+    expect(postSteps.content!.map((s) => s.attrs?.entryId)).toEqual(["flag", "dump"]);
   });
 
   it("starts long outputs trimmed to the first 40 lines", () => {
-    const d = windowsHost();
+    const d = walked();
     const long = Array.from({ length: 5000 }, (_, i) => `line ${i}`).join("\n");
     const twelve = Array.from({ length: 12 }, (_, i) => `line ${i}`).join("\n");
     d.log[3] = entry("ferox", H, 10, cmd(long, twelve));
-    const nodes = (buildTargetDraft(d, target([H]), {}).content ?? []).filter((n) => n.attrs?.entryId === "ferox");
+    const nodes = allNodes(buildTargetDraft(d, target([H]), {})).filter((n) => n.type === "evidence" && n.attrs?.entryId === "ferox");
     expect(nodes.map((n) => n.attrs?.keep)).toEqual([[[0, 39]], null]);
     expect(nodes[0].attrs).toEqual({ entryId: "ferox", block: 0, keep: [[0, 39]], emphasis: [], appendix: "inline" });
   });
 
-  it("brings along a screenshot taken between two kept entries, not one outside them", () => {
-    const d = windowsHost();
+  it("brings along a screenshot taken between two placed entries, not one outside them", () => {
+    const d = walked();
     d.log.push(entry("midshot", H, 17, shot), entry("lateshot", H, 90, shot), entry("earlyshot", H, -10, shot), entry("flagshot", H, 56, shot));
     const doc = buildTargetDraft(d, target([H]), {});
     expect(evidenceUnder(doc, "foothold")).toEqual(["ferox", "shot", "midshot", "curl"]);
@@ -254,75 +473,68 @@ describe("buildTargetDraft", () => {
   });
 
   it("does not treat access given before anything was logged as the foothold", () => {
-    const d = windowsHost();
+    const d = walked();
     d.grants = [{ ...grant(H, "user", "", -60), logEntryId: null }];
-    d.checklist.push(goal(H, ["curl", "printspoofer"]));
-    expect(phasesOf(buildTargetDraft(d, target([H]), {}))).toEqual(["enum", "foothold", "post", "tested"]);
+    expect(uniquePhases(buildTargetDraft(d, target([H]), {}))).toEqual(["enum", "foothold", "post", "tested"]);
   });
 
   it("puts every step under Initial Access when no access was granted", () => {
-    const d = windowsHost();
+    const d = walked();
     d.grants = [];
-    d.checklist.push(goal(H, ["curl", "printspoofer"]));
     const doc = buildTargetDraft(d, target([H]), {});
-    expect(phasesOf(doc)).toEqual(["enum", "foothold", "post", "tested"]);
+    expect(uniquePhases(doc)).toEqual(["enum", "foothold", "post", "tested"]);
     expect(evidenceUnder(doc, "foothold")).toEqual(["ferox", "shot", "curl", "whoami", "printspoofer"]);
   });
 
   it("leaves Also tested out when nothing was tried and failed", () => {
-    const d = windowsHost();
+    const d = walked();
     d.attempts = [];
-    expect(phasesOf(buildTargetDraft(d, target([H]), {}))).toEqual(["enum", "foothold", "privesc", "post"]);
+    expect(uniquePhases(buildTargetDraft(d, target([H]), {}))).toEqual(["enum", "foothold", "privesc", "post"]);
   });
 
-  it("opens a phase with its finding's vulnerability and the reproduce slot; an exploit no step names goes before the access step", () => {
+  it("opens a phase with its finding's vulnerability, then its steps; an exploit no step names goes inside the access step", () => {
     const d = windowsHost();
-    d.findings = [{ id: "f1", hostIds: [H], serviceIds: [], stepEntryIds: ["whoami", "printspoofer"] } as unknown as Finding];
+    d.findings = [finding("f1", { stepEntryIds: ["whoami", "printspoofer"] })];
     d.findingFiles = [{ id: "file1", findingId: "f1", name: "exploit.c", modified: true } as FindingFile];
-    const doc = buildTargetDraft(d, target([H]), {});
-    const lines = outline(doc);
-    const privesc = lines.indexOf("# privesc");
-    expect(lines.slice(privesc, lines.indexOf("# post"))).toEqual([
-      "# privesc", "V:f1", "S:Steps to reproduce the attack:", "S", "whoami", "X:file1", "S", "S", "printspoofer",
+    const lines = outline(buildTargetDraft(d, target([H]), {}));
+    expect(lines.slice(lines.indexOf("# privesc"), lines.indexOf("# post"))).toEqual([
+      "# privesc", "V:f1", "[", "-", "S", "whoami", "-", "S", "X:file1", `S:${EXPLAIN_HINT_TEXT}`, "printspoofer", "]",
     ]);
-    expect(doc.content![privesc + 2]).toEqual({
-      type: "slot",
-      attrs: { hint: "A short summary of the attack, start to finish", label: "Steps to reproduce the attack:" },
-    });
-    expect(doc.content![lines.indexOf("X:file1") + 1]).toEqual({ type: "slot", attrs: { hint: "Explain each change" } });
   });
 
-  it("puts an exploit just before the step whose command runs it, else at the end of the phase", () => {
+  it("puts an exploit inside the step whose command runs it, else in a step of its own at the end of the phase", () => {
     const d = windowsHost();
     d.log[3] = entry("ferox", H, 10, { kind: "command", blocks: [{ command: "python3 46153.py -u admin -i http://10.0.0.5", output: "ok" }] });
-    d.findings = [{ id: "f1", hostIds: [H], serviceIds: [], stepEntryIds: ["ferox"] } as unknown as Finding];
+    d.findings = [finding("f1", { stepEntryIds: ["ferox"] })];
     d.findingFiles = [
       { id: "edb", findingId: "f1", name: "exploits/46153.py", modified: true } as FindingFile,
       { id: "other", findingId: "f1", name: "notes.txt", modified: false } as FindingFile,
     ];
     d.grants = [];
-    d.checklist.push(goal(H, ["curl"]));
-    const lines = outline(buildTargetDraft(d, target([H]), {}));
-    const foot = lines.slice(lines.indexOf("# foothold"), lines.indexOf("# post"));
-    expect(foot.slice(0, 6)).toEqual(["# foothold", "V:f1", "S:Steps to reproduce the attack:", "X:edb", "S", "S"]);
-    expect(foot[6]).toBe("ferox");
-    expect(foot.at(-1)).toBe("X:other");
+    const doc = buildTargetDraft(d, target([H]), {});
+    const lines = outline(doc);
+    expect(lines.slice(lines.indexOf("# foothold"), lines.indexOf("# post"))).toEqual([
+      "# foothold", "V:f1", "[", "-", "S", "X:edb", `S:${EXPLAIN_HINT_TEXT}`, "ferox", "shot", "-", "S", "X:other", "]",
+    ]);
+    expect(stepOf(doc, "ferox").attrs).toEqual({ entryId: "ferox" });
+    expect(firstSteps(doc).content!.at(-1)!.attrs).toEqual({ entryId: null });
   });
 
   describe("findings, one per heading", () => {
-    const f = (id: string, over: Partial<Finding>) => ({ id, title: id, hostIds: [H], serviceIds: [], stepEntryIds: [], severity: "high", createdAt: 1, ...over }) as Finding;
+    const f = finding;
 
     it("puts a second finding that enabled the phase under its own heading, with its own steps", () => {
       const d = windowsHost();
       d.findings = [f("f1", { stepEntryIds: ["ferox"] }), f("f2", { stepEntryIds: ["curl"] })];
-      const lines = outline(buildTargetDraft(d, target([H]), {}));
+      const doc = buildTargetDraft(d, target([H]), {});
+      const lines = outline(doc);
       const at = lines.indexOf("# foothold");
       expect(lines.slice(at, lines.indexOf("# privesc"))).toEqual([
-        "# foothold", "V:f1", "S:Steps to reproduce the attack:", "S", "ferox", "shot",
-        "# foothold", "V:f2", "S:Steps to reproduce the attack:", "S", "curl",
+        "# foothold", "V:f1", "[", "-", "S", "ferox", "shot", "]",
+        "# foothold", "V:f2", "[", "-", "S", "curl", "]",
       ]);
-      const second = buildTargetDraft(d, target([H]), {}).content!.filter((n) => n.type === "phase" && n.attrs?.phase === "foothold");
-      expect(second.map((n) => n.attrs?.findingId ?? null)).toEqual([null, "f2"]);
+      const heads = doc.content!.filter((n) => n.type === "phase" && n.attrs?.phase === "foothold");
+      expect(heads.map((n) => n.attrs?.findingId ?? null)).toEqual([null, "f2"]);
     });
 
     it("puts findings that enabled no phase under Additional findings, after Post-Exploitation, info last", () => {
@@ -375,8 +587,7 @@ describe("buildTargetDraft", () => {
       expect(res.added).toEqual(["late"]);
       const lines = outline(res.doc);
       const second = lines.findIndex((l, i) => l === "# foothold" && i > lines.indexOf("# foothold"));
-      expect(lines.indexOf("late")).toBeLessThan(second);
-      expect(lines.indexOf("late")).toBeGreaterThan(lines.indexOf("V:f1"));
+      expect(lines.slice(lines.indexOf("V:f1"), second)).toEqual(["V:f1", "[", "-", "S", "ferox", "shot", "-", "S", "late", "]"]);
     });
 
     it("keeps an unlinked finding (an imported one) as the one that opened the box when no finding did", () => {
@@ -391,8 +602,8 @@ describe("buildTargetDraft", () => {
   describe("a flag's companions", () => {
     const HASH = "0123456789abcdef0123456789abcdef";
     const withBareFlag = () => {
-      const d = windowsHost();
-      d.log = d.log.map((e) => (e.id === "flag" ? { ...e, content: { kind: "flag", flagKind: "proof", value: HASH, attachmentId: "", proof: null } } as LogEntry : e));
+      const d = walked();
+      d.log = d.log.map((e) => (e.id === "flag" ? ({ ...e, content: { kind: "flag", flagKind: "proof", value: HASH, attachmentId: "", proof: null } } as LogEntry) : e));
       d.log.push(
         entry("read", H, 56, { kind: "command", blocks: [{ command: "type proof.txt; whoami; ipconfig", output: `${HASH}\nnt authority\\system` }] }),
         entry("proofshot", H, 57, shot),
@@ -400,27 +611,34 @@ describe("buildTargetDraft", () => {
       return d;
     };
 
-    it("never moves a proving entry: a finding's step that prints the flag stays in its phase, and its finding with it", () => {
+    it("never moves a placed entry: a finding's step that prints the flag stays in its phase, and its finding with it", () => {
       const d = withBareFlag();
       // The root session that ran the exploit also read proof.txt: it is the finding's step.
-      d.log = d.log.map((e) => (e.id === "printspoofer" ? { ...e, content: { kind: "command", blocks: [{ command: "PrintSpoofer64.exe -i -c cmd", output: "nt authority\\system" }, { command: "type proof.txt", output: HASH }] } } as LogEntry : e));
+      d.log = d.log.map((e) => (e.id === "printspoofer" ? ({ ...e, content: { kind: "command", blocks: [{ command: "PrintSpoofer64.exe -i -c cmd", output: "nt authority\\system" }, { command: "type proof.txt", output: HASH }] } } as LogEntry) : e));
       d.log = d.log.filter((e) => e.id !== "read");
-      d.findings = [{ id: "f1", title: "SeImpersonate", hostIds: [H], serviceIds: [], stepEntryIds: ["whoami", "printspoofer"], severity: "high", refs: [] } as unknown as Finding];
       const doc = buildTargetDraft(d, target([H]), {});
       expect(evidenceUnder(doc, "privesc")).toEqual(["whoami", "printspoofer", "printspoofer"]);
       expect(evidenceUnder(doc, "post")).toEqual(["flag", "proofshot"]);
-      expect(outline(doc).filter((l) => l === "V:f1")).toHaveLength(1);
-      expect(outline(doc)[outline(doc).indexOf("# privesc") + 1]).toBe("V:f1");
+      expect(outline(doc).filter((l) => l === "V:priv")).toHaveLength(1);
+      expect(outline(doc)[outline(doc).indexOf("# privesc") + 1]).toBe("V:priv");
       expect(phasesOf(doc)).not.toContain("additional");
     });
 
-    it("go into the flag's block, once, and never as steps of their own", () => {
+    it("go into the flag's step, once, and never as steps of their own", () => {
       const doc = buildTargetDraft(withBareFlag(), target([H]), {});
-      expect(evidenceUnder(doc, "post")).toEqual(["flag", "read", "proofshot"]);
+      expect(stepOf(doc, "flag").content!.map((n) => (n.type === "slot" ? "SF" : n.attrs?.entryId))).toEqual(["SF", "flag", "read", "proofshot"]);
       expect(outline(doc).filter((l) => l === "read")).toHaveLength(1);
+      expect(allNodes(doc).filter((n) => n.type === "step" && (n.attrs?.entryId === "read" || n.attrs?.entryId === "proofshot"))).toEqual([]);
     });
 
-    it("join a flag already on the page when they come later, right after it", () => {
+    it("pulls in a goal's evidence that prints the flag: only placed entries stay out of the flag's step", () => {
+      const d = withBareFlag();
+      d.checklist.push(goal(H, ["read"]));
+      const doc = buildTargetDraft(d, target([H]), {});
+      expect(evidenceUnder(doc, "post")).toEqual(["flag", "read", "proofshot"]);
+    });
+
+    it("join a flag already on the page when they come later, after the flag and before its screenshots", () => {
       const d = withBareFlag();
       const later = d.log.filter((e) => e.id !== "read");
       const doc = buildTargetDraft({ ...d, log: later }, target([H]), {});
@@ -428,18 +646,19 @@ describe("buildTargetDraft", () => {
       expect(res.added).toEqual(["read"]);
       // As a fresh draft orders the block: the command before the screenshot.
       expect(evidenceUnder(res.doc, "post")).toEqual(["flag", "read", "proofshot"]);
+      expect(stepOf(res.doc, "flag").content!.map((n) => n.attrs?.entryId ?? "SF")).toEqual(["SF", "flag", "read", "proofshot"]);
     });
   });
 
-  it("has no generated appendices or old blocks", () => {
-    const kinds = (buildTargetDraft(windowsHost(), target([H]), {}).content ?? []).filter((n) => n.type === "generated").map((n) => n.attrs?.kind);
-    expect(kinds).toEqual(["facts", "port-scan", "tested"]);
+  it("generates the facts, result, ports and Also tested blocks and none of the old ones", () => {
+    const kinds = allNodes(buildTargetDraft(walked(), target([H]), {})).filter((n) => n.type === "generated").map((n) => n.attrs?.kind);
+    expect(kinds).toEqual(["facts", "result", "ports", "tested"]);
   });
 });
 
 describe("addNewEvidence", () => {
   it("adds the Also tested heading and list once something was tried and failed", () => {
-    const d = windowsHost();
+    const d = walked();
     d.attempts = [];
     const doc = buildTargetDraft(d, target([H]), {});
     expect(phasesOf(doc)).not.toContain("tested");
@@ -451,43 +670,50 @@ describe("addNewEvidence", () => {
     expect(addNewEvidence(res.doc, d, target([H]), {}, []).addedTested).toEqual([]);
   });
 
-  it("puts a new step that runs an exploit on the page right after the exploit", () => {
+  it("puts a new step that runs an exploit on the page right after the step holding the exploit", () => {
     const d = windowsHost();
-    d.findings = [{ id: "f1", hostIds: [H], serviceIds: [], stepEntryIds: ["curl"] } as unknown as Finding];
+    d.findings = [finding("f1", { stepEntryIds: ["curl"] })];
     d.findingFiles = [{ id: "edb", findingId: "f1", name: "46153.py", modified: true } as FindingFile];
     const doc = buildTargetDraft(d, target([H]), {});
     d.log.push(entry("run", H, 19, { kind: "command", blocks: [{ command: "python3 46153.py", output: "ok" }] }));
-    d.checklist.push(goal(H, ["run"]));
+    d.findings[0].stepEntryIds = ["run", "curl"];
     const lines = outline(addNewEvidence(doc, d, target([H]), {}, []).doc);
     const x = lines.indexOf("X:edb");
-    expect(lines.slice(x, x + 4)).toEqual(["X:edb", "S", "S", "run"]);
+    expect(lines.slice(x - 2, x + 7)).toEqual(["-", "S", "X:edb", `S:${EXPLAIN_HINT_TEXT}`, "curl", "-", "S", "run", "]"]);
   });
 
-  it("appends a new step to the end of its phase, its slot before it, and leaves everything else alone", () => {
-    const d = windowsHost();
+  it("appends a new step to the end of its phase's steps and leaves everything else alone", () => {
+    const d = walked();
     const doc = buildTargetDraft(d, target([H]), {});
-    const firstSlot = doc.content!.findIndex((n) => n.type === "slot");
-    doc.content![firstSlot] = { ...doc.content![firstSlot], content: [{ type: "text", text: "A full port scan first." }] };
+    const firstStep = firstSteps(doc).content![0];
+    firstStep.content![0] = { ...firstStep.content![0], content: [{ type: "text", text: "Feroxbuster found the upload page." }] };
     const before = structuredClone(doc);
 
     d.log.push(entry("whoami2", H, 45, cmd("SeImpersonate")));
-    d.checklist.push(goal(H, ["whoami2"]));
+    d.findings[1].stepEntryIds.push("whoami2");
     const { doc: next, added } = addNewEvidence(doc, d, target([H]), {}, []);
 
     expect(added).toEqual(["whoami2"]);
     expect(evidenceUnder(next, "privesc")).toEqual(["whoami", "printspoofer", "whoami2"]);
     expect(doc).toEqual(before);
-    const inserted = next.content!.findIndex((n) => n.attrs?.entryId === "whoami2");
-    expect(next.content![inserted - 1]).toEqual(STEP_SLOT);
-    expect(next.content!.slice(0, inserted - 1)).toEqual(before.content!.slice(0, inserted - 1));
-    expect(next.content!.slice(inserted + 1)).toEqual(before.content!.slice(inserted - 1));
+    const privSteps = next.content!.findIndex((n, i) => n.type === "steps" && i > next.content!.findIndex((p) => p.type === "phase" && p.attrs?.phase === "privesc"));
+    expect(next.content!.length).toBe(before.content!.length);
+    next.content!.forEach((n, i) => {
+      if (i !== privSteps) expect(n).toEqual(before.content![i]);
+    });
+    expect(next.content![privSteps].content!.slice(0, -1)).toEqual(before.content![privSteps].content);
+    expect(next.content![privSteps].content!.at(-1)).toEqual({
+      type: "step",
+      attrs: { entryId: "whoami2" },
+      content: [{ type: "slot", attrs: { hint: STEP_HINT_TEXT } }, { type: "evidence", attrs: { entryId: "whoami2", block: 0, keep: null, emphasis: [], appendix: "inline" } }],
+    });
   });
 
   it("adds a step after the admin access to Post-Exploitation and a new local flag at the end of Initial Access", () => {
-    const d = windowsHost();
+    const d = walked();
     const doc = buildTargetDraft(d, target([H]), {});
     d.log.push(entry("local", H, 25, { kind: "flag", flagKind: "local", value: "xyz" }), entry("dump", H, 60, cmd("hashes")));
-    d.checklist.push(goal(H, ["dump"]));
+    d.findings[1].stepEntryIds.push("dump");
     const { doc: next, added } = addNewEvidence(doc, d, target([H]), {}, []);
     expect(added).toEqual(["local", "dump"]);
     expect(evidenceUnder(next, "foothold")).toEqual(["ferox", "shot", "curl", "local"]);
@@ -495,24 +721,34 @@ describe("addNewEvidence", () => {
   });
 
   it("puts a new entry-phase step before the local flag, and a new proof flag first in Post-Exploitation", () => {
-    const d = windowsHost();
+    const d = walked();
     d.log.push(entry("local", H, 25, { kind: "flag", flagKind: "local", value: "xyz" }), entry("dump", H, 60, cmd("hashes")));
-    d.checklist.push(goal(H, ["dump"]));
+    d.findings[1].stepEntryIds.push("dump");
     d.log = d.log.filter((e) => e.id !== "flag");
     const doc = buildTargetDraft(d, target([H]), {});
     d.log.push(entry("upload", H, 19, cmd("ok")), entry("flag", H, 55, proofFlag));
-    d.checklist.push(goal(H, ["upload"]));
+    d.findings[0].stepEntryIds.push("upload");
     const { doc: next } = addNewEvidence(doc, d, target([H]), {}, []);
     expect(evidenceUnder(next, "foothold")).toEqual(["ferox", "shot", "curl", "upload", "local"]);
     expect(evidenceUnder(next, "post")).toEqual(["flag", "dump"]);
+    expect(stepOf(next, "flag").content![0]).toEqual({ type: "slot", attrs: { hint: FLAG_HINT_TEXT } });
+  });
+
+  it("puts a screenshot logged after a step on the page into that step", () => {
+    const d = walked();
+    const doc = buildTargetDraft(d, target([H]), {});
+    d.log.push(entry("curlshot", H, 22, shot));
+    const { doc: next, added } = addNewEvidence(doc, d, target([H]), {}, []);
+    expect(added).toEqual(["curlshot"]);
+    expect(stepOf(next, "curl").content!.map((n) => n.attrs?.entryId ?? "S")).toEqual(["S", "curl", "curlshot"]);
   });
 
   it("does not re-add removed entries or ones already on the page", () => {
-    const d = windowsHost();
+    const d = walked();
     const doc = buildTargetDraft(d, target([H]), {});
     const withoutWhoami: ReportNode = {
       ...doc,
-      content: doc.content!.filter((n, i, all) => n.attrs?.entryId !== "whoami" && all[i + 1]?.attrs?.entryId !== "whoami"),
+      content: doc.content!.map((n) => (n.type === "steps" ? { ...n, content: n.content!.filter((s) => s.attrs?.entryId !== "whoami") } : n)),
     };
     expect(addNewEvidence(doc, d, target([H]), {}, []).added).toEqual([]);
     const res = addNewEvidence(withoutWhoami, d, target([H]), {}, ["whoami"]);
@@ -520,56 +756,64 @@ describe("addNewEvidence", () => {
     expect(res.doc).toEqual(withoutWhoami);
   });
 
-  it("creates a missing phase heading in the sample's order", () => {
+  it("creates a missing phase heading in the sample's order, with its steps list", () => {
     const d = windowsHost();
     d.grants = [];
     const doc = buildTargetDraft(d, target([H]), {});
-    expect(phasesOf(doc)).toEqual(["enum", "foothold", "post", "tested"]);
+    expect(phasesOf(doc)).toEqual(["enum", "post", "tested"]);
     d.grants = [grant(H, "user", "curl", 20), grant(H, "system", "printspoofer", 50)];
-    d.checklist.push(goal(H, ["curl", "printspoofer"]));
     const { doc: next, added } = addNewEvidence(doc, d, target([H]), {}, []);
     expect(added).toEqual(["curl", "printspoofer"]);
     expect(phasesOf(next)).toEqual(["enum", "foothold", "privesc", "post", "tested"]);
-    expect(evidenceUnder(next, "foothold")).toEqual(["ferox", "shot", "whoami", "curl"]);
+    expect(evidenceUnder(next, "foothold")).toEqual(["curl"]);
     expect(evidenceUnder(next, "privesc")).toEqual(["printspoofer"]);
+    const lines = outline(next);
+    expect(lines.slice(lines.indexOf("# foothold"), lines.indexOf("# post"))).toEqual([
+      "# foothold", "[", "-", "S", "curl", "]", "# privesc", "[", "-", "S", "printspoofer", "]",
+    ]);
   });
 });
 
-describe("AD set draft", () => {
-  function adSet(): ReportData {
-    const d = empty();
-    d.hosts = [host("h-dc01", "dc01", true), host("h-ad02", "ad02", true), host("h-ms01", "ms01", true)];
-    d.services = [service("h-dc01", 88), service("h-dc01", 389), service("h-ms01", 80)];
-    d.log = [
-      entry("ms-scan", "h-ms01", -5, { kind: "command", blocks: [{ command: "nmap 10.0.0.1", output: "80 open" }] }),
-      entry("ms-rce", "h-ms01", 0, cmd("uid")),
-      entry("ad-winrm", "h-ad02", 10, cmd("ok")),
-      entry("ad-dump", "h-ad02", 15, cmd("hash")),
-      entry("dc-psexec", "h-dc01", 20, cmd("system")),
-      entry("dc-flag", "h-dc01", 25, proofFlag),
-    ];
-    d.grants = [grant("h-ms01", "user", "ms-rce", 0), grant("h-ad02", "user", "ad-winrm", 10)];
-    d.checklist = [goal("h-ad02", ["ad-dump"]), goal("h-ms01", ["ms-scan"])];
-    d.hops = [hop("h-ms01", "h-ad02", "ad-winrm", 10), hop("h-ad02", "h-dc01", "dc-psexec", 20)];
-    return d;
-  }
+const AD_HOSTS = ["h-ad02", "h-dc01", "h-ms01"];
+function adSet(): ReportData {
+  const d = empty();
+  d.hosts = [host("h-dc01", "dc01", true), host("h-ad02", "ad02", true), host("h-ms01", "ms01", true)];
+  d.services = [service("h-dc01", 88), service("h-dc01", 389), service("h-ms01", 80)];
+  d.log = [
+    entry("ms-scan", "h-ms01", -5, { kind: "command", blocks: [{ command: "nmap 10.0.0.1", output: "80 open" }] }),
+    entry("ms-rce", "h-ms01", 0, cmd("uid")),
+    entry("ad-winrm", "h-ad02", 10, cmd("ok")),
+    entry("ad-dump", "h-ad02", 15, cmd("hash")),
+    entry("dc-psexec", "h-dc01", 20, cmd("system")),
+    entry("dc-flag", "h-dc01", 25, proofFlag),
+  ];
+  d.grants = [grant("h-ms01", "user", "ms-rce", 0), grant("h-ad02", "user", "ad-winrm", 10)];
+  d.checklist = [goal("h-ad02", ["ad-dump"]), goal("h-ms01", ["ms-scan"])];
+  d.hops = [hop("h-ms01", "h-ad02", "ad-winrm", 10), hop("h-ad02", "h-dc01", "dc-psexec", 20)];
+  return d;
+}
 
-  it("opens with one Port Scan Results table, names phases by how each machine was entered, ends with the attack chain", () => {
-    const doc = buildTargetDraft(adSet(), target(["h-ad02", "h-dc01", "h-ms01"], "ad-set"), {});
+describe("AD set draft", () => {
+  /** A machine's first phase after its Service Enumeration heading. */
+  const firstPhase = (doc: ReportNode, hostId: string) =>
+    doc.content?.find((n) => n.type === "phase" && n.attrs?.hostId === hostId && n.attrs?.phase !== "enum")?.attrs?.phase;
+
+  it("opens with the attack-path table, names phases by how each machine was entered, and places only placing entries", () => {
+    const doc = buildTargetDraft(adSet(), target(AD_HOSTS, "ad-set"), {});
     const nodes = doc.content ?? [];
-    expect(nodes[0]).toEqual({ type: "generated", attrs: { kind: "port-scan", hostId: null, appendix: "inline" } });
-    expect(nodes[nodes.length - 1].attrs?.kind).toBe("attack-chain");
+    expect(nodes[0]).toEqual({ type: "generated", attrs: { kind: "attack-path", hostId: null, appendix: "inline" } });
+    expect(nodes.filter((n) => n.type === "generated" && n.attrs?.hostId === null)).toHaveLength(1);
     const facts = nodes.filter((n) => n.attrs?.kind === "facts").map((n) => n.attrs?.hostId);
     // The attack path: the entry machine, then by when each was reached, the DC last.
     expect(facts).toEqual(["h-ms01", "h-ad02", "h-dc01"]);
-    const firstPhase = (hostId: string) => nodes.find((n) => n.type === "phase" && n.attrs?.hostId === hostId)?.attrs?.phase;
-    expect(firstPhase("h-ms01")).toBe("foothold");
-    expect(firstPhase("h-ad02")).toBe("lateral");
-    expect(firstPhase("h-dc01")).toBe("domain");
-    // No Service Enumeration per machine: a machine's scans are in its first phase.
-    expect(evidenceUnder(doc, "foothold", "h-ms01")).toEqual(["ms-scan", "ms-rce"]);
+    expect(firstPhase(doc, "h-ms01")).toBe("foothold");
+    expect(firstPhase(doc, "h-ad02")).toBe("lateral");
+    expect(firstPhase(doc, "h-dc01")).toBe("domain");
+    // Scans and goal evidence stay in the rail; the ports table covers the scan.
+    expect(evidenceIdsIn(doc).has("ms-scan")).toBe(false);
+    expect(evidenceIdsIn(doc).has("ad-dump")).toBe(false);
+    expect(evidenceUnder(doc, "foothold", "h-ms01")).toEqual(["ms-rce"]);
     expect(evidenceUnder(doc, "lateral", "h-ad02")).toEqual(["ad-winrm"]);
-    expect(evidenceUnder(doc, "privesc", "h-ad02")).toEqual(["ad-dump"]);
     expect(evidenceUnder(doc, "domain", "h-dc01")).toEqual(["dc-psexec"]);
     expect(evidenceUnder(doc, "post", "h-dc01")).toEqual(["dc-flag"]);
   });
@@ -579,20 +823,20 @@ describe("AD set draft", () => {
     d.findings = [
       { id: "f-da", hostIds: ["h-ad02", "h-dc01"], serviceIds: [], stepEntryIds: ["ad-dump", "dc-psexec"] } as unknown as Finding,
     ];
-    const doc = buildTargetDraft(d, target(["h-ad02", "h-dc01", "h-ms01"], "ad-set"), {});
+    const doc = buildTargetDraft(d, target(AD_HOSTS, "ad-set"), {});
     const nodes = doc.content ?? [];
     const vulns = nodes.flatMap((n, i) => (n.type === "vuln" ? [i] : []));
     expect(vulns).toHaveLength(1);
     const heading = [...nodes.slice(0, vulns[0])].reverse().find((n) => n.type === "phase");
     expect(heading?.attrs).toEqual({ phase: "privesc", hostId: "h-ad02" });
+    expect(evidenceUnder(doc, "privesc", "h-ad02")).toEqual(["ad-dump"]);
   });
 
   it("takes the last host in the hop chain as the DC when no host runs Kerberos and LDAP", () => {
     const d = adSet();
     d.services = [];
-    const doc = buildTargetDraft(d, target(["h-ad02", "h-dc01", "h-ms01"], "ad-set"), {});
-    const firstPhase = (hostId: string) => doc.content?.find((n) => n.type === "phase" && n.attrs?.hostId === hostId)?.attrs?.phase;
-    expect(firstPhase("h-dc01")).toBe("domain");
-    expect(firstPhase("h-ad02")).toBe("lateral");
+    const doc = buildTargetDraft(d, target(AD_HOSTS, "ad-set"), {});
+    expect(firstPhase(doc, "h-dc01")).toBe("domain");
+    expect(firstPhase(doc, "h-ad02")).toBe("lateral");
   });
 });

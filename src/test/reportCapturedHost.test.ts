@@ -114,8 +114,13 @@ describe("xfer03's report page makes no false claim", () => {
     expect(proofCompanions(data, XFER, flag("proof")).map((e) => e.id)).toEqual([id("proof-read"), id("proof-shot")]);
   });
 
-  it("shows the companions in the flag blocks, once", () => {
-    const evidence = (doc.content ?? []).filter((n) => n.type === "evidence").map((n) => n.attrs?.entryId as string);
+  it("shows the companions in the flag steps, once", () => {
+    const evidence: string[] = [];
+    const walk = (n: ReportNode) => {
+      if (n.type === "evidence") evidence.push(n.attrs?.entryId as string);
+      n.content?.forEach(walk);
+    };
+    walk(doc);
     const after = (key: string, n: number) => evidence.slice(evidence.indexOf(id(key)), evidence.indexOf(id(key)) + n);
     expect(after("local", 2)).toEqual([id("local"), id("local-shot")]);
     expect(after("proof", 3)).toEqual([id("proof"), id("proof-read"), id("proof-shot")]);

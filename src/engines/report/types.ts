@@ -51,12 +51,12 @@ export interface CoverageOverride {
 
 /** The draft layout a section's page is built with. A page saved with an older or missing layout is rebuilt from
  *  scratch the first time it opens (2: OffSec's sample report structure; 3: one finding per heading, Additional
- *  findings, flags with their companions).
+ *  findings, flags with their companions; 4: numbered steps with evidence chips, short draft, ports/result tables).
  *
  *  GUARD: bumping this rebuilds every stored page of every report on its next open. The page written before is kept in
  *  the section meta (`previousDoc`) and the page offers it back ("Restore your previous page"); a bump must keep that
  *  path working (reportSection.test.tsx: "a page rebuilt for a new layout offers the previous one back"). */
-export const DRAFT_LAYOUT = 3;
+export const DRAFT_LAYOUT = 4;
 
 /** Stored in `report_sections.meta`. */
 export interface SectionMeta {
@@ -98,11 +98,26 @@ export type ReportNode = {
 export type Phase = "enum" | "foothold" | "privesc" | "lateral" | "domain" | "post" | "additional" | "tested";
 
 /**
- * Blocks rendered from live data. `facts` is a machine's numbered heading ("Target #1 – 10.0.0.5"); `port-scan` the
- * Port Scan Results table (one host, or the whole AD set when `hostId` is null); `tested` the slim Also tested lines;
- * `scope`, `msf` and `cleanup` the Methodologies facts.
+ * Blocks rendered from live data. `facts` is a machine's numbered heading ("Target #1 – 10.0.0.5"); `result` the
+ * "Result:" line under it; `ports` its port table (Port, Service, Version, Notes); `tested` the slim Also tested lines;
+ * `attack-path` the AD set's opening table (`hostId` null); `findings` the High-Level Summary's findings table;
+ * `scope-table` the 1.4 Scope table; `msf`, `cleanup` the Methodologies facts. `port-scan`, `attack-chain` and `scope`
+ * are older layouts' blocks: still rendered so old pages open, never drafted.
  */
-export type GeneratedKind = "facts" | "port-scan" | "tested" | "attack-chain" | "scope" | "msf" | "cleanup" | "references";
+export type GeneratedKind =
+  | "facts"
+  | "result"
+  | "ports"
+  | "tested"
+  | "attack-path"
+  | "findings"
+  | "scope-table"
+  | "port-scan"
+  | "attack-chain"
+  | "scope"
+  | "msf"
+  | "cleanup"
+  | "references";
 
 /** Where a block's content sits: in the flow, moved to an appendix, or trimmed inline with the full copy there. */
 export type AppendixPlacement = "inline" | "moved" | "split";
@@ -141,6 +156,24 @@ export interface GeneratedAttrs {
   kind: GeneratedKind;
   hostId: string | null;
   appendix: Exclude<AppendixPlacement, "split">;
+}
+
+/** One numbered step of a `steps` list (Steps to reproduce): the owner's sentence, then its evidence. */
+export interface StepAttrs {
+  /** The entry the step was drafted from; null for a step the owner added. */
+  entryId: string | null;
+}
+
+/** A machine's port table; `notes` is the owner's Notes column. */
+export interface PortsAttrs extends GeneratedAttrs {
+  /** Service id → owner text. */
+  notes: Record<string, string>;
+}
+
+/** Stored in `report_sections.meta` of an owner-written page (kind `page`). */
+export interface PageMeta {
+  title: string;
+  placement: "appendix" | "body";
 }
 
 export interface VulnAttrs {

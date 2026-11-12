@@ -5,7 +5,7 @@ import { defineFileDropHandler, defineFilePasteHandler } from "prosekit/extensio
 import type { Node as PMNode } from "prosekit/pm/model";
 import { NodeSelection, type Command } from "prosekit/pm/state";
 import { ProseKit, useDocChange, useExtension, useKeymap } from "prosekit/react";
-import { ownerParagraphs, isFigure, stepTitleBefore, type EvidenceAttrs, type PageHeadings, type ReportData, type ReportNode } from "../../../engines/report";
+import { ownerParagraphs, isFigure, stepTitleBefore, type DocPath, type EvidenceAttrs, type PageHeadings, type ReportData, type ReportNode } from "../../../engines/report";
 import { reportError } from "../../../lib/lockSignal";
 import { RavenError } from "../../../types/errors";
 import { BlockHandle } from "./BlockHandle";
@@ -84,14 +84,23 @@ export function insertNodesAtCursor(editor: Editor, nodes: ReportNode[]): boolea
   });
 }
 
-/** Inserts nodes among the page's top-level blocks, before the one at `index`. */
-export function insertNodesAt(editor: Editor, index: number, nodes: ReportNode[]): boolean {
+/** Inserts nodes at a path (`DocPath`: top-level index, then child indices; the last is where the nodes go in their
+ *  parent), as `endOfPhase` returns it. */
+export function insertNodesAt(editor: Editor, path: DocPath, nodes: ReportNode[]): boolean {
   return editor.exec((state, dispatch) => {
     const made = nodes.map((n) => state.schema.nodeFromJSON(n));
     let at = 0;
-    state.doc.forEach((child, _offset, i) => {
-      if (i < index) at += child.nodeSize;
-    });
+    let parent: PMNode = state.doc;
+    for (let depth = 0; depth < path.length; depth++) {
+      const index = path[depth];
+      if (index > parent.childCount) return false;
+      for (let i = 0; i < index; i++) at += parent.child(i).nodeSize;
+      if (depth < path.length - 1) {
+        if (index >= parent.childCount) return false;
+        parent = parent.child(index);
+        at += 1;
+      }
+    }
     dispatch?.(state.tr.insert(at, made).scrollIntoView());
     return true;
   });
@@ -163,28 +172,37 @@ export function selectBlockAt(editor: Editor, pos: number) {
 }
 
 /**
- * Brings the page to `after`, a copy of `before` (the page as it is) with top-level blocks added and none removed or
- * reordered, by inserting only the new blocks, so the owner's cursor and history stay. Returns the inserted nodes.
+ * Brings the page to `after`, a copy of `before` (the page as it is) with blocks added (at the top level or inside a
+ * block, such as a step in a steps list) and none removed or reordered, by inserting only the new blocks, so the
+ * owner's cursor and history stay. Returns the inserted nodes.
  */
 export function insertAdded(editor: Editor, before: ReportNode, after: ReportNode): PMNode[] {
-  const was = before.content ?? [];
-  const now = after.content ?? [];
   const inserted: number[] = [];
+  const same = (a: ReportNode, b: ReportNode) => a === b || JSON.stringify(a) === JSON.stringify(b);
+  // The same steps list or step with blocks added inside it (`addNewEvidence` adds steps and evidence there).
+  const grown = (a: ReportNode, b: ReportNode) =>
+    (a.type === "steps" || a.type === "step") && a.type === b.type && JSON.stringify(a.attrs ?? null) === JSON.stringify(b.attrs ?? null);
   editor.exec((state, dispatch) => {
     const tr = state.tr;
-    let pos = 0;
-    let j = 0;
-    for (const n of now) {
-      if (j < was.length && (n === was[j] || JSON.stringify(n) === JSON.stringify(was[j]))) {
-        pos += tr.doc.child(j + inserted.length).nodeSize;
-        j++;
-        continue;
+    // Walks `now` against `was`, the children of the node whose content starts at `start`. Insertions only ever land
+    // after every position recorded so far, so those stay valid.
+    const merge = (was: ReportNode[], now: ReportNode[], start: number) => {
+      let pos = start;
+      let j = 0;
+      for (const n of now) {
+        if (j < was.length && (same(n, was[j]) || grown(n, was[j]))) {
+          if (!same(n, was[j])) merge(was[j].content ?? [], n.content ?? [], pos + 1);
+          pos += tr.doc.nodeAt(pos)!.nodeSize;
+          j++;
+          continue;
+        }
+        const made = state.schema.nodeFromJSON(n);
+        tr.insert(pos, made);
+        inserted.push(pos);
+        pos += made.nodeSize;
       }
-      const made = state.schema.nodeFromJSON(n);
-      tr.insert(pos, made);
-      inserted.push(pos);
-      pos += made.nodeSize;
-    }
+    };
+    merge(before.content ?? [], after.content ?? [], 0);
     dispatch?.(tr);
     return true;
   });
@@ -192,13 +210,15 @@ export function insertAdded(editor: Editor, before: ReportNode, after: ReportNod
   return inserted.map((p) => doc.nodeAt(p)).filter((n): n is PMNode => n !== null);
 }
 
-/** Removes these exact top-level nodes where they still stand unchanged; ones the owner has since edited stay. */
+/** Removes these exact nodes (top-level or nested) where they still stand unchanged; ones the owner has since edited stay. */
 export function removeExact(editor: Editor, nodes: PMNode[]): boolean {
   const set = new Set(nodes);
   return editor.exec((state, dispatch) => {
     const spans: [number, number][] = [];
-    state.doc.forEach((child, offset) => {
-      if (set.has(child)) spans.push([offset, offset + child.nodeSize]);
+    state.doc.descendants((child, pos) => {
+      if (!set.has(child)) return true;
+      spans.push([pos, pos + child.nodeSize]);
+      return false;
     });
     if (spans.length === 0) return false;
     const tr = state.tr;
