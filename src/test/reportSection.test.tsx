@@ -177,6 +177,58 @@ describe("Report view", () => {
     await waitFor(() => expect(screen.queryByRole("region", { name: "To do" })).toBeNull());
   });
 
+  it("the strip's To do opens the panel with focus in it; Esc and Close To do hand focus back to the button", async () => {
+    await seedLnx(80);
+    mount();
+    await ready();
+    await waitFor(() => expect(editors.length).toBe(1));
+    const button = screen.getByRole("button", { name: /^To do/ });
+    // Keyboard activation: focus the button, then press it.
+    button.focus();
+    fireEvent.click(button);
+    const panel = await screen.findByRole("region", { name: "To do" });
+    await waitFor(() => expect(panel.contains(document.activeElement)).toBe(true));
+    // Its first check has focus, so the arrows and Esc work at once.
+    expect(within(panel).getByRole("list", { name: "Checks" }).contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(document.activeElement!, { key: "Escape", code: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("region", { name: "To do" })).toBeNull());
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /^To do/ }));
+
+    fireEvent.click(screen.getByRole("button", { name: /^To do/ }));
+    const again = await screen.findByRole("region", { name: "To do" });
+    fireEvent.click(within(again).getByRole("button", { name: "Close To do" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "To do" })).toBeNull());
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /^To do/ }));
+  });
+
+  it("closing the panel opened from a tab's N to do hands focus back to that tab", async () => {
+    await seedLnx(80);
+    mount();
+    await ready();
+    await waitFor(() => expect(editors.length).toBe(1));
+    fireEvent.click(rowFor("lnx02").querySelector<HTMLElement>("[data-tab-state]")!);
+    const panel = await screen.findByRole("region", { name: "To do" });
+    await waitFor(() => expect(panel.contains(document.activeElement)).toBe(true));
+    fireEvent.keyDown(document.activeElement!, { key: "Escape", code: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("region", { name: "To do" })).toBeNull());
+    expect(document.activeElement).toBe(rowFor("lnx02"));
+  });
+
+  it("an empty To do panel takes focus itself, so Esc still closes it", async () => {
+    mount();
+    await ready();
+    fireEvent.click(tab("Closing"));
+    const button = screen.getByRole("button", { name: /^To do/ });
+    button.focus();
+    fireEvent.click(button);
+    const panel = await screen.findByRole("region", { name: "To do" });
+    expect(within(panel).getByText("No gaps")).toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement).toBe(panel));
+    fireEvent.keyDown(panel, { key: "Escape", code: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("region", { name: "To do" })).toBeNull());
+    expect(document.activeElement).toBe(button);
+  });
+
   it("Front matter's segmented row switches between Details, Introduction, Summary, Considerations, Methodology", async () => {
     mount();
     await ready();

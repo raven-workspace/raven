@@ -1,5 +1,5 @@
 import { Check as CheckIcon, Circle, WarningCircle, X } from "@phosphor-icons/react";
-import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { groupChecks, type Check, type CheckGroup, type FlagKind } from "../../engines/report";
 import { cx } from "../../lib/cx";
 import { Button, Disclosure, IconButton, labelClass, Toggle, Tooltip } from "../../ui";
@@ -155,17 +155,27 @@ export function TodoPanel({
   onClose(): void;
   className?: string;
 }) {
+  // Opened, focus moves in (its first check, else the panel itself) so Esc and the arrows work at once.
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const panel = ref.current;
+    (panel?.querySelector<HTMLElement>('[aria-label="Checks"] button') ?? panel)?.focus();
+  }, []);
+  // Esc closes from anywhere in the panel. A focused check shows its tooltip, whose layer marks Esc handled before it
+  // reaches here; the panel closes anyway, tooltip and all.
   const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
-    if (e.key !== "Escape" || e.defaultPrevented) return;
+    if (e.key !== "Escape") return;
     e.preventDefault();
     e.stopPropagation();
     onClose();
   };
   return (
     <section
+      ref={ref}
       aria-label="To do"
+      tabIndex={-1}
       onKeyDown={onKeyDown}
-      className={cx("grid max-h-80 min-h-0 grid-rows-[auto_minmax(0,1fr)] border-b border-line bg-surface", className)}
+      className={cx("grid max-h-80 min-h-0 outline-none grid-rows-[auto_minmax(0,1fr)] border-b border-line bg-surface", className)}
     >
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 py-1 pl-6 pr-4">
         <h2 className={cx(labelClass, "m-0")}>To do</h2>

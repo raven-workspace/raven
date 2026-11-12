@@ -183,7 +183,8 @@ function resultParagraph(schema: Schema, runs: Run[]): PMNode {
   const code = schema.marks.code;
   const text = [
     schema.text("Result:", bold ? [bold.create()] : []),
-    ...runs.map((r) => schema.text(r.text, r.code && code ? [code.create()] : [])),
+    // ProseMirror has no empty text nodes: an empty run (a flag logged with no value) is left out.
+    ...runs.filter((r) => r.text !== "").map((r) => schema.text(r.text, r.code && code ? [code.create()] : [])),
   ];
   return schema.nodes.paragraph.create({ fromEntry: null }, text);
 }

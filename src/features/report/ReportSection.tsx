@@ -802,6 +802,18 @@ function ReportBody({
 
   // The To do panel lists the open tab's checks: a target's own, Front matter's report-level ones.
   const [todoOpen, setTodoOpen] = useState(false);
+  // What opened the panel (the strip's To do button or a tab): focus goes back there when it closes.
+  const todoOpener = useRef<HTMLElement | null>(null);
+  const openTodo = (opener: HTMLElement | null) => {
+    todoOpener.current = opener;
+    setTodoOpen(true);
+  };
+  const closeTodo = () => {
+    setTodoOpen(false);
+    const back = todoOpener.current;
+    todoOpener.current = null;
+    if (back?.isConnected) back.focus();
+  };
   const openChecks = openAppendix ? [] : open?.target ? (checks.get(open.section.id) ?? []) : open?.item.group === "front" ? reportLevel : [];
   const machines = open?.target ? open.target.hostIds.map((id) => ({ hostId: id, name: data.hosts.find((h) => h.id === id)?.name ?? "Host" })) : [];
   const todoPanel = todoOpen ? (
@@ -810,7 +822,7 @@ function ReportBody({
       checks={openChecks}
       onPick={pickCheck}
       actionFor={checkAction}
-      onClose={() => setTodoOpen(false)}
+      onClose={closeTodo}
       flags={
         !openAppendix && open?.target ? (
           <ExpectedFlags machines={machines} flagsOf={(id) => expectedFlags(open.target!, id, reportMeta)} onChange={setFlags} />
@@ -922,7 +934,7 @@ function ReportBody({
         targets={targetEntries.length}
         todo={gaps}
         todoOpen={todoOpen}
-        onTodo={() => setTodoOpen((was) => !was)}
+        onTodo={(button) => (todoOpen ? closeTodo() : openTodo(button))}
         rail={narrow ? { open: railOpen, onToggle: () => toggleRail(!railOpen) } : undefined}
       />
       {entries.length === 0 ? (
@@ -942,7 +954,8 @@ function ReportBody({
             openId={openTabId}
             onOpen={openTab}
             onReorder={reorder}
-            onTodo={() => setTodoOpen(true)}
+            // A click doesn't focus a button in WebKit: the way back is the tab itself.
+            onTodo={(id) => openTodo([...(navRef.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find((t) => t.dataset.id === id) ?? null)}
             exportSlot={null}
             listRef={navRef}
           />

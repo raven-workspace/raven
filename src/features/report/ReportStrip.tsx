@@ -19,14 +19,14 @@ export function dueIn(dueAt: number, now: number): string {
 }
 
 /** The report's To do count: a button that opens the open tab's To do panel (§10.1). */
-function TodoCell({ count, open, onToggle }: { count: number; open: boolean; onToggle(): void }) {
+function TodoCell({ count, open, onToggle }: { count: number; open: boolean; onToggle(button: HTMLElement): void }) {
   return (
     <Tooltip content={open ? "Hide what's left to do" : "Show what's left to do on this tab"}>
       <button
         type="button"
         aria-label={`To do ${count}`}
         aria-expanded={open}
-        onClick={onToggle}
+        onClick={(e) => onToggle(e.currentTarget)}
         className={cx("grid h-7 cursor-default grid-flow-col items-center gap-2 rounded-sm border-0 px-1", open ? "bg-surface-hi" : "bg-transparent hover:bg-surface-hi")}
       >
         <span className={labelClass}>To do</span>
@@ -56,7 +56,8 @@ export function ReportStrip({
   /** Failing checks across the report. */
   todo: number;
   todoOpen: boolean;
-  onTodo(): void;
+  /** Toggles the panel; `button` is where focus returns when it closes. */
+  onTodo(button: HTMLElement): void;
   /** Under 1200px the evidence rail is a drawer: its toggle sits at the strip's right. */
   rail?: { open: boolean; onToggle(): void };
 }) {

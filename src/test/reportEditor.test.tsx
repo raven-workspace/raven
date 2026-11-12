@@ -689,6 +689,17 @@ describe("ReportEditor generated blocks", () => {
     expect(editor().state.doc.child(0).textContent).toBe("Result: shell as ronan, then SYSTEM. local.txt abc123. Done.");
   });
 
+  it("Edit text works on a result line whose flag was logged with no value", async () => {
+    const d = resultData();
+    d.log[1] = entry({ id: "f1", kind: "flag", title: "local", content: { kind: "flag", flagKind: "local", value: "" } });
+    const { onChange, editor } = setupLive(doc({ type: "generated", attrs: { kind: "result", hostId: "h1", appendix: "inline" } }, slot()), d);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    selectBlock(editor(), 0);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit text" }));
+    await waitFor(() => expect(lastDoc(onChange).content?.[0].type).toBe("paragraph"));
+    expect(editor().state.doc.child(0).textContent).toBe("Result: shell as ronan, then SYSTEM. local.txt .");
+  });
+
   it("prints the summary's findings table, the scope table and the AD attack path", async () => {
     const ad = { ...host, id: "h2", name: "dc01", ip: "10.0.0.10", adSetEffective: true, os: "windows" } as Host;
     const d = data({
