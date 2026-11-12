@@ -71,6 +71,11 @@ describe("suggestMoves", () => {
     expect(suggestMoves(d, data).map((s) => s.key)).toEqual(["0", "4"]);
   });
 
+  it("finds long output inside a step and returns its nested path key", () => {
+    const d = doc({ type: "phase", attrs: { phase: "foothold", hostId: "h1" } }, { type: "steps", content: [{ type: "step", attrs: { entryId: "long" }, content: [{ type: "slot", attrs: { hint: "h" } }, ev("inline", "long"), ev("inline", "short")] }] });
+    expect(suggestMoves(d, data).map((s) => s.key)).toEqual(["1.0.1"]);
+  });
+
   it("never flags an unmodified exploit: the page shows it as its URL, never its code", () => {
     const d = doc({ type: "exploit", attrs: { fileId: "f3", markedLines: [], appendix: "inline" } });
     expect(suggestMoves(d, data)).toEqual([]);

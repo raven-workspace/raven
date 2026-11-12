@@ -7,9 +7,9 @@ import { serviceCoverage } from "./coverage";
 import { captionOf, isWeakCaption, stepTitleBefore } from "./figures";
 import { expectedFlags, isValidOsid } from "./meta";
 import { findFlagInPaste } from "../capture/flag";
-import { blockCompanions, byTime, evidenceIdsIn } from "./draft";
+import { byTime, evidenceIdsIn, FLAG_STEP_HINT } from "./draft";
+import { PHASE_TITLES } from "./headings";
 import { proofCompanions, proofFacts } from "./proof";
-import { provingEntries } from "./prove";
 import { msfHosts, msfModules } from "./tools";
 import type { CoverageOverride, ReportData, ReportMeta, ReportNode, ReportTarget } from "./types";
 import { absoluteClaims, splitAffected } from "./wording";
@@ -67,6 +67,81 @@ function visit(doc: ReportNode): Visit[] {
 const textOf = (n: ReportNode): string => (n.text ?? "") + (n.content ?? []).map(textOf).join(" ");
 const hasText = (n: ReportNode | undefined) => n != null && (n.type === "slot" || n.type === "paragraph") && textOf(n).trim() !== "";
 const words = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
+
+const isEvidence = (n: ReportNode) => n.type === "evidence" || n.type === "exploit";
+const hasEvidence = (n: ReportNode): boolean => (n.content ?? []).some((c) => isEvidence(c) || hasEvidence(c));
+
+/**
+ * The checks on numbered steps (§10.2, §10.6): a step whose sentence (its first child) is an empty slot is unexplained,
+ * except a flag's step, which prints its own label; a step with the owner's words and no command, output or screenshot
+ * under it can't be replayed. Both are anchored to the step; the replay check names its number and heading.
+ */
+function stepChecks(nodes: Visit[], data: ReportData, sectionId: string): Check[] {
+  const out: Check[] = [];
+  let heading = "this page";
+  for (const { node, path, index, siblings, at } of nodes) {
+    if (node.type === "phase") {
+      const base = PHASE_TITLES[node.attrs?.phase as keyof typeof PHASE_TITLES] ?? heading;
+      const f = data.findings.find((x) => x.id === node.attrs?.findingId);
+      heading = f ? `${base} – ${f.title}` : base;
+    }
+    if (node.type !== "step") continue;
+    const entryId = typeof node.attrs?.entryId === "string" ? node.attrs.entryId : "";
+    const lead = entryId === "" ? undefined : data.log.find((e) => e.id === entryId);
+    const sentence = node.content?.[0];
+    const anchor = { entryId: entryId === "" ? undefined : entryId, nodeIndex: index };
+    if (sentence?.type === "slot" && !hasText(sentence) && sentence.attrs?.hint !== FLAG_STEP_HINT) {
+      out.push({ id: `explain:${entryId === "" ? `node-${index}` : entryId}`, level: "soft", text: "A step has no explanation before it.", anchor });
+    }
+    // A note step is prose already; a step with no sentence yet is the explain check's.
+    if (hasText(sentence) && lead?.kind !== "note" && !hasEvidence(node)) {
+      const n = siblings.slice(0, at + 1).filter((x) => x.type === "step").length;
+      out.push({
+        id: `step-replay:${sectionId}:${path}`,
+        level: "soft",
+        text: `Step ${n} of ${heading} has no command or output under it, so a reader can't replay it. Add it from the log column`,
+        anchor,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Credentials that moved you (§10.6): one found on a machine (`sourceHostId`) that got you onto another, by an access
+ * grant for its username or a hop whose via names it, with no finding on either machine that names the username or has
+ * that grant's or hop's entry as a step. Names the user, never the secret.
+ */
+function credentialChecks(data: ReportData, hosts: Host[]): Check[] {
+  const out: Check[] = [];
+  const nameOf = (id: string) => data.hosts.find((h) => h.id === id)?.name ?? id;
+  const mentions = (text: string, user: string) => text.toLowerCase().includes(user.toLowerCase());
+  for (const c of data.credentials) {
+    const user = c.username.trim();
+    if (user === "" || !c.sourceHostId) continue;
+    const moves: { hostId: string; entryId: string | null }[] = [
+      ...data.grants
+        .filter((g) => data.usernames.find((u) => u.id === g.usernameId)?.username.toLowerCase() === user.toLowerCase())
+        .map((g) => ({ hostId: g.hostId, entryId: g.logEntryId })),
+      ...data.hops.filter((h) => mentions(h.via, user)).map((h) => ({ hostId: h.toHostId, entryId: h.logEntryId })),
+    ];
+    for (const move of moves) {
+      if (move.hostId === c.sourceHostId || !hosts.some((h) => h.id === move.hostId)) continue;
+      const covered = data.findings.some(
+        (f) =>
+          (f.hostIds.includes(move.hostId) || f.hostIds.includes(c.sourceHostId!)) &&
+          ((move.entryId != null && f.stepEntryIds.includes(move.entryId)) || mentions([f.title, f.description ?? "", f.remediation].join("\n"), user)),
+      );
+      if (covered) continue;
+      out.push({
+        id: `cred-finding:${c.id}:${move.hostId}`,
+        level: "soft",
+        text: `${user}'s credential from ${nameOf(c.sourceHostId)} got you onto ${nameOf(move.hostId)}, but no finding covers it. A credential that lets you move is a finding too`,
+      });
+    }
+  }
+  return out;
+}
 
 /**
  * Each expected flag's proof, read from the flag entry and its companions (`proofCompanions`): the flag's own paste and
@@ -185,18 +260,8 @@ export function targetChecks(input: TargetChecksInput): Check[] {
   const onPage = evidenceIdsIn(doc);
   const hosts = target.hostIds.flatMap((id) => data.hosts.find((h) => h.id === id) ?? []);
   const entryOf = (id: string) => data.log.find((e) => e.id === id);
-  // Entries that proved something on one of the target's machines: a screenshot that isn't one came along with a step.
-  const proving = new Set(hosts.flatMap((h) => [...provingEntries(data, h.id).keys()]));
-  // A flag's companions (the command printing it, its screenshot) are part of the flag's block: no explanation needed.
-  const companions = new Set(
-    hosts.flatMap((h) =>
-      data.log.filter((e) => e.kind === "flag" && !e.private && e.hostIds.includes(h.id)).flatMap((f) => blockCompanions(data, h.id, f).map((c) => c.id)),
-    ),
-  );
-
   for (const host of hosts) out.push(...proofChecks(host, expectedFlags(target, host.id, meta), data, onPage));
 
-  const explain: { check: Check; shot: boolean }[] = [];
   const seenEvidence = new Set<string>();
   for (const { node, path, index, siblings, at } of nodes) {
     if (node.type !== "evidence") continue;
@@ -222,27 +287,6 @@ export function targetChecks(input: TargetChecksInput): Check[] {
         });
       }
     }
-    // The walkthrough explains a step before it: the block above, past only the same step's evidence (the entry's other
-    // command blocks, or a screenshot that came along with it). Any other step stops the walk. A flag prints its own
-    // label and needs none.
-    let lead = at - 1;
-    const idAt = (i: number) => (siblings[i]?.type === "evidence" ? siblings[i].attrs?.entryId : undefined);
-    const tagsAlong = (id: unknown) => {
-      const e = typeof id === "string" ? entryOf(id) : undefined;
-      return e?.kind === "screenshot" && !proving.has(e.id);
-    };
-    const skipEntry = (id: unknown) => {
-      while (lead >= 0 && idAt(lead) === id) lead--;
-    };
-    skipEntry(entryId);
-    if (tagsAlong(entryId)) {
-      // Past the other screenshots that came along, to the step they came with.
-      while (lead >= 0 && tagsAlong(idAt(lead))) lead--;
-      if (idAt(lead) !== undefined) skipEntry(idAt(lead));
-    }
-    if (entry.content.kind !== "flag" && !companions.has(entry.id) && !hasText(siblings[lead])) {
-      explain.push({ check: { id: `explain:${entryId}`, level: "soft", text: "A step has no explanation before it.", anchor }, shot: entry.kind === "screenshot" });
-    }
     if (entry.content.kind === "screenshot" && !seenEvidence.has(entryId)) {
       // The caption the page prints: an uncaptioned screenshot's falls back to its step's title.
       const printed = printedCaption(node, path, siblings, at, entry, entryOf);
@@ -257,7 +301,8 @@ export function targetChecks(input: TargetChecksInput): Check[] {
     }
     seenEvidence.add(entryId);
   }
-  out.push(...explain.sort((a, b) => Number(b.shot) - Number(a.shot)).map((e) => e.check));
+  out.push(...stepChecks(nodes, data, sectionId));
+  out.push(...credentialChecks(data, hosts));
 
   // Text copied from the log (a note, observations, a command edited on the page) keeps its entry: once that entry is
   // private or deleted, the words on the page may be what was hidden or meant to go. One check per entry, at its first block.
@@ -386,6 +431,8 @@ const PLURAL: Record<string, (n: number) => string> = {
   "copied-deleted": (n) => `${n} deleted entries had text copied to the page`,
   output: (n) => `${n} commands on the page show no output`,
   explain: (n) => `${n} steps have no explanation`,
+  "step-replay": (n) => `${n} steps have no command or output under them`,
+  "cred-finding": (n) => `${n} credentials that moved you have no finding`,
   caption: (n) => `${n} screenshot captions are over ${MAX_CAPTION_WORDS} words`,
   "caption-weak": (n) => `${n} screenshots have no caption of their own`,
   "caption-step": (n) => `${n} screenshots use their step's title as caption`,
@@ -423,6 +470,8 @@ const SHORT: Record<string, (c: Check) => string> = {
   "copied-deleted": () => "Text from a deleted entry",
   output: () => "A command shows no output",
   explain: () => "A step has no explanation",
+  "step-replay": (c) => `Step ${/^Step (\d+)/.exec(c.text)?.[1] ?? ""} can't be replayed`,
+  "cred-finding": (c) => c.text.replace(/, but no finding covers it.*$/, "").replace(/^(.+?)'s credential from .+ got you onto /, "$1 got you onto ") + ": no finding",
   caption: () => "Caption over 10 words",
   "caption-weak": () => "A screenshot has no caption",
   "caption-step": () => "Caption is its step's title",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { absoluteClaims, groupChecks, isReady, legibilityChecks, proofFacts, reportChecks, stepTitleBefore, targetChecks, fixSteps } from "../engines/report";
+import { absoluteClaims, checkKind, groupChecks, isReady, legibilityChecks, proofFacts, reportChecks, stepTitleBefore, targetChecks, fixSteps } from "../engines/report";
 import type { AppendixIndex, Check, ReportData, ReportNode, ReportTarget } from "../engines/report";
 import type { Host } from "../types/host";
 import type { LogEntry } from "../types/log";
@@ -19,6 +19,10 @@ const flag = (o: Record<string, unknown> = {}, content: Record<string, unknown> 
 const ev = (entryId: string, extra: Record<string, unknown> = {}): ReportNode => ({ type: "evidence", attrs: { entryId, block: 0, keep: null, emphasis: [], appendix: "inline", ...extra } });
 const slot = (text = ""): ReportNode => ({ type: "slot", attrs: { hint: "h" }, content: text ? [{ type: "text", text }] : [] });
 const doc = (...content: ReportNode[]): ReportNode => ({ type: "doc", content });
+const step = (children: ReportNode[], entryId: string | null = null): ReportNode => ({ type: "step", attrs: { entryId }, content: children });
+const steps = (...list: ReportNode[]): ReportNode => ({ type: "steps", content: list });
+const phase = (p = "foothold", extra: Record<string, unknown> = {}): ReportNode => ({ type: "phase", attrs: { phase: p, hostId: "h1", ...extra } });
+const words = (text: string): ReportNode => ({ type: "paragraph", content: [{ type: "text", text }] });
 const target: ReportTarget = { key: "h1", kind: "standalone", hostIds: ["h1"] };
 const noRefs: AppendixIndex = { entries: [], refFor: () => null };
 
@@ -225,7 +229,7 @@ describe("targetChecks", () => {
       expect(find(run(data({ log: [web, bare(), read(), shot()] }), doc(ev("f1", { block: null }), ev("r1"), ev("s1", { block: null }))), "proof-web")).toBeUndefined();
     });
     it("asks no explanation of a flag's companions", () => {
-      const page = doc(ev("f1", { block: null }), ev("r1"), ev("s1", { block: null }));
+      const page = doc(steps(step([{ type: "slot", attrs: { hint: "Say where you read the flag" }, content: [] }, ev("f1", { block: null }), ev("r1"), ev("s1", { block: null })], "f1")));
       expect(find(run(data({ log: [bare(), read(), shot()] }), page), "explain")).toBeUndefined();
     });
   });
@@ -254,33 +258,92 @@ describe("targetChecks", () => {
     expect(find(run(data({ log: [two, flag()] }), whole), "output")).toMatchObject({ id: "output:c2", level: "soft" });
     expect(find(run(data({ log: [two, flag()] }), doc(ev("c2", { block: 0 }), slot("x"), ...goodDoc().content!)), "output")).toBeUndefined();
   });
-  it("explain is soft, screenshots first", () => {
-    // Taken an hour before the flag: a step of its own, not the flag's screenshot.
+  it("explain is soft, one per step whose sentence is an empty slot, anchored to the step", () => {
     const shot = entry({ id: "s1", kind: "screenshot", at: -3_600_000, content: { kind: "screenshot", attachmentId: "a", caption: "ok", fileName: "x" } });
     const cmd = entry({ id: "c1" });
-    const page = doc(slot(""), ev("c1"), slot(""), ev("s1", { block: null }), ...goodDoc().content!);
+    const page = doc(steps(step([slot(""), ev("c1")], "c1"), step([slot(""), ev("s1", { block: null })], "s1")), ...goodDoc().content!);
     const c = run(data({ log: [cmd, shot, flag()] }), page).filter((x) => x.id.startsWith("explain"));
-    expect(c.map((x) => [x.id, x.level])).toEqual([["explain:s1", "soft"], ["explain:c1", "soft"]]);
+    expect(c.map((x) => [x.id, x.level, x.anchor])).toEqual([
+      ["explain:c1", "soft", { entryId: "c1", nodeIndex: 1 }],
+      ["explain:s1", "soft", { entryId: "s1", nodeIndex: 4 }],
+    ]);
     expect(c[0].text).toBe("A step has no explanation before it.");
-    // The walkthrough explains a step before it (OffSec's sample): text after a step doesn't count.
-    expect(find(run(data({ log: [cmd, flag()] }), doc(ev("c1"), slot("because"), ...goodDoc().content!)), "explain")).toBeDefined();
-    const done = doc(slot("Next, list the shares."), ev("c1"), ...goodDoc().content!);
+    const done = doc(steps(step([slot("Next, list the shares."), ev("c1")], "c1")), ...goodDoc().content!);
     expect(find(run(data({ log: [cmd, flag()] }), done), "explain")).toBeUndefined();
+    // The owner's own paragraph is the sentence too.
+    expect(find(run(data({ log: [cmd, flag()] }), doc(steps(step([words("Listed the shares."), ev("c1")], "c1")))), "explain")).toBeUndefined();
   });
-  it("stops at another step: in [slot, A, B] only B is unexplained", () => {
+  it("a step's other evidence shares its sentence: only a step with an empty sentence is unexplained", () => {
     const a = entry({ id: "c1" });
     const b = entry({ id: "c2" });
-    const page = doc(slot("List the shares."), ev("c1"), ev("c2"), ...goodDoc().content!);
-    const c = run(data({ log: [a, b, flag()] }), page).filter((x) => x.id.startsWith("explain"));
-    expect(c.map((x) => x.id)).toEqual(["explain:c2"]);
-    // A command's other blocks share its slot.
-    expect(find(run(data({ log: [a, flag()] }), doc(slot("Scan."), ev("c1", { block: 0 }), ev("c1", { block: 1 }), ...goodDoc().content!)), "explain")).toBeUndefined();
+    const page = doc(steps(step([slot("List the shares."), ev("c1", { block: 0 }), ev("c1", { block: 1 })], "c1"), step([slot(""), ev("c2")], "c2")), ...goodDoc().content!);
+    expect(run(data({ log: [a, b, flag()] }), page).filter((x) => x.id.startsWith("explain")).map((x) => x.id)).toEqual(["explain:c2"]);
   });
-  it("lets the evidence of one step share the slot before it, and asks nothing of a flag", () => {
+  it("asks nothing of a flag's step: its slot is the flag hint and the block prints its own label", () => {
+    const flagSlot: ReportNode = { type: "slot", attrs: { hint: "Say where you read the flag" }, content: [] };
     const shot = entry({ id: "s1", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "ok", fileName: "x" } });
+    const page = doc(steps(step([flagSlot, ev("f1", { block: null }), ev("s1", { block: null })], "f1")));
+    expect(find(run(data({ log: [shot, flag()] }), page), "explain")).toBeUndefined();
+    // An ordinary empty slot on the same step is still unexplained.
+    expect(find(run(data({ log: [shot, flag()] }), doc(steps(step([slot(""), ev("f1", { block: null })], "f1")))), "explain")).toBeDefined();
+  });
+  describe("step-replay", () => {
     const cmd = entry({ id: "c1" });
-    const page = doc(slot("Read the share."), ev("c1"), ev("s1", { block: null }), ev("f1", { block: null }));
-    expect(find(run(data({ log: [cmd, shot, flag()] }), page), "explain")).toBeUndefined();
+    const shot = entry({ id: "s1", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "ok", fileName: "x" } });
+    const check = (page: ReportNode, log: LogEntry[] = [cmd, shot, flag()], d = data({ log })) => find(run(d, page), "step-replay");
+    it("flags a step with owner text and no evidence, naming its number and heading", () => {
+      const c = check(doc(phase(), steps(step([words("Downloaded the repo")]))))!;
+      expect(c.text).toBe("Step 1 of Initial Access has no command or output under it, so a reader can't replay it. Add it from the log column");
+      expect(c).toMatchObject({ id: "step-replay:t1:1.0", level: "soft" });
+      expect(checkKind(c.id)).toBe("step-replay");
+      const second = check(doc(phase(), steps(step([slot("Scanned"), ev("c1")], "c1"), step([slot("Then this")]))));
+      expect(second?.text).toMatch(/^Step 2 of Initial Access /);
+    });
+    it("a step holding only a screenshot, or a command, or an exploit passes", () => {
+      expect(check(doc(phase(), steps(step([slot("Said"), ev("s1", { block: null })], "s1"))))).toBeUndefined();
+      expect(check(doc(phase(), steps(step([slot("Said"), ev("c1")], "c1"))))).toBeUndefined();
+      expect(check(doc(phase(), steps(step([slot("Said"), { type: "exploit", attrs: { fileId: "f9", markedLines: [], appendix: "inline" } }])))) ).toBeUndefined();
+    });
+    it("an empty sentence is the explain check, not this one", () => {
+      const c = run(data({ log: [cmd, flag()] }), doc(phase(), steps(step([slot("")]))));
+      expect(find(c, "step-replay")).toBeUndefined();
+      expect(find(c, "explain")).toBeDefined();
+    });
+    it("evidence nested in a step still satisfies proof present", () => {
+      expect(run(good(), doc(steps(step([slot("Read the proof"), ev("f1", { block: null })], "f1"))))).toEqual([]);
+    });
+  });
+  describe("cred-finding", () => {
+    const two = [host({ id: "h1", name: "ms02" }), host({ id: "h2", name: "ms01" })];
+    const cred = (o: Record<string, unknown> = {}) => ({ id: "cr1", username: "sam.rivera", secret: "Hunter2!Sup3r", sourceHostId: "h2", ...o });
+    const grant = (o: Record<string, unknown> = {}) => ({ id: "g1", usernameId: "u1", hostId: "h1", level: "user", via: "winrm", logEntryId: "sh", at: 1, ...o });
+    const base = (o: Record<string, unknown> = {}) => data({ hosts: two, log: [flag()], credentials: [cred()] as never, usernames: [{ id: "u1", username: "sam.rivera" }] as never, grants: [grant()] as never, ...o });
+    const finding = (o: Record<string, unknown> = {}) => ({ id: "fd1", title: "Weak", description: "", remediation: "", hostIds: ["h1"], serviceIds: [], stepEntryIds: [], ...o });
+    const texts = (d: ReportData) => run(d, goodDoc()).filter((x) => x.id.startsWith("cred-finding"));
+    it("flags a credential from one machine that granted access on another with no finding naming it", () => {
+      const [c] = texts(base());
+      expect(c.text).toBe("sam.rivera's credential from ms01 got you onto ms02, but no finding covers it. A credential that lets you move is a finding too");
+      expect(c).toMatchObject({ id: "cred-finding:cr1:h1", level: "soft" });
+      expect(checkKind(c.id)).toBe("cred-finding");
+    });
+    it("also reads a hop whose via names the user", () => {
+      const d = base({ grants: [], hops: [{ id: "hp", fromHostId: "h2", toHostId: "h1", via: "evil-winrm as sam.rivera", logEntryId: "hx", at: 1 }] as never });
+      expect(texts(d)).toHaveLength(1);
+    });
+    it("no check when a finding on either machine names the username, or has the grant's entry as a step", () => {
+      expect(texts(base({ findings: [finding({ description: "Reused SAM.RIVERA's password" })] as never }))).toEqual([]);
+      expect(texts(base({ findings: [finding({ hostIds: ["h2"], title: "sam.rivera reuse" })] as never }))).toEqual([]);
+      expect(texts(base({ findings: [finding({ stepEntryIds: ["sh"] })] as never }))).toEqual([]);
+      expect(texts(base({ findings: [finding({ hostIds: ["h3"], title: "sam.rivera" })] as never }))).toHaveLength(1);
+    });
+    it("no check for access on the credential's own machine, or on a machine outside the target", () => {
+      expect(texts(base({ credentials: [cred({ sourceHostId: "h1" })] as never }))).toEqual([]);
+      expect(texts(base({ grants: [grant({ hostId: "h2" })] as never, credentials: [cred({ sourceHostId: "h3" })] as never }))).toEqual([]);
+    });
+    it("never puts the credential's secret in the text", () => {
+      const c = texts(base())[0];
+      expect(JSON.stringify(c)).not.toContain("Hunter2");
+    });
   });
   describe("access-shot", () => {
     const HOUR = 3_600_000;
@@ -511,7 +574,7 @@ describe("groupChecks", () => {
     }
   });
   it("words every kind targetChecks makes when there are two of it", () => {
-    const kinds = ["proof-missing", "proof-ip", "proof-screenshot", "proof-web", "proof-identity", "proof-hostname", "proof-path", "proof-shot", "gone", "copied-private", "copied-deleted", "output", "explain", "caption", "caption-weak", "caption-step", "access-shot", "finding:x:severity", "finding:x:title", "finding:x:affected", "finding:x:description", "finding:x:remediation", "wording", "exploit:x:url", "exploit:x:explain", "exploit:x:original", "coverage", "appendix-ref", "move", "legible"];
+    const kinds = ["proof-missing", "proof-ip", "proof-screenshot", "proof-web", "proof-identity", "proof-hostname", "proof-path", "proof-shot", "gone", "copied-private", "copied-deleted", "output", "explain", "step-replay:t1", "cred-finding", "caption", "caption-weak", "caption-step", "access-shot", "finding:x:severity", "finding:x:title", "finding:x:affected", "finding:x:description", "finding:x:remediation", "wording", "exploit:x:url", "exploit:x:explain", "exploit:x:original", "coverage", "appendix-ref", "move", "legible"];
     for (const k of kinds) {
       const id = (n: number) => (k.includes(":x:") ? k.replace(":x:", `:${n}:`) : `${k}:${n}`);
       const [g] = groupChecks([c(id(1), "soft", "one"), c(id(2), "soft", "two")]);
