@@ -7,6 +7,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, resetAuditState } from "../audit/fakeApi";
 import { ReportSectionView } from "../features/report/ReportSection";
+import { useNotesStore } from "../features/notes/useNotesStore";
 import { makeQueryClient } from "../lib/queryClient";
 import type { LogContent, LogEntryInput } from "../types/log";
 import type { ReportDoc } from "../types/report";
@@ -52,7 +53,7 @@ const cmd = (title: string, command: string, over: Partial<LogEntryInput> = {}):
 /** lnx02's log: nmap (already on its page), hydra and smbclient (not), and a private entry. Plus a note, ruled-out items, a credential. */
 async function seed() {
   const nmap = await api.logCreate("e-exam", cmd("nmap scan", "nmap -sV 10.10.30.21", { at: 1_000 }));
-  await api.logCreate("e-exam", cmd("hydra login", "hydra -l bob ssh://10.10.30.21", { at: 2_000 }));
+  const hydra = await api.logCreate("e-exam", cmd("hydra login", "hydra -l bob ssh://10.10.30.21", { at: 2_000 }));
   await api.logCreate("e-exam", cmd("smbclient list", "smbclient -L //10.10.30.21", { at: 3_000 }));
   await api.logCreate("e-exam", cmd("private scratch", "secret-thing", { private: true, at: 4_000 }));
   const report = await api.reportGetOrCreate("e-exam");
@@ -66,12 +67,14 @@ async function seed() {
       { type: "slot", attrs: { hint: "Proof" } },
     ],
   };
-  await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: {}, draftBuiltAt: Date.now() });
+  await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { removedEntryIds: [hydra.id] }, draftBuiltAt: Date.now() });
   await api.noteSave("e-exam", LNX, "Port 22 open\n? why is 8080 filtered\n", false);
   await api.noteSave("e-exam", null, "Private engagement text", true);
   await api.ruledOutCreate({ engagementId: "e-exam", hostId: LNX, text: "Anonymous FTP", reason: "Not enabled", private: false });
   await api.ruledOutCreate({ engagementId: "e-exam", hostId: LNX, text: "Hidden theory", reason: "operator only", private: true });
   await api.credentialCreate("e-exam", { type: "password", username: "bob", secret: "hunter2", scope: "local", localHostId: LNX, sourceHostId: LNX });
+  const sam = await api.usernameCreate("e-exam", { username: "sam" });
+  await api.accessGrantCreate("e-exam", { usernameId: sam.id, hostId: LNX, level: "admin", via: "sudo misconfiguration" });
   await api.credentialCreate("e-exam", { type: "password", username: "alice", secret: "pw", sourceHostId: "h-exam-ms01" });
 }
 
@@ -97,6 +100,11 @@ const evidenceIds = (editor: Editor) => {
     if (n.type.name === "evidence") ids.push(n.attrs.entryId as string);
   });
   return ids;
+};
+const shape = (editor: Editor) => {
+  const out: string[] = [];
+  editor.state.doc.forEach((n) => out.push(n.type.name === "phase" ? `phase:${n.attrs.phase}` : n.type.name === "evidence" ? `evidence:${n.attrs.entryId}` : n.type.name));
+  return out;
 };
 const entryId = async (title: string) => (await api.logList("e-exam")).find((e) => e.title === title)!.id;
 
@@ -127,19 +135,29 @@ describe("Evidence rail", () => {
     const editor = editors[0];
     const hydra = await entryId("hydra login");
     const nmap = await entryId("nmap scan");
+    const save = vi.spyOn(api, "reportSectionSave");
 
-    // The caret is in the last slot, so the entry lands after it.
+    // The owner clicks into the first slot, so the entry lands right after it.
     act(() => {
+      editor.view.dom.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
       let at = 0;
       editor.state.doc.descendants((n, p) => {
-        if (n.type.name === "slot") at = p + 1;
+        if (n.type.name === "slot" && at === 0) at = p + 1;
       });
       editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, at)));
     });
     fireEvent.click(screen.getByRole("button", { name: "Insert hydra login" }));
-    expect(evidenceIds(editor)).toEqual([nmap, hydra]);
-    expect(editor.state.doc.lastChild?.type.name).toBe("slot");
+    expect(shape(editor)).toEqual(["phase:foothold", `evidence:${nmap}`, "slot", `evidence:${hydra}`, "slot", "phase:proof", "slot"]);
     await waitFor(() => expect(titles()).toEqual(["smbclient list"]));
+    // The saved page holds the block, and the entry is no longer remembered as removed.
+    await waitFor(
+      () => {
+        const [, doc, meta] = save.mock.calls.at(-1)!;
+        expect(JSON.stringify(doc)).toContain(hydra);
+        expect((meta as { removedEntryIds?: string[] }).removedEntryIds ?? []).not.toContain(hydra);
+      },
+      { timeout: 3000 },
+    );
     expect(screen.getByRole("tab", { name: "Unused (1)" })).toBeInTheDocument();
 
     // Taking the nmap block off the page puts it back in Unused.
@@ -163,11 +181,9 @@ describe("Evidence rail", () => {
     row.focus();
     fireEvent.keyDown(row, { key: "Enter" });
     expect(evidenceIds(editor)).toContain(smb);
-    // Before the proof heading: it belongs to the foothold phase.
-    const order: string[] = [];
-    editor.state.doc.forEach((n) => order.push(n.type.name === "phase" ? `phase:${n.attrs.phase}` : n.type.name));
-    expect(order.indexOf("evidence", 2)).toBeGreaterThan(-1);
-    expect(order.indexOf("phase:proof")).toBeGreaterThan(order.lastIndexOf("evidence"));
+    // No selection was ever made on the page: it goes to the end of the foothold phase, before the proof heading.
+    const nmap = await entryId("nmap scan");
+    expect(shape(editor)).toEqual(["phase:foothold", `evidence:${nmap}`, "slot", `evidence:${smb}`, "slot", "phase:proof", "slot"]);
     await waitFor(() => expect(titles()).toEqual(["hydra login"]));
     // Focus moved on to the next row instead of falling to the page.
     expect(document.activeElement).toBe(within(unusedList()).getByRole("listitem", { name: /hydra login/ }));
@@ -193,6 +209,10 @@ describe("Evidence rail", () => {
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Creds" }), { button: 0, ctrlKey: false });
     await waitFor(() => expect(screen.getByText("bob")).toBeInTheDocument());
     expect(screen.queryByText("alice")).not.toBeInTheDocument();
+    expect(screen.getByText(/sam on lnx02: admin/)).toBeInTheDocument();
+    expect(screen.getByText("sudo misconfiguration")).toBeInTheDocument();
+    expect(screen.queryByText(/hunter2/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Copy/ })).not.toBeInTheDocument();
   });
 
   it("is a drawer under 1200px, toggled by E", async () => {
@@ -218,5 +238,14 @@ describe("Evidence rail", () => {
     expect(await screen.findByRole("tab", { name: /Unused/ })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("tab", { name: /Unused/ })).not.toBeInTheDocument());
+    // ⌥3 opens it and puts focus on the tabs.
+    fireEvent.keyDown(window, { code: "Digit3", altKey: true });
+    const tab = await screen.findByRole("tab", { name: /Unused/ });
+    await waitFor(() => expect(document.activeElement).toBe(tab));
+
+    // Opening Notes slides the evidence drawer out.
+    act(() => useNotesStore.setState({ open: true }));
+    await waitFor(() => expect(screen.queryByRole("tab", { name: /Unused/ })).not.toBeInTheDocument());
+    act(() => useNotesStore.setState({ open: false }));
   });
 });

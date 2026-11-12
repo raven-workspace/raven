@@ -32,6 +32,9 @@ import { reportError } from "../../lib/lockSignal";
 import type { Report, ReportPatch, ReportSection, SectionKind } from "../../types/report";
 import type { Settings } from "../../types/settings";
 import { Button, Disclosure, EmptyState, ErrorState, LoadingState, queryState, Select, usePageShortcuts, type Hint } from "../../ui";
+import { useArsenalStore } from "../arsenal/useArsenalStore";
+import { useNotesStore } from "../notes/useNotesStore";
+import { usePayloadsStore } from "../payloads/usePayloadsStore";
 import { ReportDataContext, type ReportDataValue } from "./editor/ReportDataContext";
 import { ReportEditor } from "./editor/ReportEditor";
 import { EvidenceDrawer, EvidenceRail } from "./EvidenceRail";
@@ -59,6 +62,7 @@ const HINTS: Hint[] = [
   { keys: "↵", label: "open", priority: 2 },
   { keys: "⌥↑ ⌥↓", label: "reorder targets", priority: 3 },
   { keys: "⌥1–3", label: "outline, page, evidence", priority: 4 },
+  { keys: "⌘↵", label: "insert evidence", priority: 6 },
 ];
 /** Under 1200px the evidence rail is a drawer, which E opens. */
 const NARROW_HINTS: Hint[] = [...HINTS, { keys: "E", label: "evidence", priority: 5 }];
@@ -491,11 +495,24 @@ function ReportBody({
   const railRef = useRef<HTMLElement | null>(null);
   const [sectionRef, narrow] = useNarrow<HTMLElement>(RAIL_BREAKPOINT);
   const [railOpen, setRailOpen] = useState(false);
+  const [railFocus, setRailFocus] = useState(0);
+  // The evidence drawer shares the right edge with Notes, Arsenal and Payloads: opening one slides the other out.
+  const toggleRail = (open: boolean) => {
+    if (open) {
+      useNotesStore.getState().close();
+      useArsenalStore.getState().close();
+      usePayloadsStore.getState().close();
+    }
+    setRailOpen(open);
+  };
+  useEffect(() => useNotesStore.subscribe((st) => { if (st.open) setRailOpen(false); }), []);
+  useEffect(() => useArsenalStore.subscribe((st) => { if (st.open) setRailOpen(false); }), []);
+  useEffect(() => usePayloadsStore.subscribe((st) => { if (st.open) setRailOpen(false); }), []);
   usePageShortcuts("Report", narrow ? NARROW_HINTS : HINTS);
   useKeydown((e) => {
     if (!narrow || !isFreeKey(e) || e.shiftKey || e.key.toLowerCase() !== "e") return;
     e.preventDefault();
-    setRailOpen((o) => !o);
+    toggleRail(!railOpen);
   });
   useKeydown((e) => {
     if (!isFreeKey(e) || (e.key !== "j" && e.key !== "k" && e.key !== "J" && e.key !== "K")) return;
@@ -510,7 +527,10 @@ function ReportBody({
     e.preventDefault();
     if (pane === "outline") focusOutlineRow(navRef.current, 0);
     else if (pane === "rail") {
-      if (narrow) setRailOpen(true);
+      if (narrow) {
+        toggleRail(true);
+        setRailFocus((n) => n + 1);
+      }
       else railRef.current?.focus();
     }
     else if (openEditor()) openEditor()!.focus();
@@ -581,7 +601,7 @@ function ReportBody({
         ready={readyCount}
         targets={targetEntries.length}
         gaps={gaps}
-        rail={narrow ? { open: railOpen, onToggle: () => setRailOpen((o) => !o) } : undefined}
+        rail={narrow ? { open: railOpen, onToggle: () => toggleRail(!railOpen) } : undefined}
       />
       {entries.length === 0 ? (
         ensureFailed ? (
@@ -652,7 +672,7 @@ function ReportBody({
             ) : null}
           </div>
           {narrow ? (
-            <EvidenceDrawer open={railOpen} onClose={() => setRailOpen(false)}>
+            <EvidenceDrawer open={railOpen} focusKey={railFocus} onClose={() => setRailOpen(false)}>
               {rail}
             </EvidenceDrawer>
           ) : (

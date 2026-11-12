@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createEditor, Priority, type Editor, type NodeJSON } from "prosekit/core";
 import type { Node as PMNode } from "prosekit/pm/model";
-import { NodeSelection, Selection, type Command } from "prosekit/pm/state";
+import { NodeSelection, type Command } from "prosekit/pm/state";
 import { ProseKit, useDocChange, useKeymap } from "prosekit/react";
 import { isFigure, type EvidenceAttrs, type ReportData, type ReportNode } from "../../../engines/report";
 import { defineReportExtension } from "./extension";
@@ -27,10 +27,12 @@ function layoutOf(doc: PMNode, data: ReportData, sectionId: string, figureOffset
   return { sectionId, figureOf: (n) => figures.get(n) ?? null, pathOf: (n) => paths.get(n) ?? null };
 }
 
-/** Whether the owner has put a cursor on the page: a block selected, or the caret moved off the start of the page. */
+/** Pages the owner has focused: before that the selection is only ProseMirror's default (often the first block). */
+const touched = new WeakSet<Editor>();
+
+/** Whether the owner has put a cursor on the page: they focused or clicked into it. */
 export function hasPageCursor(editor: Editor): boolean {
-  const { selection, doc } = editor.state;
-  return selection instanceof NodeSelection || !selection.empty || selection.from !== Selection.atStart(doc).from;
+  return touched.has(editor);
 }
 
 /** Inserts nodes after the block the cursor is in, or after a selected block; it never replaces one. */
@@ -165,7 +167,14 @@ export function ReportEditor({
   const mount = useCallback(
     (el: HTMLDivElement) => {
       editor.mount(el);
-      return () => editor.unmount();
+      const mark = () => touched.add(editor);
+      el.addEventListener("focusin", mark);
+      el.addEventListener("pointerdown", mark);
+      return () => {
+        el.removeEventListener("focusin", mark);
+        el.removeEventListener("pointerdown", mark);
+        editor.unmount();
+      };
     },
     [editor],
   );

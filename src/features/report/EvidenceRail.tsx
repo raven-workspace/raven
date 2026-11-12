@@ -1,10 +1,9 @@
-import { CopyIcon, XIcon } from "@phosphor-icons/react";
+import { XIcon } from "@phosphor-icons/react";
 import type { Editor } from "prosekit/core";
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { endOfPhase, evidenceIdsIn, evidenceNodes, type ReportData, type ReportNode, type ReportTarget } from "../../engines/report";
 import { openThreads } from "../../engines/notes/threads";
 import { cx } from "../../lib/cx";
-import { copySecret } from "../../lib/clipboard";
 import { isDialogOpen, useKeydown } from "../../lib/keys";
 import type { Credential } from "../../types/credentials";
 import type { LogEntry } from "../../types/log";
@@ -81,18 +80,17 @@ function UnusedRow({ entry, onInsert }: { entry: LogEntry; onInsert(entry: LogEn
 function UnusedTab({
   data,
   target,
-  doc,
+  unused,
   editor,
   onInserted,
 }: {
   data: ReportData;
   target: ReportTarget;
-  doc: ReportNode;
+  unused: LogEntry[];
   editor: Editor | null;
   onInserted(entryId: string): void;
 }) {
   const [order, setOrder] = useState<LogOrder>("oldest");
-  const unused = useMemo(() => unusedEntries(data, target, doc), [data, target, doc]);
   const shown = order === "oldest" ? unused : [...unused].reverse();
 
   const insert = (entry: LogEntry, row: HTMLElement | null) => {
@@ -110,8 +108,7 @@ function UnusedTab({
   if (unused.length === 0) return <p className="m-0 text-meta text-muted-2">Everything logged on this target is on the page.</p>;
   return (
     <div className="grid gap-2">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-        <span className="text-meta text-muted-2">↵ inserts at the cursor</span>
+      <div className="grid justify-items-end">
         <OrderButton order={order} onChange={setOrder} />
       </div>
       <ul aria-label="Unused log entries" className="m-0 grid list-none gap-1 p-0">
@@ -200,26 +197,26 @@ const who = (c: Pick<Credential, "username" | "domain">) => (c.domain ? `${c.dom
 function CredsTab({ data, target }: { data: ReportData; target: ReportTarget }) {
   const name = (id: string) => data.hosts.find((h) => h.id === id)?.name ?? "Host";
   const ids = new Set(target.hostIds);
-  const creds = data.credentials.filter((c) => (c.sourceHostId && ids.has(c.sourceHostId)) || (c.localHostId && ids.has(c.localHostId)));
-  const grants = data.grants.filter((g) => ids.has(g.hostId));
-  const username = (id: string) => data.usernames.find((u) => u.id === id);
+  // Each credential with the target host it belongs to: where it works (local), else where it was found.
+  const creds = data.credentials.flatMap((c) => {
+    const hostId = c.localHostId && ids.has(c.localHostId) ? c.localHostId : c.sourceHostId && ids.has(c.sourceHostId) ? c.sourceHostId : null;
+    return hostId ? [{ c, hostId }] : [];
+  });
+  const grants = data.grants.filter((g) => ids.has(g.hostId)).map((g) => ({ g, user: data.usernames.find((u) => u.id === g.usernameId) }));
   if (creds.length === 0 && grants.length === 0) return <p className="m-0 text-meta text-muted-2">No credentials or access tied to this target.</p>;
   return (
     <div className="grid gap-4">
       {creds.length > 0 && (
         <Block label="Credentials">
           <ul className="m-0 grid list-none gap-2 p-0">
-            {creds.map((c) => (
-              <li key={c.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                <span className="grid min-w-0 gap-1">
-                  <span className="truncate text-code text-fg" title={who(c)}>
-                    {who(c)}
-                  </span>
-                  <span className="text-meta text-muted-2">
-                    {c.type} on {c.localHostId ? name(c.localHostId) : c.sourceHostId ? name(c.sourceHostId) : "the domain"}
-                  </span>
+            {creds.map(({ c, hostId }) => (
+              <li key={c.id} className="grid min-w-0 gap-1">
+                <span className="truncate text-code text-fg" title={who(c)}>
+                  {who(c)}
                 </span>
-                <CopySecret credential={c} />
+                <span className="text-meta text-muted-2">
+                  {c.type} on {name(hostId)}
+                </span>
               </li>
             ))}
           </ul>
@@ -228,10 +225,10 @@ function CredsTab({ data, target }: { data: ReportData; target: ReportTarget }) 
       {grants.length > 0 && (
         <Block label="Access">
           <ul className="m-0 grid list-none gap-2 p-0">
-            {grants.map((g) => (
+            {grants.map(({ g, user }) => (
               <li key={g.id} className="grid gap-1">
                 <span className="text-body text-fg-2">
-                  {username(g.usernameId) ? who(username(g.usernameId)!) : "Unknown user"} on {name(g.hostId)}: {g.level}
+                  {user ? who(user) : "Unknown user"} on {name(g.hostId)}: {g.level}
                 </span>
                 {g.via && <span className="text-meta text-muted-2">{g.via}</span>}
               </li>
@@ -241,12 +238,6 @@ function CredsTab({ data, target }: { data: ReportData; target: ReportTarget }) 
       )}
     </div>
   );
-}
-
-function CopySecret({ credential }: { credential: Credential }) {
-  return credential.secret ? (
-    <IconButton icon={CopyIcon} label={`Copy secret of ${who(credential)}`} onClick={() => void copySecret(credential.secret)} />
-  ) : null;
 }
 
 /**
@@ -270,18 +261,18 @@ export function EvidenceRail({
   onInserted(entryId: string): void;
 }) {
   const [tab, setTab] = useState<RailTab>("unused");
-  const unusedCount = useMemo(() => (target ? unusedEntries(data, target, doc).length : 0), [data, target, doc]);
+  const unused = useMemo(() => (target ? unusedEntries(data, target, doc) : []), [data, target, doc]);
   const active: RailTab = target ? tab : "notes";
   return (
     <Tabs value={active} onValueChange={(v) => setTab(v as RailTab)} className="content-start">
       <TabsList aria-label="Evidence">
-        {target && <TabsTrigger value="unused">{`Unused (${unusedCount})`}</TabsTrigger>}
+        {target && <TabsTrigger value="unused">{`Unused (${unused.length})`}</TabsTrigger>}
         <TabsTrigger value="notes">Notes</TabsTrigger>
         {target && <TabsTrigger value="creds">Creds</TabsTrigger>}
       </TabsList>
       {target && (
         <TabsContent value="unused">
-          <UnusedTab data={data} target={target} doc={doc} editor={editor} onInserted={onInserted} />
+          <UnusedTab data={data} target={target} unused={unused} editor={editor} onInserted={onInserted} />
         </TabsContent>
       )}
       <TabsContent value="notes">
@@ -297,17 +288,30 @@ export function EvidenceRail({
 }
 
 /** The rail as a drawer from the right edge (under 1200px): E or the strip button toggles it, Esc and the X close it. */
-export function EvidenceDrawer({ open, onClose, children }: { open: boolean; onClose(): void; children: React.ReactNode }) {
+export function EvidenceDrawer({
+  open,
+  focusKey,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  /** Changing it while open moves focus to the tabs again (⌥3 on an open drawer). */
+  focusKey: number;
+  onClose(): void;
+  children: React.ReactNode;
+}) {
   const [present, ref] = useDrawerPresence<HTMLElement>(open);
   // Opening moves focus to the rail's tabs; closing gives it back to where it was.
   useEffect(() => {
     if (!open) return;
     const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    ref.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
     return () => {
       if (before?.isConnected) before.focus();
     };
-  }, [open, ref]);
+  }, [open]);
+  useEffect(() => {
+    if (open && present) ref.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
+  }, [open, present, focusKey, ref]);
   useKeydown((e) => {
     if (open && e.key === "Escape" && !e.defaultPrevented && !isDialogOpen()) {
       e.preventDefault();
