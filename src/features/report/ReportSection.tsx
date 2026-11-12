@@ -933,6 +933,8 @@ function ReportBody({
     <TodoPanel
       className="row-start-2"
       checks={openChecks}
+      others={tabs.filter((t) => t.id !== openTabId && (t.todo ?? 0) > 0).map((t) => ({ id: t.id, label: t.label, todo: t.todo ?? 0 }))}
+      onOpenTab={openTab}
       onPick={pickCheck}
       actionFor={checkAction}
       onClose={closeTodo}

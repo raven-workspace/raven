@@ -31,7 +31,7 @@ export function CheckList({
       <ul aria-label="Checks" className="m-0 grid list-none p-0">
         <li className="grid grid-cols-[16px_minmax(0,1fr)] items-start gap-2 py-1 pl-2 pr-2 text-meta text-muted-2">
           <CheckIcon aria-label="pass" className="size-4 text-accent" />
-          <span>No gaps</span>
+          <span>Nothing to do on this tab</span>
         </li>
       </ul>
     );
@@ -142,6 +142,8 @@ export function ExpectedFlags({
 export function TodoPanel({
   checks,
   flags,
+  others = [],
+  onOpenTab,
   onPick,
   actionFor,
   onClose,
@@ -150,17 +152,22 @@ export function TodoPanel({
   checks: Check[];
   /** A target's expected flags, set per machine. */
   flags?: ReactNode;
+  /** The other tabs that still have checks to do (the strip's count is report-wide): each opens its tab. */
+  others?: { id: string; label: string; todo: number }[];
+  onOpenTab?(id: string): void;
   onPick(check: Check): void;
   actionFor?(check: Check): CheckAction | undefined;
   onClose(): void;
   className?: string;
 }) {
-  // Opened, focus moves in (its first check, else the panel itself) so Esc and the arrows work at once.
+  // Opened, and again on another tab picked from it, focus moves in (its first check, else the panel itself) so Esc
+  // and the arrows work at once.
   const ref = useRef<HTMLElement>(null);
+  const [moved, setMoved] = useState(0);
   useEffect(() => {
     const panel = ref.current;
     (panel?.querySelector<HTMLElement>('[aria-label="Checks"] button') ?? panel)?.focus();
-  }, []);
+  }, [moved]);
   // Esc closes from anywhere in the panel. A focused check shows its tooltip, whose layer marks Esc handled before it
   // reaches here; the panel closes anyway, tooltip and all.
   const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
@@ -183,6 +190,30 @@ export function TodoPanel({
       </header>
       <div className="grid min-h-0 content-start overflow-y-auto pb-2 pl-4 pr-4">
         <CheckList checks={checks} onPick={onPick} actionFor={actionFor} />
+        {others.length > 0 && onOpenTab && (
+          <div className="grid gap-1 pt-2">
+            <span className="pl-2 text-meta text-muted-2">Still to do on</span>
+            <ul aria-label="Tabs with checks" className="m-0 grid list-none p-0">
+              {others.map((t) => (
+                <li key={t.id} className="grid">
+                  <button
+                    type="button"
+                    aria-label={`Open ${t.label}, ${t.todo} to do`}
+                    onClick={() => {
+                      onOpenTab(t.id);
+                      setMoved((n) => n + 1);
+                    }}
+                    className="grid min-h-7 w-full cursor-default grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 rounded-sm border-0 bg-transparent py-1 pl-2 pr-2 text-left text-meta text-muted-2 hover:bg-surface hover:text-fg"
+                  >
+                    <WarningCircle aria-hidden className="size-4 text-warn" />
+                    <span className="min-w-0 truncate">{t.label}</span>
+                    <span className="font-mono tabular-nums">{`${t.todo} to do`}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {flags}
       </div>
     </section>

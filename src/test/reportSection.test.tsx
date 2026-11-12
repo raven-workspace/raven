@@ -228,11 +228,42 @@ describe("Report view", () => {
     button.focus();
     fireEvent.click(button);
     const panel = await screen.findByRole("region", { name: "To do" });
-    expect(within(panel).getByText("No gaps")).toBeInTheDocument();
+    expect(within(panel).getByText("Nothing to do on this tab")).toBeInTheDocument();
     await waitFor(() => expect(document.activeElement).toBe(panel));
     fireEvent.keyDown(panel, { key: "Escape", code: "Escape" });
     await waitFor(() => expect(screen.queryByRole("region", { name: "To do" })).toBeNull());
     expect(document.activeElement).toBe(button);
+  });
+
+  it("the strip's To do on a tab with nothing to do lists the tabs that still have checks; each opens its tab", async () => {
+    await seedLnx(80);
+    mount();
+    await ready();
+    await waitFor(() => expect(tab("Closing")).toBeDefined());
+    fireEvent.click(tab("Closing"));
+    const strip = screen.getByRole("button", { name: /^To do/ });
+    expect(strip.textContent).toMatch(/[1-9]/);
+    fireEvent.click(strip);
+    const panel = await screen.findByRole("region", { name: "To do" });
+    expect(within(panel).getByText("Nothing to do on this tab")).toBeInTheDocument();
+    expect(within(panel).queryByText("No gaps")).toBeNull();
+    const others = within(panel).getByRole("list", { name: "Tabs with checks" });
+    const go = within(others).getByRole("button", { name: /lnx02/ });
+    expect(go.tagName).toBe("BUTTON");
+    // Keyboard reachable: a real button, in tab order.
+    expect(go).not.toHaveAttribute("tabindex", "-1");
+    fireEvent.click(go);
+    await waitFor(() => expect(rowFor("lnx02")).toHaveAttribute("aria-selected", "true"));
+    // The panel stays open on that tab's own checks, with focus in it so Esc still closes it.
+    const checks = within(screen.getByRole("region", { name: "To do" })).getByRole("list", { name: "Checks" });
+    await waitFor(() => expect(within(checks).getByText("2 flags are not on the page")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("region", { name: "To do" }).contains(document.activeElement)).toBe(true));
+  });
+
+  it("an open tab with no checks and no to do anywhere says only that", () => {
+    render(<TodoPanel checks={[]} onPick={() => {}} onClose={() => {}} />);
+    expect(screen.getByText("Nothing to do on this tab")).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Tabs with checks" })).toBeNull();
   });
 
   it("Front matter's segmented row switches between Details, Introduction, Summary, Considerations, Methodology", async () => {
