@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { AUDIT_NOTE_IDS, AUDIT_NOW, FIXTURES } from "../src/audit/fixtures";
 import { MEANS_HEADER } from "../src/engines/manual/lookup";
-import { SCREENS } from "./screens";
+import { appendixTab, openReportItem, SCREENS } from "./screens";
 
 // Hard regressions: unlike the audit checks, these fail the run.
 
@@ -1179,7 +1179,22 @@ async function openReport(page: Page, target: string) {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.clock.install({ time: AUDIT_NOW });
   await page.goto("/e/e-exam/s/report");
-  await page.locator("[data-outline-row]").filter({ hasText: target }).first().click();
+  await openReportItem(target)(page);
+  await openAllEvidence(page);
+}
+
+/** Opens every chip on the page, so the blocks show as they print. */
+async function openAllEvidence(page: Page) {
+  await page.locator(".report-page .report-chip").first().waitFor();
+  const bar = page.getByRole("toolbar", { name: "Formatting" });
+  const button = bar.getByRole("button", { name: "Open all evidence" });
+  if (await button.isVisible()) await button.click();
+  else {
+    // A narrow bar keeps it under More.
+    await bar.getByRole("button", { name: "More formatting" }).click();
+    await page.getByRole("dialog", { name: "More formatting" }).getByRole("button", { name: "Open all evidence" }).click();
+    await page.keyboard.press("Escape");
+  }
   await page.locator(".report-page .report-code").first().waitFor();
 }
 
@@ -1200,10 +1215,9 @@ test("Report: code shows the characters typed, with no font ligatures", async ({
 
 test("Report: an appendix page keeps the page's side margins", async ({ page }) => {
   await openReport(page, "ms01");
-  await page.locator(".report-page .report-code", { hasText: "winPEASx64.exe" }).click();
-  await page.getByRole("button", { name: "Move to appendix" }).click();
-  await page.locator("[data-outline-row]").filter({ hasText: "Appendix A: ms01" }).click();
-  const heading = page.getByRole("heading", { name: "Appendix A: ms01" });
+  await page.locator(".report-page .report-open", { hasText: "rlwrap nc -lvnp 443" }).getByRole("button", { name: "Move to appendix" }).click();
+  await appendixTab(page, "ms01").click();
+  const heading = page.getByRole("heading", { name: /^Appendix [A-Z]: ms01$/ });
   await heading.waitFor();
   // The same 40px gutters as a target page: text never touches the paper's edge.
   const paper = (await page.locator(".report-page").boundingBox())!;
@@ -1221,8 +1235,8 @@ async function openReportAt1400(page: Page, target: string) {
   const fold = page.getByRole("button", { name: "Collapse sidebar" });
   await fold.first().waitFor();
   await fold.first().click();
-  await page.locator("[data-outline-row]").filter({ hasText: target }).first().click();
-  await page.locator(".report-page .report-code").first().waitFor();
+  await openReportItem(target)(page);
+  await openAllEvidence(page);
 }
 
 /** Every generated table with a fit column (IPs): a 15-character IP and a long port list stay in their own columns. */
@@ -1276,13 +1290,19 @@ test("Report: the formatting bar fits its pane at 1400 with the evidence rail op
   // The owner's order of what must stay: the core marks, the headings, the two lists, undo and redo.
   const kept = ["Bold", "Italic", "Inline code", "Link", "Heading 1", "Heading 2", "Heading 3", "Bulleted list", "Numbered list", "Undo", "Redo"];
   for (const name of kept) await expect(bar.getByRole("button", { name })).toBeVisible();
-  await bar.getByRole("button", { name: "More formatting" }).click();
-  await expect(page.getByRole("dialog", { name: "More formatting" }).getByRole("button", { name: "Find and replace" })).toBeVisible();
+  // Find and replace is in reach: on the bar when it fits, else under More.
+  const find = bar.getByRole("button", { name: "Find and replace" });
+  if (!(await find.isVisible())) {
+    await bar.getByRole("button", { name: "More formatting" }).click();
+    await expect(page.getByRole("dialog", { name: "More formatting" }).getByRole("button", { name: "Find and replace" })).toBeVisible();
+  }
 });
 
 test("Report: on a target page the owner's headings never outrank the numbered sub-sections", async ({ page }) => {
   await openReportAt1400(page, "ms01");
   await page.locator(".report-page .report-slot-text").first().click();
+  // ProseMirror takes up a click's selection a moment after mouseup; a key pressed sooner acts at the old selection.
+  await page.waitForTimeout(150);
   await page.keyboard.press("End");
   await page.keyboard.press("Enter");
   for (const [marks, text] of [["#", "Owner one"], ["##", "Owner two"], ["###", "Owner three"]]) {
@@ -1292,7 +1312,33 @@ test("Report: on a target page the owner's headings never outrank the numbered s
   const size = (sel: string) => page.locator(sel).first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
   const subSection = await size(".report-page .report-h3");
   for (const level of [1, 2, 3]) {
-    const owner = await size(`.report-page .ProseMirror > h${level}:not([data-number])`);
+    // The owner's own: at the top level, or in a step (the cursor's slot is a step's sentence in layout 4).
+    const owner = await size(`.report-page .ProseMirror > h${level}:not([data-number]), .report-page .report-step-body h${level}`);
     expect(owner, `owner h${level}`).toBeLessThanOrEqual(subSection);
+  }
+});
+
+test("Report: Esc closes the evidence drawer and stays on the report, in WebKit too", async ({ page, playwright, baseURL }) => {
+  // The owner's window with the sidebar open: under 1200px of pane, so the rail is a drawer. The drawer mounts after
+  // the engagement's own Esc (back to the dashboard), which once heard the key first.
+  const run = async (p: Page) => {
+    await p.setViewportSize({ width: 1400, height: 900 });
+    await p.clock.install({ time: AUDIT_NOW });
+    await p.goto("/e/e-exam/s/report");
+    await openReportItem("ms01")(p);
+    await p.locator(".report-page .report-chip").first().waitFor();
+    await p.locator("section[aria-label='Report']").getByRole("button", { name: "Evidence", exact: true }).click();
+    const drawer = p.locator("aside.fixed[aria-label='Evidence']");
+    await expect(drawer).toBeVisible();
+    await p.keyboard.press("Escape");
+    await expect(drawer).toHaveCount(0);
+    expect(new URL(p.url()).pathname).toBe("/e/e-exam/s/report");
+  };
+  await run(page);
+  const browser = await playwright.webkit.launch();
+  try {
+    await run(await browser.newPage({ baseURL }));
+  } finally {
+    await browser.close();
   }
 });

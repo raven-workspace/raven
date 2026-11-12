@@ -110,7 +110,7 @@ describe("audit fake api", () => {
     const exam = await api.engagementGet("e-exam");
     expect(exam.kind).toBe("exam-sim");
     expect(exam.msfHostId).toBe("h-exam-ms01");
-    expect(await api.hostsList("e-exam")).toHaveLength(6);
+    expect(await api.hostsList("e-exam")).toHaveLength(7);
 
     const entries = await api.logList("e-lab");
     expect(entries.length).toBeGreaterThanOrEqual(25);

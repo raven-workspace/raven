@@ -89,3 +89,92 @@ Model report: `docs/Mock exam A — model report.md` (owner's Mock exam A lab wr
   - **AD attack-path table opens the AD set** (step, from, technique, to, access), replacing the closing list.
   - **Checks:** a step with no command under it ("[not recorded]" gap); a credential used for a hop with no finding attached.
 - **Unchanged:** failed attempts still reported as "Also tested" one-liners (the mock's "drop rabbit holes" line is not an owner ruling).
+
+## Rework round (2026-11-12)
+
+Layout 4 built on `feat/reports` (Tasks 1 to 10 of `docs/superpowers/plans/2026-11-12-raven-reports-rework.md`): numbered steps with evidence chips, generated ports/result/findings/scope/attack-path tables, the tab row with a To do panel, the log column by phase, appendix and free pages, dismissable guide notes. The ledger is `.superpowers/sdd/2026-11-12-raven-reports-rework/progress.md`; Task 10's report sits beside it.
+
+### Rulings made this round (from the ledger)
+
+- Ruling (pre-flight, T1→T4: REPRODUCE_LABEL defined in draft.ts by T1, value changed in T4): T4 owns the value change
+- Ruling (pre-flight, T6→T8: ReportTabs onAddPage/onPageMenu → page sections): T6 renders + Page only when onAddPage given; T8 wires
+- Ruling: between Task 1 and Tasks 3–6, suites owned by later tasks (checks, editor, section) may be red; each task must leave its own files and earlier tasks' files green — layout 4 changes doc shape across layers — costs a red full suite mid-run only.
+- Ruling: Task 4 changes REPRODUCE_LABEL's value to "Steps to reproduce" — the steps view renders it — costs nothing.
+- Ruling: Task 6 renders + Page only when onAddPage is passed; Task 8 wires page creation — keeps T6 shippable — costs nothing.
+- Ruling: Task 1 — finding-named port scans are not steps either (spec §10.2 "port scans are not steps") — owner adds a scan from the log column — costs one manual add for the "how the port was identified" snippet.
+- Ruling: Task 2 — scope table OS prints Windows/Linux (Host.os has no version) — data model has no OS version — costs a coarser OS column; owner can type over in a later round
+- Ruling: Task 2 — a first grant that is already admin/SYSTEM must name its level in the Result line (reviewer rated Minor) — §10.2 Result line must say what access was gained; PtH-to-DC is the AD set's money line — costs one fix round
+- Ruling: Task 3 — Credential has no private field; private-credential test replaced by a no-secret-in-text test — type has no such flag — costs nothing
+- Ruling: Task 2's 4 unused-variable lint errors in tables.ts get fixed in Task 5's dispatch (one-line removals) — lint must be clean per task — costs nothing
+- Ruling: Task 4 minor "refilled step sentence slot has empty hint" carried into Task 5 (owner-visible: a step with no prompt) — small editor normalisation — costs nothing
+- Ruling: Task 5 — chip text uses separate spans with grid gap, not " · " strings (DESIGN.md bans middots; conventions.test enforces) — DESIGN.md binds over plan copy — costs nothing
+- Ruling: Task 6 — empty-flag Edit text throw (rated Minor) fixed in round 1 — it is a silent failure of a visible action — costs nothing
+- Ruling: Task 7 left a conventions.test failure (joined strings / middot in EvidenceRail.tsx rail heading/rows) — fix carried into Task 9 dispatch — DESIGN.md bans joined " · " strings; spec §10.1 copy is overridden by DESIGN.md as in Task 5 — costs nothing
+- Ruling: guide notes show once per page (first match), not above every repeated section — keeps the page calm (owner priority: low distraction); spec §10.5 wording was mine, not an owner call — costs a one-line change if owner wants every repeat; ASK OWNER at handover
+- Task 7 note (implementer calls, owner may correct): rail sort toggle removed (spec §10.1 time order); entries behind operator-reason attempts hidden from the rail (stricter than Plan A ruling that only hid the attempt); tab label kept "Unused (n)"
+- Ruling (Task 10): the audit fixture's report now holds an appendix page and a free page, so `src/test/reportSection.test.tsx` deletes them in a `beforeEach` (its tab-order tests start from a report without owner pages).
+
+### Deferred minors (from the ledger)
+
+- Task 1: minor (deferred): endOfPhase inserts a tag-along screenshot as its own numbered step while addNewEvidence joins it to the previous step (paths disagree) — fix in Task 7 rail work
+- Task 1: minor (deferred): addNewEvidence tag-along screenshot walks back past a removed predecessor into an earlier phase
+- Task 1: minor (deferred → Task 4): ReportEditor insertAdded/removeExact nested changes untested
+- Task 1: minor (deferred → Task 7): EvidenceRail.tsx:100 rail insert with cursor adds flat slot+evidence after the top-level block, lands after the whole steps list
+- Task 1: minor (deferred): REPRODUCE_LABEL/DRAFT_LAYOUT test asserts constants only
+- Task 1: minor (deferred → Task 3): proofCompanions still uses provingEntries
+- Task 2: minor (deferred): privesc finding with no admin/system grant → result "Privilege escalation" (not in §10.3 list)
+- Task 2: minor (deferred): findings tie-break inside an AD set falls back to createdAt, not machine order
+- Task 2: minor (deferred): findingRows tests miss SYSTEM/Administrator/lateral/hop Foothold; lessons test near-tautological; flag type-guard repetition
+- Task 2: minor (deferred → final wave, owner-visible): resultLine prints "shell as `x` (root), then root" when an elevated first grant is followed by a same-level grant — dedup compares strings; track last level word
+- Task 3: minor (deferred → final wave): cred-finding `mentions` is a raw substring match (short usernames false-match) — use word boundary
+- Task 3: minor (deferred): SHORT-line tests skip step-replay/cred-finding; cred-finding short form can exceed 38 chars
+- Task 3: minor (deferred): caption-step (step-title fallback) is top-level only, can't fire in layout 4 — decide in Task 5
+- Task 4: minor (deferred): backspace test uses NodeSelection not TextSelection at empty slot; chip-drag test checks doc only; stepNumbers recomputes per state; steps toDOM drops label; step content admits nested steps
+- Task 5: minor (deferred → Task 10 WebKit check): block ⋯ menu may detach when ProseKit hides the handle popup
+- Task 5: minor (deferred → final wave): block-menu Delete on a step skips onRemoveEvidence for nested evidence (same as ⌫, pre-existing) — removed entries not remembered
+- Task 5: minor (deferred): Chip aria-expanded hardcoded false; "Highlight" name clash with toolbar mark; unmodified exploit chip order; stepHints walks whole doc per txn; Esc in trim mode closes whole chip
+- Task 6: minor (deferred): tab "N to do" span mouse-only (strip button covers keyboard); strip To do is report-wide vs panel per-tab ("No gaps" on Closing) — reword empty state; tabs lack aria-controls/tabpanel; page ⋯ button inside tablist (fix in Task 8); Notes cell undo per keystroke; J/K wrap
+- Task 6: minor (deferred → final wave): result line prints "local.txt ." for an empty flag value — skip flags with empty values
+- Task 7: minor (deferred → final wave): tag-along screenshot walk ignores phase (lands in another phase than its rail group; also in addNewEvidence) — stop at phase boundary
+- Task 7: minor (deferred → final wave): + to appendix splits every block of a multi-block entry, not only long ones
+- Task 7: minor (deferred): rail row aria-label omits note; no vuln-cursor test; rowCache identity-keyed
+- Task 8: minor (deferred): Page actions tooltip shortcut F2 misleading; dialog close always refocuses selected tab; RenameInput focus is border only (use ring); input in tablist while renaming; restorePage position collision; free page tab label lacks number in label
+- Task 9: minor (deferred → final wave): "*"-hidden test passes while settings loading (20ms wait); rapid hides race in useGuideSettings.save; `?? []` new array per render; StandaloneGuide in appendix is React DOM (Plan B export must exclude [data-guide]); no clipboard test; heading-text matching
+
+Parked: none were marked "parked" in the ledger.
+
+### Fixed in Task 10 (found driving the fixture)
+
+- Esc on the open Evidence drawer left the engagement for the dashboard (owner's window: 1400 wide, sidebar open, so the rail is a drawer). The drawer mounted after the engagement's Esc handler, which heard the key first. Now the drawer listens in the capture phase (`c569bc7`, regression test in `audit/regressions.spec.ts`).
+- The block ⋯ menu pinned itself to the window's top-left corner when the page scrolled with it open (ProseKit hides the handle while scrolling, and Radix lost its anchor). A scroll now closes the menu (`abbe382`). With the pointer leaving the block, the menu stays attached: the Task 5 concern doesn't reproduce.
+- An owner heading typed in a step (`# ` after a step's sentence) rendered 22px, above the 15px numbered sub-sections. The owner-heading sizes now cover headings in a step (`67073d7`).
+- 24px targets: the ports table's Notes inputs (22px) and "Hide all guide notes" (18px). The tab row's inner strip was narrower than its tabs (the audit's `overflow`), so it now sizes to its tabs and the scroller scrolls it (`67073d7`, `8ce1337`).
+
+### Seen in WebKit at 1400×900, sidebar open, for the owner to decide
+
+Screenshots in `.superpowers/sdd/2026-11-12-raven-reports-rework/shots/wk-*.png`.
+
+- **Target page height, chips closed:** ms01 2,589 px, xfer03 2,583 px, web01 2,108 px, lnx02 581 px (all under 3,000). The AD set of three machines is 3,788 px with seven guide notes showing.
+- **Guide notes are heavy on a long page.** Each dark card is 96 to 114 px; the AD set shows seven (attack path, result, ports, steps, vuln, post, additional), about 730 px of dark chrome on a light page. Options: a lighter one-line style, collapse to the title after first view, or show only on the first page of each kind across the report. The open ruling above ("once per page") still needs the owner's answer.
+- **Tab row overflow:** with 4 targets, the AD set, 2 free pages and 3 appendices the row is 1,475 px in a 1,160 px scroller. It scrolls and the open tab is kept in view (checked opening the first and the last tab), but there's no visual cue that it scrolls (WebKit hides the scrollbar), and **+ Page** and the open page's **⋯ Page actions** scroll off the right edge (⋯ sat at x = 1,440 in a 1,400 window). They're reachable by scrolling, and F2 or Delete on the tab still work. Options: an edge fade; or move + Page and ⋯ into the fixed slot at the right with Export.
+- **Export slot:** empty until Plan B (`exportSlot={null}`), so "Export stays visible while the row scrolls" can't be checked yet. The slot sits outside the scroller, so it should hold.
+- **Rename input:** 192 × 36 px in the 44 px row, accent border. Long titles scroll inside it. Fine as it is; the owner might want it as wide as the tab it replaces.
+- **Chip truncation:** a long command chip (the base64 `python3 46153.py …` run) ends in an ellipsis with no tooltip or `title`. Opening the chip shows it in full. A `title` on the chip's command would let a hover show it too.
+- **Open chip after Move to appendix:** the chip stays open with the bar still saying "Command output, showing 12 of 12 lines" and offering Trim and Highlight, over a body that's now only the pointer line. The bar could say "In Appendix A.1" instead.
+- **Block handle beside a chip in a step** sits over the step-number column: the grip touches "1" and the ⋯ sits beside "2". It could offset left of the numbers for blocks inside steps.
+- **Spacing inside a step:** `.report-step-body` asks for a 12px row gap, but ProseKit wraps the step's content in a plain block `div`, so the sentence and its chips sit 0 px apart. A selected block's 4px outline then covers the descenders of the sentence above. Applying the gap would add about 12px per block, roughly 200 to 300 px on ms01, so it's the owner's call.
+- **To do panel:** a check's tooltip (side "right" on a full-width row) flips to the left and covers the sidebar. After picking a check, focus moves into the page, so Esc no longer closes the panel (it closes only while focus is in the panel). A check with no anchor ("No proof.txt for app03") puts the cursor at the page's start.
+- **Target appendix view:** the guide note sits above "Appendix A: ms01" (on appendix pages it sits under the title).
+- **Rail drawer:** + add with the cursor in step 2 joined step 2. With no cursor it made a new step at the end of the entry's phase (step 3 of Initial Access, before the flag step). A mouse + add drops focus from the removed row; the next row takes keyboard focus only when the row itself was focused.
+- **Reorder:** ⌥→ on "2 ms01" made it "3 ms01", ⌥← put it back, and focus stayed on the tab both times.
+- **Test-only, not a bug:** in Playwright a key pressed within a few milliseconds of a click acts at ProseMirror's old selection (the click's selection lands just after mouseup). People don't type that fast, but scripted checks need a short wait after the click.
+
+### Plan B (page-style round + PDF/.7z export) must carry
+
+- **Steps numbering in the PDF:** the numbers are view decorations (`stepNumbers`), not document content, and `steps` toDOM drops the label. Export must number each list from 1, as the page shows it.
+- **Chips print open:** every evidence chip prints as its open block (trimmed and highlighted as set); a moved block prints its "Full output: Appendix X.n" line; a split one prints both.
+- **Guide notes never print:** neither the editor decorations nor the React-DOM `StandaloneGuide` in the appendix view (exclude `[data-guide]`).
+- **`page` sections in the PDF:** free pages numbered as body sections after the targets and before Closing; appendix pages lettered after the targets' appendices, in tab order.
+- **Caption-step fallback in steps:** the caption-step check and the step-title caption fallback (`figures.ts` stepTitleBefore) are top-level only and can't fire in layout 4. Decide the fallback for chips in steps for page, checks and PDF together. The earlier privacy carry still applies: never use a private entry's title.
+- **Plan B as before:** the earlier "Plan B (PDF export) must" list above still stands (no pick hints, empty-cell prompts, empty slots or amber placeholders; titles from kind).
+- **Check the export like the page:** at 1400 in WebKit on this fixture (`src/audit/examFixtures.ts`: three standalone machines, an AD set of three with an unexplained credential hop, the modified exploit, the long winPEAS run, a private entry, one appendix page and one free page).

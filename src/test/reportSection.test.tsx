@@ -4,7 +4,7 @@ import type { Editor } from "prosekit/core";
 import { NodeSelection, TextSelection } from "prosekit/pm/state";
 import type { ComponentProps } from "react";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { api, resetAuditState } from "../audit/fakeApi";
 import { ReportSectionView } from "../features/report/ReportSection";
@@ -36,6 +36,11 @@ vi.mock("../features/report/editor/ReportEditor", async (importOriginal) => {
       />
     ),
   };
+});
+
+// The audit fixture's report holds two owner-written pages; these tests start from a report without them.
+beforeEach(async () => {
+  for (const s of await api.reportSectionsList("rep-exam")) if (s.kind === "page") await api.reportSectionDelete("rep-exam", s.id);
 });
 
 afterEach(() => {

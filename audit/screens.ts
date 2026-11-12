@@ -46,31 +46,54 @@ const pickUploaded = (root: string) => async (page: Page) => {
 const openPayloads = async (page: Page) => { await focusBody(page); await page.keyboard.press("p"); };
 const MANUAL_LONG = `/manual/${AUDIT_NOTE_IDS.long}`;
 const REPORT = `/e/${AUDIT_IDS.examEngagement}/s/report`;
-/** Opens a report page by its outline label: the outline row, or below 1000px the section picker above the page. */
-export const openReportItem = (label: string | RegExp) => async (page: Page) => {
-  const row = page.locator("[data-outline-row]:visible").filter({ hasText: label }).first();
-  const picker = page.getByRole("combobox", { name: "Report section" }).and(page.locator(":visible"));
-  await row.or(picker).first().waitFor();
-  if (await row.isVisible()) await row.click();
-  else {
-    await picker.click();
-    await page.getByRole("option", { name: label }).click();
-  }
+/** A tab of the report's tab row, by its label: a target is numbered ("2 ms01"), the rest read as named ("Appendix A"). */
+export const reportTab = (page: Page, label: string) => {
+  const exact = new RegExp(`^(\\d+ )?${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
+  return page.getByRole("tablist", { name: "Report pages" }).getByRole("tab").filter({ has: page.locator("[data-tab-label]", { hasText: exact }) });
 };
-/** The open target's checks: in the outline, or below 1000px in the Checks disclosure above the page (opened). */
+/** The tab of a target's appendix: lettered by order, it names its target under the letter ("ms01, 1 item"). */
+export const appendixTab = (page: Page, target: string) =>
+  page.getByRole("tablist", { name: "Report pages" }).getByRole("tab").filter({ has: page.locator("[data-tab-label]", { hasText: /^Appendix [A-Z]$/ }) }).filter({ hasText: `${target}, ` });
+/**
+ * Opens a report page from the tab row: a target or a tab by its label, or "Report details", the first part of Front
+ * matter. The row lists every section once the report has set them up (Front matter is the first tab).
+ */
+export const openReportItem = (label: string) => async (page: Page) => {
+  await reportTab(page, "Front matter").waitFor();
+  if (label === "Report details") {
+    await reportTab(page, "Front matter").click();
+    await page.getByRole("tablist", { name: "Front matter parts" }).getByRole("tab", { name: "Details", exact: true }).click();
+  } else await reportTab(page, label).click();
+};
+/** The open tab's checks: the To do panel, opened from the status strip's To do. */
 export const reportChecks = async (page: Page) => {
-  const disclosure = page.getByRole("button", { name: /^Checks/ });
-  if (await disclosure.isVisible()) await disclosure.click();
+  const todo = page.getByRole("group", { name: "Report status" }).getByRole("button", { name: /^To do \d+$/ });
+  if ((await todo.getAttribute("aria-expanded")) !== "true") await todo.click();
   return page.getByRole("list", { name: "Checks" }).and(page.locator(":visible")).first();
 };
-/** ms01's 400-line winPEAS run picked on the page and moved with its block's Move to appendix, then its appendix page
- *  opened. (Trimmed to 40 lines inline, it raises no "long block" check of its own.) */
+/** The evidence rail: a column from 1200px of pane, else a drawer opened from the strip. */
+export const openReportRail = async (page: Page) => {
+  const toggle = page.locator("section[aria-label='Report']").getByRole("button", { name: "Evidence", exact: true });
+  if ((await toggle.isVisible()) && (await toggle.getAttribute("aria-pressed")) !== "true") await toggle.click();
+};
+/** ms01's 400-line winPEAS run, added from the log column (its long output goes to an appendix), then its target's
+ *  appendix page opened. */
 const moveWinPeas = async (page: Page) => {
   await openReportItem("ms01")(page);
-  await page.locator(".report-page .report-code", { hasText: "winPEASx64.exe" }).click();
-  await page.getByRole("button", { name: "Move to appendix" }).click();
-  await page.getByText(/^Full output: Appendix A\.1/).waitFor();
-  await openReportItem(/^Appendix A: ms01/)(page);
+  await page.locator(".report-page .report-chip").first().waitFor();
+  await openReportRail(page);
+  await page.getByRole("button", { name: /^Add winPEAS on ms01/ }).click();
+  const chip = page.locator(".report-page .report-chip", { hasText: "winPEASx64.exe" });
+  await chip.waitFor();
+  // A plain + add puts the whole run on the page: its chip's Move to appendix sends it after.
+  if ((await chip.getAttribute("data-moved")) === null) {
+    await chip.click();
+    await page.locator(".report-page .report-open").getByRole("button", { name: "Move to appendix" }).click();
+  }
+  // The drawer (under 1200px of pane) would cover the tab row's end: close it from its own button.
+  const close = page.locator("aside[aria-label='Evidence']").getByRole("button", { name: "Close" });
+  if (await close.isVisible()) await close.click();
+  await appendixTab(page, "ms01").click();
 };
 const NOTE_PANE = "section[aria-label='Note']";
 
@@ -420,14 +443,39 @@ export const SCREENS: Screen[] = [
   // The Report on the mock exam: the report exists with no sections, so opening it drafts every page.
   { id: "report-details", path: REPORT, ready: "role=heading[name='Report details']", setup: openReportItem("Report details") },
   { id: "report-target", path: REPORT, ready: ".report-page >> role=heading[name=/^4\\.\\d+ Target #\\d+ – 10\\.10\\.30\\.5$/]", setup: openReportItem("ms01") },
-  { id: "report-ad", path: REPORT, ready: ".report-page >> role=heading[name=/Attack Chain$/]", setup: openReportItem(/^AD set/) },
-  { id: "report-appendix", path: REPORT, ready: "role=heading[name='Appendix A: ms01']", setup: moveWinPeas },
+  { id: "report-ad", path: REPORT, ready: ".report-page >> role=heading[name=/^5 Active Directory Set$/]", setup: openReportItem("AD set") },
+  { id: "report-appendix", path: REPORT, ready: "role=heading[name=/^Appendix [A-Z]: ms01$/]", setup: moveWinPeas },
+  {
+    // A chip opened in place: the block as it prints, under its bar (Trim, Highlight, Edit text, Move to appendix).
+    id: "report-chip-open", path: REPORT, ready: ".report-page .report-open .report-code",
+    setup: async (page) => {
+      await openReportItem("ms01")(page);
+      await page.locator(".report-page .report-chip", { hasText: "whoami /priv" }).click();
+    },
+  },
+  {
+    // The AD set's To do panel: the credential that moved from ad02 to app03 with no finding.
+    id: "report-todo", path: REPORT, ready: "role=list[name='Checks'] >> visible=true",
+    setup: async (page) => {
+      await openReportItem("AD set")(page);
+      await page.locator(".report-page .report-chip").first().waitFor();
+      await reportChecks(page);
+    },
+  },
+  {
+    // An owner-written free page with its Page actions menu open.
+    id: "report-free-page", path: REPORT, ready: "role=menu[name='Page actions']",
+    setup: async (page) => {
+      await openReportItem("Tools and versions")(page);
+      await page.getByRole("button", { name: "Page actions" }).click();
+    },
+  },
   {
     // Under 1200px of pane the evidence rail is a drawer, opened from the strip; wider, it is the third column.
     id: "report-narrow", path: REPORT, ready: "role=tablist[name='Evidence'] >> visible=true",
     setup: async (page) => {
       await openReportItem("ms01")(page);
-      await page.locator(".report-page .report-code").first().waitFor();
+      await page.locator(".report-page .report-chip").first().waitFor();
       const toggle = page.locator("section[aria-label='Report']").getByRole("button", { name: "Evidence", exact: true });
       if (await toggle.isVisible()) await toggle.click();
       // Checked once the drawer has faded in, not halfway through (a half-faded row reads as low contrast).

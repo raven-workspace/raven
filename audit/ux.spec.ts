@@ -48,8 +48,8 @@ const NEEDS_DATA = new Set([
   "sidebar-rail-tip",
   // No import under `empty`: the Manual shows its empty state, with no note or link to open.
   "manual-tool", "manual-card-drawer",
-  // No hosts under `empty`: the Report shows "No hosts yet", with no outline row, page or check to open.
-  "report-details", "report-target", "report-ad", "report-appendix", "report-narrow",
+  // No hosts under `empty`: the Report shows "No hosts yet", with no tab, page or check to open.
+  "report-details", "report-target", "report-ad", "report-appendix", "report-narrow", "report-chip-open", "report-todo", "report-free-page",
 ]);
 
 for (const screen of STATE_SCREENS) {
@@ -92,7 +92,7 @@ test("report: ms01's proof passes its checks", async ({ page }) => {
   await page.clock.install({ time: AUDIT_NOW });
   await page.goto("/e/e-exam/s/report");
   await openReportItem("ms01")(page);
-  await page.locator(".report-page .report-code").first().waitFor();
+  await page.locator(".report-page .report-chip").first().waitFor();
   const checks = await reportChecks(page);
   await expect(checks).toBeVisible();
   // The list is the real one: the silent download step's check is on it, as a soft one (downloads print nothing).
@@ -138,15 +138,26 @@ test("report: nothing private shows on any page, check or evidence tab", async (
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.clock.install({ time: AUDIT_NOW });
   await page.goto("/e/e-exam/s/report");
-  const rows = page.locator("[data-outline-row]");
-  await rows.first().waitFor();
-  const labels = await rows.evaluateAll((els) => els.map((e) => e.getAttribute("data-id")!));
-  expect(labels.length).toBeGreaterThan(10);
+  const row = page.getByRole("tablist", { name: "Report pages" });
+  await row.getByRole("tab", { name: /^Front matter/ }).waitFor();
+  const tabIds = await row.getByRole("tab").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.id!));
+  expect(tabIds.length).toBeGreaterThan(6);
+  // Every page: each tab, and each part of Front matter and Closing.
+  const pages: { tab: string; part?: string }[] = [];
+  for (const id of tabIds) {
+    await row.locator(`[role=tab][data-id='${id}']`).click();
+    const parts = page.getByRole("tablist", { name: /^(Front matter|Closing) parts$/ });
+    const partIds = (await parts.count()) ? await parts.getByRole("tab").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.id!)) : [];
+    if (partIds.length === 0) pages.push({ tab: id });
+    for (const part of partIds) pages.push({ tab: id, part });
+  }
+  expect(pages.length).toBeGreaterThan(10);
   const rail = page.getByRole("tablist", { name: "Evidence" });
   // A public item from the same sources does show: the search below would find a private one.
   let publicSeen = 0;
-  for (const id of labels) {
-    await page.locator(`[data-outline-row][data-id='${id}']`).click();
+  for (const { tab: id, part } of pages) {
+    await row.locator(`[role=tab][data-id='${id}']`).click();
+    if (part) await page.getByRole("tablist", { name: /^(Front matter|Closing) parts$/ }).locator(`[role=tab][data-id='${part}']`).click();
     await page.locator(".report-page").or(page.getByLabel("OSID")).first().waitFor();
     const tabs = rail.getByRole("tab");
     const count = await tabs.count();

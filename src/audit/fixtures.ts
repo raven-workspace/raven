@@ -154,6 +154,7 @@ const hosts: Host[] = [
   host("h-exam-ms01", "e-exam", "ms01", "10.10.30.5", "windows", { boardColumn: "post-exploitation", access: "root" }),
   host("h-exam-dc01", "e-exam", "dc01", "10.10.30.10", "windows", { adSet: true, adSetEffective: true, boardColumn: "post-exploitation", access: "root" }),
   host("h-exam-ad02", "e-exam", "ad02", "10.10.30.11", "windows", { adSet: true, adSetEffective: true, boardColumn: "post-exploitation", access: "root" }),
+  host("h-exam-app03", "e-exam", "app03", "10.10.30.12", "windows", { adSet: true, adSetEffective: true, boardColumn: "post-exploitation", access: "user" }),
   host("h-exam-web", "e-exam", "web01", "10.10.30.20", "linux", { boardColumn: "post-exploitation", access: "root" }),
   host("h-exam-lnx", "e-exam", "lnx02", "10.10.30.21", "linux"),
   // Captured as the owner really captures (capturedHost.ts): bare flag values, proof in separate entries, no grants.
@@ -589,7 +590,7 @@ export const FIXTURES: AuditFixtures = {
   notes: [...notes, ...exam.notes], ruledOut: [...ruledOut, ...exam.ruledOut], hostIdentity, vectors, tunnels, interfaceDismissals,
   hops: [...hops, ...exam.hops], credentials: [...credentials, ...exam.credentials, ...xfer.credentials],
   usernames: [...usernames, ...exam.usernames, ...xfer.usernames], credAttempts: [...credAttempts, ...xfer.credAttempts],
-  triedPairs: [...triedPairs, ...xfer.triedPairs], payloadBuilds, reports: exam.reports, reportSections: [], extractions,
+  triedPairs: [...triedPairs, ...xfer.triedPairs], payloadBuilds, reports: exam.reports, reportSections: exam.reportSections, extractions,
   accessGrants: [...accessGrants, ...exam.accessGrants], findings: [...findings, ...exam.findings, ...xfer.findings], findingFiles: [...findingFiles, ...exam.findingFiles], failedAttempts: [...failedAttempts, ...exam.failedAttempts],
   cleanup: [...cleanup, ...exam.cleanup], backups, settings,
 };
