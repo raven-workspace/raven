@@ -429,12 +429,26 @@ describe("buildTargetDraft", () => {
     expect(evidenceUnder(doc, "foothold")).toEqual(["ferox", "shot", "curl"]);
   });
 
-  it("keeps a port scan a finding names as a step of Service Enumeration", () => {
+  it("never places a port scan, even one a finding names: the ports table covers it (standalone and AD)", () => {
     const d = walked();
     d.findings[0].stepEntryIds = ["nmap", "ferox", "curl"];
     const doc = buildTargetDraft(d, target([H]), {});
-    expect(evidenceUnder(doc, "enum")).toEqual(["nmap"]);
-    expect(outline(doc).slice(2, 9)).toEqual(["# enum", "G:ports", "[", "-", "S", "nmap", "]"]);
+    expect(evidenceIdsIn(doc).has("nmap")).toBe(false);
+    expect(outline(doc).slice(2, 5)).toEqual(["# enum", "G:ports", "# foothold"]);
+    expect(addNewEvidence(doc, d, target([H]), {}, []).added).toEqual([]);
+
+    const ad = adSet();
+    ad.findings = [{ id: "f-ms", title: "RCE", hostIds: ["h-ms01"], serviceIds: [], stepEntryIds: ["ms-scan", "ms-rce"], severity: "high", refs: [] } as unknown as Finding];
+    const adDoc = buildTargetDraft(ad, target(AD_HOSTS, "ad-set"), {});
+    expect(evidenceIdsIn(adDoc).has("ms-scan")).toBe(false);
+    expect(evidenceUnder(adDoc, "foothold", "h-ms01")).toEqual(["ms-rce"]);
+    expect(addNewEvidence(adDoc, ad, target(AD_HOSTS, "ad-set"), {}, []).added).toEqual([]);
+
+    // The owner can still add one from the log column: a step of its own under Service Enumeration, after the table.
+    const { at, nodes } = endOfPhase(doc, d, target([H]), d.log.find((e) => e.id === "nmap")!);
+    expect(at).toEqual([4]);
+    expect(nodes.map((x) => x.type)).toEqual(["steps"]);
+    expect(nodes[0].content![0].attrs).toEqual({ entryId: "nmap" });
   });
 
   it("ends Initial Access with the local flag's step and starts Post-Exploitation with the proof flag's", () => {

@@ -112,11 +112,12 @@ export function stepNode(entries: LogEntry[], extra: ReportNode[] = []): ReportN
 /** A numbered Steps to reproduce list. Never empty. */
 export const stepsNode = (steps: ReportNode[]): ReportNode => ({ type: "steps", content: steps });
 
-/** The host's entries that land on the page, in time order: placing ones (notes aside; `placingEntries`), and
+/** The host's entries that land on the page, in time order: placing ones (notes and port scans aside: the ports table
+ *  covers a scan, §10.2; `placingEntries`), and
  *  screenshots taken between two of them or within a few minutes after one (each joins the step before it). */
 function keptEntries(data: ReportData, hostId: string): LogEntry[] {
   const placing = placingEntries(data, hostId);
-  const proven = data.log.filter((e) => placing.has(e.id) && e.kind !== "note");
+  const proven = data.log.filter((e) => placing.has(e.id) && e.kind !== "note" && !isPortScan(e));
   const shots = data.log.filter(
     (e) =>
       e.kind === "screenshot" &&
@@ -351,8 +352,8 @@ function hostPlan(data: ReportData, hostId: string, entry: HostEntry, enumerate:
   return { kept, companions, split, placing: placingEntries(data, hostId), findings, phases, time };
 }
 
-/** One machine's block in the sample's order (§10.2): its heading and Result line; Service Enumeration (the port table,
- *  on every machine; standalone: any scan a finding names, as steps); the entry phase and privilege escalation, each
+/** One machine's block in the sample's order (§10.2): its heading and Result line; Service Enumeration (the port table
+ *  only, on every machine: port scans are never steps); the entry phase and privilege escalation, each
  *  told one finding per heading (the finding that enabled it, then one numbered steps list: a step per placed entry,
  *  screenshots joining the step before them, each exploit file inside the step that runs it, else the access step, else
  *  a step of its own; a second finding that enabled the same phase gets a heading of its own, with its own list); the
@@ -376,8 +377,6 @@ function hostBlock(
   };
 
   const out: ReportNode[] = [generated("facts", hostId), generated("result", hostId), phaseNode("enum", hostId), portsNode(hostId)];
-  const scans = stepsIn("enum");
-  if (scans.length > 0) out.push(stepsNode(scans.map((st) => stepNode(st))));
   for (const phase of PHASE_ORDER) {
     if (!STEP_PHASES.has(phase)) continue;
     const steps = stepsIn(phase);
