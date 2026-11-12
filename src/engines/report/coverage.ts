@@ -12,11 +12,10 @@ export interface CoverageRow {
   via: string | null;
 }
 
-const REASON_WORDS: Record<ReasonKind, string> = {
+const REASON_WORDS: Record<Exclude<ReasonKind, "operator">, string> = {
   control: "blocked by a control",
   precondition: "precondition not met",
   access: "no access",
-  operator: "operator error",
 };
 
 const joinWords = (...parts: (string | null | undefined)[]) => parts.filter(Boolean).join(" ");
@@ -28,7 +27,7 @@ export function serviceCoverage(
   overrides: Record<string, CoverageOverride>,
 ): CoverageRow[] {
   const notes = [
-    ...data.attempts.filter((a) => !a.private && a.hostId === hostId).map((a) => ({ text: a.title, via: a.title })),
+    ...data.attempts.filter((a) => !a.private && a.reasonKind !== "operator" && a.hostId === hostId).map((a) => ({ text: a.title, via: a.title })),
     ...data.ruledOut
       .filter((r) => !r.private && r.hostId === hostId)
       .map((r) => ({ text: r.text, via: r.text })),
@@ -42,7 +41,7 @@ export function serviceCoverage(
       let result: CoverageResult = "untested";
       let via: string | null = null;
       const finding = data.findings.find((f) => f.serviceIds.includes(s.id));
-      const re = new RegExp(`\\b${s.port}\\b`);
+      const re = new RegExp(`(?<![\\d.])${s.port}(?![\\d.])`);
       const hit = notes.find((n) => re.test(n.text));
       if (finding) {
         result = "exploited";
@@ -55,7 +54,10 @@ export function serviceCoverage(
         via = hit.via;
       }
       const override = overrides[s.id];
-      if (override) result = override.result;
+      if (override) {
+        result = override.result;
+        via = override.note ?? null;
+      }
       return { serviceId: s.id, port: s.port, protocol: s.protocol, product, proven: confirmed !== null, result, via };
     });
 }
@@ -112,8 +114,8 @@ export function attackChain(data: ReportData, hostIds: string[]): ChainHop[] {
 export function testedNotExploited(data: ReportData, hostId: string | null): { title: string; reason: string }[] {
   return [
     ...data.attempts
-      .filter((a) => !a.private && (a.hostId ?? null) === hostId)
-      .map((a) => ({ title: a.title, reason: REASON_WORDS[a.reasonKind] })),
+      .filter((a) => !a.private && a.reasonKind !== "operator" && (a.hostId ?? null) === hostId)
+      .map((a) => ({ title: a.title, reason: a.reasonKind === "operator" ? "" : [REASON_WORDS[a.reasonKind], a.reason.trim()].filter(Boolean).join(": ") })),
     ...data.ruledOut
       .filter((r) => !r.private && (r.hostId ?? null) === hostId)
       .map((r) => ({ title: r.text, reason: r.reason })),

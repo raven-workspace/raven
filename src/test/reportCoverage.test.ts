@@ -20,8 +20,9 @@ function data(): ReportData {
     ],
     findings: [{ id: "f1", title: "RCE in app", hostIds: [H], serviceIds: ["s80"] }],
     attempts: [
-      attempt("SSH brute force on 22"),
-      attempt("RDP spray 3389", { private: true, reasonKind: "operator" }),
+      attempt("SSH brute force on 22", { reason: "WAF drops it" }),
+      attempt("scan 10.0.22.5 sweep", { reason: "" }),
+            attempt("RDP spray 3389", { private: false, reasonKind: "operator" }),
     ],
     ruledOut: [],
     grants: [],
@@ -37,14 +38,15 @@ describe("serviceCoverage", () => {
     expect(by(80)).toMatchObject({ result: "exploited", via: "RCE in app", product: "Apache 2.4", proven: true });
     expect(by(22)).toMatchObject({ result: "tested", via: "SSH brute force on 22", proven: false, product: "http" });
     expect(by(445).result).toBe("untested");
-    expect(by(3389).result).toBe("untested");
+    expect(by(3389).result).toBe("untested"); // operator attempt never counts
+    expect(by(445).via).toBeNull();
   });
   it("treats a dead-end verdict as tested and lets an override win", () => {
     const d = data();
     d.services[2] = svc(445, { verdict: "dead_end" }) as never;
-    const rows = serviceCoverage(d, H, { s22: { result: "untested" } });
+    const rows = serviceCoverage(d, H, { s22: { result: "untested", note: "note!" } });
     expect(rows.find((r) => r.port === 445)?.result).toBe("tested");
-    expect(rows.find((r) => r.port === 22)?.result).toBe("untested");
+    expect(rows.find((r) => r.port === 22)).toMatchObject({ result: "untested", via: "note!" });
   });
 });
 
@@ -53,10 +55,12 @@ describe("testedNotExploited", () => {
     const d = data();
     d.ruledOut = [{ id: "r", hostId: H, text: "FTP anon", reason: "disabled", private: false }] as never;
     expect(testedNotExploited(d, H)).toEqual([
-      { title: "SSH brute force on 22", reason: "blocked by a control" },
+      { title: "SSH brute force on 22", reason: "blocked by a control: WAF drops it" },
+      { title: "scan 10.0.22.5 sweep", reason: "blocked by a control" },
       { title: "FTP anon", reason: "disabled" },
     ]);
     expect(testedNotExploited(d, null)).toEqual([]);
+
   });
 });
 

@@ -48,7 +48,8 @@ export function buildSectionDraft(kind: SectionKind, _data: ReportData, settings
     case "methodology": {
       const text = methodologyParagraphs(settings.reportMethodology ?? "");
       return doc([
-        ...STAGES.flatMap((stage) => [heading(stage), ...(text.length > 0 ? text : [slot(`How ${stage.toLowerCase()} was done`)])]),
+        ...text,
+        ...STAGES.flatMap((stage) => [heading(stage), slot(`How ${stage.toLowerCase()} was done`)]),
         generated("severity-legend", null),
       ]);
     }

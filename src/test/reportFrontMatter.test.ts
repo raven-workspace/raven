@@ -33,8 +33,9 @@ describe("buildSectionDraft", () => {
       "Post-exploitation and maintaining access",
       "House cleaning",
     ]);
-    expect(filled.content?.filter((n) => n.type === "paragraph")).toHaveLength(5);
-    expect(hints(filled)).toEqual([]);
+    expect(filled.content?.filter((n) => n.type === "paragraph")).toHaveLength(1);
+    expect(filled.content?.[0].type).toBe("paragraph");
+    expect(hints(filled)).toHaveLength(5);
     expect(filled.content?.at(-1)?.attrs?.kind).toBe("severity-legend");
     expect(hints(buildSectionDraft("methodology", data, settings()))).toHaveLength(5);
   });
