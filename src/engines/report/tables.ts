@@ -59,11 +59,14 @@ export function resultLine(data: ReportData, target: ReportTarget, hostId: strin
     const firstWord = levelWord(data, hostId, first.level);
     // A machine entered already elevated names its level: "shell as `x` (root)", "WinRM as `x` (local administrator)".
     parts.push(`${hop ? hop.via : "shell"} as \`${userName(data, first.usernameId)}\`${firstWord ? ` (${lineWord(firstWord)})` : ""}`);
+    // Each later grant adds its level once: a level the line already ends on (the first grant's own included) is not
+    // repeated, whoever it was granted to.
+    let last = firstWord;
     for (const g of grants.slice(1)) {
       const w = levelWord(data, hostId, g.level);
-      if (!w) continue;
-      const label = w === "Administrator" ? `${lineWord(w)} as \`${userName(data, g.usernameId)}\`` : lineWord(w);
-      if (parts[parts.length - 1] !== label) parts.push(label);
+      if (!w || w === last) continue;
+      last = w;
+      parts.push(w === "Administrator" ? `${lineWord(w)} as \`${userName(data, g.usernameId)}\`` : lineWord(w));
     }
   }
   const entries = data.log.filter((e) => e.kind === "flag" && !e.private && e.hostIds.includes(hostId)).sort(byTime);
@@ -71,8 +74,9 @@ export function resultLine(data: ReportData, target: ReportTarget, hostId: strin
   const expected = expectedFlags(target, hostId, meta);
   for (const kind of ["local", "proof"] as FlagKind[]) {
     if (!expected.includes(kind)) continue;
-    const e = entries.find((x) => x.content.kind === "flag" && x.content.flagKind === kind);
-    if (e && e.content.kind === "flag") flags.push({ kind, value: e.content.value });
+    // A flag entry with no value yet prints nothing ("local.txt ." otherwise).
+    const e = entries.find((x) => x.content.kind === "flag" && x.content.flagKind === kind && x.content.value.trim() !== "");
+    if (e && e.content.kind === "flag") flags.push({ kind, value: e.content.value.trim() });
   }
   return { access: parts.join(", then "), flags };
 }

@@ -131,6 +131,26 @@ describe("resultLine", () => {
     expect(resultLine(ad, target, "dc01", {}).access).toBe("pass-the-hash as `ronan` (local administrator)");
   });
 
+  it("leaves out a flag whose value is empty or blank", () => {
+    const d = lab();
+    d.log = d.log.map((e) => (e.id === "local" ? { ...e, content: flag("local", "  ") } : e));
+    expect(resultLine(d, standalone("h1"), "h1", {}).flags).toEqual([{ kind: "proof", value: "ee23" }]);
+  });
+
+  it("does not repeat a level the first grant already named", () => {
+    const linux = lab();
+    linux.grants = [grant("h1", "admin", "u1", "root", 31), grant("h1", "system", "u2", "root2", 40)];
+    expect(resultLine(linux, standalone("h1"), "h1", {}).access).toBe("shell as `ronan` (root)");
+
+    const win = lab();
+    win.grants = [grant("h2", "system", "u2", "x", 5), grant("h2", "system", "u1", "y", 6)];
+    expect(resultLine(win, standalone("h2"), "h2", {}).access).toBe("shell as `jo.parker` (SYSTEM)");
+
+    const twoRoots = lab();
+    twoRoots.grants = [grant("h1", "user", "u1", "shell", 20), grant("h1", "admin", "u1", "root", 31), grant("h1", "admin", "u2", "root2", 40)];
+    expect(resultLine(twoRoots, standalone("h1"), "h1", {}).access).toBe("shell as `ronan`, then root");
+  });
+
   it("is empty with no grants and omits a missing expected flag", () => {
     const d = lab();
     d.grants = [];
