@@ -49,14 +49,18 @@ export interface CoverageOverride {
   note?: string;
 }
 
-/** The draft layout a section's page is built with. A page saved with an older or missing layout is rebuilt from
- *  scratch the first time it opens (2: OffSec's sample report structure; 3: one finding per heading, Additional
- *  findings, flags with their companions; 4: numbered steps with evidence chips, short draft, ports/result tables).
+/** The draft layout a section's page is built with. A page saved with a layout older than `UPGRADABLE_FROM` (or none)
+ *  is rebuilt from scratch the first time it opens (2: OffSec's sample report structure; 3: one finding per heading,
+ *  Additional findings, flags with their companions; 4: numbered steps with evidence chips, short draft, ports/result
+ *  tables; 5: every placed block is the page's own editable copy, §10.8). A layout-4 page is upgraded in place
+ *  (`upgradeDoc`): every owner-written node is kept.
  *
- *  GUARD: bumping this rebuilds every stored page of every report on its next open. The page written before is kept in
- *  the section meta (`previousDoc`) and the page offers it back ("Restore your previous page"); a bump must keep that
- *  path working (reportSection.test.tsx: "a page rebuilt for a new layout offers the previous one back"). */
-export const DRAFT_LAYOUT = 4;
+ *  GUARD: bumping this rebuilds every stored page older than `UPGRADABLE_FROM` on its next open. The page written
+ *  before is kept in the section meta (`previousDoc`) and the page offers it back ("Restore your previous page"); a bump
+ *  must keep that path working (reportSection.test.tsx: "a page rebuilt for a new layout offers the previous one back"). */
+export const DRAFT_LAYOUT = 5;
+/** The oldest layout `upgradeDoc` converts in place; older pages are rebuilt. */
+export const UPGRADABLE_FROM = 4;
 
 /** Stored in `report_sections.meta`. */
 export interface SectionMeta {
@@ -150,7 +154,24 @@ export interface EvidenceAttrs {
   caption?: string | null;
   /** A screenshot's width in CSS px at the page's 760px measure, set by resizing it; null (or absent) = full width. */
   width?: number | null;
+  /** The page's own copy of the entry's text (§10.8), edited on the page; null for a screenshot or a note. Absent on a
+   *  block whose entry is private or gone (never copied). `keep` and `emphasis` index the copy's lines. */
+  copy?: EvidenceCopy | null;
+  /** The copy holds only the first `COPY_LIMIT` characters of a field: Refresh restores from the log. */
+  truncated?: boolean;
 }
+
+/** A command block's copy (an HTTP entry: the request as `command`, the response as `output`). */
+export interface CommandCopy {
+  command: string | null;
+  output: string;
+}
+/** A flag's copy: its value and proof text. */
+export interface FlagCopy {
+  value: string;
+  proof: string | null;
+}
+export type EvidenceCopy = CommandCopy | FlagCopy;
 
 export interface GeneratedAttrs {
   kind: GeneratedKind;
@@ -184,4 +205,26 @@ export interface ExploitAttrs {
   fileId: string;
   markedLines: number[];
   appendix: Exclude<AppendixPlacement, "split">;
+  /** The page's own copy of the finding file's content (§10.8); absent when the file is gone. */
+  copy?: { content: string };
+  truncated?: boolean;
+}
+
+/** A finding as the page's own editable copy (§10.8): labelled paragraphs (Vulnerability Explanation, Fix, Severity,
+ *  Affected), lists and code blocks. `edited` turns true on the owner's first change inside it. */
+export interface FindingCopyAttrs {
+  findingId: string;
+  edited: boolean;
+}
+
+/** The generated kinds the page holds as its own copy (a `table-block`); the rest stay `generated` atoms. */
+export type CopiedKind = "result" | "ports" | "tested" | "attack-path" | "findings" | "scope-table" | "cleanup" | "references";
+export const COPIED_KINDS: readonly CopiedKind[] = ["result", "ports", "tested", "attack-path", "findings", "scope-table", "cleanup", "references"];
+
+/** A generated table (or the Result line) as the page's own editable copy: a `table` or `paragraph`s. */
+export interface TableBlockAttrs {
+  kind: CopiedKind;
+  hostId: string | null;
+  appendix: Exclude<AppendixPlacement, "split">;
+  edited: boolean;
 }

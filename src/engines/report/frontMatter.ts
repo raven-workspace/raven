@@ -1,7 +1,8 @@
 import type { SectionKind } from "../../types/report";
 import type { Settings } from "../../types/settings";
+import { tableCopy } from "./copies";
 import { generated, slot } from "./draft";
-import type { ReportData, ReportNode } from "./types";
+import type { CopiedKind, ReportData, ReportMeta, ReportNode } from "./types";
 
 const CONSIDERATIONS_HINT = "Anything that affected testing: positive, neutral or negative (VPN drops, machine reverts, time)";
 
@@ -12,13 +13,14 @@ const INTRO_PARTS: [string, string][] = [
   ["Requirements", "What the report is required to include"],
 ];
 
-/** Methodologies' stages in the sample's order, each with the generated fact it carries, if any. */
-const STAGES: [string, ReportNode | null][] = [
+/** Methodologies' stages in the sample's order, each with the generated fact it carries, if any: the Metasploit line
+ *  stays live, the clean-up list is the page's own table. */
+const STAGES: [string, "msf" | "cleanup" | null][] = [
   ["Information Gathering", null],
   ["Service Enumeration", null],
-  ["Penetration", generated("msf", null)],
+  ["Penetration", "msf"],
   ["Maintaining Access", null],
-  ["House Cleaning", generated("cleanup", null)],
+  ["House Cleaning", "cleanup"],
 ];
 
 const heading = (text: string): ReportNode => ({
@@ -88,8 +90,10 @@ export function introductionParts(text: string): Record<string, string> {
   return Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, v.join("\n").trim()]));
 }
 
-/** The starting document of a report-level section (§5.5); `target`, `ad` and `details` have none here. */
-export function buildSectionDraft(kind: SectionKind, _data: ReportData, settings: Settings): ReportNode {
+/** The starting document of a report-level section (§5.5); `target`, `ad` and `details` have none here. Generated
+ *  tables are the page's own copies (§10.8), built from `data` with the report's targets (`meta`). */
+export function buildSectionDraft(kind: SectionKind, data: ReportData, settings: Settings, meta: ReportMeta = {}): ReportNode {
+  const copy = (k: CopiedKind) => tableCopy(k, null, data, null, meta);
   switch (kind) {
     case "introduction": {
       const parts = introductionParts(settings.reportIntroduction ?? "");
@@ -99,7 +103,7 @@ export function buildSectionDraft(kind: SectionKind, _data: ReportData, settings
           return [heading(name), ...(blocks.length > 0 ? blocks : [slot(hint)])];
         }),
         heading("Scope"),
-        generated("scope-table", null),
+        copy("scope-table"),
       ]);
     }
     case "summary":
@@ -108,7 +112,7 @@ export function buildSectionDraft(kind: SectionKind, _data: ReportData, settings
         slot("What the targets did well"),
         slot("Vulnerabilities and trends"),
         slot("Wrap-up"),
-        generated("findings", null),
+        copy("findings"),
         heading("Recommendations"),
         slot("Recommendations"),
       ]);
@@ -117,14 +121,18 @@ export function buildSectionDraft(kind: SectionKind, _data: ReportData, settings
     case "methodology":
       return doc([
         ...textBlocks(settings.reportMethodology ?? ""),
-        ...STAGES.flatMap(([stage, fact]) => [heading(stage), slot(`How ${stage.toLowerCase()} was done`), ...(fact ? [fact] : [])]),
+        ...STAGES.flatMap(([stage, fact]) => [
+          heading(stage),
+          slot(`How ${stage.toLowerCase()} was done`),
+          ...(fact === "msf" ? [generated("msf", null)] : fact === "cleanup" ? [copy("cleanup")] : []),
+        ]),
       ]);
     case "engagement-tested":
-      return doc([generated("tested", null)]);
+      return doc([copy("tested")]);
     case "further":
       return doc([slot("Further information")]);
     case "references":
-      return doc([slot("Anything else to cite"), generated("references", null)]);
+      return doc([slot("Anything else to cite"), copy("references")]);
     default:
       return doc([]);
   }

@@ -5,17 +5,30 @@ import type { SectionKind } from "../types/report";
 import type { Settings } from "../types/settings";
 
 const settings = (reportMethodology = "", reportIntroduction = "") => ({ reportMethodology, reportIntroduction }) as Settings;
-const data = {} as ReportData;
+const data = {
+  engagement: { kind: "exam-sim" },
+  hosts: [],
+  services: [],
+  log: [],
+  findings: [],
+  attempts: [],
+  ruledOut: [],
+  grants: [],
+  hops: [],
+  cleanup: [],
+} as unknown as ReportData;
 const hints = (doc: ReportNode) => (doc.content ?? []).filter((n) => n.type === "slot").map((n) => n.attrs?.hint);
 const headings = (doc: ReportNode) =>
   (doc.content ?? []).filter((n) => n.type === "heading").map((n) => n.content?.[0].text);
-const kinds = (doc: ReportNode) => (doc.content ?? []).map((n) => (n.type === "generated" ? `G:${n.attrs?.kind}` : n.type));
+/** Node types, a generated block as G:kind (live) or T:kind (the page's own table copy). */
+const kinds = (doc: ReportNode) =>
+  (doc.content ?? []).map((n) => (n.type === "generated" ? `G:${n.attrs?.kind}` : n.type === "table-block" ? `T:${n.attrs?.kind}` : n.type));
 
 describe("buildSectionDraft", () => {
   it("lays section 1 out as Introduction, Objective and Requirements, empty slots without a Settings default", () => {
     const doc = buildSectionDraft("introduction", data, settings());
     expect(headings(doc)).toEqual(["Introduction", "Objective", "Requirements", "Scope"]);
-    expect(kinds(doc)).toEqual(["heading", "slot", "heading", "slot", "heading", "slot", "heading", "G:scope-table"]);
+    expect(kinds(doc)).toEqual(["heading", "slot", "heading", "slot", "heading", "slot", "heading", "T:scope-table"]);
   });
 
   it("fills section 1 from the Settings default, split on its part lines, bullets as a list", () => {
@@ -31,7 +44,7 @@ describe("buildSectionDraft", () => {
       "  screenshots",
     ].join("\n");
     const doc = buildSectionDraft("introduction", data, settings("", text));
-    expect(kinds(doc)).toEqual(["heading", "paragraph", "heading", "paragraph", "heading", "paragraph", "list", "list", "heading", "G:scope-table"]);
+    expect(kinds(doc)).toEqual(["heading", "paragraph", "heading", "paragraph", "heading", "paragraph", "list", "list", "heading", "T:scope-table"]);
     expect(doc.content?.[1].content?.[0].text).toBe("The exam report contains all efforts that were conducted.");
     expect(doc.content?.[3].content?.[0].text).toBe("Perform an internal penetration test.");
     expect(doc.content?.[6]).toEqual({
@@ -69,12 +82,12 @@ describe("buildSectionDraft", () => {
     const doc = buildSectionDraft("summary", data, settings());
     expect(hints(doc)).toEqual(["What the engagement was", "What the targets did well", "Vulnerabilities and trends", "Wrap-up", "Recommendations"]);
     expect(headings(doc)).toEqual(["Recommendations"]);
-    expect(kinds(doc)).toEqual(["slot", "slot", "slot", "slot", "G:findings", "heading", "slot"]);
+    expect(kinds(doc)).toEqual(["slot", "slot", "slot", "slot", "T:findings", "heading", "slot"]);
   });
 
   it("ends the introduction with a Scope subheading and the scope table, numbered 1.4", () => {
     const doc = buildSectionDraft("introduction", data, settings());
-    expect(kinds(doc).slice(-2)).toEqual(["heading", "G:scope-table"]);
+    expect(kinds(doc).slice(-2)).toEqual(["heading", "T:scope-table"]);
     expect(headings(doc).at(-1)).toBe("Scope");
     expect(subsectionNumbers("introduction", "1", doc).get((doc.content?.length ?? 0) - 2)).toBe("1.4");
   });
@@ -88,7 +101,7 @@ describe("buildSectionDraft", () => {
       "heading", "slot",
       "heading", "slot", "G:msf",
       "heading", "slot",
-      "heading", "slot", "G:cleanup",
+      "heading", "slot", "T:cleanup",
     ]);
     expect(kinds(buildSectionDraft("methodology", data, settings()))[0]).toBe("heading");
   });
@@ -97,7 +110,7 @@ describe("buildSectionDraft", () => {
     expect(hints(buildSectionDraft("considerations", data, settings()))[0]).toMatch(/^Anything that affected testing/);
     expect(buildSectionDraft("engagement-tested", data, settings()).content?.[0].attrs).toMatchObject({ kind: "tested", hostId: null });
     expect(kinds(buildSectionDraft("further", data, settings()))).toEqual(["slot"]);
-    expect(kinds(buildSectionDraft("references", data, settings()))).toContain("G:references");
+    expect(kinds(buildSectionDraft("references", data, settings()))).toContain("T:references");
   });
 });
 

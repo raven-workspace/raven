@@ -78,8 +78,11 @@ export function targetHeadings(doc: ReportNode, data: ReportData, target: Report
       text = `${text} – ${title}`;
     } else if (TITLED.has(phase)) {
       // The first vulnerability before the region ends (the next heading or the next machine).
-      const vuln = content.slice(i + 1).find((m) => m.type === "vuln" || m.type === "phase" || (m.type === "generated" && m.attrs?.kind !== "tested"));
-      const finding = vuln?.type === "vuln" ? data.findings.find((f) => f.id === vuln.attrs?.findingId) : undefined;
+      const isFinding = (m: ReportNode) => m.type === "vuln" || m.type === "finding";
+      const vuln = content
+        .slice(i + 1)
+        .find((m) => isFinding(m) || m.type === "phase" || ((m.type === "generated" || m.type === "table-block") && m.attrs?.kind !== "tested"));
+      const finding = vuln && isFinding(vuln) ? data.findings.find((f) => f.id === vuln.attrs?.findingId) : undefined;
       if (finding?.title.trim()) text = `${text} – ${finding.title.trim()}`;
     }
     if (phase === "tested") {

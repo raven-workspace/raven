@@ -422,7 +422,7 @@ function ReportBody({
     const out = new Map<string, ReportNode>();
     for (const e of entries) {
       if (hasCurrentPage(e.section) || e.section.kind === "details" || e.section.kind === "page") continue;
-      out.set(e.section.id, e.target ? buildTargetDraft(data, e.target, reportMeta) : buildSectionDraft(e.section.kind, data, settings));
+      out.set(e.section.id, e.target ? buildTargetDraft(data, e.target, reportMeta) : buildSectionDraft(e.section.kind, data, settings, reportMeta));
     }
     return out;
   }, [entries, data, reportMeta, settings]);

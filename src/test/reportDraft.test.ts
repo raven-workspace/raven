@@ -57,7 +57,7 @@ const note: LogContent = { kind: "note", text: "secret" };
 const goal = (ownerId: string, entryIds: string[]): ChecklistItem =>
   ({ ownerId, goalId: `g-${entryIds.join("-")}`, evidence: entryIds.map((entryId) => ({ entryId })) }) as ChecklistItem;
 const service = (hostId: string, port: number, confirmedEntryId: string | null = null): Service =>
-  ({ id: `s-${hostId}-${port}`, hostId, port, confirmedEntryId }) as Service;
+  ({ id: `s-${hostId}-${port}`, hostId, port, protocol: "tcp", state: "open", confirmedEntryId }) as Service;
 const grant = (hostId: string, level: AccessGrant["level"], logEntryId: string, at: number): AccessGrant =>
   ({ id: `gr-${logEntryId}`, hostId, level, logEntryId, at: T0 + at * MIN }) as AccessGrant;
 const hop = (fromHostId: string | null, toHostId: string, logEntryId: string, at: number): Hop =>
@@ -189,7 +189,8 @@ function stepOf(doc: ReportNode, entryId: string): ReportNode {
 const firstSteps = (doc: ReportNode) => topLevel(doc).find((n) => n.type === "steps")!;
 
 /** The page as a readable outline: phases, steps lists ([ … ]) and their steps (-), slots (S: a step's sentence, SF: a
- *  flag's, S:<hint> any other), evidence ids, vulns (V:id), exploits (X:id), generated kinds (G:kind). */
+ *  flag's, S:<hint> any other), evidence ids, finding copies (V:id), exploits (X:id), generated kinds, live or copied
+ *  (G:kind). */
 function outline(doc: ReportNode): string[] {
   const out: string[] = [];
   const walk = (n: ReportNode) => {
@@ -205,7 +206,7 @@ function outline(doc: ReportNode): string[] {
       const hint = n.attrs?.hint;
       out.push(hint === STEP_HINT_TEXT ? "S" : hint === FLAG_HINT_TEXT ? "SF" : `S:${hint}`);
     } else if (n.type === "evidence") out.push(n.attrs?.entryId as string);
-    else if (n.type === "vuln") out.push(`V:${n.attrs?.findingId}`);
+    else if (n.type === "finding") out.push(`V:${n.attrs?.findingId}`);
     else if (n.type === "exploit") out.push(`X:${n.attrs?.fileId}`);
     else if (n.type === "paragraph") out.push("P");
     else out.push(`G:${n.attrs?.kind}`);
@@ -289,7 +290,11 @@ describe("the short draft (layout 4)", () => {
 
   it("opens every machine with facts, result, enum heading and ports, and never emits port-scan or attack-chain", () => {
     expect(topLevel(doc).slice(0, 4).map((n) => n.attrs?.kind ?? n.attrs?.phase)).toEqual(["facts", "result", "enum", "ports"]);
-    expect(topLevel(doc)[3]).toEqual({ type: "generated", attrs: { kind: "ports", hostId: H1, appendix: "inline", notes: {} } });
+    // The port table is the page's own copy: a real table, its Notes column empty.
+    expect(topLevel(doc)[3]).toMatchObject({ type: "table-block", attrs: { kind: "ports", hostId: H1, appendix: "inline", edited: false } });
+    const ports = topLevel(doc)[3].content!.find((n) => n.type === "table")!;
+    expect(ports.content![0].content!.map((c) => c.content?.[0].content?.[0].text)).toEqual(["Port", "Service", "Version", "Notes"]);
+    expect(ports.content![1].content![3]).toEqual({ type: "tableCell", content: [{ type: "paragraph" }] });
     const adDoc = buildTargetDraft(adSet(), target(AD_HOSTS, "ad-set"), {});
     expect(JSON.stringify(adDoc)).not.toMatch(/"port-scan"|"attack-chain"/);
     for (const id of AD_HOSTS) {
@@ -300,7 +305,7 @@ describe("the short draft (layout 4)", () => {
 
   it("opens the AD set with the attack-path table", () => {
     const adDoc = buildTargetDraft(adSet(), target(AD_HOSTS, "ad-set"), {});
-    expect(adDoc.content![0]).toMatchObject({ type: "generated", attrs: { kind: "attack-path", hostId: null } });
+    expect(adDoc.content![0]).toMatchObject({ type: "table-block", attrs: { kind: "attack-path", hostId: null } });
   });
 
   it("an exploit file sits inside the step whose command names it", () => {
@@ -381,9 +386,9 @@ describe("the short draft (layout 4)", () => {
     expect(stepsNode([stepNode([])])).toEqual({ type: "steps", content: [stepNode([])] });
   });
 
-  it("keeps REPRODUCE_LABEL exported and moves the layout to 4", () => {
+  it("keeps REPRODUCE_LABEL exported and moves the layout to 5", () => {
     expect(typeof REPRODUCE_LABEL).toBe("string");
-    expect(DRAFT_LAYOUT).toBe(4);
+    expect(DRAFT_LAYOUT).toBe(5);
   });
 });
 
@@ -491,7 +496,7 @@ describe("buildTargetDraft", () => {
     d.log[3] = entry("ferox", H, 10, cmd(long, twelve));
     const nodes = allNodes(buildTargetDraft(d, target([H]), {})).filter((n) => n.type === "evidence" && n.attrs?.entryId === "ferox");
     expect(nodes.map((n) => n.attrs?.keep)).toEqual([[[0, 39]], null]);
-    expect(nodes[0].attrs).toEqual({ entryId: "ferox", block: 0, keep: [[0, 39]], emphasis: [], appendix: "inline" });
+    expect(nodes[0].attrs).toEqual({ entryId: "ferox", block: 0, keep: [[0, 39]], emphasis: [], appendix: "inline", copy: { command: "cmd 0", output: long }, truncated: false });
   });
 
   it("brings along a screenshot taken between two placed entries, not one outside them", () => {
@@ -578,7 +583,7 @@ describe("buildTargetDraft", () => {
         f("old", { severity: "medium", stepEntryIds: ["nmap"] }),
       ];
       const doc = buildTargetDraft(d, target([H]), {});
-      const lines = (doc.content ?? []).map((n) => (n.type === "phase" ? `# ${n.attrs?.phase}${n.attrs?.findingId ? `:${n.attrs.findingId}` : ""}` : n.type === "vuln" ? `V:${n.attrs?.findingId}` : null)).filter(Boolean);
+      const lines = (doc.content ?? []).map((n) => (n.type === "phase" ? `# ${n.attrs?.phase}${n.attrs?.findingId ? `:${n.attrs.findingId}` : ""}` : n.type === "finding" ? `V:${n.attrs?.findingId}` : null)).filter(Boolean);
       expect(lines).toEqual([
         "# enum", "# foothold", "V:rce", "# privesc", "# post",
         "# additional", "# additional:old", "V:old", "# additional:relay", "V:relay", "# additional:winrm", "V:winrm",
@@ -682,9 +687,11 @@ describe("buildTargetDraft", () => {
     });
   });
 
-  it("generates the facts, result, ports and Also tested blocks and none of the old ones", () => {
-    const kinds = allNodes(buildTargetDraft(walked(), target([H]), {})).filter((n) => n.type === "generated").map((n) => n.attrs?.kind);
-    expect(kinds).toEqual(["facts", "result", "ports", "tested"]);
+  it("generates the facts heading live, the result, ports and Also tested blocks as the page's copies, and none of the old ones", () => {
+    const nodes = allNodes(buildTargetDraft(walked(), target([H]), {}));
+    expect(nodes.filter((n) => n.type === "generated").map((n) => n.attrs?.kind)).toEqual(["facts"]);
+    expect(nodes.filter((n) => n.type === "table-block").map((n) => n.attrs?.kind)).toEqual(["result", "ports", "tested"]);
+    expect(nodes.some((n) => n.type === "vuln")).toBe(false);
   });
 });
 
@@ -737,7 +744,10 @@ describe("addNewEvidence", () => {
     expect(next.content![privSteps].content!.at(-1)).toEqual({
       type: "step",
       attrs: { entryId: "whoami2" },
-      content: [{ type: "slot", attrs: { hint: STEP_HINT_TEXT } }, { type: "evidence", attrs: { entryId: "whoami2", block: 0, keep: null, emphasis: [], appendix: "inline" } }],
+      content: [
+        { type: "slot", attrs: { hint: STEP_HINT_TEXT } },
+        { type: "evidence", attrs: { entryId: "whoami2", block: 0, keep: null, emphasis: [], appendix: "inline", copy: { command: "cmd 0", output: "SeImpersonate" }, truncated: false } },
+      ],
     });
   });
 
@@ -833,8 +843,8 @@ describe("AD set draft", () => {
   it("opens with the attack-path table, names phases by how each machine was entered, and places only placing entries", () => {
     const doc = buildTargetDraft(adSet(), target(AD_HOSTS, "ad-set"), {});
     const nodes = doc.content ?? [];
-    expect(nodes[0]).toEqual({ type: "generated", attrs: { kind: "attack-path", hostId: null, appendix: "inline" } });
-    expect(nodes.filter((n) => n.type === "generated" && n.attrs?.hostId === null)).toHaveLength(1);
+    expect(nodes[0]).toMatchObject({ type: "table-block", attrs: { kind: "attack-path", hostId: null, appendix: "inline", edited: false } });
+    expect(nodes.filter((n) => (n.type === "generated" || n.type === "table-block") && n.attrs?.hostId === null)).toHaveLength(1);
     const facts = nodes.filter((n) => n.attrs?.kind === "facts").map((n) => n.attrs?.hostId);
     // The attack path: the entry machine, then by when each was reached, the DC last.
     expect(facts).toEqual(["h-ms01", "h-ad02", "h-dc01"]);
@@ -857,7 +867,7 @@ describe("AD set draft", () => {
     ];
     const doc = buildTargetDraft(d, target(AD_HOSTS, "ad-set"), {});
     const nodes = doc.content ?? [];
-    const vulns = nodes.flatMap((n, i) => (n.type === "vuln" ? [i] : []));
+    const vulns = nodes.flatMap((n, i) => (n.type === "finding" ? [i] : []));
     expect(vulns).toHaveLength(1);
     const heading = [...nodes.slice(0, vulns[0])].reverse().find((n) => n.type === "phase");
     expect(heading?.attrs).toEqual({ phase: "privesc", hostId: "h-ad02" });

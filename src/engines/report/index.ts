@@ -17,3 +17,5 @@ export * from "./headings";
 export * from "./creds";
 export * from "./tables";
 export * from "./guides";
+export * from "./copies";
+export * from "./terminal";

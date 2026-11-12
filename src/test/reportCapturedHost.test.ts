@@ -146,7 +146,7 @@ describe("xfer03's report page makes no false claim", () => {
 
   it("tells one finding per heading; observations go under Additional findings, info last", () => {
     const heads = (doc.content ?? []).flatMap((n: ReportNode) =>
-      n.type === "phase" ? [`# ${n.attrs?.phase}${n.attrs?.findingId ? `:${String(n.attrs.findingId).replace("f-exam-xfer-", "")}` : ""}`] : n.type === "vuln" ? [`V:${String(n.attrs?.findingId).replace("f-exam-xfer-", "")}`] : [],
+      n.type === "phase" ? [`# ${n.attrs?.phase}${n.attrs?.findingId ? `:${String(n.attrs.findingId).replace("f-exam-xfer-", "")}` : ""}`] : n.type === "finding" ? [`V:${String(n.attrs?.findingId).replace("f-exam-xfer-", "")}`] : [],
     );
     expect(heads).toEqual([
       "# enum", "# foothold", "V:reuse", "# privesc", "V:rsync", "# post",

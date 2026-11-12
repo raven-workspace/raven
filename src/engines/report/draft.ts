@@ -1,5 +1,6 @@
-import type { Finding } from "../../types/findings";
+import type { Finding, FindingFile } from "../../types/findings";
 import type { LogEntry } from "../../types/log";
+import { evidenceCopy, exploitCopy, findingCopy, tableCopy } from "./copies";
 import { proofCompanions } from "./proof";
 import { testedNotExploited } from "./coverage";
 import { isDeadEnd, placingEntries } from "./prove";
@@ -12,14 +13,12 @@ import type {
   GeneratedKind,
   Phase,
   PhaseAttrs,
-  PortsAttrs,
   ReportData,
   ReportMeta,
   ReportNode,
   ReportTarget,
   SlotAttrs,
   StepAttrs,
-  VulnAttrs,
 } from "./types";
 
 /** How a screenshot taken after a kept entry still comes along with it. */
@@ -33,8 +32,13 @@ const EXPLOIT_HINT = "Explain each change";
 export const REPRODUCE_LABEL = "Steps to reproduce";
 /** OffSec's sample order of a machine's sub-sections, then Raven's own: Additional findings, Also tested. */
 const PHASE_ORDER: Phase[] = ["enum", "foothold", "lateral", "privesc", "domain", "post", "additional", "tested"];
-/** Generated blocks that open a machine or close the AD set: a phase's region never runs past one. */
+/** Generated blocks (atoms or table copies) that open a machine or close the AD set: a phase's region never runs past one. */
 const REGION_BREAKS = new Set<GeneratedKind>(["facts", "port-scan", "attack-chain", "attack-path"]);
+/** A generated block's kind, live (`generated`) or the page's copy (`table-block`); null for any other node. */
+const blockKind = (n: ReportNode | undefined): GeneratedKind | null =>
+  n && (n.type === "generated" || n.type === "table-block") ? (n.attrs?.kind as GeneratedKind) : null;
+/** A finding on the page: its copy (`finding`), or a layout-4 `vuln`. */
+const isFindingBlock = (n: ReportNode | undefined) => n?.type === "finding" || n?.type === "vuln";
 
 type HostEntry = "foothold" | "hop";
 
@@ -44,8 +48,6 @@ export const generated = (kind: GeneratedKind, hostId: string | null) =>
   node("generated", { kind, hostId, appendix: "inline" } satisfies GeneratedAttrs);
 const phaseNode = (phase: Phase, hostId: string, findingId?: string) =>
   node("phase", (findingId ? { phase, hostId, findingId } : { phase, hostId }) satisfies PhaseAttrs);
-/** A machine's port table, its Notes column empty. */
-const portsNode = (hostId: string) => node("generated", { kind: "ports", hostId, appendix: "inline", notes: {} } satisfies PortsAttrs);
 
 export const byTime = (a: LogEntry, b: LogEntry) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id);
 
@@ -72,15 +74,24 @@ export function ownerParagraphs(text: string, entryId: string, fromField?: "obse
     }));
 }
 
-/** One evidence node per command block (or one for the whole entry). A note is the owner's own text: it lands as
- *  editable paragraphs, never a frozen block. */
+/** One evidence node per command block (or one for the whole entry), each with the page's own copy of its text
+ *  (`evidenceCopy`; a private entry is never copied). A note is the owner's own text: it lands as editable paragraphs,
+ *  never a frozen block. */
 export function evidenceBlocks(entry: LogEntry): ReportNode[] {
   if (entry.content.kind === "note") return ownerParagraphs(entry.content.text, entry.id);
   const placements: Pick<EvidenceAttrs, "block" | "keep">[] =
     entry.content.kind === "command" && entry.content.blocks.length > 0
       ? entry.content.blocks.map((b, i) => ({ block: i, keep: defaultKeep(lineCount(b.output)) }))
       : [{ block: null, keep: null }];
-  return placements.map((p) => node("evidence", { entryId: entry.id, ...p, emphasis: [], appendix: "inline" } satisfies EvidenceAttrs));
+  return placements.map((p) =>
+    node("evidence", {
+      entryId: entry.id,
+      ...p,
+      emphasis: [],
+      appendix: "inline",
+      ...(entry.private ? {} : evidenceCopy(entry, p.block)),
+    } satisfies EvidenceAttrs),
+  );
 }
 
 /** An entry as one step: an empty slot first ("what you do next, and why"), then its evidence. A flag prints its own
@@ -217,9 +228,10 @@ export function phaseSplit(entries: LogEntry[], data: ReportData, hostId: string
 
 const isFlag = (e: LogEntry | undefined) => e?.content.kind === "flag";
 
-/** A finding file as the page shows it: the exploit, and for a modified one the slot explaining each change. */
-const exploitNodes = (file: { id: string; modified: boolean }): ReportNode[] => [
-  node("exploit", { fileId: file.id, markedLines: [], appendix: "inline" } satisfies ExploitAttrs),
+/** A finding file as the page shows it: the exploit (with the page's own copy of its code), and for a modified one the
+ *  slot explaining each change. */
+const exploitNodes = (file: FindingFile): ReportNode[] => [
+  node("exploit", { fileId: file.id, markedLines: [], appendix: "inline", ...exploitCopy(file) } satisfies ExploitAttrs),
   ...(file.modified ? [slot(EXPLOIT_HINT)] : []),
 ];
 
@@ -362,6 +374,8 @@ function hostPlan(data: ReportData, hostId: string, entry: HostEntry, enumerate:
  *  says which of the host's findings are placed here (in an AD set, a finding on several machines is placed once). */
 function hostBlock(
   data: ReportData,
+  target: ReportTarget,
+  meta: ReportMeta,
   hostId: string,
   entry: HostEntry,
   enumerate: boolean,
@@ -376,7 +390,12 @@ function hostBlock(
     return stepNode([flag, ...rest.filter((e) => e.kind !== "screenshot"), ...rest.filter((e) => e.kind === "screenshot")]);
   };
 
-  const out: ReportNode[] = [generated("facts", hostId), generated("result", hostId), phaseNode("enum", hostId), portsNode(hostId)];
+  const out: ReportNode[] = [
+    generated("facts", hostId),
+    tableCopy("result", hostId, data, target, meta),
+    phaseNode("enum", hostId),
+    tableCopy("ports", hostId, data, target, meta),
+  ];
   for (const phase of PHASE_ORDER) {
     if (!STEP_PHASES.has(phase)) continue;
     const steps = stepsIn(phase);
@@ -393,7 +412,7 @@ function hostBlock(
     const groups = here.length > 0 ? here.map((f, k) => ({ finding: f as Finding | null, k })) : [{ finding: null as Finding | null, k: 0 }];
     groups.forEach(({ finding: f, k }, g) => {
       out.push(k === 0 ? phaseNode(phase, hostId) : phaseNode(phase, hostId, f!.id));
-      if (f) out.push(node("vuln", { findingId: f.id } satisfies VulnAttrs));
+      if (f) out.push(findingCopy(f));
       const mine = walk.filter((_, i) => groupOf[i] === k);
       // Each exploit file goes inside the step that runs it, so the code is read before it is used.
       const inStep = new Map<number, ReportNode[]>();
@@ -418,11 +437,11 @@ function hostBlock(
   if (extra.length > 0) {
     out.push(phaseNode("additional", hostId));
     for (const f of extra) {
-      out.push(phaseNode("additional", hostId, f.id), node("vuln", { findingId: f.id } satisfies VulnAttrs));
+      out.push(phaseNode("additional", hostId, f.id), findingCopy(f));
       for (const file of data.findingFiles.filter((ff) => ff.findingId === f.id)) out.push(...exploitNodes(file));
     }
   }
-  if (testedNotExploited(data, hostId).length > 0) out.push(phaseNode("tested", hostId), generated("tested", hostId));
+  if (testedNotExploited(data, hostId).length > 0) out.push(phaseNode("tested", hostId), tableCopy("tested", hostId, data, target, meta));
   return out;
 }
 
@@ -465,17 +484,17 @@ function findingOwners(data: ReportData, machines: string[]): Map<string, string
   return owners;
 }
 
-/** A target's first draft, in OffSec's sample order (§5.7) with §10.2's short steps. Built once; the owner's page is
- *  the truth after that. `meta` is part of the contract for later rounds; nothing in the draft reads it yet. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function buildTargetDraft(data: ReportData, target: ReportTarget, _meta: ReportMeta): ReportNode {
+/** A target's first draft, in OffSec's sample order (§5.7) with §10.2's short steps, every placed block the page's own
+ *  copy (§10.8): findings, the Result line, port and Also tested tables, evidence and exploit text. Built once; the
+ *  owner's page is the truth after that. `meta` names the expected flags the Result line prints. */
+export function buildTargetDraft(data: ReportData, target: ReportTarget, meta: ReportMeta): ReportNode {
   if (target.kind === "standalone") {
-    return { type: "doc", content: hostBlock(data, target.hostIds[0], "foothold", true) };
+    return { type: "doc", content: hostBlock(data, target, meta, target.hostIds[0], "foothold", true) };
   }
   const machines = machinesInOrder(data, target);
   const owner = findingOwners(data, machines);
-  const content = [generated("attack-path", null)];
-  for (const id of machines) content.push(...hostBlock(data, id, hostEntry(data, target, id), false, (f) => owner.get(f) === id));
+  const content = [tableCopy("attack-path", null, data, target, meta)];
+  for (const id of machines) content.push(...hostBlock(data, target, meta, id, hostEntry(data, target, id), false, (f) => owner.get(f) === id));
   return { type: "doc", content };
 }
 
@@ -515,7 +534,7 @@ function regionEnd(content: ReportNode[], phaseIndex: number): number {
   while (
     j < content.length &&
     content[j].type !== "phase" &&
-    !(content[j].type === "generated" && REGION_BREAKS.has(content[j].attrs?.kind as GeneratedKind) && content[j].attrs?.hostId !== content[phaseIndex].attrs?.hostId)
+    !(REGION_BREAKS.has(blockKind(content[j]) as GeneratedKind) && content[j].attrs?.hostId !== content[phaseIndex].attrs?.hostId)
   ) {
     j++;
   }
@@ -579,7 +598,7 @@ function placeEntry(content: ReportNode[], data: ReportData, hostId: string, ent
   // phase's last one: new steps go at the phase's end. A proof flag opens the phase.
   const headings = content.flatMap((n, i) => (isPhase(n, hostId, phase) ? [i] : []));
   const findingAt = (i: number) =>
-    (content[i].attrs?.findingId as string | null | undefined) ?? (content[i + 1]?.type === "vuln" ? (content[i + 1].attrs?.findingId as string) : null);
+    (content[i].attrs?.findingId as string | null | undefined) ?? (isFindingBlock(content[i + 1]) ? (content[i + 1].attrs?.findingId as string) : null);
   const owner = headings.find((i) => {
     const id = findingAt(i);
     return id != null && (data.findings.find((f) => f.id === id)?.stepEntryIds.includes(entry.id) ?? false);
@@ -589,7 +608,7 @@ function placeEntry(content: ReportNode[], data: ReportData, hostId: string, ent
   const lists = content.slice(heading + 1, end).flatMap((n, j) => (n.type === "steps" ? [heading + 1 + j] : []));
   if (lists.length === 0) {
     let at = heading + 1;
-    while (at < end && (content[at].type === "vuln" || (content[at].type === "generated" && content[at].attrs?.kind === "ports"))) at++;
+    while (at < end && (isFindingBlock(content[at]) || blockKind(content[at]) === "ports")) at++;
     return { at: [at], nodes: [stepsNode(nodes)] };
   }
   const listAt = opens ? lists[0] : lists[lists.length - 1];
@@ -619,7 +638,7 @@ export function addNewEvidence(
   doc: ReportNode,
   data: ReportData,
   target: ReportTarget,
-  _meta: ReportMeta,
+  meta: ReportMeta,
   removed: string[],
 ): { doc: ReportNode; added: string[]; addedTested: string[] } {
   const skip = new Set([...evidenceIdsIn(doc), ...removed]);
@@ -658,7 +677,7 @@ export function addNewEvidence(
     }
     // Items tried and failed since the draft: the Also tested heading and its list, where the page has none.
     if (testedNotExploited(data, hostId).length > 0 && !content.some((n) => isPhase(n, hostId, "tested"))) {
-      content = insertAtPath(content, [placeForPhase(content, hostId, "tested")], [phaseNode("tested", hostId), generated("tested", hostId)]);
+      content = insertAtPath(content, [placeForPhase(content, hostId, "tested")], [phaseNode("tested", hostId), tableCopy("tested", hostId, data, target, meta)]);
       addedTested.push(hostId);
     }
   }
