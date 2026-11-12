@@ -13,7 +13,7 @@ const m = vi.mocked(api, true);
 const settings: Settings = {
   autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "", listenerPort: "", kaliUser: "kali",
   windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false,
-  reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "", reportIntroduction: "",
+  reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "", reportIntroduction: "", reportGuidesHidden: [],
 };
 
 const INTRO = "Default introduction, objective and requirements";
@@ -89,5 +89,22 @@ describe("report details settings", () => {
     await user.type(await screen.findByLabelText(INTRO), "Introduction{enter}All efforts.");
     await user.tab();
     expect(m.settingsUpdate).toHaveBeenCalledWith({ reportIntroduction: "Introduction\nAll efforts." });
+  });
+
+  it("shows hidden guide notes again, and is off while none are hidden", async () => {
+    const user = userEvent.setup();
+    m.settingsGet.mockResolvedValue({ ...settings, reportGuidesHidden: ["ports", "vuln"] });
+    m.settingsUpdate.mockResolvedValue({ ...settings, reportGuidesHidden: [] });
+    mount();
+    const button = await screen.findByRole("button", { name: "Show guide notes again" });
+    expect(button).toBeEnabled();
+    await user.click(button);
+    expect(m.settingsUpdate).toHaveBeenCalledWith({ reportGuidesHidden: [] });
+    await vi.waitFor(() => expect(screen.getByRole("button", { name: "Show guide notes again" })).toBeDisabled());
+  });
+
+  it("keeps Show guide notes again off when none are hidden", async () => {
+    mount();
+    expect(await screen.findByRole("button", { name: "Show guide notes again" })).toBeDisabled();
   });
 });

@@ -580,6 +580,7 @@ const settings: Settings = {
     "· The methodology and a walkthrough of every step",
     "· Each finding with screenshots, commands and the proof files",
   ].join("\n"),
+  reportGuidesHidden: [],
 };
 
 export const FIXTURES: AuditFixtures = {

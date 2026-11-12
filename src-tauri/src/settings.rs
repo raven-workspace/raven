@@ -31,6 +31,9 @@ const REPORT_EMAIL_KEY: &str = "report_email";
 const REPORT_OSID_KEY: &str = "report_osid";
 const REPORT_METHODOLOGY_KEY: &str = "report_methodology";
 const REPORT_INTRODUCTION_KEY: &str = "report_introduction";
+const REPORT_GUIDES_HIDDEN_KEY: &str = "report_guides_hidden";
+const MAX_GUIDE_ID_LEN: usize = 64;
+const MAX_GUIDES_HIDDEN: usize = 200;
 const MAX_REPORT_FIELD_LEN: usize = 2000;
 const MAX_REPORT_METHODOLOGY_LEN: usize = 20000;
 const RETENTION_RANGE: std::ops::RangeInclusive<u32> = 1..=200;
@@ -62,6 +65,8 @@ pub struct Settings {
     pub report_methodology: String,
     /// Default text of section 1 (Introduction, Objective, Requirements) for new reports.
     pub report_introduction: String,
+    /// Report guide notes the owner dismissed, by id; `"*"` hides them all. Empty by default.
+    pub report_guides_hidden: Vec<String>,
 }
 
 #[derive(Clone, Default, Deserialize)]
@@ -83,6 +88,7 @@ pub struct SettingsPatch {
     pub report_osid: Option<String>,
     pub report_methodology: Option<String>,
     pub report_introduction: Option<String>,
+    pub report_guides_hidden: Option<Vec<String>>,
 }
 
 /// Debug output never shows the NVD API key, only whether the patch sets one.
@@ -104,6 +110,7 @@ impl std::fmt::Debug for SettingsPatch {
             .field("report_osid", &self.report_osid)
             .field("report_methodology", &self.report_methodology)
             .field("report_introduction", &self.report_introduction)
+            .field("report_guides_hidden", &self.report_guides_hidden)
             .finish()
     }
 }
@@ -158,6 +165,10 @@ pub fn get(conn: &Connection) -> AppResult<Settings> {
         report_osid: text(REPORT_OSID_KEY),
         report_methodology: text(REPORT_METHODOLOGY_KEY),
         report_introduction: text(REPORT_INTRODUCTION_KEY),
+        report_guides_hidden: serde_json::from_str::<Vec<String>>(&text(REPORT_GUIDES_HIDDEN_KEY))
+            .ok()
+            .and_then(|v| clean_guides_hidden(v).ok())
+            .unwrap_or_default(),
     })
 }
 
@@ -270,6 +281,24 @@ fn clean_report_text(field: &str, s: &str, max: usize) -> AppResult<String> {
     }
 }
 
+/// Trims each id and drops repeats (first wins): at most 200 ids of 1-64 characters.
+fn clean_guides_hidden(list: Vec<String>) -> AppResult<Vec<String>> {
+    let mut out: Vec<String> = Vec::new();
+    for id in list {
+        let id = id.trim().to_string();
+        if id.is_empty() || id.chars().count() > MAX_GUIDE_ID_LEN || id.chars().any(char::is_control) {
+            return Err(bad("reportGuidesHidden", "each guide id must be 1-64 characters"));
+        }
+        if !out.contains(&id) {
+            out.push(id);
+        }
+    }
+    if out.len() > MAX_GUIDES_HIDDEN {
+        return Err(bad("reportGuidesHidden", "at most 200 hidden guide notes"));
+    }
+    Ok(out)
+}
+
 fn put(conn: &Connection, key: &str, v: u32) -> AppResult<()> {
     put_text(conn, key, &v.to_string())
 }
@@ -299,6 +328,7 @@ pub fn update(conn: &Connection, patch: SettingsPatch) -> AppResult<Settings> {
     let report_osid = report("reportOsid", &patch.report_osid, MAX_REPORT_FIELD_LEN)?;
     let report_methodology = report("reportMethodology", &patch.report_methodology, MAX_REPORT_METHODOLOGY_LEN)?;
     let report_introduction = report("reportIntroduction", &patch.report_introduction, MAX_REPORT_METHODOLOGY_LEN)?;
+    let guides_hidden = patch.report_guides_hidden.map(clean_guides_hidden).transpose()?;
     for (key, v) in [
         (REPORT_NAME_KEY, report_name),
         (REPORT_EMAIL_KEY, report_email),
@@ -336,6 +366,10 @@ pub fn update(conn: &Connection, patch: SettingsPatch) -> AppResult<Settings> {
     if let Some(m) = machines {
         let json = serde_json::to_string(&m).map_err(|e| AppError::Db(e.to_string()))?;
         put_text(conn, MACHINES_KEY, &json)?;
+    }
+    if let Some(ids) = guides_hidden {
+        let json = serde_json::to_string(&ids).map_err(|e| AppError::Db(e.to_string()))?;
+        put_text(conn, REPORT_GUIDES_HIDDEN_KEY, &json)?;
     }
     get(conn)
 }
@@ -578,5 +612,32 @@ mod tests {
             Err(AppError::Validation { field, .. }) => assert_eq!(field, "reportIntroduction"),
             o => panic!("{o:?}"),
         }
+    }
+
+    #[test]
+    fn settings_report_guides_round_trip_and_capped() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        assert!(get(c).unwrap().report_guides_hidden.is_empty());
+        let s = update(c, SettingsPatch { report_guides_hidden: Some(vec!["ports".into(), " vuln ".into(), "ports".into()]), ..Default::default() }).unwrap();
+        assert_eq!(s.report_guides_hidden, vec!["ports".to_string(), "vuln".to_string()]);
+        assert_eq!(get(c).unwrap().report_guides_hidden, s.report_guides_hidden);
+        let j = serde_json::to_string(&s).unwrap();
+        assert!(j.contains("\"reportGuidesHidden\":[\"ports\",\"vuln\"]"), "{j}");
+        // a patch without the list keeps it
+        let s = update(c, SettingsPatch { auto_lock_minutes: Some(10), ..Default::default() }).unwrap();
+        assert_eq!(s.report_guides_hidden.len(), 2);
+        // "*" hides all; an empty list shows them again
+        assert_eq!(update(c, SettingsPatch { report_guides_hidden: Some(vec!["*".into()]), ..Default::default() }).unwrap().report_guides_hidden, vec!["*".to_string()]);
+        assert!(update(c, SettingsPatch { report_guides_hidden: Some(vec![]), ..Default::default() }).unwrap().report_guides_hidden.is_empty());
+        let too_many: Vec<String> = (0..201).map(|i| format!("g{i}")).collect();
+        for bad in [vec!["a".repeat(65)], vec!["".into()], too_many] {
+            match update(c, SettingsPatch { report_guides_hidden: Some(bad), ..Default::default() }) {
+                Err(AppError::Validation { field, .. }) => assert_eq!(field, "reportGuidesHidden"),
+                o => panic!("{o:?}"),
+            }
+        }
+        let max: Vec<String> = (0..200).map(|i| format!("{i}{}", "g".repeat(60))).collect();
+        assert_eq!(update(c, SettingsPatch { report_guides_hidden: Some(max), ..Default::default() }).unwrap().report_guides_hidden.len(), 200);
     }
 }

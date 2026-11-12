@@ -5,15 +5,17 @@ import { defineFileDropHandler, defineFilePasteHandler } from "prosekit/extensio
 import type { Node as PMNode } from "prosekit/pm/model";
 import { NodeSelection, type Command } from "prosekit/pm/state";
 import { ProseKit, useDocChange, useExtension, useKeymap } from "prosekit/react";
-import { ownerParagraphs, isFigure, stepTitleBefore, type DocPath, type EvidenceAttrs, type PageHeadings, type ReportData, type ReportNode } from "../../../engines/report";
+import { ownerParagraphs, isFigure, stepTitleBefore, type DocPath, type EvidenceAttrs, sectionGuide, type PageHeadings, type PageMeta, type ReportData, type ReportNode } from "../../../engines/report";
 import { reportError } from "../../../lib/lockSignal";
 import { RavenError } from "../../../types/errors";
+import type { SectionKind } from "../../../types/report";
 import { BlockHandle } from "./BlockHandle";
 import { BubbleMenu } from "./BubbleMenu";
 import { CHIP_TYPES, chipKey, ChipStateProvider, useChipControls } from "./ChipState";
 import { defineReportExtension, type HeldPositions, type SourceGone, type SubNumbers } from "./extension";
 import { FindBar } from "./FindBar";
 import { FormatToolbar } from "./FormatToolbar";
+import { GuidePortals, GuideSlots, useGuideSettings } from "./GuideNote";
 import { hostAtPos, PageActionsContext, pathPos, placeEntry, saveScreenshot, type PageActions } from "./pageActions";
 import { PageLayoutContext, useReportData, type PageLayout } from "./ReportDataContext";
 import { SlashMenu } from "./SlashMenu";
@@ -65,6 +67,9 @@ const pageNumbers = new WeakMap<Editor, SubNumbers>();
 
 /** Each page's copied-text source lookup (see `SourceGone`), by its editor. */
 const sourcesGone = new WeakMap<Editor, SourceGone>();
+
+/** Each page's guide note slots (see `GuideSlots`), by its editor. */
+const guideSlots = new WeakMap<Editor, GuideSlots>();
 
 /** Pages the owner has focused: before that the selection is only ProseMirror's default (often the first block). */
 const touched = new WeakSet<Editor>();
@@ -344,6 +349,8 @@ function PageHooks({
  */
 export function ReportEditor({
   sectionId,
+  sectionKind,
+  placement,
   title,
   titleNumber,
   subNumbers,
@@ -355,6 +362,10 @@ export function ReportEditor({
   notices,
 }: {
   sectionId: string;
+  /** The page's kind, which picks its guide notes; a page without one shows none. */
+  sectionKind?: SectionKind;
+  /** An owner-written page's place (appendix or body), which picks the note at its top. */
+  placement?: PageMeta["placement"];
   /** A report-level page's title, printed at the top of the paper; it comes from the section kind and is never stored. */
   title?: string;
   /** The title's number ("3"), printed before it as OffSec's sample does. */
@@ -378,8 +389,10 @@ export function ReportEditor({
     const numbers: SubNumbers = { current: undefined };
     const held: HeldPositions = new Set();
     const gone: SourceGone = { current: undefined };
-    const made = createEditor({ extension: defineReportExtension(numbers, held, gone), defaultContent: initialDoc as NodeJSON });
+    const guides = new GuideSlots();
+    const made = createEditor({ extension: defineReportExtension(numbers, held, gone, guides), defaultContent: initialDoc as NodeJSON });
     pageNumbers.set(made, numbers);
+    guideSlots.set(made, guides);
     heldPositions.set(made, held);
     sourcesGone.set(made, gone);
     return made;
@@ -395,6 +408,18 @@ export function ReportEditor({
     };
     if (editor.mounted) editor.view.updateState(editor.view.state);
   }, [editor, log]);
+  // Guide notes follow Settings (a note hidden on another page goes here too) and the page's kind.
+  const guidesHidden = useGuideSettings().hidden;
+  const pageGuide = sectionKind ? sectionGuide(sectionKind, placement) : null;
+  useLayoutEffect(() => {
+    const slots = guideSlots.get(editor);
+    if (!slots) return;
+    if (slots.hidden === guidesHidden && slots.sectionKind === sectionKind && slots.pageGuide === pageGuide) return;
+    slots.hidden = guidesHidden;
+    slots.sectionKind = sectionKind;
+    slots.pageGuide = pageGuide;
+    if (editor.mounted) editor.view.updateState(editor.view.state);
+  }, [editor, guidesHidden, sectionKind, pageGuide]);
   // The numbering plugin reads the current numbering as the page redraws; set before the page mounts.
   useLayoutEffect(() => {
     const holder = pageNumbers.get(editor);
@@ -499,6 +524,7 @@ export function ReportEditor({
         <ProseKit editor={editor}>
           <PageActionsContext.Provider value={actions}>
             <PageHooks onDoc={onDoc} onRemoveEvidence={value.onRemoveEvidence} onImage={actions.addImage} />
+            <GuidePortals slots={guideSlots.get(editor)!} onLeave={() => editor.focus()} />
             <FormatToolbar
               end={toolbarEnd}
               className={toolbarClassName}

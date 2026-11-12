@@ -148,7 +148,7 @@ describe("credential pick is shared with the host checklist", () => {
     setImported({ commands: [USERCMD], cards: [] });
     m.settingsGet.mockResolvedValue({
       autoLockMinutes: 30, backupRetention: 14, machines: [], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali",
-      windowsToolsDir: "", linuxToolsDir: "", fieldManualPath: "", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "", reportIntroduction: "",
+      windowsToolsDir: "", linuxToolsDir: "", fieldManualPath: "", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "", reportIntroduction: "", reportGuidesHidden: [],
     });
     m.engagementGet.mockResolvedValue(E1);
     m.hostsList.mockResolvedValue([H1]);

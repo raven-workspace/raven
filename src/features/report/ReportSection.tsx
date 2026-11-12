@@ -1099,6 +1099,8 @@ function ReportBody({
                   <ReportEditor
                     key={`${openSection.id}:${swaps}`}
                     sectionId={openSection.id}
+                    sectionKind={openSection.kind}
+                    placement={openSection.kind === "page" ? (openSection.meta as Partial<PageMeta>).placement : undefined}
                     title={openTitle.text}
                     titleNumber={openTitle.number}
                     subNumbers={pageSubNumbers}

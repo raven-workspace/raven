@@ -214,6 +214,12 @@ function ReportDetails({
         />
       </Field>
       <p className="m-0 text-meta text-muted">Copied into each new report. Edit them per report afterwards.</p>
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
+        <Button size="sm" disabled={(settings.reportGuidesHidden ?? []).length === 0} onClick={() => onSave({ reportGuidesHidden: [] })}>
+          Show guide notes again
+        </Button>
+        <p className="m-0 text-meta text-muted">The notes above each part of the report, in the report editor.</p>
+      </div>
     </div>
   );
 }

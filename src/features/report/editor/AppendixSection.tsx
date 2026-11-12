@@ -1,4 +1,5 @@
 import type { EvidenceAttrs, ExploitAttrs, GeneratedAttrs, ReportNode } from "../../../engines/report";
+import { StandaloneGuide } from "./GuideNote";
 import { FullEvidence } from "./nodes/EvidenceView";
 import { FullExploit } from "./nodes/ExploitView";
 import { GeneratedContent } from "./nodes/GeneratedView";
@@ -45,6 +46,7 @@ export function AppendixSection({
     <ReportDataContext.Provider value={ctx}>
       <div className="report-page">
         <div className="report-appendix">
+          <StandaloneGuide id="appendix" />
           <h1>{title}</h1>
           {entries.map((e) => (
             <section key={e.path} className="report-appendix-entry" aria-label={`${e.ref} ${e.title}`}>

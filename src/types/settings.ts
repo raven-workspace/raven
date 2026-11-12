@@ -23,6 +23,8 @@ export interface Settings {
   reportMethodology: string;
   /** Default text of report section 1 (Introduction, Objective, Requirements) for new reports; empty by default. */
   reportIntroduction: string;
+  /** Report guide notes dismissed, by id (`GuideId`); `"*"` hides them all. Empty by default. */
+  reportGuidesHidden: string[];
 }
 
 export type SettingsPatch = Partial<Omit<Settings, "nvdKeySet">> & {
