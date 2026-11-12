@@ -1,0 +1,243 @@
+/* The report page: provisional house style (spec §4.3). The style round replaces values, not selectors. */
+
+.report-page {
+  --page-paper: #f4f3ef;
+  --page-ink: #16161a;
+  --page-code-bg: #e9e7e1;
+  --page-placeholder: #66655f;
+  --page-rule: #d6d3cb;
+  --page-amber-ink: #7a5414;
+  --page-amber-line: #b3802a;
+  --page-sans: "Instrument Sans Variable", system-ui, sans-serif;
+  --page-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  display: grid;
+  grid-template-columns: minmax(0, 760px);
+  justify-content: center;
+  padding: 32px 24px;
+  background: var(--page-paper);
+  color: var(--page-ink);
+  font-family: var(--page-sans);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.report-page .ProseMirror {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 12px;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.report-page p,
+.report-page ul,
+.report-page ol,
+.report-page h1,
+.report-page h2,
+.report-page h3,
+.report-page h4,
+.report-page figure,
+.report-page pre {
+  margin: 0;
+}
+
+.report-page ul,
+.report-page ol {
+  padding-left: 24px;
+}
+
+.report-page ul {
+  list-style: disc;
+}
+
+.report-page ol {
+  list-style: decimal;
+}
+
+.report-page h1,
+.report-page h2,
+.report-page .report-h2 {
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.report-page h3,
+.report-page h4,
+.report-page .report-h3,
+.report-page .report-h4 {
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 600;
+}
+
+.report-page code,
+.report-page pre,
+.report-page .report-code {
+  font-family: var(--page-mono);
+  font-size: 12.5px;
+  line-height: 19px;
+}
+
+.report-page code {
+  background: var(--page-code-bg);
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+/* Blocks */
+
+.report-page .report-block {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 8px;
+  border-radius: 4px;
+  outline: 2px solid transparent;
+  outline-offset: 4px;
+}
+
+.report-page .report-block[data-selected] {
+  outline-color: var(--page-ink);
+}
+
+.report-page .report-code {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 8px 12px;
+  background: var(--page-code-bg);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.report-page .report-cmd {
+  font-weight: 600;
+}
+
+.report-page .report-line[data-emphasis] {
+  font-weight: 700;
+  background: var(--page-paper);
+}
+
+.report-page .report-omitted {
+  color: var(--page-placeholder);
+  font-style: italic;
+}
+
+.report-page .report-figure {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 8px;
+}
+
+.report-page .report-figure img {
+  max-width: 100%;
+  max-height: none;
+  border-color: var(--page-rule);
+}
+
+.report-page .report-figure figcaption,
+.report-page .report-ref,
+.report-page .report-facts,
+.report-page .report-none {
+  color: var(--page-placeholder);
+}
+
+.report-page .report-label {
+  font-weight: 600;
+}
+
+.report-page .report-prose {
+  white-space: pre-wrap;
+}
+
+.report-page .report-vuln,
+.report-page .report-flag,
+.report-page .report-http {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 8px;
+}
+
+.report-page .report-http-line {
+  font-family: var(--page-mono);
+  font-size: 12.5px;
+  line-height: 19px;
+  font-weight: 600;
+}
+
+/* Exploit diff */
+
+.report-page .report-diff-line {
+  display: grid;
+  grid-template-columns: 32px 16px minmax(0, 1fr);
+}
+
+.report-page .report-diff-line[data-diff="add"] {
+  font-weight: 700;
+  background: var(--page-paper);
+}
+
+.report-page .report-diff-line[data-diff="del"] {
+  color: var(--page-placeholder);
+  text-decoration: line-through;
+}
+
+.report-page .report-ln {
+  color: var(--page-placeholder);
+  text-align: right;
+  padding-right: 8px;
+  font: inherit;
+  font-weight: 400;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+/* Tables */
+
+.report-page .report-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.report-page .report-table th,
+.report-page .report-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--page-rule);
+}
+
+.report-page .report-table th {
+  font-weight: 600;
+  border-bottom-color: var(--page-ink);
+}
+
+/* Slots: an empty one shows its hint, which never exports */
+
+.report-page .report-slot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.report-page .report-slot > * {
+  grid-area: 1 / 1;
+}
+
+.report-page .report-slot-hint {
+  color: var(--page-placeholder);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Amber placeholder: a referenced row that was deleted or made private */
+
+.report-page .report-gone {
+  padding: 8px 12px;
+  color: var(--page-amber-ink);
+  border: 1px dashed var(--page-amber-line);
+  border-radius: 4px;
+}
