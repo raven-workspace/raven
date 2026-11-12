@@ -10,6 +10,7 @@ import type { TriedPair } from "../types/credentials";
 import type { ErrorCode } from "../types/errors";
 import type { NvdRecord } from "../types/findings";
 import { RavenError } from "../types/errors";
+import type { Report, ReportSection } from "../types/report";
 import type { ServiceVerdict } from "../types/hostFacts";
 import type { Extraction, Progress } from "../types/log";
 import { AUDIT_NOTE_SOURCES, AUDIT_NOW, FIXTURES, FIXTURE_PROGRESS, type AuditFixtures } from "./fixtures";
@@ -403,6 +404,55 @@ const base = {
     db.payloadBuilds = db.payloadBuilds.filter((b) => !(b.hostId === input.hostId && b.payloadId === input.payloadId));
     db.payloadBuilds.push(clone(input));
     return clone(input);
+  },
+  reportGetOrCreate: async (engagementId: string) => {
+    if (!db.engagements.some((e) => e.id === engagementId)) throw new RavenError("not_found", "Not found");
+    let report = db.reports.find((r) => r.engagementId === engagementId);
+    if (!report) {
+      report = {
+        id: nid("rep"), engagementId, candidateName: "", email: "", osid: "", title: "OSCP Exam Report", meta: {},
+        createdAt: now(), updatedAt: now(), exportedAt: null,
+      } satisfies Report;
+      db.reports.push(report);
+    }
+    return clone(report);
+  },
+  reportUpdate: async (id: string, patch) => {
+    const report = db.reports.find((r) => r.id === id);
+    if (!report) throw new RavenError("not_found", "Not found");
+    if (patch.title !== undefined && !patch.title.trim()) throw new RavenError("validation", "title is required", "title");
+    for (const [k, v] of Object.entries(patch)) if (v !== undefined) (report as unknown as Record<string, unknown>)[k] = clone(v);
+    report.updatedAt = now();
+    return clone(report);
+  },
+  reportSectionsList: async (reportId: string) =>
+    clone(db.reportSections.filter((s) => s.reportId === reportId).sort((a, b) => a.position - b.position || a.kind.localeCompare(b.kind))),
+  reportSectionUpsert: async (reportId: string, input) => {
+    if (!db.reports.some((r) => r.id === reportId)) throw new RavenError("not_found", "Not found");
+    const key = input.targetKey ?? null;
+    const needsKey = input.kind === "target" ? !!key?.trim() : input.kind === "ad" ? key === "ad-set" : key === null;
+    if (!needsKey) throw new RavenError("validation", "invalid target key for this section", "targetKey");
+    let section = db.reportSections.find((s) => s.reportId === reportId && s.kind === input.kind && s.targetKey === key);
+    if (section) Object.assign(section, clone(input), { targetKey: key, updatedAt: now() });
+    else {
+      section = { ...clone(input), targetKey: key, id: nid("rs"), reportId, updatedAt: now() } satisfies ReportSection;
+      db.reportSections.push(section);
+    }
+    return clone(section);
+  },
+  reportSectionSave: async (id: string, doc, meta) => {
+    const section = db.reportSections.find((s) => s.id === id);
+    if (!section) throw new RavenError("not_found", "Not found");
+    Object.assign(section, { doc: clone(doc), meta: clone(meta), updatedAt: now() });
+    return clone(section);
+  },
+  reportSectionsReorder: async (reportId: string, ids: string[]) => {
+    const mine = ids.map((id) => db.reportSections.find((s) => s.id === id && s.reportId === reportId));
+    if (mine.some((s) => !s)) throw new RavenError("not_found", "Not found");
+    mine.forEach((s, i) => {
+      if (s) s.position = i;
+    });
+    return null;
   },
   triedPairsList: async (engagementId: string) => clone(db.triedPairs.filter((t) => t.engagementId === engagementId)),
   triedPairsUpsert: async (engagementId: string, inputs) => {

@@ -20,6 +20,7 @@ pub mod migrations;
 pub mod paths;
 pub mod services;
 pub mod payload_builds;
+pub mod reports;
 pub mod tried_pairs;
 pub mod settings;
 pub mod vault;
@@ -119,6 +120,12 @@ pub fn run() {
             commands::cred_attempt_delete,
             commands::cred_attempts_rekey,
             commands::payload_builds_list,
+            commands::report_get_or_create,
+            commands::report_update,
+            commands::report_sections_list,
+            commands::report_section_upsert,
+            commands::report_section_save,
+            commands::report_sections_reorder,
             commands::payload_build_record,
             commands::tried_pairs_list,
             commands::tried_pairs_upsert,

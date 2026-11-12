@@ -2,6 +2,7 @@
 // addresses, RFC 5737 addresses (192.0.2.10 for the attacker; 198.51.100.x and example.test for the Payloads drill)
 // and placeholder secrets only. Timestamps are relative to AUDIT_NOW so screenshots are stable.
 import type { PayloadBuild } from "../types/payloadBuild";
+import type { Report, ReportSection } from "../types/report";
 import type { AccessGrant, CredAttempt, Credential, TriedPair, Username } from "../types/credentials";
 import type { ChecklistItem } from "../types/checklist";
 import type { CleanupItem } from "../types/cleanup";
@@ -58,6 +59,8 @@ export interface AuditFixtures {
   credAttempts: CredAttempt[];
   triedPairs: TriedPair[];
   payloadBuilds: PayloadBuild[];
+  reports: Report[];
+  reportSections: ReportSection[];
   extractions: Extraction[];
   accessGrants: AccessGrant[];
   findings: Finding[];
@@ -591,7 +594,7 @@ const settings: Settings = {
 
 export const FIXTURES: AuditFixtures = {
   engagements, hosts, services, log, attachments, checklist, notes, ruledOut, hostIdentity, vectors, tunnels, interfaceDismissals, hops, credentials, usernames,
-  credAttempts, triedPairs, payloadBuilds, extractions, accessGrants, findings, findingFiles, failedAttempts, cleanup, backups, settings,
+  credAttempts, triedPairs, payloadBuilds, reports: [], reportSections: [], extractions, accessGrants, findings, findingFiles, failedAttempts, cleanup, backups, settings,
 };
 
 export const FIXTURE_PROGRESS = progress;

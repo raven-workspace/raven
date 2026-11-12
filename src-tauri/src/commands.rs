@@ -5,6 +5,7 @@
 
 use crate::attempts::{self, CredAttempt, CredAttemptInput};
 use crate::payload_builds::{self, PayloadBuild};
+use crate::reports::{self, Report, ReportDefaults, ReportPatch, ReportSection, SectionInput};
 use crate::tried_pairs::{self, TriedPair, TriedPairInput};
 use crate::extractions::{self, Extraction, ExtractionRecord, ExtractionSummary};
 use crate::backup::{self, BackupInfo};
@@ -822,4 +823,35 @@ pub async fn extractions_list(app: AppHandle, engagement_id: String) -> AppResul
 #[tauri::command]
 pub async fn extraction_undo(app: AppHandle, log_entry_id: String) -> AppResult<Extraction> {
     with_vault(app, move |v| extractions::undo(v.conn()?, &log_entry_id)).await
+}
+
+#[tauri::command]
+pub async fn report_get_or_create(app: AppHandle, engagement_id: String) -> AppResult<Report> {
+    // Defaults come from Settings once Task 2 adds them; empty until then.
+    with_vault(app, move |v| reports::get_or_create(v.conn()?, &engagement_id, &ReportDefaults::default())).await
+}
+
+#[tauri::command]
+pub async fn report_update(app: AppHandle, id: String, patch: ReportPatch) -> AppResult<Report> {
+    with_vault(app, move |v| reports::update(v.conn()?, &id, patch)).await
+}
+
+#[tauri::command]
+pub async fn report_sections_list(app: AppHandle, report_id: String) -> AppResult<Vec<ReportSection>> {
+    with_vault(app, move |v| reports::sections_list(v.conn()?, &report_id)).await
+}
+
+#[tauri::command]
+pub async fn report_section_upsert(app: AppHandle, report_id: String, input: SectionInput) -> AppResult<ReportSection> {
+    with_vault(app, move |v| reports::section_upsert(v.conn()?, &report_id, input)).await
+}
+
+#[tauri::command]
+pub async fn report_section_save(app: AppHandle, id: String, doc: serde_json::Value, meta: serde_json::Value) -> AppResult<ReportSection> {
+    with_vault(app, move |v| reports::section_save(v.conn()?, &id, doc, meta)).await
+}
+
+#[tauri::command]
+pub async fn report_sections_reorder(app: AppHandle, report_id: String, ids: Vec<String>) -> AppResult<()> {
+    with_vault(app, move |v| reports::sections_reorder(v.conn()?, &report_id, ids)).await
 }
