@@ -536,7 +536,7 @@ const base = {
   findingDelete: async (id: string) => remove(db.findings, id),
   findingFilesList: async (findingId: string) => clone(db.findingFiles.filter((f) => f.findingId === findingId)),
   findingFileCreate: async (findingId: string, input) => {
-    const f = { language: null, ...input, id: nid("ff"), findingId, createdAt: now(), updatedAt: now() };
+    const f = { language: null, modified: false, originalUrl: null, originalContent: null, ...input, id: nid("ff"), findingId, createdAt: now(), updatedAt: now() };
     db.findingFiles.push(f);
     return clone(f);
   },

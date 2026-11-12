@@ -485,7 +485,7 @@ const findings: Finding[] = [
 ];
 
 const findingFiles: FindingFile[] = [
-  { id: "ff-1", findingId: "f-1", name: "kerberoast.sh", language: "bash", content: "#!/bin/sh\nimpacket-GetUserSPNs acme.corp/svc_backup:'Password123!' -dc-ip 10.10.20.10 -request\n", createdAt: ago(20 * MIN), updatedAt: ago(20 * MIN) },
+  { id: "ff-1", findingId: "f-1", name: "kerberoast.sh", language: "bash", content: "#!/bin/sh\nimpacket-GetUserSPNs acme.corp/svc_backup:'Password123!' -dc-ip 10.10.20.10 -request\n", modified: false, originalUrl: null, originalContent: null, createdAt: ago(20 * MIN), updatedAt: ago(20 * MIN) },
 ];
 
 const failedAttempts: FailedAttempt[] = [

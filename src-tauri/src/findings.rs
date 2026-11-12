@@ -76,10 +76,14 @@ pub struct FindingFile {
     pub name: String,
     pub language: Option<String>,
     pub content: String,
+    pub modified: bool,
+    pub original_url: Option<String>,
+    pub original_content: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
 
+/// `modified`, `original_url` and `original_content` are optional: absent keeps the current value on update.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FindingFileInput {
@@ -88,6 +92,12 @@ pub struct FindingFileInput {
     pub language: Option<String>,
     #[serde(default)]
     pub content: String,
+    #[serde(default)]
+    pub modified: Option<bool>,
+    #[serde(default)]
+    pub original_url: Option<String>,
+    #[serde(default)]
+    pub original_content: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -367,7 +377,7 @@ pub fn finding_delete(conn: &Connection, id: &str) -> AppResult<()> {
 
 // ---- finding files ----
 
-const FILE_COLS: &str = "id, finding_id, name, language, content, created_at, updated_at";
+const FILE_COLS: &str = "id, finding_id, name, language, content, modified, original_url, original_content, created_at, updated_at";
 
 fn file_row(r: &Row) -> rusqlite::Result<FindingFile> {
     Ok(FindingFile {
@@ -376,8 +386,11 @@ fn file_row(r: &Row) -> rusqlite::Result<FindingFile> {
         name: r.get(2)?,
         language: r.get(3)?,
         content: r.get(4)?,
-        created_at: r.get(5)?,
-        updated_at: r.get(6)?,
+        modified: r.get::<_, i64>(5)? != 0,
+        original_url: r.get(6)?,
+        original_content: r.get(7)?,
+        created_at: r.get(8)?,
+        updated_at: r.get(9)?,
     })
 }
 
@@ -388,6 +401,9 @@ fn clean_file(i: &FindingFileInput) -> AppResult<(String, Option<String>)> {
     }
     if i.content.len() > MAX_CONTENT {
         return Err(invalid("content", "content is too long (1 MiB max)"));
+    }
+    if i.original_content.as_deref().is_some_and(|c| c.len() > MAX_CONTENT) {
+        return Err(invalid("originalContent", "original content is too long (1 MiB max)"));
     }
     Ok((name, blank_to_none(i.language.as_deref())))
 }
@@ -414,9 +430,19 @@ pub fn file_create(conn: &Connection, finding_id: &str, input: FindingFileInput)
     let id = uuid::Uuid::new_v4().to_string();
     let now = system_now_ms();
     conn.execute(
-        "INSERT INTO finding_files (id, finding_id, name, language, content, created_at, updated_at) \
-         VALUES (?1,?2,?3,?4,?5,?6,?6)",
-        params![id, finding_id, name, language, input.content, now],
+        "INSERT INTO finding_files (id, finding_id, name, language, content, modified, original_url, original_content, created_at, updated_at) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9)",
+        params![
+            id,
+            finding_id,
+            name,
+            language,
+            input.content,
+            input.modified.unwrap_or(false),
+            blank_to_none(input.original_url.as_deref()),
+            input.original_content.clone().filter(|c| !c.is_empty()),
+            now
+        ],
     )?;
     file_get(conn, &id)
 }
@@ -425,8 +451,12 @@ pub fn file_update(conn: &Connection, id: &str, input: FindingFileInput) -> AppR
     file_get(conn, id)?;
     let (name, language) = clean_file(&input)?;
     conn.execute(
-        "UPDATE finding_files SET name=?2, language=?3, content=?4, updated_at=?5 WHERE id=?1",
-        params![id, name, language, input.content, system_now_ms()],
+        "UPDATE finding_files SET name=?2, language=?3, content=?4, \
+         modified=COALESCE(?5, modified), \
+         original_url=CASE WHEN ?6 IS NULL THEN original_url ELSE NULLIF(trim(?6), '') END, \
+         original_content=CASE WHEN ?7 IS NULL THEN original_content ELSE NULLIF(?7, '') END, \
+         updated_at=?8 WHERE id=?1",
+        params![id, name, language, input.content, input.modified, input.original_url, input.original_content, system_now_ms()],
     )?;
     file_get(conn, id)
 }
@@ -766,15 +796,15 @@ mod tests {
         let c = v.conn().unwrap();
         let e = eng(c, "A");
         let f = finding_create(c, &e, fin("F")).unwrap();
-        let ok = FindingFileInput { name: " poc.py ".into(), language: Some("python".into()), content: "x".repeat(1024 * 1024) };
+        let ok = FindingFileInput { name: " poc.py ".into(), language: Some("python".into()), content: "x".repeat(1024 * 1024), modified: None, original_url: None, original_content: None };
         let file = file_create(c, &f.id, ok).unwrap();
         assert_eq!(file.name, "poc.py");
-        let big = FindingFileInput { name: "a".into(), language: None, content: "x".repeat(1024 * 1024 + 1) };
+        let big = FindingFileInput { name: "a".into(), language: None, content: "x".repeat(1024 * 1024 + 1), modified: None, original_url: None, original_content: None };
         assert!(matches!(file_create(c, &f.id, big.clone()), Err(AppError::Validation { field, .. }) if field == "content"));
         assert!(matches!(file_update(c, &file.id, big), Err(AppError::Validation { .. })));
-        let blank = FindingFileInput { name: " ".into(), language: None, content: "".into() };
+        let blank = FindingFileInput { name: " ".into(), language: None, content: "".into(), modified: None, original_url: None, original_content: None };
         assert!(matches!(file_create(c, &f.id, blank), Err(AppError::Validation { field, .. }) if field == "name"));
-        let upd = FindingFileInput { name: "b.sh".into(), language: None, content: "echo".into() };
+        let upd = FindingFileInput { name: "b.sh".into(), language: None, content: "echo".into(), modified: None, original_url: None, original_content: None };
         let u = file_update(c, &file.id, upd).unwrap();
         assert_eq!((u.name.as_str(), u.language, u.content.as_str()), ("b.sh", None, "echo"));
         assert_eq!(files_list(c, &f.id).unwrap().len(), 1);
@@ -789,8 +819,47 @@ mod tests {
         assert_eq!(n, 0);
     }
 
+    #[test]
+    fn finding_file_modified_fields_round_trip() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "A");
+        let f = finding_create(c, &e, fin("F")).unwrap();
+        let url = "https://www.exploit-db.com/exploits/50000";
+        let mut i = fin_file();
+        i.modified = Some(true);
+        i.original_url = Some(url.into());
+        i.original_content = Some("orig".into());
+        let file = file_create(c, &f.id, i).unwrap();
+        assert!(file.modified);
+        assert_eq!(file.original_url.as_deref(), Some(url));
+        assert_eq!(file.original_content.as_deref(), Some("orig"));
+        // Absent on update keeps them.
+        let mut u = fin_file();
+        u.content = "new".into();
+        let u = file_update(c, &file.id, u).unwrap();
+        assert_eq!(u.content, "new");
+        assert!(u.modified);
+        assert_eq!(u.original_url.as_deref(), Some(url));
+        assert_eq!(u.original_content.as_deref(), Some("orig"));
+        // Explicit values change them; blank clears.
+        let mut u2 = fin_file();
+        u2.modified = Some(false);
+        u2.original_url = Some(" ".into());
+        let u2 = file_update(c, &file.id, u2).unwrap();
+        assert!(!u2.modified);
+        assert_eq!(u2.original_url, None);
+        assert_eq!(u2.original_content.as_deref(), Some("orig"));
+        // Defaults on a plain create; original content is capped.
+        let plain = file_create(c, &f.id, fin_file()).unwrap();
+        assert!(!plain.modified && plain.original_url.is_none() && plain.original_content.is_none());
+        let mut big = fin_file();
+        big.original_content = Some("x".repeat(1024 * 1024 + 1));
+        assert!(matches!(file_create(c, &f.id, big), Err(AppError::Validation { field, .. }) if field == "originalContent"));
+    }
+
     fn fin_file() -> FindingFileInput {
-        FindingFileInput { name: "n".into(), language: None, content: "c".into() }
+        FindingFileInput { name: "n".into(), language: None, content: "c".into(), modified: None, original_url: None, original_content: None }
     }
 
     #[test]
