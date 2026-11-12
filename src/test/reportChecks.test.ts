@@ -149,8 +149,8 @@ describe("targetChecks", () => {
       ["proof-shot:DC01:local", "soft", "Raven can't read screenshots; make sure the local.txt screenshot for DC01 shows ipconfig with 10.0.0.5.", "f0"],
       ["proof-shot:DC01:proof", "soft", "Raven can't read screenshots; make sure the proof.txt screenshot for DC01 shows ipconfig with 10.0.0.5.", "f1"],
     ]);
-    expect(groupChecks(c).map((g) => g.text)).toEqual(["2 proof screenshots: Raven can't read them; check each shows the target IP."]);
-    expect(groupChecks(c.slice(0, 1)).map((g) => g.text)).toEqual(["local.txt: check screenshot shows IP"]);
+    expect(groupChecks(c).map((g) => g.text)).toEqual(["2 proof screenshots: Raven can't read them; check each shows the target IP"]);
+    expect(groupChecks(c.slice(0, 1)).map((g) => g.text)).toEqual(["local.txt: screenshot shows IP?"]);
     const lin = run(data({ hosts: [host({ os: "linux" })], log: [local] }), doc(ev("f0", { block: null })), {}, ["local"]);
     expect(lin[0].text).toBe("Raven can't read screenshots; make sure the local.txt screenshot for DC01 shows ip a or ifconfig with 10.0.0.5.");
   });
@@ -455,15 +455,15 @@ describe("groupChecks", () => {
     expect(groups.map((g) => [g.key, g.level, g.text, g.full, g.checks.length])).toEqual([
       // One check reads short in the outline; its full text is the tooltip's.
       ["proof-missing", "fail", "No local.txt for web01", "No local.txt for web01 on the page.", 1],
-      ["explain", "soft", "3 steps have no explanation.", "3 steps have no explanation.", 3],
-      ["coverage", "soft", "22/tcp on web01 is untested.", "22/tcp on web01 is untested.", 1],
+      ["explain", "soft", "3 steps have no explanation", "3 steps have no explanation", 3],
+      ["coverage", "soft", "22/tcp on web01 is untested", "22/tcp on web01 is untested.", 1],
     ]);
   });
   it("keys finding and exploit checks by their kind, not their id", () => {
     const groups = groupChecks([c("finding:f1:severity"), c("finding:f2:severity"), c("finding:f1:remediation"), c("exploit:x:url", "fail"), c("exploit:y:url", "fail")]);
     expect(groups.map((g) => [g.key, g.text])).toEqual([
-      ["exploit-url", "2 modified exploits have no original URL."],
-      ["finding-severity", "2 findings have no severity."],
+      ["exploit-url", "2 modified exploits have no original URL"],
+      ["finding-severity", "2 findings have no severity"],
       ["finding-remediation", "A finding has no remediation"],
     ]);
   });
@@ -474,17 +474,20 @@ describe("groupChecks", () => {
     expect(one("output:e1")).toBe("A command shows no output");
     expect(one("exploit:f:explain")).toBe("Explain the modified exploit");
     expect(one("move:0.3", "This block is long (80 lines of output). Consider moving it to an appendix.")).toBe("Long block (80 lines of output)");
-    for (const k of ["proof-missing:h:proof", "proof-screenshot:h:proof", "proof-web:h:proof", "proof-identity:h:proof", "proof-hostname:h:proof", "proof-path:h:proof", "gone:1", "explain:1", "caption:1", "finding:x:severity", "finding:x:title", "finding:x:affected", "finding:x:description", "finding:x:remediation", "wording:1", "exploit:x:url", "exploit:x:original", "appendix-ref:1", "legible:1"]) {
+    for (const k of ["proof-missing:h:proof", "proof-shot:h:local", "caption-step:1", "proof-screenshot:h:proof", "proof-web:h:proof", "proof-identity:h:proof", "proof-hostname:h:proof", "proof-path:h:proof", "gone:1", "explain:1", "caption:1", "finding:x:severity", "finding:x:title", "finding:x:affected", "finding:x:description", "finding:x:remediation", "wording:1", "exploit:x:url", "exploit:x:original", "appendix-ref:1", "legible:1"]) {
       expect(one(k, "the full text"), k).not.toBe("the full text");
       expect(one(k).length, k).toBeLessThanOrEqual(38);
+      // Single and counted lines end alike: no full stop.
+      expect(one(k), k).not.toMatch(/\.$/);
     }
   });
   it("words every kind targetChecks makes when there are two of it", () => {
-    const kinds = ["proof-missing", "proof-ip", "proof-screenshot", "proof-web", "proof-identity", "proof-hostname", "proof-path", "gone", "output", "explain", "caption", "access-shot", "finding:x:severity", "finding:x:title", "finding:x:affected", "finding:x:description", "finding:x:remediation", "wording", "exploit:x:url", "exploit:x:explain", "exploit:x:original", "coverage", "appendix-ref", "move", "legible"];
+    const kinds = ["proof-missing", "proof-ip", "proof-screenshot", "proof-web", "proof-identity", "proof-hostname", "proof-path", "proof-shot", "gone", "output", "explain", "caption", "caption-weak", "caption-step", "access-shot", "finding:x:severity", "finding:x:title", "finding:x:affected", "finding:x:description", "finding:x:remediation", "wording", "exploit:x:url", "exploit:x:explain", "exploit:x:original", "coverage", "appendix-ref", "move", "legible"];
     for (const k of kinds) {
       const id = (n: number) => (k.includes(":x:") ? k.replace(":x:", `:${n}:`) : `${k}:${n}`);
       const [g] = groupChecks([c(id(1), "soft", "one"), c(id(2), "soft", "two")]);
       expect(g.text, k).toMatch(/^2 /);
+      expect(g.text, k).not.toMatch(/\.$/);
     }
   });
 });

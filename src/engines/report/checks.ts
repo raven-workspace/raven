@@ -359,34 +359,34 @@ export function checkKind(id: string): string {
 
 /** How a group of `n` checks of one kind reads in the outline. */
 const PLURAL: Record<string, (n: number) => string> = {
-  "proof-missing": (n) => `${n} flags are not on the page.`,
-  "proof-ip": (n) => `${n} proofs don't show ipconfig, ifconfig or ip addr with the target IP.`,
-  "proof-screenshot": (n) => `${n} proofs have no screenshot.`,
-  "proof-web": (n) => `${n} proofs look like they came from a web request, not an interactive shell.`,
-  "proof-identity": (n) => `${n} proofs don't show whoami or id.`,
-  "proof-hostname": (n) => `${n} proofs don't show hostname.`,
-  "proof-path": (n) => `${n} proofs don't read the flag from its usual location.`,
-  "proof-shot": (n) => `${n} proof screenshots: Raven can't read them; check each shows the target IP.`,
-  gone: (n) => `${n} blocks on the page use deleted or private content.`,
-  output: (n) => `${n} commands on the page show no output.`,
-  explain: (n) => `${n} steps have no explanation.`,
-  caption: (n) => `${n} screenshot captions are over ${MAX_CAPTION_WORDS} words.`,
-  "caption-weak": (n) => `${n} screenshots have no caption of their own.`,
-  "caption-step": (n) => `${n} screenshots use their step's title as caption.`,
-  "access-shot": (n) => `${n} access levels have no screenshot of them on the page.`,
-  "finding-severity": (n) => `${n} findings have no severity.`,
-  "finding-title": (n) => `${n} finding titles are a single word.`,
-  "finding-affected": (n) => `${n} findings have no affected host or service.`,
-  "finding-description": (n) => `${n} findings have no description.`,
-  "finding-remediation": (n) => `${n} findings have no remediation.`,
-  wording: (n) => `${n} absolute claims on the page.`,
-  "exploit-url": (n) => `${n} modified exploits have no original URL.`,
-  "exploit-explain": (n) => `${n} modified exploits have no explanation of the changes after them.`,
-  "exploit-original": (n) => `${n} modified exploits have no original and no marked lines.`,
-  coverage: (n) => `${n} services are untested.`,
-  "appendix-ref": (n) => `${n} moved blocks have no appendix entry any more.`,
-  move: (n) => `${n} blocks are long. Consider moving them to an appendix.`,
-  legible: (n) => `${n} screenshots are narrower than would print legibly.`,
+  "proof-missing": (n) => `${n} flags are not on the page`,
+  "proof-ip": (n) => `${n} proofs don't show ipconfig, ifconfig or ip addr with the target IP`,
+  "proof-screenshot": (n) => `${n} proofs have no screenshot`,
+  "proof-web": (n) => `${n} proofs look like they came from a web request, not an interactive shell`,
+  "proof-identity": (n) => `${n} proofs don't show whoami or id`,
+  "proof-hostname": (n) => `${n} proofs don't show hostname`,
+  "proof-path": (n) => `${n} proofs don't read the flag from its usual location`,
+  "proof-shot": (n) => `${n} proof screenshots: Raven can't read them; check each shows the target IP`,
+  gone: (n) => `${n} blocks on the page use deleted or private content`,
+  output: (n) => `${n} commands on the page show no output`,
+  explain: (n) => `${n} steps have no explanation`,
+  caption: (n) => `${n} screenshot captions are over ${MAX_CAPTION_WORDS} words`,
+  "caption-weak": (n) => `${n} screenshots have no caption of their own`,
+  "caption-step": (n) => `${n} screenshots use their step's title as caption`,
+  "access-shot": (n) => `${n} access levels have no screenshot of them on the page`,
+  "finding-severity": (n) => `${n} findings have no severity`,
+  "finding-title": (n) => `${n} finding titles are a single word`,
+  "finding-affected": (n) => `${n} findings have no affected host or service`,
+  "finding-description": (n) => `${n} findings have no description`,
+  "finding-remediation": (n) => `${n} findings have no remediation`,
+  wording: (n) => `${n} absolute claims on the page`,
+  "exploit-url": (n) => `${n} modified exploits have no original URL`,
+  "exploit-explain": (n) => `${n} modified exploits have no explanation of the changes after them`,
+  "exploit-original": (n) => `${n} modified exploits have no original and no marked lines`,
+  coverage: (n) => `${n} services are untested`,
+  "appendix-ref": (n) => `${n} moved blocks have no appendix entry any more`,
+  move: (n) => `${n} blocks are long; consider moving them to an appendix`,
+  legible: (n) => `${n} screenshots are narrower than would print legibly`,
 };
 
 /**
@@ -401,7 +401,7 @@ const SHORT: Record<string, (c: Check) => string> = {
   "proof-identity": (c) => `${part(c, 2)}.txt proof lacks whoami`,
   "proof-hostname": (c) => `${part(c, 2)}.txt proof lacks hostname`,
   "proof-path": (c) => `${part(c, 2)}.txt read from an odd place`,
-  "proof-shot": (c) => `${part(c, 2)}.txt: check screenshot shows IP`,
+  "proof-shot": (c) => `${part(c, 2)}.txt: screenshot shows IP?`,
   gone: () => "Deleted or private entry on the page",
   output: () => "A command shows no output",
   explain: () => "A step has no explanation",
@@ -434,7 +434,8 @@ export interface CheckGroup {
   key: string;
   /** Fail when any of its checks fails. */
   level: CheckLevel;
-  /** The outline's line: one check's short wording, or several as a count ("12 steps have no explanation."). */
+  /** The outline's line, never ending in a full stop: one check's short wording, or several as a count ("12 steps have
+   *  no explanation"). */
   text: string;
   /** The full statement, for the tooltip: one check's own text, or the count. */
   full: string;
@@ -451,7 +452,7 @@ export function groupChecks(checks: Check[]): CheckGroup[] {
   const out = [...groups].map(([key, list]): CheckGroup => ({
     key,
     level: list.some((c) => c.level === "fail") ? "fail" : "soft",
-    text: list.length === 1 ? (SHORT[key]?.(list[0]) ?? list[0].text) : (PLURAL[key]?.(list.length) ?? `${list.length} × ${list[0].text}`),
+    text: list.length === 1 ? (SHORT[key]?.(list[0]) ?? list[0].text.replace(/\.$/, "")) : (PLURAL[key]?.(list.length) ?? `${list.length} × ${list[0].text.replace(/\.$/, "")}`),
     full: list.length === 1 ? list[0].text : (PLURAL[key]?.(list.length) ?? `${list.length} × ${list[0].text}`),
     checks: list,
   }));

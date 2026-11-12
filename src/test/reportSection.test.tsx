@@ -673,7 +673,7 @@ describe("Report view: the result", () => {
     fireEvent.click(rowFor("ms01"));
     await waitFor(() => expect(screen.getAllByRole("list", { name: "Checks" })[0]).toHaveTextContent(/steps have no explanation/));
     const checks = screen.getAllByRole("list", { name: "Checks" })[0];
-    const explain = within(checks).getByText(/^\d+ steps have no explanation\.$/);
+    const explain = within(checks).getByText(/^\d+ steps have no explanation$/);
     expect(within(checks).queryAllByText("A step has no explanation before it.")).toHaveLength(0);
     const total = Number(explain.textContent!.split(" ")[0]);
     expect(total).toBeGreaterThan(1);
@@ -721,10 +721,10 @@ describe("CheckList", () => {
     fireEvent.click(fix);
     expect(screen.getByText("ipconfig").tagName).toBe("CODE");
     // A group's row names each one as it cycles, in its own words when they differ.
-    fireEvent.click(screen.getByText("2 services are untested."));
+    fireEvent.click(screen.getByText("2 services are untested"));
     expect(screen.getByText("1 of 2")).toBeInTheDocument();
     expect(screen.getByText("22/tcp on ms01 is untested.")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("2 services are untested."));
+    fireEvent.click(screen.getByText("2 services are untested"));
     expect(screen.getByText("80/tcp on ms01 is untested.")).toBeInTheDocument();
     expect(onPick).toHaveBeenLastCalledWith(expect.objectContaining({ id: "coverage:s2" }));
     expect(screen.queryByRole("button", { name: "Fix" })).toBeNull();
