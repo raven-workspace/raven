@@ -499,6 +499,26 @@ Owner request (2026-11-11): blocks, especially screenshots, land where their tim
 
 ---
 
+### Task 14: Result polish (from the owner's screenshot and the controller's result review)
+
+The result review (Task 13 screenshots, `audit-output/report-result/`) and the owner's real-app screenshot show what a grader and the owner see. Fix these; each with a test where behaviour changes, and a WebKit 1400 look at the affected pages afterwards (re-shoot `audit-output/report-result/`).
+
+**Files:** as needed in `src/features/report/**`, `src/engines/report/**`, `src/features/engagements/StatusStrip.tsx`, `page.css`.
+
+1. **Page titles.** Report-level pages (summary, considerations, methodology, appendices A–D, appendix pages E+, further, references) show their title at the top of the paper ("High-level summary", "Appendix A: Proof table", …), rendered from the section kind (not stored in the doc, so existing saved docs get it too). Targets keep their facts title.
+2. **One strip.** On the Report section the report strip replaces the engagement status strip (no two strips stacked).
+3. **Facts line.** No " | " joins. Render labelled values (label muted, value in ink; e.g. IP, OS, Ports, Access) on one wrapping row with 24px gaps, or a two-column facts list.
+4. **nmap guesses.** Don't repeat "(nmap guess)" per row: unproven products render muted italic, with one line under the table: "Italic: nmap's guess, not confirmed."
+5. **Coverage from access.** A port used to get in (an access grant or hop whose `via` or linked log entry names the port or the service, e.g. evil-winrm → 5985, ssh → 22, psexec/smb → 445) reads "exploited (<via>)" instead of "not tested". Engine change in `coverage.ts` with tests.
+6. **Tools appendix.** Columns Tool / Purpose / URL (template 5.2). Purpose and URL come from a built-in data table of common tools (nmap, feroxbuster, gobuster, ffuf, hydra, nxc/crackmapexec, impacket-*, evil-winrm, mimikatz, rubeus, bloodhound/sharphound, printspoofer*, godpotato, winpeas*/linpeas, chisel, ligolo, rlwrap, nc/ncat, socat, msfvenom, sqlmap is banned so omit, john, hashcat, smbclient, enum4linux, kerbrute, certipy, python3 = "exploit runner" only when running a .py), editable per row (stored in that appendix section's meta). Exclude shell builtins and coreutils (whoami, type, cd, ls, dir, cat, echo, chmod, tar, cp, mv, sudo, iwr/Invoke-WebRequest, certutil as download → keep certutil? list it as "file transfer"), and fix `sudo` being counted. No "Times used" column.
+7. **Outline checks.** One line per check (truncate with tooltip). Checks of the same id-kind group into one row with a count ("12 steps have no explanation"); clicking cycles through them. The fix one-liner shows only for the selected check, in a Disclosure, not inline for all.
+8. **Block tools placement.** The selected block's tools sit in the page's right gutter beside the block's top, never over content (the owner's screenshot shows the Move square over the facts line).
+9. **Silent commands.** Ruling: a command block with blank output on a non-"returned nothing" entry is a **soft** check ("A command on the page shows no output. Fine if it printed nothing; otherwise paste its output."), not a fail — downloads like `iwr`/`certutil` print nothing.
+
+- [ ] Steps: failing tests for 1, 2, 4, 5, 6, 7, 9 → implement → full gate → WebKit 1400 re-shoot and look → commit `fix(reports): result polish from the owner's review`.
+
+---
+
 ## Spec coverage map (self-review)
 
 | Spec | Task |
