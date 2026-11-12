@@ -13,3 +13,4 @@ export * from "./proof";
 export * from "./wording";
 export * from "./checks";
 export * from "./figures";
+export * from "./toolCatalog";

@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../../App";
@@ -32,10 +32,10 @@ beforeEach(() => {
   m.notesGet.mockResolvedValue({ engagementId: "e1", hostId: null, body: "", updatedAt: 1 } as never);
 });
 
-async function mountStrip() {
+async function mountStrip(path = "/e/e1") {
   render(
     <QueryClientProvider client={makeQueryClient()}>
-      <MemoryRouter initialEntries={["/e/e1"]}>
+      <MemoryRouter initialEntries={[path]}>
         <App />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -44,6 +44,20 @@ async function mountStrip() {
 }
 
 describe("status strip and title bar", () => {
+  it("is left out on the Report section, where the report's own strip stands in its place", async () => {
+    await mountStrip();
+    render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <MemoryRouter initialEntries={["/e/e1/s/report"]}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    // Two Apps: the board's has the strip, the report's has none.
+    await waitFor(() => expect(screen.getAllByRole("heading", { name: "Lab A" })).toHaveLength(2));
+    expect(screen.getAllByRole("status", { name: "Engagement status" })).toHaveLength(1);
+  });
+
   it("status strip has no keyboard hints", async () => {
     const strip = await mountStrip();
     expect(strip.querySelector("kbd")).toBeNull();

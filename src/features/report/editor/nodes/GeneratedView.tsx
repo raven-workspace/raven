@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { ReactNodeViewProps } from "prosekit/react";
 import {
   attackChain,
@@ -99,7 +99,39 @@ function targetOf(targets: ReportTarget[], host: Host): ReportTarget {
   );
 }
 
-function Content({ attrs, ctx, attackerIp }: { attrs: GeneratedAttrs; ctx: ReportDataValue; attackerIp: string }) {
+/**
+ * One editable cell of the Tools appendix: page text (wrapping, so a long URL reads whole) until clicked, then a field
+ * in place; Enter, Esc or leaving it ends the edit. An empty cell says what it wants, on screen only.
+ */
+function CellInput({ label, empty, value, onChange }: { label: string; empty: string; value: string; onChange(value: string): void }) {
+  const [editing, setEditing] = useState(false);
+  if (!editing) {
+    return (
+      <button type="button" className="report-cell-edit" aria-label={label} onClick={() => setEditing(true)}>
+        {value || <span className="report-cell-empty">{empty}</span>}
+      </button>
+    );
+  }
+  return (
+    <input
+      className="report-input"
+      aria-label={label}
+      value={value}
+      spellCheck={false}
+      autoFocus
+      onChange={(e) => onChange(e.target.value)}
+      onBlur={() => setEditing(false)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === "Escape") {
+          e.preventDefault();
+          setEditing(false);
+        }
+      }}
+    />
+  );
+}
+
+function Content({ attrs, ctx, attackerIp, editable = false }: { attrs: GeneratedAttrs; ctx: ReportDataValue; attackerIp: string; editable?: boolean }) {
   const { data, sectionMeta } = ctx;
   const meta = ctx.reportMeta ?? {};
   const host = attrs.hostId ? data.hosts.find((h) => h.id === attrs.hostId) : undefined;
@@ -110,32 +142,47 @@ function Content({ attrs, ctx, attackerIp }: { attrs: GeneratedAttrs; ctx: Repor
     case "facts": {
       if (!host) return <None text="This host was deleted." />;
       const ports = data.services.filter((s) => s.hostId === host.id).map((s) => s.port).sort((a, b) => a - b);
-      const facts = [
-        host.ip,
-        host.os ? OS_WORDS[host.os] : null,
-        ports.length > 0 ? `Ports ${ports.join(", ")}` : null,
-        `Access reached: ${accessWords(host)}`,
-      ].filter(Boolean);
+      const facts: [string, string | null][] = [
+        ["IP", host.ip],
+        ["OS", host.os ? OS_WORDS[host.os] : null],
+        ["Ports", ports.length > 0 ? ports.join(", ") : null],
+        ["Access", accessWords(host)],
+      ];
+      // Labelled values on one row that wraps: the label muted, the value in ink.
       return (
         <>
           <h2 className="report-h2">{host.name}</h2>
-          <p className="report-facts">{facts.join(" | ")}</p>
+          <dl className="report-facts">
+            {facts.flatMap(([label, value]) =>
+              value ? [
+                <div key={label} className="report-fact">
+                  <dt>{label}</dt>
+                  <dd>{value}</dd>
+                </div>,
+              ] : [],
+            )}
+          </dl>
         </>
       );
     }
     case "services": {
       const rows = attrs.hostId ? serviceCoverage(data, attrs.hostId, sectionMeta.coverage ?? {}) : [];
       if (rows.length === 0) return <None text="No services recorded." />;
+      const guessed = (r: (typeof rows)[number]) => !r.proven && r.product !== "";
       return (
-        <Table
-          head={["Port", "Service", "Result"]}
-          fit={[0]}
-          rows={rows.map((r) => [
-            `${r.port}/${r.protocol}`,
-            r.proven || r.product === "" ? r.product : `${r.product} (nmap guess)`,
-            r.via ? `${COVERAGE_WORDS[r.result]} (${r.via})` : COVERAGE_WORDS[r.result],
-          ])}
-        />
+        <>
+          <Table
+            head={["Port", "Service", "Result"]}
+            fit={[0]}
+            rows={rows.map((r) => [
+              `${r.port}/${r.protocol}`,
+              guessed(r) ? <span className="report-guess">{r.product}</span> : r.product,
+              r.via ? `${COVERAGE_WORDS[r.result]} (${r.via})` : COVERAGE_WORDS[r.result],
+            ])}
+          />
+          {/* One note for every unconfirmed product, not one per row. */}
+          {rows.some(guessed) && <p className="report-note">{"Italic: nmap's guess, not confirmed."}</p>}
+        </>
       );
     }
     case "vulns": {
@@ -243,9 +290,24 @@ function Content({ attrs, ctx, attackerIp }: { attrs: GeneratedAttrs; ctx: Repor
       return <Table head={["Target", "IP", "local.txt", "proof.txt"]} fit={[1]} rows={rows} />;
     }
     case "tools": {
-      const rows = toolsUsed(data.log, attrs.hostId ? [attrs.hostId] : data.hosts.map((h) => h.id));
+      const overrides = sectionMeta.tools ?? {};
+      const rows = toolsUsed(data.log, attrs.hostId ? [attrs.hostId] : data.hosts.map((h) => h.id), { attempts: data.attempts, overrides });
       if (rows.length === 0) return <None />;
-      return <Table head={["Tool", "Times used"]} rows={rows.map((r) => [r.tool, String(r.count)])} />;
+      const edit = editable ? ctx.onSectionMeta : undefined;
+      const cell = (tool: string, field: "purpose" | "url", value: string, label: string) =>
+        edit ? (
+          <CellInput label={`${label} of ${tool}`} empty={`Add ${field === "url" ? "the URL" : "its purpose"}`} value={value} onChange={(v) => edit({ tools: { ...overrides, [tool]: { ...overrides[tool], [field]: v } } })} />
+        ) : (
+          value
+        );
+      // Template 5.2: Tool, Purpose, URL. Purpose and URL come from the catalog; the owner's edits are kept per row.
+      return (
+        <Table
+          head={["Tool", "Purpose", "URL"]}
+          fit={[0]}
+          rows={rows.map((r) => [r.tool, cell(r.tool, "purpose", r.purpose, "Purpose"), cell(r.tool, "url", r.url, "URL")])}
+        />
+      );
     }
     case "msf": {
       const rows = msfModules(data.log, data.engagement, data.hosts).filter((r) => !attrs.hostId || r.hostId === attrs.hostId);
@@ -270,10 +332,10 @@ function Content({ attrs, ctx, attackerIp }: { attrs: GeneratedAttrs; ctx: Repor
   }
 }
 
-/** A generated table or list in full, as the appendix prints it. */
-export function GeneratedContent({ attrs, ctx }: { attrs: GeneratedAttrs; ctx: ReportDataValue }) {
+/** A generated table or list in full, as the appendix prints it; `editable` (on its own page) lets the Tools rows take edits. */
+export function GeneratedContent({ attrs, ctx, editable = false }: { attrs: GeneratedAttrs; ctx: ReportDataValue; editable?: boolean }) {
   const attackerIp = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet }).data?.attackerIp ?? "";
-  return <Content attrs={attrs} ctx={ctx} attackerIp={attackerIp} />;
+  return <Content attrs={attrs} ctx={ctx} attackerIp={attackerIp} editable={editable} />;
 }
 
 /** A table or list generated from live data; moved to an appendix, it leaves a one-line reference. */
@@ -289,7 +351,7 @@ export function GeneratedView({ node, selected, setAttrs }: ReactNodeViewProps) 
           <MoveButton place={attrs.appendix} canSplit={false} onMove={(next) => setAttrs({ appendix: next })} />
         </BlockTools>
       )}
-      {attrs.appendix === "moved" ? <AppendixRef label="Full list" refText={ref} /> : <GeneratedContent attrs={attrs} ctx={ctx} />}
+      {attrs.appendix === "moved" ? <AppendixRef label="Full list" refText={ref} /> : <GeneratedContent attrs={attrs} ctx={ctx} editable />}
     </Block>
   );
 }

@@ -18,8 +18,8 @@ const ATOMS: { name: string; attrs: Record<string, unknown>; component: ReactNod
   { name: "exploit", attrs: { fileId: "", markedLines: [], appendix: "inline" }, component: ExploitView },
 ];
 
-/** Clicks on controls inside a node view (line-number toggles) stay with the control, not ProseMirror. */
-const stopControlEvents = (event: Event) => event.target instanceof Element && event.target.closest("button") !== null;
+/** Clicks and typing in controls inside a node view (line-number toggles, the Tools appendix's fields) stay with the control, not ProseMirror. */
+const stopControlEvents = (event: Event) => event.target instanceof Element && event.target.closest("button, input") !== null;
 
 /** Atoms serialise their attrs so copy and paste between positions keeps them. */
 function atomSpec(name: string, defaults: Record<string, unknown>) {

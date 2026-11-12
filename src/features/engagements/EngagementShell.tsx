@@ -22,7 +22,7 @@ import { SECTIONS, SectionView, sectionPath, type SectionId } from "./sections";
 
 /** Layout for `/e/:id/*`: sidebar, header, status strip and the routed section. */
 export function EngagementShell() {
-  const { id = "", hostId } = useParams();
+  const { id = "", hostId, section } = useParams();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const openCapture = useCaptureStore((s) => s.openCapture);
@@ -83,15 +83,19 @@ export function EngagementShell() {
   }
   if (!query.data) return <div className="px-8 py-6">{queryState([query], "this engagement")}</div>;
   const e = query.data;
+  // The Report section has its own strip (file name, due in, gaps) in this one's place: never two strips stacked.
+  const strip = section !== "report";
+  const bars = (hostId ? 0 : 1) + (strip ? 1 : 0);
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[auto_minmax(0,1fr)]">
       <Sidebar engagementId={id} />
       {/* On a host page the host is the subject: no engagement header; the strip carries the engagement's name. */}
-      <div className={cx("grid min-h-0 min-w-0", hostId ? "grid-rows-[auto_minmax(0,1fr)]" : "grid-rows-[auto_auto_minmax(0,1fr)]")}>
+      <div className={cx("grid min-h-0 min-w-0", bars === 2 ? "grid-rows-[auto_auto_minmax(0,1fr)]" : "grid-rows-[auto_minmax(0,1fr)]")}>
         {!hostId && <EngagementHeader engagement={e} />}
-        <StatusStrip engagement={e} named={!!hostId} />
-        <main className="min-h-0 overflow-auto px-6 py-6">
+        {strip && <StatusStrip engagement={e} named={!!hostId} />}
+        {/* The Report lays out its own panes and strip edge to edge. */}
+        <main className={cx("min-h-0 overflow-auto", strip && "px-6 py-6")}>
           <Outlet />
         </main>
       </div>

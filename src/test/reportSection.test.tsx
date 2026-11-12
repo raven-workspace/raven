@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, resetAuditState } from "../audit/fakeApi";
 import { ReportSectionView } from "../features/report/ReportSection";
 import { pruneRemoved } from "../features/report/queries";
+import { CheckList } from "../features/report/ReportOutline";
 import { makeQueryClient } from "../lib/queryClient";
 import type { LogContent, LogEntryInput } from "../types/log";
 import type { ReportDoc } from "../types/report";
@@ -330,7 +331,9 @@ describe("Report view: appendices and new evidence", () => {
     await ready();
     await waitFor(() => expect(editors.length).toBeGreaterThan(0));
     const checks = screen.getAllByRole("list", { name: "Checks" })[0];
-    expect(within(checks).getByText(/This block is long \(80 lines of output\)/)).toBeInTheDocument();
+    // The fix is offered for the picked check only.
+    expect(within(checks).queryByRole("button", { name: "Move to appendix" })).toBeNull();
+    fireEvent.click(within(checks).getByText(/This block is long \(80 lines of output\)/));
     fireEvent.click(within(checks).getByRole("button", { name: "Move to appendix" }));
     await waitFor(() => expect(pageEditor().state.doc.child(1).attrs.appendix).toBe("moved"));
     expect(await within(appendixGroup()).findByRole("button", { name: "Appendix E: lnx02" })).toBeInTheDocument();
@@ -409,6 +412,118 @@ describe("Report view: appendices and new evidence", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
     const notice = (await screen.findByText("Nothing new to add")).closest<HTMLElement>("[role=status]")!;
     expect(within(notice).queryByRole("button", { name: "Undo" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Report view: the result", () => {
+  const paper = () => document.querySelector<HTMLElement>(".report-page")!;
+
+  it("titles a report-level page from its kind, at the top of the paper", async () => {
+    mount();
+    await ready();
+    fireEvent.click(row(/High-level summary/));
+    await waitFor(() => expect(within(paper()).getByRole("heading", { level: 1, name: "High-level summary" })).toBeInTheDocument());
+    fireEvent.click(row(/Proof table/));
+    await waitFor(() => expect(within(paper()).getByRole("heading", { level: 1, name: "Appendix A: Proof table" })).toBeInTheDocument());
+    expect(paper().firstElementChild?.tagName).toBe("H1");
+    // A target keeps its facts title and gets none of its own.
+    fireEvent.click(rowFor("lnx02"));
+    await waitFor(() => expect(within(paper()).getByRole("heading", { level: 2, name: "lnx02" })).toBeInTheDocument());
+    expect(within(paper()).queryByRole("heading", { level: 1 })).toBeNull();
+  });
+
+  it("prints a target's facts as labelled values and marks nmap's guesses once, under the table", async () => {
+    mount();
+    await ready();
+    await waitFor(() => expect(paper().querySelector(".report-facts")).toBeTruthy());
+    const facts = paper().querySelector<HTMLElement>(".report-facts")!;
+    expect(facts.textContent).not.toContain("|");
+    expect([...facts.querySelectorAll("dt")].map((d) => d.textContent)).toEqual(["IP", "OS", "Ports", "Access"]);
+    expect([...facts.querySelectorAll("dd")].map((d) => d.textContent)).toEqual(["10.10.30.21", "Linux", "22, 8080", "none"]);
+    expect(paper().textContent).not.toContain("(nmap guess)");
+    expect(paper().querySelectorAll(".report-guess").length).toBe(2);
+    expect(within(paper()).getAllByText("Italic: nmap's guess, not confirmed.")).toHaveLength(1);
+  });
+
+  it("groups checks of one kind into one row and cycles through them; the fix sits in a disclosure for the picked one", async () => {
+    mount();
+    await ready();
+    fireEvent.click(rowFor("ms01"));
+    await waitFor(() => expect(screen.getAllByRole("list", { name: "Checks" })[0]).toHaveTextContent(/steps have no explanation/));
+    const checks = screen.getAllByRole("list", { name: "Checks" })[0];
+    const explain = within(checks).getByText(/^\d+ steps have no explanation\.$/);
+    expect(within(checks).queryAllByText("A step has no explanation after it.")).toHaveLength(0);
+    const total = Number(explain.textContent!.split(" ")[0]);
+    expect(total).toBeGreaterThan(1);
+    const selectedPos = () => {
+      const sel = pageEditor().state.selection;
+      return sel instanceof NodeSelection ? sel.from : null;
+    };
+    fireEvent.click(explain);
+    await waitFor(() => expect(selectedPos()).not.toBeNull());
+    expect(within(checks).getByText(`1 of ${total}`)).toBeInTheDocument();
+    const first = selectedPos();
+    fireEvent.click(explain);
+    await waitFor(() => expect(within(checks).getByText(`2 of ${total}`)).toBeInTheDocument());
+    expect(selectedPos()).not.toBe(first);
+    // No fix one-liners show until a check that has one is picked, and then inside a closed disclosure.
+    expect(checks.querySelector("code")).toBeNull();
+  });
+
+  it("lists tools with purpose and URL, and keeps an edited purpose in the appendix section's meta", async () => {
+    const save = vi.spyOn(api, "reportSectionSave");
+    mount();
+    await ready();
+    fireEvent.click(row(/Tools and payloads/));
+    await waitFor(() => expect(within(paper()).getByRole("columnheader", { name: "Purpose" })).toBeInTheDocument());
+    expect(within(paper()).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Tool", "Purpose", "URL"]);
+    expect(within(paper()).queryByText("Times used")).toBeNull();
+    // The cell reads as text until clicked, then takes typing in place.
+    const cell = within(paper()).getByRole("button", { name: "Purpose of nmap" });
+    expect(cell).toHaveTextContent("Port and service scanning");
+    fireEvent.click(cell);
+    const purpose = within(paper()).getByRole("textbox", { name: "Purpose of nmap" });
+    expect(purpose).toHaveValue("Port and service scanning");
+    fireEvent.change(purpose, { target: { value: "Full TCP scans" } });
+    await waitFor(() =>
+      expect(save.mock.calls.some(([, , meta]) => JSON.stringify(meta).includes('"nmap":{"purpose":"Full TCP scans"}'))).toBe(true),
+    );
+    fireEvent.keyDown(purpose, { key: "Enter" });
+    expect(within(paper()).getByRole("button", { name: "Purpose of nmap" })).toHaveTextContent("Full TCP scans");
+  });
+});
+
+describe("CheckList", () => {
+  it("shows a check's fix only once it is picked, inside a closed Fix disclosure", () => {
+    const onPick = vi.fn();
+    render(
+      <TooltipProvider>
+        <CheckList
+          checks={[
+            { id: "proof-ip:ms01:proof", level: "fail", text: "The proof.txt proof for ms01 doesn't show ipconfig.", fix: "ipconfig" },
+            { id: "coverage:s1", level: "soft", text: "22/tcp on ms01 is untested." },
+            { id: "coverage:s2", level: "soft", text: "80/tcp on ms01 is untested." },
+          ]}
+          onPick={onPick}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByText("ipconfig")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Fix" })).toBeNull();
+    fireEvent.click(screen.getByText("The proof.txt proof for ms01 doesn't show ipconfig."));
+    expect(onPick).toHaveBeenLastCalledWith(expect.objectContaining({ id: "proof-ip:ms01:proof" }));
+    const fix = screen.getByRole("button", { name: "Fix" });
+    expect(fix).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(fix);
+    expect(screen.getByText("ipconfig").tagName).toBe("CODE");
+    // A group's row names each one as it cycles, in its own words when they differ.
+    fireEvent.click(screen.getByText("2 services are untested."));
+    expect(screen.getByText("1 of 2")).toBeInTheDocument();
+    expect(screen.getByText("22/tcp on ms01 is untested.")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("2 services are untested."));
+    expect(screen.getByText("80/tcp on ms01 is untested.")).toBeInTheDocument();
+    expect(onPick).toHaveBeenLastCalledWith(expect.objectContaining({ id: "coverage:s2" }));
+    expect(screen.queryByRole("button", { name: "Fix" })).toBeNull();
   });
 });
 

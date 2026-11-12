@@ -47,11 +47,19 @@ export interface CoverageOverride {
   note?: string;
 }
 
+/** The owner's own purpose or URL for a row of the Tools appendix. */
+export interface ToolOverride {
+  purpose?: string;
+  url?: string;
+}
+
 /** Stored in `report_sections.meta`. */
 export interface SectionMeta {
   removedEntryIds?: string[];
   coverage?: Record<string, CoverageOverride>;
   method?: string;
+  /** The Tools appendix's per-row edits, by the tool name the row prints. */
+  tools?: Record<string, ToolOverride>;
 }
 
 export type TargetKind = "standalone" | "ad-set";

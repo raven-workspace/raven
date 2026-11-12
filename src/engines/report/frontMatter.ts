@@ -1,5 +1,6 @@
 import type { SectionKind } from "../../types/report";
 import type { Settings } from "../../types/settings";
+import { FIXED_LETTERS } from "./appendix";
 import { generated, slot } from "./draft";
 import type { ReportData, ReportNode } from "./types";
 
@@ -72,3 +73,30 @@ export function buildSectionDraft(kind: SectionKind, _data: ReportData, settings
   }
 }
 
+
+/** The names of the report-level pages, as the outline lists them. */
+export const SECTION_NAMES: Partial<Record<SectionKind, string>> = {
+  details: "Report details",
+  summary: "High-level summary",
+  considerations: "Testing considerations",
+  methodology: "Methodology",
+  "engagement-tested": "Tested, not exploited",
+  "appendix-proof": "Proof table",
+  "appendix-tools": "Tools and payloads",
+  "appendix-msf": "Metasploit usage",
+  "appendix-cleanup": "House cleaning",
+  further: "Further information",
+  references: "References",
+};
+
+/**
+ * The title printed at the top of a report-level page, from its kind (never stored, so every saved page has it):
+ * "High-level summary", "Appendix A: Proof table". Targets and the AD set carry their own title; Report details is a form.
+ */
+export function pageTitle(kind: SectionKind): string | null {
+  if (kind === "details") return null;
+  const name = SECTION_NAMES[kind];
+  if (!name) return null;
+  const letter = FIXED_LETTERS[kind];
+  return letter ? `Appendix ${letter}: ${name}` : name;
+}

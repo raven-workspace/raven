@@ -1,7 +1,7 @@
 import { ArrowSquareOut } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import type { AppendixPlacement } from "../../../../engines/report";
-import { ActionCell, IconButton } from "../../../../ui";
+import { IconButton } from "../../../../ui";
 import { usePageLayout } from "../ReportDataContext";
 
 /** The amber block that stands where a referenced row used to be. */
@@ -20,14 +20,16 @@ export function Block({ selected, kind, children }: { selected: boolean; kind: s
   );
 }
 
-/** The selected block's controls: an Ink toolbar floating above the block's top-right corner, never on the paper. */
+/**
+ * The selected block's controls: a column of Ink icon buttons in the page's right gutter, level with the block's top,
+ * never over the paper's content (the gutter is 40px; the column is 30px wide, 8px off the text). On a block taller
+ * than the pane the column stays in view under the formatting bar while the block is on screen.
+ */
 export function BlockTools({ children }: { children: ReactNode }) {
   return (
-    <div
-      contentEditable={false}
-      className="absolute right-0 bottom-full z-10 mb-2 grid rounded-md border border-line-strong bg-surface p-1 shadow-lg"
-    >
-      <ActionCell>{children}</ActionCell>
+    <div contentEditable={false} className="pointer-events-none absolute top-0 bottom-0 left-full z-10 ml-2 grid content-start">
+      {/* The pane's 24px top padding is inside the sticky inset: top-6 sits 48px below the pane's edge, under the 41px bar. */}
+      <div className="pointer-events-auto sticky top-6 grid gap-1 rounded-md border border-line-strong bg-surface shadow-lg">{children}</div>
     </div>
   );
 }

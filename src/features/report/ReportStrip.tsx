@@ -17,7 +17,7 @@ export function dueIn(dueAt: number, now: number): string {
   return `${Math.floor(left / HOUR)}h ${Math.floor((left % HOUR) / MIN)}m`;
 }
 
-/** The report's status: file name, time left, targets ready and open gaps. Export arrives with the PDF round. */
+/** The report's status: file name, time left, targets ready and open gaps. On the Report it stands in the engagement strip's place. Export arrives with the PDF round. */
 export function ReportStrip({
   fileName,
   osidValid,
@@ -40,7 +40,7 @@ export function ReportStrip({
   const { outer, inner } = useFitStrip(LAST_STEP);
   // A group, not a live region: the countdown ticks and must not be announced each minute.
   return (
-    <div className="grid h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-line pr-2">
+    <div className="grid h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-line pl-6 pr-4">
       <div ref={outer} role="group" aria-label="Report status" className="h-9 overflow-hidden text-meta text-muted-2">
         <div ref={inner} className="grid h-full grid-flow-col auto-cols-max items-center justify-start gap-6 whitespace-nowrap">
           <Cell label="Report" value={fileName} tone={osidValid ? undefined : "warn"} />

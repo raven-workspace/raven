@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 import { applyKeep, lineCount, type EvidenceAttrs } from "../../../../engines/report";
 import { api } from "../../../../lib/api";
 import type { CommandBlock, LogEntry } from "../../../../types/log";
-import { Button, IconButton } from "../../../../ui";
+import { IconButton } from "../../../../ui";
 import { AttachmentImage } from "../../../log/AttachmentImage";
 import { useAppendixRef, usePageLayout, useReportData } from "../ReportDataContext";
 import { AppendixRef, Block, BlockTools, Gone, MoveButton } from "./parts";
@@ -300,14 +300,6 @@ export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNo
     <Block selected={selected} kind="evidence">
       {tools && (
         <BlockTools>
-          {mode === "trim" &&
-            (attrs.keep === null ? (
-              <span className="px-2 text-meta text-muted-2">Pick the lines to keep</span>
-            ) : (
-              <Button size="sm" onClick={() => setAttrs({ keep: null })}>
-                Keep all
-              </Button>
-            ))}
           {isCommand && (
             <>
               <IconButton icon={Scissors} label="Trim" active={mode === "trim"} disabled={attrs.appendix === "moved"} onClick={() => pickMode("trim")} />
@@ -323,6 +315,18 @@ export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNo
           {shown && canMove && <MoveButton place={attrs.appendix} canSplit={isCommand} onMove={(next) => setAttrs({ appendix: next })} />}
           <IconButton icon={Trash} label="Remove" shortcut="⌫" tone="destructive" onClick={remove} />
         </BlockTools>
+      )}
+      {/* Trimming: what to do, or the way back, on the paper above the output (the gutter holds only icons). */}
+      {mode === "trim" && (
+        <div contentEditable={false} className="report-pick-hint">
+          {attrs.keep === null ? (
+            "Pick the lines to keep"
+          ) : (
+            <button type="button" className="report-backlink" onClick={() => setAttrs({ keep: null })}>
+              Keep all
+            </button>
+          )}
+        </div>
       )}
       {body}
     </Block>

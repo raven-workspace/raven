@@ -17,7 +17,7 @@ export interface AppendixIndex {
   refFor(key: string): string | null;
 }
 
-const FIXED_LETTERS: Partial<Record<SectionKind, string>> = {
+export const FIXED_LETTERS: Partial<Record<SectionKind, string>> = {
   "appendix-proof": "A",
   "appendix-tools": "B",
   "appendix-msf": "C",
@@ -88,7 +88,7 @@ function keptLines(node: ReportNode, data: ReportData): number {
 function generatedRows(attrs: GeneratedAttrs, data: ReportData): number {
   switch (attrs.kind) {
     case "tools":
-      return toolsUsed(data.log, (attrs.hostId ? [attrs.hostId] : data.hosts.map((h) => h.id))).length;
+      return toolsUsed(data.log, attrs.hostId ? [attrs.hostId] : data.hosts.map((h) => h.id), { attempts: data.attempts }).length;
     case "tested":
       return testedNotExploited(data, attrs.hostId).length;
     case "services":

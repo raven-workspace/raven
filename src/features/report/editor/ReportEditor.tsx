@@ -200,6 +200,7 @@ function PageHooks({ onDoc, onRemoveEvidence }: { onDoc(doc: PMNode): void; onRe
  */
 export function ReportEditor({
   sectionId,
+  title,
   doc,
   onChange,
   onReady,
@@ -208,6 +209,8 @@ export function ReportEditor({
   notices,
 }: {
   sectionId: string;
+  /** A report-level page's title, printed at the top of the paper; it comes from the section kind and is never stored. */
+  title?: string;
   doc: ReportNode;
   onChange(doc: ReportNode): void;
   onReady(editor: Editor): void;
@@ -275,6 +278,7 @@ export function ReportEditor({
         <FormatToolbar end={toolbarEnd} className={toolbarClassName} />
         {notices}
         <div className="report-page">
+          {title && <h1 className="report-title">{title}</h1>}
           <div ref={mount} className="report-page-doc" />
           <BlockHandle />
         </div>

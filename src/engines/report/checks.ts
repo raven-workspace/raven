@@ -131,7 +131,13 @@ export function targetChecks(input: TargetChecksInput): Check[] {
       const block = node.attrs?.block;
       const picked = typeof block === "number" ? blocks.slice(block, block + 1) : blocks;
       if (picked.length === 0 || picked.some((b) => (b.output ?? "").trim() === "")) {
-        out.push({ id: `output:${entryId}`, level: "fail", text: "A command on the page has no output.", anchor });
+        // Soft: downloads (iwr, certutil) and other quiet commands print nothing, and that is fine to show.
+        out.push({
+          id: `output:${entryId}`,
+          level: "soft",
+          text: "A command on the page shows no output. Fine if it printed nothing; otherwise paste its output.",
+          anchor,
+        });
       }
     }
     if (!hasText(siblings[at + 1])) {
@@ -222,6 +228,68 @@ export function targetChecks(input: TargetChecksInput): Check[] {
 
   const seen = new Set<string>();
   return out.filter((c) => !seen.has(c.id) && seen.add(c.id));
+}
+
+/** A check's kind: its id's first part, or for findings and exploits the problem after the id ("finding-severity"). */
+export function checkKind(id: string): string {
+  const parts = id.split(":");
+  if ((parts[0] === "finding" || parts[0] === "exploit") && parts.length >= 3) return `${parts[0]}-${parts[parts.length - 1]}`;
+  return parts[0];
+}
+
+/** How a group of `n` checks of one kind reads in the outline. */
+const PLURAL: Record<string, (n: number) => string> = {
+  "proof-missing": (n) => `${n} flags are not on the page.`,
+  "proof-ip": (n) => `${n} proofs don't show ipconfig, ifconfig or ip addr with the target IP.`,
+  "proof-screenshot": (n) => `${n} proofs have no screenshot.`,
+  "proof-web": (n) => `${n} proofs look like they came from a web request, not an interactive shell.`,
+  "proof-identity": (n) => `${n} proofs don't show whoami or id.`,
+  "proof-hostname": (n) => `${n} proofs don't show hostname.`,
+  "proof-path": (n) => `${n} proofs don't read the flag from its usual location.`,
+  gone: (n) => `${n} blocks on the page use deleted or private content.`,
+  output: (n) => `${n} commands on the page show no output.`,
+  explain: (n) => `${n} steps have no explanation.`,
+  caption: (n) => `${n} screenshot captions are over ${MAX_CAPTION_WORDS} words.`,
+  "access-shot": (n) => `${n} access levels have no screenshot of them on the page.`,
+  "finding-severity": (n) => `${n} findings have no severity.`,
+  "finding-title": (n) => `${n} finding titles are a single word.`,
+  "finding-affected": (n) => `${n} findings have no affected host or service.`,
+  "finding-description": (n) => `${n} findings have no description.`,
+  "finding-remediation": (n) => `${n} findings have no remediation.`,
+  wording: (n) => `${n} absolute claims on the page.`,
+  "exploit-url": (n) => `${n} modified exploits have no original URL.`,
+  "exploit-explain": (n) => `${n} modified exploits have no explanation of the changes after them.`,
+  "exploit-original": (n) => `${n} modified exploits have no original and no marked lines.`,
+  coverage: (n) => `${n} services are untested.`,
+  "appendix-ref": (n) => `${n} moved blocks have no appendix entry any more.`,
+  move: (n) => `${n} blocks are long. Consider moving them to an appendix.`,
+  legible: (n) => `${n} screenshots are narrower than would print legibly.`,
+};
+
+export interface CheckGroup {
+  /** The kind the group's checks share. */
+  key: string;
+  /** Fail when any of its checks fails. */
+  level: CheckLevel;
+  /** One check's own text; several read as a count ("12 steps have no explanation."). */
+  text: string;
+  checks: Check[];
+}
+
+/** Checks grouped by kind, one outline row each: failing groups first, otherwise in the order their first check came. */
+export function groupChecks(checks: Check[]): CheckGroup[] {
+  const groups = new Map<string, Check[]>();
+  for (const c of checks) {
+    const key = checkKind(c.id);
+    groups.set(key, [...(groups.get(key) ?? []), c]);
+  }
+  const out = [...groups].map(([key, list]): CheckGroup => ({
+    key,
+    level: list.some((c) => c.level === "fail") ? "fail" : "soft",
+    text: list.length === 1 ? list[0].text : (PLURAL[key]?.(list.length) ?? `${list.length} × ${list[0].text}`),
+    checks: list,
+  }));
+  return [...out.filter((g) => g.level === "fail"), ...out.filter((g) => g.level !== "fail")];
 }
 
 /** Report-level checks; `data` feeds the Metasploit check across the targets' hosts. */

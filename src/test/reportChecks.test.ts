@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { absoluteClaims, isReady, proofFacts, reportChecks, targetChecks } from "../engines/report";
+import { absoluteClaims, groupChecks, isReady, proofFacts, reportChecks, targetChecks } from "../engines/report";
 import type { AppendixIndex, Check, ReportData, ReportNode, ReportTarget } from "../engines/report";
 import type { Host } from "../types/host";
 import type { LogEntry } from "../types/log";
@@ -137,15 +137,19 @@ describe("targetChecks", () => {
       ["proof-path:DC01:proof", "The proof.txt proof for DC01 doesn't read the flag from its usual location."],
     ]);
   });
-  it("output fails on blank output unless it returned nothing", () => {
+  it("output is soft on blank output unless it returned nothing (downloads print nothing)", () => {
     const blank = (extra = {}) => entry({ id: "c1", content: { kind: "command", blocks: [{ command: "ls", output: "  " }] }, ...extra });
     const page = doc(ev("c1"), slot("x"), ...goodDoc().content!);
     const c = find(run(data({ log: [blank(), flag()] }), page), "output")!;
-    expect(c).toMatchObject({ id: "output:c1", level: "fail", text: "A command on the page has no output." });
+    expect(c).toMatchObject({
+      id: "output:c1",
+      level: "soft",
+      text: "A command on the page shows no output. Fine if it printed nothing; otherwise paste its output.",
+    });
     expect(find(run(data({ log: [blank({ returnedNothing: true }), flag()] }), page), "output")).toBeUndefined();
     const two = entry({ id: "c2", content: { kind: "command", blocks: [{ command: "a", output: "x" }, { command: "b", output: "" }] } });
     const whole = doc(ev("c2", { block: null }), slot("x"), ...goodDoc().content!);
-    expect(find(run(data({ log: [two, flag()] }), whole), "output")).toMatchObject({ id: "output:c2", level: "fail" });
+    expect(find(run(data({ log: [two, flag()] }), whole), "output")).toMatchObject({ id: "output:c2", level: "soft" });
     expect(find(run(data({ log: [two, flag()] }), doc(ev("c2", { block: 0 }), slot("x"), ...goodDoc().content!)), "output")).toBeUndefined();
   });
   it("explain is soft, screenshots first", () => {
@@ -263,5 +267,39 @@ describe("isReady", () => {
   it("is true when only soft checks remain", () => {
     expect(isReady([{ id: "a", level: "soft", text: "" }])).toBe(true);
     expect(isReady([{ id: "a", level: "soft", text: "" }, { id: "b", level: "fail", text: "" }])).toBe(false);
+  });
+});
+
+describe("groupChecks", () => {
+  const c = (id: string, level: "fail" | "soft" = "soft", text = id): Check => ({ id, level, text });
+  it("groups checks of one kind into a counted row, fails first, in first-seen order", () => {
+    const groups = groupChecks([
+      c("explain:a"),
+      c("coverage:s1", "soft", "22/tcp on web01 is untested."),
+      c("explain:b"),
+      c("proof-missing:web01:local", "fail", "No local.txt for web01 on the page."),
+      c("explain:c"),
+    ]);
+    expect(groups.map((g) => [g.key, g.level, g.text, g.checks.length])).toEqual([
+      ["proof-missing", "fail", "No local.txt for web01 on the page.", 1],
+      ["explain", "soft", "3 steps have no explanation.", 3],
+      ["coverage", "soft", "22/tcp on web01 is untested.", 1],
+    ]);
+  });
+  it("keys finding and exploit checks by their kind, not their id", () => {
+    const groups = groupChecks([c("finding:f1:severity"), c("finding:f2:severity"), c("finding:f1:remediation"), c("exploit:x:url", "fail"), c("exploit:y:url", "fail")]);
+    expect(groups.map((g) => [g.key, g.text])).toEqual([
+      ["exploit-url", "2 modified exploits have no original URL."],
+      ["finding-severity", "2 findings have no severity."],
+      ["finding-remediation", "finding:f1:remediation"],
+    ]);
+  });
+  it("words every kind targetChecks makes when there are two of it", () => {
+    const kinds = ["proof-missing", "proof-ip", "proof-screenshot", "proof-web", "proof-identity", "proof-hostname", "proof-path", "gone", "output", "explain", "caption", "access-shot", "finding:x:severity", "finding:x:title", "finding:x:affected", "finding:x:description", "finding:x:remediation", "wording", "exploit:x:url", "exploit:x:explain", "exploit:x:original", "coverage", "appendix-ref", "move", "legible"];
+    for (const k of kinds) {
+      const id = (n: number) => (k.includes(":x:") ? k.replace(":x:", `:${n}:`) : `${k}:${n}`);
+      const [g] = groupChecks([c(id(1), "soft", "one"), c(id(2), "soft", "two")]);
+      expect(g.text, k).toMatch(/^2 /);
+    }
   });
 });

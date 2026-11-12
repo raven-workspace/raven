@@ -20,6 +20,49 @@ const REASON_WORDS: Record<Exclude<ReasonKind, "operator">, string> = {
 
 const joinWords = (...parts: (string | null | undefined)[]) => parts.filter(Boolean).join(" ");
 
+/**
+ * Services an access step names by tool or protocol rather than by port: a service is in a family by its port or its
+ * nmap name, and an access step names the family with one of its words ("evil-winrm" is WinRM on 5985).
+ */
+const ACCESS_FAMILIES: { ports: number[]; names: string[]; words: RegExp }[] = [
+  { ports: [22], names: ["ssh"], words: /\b(ssh|scp|sftp)\b/i },
+  { ports: [21], names: ["ftp"], words: /\bftp\b/i },
+  { ports: [23], names: ["telnet"], words: /\btelnet\b/i },
+  { ports: [445], names: ["microsoft-ds"], words: /\b(psexec|smbexec|atexec|smbclient|smb)\b/i },
+  { ports: [5985, 5986], names: ["wsman", "winrm"], words: /\b(evil-winrm|winrm)\b/i },
+  { ports: [3389], names: ["ms-wbt-server", "rdp"], words: /\b(rdp|xfreerdp|rdesktop)\b/i },
+  { ports: [1433], names: ["ms-sql-s", "mssql"], words: /\b(mssql|mssqlclient)\b/i },
+  { ports: [3306], names: ["mysql"], words: /\bmysql\b/i },
+  { ports: [5432], names: ["postgresql"], words: /\b(psql|postgres|postgresql)\b/i },
+  { ports: [135], names: ["msrpc"], words: /\b(wmiexec|dcomexec)\b/i },
+  { ports: [5900], names: ["vnc"], words: /\bvnc(viewer)?\b/i },
+];
+
+const portPattern = (port: number) => new RegExp(`(?<![\\d.])${port}(?![\\d.])`);
+/** A port standing alone in a command or title ("on 8080", ":8080/"): not inside a word, an IP or a base64 payload. */
+const barePort = (port: number) => new RegExp(`(?<![\\w.])${port}(?![\\w.])`);
+
+/** What the steps into a host say: each access grant's and hop's `via`, with its linked entry's title and commands (never a private entry's). */
+function accessSteps(data: ReportData, hostId: string): { text: string; via: string }[] {
+  const entryText = (id: string | null) => {
+    const e = id ? data.log.find((l) => l.id === id) : undefined;
+    if (!e || e.private) return "";
+    const commands = e.content.kind === "command" ? e.content.blocks.map((b) => b.command ?? "") : [];
+    return [e.title, ...commands].join("\n");
+  };
+  return [
+    ...data.grants.filter((g) => g.hostId === hostId).map((g) => ({ via: g.via, text: `${g.via}\n${entryText(g.logEntryId)}` })),
+    ...data.hops.filter((h) => h.toHostId === hostId).map((h) => ({ via: h.via, text: `${h.via}\n${entryText(h.logEntryId)}` })),
+  ];
+}
+
+/** Whether an access step's text names this service: its port outright, or its family's tool or protocol. */
+function namesService(text: string, port: number, nmapService: string | null): boolean {
+  if (barePort(port).test(text)) return true;
+  const name = (nmapService ?? "").toLowerCase();
+  return ACCESS_FAMILIES.some((f) => (f.ports.includes(port) || f.names.includes(name)) && f.words.test(text));
+}
+
 /** A service's coverage on one host (§5.5): exploited, tested, or untested; an override wins. */
 export function serviceCoverage(
   data: ReportData,
@@ -32,6 +75,7 @@ export function serviceCoverage(
       .filter((r) => !r.private && r.hostId === hostId)
       .map((r) => ({ text: r.text, via: r.text })),
   ];
+  const steps = accessSteps(data, hostId);
   return data.services
     .filter((s) => s.hostId === hostId)
     .sort((a, b) => a.port - b.port)
@@ -41,11 +85,16 @@ export function serviceCoverage(
       let result: CoverageResult = "untested";
       let via: string | null = null;
       const finding = data.findings.find((f) => f.serviceIds.includes(s.id));
-      const re = new RegExp(`(?<![\\d.])${s.port}(?![\\d.])`);
+      const re = portPattern(s.port);
       const hit = notes.find((n) => re.test(n.text));
+      // A port used to get in (an access grant or hop names it) was exploited, whether or not a finding says so.
+      const access = finding ? undefined : steps.find((st) => namesService(st.text, s.port, s.nmapService));
       if (finding) {
         result = "exploited";
         via = finding.title;
+      } else if (access) {
+        result = "exploited";
+        via = access.via;
       } else if (s.verdict === "dead_end") {
         result = "tested";
         via = "ruled out as a dead end";

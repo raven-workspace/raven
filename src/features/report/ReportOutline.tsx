@@ -1,8 +1,8 @@
 import { Check as CheckIcon, Circle, WarningCircle } from "@phosphor-icons/react";
-import { Fragment, type KeyboardEvent, type ReactNode } from "react";
-import type { Check, FlagKind } from "../../engines/report";
+import { Fragment, useState, type KeyboardEvent, type ReactNode } from "react";
+import { groupChecks, type Check, type CheckGroup, type FlagKind } from "../../engines/report";
 import { cx } from "../../lib/cx";
-import { Button, labelClass, Toggle } from "../../ui";
+import { Button, Disclosure, labelClass, Toggle, Tooltip } from "../../ui";
 
 export type OutlineGroup = "report" | "targets" | "appendices" | "closing";
 export type TargetState = "ready" | "gaps" | "not-started";
@@ -100,7 +100,11 @@ export interface CheckAction {
   run(): void;
 }
 
-/** The open target's checks, in plain words; clicking one takes the page to the place it concerns. */
+/**
+ * The open target's checks, in plain words, one line per kind: several checks of a kind read as a count ("12 steps
+ * have no explanation") and each click on the row takes the page to the next of them. The picked check
+ * shows which one it is, its fix (in a disclosure) and its one-press action under its row.
+ */
 export function CheckList({
   checks,
   onPick,
@@ -110,6 +114,8 @@ export function CheckList({
   onPick(check: Check): void;
   actionFor?(check: Check): CheckAction | undefined;
 }) {
+  const [picked, setPicked] = useState<{ key: string; at: number } | null>(null);
+  const [fixOpen, setFixOpen] = useState(false);
   if (checks.length === 0) {
     return (
       <ul aria-label="Checks" className="m-0 grid list-none p-0">
@@ -120,33 +126,60 @@ export function CheckList({
       </ul>
     );
   }
+  const groups = groupChecks(checks);
+  const pick = (g: CheckGroup) => {
+    const at = picked?.key === g.key ? (picked.at + 1) % g.checks.length : 0;
+    setPicked({ key: g.key, at });
+    setFixOpen(false);
+    onPick(g.checks[at]);
+  };
   return (
     <ul aria-label="Checks" className="m-0 grid list-none p-0">
-      {checks.map((c) => {
-        const action = actionFor?.(c);
+      {groups.map((g) => {
+        const isPicked = picked?.key === g.key;
+        // The group may have shrunk since the pick (a step got its explanation): stay inside it.
+        const at = isPicked ? Math.min(picked.at, g.checks.length - 1) : 0;
+        const check = g.checks[at];
+        const action = isPicked ? actionFor?.(check) : undefined;
+        const many = g.checks.length > 1;
+        // Which one of the group: its own words when they differ from the others' ("22/tcp on lnx02 is untested.").
+        const ownText = many && g.checks.some((c) => c.text !== g.checks[0].text);
         return (
-          <li key={c.id} className="grid">
-            <button
-              type="button"
-              onClick={() => onPick(c)}
-              className="grid w-full cursor-default grid-cols-[16px_minmax(0,1fr)] items-start gap-2 rounded-sm border-0 bg-transparent py-1 pl-8 pr-2 text-left text-meta text-muted-2 hover:bg-surface hover:text-fg"
-            >
-              {c.level === "fail" ? (
-                <WarningCircle aria-label="gap" className="size-4 text-warn" />
-              ) : (
-                <Circle aria-label="worth a look" className="size-4 text-muted" />
-              )}
-              <span className="grid gap-1">
-                <span>{c.text}</span>
-                {c.fix && <span className="font-mono text-meta text-faint [overflow-wrap:anywhere]">{c.fix}</span>}
-              </span>
-            </button>
-            {action && (
-              <div className="grid grid-cols-[16px_minmax(0,1fr)] gap-2 pb-1 pl-8 pr-2">
+          <li key={g.key} className="grid">
+            <Tooltip content={g.text} side="right">
+              <button
+                type="button"
+                onClick={() => pick(g)}
+                className={cx(
+                  "grid min-h-7 w-full cursor-default grid-cols-[16px_minmax(0,1fr)] items-center gap-2 rounded-sm border-0 py-1 pl-8 pr-2 text-left text-meta",
+                  isPicked ? "bg-surface text-fg" : "bg-transparent text-muted-2 hover:bg-surface hover:text-fg",
+                )}
+              >
+                {g.level === "fail" ? (
+                  <WarningCircle aria-label="gap" className="size-4 text-warn" />
+                ) : (
+                  <Circle aria-label="worth a look" className="size-4 text-muted" />
+                )}
+                <span className="min-w-0 truncate">{g.text}</span>
+              </button>
+            </Tooltip>
+            {isPicked && (many || check.fix || action) && (
+              <div className="grid grid-cols-[16px_minmax(0,1fr)] gap-x-2 gap-y-1 pb-2 pl-8 pr-2 text-meta text-muted-2">
                 <span aria-hidden />
-                <Button size="sm" className="justify-self-start" onClick={action.run}>
-                  {action.label}
-                </Button>
+                <div className="grid gap-1">
+                  {many && <span className="font-mono tabular-nums">{`${at + 1} of ${g.checks.length}`}</span>}
+                  {ownText && <span>{check.text}</span>}
+                  {check.fix && (
+                    <Disclosure label="Fix" open={fixOpen} onOpenChange={setFixOpen}>
+                      <code className="block py-1 pl-6 font-mono text-meta text-fg-2 [overflow-wrap:anywhere]">{check.fix}</code>
+                    </Disclosure>
+                  )}
+                  {action && (
+                    <Button size="sm" className="justify-self-start" onClick={action.run}>
+                      {action.label}
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
           </li>

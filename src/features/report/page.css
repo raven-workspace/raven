@@ -162,8 +162,41 @@
 
 .report-page .report-figure figcaption,
 .report-page .report-ref,
+.report-page .report-none,
+.report-page .report-note {
+  color: var(--page-placeholder);
+}
+
+/* A report-level page's title, from its kind: above the editor, inside the same side margins. */
+.report-page .report-title {
+  padding: 0 40px 16px;
+}
+
+/* A target's facts: labelled values on one row that wraps, 24px apart; the label muted, the value in ink. */
 .report-page .report-facts,
-.report-page .report-none {
+.report-page .report-facts dd {
+  margin: 0;
+}
+
+.report-page .report-fact {
+  display: inline-block;
+  max-width: 100%;
+  margin-right: 24px;
+}
+
+.report-page .report-fact dt,
+.report-page .report-fact dd {
+  display: inline;
+}
+
+.report-page .report-fact dt {
+  margin-right: 8px;
+  color: var(--page-placeholder);
+}
+
+/* A product only nmap guessed: muted italic, with one note under the table. */
+.report-page .report-guess {
+  font-style: italic;
   color: var(--page-placeholder);
 }
 
@@ -377,4 +410,49 @@
 /* The block being dragged stays visible in place, faded, until it lands. */
 .report-page .ProseMirror.prosekit-dragging .ProseMirror-selectednode {
   opacity: 0.4;
+}
+
+/* An editable cell (the Tools appendix's purpose and URL): page text that wraps, a field while it is edited. */
+.report-page .report-cell-edit,
+.report-page .report-input {
+  display: block;
+  width: 100%;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.report-page .report-cell-edit {
+  /* A button centres its 22px line in its 24px box: pull it up a pixel so it sits on the row's baseline. */
+  margin: -1px 0;
+  cursor: text;
+}
+
+.report-page .report-cell-edit:hover {
+  background: var(--page-code-bg);
+}
+
+.report-page .report-input {
+  background: var(--page-code-bg);
+}
+
+.report-page .report-cell-edit:focus-visible,
+.report-page .report-input:focus-visible {
+  outline: 2px solid var(--page-ink);
+  outline-offset: 2px;
+}
+
+.report-page .report-cell-empty {
+  color: var(--page-placeholder);
+}
+
+/* While trimming: the hint, or Keep all, on its own line above the output. */
+.report-page .report-pick-hint {
+  color: var(--page-placeholder);
+  min-height: 24px;
 }

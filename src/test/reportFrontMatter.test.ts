@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSectionDraft } from "../engines/report";
+import { buildSectionDraft, pageTitle } from "../engines/report";
 import type { ReportData, ReportNode } from "../engines/report";
 import type { Settings } from "../types/settings";
 
@@ -54,5 +54,25 @@ describe("buildSectionDraft", () => {
     expect(kinds("appendix-cleanup")).toEqual(["cleanup", "slot"]);
     expect(kinds("further")).toEqual(["slot"]);
     expect(kinds("references")).toContain("references");
+  });
+});
+
+describe("pageTitle", () => {
+  it("titles every report-level page from its kind, appendices with their letter", () => {
+    expect(pageTitle("summary")).toBe("High-level summary");
+    expect(pageTitle("considerations")).toBe("Testing considerations");
+    expect(pageTitle("methodology")).toBe("Methodology");
+    expect(pageTitle("engagement-tested")).toBe("Tested, not exploited");
+    expect(pageTitle("appendix-proof")).toBe("Appendix A: Proof table");
+    expect(pageTitle("appendix-tools")).toBe("Appendix B: Tools and payloads");
+    expect(pageTitle("appendix-msf")).toBe("Appendix C: Metasploit usage");
+    expect(pageTitle("appendix-cleanup")).toBe("Appendix D: House cleaning");
+    expect(pageTitle("further")).toBe("Further information");
+    expect(pageTitle("references")).toBe("References");
+  });
+  it("gives targets, the AD set and Report details none (they carry their own)", () => {
+    expect(pageTitle("target")).toBeNull();
+    expect(pageTitle("ad")).toBeNull();
+    expect(pageTitle("details")).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Editor } from "prosekit/core";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams } from "react-router";
 import {
   buildSectionDraft,
@@ -10,10 +10,12 @@ import {
   isReady,
   isValidOsid,
   numberAppendices,
+  pageTitle,
   reportChecks,
   reportDueAt,
   reportFileName,
   reportTargets,
+  SECTION_NAMES,
   targetChecks,
   type AppendixEntry,
   type AppendixIndex,
@@ -29,7 +31,7 @@ import { api } from "../../lib/api";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
 import { useNarrow } from "../../lib/useNarrow";
 import { reportError } from "../../lib/lockSignal";
-import type { Report, ReportPatch, ReportSection, SectionKind } from "../../types/report";
+import type { Report, ReportPatch, ReportSection } from "../../types/report";
 import type { Settings } from "../../types/settings";
 import { Button, Disclosure, EmptyState, ErrorState, LoadingState, queryState, Select, usePageShortcuts, type Hint } from "../../ui";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
@@ -72,19 +74,7 @@ const HINTS: Hint[] = [
 const NARROW_HINTS: Hint[] = [...HINTS, { keys: "E", label: "evidence", priority: 5 }];
 const RAIL_BREAKPOINT = 1200;
 
-const LABEL: Partial<Record<SectionKind, string>> = {
-  details: "Report details",
-  summary: "High-level summary",
-  considerations: "Testing considerations",
-  methodology: "Methodology",
-  "engagement-tested": "Tested, not exploited",
-  "appendix-proof": "Proof table",
-  "appendix-tools": "Tools and payloads",
-  "appendix-msf": "Metasploit usage",
-  "appendix-cleanup": "House cleaning",
-  further: "Further information",
-  references: "References",
-};
+const LABEL = SECTION_NAMES;
 
 const GENERATED_TITLE: Record<string, string> = {
   services: "Services",
@@ -235,19 +225,38 @@ function usePageEdits(
     },
     [openSection, docOf, saver, setLiveMeta],
   );
-  return { onChange, onRemoveEvidence, onRestoreEvidence };
+  /** A change to the section's own settings (the Tools appendix's rows): saved with the page as it is. */
+  const onSectionMeta = useCallback(
+    (patch: Partial<SectionMeta>) => {
+      if (!openSection) return;
+      const cur = current.current?.id === openSection.id ? current.current : { id: openSection.id, doc: docOf(openSection), meta: openSection.meta as SectionMeta };
+      const meta: SectionMeta = { ...cur.meta, ...patch };
+      current.current = { ...cur, meta };
+      setLiveMeta({ id: openSection.id, meta });
+      saver.save(cur.doc, meta);
+    },
+    [openSection, docOf, saver, setLiveMeta],
+  );
+  return { onChange, onRemoveEvidence, onRestoreEvidence, onSectionMeta };
 }
 
 /** The engagement's Report section: client engagements get a placeholder this round. */
 export function ReportSectionView() {
   const { id = "" } = useParams();
   const engagement = useQuery({ queryKey: ["engagement", id], queryFn: () => api.engagementGet(id) });
-  if (!engagement.data) return queryState([engagement], "the report");
+  if (!engagement.data) return <Padded>{queryState([engagement], "the report")}</Padded>;
   if (engagement.data.kind === "client") {
-    return <EmptyState title="Client reports come after the exam" body="This round builds the OSCP exam report. Client reports arrive in a later round." />;
+    return (
+      <Padded>
+        <EmptyState title="Client reports come after the exam" body="This round builds the OSCP exam report. Client reports arrive in a later round." />
+      </Padded>
+    );
   }
   return <ReportWorkspace eid={id} />;
 }
+
+/** The section's states (loading, empty, error) keep the margins the shell gives other sections; the report itself runs edge to edge. */
+const Padded = ({ children }: { children: ReactNode }) => <div className="px-6 py-6">{children}</div>;
 
 interface Entry {
   item: OutlineItem;
@@ -265,6 +274,7 @@ function ReportWorkspace({ eid }: { eid: string }) {
   const failed = reportQ.error ?? dataQ.error ?? settingsQ.error ?? sectionsQ.error;
   if (failed) {
     return (
+      <Padded>
       <ErrorState
         title="Couldn't load the report"
         hint="Retry. If it keeps failing, lock and unlock Raven."
@@ -276,11 +286,22 @@ function ReportWorkspace({ eid }: { eid: string }) {
         }}
         detail={failed.message}
       />
+      </Padded>
     );
   }
-  if (!reportQ.data || !dataQ.data || !settingsQ.data || !sectionsQ.data) return <LoadingState label="the report" />;
+  if (!reportQ.data || !dataQ.data || !settingsQ.data || !sectionsQ.data) {
+    return (
+      <Padded>
+        <LoadingState label="the report" />
+      </Padded>
+    );
+  }
   if (dataQ.data.hosts.length === 0) {
-    return <EmptyState title="No hosts yet" body="The report builds itself from your hosts and their log. Add a host to start." />;
+    return (
+      <Padded>
+        <EmptyState title="No hosts yet" body="The report builds itself from your hosts and their log. Add a host to start." />
+      </Padded>
+    );
   }
   return <ReportBody report={reportQ.data} data={dataQ.data} settings={settingsQ.data} sections={sectionsQ.data} qc={qc} />;
 }
@@ -503,7 +524,7 @@ function ReportBody({
     [openId_],
   );
 
-  const { onChange, onRemoveEvidence, onRestoreEvidence } = usePageEdits(openSection, savedDocOf, saver, setLive, setLiveMeta);
+  const { onChange, onRemoveEvidence, onRestoreEvidence, onSectionMeta } = usePageEdits(openSection, savedDocOf, saver, setLive, setLiveMeta);
   // An appendix page reads the stored pages: write the open page first, so a block moved a moment ago is on it.
   const openItem = (id: string) => {
     if (id.startsWith(APPENDIX_ID)) void saver.flush();
@@ -679,9 +700,9 @@ function ReportBody({
   const contextValue = useMemo(
     (): ReportDataValue | null =>
       openSectionMeta
-        ? { data, appendix, sectionMeta: openSectionMeta, onRemoveEvidence, reportMeta, targetMeta, figureOffset, onImageWidth, canMove: Boolean(openTarget) }
+        ? { data, appendix, sectionMeta: openSectionMeta, onRemoveEvidence, onSectionMeta, reportMeta, targetMeta, figureOffset, onImageWidth, canMove: Boolean(openTarget) }
         : null,
-    [data, appendix, openSectionMeta, onRemoveEvidence, reportMeta, targetMeta, figureOffset, onImageWidth, openTarget],
+    [data, appendix, openSectionMeta, onRemoveEvidence, onSectionMeta, reportMeta, targetMeta, figureOffset, onImageWidth, openTarget],
   );
 
   const notStarted = open?.target && stateOf(open.target, open.section.id) === "not-started";
@@ -740,9 +761,13 @@ function ReportBody({
       />
       {entries.length === 0 ? (
         ensureFailed ? (
-          <ErrorState title="Couldn't set up the report" hint="Retry. If it keeps failing, lock and unlock Raven." onRetry={() => setEnsureFailed(null)} detail={ensureFailed} />
+          <Padded>
+            <ErrorState title="Couldn't set up the report" hint="Retry. If it keeps failing, lock and unlock Raven." onRetry={() => setEnsureFailed(null)} detail={ensureFailed} />
+          </Padded>
         ) : (
-          <LoadingState label="the report" />
+          <Padded>
+            <LoadingState label="the report" />
+          </Padded>
         )
       ) : (
         <div className="grid min-h-0 grid-cols-[minmax(0,1fr)] @min-[1000px]/report:grid-cols-[272px_minmax(0,1fr)] @min-[1200px]/report:grid-cols-[272px_minmax(0,1fr)_320px]">
@@ -788,6 +813,7 @@ function ReportBody({
                   <ReportEditor
                     key={openSection.id}
                     sectionId={openSection.id}
+                    title={pageTitle(openSection.kind) ?? undefined}
                     doc={openSection.doc as ReportNode}
                     onChange={onChange}
                     onReady={(editor) => onEditorReady(openSection.id, editor)}
