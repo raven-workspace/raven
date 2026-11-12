@@ -258,14 +258,14 @@ describe("targetChecks", () => {
     expect(find(run(data({ log: [two, flag()] }), whole), "output")).toMatchObject({ id: "output:c2", level: "soft" });
     expect(find(run(data({ log: [two, flag()] }), doc(ev("c2", { block: 0 }), slot("x"), ...goodDoc().content!)), "output")).toBeUndefined();
   });
-  it("explain is soft, one per step whose sentence is an empty slot, anchored to the step", () => {
+  it("explain is soft, one per step whose sentence is an empty slot, anchored to the step, screenshot steps first", () => {
     const shot = entry({ id: "s1", kind: "screenshot", at: -3_600_000, content: { kind: "screenshot", attachmentId: "a", caption: "ok", fileName: "x" } });
     const cmd = entry({ id: "c1" });
     const page = doc(steps(step([slot(""), ev("c1")], "c1"), step([slot(""), ev("s1", { block: null })], "s1")), ...goodDoc().content!);
     const c = run(data({ log: [cmd, shot, flag()] }), page).filter((x) => x.id.startsWith("explain"));
     expect(c.map((x) => [x.id, x.level, x.anchor])).toEqual([
-      ["explain:c1", "soft", { entryId: "c1", nodeIndex: 1 }],
       ["explain:s1", "soft", { entryId: "s1", nodeIndex: 4 }],
+      ["explain:c1", "soft", { entryId: "c1", nodeIndex: 1 }],
     ]);
     expect(c[0].text).toBe("A step has no explanation before it.");
     const done = doc(steps(step([slot("Next, list the shares."), ev("c1")], "c1")), ...goodDoc().content!);

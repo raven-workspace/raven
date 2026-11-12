@@ -78,6 +78,8 @@ const hasEvidence = (n: ReportNode): boolean => (n.content ?? []).some((c) => is
  */
 function stepChecks(nodes: Visit[], data: ReportData, sectionId: string): Check[] {
   const out: Check[] = [];
+  // Screenshots without supporting text are listed first (§6.5): a step whose first evidence is a screenshot.
+  const explain: { check: Check; shot: boolean }[] = [];
   let heading = "this page";
   for (const { node, path, index, siblings, at } of nodes) {
     if (node.type === "phase") {
@@ -91,7 +93,9 @@ function stepChecks(nodes: Visit[], data: ReportData, sectionId: string): Check[
     const sentence = node.content?.[0];
     const anchor = { entryId: entryId === "" ? undefined : entryId, nodeIndex: index };
     if (sentence?.type === "slot" && !hasText(sentence) && sentence.attrs?.hint !== FLAG_STEP_HINT) {
-      out.push({ id: `explain:${entryId === "" ? `node-${index}` : entryId}`, level: "soft", text: "A step has no explanation before it.", anchor });
+      const first = node.content?.find(isEvidence);
+      const shot = first?.type === "evidence" && data.log.find((e) => e.id === first.attrs?.entryId)?.kind === "screenshot";
+      explain.push({ check: { id: `explain:${entryId === "" ? `node-${index}` : entryId}`, level: "soft", text: "A step has no explanation before it.", anchor }, shot });
     }
     // A note step is prose already; a step with no sentence yet is the explain check's.
     if (hasText(sentence) && lead?.kind !== "note" && !hasEvidence(node)) {
@@ -104,7 +108,7 @@ function stepChecks(nodes: Visit[], data: ReportData, sectionId: string): Check[
       });
     }
   }
-  return out;
+  return [...explain.sort((x, y) => Number(y.shot) - Number(x.shot)).map((e) => e.check), ...out];
 }
 
 /**
