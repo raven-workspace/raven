@@ -205,7 +205,7 @@ const removalKey = new PluginKey<{ ids: string[] } | null>("ravenRemovedEvidence
 
 /** Reports each entry a user transaction takes off the page (`removedByTransaction`) to `onRemove`, once, however it
  *  went: ⌫ on a block, step or list, the block menu's Delete, a text selection across steps, a cut. */
-function removedEvidencePlugin(onRemove: { current: (entryId: string) => void }) {
+function removedEvidencePlugin(onRemove: (entryId: string) => void) {
   return new Plugin<{ ids: string[] } | null>({
     key: removalKey,
     state: {
@@ -222,7 +222,7 @@ function removedEvidencePlugin(onRemove: { current: (entryId: string) => void })
           const now = removalKey.getState(v.state);
           if (now === seen) return;
           seen = now;
-          now?.ids.forEach((id) => onRemove.current(id));
+          now?.ids.forEach((id) => onRemove(id));
         },
       };
     },
@@ -369,9 +369,7 @@ function PageHooks({
     ),
   );
   // Whatever takes evidence off the page is remembered as removed, so Add new evidence never brings it back.
-  const onRemove = useRef(onRemoveEvidence);
-  onRemove.current = onRemoveEvidence;
-  useExtension(useMemo(() => definePlugin(removedEvidencePlugin(onRemove)), []));
+  useExtension(useMemo(() => definePlugin(removedEvidencePlugin(onRemoveEvidence)), [onRemoveEvidence]));
   const keymap = useMemo(() => {
     // ⌫ or Delete on a selected block (evidence, a step, a steps list) removes the whole block.
     const removeBlock: Command = (state, dispatch) => {
