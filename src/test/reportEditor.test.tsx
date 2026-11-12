@@ -1148,7 +1148,9 @@ describe("ReportEditor nested insertion helpers", () => {
     });
     act(() => void removeExact(editor(), added));
     act(() => void insertAdded(editor(), before, after));
-    act(() => void editor().commands.undo());
+    expect(JSON.stringify(editor().getDocJSON())).toContain('"e3"');
+    act(() => void fireEvent.keyDown(editor().view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true }));
+    expect(JSON.stringify(editor().getDocJSON())).not.toContain('"e3"');
     expect(onRemoveEvidence).not.toHaveBeenCalled();
     // The owner deleting the step holding e1 is.
     const view = editor().view;
@@ -1160,7 +1162,8 @@ describe("ReportEditor nested insertion helpers", () => {
     act(() => view.dispatch(view.state.tr.delete(at, at + view.state.doc.nodeAt(at)!.nodeSize)));
     expect(onRemoveEvidence.mock.calls).toEqual([["e1"]]);
     // Its undo is not a removal either.
-    act(() => void editor().commands.undo());
+    act(() => void fireEvent.keyDown(editor().view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true }));
+    expect(JSON.stringify(editor().getDocJSON())).toContain('"e1"');
     expect(onRemoveEvidence.mock.calls).toEqual([["e1"]]);
   });
 
