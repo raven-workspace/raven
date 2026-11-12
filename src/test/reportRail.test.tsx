@@ -1,12 +1,12 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { Editor } from "prosekit/core";
-import { TextSelection } from "prosekit/pm/state";
+import { NodeSelection, TextSelection, type Selection } from "prosekit/pm/state";
 import type { ComponentProps } from "react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, resetAuditState } from "../audit/fakeApi";
-import { DRAFT_LAYOUT } from "../engines/report";
+import { DRAFT_LAYOUT, STEP_HINT } from "../engines/report";
 import { ReportSectionView } from "../features/report/ReportSection";
 import { useNotesStore } from "../features/notes/useNotesStore";
 import { makeQueryClient } from "../lib/queryClient";
@@ -40,30 +40,67 @@ afterEach(() => {
 });
 
 const LNX = "h-exam-lnx";
-const cmd = (title: string, command: string, over: Partial<LogEntryInput> = {}): LogEntryInput => ({
+const cmd = (title: string, command: string, over: Partial<LogEntryInput> = {}, output = "ok"): LogEntryInput => ({
   title,
   ranOn: null,
   hostIds: [LNX],
   observations: null,
   returnedNothing: false,
   private: false,
-  content: { kind: "command", blocks: [{ command, output: "ok" }] } satisfies LogContent,
+  content: { kind: "command", blocks: [{ command, output }] } satisfies LogContent,
   ...over,
 });
+const shot = (title: string, at: number): LogEntryInput => ({
+  title,
+  ranOn: null,
+  hostIds: [LNX],
+  observations: null,
+  returnedNothing: false,
+  private: false,
+  at,
+  content: { kind: "screenshot", attachmentId: "", caption: "", fileName: "shot.png" },
+});
 
-/** lnx02's log: nmap (already on its page), hydra and smbclient (not), and a private entry. Plus a note, ruled-out items, a credential. */
+const NMAP_OUT = "Nmap scan report for 10.10.30.21\nPORT     STATE SERVICE VERSION\n22/tcp   open  ssh     OpenSSH 7.6p1\n8080/tcp open  http    Jetty 9.4\n";
+const WINPEAS_OUT = Array.from({ length: 3000 }, (_, i) => `line ${i + 1}`).join("\n");
+
+/**
+ * lnx02 (standalone) in layout 4: an ssh login granted user access and is step 1 of Initial access, step 2 is the
+ * owner's own empty step. Not on the page: the nmap scan (its ports are the port table's), hydra, a failed anonymous
+ * FTP attempt, a screenshot that came along with the ssh login, smbclient and a 3,000-line winPEAS after the access
+ * (privilege escalation), a private entry, and an entry behind an operator-reason attempt. Plus a note, ruled-out
+ * items, credentials and an admin grant.
+ */
 async function seed() {
-  const nmap = await api.logCreate("e-exam", cmd("nmap scan", "nmap -sV 10.10.30.21", { at: 1_000 }));
-  const hydra = await api.logCreate("e-exam", cmd("hydra login", "hydra -l bob ssh://10.10.30.21", { at: 2_000 }));
-  await api.logCreate("e-exam", cmd("smbclient list", "smbclient -L //10.10.30.21", { at: 3_000 }));
+  const nmap = await api.logCreate("e-exam", cmd("nmap scan", "nmap -sV 10.10.30.21", { at: 1_000 }, NMAP_OUT));
+  const hydra = await api.logCreate("e-exam", cmd("hydra login", "hydra -L users.txt -P rockyou.txt ssh://10.10.30.21", { at: 2_000 }, "\n[22][ssh] host: 10.10.30.21 login: svc_web password: Summer2026\n"));
+  const ftp = await api.logCreate("e-exam", cmd("ftp anonymous", "ftp 10.10.30.21", { at: 2_200, observations: "anonymous login refused" }, ""));
+  const lazy = await api.logCreate("e-exam", cmd("lazy guess", "ssh root@10.10.30.21", { at: 2_300 }));
+  const ssh = await api.logCreate("e-exam", cmd("ssh login", "ssh svc_web@10.10.30.21", { at: 2_500 }));
+  const screenshot = await api.logCreate("e-exam", shot("ssh shell screenshot", 2_600));
+  const smb = await api.logCreate("e-exam", cmd("smbclient list", "smbclient -L //10.10.30.21", { at: 3_000 }));
+  const winpeas = await api.logCreate("e-exam", cmd("winpeas run", "./winpeas.sh", { at: 3_500 }, WINPEAS_OUT));
   await api.logCreate("e-exam", cmd("private scratch", "secret-thing", { private: true, at: 4_000 }));
+  await api.failedAttemptCreate("e-exam", { hostId: LNX, title: "Anonymous FTP login", reasonKind: "precondition", reason: "Anonymous login disabled", logEntryId: ftp.id });
+  await api.failedAttemptCreate("e-exam", { hostId: LNX, title: "Root guess", reasonKind: "operator", reason: "ran out of time", logEntryId: lazy.id });
+  const shell = await api.usernameCreate("e-exam", { username: "svc_web" });
+  await api.accessGrantCreate("e-exam", { usernameId: shell.id, hostId: LNX, level: "user", via: "ssh with hydra's password", logEntryId: ssh.id, at: 2_500 });
+
   const report = await api.reportGetOrCreate("e-exam");
+  const step = (entryId: string | null, ...evidence: string[]) => ({
+    type: "step",
+    attrs: { entryId },
+    content: [{ type: "slot", attrs: { hint: STEP_HINT } }, ...evidence.map((id) => ({ type: "evidence", attrs: { entryId: id, block: 0, keep: null, emphasis: [], appendix: "inline" } }))],
+  });
   const doc = {
     type: "doc",
     content: [
+      { type: "generated", attrs: { kind: "facts", hostId: LNX, appendix: "inline" } },
+      { type: "generated", attrs: { kind: "result", hostId: LNX, appendix: "inline" } },
+      { type: "phase", attrs: { phase: "enum", hostId: LNX } },
+      { type: "generated", attrs: { kind: "ports", hostId: LNX, appendix: "inline", notes: {} } },
       { type: "phase", attrs: { phase: "foothold", hostId: LNX } },
-      { type: "slot", attrs: { hint: "What you do next" } },
-      { type: "evidence", attrs: { entryId: nmap.id, block: 0, keep: null, emphasis: [], appendix: "inline" } },
+      { type: "steps", content: [step(ssh.id, ssh.id), step(null)] },
       { type: "phase", attrs: { phase: "post", hostId: LNX } },
       { type: "slot", attrs: { hint: "Proof" } },
     ],
@@ -77,6 +114,7 @@ async function seed() {
   const sam = await api.usernameCreate("e-exam", { username: "sam" });
   await api.accessGrantCreate("e-exam", { usernameId: sam.id, hostId: LNX, level: "admin", via: "sudo misconfiguration" });
   await api.credentialCreate("e-exam", { type: "password", username: "alice", secret: "pw", sourceHostId: "h-exam-ms01" });
+  return { nmap, hydra, ftp, ssh, screenshot, smb, winpeas };
 }
 
 function mount() {
@@ -93,8 +131,11 @@ function mount() {
   );
 }
 
-const unusedList = () => screen.getByRole("list", { name: "Unused log entries" });
-const titles = () => within(unusedList()).queryAllByRole("listitem").map((li) => li.getAttribute("aria-label")!.split(",")[0]);
+const logColumn = () => screen.getByRole("group", { name: "Unused log entries" });
+const rowTitles = (el: HTMLElement) => within(el).queryAllByRole("listitem").map((li) => li.getAttribute("aria-label")!.split(",")[0]);
+const titles = () => rowTitles(logColumn());
+const group = (label: string) => within(logColumn()).getByRole("list", { name: label });
+const row = (title: string) => within(logColumn()).getByRole("listitem", { name: new RegExp(`^${title},`) });
 const evidenceIds = (editor: Editor) => {
   const ids: string[] = [];
   editor.state.doc.descendants((n) => {
@@ -102,93 +143,192 @@ const evidenceIds = (editor: Editor) => {
   });
   return ids;
 };
-const shape = (editor: Editor) => {
+/** The page's top-level blocks; a steps list as its steps' evidence entry titles, `[ssh login][]`. */
+async function shapeOf(editor: Editor) {
+  const title = new Map((await api.logList("e-exam")).map((e) => [e.id, e.title]));
   const out: string[] = [];
-  editor.state.doc.forEach((n) => out.push(n.type.name === "phase" ? `phase:${n.attrs.phase}` : n.type.name === "evidence" ? `evidence:${n.attrs.entryId}` : n.type.name));
+  editor.state.doc.forEach((n) => {
+    if (n.type.name === "phase") out.push(`phase:${n.attrs.phase}`);
+    else if (n.type.name === "generated") out.push(`generated:${n.attrs.kind}`);
+    else if (n.type.name === "steps") {
+      const steps: string[] = [];
+      n.forEach((st) => {
+        const ids: string[] = [];
+        st.forEach((k) => void (k.type.name === "evidence" && ids.push(title.get(k.attrs.entryId as string) ?? "?")));
+        steps.push(`[${ids.join(",")}]`);
+      });
+      out.push(`steps:${steps.join("")}`);
+    } else out.push(n.type.name);
+  });
   return out;
-};
-const entryId = async (title: string) => (await api.logList("e-exam")).find((e) => e.title === title)!.id;
+}
+/** Focuses the page (the owner has a cursor on it) and selects with `pick`. */
+function cursor(editor: Editor, pick: (doc: Editor["state"]["doc"]) => Selection) {
+  act(() => {
+    editor.view.dom.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    editor.view.dispatch(editor.state.tr.setSelection(pick(editor.state.doc)));
+  });
+}
+/** The position of the `n`th (from 0) node named `type`. */
+function nth(doc: Editor["state"]["doc"], type: string, n = 0, where: (attrs: Record<string, unknown>) => boolean = () => true) {
+  const found: number[] = [];
+  doc.descendants((node, pos) => void (node.type.name === type && where(node.attrs) && found.push(pos)));
+  return found[n];
+}
 
 async function ready() {
   await waitFor(() => expect(editors.length).toBeGreaterThan(0));
   await waitFor(() => expect(screen.getByRole("tab", { name: /Unused/ })).toBeInTheDocument());
 }
 
-describe("Evidence rail", () => {
-  it("lists host-linked entries that are not on the page, without private ones", async () => {
+describe("Evidence rail: the log column", () => {
+  it("groups the host's unplaced entries by phase in time order", async () => {
     await seed();
     mount();
     await ready();
-    expect(screen.getByRole("tab", { name: "Unused (2)" })).toBeInTheDocument();
-    expect(titles()).toEqual(["hydra login", "smbclient list"]);
-    expect(titles()).not.toContain("nmap scan");
-    expect(titles()).not.toContain("private scratch");
-
-    // The sort toggle flips the time order.
-    fireEvent.click(screen.getByRole("button", { name: "Oldest first" }));
-    expect(titles()).toEqual(["smbclient list", "hydra login"]);
+    expect(screen.getByRole("heading", { name: "lnx02 log · not in the report" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Unused (6)" })).toBeInTheDocument();
+    expect(rowTitles(group("Service enumeration"))).toEqual(["nmap scan"]);
+    expect(rowTitles(group("Initial access"))).toEqual(["hydra login", "ftp anonymous", "ssh shell screenshot"]);
+    expect(rowTitles(group("Privilege escalation"))).toEqual(["smbclient list", "winpeas run"]);
+    expect(screen.getAllByRole("heading", { level: 4 }).map((h) => h.textContent)).toEqual(["Service enumeration", "Initial access", "Privilege escalation"]);
+    // Each row: time · command, then one line of what it showed (the output's first line, else the observations).
+    expect(within(row("hydra login")).getByText("[22][ssh] host: 10.10.30.21 login: svc_web password: Summer2026")).toBeInTheDocument();
+    expect(within(row("hydra login")).getByText(/hydra -L users.txt/)).toBeInTheDocument();
+    expect(within(row("ftp anonymous")).getByText("anonymous login refused")).toBeInTheDocument();
+    expect(within(row("ssh shell screenshot")).getByText("no output")).toBeInTheDocument();
+    // The scan's ports are the port table's.
+    expect(within(row("nmap scan")).getByText("in the port table already")).toBeInTheDocument();
   });
 
-  it("inserts at the cursor, the entry leaves Unused, and a removed block comes back", async () => {
-    await seed();
+  it("+ add with the cursor in step 2 appends the entry's evidence to step 2", async () => {
+    const { hydra } = await seed();
     mount();
     await ready();
     const editor = editors[0];
-    const hydra = await entryId("hydra login");
-    const nmap = await entryId("nmap scan");
     const save = vi.spyOn(api, "reportSectionSave");
-
-    // The owner clicks into the last slot, so the entry lands right after it, its own slot first.
-    act(() => {
-      editor.view.dom.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
-      let at = 0;
-      editor.state.doc.descendants((n, p) => {
-        if (n.type.name === "slot") at = p + 1;
-      });
-      editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, at)));
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Insert hydra login" }));
-    expect(shape(editor)).toEqual(["phase:foothold", "slot", `evidence:${nmap}`, "phase:post", "slot", "slot", `evidence:${hydra}`]);
-    await waitFor(() => expect(titles()).toEqual(["smbclient list"]));
-    // The saved page holds the block, and the entry is no longer remembered as removed.
+    cursor(editor, (doc) => TextSelection.create(doc, nth(doc, "step", 1) + 2));
+    fireEvent.click(screen.getByRole("button", { name: "Add hydra login" }));
+    expect(await shapeOf(editor)).toEqual([
+      "generated:facts",
+      "generated:result",
+      "phase:enum",
+      "generated:ports",
+      "phase:foothold",
+      "steps:[ssh login][hydra login]",
+      "phase:post",
+      "slot",
+    ]);
+    await waitFor(() => expect(titles()).not.toContain("hydra login"));
+    // The saved page holds it, and the entry is no longer remembered as removed.
     await waitFor(
       () => {
         const [, doc, meta] = save.mock.calls.at(-1)!;
-        expect(JSON.stringify(doc)).toContain(hydra);
-        expect((meta as { removedEntryIds?: string[] }).removedEntryIds ?? []).not.toContain(hydra);
+        expect(JSON.stringify(doc)).toContain(hydra.id);
+        expect((meta as { removedEntryIds?: string[] }).removedEntryIds ?? []).not.toContain(hydra.id);
       },
       { timeout: 3000 },
     );
-    expect(screen.getByRole("tab", { name: "Unused (1)" })).toBeInTheDocument();
-
-    // Taking the nmap block off the page puts it back in Unused.
-    act(() => {
-      let pos = -1;
-      editor.state.doc.descendants((n, p) => {
-        if (n.type.name === "evidence" && n.attrs.entryId === nmap) pos = p;
-      });
-      editor.view.dispatch(editor.state.tr.delete(pos, pos + editor.state.doc.nodeAt(pos)!.nodeSize));
-    });
-    await waitFor(() => expect(titles()).toEqual(["nmap scan", "smbclient list"]));
   });
 
-  it("inserts at the end of the entry's phase when the page has no cursor, from the keyboard", async () => {
+  it("+ add with the cursor in a ports Notes cell or a heading adds a new step at the end of the entry's phase", async () => {
     await seed();
     mount();
     await ready();
     const editor = editors[0];
-    const smb = await entryId("smbclient list");
-    const row = within(unusedList()).getByRole("listitem", { name: /smbclient list/ });
-    row.focus();
-    fireEvent.keyDown(row, { key: "Enter" });
-    expect(evidenceIds(editor)).toContain(smb);
-    // No selection was ever made on the page: it goes to the end of the foothold phase, before Post-Exploitation,
-    // its slot before it.
-    const nmap = await entryId("nmap scan");
-    expect(shape(editor)).toEqual(["phase:foothold", "slot", `evidence:${nmap}`, "slot", `evidence:${smb}`, "phase:post", "slot"]);
-    await waitFor(() => expect(titles()).toEqual(["hydra login"]));
+    // The Notes cell lives in the port table's block: the page's selection is that block.
+    cursor(editor, (doc) => NodeSelection.create(doc, nth(doc, "generated", 0, (a) => a.kind === "ports")));
+    fireEvent.click(screen.getByRole("button", { name: "Add smbclient list" }));
+    expect((await shapeOf(editor)).slice(4)).toEqual(["phase:foothold", "steps:[ssh login][]", "phase:privesc", "steps:[smbclient list]", "phase:post", "slot"]);
+
+    // A heading: hydra goes to the end of Initial access, a step of its own.
+    cursor(editor, (doc) => NodeSelection.create(doc, nth(doc, "phase", 0, (a) => a.phase === "foothold")));
+    fireEvent.click(screen.getByRole("button", { name: "Add hydra login" }));
+    expect((await shapeOf(editor)).slice(4)).toEqual(["phase:foothold", "steps:[ssh login][][hydra login]", "phase:privesc", "steps:[smbclient list]", "phase:post", "slot"]);
+  });
+
+  it("with no cursor on the page, ⌘↵ on a focused row adds a step at the end of its phase and focus moves on", async () => {
+    await seed();
+    mount();
+    await ready();
+    const editor = editors[0];
+    const r = row("smbclient list");
+    r.focus();
+    fireEvent.keyDown(r, { key: "Enter", metaKey: true });
+    expect((await shapeOf(editor)).slice(4)).toEqual(["phase:foothold", "steps:[ssh login][]", "phase:privesc", "steps:[smbclient list]", "phase:post", "slot"]);
+    await waitFor(() => expect(titles()).not.toContain("smbclient list"));
     // Focus moved on to the next row instead of falling to the page.
-    expect(document.activeElement).toBe(within(unusedList()).getByRole("listitem", { name: /hydra login/ }));
+    expect(document.activeElement).toBe(row("winpeas run"));
+  });
+
+  it("with no cursor, a screenshot that came along with a step joins that step", async () => {
+    await seed();
+    mount();
+    await ready();
+    const editor = editors[0];
+    // No cursor: into the ssh login's step, as Add new evidence puts it, never a numbered step of its own.
+    fireEvent.click(screen.getByRole("button", { name: "Add ssh shell screenshot" }));
+    expect((await shapeOf(editor)).slice(4, 6)).toEqual(["phase:foothold", "steps:[ssh login,ssh shell screenshot][]"]);
+  });
+
+  it("a screenshot that came along with a step goes into the step holding the cursor", async () => {
+    const { screenshot } = await seed();
+    mount();
+    await ready();
+    const editor = editors[0];
+    cursor(editor, (doc) => TextSelection.create(doc, nth(doc, "step", 1) + 2));
+    fireEvent.click(screen.getByRole("button", { name: "Add ssh shell screenshot" }));
+    expect((await shapeOf(editor)).slice(4, 6)).toEqual(["phase:foothold", "steps:[ssh login][ssh shell screenshot]"]);
+    expect(evidenceIds(editor).filter((id) => id === screenshot.id)).toHaveLength(1);
+  });
+
+  it("a 3,000-line output offers + to appendix and lands split", async () => {
+    const { winpeas } = await seed();
+    mount();
+    await ready();
+    const editor = editors[0];
+    expect(within(row("winpeas run")).queryByRole("button", { name: "Add winpeas run" })).not.toBeInTheDocument();
+    const button = within(row("winpeas run")).getByRole("button", { name: "Add winpeas run to appendix" });
+    expect(button).toHaveTextContent("+ to appendix");
+    expect(within(row("smbclient list")).getByRole("button", { name: "Add smbclient list" })).toHaveTextContent("+ add");
+    fireEvent.click(button);
+    const placed: Record<string, unknown>[] = [];
+    editor.state.doc.descendants((n) => void (n.type.name === "evidence" && n.attrs.entryId === winpeas.id && placed.push(n.attrs)));
+    expect(placed).toHaveLength(1);
+    expect(placed[0].appendix).toBe("split");
+    // Trimmed inline: the page shows its first lines, the appendix the rest.
+    expect(placed[0].keep).not.toBeNull();
+    expect((await shapeOf(editor)).slice(6, 8)).toEqual(["phase:privesc", "steps:[winpeas run]"]);
+  });
+
+  it("a failed attempt's row says it is in Also tested", async () => {
+    await seed();
+    mount();
+    await ready();
+    expect(within(row("ftp anonymous")).getByText("in Also tested")).toBeInTheDocument();
+    expect(within(row("hydra login")).queryByText("in Also tested")).not.toBeInTheDocument();
+  });
+
+  it("private entries never appear, nor an entry behind an operator-reason attempt", async () => {
+    await seed();
+    mount();
+    await ready();
+    expect(titles()).not.toContain("private scratch");
+    expect(titles()).not.toContain("lazy guess");
+    expect(screen.queryByText(/secret-thing/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ran out of time/)).not.toBeInTheDocument();
+  });
+
+  it("an entry whose block is taken off the page comes back to its group", async () => {
+    const { ssh } = await seed();
+    mount();
+    await ready();
+    const editor = editors[0];
+    act(() => {
+      const pos = nth(editor.state.doc, "evidence", 0, (a) => a.entryId === ssh.id);
+      editor.view.dispatch(editor.state.tr.delete(pos, pos + editor.state.doc.nodeAt(pos)!.nodeSize));
+    });
+    await waitFor(() => expect(rowTitles(group("Initial access"))).toEqual(["hydra login", "ftp anonymous", "ssh login", "ssh shell screenshot"]));
   });
 
   it("shows the notes and ruled-out items, marks open threads, and never shows private ones", async () => {

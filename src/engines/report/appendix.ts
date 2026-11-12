@@ -18,7 +18,8 @@ export interface AppendixIndex {
 
 const FIRST_LETTER = "A".charCodeAt(0);
 const MOVABLE = new Set(["evidence", "exploit", "generated"]);
-const MAX_INLINE_LINES = 60;
+/** Lines of output past which an inline block is suggested for an appendix (`suggestMoves`). */
+export const MAX_INLINE_LINES = 60;
 const MAX_INLINE_ROWS = 15;
 
 const isMoved = (node: ReportNode) =>

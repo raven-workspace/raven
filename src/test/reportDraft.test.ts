@@ -346,6 +346,24 @@ describe("the short draft (layout 4)", () => {
     expect(nodes.map((n) => n.type)).toEqual(["evidence"]);
   });
 
+  it("endOfPhase joins a screenshot that came along to a step, as addNewEvidence does, never a step of its own", () => {
+    const d = lab();
+    const s1 = entry("s1", H1, 12, shot);
+    d.log.push(s1);
+    const list = topLevel(doc).indexOf(firstSteps(doc));
+    // The step holding the entry logged before it.
+    const joined = endOfPhase(doc, d, standalone(H1), s1);
+    expect(joined.at).toEqual([list, 0, firstSteps(doc).content![0].content!.length]);
+    expect(joined.nodes.map((n) => n.type)).toEqual(["evidence"]);
+    expect(addNewEvidence(doc, d, standalone(H1), {}, []).doc.content![list].content![0].content!.at(-1)).toMatchObject({ attrs: { entryId: "s1" } });
+    // That step taken off the page: the last step of its phase (the owner's step before the local flag).
+    const owner = { type: "step", attrs: { entryId: null }, content: [{ type: "slot", attrs: { hint: "Say what this step does" } }] };
+    const edited = { ...doc, content: topLevel(doc).map((n, i) => (i === list ? { ...n, content: [owner, n.content![1]] } : n)) };
+    const last = endOfPhase(edited, d, standalone(H1), s1);
+    expect(last.at).toEqual([list, 0, 1]);
+    expect(last.nodes.map((n) => n.type)).toEqual(["evidence"]);
+  });
+
   it("evidenceIdsIn finds evidence nested in steps", () => {
     expect(evidenceIdsIn(doc).has("e2")).toBe(true);
   });

@@ -686,19 +686,41 @@ function companionPlace(content: ReportNode[], flagId: string, data: ReportData,
   return [...path, j];
 }
 
-/** Where an entry goes when the page has no cursor (§5.1, §10.1): a new step at the end of its phase (`placeEntry`).
- *  `at` is a path (`DocPath`). A flag's companion goes into the flag's step when the flag is on the page. */
-export function endOfPhase(doc: ReportNode, data: ReportData, target: ReportTarget, entry: LogEntry): { at: DocPath; nodes: ReportNode[] } {
+/** The machine of the target an entry is placed under (its first one in the target), and the phase it belongs to there:
+ *  where `endOfPhase` puts it. A screenshot that only came along with a placed entry takes that entry's phase. */
+export function entryPhase(data: ReportData, target: ReportTarget, entry: LogEntry): { hostId: string; phase: Phase } {
   const hostId = entry.hostIds.find((h) => target.hostIds.includes(h)) ?? target.hostIds[0];
-  const content = doc.content ?? [];
-  for (const [flagId, list] of flagCompanions(data, hostId, keptEntries(data, hostId))) {
-    if (!list.some((e) => e.id === entry.id)) continue;
-    const at = companionPlace(content, flagId, data, entry);
-    if (at != null) return { at, nodes: evidenceBlocks(entry) };
-  }
   const kept = keptEntries(data, hostId);
   const list = kept.some((e) => e.id === entry.id) ? kept : [...kept, entry];
   const how = hostEntry(data, target, hostId);
   const phase = phaseSplit(list, data, hostId, how, target.kind === "standalone").get(entry.id) ?? phaseNames(data, hostId, how)[0];
-  return placeEntry(content, data, hostId, entry, phase);
+  return { hostId, phase };
+}
+
+/** Where an entry goes when the page has no cursor (§5.1, §10.1): a new step at the end of its phase (`placeEntry`).
+ *  `at` is a path (`DocPath`). A flag's companion goes into the flag's step when the flag is on the page. A screenshot
+ *  that only came along with a placed entry joins a step, as `addNewEvidence` places it: the step holding the entry
+ *  logged before it, else the last step of its phase's list; a new step only when that list has none. */
+export function endOfPhase(doc: ReportNode, data: ReportData, target: ReportTarget, entry: LogEntry): { at: DocPath; nodes: ReportNode[] } {
+  const { hostId, phase } = entryPhase(data, target, entry);
+  const content = doc.content ?? [];
+  const kept = keptEntries(data, hostId);
+  for (const [flagId, list] of flagCompanions(data, hostId, kept)) {
+    if (!list.some((e) => e.id === entry.id)) continue;
+    const at = companionPlace(content, flagId, data, entry);
+    if (at != null) return { at, nodes: evidenceBlocks(entry) };
+  }
+  const placed = placeEntry(content, data, hostId, entry, phase);
+  if (entry.kind === "screenshot" && !placingEntries(data, hostId).has(entry.id)) {
+    const endOf = (path: DocPath): DocPath => [...path, (content[path[0]].content![path[1]].content ?? []).length];
+    const before = kept.filter((e) => e.id !== entry.id && byTime(e, entry) < 0).reverse();
+    for (const e of before) {
+      const path = stepPath(content, e.id);
+      if (path) return { at: endOf(path), nodes: evidenceBlocks(entry) };
+    }
+    // The step placeEntry would add goes into a list at `[list, k]`: the step before it is the phase's last one.
+    const [listAt, k] = placed.at;
+    if (placed.at.length === 2 && k > 0) return { at: endOf([listAt, k - 1]), nodes: evidenceBlocks(entry) };
+  }
+  return placed;
 }

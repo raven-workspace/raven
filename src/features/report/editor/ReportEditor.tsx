@@ -14,7 +14,7 @@ import { CHIP_TYPES, chipKey, ChipStateProvider, useChipControls } from "./ChipS
 import { defineReportExtension, type HeldPositions, type SourceGone, type SubNumbers } from "./extension";
 import { FindBar } from "./FindBar";
 import { FormatToolbar } from "./FormatToolbar";
-import { hostAtPos, PageActionsContext, placeEntry, saveScreenshot, type PageActions } from "./pageActions";
+import { hostAtPos, PageActionsContext, pathPos, placeEntry, saveScreenshot, type PageActions } from "./pageActions";
 import { PageLayoutContext, useReportData, type PageLayout } from "./ReportDataContext";
 import { SlashMenu } from "./SlashMenu";
 import { TableHandles } from "./TableHandles";
@@ -92,20 +92,9 @@ export function insertNodesAtCursor(editor: Editor, nodes: ReportNode[]): boolea
  *  parent), as `endOfPhase` returns it. */
 export function insertNodesAt(editor: Editor, path: DocPath, nodes: ReportNode[]): boolean {
   return editor.exec((state, dispatch) => {
-    const made = nodes.map((n) => state.schema.nodeFromJSON(n));
-    let at = 0;
-    let parent: PMNode = state.doc;
-    for (let depth = 0; depth < path.length; depth++) {
-      const index = path[depth];
-      if (index > parent.childCount) return false;
-      for (let i = 0; i < index; i++) at += parent.child(i).nodeSize;
-      if (depth < path.length - 1) {
-        if (index >= parent.childCount) return false;
-        parent = parent.child(index);
-        at += 1;
-      }
-    }
-    dispatch?.(state.tr.insert(at, made).scrollIntoView());
+    const at = pathPos(state.doc, path);
+    if (at === null) return false;
+    dispatch?.(state.tr.insert(at, nodes.map((n) => state.schema.nodeFromJSON(n))).scrollIntoView());
     return true;
   });
 }

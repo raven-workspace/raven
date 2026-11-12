@@ -2,10 +2,21 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { Editor } from "prosekit/core";
 import { createContext, useContext } from "react";
 import type { Node as PMNode } from "prosekit/pm/model";
-import { evidenceBlocks, evidenceNodes, type AppendixPlacement, type ReportData, type ReportNode, type ReportTarget } from "../../../engines/report";
+import type { Command, EditorState } from "prosekit/pm/state";
+import {
+  endOfPhase,
+  evidenceBlocks,
+  evidenceNodes,
+  type AppendixPlacement,
+  type DocPath,
+  type ReportData,
+  type ReportNode,
+  type ReportTarget,
+} from "../../../engines/report";
 import { api } from "../../../lib/api";
 import type { LogEntry } from "../../../types/log";
 import { readImage, releaseImage } from "../../capture/imagePaste";
+import { insertIntoCurrentStep } from "./commands";
 
 /** What the page's menus and toolbar ask the page to do beyond ProseKit's own commands. */
 export interface PageActions {
@@ -137,4 +148,56 @@ export function deleteBlockAt(editor: Editor, block: { node: PMNode; pos: number
     }
     return true;
   });
+}
+
+/** The position a `DocPath` names (top-level index, then child indices; the last is where nodes go in their parent),
+ *  or null when the page has no such place. */
+export function pathPos(doc: PMNode, path: DocPath): number | null {
+  let at = 0;
+  let parent = doc;
+  for (let depth = 0; depth < path.length; depth++) {
+    const index = path[depth];
+    if (index > parent.childCount) return null;
+    for (let i = 0; i < index; i++) at += parent.child(i).nodeSize;
+    if (depth < path.length - 1) {
+      if (index >= parent.childCount) return null;
+      parent = parent.child(index);
+      at += 1;
+    }
+  }
+  return at;
+}
+
+/** `nodes` with the entry's evidence blocks (at any depth) set to `place`. */
+function withAppendix(nodes: ReportNode[], entryId: string, place: AppendixPlacement): ReportNode[] {
+  return nodes.map((n) => ({
+    ...n,
+    ...(n.type === "evidence" && n.attrs?.entryId === entryId ? { attrs: { ...n.attrs, appendix: place } } : {}),
+    ...(n.content ? { content: withAppendix(n.content, entryId, place) } : {}),
+  }));
+}
+
+/**
+ * The rail's + add (§10.1): the entry's evidence into the step that holds the cursor (no new step; `cursor` says the
+ * owner has put one on the page), else a new step at the end of its phase (`endOfPhase`). + to appendix (`toAppendix`)
+ * places it the same way with its evidence split: trimmed inline, in full in the appendix. One undoable step.
+ */
+export function addEntryCommand(
+  state: EditorState,
+  cursor: boolean,
+  data: ReportData,
+  target: ReportTarget,
+  entry: LogEntry,
+  toAppendix = false,
+): Command {
+  const finish = (nodes: ReportNode[]) => (toAppendix ? withAppendix(nodes, entry.id, "split") : nodes).map((n) => state.schema.nodeFromJSON(n));
+  const inStep = cursor ? insertIntoCurrentStep(state, finish(evidenceBlocks(entry))) : null;
+  if (inStep) return inStep;
+  return (s, dispatch) => {
+    const { at, nodes } = endOfPhase(s.doc.toJSON() as ReportNode, data, target, entry);
+    const pos = pathPos(s.doc, at);
+    if (pos === null) return false;
+    dispatch?.(s.tr.insert(pos, finish(nodes)).scrollIntoView());
+    return true;
+  };
 }

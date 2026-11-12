@@ -1,18 +1,29 @@
 import { XIcon } from "@phosphor-icons/react";
 import type { Editor } from "prosekit/core";
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { endOfPhase, evidenceIdsIn, evidenceNodes, targetCredentials, type ReportData, type ReportNode, type ReportTarget } from "../../engines/report";
+import {
+  entryPhase,
+  evidenceIdsIn,
+  isPortScan,
+  machinesInOrder,
+  MAX_INLINE_LINES,
+  targetCredentials,
+  type Phase,
+  type ReportData,
+  type ReportNode,
+  type ReportTarget,
+} from "../../engines/report";
 import { openThreads } from "../../engines/notes/threads";
+import { detectAndParseScan } from "../../engines/parse/scan";
 import { cx } from "../../lib/cx";
 import { isDialogOpen, useKeydown } from "../../lib/keys";
 import type { Credential } from "../../types/credentials";
 import type { LogEntry } from "../../types/log";
-import { BELOW_TITLE_BAR, Button, IconButton, labelClass, useDrawerPresence } from "../../ui";
+import { BELOW_TITLE_BAR, Button, IconButton, labelClass, Tooltip, useDrawerPresence } from "../../ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/shadcn/tabs";
 import { KIND_LABELS } from "../log/kindLabels";
-import { OrderButton } from "../log/OrderButton";
-import type { LogOrder } from "../log/usePersistedOrder";
-import { hasPageCursor, insertNodesAt, insertNodesAtCursor } from "./editor/ReportEditor";
+import { addEntryCommand } from "./editor/pageActions";
+import { hasPageCursor } from "./editor/ReportEditor";
 
 type RailTab = "unused" | "notes" | "creds";
 
@@ -22,100 +33,213 @@ const clock = (at: number) => {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-/** Host-linked, non-private entries (any host of the target) with no evidence block on the page, in time order. */
+/** An entry the report keeps to the operator: a failed attempt logged with an operator-only reason (or kept private). */
+const operatorOnly = (data: ReportData, e: LogEntry) => data.attempts.some((a) => a.logEntryId === e.id && (a.private || a.reasonKind === "operator"));
+
+/** Host-linked, non-private entries (any host of the target) with no evidence block on the page, in time order. An
+ *  entry behind an operator-reason attempt never shows. */
 export function unusedEntries(data: ReportData, target: ReportTarget, doc: ReportNode): LogEntry[] {
   const onPage = evidenceIdsIn(doc);
   return data.log
-    .filter((e) => !e.private && !onPage.has(e.id) && e.hostIds.some((h) => target.hostIds.includes(h)))
+    .filter((e) => !e.private && !onPage.has(e.id) && e.hostIds.some((h) => target.hostIds.includes(h)) && !operatorOnly(data, e))
     .sort((a, b) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id));
 }
 
-/** What an entry's row says besides its title: the first command of a command entry. */
-const commandOf = (e: LogEntry) => (e.content.kind === "command" ? e.content.blocks[0]?.command : undefined);
+/** One row of the log column: the entry, one line of what it showed, its action, and why it may already be covered. */
+export interface RailRow {
+  entry: LogEntry;
+  line: string;
+  action: "add" | "appendix";
+  /** A port scan whose open ports are all in the port table; a failed attempt, listed in Also tested. */
+  note?: "in-ports" | "in-tested";
+}
 
-function UnusedRow({ entry, onInsert }: { entry: LogEntry; onInsert(entry: LogEntry, from: HTMLElement | null): void }) {
-  const command = commandOf(entry);
+/** One phase of a machine's log that is not in the report. */
+export interface RailGroup {
+  hostId: string;
+  phase: Phase;
+  label: string;
+  rows: RailRow[];
+}
+
+const PHASE_LABELS: Partial<Record<Phase, string>> = {
+  enum: "Service enumeration",
+  foothold: "Initial access",
+  lateral: "Lateral movement",
+  privesc: "Privilege escalation",
+  domain: "Domain compromise",
+  post: "Post-exploitation",
+};
+const GROUP_ORDER: Phase[] = ["enum", "foothold", "lateral", "privesc", "domain", "post"];
+
+const outputsOf = (e: LogEntry) => (e.content.kind === "command" ? e.content.blocks.map((b) => b.output ?? "") : []);
+const firstLine = (text: string) =>
+  text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .find((l) => l !== "");
+const lines = (text: string) => (text === "" ? 0 : text.replace(/\n$/, "").split(/\r?\n/).length);
+
+/** The scan's open ports, all already in the host's services (the port table lists them). */
+function scanInPortTable(data: ReportData, hostId: string, e: LogEntry): boolean {
+  if (!isPortScan(e)) return false;
+  const open = outputsOf(e).flatMap((o) => detectAndParseScan(o)?.ports.filter((p) => p.state === "open").map((p) => p.port) ?? []);
+  const known = new Set(data.services.filter((s) => s.hostId === hostId).map((s) => s.port));
+  return open.length > 0 && open.every((p) => known.has(p));
+}
+
+function railRow(data: ReportData, hostId: string, e: LogEntry): RailRow {
+  const outputs = outputsOf(e);
+  const line = outputs.map(firstLine).find((l) => l != null) ?? firstLine(e.observations ?? "") ?? "no output";
+  const longest = Math.max(0, ...outputs.map(lines));
+  const tested = data.attempts.some((a) => a.logEntryId === e.id && !a.private && a.reasonKind !== "operator");
+  const note = scanInPortTable(data, hostId, e) ? "in-ports" : tested ? "in-tested" : undefined;
+  return { entry: e, line, action: longest > MAX_INLINE_LINES ? "appendix" : "add", ...(note ? { note } : {}) };
+}
+
+interface Placed {
+  hostId: string;
+  phase: Phase;
+  row: RailRow;
+}
+const rowCache = new WeakMap<ReportData, WeakMap<ReportTarget, Map<string, Placed>>>();
+
+/**
+ * The log column (§10.1): the target's log that is not in the report, per machine (in page order) and phase (the phase
+ * `endOfPhase` would place it in), time order inside each group. Private entries and operator-reason attempts never
+ * show.
+ */
+export function railGroups(data: ReportData, target: ReportTarget, doc: ReportNode): RailGroup[] {
+  // An entry's phase and row depend on the data alone: worked out once per load, not on every keystroke.
+  const byTarget = rowCache.get(data) ?? new WeakMap<ReportTarget, Map<string, Placed>>();
+  rowCache.set(data, byTarget);
+  const known = byTarget.get(target) ?? new Map<string, Placed>();
+  byTarget.set(target, known);
+  const placed = unusedEntries(data, target, doc).map((e) => {
+    let p = known.get(e.id);
+    if (!p) {
+      const { hostId, phase } = entryPhase(data, target, e);
+      p = { hostId, phase, row: railRow(data, hostId, e) };
+      known.set(e.id, p);
+    }
+    return p;
+  });
+  return machinesInOrder(data, target).flatMap((hostId) =>
+    GROUP_ORDER.flatMap((phase) => {
+      const rows = placed.filter((p) => p.hostId === hostId && p.phase === phase).map((p) => p.row);
+      return rows.length > 0 ? [{ hostId, phase, label: PHASE_LABELS[phase]!, rows }] : [];
+    }),
+  );
+}
+
+const NOTE_TEXT: Record<NonNullable<RailRow["note"]>, string> = {
+  "in-ports": "in the port table already",
+  "in-tested": "in Also tested",
+};
+
+/** What an entry's row leads with: the first command of a command entry, else its title. */
+const commandOf = (e: LogEntry) => (e.content.kind === "command" ? e.content.blocks[0]?.command?.split("\n")[0] : undefined) || e.title;
+
+function RailItem({ row, onAct }: { row: RailRow; onAct(row: RailRow, from: HTMLElement | null): void }) {
+  const { entry, line, action, note } = row;
+  const lead = commandOf(entry);
   const onKey = (ev: KeyboardEvent<HTMLLIElement>) => {
     const li = ev.currentTarget;
     if (ev.target !== li) return;
     if (ev.key === "Enter") {
       ev.preventDefault();
-      onInsert(entry, li);
+      onAct(row, li);
     } else if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
       ev.preventDefault();
-      const next = ev.key === "ArrowDown" ? li.nextElementSibling : li.previousElementSibling;
-      (next as HTMLElement | null)?.focus();
+      const rows = [...(li.closest("[data-rail-log]")?.querySelectorAll<HTMLElement>("li[data-rail-row]") ?? [])];
+      rows[rows.indexOf(li) + (ev.key === "ArrowDown" ? 1 : -1)]?.focus();
     }
   };
+  const label = action === "appendix" ? `Add ${entry.title} to appendix` : `Add ${entry.title}`;
   return (
     <li
       tabIndex={0}
+      data-rail-row=""
       aria-label={`${entry.title}, ${KIND_LABELS[entry.kind]} at ${clock(entry.at)}`}
       onKeyDown={onKey}
-      className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-sm px-2 py-2 outline-none hover:bg-surface-hi focus-visible:bg-surface-hi focus-visible:ring-1 focus-visible:ring-accent"
+      className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-sm border-l-2 border-line-2 py-1 pr-1 pl-3 outline-none hover:bg-surface-hi focus-visible:bg-surface-hi focus-visible:ring-1 focus-visible:ring-accent"
     >
-      <span className="grid justify-items-start gap-1">
-        <time dateTime={new Date(entry.at).toISOString()} className="text-code text-muted tabular-nums">
-          {clock(entry.at)}
-        </time>
-        <span className="text-meta text-muted-2">{KIND_LABELS[entry.kind]}</span>
-      </span>
       <span className="grid min-w-0 gap-1">
-        <span className="truncate text-body text-fg" title={entry.title}>
-          {entry.title}
+        <span className="truncate text-code text-muted" title={lead}>
+          <time dateTime={new Date(entry.at).toISOString()} className="tabular-nums">
+            {clock(entry.at)}
+          </time>
+          {" · "}
+          {lead}
         </span>
-        {command && (
-          <span className="truncate text-code text-muted" title={command}>
-            {command}
-          </span>
-        )}
+        <span className="truncate text-meta text-fg-2" title={line}>
+          {line}
+        </span>
+        {note && <span className="text-meta text-muted-2">{NOTE_TEXT[note]}</span>}
       </span>
-      <Button size="sm" aria-label={`Insert ${entry.title}`} onClick={(e) => onInsert(entry, e.currentTarget.closest("li"))}>
-        Insert
-      </Button>
+      <Tooltip
+        content={
+          <>
+            <span>{action === "appendix" ? "Add, with the full output in an appendix" : "Add to the step you're on, else the end of its phase"}</span>
+            <span className="ml-2 font-mono text-muted">⌘↵</span>
+          </>
+        }
+      >
+        <Button size="sm" aria-label={label} onClick={(e) => onAct(row, e.currentTarget.closest("li"))}>
+          {action === "appendix" ? "+ to appendix" : "+ add"}
+        </Button>
+      </Tooltip>
     </li>
   );
 }
 
-function UnusedTab({
+function LogTab({
   data,
   target,
-  unused,
+  groups,
   editor,
   onInserted,
 }: {
   data: ReportData;
   target: ReportTarget;
-  unused: LogEntry[];
+  groups: RailGroup[];
   editor: Editor | null;
   onInserted(entryId: string): void;
 }) {
-  const [order, setOrder] = useState<LogOrder>("oldest");
-  const shown = order === "oldest" ? unused : [...unused].reverse();
-
-  const insert = (entry: LogEntry, row: HTMLElement | null) => {
+  const act = (row: RailRow, li: HTMLElement | null) => {
     if (!editor) return;
-    // Keyboard focus stays in the list: the row is about to leave it.
-    if (row && row === document.activeElement) ((row.nextElementSibling ?? row.previousElementSibling) as HTMLElement | null)?.focus();
-    if (hasPageCursor(editor)) insertNodesAtCursor(editor, evidenceNodes(entry));
-    else {
-      const { at, nodes } = endOfPhase(editor.getDocJSON() as ReportNode, data, target, entry);
-      insertNodesAt(editor, at, nodes);
+    // Keyboard focus stays in the column: the row is about to leave it.
+    if (li && li === document.activeElement) {
+      const rows = [...(li.closest("[data-rail-log]")?.querySelectorAll<HTMLElement>("li[data-rail-row]") ?? [])];
+      const i = rows.indexOf(li);
+      (rows[i + 1] ?? rows[i - 1])?.focus();
     }
-    onInserted(entry.id);
+    editor.exec(addEntryCommand(editor.state, hasPageCursor(editor), data, target, row.entry, row.action === "appendix"));
+    onInserted(row.entry.id);
   };
 
-  if (unused.length === 0) return <p className="m-0 text-meta text-muted-2">Everything logged on this target is on the page.</p>;
+  if (groups.length === 0) return <p className="m-0 text-meta text-muted-2">Everything logged on this target is in the report.</p>;
+  const name = (id: string) => data.hosts.find((h) => h.id === id)?.name ?? "Host";
+  const hosts = [...new Set(groups.map((g) => g.hostId))];
   return (
-    <div className="grid gap-2">
-      <div className="grid justify-items-end">
-        <OrderButton order={order} onChange={setOrder} />
-      </div>
-      <ul aria-label="Unused log entries" className="m-0 grid list-none gap-1 p-0">
-        {shown.map((e) => (
-          <UnusedRow key={e.id} entry={e} onInsert={insert} />
-        ))}
-      </ul>
+    <div role="group" aria-label="Unused log entries" data-rail-log="" className="grid gap-4">
+      {hosts.map((hostId) => (
+        <section key={hostId} aria-label={`${name(hostId)} log`} className="grid gap-3">
+          <h3 className={cx(labelClass, "m-0")}>{`${name(hostId)} log · not in the report`}</h3>
+          {groups
+            .filter((g) => g.hostId === hostId)
+            .map((g) => (
+              <section key={g.phase} className="grid gap-2">
+                <h4 className="m-0 text-body font-semibold text-fg">{g.label}</h4>
+                <ul aria-label={hosts.length > 1 ? `${name(hostId)} ${g.label}` : g.label} className="m-0 grid list-none gap-2 p-0">
+                  {g.rows.map((r) => (
+                    <RailItem key={r.entry.id} row={r} onAct={act} />
+                  ))}
+                </ul>
+              </section>
+            ))}
+        </section>
+      ))}
     </div>
   );
 }
@@ -238,7 +362,7 @@ function CredsTab({ data, target }: { data: ReportData; target: ReportTarget }) 
 }
 
 /**
- * The evidence rail: Unused entries to insert, the notes, and the target's credentials. Without a target (a front-matter
+ * The evidence rail: the log column (the target's log not in the report, by phase, `railGroups`), the notes, and the target's credentials. Without a target (a front-matter
  * page) only the notes are shown.
  */
 export function EvidenceRail({
@@ -258,18 +382,19 @@ export function EvidenceRail({
   onInserted(entryId: string): void;
 }) {
   const [tab, setTab] = useState<RailTab>("unused");
-  const unused = useMemo(() => (target ? unusedEntries(data, target, doc) : []), [data, target, doc]);
+  const groups = useMemo(() => (target ? railGroups(data, target, doc) : []), [data, target, doc]);
+  const count = groups.reduce((n, g) => n + g.rows.length, 0);
   const active: RailTab = target ? tab : "notes";
   return (
     <Tabs value={active} onValueChange={(v) => setTab(v as RailTab)} className="content-start">
       <TabsList aria-label="Evidence">
-        {target && <TabsTrigger value="unused">{`Unused (${unused.length})`}</TabsTrigger>}
+        {target && <TabsTrigger value="unused">{`Unused (${count})`}</TabsTrigger>}
         <TabsTrigger value="notes">Notes</TabsTrigger>
         {target && <TabsTrigger value="creds">Creds</TabsTrigger>}
       </TabsList>
       {target && (
         <TabsContent value="unused">
-          <UnusedTab data={data} target={target} unused={unused} editor={editor} onInserted={onInserted} />
+          <LogTab data={data} target={target} groups={groups} editor={editor} onInserted={onInserted} />
         </TabsContent>
       )}
       <TabsContent value="notes">
