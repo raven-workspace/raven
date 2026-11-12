@@ -24,6 +24,11 @@ const passesAnySecret = (cmd: string) =>
 /** Characters that can't sit next to a secret inside one shell word: it stands alone or behind `-p `, `:`, `/p:`, quotes. */
 const AROUND = `\\s'"=:/@\\\\`;
 
+/** Output that says a login failed: nxc's `[-]`, ssh's "Permission denied", SMB's LOGON_FAILURE, WinRM's and FTP's. */
+const FAILED_LOGIN = /\[-\]|Permission denied|LOGON_FAILURE|Authentication failed|Login incorrect/i;
+/** A login whose output says it failed, unless it also says one worked (`[+]`, a spray over several hosts). */
+const loginFailed = (output: string) => FAILED_LOGIN.test(output) && !output.includes("[+]");
+
 /** The username as a whole word of the command (not `bobby` for `bob`). */
 const namesUser = (cmd: string, username: string) => new RegExp(`(?<![\\w.-])${esc(username)}(?![\\w-])`, "i").test(cmd);
 
@@ -48,7 +53,8 @@ function passesSecret(cmd: string, c: Credential): boolean {
  *    as a whole word (`evil-winrm -u bob -p pw`, `xfreerdp /u:bob /p:pw`, `psexec corp/bob:pw@ip`, `-hashes :<nt>`);
  *    or, when the command passes no secret at all, its username at one of their IPs or names (`ssh bob@10.0.0.5`, the
  *    password typed at the prompt), only when that username has exactly one credential. A direct login leaves no
- *    attempt or grant;
+ *    attempt or grant; one whose output says it failed (`[-]`, "Permission denied") ties nothing, nor does a
+ *    credential with a failed attempt on that host;
  *  - access grants on them, with their usernames.
  * In the order the credentials were added; access in time order.
  */
@@ -82,12 +88,24 @@ export function targetCredentials(data: ReportData, hostIds: string[]): { creden
   const hosts = data.hosts.filter((h) => ids.has(h.id));
   const commands = data.log.filter((e) => !e.private && e.content.kind === "command" && e.hostIds.some((h) => ids.has(h)));
   const sameUser = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  // A credential that failed on one of the entry's hosts: its own attempt, or its username tried with its secret.
+  const failedOn = (c: Credential, hostIdsOf: string[]) =>
+    data.credAttempts.some((a) => {
+      if (a.result !== "failed" || !hostIdsOf.includes(a.hostId)) return false;
+      if (a.credId === c.id && !a.usernameId) return true;
+      const user = a.usernameId ? data.usernames.find((u) => u.id === a.usernameId)?.username : credOf(a.credId)?.username;
+      return user != null && sameUser(user, c.username) && credOf(a.credId)?.secret === c.secret;
+    });
   for (const e of commands) {
     if (e.content.kind !== "command") continue;
     const on = e.hostIds.find((h) => ids.has(h))!;
+    const onIds = e.hostIds.filter((h) => ids.has(h));
     for (const b of e.content.blocks) {
       const cmd = b.command ?? "";
-      const named = data.credentials.filter((c) => c.username.trim() !== "" && c.secret.trim() !== "" && namesUser(cmd, c.username));
+      if (loginFailed(b.output ?? "")) continue;
+      const named = data.credentials.filter(
+        (c) => c.username.trim() !== "" && c.secret.trim() !== "" && namesUser(cmd, c.username) && !failedOn(c, onIds),
+      );
       const bySecret = named.filter((c) => passesSecret(cmd, c));
       for (const c of bySecret) tie(c.id, { username: c.username, domain: c.domain, type: c.type, at: c.createdAt }, `used on ${name(on)}`);
       // `ssh bob@10.0.0.5`: the password is typed at the prompt, so the command names only the account. It ties the

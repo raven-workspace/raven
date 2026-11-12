@@ -68,4 +68,31 @@ describe("targetCredentials: direct logins", () => {
     expect(tied(data([cmd("e", "ssh bobby@10.0.0.5")]))).toEqual([]);
     expect(tied(data([cmd("e", "evil-winrm -i 10.0.0.5 -u bob -p 'Spring2026!'", { hostIds: ["h2"] })]))).toEqual([]);
   });
+
+  it("never ties a login that failed: an nxc spray marked [-], or ssh answered with Permission denied", () => {
+    const out = (command: string, output: string) =>
+      ({ id: "e", kind: "command", title: "e", hostIds: [H], private: false, content: { kind: "command", blocks: [{ command, output }] } }) as unknown as LogEntry;
+    expect(tied(data([out("nxc smb 10.0.0.5 -u bob -p 'Spring2026!'", "SMB  10.0.0.5  445  MS01  [-] corp.local\\bob:Spring2026! STATUS_LOGON_FAILURE")]))).toEqual([]);
+    expect(tied(data([out("ssh bob@10.0.0.5", "bob@10.0.0.5's password: \nPermission denied, please try again.")]))).toEqual([]);
+    for (const said of ["Authentication failed.", "Login incorrect", "NT_STATUS_LOGON_FAILURE"]) {
+      expect(tied(data([out("evil-winrm -i 10.0.0.5 -u bob -p 'Spring2026!'", said)])), said).toEqual([]);
+    }
+    // A login that worked still ties.
+    expect(tied(data([out("ssh bob@10.0.0.5", "Welcome to Ubuntu\nbob@ms01:~$")]))).toEqual([["bob", "used on ms01"]]);
+  });
+
+  it("never ties a login whose credential (or username) failed on that host", () => {
+    const failed = (o: Record<string, unknown>) => ({ id: "a", credId: "c1", usernameId: null, hostId: H, service: "ssh", result: "failed", at: 5, ...o });
+    const creds = [cred("c1", "bob", "Spring2026!"), cred("c2", "alice", "Other1!"), cred("c3", "svc", "Spring2026!")];
+    const d = (attempt: Record<string, unknown>, usernames: unknown[] = []) =>
+      ({ ...data([cmd("e", "ssh bob@10.0.0.5")], creds), credAttempts: [attempt], usernames }) as unknown as ReportData;
+    expect(tied(d(failed({})))).toEqual([]);
+    // The username bob tried with this credential's secret (svc's, the same password) failed.
+    const bob = [{ id: "u1", username: "bob", domain: null }];
+    expect(tied(d(failed({ credId: "c3", usernameId: "u1" }), bob))).toEqual([]);
+    // bob tried with another secret says nothing about this one.
+    expect(tied(d(failed({ credId: "c2", usernameId: "u1" }), bob))).toEqual([["bob", "used on ms01"]]);
+    // A failure on another host says nothing about this one.
+    expect(tied(d(failed({ hostId: "h2" })))).toEqual([["bob", "used on ms01"]]);
+  });
 });
