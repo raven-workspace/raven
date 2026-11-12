@@ -33,7 +33,7 @@ From the current OSCP+ Exam Guide (help.offsec.com article 360040165632):
 - Fast and keyboard-first, as everywhere in Raven.
 
 **Non-goals (this round)**
-- Client reports (per-finding severity layout, branding, cover, logo). They come after the exam and reuse this machinery.
+- Client report specifics (findings-first layout with an executive risk summary, branding, cover, logo). They come after the exam and reuse this machinery; this round already reports vulnerabilities, fixes and what was tested per target (5.4).
 - A personal findings library.
 - Report templates or themes beyond the one house style.
 - Collaboration, comments, version history beyond undo.
@@ -83,7 +83,7 @@ Keyboard-first, listed in the Shortcuts sheet (`usePageShortcuts`), not a hint r
 
 The owner's own clean house style, not a copy of OffSec's Word template:
 - Light paper, near-black ink, Instrument Sans for text and JetBrains Mono for commands, output and code. One accent colour used sparingly (it must work on paper and in greyscale print; Ink's lime is a screen colour, so the paper accent is a darker relative or a neutral — decided in the style round).
-- Section structure follows OffSec's required content and the clibetoe OSCP template the owner liked (link in the desktop spec, phase 3): title page, high-level summary with an exploited-systems table, methodology, one section per target (services, initial access, privilege escalation, proof), the AD set with its attack chain, house cleaning, appendices.
+- Section structure follows OffSec's required content and the clibetoe OSCP template the owner liked (link in the desktop spec, phase 3): title page, high-level summary with an exploited-systems table, methodology, one section per target (services with coverage, vulnerabilities with severity and fix, initial access, privilege escalation, tested-not-exploitable, proof), the AD set with its attack chain, house cleaning, appendices.
 - Commands render as `prompt$ command` above their output in a tinted code block; long lines wrap, never clip. Screenshots fit the page width with "Figure N." captions, numbered across the document.
 - **A short style round comes before the export work:** two or three page-style mockups (title page, a target section with code and a screenshot, the proof table) in the decision page, owner picks one. The page in the editor and the PDF share that one stylesheet.
 
@@ -120,7 +120,7 @@ Per target, in time order, split into **Initial access**, **Privilege escalation
   - a flag entry;
   - steps of a finding linked to the host (`finding_steps`).
 - A screenshot entry whose time falls between two kept entries, or within a few minutes after one (builder picks the window), comes along with it.
-- **Left out (in Unused):** entries with a failed attempt linked (`failed_attempts.log_entry_id`), "returned nothing" entries, notes, and anything not matched above.
+- **Left out of the step-by-step (in Unused):** entries with a failed attempt linked (`failed_attempts.log_entry_id`), "returned nothing" entries, notes, and anything not matched above. Failed attempts are still reported, as the "Tested, not exploitable" list (5.4); Unused only decides whether their full command and output also appear as a step.
 - **Never anywhere:** private entries.
 
 **The foothold/privesc split:** the first entry that granted user-level access (or the first `local.txt` flag) closes Initial access; everything after it up to the root/SYSTEM/admin access goes to Privilege escalation; flags go to Proof. If Raven can't tell, everything goes to Initial access and the owner moves the divider (the sub-section heading is a block they can move like any other). Where the target was entered via a hop rather than its own foothold (AD set), the hop is the foothold.
@@ -141,9 +141,18 @@ Per target, in time order, split into **Initial access**, **Privilege escalation
 - **Lab engagements:** the owner picks which hosts are in the report (a checkbox per host in the outline's target list; default: hosts with at least one flag). Each is a standalone target. If any hosts have `ad_set`, they group as an AD set target the same way.
 - **Client engagements:** the Report section shows a one-line EmptyState ("Client reports come after the exam") this round.
 
-### 5.4 Not in the report this round
+### 5.4 Written as a real engagement report
 
-Ruled-out items, reported failed attempts and findings' impact/remediation are not sections of the OSCP PDF: OffSec grades the working path, and dead ends would only lengthen it. Findings still feed the draft through their steps and files (5.1, 5.2). Failed-attempt entries sit in Unused, so the owner can insert one where explaining a dead end helps. Non-private ruled-out items appear in the rail's Notes tab as a read-only list for reference. Client reports (later) will use all of these.
+The owner's rule (2026-11-11): treat the exam report as a real pentest report. What didn't work is reported too, because it gives the client coverage assurance and shows a complete testing methodology. The only things left out are private ones; a failed attempt whose reason is **operator** (the owner's own inexperience) is private by design and never appears.
+
+So each target section also carries, generated from live data and editable around:
+- **Vulnerabilities:** for each finding linked to the host, its title, severity (and CVSS where set), description as the vulnerability explanation, impact, and remediation as the fix, placed with the sub-section it enabled (foothold or privesc; by the finding's steps, or the owner moves it). This is the template's "Vulnerability Explanation / Vulnerability Fix / Severity" block. Lessons stay private.
+- **Tested, not exploitable:** the target's non-private failed attempts (title, reason kind as plain words: "blocked by a control", "precondition not met", "no access", and the reason text) and non-private ruled-out items (text and reason), as a list. A failed attempt's log entry can still be inserted as full evidence from Unused where showing the command helps.
+- **Coverage per service:** the services table gains a result column: exploited (with which finding), tested and not exploitable (with the attempt or ruled-out reason), or not tested. Derived from findings, attempts, ruled-out items and service verdicts; the owner can correct a row.
+
+Engagement-level failed attempts and ruled-out items with no host go in a **Tested, not exploitable** sub-section of the AD set (if domain-related) or a report-level one before the appendices (builder decides the placement rule).
+
+New checks (6.5), soft: a service with no result ("not tested") and a finding with an empty description or remediation.
 
 ### 5.5 Report-level sections
 
@@ -222,7 +231,7 @@ Checks never block export outright; export shows the open gaps in its confirm st
 - Expected flags per machine: standalone local.txt + proof.txt, AD machines proof.txt, editable per machine (6.5).
 - Labs: owner picks report hosts (default: hosts with a flag); clients get a placeholder this round (5.3).
 - Finding files gain "modified" and "original URL"; unmodified exploits are cited by URL (5.2).
-- Ruled-out items, failed attempts and finding impact/remediation stay out of the OSCP PDF; ruled-out items are reference in the rail (5.4).
+- (Owner's rule, not a call) Report like a real engagement: failed attempts, ruled-out items and findings' severity/impact/remediation all appear; only private content, including operator-reason attempts, stays out (5.4).
 - Checks warn and gate export behind "Export anyway", never hard-block.
 - The .7z and MD5 are produced by Raven, since OffSec requires both and the owner wants every clerical step removed.
 - Lab engagements get the same view (practice before the exam), with the file name and deadline cells adapting.
