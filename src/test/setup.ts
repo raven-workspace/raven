@@ -12,6 +12,8 @@ globalThis.ResizeObserver ??= class {
   disconnect() {}
 } as unknown as typeof ResizeObserver;
 Element.prototype.scrollIntoView ??= () => {};
+// jsdom has no Web Animations: ProseKit's overlays (the report page's drag handle) wait on running animations.
+Element.prototype.getAnimations ??= () => [];
 
 // jsdom has no canvas: the lock screen's ciphertext field draws nothing in tests.
 HTMLCanvasElement.prototype.getContext = (() => null) as unknown as typeof HTMLCanvasElement.prototype.getContext;

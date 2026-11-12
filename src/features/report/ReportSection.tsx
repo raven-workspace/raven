@@ -65,6 +65,8 @@ const HINTS: Hint[] = [
   { keys: "⌥↑ ⌥↓", label: "reorder targets", priority: 3 },
   { keys: "⌥1–3", label: "outline, page, evidence", priority: 4 },
   { keys: "⌘↵", label: "insert evidence", priority: 6 },
+  // ⌘K is search, so the page's link key takes Shift.
+  { keys: "⌘⇧K", label: "link", priority: 7 },
 ];
 /** Under 1200px the evidence rail is a drawer, which E opens. */
 const NARROW_HINTS: Hint[] = [...HINTS, { keys: "E", label: "evidence", priority: 5 }];
@@ -765,22 +767,7 @@ function ReportBody({
             )}
             {saveFailed && <p className="m-0 text-meta text-warn">Some typing isn't saved yet. Raven tries again with your next change; keep Raven open until this goes.</p>}
             {draftFailed && <WarnLine text={`Couldn't build this page's draft: ${draftFailed}`} onRetry={() => setDraftFailed(null)} />}
-            {open?.target && openSection?.doc ? (
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-                <p className="m-0 text-meta text-muted-2">{notStarted ? `Nothing logged on ${open.item.label} yet. The page fills in as you work.` : ""}</p>
-                <AddEvidenceButton
-                  key={openSection.id}
-                  editor={readyEditor && readyEditor.id === openSection.id ? readyEditor.editor : null}
-                  data={data}
-                  target={open.target}
-                  meta={reportMeta}
-                  removed={openSectionMeta?.removedEntryIds ?? []}
-                  onAdded={() => void saver.flush()}
-                />
-              </div>
-            ) : (
-              notStarted && open?.target && <p className="m-0 text-meta text-muted-2">Nothing logged on {open.item.label} yet. The page fills in as you work.</p>
-            )}
+            {notStarted && open?.target && <p className="m-0 text-meta text-muted-2">Nothing logged on {open.item.label} yet. The page fills in as you work.</p>}
             {appendixView ?? (openSection?.kind === "details" ? (
               <ReportDetails
                 key={report.id}
@@ -799,6 +786,19 @@ function ReportBody({
                     doc={openSection.doc as ReportNode}
                     onChange={onChange}
                     onReady={(editor) => onEditorReady(openSection.id, editor)}
+                    toolbarEnd={
+                      open?.target && (
+                        <AddEvidenceButton
+                          key={openSection.id}
+                          editor={readyEditor && readyEditor.id === openSection.id ? readyEditor.editor : null}
+                          data={data}
+                          target={open.target}
+                          meta={reportMeta}
+                          removed={openSectionMeta?.removedEntryIds ?? []}
+                          onAdded={() => void saver.flush()}
+                        />
+                      )
+                    }
                   />
                 </ReportDataContext.Provider>
               ) : draftFailed ? null : (

@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createEditor, Priority, type Editor, type NodeJSON } from "prosekit/core";
 import type { Node as PMNode } from "prosekit/pm/model";
 import { NodeSelection, type Command } from "prosekit/pm/state";
 import { ProseKit, useDocChange, useKeymap } from "prosekit/react";
 import { isFigure, type EvidenceAttrs, type ReportData, type ReportNode } from "../../../engines/report";
+import { BlockHandle } from "./BlockHandle";
 import { defineReportExtension } from "./extension";
+import { FormatToolbar } from "./FormatToolbar";
 import { PageLayoutContext, useReportData, type PageLayout } from "./ReportDataContext";
 import "../page.css";
 
@@ -192,17 +194,23 @@ function PageHooks({ onDoc, onRemoveEvidence }: { onDoc(doc: PMNode): void; onRe
   return null;
 }
 
-/** One section's page: a ProseKit editor on paper. The document is read once at mount; key it by section. */
+/**
+ * One section's page: a ProseKit editor on paper, under a formatting toolbar that pins to the top of the page pane,
+ * with a drag handle in the page's left gutter. The document is read once at mount; key it by section.
+ */
 export function ReportEditor({
   sectionId,
   doc,
   onChange,
   onReady,
+  toolbarEnd,
 }: {
   sectionId: string;
   doc: ReportNode;
   onChange(doc: ReportNode): void;
   onReady(editor: Editor): void;
+  /** The page's own action, at the right end of the formatting bar. */
+  toolbarEnd?: ReactNode;
 }) {
   const value = useReportData();
   const [initialDoc] = useState(doc);
@@ -258,8 +266,10 @@ export function ReportEditor({
     <PageLayoutContext.Provider value={layout}>
       <ProseKit editor={editor}>
         <PageHooks onDoc={onDoc} onRemoveEvidence={value.onRemoveEvidence} />
+        <FormatToolbar shown={pageTouched} end={toolbarEnd} />
         <div className="report-page">
           <div ref={mount} className="report-page-doc" />
+          <BlockHandle />
         </div>
       </ProseKit>
     </PageLayoutContext.Provider>

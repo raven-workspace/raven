@@ -11,10 +11,12 @@
   --page-sans: "Instrument Sans Variable", system-ui, sans-serif;
   --page-mono: "JetBrains Mono Variable", ui-monospace, monospace;
 
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 760px);
+  /* 760px of text plus the 40px gutters inside the editor, where the drag handle sits. */
+  grid-template-columns: minmax(0, 840px);
   justify-content: center;
-  padding: 32px 24px;
+  padding: 32px 0;
   background: var(--page-paper);
   color: var(--page-ink);
   font-family: var(--page-sans);
@@ -26,6 +28,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   row-gap: 12px;
+  /* The gutters are part of the editor, so hovering one still finds the block beside it. */
+  padding: 0 40px;
   outline: none;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -227,6 +231,13 @@
   border-bottom: 1px solid var(--page-rule);
 }
 
+/* Ports and IPs: as wide as their content, never broken across lines. */
+.report-page .report-table .report-fit {
+  width: 1%;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
 .report-page .report-table th {
   font-weight: 600;
   border-bottom-color: var(--page-ink);
@@ -288,6 +299,12 @@
   outline-offset: 2px;
 }
 
+/* Selected text on paper reads as ink on a paper highlight, not the app's light-on-dark selection. */
+.report-page ::selection {
+  background: var(--page-rule);
+  color: var(--page-ink);
+}
+
 /* A selected block shows its outline, not the browser's text highlight (ProseMirror's own rule; its stylesheet isn't loaded). */
 .report-page .ProseMirror-hideselection *::selection {
   background: transparent;
@@ -295,4 +312,55 @@
 
 .report-page .ProseMirror-hideselection {
   caret-color: transparent;
+}
+
+/* Drag handle: in the left gutter beside the hovered block. Ink on paper, as the page's own controls are. */
+
+.report-page > .report-handle-root {
+  display: contents;
+}
+
+.report-page .report-handle {
+  z-index: 10;
+}
+
+.report-page .report-handle-popup {
+  display: grid;
+  transition: opacity 120ms ease-out;
+}
+
+.report-page .report-handle-popup[data-state="closed"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.report-page .report-handle-grip {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  color: var(--page-placeholder);
+  cursor: grab;
+}
+
+.report-page .report-handle-grip:hover {
+  color: var(--page-ink);
+  background: var(--page-code-bg);
+}
+
+.report-page .report-handle-grip[data-dragging] {
+  cursor: grabbing;
+}
+
+/* Where a dragged block will land. */
+.report-page .report-drop {
+  z-index: 10;
+  background: var(--page-ink);
+  border-radius: 1px;
+}
+
+/* The block being dragged stays visible in place, faded, until it lands. */
+.report-page .ProseMirror.prosekit-dragging .ProseMirror-selectednode {
+  opacity: 0.4;
 }

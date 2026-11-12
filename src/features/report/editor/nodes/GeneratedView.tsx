@@ -44,13 +44,17 @@ const RESTRICTIONS = [
 
 const OS_WORDS = { windows: "Windows", linux: "Linux", other: "Other" } as const;
 
-function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
+/** A generated table. Columns in `fit` (ports, IPs) take their content's width and never wrap; the others take the slack. */
+function Table({ head, rows, fit = [] }: { head: string[]; rows: ReactNode[][]; fit?: number[] }) {
+  const cls = (j: number) => (fit.includes(j) ? "report-fit" : undefined);
   return (
     <table className="report-table">
       <thead>
         <tr>
-          {head.map((h) => (
-            <th key={h}>{h}</th>
+          {head.map((h, j) => (
+            <th key={h} className={cls(j)}>
+              {h}
+            </th>
           ))}
         </tr>
       </thead>
@@ -58,7 +62,9 @@ function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
         {rows.map((r, i) => (
           <tr key={i}>
             {r.map((c, j) => (
-              <td key={j}>{c}</td>
+              <td key={j} className={cls(j)}>
+                {c}
+              </td>
             ))}
           </tr>
         ))}
@@ -123,6 +129,7 @@ function Content({ attrs, ctx, attackerIp }: { attrs: GeneratedAttrs; ctx: Repor
       return (
         <Table
           head={["Port", "Service", "Result"]}
+          fit={[0]}
           rows={rows.map((r) => [
             `${r.port}/${r.protocol}`,
             r.proven || r.product === "" ? r.product : `${r.product} (nmap guess)`,
@@ -182,7 +189,7 @@ function Content({ attrs, ctx, attackerIp }: { attrs: GeneratedAttrs; ctx: Repor
     case "exploited-systems": {
       const rows = exploitedSystems(data, targets, ctx.targetMeta ?? {});
       if (rows.length === 0) return <None />;
-      return <Table head={["Target", "IP", "Access", "Method"]} rows={rows.map((r) => [r.name, r.ip ?? "", r.access, r.method])} />;
+      return <Table head={["Target", "IP", "Access", "Method"]} fit={[1]} rows={rows.map((r) => [r.name, r.ip ?? "", r.access, r.method])} />;
     }
     case "severity-legend":
       return (
@@ -198,6 +205,7 @@ function Content({ attrs, ctx, attackerIp }: { attrs: GeneratedAttrs; ctx: Repor
           <p>Domain: {data.engagement.domain ?? "Not set"}</p>
           <Table
             head={["Machine", "IP", "Role", "OS"]}
+            fit={[1]}
             rows={adHosts.map((h) => [h.name, h.ip ?? "", h.id === dc ? "Domain controller" : "Member", h.os ? OS_WORDS[h.os] : ""])}
           />
         </>
@@ -225,7 +233,7 @@ function Content({ attrs, ctx, attackerIp }: { attrs: GeneratedAttrs; ctx: Repor
         }),
       );
       if (rows.length === 0) return <None />;
-      return <Table head={["Target", "IP", "local.txt", "proof.txt"]} rows={rows} />;
+      return <Table head={["Target", "IP", "local.txt", "proof.txt"]} fit={[1]} rows={rows} />;
     }
     case "tools": {
       const rows = toolsUsed(data.log, attrs.hostId ? [attrs.hostId] : data.hosts.map((h) => h.id));

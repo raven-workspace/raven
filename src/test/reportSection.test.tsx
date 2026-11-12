@@ -368,7 +368,8 @@ describe("Report view: appendices and new evidence", () => {
     await waitFor(() => expect(save.mock.calls.some(([, doc]) => JSON.stringify(doc).includes(localFlag.id))).toBe(true));
 
     const writes = save.mock.calls.length;
-    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    // The notice's Undo, not the formatting toolbar's.
+    fireEvent.click(within(screen.getByText("Added 1 entry").closest<HTMLElement>("[role=status]")!).getByRole("button", { name: "Undo" }));
     await waitFor(() => expect(evidenceIds()).toEqual([scan.id]));
     await waitFor(() => expect(save.mock.calls.length).toBeGreaterThan(writes));
     expect(JSON.stringify(save.mock.calls.at(-1)![1])).not.toContain(localFlag.id);
@@ -397,9 +398,12 @@ describe("Report view: appendices and new evidence", () => {
     mount();
     await ready();
     await waitFor(() => expect(editors.length).toBeGreaterThan(0));
+    // One bar above the page: Add new evidence sits at the right end of the formatting bar, not on a row of its own.
+    const formatting = screen.getByRole("toolbar", { name: "Formatting" });
+    expect(screen.getByRole("button", { name: "Add new evidence" }).parentElement).toBe(formatting.parentElement);
     fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
-    expect(await screen.findByText("Nothing new to add")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Undo" })).not.toBeInTheDocument();
+    const notice = (await screen.findByText("Nothing new to add")).closest<HTMLElement>("[role=status]")!;
+    expect(within(notice).queryByRole("button", { name: "Undo" })).not.toBeInTheDocument();
   });
 });
 
