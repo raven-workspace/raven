@@ -37,13 +37,22 @@ const isAttacker = (host: string, machines: string[]) =>
     return name === host.toLowerCase() || name.split(/[\s(]/)[0] === host.toLowerCase();
   });
 
+/** Output that shows a root shell when no prompt was captured: `id` as uid 0, `whoami` as root or SYSTEM. */
+const ROOT_OUTPUT = /^\s*(?:uid=0\(|root\s*$|nt authority\\system\s*$)/im;
+
 /**
  * A pasted block's own shell, when the paste recorded one, else the entry's prompt: `*Evil-WinRM* PS>`, `PS>`, `C:\>`
  * for cmd (the paste keeps no folder), `user@host$` (`#` for root), and the attacker's own shell as `kali$` like the
- * entry prompt beside it.
+ * entry prompt beside it. A root shell ends in `#`: a bare `#` prompt (`root`), or, with no prompt captured, output
+ * that shows root (`uid=0`, `whoami` root or SYSTEM).
  */
-function blockPrompt(shell: string | undefined, entryPrompt: string, machines: string[]): string {
-  if (!shell || shell === "sh") return entryPrompt;
+function blockPrompt(block: Pick<CommandBlock, "shell" | "root" | "output"> | undefined, entryPrompt: string, machines: string[]): string {
+  const shell = block?.shell;
+  const asRoot = (p: string) => p.replace(/\$$/, "#");
+  if (!shell || shell === "sh") {
+    const root = block?.root === true || (!shell && ROOT_OUTPUT.test(block?.output ?? ""));
+    return root ? asRoot(entryPrompt) : entryPrompt;
+  }
   if (shell === "evil-winrm") return "*Evil-WinRM* PS>";
   if (shell === "powershell") return "PS>";
   if (shell === "cmd") return "C:\\>";
@@ -53,10 +62,10 @@ function blockPrompt(shell: string | undefined, entryPrompt: string, machines: s
 }
 
 /** Each block's prompt: its own shell when the paste recorded one, else the entry's. */
-type Prompt = (shell?: string) => string;
+type Prompt = (block?: Pick<CommandBlock, "shell" | "root" | "output">) => string;
 const promptsFor = (ranOn: string | null, machines: string[]): Prompt => {
   const entry = promptFor(ranOn, machines);
-  return (shell) => blockPrompt(shell, entry, machines);
+  return (block) => blockPrompt(block, entry, machines);
 };
 
 /** How the owner is picking lines on a selected command block, if at all. */
@@ -105,7 +114,7 @@ function CommandBody({
     return (
       <div className="report-code" key={i}>
         <div className="report-cmd">
-          <span className="report-prompt">{prompt(b.shell)}</span> {b.command}
+          <span className="report-prompt">{prompt(b)}</span> {b.command}
         </div>
         {output !== "" &&
           applyKeep(output, keep).map((item, k) => {
@@ -368,10 +377,10 @@ export function detachedBlock(entry: LogEntry, attrs: EvidenceAttrs, prompt: Pro
             : applyKeep(output, keep).map((item) =>
                 item.kind === "omitted" ? `… ${item.count} ${item.count === 1 ? "line" : "lines"} omitted` : item.text,
               );
-        return [`${prompt(b.shell)} ${b.command}`, ...lines].join("\n");
+        return [`${prompt(b)} ${b.command}`, ...lines].join("\n");
       })
       .join("\n\n");
-    language = shellLanguage(prompt(chosen[0]?.shell));
+    language = shellLanguage(prompt(chosen[0]));
   } else if (c.kind === "http") {
     text = c.response ? `${c.request}\n\n${c.response}` : c.request;
     language = "http";

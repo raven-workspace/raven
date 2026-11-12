@@ -237,39 +237,65 @@ const severityRank = (f: Finding) => (f.severity == null ? 4 : f.severity === "i
 const isObservation = (f: Finding) => f.severity === "info" || f.severity === "low";
 
 /**
- * Each of a host's kept flags with its companions (`proofCompanions`) that the page shows in the flag's block. An entry
- * goes with the first flag that claims it.
+ * A flag's companions (`proofCompanions`) the page shows in the flag's block. A proving entry (a finding's step, an
+ * access step, a goal's evidence) stays in its phase: its text still counts for the proof, but it is never moved.
+ */
+export function blockCompanions(data: ReportData, hostId: string, flag: LogEntry): LogEntry[] {
+  const proving = provingEntries(data, hostId);
+  return proofCompanions(data, hostId, flag).filter((c) => !proving.has(c.id) && !isFlag(c));
+}
+
+/**
+ * Each of a host's kept flags with the companions its block shows (`blockCompanions`). An entry goes with the first
+ * flag that claims it.
  */
 function flagCompanions(data: ReportData, hostId: string, kept: LogEntry[]): Map<string, LogEntry[]> {
   const out = new Map<string, LogEntry[]>();
   const taken = new Set<string>();
   for (const f of kept.filter(isFlag)) {
-    const mine = proofCompanions(data, hostId, f).filter((c) => !taken.has(c.id) && !isFlag(c));
+    const mine = blockCompanions(data, hostId, f).filter((c) => !taken.has(c.id));
     for (const c of mine) taken.add(c.id);
     out.set(f.id, mine);
   }
   return out;
 }
 
+/** Words that make a finding a privilege escalation: a token privilege, sudo, SUID, a service or task, a kernel bug. */
+const PRIVESC_WORDS =
+  /\b(?:privilege escalation|privesc|SeImpersonate\w*|SeBackup\w*|SeDebug\w*|SeAssignPrimaryToken\w*|potato\w*|PrintSpoofer|sudo(?:ers)?|SUID|setuid|capabilit(?:y|ies)|cron(?:tab)?|AlwaysInstallElevated|unquoted service|service (?:binary|permissions?)|scheduled task|kernel exploit|DLL hijack\w*|token impersonation|to (?:root|SYSTEM)|gives? (?:root|SYSTEM))\b/i;
+const readsPrivesc = (f: Finding) => PRIVESC_WORDS.test([f.title, f.description ?? "", ...(f.refs ?? [])].join("\n"));
+
 /**
  * Which phase each of a host's findings enabled: the phase of its first step (an entry phase only). Findings with no
- * such step, and observations (info, low), enabled none: they are Additional findings. One exception keeps a finding
- * that was never linked to its steps (an imported one) in the story: when the entry phase has no finding, the most
- * severe unlinked medium-or-worse finding is the one that opened it.
+ * such step, and observations (info, low), enabled none: they are Additional findings. One exception keeps findings
+ * that were never linked to their steps (imported ones) in the story: an entry phase or privilege escalation with no
+ * finding takes the most severe unlinked medium-or-worse finding whose words fit it (privilege escalation words:
+ * SeImpersonate, sudo, SUID…); among equals, the one whose words fit, then the oldest.
  */
-function findingPhases(findings: Finding[], split: Map<string, Phase>, time: Map<string, number>, entryPhase: Phase): Map<string, Phase | null> {
+function findingPhases(
+  findings: Finding[],
+  split: Map<string, Phase>,
+  time: Map<string, number>,
+  [entryPhase, second]: [Phase, Phase],
+): Map<string, Phase | null> {
   const out = new Map<string, Phase | null>();
   for (const f of findings) {
     const steps = f.stepEntryIds.filter((id) => STEP_PHASES.has(split.get(id) as Phase));
     steps.sort((a, b) => (time.get(a) ?? 0) - (time.get(b) ?? 0));
     out.set(f.id, !isObservation(f) && steps.length > 0 ? split.get(steps[0])! : null);
   }
-  if (![...out.values()].includes(entryPhase)) {
-    const unlinked = findings
-      .filter((f) => !isObservation(f) && f.severity != null && f.stepEntryIds.length === 0)
-      .sort((a, b) => severityRank(a) - severityRank(b) || a.createdAt - b.createdAt);
-    if (unlinked.length > 0) out.set(unlinked[0].id, entryPhase);
-  }
+  const unlinked = findings.filter((f) => !isObservation(f) && f.severity != null && f.stepEntryIds.length === 0);
+  const fill = (phase: Phase, privesc: boolean) => {
+    if ([...out.values()].includes(phase)) return;
+    const fits = (f: Finding) => readsPrivesc(f) === privesc;
+    const pick = unlinked
+      .filter((f) => out.get(f.id) == null && (privesc ? fits(f) : true))
+      .sort((a, b) => severityRank(a) - severityRank(b) || Number(fits(b)) - Number(fits(a)) || a.createdAt - b.createdAt)[0];
+    if (pick) out.set(pick.id, phase);
+  };
+  // Privilege escalation first, so a privesc-worded finding never opens the entry phase when another one could.
+  if (second !== entryPhase) fill(second, true);
+  fill(entryPhase, false);
   return out;
 }
 
@@ -295,11 +321,10 @@ function hostBlock(
   const kept = all.filter((e) => !moved.has(e.id));
   const split = phaseSplit(kept, data, hostId, entry, enumerate);
   const proving = provingEntries(data, hostId);
-  const entryPhase = phaseNames(data, hostId, entry)[0];
   const time = new Map(kept.map((e) => [e.id, e.at]));
 
   const findings = data.findings.filter((f) => f.hostIds.includes(hostId) && owns(f.id));
-  const phases = findingPhases(findings, split, time, entryPhase);
+  const phases = findingPhases(findings, split, time, phaseNames(data, hostId, entry));
   const firstStep = (f: Finding) => Math.min(...f.stepEntryIds.map((id) => time.get(id) ?? Infinity), Infinity);
   const stepsIn = (phase: Phase) => stepsOf(kept.filter((e) => split.get(e.id) === phase), proving);
   const flagNodes = (step: LogEntry[]) => [...stepNodes(step), ...(companions.get(step[0].id) ?? []).flatMap(evidenceBlocks)];
@@ -468,11 +493,16 @@ function placeEntry(
   const first = content.findIndex((n) => isPhase(n, hostId, phase));
   if (first === -1) return { at: placeForPhase(content, hostId, phase), nodes: [phaseNode(phase, hostId), ...nodes] };
   if (phase === "post" && isFlag(entry)) return { at: first + 1, nodes };
-  // The phase's last heading: a second finding that enabled it has its own, and new steps go at the phase's end.
-  let heading = first;
-  content.forEach((n, i) => {
-    if (isPhase(n, hostId, phase)) heading = i;
+  // The heading of the finding the step belongs to (a second finding that enabled the phase has its own), else the
+  // phase's last one: new steps go at the phase's end.
+  const headings = content.flatMap((n, i) => (isPhase(n, hostId, phase) ? [i] : []));
+  const findingAt = (i: number) =>
+    (content[i].attrs?.findingId as string | null | undefined) ?? (content[i + 1]?.type === "vuln" ? (content[i + 1].attrs?.findingId as string) : null);
+  const owner = headings.find((i) => {
+    const id = findingAt(i);
+    return id != null && (data.findings.find((f) => f.id === id)?.stepEntryIds.includes(entry.id) ?? false);
   });
+  const heading = owner ?? headings[headings.length - 1];
   const end = regionEnd(content, heading);
   // A step that runs an exploit on the page goes right after it (and its explanation), when no step runs it yet.
   const region = content.slice(heading + 1, end);
@@ -530,13 +560,12 @@ export function addNewEvidence(
       skip.add(e.id);
       added.push(e.id);
     }
-    // A flag's companions not on the page yet go into its block, right after what the block already shows.
+    // A flag's companions not on the page yet go into its block as a fresh draft orders it: commands, then screenshots.
     for (const [flagId, list] of companions) {
-      const fresh = list.filter((e) => !skip.has(e.id));
-      const at = afterFlagBlock(content, flagId, data);
-      if (fresh.length === 0 || at === -1) continue;
-      content.splice(at, 0, ...fresh.flatMap(evidenceBlocks));
-      for (const e of fresh) {
+      for (const e of list.filter((x) => !skip.has(x.id))) {
+        const at = companionPlace(content, flagId, data, e);
+        if (at === -1) continue;
+        content.splice(at, 0, ...evidenceBlocks(e));
         skip.add(e.id);
         added.push(e.id);
       }
@@ -551,16 +580,22 @@ export function addNewEvidence(
   return { doc: changed ? { ...doc, content } : doc, added, addedTested };
 }
 
-/** The index just past a flag's block on the page (its evidence, then its companions' evidence); -1 when the flag is
- *  not on the page. */
-function afterFlagBlock(content: ReportNode[], flagId: string, data: ReportData): number {
+/**
+ * Where a companion goes in its flag's block on the page, as a fresh draft orders the block (the flag, its commands,
+ * then its screenshots): a command after the flag and the block's commands, a screenshot at the block's end. -1 when
+ * the flag is not on the page.
+ */
+function companionPlace(content: ReportNode[], flagId: string, data: ReportData, entry: LogEntry): number {
   const at = content.findIndex((n) => n.type === "evidence" && n.attrs?.entryId === flagId);
   if (at === -1) return -1;
   const flag = data.log.find((e) => e.id === flagId);
-  const hostIds = flag?.hostIds ?? [];
-  const companionIds = new Set(flag ? hostIds.flatMap((h) => proofCompanions(data, h, flag).map((c) => c.id)) : []);
+  const ids = new Set(flag ? flag.hostIds.flatMap((h) => blockCompanions(data, h, flag).map((c) => c.id)) : []);
+  const kindAt = (j: number) => data.log.find((e) => e.id === content[j].attrs?.entryId)?.kind;
   let j = at + 1;
-  while (j < content.length && content[j].type === "evidence" && (content[j].attrs?.entryId === flagId || companionIds.has(String(content[j].attrs?.entryId)))) j++;
+  while (j < content.length && content[j].type === "evidence" && (content[j].attrs?.entryId === flagId || ids.has(String(content[j].attrs?.entryId)))) {
+    if (entry.kind !== "screenshot" && content[j].attrs?.entryId !== flagId && kindAt(j) === "screenshot") break;
+    j++;
+  }
   return j;
 }
 
@@ -571,7 +606,7 @@ export function endOfPhase(doc: ReportNode, data: ReportData, target: ReportTarg
   const content = doc.content ?? [];
   for (const [flagId, list] of flagCompanions(data, hostId, keptEntries(data, hostId))) {
     if (!list.some((e) => e.id === entry.id)) continue;
-    const at = afterFlagBlock(content, flagId, data);
+    const at = companionPlace(content, flagId, data, entry);
     if (at !== -1) return { at, nodes: evidenceBlocks(entry) };
   }
   const kept = keptEntries(data, hostId);

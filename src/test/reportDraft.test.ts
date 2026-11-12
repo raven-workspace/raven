@@ -342,6 +342,30 @@ describe("buildTargetDraft", () => {
       ]);
     });
 
+    it("puts an unlinked finding whose words are privilege escalation under Privilege Escalation, never Initial Access", () => {
+      const d = windowsHost();
+      d.findings = [
+        f("potato", { severity: "critical", title: "SeImpersonatePrivilege to SYSTEM", createdAt: 1 }),
+        f("rce", { severity: "critical", title: "File upload to RCE", createdAt: 2 }),
+      ];
+      const lines = outline(buildTargetDraft(d, target([H]), {}));
+      expect(lines[lines.indexOf("# foothold") + 1]).toBe("V:rce");
+      expect(lines[lines.indexOf("# privesc") + 1]).toBe("V:potato");
+    });
+
+    it("puts a new step under the finding it belongs to, not the phase's last finding", () => {
+      const d = windowsHost();
+      d.findings = [f("f1", { stepEntryIds: ["ferox", "late"] }), f("f2", { stepEntryIds: ["curl"] })];
+      const doc = buildTargetDraft(d, target([H]), {});
+      d.log.push(entry("late", H, 15, cmd("more")));
+      const res = addNewEvidence(doc, d, target([H]), {}, []);
+      expect(res.added).toEqual(["late"]);
+      const lines = outline(res.doc);
+      const second = lines.findIndex((l, i) => l === "# foothold" && i > lines.indexOf("# foothold"));
+      expect(lines.indexOf("late")).toBeLessThan(second);
+      expect(lines.indexOf("late")).toBeGreaterThan(lines.indexOf("V:f1"));
+    });
+
     it("keeps an unlinked finding (an imported one) as the one that opened the box when no finding did", () => {
       const d = windowsHost();
       d.findings = [f("note", { severity: "info" }), f("rce", { severity: "critical" }), f("weak", { severity: "medium" })];
@@ -363,6 +387,20 @@ describe("buildTargetDraft", () => {
       return d;
     };
 
+    it("never moves a proving entry: a finding's step that prints the flag stays in its phase, and its finding with it", () => {
+      const d = withBareFlag();
+      // The root session that ran the exploit also read proof.txt: it is the finding's step.
+      d.log = d.log.map((e) => (e.id === "printspoofer" ? { ...e, content: { kind: "command", blocks: [{ command: "PrintSpoofer64.exe -i -c cmd", output: "nt authority\\system" }, { command: "type proof.txt", output: HASH }] } } as LogEntry : e));
+      d.log = d.log.filter((e) => e.id !== "read");
+      d.findings = [{ id: "f1", title: "SeImpersonate", hostIds: [H], serviceIds: [], stepEntryIds: ["whoami", "printspoofer"], severity: "high", refs: [] } as unknown as Finding];
+      const doc = buildTargetDraft(d, target([H]), {});
+      expect(evidenceUnder(doc, "privesc")).toEqual(["whoami", "printspoofer", "printspoofer"]);
+      expect(evidenceUnder(doc, "post")).toEqual(["flag", "proofshot"]);
+      expect(outline(doc).filter((l) => l === "V:f1")).toHaveLength(1);
+      expect(outline(doc)[outline(doc).indexOf("# privesc") + 1]).toBe("V:f1");
+      expect(phasesOf(doc)).not.toContain("additional");
+    });
+
     it("go into the flag's block, once, and never as steps of their own", () => {
       const doc = buildTargetDraft(withBareFlag(), target([H]), {});
       expect(evidenceUnder(doc, "post")).toEqual(["flag", "read", "proofshot"]);
@@ -375,7 +413,8 @@ describe("buildTargetDraft", () => {
       const doc = buildTargetDraft({ ...d, log: later }, target([H]), {});
       const res = addNewEvidence(doc, d, target([H]), {}, []);
       expect(res.added).toEqual(["read"]);
-      expect(evidenceUnder(res.doc, "post")).toEqual(["flag", "proofshot", "read"]);
+      // As a fresh draft orders the block: the command before the screenshot.
+      expect(evidenceUnder(res.doc, "post")).toEqual(["flag", "read", "proofshot"]);
     });
   });
 

@@ -146,6 +146,21 @@ const rawQuery = (match: RegExpExecArray) => match[1] ?? "";
 
 const words = (text: string) => text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 
+/**
+ * How well a block item matches the query: every word of the query must start a word of its label, id or keywords
+ * (its aliases), never a loose subsequence, so "/etc" is not "Heading 1" (h-e-a-d… t-itle s-e-c-tion). Higher is
+ * better: the label's first word, then any label word, then an alias. Null is no match.
+ */
+export function blockScore(query: string, item: { id: string; label: string; keywords: string }): number | null {
+  const q = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (q.length === 0) return 0;
+  const label = words(item.label);
+  const all = [...label, item.id.toLowerCase(), ...words(item.keywords)];
+  if (!q.every((w) => all.some((h) => h.startsWith(w)))) return null;
+  const first = q[0];
+  return label[0]?.startsWith(first) ? 3 : label.some((h) => h.startsWith(first)) ? 2 : 1;
+}
+
 /** Whether every word after the first is the start of some word in `text`: a sentence typed after `/x` doesn't match. */
 function laterWordsMatch(query: string, text: string): boolean {
   const [, ...rest] = query.trim().toLowerCase().split(/\s+/);
@@ -158,8 +173,8 @@ const ITEM =
 
 /**
  * The slash menu (ProseKit's autocomplete, Ink chrome): `/` at the start of a line lists the blocks to insert, each
- * with the markdown that makes it as you type, then this target's log entries not yet on the page, fuzzy-matched on
- * title and command. A log entry is never the item ↵ takes on its own unless the query (3 characters or more) starts
+ * with the markdown that makes it as you type (matched by the start of a label word or alias), then this target's log
+ * entries not yet on the page, fuzzy-matched on title and command. A log entry is never the item ↵ takes on its own unless the query (3 characters or more) starts
  * its title: otherwise the first item keeps what was typed as text. ↑↓ move, ↵ inserts, Esc closes.
  */
 export function SlashMenu() {
@@ -178,8 +193,8 @@ export function SlashMenu() {
   const blocks = useMemo(() => {
     if (onlyEvidence) return [];
     return BLOCK_ITEMS.filter((b) => !(structural && b.retypes))
-      .map((b) => ({ b, s: fuzzyScore(query, `${b.label} ${b.keywords}`) }))
-      .filter((x): x is { b: BlockItem; s: number } => x.s !== null && laterWordsMatch(query, `${x.b.label} ${x.b.keywords}`))
+      .map((b) => ({ b, s: blockScore(query, b) }))
+      .filter((x): x is { b: BlockItem; s: number } => x.s !== null)
       .sort((x, y) => (query ? y.s - x.s : 0))
       .map((x) => x.b);
   }, [query, onlyEvidence, structural]);

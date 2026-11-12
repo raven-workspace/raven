@@ -381,7 +381,7 @@ function ReportBody({
   }, [sections, targets, data, report]);
 
   // First drafts for sections not built yet, or built with an older layout (rebuilt from scratch: the owner confirmed
-  // nothing written before layout 2 needs keeping): what their page will hold, so checks and numbering read it already.
+  // nothing written before the current layout needs keeping): what their page will hold, so checks and numbering read it already.
   const drafts = useMemo(() => {
     const out = new Map<string, ReportNode>();
     for (const e of entries) {

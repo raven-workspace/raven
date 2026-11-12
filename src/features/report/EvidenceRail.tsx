@@ -196,10 +196,10 @@ const who = (c: Pick<Credential, "username" | "domain">) => (c.domain ? `${c.dom
 
 function CredsTab({ data, target }: { data: ReportData; target: ReportTarget }) {
   const name = (id: string) => data.hosts.find((h) => h.id === id)?.name ?? "Host";
-  // Found here, local here, or tried here and it worked (nxc, hydra); and the access gained on the target.
+  // Found here, local here, tried here and it worked (nxc, hydra), or used in a login here; and the access gained.
   const { credentials: creds, access: grants } = useMemo(() => targetCredentials(data, target.hostIds), [data, target.hostIds]);
   if (creds.length === 0 && grants.length === 0) {
-    return <p className="m-0 text-meta text-muted-2">No credential found on, local to or working on this target, and no access recorded.</p>;
+    return <p className="m-0 text-meta text-muted-2">No credential results or access recorded for this target.</p>;
   }
   return (
     <div className="grid gap-4">

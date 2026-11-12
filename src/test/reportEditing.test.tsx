@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { addNewEvidence, evidenceIdsIn, evidenceNodes, type AppendixIndex, type ReportData, type ReportNode, type ReportTarget } from "../engines/report";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext";
 import { openFindBar, ReportEditor } from "../features/report/editor/ReportEditor";
-import { fuzzyScore } from "../features/report/editor/SlashMenu";
+import { blockScore, fuzzyScore } from "../features/report/editor/SlashMenu";
 import { unusedEntries } from "../features/report/EvidenceRail";
 import { pruneRemoved } from "../features/report/saveQueue";
 import { api } from "../lib/api";
@@ -430,6 +430,20 @@ describe("Slash menu", () => {
     await waitFor(() => expect(json(editor())).toEqual(before));
   });
 
+  it("/etc then ↵ stays text: block items match a label word or alias by its start, never a loose subsequence", async () => {
+    const { editor } = await slash();
+    type(editor(), "etc");
+    await waitFor(() => expect(screen.queryByRole("option", { name: /^Heading 1/, hidden: true })).toBeNull());
+    act(() => void fireEvent.keyDown(editor().view.dom, { key: "Enter", code: "Enter", keyCode: 13 }));
+    const top = json(editor()).content ?? [];
+    expect(top.some((n) => n.type === "heading")).toBe(false);
+    expect(JSON.stringify(top)).toContain("/etc");
+    expect(blockScore("etc", { id: "h1", label: "Heading 1", keywords: "title section" })).toBeNull();
+    expect(blockScore("h1", { id: "h1", label: "Heading 1", keywords: "title section" })).not.toBeNull();
+    expect(blockScore("head", { id: "h1", label: "Heading 1", keywords: "title section" })).toBe(3);
+    expect(blockScore("sec", { id: "h1", label: "Heading 1", keywords: "title section" })).toBe(1);
+  });
+
   it("matches words out of order of their letters, never unrelated text", () => {
     expect(fuzzyScore("nmp", "Full port scan nmap -p-")).not.toBeNull();
     expect(fuzzyScore("zzz", "Full port scan")).toBeNull();
@@ -468,6 +482,22 @@ describe("Headings", () => {
     for (const level of [0, 1, 3]) act(() => void fireEvent.keyDown(editor().view.dom, { key: String(level), code: `Digit${level}`, ctrlKey: true, altKey: true }));
     type(editor(), "# ");
     expect(json(editor()).content?.[0]).toMatchObject({ type: "heading", attrs: { level: 2 }, content: [{ text: "# Introduction" }] });
+  });
+
+  for (const md of ["- ", "* ", "1. ", "> ", "[ ] "])
+    it(`keep "${md}" typed at a numbered heading's start as text, never a list or quote`, async () => {
+      const heading = { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Introduction" }] };
+      const { editor } = await ready(doc(heading, para("x")), undefined, { subNumbers: () => new Map([[0, "1.1"]]) });
+      cursorAt(editor(), 1);
+      type(editor(), md);
+      expect(json(editor()).content?.[0]).toMatchObject({ type: "heading", attrs: { level: 2 }, content: [{ text: `${md}Introduction` }] });
+    });
+
+  it("still turns list markdown into a list in the owner's own text", async () => {
+    const { editor } = await ready(doc(para()), undefined, { subNumbers: () => new Map([[0, "1.1"]]) });
+    cursorAt(editor(), 1);
+    type(editor(), "- ");
+    expect(json(editor()).content?.[0].type).toBe("list");
   });
 
   it("are in the bubble menu too", async () => {
@@ -625,10 +655,35 @@ describe("Find in log blocks", () => {
     fireEvent.keyDown(screen.getByLabelText("Find"), { key: "Enter" });
     await waitFor(() => expect(screen.getByText("2 of 2")).toBeInTheDocument());
     expect(screen.getByText(/This match is in a block from the log: read-only/)).toBeInTheDocument();
+    // Replace acts on the current match: off while it is in a log block, on again on the owner's text.
+    expect(screen.getByRole("button", { name: "Replace" })).toBeDisabled();
+    fireEvent.keyDown(screen.getByLabelText("Find"), { key: "Enter" });
+    await waitFor(() => expect(screen.getByText("1 of 2")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Replace" })).toBeEnabled();
     fireEvent.change(screen.getByLabelText("Replace with"), { target: { value: "PORT" } });
     fireEvent.click(screen.getByRole("button", { name: "Replace all" }));
     expect(json(editor()).content?.[0].content?.[0].text).toBe("the PORT list");
     expect(json(editor()).content?.[1]).toMatchObject({ type: "evidence", attrs: { entryId: "e1" } });
+  });
+});
+
+describe("Find after the log changes", () => {
+  it("collects the matches again when the log data behind the blocks is fetched again", async () => {
+    const page = doc(para("the port list"), ev("e1"));
+    const s = await ready(page);
+    await waitFor(() => expect(document.querySelector(".report-cmd")).toBeInTheDocument());
+    act(() => void openFindBar(s.editor()));
+    fireEvent.change(await screen.findByLabelText("Find"), { target: { value: "port" } });
+    await waitFor(() => expect(screen.getByText("1 of 2")).toBeInTheDocument());
+    const edited = entry({ content: { kind: "command", blocks: [{ command: "nmap -p- 10.0.0.5", output: "PORT STATE\n22/tcp open ssh\nport 80 too" }] } });
+    s.rerender(
+      <QueryClientProvider client={s.qc}>
+        <ReportDataContext.Provider value={{ data: data([edited]), appendix: noRefs, sectionMeta: {}, onRemoveEvidence: vi.fn(), target: standalone, canMove: true }}>
+          <ReportEditor sectionId="s1" doc={page} onChange={s.onChange} onReady={() => {}} />
+        </ReportDataContext.Provider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByText("1 of 3")).toBeInTheDocument());
   });
 });
 

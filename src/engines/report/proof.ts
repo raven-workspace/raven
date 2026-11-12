@@ -13,8 +13,6 @@ export interface ProofFacts {
    *  say it was read from somewhere else. */
   pathKnown: boolean;
   hasScreenshot: boolean;
-  /** Any proof text at all: the flag's own paste or a companion command. */
-  hasText: boolean;
 }
 
 const IP_COMMAND = /\b(?:ipconfig|ifconfig)\b|\bip\s+(?:-\S+\s+)*a(?:ddr(?:ess)?)?\b/i;
@@ -62,7 +60,6 @@ export function textFacts(text: string, host: Host): Omit<ProofFacts, "hasScreen
     showsHostname: HOSTNAME.test(text),
     usualPath: usualRead || dir.usual,
     pathKnown: usualRead || dir.known || reads.some((arg) => ABSOLUTE.test(arg)),
-    hasText: text.trim() !== "",
   };
 }
 

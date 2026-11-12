@@ -393,7 +393,7 @@ const logInput = (title: string, content: LogContent, at: number): LogEntryInput
 });
 const evNode = (entryId: string) => ({ type: "evidence", attrs: { entryId, block: 0, keep: null, emphasis: [], appendix: "inline" } });
 
-/** lnx02's page (layout 2): a foothold heading, a slot, a scan with `outputLines` lines of output, the post heading. */
+/** lnx02's page (layout 3): a foothold heading, a slot, a scan with `outputLines` lines of output, the post heading. */
 async function seedLnx(outputLines = 3, meta: Record<string, unknown> = {}) {
   const output = Array.from({ length: outputLines }, (_, i) => `line ${i}`).join("\n");
   const scan = await api.logCreate("e-exam", logInput("nmap scan", { kind: "command", blocks: [{ command: "nmap -sV 10.10.30.21", output }] }, 1_000));
@@ -408,7 +408,7 @@ async function seedLnx(outputLines = 3, meta: Record<string, unknown> = {}) {
       { type: "slot", attrs: { hint: "Proof" } },
     ],
   };
-  await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { layout: 2, ...meta }, draftBuiltAt: Date.now() });
+  await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { layout: 3, ...meta }, draftBuiltAt: Date.now() });
   return scan;
 }
 
@@ -477,7 +477,7 @@ describe("Report view: appendices and new evidence", () => {
     const sections = await api.reportSectionsList(report.id);
     const lnx = sections.find((s) => s.targetKey === LNX)!;
     const doc = lnx.doc as unknown as { content: unknown[] };
-    await api.reportSectionSave(lnx.id, { ...doc, content: [...doc.content, { ...evNode(shot.id), attrs: { ...evNode(shot.id).attrs, block: null } }] } as unknown as ReportDoc, { layout: 2 });
+    await api.reportSectionSave(lnx.id, { ...doc, content: [...doc.content, { ...evNode(shot.id), attrs: { ...evNode(shot.id).attrs, block: null } }] } as unknown as ReportDoc, { layout: 3 });
     const { container } = mount();
     await ready();
     await waitFor(() => expect(container.querySelector(".report-figure img")).toBeTruthy());
@@ -656,7 +656,7 @@ describe("Report view: the result", () => {
     await ready();
     await waitFor(() => expect(draftUpserts(upsert, LNX)).toHaveLength(1));
     const [, input] = draftUpserts(upsert, LNX)[0] as [string, { meta: unknown; doc: unknown }];
-    expect(input.meta).toEqual({ layout: 2 });
+    expect(input.meta).toEqual({ layout: 3 });
     expect(JSON.stringify(input.doc)).not.toContain("Written under the old layout");
     await waitFor(() => expect(paper().querySelector(".report-table")).toBeTruthy());
     expect(paper().textContent).not.toContain("Written under the old layout");
@@ -735,7 +735,7 @@ describe("pruneRemoved", () => {
   const ev = (entryId: string) => ({ type: "evidence", attrs: { entryId } });
   it("drops removed ids whose entry is on the page again (undo) and keeps the rest", () => {
     const doc = { type: "doc", content: [ev("a")] };
-    expect(pruneRemoved(doc, { removedEntryIds: ["a", "b"], layout: 2 })).toEqual({ removedEntryIds: ["b"], layout: 2 });
+    expect(pruneRemoved(doc, { removedEntryIds: ["a", "b"], layout: 3 })).toEqual({ removedEntryIds: ["b"], layout: 3 });
     const meta = { removedEntryIds: ["b"] };
     expect(pruneRemoved(doc, meta)).toBe(meta);
   });

@@ -15,6 +15,9 @@ pub struct CommandBlock {
     pub output: String,
     #[serde(default)]
     pub shell: Option<String>,
+    /// Pasted at a bare `#` prompt: a root shell whose prompt names no user. Absent when false.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root: Option<bool>,
 }
 
 /// Stored as JSON in `log_entries.content`; the tag equals the `kind` column.
@@ -529,7 +532,7 @@ mod tests {
     }
 
     fn cmd() -> LogContent {
-        LogContent::Command { blocks: vec![CommandBlock { command: "nmap -sV 10.0.0.5".into(), output: "".into(), shell: None }] }
+        LogContent::Command { blocks: vec![CommandBlock { command: "nmap -sV 10.0.0.5".into(), output: "".into(), shell: None, root: None }] }
     }
 
     fn shot() -> LogContent {
@@ -726,7 +729,7 @@ mod tests {
     fn content_json_round_trips_each_kind() {
         let kinds = vec![
             cmd(),
-            LogContent::Command { blocks: vec![CommandBlock { command: "id".into(), output: "uid=0".into(), shell: Some("bash".into()) }] },
+            LogContent::Command { blocks: vec![CommandBlock { command: "id".into(), output: "uid=0".into(), shell: Some("bash".into()), root: None }] },
             shot(),
             LogContent::Http { request: "GET / HTTP/1.1".into(), response: Some("200".into()) },
             LogContent::Http { request: "GET /".into(), response: None },
@@ -740,6 +743,10 @@ mod tests {
         }
         let j = serde_json::to_value(shot()).unwrap();
         assert!(j.get("attachmentId").is_some() && j.get("fileName").is_some());
+        // A root block keeps its flag through the store; a plain one writes no `root` key.
+        let root: LogContent = serde_json::from_str(r#"{"kind":"command","blocks":[{"command":"id","output":"uid=0","shell":"sh","root":true}]}"#).unwrap();
+        assert_eq!(serde_json::to_value(&root).unwrap()["blocks"][0]["root"], true);
+        assert!(serde_json::to_value(cmd()).unwrap()["blocks"][0].get("root").is_none());
         let f: LogContent = serde_json::from_str(r#"{"kind":"flag","flagKind":"proof","value":"x"}"#).unwrap();
         assert_eq!(f, LogContent::Flag { flag_kind: "proof".into(), value: "x".into(), attachment_id: None, proof: None });
         // stored round trip keeps kind column == tag

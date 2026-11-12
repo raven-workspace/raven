@@ -3,10 +3,10 @@ import type { Host } from "../../types/host";
 import type { AppendixIndex } from "./appendix";
 import { suggestMoves } from "./appendix";
 import { serviceCoverage } from "./coverage";
-import { byTime, evidenceIdsIn } from "./draft";
 import { captionOf } from "./figures";
 import { expectedFlags, isValidOsid } from "./meta";
 import { findFlagInPaste } from "../capture/flag";
+import { blockCompanions, byTime, evidenceIdsIn } from "./draft";
 import { proofCompanions, proofFacts } from "./proof";
 import { provingEntries } from "./prove";
 import { msfHosts, msfModules } from "./tools";
@@ -73,8 +73,6 @@ const words = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
  */
 function proofChecks(host: Host, flags: ("local" | "proof")[], data: ReportData, onPage: Set<string>): Check[] {
   const out: Check[] = [];
-  // Raven can't read a screenshot: when one may show what the text doesn't, the host gets one soft line, not one per gap.
-  let unreadShot = false;
   for (const flag of flags) {
     const entries = data.log
       .filter((e) => e.kind === "flag" && e.content.kind === "flag" && e.content.flagKind === flag && !e.private && e.hostIds.includes(host.id))
@@ -96,7 +94,11 @@ function proofChecks(host: Host, flags: ("local" | "proof")[], data: ReportData,
     const fix = host.os === "windows" ? WIN_FIX : LINUX_FIX;
     const soft = (id: string, text: string) => out.push({ id: `${id}:${key}`, level: "soft", text, fix, anchor });
     if (facts.hasScreenshot) {
-      if (!facts.showsIp) unreadShot = true;
+      // Raven can't read a screenshot: when it may show what the text doesn't, one soft line for the proof, not one per gap.
+      if (!facts.showsIp) {
+        const ipCommand = host.os === "windows" ? "ipconfig" : "ip a or ifconfig";
+        soft("proof-shot", `Raven can't read screenshots; make sure the ${flag}.txt screenshot for ${host.name} shows ${ipCommand} with ${host.ip || "its IP"}.`);
+      }
     } else {
       if (!facts.showsIp) {
         out.push({
@@ -121,14 +123,6 @@ function proofChecks(host: Host, flags: ("local" | "proof")[], data: ReportData,
     }
     // Said only when the text shows the folder it read from.
     if (facts.pathKnown && !facts.usualPath) soft("proof-path", `${which} doesn't read the flag from its usual location.`);
-  }
-  if (unreadShot) {
-    out.push({
-      id: `proof-shot:${host.name}`,
-      level: "soft",
-      text: `Raven can't read screenshots; make sure the proof screenshot shows ipconfig and ${host.ip || "the target IP"}.`,
-      fix: host.os === "windows" ? WIN_FIX : LINUX_FIX,
-    });
   }
   return out;
 }
@@ -158,7 +152,7 @@ export function targetChecks(input: TargetChecksInput): Check[] {
   // A flag's companions (the command printing it, its screenshot) are part of the flag's block: no explanation needed.
   const companions = new Set(
     hosts.flatMap((h) =>
-      data.log.filter((e) => e.kind === "flag" && !e.private && e.hostIds.includes(h.id)).flatMap((f) => proofCompanions(data, h.id, f).map((c) => c.id)),
+      data.log.filter((e) => e.kind === "flag" && !e.private && e.hostIds.includes(h.id)).flatMap((f) => blockCompanions(data, h.id, f).map((c) => c.id)),
     ),
   );
 
@@ -224,7 +218,19 @@ export function targetChecks(input: TargetChecksInput): Check[] {
   for (const g of data.grants) {
     const host = hosts.find((h) => h.id === g.hostId);
     if (!host) continue;
-    if (!shotsOnPage.some((s) => Math.abs(s.at - g.at) <= SHOT_WINDOW_MS)) {
+    // Only the host's own screenshots show its access. A grant is often recorded long after the shell: its linked
+    // step's time is when access came; with no step linked, any screenshot from the host's first access step on counts.
+    const shots = shotsOnPage.filter((s) => s.hostIds.includes(host.id));
+    const step = g.logEntryId ? entryOf(g.logEntryId) : undefined;
+    const firstAccess = Math.min(
+      ...data.grants.filter((x) => x.hostId === host.id).flatMap((x) => (x.logEntryId ? [entryOf(x.logEntryId)?.at ?? Infinity] : [])),
+      ...data.hops.filter((h) => h.toHostId === host.id).flatMap((h) => (h.logEntryId ? [entryOf(h.logEntryId)?.at ?? Infinity] : [])),
+      Infinity,
+    );
+    const shown = step
+      ? shots.some((s) => Math.abs(s.at - step.at) <= SHOT_WINDOW_MS)
+      : shots.some((s) => firstAccess === Infinity || s.at >= firstAccess);
+    if (!shown) {
       out.push({ id: `access-shot:${host.name}:${g.level}`, level: "soft", text: `${host.name} has ${g.level} access with no screenshot of it on the page.` });
     }
   }
@@ -315,7 +321,7 @@ const PLURAL: Record<string, (n: number) => string> = {
   "proof-identity": (n) => `${n} proofs don't show whoami or id.`,
   "proof-hostname": (n) => `${n} proofs don't show hostname.`,
   "proof-path": (n) => `${n} proofs don't read the flag from its usual location.`,
-  "proof-shot": (n) => `Raven can't read screenshots; make sure ${n} proof screenshots show ipconfig and the target IP.`,
+  "proof-shot": (n) => `${n} proof screenshots: Raven can't read them; check each shows the target IP.`,
   gone: (n) => `${n} blocks on the page use deleted or private content.`,
   output: (n) => `${n} commands on the page show no output.`,
   explain: (n) => `${n} steps have no explanation.`,
@@ -348,7 +354,7 @@ const SHORT: Record<string, (c: Check) => string> = {
   "proof-identity": (c) => `${part(c, 2)}.txt proof lacks whoami`,
   "proof-hostname": (c) => `${part(c, 2)}.txt proof lacks hostname`,
   "proof-path": (c) => `${part(c, 2)}.txt read from an odd place`,
-  "proof-shot": (c) => `${part(c, 1)}: check ipconfig in the screenshot`,
+  "proof-shot": (c) => `${part(c, 2)}.txt: check screenshot shows IP`,
   gone: () => "Deleted or private entry on the page",
   output: () => "A command shows no output",
   explain: () => "A step has no explanation",

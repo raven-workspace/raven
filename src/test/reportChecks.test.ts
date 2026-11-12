@@ -35,7 +35,7 @@ const goodDoc = () => doc(ev("f1", { block: null }), slot("Proof of root"));
 describe("proofFacts", () => {
   it("reads the pasted proof", () => {
     const f = proofFacts(flag(), host());
-    expect(f).toEqual({ showsIp: true, showsIdentity: true, showsHostname: true, usualPath: true, pathKnown: true, hasScreenshot: true, hasText: true });
+    expect(f).toEqual({ showsIp: true, showsIdentity: true, showsHostname: true, usualPath: true, pathKnown: true, hasScreenshot: true });
   });
   it("needs the IP and a command, and a usual path", () => {
     const f = proofFacts(flag({}, { proof: "ipconfig\ncat /tmp/x", attachmentId: null }), host());
@@ -133,13 +133,18 @@ describe("targetChecks", () => {
     const c = run(data({ log: [flag({}, { proof: "whoami\nhostname\ntype proof.txt\nipconfig\n10.0.0.5" })] }), goodDoc());
     expect(c).toEqual([]);
   });
-  it("with a screenshot and no IP in the text: one soft line per host, never a fail", () => {
+  it("with a screenshot and no IP in the text: one soft line per proof naming its flag and the host's IP command, never a fail", () => {
     const local = flag({ id: "f0", at: 4000 }, { flagKind: "local", value: "a".repeat(32), proof: null });
     const proof = flag({}, { value: "b".repeat(32), proof: null });
     const c = run(data({ log: [local, proof] }), doc(ev("f0", { block: null }), ...goodDoc().content!), {}, ["local", "proof"]);
-    expect(c.map((x) => [x.id, x.level, x.text])).toEqual([
-      ["proof-shot:DC01", "soft", "Raven can't read screenshots; make sure the proof screenshot shows ipconfig and 10.0.0.5."],
+    expect(c.map((x) => [x.id, x.level, x.text, x.anchor?.entryId])).toEqual([
+      ["proof-shot:DC01:local", "soft", "Raven can't read screenshots; make sure the local.txt screenshot for DC01 shows ipconfig with 10.0.0.5.", "f0"],
+      ["proof-shot:DC01:proof", "soft", "Raven can't read screenshots; make sure the proof.txt screenshot for DC01 shows ipconfig with 10.0.0.5.", "f1"],
     ]);
+    expect(groupChecks(c).map((g) => g.text)).toEqual(["2 proof screenshots: Raven can't read them; check each shows the target IP."]);
+    expect(groupChecks(c.slice(0, 1)).map((g) => g.text)).toEqual(["local.txt: check screenshot shows IP"]);
+    const lin = run(data({ hosts: [host({ os: "linux" })], log: [local] }), doc(ev("f0", { block: null })), {}, ["local"]);
+    expect(lin[0].text).toBe("Raven can't read screenshots; make sure the local.txt screenshot for DC01 shows ip a or ifconfig with 10.0.0.5.");
   });
   describe("real capture shapes", () => {
     const HASH = "0123456789abcdef0123456789abcdef";
@@ -164,7 +169,7 @@ describe("targetChecks", () => {
     });
     it("(b) the screenshot alone: one soft reminder, no fail and no whoami or hostname line", () => {
       const c = run(data({ log: [bare(), shot()] }), doc(ev("f1", { block: null }), ev("s1", { block: null })));
-      expect(c.map((x) => [x.id, x.level])).toEqual([["proof-shot:DC01", "soft"]]);
+      expect(c.map((x) => [x.id, x.level])).toEqual([["proof-shot:DC01:proof", "soft"]]);
     });
     it("(b) a screenshot taken more than 15 minutes away, or nearer another step, is not the proof", () => {
       const far = run(data({ log: [bare(), shot({ at: 600_000 + 16 * 60_000 })] }), doc(ev("f1", { block: null })));
@@ -175,7 +180,7 @@ describe("targetChecks", () => {
     });
     it("(c) a flag with its own screenshot and no text: one soft reminder", () => {
       const c = run(data({ log: [bare({ attachmentId: "a1" })] }), doc(ev("f1", { block: null })));
-      expect(c.map((x) => x.id)).toEqual(["proof-shot:DC01"]);
+      expect(c.map((x) => x.id)).toEqual(["proof-shot:DC01:proof"]);
     });
     it("a proof read pasted only as a command still puts the flag on the page", () => {
       const only = entry({ id: "r2", content: { kind: "command", blocks: [{ command: "type proof.txt", output: HASH }] } });
@@ -244,20 +249,37 @@ describe("targetChecks", () => {
     const page = doc(slot("Read the share."), ev("c1"), ev("s1", { block: null }), ev("f1", { block: null }));
     expect(find(run(data({ log: [cmd, shot, flag()] }), page), "explain")).toBeUndefined();
   });
-  it("access-shot is soft when no screenshot is within 5 minutes", () => {
-    const grant = { id: "g", hostId: "h1", level: "admin", at: 10_000_000, via: "x", logEntryId: null };
-    const shot = entry({ id: "s1", kind: "screenshot", at: 10_000_000 + 60_000, content: { kind: "screenshot", attachmentId: "a", caption: "ok", fileName: "x" } });
-    const flagShot = flag({ id: "fs", at: 10_000_000 + 1000 });
-    const privShot = { ...shot, private: true } as LogEntry;
-    const flagPage = doc(ev("fs", { block: null }), slot("x"));
-    expect(find(run(data({ log: [flagShot], grants: [grant] as never }), flagPage), "access-shot")).toBeUndefined();
-    expect(find(run(data({ log: [privShot, flag()], grants: [grant] as never }), doc(ev("s1", { block: null }), slot("x"), ...goodDoc().content!)), "access-shot")).toBeDefined();
-    const far = { ...shot, at: 10_000_000 + 600_000 } as LogEntry;
-    const page = doc(ev("s1", { block: null }), slot("x"), ...goodDoc().content!);
-    expect(find(run(data({ log: [shot, flag()], grants: [grant] as never }), page), "access-shot")).toBeUndefined();
-    const c = find(run(data({ log: [far, flag()], grants: [grant] as never }), page), "access-shot")!;
-    expect(c).toMatchObject({ id: "access-shot:DC01:admin", level: "soft" });
-    expect(c.text).toContain("DC01");
+  describe("access-shot", () => {
+    const HOUR = 3_600_000;
+    const shell = entry({ id: "sh", at: 10_000_000 });
+    const shot = (o: Record<string, unknown> = {}) =>
+      entry({ id: "s1", kind: "screenshot", at: 10_000_000 + 60_000, content: { kind: "screenshot", attachmentId: "a", caption: "ok", fileName: "x" }, ...o });
+    const page = doc(slot("x"), ev("sh"), ev("s1", { block: null }), ...goodDoc().content!);
+    const grant = (o: Record<string, unknown> = {}) => ({ id: "g", hostId: "h1", level: "admin", at: 10_000_000, via: "x", logEntryId: "sh", ...o });
+    const check = (log: LogEntry[], g = grant(), p = page) => find(run(data({ log: [...log, flag()], grants: [g] as never }), p), "access-shot");
+
+    it("times a linked grant by its step, not by when it was recorded", () => {
+      expect(check([shell, shot()], grant({ at: 10_000_000 + 2 * HOUR }))).toBeUndefined();
+      const c = check([shell, shot({ at: 10_000_000 + 10 * 60_000 })])!;
+      expect(c).toMatchObject({ id: "access-shot:DC01:admin", level: "soft" });
+      expect(c.text).toContain("DC01");
+    });
+    it("with no step linked, takes any of the host's screenshots from its first access step on", () => {
+      // Recorded two hours after the shell screenshot, with no step: the screenshot still shows it.
+      const unlinked = grant({ logEntryId: null, at: 10_000_000 + 2 * HOUR });
+      expect(check([shell, shot()], unlinked)).toBeUndefined();
+      const first = grant({ id: "g0", level: "user", logEntryId: "sh" });
+      const before = shot({ at: 10_000_000 - HOUR });
+      const d = data({ log: [shell, before, flag()], grants: [first, unlinked] as never });
+      expect(run(d, page).filter((c) => c.id.startsWith("access-shot")).map((c) => c.id)).toEqual(["access-shot:DC01:user", "access-shot:DC01:admin"]);
+    });
+    it("counts only the host's own, non-private screenshots", () => {
+      expect(check([shell, shot({ hostIds: ["h2"] })])).toBeDefined();
+      expect(check([shell, shot({ private: true })])).toBeDefined();
+      expect(check([shell], grant(), doc(slot("x"), ev("sh")))).toBeDefined();
+      const flagShot = flag({ id: "fs", at: 10_000_000 + 1000 });
+      expect(check([shell, flagShot], grant(), doc(slot("x"), ev("sh"), ev("fs", { block: null })))).toBeUndefined();
+    });
   });
   it("caption is soft over 10 words", () => {
     const long = entry({ id: "s1", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "one two three four five six seven eight nine ten eleven", fileName: "x" } });

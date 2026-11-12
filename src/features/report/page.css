@@ -132,10 +132,13 @@
   font-variant-ligatures: none;
 }
 
+/* The tint reaches past the text without padding, so code next to a bracket or quote leaves no gap: "(`x`)" reads
+   as "(x)". */
 .report-page code {
   background: var(--page-code-bg);
-  padding: 0 4px;
-  border-radius: 4px;
+  padding: 0;
+  border-radius: 2px;
+  box-shadow: -2px 0 0 var(--page-code-bg), 2px 0 0 var(--page-code-bg);
 }
 
 /* Blocks */
@@ -607,6 +610,7 @@
   background: none;
   padding: 0;
   border-radius: 0;
+  box-shadow: none;
   white-space: pre-wrap;
 }
 

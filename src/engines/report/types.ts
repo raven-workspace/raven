@@ -50,8 +50,9 @@ export interface CoverageOverride {
 }
 
 /** The draft layout a section's page is built with. A page saved with an older or missing layout is rebuilt from
- *  scratch the first time it opens (2: OffSec's sample report structure). */
-export const DRAFT_LAYOUT = 2;
+ *  scratch the first time it opens (2: OffSec's sample report structure; 3: one finding per heading, Additional
+ *  findings, flags with their companions). */
+export const DRAFT_LAYOUT = 3;
 
 /** Stored in `report_sections.meta`. */
 export interface SectionMeta {

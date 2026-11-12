@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attackChain, isPortScan, msfModules, serviceCoverage, testedLine, testedNotExploited } from "../engines/report";
+import { attackChain, isPortScan, msfModules, requestPort, serviceCoverage, testedLine, testedNotExploited } from "../engines/report";
 import type { ReportData } from "../engines/report";
 import type { Host } from "../types/host";
 import type { LogEntry } from "../types/log";
@@ -47,6 +47,57 @@ describe("serviceCoverage", () => {
     const rows = serviceCoverage(d, H, { s22: { result: "untested", note: "note!" } });
     expect(rows.find((r) => r.port === 445)?.result).toBe("tested");
     expect(rows.find((r) => r.port === 22)).toMatchObject({ result: "untested", via: "note!" });
+  });
+});
+
+describe("serviceCoverage from real work", () => {
+  const cmd = (id: string, command: string, extra = {}) =>
+    ({ id, kind: "command", title: id, hostIds: [H], private: false, content: { kind: "command", blocks: [{ command, output: "x" }] }, ...extra }) as unknown as LogEntry;
+  const http = (id: string, request: string) =>
+    ({ id, kind: "http", title: id, hostIds: [H], private: false, content: { kind: "http", request, response: null } }) as unknown as LogEntry;
+  const at = (d: ReportData, port: number) => serviceCoverage(d, H, {}).find((r) => r.port === port)!;
+  const base = () => {
+    const d = data();
+    d.attempts = [];
+    d.services = [...d.services, svc(8080), svc(8443), svc(5985, { nmapService: "wsman" })] as never;
+    return d;
+  };
+
+  it("counts credential attempts on the service", () => {
+    const d = base();
+    d.credAttempts = [{ id: "a", credId: "c", hostId: H, service: "smb", port: null, result: "failed" }] as never;
+    expect(at(d, 445)).toMatchObject({ result: "tested", via: "credentials tried on SMB" });
+    expect(at(d, 3389).result).toBe("untested");
+  });
+
+  it("counts commands against the host's port, never a port scan", () => {
+    const d = base();
+    d.log = [
+      cmd("gobuster", "gobuster dir -u http://10.0.0.5:8080/ -w common.txt"),
+      cmd("winrm", "evil-winrm -i 10.0.0.5 -u bob -p pw"),
+      cmd("nmap", "nmap -p 3389 10.0.0.5"),
+      cmd("private", "xfreerdp /v:10.0.0.5", { private: true }),
+    ];
+    expect(at(d, 8080)).toMatchObject({ result: "tested", via: "gobuster" });
+    expect(at(d, 5985)).toMatchObject({ result: "tested", via: "winrm" });
+    expect(at(d, 3389).result).toBe("untested");
+  });
+
+  it("matches the host by its name in the engagement's domain", () => {
+    const d = base();
+    d.engagement = { id: "e1", domain: "exam.corp" } as never;
+    d.log = [cmd("curl", "curl -sk https://web01.exam.corp:8443/admin")];
+    expect(at(d, 8443)).toMatchObject({ result: "tested", via: "curl" });
+    expect(at(d, 3389).result).toBe("untested");
+  });
+
+  it("counts captured HTTP requests by their Host header or URL port", () => {
+    const d = base();
+    d.log = [http("login", "POST /login HTTP/1.1\nHost: 10.0.0.5:8080\n\nu=a"), http("tls", "GET https://10.0.0.5/ HTTP/1.1")];
+    expect(at(d, 8080)).toMatchObject({ result: "tested", via: "login" });
+    expect(at(d, 8443).result).toBe("untested");
+    expect(requestPort("GET https://10.0.0.5/ HTTP/1.1")).toBe(443);
+    expect(requestPort("GET / HTTP/1.1\nHost: web01")).toBe(80);
   });
 });
 

@@ -9,7 +9,9 @@ import {
   setBlockType,
   toggleMark,
   toggleNode,
+  Priority,
   union,
+  withPriority,
   withSkipCodeBlock,
   type Extension,
 } from "prosekit/core";
@@ -189,6 +191,32 @@ const headingRule = (numbers: SubNumbers) =>
     }),
   );
 
+/** What list and quote markdown types at a line's start: `- `, `* `, `1. `, `[ ] `, `> `. */
+const STRUCTURE_MARKDOWN = /^\s*(?:[-+*]|\d+[.)]|\[[\sxX]?\]|>)\s$/;
+
+/**
+ * Inside a numbered heading, list and quote markdown stays the text typed: the drafted structure keeps its type. Runs
+ * before ProseKit's list and quote input rules, so they never see it.
+ */
+const guardStructureMarkdown = (numbers: SubNumbers) =>
+  withPriority(
+    definePlugin(
+      new Plugin({
+        props: {
+          handleTextInput: (view, from, to, text) => {
+            const { state } = view;
+            if (!inNumberedHeading(state, numbers)) return false;
+            const $from = state.doc.resolve(from);
+            if (!STRUCTURE_MARKDOWN.test($from.parent.textBetween(0, $from.parentOffset) + text)) return false;
+            view.dispatch(state.tr.insertText(text, from, to));
+            return true;
+          },
+        },
+      }),
+    ),
+    Priority.highest,
+  );
+
 /** The page's keys beyond ProseKit's own: headings 1 to 3, paragraph, sub- and superscript, table cells. */
 const pageKeymap = (numbers: SubNumbers) =>
   defineKeymap({
@@ -223,6 +251,7 @@ function defineEditing(numbers: SubNumbers = { current: undefined }) {
     defineHeadingSpec(),
     defineHeadingCommands(),
     headingRule(numbers),
+    guardStructureMarkdown(numbers),
     defineList(),
     defineBlockquote(),
     defineHorizontalRule(),

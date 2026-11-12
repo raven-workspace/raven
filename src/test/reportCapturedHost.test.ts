@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, resetAuditState } from "../audit/fakeApi";
-import { capturedHost, draftInputOf, editsOf, XFER, XFER_CAPTURES } from "../audit/capturedHost";
+import { capturedHost, editsOf, XFER, XFER_CAPTURES, XFER_DOMAIN, XFER_MACHINES, XFER_SCOPE } from "../audit/capturedHost";
+import { resolveCapture } from "../features/capture/resolve";
+import { EMPTY_DRAFT } from "../features/capture/useCaptureStore";
 import { FIXTURES } from "../audit/fixtures";
 import { AUDIT_PNGS } from "../audit/images";
 import {
@@ -48,28 +50,34 @@ function examData(): ReportData {
 
 const target: ReportTarget = { key: XFER, kind: "standalone", hostIds: [XFER] };
 const id = (key: string) => `l-exam-xfer-${key}`;
-/** A stored entry's content without what only the store decides (the attachment id, the file name from the column). */
+/** A stored entry's content without what only the store and the moment decide: the attachment id, and a screenshot's
+ *  file name, which carries the host's board column at capture time (each save moves the board). */
 const shape = (c: LogContent) => ({ ...c, ...("attachmentId" in c ? { attachmentId: "" } : {}), ...("fileName" in c ? { fileName: "" } : {}) });
 
 describe("xfer03, captured through the real pipeline", () => {
   it("is what saving the same pastes stores", async () => {
     const eng = await api.engagementCreate({ name: "Pipeline", kind: "exam-sim", scopeCidrs: ["10.10.30.0/24"], domain: "exam.corp" } as never);
-    const host = await api.hostCreate(eng.id, { name: "xfer03", ip: "10.10.30.22" });
+    // At Post-exploitation, as in the fixture: the form offers proof.txt for a bare flag value.
+    const host = await api.hostCreate(eng.id, { name: "xfer03", ip: "10.10.30.22", boardColumn: "post-exploitation" } as never);
     const fixture = capturedHost(1_000_000_000, FIXTURES.hosts.filter((h) => h.engagementId === "e-exam"));
     for (const c of XFER_CAPTURES) {
       const hosts = await api.hostsList(eng.id);
+      // The capture form as the owner fills it: the paste (a screenshot's text is its caption), the kind and flag
+      // kind picked, the host preset when capture was opened from the host's view.
+      const image = c.image ? { mime: "image/png", dataBase64: AUDIT_PNGS[c.image as keyof typeof AUDIT_PNGS].base64, objectUrl: "" } : null;
+      const r = resolveCapture(
+        { ...EMPTY_DRAFT, text: c.image ? "" : c.text, caption: c.image ? c.text : "", image, kind: c.kind ?? null, flagKind: c.flagKind ?? null, observations: c.observations ?? "" },
+        { hosts, scope: XFER_SCOPE, domain: XFER_DOMAIN, machines: XFER_MACHINES, lastRanOn: "Kali (VM)", presetHostId: c.preset ? host.id : null },
+      );
       const e = editsOf(c, hosts, host.id);
+      expect({ ...r.edits, content: shape(r.edits.content) }, c.key).toMatchObject({ kind: e.kind, title: e.title, hostIds: e.hostIds, ranOn: e.ranOn, content: shape(e.content) });
       const { entry } = await saveCapture({
         engagementId: eng.id,
-        draft: e.draft,
-        edits: {
-          kind: e.kind, title: e.title, titleEdited: false, hostIds: e.hostIds, ranOn: e.ranOn, observations: e.observations,
-          returnedNothing: false, private: false, content: e.content,
-          credentials: e.credentials.map((p) => ({ ...p, hostId: e.hostIds[0] ?? null })),
-        },
-        image: c.image ? { mime: "image/png", dataBase64: AUDIT_PNGS[c.image as keyof typeof AUDIT_PNGS].base64 } : null,
+        draft: r.draft,
+        edits: r.edits,
+        image: image && { mime: image.mime, dataBase64: image.dataBase64 },
         hosts,
-        draftInput: draftInputOf(c, hosts),
+        draftInput: r.draftInput,
       });
       const want = fixture.log.find((x) => x.id === id(c.key))!;
       expect({ kind: entry.kind, title: entry.title, ranOn: entry.ranOn, content: shape(entry.content) }, c.key).toEqual({
@@ -118,7 +126,7 @@ describe("xfer03's report page makes no false claim", () => {
   it("raises no proof fail and at most the one screenshot reminder", () => {
     const proof = checks.filter((c) => c.id.startsWith("proof"));
     expect(proof.map((c) => [c.id, c.level, c.text])).toEqual([
-      ["proof-shot:xfer03", "soft", "Raven can't read screenshots; make sure the proof screenshot shows ipconfig and 10.10.30.22."],
+      ["proof-shot:xfer03:local", "soft", "Raven can't read screenshots; make sure the local.txt screenshot for xfer03 shows ip a or ifconfig with 10.10.30.22."],
     ]);
     expect(checks.some((c) => c.level === "fail")).toBe(false);
     expect(checks.filter((c) => c.id.startsWith("coverage"))).toEqual([]);
@@ -127,7 +135,7 @@ describe("xfer03's report page makes no false claim", () => {
 
   it("ties the nxc-validated credential to the target, with no source host and no grant", () => {
     const { credentials, access } = targetCredentials(data, [XFER]);
-    expect(credentials.map((c) => [c.username, c.type, c.ties])).toEqual([["svc_backup", "password", ["works on SSH, xfer03"]]]);
+    expect(credentials.map((c) => [c.username, c.type, c.ties])).toEqual([["svc_backup", "password", ["works on SSH, xfer03", "used on xfer03"]]]);
     expect(access).toEqual([]);
   });
 

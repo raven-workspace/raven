@@ -6,6 +6,7 @@ import { useEditor, useExtension } from "prosekit/react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Button, IconButton, Input, Toolbar } from "../../../ui";
 import type { EditingExtension } from "./extension";
+import { useReportData } from "./ReportDataContext";
 
 /** A match on the page: in the owner's text (editable, replaceable), or in a block drawn from the log (read-only). */
 export type Hit = { kind: "text"; from: number; to: number; at: number } | { kind: "log"; range: Range; at: number };
@@ -66,7 +67,8 @@ function paintLogHits(all: Range[], active: Range | null) {
 /**
  * Find and replace on the page (ProseKit's search for the owner's text, plus the text log and generated blocks show):
  * every match is highlighted and counted; ↵ and ⇧↵ step through them in page order, scrolling to each. Matches in log
- * blocks are read-only: Replace changes the owner's text only, and says so. Esc closes and puts the cursor back.
+ * blocks are read-only: Replace is off while one is current, Replace all changes the owner's text only, and both say
+ * so. Matches are collected again when the page or the log data behind its blocks changes. Esc closes and puts the cursor back.
  * In Replace, ↵ replaces the current match and moves on; ⌘↵ replaces them all.
  */
 export function FindBar({ focusKey, onClose }: { focusKey: number; onClose(): void }) {
@@ -87,6 +89,8 @@ export function FindBar({ focusKey, onClose }: { focusKey: number; onClose(): vo
   }, [focusKey]);
 
   const doc = editor.mounted ? editor.state.doc : null;
+  // The log blocks draw live data: when it is fetched again (an entry edited, a new paste), their text changes.
+  const { data } = useReportData();
   // The page and its log blocks as drawn: collected on the next frame, once their node views have rendered.
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -95,7 +99,7 @@ export function FindBar({ focusKey, onClose }: { focusKey: number; onClose(): vo
       setIndex((i) => Math.min(i, Math.max(0, next.length - 1)));
     });
     return () => cancelAnimationFrame(frame);
-  }, [editor, doc, search, caseSensitive]);
+  }, [editor, doc, data, search, caseSensitive]);
 
   const current = hits[index] ?? null;
   useEffect(() => {
@@ -139,9 +143,10 @@ export function FindBar({ focusKey, onClose }: { focusKey: number; onClose(): vo
     onClose();
     editor.focus();
   };
+  // Replace acts on the current match only when it is the owner's text: a match in a log block is read-only.
+  const canReplace = current?.kind === "text";
   const replaceOne = () => {
-    if (current?.kind === "text") editor.commands.replaceCurrent();
-    else editor.commands.replaceNext();
+    if (canReplace) editor.commands.replaceCurrent();
   };
   const onFindKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -212,7 +217,7 @@ export function FindBar({ focusKey, onClose }: { focusKey: number; onClose(): vo
             onKeyDown={onReplaceKey}
           />
           <Toolbar gap={2}>
-            <Button size="sm" disabled={editable === 0} onClick={replaceOne}>
+            <Button size="sm" disabled={!canReplace} onClick={replaceOne}>
               Replace
             </Button>
             <Button size="sm" disabled={editable === 0} onClick={() => editor.commands.replaceAll()}>

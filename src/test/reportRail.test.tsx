@@ -67,7 +67,7 @@ async function seed() {
       { type: "slot", attrs: { hint: "Proof" } },
     ],
   };
-  await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { removedEntryIds: [hydra.id], layout: 2 }, draftBuiltAt: Date.now() });
+  await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { removedEntryIds: [hydra.id], layout: 3 }, draftBuiltAt: Date.now() });
   await api.noteSave("e-exam", LNX, "Port 22 open\n? why is 8080 filtered\n", false);
   await api.noteSave("e-exam", null, "Private engagement text", true);
   await api.ruledOutCreate({ engagementId: "e-exam", hostId: LNX, text: "Anonymous FTP", reason: "Not enabled", private: false });
@@ -241,7 +241,7 @@ describe("Evidence rail", () => {
     mount();
     await ready();
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Creds" }), { button: 0, ctrlKey: false });
-    expect(await screen.findByText("No credential found on, local to or working on this target, and no access recorded.")).toBeInTheDocument();
+    expect(await screen.findByText("No credential results or access recorded for this target.")).toBeInTheDocument();
   });
 
   it("is a drawer under 1200px, toggled by E", async () => {

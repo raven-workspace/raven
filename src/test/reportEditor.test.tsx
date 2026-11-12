@@ -123,6 +123,23 @@ describe("ReportEditor evidence", () => {
     ]);
   });
 
+  it("ends a root block's prompt in #: a bare # prompt, or root output with no prompt captured", async () => {
+    const blocks = [
+      { command: "sudo rsync -e sh 127.0.0.1:/dev/null", output: "", shell: "svc_backup@xfer03" },
+      { command: "id", output: "uid=0(root) gid=0(root)", shell: "sh", root: true as const },
+      { command: "whoami", output: "nt authority\\system" },
+      { command: "whoami", output: "dev" },
+    ];
+    const { container } = setup(doc(ev("e1", { block: null })), data({ log: [entry({ ranOn: "xfer03", content: { kind: "command", blocks } })] }));
+    await waitFor(() => expect(container.querySelectorAll(".report-cmd")).toHaveLength(4));
+    expect([...container.querySelectorAll(".report-cmd")].map((n) => n.textContent)).toEqual([
+      "svc_backup@xfer03$ sudo rsync -e sh 127.0.0.1:/dev/null",
+      "xfer03# id",
+      "xfer03# whoami",
+      "xfer03$ whoami",
+    ]);
+  });
+
   it("prints Methodologies' facts: the exam network, the Metasploit target and the cleanup list", async () => {
     const gen = (kind: string): ReportNode => ({ type: "generated", attrs: { kind, hostId: null, appendix: "inline" } });
     const msf = entry({ id: "m1", content: { kind: "command", blocks: [{ command: "msfconsole -q\nuse exploit/windows/smb/ms17_010_eternalblue", output: "" }] } });
@@ -344,6 +361,17 @@ describe("ReportEditor vulnerabilities and exploits", () => {
     expect(line("Vulnerability Fix:")?.querySelector("code")).toHaveTextContent("PasswordAuthentication no");
     expect(line("Affected:")).toHaveTextContent("Affected: 22/tcp OpenSSH");
     expect(container.innerHTML).not.toContain("**");
+  });
+
+  it("renders a fix holding a code block or a table as written, not split into steps", async () => {
+    const block = { ...finding, remediation: "Set this in `sshd_config`:\n\n```\nPasswordAuthentication no\nPermitRootLogin no\n```\n\n| Setting | Value |\n| --- | --- |\n| UsePAM | yes |" } as Finding;
+    const { container } = setup(doc({ type: "vuln", attrs: { findingId: "f1" } }), data({ findings: [block] }));
+    await waitFor(() => expect(container.querySelector(".report-vuln pre")).toBeTruthy());
+    expect(container.querySelector(".report-vuln pre")).toHaveTextContent("PasswordAuthentication no PermitRootLogin no");
+    expect([...container.querySelectorAll(".report-vuln td")].map((c) => c.textContent)).toEqual(["UsePAM", "yes"]);
+    const fix = [...container.querySelectorAll(".report-vuln p")].find((p) => p.textContent?.startsWith("Vulnerability Fix:"));
+    expect(fix).toHaveTextContent("Vulnerability Fix: Set this in sshd_config:");
+    expect(container.querySelector(".report-vuln")!.innerHTML).not.toContain("```");
   });
 
   it("puts a one-step fix on the Vulnerability Fix line itself", async () => {

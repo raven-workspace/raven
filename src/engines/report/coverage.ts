@@ -102,8 +102,20 @@ function commandWorks(command: string, hosts: string[], port: number, nmapServic
   return ACCESS_FAMILIES.some((f) => (f.ports.includes(port) || f.names.includes(name)) && f.words.test(command));
 }
 
+/** The port a captured HTTP request went to: its Host header's port, else its URL's, else 80 (443 for https). */
+export function requestPort(request: string): number {
+  const [first = "", ...headers] = request.split(/\r?\n/);
+  const host = headers.find((h) => /^host:/i.test(h))?.replace(/^host:\s*/i, "").trim() ?? "";
+  const hostPort = /:(\d+)$/.exec(host)?.[1];
+  if (hostPort) return Number(hostPort);
+  const url = /\b(https?):\/\/[^\s/:]+(?::(\d+))?/i.exec(first);
+  if (url?.[2]) return Number(url[2]);
+  return url?.[1].toLowerCase() === "https" ? 443 : 80;
+}
+
 /** A service's coverage on one host (§5.5): exploited, tested, or untested; an override wins. Tested includes what
- *  real work shows without a ruled-out item: credentials tried on it (nxc, hydra), and commands run against it. */
+ *  real work shows without a ruled-out item: credentials tried on it (nxc, hydra), commands run against it, and HTTP
+ *  requests captured to its port. */
 export function serviceCoverage(
   data: ReportData,
   hostId: string,
@@ -117,7 +129,10 @@ export function serviceCoverage(
   ];
   const steps = accessSteps(data, hostId);
   const host = data.hosts.find((h) => h.id === hostId);
-  const names = [host?.ip ?? "", host?.name ?? ""];
+  const domain = (data.engagement?.domain ?? "").trim();
+  // The host by IP, name, and name in the engagement's domain (`ms01.exam.corp`).
+  const names = [host?.ip ?? "", host?.name ?? "", host?.name && domain && !host.name.includes(".") ? `${host.name}.${domain}` : ""];
+  const requests = data.log.filter((e) => !e.private && e.hostIds.includes(hostId) && e.content.kind === "http");
   const commands = data.log.filter(
     (e) => !e.private && e.hostIds.includes(hostId) && e.content.kind === "command" && !isPortScan(e),
   );
@@ -150,7 +165,11 @@ export function serviceCoverage(
       } else {
         const tried = attempts.find((a) => attemptOn(a, s.port, s.nmapService));
         const ran = tried ? undefined : commands.find((e) => e.content.kind === "command" && e.content.blocks.some((b) => commandWorks(b.command ?? "", names, s.port, s.nmapService)));
-        if (tried) {
+        const asked = tried || ran ? undefined : requests.find((e) => e.content.kind === "http" && requestPort(e.content.request) === s.port);
+        if (asked) {
+          result = "tested";
+          via = asked.title;
+        } else if (tried) {
           result = "tested";
           via = `credentials tried on ${tried.service.toUpperCase()}`;
         } else if (ran) {

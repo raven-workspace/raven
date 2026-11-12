@@ -1,12 +1,16 @@
 // xfer03: a mock-exam host captured the way the owner really captures (real engagement "Mock exam A", host Vega,
 // 2026-11-12), built by running the pastes through Raven's own capture code rather than by writing log rows by hand:
 // the draft builder (`buildDraft`, the kind, title, host and content a save stores), the pasted-credential reader and
-// the nxc intake planner (`planCredentialIntake`, the credential results a save files). Each flag is pasted as just its
-// value and tagged to the host by hand; its proof is a screenshot taken next to it and, for proof.txt, a separate
-// command paste. The credential that opens the box was found on another host's share and pasted with no host, so only
-// the nxc result ties it here; no access grant is recorded. src/test/reportCapturedHost.test.ts saves the same pastes
-// through `saveCapture` and checks the rows match. Synthetic throughout (10.10.30.x, RFC 5737 attacker 192.0.2.10).
-import { buildDraft, credentialsInPaste, flagTitle, type DraftInput } from "../engines/capture";
+// the nxc intake planner (`planCredentialIntake`, the credential results a save files). The capture form's own rules
+// (src/features/capture/resolve.ts: the host preset when capture is opened from the host's view, the flag kind from the
+// host's board column, a credential note's title) are mirrored here, because this file is also built for the Node-side
+// audit tooling, which can't load the form's code. src/test/reportCapturedHost.test.ts runs the same pastes through
+// `resolveCapture` and `saveCapture` and checks every row matches. Each flag is pasted as just its value, with capture
+// opened from the host; its proof is a screenshot taken next to it (one captioned, one not) and, for proof.txt, a
+// separate command paste. The credential that opens the box was found on another host's share and pasted with no
+// host, so only the nxc result ties it here; no access grant is recorded. Synthetic throughout (10.10.30.x, RFC 5737
+// attacker 192.0.2.10).
+import { buildDraft, credentialsInPaste, findFlagInPaste, flagTitle, noteTitle, screenshotFileName, type DraftInput } from "../engines/capture";
 import { planCredentialIntake } from "../engines/credentials";
 import type { ChecklistItem } from "../types/checklist";
 import type { CredAttempt, Credential, TriedPair, Username } from "../types/credentials";
@@ -30,9 +34,9 @@ export interface Capture {
   image?: string;
   /** The kind chip picked over the detected kind. */
   kind?: LogKind;
-  /** Tagged to xfer03 by hand: a bare flag value or a screenshot names no host. */
-  tagHost?: boolean;
-  /** The flag kind picked over the default (a bare value is local.txt until changed). */
+  /** Captured from xfer03's host view, so the host is preset (a bare flag value or an uncaptioned screenshot names none). */
+  preset?: boolean;
+  /** The flag kind picked over the form's default (proof.txt once the host is at Privilege escalation or later). */
   flagKind?: FlagKind;
   observations?: string;
 }
@@ -97,7 +101,8 @@ export const XFER_CAPTURES: Capture[] = [
       "uid=1001(svc_backup) gid=1001(svc_backup) groups=1001(svc_backup)",
     ].join("\n"),
   },
-  { key: "local", min: 27, text: FLAGS.xfer03Local, tagHost: true },
+  // xfer03 sits at Post-exploitation now, so the form offers proof.txt: the owner picks local.txt.
+  { key: "local", min: 27, text: FLAGS.xfer03Local, preset: true, flagKind: "local" },
   { key: "local-shot", min: 26, text: "local.txt on xfer03", image: "xfer03-local" },
   {
     key: "sudo",
@@ -120,10 +125,11 @@ export const XFER_CAPTURES: Capture[] = [
       "uid=0(root) gid=0(root) groups=0(root)",
     ].join("\n"),
   },
-  { key: "proof", min: 21, text: FLAGS.xfer03Proof, tagHost: true, flagKind: "proof" },
+  { key: "proof", min: 21, text: FLAGS.xfer03Proof, preset: true },
   // The read reads as a flag paste; the owner had logged the flag already and kept this one a command.
   { key: "proof-read", min: 20.5, text: XFER03.proofPaste, kind: "command" },
-  { key: "proof-shot", min: 20, text: "proof.txt on xfer03", image: "xfer03-proof" },
+  // No caption: only its time ties it to the proof flag.
+  { key: "proof-shot", min: 20, text: "", image: "xfer03-proof", preset: true },
 ];
 
 export const XFER_SCOPE = ["10.10.30.0/24"];
@@ -144,21 +150,37 @@ export function draftInputOf(c: Capture, hosts: Host[]): DraftInput {
   };
 }
 
-/** The entry fields a save stores for a paste: the draft with the owner's changes (`hostId`: xfer03's id). */
+const COLUMNS = ["information-gathering", "vulnerability-detection", "initial-foothold", "privilege-escalation", "post-exploitation", "reporting"];
+
+/** The entry fields a save stores for a paste, as the capture form resolves them (`hostId`: xfer03's id). */
 export function editsOf(c: Capture, hosts: Host[], hostId = XFER) {
   const draft = buildDraft(draftInputOf(c, hosts));
-  const content = c.flagKind && draft.content.kind === "flag" ? { ...draft.content, flagKind: c.flagKind } : draft.content;
-  // The form's title follows the kind picked (no title was typed).
-  const title = c.flagKind && draft.content.kind === "flag" ? flagTitle(c.flagKind) : draft.title;
+  const hostIds = draft.hostIds.length > 0 ? draft.hostIds : c.preset ? [hostId] : [];
+  const host = hosts.find((h) => h.id === hostIds[0]) ?? null;
+  let content = draft.content;
+  let title = draft.title;
+  if (content.kind === "flag") {
+    // A pasted proof block names its file; else the form's default from the host's board column.
+    const byColumn: FlagKind = host && COLUMNS.indexOf(host.boardColumn) >= COLUMNS.indexOf("privilege-escalation") ? "proof" : "local";
+    const flagKind = c.flagKind ?? findFlagInPaste(c.text)?.flagKind ?? byColumn;
+    content = { ...content, flagKind };
+    title = flagTitle(flagKind);
+  } else if (content.kind === "screenshot") {
+    title = noteTitle(c.text) || "Screenshot";
+    const fileName = screenshotFileName({ ip: host?.ip ?? null, hostName: host?.name ?? null, column: host?.boardColumn ?? null, caption: c.text, mime: "image/png" });
+    content = { ...content, fileName };
+  }
+  const credentials = draft.kind === "note" ? credentialsInPaste(c.text, hosts.map((h) => h.name)) : [];
+  if (credentials.length > 0) title = `${credentials.length === 1 ? "Credential" : "Credentials"} for ${credentials.map((p) => p.username).join(", ")}`;
   return {
     draft,
     kind: content.kind,
     title,
-    hostIds: c.tagHost ? [hostId] : draft.hostIds,
+    hostIds,
     ranOn: draft.ranOn,
     content,
     observations: c.observations ?? "",
-    credentials: draft.kind === "note" ? credentialsInPaste(c.text, hosts.map((h) => h.name)) : [],
+    credentials: credentials.map((p) => ({ ...p, hostId: host?.id ?? null })),
   };
 }
 
@@ -184,11 +206,11 @@ export function capturedHost(now: number, hosts: Host[]) {
     };
     log.push(entry);
 
-    // A pasted credential: no host linked, so no source host.
+    // A pasted credential, placed on the host the capture is linked to (here none: no source host).
     for (const p of e.credentials) {
       credentials.push({
         id: `c-exam-xfer-${p.username}`, engagementId: E, type: p.type, username: p.username, domain: p.domain, secret: p.secret,
-        hashType: p.type === "hash" ? "NTLM" : null, scope: p.local ? "local" : "domain", localHostId: null, sourceHostId: null,
+        hashType: p.type === "hash" ? "NTLM" : null, scope: p.local ? "local" : "domain", localHostId: p.local ? p.hostId : null, sourceHostId: p.hostId,
         source: "paste", notes: null, crackStatus: null, crackedFrom: null, fromSecretId: null, createdAt: at, updatedAt: at,
       });
     }

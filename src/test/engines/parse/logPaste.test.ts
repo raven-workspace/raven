@@ -101,7 +101,20 @@ describe('kali two-line zsh prompt (I3)', () => {
 
   it('detectPrompt sees the second line as a prompt', () => {
     expect(detectPrompt('└─$ whoami')).toEqual({ shell: 'sh', command: 'whoami' })
-    expect(detectPrompt('└─# id')).toEqual({ shell: 'sh', command: 'id' })
+    expect(detectPrompt('└─# id')).toEqual({ shell: 'sh', command: 'id', root: true })
+  })
+
+  it('keeps a bare # prompt as a root block (the xfer03 rsync paste)', () => {
+    const paste = [
+      `svc_backup@xfer03:~$ sudo rsync -e 'sh -c "sh 0<&2 1>&2"' 127.0.0.1:/dev/null`,
+      '# id',
+      'uid=0(root) gid=0(root) groups=0(root)',
+    ].join('\n')
+    expect(splitPaste(paste)).toEqual([
+      { command: `sudo rsync -e 'sh -c "sh 0<&2 1>&2"' 127.0.0.1:/dev/null`, output: '', shell: 'svc_backup@xfer03' },
+      { command: 'id', output: 'uid=0(root) gid=0(root) groups=0(root)', shell: 'sh', root: true },
+    ])
+    expect(detectPrompt('$ id')).toEqual({ shell: 'sh', command: 'id' })
   })
 })
 
