@@ -133,7 +133,7 @@ Per target, in time order, split into **Initial access**, **Privilege escalation
 - **Each command block:** each `{command, output}` pair from the entry, with the prompt shown as the `ran_on` machine (`kali$` or the host's shell). The owner trims output by **keeping chosen line ranges**; Raven puts "… N lines omitted" between them (head-and-tail folding would hide the line that matters, often in the middle). The owner can also emphasise key lines. Long outputs start trimmed to a builder-chosen head with a prompt to pick the relevant lines; trimming is per placement and never changes the log entry.
 - **Each screenshot:** the image and a caption from the entry's caption, numbered at render time.
 - **Proof:** each flag entry with its value, the pasted proof text and its screenshot.
-- **Exploits:** `finding_files` gain two fields (migration): **modified** (yes/no) and **original URL**, editable in the finding's Files section and on the page. A modified file attached to a finding linked to the host appears in the section as code, with its original URL and an "explain each change" prose slot (the check in 6.5 enforces it). An unmodified exploit appears as its URL only, as OffSec asks: from the file's original URL, or from the finding's `refs` (EDB IDs and URLs) when there's no file. OffSec requires the changes **highlighted**, so a modified file also takes the **original** (pasted or loaded as text; no network) and Raven renders a local line diff with changes marked. Where the owner has no original, they mark changed lines on the code block by hand. Code too long for the flow (course p.113) moves to an appendix, leaving a reference in the target section.
+- **Exploits:** `finding_files` gain two fields (migration): **modified** (yes/no) and **original URL**, editable in the finding's Files section and on the page. A modified file attached to a finding linked to the host appears in the section as code, with its original URL and an "explain each change" prose slot (the check in 6.5 enforces it). An unmodified exploit appears as its URL only, as OffSec asks: from the file's original URL, or from the finding's `refs` (EDB IDs and URLs) when there's no file. OffSec requires the changes **highlighted**, so a modified file also takes the **original** (pasted or loaded as text; no network) and Raven renders a local line diff with changes marked. Where the owner has no original, they mark changed lines on the code block by hand. Code too long for the flow moves to an appendix by the rules in 5.7, leaving a reference in the target section.
 - **Empty prose slots** after each block, so the cursor has an obvious place to go. They carry quiet placeholder text ("What this shows, and why it matters") that never exports.
 
 ### 5.3 Which targets
@@ -168,6 +168,17 @@ New checks (6.5), soft: a service with no result ("not tested") and a finding wi
 - **AD set:** an **AD overview** first (domain, a machine/IP/role/OS table, a prose slot for the path); then a sub-section per machine whose phases are named by how it was entered: **Initial access** (the first machine), **Lateral movement** (entered by a hop), **Domain compromise** (the DC), replacing the foothold/privesc split for these machines; the DC's proof adds a "Domain admin: yes/no" row; then the **attack chain** generated from `hops` and `access_grants` (from → to, via what credential or technique, at which step), rendered as a simple ordered list (a diagram is a later round).
 - **Appendices (auto):** proof table (target, IP, hostname, local.txt, proof.txt values; "N/A" where a flag isn't expected), tools and payloads (tool, purpose, URL; generated from command first words, purpose and URL editable), Metasploit usage (target, module, purpose; modules found in that host's commands, or "not used"), house cleaning (from the cleanup list, with removed/open status). The owner can add prose to each.
 
+### 5.7 Appendices for content too long to sit inline (binding)
+
+PEN-200 Module 5 (§5.2.6–5.2.7, pp.110–113): the appendices hold material the report needs but that would interrupt the reading if placed inline: long lists of compromised users or affected areas, large proof-of-concept code, expanded methodology or technical write-ups, and an extended attack narrative. Evidence that is simple goes inline; otherwise it goes in an appendix, and the body **summarises and references it** ("as detailed in Appendix C.2"). The exam guide adds that scripts and PoCs must be in the PDF as text, so moving something out never means leaving it out.
+
+- **Move to appendix** is available on any evidence or generated block: command output, exploit code, an HTTP request/response, a long list (credentials dumped, users, shares, affected hosts or URLs), an extended narrative the owner writes. The block leaves a one-line reference in its place ("Full output: Appendix C.2, *title*"), and the owner writes the inline summary around it.
+- **Trimmed inline, full in the appendix:** for output the owner trimmed (5.2), one option keeps the trimmed lines inline and puts the complete output in the appendix, with the reference between them.
+- **Appendix entries** are titled (from the entry's title, editable), numbered, belong to their target, and show which section references them. References are live: renumbering after a move or reorder updates every reference, in the editor and the PDF. A reference to a removed appendix entry is a gap.
+- **Suggested moves (soft checks):** Raven flags blocks that would break the flow: code or output longer than about one printed page (builder sets the line threshold), lists over about 15 rows, and any table wider than the page. The check's fix is the Move action. It never moves anything by itself.
+- **Methodology** expansions (e.g. full tool command lines used for enumeration) and the extended AD narrative may also live in appendices, referenced from Methodology or the attack chain.
+- Moved-out content keeps all checks: a modified exploit in an appendix still needs its highlighted changes and explanation; output in an appendix still counts as "the command has its output".
+
 ### 5.6 Report outline (binding)
 
 1. Cover, then table of contents.
@@ -177,7 +188,9 @@ New checks (6.5), soft: a service with no result ("not tested") and a finding wi
 5. Independent targets, in grading order. Each: heading and facts; services with coverage; Initial access (vulnerability block, then steps); Privilege escalation (vulnerability block, then steps); Tested, not exploited; Proof (item/value table: local.txt, proof.txt, IP address, hostname; then the proof screenshot and text).
 6. Active Directory set: AD overview; each machine (services, Initial access / Lateral movement / Domain compromise, tested-not-exploited, proof); attack chain.
 7. Engagement-level tested-not-exploited, if any.
-8. Appendices: proof table; tools and payloads; Metasploit usage; house cleaning; long exploit code.
+8. Appendices, lettered A, B, C… with numbered entries (A.1, A.2): proof table; tools and payloads; Metasploit usage; house cleaning; then the **moved-out content** of 5.7, grouped by target in report order.
+9. Further information (optional; omitted when empty).
+10. References (cited, authoritative sources; built from findings' `refs` and links the owner adds; omitted when empty).
 
 ## 6. How it works
 
