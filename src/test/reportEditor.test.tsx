@@ -697,7 +697,7 @@ describe("ReportEditor generated blocks", () => {
     selectBlock(editor(), 0);
     fireEvent.click(await screen.findByRole("button", { name: "Edit text" }));
     await waitFor(() => expect(lastDoc(onChange).content?.[0].type).toBe("paragraph"));
-    expect(editor().state.doc.child(0).textContent).toBe("Result: shell as ronan, then SYSTEM. local.txt .");
+    expect(editor().state.doc.child(0).textContent).toBe("Result: shell as ronan, then SYSTEM.");
   });
 
   it("prints the summary's findings table, the scope table and the AD attack path", async () => {
