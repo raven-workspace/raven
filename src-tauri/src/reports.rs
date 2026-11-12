@@ -149,7 +149,15 @@ pub fn get_or_create(conn: &Connection, engagement_id: &str, defaults: &ReportDe
     report_by(conn, "engagement_id", engagement_id)?.ok_or(AppError::NotFound)
 }
 
+/// Name, email, OSID and title: at most 2000 characters each, like the report defaults in Settings.
+const MAX_REPORT_FIELD_LEN: usize = 2000;
+
 pub fn update(conn: &Connection, id: &str, patch: ReportPatch) -> AppResult<Report> {
+    for (field, value) in [("candidateName", &patch.candidate_name), ("email", &patch.email), ("osid", &patch.osid), ("title", &patch.title)] {
+        if value.as_deref().is_some_and(|v| v.chars().count() > MAX_REPORT_FIELD_LEN) {
+            return Err(AppError::Validation { field: field.into(), message: format!("at most {MAX_REPORT_FIELD_LEN} characters") });
+        }
+    }
     let cur = report_by(conn, "id", id)?.ok_or(AppError::NotFound)?;
     let title = patch.title.unwrap_or(cur.title);
     if title.trim().is_empty() {
@@ -169,6 +177,9 @@ pub fn update(conn: &Connection, id: &str, patch: ReportPatch) -> AppResult<Repo
     )?;
     report_by(conn, "id", id)?.ok_or(AppError::NotFound)
 }
+
+/// A section's page and meta, serialized, at most 8 MiB.
+const MAX_SECTION_BYTES: usize = 8 * 1024 * 1024;
 
 const SECTION_COLS: &str = "id, report_id, kind, target_key, position, doc, meta, draft_built_at, updated_at";
 
@@ -211,6 +222,16 @@ pub fn sections_list(conn: &Connection, report_id: &str) -> AppResult<Vec<Report
     parts.into_iter().map(finish).collect()
 }
 
+/// The page and meta as stored, refused past 8 MiB together.
+fn section_texts(doc: Option<&Value>, meta: &Value) -> AppResult<(Option<String>, String)> {
+    let doc = doc.map(to_text);
+    let meta = to_text(meta);
+    if doc.as_ref().map_or(0, String::len) + meta.len() > MAX_SECTION_BYTES {
+        return Err(AppError::Validation { field: "doc".into(), message: "this page is over 8 MiB".into() });
+    }
+    Ok((doc, meta))
+}
+
 fn validate(input: &SectionInput) -> AppResult<()> {
     let bad = |field: &str, message: &str| Err(AppError::Validation { field: field.into(), message: message.into() });
     if !KINDS.contains(&input.kind.as_str()) {
@@ -229,6 +250,7 @@ fn validate(input: &SectionInput) -> AppResult<()> {
 /// Unique on (report, kind, target key): an existing row keeps its id and takes the new values.
 pub fn section_upsert(conn: &Connection, report_id: &str, input: SectionInput) -> AppResult<ReportSection> {
     validate(&input)?;
+    let (doc, meta) = section_texts(input.doc.as_ref(), &input.meta)?;
     if report_by(conn, "id", report_id)?.is_none() {
         return Err(AppError::NotFound);
     }
@@ -242,12 +264,11 @@ pub fn section_upsert(conn: &Connection, report_id: &str, input: SectionInput) -
         Err(e) => return Err(e.into()),
     };
     let now = system_now_ms();
-    let doc = input.doc.as_ref().map(to_text);
     let id = match existing {
         Some(id) => {
             conn.execute(
                 "UPDATE report_sections SET position=?1, doc=?2, meta=?3, draft_built_at=?4, updated_at=?5 WHERE id=?6",
-                params![input.position, doc, to_text(&input.meta), input.draft_built_at, now, id],
+                params![input.position, doc, meta, input.draft_built_at, now, id],
             )?;
             id
         }
@@ -255,7 +276,7 @@ pub fn section_upsert(conn: &Connection, report_id: &str, input: SectionInput) -
             let id = uuid::Uuid::new_v4().to_string();
             conn.execute(
                 &format!("INSERT INTO report_sections ({SECTION_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)"),
-                params![id, report_id, input.kind, input.target_key, input.position, doc, to_text(&input.meta), input.draft_built_at, now],
+                params![id, report_id, input.kind, input.target_key, input.position, doc, meta, input.draft_built_at, now],
             )?;
             id
         }
@@ -264,9 +285,10 @@ pub fn section_upsert(conn: &Connection, report_id: &str, input: SectionInput) -
 }
 
 pub fn section_save(conn: &Connection, id: &str, doc: Value, meta: Value) -> AppResult<ReportSection> {
+    let (doc, meta) = section_texts(Some(&doc), &meta)?;
     let n = conn.execute(
         "UPDATE report_sections SET doc=?1, meta=?2, updated_at=?3 WHERE id=?4",
-        params![to_text(&doc), to_text(&meta), system_now_ms(), id],
+        params![doc, meta, system_now_ms(), id],
     )?;
     if n == 0 {
         return Err(AppError::NotFound);
@@ -406,6 +428,47 @@ mod tests {
         assert_eq!(listed[0].doc, Some(doc));
         assert_eq!(listed[0].meta, json!({"x": true}));
         assert!(matches!(section_save(c, "missing", json!({}), json!({})), Err(AppError::NotFound)));
+    }
+
+    #[test]
+    fn update_caps_text_fields_at_2000_chars() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "e");
+        let r = get_or_create(c, &e, &defaults()).unwrap();
+        let long = "é".repeat(2001);
+        let ok = "é".repeat(2000);
+        let patches: [fn(String) -> ReportPatch; 4] = [
+            |s| ReportPatch { candidate_name: Some(s), ..Default::default() },
+            |s| ReportPatch { email: Some(s), ..Default::default() },
+            |s| ReportPatch { osid: Some(s), ..Default::default() },
+            |s| ReportPatch { title: Some(s), ..Default::default() },
+        ];
+        for (patch, field) in patches.iter().zip(["candidateName", "email", "osid", "title"]) {
+            match update(c, &r.id, patch(long.clone())) {
+                Err(AppError::Validation { field: f, .. }) => assert_eq!(f, field),
+                other => panic!("{field}: expected a validation error, got {other:?}"),
+            }
+            assert!(update(c, &r.id, patch(ok.clone())).is_ok(), "{field} at 2000 chars");
+        }
+    }
+
+    #[test]
+    fn section_writes_cap_the_page_size() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let e = eng(c, "e");
+        let r = get_or_create(c, &e, &defaults()).unwrap();
+        let s = section_upsert(c, &r.id, input("summary", None, 0)).unwrap();
+        let huge = json!({"type": "doc", "content": [{"type": "text", "text": "x".repeat(MAX_SECTION_BYTES)}]});
+        assert!(matches!(section_save(c, &s.id, huge.clone(), json!({})), Err(AppError::Validation { .. })));
+        let mut big = input("summary", None, 0);
+        big.doc = Some(huge);
+        assert!(matches!(section_upsert(c, &r.id, big), Err(AppError::Validation { .. })));
+        // Nothing was written.
+        assert_eq!(sections_list(c, &r.id).unwrap()[0].doc, None);
+        let fits = json!({"type": "doc", "content": [{"type": "text", "text": "x".repeat(1024 * 1024)}]});
+        assert!(section_save(c, &s.id, fits, json!({})).is_ok());
     }
 
     #[test]
