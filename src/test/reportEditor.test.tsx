@@ -169,6 +169,27 @@ describe("ReportEditor evidence", () => {
     expect(hidden.container.querySelector<HTMLInputElement>(".report-caption-input")?.value).not.toBe("Full port scan");
   });
 
+  it("lists the references of findings on the report's targets only", async () => {
+    const web = { ...host, id: "h2", name: "WEB09", ip: "10.0.0.9" } as Host;
+    const finding = (id: string, o: Record<string, unknown>) => ({ id, title: id, hostIds: [], serviceIds: [], refs: [], ...o }) as unknown as Finding;
+    const flagged = entry({ id: "fl", kind: "flag", content: { kind: "flag", flagKind: "local", value: "x" } });
+    const d = data({
+      engagement: { id: "eng", kind: "lab" } as never,
+      hosts: [host, web],
+      services: [{ id: "sv", hostId: "h1", port: 80, protocol: "tcp" }] as never,
+      log: [flagged],
+      findings: [
+        finding("f1", { hostIds: ["h1"], refs: ["https://ref.example/on-target"] }),
+        finding("f2", { hostIds: ["h2"], refs: ["https://ref.example/off-report"] }),
+        finding("f3", { serviceIds: ["sv"], refs: ["https://ref.example/by-service"] }),
+      ],
+    });
+    const { container } = setup(doc({ type: "generated", attrs: { kind: "references", hostId: null, appendix: "inline" } }), d);
+    await waitFor(() => expect(container.textContent).toContain("https://ref.example/on-target"));
+    expect(container.textContent).toContain("https://ref.example/by-service");
+    expect(container.textContent).not.toContain("off-report");
+  });
+
   it("prints Methodologies' facts: the exam network, the Metasploit target and the cleanup list", async () => {
     const gen = (kind: string): ReportNode => ({ type: "generated", attrs: { kind, hostId: null, appendix: "inline" } });
     const msf = entry({ id: "m1", content: { kind: "command", blocks: [{ command: "msfconsole -q\nuse exploit/windows/smb/ms17_010_eternalblue", output: "" }] } });

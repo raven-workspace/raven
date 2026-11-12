@@ -177,7 +177,12 @@ function Content({ attrs, ctx }: { attrs: GeneratedAttrs; ctx: ReportDataValue }
       );
     }
     case "references": {
-      const refs = [...new Set(data.findings.flatMap((f) => f.refs))];
+      // Only findings on the report's targets: a host or a service of one.
+      const onTargets = new Set(targets.flatMap((t) => t.hostIds));
+      const linked = data.findings.filter(
+        (f) => f.hostIds.some((id) => onTargets.has(id)) || f.serviceIds.some((id) => onTargets.has(data.services.find((s) => s.id === id)?.hostId ?? "")),
+      );
+      const refs = [...new Set(linked.flatMap((f) => f.refs))];
       if (refs.length === 0) return <None />;
       return <List items={refs} />;
     }
