@@ -1,12 +1,11 @@
 import type { Finding, FindingFile } from "../../types/findings";
-import type { CommandBlock, LogEntry } from "../../types/log";
+import type { LogEntry } from "../../types/log";
 import { findingBlocks, inlineMarkdown, labelled } from "./copies";
 import { testedLine, testedNotExploited } from "./coverage";
 import { findingPhaseMap, hostEntry, hostPlan, machinesInOrder, severityRank, stepsOf } from "./draft";
 import { placingEntries } from "./prove";
 import { portRows, resultLine } from "./tables";
 import { isPortScan } from "./tools";
-import { applyKeep, defaultKeep, lineCount } from "./trim";
 import type { Phase, ReportData, ReportMeta, ReportNode, ReportTarget } from "./types";
 import { splitAffected } from "./wording";
 
@@ -83,40 +82,113 @@ function textBlocks(value: string): ReportNode[] {
   });
 }
 
-/** An output as the page prints it: trailing blank lines off, long ones cut by `defaultKeep` with one line per cut. */
-export function trimmedOutput(output: string): string {
-  const body = output.replace(/\s+$/, "");
-  if (body === "") return "";
-  return applyKeep(body, defaultKeep(lineCount(body)))
-    .map((item) => (item.kind === "omitted" ? `[… ${item.count} ${item.count === 1 ? "line" : "lines"} omitted …]` : item.text))
-    .join("\n");
-}
+/** Outputs longer than this are cut for the page (a written report keeps only what proves the step). */
+export const PLAIN_MAX_LINES = 12;
+const EDGE_LINES = 4;
+/** Lines a cut output always keeps: a success mark, an id, an address, a flag, a secret, a changed line of a diff. */
+const PROVING_LINE = [
+  /\[\+\]/,
+  /Pwn3d!/,
+  /uid=/,
+  /inet \d/,
+  /\b[0-9a-f]{32}\b/,
+  /password|passwd|BEGIN .*KEY/i,
+  // A diff's added or removed line (not its ---/+++ file headers).
+  /^[+-](?![+-]{2}\s)\s*\S/,
+];
+const omitted = (count: number) => `[… ${count} ${count === 1 ? "line" : "lines"} omitted …]`;
 
-/** A port scan's output cut to its open ports and the `|` script lines under each. Empty when it holds none. */
-export function openPortLines(output: string): string {
+/** A command that prints the machine's addresses: `ip a`, `ip addr`, `ifconfig`, `ipconfig`. */
+const ADDRESS_COMMAND = /\bip\s+(?:-\S+\s+)*a(?:ddr(?:ess)?)?\b|\bifconfig\b|\bipconfig\b/i;
+/** An `ip a` interface line ("2: ens3: <…>") or an ipconfig adapter line ("Ethernet adapter Ethernet0:"). */
+const INTERFACE_LINE = /^\d+:\s+\S+:\s|^\S.*adapter .*:\s*$/;
+/** A line of `ip a` / ifconfig / ipconfig detail under an interface. */
+const ADDRESS_DETAIL = /^\s+\S/;
+
+/**
+ * The address part of an output cut to the machine's own: each interface line and the detail lines under it go,
+ * except the interface that holds `ip` (its interface line and the lines naming the IP). Lines outside an interface's
+ * block (hostname, whoami, a flag) stay.
+ */
+export function ownAddressLines(output: string, ip: string): string {
+  const lines = output.split(/\r?\n/);
   const out: string[] = [];
-  let under = false;
-  for (const line of output.split(/\r?\n/)) {
-    if (/^\d+\/(?:tcp|udp)\s+open\b/.test(line)) {
+  let block: string[] | null = null;
+  const flush = () => {
+    if (block && block.some((l) => l.includes(ip))) out.push(block[0], ...block.slice(1).filter((l) => l.includes(ip)));
+    block = null;
+  };
+  for (const line of lines) {
+    if (INTERFACE_LINE.test(line)) {
+      flush();
+      block = [line];
+    } else if (block && (ADDRESS_DETAIL.test(line) || line.trim() === "")) block.push(line);
+    else {
+      flush();
       out.push(line);
-      under = true;
-    } else if (under && line.startsWith("|")) out.push(line);
-    else under = false;
+    }
   }
+  flush();
   return out.join("\n");
 }
 
-/** A command's code block language: PowerShell for a PowerShell or Evil-WinRM prompt, plain for cmd, else bash (a
- *  command run on a Windows machine with no prompt recorded is PowerShell). */
-function shellLanguage(data: ReportData, entry: LogEntry, block: CommandBlock): string {
-  const shell = (block.shell ?? "").toLowerCase();
-  if (/powershell|pwsh|evil-winrm|^ps\b/.test(shell)) return "powershell";
-  if (/^cmd\b|cmd\.exe/.test(shell)) return "";
-  if (shell === "" && entry.ranOn) {
-    const host = data.hosts.find((h) => h.name.toLowerCase() === entry.ranOn!.toLowerCase());
-    if (host?.os === "windows") return "powershell";
+/**
+ * An output as a written report prints it: trailing blank lines off; one over `PLAIN_MAX_LINES` lines keeps its first
+ * and last four and every proving line (`PROVING_LINE`), each gap one "[… N lines omitted …]" line. A command that
+ * prints addresses (`ip a`) keeps only the machine's own (`ownAddressLines`) when `ip` is known.
+ */
+export function trimmedOutput(output: string, command = "", ip: string | null = null): string {
+  let body = output.replace(/\s+$/, "");
+  if (ip && ADDRESS_COMMAND.test(command)) body = ownAddressLines(body, ip);
+  if (body === "") return "";
+  const lines = body.split(/\r?\n/);
+  if (lines.length <= PLAIN_MAX_LINES) return lines.join("\n");
+  const out: string[] = [];
+  let gap = 0;
+  lines.forEach((line, i) => {
+    const keep = i < EDGE_LINES || i >= lines.length - EDGE_LINES || PROVING_LINE.some((re) => re.test(line));
+    if (!keep) {
+      gap++;
+      return;
+    }
+    if (gap > 0) out.push(omitted(gap));
+    gap = 0;
+    out.push(line);
+  });
+  return out.join("\n");
+}
+
+/** Words of an nmap script name that only name the protocol ("http-git" is about git). */
+const PROTOCOL_WORDS = new Set(["http", "https", "ssh", "ftp", "smb", "smb2", "ms", "sql", "rdp", "ssl", "tls", "nbstat", "rpc"]);
+
+/**
+ * A port scan's output cut to its open port lines, plus the `|` script blocks under a port in `findings` (port → the
+ * text of the findings about it) whose script name the findings mention ("http-git" under 80 when a finding is about
+ * the `.git/` directory). Host keys, titles, headers and other script noise go. Empty when it holds no open port.
+ */
+export function openPortLines(output: string, findings: ReadonlyMap<number, string> = new Map()): string {
+  const out: string[] = [];
+  let text: string | null = null;
+  let keep = false;
+  for (const line of output.split(/\r?\n/)) {
+    const port = /^(\d+)\/(?:tcp|udp)\s+open\b/.exec(line);
+    if (port) {
+      out.push(line);
+      text = findings.get(Number(port[1])) ?? null;
+      keep = false;
+    } else if (line.startsWith("|")) {
+      const script = /^\|_? ?([A-Za-z][\w-]*):/.exec(line);
+      if (script && text !== null) {
+        const words = script[1].toLowerCase().split("-").filter((w) => w.length >= 3 && !PROTOCOL_WORDS.has(w));
+        keep = words.some((w) => new RegExp(`\\b${w}\\b`, "i").test(text!));
+      }
+      if (text !== null && keep) out.push(line);
+    } else {
+      text = null;
+      keep = false;
+    }
   }
-  return "bash";
+  return out.join("\n");
 }
 
 /** An entry's title as a step's sentence: capitalised, ending in ":". */
@@ -142,15 +214,16 @@ interface Step {
  *  then its trimmed output; an HTTP request and response; a screenshot as a figure; a note as paragraphs. */
 function evidence(data: ReportData, entry: LogEntry, step: Step) {
   const c = entry.content;
+  const ip = data.hosts.find((h) => entry.hostIds.includes(h.id))?.ip ?? null;
   if (c.kind === "command") {
     let pending: { command: string; at: number }[] = [];
     c.blocks.forEach((b, i) => {
-      const output = trimmedOutput(b.output ?? "");
       const command = (b.command ?? "").trim();
+      const output = trimmedOutput(b.output ?? "", command, ip);
       if (command !== "") pending.push({ command, at: i });
       if (output === "" && i < c.blocks.length - 1) return;
       if (pending.length > 0) {
-        step.blocks.push(codeBlock(pending.map((p) => p.command).join("\n"), shellLanguage(data, entry, c.blocks[pending[0].at]), `entry:${entry.id}:${pending[0].at}:command`));
+        step.blocks.push(codeBlock(pending.map((p) => p.command).join("\n"), "", `entry:${entry.id}:${pending[0].at}:command`));
       }
       pending = [];
       if (output !== "") {
@@ -159,10 +232,10 @@ function evidence(data: ReportData, entry: LogEntry, step: Step) {
       }
     });
   } else if (c.kind === "http") {
-    if (c.request.trim()) step.blocks.push(codeBlock(c.request.trim(), "http", `entry:${entry.id}:request`));
+    if (c.request.trim()) step.blocks.push(codeBlock(c.request.trim(), "", `entry:${entry.id}:request`));
     const response = trimmedOutput(c.response ?? "");
     if (response) {
-      step.blocks.push(codeBlock(response, "http", `entry:${entry.id}:response`));
+      step.blocks.push(codeBlock(response, "", `entry:${entry.id}:response`));
       step.shown.push(c.response ?? "");
     }
   } else if (c.kind === "screenshot") {
@@ -195,13 +268,15 @@ function printed(proof: string, shown: string[]): boolean {
 
 /** A flag's own evidence in a step: its proof text unless the step already prints it, else its value unless printed;
  *  its picture as a figure. */
-function flagEvidence(entry: LogEntry, step: Step) {
+function flagEvidence(data: ReportData, entry: LogEntry, step: Step) {
   const c = entry.content;
   if (c.kind !== "flag") return;
   const shown = step.shown.join("\n");
   const proof = c.proof?.trim() ?? "";
   if (proof !== "" && !printed(proof, step.shown)) {
-    step.blocks.push(codeBlock(trimmedOutput(proof), "", `entry:${entry.id}:proof`));
+    const ip = data.hosts.find((h) => entry.hostIds.includes(h.id))?.ip ?? null;
+    // A pasted proof holds its own commands: `ip a` in it cuts the addresses to the machine's own.
+    step.blocks.push(codeBlock(trimmedOutput(proof, proof, ip), "", `entry:${entry.id}:proof`));
     step.shown.push(proof);
   } else if (proof === "" && c.value.trim() !== "" && !shown.includes(c.value.trim())) {
     step.blocks.push(codeBlock(c.value.trim(), "", `entry:${entry.id}:value`));
@@ -306,17 +381,24 @@ function portTable(data: ReportData, hostId: string): ReportNode | null {
   };
 }
 
-/** The host's first port scan as a bash block, then its open ports and their script lines. */
+/** The host's first port scan as a code block, then its open ports (script lines only under a finding's ports). */
 function portScan(data: ReportData, hostId: string): ReportNode[] {
   const scan = data.log
     .filter((e) => !e.private && e.hostIds.includes(hostId) && isPortScan(e))
     .sort((a, b) => a.at - b.at || a.createdAt - b.createdAt)[0];
   if (!scan || scan.content.kind !== "command") return [];
+  // Script blocks only under the ports a finding is about, and only the ones it mentions (http-git under 80).
+  const scripted = new Map<number, string>();
+  for (const f of data.findings.filter((x) => x.hostIds.includes(hostId))) {
+    for (const s of data.services.filter((x) => x.hostId === hostId && f.serviceIds.includes(x.id))) {
+      scripted.set(s.port, `${scripted.get(s.port) ?? ""}\n${f.title}\n${f.description}`);
+    }
+  }
   const out: ReportNode[] = [];
   scan.content.blocks.forEach((b, i) => {
     if ((b.command ?? "").trim() === "") return;
-    out.push(codeBlock(b.command.trim(), "bash", `entry:${scan.id}:${i}:command`));
-    const output = openPortLines(b.output ?? "") || trimmedOutput(b.output ?? "");
+    out.push(codeBlock(b.command.trim(), "", `entry:${scan.id}:${i}:command`));
+    const output = openPortLines(b.output ?? "", scripted) || trimmedOutput(b.output ?? "");
     if (output) out.push(codeBlock(output, "", `entry:${scan.id}:${i}:output`));
   });
   return out;
@@ -360,7 +442,7 @@ function machineBlock(data: ReportData, target: ReportTarget, meta: ReportMeta, 
     const last = list[list.length - 1];
     const value = flagValue(flag);
     if (commands.length === 0 && last && value.length >= 8 && last.shown.some((o) => o.includes(value))) {
-      flagEvidence(flag, last);
+      flagEvidence(data, flag, last);
       for (const s of shots) evidence(data, s, last);
       return;
     }
@@ -369,7 +451,7 @@ function machineBlock(data: ReportData, target: ReportTarget, meta: ReportMeta, 
       : [para([text(`Read ${flag.content.kind === "flag" ? flag.content.flagKind : "the"}.txt:`)], `entry:${flag.id}:title`)];
     const step: Step = { blocks: sentence, shown: [] };
     for (const c of commands) evidence(data, c, step);
-    flagEvidence(flag, step);
+    flagEvidence(data, flag, step);
     for (const s of shots) evidence(data, s, step);
     list.push(step);
   };

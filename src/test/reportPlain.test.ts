@@ -83,15 +83,34 @@ describe("buildPlainTarget (garnet)", () => {
   it("prints the login step as the sample does: the commands together, the output once, then the screenshot", () => {
     const login = steps[4].content!;
     expect(login.map((n) => n.type)).toEqual(["paragraph", "codeBlock", "codeBlock", "figure"]);
-    expect(login[1].attrs?.language).toBe("bash");
+    expect(login[1].attrs?.language).toBe("");
+    expect(textOf(login[2])).toBe(
+      "garnet\nronan\n4c1d8e2f9a7b3065e2c4a9f1d7b80e36\n2: ens3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000\n    inet 10.10.30.31/24 brd 10.10.30.255 scope global ens3",
+    );
     expect(textOf(login[1])).toBe("ssh ronan@10.10.30.31\nhostname && whoami && cat local.txt && ip a");
     expect(textOf(login[3])).toBe("local.txt on garnet after logging in");
   });
 
   it("cuts long output with one omitted line and keeps every source attr off the text", () => {
     const dump = steps[1].content!.filter((n) => n.type === "codeBlock").map(textOf)[1];
-    expect(dump).toMatch(/\[… \d+ lines omitted …\]$/);
+    expect(dump).toMatch(/\[… \d+ lines omitted …\]/);
+    expect(dump.split("\n").length).toBeLessThanOrEqual(10);
     expect(steps[1].content![1].attrs?.source).toBe("entry:l-garnet-dump:0:command");
+  });
+
+  it("prints the scan's open ports, with script lines only under the port a finding is about", () => {
+    const at = doc.content!.findIndex((n) => n.type === "heading" && textOf(n) === "Service enumeration");
+    const scan = textOf(doc.content!.slice(at).filter((n) => n.type === "codeBlock")[1]);
+    expect(scan).not.toContain("ssh-hostkey");
+    expect(scan).not.toContain("http-title");
+    expect(scan).toContain("| http-git:");
+    expect(scan.split("\n").filter((l) => /^\d+\/tcp open/.test(l))).toHaveLength(3);
+  });
+
+  it("gives command and output blocks no language, so nothing in them is bolded", () => {
+    const blocks = all(doc).filter((n) => n.type === "codeBlock" && /^entry:/.test(String(n.attrs?.source)));
+    expect(blocks.length).toBeGreaterThan(10);
+    expect(blocks.filter((n) => n.attrs?.language !== "")).toEqual([]);
   });
 
   it("states the unmodified exploit by its URL, with the exploit notes after it", () => {
@@ -143,8 +162,10 @@ describe("the plain page's schema", () => {
 });
 
 describe("plain helpers", () => {
-  it("cuts a scan to its open ports and their script lines", () => {
-    expect(openPortLines("PORT STATE\n22/tcp open ssh\n| ssh-hostkey:\n|_ key\n80/tcp closed http\n| x\nNmap done")).toBe("22/tcp open ssh\n| ssh-hostkey:\n|_ key");
+  it("cuts a scan to its open ports, keeping only the script blocks a finding on the port mentions", () => {
+    const scan = "PORT STATE\n22/tcp open ssh\n| ssh-hostkey:\n|_ key\n80/tcp open http\n|_http-title: Shop\n| http-git:\n|_ found\nNmap done";
+    expect(openPortLines(scan)).toBe("22/tcp open ssh\n80/tcp open http");
+    expect(openPortLines(scan, new Map([[80, "The web root serves .git/"]]))).toBe("22/tcp open ssh\n80/tcp open http\n| http-git:\n|_ found");
   });
 
   it("turns a title into a sentence", () => {
@@ -152,9 +173,19 @@ describe("plain helpers", () => {
     expect(titleSentence("  ")).toBe("Run the following:");
   });
 
-  it("keeps short output whole and marks one cut line in the singular", () => {
+  it("keeps short output whole; a long one keeps its edges and proving lines, one marker per gap", () => {
     expect(trimmedOutput("a\nb\n")).toBe("a\nb");
-    const long = Array.from({ length: 41 + 20 }, (_, i) => `l${i}`).join("\n");
-    expect(trimmedOutput(long).split("\n").slice(-1)[0]).toBe("[… 21 lines omitted …]");
+    const long = Array.from({ length: 30 }, (_, i) => (i === 15 ? "[+] admin:pw (Pwn3d!)" : `l${i}`)).join("\n");
+    expect(trimmedOutput(long).split("\n")).toEqual([
+      "l0", "l1", "l2", "l3", "[… 11 lines omitted …]", "[+] admin:pw (Pwn3d!)", "[… 10 lines omitted …]", "l26", "l27", "l28", "l29",
+    ]);
+    const thirteen = Array.from({ length: 13 }, (_, i) => `l${i}`).join("\n");
+    expect(trimmedOutput(thirteen)).toContain("[… 5 lines omitted …]");
+  });
+
+  it("cuts address output to the machine's own interface and address", () => {
+    const out = "h\n1: lo: <LOOPBACK>\n    inet 127.0.0.1/8 scope host lo\n2: eth0: <UP>\n    link/ether aa\n    inet 10.0.0.5/24 scope global eth0";
+    expect(trimmedOutput(out, "hostname; ip a", "10.0.0.5")).toBe("h\n2: eth0: <UP>\n    inet 10.0.0.5/24 scope global eth0");
+    expect(trimmedOutput(out, "cat x", "10.0.0.5")).toBe(out);
   });
 });
