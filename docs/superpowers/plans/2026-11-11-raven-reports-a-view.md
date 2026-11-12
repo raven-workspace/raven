@@ -591,6 +591,12 @@ Owner (2026-11-12, real engagement "Mock exam A", host Vega): the proof checks (
 5. **Audit every absolute claim** the report and rail make ("No …", "None recorded", "not tested", "untested", "missing") and check what real data could make it false; fix each source.
 6. **Fixtures from the real pipeline:** add a second exam host whose entries are produced by running real pastes through the capture engine (`src/engines/capture` draft + the intake/interpretation used on save): a flag pasted as a bare hash + a separate proof screenshot + a separate `cat proof.txt; ip a` command; creds from an `nxc ssh` success output with no source host. Tests assert no false proof/creds claims on it.
 
+7. **Findings are told one per heading** (owner screenshot 2026-11-12: MS01's "Initial Access – APS v1.0 … RCE" heading had four findings dumped under it, three of them info-level observations, each just a run of labelled lines with no title):
+   - A phase holds only the finding(s) whose steps enabled that phase; each gets its own numbered sub-heading with the finding title (e.g. "5.2.1 Initial Access – <title>"; a second enabling finding becomes its own sub-heading in that phase).
+   - Findings linked to the host that enabled no phase (info/low observations, "relay-relevant", "WinRM available") go in a per-target **Additional findings** subsection after Post-Exploitation (before Also tested), each with its own heading "<title>" and its labelled lines; info severity sorted last.
+   - "Affected: …" is never prepended into Vulnerability Explanation; if kept, it's its own labelled line.
+   - **Finding text is Markdown**: render description, remediation (Fix) and other finding prose through the app's Markdown renderer (inline code, bold, italic, lists, links), not raw `` ` `` and `**`.
+   - No leading blank gap inside Explanation.
 - [ ] Steps: failing tests for each capture shape (proof checks pass for b and c; creds rail lists the nxc-validated cred; no "No credentials" claim); implement; full gate; WebKit re-shoot of the Vega-like host; controller verifies each remaining check on that page by reading the page; commit.
 
 ---
