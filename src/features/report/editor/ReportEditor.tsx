@@ -420,6 +420,7 @@ export function ReportEditor({
   toolbarEnd,
   toolbarClassName,
   notices,
+  plain = false,
 }: {
   sectionId: string;
   /** The page's kind, which picks its guide notes; a page without one shows none. */
@@ -442,21 +443,24 @@ export function ReportEditor({
   toolbarClassName?: string;
   /** Lines about the page (save warnings, "nothing logged yet"), between the bar and the paper. */
   notices?: ReactNode;
+  /** A plain draft (`buildPlainTarget`): the schema takes its figure node and `source` attrs. Read at mount. */
+  plain?: boolean;
 }) {
   const value = useReportData();
   const [initialDoc] = useState(doc);
+  const [plainPage] = useState(plain);
   const editor = useMemo(() => {
     const numbers: SubNumbers = { current: undefined };
     const held: HeldPositions = new Set();
     const gone: SourceGone = { current: undefined };
     const guides = new GuideSlots();
-    const made = createEditor({ extension: defineReportExtension(numbers, held, gone, guides), defaultContent: initialDoc as NodeJSON });
+    const made = createEditor({ extension: defineReportExtension(numbers, held, gone, guides, plainPage), defaultContent: initialDoc as NodeJSON });
     pageNumbers.set(made, numbers);
     guideSlots.set(made, guides);
     heldPositions.set(made, held);
     sourcesGone.set(made, gone);
     return made;
-  }, [initialDoc]);
+  }, [initialDoc, plainPage]);
   // Copied text whose entry went private or was deleted shows in amber, from the live log: redrawn when it changes.
   const log = value.data.log;
   useLayoutEffect(() => {

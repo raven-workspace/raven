@@ -51,6 +51,7 @@ import { addStep, moveCell } from "./commands";
 import { CodeBlockView } from "./nodes/CodeBlockView";
 import { defineGuideNotes, GuideSlots } from "./GuideNote";
 import { EvidenceView } from "./nodes/EvidenceView";
+import { FigureView } from "./nodes/FigureView";
 import { ExploitView } from "./nodes/ExploitView";
 import { GeneratedView } from "./nodes/GeneratedView";
 import { PhaseView } from "./nodes/PhaseView";
@@ -199,6 +200,44 @@ const fromEntryAttr = (type: string) =>
     toDOM: (value: string | null) => (value ? ["data-from-entry", value] : null),
     parseDOM: (dom: HTMLElement) => dom.getAttribute("data-from-entry"),
   });
+
+/** Where a plain draft's block came from ("entry:<id>:<block>", "finding:<id>:fix", "ports:<hostId>"), for Refresh and
+ *  the checks: never shown, kept through copy and paste. */
+const sourceAttr = (type: string) =>
+  defineNodeAttr({
+    type,
+    attr: "source",
+    default: null,
+    toDOM: (value: string | null) => (value ? ["data-source", value] : null),
+    parseDOM: (dom: HTMLElement) => dom.getAttribute("data-source"),
+  });
+const SOURCED = ["heading", "paragraph", "list", "codeBlock", "table", "figure"];
+
+/** A screenshot on a plain page: the image (by attachment) and its caption, ordinary editable text. */
+const figureSpec = defineNodeSpec({
+  name: "figure",
+  group: "block",
+  content: "inline*",
+  draggable: true,
+  attrs: { attachmentId: { default: "" }, entryId: { default: null } },
+  parseDOM: [
+    {
+      tag: 'figure[data-report="figure"]',
+      contentElement: "figcaption",
+      getAttrs: (dom: HTMLElement) => ({ attachmentId: dom.getAttribute("data-attachment") ?? "", entryId: dom.getAttribute("data-entry") }),
+    },
+  ],
+  toDOM: (node: PMNode) => [
+    "figure",
+    { "data-report": "figure", "data-attachment": node.attrs.attachmentId as string, ...(node.attrs.entryId ? { "data-entry": node.attrs.entryId as string } : {}) },
+    ["figcaption", 0],
+  ],
+});
+
+/** What a plain page (the plain draft, `buildPlainTarget`) adds to the schema: the figure node and the `source` attr.
+ *  Only a page opened as plain takes it, so the live pages' saved documents are unchanged. */
+const definePlainPage = () =>
+  union(figureSpec, ...SOURCED.map(sourceAttr), defineReactNodeView({ name: "figure", component: FigureView, as: "div", contentAs: "figcaption" }));
 
 /** A numbered page's sub-section numbers by top-level index, read when the page redraws. */
 export type SubNumbers = { current: ((doc: ReportNode) => Map<number, string>) | undefined };
@@ -414,6 +453,7 @@ export function defineReportExtension(
   held: HeldPositions = new Set(),
   gone: SourceGone = { current: undefined },
   guides: GuideSlots = new GuideSlots(),
+  plain = false,
 ): Extension {
   return union(
     headingNumbers(numbers),
@@ -431,6 +471,7 @@ export function defineReportExtension(
       parseDOM: (dom: HTMLElement) => dom.getAttribute("data-from-field"),
     }),
     fromEntryAttr("codeBlock"),
+
     defineReactNodeView({ name: "codeBlock", component: CodeBlockView, as: "div", contentAs: "code", stopEvent: stopControlEvents }),
     slotSpec,
     defineReactNodeView({ name: "slot", component: SlotView, as: "div", contentAs: "div" }),
@@ -445,5 +486,6 @@ export function defineReportExtension(
       atomSpec(name, attrs),
       defineReactNodeView({ name, component, as: "div", stopEvent: stopControlEvents }),
     ]),
+    ...(plain ? [definePlainPage()] : []),
   );
 }

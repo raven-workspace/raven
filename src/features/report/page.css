@@ -1183,3 +1183,25 @@
   background-color: #16161a;
   color: #f4f3ef;
 }
+
+/* A screenshot on a plain page (the `figure` node): the image, then its caption as the owner's text, numbered by the
+   page in document order. */
+.report-page .ProseMirror {
+  counter-reset: report-figure;
+}
+
+.report-page .report-plain-figure {
+  counter-increment: report-figure;
+}
+
+/* "Figure N. " then the caption text on the same line, wrapping under itself. */
+.report-page .report-plain-caption {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  color: var(--page-placeholder);
+}
+
+.report-page .report-plain-caption::before {
+  content: "Figure " counter(report-figure) ".\00a0";
+  white-space: pre;
+}
