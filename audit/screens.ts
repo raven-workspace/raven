@@ -45,6 +45,33 @@ const pickUploaded = (root: string) => async (page: Page) => {
 };
 const openPayloads = async (page: Page) => { await focusBody(page); await page.keyboard.press("p"); };
 const MANUAL_LONG = `/manual/${AUDIT_NOTE_IDS.long}`;
+const REPORT = `/e/${AUDIT_IDS.examEngagement}/s/report`;
+/** Opens a report page by its outline label: the outline row, or below 1000px the section picker above the page. */
+export const openReportItem = (label: string | RegExp) => async (page: Page) => {
+  const row = page.locator("[data-outline-row]:visible").filter({ hasText: label }).first();
+  const picker = page.getByRole("combobox", { name: "Report section" }).and(page.locator(":visible"));
+  await row.or(picker).first().waitFor();
+  if (await row.isVisible()) await row.click();
+  else {
+    await picker.click();
+    await page.getByRole("option", { name: label }).click();
+  }
+};
+/** The open target's checks: in the outline, or below 1000px in the Checks disclosure above the page (opened). */
+export const reportChecks = async (page: Page) => {
+  const disclosure = page.getByRole("button", { name: /^Checks/ });
+  if (await disclosure.isVisible()) await disclosure.click();
+  return page.getByRole("list", { name: "Checks" }).and(page.locator(":visible")).first();
+};
+/** ms01's 400-line winPEAS run picked on the page and moved with its block's Move to appendix, then its appendix page
+ *  opened. (Trimmed to 40 lines inline, it raises no "long block" check of its own.) */
+const moveWinPeas = async (page: Page) => {
+  await openReportItem("ms01")(page);
+  await page.locator(".report-page .report-code", { hasText: "winPEASx64.exe" }).click();
+  await page.getByRole("button", { name: "Move to appendix" }).click();
+  await page.getByText(/^Full output: Appendix E\.1/).waitFor();
+  await openReportItem(/^Appendix E: ms01/)(page);
+};
 const NOTE_PANE = "section[aria-label='Note']";
 
 export const SCREENS: Screen[] = [
@@ -390,4 +417,21 @@ export const SCREENS: Screen[] = [
     id: "manual-lookup-card", path: `/manual/${AUDIT_NOTE_IDS.lookup}?q=STATUS_ZZ_DENIED#table-1`, ready: "[aria-label='Answer']",
   },
   { id: "manual-empty", path: "/manual?audit=empty", ready: "text=Import your Field Manual to fill the Manual" },
+  // The Report on the mock exam: the report exists with no sections, so opening it drafts every page.
+  { id: "report-details", path: REPORT, ready: "role=heading[name='Report details']", setup: openReportItem("Report details") },
+  { id: "report-target", path: REPORT, ready: ".report-page >> role=heading[name='ms01']", setup: openReportItem("ms01") },
+  { id: "report-ad", path: REPORT, ready: ".report-page >> role=heading[name='Attack chain']", setup: openReportItem(/^AD set/) },
+  { id: "report-appendix", path: REPORT, ready: "role=heading[name='Appendix E: ms01']", setup: moveWinPeas },
+  {
+    // Under 1200px of pane the evidence rail is a drawer, opened from the strip; wider, it is the third column.
+    id: "report-narrow", path: REPORT, ready: "role=tablist[name='Evidence'] >> visible=true",
+    setup: async (page) => {
+      await openReportItem("ms01")(page);
+      await page.locator(".report-page .report-code").first().waitFor();
+      const toggle = page.locator("section[aria-label='Report']").getByRole("button", { name: "Evidence", exact: true });
+      if (await toggle.isVisible()) await toggle.click();
+      // Checked once the drawer has faded in, not halfway through (a half-faded row reads as low contrast).
+      await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running"));
+    },
+  },
 ];

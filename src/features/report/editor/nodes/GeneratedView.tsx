@@ -189,7 +189,11 @@ function Content({ attrs, ctx, attackerIp }: { attrs: GeneratedAttrs; ctx: Repor
     case "exploited-systems": {
       const rows = exploitedSystems(data, targets, ctx.targetMeta ?? {});
       if (rows.length === 0) return <None />;
-      return <Table head={["Target", "IP", "Access", "Method"]} fit={[1]} rows={rows.map((r) => [r.name, r.ip ?? "", r.access, r.method])} />;
+      const access = (hostId: string) => {
+        const h = data.hosts.find((x) => x.id === hostId);
+        return h ? accessWords(h) : "";
+      };
+      return <Table head={["Target", "IP", "Access", "Method"]} fit={[1]} rows={rows.map((r) => [r.name, r.ip ?? "", access(r.hostId), r.method])} />;
     }
     case "severity-legend":
       return (
@@ -202,6 +206,7 @@ function Content({ attrs, ctx, attackerIp }: { attrs: GeneratedAttrs; ctx: Repor
       const dc = domainController(data, adHosts.map((h) => h.id));
       return (
         <>
+          <h2 className="report-h2">Active Directory set</h2>
           <p>Domain: {data.engagement.domain ?? "Not set"}</p>
           <Table
             head={["Machine", "IP", "Role", "OS"]}
@@ -213,14 +218,20 @@ function Content({ attrs, ctx, attackerIp }: { attrs: GeneratedAttrs; ctx: Repor
     }
     case "attack-chain": {
       const hops = attackChain(data, adHosts.map((h) => h.id));
-      if (hops.length === 0) return <None />;
       return (
-        <List
-          ordered
-          items={hops.map((h) =>
-            h.from ? `${hostName(data, h.from)} to ${hostName(data, h.to)} via ${h.via}` : `${hostName(data, h.to)}: ${h.via}`,
+        <>
+          <h3 className="report-h3">Attack chain</h3>
+          {hops.length === 0 ? (
+            <None />
+          ) : (
+            <List
+              ordered
+              items={hops.map((h) =>
+                h.from ? `${hostName(data, h.from)} to ${hostName(data, h.to)} via ${h.via}` : `${hostName(data, h.to)}: ${h.via}`,
+              )}
+            />
           )}
-        />
+        </>
       );
     }
     case "proof-table": {

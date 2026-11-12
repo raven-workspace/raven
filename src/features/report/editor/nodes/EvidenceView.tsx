@@ -28,6 +28,14 @@ function promptFor(ranOn: string | null, machines: string[]): string {
   return `${ranOn}$`;
 }
 
+/** A pasted block's own shell, when the paste recorded one (`evil-winrm`, `powershell`, `user@host`), else the entry's prompt. */
+function blockPrompt(shell: string | undefined, entryPrompt: string): string {
+  if (!shell || shell === "sh") return entryPrompt;
+  if (shell === "evil-winrm") return "*Evil-WinRM* PS>";
+  if (shell === "powershell") return "PS>";
+  return `${shell}$`;
+}
+
 /** How the owner is picking lines on a selected command block, if at all. */
 type PickMode = "trim" | "emphasis" | null;
 
@@ -62,7 +70,7 @@ function CommandBody({
     return (
       <div className="report-code" key={i}>
         <div className="report-cmd">
-          <span className="report-prompt">{prompt}</span> {b.command}
+          <span className="report-prompt">{blockPrompt(b.shell, prompt)}</span> {b.command}
         </div>
         {output !== "" &&
           applyKeep(output, keep).map((item, k) => {

@@ -70,6 +70,10 @@ describe("exploitedSystems", () => {
     expect(exploitedSystems(data(), t, {})[0]).toMatchObject({ name: "web01", access: "root", method: "RCE in app" });
     expect(exploitedSystems(data(), t, { [H]: { method: "Manual" } })[0].method).toBe("Manual");
   });
+  it("lists only hosts where access was gained", () => {
+    const t = [{ key: "ad-set", kind: "ad-set" as const, hostIds: [H, "h2"] }];
+    expect(exploitedSystems(data(), t, {}).map((r) => r.name)).toEqual(["web01"]);
+  });
 });
 
 describe("attackChain", () => {
@@ -81,6 +85,12 @@ describe("attackChain", () => {
       { hostId: "h2", level: "user", via: "x", logEntryId: null, at: 10 },
     ] as never;
     expect(attackChain(d, ["h2"]).map((s) => s.via)).toEqual(["psexec", "dcsync"]);
+  });
+  it("lists a hop once when the same step also granted SYSTEM on the host it reached", () => {
+    const d = data();
+    d.hops = [{ fromHostId: H, toHostId: "h2", via: "Pass the hash (psexec)", logEntryId: "l1", at: 20 }] as never;
+    d.grants = [{ hostId: "h2", level: "system", via: "Pass the hash (psexec)", logEntryId: "l1", at: 20 }] as never;
+    expect(attackChain(d, ["h2"])).toEqual([{ from: H, to: "h2", via: "Pass the hash (psexec)", entryId: "l1" }]);
   });
 });
 

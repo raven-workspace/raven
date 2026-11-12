@@ -8,7 +8,7 @@ import { collectOptOuts } from "./checks/optouts";
 import { collectStateIssues, type AuditState } from "./checks/states";
 import { collectUxIssues } from "./checks/ux";
 import { writeIssues } from "./report";
-import { SCREENS } from "./screens";
+import { openReportItem, reportChecks, SCREENS } from "./screens";
 import { CHECK_IDS, gateFailures } from "./types";
 
 const WIDTH = 1280;
@@ -48,6 +48,8 @@ const NEEDS_DATA = new Set([
   "sidebar-rail-tip",
   // No import under `empty`: the Manual shows its empty state, with no note or link to open.
   "manual-tool", "manual-card-drawer",
+  // No hosts under `empty`: the Report shows "No hosts yet", with no outline row, page or check to open.
+  "report-details", "report-target", "report-ad", "report-appendix", "report-narrow",
 ]);
 
 for (const screen of STATE_SCREENS) {
@@ -83,3 +85,36 @@ for (const screen of STATE_SCREENS) {
     });
   }
 }
+
+// The Report on the mock exam, as the owner uses it.
+test("report: ms01's proof passes its checks", async ({ page }) => {
+  await page.setViewportSize({ width: WIDTH, height: 900 });
+  await page.clock.install({ time: AUDIT_NOW });
+  await page.goto("/e/e-exam/s/report");
+  await openReportItem("ms01")(page);
+  await page.locator(".report-page .report-code").first().waitFor();
+  const checks = await reportChecks(page);
+  await expect(checks).toBeVisible();
+  // ipconfig with 10.10.30.5, whoami, hostname, type from the Desktop, a screenshot: no proof check is left.
+  await expect(checks.getByText(/proof/i)).toHaveCount(0);
+  await expect(checks.getByText(/No (local|proof)\.txt/)).toHaveCount(0);
+});
+
+test("report: an OSID that is not OS- and digits turns the file name amber", async ({ page }) => {
+  await page.setViewportSize({ width: WIDTH, height: 900 });
+  await page.clock.install({ time: AUDIT_NOW });
+  await page.goto("/e/e-exam/s/report");
+  const strip = page.getByRole("group", { name: "Report status" });
+  const name = strip.getByText(/^OSCP-OS-.*-Exam-Report\.pdf$/);
+  await expect(name).toHaveText("OSCP-OS-48213-Exam-Report.pdf");
+  const amber = () => name.evaluate((el) => getComputedStyle(el).color);
+  const before = await amber();
+  await openReportItem("Report details")(page);
+  const osid = page.getByLabel("OSID");
+  await osid.fill("os-1");
+  await osid.blur();
+  await expect(name).toHaveText("OSCP-OS-?????-Exam-Report.pdf");
+  // The warn tone: #e0a030.
+  await expect.poll(amber).toBe("rgb(224, 160, 48)");
+  expect(before).not.toBe("rgb(224, 160, 48)");
+});

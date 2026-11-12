@@ -4,7 +4,8 @@ import type { Finding } from "../../../../types/findings";
 import { useReportData } from "../ReportDataContext";
 import { Block, capitalize, Gone } from "./parts";
 
-/** One fix step per item: blank lines and bullets ("-", "*", "•", "1.") start a new one. */
+/** One fix step per item: blank lines, bullets ("-", "*", "•", "1.") and a line that ends a sentence start a new one;
+ *  a line broken mid-sentence carries on the same step. */
 function fixSteps(remediation: string): string[] {
   const steps: string[] = [];
   let current: string[] = [];
@@ -21,6 +22,7 @@ function fixSteps(remediation: string): string[] {
     const bullet = /^(?:[-*•]|\d+[.)])\s+/.exec(line);
     if (bullet) flush();
     current.push(bullet ? line.slice(bullet[0].length) : line);
+    if (/[.!?]$/.test(line)) flush();
   }
   flush();
   return steps;

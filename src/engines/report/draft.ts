@@ -20,6 +20,7 @@ import type {
 const SCREENSHOT_WINDOW_MS = 5 * 60_000;
 const STEP_HINT = "What this shows, and why it matters";
 const EXPLOIT_HINT = "Explain each change";
+const AD_PATH_HINT = "The path through the domain, machine by machine";
 /** §5.7 order of a target's sub-sections. */
 const PHASE_ORDER: Phase[] = ["foothold", "lateral", "privesc", "domain", "tested", "proof"];
 /** Generated blocks that open a machine or the AD set: a phase's region never runs past one. */
@@ -143,14 +144,15 @@ export function phaseSplit(entries: LogEntry[], data: ReportData, hostId: string
   return out;
 }
 
-/** One machine's block: facts, services, its step phases, tested-not-exploited, proof. */
-function hostBlock(data: ReportData, hostId: string, entry: HostEntry): ReportNode[] {
+/** One machine's block: facts, services, its step phases, tested-not-exploited, proof. `owns` says which of the
+ *  host's findings are placed here (in an AD set, a finding on several machines is placed once). */
+function hostBlock(data: ReportData, hostId: string, entry: HostEntry, owns: (findingId: string) => boolean = () => true): ReportNode[] {
   const kept = keptEntries(data, hostId);
   const split = phaseSplit(kept, data, hostId, entry);
   const entryPhase = phaseNames(data, hostId, entry)[0];
   const time = new Map(kept.map((e) => [e.id, e.at]));
 
-  const findings = data.findings.filter((f) => f.hostIds.includes(hostId));
+  const findings = data.findings.filter((f) => f.hostIds.includes(hostId) && owns(f.id));
   const findingPhase = (stepIds: string[]): Phase => {
     const steps = stepIds.filter((id) => split.has(id) && split.get(id) !== "proof");
     steps.sort((a, b) => (time.get(a) ?? 0) - (time.get(b) ?? 0));
@@ -184,6 +186,22 @@ const hostName = (data: ReportData, id: string) => data.hosts.find((h) => h.id =
 const machinesInOrder = (data: ReportData, target: ReportTarget) =>
   [...target.hostIds].sort((a, b) => hostName(data, a).localeCompare(hostName(data, b)));
 
+/** Which machine of an AD set each of its findings is placed under: the machine of its first step logged on one of
+ *  them, else the first of its machines in page order. */
+function findingOwners(data: ReportData, machines: string[]): Map<string, string> {
+  const owners = new Map<string, string>();
+  for (const f of data.findings) {
+    const mine = machines.filter((id) => f.hostIds.includes(id));
+    if (mine.length === 0) continue;
+    const steps = f.stepEntryIds
+      .flatMap((id) => data.log.find((e) => e.id === id) ?? [])
+      .sort(byTime);
+    const first = steps.flatMap((e) => mine.filter((id) => e.hostIds.includes(id)))[0];
+    owners.set(f.id, first ?? mine[0]);
+  }
+  return owners;
+}
+
 /** A target's first draft, in the §5.7 per-target order. Built once; the owner's page is the truth after that.
  *  `meta` is part of the contract for later rounds; nothing in the draft reads it yet. */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -191,8 +209,10 @@ export function buildTargetDraft(data: ReportData, target: ReportTarget, _meta: 
   if (target.kind === "standalone") {
     return { type: "doc", content: hostBlock(data, target.hostIds[0], "foothold") };
   }
-  const content = [generated("ad-overview", null)];
-  for (const id of machinesInOrder(data, target)) content.push(...hostBlock(data, id, hostEntry(data, target, id)));
+  const machines = machinesInOrder(data, target);
+  const owner = findingOwners(data, machines);
+  const content = [generated("ad-overview", null), slot(AD_PATH_HINT)];
+  for (const id of machines) content.push(...hostBlock(data, id, hostEntry(data, target, id), (f) => owner.get(f) === id));
   content.push(generated("attack-chain", null));
   return { type: "doc", content };
 }

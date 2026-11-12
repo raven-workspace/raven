@@ -96,6 +96,26 @@ describe("ReportEditor evidence", () => {
     await waitFor(() => expect(container.querySelector(".report-cmd")).toHaveTextContent("kali-target$ nmap"));
   });
 
+  it("shows the shell a pasted block ran in as its prompt", async () => {
+    const blocks = [
+      { command: "evil-winrm -i 10.0.0.5 -u bob -p x", output: "Evil-WinRM shell v3.5", shell: "kali@kali" },
+      { command: "whoami", output: "corp\\bob", shell: "evil-winrm" },
+      { command: "hostname", output: "DC01", shell: "powershell" },
+      { command: "id", output: "uid=0", shell: "sh" },
+    ];
+    const { container } = setup(doc(ev("e1", { block: null })), data({ log: [entry({ content: { kind: "command", blocks } })] }));
+    await waitFor(() => expect(container.querySelectorAll(".report-cmd")).toHaveLength(4));
+    // The attacker's machines come from Settings, so the entry's own prompt settles once they load.
+    await waitFor(() => expect(container.querySelectorAll(".report-cmd")[3]).toHaveTextContent("kali$ id"));
+    expect([...container.querySelectorAll(".report-cmd")].map((n) => n.textContent)).toEqual([
+      "kali@kali$ evil-winrm -i 10.0.0.5 -u bob -p x",
+      "*Evil-WinRM* PS> whoami",
+      "PS> hostname",
+      // A plain shell prompt says nothing more than the entry's machine.
+      "kali$ id",
+    ]);
+  });
+
   it("lists the exam restrictions only for exam-sim engagements", async () => {
     const g: ReportNode = { type: "generated", attrs: { kind: "engagement-details", hostId: null, appendix: "inline" } };
     setup(doc(g));
@@ -282,6 +302,13 @@ describe("ReportEditor vulnerabilities and exploits", () => {
     expect(container.innerHTML).not.toContain("I forgot to check FTP first");
   });
 
+  it("lists each fix step a line of its own when a line ends a sentence; a wrapped line stays one step", async () => {
+    const steps = { ...finding, remediation: "Upgrade the CMS.\nRemove /backup from the site and\nrotate the admin password." } as Finding;
+    setup(doc({ type: "vuln", attrs: { findingId: "f1" } }), data({ findings: [steps] }));
+    expect(await screen.findByText("Upgrade the CMS.")).toBeInTheDocument();
+    expect(screen.getByText("Remove /backup from the site and rotate the admin password.")).toBeInTheDocument();
+  });
+
   it("marks lines a modified exploit added to its original", async () => {
     const file = {
       id: "x1",
@@ -361,7 +388,40 @@ const lines = (n: number) => Array.from({ length: n }, (_, i) => `line ${i}`).jo
 const longEntry = (id: string, title: string, n: number) =>
   entry({ id, title, content: { kind: "command", blocks: [{ command: `cat ${id}`, output: lines(n) }] } });
 
+describe("ReportEditor generated blocks", () => {
+  const gen = (kind: string): ReportNode => ({ type: "generated", attrs: { kind, hostId: null, appendix: "inline" } });
+  const ad = { ...host, id: "h2", name: "dc01", ip: "10.0.0.10", adSetEffective: true } as Host;
+
+  it("titles the AD set page and its attack chain", async () => {
+    const d = data({
+      hosts: [host, ad],
+      hops: [{ id: "hp", fromHostId: "h1", toHostId: "h2", via: "Pass the hash", logEntryId: null, at: 1 }] as never,
+    });
+    setup(doc(gen("ad-overview"), gen("attack-chain")), d);
+    expect(await screen.findByRole("heading", { name: "Active Directory set" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Attack chain" })).toBeInTheDocument();
+    expect(screen.getByText("DC01 to dc01 via Pass the hash")).toBeInTheDocument();
+  });
+
+  it("words a Windows host's full access as SYSTEM in the exploited systems", async () => {
+    const { container } = setup(doc(gen("exploited-systems")), data());
+    await waitFor(() => expect(container.querySelector(".report-table tbody tr")).toBeTruthy());
+    expect(container.querySelector(".report-table tbody tr")?.textContent).toContain("SYSTEM");
+  });
+});
+
 describe("ReportEditor block tools", () => {
+  it("outlines no block on ProseMirror's default selection until the owner clicks into the page", async () => {
+    const { editor, container } = setupLive(doc(ev("e1"), slot()));
+    await waitFor(() => expect(editor()).toBeTruthy());
+    const view = editor().view;
+    act(() => view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, 0))));
+    await screen.findByText("22/tcp open ssh", { normalizer: (t) => t.replace(/\s+/g, " ") });
+    expect(container.querySelector(".report-block[data-selected]")).toBeNull();
+    fireEvent.pointerDown(view.dom);
+    await waitFor(() => expect(container.querySelector(".report-block[data-selected]")).not.toBeNull());
+  });
+
   it("shows no tools on ProseMirror's default selection until the owner clicks into the page", async () => {
     const { editor } = setupLive(doc(ev("e1"), slot()));
     await waitFor(() => expect(editor()).toBeTruthy());

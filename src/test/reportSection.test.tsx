@@ -76,14 +76,17 @@ describe("Report view", () => {
   it("lists the targets in grading order with the AD set last, and names the file from the OSID", async () => {
     mount();
     await ready();
-    await waitFor(() => expect(targetRows().map((r) => r.textContent)).toEqual(["lnx02.21", "ms01.5", "web01.20", "AD set: ad02, dc01"]));
-    expect(screen.getByRole("group", { name: "Report OSCP-OS-?????-Exam-Report.pdf" })).toBeInTheDocument();
+    // The engagement-level "Tested, not exploited" closes the targets.
+    await waitFor(() =>
+      expect(targetRows().map((r) => r.textContent)).toEqual(["lnx02.21", "ms01.5", "web01.20", "AD set: ad02, dc01", "Tested, not exploited"]),
+    );
+    expect(screen.getByRole("group", { name: "Report OSCP-OS-48213-Exam-Report.pdf" })).toBeInTheDocument();
 
     fireEvent.click(row(/Report details/));
     const osid = await screen.findByLabelText("OSID");
-    fireEvent.change(osid, { target: { value: "OS-48213" } });
+    fireEvent.change(osid, { target: { value: "os-1" } });
     fireEvent.blur(osid);
-    expect(await screen.findByRole("group", { name: "Report OSCP-OS-48213-Exam-Report.pdf" })).toBeInTheDocument();
+    expect(await screen.findByRole("group", { name: "Report OSCP-OS-?????-Exam-Report.pdf" })).toBeInTheDocument();
   });
 
   it("builds a target's draft once, on its first open", async () => {
@@ -136,13 +139,13 @@ describe("Report view", () => {
     const upsert = vi.spyOn(api, "reportSectionUpsert");
     const { qc } = mount();
     await ready();
-    await waitFor(() => expect(targetRows()).toHaveLength(4));
+    await waitFor(() => expect(targetRows()).toHaveLength(5));
 
     await act(async () => {
       await api.hostDelete("h-exam-web");
       await qc.invalidateQueries();
     });
-    await waitFor(() => expect(targetRows().map((r) => r.textContent)).toEqual(["lnx02.21", "ms01.5", "AD set: ad02, dc01"]));
+    await waitFor(() => expect(targetRows().map((r) => r.textContent)).toEqual(["lnx02.21", "ms01.5", "AD set: ad02, dc01", "Tested, not exploited"]));
 
     let created = "";
     await act(async () => {
@@ -209,7 +212,7 @@ describe("Report view", () => {
     });
     const { qc } = mount();
     await ready();
-    await waitFor(() => expect(targetRows()).toHaveLength(4));
+    await waitFor(() => expect(targetRows()).toHaveLength(5));
 
     fail = true;
     await act(async () => {
@@ -217,7 +220,7 @@ describe("Report view", () => {
       await qc.invalidateQueries();
     });
     expect(await screen.findByText(/Couldn't add the report's new sections/)).toBeInTheDocument();
-    expect(targetRows()).toHaveLength(4);
+    expect(targetRows()).toHaveLength(5);
 
     fail = false;
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -234,13 +237,15 @@ describe("Report view", () => {
     const reorder = vi.spyOn(api, "reportSectionsReorder");
     mount();
     await ready();
-    await waitFor(() => expect(targetRows()).toHaveLength(4));
+    await waitFor(() => expect(targetRows()).toHaveLength(5));
     const first = rowFor("lnx02");
     const lnxId = first.dataset.id!;
     const msId = rowFor("ms01").dataset.id!;
     first.focus();
     fireEvent.keyDown(first, { key: "ArrowDown", code: "ArrowDown", altKey: true });
-    await waitFor(() => expect(targetRows().map((r) => r.textContent)).toEqual(["ms01.5", "lnx02.21", "web01.20", "AD set: ad02, dc01"]));
+    await waitFor(() =>
+      expect(targetRows().map((r) => r.textContent)).toEqual(["ms01.5", "lnx02.21", "web01.20", "AD set: ad02, dc01", "Tested, not exploited"]),
+    );
     expect(reorder).toHaveBeenCalledTimes(1);
     const ids = reorder.mock.calls[0][1];
     expect(ids.indexOf(msId)).toBeLessThan(ids.indexOf(lnxId));

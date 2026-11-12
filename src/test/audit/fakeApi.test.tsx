@@ -116,7 +116,8 @@ describe("audit fake api", () => {
     expect(entries.length).toBeGreaterThanOrEqual(25);
     const shots = entries.filter((e) => e.kind === "screenshot");
     expect(shots).toHaveLength(4);
-    const declared = Object.values(AUDIT_PNGS).map((p) => `${p.width}x${p.height}`).sort();
+    // The lab's four flat shapes; the rendered terminal shots belong to the mock exam.
+    const declared = [AUDIT_PNGS.wide, AUDIT_PNGS.tall, AUDIT_PNGS.hd, AUDIT_PNGS.tiny].map((p) => `${p.width}x${p.height}`).sort();
     const actual: string[] = [];
     for (const s of shots) {
       if (s.content.kind !== "screenshot") throw new Error("not a screenshot");

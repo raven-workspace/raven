@@ -350,6 +350,8 @@ describe("AD set draft", () => {
     const doc = buildTargetDraft(adSet(), target(["h-ad02", "h-dc01", "h-ms01"], "ad-set"), {});
     const nodes = doc.content ?? [];
     expect(nodes[0]).toEqual({ type: "generated", attrs: { kind: "ad-overview", hostId: null, appendix: "inline" } });
+    // The overview's table is followed by a place to write the path through the domain.
+    expect(nodes[1]).toEqual({ type: "slot", attrs: { hint: "The path through the domain, machine by machine" } });
     expect(nodes[nodes.length - 1].attrs?.kind).toBe("attack-chain");
     const facts = nodes.filter((n) => n.attrs?.kind === "facts").map((n) => n.attrs?.hostId);
     expect(facts).toEqual(["h-ad02", "h-dc01", "h-ms01"]);
@@ -362,6 +364,20 @@ describe("AD set draft", () => {
     expect(evidenceUnder(doc, "privesc", "h-ad02")).toEqual(["ad-dump"]);
     expect(evidenceUnder(doc, "domain", "h-dc01")).toEqual(["dc-psexec"]);
     expect(evidenceUnder(doc, "proof", "h-dc01")).toEqual(["dc-flag"]);
+  });
+
+  it("places a finding on several machines once, at the machine of its first step", () => {
+    const d = adSet();
+    d.findings = [
+      { id: "f-da", hostIds: ["h-ad02", "h-dc01"], serviceIds: [], stepEntryIds: ["ad-dump", "dc-psexec"] } as unknown as Finding,
+    ];
+    const doc = buildTargetDraft(d, target(["h-ad02", "h-dc01", "h-ms01"], "ad-set"), {});
+    const nodes = doc.content ?? [];
+    const vulns = nodes.flatMap((n, i) => (n.type === "vuln" ? [i] : []));
+    expect(vulns).toHaveLength(1);
+    // Under ad02's privilege escalation, where the hash was dumped.
+    const heading = [...nodes.slice(0, vulns[0])].reverse().find((n) => n.type === "phase");
+    expect(heading?.attrs).toEqual({ phase: "privesc", hostId: "h-ad02" });
   });
 
   it("takes the last host in the hop chain as the DC when no host runs Kerberos and LDAP", () => {

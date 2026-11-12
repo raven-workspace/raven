@@ -81,8 +81,10 @@
 .report-page pre,
 .report-page .report-code {
   font-family: var(--page-mono);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 19px;
+  /* JetBrains Mono would draw "=>" as an arrow and "!=" as a sign: code must show the characters typed. */
+  font-variant-ligatures: none;
 }
 
 .report-page code {
@@ -119,6 +121,11 @@
 
 .report-page .report-cmd {
   font-weight: 600;
+}
+
+/* A blank output line keeps its height, as the terminal showed it. */
+.report-page .report-line {
+  min-height: 19px;
 }
 
 .report-page .report-line[data-emphasis] {
@@ -178,7 +185,7 @@
 
 .report-page .report-http-line {
   font-family: var(--page-mono);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 19px;
   font-weight: 600;
 }
@@ -282,9 +289,16 @@
   row-gap: 8px;
 }
 
+/* The same side margins as the editor's page (its 40px gutters). */
+.report-page .report-appendix {
+  padding: 0 40px;
+}
+
 /* A link back to the page that references the entry: underlined, as links in prose are. */
 .report-page .report-backlink {
   justify-self: start;
+  /* A 24px target, like every control. */
+  min-height: 24px;
   padding: 0;
   border: 0;
   background: none;

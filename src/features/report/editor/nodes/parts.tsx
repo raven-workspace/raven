@@ -2,16 +2,19 @@ import { ArrowSquareOut } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import type { AppendixPlacement } from "../../../../engines/report";
 import { ActionCell, IconButton } from "../../../../ui";
+import { usePageLayout } from "../ReportDataContext";
 
 /** The amber block that stands where a referenced row used to be. */
 export function Gone({ text }: { text: string }) {
   return <div className="report-gone">{text}</div>;
 }
 
-/** Every report block sits in one frame, outlined while selected. */
+/** Every report block sits in one frame, outlined while selected. ProseMirror's default selection (often the first
+ *  block) is no choice of the owner's, so nothing is outlined until they click or focus into the page. */
 export function Block({ selected, kind, children }: { selected: boolean; kind: string; children: ReactNode }) {
+  const { touched } = usePageLayout();
   return (
-    <div className="report-block" data-block={kind} data-selected={selected || undefined}>
+    <div className="report-block" data-block={kind} data-selected={(selected && touched) || undefined}>
       {children}
     </div>
   );

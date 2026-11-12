@@ -409,8 +409,10 @@ const base = {
     if (!db.engagements.some((e) => e.id === engagementId)) throw new RavenError("not_found", "Not found");
     let report = db.reports.find((r) => r.engagementId === engagementId);
     if (!report) {
+      // As the backend does: name, email and OSID default from Settings.
+      const { reportName, reportEmail, reportOsid } = db.settings;
       report = {
-        id: nid("rep"), engagementId, candidateName: "", email: "", osid: "", title: "OSCP Exam Report", meta: {},
+        id: nid("rep"), engagementId, candidateName: reportName ?? "", email: reportEmail ?? "", osid: reportOsid ?? "", title: "OSCP Exam Report", meta: {},
         createdAt: now(), updatedAt: now(), exportedAt: null,
       } satisfies Report;
       db.reports.push(report);

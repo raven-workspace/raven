@@ -16,8 +16,10 @@ const ID_COMMAND = /(?:^|[;&|$#>]\s*)id(?:\s|$)/m;
 const HOSTNAME = /\bhostname\b/i;
 const READ_COMMAND = /\b(?:cat|type)\s+(.+)/gi;
 const CD_COMMAND = /\bcd\s+(?:\/d\s+)?(.+)/gi;
-const USUAL_DIRS = [/^\/root\b/i, /^\/home\/[^/\s]+/i, /^"?C:\\Users\\[^\\]+\\Desktop/i];
-const PROMPT_DIR = /^\s*(?:[^\s@]+@[^\s:]+:)?(\/\S*|[A-Za-z]:\\[^>]*)[>#$]/;
+/** `~` alone is the shell user's home: /root for root, /home/<user> for anyone else. */
+const USUAL_DIRS = [/^\/root\b/i, /^\/home\/[^/\s]+/i, /^"?C:\\Users\\[^\\]+\\Desktop/i, /^~$/];
+/** The folder a prompt shows: bash (`user@host:/dir$`, `user@host:~#`), cmd (`C:\dir>`), PowerShell (`PS C:\dir>`) and Evil-WinRM (`*Evil-WinRM* PS C:\dir>`). */
+const PROMPT_DIR = /^\s*(?:\*Evil-WinRM\*\s+)?(?:PS\s+)?(?:[^\s@]+@[^\s:]+:)?(~\S*|\/\S*|[A-Za-z]:\\[^>]*)[>#$]/;
 const USUAL_PATHS = [/\/root\//i, /\/home\/[^/\s]+\//i, /C:\\Users\\[^\\]+\\Desktop\\/i];
 
 const hasIp = (text: string, ip: string) =>

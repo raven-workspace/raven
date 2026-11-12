@@ -79,7 +79,8 @@ export function exploitedSystems(
   return targets.flatMap((t) =>
     t.hostIds.flatMap((id) => {
       const host = data.hosts.find((h) => h.id === id);
-      if (!host) return [];
+      // Exploited systems only: a host with no access gained is not one.
+      if (!host || host.access === "none") return [];
       const method =
         sectionMeta[t.key]?.method ?? data.findings.find((f) => f.hostIds.includes(id))?.title ?? "";
       return [{ hostId: id, name: host.name, ip: host.ip, access: host.access, method }];
@@ -94,15 +95,16 @@ export interface ChainHop {
   entryId: string | null;
 }
 
-/** Hops into the AD hosts plus admin/system grants on them, ordered by time. */
+/** Hops into the AD hosts plus admin/system grants on them, ordered by time. A grant made by the step that also made
+ *  a hop into that host is that hop, so it is listed once. */
 export function attackChain(data: ReportData, hostIds: string[]): ChainHop[] {
   const ids = new Set(hostIds);
+  const hops = data.hops.filter((h) => ids.has(h.toHostId));
+  const isHop = (hostId: string, entryId: string | null) => entryId != null && hops.some((h) => h.toHostId === hostId && h.logEntryId === entryId);
   const steps: (ChainHop & { at: number })[] = [
-    ...data.hops
-      .filter((h) => ids.has(h.toHostId))
-      .map((h) => ({ from: h.fromHostId, to: h.toHostId, via: h.via, entryId: h.logEntryId, at: h.at })),
+    ...hops.map((h) => ({ from: h.fromHostId, to: h.toHostId, via: h.via, entryId: h.logEntryId, at: h.at })),
     ...data.grants
-      .filter((g) => ids.has(g.hostId) && (g.level === "admin" || g.level === "system"))
+      .filter((g) => ids.has(g.hostId) && (g.level === "admin" || g.level === "system") && !isHop(g.hostId, g.logEntryId))
       .map((g) => ({ from: null, to: g.hostId, via: g.via, entryId: g.logEntryId, at: g.at })),
   ];
   return steps

@@ -77,25 +77,28 @@ function proofChecks(host: Host, flags: ("local" | "proof")[], data: ReportData,
     }
     const facts = proofFacts(entry, host);
     const anchor = { entryId: entry.id };
+    // One check per flag: with local.txt and proof.txt both expected, the text says which proof falls short.
+    const key = `${host.name}:${flag}`;
+    const which = `The ${flag}.txt proof for ${host.name}`;
     const fix = host.os === "windows" ? WIN_FIX : LINUX_FIX;
     if (!facts.showsIp) {
       out.push({
-        id: `proof-ip:${host.name}`,
+        id: `proof-ip:${key}`,
         level: "fail",
-        text: `The proof for ${host.name} doesn't show ipconfig, ifconfig or ip addr with ${host.ip ?? "its IP"}. Raven can't read the screenshot, so this checks the pasted proof.`,
+        text: `${which} doesn't show ipconfig, ifconfig or ip addr with ${host.ip ?? "its IP"}. Raven can't read the screenshot, so this checks the pasted proof.`,
         fix,
         anchor,
       });
     }
-    if (!facts.hasScreenshot) out.push({ id: `proof-screenshot:${host.name}`, level: "fail", text: `The proof for ${host.name} has no screenshot.`, anchor });
+    if (!facts.hasScreenshot) out.push({ id: `proof-screenshot:${key}`, level: "fail", text: `${which} has no screenshot.`, anchor });
     const before = data.log.filter((e) => e.id !== entry.id && e.hostIds.includes(host.id) && byTime(e, entry) < 0).sort(byTime).pop();
     if (before?.kind === "http") {
-      out.push({ id: `proof-web:${host.name}`, level: "fail", text: `The proof for ${host.name} looks like it came from a web request, not an interactive shell.`, anchor });
+      out.push({ id: `proof-web:${key}`, level: "fail", text: `${which} looks like it came from a web request, not an interactive shell.`, anchor });
     }
-    const soft = (id: string, text: string) => out.push({ id: `${id}:${host.name}`, level: "soft", text, fix, anchor });
-    if (!facts.showsIdentity) soft("proof-identity", `The proof for ${host.name} doesn't show whoami or id.`);
-    if (!facts.showsHostname) soft("proof-hostname", `The proof for ${host.name} doesn't show hostname.`);
-    if (!facts.usualPath) soft("proof-path", `The proof for ${host.name} doesn't read the flag from its usual location.`);
+    const soft = (id: string, text: string) => out.push({ id: `${id}:${key}`, level: "soft", text, fix, anchor });
+    if (!facts.showsIdentity) soft("proof-identity", `${which} doesn't show whoami or id.`);
+    if (!facts.showsHostname) soft("proof-hostname", `${which} doesn't show hostname.`);
+    if (!facts.usualPath) soft("proof-path", `${which} doesn't read the flag from its usual location.`);
   }
   return out;
 }

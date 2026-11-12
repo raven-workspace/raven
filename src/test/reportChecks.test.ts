@@ -63,6 +63,15 @@ describe("proofFacts details", () => {
     expect(f("cd /tmp\ncat proof.txt").usualPath).toBe(false);
     expect(f("user@x:/tmp$ cat proof.txt").usualPath).toBe(false);
   });
+  it("reads the folder from PowerShell, Evil-WinRM and home-directory (~) prompts", () => {
+    expect(f("PS C:\\Users\\Administrator\\Desktop> type proof.txt").usualPath).toBe(true);
+    expect(f("*Evil-WinRM* PS C:\\Users\\Administrator\\Desktop> type proof.txt").usualPath).toBe(true);
+    expect(f("PS C:\\Windows\\Temp> type proof.txt").usualPath).toBe(false);
+    // ~ is the shell user's home: /root for root, /home/<user> for anyone else.
+    expect(f("root@web01:~# cat proof.txt").usualPath).toBe(true);
+    expect(f("dev@web01:~$ cat local.txt").usualPath).toBe(true);
+    expect(f("dev@web01:~/tools$ cat local.txt").usualPath).toBe(false);
+  });
 });
 
 describe("absoluteClaims", () => {
@@ -89,7 +98,7 @@ describe("targetChecks", () => {
   it("proof-ip fails with a fix by OS", () => {
     const d = data({ log: [flag({}, { proof: "whoami" })] });
     const c = find(run(d, goodDoc()), "proof-ip")!;
-    expect(c).toMatchObject({ id: "proof-ip:DC01", level: "fail" });
+    expect(c).toMatchObject({ id: "proof-ip:DC01:proof", level: "fail" });
     expect(c.text).toContain("10.0.0.5");
     expect(c.fix).toContain("ipconfig");
     const lin = find(run(data({ hosts: [host({ os: "linux" })], log: [flag({}, { proof: "x" })] }), goodDoc()), "proof-ip")!;
@@ -97,27 +106,36 @@ describe("targetChecks", () => {
   });
   it("proof-screenshot fails without an attachment", () => {
     const c = find(run(data({ log: [flag({}, { attachmentId: null })] }), goodDoc()), "proof-screenshot")!;
-    expect(c).toMatchObject({ id: "proof-screenshot:DC01", level: "fail" });
+    expect(c).toMatchObject({ id: "proof-screenshot:DC01:proof", level: "fail" });
     expect(c.text).toContain("DC01");
   });
   it("proof-web fails when the entry before the flag is http", () => {
     const d = data({ log: [entry({ id: "w", kind: "http", at: 4000, content: { kind: "http", request: "GET /" } }), flag()] });
-    expect(find(run(d, goodDoc()), "proof-web")).toMatchObject({ id: "proof-web:DC01", level: "fail" });
+    expect(find(run(d, goodDoc()), "proof-web")).toMatchObject({ id: "proof-web:DC01:proof", level: "fail" });
     const ok = data({ log: [entry({ id: "w", kind: "http", at: 4000, content: { kind: "http", request: "GET /" } }), entry({ id: "c", at: 4500 }), flag()] });
     expect(find(run(ok, goodDoc()), "proof-web")).toBeUndefined();
   });
   it("proof-identity and proof-path are soft", () => {
     const d = data({ log: [flag({}, { proof: "ipconfig\n10.0.0.5\ncat /tmp/proof.txt" })] });
     const c = run(d, goodDoc());
-    expect(find(c, "proof-identity")).toMatchObject({ id: "proof-identity:DC01", level: "soft" });
-    expect(find(c, "proof-path")).toMatchObject({ id: "proof-path:DC01", level: "soft" });
-    expect(find(c, "proof-hostname")).toMatchObject({ id: "proof-hostname:DC01", level: "soft", text: "The proof for DC01 doesn't show hostname." });
+    expect(find(c, "proof-identity")).toMatchObject({ id: "proof-identity:DC01:proof", level: "soft" });
+    expect(find(c, "proof-path")).toMatchObject({ id: "proof-path:DC01:proof", level: "soft" });
+    expect(find(c, "proof-hostname")).toMatchObject({ id: "proof-hostname:DC01:proof", level: "soft", text: "The proof.txt proof for DC01 doesn't show hostname." });
     for (const id of ["proof-identity", "proof-path", "proof-hostname"]) expect(find(c, id)!.fix).toContain("ipconfig");
     expect(isReady(c)).toBe(true);
     const lin = run(data({ hosts: [host({ os: "linux" })], log: [flag({}, { proof: "id\nip addr\n10.0.0.5\ncat /root/proof.txt" })] }), goodDoc());
     expect(find(lin, "proof-hostname")!.fix).toContain("ip addr");
     const noHost = run(data({ log: [flag({}, { proof: "whoami\nipconfig\n10.0.0.5\ntype C:\\Users\\Administrator\\Desktop\\proof.txt" })] }), goodDoc());
-    expect(noHost.map((c) => c.id)).toEqual(["proof-hostname:DC01"]);
+    expect(noHost.map((c) => c.id)).toEqual(["proof-hostname:DC01:proof"]);
+  });
+  it("names which flag's proof falls short, one check per flag", () => {
+    const local = flag({ id: "f0", at: 4000 }, { flagKind: "local", proof: "dev@web01:/tmp$ cat local.txt\nid\nhostname\nip addr\n10.0.0.5" });
+    const proof = flag({}, { proof: "root@web01:/tmp# cat proof.txt\nid\nhostname\nip addr\n10.0.0.5" });
+    const c = run(data({ hosts: [host({ os: "linux" })], log: [local, proof] }), doc(ev("f0", { block: null }), slot("x"), ...goodDoc().content!), {}, ["local", "proof"]);
+    expect(c.filter((x) => x.id.startsWith("proof-path")).map((x) => [x.id, x.text])).toEqual([
+      ["proof-path:DC01:local", "The local.txt proof for DC01 doesn't read the flag from its usual location."],
+      ["proof-path:DC01:proof", "The proof.txt proof for DC01 doesn't read the flag from its usual location."],
+    ]);
   });
   it("output fails on blank output unless it returned nothing", () => {
     const blank = (extra = {}) => entry({ id: "c1", content: { kind: "command", blocks: [{ command: "ls", output: "  " }] }, ...extra });

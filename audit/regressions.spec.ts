@@ -1171,3 +1171,44 @@ test("Interfaces: the inline subnet is a 24px target and keeps its line height",
   expect(h.btn).toBeGreaterThanOrEqual(24);
   expect(h.line, "not grown by the button").toBe(h.plain);
 });
+
+// ---------------------------------------------------------------- Report: the page as a grader reads it
+
+/** Opens the mock exam's report on a target and waits for its drafted page. */
+async function openReport(page: Page, target: string) {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.clock.install({ time: AUDIT_NOW });
+  await page.goto("/e/e-exam/s/report");
+  await page.locator("[data-outline-row]").filter({ hasText: target }).first().click();
+  await page.locator(".report-page .report-code").first().waitFor();
+}
+
+test("Report: a blank line in command output keeps its height", async ({ page }) => {
+  await openReport(page, "ms01");
+  // The listener's output has a blank line between the connection and the prompt, as the terminal showed it.
+  const code = page.locator(".report-page .report-code", { hasText: "rlwrap nc -lvnp 443" });
+  const blank = code.locator(".report-line").filter({ hasText: /^$/ }).first();
+  const line = code.locator(".report-line").filter({ hasText: "listening on" });
+  expect((await blank.boundingBox())!.height).toBeGreaterThanOrEqual((await line.boundingBox())!.height - 0.5);
+});
+
+test("Report: code shows the characters typed, with no font ligatures", async ({ page }) => {
+  await openReport(page, "ms01");
+  const code = page.locator(".report-page .report-code").first();
+  expect(await code.evaluate((el) => getComputedStyle(el).fontVariantLigatures)).toBe("none");
+});
+
+test("Report: an appendix page keeps the page's side margins", async ({ page }) => {
+  await openReport(page, "ms01");
+  await page.locator(".report-page .report-code", { hasText: "winPEASx64.exe" }).click();
+  await page.getByRole("button", { name: "Move to appendix" }).click();
+  await page.locator("[data-outline-row]").filter({ hasText: "Appendix E: ms01" }).click();
+  const heading = page.getByRole("heading", { name: "Appendix E: ms01" });
+  await heading.waitFor();
+  // The same 40px gutters as a target page: text never touches the paper's edge.
+  const paper = (await page.locator(".report-page").boundingBox())!;
+  const title = (await heading.boundingBox())!;
+  const code = (await page.locator(".report-appendix .report-code").first().boundingBox())!;
+  expect(title.x - paper.x).toBeGreaterThanOrEqual(40);
+  expect(paper.x + paper.width - (code.x + code.width)).toBeGreaterThanOrEqual(40);
+});
