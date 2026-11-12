@@ -629,7 +629,7 @@ function openLabel(entry: LogEntry, figure: number | null, kept: number, total: 
  * it shows its tools: Trim and Emphasise lines (command output), Move to appendix, Remove.
  */
 export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNodeViewProps) {
-  const { data, onRemoveEvidence, canMove = false } = useReportData();
+  const { data, canMove = false } = useReportData();
   const { figureOf, stepTitleOf, touched, inStep } = usePageLayout();
   const ref = useAppendixRef(node);
   const machines = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet }).data?.machines ?? NO_MACHINES;
@@ -686,7 +686,7 @@ export function EvidenceView({ node, selected, setAttrs, view, getPos }: ReactNo
   const remove = () => {
     const pos = getPos();
     if (pos === undefined) return;
-    onRemoveEvidence(attrs.entryId);
+    // The page's removal tracking remembers the entry as removed.
     view.dispatch(view.state.tr.delete(pos, pos + node.nodeSize));
     view.focus();
   };

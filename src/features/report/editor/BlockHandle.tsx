@@ -33,7 +33,7 @@ function walkItems(e: KeyboardEvent<HTMLDivElement>) {
  */
 export function BlockHandle() {
   const editor = useEditor();
-  const { canMove = false, data, onRemoveEvidence } = useReportData();
+  const { canMove = false, data } = useReportData();
   // The block the handle is beside, and the one the open menu acts on (held while the pointer is in the menu).
   const hovered = useRef<Hovered>(null);
   const [menu, setMenu] = useState<Hovered>(null);
@@ -108,7 +108,7 @@ export function BlockHandle() {
                     role="menuitem"
                     className={`${ITEM} hover:text-warn focus-visible:text-warn`}
                     onClick={() => {
-                      if (menu) deleteBlockAt(editor, menu, onRemoveEvidence);
+                      if (menu) deleteBlockAt(editor, menu);
                       done();
                     }}
                   >

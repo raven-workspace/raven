@@ -138,15 +138,13 @@ export function setBlockAppendix(editor: Editor, block: { node: PMNode; pos: num
   });
 }
 
-/** Deletes a block; an evidence block's entry is remembered as removed (`onRemoveEvidence`), as ⌫ does. */
-export function deleteBlockAt(editor: Editor, block: { node: PMNode; pos: number }, onRemoveEvidence: (entryId: string) => void): boolean {
+/** Deletes a block. The evidence in it (a step's, a list's too) is remembered as removed by the page's removal
+ *  tracking (`removedByTransaction`), as ⌫ is. */
+export function deleteBlockAt(editor: Editor, block: { node: PMNode; pos: number }): boolean {
   return editor.exec((state, dispatch) => {
     const pos = currentPos(editor, block);
     if (pos === null) return false;
-    if (dispatch) {
-      if (block.node.type.name === "evidence") onRemoveEvidence(block.node.attrs.entryId as string);
-      dispatch(state.tr.delete(pos, pos + block.node.nodeSize));
-    }
+    dispatch?.(state.tr.delete(pos, pos + block.node.nodeSize));
     return true;
   });
 }

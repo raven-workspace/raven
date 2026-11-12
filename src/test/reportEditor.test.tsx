@@ -1137,6 +1137,33 @@ describe("ReportEditor nested insertion helpers", () => {
     expect(stepsIn(lastDoc(onChange))[0].content!.map((s) => s.content!.map((n) => n.attrs?.entryId ?? n.type))).toEqual([["slot", "e1"], ["paragraph"]]);
   });
 
+  it("Add new evidence's insert and its Undo, and ⌘Z of an insert, are never remembered as removals; a deleted step is", async () => {
+    const before = doc(slot("intro"), steps(step(slot(STEP_HINT), ev("e1"))));
+    const { onRemoveEvidence, editor } = setup(before);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    const after = doc(slot("intro"), steps(step(slot(STEP_HINT), ev("e1")), { type: "step", attrs: { entryId: "e3" }, content: [slot(STEP_HINT), ev("e3")] }));
+    let added: ReturnType<typeof insertAdded> = [];
+    act(() => {
+      added = insertAdded(editor(), before, after);
+    });
+    act(() => void removeExact(editor(), added));
+    act(() => void insertAdded(editor(), before, after));
+    act(() => void editor().commands.undo());
+    expect(onRemoveEvidence).not.toHaveBeenCalled();
+    // The owner deleting the step holding e1 is.
+    const view = editor().view;
+    let at = -1;
+    view.state.doc.descendants((n, pos) => {
+      if (at === -1 && n.type.name === "step") at = pos;
+      return at === -1;
+    });
+    act(() => view.dispatch(view.state.tr.delete(at, at + view.state.doc.nodeAt(at)!.nodeSize)));
+    expect(onRemoveEvidence.mock.calls).toEqual([["e1"]]);
+    // Its undo is not a removal either.
+    act(() => void editor().commands.undo());
+    expect(onRemoveEvidence.mock.calls).toEqual([["e1"]]);
+  });
+
   it("removeExact leaves an added step the owner has since edited", async () => {
     const before = doc(steps(step(para("own"))));
     const { onChange, editor } = setup(before);

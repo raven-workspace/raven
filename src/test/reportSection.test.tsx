@@ -727,6 +727,78 @@ describe("Report view: appendices and new evidence", () => {
     expect(screen.queryByRole("button", { name: "Move to appendix" })).toBeNull();
   });
 
+  describe("deleting steps is remembered, so Add new evidence never brings them back", () => {
+    /** lnx02 with two flag steps in one steps list, each with a written sentence. */
+    async function seedSteps() {
+      const local = await api.logCreate("e-exam", logInput("local flag", { kind: "flag", flagKind: "local", value: "l".repeat(32) }, 2_000));
+      const proof = await api.logCreate("e-exam", logInput("proof flag", { kind: "flag", flagKind: "proof", value: "p".repeat(32) }, 3_000));
+      const report = await api.reportGetOrCreate("e-exam");
+      const step = (id: string, text: string) => ({ type: "step", attrs: { entryId: id }, content: [{ type: "slot", attrs: { hint: "Where" }, content: [{ type: "text", text }] }, evNode(id)] });
+      const doc = {
+        type: "doc",
+        content: [
+          { type: "phase", attrs: { phase: "foothold", hostId: LNX } },
+          { type: "steps", content: [step(local.id, "Read the local flag"), step(proof.id, "Read the proof flag")] },
+          { type: "phase", attrs: { phase: "post", hostId: LNX } },
+          { type: "slot", attrs: { hint: "Proof" } },
+        ],
+      };
+      await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { layout: DRAFT_LAYOUT }, draftBuiltAt: Date.now() });
+      mount();
+      await ready();
+      await waitFor(() => expect(editors.length).toBeGreaterThan(0));
+      await waitFor(() => expect(evidenceIds()).toEqual([local.id, proof.id]));
+      return { local, proof };
+    }
+    const stepAt = (index: number) => {
+      const steps: { node: import("prosekit/pm/model").Node; pos: number }[] = [];
+      pageEditor().state.doc.descendants((node, pos) => {
+        if (node.type.name === "step") steps.push({ node, pos });
+        return true;
+      });
+      return steps[index];
+    };
+    const addNew = async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
+      expect(await screen.findByText("Nothing new to add")).toBeInTheDocument();
+    };
+
+    it("a step deleted from the block menu", async () => {
+      const { local, proof } = await seedSteps();
+      const root = document.querySelector("prosekit-block-handle-root")!;
+      act(() => void root.dispatchEvent(Object.assign(new Event("stateChange"), { detail: stepAt(0) })));
+      fireEvent.click(screen.getByRole("button", { name: "Block actions", hidden: true }));
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+      await waitFor(() => expect(evidenceIds()).toEqual([proof.id]));
+      await addNew();
+      expect(evidenceIds()).not.toContain(local.id);
+    });
+
+    it("a selected step removed with Backspace", async () => {
+      const { local, proof } = await seedSteps();
+      const view = pageEditor().view;
+      fireEvent.pointerDown(view.dom);
+      act(() => view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, stepAt(1).pos))));
+      act(() => void fireEvent.keyDown(view.dom, { key: "Backspace", code: "Backspace", keyCode: 8 }));
+      await waitFor(() => expect(evidenceIds()).toEqual([local.id]));
+      await addNew();
+      expect(evidenceIds()).not.toContain(proof.id);
+    });
+
+    it("a text selection across two steps removed with Backspace", async () => {
+      const { local } = await seedSteps();
+      const view = pageEditor().view;
+      const first = stepAt(0).pos + 3; // inside the first step's sentence
+      const second = stepAt(1).pos + 3; // inside the second step's sentence
+      fireEvent.pointerDown(view.dom);
+      act(() => view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, first, second))));
+      act(() => void fireEvent.keyDown(view.dom, { key: "Backspace", code: "Backspace", keyCode: 8 }));
+      await waitFor(() => expect(evidenceIds()).not.toContain(local.id));
+      await addNew();
+      expect(evidenceIds()).not.toContain(local.id);
+    });
+  });
+
   it("Add new evidence says when there is nothing new", async () => {
     await seedLnx();
     mount();

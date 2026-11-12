@@ -1,9 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
-import { createEditor, Priority, union, type Editor, type NodeJSON } from "prosekit/core";
+import { createEditor, definePlugin, Priority, union, type Editor, type NodeJSON } from "prosekit/core";
 import { defineFileDropHandler, defineFilePasteHandler } from "prosekit/extensions/file";
 import type { Node as PMNode } from "prosekit/pm/model";
-import { NodeSelection, type Command } from "prosekit/pm/state";
+import { isHistoryTransaction } from "prosekit/pm/history";
+import { NodeSelection, Plugin, PluginKey, type Command, type Transaction } from "prosekit/pm/state";
 import { ProseKit, useDocChange, useExtension, useKeymap } from "prosekit/react";
 import { ownerParagraphs, isFigure, stepTitleBefore, type DocPath, type EvidenceAttrs, sectionGuide, type PageHeadings, type PageMeta, type ReportData, type ReportNode } from "../../../engines/report";
 import { reportError } from "../../../lib/lockSignal";
@@ -169,6 +170,65 @@ export function selectBlockAt(editor: Editor, pos: number) {
   view.focus();
 }
 
+/** Marks a transaction the page makes itself (Add new evidence and its Undo, notes turned into text): what it takes
+ *  off the page is not the owner's removal. */
+export const PROGRAMMATIC = "raven:programmatic";
+
+/**
+ * The entries a transaction took off the page: evidence blocks in the ranges it deleted (inside a step or a steps list
+ * too) whose entry the page no longer places (`evidenceIdsIn`'s rule: no evidence block, no text taken from it). None
+ * for the page's own transactions (`PROGRAMMATIC`) and for undo and redo.
+ */
+export function removedByTransaction(tr: Transaction): string[] {
+  if (!tr.docChanged || tr.getMeta(PROGRAMMATIC) === true || isHistoryTransaction(tr)) return [];
+  const gone = new Set<string>();
+  tr.steps.forEach((step, i) => {
+    const before = tr.docs[i];
+    step.getMap().forEach((oldStart, oldEnd) => {
+      if (oldEnd <= oldStart) return;
+      before.nodesBetween(oldStart, oldEnd, (node) => {
+        if (node.type.name === "evidence" && typeof node.attrs.entryId === "string") gone.add(node.attrs.entryId);
+        return true;
+      });
+    });
+  });
+  if (gone.size === 0) return [];
+  tr.doc.descendants((node) => {
+    if (node.type.name === "evidence") gone.delete(node.attrs.entryId as string);
+    else if (typeof node.attrs.fromEntry === "string" && node.attrs.fromField == null) gone.delete(node.attrs.fromEntry);
+    return gone.size > 0;
+  });
+  return [...gone];
+}
+
+const removalKey = new PluginKey<{ ids: string[] } | null>("ravenRemovedEvidence");
+
+/** Reports each entry a user transaction takes off the page (`removedByTransaction`) to `onRemove`, once, however it
+ *  went: ⌫ on a block, step or list, the block menu's Delete, a text selection across steps, a cut. */
+function removedEvidencePlugin(onRemove: { current: (entryId: string) => void }) {
+  return new Plugin<{ ids: string[] } | null>({
+    key: removalKey,
+    state: {
+      init: () => null,
+      apply: (tr, prev) => {
+        const ids = removedByTransaction(tr);
+        return ids.length > 0 ? { ids } : prev;
+      },
+    },
+    view: (view) => {
+      let seen = removalKey.getState(view.state);
+      return {
+        update: (v) => {
+          const now = removalKey.getState(v.state);
+          if (now === seen) return;
+          seen = now;
+          now?.ids.forEach((id) => onRemove.current(id));
+        },
+      };
+    },
+  });
+}
+
 /**
  * Brings the page to `after`, a copy of `before` (the page as it is) with blocks added (at the top level or inside a
  * block, such as a step in a steps list) and none removed or reordered, by inserting only the new blocks, so the
@@ -201,7 +261,7 @@ export function insertAdded(editor: Editor, before: ReportNode, after: ReportNod
       }
     };
     merge(before.content ?? [], after.content ?? [], 0);
-    dispatch?.(tr);
+    dispatch?.(tr.setMeta(PROGRAMMATIC, true));
     return true;
   });
   const doc = editor.state.doc;
@@ -221,7 +281,7 @@ export function removeExact(editor: Editor, nodes: PMNode[]): boolean {
     if (spans.length === 0) return false;
     const tr = state.tr;
     for (const [from, to] of spans.reverse()) tr.delete(from, to);
-    dispatch?.(tr);
+    dispatch?.(tr.setMeta(PROGRAMMATIC, true));
     return true;
   });
 }
@@ -244,7 +304,7 @@ export function convertNoteBlocks(editor: Editor, data: ReportData): boolean {
     if (dispatch) {
       const tr = state.tr;
       for (const span of spans.reverse()) tr.replaceWith(span.from, span.to, span.nodes.map((n) => state.schema.nodeFromJSON(n)));
-      dispatch(tr);
+      dispatch(tr.setMeta(PROGRAMMATIC, true));
     }
     return true;
   });
@@ -308,18 +368,20 @@ function PageHooks({
       [onImage],
     ),
   );
+  // Whatever takes evidence off the page is remembered as removed, so Add new evidence never brings it back.
+  const onRemove = useRef(onRemoveEvidence);
+  onRemove.current = onRemoveEvidence;
+  useExtension(useMemo(() => definePlugin(removedEvidencePlugin(onRemove)), []));
   const keymap = useMemo(() => {
-    const removeEvidence: Command = (state, dispatch) => {
+    // ⌫ or Delete on a selected block (evidence, a step, a steps list) removes the whole block.
+    const removeBlock: Command = (state, dispatch) => {
       const sel = state.selection;
-      if (!(sel instanceof NodeSelection) || sel.node.type.name !== "evidence") return false;
-      if (dispatch) {
-        onRemoveEvidence(sel.node.attrs.entryId as string);
-        dispatch(state.tr.deleteSelection().scrollIntoView());
-      }
+      if (!(sel instanceof NodeSelection) || !["evidence", "step", "steps"].includes(sel.node.type.name)) return false;
+      dispatch?.(state.tr.deleteSelection().scrollIntoView());
       return true;
     };
-    return { Backspace: removeEvidence, Delete: removeEvidence, "Alt-ArrowUp": moveSelectedBlock(-1), "Alt-ArrowDown": moveSelectedBlock(1) };
-  }, [onRemoveEvidence]);
+    return { Backspace: removeBlock, Delete: removeBlock, "Alt-ArrowUp": moveSelectedBlock(-1), "Alt-ArrowDown": moveSelectedBlock(1) };
+  }, []);
   useKeymap(keymap, { priority: Priority.high });
   // A selected chip in a step: ↵ opens it, Esc closes it (the selection stays on it).
   const chips = useChipControls();
