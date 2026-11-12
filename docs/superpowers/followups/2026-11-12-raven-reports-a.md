@@ -75,3 +75,17 @@ Branch feat/reports. Copied from the SDD ledger on 2026-11-12 before the workspa
   - **A · Steps (recommended):** one continuous page; "Steps to reproduce" is a numbered list, each step = owner's sentence + evidence as compact chips that open in place (trim/highlight/edit); long files become a chip pointing to the appendix.
   - **B · One step at a time:** outline of steps left with ✓/write, current step full-size centre, ⌥↑/⌥↓ to move, ⌘P whole-page preview.
   - Owner has not yet chosen A or B.
+
+## Owner decisions on the feedback (2026-11-12, later)
+
+Model report: `docs/Mock exam A — model report.md` (owner's Mock exam A lab written up from their vault notes, with "From your notes" callouts). Owner rates it above OffSec's sample; the next round follows its shape.
+
+- **Target pages: A · Steps.** Numbered steps, each = owner sentence + evidence chips (command, trimmed output, screenshot) that open in place.
+- **Appendices: manual only.** + Page and a visible "Move to appendix"; no auto proof table or tools list.
+- **Guide notes:** dismissable callouts per section in the editor, in the mock's "From your notes" spirit (what this section is for, how to fill it, neutral voice). Hide one or all. Never exported.
+- **Adopted from the mock:**
+  - Generated **findings table** in the High-Level Summary (#, host, finding, severity, result), sorted by severity; plus a **scope table** (host, IP when tested, OS, set).
+  - **Service enumeration as a port table** (port, service, version, notes) replacing "IP / Ports Open"; a **Result line** under each host heading (access gained + flag values).
+  - **AD attack-path table opens the AD set** (step, from, technique, to, access), replacing the closing list.
+  - **Checks:** a step with no command under it ("[not recorded]" gap); a credential used for a hop with no finding attached.
+- **Unchanged:** failed attempts still reported as "Also tested" one-liners (the mock's "drop rabbit holes" line is not an owner ruling).
