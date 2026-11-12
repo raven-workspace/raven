@@ -519,6 +519,33 @@ The result review (Task 13 screenshots, `audit-output/report-result/`) and the o
 
 ---
 
+### Task 15: Match OffSec's sample report structure
+
+OffSec's own sample report (v2.0; owner's copy at `a file outside the repo`) replaces the third-party template as the structure authority. Owner decisions (2026-11-11): appendices stay **for content too big to inline** (PEN-200 §5.2.7); "Tested, not exploited" stays in a **much slimmer form** (a client wants to know it was tested, not repro steps for a non-issue).
+
+**Document structure (numbered headings, e.g. 4.1.3):**
+1. Cover (Plan B) and table of contents (Plan B).
+2. **1 OffSec Certified Professional Exam Report** — 1.1 Introduction, 1.2 Objective, 1.3 Requirements: editable slots pre-filled from a Settings default (empty by default; owner pastes their wording once). No generated prose.
+3. **2 High-Level Summary** — prose slots (keep the four placeholders), then **2.1 Recommendations**. The engagement-details and exploited-systems tables go (their facts move: scope → 3.1, exploited systems are told in the targets).
+4. **3 Methodologies** — 3.1 Information Gathering (generated scope line: "Exam network: <IPs>"), 3.2 Service Enumeration, 3.3 Penetration (plus one generated line naming the Metasploit target, or "Metasploit was not used"), 3.4 Maintaining Access, 3.5 House Cleaning (generated list from the cleanup items). Each stage keeps the Settings methodology text or an empty slot.
+5. **Testing considerations** (PEN-200 §5.2.4) is kept but exports only if the owner wrote something (my call).
+6. **4 Independent Challenges** — per target **4.N Target #N – <IP>**:
+   - **4.N.1 Service Enumeration**: a compact **Port Scan Results** table (IP Address | Ports Open: "TCP: 21, 80, …" / "UDP: …"), then the scan evidence. The per-service coverage table goes.
+   - **4.N.2 Initial Access – <vulnerability title>** (title from the finding that enabled it, else the phase name): labelled lines **Vulnerability Explanation** (finding description), **Vulnerability Fix** (remediation, as steps), **Severity** (with CVSS), **Steps to reproduce the attack** (an empty prose slot for a short summary); then the walkthrough; then **Local.txt value:** with its flag evidence (the local flag sits at the end of initial access).
+   - **4.N.3 Privilege Escalation – <vulnerability title>**: same labelled lines and walkthrough.
+   - **4.N.4 Post-Exploitation**: **Proof.txt value:** with its flag evidence, then any post-root steps (entries after the root grant that aren't the flag: credential dumps, pivots found).
+   - **Also tested** (slim "Tested, not exploited"): one line per item, "<what> on <port>: <reason words>", no commands, no steps; at the end of the target before Post-Exploitation; omitted when empty.
+7. **5 Active Directory Set** — one **Port Scan Results** table for all AD machines; then per machine **5.N <Name> – <IP>** with Initial Access – <technique> (or Lateral Movement / Domain Compromise naming), Privilege Escalation if any, Post-Exploitation (flags + the pivot evidence). The attack-chain list stays as a short closing subsection.
+8. **Appendices**: only for moved-out content (§5.6), lettered A, B… in report order. The auto appendices (proof table, tools and payloads, Metasploit usage, house cleaning) go: flags are inline, Metasploit and house cleaning move into Methodologies (my calls). Further information and References stay optional, exported only when filled.
+
+**Walkthrough style:** the prose slot comes **before** each step ("what you're about to do and why"), as in the sample, not after. Only steps get a slot; consecutive evidence from the same step (a command and its screenshot) shares one slot. Screenshots keep "Figure N." captions.
+
+**Migration of existing drafts:** documents already saved keep working: the renderer must accept the old node layout. A **Rebuild layout** action per section (confirm + undo) rebuilds the structure around the owner's existing text: owner-written slot text is carried over in order (never dropped).
+
+- [ ] Steps: update spec §4.3/§5.2/§5.4/§5.5/§5.7 to this structure; failing engine tests for the new draft layout (numbering, phase titles from findings, local/proof placement, post-exploitation split, slim tested lines, port scan table, slot-before-step, no auto appendices); renderer tests (labelled vuln lines, port scan table, numbered headings); Rebuild layout carries owner text; full gate; re-shoot `audit-output/report-result/` in WebKit 1400 and compare page by page against the sample PDF; commit.
+
+---
+
 ## Spec coverage map (self-review)
 
 | Spec | Task |
