@@ -360,6 +360,8 @@
 .report-page .report-cell-input {
   width: 100%;
   min-width: 0;
+  /* A 24px target, like every control. */
+  min-height: 24px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -1114,9 +1116,11 @@
 
 /* The owner's headings (Heading 1 to 3): a step under the page's numbered section headings (22px, with their number),
    so the drafted structure still reads first; 1 > 2 > 3 by size, 3 by weight alone. They never take a number. Only
-   heading nodes themselves: the machine and phase headings drawn by node views keep their own sizes. */
+   heading nodes themselves (at the top level, or inside a quote, a list, a table cell or a step): the machine and phase
+   headings drawn by node views keep their own sizes. */
 .report-page .ProseMirror > h1:not([data-number]),
-.report-page .ProseMirror :is(blockquote, .list-content, td, th) > h1 {
+.report-page .ProseMirror :is(blockquote, .list-content, td, th) > h1,
+.report-page .ProseMirror .report-step-body h1 {
   font-size: 19px;
   line-height: 26px;
   font-weight: 600;
@@ -1124,14 +1128,16 @@
 }
 
 .report-page .ProseMirror > h2:not([data-number]),
-.report-page .ProseMirror :is(blockquote, .list-content, td, th) > h2 {
+.report-page .ProseMirror :is(blockquote, .list-content, td, th) > h2,
+.report-page .ProseMirror .report-step-body h2 {
   font-size: 16px;
   line-height: 24px;
   font-weight: 600;
 }
 
 .report-page .ProseMirror > h3,
-.report-page .ProseMirror :is(blockquote, .list-content, td, th) > h3 {
+.report-page .ProseMirror :is(blockquote, .list-content, td, th) > h3,
+.report-page .ProseMirror .report-step-body h3 {
   font-size: 14px;
   line-height: 22px;
   font-weight: 600;
@@ -1141,7 +1147,8 @@
 /* On a target or AD page the numbered sub-sections ("4.2.1 Service Enumeration") are 15px: the owner's headings sit
    at or under that size and differ by weight and spacing, so they never outrank the structure. */
 .report-page[data-page="target"] .ProseMirror > h1:not([data-number]),
-.report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h1 {
+.report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h1,
+.report-page[data-page="target"] .ProseMirror .report-step-body h1 {
   font-size: 15px;
   line-height: 22px;
   font-weight: 700;
@@ -1149,7 +1156,8 @@
 }
 
 .report-page[data-page="target"] .ProseMirror > h2:not([data-number]),
-.report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h2 {
+.report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h2,
+.report-page[data-page="target"] .ProseMirror .report-step-body h2 {
   font-size: 14px;
   line-height: 22px;
   font-weight: 700;
@@ -1157,7 +1165,8 @@
 }
 
 .report-page[data-page="target"] .ProseMirror > h3,
-.report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h3 {
+.report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h3,
+.report-page[data-page="target"] .ProseMirror .report-step-body h3 {
   font-size: 14px;
   line-height: 22px;
   font-weight: 600;
