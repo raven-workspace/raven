@@ -11,7 +11,7 @@ import { IconButton } from "../../../ui";
  * One guide note (spec §10.5): editor chrome in the app's own dark style, so it never reads as report text. It is
  * fixed text from `GUIDES` and holds no wording for the report.
  */
-export function GuideNote({ id, onHide, onHideAll }: { id: GuideId; onHide(): void; onHideAll(): void }) {
+export function GuideNote({ id, onHide }: { id: GuideId; onHide(): void }) {
   const guide = GUIDES[id];
   return (
     <aside
@@ -23,13 +23,6 @@ export function GuideNote({ id, onHide, onHideAll }: { id: GuideId; onHide(): vo
       <p className="m-0 pt-1 font-semibold text-fg">{guide.title}</p>
       <IconButton icon={X} label="Hide this note" onClick={onHide} />
       <p className="col-span-2 m-0 pr-2">{guide.body}</p>
-      <button
-        type="button"
-        onClick={onHideAll}
-        className="col-span-2 min-h-6 justify-self-start rounded-sm border-0 bg-transparent p-0 text-meta text-muted underline-offset-2 cursor-default hover:text-fg hover:underline focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
-      >
-        Hide all guide notes
-      </button>
     </aside>
   );
 }
