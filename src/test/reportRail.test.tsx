@@ -1,12 +1,12 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { Editor } from "prosekit/core";
-import { NodeSelection, TextSelection, type Selection } from "prosekit/pm/state";
+import { TextSelection, type Selection } from "prosekit/pm/state";
 import type { ComponentProps } from "react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, resetAuditState } from "../audit/fakeApi";
-import { DRAFT_LAYOUT, STEP_HINT } from "../engines/report";
+import { DRAFT_LAYOUT, sourceOf, type ReportNode } from "../engines/report";
 import { ReportSectionView } from "../features/report/ReportSection";
 import { useNotesStore } from "../features/notes/useNotesStore";
 import { makeQueryClient } from "../lib/queryClient";
@@ -65,8 +65,8 @@ const NMAP_OUT = "Nmap scan report for 10.10.30.21\nPORT     STATE SERVICE VERSI
 const WINPEAS_OUT = Array.from({ length: 3000 }, (_, i) => `line ${i + 1}`).join("\n");
 
 /**
- * lnx02 (standalone) in layout 4: an ssh login granted user access and is step 1 of Initial access, step 2 is the
- * owner's own empty step. Not on the page: the nmap scan (its ports are the port table's), hydra, a failed anonymous
+ * lnx02 (standalone), a plain page at the current layout: an ssh login granted user access and is step 1 of Initial
+ * access, step 2 is the owner's own step. Not on the page: the nmap scan (its ports are the port table's), hydra, a failed anonymous
  * FTP attempt, a screenshot that came along with the ssh login, smbclient and a 3,000-line winPEAS after the access
  * (privilege escalation), a private entry, and an entry behind an operator-reason attempt. Plus a note, ruled-out
  * items, credentials and an admin grant.
@@ -87,22 +87,26 @@ async function seed() {
   await api.accessGrantCreate("e-exam", { usernameId: shell.id, hostId: LNX, level: "user", via: "ssh with hydra's password", logEntryId: ssh.id, at: 2_500 });
 
   const report = await api.reportGetOrCreate("e-exam");
-  const step = (entryId: string | null, ...evidence: string[]) => ({
-    type: "step",
-    attrs: { entryId },
-    content: [{ type: "slot", attrs: { hint: STEP_HINT } }, ...evidence.map((id) => ({ type: "evidence", attrs: { entryId: id, block: 0, keep: null, emphasis: [], appendix: "inline" } }))],
-  });
+  const t = (text: string) => [{ type: "text", text }];
   const doc = {
     type: "doc",
     content: [
-      { type: "generated", attrs: { kind: "facts", hostId: LNX, appendix: "inline" } },
-      { type: "generated", attrs: { kind: "result", hostId: LNX, appendix: "inline" } },
-      { type: "phase", attrs: { phase: "enum", hostId: LNX } },
-      { type: "generated", attrs: { kind: "ports", hostId: LNX, appendix: "inline", notes: {} } },
-      { type: "phase", attrs: { phase: "foothold", hostId: LNX } },
-      { type: "steps", content: [step(ssh.id, ssh.id), step(null)] },
-      { type: "phase", attrs: { phase: "post", hostId: LNX } },
-      { type: "slot", attrs: { hint: "Proof" } },
+      { type: "heading", attrs: { level: 1, source: `facts:${LNX}` }, content: t("lnx02 (10.10.30.21)") },
+      { type: "heading", attrs: { level: 2, source: `phase:${LNX}:enum` }, content: t("Service enumeration") },
+      { type: "paragraph", content: t("Two ports open.") },
+      { type: "heading", attrs: { level: 2, source: `phase:${LNX}:foothold` }, content: t("Initial access") },
+      { type: "paragraph", attrs: { source: `phase-steps:${LNX}` }, content: [{ type: "text", text: "Steps to reproduce:", marks: [{ type: "bold" }] }] },
+      {
+        type: "list",
+        attrs: { kind: "ordered" },
+        content: [
+          { type: "paragraph", attrs: { source: `entry:${ssh.id}:title` }, content: t("Ssh login:") },
+          { type: "codeBlock", attrs: { language: "", source: `entry:${ssh.id}:0:command` }, content: t("ssh svc_web@10.10.30.21") },
+          { type: "codeBlock", attrs: { language: "", source: `entry:${ssh.id}:0:output` }, content: t("ok") },
+        ],
+      },
+      { type: "list", attrs: { kind: "ordered" }, content: [{ type: "paragraph", content: t("Then the owner's own step.") }] },
+      { type: "heading", attrs: { level: 2, source: `phase:${LNX}:tested` }, content: t("Also tested") },
     ],
   };
   await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { removedEntryIds: [hydra.id], layout: DRAFT_LAYOUT }, draftBuiltAt: Date.now() });
@@ -136,30 +140,28 @@ const rowTitles = (el: HTMLElement) => within(el).queryAllByRole("listitem").map
 const titles = () => rowTitles(logColumn());
 const group = (label: string) => within(logColumn()).getByRole("list", { name: label });
 const row = (title: string) => within(logColumn()).getByRole("listitem", { name: new RegExp(`^${title},`) });
-const evidenceIds = (editor: Editor) => {
-  const ids: string[] = [];
-  editor.state.doc.descendants((n) => {
-    if (n.type.name === "evidence") ids.push(n.attrs.entryId as string);
-  });
-  return ids;
-};
-/** The page's top-level blocks; a steps list as its steps' evidence entry titles, `[ssh login][]`. */
-async function shapeOf(editor: Editor) {
+/** Each entry title a block's sources name, in order (a figure by its entry). */
+async function titlesIn(n: ReportNode): Promise<string[]> {
   const title = new Map((await api.logList("e-exam")).map((e) => [e.id, e.title]));
   const out: string[] = [];
-  editor.state.doc.forEach((n) => {
-    if (n.type.name === "phase") out.push(`phase:${n.attrs.phase}`);
-    else if (n.type.name === "generated") out.push(`generated:${n.attrs.kind}`);
-    else if (n.type.name === "steps") {
-      const steps: string[] = [];
-      n.forEach((st) => {
-        const ids: string[] = [];
-        st.forEach((k) => void (k.type.name === "evidence" && ids.push(title.get(k.attrs.entryId as string) ?? "?")));
-        steps.push(`[${ids.join(",")}]`);
-      });
-      out.push(`steps:${steps.join("")}`);
-    } else out.push(n.type.name);
-  });
+  const walk = (b: ReportNode) => {
+    const m = /^entry:([^:]+)/.exec(sourceOf(b) ?? "");
+    const id = m?.[1] ?? (b.type === "figure" ? (b.attrs?.entryId as string | undefined) : undefined);
+    if (id && out.at(-1) !== title.get(id)) out.push(title.get(id) ?? "?");
+    b.content?.forEach(walk);
+  };
+  walk(n);
+  return out;
+}
+/** The page's top-level blocks: a heading as `h:<text>`, a numbered step as the entries it holds, `[ssh login]`. */
+async function shapeOf(editor: Editor) {
+  const out: string[] = [];
+  for (const n of (editor.getDocJSON() as ReportNode).content ?? []) {
+    const text = (b: ReportNode): string => (b.text ?? "") + (b.content ?? []).map(text).join("");
+    if (n.type === "heading") out.push(`h:${text(n)}`);
+    else if (n.type === "list" && n.attrs?.kind === "ordered") out.push(`[${(await titlesIn(n)).join(",")}]`);
+    else out.push((await titlesIn(n)).length > 0 ? `${n.type}:${(await titlesIn(n)).join(",")}` : n.type);
+  }
   return out;
 }
 /** Focuses the page (the owner has a cursor on it) and selects with `pick`. */
@@ -169,11 +171,19 @@ function cursor(editor: Editor, pick: (doc: Editor["state"]["doc"]) => Selection
     editor.view.dispatch(editor.state.tr.setSelection(pick(editor.state.doc)));
   });
 }
-/** The position of the `n`th (from 0) node named `type`. */
-function nth(doc: Editor["state"]["doc"], type: string, n = 0, where: (attrs: Record<string, unknown>) => boolean = () => true) {
-  const found: number[] = [];
-  doc.descendants((node, pos) => void (node.type.name === type && where(node.attrs) && found.push(pos)));
-  return found[n];
+/** The position inside the textblock whose text is `text`, after its first character. */
+function textPos(doc: Editor["state"]["doc"], text: string) {
+  let at = -1;
+  doc.descendants((node, pos) => void (at < 0 && node.isTextblock && node.textContent === text && (at = pos + 2)));
+  expect(at).toBeGreaterThan(0);
+  return at;
+}
+/** The position of the top-level step holding an entry's blocks. */
+function listPos(doc: Editor["state"]["doc"], entryId: string) {
+  let at = -1;
+  doc.forEach((node, offset) => void (at < 0 && node.type.name === "list" && JSON.stringify(node.toJSON()).includes(`entry:${entryId}:`) && (at = offset)));
+  expect(at).toBeGreaterThanOrEqual(0);
+  return at;
 }
 
 async function ready() {
@@ -182,24 +192,6 @@ async function ready() {
 }
 
 describe("Evidence rail: the log column", () => {
-  it("+ to appendix splits only the blocks too long to print; the short ones stay inline", async () => {
-    await seed();
-    const multi = await api.logCreate("e-exam", {
-      ...cmd("enum script", "id", { at: 3_600 }),
-      content: { kind: "command", blocks: [{ command: "id", output: "uid=1001(svc_web)" }, { command: "./linpeas.sh", output: WINPEAS_OUT }] },
-    });
-    mount();
-    await ready();
-    const editor = editors[0];
-    fireEvent.click(within(row("enum script")).getByRole("button", { name: "Add enum script to appendix" }));
-    const placed: Record<string, unknown>[] = [];
-    editor.state.doc.descendants((n) => void (n.type.name === "evidence" && n.attrs.entryId === multi.id && placed.push(n.attrs)));
-    expect(placed.map((a) => [a.block, a.appendix])).toEqual([
-      [0, "inline"],
-      [1, "split"],
-    ]);
-  });
-
   it("a failed attempt's row says it is in Also tested", async () => {
     await seed();
     mount();
@@ -345,10 +337,8 @@ describe("Evidence rail: the log column", () => {
   });
 });
 
-// Skipped by the plain-page rollout (Task 6): the seeded page holds steps and evidence nodes, which now open flattened to
-// plain blocks, and the rail still reads and inserts the old nodes. Rewritten with the rail's plain + add (Task 7).
-describe.skip("Evidence rail: the log column on a page of steps and evidence nodes", () => {
-  it("groups the host's unplaced entries by phase in time order", async () => {
+describe("Evidence rail: the log column on a plain page", () => {
+  it("groups the host's unplaced entries by phase in time order, each with + add only", async () => {
     await seed();
     mount();
     await ready();
@@ -365,26 +355,20 @@ describe.skip("Evidence rail: the log column on a page of steps and evidence nod
     expect(within(row("ssh shell screenshot")).getByText("no output")).toBeInTheDocument();
     // The scan's ports are the port table's.
     expect(within(row("nmap scan")).getByText("in the port table already")).toBeInTheDocument();
+    // One action per row, + add, a 3,000-line output too: no appendix action.
+    for (const title of titles()) expect(within(row(title)).getAllByRole("button").map((b) => b.textContent)).toEqual(["+ add"]);
+    expect(within(logColumn()).queryByText(/to appendix/)).toBeNull();
   });
 
-  it("+ add with the cursor in step 2 appends the entry's evidence to step 2", async () => {
+  it("+ add with the cursor in step 2 puts the entry's blocks into step 2", async () => {
     const { hydra } = await seed();
     mount();
     await ready();
     const editor = editors[0];
     const save = vi.spyOn(api, "reportSectionSave");
-    cursor(editor, (doc) => TextSelection.create(doc, nth(doc, "step", 1) + 2));
+    cursor(editor, (doc) => TextSelection.create(doc, textPos(doc, "Then the owner's own step.")));
     fireEvent.click(screen.getByRole("button", { name: "Add hydra login" }));
-    expect(await shapeOf(editor)).toEqual([
-      "generated:facts",
-      "generated:result",
-      "phase:enum",
-      "generated:ports",
-      "phase:foothold",
-      "steps:[ssh login][hydra login]",
-      "phase:post",
-      "slot",
-    ]);
+    expect(await shapeOf(editor)).toEqual(["h:lnx02 (10.10.30.21)", "h:Service enumeration", "paragraph", "h:Initial access", "paragraph", "[ssh login]", "[hydra login]", "h:Also tested"]);
     await waitFor(() => expect(titles()).not.toContain("hydra login"));
     // The saved page holds it, and the entry is no longer remembered as removed.
     await waitFor(
@@ -397,20 +381,14 @@ describe.skip("Evidence rail: the log column on a page of steps and evidence nod
     );
   });
 
-  it("+ add with the cursor in a ports Notes cell or a heading adds a new step at the end of the entry's phase", async () => {
+  it("+ add with the cursor in a heading puts the entry's blocks right after it", async () => {
     await seed();
     mount();
     await ready();
     const editor = editors[0];
-    // The Notes cell lives in the port table's block: the page's selection is that block.
-    cursor(editor, (doc) => NodeSelection.create(doc, nth(doc, "generated", 0, (a) => a.kind === "ports")));
-    fireEvent.click(screen.getByRole("button", { name: "Add smbclient list" }));
-    expect((await shapeOf(editor)).slice(4)).toEqual(["phase:foothold", "steps:[ssh login][]", "phase:privesc", "steps:[smbclient list]", "phase:post", "slot"]);
-
-    // A heading: hydra goes to the end of Initial access, a step of its own.
-    cursor(editor, (doc) => NodeSelection.create(doc, nth(doc, "phase", 0, (a) => a.phase === "foothold")));
+    cursor(editor, (doc) => TextSelection.create(doc, textPos(doc, "Initial access")));
     fireEvent.click(screen.getByRole("button", { name: "Add hydra login" }));
-    expect((await shapeOf(editor)).slice(4)).toEqual(["phase:foothold", "steps:[ssh login][][hydra login]", "phase:privesc", "steps:[smbclient list]", "phase:post", "slot"]);
+    expect((await shapeOf(editor)).slice(3, 6)).toEqual(["h:Initial access", "paragraph:hydra login", "codeBlock:hydra login"]);
   });
 
   it("with no cursor on the page, ⌘↵ on a focused row adds a step at the end of its phase and focus moves on", async () => {
@@ -421,61 +399,95 @@ describe.skip("Evidence rail: the log column on a page of steps and evidence nod
     const r = row("smbclient list");
     r.focus();
     fireEvent.keyDown(r, { key: "Enter", metaKey: true });
-    expect((await shapeOf(editor)).slice(4)).toEqual(["phase:foothold", "steps:[ssh login][]", "phase:privesc", "steps:[smbclient list]", "phase:post", "slot"]);
+    // Privilege escalation had no heading: it comes before Also tested, with its Steps to reproduce.
+    expect((await shapeOf(editor)).slice(5)).toEqual(["[ssh login]", "[]", "h:Privilege escalation", "paragraph", "[smbclient list]", "h:Also tested"]);
     await waitFor(() => expect(titles()).not.toContain("smbclient list"));
     // Focus moved on to the next row instead of falling to the page.
     expect(document.activeElement).toBe(row("winpeas run"));
   });
 
-  it("with no cursor, a screenshot that came along with a step joins that step", async () => {
-    await seed();
-    mount();
-    await ready();
-    const editor = editors[0];
-    // No cursor: into the ssh login's step, as Add new evidence puts it, never a numbered step of its own.
-    fireEvent.click(screen.getByRole("button", { name: "Add ssh shell screenshot" }));
-    expect((await shapeOf(editor)).slice(4, 6)).toEqual(["phase:foothold", "steps:[ssh login,ssh shell screenshot][]"]);
-  });
-
-  it("a screenshot that came along with a step goes into the step holding the cursor", async () => {
+  it("with no cursor, a screenshot that came along with a step is a step of its own at the end of its phase", async () => {
     const { screenshot } = await seed();
     mount();
     await ready();
     const editor = editors[0];
-    cursor(editor, (doc) => TextSelection.create(doc, nth(doc, "step", 1) + 2));
     fireEvent.click(screen.getByRole("button", { name: "Add ssh shell screenshot" }));
-    expect((await shapeOf(editor)).slice(4, 6)).toEqual(["phase:foothold", "steps:[ssh login][ssh shell screenshot]"]);
-    expect(evidenceIds(editor).filter((id) => id === screenshot.id)).toHaveLength(1);
+    expect((await shapeOf(editor)).slice(5)).toEqual(["[ssh login]", "[]", "[ssh shell screenshot]", "h:Also tested"]);
+    const figures: string[] = [];
+    editor.state.doc.descendants((n) => void (n.type.name === "figure" && figures.push(n.attrs.entryId as string)));
+    expect(figures).toEqual([screenshot.id]);
   });
 
-  it("a 3,000-line output offers + to appendix and lands split", async () => {
+  it("a screenshot goes into the step holding the cursor, as a figure", async () => {
+    const { screenshot } = await seed();
+    mount();
+    await ready();
+    const editor = editors[0];
+    cursor(editor, (doc) => TextSelection.create(doc, textPos(doc, "Then the owner's own step.")));
+    fireEvent.click(screen.getByRole("button", { name: "Add ssh shell screenshot" }));
+    expect((await shapeOf(editor)).slice(5, 7)).toEqual(["[ssh login]", "[ssh shell screenshot]"]);
+    const step = (editor.getDocJSON() as ReportNode).content![6];
+    expect(step.content!.map((n) => n.type)).toEqual(["paragraph", "paragraph", "figure"]);
+    expect(step.content![2].attrs?.entryId).toBe(screenshot.id);
+  });
+
+  it("a 3,000-line output is added with + add, cut to what proves the step", async () => {
     const { winpeas } = await seed();
     mount();
     await ready();
     const editor = editors[0];
-    expect(within(row("winpeas run")).queryByRole("button", { name: "Add winpeas run" })).not.toBeInTheDocument();
-    const button = within(row("winpeas run")).getByRole("button", { name: "Add winpeas run to appendix" });
-    expect(button).toHaveTextContent("+ to appendix");
-    expect(within(row("smbclient list")).getByRole("button", { name: "Add smbclient list" })).toHaveTextContent("+ add");
-    fireEvent.click(button);
-    const placed: Record<string, unknown>[] = [];
-    editor.state.doc.descendants((n) => void (n.type.name === "evidence" && n.attrs.entryId === winpeas.id && placed.push(n.attrs)));
-    expect(placed).toHaveLength(1);
-    expect(placed[0].appendix).toBe("split");
-    // Trimmed inline: the page shows its first lines, the appendix the rest.
-    expect(placed[0].keep).not.toBeNull();
-    expect((await shapeOf(editor)).slice(6, 8)).toEqual(["phase:privesc", "steps:[winpeas run]"]);
+    fireEvent.click(within(row("winpeas run")).getByRole("button", { name: "Add winpeas run" }));
+    expect((await shapeOf(editor)).slice(7, 10)).toEqual(["h:Privilege escalation", "paragraph", "[winpeas run]"]);
+    let output = "";
+    editor.state.doc.descendants((n) => void (n.attrs.source === `entry:${winpeas.id}:0:output` && (output = n.textContent)));
+    expect(output.split("\n").length).toBeLessThan(20);
+    expect(output).toContain("lines omitted");
+    expect(output.startsWith("line 1\n")).toBe(true);
+    expect(output.endsWith("line 3000")).toBe(true);
   });
 
-  it("an entry whose block is taken off the page comes back to its group", async () => {
+  it("an entry whose blocks are taken off the page comes back to its group", async () => {
     const { ssh } = await seed();
     mount();
     await ready();
     const editor = editors[0];
     act(() => {
-      const pos = nth(editor.state.doc, "evidence", 0, (a) => a.entryId === ssh.id);
+      const pos = listPos(editor.state.doc, ssh.id);
       editor.view.dispatch(editor.state.tr.delete(pos, pos + editor.state.doc.nodeAt(pos)!.nodeSize));
     });
     await waitFor(() => expect(rowTitles(group("Initial access"))).toEqual(["hydra login", "ftp anonymous", "ssh login", "ssh shell screenshot"]));
+  });
+
+  it("deleting an entry's step records it as removed in the saved meta; undo un-records it", async () => {
+    const { ssh } = await seed();
+    mount();
+    await ready();
+    const editor = editors[0];
+    const save = vi.spyOn(api, "reportSectionSave");
+    const lastMeta = () => (save.mock.calls.at(-1)?.[2] as { removedEntryIds?: string[] } | undefined)?.removedEntryIds ?? [];
+    act(() => {
+      const pos = listPos(editor.state.doc, ssh.id);
+      editor.view.dispatch(editor.state.tr.delete(pos, pos + editor.state.doc.nodeAt(pos)!.nodeSize));
+    });
+    await waitFor(() => expect(lastMeta()).toContain(ssh.id), { timeout: 3000 });
+    fireEvent.keyDown(editor.view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true });
+    await waitFor(() => expect(JSON.stringify(save.mock.calls.at(-1)?.[1])).toContain(ssh.id), { timeout: 3000 });
+    expect(lastMeta()).not.toContain(ssh.id);
+  });
+
+  it("Add new evidence adds what the draft places that isn't on the page or removed, and Undo takes it off", async () => {
+    const { hydra, ssh } = await seed();
+    mount();
+    await ready();
+    const editor = editors[0];
+    const before = editor.getDocJSON();
+    fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
+    const notice = await screen.findByText(/^Added \d+ (entry|entries)$/);
+    const json = JSON.stringify(editor.getDocJSON());
+    // hydra was removed by the owner: it stays off. The ssh login is on the page once.
+    expect(json).not.toContain(hydra.id);
+    expect(json.split(`entry:${ssh.id}:0:command`)).toHaveLength(2);
+    fireEvent.click(within(notice.closest<HTMLElement>("[role=status]")!).getByRole("button", { name: "Undo" }));
+    expect(editor.getDocJSON()).toEqual(before);
   });
 });

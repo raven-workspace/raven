@@ -1,9 +1,10 @@
 import type { Editor } from "prosekit/core";
 import type { Node as PMNode } from "prosekit/pm/model";
 import { useCallback, useState } from "react";
-import { addNewEvidence, type ReportData, type ReportMeta, type ReportNode, type ReportTarget } from "../../engines/report";
+import { missingEntries, type ReportData, type ReportMeta, type ReportNode, type ReportTarget } from "../../engines/report";
 import { Button, TimedNotice } from "../../ui";
-import { insertAdded, removeExact } from "./editor/ReportEditor";
+import { insertEntry } from "./editor/pageActions";
+import { removeExact } from "./editor/ReportEditor";
 
 /** What the last run added: its words, and the blocks it put on the page (null when it added nothing). */
 interface Added {
@@ -12,8 +13,9 @@ interface Added {
 }
 
 /**
- * Add new evidence (spec §5): appends entries that now qualify, aren't on the page and weren't removed, each at the
- * end of its phase. It never removes or rewrites anything; Undo takes off exactly what it added. Key it by section.
+ * Add new evidence (spec §5): appends the entries the draft would place now that aren't on the page and weren't removed
+ * (`missingEntries`), in time order, each as a new step at the end of its phase (`insertEntry`). It never removes or
+ * rewrites anything; Undo takes off exactly what it added. Key it by section.
  */
 export function AddEvidenceButton({
   editor,
@@ -35,16 +37,14 @@ export function AddEvidenceButton({
   const close = useCallback(() => setAdded(null), []);
   const run = () => {
     if (!editor) return;
-    const before = editor.getDocJSON() as ReportNode;
-    const result = addNewEvidence(before, data, target, meta, removed);
-    if (result.added.length === 0 && result.addedTested.length === 0) {
+    const missing = missingEntries(editor.getDocJSON() as ReportNode, data, target, meta, removed);
+    if (missing.length === 0) {
       setAdded({ text: "Nothing new to add", nodes: null });
       return;
     }
-    const nodes = insertAdded(editor, before, result.doc);
-    const n = result.added.length;
-    const parts = [...(n > 0 ? [`${n} ${n === 1 ? "entry" : "entries"}`] : []), ...(result.addedTested.length > 0 ? ["the Also tested list"] : [])];
-    setAdded({ text: `Added ${parts.join(" and ")}`, nodes });
+    const nodes = missing.flatMap((entry) => insertEntry(editor, data, target, entry, false));
+    const n = missing.length;
+    setAdded({ text: `Added ${n} ${n === 1 ? "entry" : "entries"}`, nodes });
     onAdded();
   };
   const undo = () => {

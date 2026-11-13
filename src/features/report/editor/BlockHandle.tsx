@@ -5,10 +5,9 @@ import { useEditor } from "prosekit/react";
 import { BlockHandleDraggable, BlockHandlePopup, BlockHandlePositioner, BlockHandleRoot } from "prosekit/react/block-handle";
 import { DropIndicator } from "prosekit/react/drop-indicator";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import type { AppendixPlacement } from "../../../engines/report";
-import { Tooltip } from "../../../ui";
-import { moveLabel } from "./nodes/parts";
-import { blockMovable, deleteBlockAt, setBlockAppendix } from "./pageActions";
+import { sourceBlocks } from "../../../engines/report";
+import { Button, Dialog, Tooltip } from "../../../ui";
+import { deleteBlockAt, isEdited, refreshLabel, refreshRun, sourceRun, type SourceRun } from "./pageActions";
 import { useReportData } from "./ReportDataContext";
 
 type Hovered = { node: PMNode; pos: number } | null;
@@ -28,21 +27,32 @@ function walkItems(e: KeyboardEvent<HTMLDivElement>) {
 
 /**
  * The page's drag handle: hovering a block shows it in the left gutter, and dragging it moves the block (attrs and
- * all, in one undoable step) to where the drop line shows. Beside it, ⋯ opens the block's menu: Move to appendix (or
- * Back inline) where the block can move, and Delete. No add button: insertion stays in the evidence rail.
+ * all, in one undoable step) to where the drop line shows. Beside it, ⋯ opens the block's menu: Refresh (from the log,
+ * a finding or Raven) where the block's source can be written again, and Delete. Refresh replaces the block's whole
+ * run (`sourceRun`); when the owner has edited it, it asks first. No add button: insertion stays in the evidence rail.
  */
 export function BlockHandle() {
   const editor = useEditor();
-  const { canMove = false, data } = useReportData();
+  const { data, target, reportMeta } = useReportData();
   // The block the handle is beside, and the one the open menu acts on (held while the pointer is in the menu).
   const hovered = useRef<Hovered>(null);
   const [menu, setMenu] = useState<Hovered>(null);
+  // An edited run waiting on the owner's answer.
+  const [confirm, setConfirm] = useState<SourceRun | null>(null);
 
-  const movable = menu !== null && canMove && blockMovable(menu.node, data);
-  const place = (menu?.node.attrs.appendix as AppendixPlacement | undefined) ?? "inline";
+  const meta = reportMeta ?? {};
+  // The hovered block's run, while it still stands where the handle saw it.
+  const run = menu && editor.mounted && editor.state.doc.nodeAt(menu.pos) === menu.node ? sourceRun(editor.state.doc, menu.pos) : null;
+  const canRefresh = run !== null && sourceBlocks(run.source, data, target ?? null, meta) !== null;
   const done = () => {
     setMenu(null);
     editor.focus();
+  };
+  const refresh = (r: SourceRun) => {
+    // Still the same blocks where they were (the dialog holds the page still), else the run as it stands now.
+    const same = r.nodes.every((n, i) => editor.state.doc.nodeAt(r.from + r.nodes.slice(0, i).reduce((s, b) => s + b.nodeSize, 0)) === n);
+    const now = same ? r : sourceRun(editor.state.doc, r.from);
+    if (now) refreshRun(editor, now, data, target ?? null, meta);
   };
   // The handle hides while the page scrolls, and its menu would lose its anchor (Radix then pins it to the window's
   // corner): a scroll closes the menu, as the pointer leaving a hovered block does not.
@@ -90,17 +100,21 @@ export function BlockHandle() {
                   onKeyDown={walkItems}
                   className="z-50 grid min-w-40 gap-1 rounded-md border border-line-strong bg-surface p-1 shadow-[0_12px_32px_rgba(0,0,0,.6)]"
                 >
-                  {movable && (
+                  {canRefresh && (
                     <button
                       type="button"
                       role="menuitem"
                       className={ITEM}
                       onClick={() => {
-                        setBlockAppendix(editor, menu, place === "inline" ? "moved" : "inline");
-                        done();
+                        setMenu(null);
+                        if (isEdited(run.nodes)) setConfirm(run);
+                        else {
+                          refresh(run);
+                          editor.focus();
+                        }
                       }}
                     >
-                      {moveLabel(place)}
+                      {refreshLabel(run.source)}
                     </button>
                   )}
                   <button
@@ -121,6 +135,30 @@ export function BlockHandle() {
         </BlockHandlePositioner>
       </BlockHandleRoot>
       <DropIndicator className="report-drop" />
+      <Dialog
+        open={confirm !== null}
+        onOpenChange={(open) => !open && setConfirm(null)}
+        title="Replace this block with the current version?"
+        description="Your edits to this block are replaced. ⌘Z brings them back."
+        onCloseAutoFocus={(e) => {
+          e.preventDefault();
+          editor.focus();
+        }}
+        footer={
+          <>
+            <Button onClick={() => setConfirm(null)}>Cancel</Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (confirm) refresh(confirm);
+                setConfirm(null);
+              }}
+            >
+              Replace
+            </Button>
+          </>
+        }
+      />
     </>
   );
 }

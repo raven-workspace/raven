@@ -19,14 +19,14 @@ import { TextSelection } from "prosekit/pm/state";
 import { AutocompleteEmpty, AutocompleteItem, AutocompletePopup, AutocompletePositioner, AutocompleteRoot } from "prosekit/react/autocomplete";
 import { useEditor } from "prosekit/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { evidenceIdsIn, type ReportNode } from "../../../engines/report";
+import { entryIdsIn, type ReportNode } from "../../../engines/report";
 import type { LogEntry } from "../../../types/log";
 import { cx } from "../../../lib/cx";
 import { labelClass } from "../../../ui";
 import { KIND_LABELS } from "../../log/kindLabels";
 import { inPageHeading, insertTable, setBlockKind, type PageEditor } from "./commands";
 import type { EditingExtension } from "./extension";
-import { placeEntry, usePageActions } from "./pageActions";
+import { insertEntry, usePageActions } from "./pageActions";
 import { useReportData } from "./ReportDataContext";
 
 interface BlockItem {
@@ -77,7 +77,7 @@ export function fuzzyScore(query: string, text: string): number | null {
 
 /** Evidence the slash menu offers: this target's non-private entries not on the page yet. */
 function candidates(log: LogEntry[], hostIds: string[], doc: ReportNode): LogEntry[] {
-  const onPage = evidenceIdsIn(doc);
+  const onPage = entryIdsIn(doc);
   return log
     .filter((e) => !e.private && !onPage.has(e.id) && e.hostIds.some((h) => hostIds.includes(h)))
     .sort((a, b) => b.at - a.at || b.createdAt - a.createdAt);
@@ -301,7 +301,7 @@ export function SlashMenu() {
                 className="grid min-h-11 cursor-default grid-cols-[40px_minmax(0,1fr)] items-start gap-3 rounded-sm px-2 py-1 data-highlighted:bg-surface-hi"
                 onSelect={() => {
                   picked.current = true;
-                  placeEntry(editor, e);
+                  if (target) insertEntry(editor, data, target, e, true);
                 }}
               >
                 <span className="font-mono text-code text-muted tabular-nums">{clock(e.at)}</span>

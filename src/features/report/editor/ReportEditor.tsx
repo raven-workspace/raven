@@ -6,7 +6,7 @@ import type { Node as PMNode } from "prosekit/pm/model";
 import { isHistoryTransaction } from "prosekit/pm/history";
 import { NodeSelection, Plugin, PluginKey, type Command, type Transaction } from "prosekit/pm/state";
 import { ProseKit, useDocChange, useExtension, useKeymap } from "prosekit/react";
-import { ownerParagraphs, isFigure, stepTitleBefore, type DocPath, type EvidenceAttrs, sectionGuide, type PageHeadings, type PageMeta, type ReportData, type ReportNode } from "../../../engines/report";
+import { entryIdsIn, ownerParagraphs, isFigure, stepTitleBefore, type DocPath, type EvidenceAttrs, sectionGuide, type PageHeadings, type PageMeta, type ReportData, type ReportNode } from "../../../engines/report";
 import { reportError } from "../../../lib/lockSignal";
 import { RavenError } from "../../../types/errors";
 import type { SectionKind } from "../../../types/report";
@@ -17,7 +17,7 @@ import { defineReportExtension, type HeldPositions, type SourceGone, type SubNum
 import { FindBar } from "./FindBar";
 import { FormatToolbar } from "./FormatToolbar";
 import { GuidePortals, GuideSlots, useGuideSettings } from "./GuideNote";
-import { hostAtPos, PageActionsContext, pathPos, placeEntry, saveScreenshot, type PageActions } from "./pageActions";
+import { hostAtPos, insertFigure, PageActionsContext, pathPos, PROGRAMMATIC, saveScreenshot, type PageActions } from "./pageActions";
 import { PageLayoutContext, useReportData, type PageLayout } from "./ReportDataContext";
 import { SlashMenu } from "./SlashMenu";
 import { TableHandles } from "./TableHandles";
@@ -177,14 +177,15 @@ export function selectBlockAt(editor: Editor, pos: number) {
   view.focus();
 }
 
-/** Marks a transaction the page makes itself (Add new evidence and its Undo, notes turned into text): what it takes
- *  off the page is not the owner's removal. */
-export const PROGRAMMATIC = "raven:programmatic";
+export { PROGRAMMATIC };
+
+/** The entries a block names itself (its `entry:` source, a figure's `entryId`, its `also`), not its children's. */
+const ownEntryIds = (node: PMNode) => entryIdsIn({ type: node.type.name, attrs: node.attrs });
 
 /**
- * The entries a transaction took off the page: evidence blocks in the ranges it deleted (inside a step or a steps list
- * too) whose entry the page no longer places (`evidenceIdsIn`'s rule: no evidence block, no text taken from it). None
- * for the page's own transactions (`PROGRAMMATIC`) and for undo and redo.
+ * The entries a transaction took off the page: entries named by blocks in the ranges it deleted (inside a step list
+ * too) that the page no longer names anywhere (`entryIdsIn`'s rule: a source, a figure's entry, an `also`). None for
+ * the page's own transactions (`PROGRAMMATIC`) and for undo and redo.
  */
 export function removedByTransaction(tr: Transaction): string[] {
   if (!tr.docChanged || tr.getMeta(PROGRAMMATIC) === true || isHistoryTransaction(tr)) return [];
@@ -194,15 +195,14 @@ export function removedByTransaction(tr: Transaction): string[] {
     step.getMap().forEach((oldStart, oldEnd) => {
       if (oldEnd <= oldStart) return;
       before.nodesBetween(oldStart, oldEnd, (node) => {
-        if (node.type.name === "evidence" && typeof node.attrs.entryId === "string") gone.add(node.attrs.entryId);
+        for (const id of ownEntryIds(node)) gone.add(id);
         return true;
       });
     });
   });
   if (gone.size === 0) return [];
   tr.doc.descendants((node) => {
-    if (node.type.name === "evidence") gone.delete(node.attrs.entryId as string);
-    else if (typeof node.attrs.fromEntry === "string" && node.attrs.fromField == null) gone.delete(node.attrs.fromEntry);
+    for (const id of ownEntryIds(node)) gone.delete(id);
     return gone.size > 0;
   });
   return [...gone];
@@ -542,7 +542,7 @@ export function ReportEditor({
         .then((entry) => {
           if (!editor.mounted) return;
           // The caption is the page's to write.
-          placeEntry(editor, entry, Math.min(spot.pos, editor.state.doc.content.size), { caption: "" });
+          insertFigure(editor, entry, spot.pos);
         })
         .finally(() => held?.delete(spot))
         .catch((e: unknown) => {

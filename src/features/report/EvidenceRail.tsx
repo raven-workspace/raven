@@ -3,10 +3,9 @@ import type { Editor } from "prosekit/core";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   entryPhase,
-  evidenceIdsIn,
+  entryIdsIn,
   isPortScan,
   machinesInOrder,
-  MAX_INLINE_LINES,
   targetCredentials,
   type Phase,
   type ReportData,
@@ -22,7 +21,7 @@ import type { LogEntry } from "../../types/log";
 import { BELOW_TITLE_BAR, Button, IconButton, labelClass, Tooltip, useDrawerPresence } from "../../ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/shadcn/tabs";
 import { KIND_LABELS } from "../log/kindLabels";
-import { addEntryCommand } from "./editor/pageActions";
+import { insertEntry } from "./editor/pageActions";
 import { hasPageCursor } from "./editor/ReportEditor";
 
 type RailTab = "unused" | "notes" | "creds";
@@ -36,20 +35,19 @@ const clock = (at: number) => {
 /** An entry the report keeps to the operator: a failed attempt logged with an operator-only reason (or kept private). */
 const operatorOnly = (data: ReportData, e: LogEntry) => data.attempts.some((a) => a.logEntryId === e.id && (a.private || a.reasonKind === "operator"));
 
-/** Host-linked, non-private entries (any host of the target) with no evidence block on the page, in time order. An
- *  entry behind an operator-reason attempt never shows. */
+/** Host-linked, non-private entries (any host of the target) with no block on the page sourced from them
+ *  (`entryIdsIn`), in time order. An entry behind an operator-reason attempt never shows. */
 export function unusedEntries(data: ReportData, target: ReportTarget, doc: ReportNode): LogEntry[] {
-  const onPage = evidenceIdsIn(doc);
+  const onPage = entryIdsIn(doc);
   return data.log
     .filter((e) => !e.private && !onPage.has(e.id) && e.hostIds.some((h) => target.hostIds.includes(h)) && !operatorOnly(data, e))
     .sort((a, b) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id));
 }
 
-/** One row of the log column: the entry, one line of what it showed, its action, and why it may already be covered. */
+/** One row of the log column: the entry, one line of what it showed, and why it may already be covered. */
 export interface RailRow {
   entry: LogEntry;
   line: string;
-  action: "add" | "appendix";
   /** A port scan whose open ports are all in the port table; a failed attempt, listed in Also tested. */
   note?: "in-ports" | "in-tested";
 }
@@ -78,7 +76,6 @@ const firstLine = (text: string) =>
     .split(/\r?\n/)
     .map((l) => l.trim())
     .find((l) => l !== "");
-const lines = (text: string) => (text === "" ? 0 : text.replace(/\n$/, "").split(/\r?\n/).length);
 
 /** The scan's open ports, all already in the host's services (the port table lists them). */
 function scanInPortTable(data: ReportData, hostId: string, e: LogEntry): boolean {
@@ -91,10 +88,9 @@ function scanInPortTable(data: ReportData, hostId: string, e: LogEntry): boolean
 function railRow(data: ReportData, hostId: string, e: LogEntry): RailRow {
   const outputs = outputsOf(e);
   const line = outputs.map(firstLine).find((l) => l != null) ?? firstLine(e.observations ?? "") ?? "no output";
-  const longest = Math.max(0, ...outputs.map(lines));
   const tested = data.attempts.some((a) => a.logEntryId === e.id && !a.private && a.reasonKind !== "operator");
   const note = scanInPortTable(data, hostId, e) ? "in-ports" : tested ? "in-tested" : undefined;
-  return { entry: e, line, action: longest > MAX_INLINE_LINES ? "appendix" : "add", ...(note ? { note } : {}) };
+  return { entry: e, line, ...(note ? { note } : {}) };
 }
 
 interface Placed {
@@ -106,7 +102,7 @@ const rowCache = new WeakMap<ReportData, WeakMap<ReportTarget, Map<string, Place
 
 /**
  * The log column (§10.1): the target's log that is not in the report, per machine (in page order) and phase (the phase
- * `endOfPhase` would place it in), time order inside each group. Private entries and operator-reason attempts never
+ * `phaseInsertAt` would place it in), time order inside each group. Private entries and operator-reason attempts never
  * show.
  */
 export function railGroups(data: ReportData, target: ReportTarget, doc: ReportNode): RailGroup[] {
@@ -141,7 +137,7 @@ const NOTE_TEXT: Record<NonNullable<RailRow["note"]>, string> = {
 const commandOf = (e: LogEntry) => (e.content.kind === "command" ? e.content.blocks[0]?.command?.split("\n")[0] : undefined) || e.title;
 
 function RailItem({ row, onAct }: { row: RailRow; onAct(row: RailRow, from: HTMLElement | null): void }) {
-  const { entry, line, action, note } = row;
+  const { entry, line, note } = row;
   const lead = commandOf(entry);
   const onKey = (ev: KeyboardEvent<HTMLLIElement>) => {
     const li = ev.currentTarget;
@@ -155,7 +151,6 @@ function RailItem({ row, onAct }: { row: RailRow; onAct(row: RailRow, from: HTML
       rows[rows.indexOf(li) + (ev.key === "ArrowDown" ? 1 : -1)]?.focus();
     }
   };
-  const label = action === "appendix" ? `Add ${entry.title} to appendix` : `Add ${entry.title}`;
   return (
     <li
       tabIndex={0}
@@ -179,13 +174,13 @@ function RailItem({ row, onAct }: { row: RailRow; onAct(row: RailRow, from: HTML
       <Tooltip
         content={
           <>
-            <span>{action === "appendix" ? "Add, with the full output in an appendix" : "Add to the step you're on, else the end of its phase"}</span>
+            <span>Add to the step you're on, else the end of its phase</span>
             <span className="ml-2 font-mono text-muted">⌘↵</span>
           </>
         }
       >
-        <Button size="sm" aria-label={label} onClick={(e) => onAct(row, e.currentTarget.closest("li"))}>
-          {action === "appendix" ? "+ to appendix" : "+ add"}
+        <Button size="sm" aria-label={`Add ${entry.title}`} onClick={(e) => onAct(row, e.currentTarget.closest("li"))}>
+          + add
         </Button>
       </Tooltip>
     </li>
@@ -213,7 +208,7 @@ function LogTab({
       const i = rows.indexOf(li);
       (rows[i + 1] ?? rows[i - 1])?.focus();
     }
-    editor.exec(addEntryCommand(editor.state, hasPageCursor(editor), data, target, row.entry, row.action === "appendix"));
+    insertEntry(editor, data, target, row.entry, hasPageCursor(editor));
     onInserted(row.entry.id);
   };
 

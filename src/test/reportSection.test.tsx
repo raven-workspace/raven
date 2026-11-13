@@ -1557,9 +1557,10 @@ describe("TodoPanel", () => {
 });
 
 describe("pruneRemoved", () => {
-  const ev = (entryId: string) => ({ type: "evidence", attrs: { entryId } });
+  const block = (entryId: string) => ({ type: "codeBlock", attrs: { source: `entry:${entryId}:0:output` } });
   it("drops removed ids whose entry is on the page again (undo) and keeps the rest", () => {
-    const doc = { type: "doc", content: [ev("a")] };
+    const doc = { type: "doc", content: [block("a"), { type: "figure", attrs: { entryId: "c" } }, { type: "paragraph", attrs: { also: ["d"] } }] };
+    expect(pruneRemoved(doc, { removedEntryIds: ["b", "c", "d"] })).toEqual({ removedEntryIds: ["b"] });
     expect(pruneRemoved(doc, { removedEntryIds: ["a", "b"], layout: 3 })).toEqual({ removedEntryIds: ["b"], layout: 3 });
     const meta = { removedEntryIds: ["b"] };
     expect(pruneRemoved(doc, meta)).toBe(meta);

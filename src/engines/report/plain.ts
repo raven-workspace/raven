@@ -2,7 +2,7 @@ import type { Finding, FindingFile } from "../../types/findings";
 import type { LogEntry } from "../../types/log";
 import { findingBlocks, inlineMarkdown, labelled } from "./copies";
 import { testedLine, testedNotExploited } from "./coverage";
-import { findingPhaseMap, hostEntry, hostPlan, machinesInOrder, severityRank, stepsOf } from "./draft";
+import { entryPhase, findingPhaseMap, hostEntry, hostPlan, machinesInOrder, severityRank, stepsOf } from "./draft";
 import { msfLine, PLAIN_TABLE_KINDS, plainTable } from "./plainTables";
 import { placingEntries } from "./prove";
 import { attackPathRows, portRows, resultLine } from "./tables";
@@ -714,6 +714,61 @@ export function entryIdsIn(doc: ReportNode): Set<string> {
   };
   walk(doc);
   return ids;
+}
+
+/* ------------------------------------------------------------------ Placing an entry */
+
+/** The phases with a heading of their own, in page order. */
+const PAGE_PHASES: Phase[] = ["enum", "foothold", "lateral", "privesc", "domain", "post"];
+
+/**
+ * Where a new step for `entry` goes on a page with no cursor: `index` is the top-level index at the end of the region
+ * of the last heading whose source is `phase:<hostId>:<phase>` (or `…:<findingId>`), the region running to the next
+ * level 1 or 2 heading or the end. `before` lists the blocks to insert first: the phase's heading when it has none
+ * (before the host's first later-phase heading, else its Additional findings or Also tested heading, else the next
+ * machine's heading, else at the end), and "Steps to reproduce:" when the region holds no step yet. The phase is
+ * `entryPhase`'s; `enum` is the Service enumeration region.
+ */
+export function phaseInsertAt(doc: ReportNode, data: ReportData, target: ReportTarget, entry: LogEntry): { index: number; before: ReportNode[] } {
+  const { hostId, phase } = entryPhase(data, target, entry);
+  const content = doc.content ?? [];
+  const src = (n: ReportNode) => sourceOf(n) ?? "";
+  const ofPhase = (n: ReportNode, p: Phase) => n.type === "heading" && (src(n) === `phase:${hostId}:${p}` || src(n).startsWith(`phase:${hostId}:${p}:`));
+  const breaks = (n: ReportNode) => n.type === "heading" && ((n.attrs?.level as number | undefined) ?? 1) <= 2;
+  const isStep = (n: ReportNode) => n.type === "list" && n.attrs?.kind === "ordered";
+  const stepsLabel = para([bold("Steps to reproduce:")], `phase-steps:${hostId}`);
+
+  const head = content.reduce((found, n, i) => (ofPhase(n, phase) ? i : found), -1);
+  if (head !== -1) {
+    let end = head + 1;
+    while (end < content.length && !breaks(content[end])) end++;
+    const region = content.slice(head + 1, end);
+    const labelled = region.some((n) => isStep(n) || src(n) === `phase-steps:${hostId}`);
+    return { index: end, before: finish(labelled ? [] : [stepsLabel]) };
+  }
+
+  const later = PAGE_PHASES.slice(PAGE_PHASES.indexOf(phase) + 1);
+  let at = content.findIndex((n) => later.some((p) => ofPhase(n, p)));
+  if (at === -1) at = content.findIndex((n) => ofPhase(n, "additional") || ofPhase(n, "tested"));
+  if (at === -1) {
+    const facts = content.findIndex((n) => src(n) === `facts:${hostId}`);
+    if (facts !== -1) at = content.findIndex((n, i) => i > facts && src(n).startsWith("facts:"));
+  }
+  if (at === -1) at = content.length;
+  const title = phase === "enum" ? ENUM_HEADING : (PHASE_TITLE[phase] ?? capitalize(phase));
+  return { index: at, before: finish([heading(2, title, `phase:${hostId}:${phase}`), stepsLabel]) };
+}
+
+/**
+ * Add new evidence's entries: those the draft would place now (`entryIdsIn(buildPlainTarget(…))`) that the page holds
+ * no block of and the owner hasn't removed, in time order.
+ */
+export function missingEntries(doc: ReportNode, data: ReportData, target: ReportTarget, meta: ReportMeta, removed: readonly string[]): LogEntry[] {
+  const wanted = entryIdsIn(buildPlainTarget(data, target, meta));
+  const onPage = entryIdsIn(doc);
+  return data.log
+    .filter((e) => wanted.has(e.id) && !onPage.has(e.id) && !removed.includes(e.id))
+    .sort((a, b) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id));
 }
 
 /** Text nodes as ProseMirror stores them: neighbours with the same marks joined, empty ones dropped. */

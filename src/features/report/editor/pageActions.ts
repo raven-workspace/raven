@@ -1,23 +1,24 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { Editor } from "prosekit/core";
 import { createContext, useContext } from "react";
-import type { Node as PMNode } from "prosekit/pm/model";
-import type { Command, EditorState } from "prosekit/pm/state";
+import { Fragment, type Node as PMNode } from "prosekit/pm/model";
+import { closeHistory } from "prosekit/pm/history";
+import { NodeSelection } from "prosekit/pm/state";
 import {
-  endOfPhase,
-  evidenceBlocks,
-  evidenceNodes,
-  MAX_INLINE_LINES,
-  type AppendixPlacement,
+  blockHash,
+  entryBlocks,
+  phaseInsertAt,
+  sourceBlocks,
+  stamp,
   type DocPath,
   type ReportData,
+  type ReportMeta,
   type ReportNode,
   type ReportTarget,
 } from "../../../engines/report";
 import { api } from "../../../lib/api";
 import type { LogEntry } from "../../../types/log";
 import { readImage, releaseImage } from "../../capture/imagePaste";
-import { insertIntoCurrentStep } from "./commands";
 
 /** What the page's menus and toolbar ask the page to do beyond ProseKit's own commands. */
 export interface PageActions {
@@ -33,9 +34,15 @@ export const usePageActions = () => useContext(PageActionsContext);
 /** The top-level block a position is in (or just before), by index. */
 const topIndexAt = (doc: Editor["state"]["doc"], pos: number) => doc.resolve(Math.max(0, Math.min(pos, doc.content.size))).index(0);
 
+/** The machine a top-level block names: a machine heading (`facts:<hostId>`) or a phase heading (`phase:<hostId>:…`). */
+function hostOfBlock(node: PMNode): string | null {
+  const source = typeof node.attrs.source === "string" ? node.attrs.source : "";
+  return /^(?:facts|phase):([^:]+)/.exec(source)?.[1] ?? null;
+}
+
 /**
  * The machine a position on the page belongs to: on an AD set's page, the one whose section it sits in (the nearest
- * machine heading or phase above it), else the target's first machine. None on a page without a target.
+ * machine or phase heading above it), else the target's first machine. None on a page without a target.
  */
 export function hostAtPos(editor: Editor, pos: number, target: ReportTarget | undefined): string | null {
   if (!target || target.hostIds.length === 0) return null;
@@ -44,41 +51,10 @@ export function hostAtPos(editor: Editor, pos: number, target: ReportTarget | un
   let found: string | null = null;
   doc.forEach((node, _offset, i) => {
     if (i > upTo) return;
-    const hostId = node.attrs.hostId as unknown;
-    if ((node.type.name === "phase" || (node.type.name === "generated" && node.attrs.kind === "facts")) && typeof hostId === "string" && target.hostIds.includes(hostId))
-      found = hostId;
+    const hostId = hostOfBlock(node);
+    if (hostId && target.hostIds.includes(hostId)) found = hostId;
   });
   return found ?? target.hostIds[0];
-}
-
-/**
- * Puts a log entry on the page at `pos` (the cursor when absent), never splitting a block: in place of the empty
- * paragraph the cursor is in, else after the cursor's top-level block. After a block the owner writes in (a slot or a
- * paragraph) the entry takes no slot of its own: that block is its explanation. `evidenceAttrs` go on its evidence
- * blocks (a pasted screenshot's empty caption).
- */
-export function placeEntry(editor: Editor, entry: LogEntry, pos?: number, evidenceAttrs?: Record<string, unknown>): boolean {
-  return editor.exec((state, dispatch) => {
-    const at = pos ?? state.selection.from;
-    const $pos = state.doc.resolve(Math.max(0, Math.min(at, state.doc.content.size)));
-    if ($pos.depth === 0) {
-      dispatch?.(state.tr.insert($pos.pos, evidenceNodes(entry).map((n) => state.schema.nodeFromJSON(n))).scrollIntoView());
-      return true;
-    }
-    const top = $pos.node(1);
-    const from = $pos.before(1);
-    const to = $pos.after(1);
-    const prose = top.type.name === "paragraph" || top.type.name === "slot";
-    const nodes: ReportNode[] = (prose ? evidenceBlocks(entry) : evidenceNodes(entry)).map((n) =>
-      n.type === "evidence" && evidenceAttrs ? { ...n, attrs: { ...n.attrs, ...evidenceAttrs } } : n,
-    );
-    const made = nodes.map((n) => state.schema.nodeFromJSON(n));
-    if (dispatch) {
-      const tr = top.type.name === "paragraph" && top.content.size === 0 ? state.tr.replaceWith(from, to, made) : state.tr.insert(to, made);
-      dispatch(tr.scrollIntoView());
-    }
-    return true;
-  });
 }
 
 const fileNameOf = (file: File) => file.name || `screenshot.${file.type.split("/")[1] ?? "png"}`;
@@ -118,26 +94,6 @@ function currentPos(editor: Editor, block: { node: PMNode; pos: number }): numbe
   return found;
 }
 
-/**
- * Whether a block can move to an appendix (§5.6, §10.4): evidence, a generated table, a modified exploit. An unmodified
- * exploit is one line (its URL), so it stays.
- */
-export function blockMovable(node: PMNode, data: ReportData): boolean {
-  if (node.type.name === "evidence" || node.type.name === "generated") return true;
-  if (node.type.name !== "exploit") return false;
-  return data.findingFiles.find((f) => f.id === node.attrs.fileId)?.modified === true;
-}
-
-/** Moves a block to the appendix or back inline: its `appendix` attr, one undoable step. */
-export function setBlockAppendix(editor: Editor, block: { node: PMNode; pos: number }, place: AppendixPlacement): boolean {
-  return editor.exec((state, dispatch) => {
-    const pos = currentPos(editor, block);
-    if (pos === null) return false;
-    dispatch?.(state.tr.setNodeMarkup(pos, undefined, { ...block.node.attrs, appendix: place }));
-    return true;
-  });
-}
-
 /** Deletes a block. The evidence in it (a step's, a list's too) is remembered as removed by the page's removal
  *  tracking (`removedByTransaction`), as ⌫ is. */
 export function deleteBlockAt(editor: Editor, block: { node: PMNode; pos: number }): boolean {
@@ -167,49 +123,165 @@ export function pathPos(doc: PMNode, path: DocPath): number | null {
   return at;
 }
 
-/** Lines in an output, as the rail counts them (a trailing newline ends the last line, it opens none). */
-const outputLines = (text: string) => (text === "" ? 0 : text.replace(/\n$/, "").split(/\r?\n/).length);
 
-/** Whether an evidence block of `entry` prints more than `MAX_INLINE_LINES` lines of output. */
-function tooLong(entry: LogEntry, attrs: Record<string, unknown> | undefined): boolean {
-  if (entry.content.kind !== "command") return false;
-  const block = typeof attrs?.block === "number" ? attrs.block : null;
-  const blocks = block === null ? entry.content.blocks : entry.content.blocks.slice(block, block + 1);
-  return blocks.some((b) => outputLines(b.output ?? "") > MAX_INLINE_LINES);
-}
+/** Marks a transaction the page makes itself (Add new evidence's Undo, a Refresh, notes turned into text): what it
+ *  takes off the page is not the owner's removal. */
+export const PROGRAMMATIC = "raven:programmatic";
 
-/** `nodes` with the entry's evidence blocks (at any depth) that are too long to print set to `place`; the rest of
- *  its blocks stay inline. */
-function withAppendix(nodes: ReportNode[], entry: LogEntry, place: AppendixPlacement): ReportNode[] {
-  return nodes.map((n) => ({
-    ...n,
-    ...(n.type === "evidence" && n.attrs?.entryId === entry.id && tooLong(entry, n.attrs) ? { attrs: { ...n.attrs, appendix: place } } : {}),
-    ...(n.content ? { content: withAppendix(n.content, entry, place) } : {}),
-  }));
+/** Where blocks go beside a position: `from`..`to` in a parent that takes them (equal when inserting). */
+interface Spot {
+  from: number;
+  to: number;
 }
 
 /**
- * The rail's + add (§10.1): the entry's evidence into the step that holds the cursor (no new step; `cursor` says the
- * owner has put one on the page), else a new step at the end of its phase (`endOfPhase`). + to appendix (`toAppendix`)
- * places it the same way with its long evidence split (trimmed inline, in full in the appendix); its short blocks stay
- * inline. One undoable step.
+ * Where blocks go after the block at `pos` (the cursor's textblock, or a selected block): right after it, in its
+ * parent. An empty paragraph without a hint is replaced; a hint paragraph never is. A cell of a table counts as the
+ * table: the blocks go after the table, never into a cell. A parent that can't take them passes them up a level.
  */
-export function addEntryCommand(
-  state: EditorState,
-  cursor: boolean,
-  data: ReportData,
-  target: ReportTarget,
-  entry: LogEntry,
-  toAppendix = false,
-): Command {
-  const finish = (nodes: ReportNode[]) => (toAppendix ? withAppendix(nodes, entry, "split") : nodes).map((n) => state.schema.nodeFromJSON(n));
-  const inStep = cursor ? insertIntoCurrentStep(state, finish(evidenceBlocks(entry))) : null;
-  if (inStep) return inStep;
-  return (s, dispatch) => {
-    const { at, nodes } = endOfPhase(s.doc.toJSON() as ReportNode, data, target, entry);
-    const pos = pathPos(s.doc, at);
-    if (pos === null) return false;
-    dispatch?.(s.tr.insert(pos, finish(nodes)).scrollIntoView());
+function spotAfter(doc: PMNode, pos: number, selected: PMNode | null, made: PMNode[]): Spot {
+  const frag = Fragment.from(made);
+  const $pos = doc.resolve(Math.max(0, Math.min(pos, doc.content.size)));
+  let depth: number;
+  if (selected) depth = $pos.depth + 1;
+  else if ($pos.parent.isTextblock) depth = $pos.depth;
+  else {
+    // Between blocks: insert right there, when the parent takes them.
+    if ($pos.parent.canReplace($pos.index(), $pos.index(), frag)) return { from: $pos.pos, to: $pos.pos };
+    depth = $pos.depth;
+  }
+  for (let d = 1; d <= Math.min(depth, $pos.depth); d++) {
+    if ($pos.node(d).type.name === "table") {
+      depth = d;
+      break;
+    }
+  }
+  const blockAt = (d: number) => (d === $pos.depth + 1 ? selected! : $pos.node(d));
+  const before = (d: number) => (d === $pos.depth + 1 ? $pos.pos : $pos.before(d));
+  const index = (d: number) => $pos.index(d - 1);
+  const block = blockAt(depth);
+  const parent = $pos.node(depth - 1);
+  const empty = block.type.name === "paragraph" && block.content.size === 0 && !block.attrs.hint;
+  if (empty && parent.canReplace(index(depth), index(depth) + 1, frag)) return { from: before(depth), to: before(depth) + block.nodeSize };
+  for (let d = depth; d >= 1; d--) {
+    const after = before(d) + blockAt(d).nodeSize;
+    if ($pos.node(d - 1).canReplace(index(d) + 1, index(d) + 1, frag)) return { from: after, to: after };
+  }
+  return { from: doc.content.size, to: doc.content.size };
+}
+
+/** Inserts `made` at `spot` in one transaction, an undo step of its own (never merged with typing just before it);
+ *  returns the nodes as they stand on the page after it. */
+function insertAtSpot(editor: Editor, spot: (doc: PMNode) => Spot, made: PMNode[]): PMNode[] {
+  let at: number | null = null;
+  editor.exec((state, dispatch) => {
+    const { from, to } = spot(state.doc);
+    at = from;
+    dispatch?.(closeHistory(state.tr.replaceWith(from, to, made)).scrollIntoView());
     return true;
-  };
+  });
+  if (at === null) return [];
+  const $at = editor.state.doc.resolve(at);
+  const out: PMNode[] = [];
+  for (let i = $at.index(); i < Math.min($at.parent.childCount, $at.index() + made.length); i++) out.push($at.parent.child(i));
+  return out;
+}
+
+/**
+ * Puts a log entry on a plain page, as one undoable step, and returns the top-level nodes it inserted. With the owner's
+ * cursor on the page (`atCursor`, `hasPageCursor`), the entry's blocks (`entryBlocks`) go right after the cursor's
+ * block, inside its list or step: an empty paragraph without a hint is replaced, a hint paragraph never is. Without
+ * one, they go as a new numbered step at the end of the entry's phase (`phaseInsertAt`), after its heading and "Steps
+ * to reproduce:" when the page has none yet.
+ */
+export function insertEntry(editor: Editor, data: ReportData, target: ReportTarget, entry: LogEntry, atCursor: boolean): PMNode[] {
+  const schema = editor.state.schema;
+  const blocks = entryBlocks(data, entry);
+  if (atCursor) {
+    const made = blocks.map((n) => schema.nodeFromJSON(n));
+    return insertAtSpot(
+      editor,
+      (doc) => {
+        const sel = editor.state.selection;
+        return spotAfter(doc, sel.from, sel instanceof NodeSelection && sel.node.isBlock ? sel.node : null, made);
+      },
+      made,
+    );
+  }
+  const { index, before } = phaseInsertAt(editor.state.doc.toJSON() as ReportNode, data, target, entry);
+  const made = [...before, { type: "list", attrs: { kind: "ordered" }, content: blocks }].map((n) => schema.nodeFromJSON(n));
+  return insertAtSpot(
+    editor,
+    (doc) => {
+      let pos = 0;
+      for (let i = 0; i < Math.min(index, doc.childCount); i++) pos += doc.child(i).nodeSize;
+      return { from: pos, to: pos };
+    },
+    made,
+  );
+}
+
+/**
+ * Puts a pasted or dropped screenshot on the page as a figure with an empty caption (the page's to write), after the
+ * block at `pos`, in its parent: an empty paragraph without a hint is replaced. One undoable step.
+ */
+export function insertFigure(editor: Editor, entry: LogEntry, pos: number): PMNode[] {
+  if (entry.content.kind !== "screenshot") return [];
+  const [figure] = stamp([{ type: "figure", attrs: { attachmentId: entry.content.attachmentId, entryId: entry.id, source: `entry:${entry.id}` } }]);
+  const made = [editor.state.schema.nodeFromJSON(figure)];
+  return insertAtSpot(editor, (doc) => spotAfter(doc, Math.min(pos, doc.content.size), null, made), made);
+}
+
+/** A run of sibling blocks that share one source: Refresh replaces it as a whole. */
+export interface SourceRun {
+  from: number;
+  to: number;
+  nodes: PMNode[];
+  source: string;
+}
+
+/** The contiguous siblings around the block at `pos` that share its `source`; null when it has none. */
+export function sourceRun(doc: PMNode, pos: number): SourceRun | null {
+  const node = doc.nodeAt(pos);
+  const source = node?.attrs.source;
+  if (!node || typeof source !== "string" || source === "") return null;
+  const $pos = doc.resolve(pos);
+  const parent = $pos.parent;
+  const index = $pos.index();
+  const same = (i: number) => parent.child(i).attrs.source === source;
+  let first = index;
+  while (first > 0 && same(first - 1)) first--;
+  let last = index;
+  while (last < parent.childCount - 1 && same(last + 1)) last++;
+  let from = $pos.start();
+  for (let i = 0; i < first; i++) from += parent.child(i).nodeSize;
+  const nodes: PMNode[] = [];
+  for (let i = first; i <= last; i++) nodes.push(parent.child(i));
+  return { from, to: from + nodes.reduce((n, b) => n + b.nodeSize, 0), nodes, source };
+}
+
+/** Whether the owner changed any of these blocks since they were generated: its hash differs from its `gen`, or it has
+ *  none (a flattened block, whose words may be the owner's). */
+export function isEdited(nodes: PMNode[]): boolean {
+  return nodes.some((n) => typeof n.attrs.gen !== "string" || n.attrs.gen === "" || blockHash(n.toJSON() as ReportNode) !== n.attrs.gen);
+}
+
+/** Replaces a run with its source's blocks as the draft writes them now (`sourceBlocks`), in one undo step of its own
+ *  (⌘Z brings the owner's words back, never merged with their typing). False
+ *  when the source offers no Refresh (unknown, private or deleted). */
+export function refreshRun(editor: Editor, run: SourceRun, data: ReportData, target: ReportTarget | null, meta: ReportMeta): boolean {
+  const blocks = sourceBlocks(run.source, data, target, meta);
+  if (!blocks) return false;
+  return editor.exec((state, dispatch) => {
+    const made = blocks.map((n) => state.schema.nodeFromJSON(n));
+    dispatch?.(closeHistory(state.tr.replaceWith(run.from, run.to, made)).setMeta(PROGRAMMATIC, true));
+    return true;
+  });
+}
+
+/** The block menu's Refresh item for a source: the log's, a finding's (its file's too), else Raven's own. */
+export function refreshLabel(source: string): "Refresh from log" | "Refresh from finding" | "Refresh from Raven" {
+  if (source.startsWith("entry:")) return "Refresh from log";
+  if (source.startsWith("finding:") || source.startsWith("file:")) return "Refresh from finding";
+  return "Refresh from Raven";
 }

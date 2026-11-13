@@ -371,9 +371,9 @@ describe("Slash menu", () => {
     ]);
   });
 
-  it("searches this target's log, fuzzily, and inserts the entry as live evidence in place of the empty line", async () => {
+  it("searches this target's log, fuzzily, and inserts the entry's blocks in place of the empty line", async () => {
     const log = [entry({}), shot("s1", "Admin panel"), entry({ id: "other", title: "Other host", hostIds: ["h9"] })];
-    const { editor } = await ready(doc(slot("Scanned it"), para()), log);
+    const { editor } = await ready(doc(para("Scanned it"), para()), log);
     act(() => editor().view.focus());
     cursorAt(editor(), editor().state.doc.child(0).nodeSize + 1);
     type(editor(), "/nmp");
@@ -381,8 +381,8 @@ describe("Slash menu", () => {
     await waitFor(() => expect(within(list).getByRole("option", { name: /Full port scan/, hidden: true })).toBeInTheDocument());
     expect(within(list).queryByRole("option", { name: /Other host/, hidden: true })).toBeNull();
     fireEvent.click(within(list).getByRole("option", { name: /Full port scan/, hidden: true }));
-    // Typed after a slot (the step's explanation), so the entry takes no slot of its own.
-    expect(json(editor()).content?.map((n) => n.attrs?.entryId ?? n.type)).toEqual(["slot", "e1"]);
+    // Plain blocks with their sources, where the empty line was.
+    expect(json(editor()).content?.map((n) => n.attrs?.source ?? n.content?.[0]?.text)).toEqual(["Scanned it", "entry:e1:title", "entry:e1:0:command", "entry:e1:0:output"]);
   });
 
   it("the toolbar's Insert evidence opens it on log entries alone", async () => {
@@ -394,7 +394,8 @@ describe("Slash menu", () => {
     await waitFor(() => expect(within(list).getByRole("option", { name: /Admin panel/, hidden: true })).toBeInTheDocument());
     expect(within(list).queryByRole("option", { name: /Heading 3/, hidden: true })).toBeNull();
     fireEvent.click(within(list).getByRole("option", { name: /Admin panel/, hidden: true }));
-    expect(json(editor()).content?.map((n) => n.attrs?.entryId ?? n.content?.[0]?.text)).toEqual(["Next we scanned", "s1"]);
+    expect(json(editor()).content?.map((n) => n.attrs?.source ?? n.content?.[0]?.text)).toEqual(["Next we scanned", "entry:s1:title", "entry:s1"]);
+    expect(json(editor()).content?.[2]).toMatchObject({ type: "figure", attrs: { entryId: "s1", attachmentId: "a1" } });
   });
 
   it("never opens mid-sentence: a path typed in a sentence and ↵ stay as text", async () => {
@@ -582,8 +583,8 @@ describe("Images", () => {
     act(() => void editor.view.dom.dispatchEvent(event));
   }
 
-  it("a pasted image becomes a screenshot entry of this target, on the page as live evidence with a caption to write", async () => {
-    const { editor, qc } = await ready(doc(slot("Uploaded the shell"), para()));
+  it("a pasted image becomes a screenshot entry of this target, on the page as a figure with a caption to write", async () => {
+    const { editor, qc } = await ready(doc(para("Uploaded the shell"), para()));
     cursorAt(editor(), editor().state.doc.child(0).nodeSize + 1);
     paste(editor(), png());
     await waitFor(() => expect(m.logCreate).toHaveBeenCalled());
@@ -594,8 +595,11 @@ describe("Images", () => {
       content: { kind: "screenshot", caption: "", fileName: "shot.png" },
       attachment: { mime: "image/png", dataBase64: expect.any(String) },
     });
-    await waitFor(() => expect(json(editor()).content?.map((n) => n.attrs?.entryId ?? n.type)).toEqual(["slot", "new-shot"]));
-    expect(json(editor()).content?.[1].attrs).toMatchObject({ caption: "" });
+    // In place of the empty line.
+    await waitFor(() => expect(json(editor()).content?.map((n) => n.type)).toEqual(["paragraph", "figure"]));
+    const figure = json(editor()).content![1];
+    expect(figure.attrs).toMatchObject({ entryId: "new-shot", attachmentId: "att-9", source: "entry:new-shot" });
+    expect(figure.content ?? []).toEqual([]);
     expect(qc.getQueryData<LogEntry[]>(["log", "eng"])?.some((e) => e.id === "new-shot")).toBe(true);
   });
 
@@ -617,9 +621,9 @@ describe("Images", () => {
   it("on an AD set's page, goes to the machine whose section the cursor is in", async () => {
     const target: ReportTarget = { key: "ad", kind: "ad-set", hostIds: ["h1", "h2"] };
     const page = doc(
-      { type: "generated", attrs: { kind: "facts", hostId: "h1", appendix: "inline" } },
+      { type: "heading", attrs: { level: 1, source: "facts:h1" }, content: [{ type: "text", text: "ms01" }] },
       para("one"),
-      { type: "generated", attrs: { kind: "facts", hostId: "h2", appendix: "inline" } },
+      { type: "heading", attrs: { level: 2, source: "phase:h2:foothold" }, content: [{ type: "text", text: "Initial access" }] },
       para("two"),
     );
     const { editor } = await ready(page, [entry({})], { target, hosts: [host("h1", "ms01"), host("h2", "dc01")] });
@@ -771,20 +775,6 @@ describe("Block handle menu", () => {
   }
   // The handle shows on a real pointer hover, which jsdom has no layout for: its popup stays display:none here.
   const openMenu = () => fireEvent.click(screen.getByRole("button", { name: "Block actions", hidden: true }));
-  const step = (...content: ReportNode[]): ReportNode => ({ type: "step", attrs: { entryId: null }, content });
-
-  it("the block handle menu moves a block to the appendix, and back inline", async () => {
-    const { container, onChange, editor } = await ready(doc({ type: "steps", content: [step(para("Scan"), ev("e1"))] }));
-    hover(container, editor(), "evidence");
-    openMenu();
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Move to appendix" }));
-    await waitFor(() => expect(json(editor()).content?.[0].content?.[0].content?.[1].attrs?.appendix).toBe("moved"));
-    expect(onChange).toHaveBeenCalled();
-    hover(container, editor(), "evidence");
-    openMenu();
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Back inline" }));
-    await waitFor(() => expect(json(editor()).content?.[0].content?.[0].content?.[1].attrs?.appendix).toBe("inline"));
-  });
 
   it("a scroll closes the block menu, so it never stays open without its handle", async () => {
     const { container, editor } = await ready(doc(para("Intro"), ev("e1")));

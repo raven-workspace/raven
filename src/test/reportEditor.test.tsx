@@ -326,8 +326,9 @@ describe("ReportEditor slots", () => {
 });
 
 describe("ReportEditor removing evidence", () => {
-  it("Backspace on a selected evidence node removes it and reports the entry; undo brings it back", async () => {
-    const { onChange, onRemoveEvidence, editor } = setup(doc(ev("e1"), slot()));
+  it("Backspace on a selected figure removes it and reports the entry; undo brings it back", async () => {
+    const figure: ReportNode = { type: "figure", attrs: { attachmentId: "a1", entryId: "e1", source: "entry:e1" } };
+    const { onChange, onRemoveEvidence, editor } = setup(doc(figure, slot()));
     await waitFor(() => expect(editor()).toBeTruthy());
     const view = editor().view;
     act(() => view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, 0))));
@@ -335,12 +336,13 @@ describe("ReportEditor removing evidence", () => {
       fireEvent.keyDown(view.dom, { key: "Backspace", code: "Backspace", keyCode: 8 });
     });
     expect(onRemoveEvidence).toHaveBeenCalledWith("e1");
-    await waitFor(() => expect(lastDoc(onChange).content?.some((n) => n.type === "evidence")).toBe(false));
+    await waitFor(() => expect(lastDoc(onChange).content?.some((n) => n.type === "figure")).toBe(false));
     // jsdom's navigator is not a Mac, so Mod-z is Ctrl-z here (⌘Z in the app).
     act(() => {
       fireEvent.keyDown(view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true });
     });
-    await waitFor(() => expect(lastDoc(onChange).content?.[0]).toMatchObject({ type: "evidence", attrs: { entryId: "e1" } }));
+    await waitFor(() => expect(lastDoc(onChange).content?.[0]).toMatchObject({ type: "figure", attrs: { entryId: "e1" } }));
+    expect(onRemoveEvidence).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -947,11 +949,10 @@ describe("ReportEditor block tools", () => {
   });
 
   it("removes a block with its Remove button, as Backspace does", async () => {
-    const { onChange, onRemoveEvidence, editor } = setupLive(doc(ev("e1"), slot()));
+    const { onChange, editor } = setupLive(doc(ev("e1"), slot()));
     await waitFor(() => expect(editor()).toBeTruthy());
     selectBlock(editor(), 0);
     fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
-    expect(onRemoveEvidence).toHaveBeenCalledWith("e1");
     await waitFor(() => expect(lastDoc(onChange).content?.map((n) => n.type)).toEqual(["slot"]));
   });
 
@@ -1156,32 +1157,29 @@ describe("ReportEditor nested insertion helpers", () => {
   });
 
   it("Add new evidence's insert and its Undo, and ⌘Z of an insert, are never remembered as removals; a deleted step is", async () => {
-    const before = doc(slot("intro"), steps(step(slot(STEP_HINT), ev("e1"))));
+    const stepOf = (id: string): ReportNode => ({ type: "list", attrs: { kind: "ordered" }, content: [{ type: "paragraph", attrs: { source: `entry:${id}:title` }, content: [{ type: "text", text: `Run ${id}:` }] }] });
+    const before = doc(para("intro"), stepOf("e1"));
     const { onRemoveEvidence, editor } = setup(before);
     await waitFor(() => expect(editor()).toBeTruthy());
-    const after = doc(slot("intro"), steps(step(slot(STEP_HINT), ev("e1")), { type: "step", attrs: { entryId: "e3" }, content: [slot(STEP_HINT), ev("e3")] }));
+    const after = doc(para("intro"), stepOf("e1"), stepOf("e3"));
     let added: ReturnType<typeof insertAdded> = [];
     act(() => {
       added = insertAdded(editor(), before, after);
     });
     act(() => void removeExact(editor(), added));
     act(() => void insertAdded(editor(), before, after));
-    expect(JSON.stringify(editor().getDocJSON())).toContain('"e3"');
+    expect(JSON.stringify(editor().getDocJSON())).toContain("entry:e3");
     act(() => void fireEvent.keyDown(editor().view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true }));
-    expect(JSON.stringify(editor().getDocJSON())).not.toContain('"e3"');
+    expect(JSON.stringify(editor().getDocJSON())).not.toContain("entry:e3");
     expect(onRemoveEvidence).not.toHaveBeenCalled();
     // The owner deleting the step holding e1 is.
     const view = editor().view;
-    let at = -1;
-    view.state.doc.descendants((n, pos) => {
-      if (at === -1 && n.type.name === "step") at = pos;
-      return at === -1;
-    });
+    const at = view.state.doc.child(0).nodeSize;
     act(() => view.dispatch(view.state.tr.delete(at, at + view.state.doc.nodeAt(at)!.nodeSize)));
     expect(onRemoveEvidence.mock.calls).toEqual([["e1"]]);
     // Its undo is not a removal either.
     act(() => void fireEvent.keyDown(editor().view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true }));
-    expect(JSON.stringify(editor().getDocJSON())).toContain('"e1"');
+    expect(JSON.stringify(editor().getDocJSON())).toContain("entry:e1");
     expect(onRemoveEvidence.mock.calls).toEqual([["e1"]]);
   });
 
