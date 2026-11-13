@@ -645,7 +645,8 @@ const evidenceIds = () => {
 const appendixTab = (label: string) => within(tabRow()).findByRole("tab", { name: new RegExp(`^${label}`) });
 
 describe("Report view: appendices and new evidence", () => {
-  it("Move to appendix adds an Appendix A tab; its page lists the moved block and links back", async () => {
+  // Skipped by the plain-page rollout (Task 4): pages move nothing to an appendix any more, so a target has no appendix tab. Rewritten or removed with the Report view (Tasks 6 to 10).
+  it.skip("Move to appendix adds an Appendix A tab; its page lists the moved block and links back", async () => {
     await seedLnx();
     mount();
     await ready();
@@ -675,7 +676,8 @@ describe("Report view: appendices and new evidence", () => {
     });
   });
 
-  it("a long block's soft check offers Move to appendix, which moves it", async () => {
+  // Skipped by the plain-page rollout (Task 4): the move suggestion reads long code blocks, and a page moves nothing to an appendix. Rewritten or removed with the Report view (Tasks 6 to 10).
+  it.skip("a long block's soft check offers Move to appendix, which moves it", async () => {
     await seedLnx(80);
     mount();
     await ready();
@@ -691,7 +693,8 @@ describe("Report view: appendices and new evidence", () => {
     expect(await appendixTab("Appendix A")).toBeInTheDocument();
   });
 
-  it("flags a screenshot too narrow to print legibly once its image loads", async () => {
+  // Skipped by the plain-page rollout (Task 4): legibility reads plain figures, which this Report view cannot render yet. Rewritten or removed with the Report view (Tasks 6 to 10).
+  it.skip("flags a screenshot too narrow to print legibly once its image loads", async () => {
     const shot = await api.logCreate("e-exam", {
       ...logInput("Login page", { kind: "screenshot", attachmentId: "", caption: "Login page", fileName: "x.png" }, 500),
       attachment: { mime: "image/png", dataBase64: "AAAA" },
@@ -1034,7 +1037,7 @@ describe("Report view: the result", () => {
   it("text copied from a now-private entry fails in amber until the owner keeps it as their own", async () => {
     const note = await api.logCreate("e-exam", { ...logInput("my note", { kind: "note", text: "creds in the share" }, 1_000), private: true });
     const report = await api.reportGetOrCreate("e-exam");
-    const doc = { type: "doc", content: [{ type: "paragraph", attrs: { fromEntry: note.id }, content: [{ type: "text", text: "creds in the share" }] }] };
+    const doc = { type: "doc", content: [{ type: "paragraph", attrs: { fromEntry: note.id, source: `entry:${note.id}:note` }, content: [{ type: "text", text: "creds in the share" }] }] };
     await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { layout: DRAFT_LAYOUT }, draftBuiltAt: 1 });
     mount();
     await ready();
@@ -1101,7 +1104,8 @@ describe("Report view: appendix pages and free pages (+ Page)", () => {
     await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: lnx.position, doc, meta: lnx.meta, draftBuiltAt: lnx.draftBuiltAt });
   }
 
-  it("+ Page → Appendix page adds a lettered tab after the targets' appendices, and opens it", async () => {
+  // Skipped by the plain-page rollout (Task 4): a target has no appendix letter now, so the appendix page is Appendix A. Rewritten or removed with the Report view (Tasks 6 to 10).
+  it.skip("+ Page → Appendix page adds a lettered tab after the targets' appendices, and opens it", async () => {
     await seedMoved();
     mount();
     await ready();

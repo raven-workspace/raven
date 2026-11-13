@@ -4,12 +4,13 @@ import type { LogEntry } from "../../types/log";
 import type { AppendixIndex } from "./appendix";
 import { suggestMoves } from "./appendix";
 import { serviceCoverage } from "./coverage";
-import { captionOf, isWeakCaption, stepTitleBefore } from "./figures";
+import { isWeakCaption } from "./figures";
 import { expectedFlags, isValidOsid } from "./meta";
 import { findFlagInPaste } from "../capture/flag";
-import { byTime, evidenceIdsIn, FLAG_STEP_HINT } from "./draft";
-import { PHASE_TITLES } from "./headings";
+import { byTime } from "./draft";
+import { entryIdsIn } from "./plain";
 import { proofCompanions, proofFacts } from "./proof";
+import { sourceOf } from "./stamp";
 import { msfHosts, msfModules } from "./tools";
 import type { CoverageOverride, ReportData, ReportMeta, ReportNode, ReportTarget } from "./types";
 import { absoluteClaims, splitAffected } from "./wording";
@@ -29,8 +30,9 @@ export interface TargetChecksInput {
   target: ReportTarget;
   doc: ReportNode;
   meta: ReportMeta;
-  appendixRefs: AppendixIndex;
-  /** The target's section id: `appendix-ref` matches entry keys exactly against it. */
+  /** Ignored: a page moves nothing to an appendix any more. Task 10 removes it. */
+  appendixRefs?: AppendixIndex;
+  /** The target's section id, for the ids of the checks anchored to a path in the page. */
   sectionId: string;
   /** The section's coverage overrides, by service id. */
   coverage?: Record<string, CoverageOverride>;
@@ -65,51 +67,73 @@ function visit(doc: ReportNode): Visit[] {
 }
 
 const textOf = (n: ReportNode): string => (n.text ?? "") + (n.content ?? []).map(textOf).join(" ");
-const hasText = (n: ReportNode | undefined) => n != null && (n.type === "slot" || n.type === "paragraph") && textOf(n).trim() !== "";
+const hasText = (n: ReportNode | undefined) => n != null && n.type === "paragraph" && textOf(n).trim() !== "";
 const words = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
 
-const isEvidence = (n: ReportNode) => n.type === "evidence" || n.type === "exploit";
-const hasEvidence = (n: ReportNode): boolean => (n.content ?? []).some((c) => isEvidence(c) || hasEvidence(c));
+/** The entry a block's source names (`entry:<id>…`), or null. */
+const entryOfSource = (node: ReportNode): string | null => /^entry:([^:]+)/.exec(sourceOf(node) ?? "")?.[1] ?? null;
+/** The entry id a figure shows, or "". */
+const figureEntry = (node: ReportNode): string => (node.type === "figure" && typeof node.attrs?.entryId === "string" ? node.attrs.entryId : "");
+const hasKind = (n: ReportNode, types: string[]): boolean => (n.content ?? []).some((c) => types.includes(c.type) || hasKind(c, types));
+/** The first block with a source at or under a node. */
+const firstSourced = (n: ReportNode): ReportNode | undefined => {
+  if (sourceOf(n)) return n;
+  for (const c of n.content ?? []) {
+    const found = firstSourced(c);
+    if (found) return found;
+  }
+  return undefined;
+};
+
+const isStep = (n: ReportNode) => n.type === "list" && n.attrs?.kind === "ordered";
 
 /**
- * The checks on numbered steps (§10.2, §10.6): a step whose sentence (its first child) is an empty slot is unexplained,
- * except a flag's step, which prints its own label; a step with the owner's words and no command, output or screenshot
- * under it can't be replayed. Both are anchored to the step; the replay check names its number and heading.
+ * The checks on numbered steps (an ordered list item): a step whose first child is not a sentence is unexplained; a
+ * step with the owner's words and no command, output or screenshot under it can't be replayed (a note step is prose
+ * already). Both are anchored to the step; the replay check names its number and heading.
  */
-function stepChecks(nodes: Visit[], data: ReportData, sectionId: string): Check[] {
+function stepChecks(nodes: Visit[], sectionId: string): Check[] {
   const out: Check[] = [];
-  // Screenshots without supporting text are listed first (§6.5): a step whose first evidence is a screenshot.
+  // Screenshots without supporting text are listed first: a step whose first sourced block is a figure.
   const explain: { check: Check; shot: boolean }[] = [];
-  let heading = "this page";
-  for (const { node, path, index, siblings, at } of nodes) {
-    if (node.type === "phase") {
-      const base = PHASE_TITLES[node.attrs?.phase as keyof typeof PHASE_TITLES] ?? heading;
-      const f = data.findings.find((x) => x.id === node.attrs?.findingId);
-      heading = f ? `${base} – ${f.title}` : base;
+  let h1 = "";
+  let h2 = "";
+  let n = 0;
+  for (const { node, path, index } of nodes) {
+    if (node.type === "heading") {
+      const level = Number(node.attrs?.level ?? 1);
+      if (level === 1) {
+        h1 = textOf(node).trim();
+        h2 = "";
+        n = 0;
+      } else if (level === 2) {
+        h2 = textOf(node).trim();
+        n = 0;
+      }
+      continue;
     }
-    if (node.type !== "step") continue;
-    const entryId = typeof node.attrs?.entryId === "string" ? node.attrs.entryId : "";
-    const lead = entryId === "" ? undefined : data.log.find((e) => e.id === entryId);
-    const sentence = node.content?.[0];
+    if (!isStep(node)) continue;
+    n++;
+    const lead = firstSourced(node);
+    const entryId = lead ? (entryOfSource(lead) ?? "") : "";
     const anchor = { entryId: entryId === "" ? undefined : entryId, nodeIndex: index };
-    if (sentence?.type === "slot" && !hasText(sentence) && sentence.attrs?.hint !== FLAG_STEP_HINT) {
-      const first = node.content?.find(isEvidence);
-      const shot = first?.type === "evidence" && data.log.find((e) => e.id === first.attrs?.entryId)?.kind === "screenshot";
-      explain.push({ check: { id: `explain:${entryId === "" ? `node-${index}` : entryId}`, level: "soft", text: "A step has no explanation before it.", anchor }, shot });
+    const sentence = node.content?.[0];
+    if (!hasText(sentence)) {
+      explain.push({ check: { id: `explain:${entryId === "" ? `node-${index}` : entryId}`, level: "soft", text: "A step has no explanation before it.", anchor }, shot: lead?.type === "figure" });
+      continue;
     }
-    // A note step is prose already; a step with no sentence yet is the explain check's.
-    if (hasText(sentence) && lead?.kind !== "note" && !hasEvidence(node)) {
-      const n = siblings.slice(0, at + 1).filter((x) => x.type === "step").length;
+    if (!hasKind(node, ["codeBlock", "figure"]) && !sourceOf(lead ?? node)?.endsWith(":note")) {
       out.push({
         id: `step-replay:${sectionId}:${path}`,
         level: "soft",
-        text: `Step ${n} of ${heading} has no command or output under it, so a reader can't replay it. Add it from the log column`,
+        text: `Step ${n} of ${h2 || h1 || "this page"} has no command or output under it, so a reader can't replay it. Add it from the log column`,
         anchor,
       });
     }
   }
   return [...explain.sort((x, y) => Number(y.shot) - Number(x.shot)).map((e) => e.check), ...out];
 }
+
 
 /**
  * Credentials that moved you (§10.6): one found on a machine (`sourceHostId`) that got you onto another, by an access
@@ -225,12 +249,6 @@ function readOnPage(data: ReportData, hostId: string, flag: "local" | "proof", o
   return undefined;
 }
 
-/** The caption a screenshot node prints: its own, else (top-level only, as the page does) its step's title. */
-function printedCaption(node: ReportNode, path: string, siblings: ReportNode[], at: number, entry: LogEntry, entryOf: (id: string) => LogEntry | undefined): string {
-  const step = path.includes(".") ? null : stepTitleBefore(siblings, at, entryOf);
-  return captionOf(node.attrs, entry, step);
-}
-
 /** Under this natural width a screenshot is upscaled or tiny at page width (spec §6.5). */
 const MIN_PRINT_WIDTH = 600;
 
@@ -240,14 +258,13 @@ const MIN_PRINT_WIDTH = 600;
  */
 export function legibilityChecks(doc: ReportNode, data: ReportData, widths: Record<string, number>): Check[] {
   const out: Check[] = [];
-  const entryOf = (id: string) => data.log.find((e) => e.id === id);
-  for (const { node, path, siblings, at } of visit(doc)) {
-    const id = node.type === "evidence" ? String(node.attrs?.entryId ?? "") : "";
+  for (const { node } of visit(doc)) {
+    const id = figureEntry(node);
     const width = widths[id];
-    if (width === undefined || width >= MIN_PRINT_WIDTH || out.some((c) => c.id === `legible:${id}`)) continue;
-    const entry = entryOf(id);
+    if (id === "" || width === undefined || width >= MIN_PRINT_WIDTH || out.some((c) => c.id === `legible:${id}`)) continue;
+    const entry = data.log.find((e) => e.id === id);
     if (!entry || entry.private) continue;
-    const name = printedCaption(node, path, siblings, at, entry, entryOf).trim() || "A screenshot";
+    const name = textOf(node).trim() || "A screenshot";
     out.push({
       id: `legible:${id}`,
       level: "soft",
@@ -260,71 +277,73 @@ export function legibilityChecks(doc: ReportNode, data: ReportData, widths: Reco
 
 /** Per-target checks: what would lose OSCP exam points before export. Ids are stable and unique. */
 export function targetChecks(input: TargetChecksInput): Check[] {
-  const { data, target, doc, meta, appendixRefs, sectionId } = input;
+  const { data, target, doc, meta, sectionId } = input;
   const out: Check[] = [];
   const nodes = visit(doc);
-  const onPage = evidenceIdsIn(doc);
+  const onPage = entryIdsIn(doc);
   const hosts = target.hostIds.flatMap((id) => data.hosts.find((h) => h.id === id) ?? []);
   const entryOf = (id: string) => data.log.find((e) => e.id === id);
   for (const host of hosts) out.push(...proofChecks(host, expectedFlags(target, host.id, meta), data, onPage));
 
-  const seenEvidence = new Set<string>();
-  for (const { node, path, index, siblings, at } of nodes) {
-    if (node.type !== "evidence") continue;
-    const rawId = node.attrs?.entryId;
-    const entryId = typeof rawId === "string" ? rawId : "";
-    const entry = entryId === "" ? undefined : entryOf(entryId);
-    const anchor = { entryId, nodeIndex: index };
-    if (!entry || entry.private) {
-      out.push({ id: entryId === "" ? `gone:node-${index}` : `gone:${entryId}`, level: "fail", text: "A step on the page uses an entry that was deleted or marked private.", anchor });
-      continue;
-    }
-    if (entry.content.kind === "command" && !entry.returnedNothing) {
-      const blocks = entry.content.blocks;
-      const block = node.attrs?.block;
-      const picked = typeof block === "number" ? blocks.slice(block, block + 1) : blocks;
-      if (picked.length === 0 || picked.some((b) => (b.output ?? "").trim() === "")) {
-        // Soft: downloads (iwr, certutil) and other quiet commands print nothing, and that is fine to show.
-        out.push({
-          id: `output:${entryId}`,
-          level: "soft",
-          text: "A command on the page shows no output. Fine if it printed nothing; otherwise paste its output.",
-          anchor,
-        });
-      }
-    }
-    if (entry.content.kind === "screenshot" && !seenEvidence.has(entryId)) {
-      // The caption the page prints: an uncaptioned screenshot's falls back to its step's title.
-      const printed = printedCaption(node, path, siblings, at, entry, entryOf);
-      if (printed !== captionOf(node.attrs, entry)) {
-        out.push({ id: `caption-step:${entryId}`, level: "soft", text: "Screenshot uses its step's title as caption.", anchor });
-      } else if (isWeakCaption(printed)) {
-        out.push({ id: `caption-weak:${entryId}`, level: "soft", text: "A screenshot has no caption of its own. Say what it shows.", anchor });
-      }
-      if (words(printed) > MAX_CAPTION_WORDS) {
-        out.push({ id: `caption:${entryId}`, level: "soft", text: `A screenshot caption is over ${MAX_CAPTION_WORDS} words.`, anchor });
-      }
-    }
-    seenEvidence.add(entryId);
-  }
-  out.push(...stepChecks(nodes, data, sectionId));
-  out.push(...credentialChecks(data, hosts));
-
-  // Text copied from the log (a note, observations, a command edited on the page) keeps its entry: once that entry is
-  // private or deleted, the words on the page may be what was hidden or meant to go. One check per entry, at its first block.
+  // A block from a private or deleted entry: the words or picture on the page may be what was hidden or meant to go.
+  // One check per entry, at its first block. A command with no output block is soft, and only when the entry has one.
+  const seenEntry = new Set<string>();
+  const commands = new Map<string, number>();
+  const outputs = new Set<string>();
   for (const { node, index } of nodes) {
-    const from = node.attrs?.fromEntry;
-    if (typeof from !== "string" || from === "") continue;
-    const source = entryOf(from);
-    if (source && !source.private) continue;
+    const source = sourceOf(node) ?? "";
+    const cmd = /^entry:([^:]+):\d+:command$/.exec(source)?.[1];
+    if (cmd && !commands.has(cmd)) commands.set(cmd, index);
+    const res = /^entry:([^:]+):\d+:output$/.exec(source)?.[1];
+    if (res) outputs.add(res);
+    const id = figureEntry(node) || entryOfSource(node) || "";
+    if (id === "" || seenEntry.has(id)) continue;
+    seenEntry.add(id);
+    const entry = entryOf(id);
+    if (entry && !entry.private) continue;
     out.push(
-      source
-        ? { id: `copied-private:${from}`, level: "fail", text: "Text copied from an entry that is now private.", anchor: { nodeIndex: index } }
-        : { id: `copied-deleted:${from}`, level: "fail", text: "Text copied from an entry that was deleted.", anchor: { nodeIndex: index } },
+      entry
+        ? { id: `copied-private:${id}`, level: "fail", text: "A block on the page comes from an entry that is now private.", anchor: { nodeIndex: index } }
+        : { id: `copied-deleted:${id}`, level: "fail", text: "A block on the page comes from an entry that was deleted.", anchor: { nodeIndex: index } },
     );
   }
+  for (const [id, index] of commands) {
+    const entry = entryOf(id);
+    if (outputs.has(id) || !entry || entry.private || entry.content.kind !== "command" || entry.returnedNothing) continue;
+    // Soft: downloads (iwr, certutil) and other quiet commands print nothing, and that is fine to show.
+    out.push({ id: `output:${id}`, level: "soft", text: "A command on the page shows no output. Fine if it printed nothing; otherwise paste its output.", anchor: { entryId: id, nodeIndex: index } });
+  }
 
-  const shotsOnPage = [...onPage].flatMap((id) => entryOf(id) ?? []).filter((e) => !e.private && (e.kind === "screenshot" || (e.content.kind === "flag" && Boolean(e.content.attachmentId))));
+  // A finding or file that was deleted: one check per id, at its first block.
+  const goneSeen = new Set<string>();
+  for (const { node, index } of nodes) {
+    const source = sourceOf(node) ?? "";
+    const finding = /^finding:([^:]+)/.exec(source)?.[1];
+    const file = /^file:(.+)$/.exec(source)?.[1];
+    const id = finding ?? file;
+    if (!id || goneSeen.has(id)) continue;
+    goneSeen.add(id);
+    const exists = finding ? data.findings.some((f) => f.id === finding) : data.findingFiles.some((f) => f.id === file);
+    if (!exists) out.push({ id: `gone:${id}`, level: "fail", text: "A finding or file on the page was deleted.", anchor: { nodeIndex: index } });
+  }
+
+  out.push(...stepChecks(nodes, sectionId));
+
+  const seenFigure = new Set<string>();
+  for (const { node, index } of nodes) {
+    const entryId = figureEntry(node);
+    const entry = entryId === "" ? undefined : entryOf(entryId);
+    if (!entry || entry.private || seenFigure.has(entryId)) continue;
+    seenFigure.add(entryId);
+    const caption = textOf(node).trim();
+    const anchor = { entryId, nodeIndex: index };
+    if (isWeakCaption(caption)) out.push({ id: `caption-weak:${entryId}`, level: "soft", text: "A screenshot has no caption of its own. Say what it shows.", anchor });
+    if (words(caption) > MAX_CAPTION_WORDS) out.push({ id: `caption:${entryId}`, level: "soft", text: `A screenshot caption is over ${MAX_CAPTION_WORDS} words.`, anchor });
+  }
+  out.push(...credentialChecks(data, hosts));
+
+  const shotIds = new Set([...seenFigure, ...[...onPage].filter((id) => { const e = entryOf(id); return e?.content.kind === "flag" && Boolean(e.content.attachmentId); })]);
+  const shotsOnPage = [...shotIds].flatMap((id) => entryOf(id) ?? []).filter((e) => !e.private && (e.kind === "screenshot" || (e.content.kind === "flag" && Boolean(e.content.attachmentId))));
   for (const g of data.grants) {
     const host = hosts.find((h) => h.id === g.hostId);
     if (!host) continue;
@@ -345,13 +364,13 @@ export function targetChecks(input: TargetChecksInput): Check[] {
     }
   }
 
+  // Findings named by any `finding:<id>…` block, checked once, anchored at the first.
+  const checkedFindings = new Set<string>();
   for (const { node, index } of nodes) {
-    if (node.type !== "vuln") continue;
-    const f = data.findings.find((x) => x.id === node.attrs?.findingId);
-    if (!f) {
-      out.push({ id: `gone:${String(node.attrs?.findingId ?? `node-${index}`)}`, level: "fail", text: "A finding on the page was deleted.", anchor: { nodeIndex: index } });
-      continue;
-    }
+    const id = /^finding:([^:]+)/.exec(sourceOf(node) ?? "")?.[1];
+    const f = id ? data.findings.find((x) => x.id === id) : undefined;
+    if (!f || checkedFindings.has(f.id)) continue;
+    checkedFindings.add(f.id);
     const anchor = { nodeIndex: index };
     const problem = (kind: string, text: string) => out.push({ id: `finding:${f.id}:${kind}`, level: "soft", text, anchor });
     if (f.severity == null) problem("severity", `The finding "${f.title}" has no severity.`);
@@ -364,30 +383,35 @@ export function targetChecks(input: TargetChecksInput): Check[] {
 
   let n = 0;
   for (const { node, index } of nodes) {
-    if (node.type !== "slot" && node.type !== "paragraph") continue;
+    if (node.type !== "paragraph") continue;
     for (const claim of absoluteClaims(textOf(node))) {
       out.push({ id: `wording:${n++}`, level: "soft", text: `"${claim}" is an absolute claim. Say what you tested and what happened instead.`, anchor: { nodeIndex: index } });
     }
   }
 
+  // A modified exploit: its original's URL and content, and a sentence after its blocks saying what changed.
+  const checkedFiles = new Set<string>();
   for (const { node, index, siblings, at } of nodes) {
-    if (node.type !== "exploit") continue;
-    const file = data.findingFiles.find((x) => x.id === node.attrs?.fileId);
-    if (!file) {
-      out.push({ id: `gone:${String(node.attrs?.fileId ?? `node-${index}`)}`, level: "fail", text: "An exploit file on the page was deleted.", anchor: { nodeIndex: index } });
-      continue;
-    }
+    const id = /^file:(.+)$/.exec(sourceOf(node) ?? "")?.[1];
+    const file = id ? data.findingFiles.find((x) => x.id === id) : undefined;
+    if (!file || checkedFiles.has(file.id)) continue;
+    checkedFiles.add(file.id);
     if (!file.modified) continue;
     const anchor = { nodeIndex: index };
     if (!file.originalUrl?.trim()) {
       out.push({ id: `exploit:${file.id}:url`, level: "fail", text: `The modified exploit ${file.name} has no original URL.`, anchor });
     }
-    if (!hasText(siblings[at + 1])) {
+    // The run of the file's blocks; the explanation is a paragraph in the run after its code (the finding's exploit
+    // notes) or the sibling after it.
+    let end = at;
+    while (sourceOf(siblings[end + 1] ?? { type: "" }) === `file:${file.id}`) end++;
+    const code = siblings.slice(at, end + 1).findIndex((b) => b.type === "codeBlock");
+    const noted = code >= 0 && siblings.slice(at + code + 1, end + 1).some(hasText);
+    if (!noted && !hasText(siblings[end + 1])) {
       out.push({ id: `exploit:${file.id}:explain`, level: "soft", text: `The modified exploit ${file.name} has no explanation of the changes after it.`, anchor });
     }
-    const marked = Array.isArray(node.attrs?.markedLines) ? node.attrs.markedLines : [];
-    if (!file.originalContent && marked.length === 0) {
-      out.push({ id: `exploit:${file.id}:original`, level: "fail", text: `The modified exploit ${file.name} has no original to compare against and no marked lines.`, anchor });
+    if (!file.originalContent) {
+      out.push({ id: `exploit:${file.id}:original`, level: "fail", text: `The modified exploit ${file.name} has no original to compare against.`, anchor });
     }
   }
 
@@ -399,16 +423,8 @@ export function targetChecks(input: TargetChecksInput): Check[] {
     }
   }
 
-  for (const { node, path, index } of nodes) {
-    const moved = node.attrs?.appendix === "moved" || node.attrs?.appendix === "split";
-    if (!moved || !["evidence", "exploit", "generated"].includes(node.type)) continue;
-    const key = `${sectionId}:${path}`;
-    const exists = appendixRefs.entries.some((e) => e.key === key);
-    if (!exists) out.push({ id: `appendix-ref:${key}`, level: "fail", text: "A block moved to an appendix has no appendix entry any more.", anchor: { nodeIndex: index } });
-  }
-
-  for (const m of suggestMoves(doc, data)) {
-    out.push({ id: `move:${m.key}`, level: "soft", text: `This block is long (${m.reason}). Consider moving it to an appendix.` });
+  for (const m of suggestMoves(doc)) {
+    out.push({ id: `move:${m.key}`, level: "soft", text: `This block is long (${m.reason}). Consider moving it to an appendix page.` });
   }
 
   const seen = new Set<string>();
@@ -432,7 +448,7 @@ const PLURAL: Record<string, (n: number) => string> = {
   "proof-hostname": (n) => `${n} proofs don't show hostname`,
   "proof-path": (n) => `${n} proofs don't read the flag from its usual location`,
   "proof-shot": (n) => `${n} proof screenshots: Raven can't read them; check each shows the target IP`,
-  gone: (n) => `${n} blocks on the page use deleted or private content`,
+  gone: (n) => `${n} blocks on the page come from a deleted finding or file`,
   "copied-private": (n) => `${n} entries now private had text copied to the page`,
   "copied-deleted": (n) => `${n} deleted entries had text copied to the page`,
   output: (n) => `${n} commands on the page show no output`,
@@ -441,7 +457,6 @@ const PLURAL: Record<string, (n: number) => string> = {
   "cred-finding": (n) => `${n} credentials that moved you have no finding`,
   caption: (n) => `${n} screenshot captions are over ${MAX_CAPTION_WORDS} words`,
   "caption-weak": (n) => `${n} screenshots have no caption of their own`,
-  "caption-step": (n) => `${n} screenshots use their step's title as caption`,
   "access-shot": (n) => `${n} access levels have no screenshot of them on the page`,
   "finding-severity": (n) => `${n} findings have no severity`,
   "finding-title": (n) => `${n} finding titles are a single word`,
@@ -451,9 +466,8 @@ const PLURAL: Record<string, (n: number) => string> = {
   wording: (n) => `${n} absolute claims on the page`,
   "exploit-url": (n) => `${n} modified exploits have no original URL`,
   "exploit-explain": (n) => `${n} modified exploits have no explanation of the changes after them`,
-  "exploit-original": (n) => `${n} modified exploits have no original and no marked lines`,
+  "exploit-original": (n) => `${n} modified exploits have no original to compare against`,
   coverage: (n) => `${n} services are untested`,
-  "appendix-ref": (n) => `${n} moved blocks have no appendix entry any more`,
   move: (n) => `${n} blocks are long; consider moving them to an appendix`,
   legible: (n) => `${n} screenshots are narrower than would print legibly`,
 };
@@ -471,7 +485,7 @@ const SHORT: Record<string, (c: Check) => string> = {
   "proof-hostname": (c) => `${part(c, 2)}.txt proof lacks hostname`,
   "proof-path": (c) => `${part(c, 2)}.txt read from an odd place`,
   "proof-shot": (c) => `${part(c, 2)}.txt: screenshot shows IP?`,
-  gone: () => "Deleted or private entry on the page",
+  gone: () => "Deleted finding or file on the page",
   "copied-private": () => "Text from a now-private entry",
   "copied-deleted": () => "Text from a deleted entry",
   output: () => "A command shows no output",
@@ -480,7 +494,6 @@ const SHORT: Record<string, (c: Check) => string> = {
   "cred-finding": (c) => c.text.replace(/, but no finding covers it.*$/, "").replace(/^(.+?)'s credential from .+ got you onto /, "$1 got you onto ") + ": no finding",
   caption: () => "Caption over 10 words",
   "caption-weak": () => "A screenshot has no caption",
-  "caption-step": () => "Caption is its step's title",
   "access-shot": (c) => `${part(c, 1)}: no ${part(c, 2)} screenshot`,
   "finding-severity": () => "A finding has no severity",
   "finding-title": () => "A finding title is one word",
@@ -491,7 +504,6 @@ const SHORT: Record<string, (c: Check) => string> = {
   "exploit-url": () => "Exploit has no original URL",
   "exploit-explain": () => "Explain the modified exploit",
   "exploit-original": () => "Exploit has no original",
-  "appendix-ref": () => "A moved block lost its appendix entry",
   move: (c) => {
     const why = /\(([^)]+)\)/.exec(c.text)?.[1];
     return why ? `Long block (${why})` : "Long block";

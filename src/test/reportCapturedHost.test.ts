@@ -6,6 +6,7 @@ import { EMPTY_DRAFT } from "../features/capture/useCaptureStore";
 import { FIXTURES } from "../audit/fixtures";
 import { AUDIT_PNGS } from "../audit/images";
 import {
+  buildPlainTarget,
   buildTargetDraft,
   evidenceIdsIn,
   groupChecks,
@@ -106,7 +107,7 @@ describe("xfer03, captured through the real pipeline", () => {
 describe("xfer03's report page makes no false claim", () => {
   const data = examData();
   const doc = buildTargetDraft(data, target, {});
-  const checks = targetChecks({ data, target, doc, meta: {}, appendixRefs: { entries: [], refFor: () => null }, sectionId: "t-xfer" });
+  const checks = targetChecks({ data, target, doc: buildPlainTarget(data, target, {}), meta: {}, sectionId: "t-xfer" });
 
   it("finds each flag's companions: the screenshot beside it, the command that prints it", () => {
     const flag = (key: string) => data.log.find((e) => e.id === id(key))!;

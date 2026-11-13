@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { absoluteClaims, checkKind, groupChecks, isReady, legibilityChecks, proofFacts, reportChecks, stepTitleBefore, targetChecks, fixSteps } from "../engines/report";
-import type { AppendixIndex, Check, ReportData, ReportNode, ReportTarget } from "../engines/report";
+import { absoluteClaims, buildPlainTarget, checkKind, groupChecks, isReady, legibilityChecks, proofFacts, reportChecks, stepTitleBefore, targetChecks, fixSteps } from "../engines/report";
+import { GARNET_HOST, garnetFixtures } from "../audit/examFixtures";
+import type { Check, ReportData, ReportNode, ReportTarget } from "../engines/report";
 import type { Host } from "../types/host";
 import type { LogEntry } from "../types/log";
 import type { Report } from "../types/report";
@@ -16,25 +17,31 @@ const flag = (o: Record<string, unknown> = {}, content: Record<string, unknown> 
     content: { kind: "flag", flagKind: "proof", value: "abc", attachmentId: "a1", proof: "whoami\nhostname\ntype C:\\Users\\Administrator\\Desktop\\proof.txt\nipconfig\n10.0.0.5", ...content },
     ...o,
   });
-const ev = (entryId: string, extra: Record<string, unknown> = {}): ReportNode => ({ type: "evidence", attrs: { entryId, block: 0, keep: null, emphasis: [], appendix: "inline", ...extra } });
-const slot = (text = ""): ReportNode => ({ type: "slot", attrs: { hint: "h" }, content: text ? [{ type: "text", text }] : [] });
 const doc = (...content: ReportNode[]): ReportNode => ({ type: "doc", content });
-const step = (children: ReportNode[], entryId: string | null = null): ReportNode => ({ type: "step", attrs: { entryId }, content: children });
-const steps = (...list: ReportNode[]): ReportNode => ({ type: "steps", content: list });
-const phase = (p = "foothold", extra: Record<string, unknown> = {}): ReportNode => ({ type: "phase", attrs: { phase: p, hostId: "h1", ...extra } });
-const words = (text: string): ReportNode => ({ type: "paragraph", content: [{ type: "text", text }] });
+const words = (text: string, source?: string): ReportNode => ({ type: "paragraph", ...(source ? { attrs: { source } } : {}), content: [{ type: "text", text }] });
+const hint = (): ReportNode => ({ type: "paragraph", attrs: { hint: "h" } });
+const heading = (level: number, text: string, source: string): ReportNode => ({ type: "heading", attrs: { level, source }, content: [{ type: "text", text }] });
+const h1 = (text: string, source = "facts:h1") => heading(1, text, source);
+const h2 = (text: string, source: string) => heading(2, text, source);
+const code = (text: string, source: string): ReportNode => ({ type: "codeBlock", attrs: { language: "", source }, content: [{ type: "text", text }] });
+/** A block an entry puts on the page: its value, so it is on the page without a command or output. */
+const ev = (entryId: string): ReportNode => code("x", `entry:${entryId}:value`);
+/** A command entry's blocks: the command and its output. */
+const cmd = (entryId: string, output = "uid=0"): ReportNode[] => [code("id", `entry:${entryId}:0:command`), ...(output ? [code(output, `entry:${entryId}:0:output`)] : [])];
+const fig = (entryId: string, caption = "A caption"): ReportNode => ({ type: "figure", attrs: { attachmentId: "a", entryId, source: `entry:${entryId}` }, ...(caption ? { content: [{ type: "text", text: caption }] } : {}) });
+const step = (...children: ReportNode[]): ReportNode => ({ type: "list", attrs: { kind: "ordered" }, content: children });
+const stepsPara = (hostId = "h1"): ReportNode => words("Steps to reproduce:", `phase-steps:${hostId}`);
 const target: ReportTarget = { key: "h1", kind: "standalone", hostIds: ["h1"] };
-const noRefs: AppendixIndex = { entries: [], refFor: () => null };
 
 function data(o: Partial<ReportData> = {}): ReportData {
   return { engagement: { id: "eng" }, hosts: [host()], services: [], log: [], checklist: [], findings: [], findingFiles: [], attempts: [], ruledOut: [], grants: [], usernames: [], hops: [], cleanup: [], notes: [], credentials: [], credAttempts: [], ...o } as unknown as ReportData;
 }
 function run(d: ReportData, page: ReportNode, extra: Record<string, unknown> = {}, flags: ("local" | "proof")[] = ["proof"]): Check[] {
-  return targetChecks({ data: d, target, doc: page, meta: { expectedFlags: { h1: flags } }, appendixRefs: noRefs, sectionId: "t1", ...extra });
+  return targetChecks({ data: d, target, doc: page, meta: { expectedFlags: { h1: flags } }, sectionId: "t1", ...extra });
 }
 const find = (cs: Check[], prefix: string) => cs.find((c) => c.id.startsWith(prefix));
 const good = () => data({ log: [flag()] });
-const goodDoc = () => doc(ev("f1", { block: null }), slot("Proof of root"));
+const goodDoc = () => doc(words("Proof of root"), ev("f1"));
 
 describe("proofFacts", () => {
   it("reads the pasted proof", () => {
@@ -148,14 +155,14 @@ describe("targetChecks", () => {
   it("with a screenshot and no IP in the text: one soft line per proof naming its flag and the host's IP command, never a fail", () => {
     const local = flag({ id: "f0", at: 4000 }, { flagKind: "local", value: "a".repeat(32), proof: null });
     const proof = flag({}, { value: "b".repeat(32), proof: null });
-    const c = run(data({ log: [local, proof] }), doc(ev("f0", { block: null }), ...goodDoc().content!), {}, ["local", "proof"]);
+    const c = run(data({ log: [local, proof] }), doc(ev("f0"), ...goodDoc().content!), {}, ["local", "proof"]);
     expect(c.map((x) => [x.id, x.level, x.text, x.anchor?.entryId])).toEqual([
       ["proof-shot:DC01:local", "soft", "Raven can't read screenshots; make sure the local.txt screenshot for DC01 shows ipconfig with 10.0.0.5.", "f0"],
       ["proof-shot:DC01:proof", "soft", "Raven can't read screenshots; make sure the proof.txt screenshot for DC01 shows ipconfig with 10.0.0.5.", "f1"],
     ]);
     expect(groupChecks(c).map((g) => g.text)).toEqual(["2 proof screenshots: Raven can't read them; check each shows the target IP"]);
     expect(groupChecks(c.slice(0, 1)).map((g) => g.text)).toEqual(["local.txt: screenshot shows IP?"]);
-    const lin = run(data({ hosts: [host({ os: "linux" })], log: [local] }), doc(ev("f0", { block: null })), {}, ["local"]);
+    const lin = run(data({ hosts: [host({ os: "linux" })], log: [local] }), doc(ev("f0")), {}, ["local"]);
     expect(lin[0].text).toBe("Raven can't read screenshots; make sure the local.txt screenshot for DC01 shows ip a or ifconfig with 10.0.0.5.");
   });
   describe("real capture shapes", () => {
@@ -172,36 +179,36 @@ describe("targetChecks", () => {
       entry({ id: "s1", kind: "screenshot", at: 700_000, content: { kind: "screenshot", attachmentId: "a9", caption: "root shell", fileName: "x.png" }, ...o });
 
     it("(b) a bare flag value with a separate proof command and screenshot: no proof check", () => {
-      const page = doc(ev("f1", { block: null }), ev("r1"), ev("s1", { block: null }));
+      const page = doc(ev("f1"), ...cmd("r1"), fig("s1"));
       expect(run(data({ log: [bare(), read(), shot()] }), page)).toEqual([]);
     });
     it("(b) the command alone: the text passes, only the missing screenshot is said", () => {
-      const c = run(data({ log: [bare(), read()] }), doc(ev("f1", { block: null }), ev("r1")));
+      const c = run(data({ log: [bare(), read()] }), doc(ev("f1"), ...cmd("r1")));
       expect(c.map((x) => x.id)).toEqual(["proof-screenshot:DC01:proof"]);
     });
     it("(b) the screenshot alone: one soft reminder, no fail and no whoami or hostname line", () => {
-      const c = run(data({ log: [bare(), shot()] }), doc(ev("f1", { block: null }), ev("s1", { block: null })));
+      const c = run(data({ log: [bare(), shot()] }), doc(ev("f1"), fig("s1")));
       expect(c.map((x) => [x.id, x.level])).toEqual([["proof-shot:DC01:proof", "soft"]]);
     });
     it("(b) a screenshot taken more than 15 minutes away, or nearer another step, is not the proof", () => {
-      const far = run(data({ log: [bare(), shot({ at: 600_000 + 16 * 60_000 })] }), doc(ev("f1", { block: null })));
+      const far = run(data({ log: [bare(), shot({ at: 600_000 + 16 * 60_000 })] }), doc(ev("f1")));
       expect(far.map((x) => x.id)).toContain("proof-screenshot:DC01:proof");
       const step = entry({ id: "c9", at: 710_000 });
-      const nearer = run(data({ log: [bare(), step, shot()], checklist: [{ ownerId: "h1", evidence: [{ entryId: "c9" }] }] as never }), doc(ev("f1", { block: null })));
+      const nearer = run(data({ log: [bare(), step, shot()], checklist: [{ ownerId: "h1", evidence: [{ entryId: "c9" }] }] as never }), doc(ev("f1")));
       expect(nearer.map((x) => x.id)).toContain("proof-screenshot:DC01:proof");
     });
     it("(c) a flag with its own screenshot and no text: one soft reminder", () => {
-      const c = run(data({ log: [bare({ attachmentId: "a1" })] }), doc(ev("f1", { block: null })));
+      const c = run(data({ log: [bare({ attachmentId: "a1" })] }), doc(ev("f1")));
       expect(c.map((x) => x.id)).toEqual(["proof-shot:DC01:proof"]);
     });
     it("a proof read pasted only as a command still puts the flag on the page", () => {
       const only = entry({ id: "r2", content: { kind: "command", blocks: [{ command: "type proof.txt", output: HASH }] } });
-      const c = run(data({ log: [only] }), doc(slot("Read the proof."), ev("r2")));
+      const c = run(data({ log: [only] }), doc(words("Read the proof."), ...cmd("r2")));
       expect(find(c, "proof-missing")).toBeUndefined();
     });
     it("checks a proof read on the page as the proof when its flag entry isn't there", () => {
       const only = entry({ id: "r2", at: 660_000, content: { kind: "command", blocks: [{ command: "type proof.txt", output: HASH }] } });
-      const c = run(data({ log: [only] }), doc(slot("Read the proof."), ev("r2")));
+      const c = run(data({ log: [only] }), doc(words("Read the proof."), ...cmd("r2")));
       expect(c.filter((x) => x.id.startsWith("proof")).map((x) => [x.id, x.level, x.anchor?.entryId])).toEqual([
         ["proof-ip:DC01:proof", "fail", "r2"],
         ["proof-screenshot:DC01:proof", "fail", "r2"],
@@ -209,16 +216,22 @@ describe("targetChecks", () => {
         ["proof-hostname:DC01:proof", "soft", "r2"],
       ]);
       // The full read with its screenshot: nothing to say. A flag entry that isn't on the page changes nothing.
-      expect(run(data({ log: [read(), shot()] }), doc(slot("Read the proof."), ev("r1"), ev("s1", { block: null })))).toEqual([]);
-      expect(run(data({ log: [bare(), read(), shot()] }), doc(slot("Read the proof."), ev("r1"), ev("s1", { block: null })))).toEqual([]);
+      expect(run(data({ log: [read(), shot()] }), doc(words("Read the proof."), ...cmd("r1"), fig("s1")))).toEqual([]);
+      expect(run(data({ log: [bare(), read(), shot()] }), doc(words("Read the proof."), ...cmd("r1"), fig("s1")))).toEqual([]);
     });
     it("counts another proof.txt flag entry's screenshot on the page as the proof's screenshot", () => {
       const text = flag({ at: 600_000 }, { value: HASH, attachmentId: null });
       const pic = flag({ id: "f2", at: 610_000 }, { value: HASH, proof: null, attachmentId: "a2" });
-      const c = run(data({ log: [text, pic] }), doc(ev("f1", { block: null }), ev("f2", { block: null })));
+      const c = run(data({ log: [text, pic] }), doc(ev("f1"), fig("f2")));
       expect(find(c, "proof-screenshot")).toBeUndefined();
       // Off the page, it isn't shown.
-      expect(find(run(data({ log: [text, pic] }), doc(ev("f1", { block: null }))), "proof-screenshot")).toBeDefined();
+      expect(find(run(data({ log: [text, pic] }), doc(ev("f1"))), "proof-screenshot")).toBeDefined();
+    });
+    it("counts an entry a block already shows (its also ids) as on the page", () => {
+      const text = flag({ at: 600_000 }, { value: HASH, attachmentId: null });
+      const pic = flag({ id: "f2", at: 610_000 }, { value: HASH, proof: null, attachmentId: "a2" });
+      const shown = { ...ev("f1"), attrs: { source: "entry:f1:value", also: ["f2"] } };
+      expect(find(run(data({ log: [text, pic] }), doc(shown)), "proof-screenshot")).toBeUndefined();
     });
     it("never reads a private web request before the flag as the proof's source", () => {
       const web = entry({ id: "w", kind: "http", at: 4000, private: true, content: { kind: "http", request: "GET /" } });
@@ -226,10 +239,10 @@ describe("targetChecks", () => {
     });
     it("a shell's own output beside the flag is no web request", () => {
       const web = entry({ id: "w", kind: "http", at: 590_000, content: { kind: "http", request: "GET /" } });
-      expect(find(run(data({ log: [web, bare(), read(), shot()] }), doc(ev("f1", { block: null }), ev("r1"), ev("s1", { block: null }))), "proof-web")).toBeUndefined();
+      expect(find(run(data({ log: [web, bare(), read(), shot()] }), doc(ev("f1"), ...cmd("r1"), fig("s1"))), "proof-web")).toBeUndefined();
     });
-    it("asks no explanation of a flag's companions", () => {
-      const page = doc(steps(step([{ type: "slot", attrs: { hint: "Say where you read the flag" }, content: [] }, ev("f1", { block: null }), ev("r1"), ev("s1", { block: null })], "f1")));
+    it("asks no explanation of a flag's step: it opens with its own sentence", () => {
+      const page = doc(step(words("Read proof.txt:"), ev("f1"), ...cmd("r1"), fig("s1")));
       expect(find(run(data({ log: [bare(), read(), shot()] }), page), "explain")).toBeUndefined();
     });
   });
@@ -237,80 +250,98 @@ describe("targetChecks", () => {
   it("names which flag's proof falls short, one check per flag", () => {
     const local = flag({ id: "f0", at: 4000 }, { flagKind: "local", proof: "dev@web01:/tmp$ cat local.txt\nid\nhostname\nip addr\n10.0.0.5" });
     const proof = flag({}, { proof: "root@web01:/tmp# cat proof.txt\nid\nhostname\nip addr\n10.0.0.5" });
-    const c = run(data({ hosts: [host({ os: "linux" })], log: [local, proof] }), doc(ev("f0", { block: null }), slot("x"), ...goodDoc().content!), {}, ["local", "proof"]);
+    const c = run(data({ hosts: [host({ os: "linux" })], log: [local, proof] }), doc(ev("f0"), words("x"), ...goodDoc().content!), {}, ["local", "proof"]);
     expect(c.filter((x) => x.id.startsWith("proof-path")).map((x) => [x.id, x.text])).toEqual([
       ["proof-path:DC01:local", "The local.txt proof for DC01 doesn't read the flag from its usual location."],
       ["proof-path:DC01:proof", "The proof.txt proof for DC01 doesn't read the flag from its usual location."],
     ]);
   });
-  it("output is soft on blank output unless it returned nothing (downloads print nothing)", () => {
+
+  describe("output", () => {
     const blank = (extra = {}) => entry({ id: "c1", content: { kind: "command", blocks: [{ command: "ls", output: "  " }] }, ...extra });
-    const page = doc(ev("c1"), slot("x"), ...goodDoc().content!);
-    const c = find(run(data({ log: [blank(), flag()] }), page), "output")!;
-    expect(c).toMatchObject({
-      id: "output:c1",
-      level: "soft",
-      text: "A command on the page shows no output. Fine if it printed nothing; otherwise paste its output.",
+    const noOutput = (id: string) => code("ls", `entry:${id}:0:command`);
+    it("is soft for a command on the page with no output block, anchored at its command", () => {
+      const c = find(run(data({ log: [blank(), flag()] }), doc(words("Listed."), noOutput("c1"), ...goodDoc().content!)), "output")!;
+      expect(c).toMatchObject({
+        id: "output:c1",
+        level: "soft",
+        text: "A command on the page shows no output. Fine if it printed nothing; otherwise paste its output.",
+        anchor: { entryId: "c1", nodeIndex: 2 },
+      });
     });
-    expect(find(run(data({ log: [blank({ returnedNothing: true }), flag()] }), page), "output")).toBeUndefined();
-    const two = entry({ id: "c2", content: { kind: "command", blocks: [{ command: "a", output: "x" }, { command: "b", output: "" }] } });
-    const whole = doc(ev("c2", { block: null }), slot("x"), ...goodDoc().content!);
-    expect(find(run(data({ log: [two, flag()] }), whole), "output")).toMatchObject({ id: "output:c2", level: "soft" });
-    expect(find(run(data({ log: [two, flag()] }), doc(ev("c2", { block: 0 }), slot("x"), ...goodDoc().content!)), "output")).toBeUndefined();
+    it("says nothing when the entry returned nothing, or an output block is there", () => {
+      expect(find(run(data({ log: [blank({ returnedNothing: true }), flag()] }), doc(noOutput("c1"), ...goodDoc().content!)), "output")).toBeUndefined();
+      expect(find(run(data({ log: [blank(), flag()] }), doc(...cmd("c1"), ...goodDoc().content!)), "output")).toBeUndefined();
+      // Any output block of the entry counts, a second command with none included.
+      const two = entry({ id: "c2", content: { kind: "command", blocks: [{ command: "a", output: "x" }, { command: "b", output: "" }] } });
+      expect(find(run(data({ log: [two, flag()] }), doc(...cmd("c2"), noOutput("c2"), ...goodDoc().content!)), "output")).toBeUndefined();
+    });
   });
-  it("explain is soft, one per step whose sentence is an empty slot, anchored to the step, screenshot steps first", () => {
-    const shot = entry({ id: "s1", kind: "screenshot", at: -3_600_000, content: { kind: "screenshot", attachmentId: "a", caption: "ok", fileName: "x" } });
-    const cmd = entry({ id: "c1" });
-    const page = doc(steps(step([slot(""), ev("c1")], "c1"), step([slot(""), ev("s1", { block: null })], "s1")), ...goodDoc().content!);
-    const c = run(data({ log: [cmd, shot, flag()] }), page).filter((x) => x.id.startsWith("explain"));
-    expect(c.map((x) => [x.id, x.level, x.anchor])).toEqual([
-      ["explain:s1", "soft", { entryId: "s1", nodeIndex: 4 }],
-      ["explain:c1", "soft", { entryId: "c1", nodeIndex: 1 }],
-    ]);
-    expect(c[0].text).toBe("A step has no explanation before it.");
-    const done = doc(steps(step([slot("Next, list the shares."), ev("c1")], "c1")), ...goodDoc().content!);
-    expect(find(run(data({ log: [cmd, flag()] }), done), "explain")).toBeUndefined();
-    // The owner's own paragraph is the sentence too.
-    expect(find(run(data({ log: [cmd, flag()] }), doc(steps(step([words("Listed the shares."), ev("c1")], "c1")))), "explain")).toBeUndefined();
+
+  describe("explain", () => {
+    it("is soft, one per step whose first child is no sentence, anchored to the step, screenshot steps first", () => {
+      const shot = entry({ id: "s1", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "ok", fileName: "x" } });
+      const page = doc(h2("Initial access", "phase:h1:foothold"), stepsPara(), step(hint(), ...cmd("c1")), step(hint(), fig("s1")), ...goodDoc().content!);
+      const c = run(data({ log: [entry({ id: "c1" }), shot, flag()] }), page).filter((x) => x.id.startsWith("explain"));
+      expect(c.map((x) => [x.id, x.level, x.anchor])).toEqual([
+        ["explain:s1", "soft", { entryId: "s1", nodeIndex: 10 }],
+        ["explain:c1", "soft", { entryId: "c1", nodeIndex: 4 }],
+      ]);
+      expect(c[0].text).toBe("A step has no explanation before it.");
+    });
+    it("a step opening with words, or a step with no sourced block, is judged by its first child", () => {
+      const page = doc(step(words("Listed the shares:"), ...cmd("c1")), ...goodDoc().content!);
+      expect(find(run(data({ log: [entry({ id: "c1" }), flag()] }), page), "explain")).toBeUndefined();
+      expect(find(run(data({ log: [flag()] }), doc(step(code("x", "free")), ...goodDoc().content!)), "explain:node-0")).toBeDefined();
+    });
   });
-  it("a step's other evidence shares its sentence: only a step with an empty sentence is unexplained", () => {
-    const a = entry({ id: "c1" });
-    const b = entry({ id: "c2" });
-    const page = doc(steps(step([slot("List the shares."), ev("c1", { block: 0 }), ev("c1", { block: 1 })], "c1"), step([slot(""), ev("c2")], "c2")), ...goodDoc().content!);
-    expect(run(data({ log: [a, b, flag()] }), page).filter((x) => x.id.startsWith("explain")).map((x) => x.id)).toEqual(["explain:c2"]);
-  });
-  it("asks nothing of a flag's step: its slot is the flag hint and the block prints its own label", () => {
-    const flagSlot: ReportNode = { type: "slot", attrs: { hint: "Say where you read the flag" }, content: [] };
-    const shot = entry({ id: "s1", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "ok", fileName: "x" } });
-    const page = doc(steps(step([flagSlot, ev("f1", { block: null }), ev("s1", { block: null })], "f1")));
-    expect(find(run(data({ log: [shot, flag()] }), page), "explain")).toBeUndefined();
-    // An ordinary empty slot on the same step is still unexplained.
-    expect(find(run(data({ log: [shot, flag()] }), doc(steps(step([slot(""), ev("f1", { block: null })], "f1")))), "explain")).toBeDefined();
-  });
+
   describe("step-replay", () => {
-    const cmd = entry({ id: "c1" });
-    const shot = entry({ id: "s1", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "ok", fileName: "x" } });
-    const check = (page: ReportNode, log: LogEntry[] = [cmd, shot, flag()], d = data({ log })) => find(run(d, page), "step-replay");
-    it("flags a step with owner text and no evidence, naming its number and heading", () => {
-      const c = check(doc(phase(), steps(step([words("Downloaded the repo")]))))!;
-      expect(c.text).toBe("Step 1 of Initial Access has no command or output under it, so a reader can't replay it. Add it from the log column");
-      expect(c).toMatchObject({ id: "step-replay:t1:1.0", level: "soft" });
-      expect(checkKind(c.id)).toBe("step-replay");
-      const second = check(doc(phase(), steps(step([slot("Scanned"), ev("c1")], "c1"), step([slot("Then this")]))));
-      expect(second?.text).toMatch(/^Step 2 of Initial Access /);
+    const check = (page: ReportNode, log: LogEntry[] = [entry({ id: "c1" }), flag()]) => find(run(data({ log }), page), "step-replay");
+    it("step-replay: a step with words and no code or figure", () => {
+      const page = doc(h2("Initial access", "phase:h1:foothold"), stepsPara(), step(words("I logged in over SSH as ronan.")));
+      const c = targetChecks({ data: data({ log: [flag()] }), target, doc: page, meta: {}, sectionId: "sec-1" }).filter((x) => x.id.startsWith("step-replay"));
+      expect(c.map((x) => x.id)).toEqual(["step-replay:sec-1:2"]);
+      expect(c[0]).toMatchObject({
+        level: "soft",
+        text: "Step 1 of Initial access has no command or output under it, so a reader can't replay it. Add it from the log column",
+        anchor: { nodeIndex: 4 },
+      });
+      expect(checkKind(c[0].id)).toBe("step-replay");
     });
-    it("a step holding only a screenshot, or a command, or an exploit passes", () => {
-      expect(check(doc(phase(), steps(step([slot("Said"), ev("s1", { block: null })], "s1"))))).toBeUndefined();
-      expect(check(doc(phase(), steps(step([slot("Said"), ev("c1")], "c1"))))).toBeUndefined();
-      expect(check(doc(phase(), steps(step([slot("Said"), { type: "exploit", attrs: { fileId: "f9", markedLines: [], appendix: "inline" } }])))) ).toBeUndefined();
+    it("counts steps since the last heading and names the nearest level-2 heading", () => {
+      const page = doc(
+        h1("DC01 (10.0.0.5)"),
+        h2("Initial access", "phase:h1:foothold"),
+        step(words("Scanned:"), ...cmd("c1")),
+        step(words("Then this.")),
+        h2("Privilege escalation", "phase:h1:privesc"),
+        step(words("And this.")),
+      );
+      expect(run(data({ log: [entry({ id: "c1" }), flag()] }), page).filter((x) => x.id.startsWith("step-replay")).map((x) => x.text.slice(0, 40))).toEqual([
+        "Step 2 of Initial access has no command ",
+        "Step 1 of Privilege escalation has no co",
+      ]);
     });
-    it("an empty sentence is the explain check, not this one", () => {
-      const c = run(data({ log: [cmd, flag()] }), doc(phase(), steps(step([slot("")]))));
+    it("falls back to the level-1 heading, then to this page", () => {
+      expect(check(doc(h1("DC01 (10.0.0.5)"), step(words("Said."))))!.text).toMatch(/^Step 1 of DC01 \(10.0.0.5\) /);
+      expect(check(doc(step(words("Said."))))!.text).toMatch(/^Step 1 of this page /);
+    });
+    it("a step holding a command or a figure, at any depth, passes", () => {
+      expect(check(doc(step(words("Said:"), ...cmd("c1"))))).toBeUndefined();
+      expect(check(doc(step(words("Said:"), fig("s1"))))).toBeUndefined();
+      expect(check(doc(step(words("Said:"), { type: "table", content: [{ type: "tableRow", content: [{ type: "tableCell", content: [code("x", "entry:c1:0:command")] }] }] })))).toBeUndefined();
+    });
+    it("a note step is prose already", () => {
+      expect(check(doc(step(words("What I saw.", "entry:n1:note"))), [entry({ id: "n1", kind: "note", content: { kind: "note", text: "What I saw." } }), flag()])).toBeUndefined();
+    });
+    it("a step with no sentence is the explain check's, not this one's", () => {
+      const c = run(data({ log: [flag()] }), doc(step(hint())));
       expect(find(c, "step-replay")).toBeUndefined();
       expect(find(c, "explain")).toBeDefined();
     });
-    it("evidence nested in a step still satisfies proof present", () => {
-      expect(run(good(), doc(steps(step([slot("Read the proof"), ev("f1", { block: null })], "f1"))))).toEqual([]);
+    it("a bullet is no step", () => {
+      expect(check(doc({ type: "list", attrs: { kind: "bullet" }, content: [words("A bullet.")] }))).toBeUndefined();
     });
   });
   describe("cred-finding", () => {
@@ -360,7 +391,7 @@ describe("targetChecks", () => {
     const shell = entry({ id: "sh", at: 10_000_000 });
     const shot = (o: Record<string, unknown> = {}) =>
       entry({ id: "s1", kind: "screenshot", at: 10_000_000 + 60_000, content: { kind: "screenshot", attachmentId: "a", caption: "ok", fileName: "x" }, ...o });
-    const page = doc(slot("x"), ev("sh"), ev("s1", { block: null }), ...goodDoc().content!);
+    const page = doc(words("x"), ...cmd("sh"), fig("s1"), ...goodDoc().content!);
     const grant = (o: Record<string, unknown> = {}) => ({ id: "g", hostId: "h1", level: "admin", at: 10_000_000, via: "x", logEntryId: "sh", ...o });
     const check = (log: LogEntry[], g = grant(), p = page) => find(run(data({ log: [...log, flag()], grants: [g] as never }), p), "access-shot");
 
@@ -379,110 +410,141 @@ describe("targetChecks", () => {
       const d = data({ log: [shell, before, flag()], grants: [first, unlinked] as never });
       expect(run(d, page).filter((c) => c.id.startsWith("access-shot")).map((c) => c.id)).toEqual(["access-shot:DC01:user", "access-shot:DC01:admin"]);
     });
-    it("counts only the host's own, non-private screenshots", () => {
+    it("counts only the host's own, non-private screenshots that are figures on the page", () => {
       expect(check([shell, shot({ hostIds: ["h2"] })])).toBeDefined();
       expect(check([shell, shot({ private: true })])).toBeDefined();
-      expect(check([shell], grant(), doc(slot("x"), ev("sh")))).toBeDefined();
+      expect(check([shell], grant(), doc(words("x"), ...cmd("sh")))).toBeDefined();
+      // A screenshot the page doesn't show as a figure shows no access.
+      expect(check([shell, shot()], grant(), doc(words("x"), ...cmd("sh")))).toBeDefined();
       const flagShot = flag({ id: "fs", at: 10_000_000 + 1000 });
-      expect(check([shell, flagShot], grant(), doc(slot("x"), ev("sh"), ev("fs", { block: null })))).toBeUndefined();
+      expect(check([shell, flagShot], grant(), doc(words("x"), ...cmd("sh"), fig("fs")))).toBeUndefined();
     });
   });
-  it("caption-weak flags a screenshot with no caption of its own, or a bare \"Screenshot\"", () => {
-    const bare = entry({ id: "s1", kind: "screenshot", title: "Screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "", fileName: "x" } });
-    const page = doc(ev("s1", { block: null }), slot("x"), ...goodDoc().content!);
-    expect(find(run(data({ log: [bare, flag()] }), page), "caption-weak")).toMatchObject({ id: "caption-weak:s1", level: "soft" });
-    // A caption written on the page is its own.
-    const named = doc(ev("s1", { block: null, caption: "Root shell on DC01" }), slot("x"), ...goodDoc().content!);
-    expect(find(run(data({ log: [bare, flag()] }), named), "caption-weak")).toBeUndefined();
-    expect(groupChecks(run(data({ log: [bare, flag()] }), page).filter((c) => c.id.startsWith("caption-weak"))).map((g) => g.text)).toEqual(["A screenshot has no caption"]);
-  });
-  describe("text copied from the log", () => {
-    const para = (fromEntry: string, text = "copied words", extra: Record<string, unknown> = {}): ReportNode => ({
-      type: "paragraph",
-      attrs: { fromEntry, ...extra },
-      content: [{ type: "text", text }],
+  describe("captions", () => {
+    const shotEntry = (caption: string, o: Record<string, unknown> = {}) =>
+      entry({ id: "s1", kind: "screenshot", title: "Screenshot", content: { kind: "screenshot", attachmentId: "a", caption, fileName: "x" }, ...o });
+    const ids = (log: LogEntry[], page: ReportNode) => run(data({ log: [...log, flag()] }), page).filter((c) => c.id.startsWith("caption")).map((c) => [c.id, c.level]);
+    it("caption-weak: a figure with no caption, or a bare Screenshot", () => {
+      expect(ids([shotEntry("")], doc(fig("s1", ""), ...goodDoc().content!))).toEqual([["caption-weak:s1", "soft"]]);
+      expect(ids([shotEntry("")], doc(fig("s1", "Screenshot"), ...goodDoc().content!))).toEqual([["caption-weak:s1", "soft"]]);
+      expect(ids([shotEntry("")], doc(fig("s1", "Root shell on DC01"), ...goodDoc().content!))).toEqual([]);
+      const c = run(data({ log: [shotEntry(""), flag()] }), doc(fig("s1", ""), ...goodDoc().content!)).filter((x) => x.id.startsWith("caption-weak"));
+      expect(groupChecks(c).map((g) => g.text)).toEqual(["A screenshot has no caption"]);
+      expect(c[0].anchor).toEqual({ entryId: "s1", nodeIndex: 0 });
     });
-    const code = (fromEntry: string): ReportNode => ({ type: "codeBlock", attrs: { language: "", fromEntry }, content: [{ type: "text", text: "id" }] });
-    const note = (o: Record<string, unknown> = {}) => entry({ id: "n1", kind: "note", content: { kind: "note", text: "copied words" }, ...o });
-    const copied = (cs: Check[]) => cs.filter((c) => c.id.startsWith("copied")).map((c) => [c.id, c.level, c.text, c.anchor?.nodeIndex]);
-
-    it("fails, anchored, when the entry the text came from is now private", () => {
-      const page = doc(para("n1"), para("c1", "said", { fromField: "observations" }), code("c1"), ...goodDoc().content!);
-      expect(copied(run(data({ log: [note({ private: true }), entry({ id: "c1", private: true }), flag()] }), page))).toEqual([
-        ["copied-private:n1", "fail", "Text copied from an entry that is now private.", 0],
-        ["copied-private:c1", "fail", "Text copied from an entry that is now private.", 2],
-      ]);
-      expect(groupChecks(run(data({ log: [note({ private: true }), flag()] }), doc(para("n1"), ...goodDoc().content!))).map((g) => g.text)).toEqual([
-        "Text from a now-private entry",
-      ]);
+    it("caption: a figure caption over 10 words", () => {
+      const long = "one two three four five six seven eight nine ten eleven";
+      expect(ids([shotEntry(long)], doc(fig("s1", long), ...goodDoc().content!))).toEqual([["caption:s1", "soft"]]);
+      expect(ids([shotEntry("")], doc(fig("s1", "one two three four five six seven eight nine ten"), ...goodDoc().content!))).toEqual([]);
     });
-    it("fails when it was deleted, and says nothing while the entry is there", () => {
-      const page = doc(slot("x"), para("n1"), code("c9"), ...goodDoc().content!);
-      expect(copied(run(data({ log: [flag()] }), page))).toEqual([
-        ["copied-deleted:n1", "fail", "Text copied from an entry that was deleted.", 2],
-        ["copied-deleted:c9", "fail", "Text copied from an entry that was deleted.", 4],
-      ]);
-      expect(copied(run(data({ log: [note(), entry({ id: "c9" }), flag()] }), page))).toEqual([]);
+    it("a figure prints only its own caption: no step-title check exists", () => {
+      const step = entry({ id: "c1", title: "Full port scan" });
+      expect(ids([step, shotEntry("")], doc(...cmd("c1"), fig("s1", ""), ...goodDoc().content!))).toEqual([["caption-weak:s1", "soft"]]);
     });
-  });
-  describe("printed captions", () => {
-    const bare = entry({ id: "s1", kind: "screenshot", title: "Screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "", fileName: "x" } });
-    const step = (o: Record<string, unknown> = {}) => entry({ id: "c1", title: "Full port scan", ...o });
-    const page = doc(slot("Scan."), ev("c1"), ev("s1", { block: null }), ...goodDoc().content!);
-    const ids = (log: LogEntry[], p = page) => run(data({ log: [...log, flag()] }), p).filter((c) => c.id.startsWith("caption")).map((c) => [c.id, c.level, c.text]);
-
-    it("an uncaptioned screenshot that prints its step's title is said softly as that, not as uncaptioned", () => {
-      expect(ids([step(), bare])).toEqual([["caption-step:s1", "soft", "Screenshot uses its step's title as caption."]]);
-      const groups = groupChecks(run(data({ log: [step(), bare, flag()] }), page).filter((c) => c.id.startsWith("caption")));
-      expect(groups.map((g) => g.text)).toEqual(["Caption is its step's title"]);
-    });
-    it("counts the words of the caption the page prints", () => {
-      const long = step({ title: "one two three four five six seven eight nine ten eleven" });
-      expect(ids([long, bare]).map((x) => x[0])).toEqual(["caption-step:s1", "caption:s1"]);
-    });
-    it("never prints, or counts, a private or deleted step's title", () => {
-      expect(ids([step({ private: true }), bare]).map((x) => x[0])).toEqual(["caption-weak:s1"]);
-      expect(ids([bare]).map((x) => x[0])).toEqual(["caption-weak:s1"]);
-    });
-    it("names a too-narrow screenshot by the caption the page prints, never a private step's", () => {
-      const named = legibilityChecks(page, data({ log: [step(), bare] }), { s1: 300 });
+    it("legible: a too-narrow figure, named by its caption, never a private entry's", () => {
+      const page = doc(fig("s1", "Full port scan"));
+      const named = legibilityChecks(page, data({ log: [shotEntry("")] }), { s1: 300 });
       expect(named.map((c) => c.text)).toEqual(['The screenshot "Full port scan" is narrower than would print legibly. Retake it larger or crop it tighter.']);
-      const hidden = legibilityChecks(page, data({ log: [step({ title: "secret box", private: true }), bare] }), { s1: 300 });
-      expect(hidden[0].text).not.toContain("secret");
+      expect(named[0]).toMatchObject({ id: "legible:s1", level: "soft", anchor: { entryId: "s1" } });
+      expect(legibilityChecks(doc(fig("s1", "")), data({ log: [shotEntry("")] }), { s1: 300 })[0].text).toContain('"A screenshot"');
+      expect(legibilityChecks(page, data({ log: [shotEntry("", { private: true })] }), { s1: 300 })).toEqual([]);
+      expect(legibilityChecks(page, data({ log: [shotEntry("")] }), { s1: 900 })).toEqual([]);
     });
   });
-  it("caption is soft over 10 words", () => {
-    const long = entry({ id: "s1", kind: "screenshot", content: { kind: "screenshot", attachmentId: "a", caption: "one two three four five six seven eight nine ten eleven", fileName: "x" } });
-    const page = doc(ev("s1", { block: null }), slot("x"), ...goodDoc().content!);
-    expect(find(run(data({ log: [long, flag()] }), page), "caption")).toMatchObject({ id: "caption:s1", level: "soft" });
+  describe("copied-private and copied-deleted", () => {
+    const note = (o: Record<string, unknown> = {}) => entry({ id: "n1", kind: "note", content: { kind: "note", text: "copied words" }, ...o });
+    const copied = (cs: Check[]) => cs.filter((c) => c.id.startsWith("copied")).map((c) => [c.id, c.level, c.anchor?.nodeIndex]);
+
+    it("copied-deleted: a block from a deleted entry is a fail at that block", () => {
+      const page = doc(words("x"), code("id", "entry:gone:0:output"), code("again", "entry:gone:1:command"), ...goodDoc().content!);
+      expect(run(good(), page).filter((c) => c.id.startsWith("copied"))).toEqual([
+        { id: "copied-deleted:gone", level: "fail", text: "A block on the page comes from an entry that was deleted.", anchor: { nodeIndex: 2 } },
+      ]);
+    });
+    it("copied-private: a block, or a figure, from a private entry fails once per entry, at its first block", () => {
+      const priv = [note({ private: true }), entry({ id: "s1", kind: "screenshot", private: true, content: { kind: "screenshot", attachmentId: "a", caption: "", fileName: "x" } }), flag()];
+      const page = doc(words("copied words", "entry:n1:note"), fig("s1"), words("more", "entry:n1:note"), ...goodDoc().content!);
+      expect(copied(run(data({ log: priv }), page))).toEqual([
+        ["copied-private:n1", "fail", 0],
+        ["copied-private:s1", "fail", 2],
+      ]);
+      expect(groupChecks(run(data({ log: priv }), page).filter((c) => c.id.startsWith("copied"))).map((g) => g.text)).toEqual(["2 entries now private had text copied to the page"]);
+      expect(groupChecks(run(data({ log: priv }), doc(words("copied words", "entry:n1:note"), ...goodDoc().content!)).filter((c) => c.id.startsWith("copied"))).map((g) => g.text)).toEqual(["Text from a now-private entry"]);
+    });
+    it("says nothing while the entries are there", () => {
+      const page = doc(words("copied words", "entry:n1:note"), ...goodDoc().content!);
+      expect(copied(run(data({ log: [note(), flag()] }), page))).toEqual([]);
+    });
+    it("operator attempts are never mentioned", () => {
+      const attempt = { id: "a", hostId: "h1", title: "SECRETOPERATORNOTE", reasonKind: "operator", reason: "SECRETREASON", private: true, logEntryId: "p1" };
+      const page = doc(code("x", "entry:p1:0:command"), ...goodDoc().content!);
+      const c = run(data({ log: [entry({ id: "p1", private: true }), flag()], attempts: [attempt] as never }), page);
+      expect(find(c, "copied-private:p1")).toBeDefined();
+      expect(JSON.stringify(c)).not.toMatch(/SECRET/);
+    });
   });
-  it("finding raises one soft check per problem", () => {
-    const f = { id: "f9", title: "nmap", severity: null, hostIds: [], serviceIds: [], description: "", remediation: "" };
-    const page = doc({ type: "vuln", attrs: { findingId: "f9" } }, ...goodDoc().content!);
-    const c = run(data({ log: [flag()], findings: [f] as never }), page).filter((x) => x.id.startsWith("finding:f9"));
-    expect(c.map((x) => x.id).sort()).toEqual(["finding:f9:affected", "finding:f9:description", "finding:f9:remediation", "finding:f9:severity", "finding:f9:title"]);
-    expect(c.every((x) => x.level === "soft")).toBe(true);
+  describe("gone", () => {
+    it("fails once per finding or file that no longer exists, at its first block", () => {
+      const page = doc(words("Why.", "finding:nf:explanation"), words("Fix.", "finding:nf:fix"), code("x", "file:nx"), ...goodDoc().content!);
+      expect(run(good(), page).filter((c) => c.id.startsWith("gone"))).toEqual([
+        { id: "gone:nf", level: "fail", text: "A finding or file on the page was deleted.", anchor: { nodeIndex: 0 } },
+        { id: "gone:nx", level: "fail", text: "A finding or file on the page was deleted.", anchor: { nodeIndex: 4 } },
+      ]);
+    });
+    it("says nothing for a finding and a file that exist", () => {
+      const f = { id: "f9", title: "Two words", severity: "high", hostIds: ["h1"], serviceIds: [], description: "Why.", remediation: "Fix.", stepEntryIds: [], refs: [] };
+      const file = { id: "x1", findingId: "f9", name: "poc.py", modified: false, originalUrl: null, originalContent: null, content: "a" };
+      const page = doc(words("Why.", "finding:f9:explanation"), words("Exploit code:", "file:x1"), ...goodDoc().content!);
+      expect(find(run(data({ log: [flag()], findings: [f], findingFiles: [file] } as never), page), "gone")).toBeUndefined();
+    });
   });
-  it("wording flags each absolute claim in slots and paragraphs", () => {
-    const page = doc(slot("This is impossible."), { type: "paragraph", content: [{ type: "text", text: "Fully secure, not vulnerable." }] }, ...goodDoc().content!);
+  describe("finding checks", () => {
+    const f = { id: "f9", title: "nmap", severity: null, hostIds: [], serviceIds: [], description: "", remediation: "", stepEntryIds: [] };
+    it("raises one soft check per problem, once per finding, anchored at its first block", () => {
+      const page = doc(words("x"), words("Fix.", "finding:f9:fix"), words("Why.", "finding:f9:explanation"), ...goodDoc().content!);
+      const c = run(data({ log: [flag()], findings: [f] as never }), page).filter((x) => x.id.startsWith("finding:f9"));
+      expect(c.map((x) => x.id).sort()).toEqual(["finding:f9:affected", "finding:f9:description", "finding:f9:remediation", "finding:f9:severity", "finding:f9:title"]);
+      expect(c.every((x) => x.level === "soft" && x.anchor?.nodeIndex === 2)).toBe(true);
+    });
+    it("reads any finding source, and none for a finding the page doesn't name", () => {
+      expect(run(data({ log: [flag()], findings: [f] as never }), doc(words("Bullet", "finding:f9"), ...goodDoc().content!)).some((x) => x.id.startsWith("finding:f9"))).toBe(true);
+      expect(run(data({ log: [flag()], findings: [f] as never }), goodDoc()).some((x) => x.id.startsWith("finding:"))).toBe(false);
+    });
+  });
+  it("wording flags each absolute claim in a paragraph at any depth, table cells included", () => {
+    const cell: ReportNode = { type: "table", content: [{ type: "tableRow", content: [{ type: "tableCell", content: [words("This is impossible.")] }] }] };
+    const page = doc(words("Fully secure, not vulnerable."), cell, step(words("Impossible to reach:")), ...goodDoc().content!);
     const c = run(good(), page).filter((x) => x.id.startsWith("wording"));
-    expect(c.map((x) => x.id)).toEqual(["wording:0", "wording:1", "wording:2"]);
+    expect(c.map((x) => x.id)).toEqual(["wording:0", "wording:1", "wording:2", "wording:3"]);
     expect(c.every((x) => x.level === "soft")).toBe(true);
+    expect(c[0].anchor).toEqual({ nodeIndex: 0 });
   });
-  it("exploit checks", () => {
+  describe("exploit checks", () => {
     const file = { id: "x1", findingId: "f9", name: "poc.py", modified: true, originalUrl: null, originalContent: null, content: "a" };
-    const exploit = (marked: number[] = []): ReportNode => ({ type: "exploit", attrs: { fileId: "x1", markedLines: marked, appendix: "inline" } });
-    const c = run(data({ log: [flag()], findingFiles: [file] as never }), doc(exploit(), ...goodDoc().content!));
-    expect(c.filter((x) => x.id.startsWith("exploit")).map((x) => [x.id, x.level])).toEqual([
-      ["exploit:x1:url", "fail"],
-      ["exploit:x1:explain", "soft"],
-      ["exploit:x1:original", "fail"],
-    ]);
-    const ok = { ...file, originalUrl: "https://e", originalContent: "b" };
-    const c2 = run(data({ log: [flag()], findingFiles: [ok] as never }), doc(exploit(), slot("Changed the host"), ...goodDoc().content!));
-    expect(c2.filter((x) => x.id.startsWith("exploit"))).toEqual([]);
-    const marked = run(data({ log: [flag()], findingFiles: [{ ...ok, originalContent: null }] as never }), doc(exploit([3]), slot("x"), ...goodDoc().content!));
-    expect(marked.filter((x) => x.id.startsWith("exploit"))).toEqual([]);
+    const blocks = (): ReportNode[] => [words("Exploit code:", "file:x1"), code("a", "file:x1")];
+    const exploit = (f: object, ...after: ReportNode[]) => run(data({ log: [flag()], findingFiles: [f] as never }), doc(...goodDoc().content!, ...blocks(), ...after)).filter((x) => x.id.startsWith("exploit"));
+    it("a modified file with no URL, no original and nothing after it", () => {
+      expect(exploit(file).map((x) => [x.id, x.level])).toEqual([
+        ["exploit:x1:url", "fail"],
+        ["exploit:x1:explain", "soft"],
+        ["exploit:x1:original", "fail"],
+      ]);
+      expect(exploit(file)[0].anchor).toEqual({ nodeIndex: 4 });
+    });
+    it("is clean with its URL, its original and a sentence after the run", () => {
+      expect(exploit({ ...file, originalUrl: "https://e", originalContent: "b" }, words("Changed the host."))).toEqual([]);
+    });
+    it("a paragraph of the run after its code (the exploit notes) explains it", () => {
+      const ok = { ...file, originalUrl: "https://e", originalContent: "b" };
+      const page = doc(words("Exploit code:", "file:x1"), code("a", "file:x1"), words("Changed the host.", "file:x1"), words("Next", "finding:f9:fix"));
+      expect(run(data({ log: [flag()], findingFiles: [ok] as never }), page).filter((x) => x.id.startsWith("exploit"))).toEqual([]);
+    });
+    it("an unmodified file asks nothing, and a missing original content fails with no marked-lines escape", () => {
+      expect(exploit({ ...file, modified: false })).toEqual([]);
+      const c = exploit({ ...file, originalUrl: "https://e" }, words("Changed it."));
+      expect(c.map((x) => [x.id, x.level])).toEqual([["exploit:x1:original", "fail"]]);
+      expect(c[0].text).toBe("The modified exploit poc.py has no original to compare against.");
+    });
   });
   it("coverage is soft for untested services", () => {
     const svc = { id: "sv1", hostId: "h1", port: 445, protocol: "tcp", nmapService: "smb", nmapVersion: null, confirmedProduct: null, confirmedVersion: null, verdict: null };
@@ -490,30 +552,23 @@ describe("targetChecks", () => {
     expect(c).toMatchObject({ id: "coverage:sv1", level: "soft" });
     expect(c.text).toContain("DC01");
   });
-  it("gone fails for a deleted or private entry, and operator attempts are never mentioned", () => {
-    const priv = entry({ id: "p1", private: true });
-    const attempt = { id: "a", hostId: "h1", title: "SECRETOPERATORNOTE", reasonKind: "operator", reason: "SECRETREASON", private: true, logEntryId: "p1" };
-    const page = doc(ev("p1"), slot("x"), ev("missing"), slot("x"), ...goodDoc().content!);
-    const c = run(data({ log: [priv, flag()], attempts: [attempt] as never }), page);
-    expect(c.filter((x) => x.id.startsWith("gone")).map((x) => [x.id, x.level])).toEqual([["gone:p1", "fail"], ["gone:missing", "fail"]]);
-    expect(JSON.stringify(c)).not.toMatch(/SECRET/);
+  it("move: a code block over 60 lines is a soft suggestion with its path", () => {
+    const long = Array.from({ length: 61 }, (_, i) => `l${i}`).join("\n");
+    const c = find(run(good(), doc(words("x"), code(long, "entry:c1:0:output"), ...goodDoc().content!)), "move")!;
+    expect(c).toMatchObject({ id: "move:1", level: "soft", text: "This block is long (61 lines). Consider moving it to an appendix page." });
+    expect(groupChecks([c]).map((g) => g.text)).toEqual(["Long block (61 lines)"]);
   });
-  it("gone covers missing findings, files and blank entry ids", () => {
-    const page = doc({ type: "vuln", attrs: { findingId: "nf" } }, { type: "exploit", attrs: { fileId: "nx", markedLines: [], appendix: "inline" } }, { type: "evidence", attrs: {} }, slot("x"), ...goodDoc().content!);
-    const ids = run(good(), page).filter((c) => c.id.startsWith("gone")).map((c) => [c.id, c.level]);
-    expect(ids).toEqual([["gone:node-2", "fail"], ["gone:nf", "fail"], ["gone:nx", "fail"]]);
+  it("no check reads caption-step or appendix-ref any more", () => {
+    const garnet = garnetFixtures(1_700_000_000_000);
+    const t: ReportTarget = { key: GARNET_HOST, kind: "standalone", hostIds: [GARNET_HOST] };
+    const ids = targetChecks({ data: garnet, target: t, doc: buildPlainTarget(garnet, t, {}), meta: {}, sectionId: "t1" }).map((c) => c.id);
+    expect(ids.filter((id) => id.startsWith("caption-step") || id.startsWith("appendix-ref"))).toEqual([]);
   });
-  it("appendix-ref fails when the moved node has no entry", () => {
-    const page = doc({ ...ev("f1", { block: null, appendix: "moved" }) }, slot("x"));
-    expect(find(run(good(), page), "appendix-ref")).toMatchObject({ id: "appendix-ref:t1:0", level: "fail" });
-    const refs: AppendixIndex = { entries: [{ key: "t1:0", letter: "E", n: 1, title: "", sectionId: "t1" }], refFor: () => "E.1" };
-    expect(find(run(good(), page, { appendixRefs: refs }), "appendix-ref")).toBeUndefined();
-    expect(find(run(good(), page, { appendixRefs: refs, sectionId: "t2" }), "appendix-ref")?.id).toBe("appendix-ref:t2:0");
-  });
-  it("move suggestions are soft with the bare key", () => {
-    const long = entry({ id: "big", content: { kind: "command", blocks: [{ command: "x", output: Array.from({ length: 100 }, (_, i) => `l${i}`).join("\n") }] } });
-    const c = find(run(data({ log: [long, flag()] }), doc(ev("big"), slot("x"), ...goodDoc().content!)), "move")!;
-    expect(c).toMatchObject({ id: "move:0", level: "soft" });
+  it("the garnet draft as drafted has no fail", () => {
+    const garnet = garnetFixtures(1_700_000_000_000);
+    const t: ReportTarget = { key: GARNET_HOST, kind: "standalone", hostIds: [GARNET_HOST] };
+    const checks = targetChecks({ data: garnet, target: t, doc: buildPlainTarget(garnet, t, {}), meta: {}, sectionId: "t1" });
+    expect(checks.filter((c) => c.level === "fail")).toEqual([]);
   });
 });
 
@@ -575,8 +630,9 @@ describe("groupChecks", () => {
     expect(one("access-shot:ms01:system")).toBe("ms01: no system screenshot");
     expect(one("output:e1")).toBe("A command shows no output");
     expect(one("exploit:f:explain")).toBe("Explain the modified exploit");
-    expect(one("move:0.3", "This block is long (80 lines of output). Consider moving it to an appendix.")).toBe("Long block (80 lines of output)");
-    for (const k of ["proof-missing:h:proof", "proof-shot:h:local", "caption-step:1", "copied-private:1", "copied-deleted:1", "proof-screenshot:h:proof", "proof-web:h:proof", "proof-identity:h:proof", "proof-hostname:h:proof", "proof-path:h:proof", "gone:1", "explain:1", "caption:1", "finding:x:severity", "finding:x:title", "finding:x:affected", "finding:x:description", "finding:x:remediation", "wording:1", "exploit:x:url", "exploit:x:original", "appendix-ref:1", "legible:1"]) {
+    expect(one("move:0.3", "This block is long (80 lines). Consider moving it to an appendix page.")).toBe("Long block (80 lines)");
+    expect(one("gone:f1")).toBe("Deleted finding or file on the page");
+    for (const k of ["proof-missing:h:proof", "proof-shot:h:local", "copied-private:1", "copied-deleted:1", "proof-screenshot:h:proof", "proof-web:h:proof", "proof-identity:h:proof", "proof-hostname:h:proof", "proof-path:h:proof", "gone:1", "explain:1", "caption:1", "finding:x:severity", "finding:x:title", "finding:x:affected", "finding:x:description", "finding:x:remediation", "wording:1", "exploit:x:url", "exploit:x:original", "legible:1"]) {
       expect(one(k, "the full text"), k).not.toBe("the full text");
       expect(one(k).length, k).toBeLessThanOrEqual(38);
       // Single and counted lines end alike: no full stop.
@@ -584,7 +640,7 @@ describe("groupChecks", () => {
     }
   });
   it("words every kind targetChecks makes when there are two of it", () => {
-    const kinds = ["proof-missing", "proof-ip", "proof-screenshot", "proof-web", "proof-identity", "proof-hostname", "proof-path", "proof-shot", "gone", "copied-private", "copied-deleted", "output", "explain", "step-replay:t1", "cred-finding", "caption", "caption-weak", "caption-step", "access-shot", "finding:x:severity", "finding:x:title", "finding:x:affected", "finding:x:description", "finding:x:remediation", "wording", "exploit:x:url", "exploit:x:explain", "exploit:x:original", "coverage", "appendix-ref", "move", "legible"];
+    const kinds = ["proof-missing", "proof-ip", "proof-screenshot", "proof-web", "proof-identity", "proof-hostname", "proof-path", "proof-shot", "gone", "copied-private", "copied-deleted", "output", "explain", "step-replay:t1", "cred-finding", "caption", "caption-weak", "access-shot", "finding:x:severity", "finding:x:title", "finding:x:affected", "finding:x:description", "finding:x:remediation", "wording", "exploit:x:url", "exploit:x:explain", "exploit:x:original", "coverage", "move", "legible"];
     for (const k of kinds) {
       const id = (n: number) => (k.includes(":x:") ? k.replace(":x:", `:${n}:`) : `${k}:${n}`);
       const [g] = groupChecks([c(id(1), "soft", "one"), c(id(2), "soft", "two")]);

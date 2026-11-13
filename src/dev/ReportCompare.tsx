@@ -1,7 +1,7 @@
 import { useEffect, useMemo, type ReactNode } from "react";
 import { garnetFixtures, GARNET_HOST } from "../audit/examFixtures";
 import { AUDIT_NOW } from "../audit/fixtures";
-import { buildPlainTarget, type AppendixIndex, type ReportTarget } from "../engines/report";
+import { buildPlainTarget, targetNumbers, type AppendixIndex, type ReportTarget } from "../engines/report";
 import { parseMarkdown, type Block, type Inline } from "../engines/manual/markdown";
 import { ReportDataContext, type ReportDataValue } from "../features/report/editor/ReportDataContext";
 import { ReportEditor } from "../features/report/editor/ReportEditor";
@@ -131,7 +131,7 @@ export default function ReportCompare() {
       <section aria-label="Raven's draft of garnet">
         <p className="report-compare-label">Raven: plain draft of garnet (editable)</p>
         <ReportDataContext.Provider value={value}>
-          <ReportEditor sectionId="compare-garnet" plain doc={doc} onChange={() => {}} onReady={() => {}} />
+          <ReportEditor sectionId="compare-garnet" plain doc={doc} subNumbers={(d) => targetNumbers(d, TARGET, "4.1")} onChange={() => {}} onReady={() => {}} />
         </ReportDataContext.Provider>
       </section>
     </div>

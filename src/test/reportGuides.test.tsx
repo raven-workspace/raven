@@ -3,8 +3,9 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Editor } from "prosekit/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReportData, ReportNode } from "../engines/report";
-import { GUIDES, guideFor, sectionGuide, type GuideId } from "../engines/report/guides";
+import { GARNET_HOST, garnetFixtures } from "../audit/examFixtures";
+import { buildPlainTarget, buildSectionDraft, type ReportData, type ReportNode } from "../engines/report";
+import { GUIDES, guideFor, guidesOf, sectionGuide, type GuideId } from "../engines/report/guides";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext";
 import { ReportEditor } from "../features/report/editor/ReportEditor";
 import { api } from "../lib/api";
@@ -112,6 +113,55 @@ describe("guide catalog", () => {
     expect(sectionGuide("page", "appendix")).toBe("appendix");
     expect(sectionGuide("page", "body")).toBe("page");
     expect(sectionGuide("target")).toBeNull();
+  });
+});
+
+describe("guidesOf", () => {
+  const src = (type: string, source: string, extra: Record<string, unknown> = {}): ReportNode => ({ type, attrs: { source, ...extra } });
+  const h = (text: string, source?: string): ReportNode => ({ type: "heading", attrs: { level: 2, ...(source ? { source } : {}) }, content: [{ type: "text", text }] });
+
+  it("reads the garnet draft's guides in page order", () => {
+    const garnet = buildPlainTarget(garnetFixtures(1_700_000_000_000), { key: GARNET_HOST, kind: "standalone", hostIds: [GARNET_HOST] }, {});
+    expect(guidesOf(garnet, "target").slice(0, 4)).toEqual(["result", "ports", "vuln", "steps"]);
+  });
+
+  it("reads the summary draft: the page's guide, the findings table, the Recommendations heading", () => {
+    const summary = buildSectionDraft("summary", data, settings(), {});
+    expect(guidesOf(summary, "summary")).toEqual(["summary", "findings-table", "recommendations"]);
+  });
+
+  it("maps every source to its guide, without repeats", () => {
+    const page: ReportNode = {
+      type: "doc",
+      content: [
+        src("paragraph", "result:h1"),
+        src("table", "ports:h1"),
+        src("paragraph", "finding:f1:explanation"),
+        src("paragraph", "finding:f1:fix"),
+        src("paragraph", "file:x1"),
+        src("paragraph", "phase-steps:h1"),
+        h("Post-exploitation", "phase:h1:post"),
+        h("Additional findings", "phase:h1:additional"),
+        h("Also tested", "phase:h1:tested"),
+        h("Finding", "phase:h1:additional:f1"),
+        src("paragraph", "attack-path"),
+        src("table", "table:findings"),
+        src("table", "table:scope-table"),
+        src("table", "table:tested"),
+        src("table", "table:cleanup"),
+        src("paragraph", "result:h2"),
+      ],
+    };
+    expect(guidesOf(page, "target")).toEqual(["result", "ports", "vuln", "exploit", "steps", "post", "additional", "tested", "attack-path", "findings-table", "scope", "house-cleaning"]);
+    // The report-level Also tested table has its guide only on its own page.
+    expect(guidesOf(page, "engagement-tested")).toContain("tested");
+  });
+
+  it("starts with the page's own guide, then takes a heading's from the page kind", () => {
+    const page: ReportNode = { type: "doc", content: [h("Scope"), h("House cleaning")] };
+    expect(guidesOf(page, "methodology")).toEqual(["methodology", "house-cleaning"]);
+    expect(guidesOf(page, "introduction")).toEqual(["scope"]);
+    expect(guidesOf({ type: "doc", content: [] }, "page", "appendix")).toEqual(["appendix"]);
   });
 });
 

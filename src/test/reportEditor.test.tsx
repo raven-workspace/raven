@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Editor } from "prosekit/core";
 import {
-  numberAppendices,
   REPRODUCE_LABEL,
   STEP_HINT,
   subsectionNumbers,
@@ -509,6 +508,25 @@ describe("ReportEditor vulnerabilities and exploits", () => {
   });
 });
 
+/**
+ * The appendix index the Report view computed before pages moved nothing out (`numberAppendices` now yields no target
+ * entries): each moved node of the page lettered "A", in document order. The old block tools still move blocks until
+ * the appendix references go; this keeps their tests honest meanwhile.
+ */
+function legacyAppendices(page: ReportNode, titleOf: (node: ReportNode) => string): AppendixIndex {
+  const entries: AppendixIndex["entries"] = [];
+  const walk = (node: ReportNode, path: string) => {
+    const moved = node.attrs?.appendix === "moved" || node.attrs?.appendix === "split";
+    if (path !== "" && moved && ["evidence", "exploit", "generated"].includes(node.type)) {
+      entries.push({ key: `s1:${path}`, letter: "A", n: entries.length + 1, title: titleOf(node), sectionId: "s1" });
+    }
+    (node.content ?? []).forEach((child, i) => walk(child, path === "" ? `${i}` : `${path}.${i}`));
+  };
+  walk(page, "");
+  const byKey = new Map(entries.map((e) => [e.key, `${e.letter}.${e.n}`]));
+  return { entries, pages: [], refFor: (key) => byKey.get(key) ?? null };
+}
+
 /** The editor with its appendix index recomputed from the live page, as the Report view does. */
 function setupLive(page: ReportNode, d: ReportData = data(), canMove = true) {
   const onChange = vi.fn();
@@ -519,7 +537,7 @@ function setupLive(page: ReportNode, d: ReportData = data(), canMove = true) {
     const [current, setCurrent] = useState(page);
     const appendix = useMemo(
       () =>
-        numberAppendices([{ id: "s1", kind: "target", targetKey: "h1", doc: current }], (n) => d.log.find((e) => e.id === n.attrs?.entryId)?.title ?? "Evidence"),
+        legacyAppendices(current, (n) => d.log.find((e) => e.id === n.attrs?.entryId)?.title ?? "Evidence"),
       [current],
     );
     return (

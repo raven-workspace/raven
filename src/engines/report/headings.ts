@@ -97,6 +97,19 @@ export function targetHeadings(doc: ReportNode, data: ReportData, target: Report
   return out;
 }
 
+/**
+ * The numbers of a plain target page's machine headings (source `facts:<hostId>`), by top-level index. A standalone
+ * target's heading is `base` ("4.1"); in the AD set the n-th machine is `${base}.${n}`. Other headings take no number.
+ */
+export function targetNumbers(doc: ReportNode, target: ReportTarget, base: string): Map<number, string> {
+  const out = new Map<number, string>();
+  (doc.content ?? []).forEach((n, i) => {
+    if (n.type !== "heading" || !/^facts:/.test(String(n.attrs?.source ?? ""))) return;
+    out.set(i, target.kind === "ad-set" ? `${base}.${out.size + 1}` : base);
+  });
+  return out;
+}
+
 /** A report-level page's number and title, from the outline order. */
 export interface SectionNumber {
   /** "1", "4.2"; null for an unnumbered page (Testing considerations, the closing pages). */

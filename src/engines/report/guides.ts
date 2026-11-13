@@ -1,4 +1,5 @@
 import type { SectionKind } from "../../types/report";
+import { sourceOf } from "./stamp";
 import type { PageMeta, ReportNode } from "./types";
 
 /**
@@ -163,6 +164,59 @@ export function sectionGuide(kind: SectionKind, placement?: PageMeta["placement"
     default:
       return null;
   }
+}
+
+/** The guide a block's `source` carries, or null. */
+function sourceGuide(source: string, kind: SectionKind): GuideId | null {
+  const [head, , part] = source.split(":");
+  switch (head) {
+    case "ports":
+    case "result":
+      return head;
+    case "phase-steps":
+      return "steps";
+    case "finding":
+      return part === "explanation" ? "vuln" : null;
+    case "file":
+      return "exploit";
+    case "attack-path":
+      return source === head ? "attack-path" : null;
+    case "table":
+      switch (source) {
+        case "table:findings":
+          return "findings-table";
+        case "table:scope-table":
+          return "scope";
+        case "table:tested":
+          return kind === "engagement-tested" ? "tested" : null;
+        case "table:cleanup":
+          return "house-cleaning";
+        default:
+          return null;
+      }
+    default:
+      return null;
+  }
+}
+
+/** The guides a plain page shows, in page order without repeats: the page's own first, then one per block that carries one. */
+export function guidesOf(doc: ReportNode, kind: SectionKind, placement?: PageMeta["placement"]): GuideId[] {
+  const out: GuideId[] = [];
+  const add = (id: GuideId | null | undefined) => {
+    if (id && !out.includes(id)) out.push(id);
+  };
+  add(sectionGuide(kind, placement));
+  const walk = (node: ReportNode) => {
+    const source = sourceOf(node);
+    if (source) {
+      const phase = /^phase:[^:]+:(post|additional|tested)$/.exec(source)?.[1];
+      add(phase ? PHASE_GUIDES[phase] : sourceGuide(source, kind));
+    }
+    if (node.type === "heading") add(HEADING_GUIDES[kind]?.[textOf(node).trim().toLowerCase()]);
+    node.content?.forEach(walk);
+  };
+  doc.content?.forEach(walk);
+  return out;
 }
 
 /** Whether Settings hides this guide. */
