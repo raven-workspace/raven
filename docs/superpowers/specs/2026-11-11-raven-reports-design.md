@@ -367,3 +367,41 @@ Checks read what the page prints (the copy). Gone or private sources still mark 
 **Rhythm:** consecutive blocks have visible space between them. Every finding under Additional findings is a numbered sub-heading (4.N.5.1 …) with space before it. Steps have space between them. A chip shows "N lines" when nothing is cut, and "K of N lines" only when lines are cut. Empty labelled fields show their hint only in the editor, never as "Not written yet." on the page.
 
 **Notices** (TimedNotice) render above everything, in the bottom-left of the content area, clear of the sidebar in both its expanded and collapsed states.
+
+## 11. Plain pages (2026-11-13): binding. Supersedes §10's page machinery and §10.8's container copies
+
+**Why.** The owner rejected the page as an "assembly tool": chips, slots, guide cards, evidence atoms, finding and table containers. They approved the plain draft of garnet on `/__compare/garnet` ("SOOOO MUCH BETTER"). Hard requirement: **every block on the page is editable as ordinary content** (text, code blocks, tables, figure captions; screenshots deletable and movable), and the log, findings and files never change. Plan: `docs/superpowers/plans/2026-11-13-raven-reports-plain-rollout.md`.
+
+### 11.1 Every page is a plain document
+
+- **Targets and the AD set** are written by `buildPlainTarget`, shaped like a real OSCP report. A machine heading reads "<name> (<IP>)". Then come the Result line, Service enumeration (ports table, the trimmed scan), one heading per finding that enabled a phase with its labelled lines (Vulnerability explanation, fix, severity, affected, exploit code), numbered steps (a sentence, the command, its trimmed output, the screenshots), the flags closing their phase, Additional findings as bullets, and Also tested. The AD set opens with its attack-path table (§10.3).
+- **Front matter and closing pages** are plain. An empty prose part is an empty paragraph whose `hint` shows as placeholder text and vanishes when typed in. Generated tables (scope, findings, clean-up, Also tested, references) are ordinary tables. When a table has no rows yet, it is an empty hint paragraph instead (nothing prints). The Metasploit line is a plain paragraph.
+- **Owner pages** (+ Page) are unchanged and use the same schema.
+- The only node types are `PAGE_NODE_TYPES`: doc, heading, paragraph, text, hardBreak, list, codeBlock, table, tableRow, tableHeaderCell, tableCell, blockquote, horizontalRule, figure (a screenshot plus its editable caption).
+- Each generated block carries hidden attrs that never print: `source` (where it came from: `entry:<id>:<part>`, `finding:<id>:<part>`, `file:<id>`, `ports:<hostId>`, `result:<hostId>`, `tested:<hostId>`, `attack-path`, `table:<kind>`, `msf`, `facts:<hostId>`, `phase:<hostId>:<phase>`) and `gen` (a hash of its text when generated).
+- Numbering is computed, never stored: a machine heading is numbered from the section order (4.N; 5.N in the AD set), so reordering targets renumbers. Sub-headings are unnumbered, as in the approved draft. The page prints no figure numbers.
+
+### 11.2 Beside the page, not on it
+
+The To do panel (checks), the log column, Export, and the **guide notes** (dismissable, top of the right-hand column; `Settings.reportGuidesHidden` still honoured).
+
+### 11.3 Adding and refreshing
+
+- **+ add** in the log column inserts the same plain blocks the draft would (sentence, command, trimmed output, figures). It inserts at the cursor, inside the step the cursor is in. With no cursor, it adds a new numbered step at the end of the entry's phase section, adding the phase heading and "Steps to reproduce:" if missing. **Add new evidence** does the same for every entry the draft would place that is not on the page and was not removed.
+- **Refresh from log** (or "from finding", "from Raven") is in the block menu of every block with a live source. It regenerates that block's run of same-source siblings from the current data and nothing else. If the block was edited (its text no longer matches `gen`, or it has no `gen`), Raven asks first, and ⌘Z undoes. A block whose source is private or deleted offers no Refresh, and its check says why.
+
+### 11.4 Layout 6 and old pages
+
+`DRAFT_LAYOUT` is 6. A page stored under an older layout is rebuilt as the plain draft. Before the rebuild, the save queue is flushed so no older write lands after it. The old page is kept byte for byte in `meta.previousDoc`. **Restore your previous page** converts it with `flattenToPlain`: containers are unwrapped, slot text becomes paragraphs, evidence becomes code blocks and figures, generated blocks become their tables or text, and unknown atoms are dropped. Its owner text is kept. A page already at layout 6 is never rebuilt. A page (an owner page included) that still holds old nodes is flattened when it opens, and the original is kept in `previousDoc`.
+
+### 11.5 Appendices are manual
+
+Appendix pages (+ Page → Appendix page) stay. Moving blocks into automatic per-target appendices is gone: no Move to appendix, no "+ to appendix", no lettered target appendices. A code block over 60 lines gets a soft check suggesting the owner move it to an appendix page by hand.
+
+### 11.6 Checks read the plain page
+
+Each check keeps its intent and reads `source` attrs and headings. The reading rules are listed in the plan's Task 4. A step is a numbered list item, and its replay check still names "Step N of <heading>". The caption-step check is dropped (a figure prints only its own caption), and so is appendix-ref (there are no moved blocks).
+
+### 11.7 Rhythm and notices
+
+Consecutive blocks are 12px apart on the page and inside a numbered step. Notices portal above everything, 16px right of the sidebar whether it is expanded or collapsed (§10.8).
