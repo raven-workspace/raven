@@ -1,6 +1,5 @@
 import type { LogEntry } from "../../types/log";
-import { PHASE_TITLES } from "./headings";
-import { entryBlocks, PLAIN_NODE_TYPES, sourceBlocks } from "./plain";
+import { ADDITIONAL_HEADING, ENUM_HEADING, entryBlocks, PHASE_TITLE, PLAIN_NODE_TYPES, sourceBlocks, TESTED_HEADING } from "./plain";
 import { hintPara, msfLine, plainTable, type PlainTableKind } from "./plainTables";
 import { sourceOf } from "./stamp";
 import { portRows } from "./tables";
@@ -56,41 +55,130 @@ interface Ctx {
   meta: ReportMeta;
 }
 
-/** The entry an evidence or note names, when the data holds it and it may be printed (not private). */
-const entryOf = (ctx: Ctx, id: string | null): LogEntry | undefined => {
-  const e = id ? ctx.data?.log.find((l) => l.id === id) : undefined;
-  return e && !e.private ? e : undefined;
-};
+/** One command of a copy and the output it printed; `at` is its block in the entry, `offset` the output's first line in
+ *  the copy (`keep` indexes the copy's joined output). */
+interface Segment {
+  command: string;
+  output: string;
+  at: number;
+  offset: number;
+}
+type FlagText = { value: string; proof: string };
+type EvidenceText = { segments: Segment[] } | FlagText;
 
-/** An evidence block: its copy as code blocks, a screenshot as a figure, a copy-less block from the log. */
+const lines = (s: string) => s.split(/\r?\n/).length;
+const asText = (v: unknown) => (typeof v === "string" ? v : "");
+
+/** The log's full text of an evidence block (no length cap): a command entry's blocks (one, or all of them), an HTTP
+ *  entry's request and response, a flag's value and proof. Null for any other entry. */
+function logText(entry: LogEntry, block: number | null): EvidenceText | null {
+  const c = entry.content;
+  if (c.kind === "command") {
+    const picked = block === null ? c.blocks.map((b, at) => ({ b, at })) : c.blocks[block] ? [{ b: c.blocks[block], at: block }] : [];
+    let offset = 0;
+    return {
+      segments: picked.map(({ b, at }) => {
+        const seg = { command: b.command ?? "", output: b.output ?? "", at, offset };
+        offset += lines(seg.output);
+        return seg;
+      }),
+    };
+  }
+  if (c.kind === "http") return { segments: [{ command: c.request ?? "", output: c.response ?? "", at: 0, offset: 0 }] };
+  if (c.kind === "flag") return { value: c.value ?? "", proof: c.proof ?? "" };
+  return null;
+}
+
+/** A stored copy's text. A whole multi-block command entry's copy (`block` null) is split back into its blocks by the
+ *  log's line counts, so each command sits above its own output; when the owner changed the line counts it stays one
+ *  command and one output. */
+function copyText(copy: Record<string, unknown>, block: number | null, entry: LogEntry | undefined): EvidenceText {
+  if ("value" in copy) return { value: asText(copy.value), proof: asText(copy.proof) };
+  const command = asText(copy.command);
+  const output = asText(copy.output);
+  const blocks = entry?.content.kind === "command" ? entry.content.blocks : [];
+  if (block === null && blocks.length > 1) {
+    const commandLines = command.split(/\r?\n/);
+    const outputLines = output.split(/\r?\n/);
+    const counts = blocks.map((b) => [lines(b.command ?? ""), lines(b.output ?? "")]);
+    if (counts.reduce((n, [c]) => n + c, 0) === commandLines.length && counts.reduce((n, [, o]) => n + o, 0) === outputLines.length) {
+      let ci = 0;
+      let oi = 0;
+      return {
+        segments: counts.map(([c, o], at) => {
+          const seg = { command: commandLines.slice(ci, ci + c).join("\n"), output: outputLines.slice(oi, oi + o).join("\n"), at, offset: oi };
+          ci += c;
+          oi += o;
+          return seg;
+        }),
+      };
+    }
+  }
+  return { segments: [{ command, output, at: block ?? 0, offset: 0 }] };
+}
+
+/** `keep` ranges moved to a segment whose output starts `offset` lines into the copy. */
+const shiftKeep = (keep: unknown, offset: number): [number, number][] | null =>
+  Array.isArray(keep) ? (keep as [number, number][]).map(([a, b]) => [a - offset, b - offset] as [number, number]) : null;
+
+/** An evidence block's text as code blocks: each command above its output (kept ranges applied unless `full`), a flag's
+ *  proof, and its value when the proof does not hold it. */
+function textBlocks(t: EvidenceText, entryId: string, http: boolean, keep: unknown, full: boolean): ReportNode[] {
+  const trimEnd = (s: string) => s.replace(/\s+$/, "");
+  if ("value" in t) {
+    const out: ReportNode[] = [];
+    const proof = trimEnd(t.proof);
+    const value = t.value.trim();
+    if (proof.trim() !== "") out.push(codeBlock(proof, `entry:${entryId}:proof`));
+    if (value !== "" && !proof.includes(value)) out.push(codeBlock(value, `entry:${entryId}:value`));
+    return out;
+  }
+  return t.segments.flatMap((seg) => {
+    const out: ReportNode[] = [];
+    const command = trimEnd(seg.command);
+    if (command.trim() !== "") out.push(codeBlock(command, http ? `entry:${entryId}:request` : `entry:${entryId}:${seg.at}:command`));
+    const output = full ? trimEnd(seg.output) : keptOutput(seg.output, shiftKeep(keep, seg.offset));
+    if (output.trim() !== "") out.push(codeBlock(output, http ? `entry:${entryId}:response` : `entry:${entryId}:${seg.at}:output`));
+    return out;
+  });
+}
+
+const figure = (attachmentId: string, caption: string, entryId: string): ReportNode => ({
+  type: "figure",
+  attrs: { attachmentId, entryId, source: `entry:${entryId}` },
+  ...(caption.trim() ? { content: [text(caption.trim())] } : {}),
+});
+
+/**
+ * An evidence block: a screenshot as a figure; its copy as code blocks (the log's full text when the copy was cut, the
+ * whole output when the block was split to an appendix), a flag's picture as a figure after it; a copy-less block from
+ * the log. An entry now private is not printed (the page before the flatten keeps it).
+ */
 function evidence(n: ReportNode, ctx: Ctx): ReportNode[] {
   const attrs = n.attrs ?? {};
   const entryId = str(attrs.entryId) ?? "";
   const block = typeof attrs.block === "number" ? attrs.block : null;
-  const entry = entryOf(ctx, entryId);
+  const entry = entryId ? ctx.data?.log.find((l) => l.id === entryId) : undefined;
+  if (entry?.private) return [];
   const caption = typeof attrs.caption === "string" ? attrs.caption : null;
-  const copy = attrs.copy as Record<string, unknown> | null | undefined;
+  const copy = attrs.copy && typeof attrs.copy === "object" ? (attrs.copy as Record<string, unknown>) : null;
+  const full = attrs.appendix === "split";
+  const http = entry?.content.kind === "http";
 
   if (entry?.content.kind === "screenshot") {
     const c = entry.content;
-    const words = (caption ?? (c.caption.trim() || entry.title)).trim();
-    return [{ type: "figure", attrs: { attachmentId: c.attachmentId, entryId: entry.id, source: `entry:${entry.id}` }, ...(words ? { content: [text(words)] } : {}) }];
+    return [figure(c.attachmentId, caption ?? (c.caption.trim() || entry.title), entry.id)];
   }
-  if (copy && typeof copy === "object") {
-    if ("value" in copy) {
-      const proof = typeof copy.proof === "string" ? copy.proof.replace(/\s+$/, "") : "";
-      const value = typeof copy.value === "string" ? copy.value.trim() : "";
-      if (proof.trim() !== "") return [codeBlock(proof, `entry:${entryId}:proof`)];
-      return value !== "" ? [codeBlock(value, `entry:${entryId}:value`)] : [];
-    }
-    const http = entry?.content.kind === "http";
-    const at = block ?? 0;
-    const out: ReportNode[] = [];
-    const command = typeof copy.command === "string" ? copy.command.replace(/\s+$/, "") : "";
-    if (command.trim() !== "") out.push(codeBlock(command, http ? `entry:${entryId}:request` : `entry:${entryId}:${at}:command`));
-    const output = typeof copy.output === "string" ? keptOutput(copy.output, attrs.keep) : "";
-    if (output.trim() !== "") out.push(codeBlock(output, http ? `entry:${entryId}:response` : `entry:${entryId}:${at}:output`));
-    return out;
+  const flagPicture = (): ReportNode[] =>
+    entry?.content.kind === "flag" && entry.content.attachmentId ? [figure(entry.content.attachmentId, caption ?? `${entry.content.flagKind}.txt`, entry.id)] : [];
+
+  if (copy) {
+    const fromLog = attrs.truncated === true && entry ? logText(entry, block) : null;
+    return [...textBlocks(fromLog ?? copyText(copy, block, entry), entryId, http, attrs.keep, full), ...flagPicture()];
+  }
+  if (entry && full) {
+    const t = logText(entry, block);
+    if (t) return [...textBlocks(t, entryId, http, null, true), ...flagPicture()];
   }
   if (entry && ctx.data) {
     // The entry's blocks as a draft step holds them, its sentence left out (the step has the owner's); a block of a
@@ -104,7 +192,7 @@ function evidence(n: ReportNode, ctx: Ctx): ReportNode[] {
     });
     return unstamped(blocks);
   }
-  // The entry is gone or private: only the owner's caption is kept.
+  // The entry is gone: only the owner's caption is kept.
   return caption?.trim() ? [para([text(caption.trim())])] : [];
 }
 
@@ -197,20 +285,25 @@ function exploit(n: ReportNode, ctx: Ctx): ReportNode[] {
   return code.trim() !== "" ? [codeBlock(code, `file:${fileId}`, file?.language ?? "")] : [];
 }
 
+/** Phase headings worded as the plain draft writes them, so a flattened page reads like a rebuilt one. */
+const PHASE_HEADINGS: Partial<Record<Phase, string>> = { ...PHASE_TITLE, enum: ENUM_HEADING, additional: ADDITIONAL_HEADING, tested: TESTED_HEADING };
+
 /** A phase heading in the sample's wording, a finding's own one named after it. */
 function phase(n: ReportNode, ctx: Ctx): ReportNode[] {
   const p = str(n.attrs?.phase) ?? "";
   const hostId = str(n.attrs?.hostId) ?? "";
   const findingId = str(n.attrs?.findingId);
-  const title = PHASE_TITLES[p as Phase] ?? p;
-  const finding = findingId ? ctx.data?.findings.find((f) => f.id === findingId) : undefined;
-  const words = finding?.title.trim() ? `${title} – ${finding.title.trim()}` : title;
-  return [{ type: "heading", attrs: { level: 2, source: `phase:${hostId}:${p}${findingId ? `:${findingId}` : ""}` }, content: [text(words)] }];
+  const title = PHASE_HEADINGS[p as Phase] ?? p;
+  const named = findingId ? ctx.data?.findings.find((f) => f.id === findingId)?.title.trim() : undefined;
+  const source = `phase:${hostId}:${p}${findingId ? `:${findingId}` : ""}`;
+  // A finding's own heading under Additional findings is its title, one level down; elsewhere the phase names it.
+  if (named && p === "additional") return [{ type: "heading", attrs: { level: 3, source }, content: [text(named)] }];
+  return [{ type: "heading", attrs: { level: 2, source }, content: [text(named ? `${title}: ${named}` : title)] }];
 }
 
 /** A slot: its text as a paragraph (its label a bold lead-in), or an empty one with its hint. */
-function slot(n: ReportNode): ReportNode[] {
-  const content = n.content ?? [];
+function slot(n: ReportNode, ctx: Ctx): ReportNode[] {
+  const content = (n.content ?? []).flatMap((c) => flat(c, ctx));
   if (content.length === 0) {
     const hint = str(n.attrs?.hint);
     return [hint ? hintPara(hint) : para([])];
@@ -245,7 +338,7 @@ function flat(n: ReportNode, ctx: Ctx): ReportNode[] {
         return [{ type: "list", attrs: { kind: "ordered" }, content: content.length > 0 ? content : [para([])] }];
       });
     case "slot":
-      return slot(n);
+      return slot(n, ctx);
     case "phase":
       return phase(n, ctx);
     case "evidence":
@@ -270,5 +363,5 @@ function flat(n: ReportNode, ctx: Ctx): ReportNode[] {
  * a live table, a phase's finding title); without it those blocks are dropped. No block it writes carries `gen`.
  */
 export function flattenToPlain(doc: ReportNode, data?: ReportData, target: ReportTarget | null = null, meta: ReportMeta = {}): ReportNode {
-  return own(doc, { data, target, meta });
+  return own(structuredClone(doc), { data, target, meta });
 }

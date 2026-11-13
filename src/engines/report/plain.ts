@@ -38,7 +38,7 @@ export const PLAIN_NODE_TYPES: readonly string[] = [
 ];
 
 /** The headings of a machine's step phases, in the sample's wording. */
-const PHASE_TITLE: Partial<Record<Phase, string>> = {
+export const PHASE_TITLE: Partial<Record<Phase, string>> = {
   foothold: "Initial access",
   lateral: "Lateral movement",
   privesc: "Privilege escalation",
