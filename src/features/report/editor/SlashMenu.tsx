@@ -180,7 +180,7 @@ const ITEM =
 export function SlashMenu() {
   const editor = useEditor<EditingExtension>();
   const actions = usePageActions();
-  const { data, target } = useReportData();
+  const { data, target, reportMeta } = useReportData();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [onlyEvidence, setOnlyEvidence] = useState(false);
@@ -301,7 +301,7 @@ export function SlashMenu() {
                 className="grid min-h-11 cursor-default grid-cols-[40px_minmax(0,1fr)] items-start gap-3 rounded-sm px-2 py-1 data-highlighted:bg-surface-hi"
                 onSelect={() => {
                   picked.current = true;
-                  if (target) insertEntry(editor, data, target, e, true);
+                  if (target) insertEntry(editor, data, target, e, true, reportMeta);
                 }}
               >
                 <span className="font-mono text-code text-muted tabular-nums">{clock(e.at)}</span>

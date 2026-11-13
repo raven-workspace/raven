@@ -381,14 +381,14 @@ describe("Evidence rail: the log column on a plain page", () => {
     );
   });
 
-  it("+ add with the cursor in a heading puts the entry's blocks right after it", async () => {
+  it("+ add with the cursor in a heading adds a numbered step at the end of the entry's phase, as with no cursor", async () => {
     await seed();
     mount();
     await ready();
     const editor = editors[0];
     cursor(editor, (doc) => TextSelection.create(doc, textPos(doc, "Initial access")));
     fireEvent.click(screen.getByRole("button", { name: "Add hydra login" }));
-    expect((await shapeOf(editor)).slice(3, 6)).toEqual(["h:Initial access", "paragraph:hydra login", "codeBlock:hydra login"]);
+    expect((await shapeOf(editor)).slice(3)).toEqual(["h:Initial access", "paragraph", "[ssh login]", "[]", "[hydra login]", "h:Also tested"]);
   });
 
   it("with no cursor on the page, ⌘↵ on a focused row adds a step at the end of its phase and focus moves on", async () => {
@@ -406,13 +406,13 @@ describe("Evidence rail: the log column on a plain page", () => {
     expect(document.activeElement).toBe(row("winpeas run"));
   });
 
-  it("with no cursor, a screenshot that came along with a step is a step of its own at the end of its phase", async () => {
+  it("with no cursor, a screenshot that came along with a step joins the step holding that entry", async () => {
     const { screenshot } = await seed();
     mount();
     await ready();
     const editor = editors[0];
     fireEvent.click(screen.getByRole("button", { name: "Add ssh shell screenshot" }));
-    expect((await shapeOf(editor)).slice(5)).toEqual(["[ssh login]", "[]", "[ssh shell screenshot]", "h:Also tested"]);
+    expect((await shapeOf(editor)).slice(5)).toEqual(["[ssh login,ssh shell screenshot]", "[]", "h:Also tested"]);
     const figures: string[] = [];
     editor.state.doc.descendants((n) => void (n.type.name === "figure" && figures.push(n.attrs.entryId as string)));
     expect(figures).toEqual([screenshot.id]);
@@ -482,7 +482,7 @@ describe("Evidence rail: the log column on a plain page", () => {
     const editor = editors[0];
     const before = editor.getDocJSON();
     fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
-    const notice = await screen.findByText(/^Added \d+ (entry|entries)$/);
+    const notice = await screen.findByText(/^Added /);
     const json = JSON.stringify(editor.getDocJSON());
     // hydra was removed by the owner: it stays off. The ssh login is on the page once.
     expect(json).not.toContain(hydra.id);

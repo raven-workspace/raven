@@ -7,7 +7,7 @@ import { DropIndicator } from "prosekit/react/drop-indicator";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { sourceBlocks } from "../../../engines/report";
 import { Button, Dialog, Tooltip } from "../../../ui";
-import { deleteBlockAt, isEdited, refreshLabel, refreshRun, sourceRun, type SourceRun } from "./pageActions";
+import { currentRun, deleteBlockAt, isEdited, refreshLabel, refreshRun, sourceRun, type SourceRun } from "./pageActions";
 import { useReportData } from "./ReportDataContext";
 
 type Hovered = { node: PMNode; pos: number } | null;
@@ -48,11 +48,13 @@ export function BlockHandle() {
     setMenu(null);
     editor.focus();
   };
+  /** Refreshes a run the owner confirmed (or that needs no asking). A run that moved since is found again by its
+   *  source; if what stands there now is edited, the owner is asked again about that run. */
   const refresh = (r: SourceRun) => {
-    // Still the same blocks where they were (the dialog holds the page still), else the run as it stands now.
-    const same = r.nodes.every((n, i) => editor.state.doc.nodeAt(r.from + r.nodes.slice(0, i).reduce((s, b) => s + b.nodeSize, 0)) === n);
-    const now = same ? r : sourceRun(editor.state.doc, r.from);
-    if (now) refreshRun(editor, now, data, target ?? null, meta);
+    const now = currentRun(editor.state.doc, r);
+    if (!now) return;
+    if (now !== r && isEdited(now.nodes)) setConfirm(now);
+    else refreshRun(editor, now, data, target ?? null, meta);
   };
   // The handle hides while the page scrolls, and its menu would lose its anchor (Radix then pins it to the window's
   // corner): a scroll closes the menu, as the pointer leaving a hovered block does not.
@@ -150,8 +152,8 @@ export function BlockHandle() {
             <Button
               variant="primary"
               onClick={() => {
-                if (confirm) refresh(confirm);
                 setConfirm(null);
+                if (confirm) refresh(confirm);
               }}
             >
               Replace

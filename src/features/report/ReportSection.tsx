@@ -1001,6 +1001,7 @@ function ReportBody({
       doc={railDoc}
       editor={readyEditor && readyEditor.id === openSection?.id ? readyEditor.editor : null}
       didWell={openSection?.kind === "summary"}
+      meta={reportMeta}
       onInserted={onRestoreEvidence}
     />
   );

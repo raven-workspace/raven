@@ -9,6 +9,7 @@ import {
   targetCredentials,
   type Phase,
   type ReportData,
+  type ReportMeta,
   type ReportNode,
   type ReportTarget,
 } from "../../engines/report";
@@ -190,12 +191,14 @@ function RailItem({ row, onAct }: { row: RailRow; onAct(row: RailRow, from: HTML
 function LogTab({
   data,
   target,
+  meta,
   groups,
   editor,
   onInserted,
 }: {
   data: ReportData;
   target: ReportTarget;
+  meta: ReportMeta;
   groups: RailGroup[];
   editor: Editor | null;
   onInserted(entryId: string): void;
@@ -208,7 +211,7 @@ function LogTab({
       const i = rows.indexOf(li);
       (rows[i + 1] ?? rows[i - 1])?.focus();
     }
-    insertEntry(editor, data, target, row.entry, hasPageCursor(editor));
+    insertEntry(editor, data, target, row.entry, hasPageCursor(editor), meta);
     onInserted(row.entry.id);
   };
 
@@ -368,12 +371,15 @@ export function EvidenceRail({
   doc,
   editor,
   didWell = false,
+  meta = {},
   onInserted,
 }: {
   target?: ReportTarget;
   data: ReportData;
   doc: ReportNode;
   editor: Editor | null;
+  /** The report's meta, for the draft's placement of an entry. */
+  meta?: ReportMeta;
   /** The Summary is open: list the controls that blocked attempts under "What the targets did well". */
   didWell?: boolean;
   onInserted(entryId: string): void;
@@ -391,7 +397,7 @@ export function EvidenceRail({
       </TabsList>
       {target && (
         <TabsContent value="unused">
-          <LogTab data={data} target={target} groups={groups} editor={editor} onInserted={onInserted} />
+          <LogTab data={data} target={target} meta={meta} groups={groups} editor={editor} onInserted={onInserted} />
         </TabsContent>
       )}
       <TabsContent value="notes">

@@ -721,42 +721,90 @@ export function entryIdsIn(doc: ReportNode): Set<string> {
 /** The phases with a heading of their own, in page order. */
 const PAGE_PHASES: Phase[] = ["enum", "foothold", "lateral", "privesc", "domain", "post"];
 
+const srcOf = (n: ReportNode) => sourceOf(n) ?? "";
+/** Whether a level 1 or 2 heading ends the region before it. */
+const breaksRegion = (n: ReportNode) => n.type === "heading" && ((n.attrs?.level as number | undefined) ?? 1) <= 2;
+const isStepList = (n: ReportNode) => n.type === "list" && n.attrs?.kind === "ordered";
+/** The entries a block names itself (its source, a figure's entry, its `also`), not its children's. */
+const ownIds = (n: ReportNode) => entryIdsIn({ type: n.type, attrs: n.attrs });
+
+/** The top-level index where a machine's part of the page ends: its next machine's heading, else the end. */
+function hostEnd(content: ReportNode[], hostId: string): number {
+  const facts = content.findIndex((n) => srcOf(n) === `facts:${hostId}`);
+  const next = facts === -1 ? -1 : content.findIndex((n, i) => i > facts && srcOf(n).startsWith("facts:"));
+  return next === -1 ? content.length : next;
+}
+/** The end of the region a heading at `head` opens: the next level 1 or 2 heading, else the end. */
+function regionEnd(content: ReportNode[], head: number): number {
+  let end = head + 1;
+  while (end < content.length && !breaksRegion(content[end])) end++;
+  return end;
+}
+
 /**
  * Where a new step for `entry` goes on a page with no cursor: `index` is the top-level index at the end of the region
  * of the last heading whose source is `phase:<hostId>:<phase>` (or `…:<findingId>`), the region running to the next
  * level 1 or 2 heading or the end. `before` lists the blocks to insert first: the phase's heading when it has none
  * (before the host's first later-phase heading, else its Additional findings or Also tested heading, else the next
  * machine's heading, else at the end), and "Steps to reproduce:" when the region holds no step yet. The phase is
- * `entryPhase`'s; `enum` is the Service enumeration region.
+ * `entryPhase`'s; `enum` is the Service enumeration region. A phase with no step heading of its own goes at the end of
+ * the machine's part of the page.
  */
 export function phaseInsertAt(doc: ReportNode, data: ReportData, target: ReportTarget, entry: LogEntry): { index: number; before: ReportNode[] } {
   const { hostId, phase } = entryPhase(data, target, entry);
   const content = doc.content ?? [];
-  const src = (n: ReportNode) => sourceOf(n) ?? "";
-  const ofPhase = (n: ReportNode, p: Phase) => n.type === "heading" && (src(n) === `phase:${hostId}:${p}` || src(n).startsWith(`phase:${hostId}:${p}:`));
-  const breaks = (n: ReportNode) => n.type === "heading" && ((n.attrs?.level as number | undefined) ?? 1) <= 2;
-  const isStep = (n: ReportNode) => n.type === "list" && n.attrs?.kind === "ordered";
+  const ofPhase = (n: ReportNode, p: Phase) => n.type === "heading" && (srcOf(n) === `phase:${hostId}:${p}` || srcOf(n).startsWith(`phase:${hostId}:${p}:`));
   const stepsLabel = para([bold("Steps to reproduce:")], `phase-steps:${hostId}`);
+  if (!PAGE_PHASES.includes(phase)) return { index: hostEnd(content, hostId), before: [] };
 
   const head = content.reduce((found, n, i) => (ofPhase(n, phase) ? i : found), -1);
   if (head !== -1) {
-    let end = head + 1;
-    while (end < content.length && !breaks(content[end])) end++;
-    const region = content.slice(head + 1, end);
-    const labelled = region.some((n) => isStep(n) || src(n) === `phase-steps:${hostId}`);
+    const end = regionEnd(content, head);
+    const labelled = content.slice(head + 1, end).some((n) => isStepList(n) || srcOf(n) === `phase-steps:${hostId}`);
     return { index: end, before: finish(labelled ? [] : [stepsLabel]) };
   }
 
   const later = PAGE_PHASES.slice(PAGE_PHASES.indexOf(phase) + 1);
   let at = content.findIndex((n) => later.some((p) => ofPhase(n, p)));
   if (at === -1) at = content.findIndex((n) => ofPhase(n, "additional") || ofPhase(n, "tested"));
-  if (at === -1) {
-    const facts = content.findIndex((n) => src(n) === `facts:${hostId}`);
-    if (facts !== -1) at = content.findIndex((n, i) => i > facts && src(n).startsWith("facts:"));
-  }
-  if (at === -1) at = content.length;
-  const title = phase === "enum" ? ENUM_HEADING : (PHASE_TITLE[phase] ?? capitalize(phase));
+  if (at === -1) at = hostEnd(content, hostId);
+  const title = phase === "enum" ? ENUM_HEADING : PHASE_TITLE[phase]!;
   return { index: at, before: finish([heading(2, title, `phase:${hostId}:${phase}`), stepsLabel]) };
+}
+
+/**
+ * One entry's blocks as the draft places them (`entryBlocks`), each carrying the `also` the draft records on it: an
+ * entry whose evidence one of these blocks already shows (a flag its output prints) is placed with it, never twice.
+ */
+export function draftedEntryBlocks(data: ReportData, target: ReportTarget, meta: ReportMeta, entry: LogEntry): ReportNode[] {
+  const blocks = entryBlocks(data, entry);
+  const sources = [...new Set(blocks.map(srcOf).filter((s) => s !== ""))];
+  const withAlso = new Map(sources.map((s) => [s, withAbsorbed(blocks.filter((b) => srcOf(b) === s), s, data, target, meta)]));
+  const seen = new Map<string, number>();
+  return blocks.map((b) => {
+    const s = srcOf(b);
+    if (!s) return b;
+    const i = seen.get(s) ?? 0;
+    seen.set(s, i + 1);
+    return withAlso.get(s)![i] ?? b;
+  });
+}
+
+/**
+ * Where a screenshot that came along with a step goes on a page with no cursor: the draft's step that holds it (with
+ * another entry leading it) is matched to the page's numbered step holding any of that step's other entries, and the
+ * screenshot's own blocks from the draft go at its end. Null when the screenshot leads a step of its own, or the page
+ * has no such step: it then goes as a step of its own.
+ */
+export function companionStepAt(doc: ReportNode, data: ReportData, target: ReportTarget, meta: ReportMeta, entry: LogEntry): { index: number; blocks: ReportNode[] } | null {
+  if (entry.content.kind !== "screenshot") return null;
+  const step = (buildPlainTarget(data, target, meta).content ?? []).find((n) => isStepList(n) && (n.content ?? []).some((b) => ownIds(b).has(entry.id)));
+  if (!step || ownIds(step.content![0]).has(entry.id)) return null;
+  const others = [...entryIdsIn(step)].filter((id) => id !== entry.id);
+  const content = doc.content ?? [];
+  const index = content.findIndex((n) => isStepList(n) && others.some((id) => entryIdsIn(n).has(id)));
+  if (index === -1) return null;
+  return { index, blocks: step.content!.filter((b) => ownIds(b).has(entry.id)) };
 }
 
 /**
@@ -769,6 +817,24 @@ export function missingEntries(doc: ReportNode, data: ReportData, target: Report
   return data.log
     .filter((e) => wanted.has(e.id) && !onPage.has(e.id) && !removed.includes(e.id))
     .sort((a, b) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+}
+
+/**
+ * A machine's Also tested run as the draft writes it, for Add new evidence, when the page holds no `tested:<hostId>`
+ * block and the draft has some: the bullets at the end of the page's Also tested region, or the heading and the
+ * bullets at the end of the machine's part of the page. Null otherwise.
+ */
+export function missingTested(doc: ReportNode, data: ReportData, target: ReportTarget, meta: ReportMeta, hostId: string): { index: number; blocks: ReportNode[] } | null {
+  const content = doc.content ?? [];
+  const has = (n: ReportNode): boolean => srcOf(n) === `tested:${hostId}` || (n.content ?? []).some(has);
+  if (content.some(has)) return null;
+  const drafted = buildPlainTarget(data, target, meta).content ?? [];
+  const bullets = drafted.filter((n) => srcOf(n) === `tested:${hostId}`);
+  if (bullets.length === 0) return null;
+  const head = content.findIndex((n) => n.type === "heading" && srcOf(n) === `phase:${hostId}:tested`);
+  if (head !== -1) return { index: regionEnd(content, head), blocks: bullets };
+  const title = drafted.filter((n) => srcOf(n) === `phase:${hostId}:tested`);
+  return { index: hostEnd(content, hostId), blocks: [...title, ...bullets] };
 }
 
 /** Text nodes as ProseMirror stores them: neighbours with the same marks joined, empty ones dropped. */

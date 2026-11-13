@@ -6,7 +6,8 @@ import { closeHistory } from "prosekit/pm/history";
 import { NodeSelection } from "prosekit/pm/state";
 import {
   blockHash,
-  entryBlocks,
+  companionStepAt,
+  draftedEntryBlocks,
   phaseInsertAt,
   sourceBlocks,
   stamp,
@@ -170,8 +171,17 @@ function spotAfter(doc: PMNode, pos: number, selected: PMNode | null, made: PMNo
   return { from: doc.content.size, to: doc.content.size };
 }
 
-/** Inserts `made` at `spot` in one transaction, an undo step of its own (never merged with typing just before it);
- *  returns the nodes as they stand on the page after it. */
+/** Ends the page's current undo group: what the owner types next is an undo step of its own, never merged with the
+ *  page's own change just before it. */
+function endUndoGroup(editor: Editor) {
+  editor.exec((state, dispatch) => {
+    dispatch?.(closeHistory(state.tr));
+    return true;
+  });
+}
+
+/** Inserts `made` at `spot` in one transaction, an undo step of its own (never merged with typing before or after
+ *  it); returns the nodes as they stand on the page after it. */
 function insertAtSpot(editor: Editor, spot: (doc: PMNode) => Spot, made: PMNode[]): PMNode[] {
   let at: number | null = null;
   editor.exec((state, dispatch) => {
@@ -181,24 +191,46 @@ function insertAtSpot(editor: Editor, spot: (doc: PMNode) => Spot, made: PMNode[
     return true;
   });
   if (at === null) return [];
+  endUndoGroup(editor);
   const $at = editor.state.doc.resolve(at);
   const out: PMNode[] = [];
   for (let i = $at.index(); i < Math.min($at.parent.childCount, $at.index() + made.length); i++) out.push($at.parent.child(i));
   return out;
 }
 
+/** The top-level position before the block at `index` (the end of the page past the last block). */
+const topPos = (doc: PMNode, index: number) => {
+  let pos = 0;
+  for (let i = 0; i < Math.min(index, doc.childCount); i++) pos += doc.child(i).nodeSize;
+  return pos;
+};
+
+/** Puts blocks at a top-level index, one undo step; returns them as they stand on the page. */
+export function insertBlocksAt(editor: Editor, index: number, blocks: ReportNode[]): PMNode[] {
+  const made = blocks.map((n) => editor.state.schema.nodeFromJSON(n));
+  return insertAtSpot(editor, (doc) => ({ from: topPos(doc, index), to: topPos(doc, index) }), made);
+}
+
+/** Whether the cursor is in a heading, or a heading is the selected block: + add then places by phase. */
+function cursorInHeading(editor: Editor): boolean {
+  const sel = editor.state.selection;
+  const node = sel instanceof NodeSelection ? sel.node : sel.$from.parent;
+  return node.type.name === "heading";
+}
+
 /**
- * Puts a log entry on a plain page, as one undoable step, and returns the top-level nodes it inserted. With the owner's
- * cursor on the page (`atCursor`, `hasPageCursor`), the entry's blocks (`entryBlocks`) go right after the cursor's
- * block, inside its list or step: an empty paragraph without a hint is replaced, a hint paragraph never is. Without
- * one, they go as a new numbered step at the end of the entry's phase (`phaseInsertAt`), after its heading and "Steps
- * to reproduce:" when the page has none yet.
+ * Puts a log entry on a plain page, as one undoable step, and returns the nodes it inserted. Its blocks are the
+ * draft's (`draftedEntryBlocks`): an entry one of them already shows (a flag its output prints) is placed with it.
+ * With the owner's cursor on the page (`atCursor`, `hasPageCursor`) outside a heading, they go right after the
+ * cursor's block, inside its list or step: an empty paragraph without a hint is replaced, a hint paragraph never is.
+ * Without one, a screenshot that came along with a step on the page joins that step (`companionStepAt`); anything else
+ * goes as a new numbered step at the end of the entry's phase (`phaseInsertAt`), after its heading and "Steps to
+ * reproduce:" when the page has none yet.
  */
-export function insertEntry(editor: Editor, data: ReportData, target: ReportTarget, entry: LogEntry, atCursor: boolean): PMNode[] {
+export function insertEntry(editor: Editor, data: ReportData, target: ReportTarget, entry: LogEntry, atCursor: boolean, meta: ReportMeta = {}): PMNode[] {
   const schema = editor.state.schema;
-  const blocks = entryBlocks(data, entry);
-  if (atCursor) {
-    const made = blocks.map((n) => schema.nodeFromJSON(n));
+  if (atCursor && !cursorInHeading(editor)) {
+    const made = draftedEntryBlocks(data, target, meta, entry).map((n) => schema.nodeFromJSON(n));
     return insertAtSpot(
       editor,
       (doc) => {
@@ -208,17 +240,21 @@ export function insertEntry(editor: Editor, data: ReportData, target: ReportTarg
       made,
     );
   }
-  const { index, before } = phaseInsertAt(editor.state.doc.toJSON() as ReportNode, data, target, entry);
-  const made = [...before, { type: "list", attrs: { kind: "ordered" }, content: blocks }].map((n) => schema.nodeFromJSON(n));
-  return insertAtSpot(
-    editor,
-    (doc) => {
-      let pos = 0;
-      for (let i = 0; i < Math.min(index, doc.childCount); i++) pos += doc.child(i).nodeSize;
-      return { from: pos, to: pos };
-    },
-    made,
-  );
+  const doc = editor.state.doc.toJSON() as ReportNode;
+  const joins = companionStepAt(doc, data, target, meta, entry);
+  if (joins) {
+    const made = joins.blocks.map((n) => schema.nodeFromJSON(n));
+    return insertAtSpot(
+      editor,
+      (d) => {
+        const end = topPos(d, joins.index) + d.child(joins.index).nodeSize - 1;
+        return { from: end, to: end };
+      },
+      made,
+    );
+  }
+  const { index, before } = phaseInsertAt(doc, data, target, entry);
+  return insertBlocksAt(editor, index, [...before, { type: "list", attrs: { kind: "ordered" }, content: draftedEntryBlocks(data, target, meta, entry) }]);
 }
 
 /**
@@ -260,6 +296,24 @@ export function sourceRun(doc: PMNode, pos: number): SourceRun | null {
   return { from, to: from + nodes.reduce((n, b) => n + b.nodeSize, 0), nodes, source };
 }
 
+/** A run as it stands now: in place when its blocks still are, else the first run on the page with its source (it
+ *  moved); null when the page no longer holds it. */
+export function currentRun(doc: PMNode, run: SourceRun): SourceRun | null {
+  let pos = run.from;
+  const inPlace = run.nodes.every((n) => {
+    const here = pos <= doc.content.size ? doc.nodeAt(pos) : null;
+    pos += n.nodeSize;
+    return here === n;
+  });
+  if (inPlace) return run;
+  let found: number | null = null;
+  doc.descendants((node, at) => {
+    if (found === null && node.attrs.source === run.source) found = at;
+    return found === null;
+  });
+  return found === null ? null : sourceRun(doc, found);
+}
+
 /** Whether the owner changed any of these blocks since they were generated: its hash differs from its `gen`, or it has
  *  none (a flattened block, whose words may be the owner's). */
 export function isEdited(nodes: PMNode[]): boolean {
@@ -272,11 +326,13 @@ export function isEdited(nodes: PMNode[]): boolean {
 export function refreshRun(editor: Editor, run: SourceRun, data: ReportData, target: ReportTarget | null, meta: ReportMeta): boolean {
   const blocks = sourceBlocks(run.source, data, target, meta);
   if (!blocks) return false;
-  return editor.exec((state, dispatch) => {
+  const done = editor.exec((state, dispatch) => {
     const made = blocks.map((n) => state.schema.nodeFromJSON(n));
     dispatch?.(closeHistory(state.tr.replaceWith(run.from, run.to, made)).setMeta(PROGRAMMATIC, true));
     return true;
   });
+  if (done) endUndoGroup(editor);
+  return done;
 }
 
 /** The block menu's Refresh item for a source: the log's, a finding's (its file's too), else Raven's own. */

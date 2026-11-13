@@ -19,6 +19,7 @@ import {
   type ReportTarget,
 } from "../engines/report";
 import { AddEvidenceButton } from "../features/report/AddEvidenceButton";
+import { unusedEntries } from "../features/report/EvidenceRail";
 import { deleteBlockAt, insertEntry, insertFigure, isEdited, refreshLabel, refreshRun, sourceRun } from "../features/report/editor/pageActions";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext";
 import { ReportEditor } from "../features/report/editor/ReportEditor";
@@ -221,6 +222,40 @@ describe("insertEntry: the rail's + add", () => {
     expect(holds(after[at + 3], "build")).toBe(true);
   });
 
+  it("the entry a lead's block shows is no longer unused once the lead is added", async () => {
+    const { editor } = await ready(without("ssh"));
+    expect(unusedEntries(garnet, target, json(editor())).map((e) => e.id)).toContain(id("local"));
+    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "ssh"), false));
+    expect(unusedEntries(garnet, target, json(editor())).map((e) => e.id)).not.toContain(id("local"));
+  });
+
+  it("with the cursor in a heading, + add places by phase, as with no cursor", async () => {
+    const { editor } = await ready(without("fuse"));
+    cursorAt(editor(), find(editor(), (n) => n.type.name === "heading" && String(n.attrs.source).startsWith(`phase:${GARNET_HOST}:foothold`)).pos + 2);
+    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "fuse"), true));
+    const top = json(editor()).content!;
+    const additional = top.findIndex((n) => sourceOf(n) === `phase:${GARNET_HOST}:additional`);
+    expect(holds(top[additional - 1], "fuse")).toBe(true);
+  });
+
+  it("with no cursor, a screenshot that came along with a step joins the step holding its companion", async () => {
+    const content = draft.content!.map((n) => (holds(n, "ssh") ? { ...n, content: n.content!.filter((b) => b.type !== "figure") } : n));
+    const { editor } = await ready({ ...draft, content });
+    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "local-shot"), false));
+    const step = json(editor()).content!.find((n) => holds(n, "ssh"))!;
+    expect(step.content!.map((b) => b.type)).toEqual(["paragraph", "codeBlock", "codeBlock", "figure"]);
+    expect(json(editor()).content).toHaveLength(content.length);
+  });
+
+  it("typing right after an insert is its own undo step", async () => {
+    const { editor } = await ready(without("fuse"));
+    act(() => void insertEntry(editor(), garnet, target, entry(garnet, "fuse"), false));
+    const inserted = json(editor());
+    typeAt(editor(), find(editor(), bySource(`entry:${id("fuse")}:observations`)).pos + 1, "X");
+    fireEvent.keyDown(editor().view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true });
+    expect(json(editor())).toEqual(inserted);
+  });
+
   it("each insert is one undoable step", async () => {
     const { editor } = await ready(without("fuse"));
     const before = json(editor());
@@ -274,6 +309,37 @@ describe("the block menu: Refresh and Delete", () => {
     fireEvent.keyDown(editor().view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true });
     expect(json(editor())).toEqual(edited);
     expect(find(editor(), bySource(`entry:${id("head")}:0:output`)).node.textContent).toContain("MY ");
+  });
+
+  it("a confirmed run that moved is found again by its source and asked about again, never whatever sits at its old place", async () => {
+    const data = newOutput("head", "ref: refs/heads/dev");
+    const { container, editor } = await ready(draft, data);
+    typeAt(editor(), find(editor(), bySource(`entry:${id("head")}:0:output`)).pos + 1, "MY ");
+    await menuFor(container, find(editor(), bySource(`entry:${id("head")}:0:output`)));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Refresh from log" }));
+    await screen.findByRole("dialog", { name: "Replace this block with the current version?" });
+    // The page shifts under the dialog: a paragraph lands at the top.
+    act(() => editor().view.dispatch(editor().state.tr.insert(0, editor().state.schema.nodes.paragraph.create(null, editor().state.schema.text("New")))));
+    const shifted = json(editor());
+    fireEvent.click(screen.getByRole("button", { name: "Replace" }));
+    // Asked again about the run where it stands now; nothing changed yet.
+    expect(await screen.findByRole("dialog", { name: "Replace this block with the current version?" })).toBeInTheDocument();
+    expect(json(editor())).toEqual(shifted);
+    fireEvent.click(screen.getByRole("button", { name: "Replace" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(find(editor(), bySource(`entry:${id("head")}:0:output`)).node.textContent).toBe("ref: refs/heads/dev");
+    expect(json(editor()).content![0]).toEqual(shifted.content![0]);
+  });
+
+  it("typing right after a Replace is its own undo step", async () => {
+    const data = newOutput("head", "ref: refs/heads/dev");
+    const { container, editor } = await ready(draft, data);
+    await menuFor(container, find(editor(), bySource(`entry:${id("head")}:0:output`)));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Refresh from log" }));
+    const refreshed = json(editor());
+    typeAt(editor(), find(editor(), bySource(`entry:${id("head")}:0:output`)).pos + 1, "X");
+    fireEvent.keyDown(editor().view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true });
+    expect(json(editor())).toEqual(refreshed);
   });
 
   it("a flattened block (no gen) counts as edited, so Refresh asks", async () => {
@@ -368,7 +434,7 @@ describe("Add new evidence", () => {
   }
 
   it("adds what the draft would place and isn't on the page or removed; Undo takes off exactly that", async () => {
-    const { editor } = await ready(without("fuse", "dump"));
+    const { editor, onRemoveEvidence } = await ready(without("fuse", "dump"));
     const before = json(editor());
     expect(missingEntries(before, garnet, target, {}, [id("dump")]).map((e) => e.id)).toEqual([id("fuse")]);
     const onAdded = addButton(editor(), [id("dump")]);
@@ -383,6 +449,54 @@ describe("Add new evidence", () => {
 
     // The page's own Undo button, beside the notice (the editor's toolbar has one too).
     fireEvent.click(within(screen.getByText("Added 1 entry").closest<HTMLElement>("[role=status]")!).getByRole("button", { name: "Undo" }));
+    expect(json(editor())).toEqual(before);
+    // The page's own Undo is never the owner's removal.
+    expect(onRemoveEvidence).not.toHaveBeenCalled();
+  });
+
+  it("an entry the draft shows inside another's block is placed with it once: the flag value printed once, never its own step", async () => {
+    const { editor, onRemoveEvidence } = await ready(without("ssh"));
+    addButton(editor(), []);
+    fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
+    // The login, and its screenshot in the same step; local.txt is shown by the login's output.
+    expect(await screen.findByText("Added 2 entries")).toBeInTheDocument();
+    const check = () => {
+      const page = json(editor());
+      const text = JSON.stringify(page);
+      // As often as the draft prints it: the Result line and the login's output.
+      expect(text.split("4c1d8e2f9a7b3065e2c4a9f1d7b80e36")).toHaveLength(JSON.stringify(draft).split("4c1d8e2f9a7b3065e2c4a9f1d7b80e36").length);
+      expect(text).not.toContain(`entry:${id("local")}:`);
+      expect(text).not.toContain("Read local.txt:");
+      const step = page.content!.find((n) => holds(n, "ssh"))!;
+      expect(step.content!.map((b) => b.type)).toEqual(["paragraph", "codeBlock", "codeBlock", "figure"]);
+      expect(step.content![2].attrs?.also).toEqual([id("local")]);
+      expect(step.content![3].attrs?.entryId).toBe(id("local-shot"));
+      expect(missingEntries(page, garnet, target, {}, [])).toEqual([]);
+    };
+    check();
+    // A later Refresh of every block keeps it so.
+    const sources = new Set<string>();
+    editor().state.doc.descendants((n) => void (typeof n.attrs.source === "string" && n.attrs.source && sources.add(n.attrs.source)));
+    for (const source of sources) {
+      const run = sourceRun(editor().state.doc, find(editor(), bySource(source)).pos);
+      if (run) act(() => void refreshRun(editor(), run, garnet, target, {}));
+    }
+    check();
+    expect(onRemoveEvidence).not.toHaveBeenCalled();
+  });
+
+  it("restores a machine's Also tested list when the page has none; Undo takes it off too", async () => {
+    const page = { ...draft, content: draft.content!.filter((n) => !(sourceOf(n) ?? "").includes("tested")) };
+    const { editor } = await ready(page);
+    const before = json(editor());
+    addButton(editor(), []);
+    fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
+    expect(await screen.findByText("Added the Also tested list")).toBeInTheDocument();
+    const tail = json(editor()).content!.slice(-2);
+    expect(tail.map(sourceOf)).toEqual([`phase:${GARNET_HOST}:tested`, `tested:${GARNET_HOST}`]);
+    const words = (n: ReportNode): string => (n.text ?? "") + (n.content ?? []).map(words).join("");
+    expect(tail.map(words)).toEqual(draft.content!.slice(-2).map(words));
+    fireEvent.click(within(screen.getByText("Added the Also tested list").closest<HTMLElement>("[role=status]")!).getByRole("button", { name: "Undo" }));
     expect(json(editor())).toEqual(before);
   });
 
