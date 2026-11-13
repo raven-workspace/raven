@@ -997,19 +997,19 @@ function ReportBody({
   const railDoc = openSection ? (openLiveDoc ?? savedDocOf(openSection)) : EMPTY_DOC;
   const guides =
     openSection && openSection.kind !== "details" && hasCurrentPage(openSection) && contextValue ? (
-      <GuidePanel kind={openSection.kind} placement={openSection.kind === "page" ? (openSection.meta as Partial<PageMeta>).placement : undefined} doc={railDoc} />
+      <GuidePanel key={openSection.id} kind={openSection.kind} placement={openSection.kind === "page" ? (openSection.meta as Partial<PageMeta>).placement : undefined} doc={railDoc} />
     ) : null;
   const rail = (
     <>
       {guides}
       <EvidenceRail
-      target={open?.target}
-      data={data}
-      doc={railDoc}
-      editor={readyEditor && readyEditor.id === openSection?.id ? readyEditor.editor : null}
-      didWell={openSection?.kind === "summary"}
-      meta={reportMeta}
-      onInserted={onRestoreEvidence}
+        target={open?.target}
+        data={data}
+        doc={railDoc}
+        editor={readyEditor && readyEditor.id === openSection?.id ? readyEditor.editor : null}
+        didWell={openSection?.kind === "summary"}
+        meta={reportMeta}
+        onInserted={onRestoreEvidence}
       />
     </>
   );

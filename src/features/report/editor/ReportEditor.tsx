@@ -67,7 +67,6 @@ const pageNumbers = new WeakMap<Editor, SubNumbers>();
 /** Each page's copied-text source lookup (see `SourceGone`), by its editor. */
 const sourcesGone = new WeakMap<Editor, SourceGone>();
 
-
 /** Pages the owner has focused: before that the selection is only ProseMirror's default (often the first block). */
 const touched = new WeakSet<Editor>();
 

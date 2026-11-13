@@ -171,7 +171,7 @@ describe("guide notes beside the page", () => {
   const panel = (d: ReportNode = garnetDoc, kind: SectionKind = "target", qc = makeQueryClient()) =>
     render(
       <QueryClientProvider client={qc}>
-        <aside aria-label="Evidence">
+        <aside aria-label="Evidence" tabIndex={-1}>
           <GuidePanel kind={kind} doc={d} />
         </aside>
       </QueryClientProvider>,
@@ -239,5 +239,36 @@ describe("guide notes beside the page", () => {
     qc.setQueryData(["settings"], settings([]));
     panel(garnetDoc, "target", qc);
     expect(await screen.findByRole("list", { name: "Guide notes" })).toBeInTheDocument();
+  });
+
+  it("the fold starts closed on another page", async () => {
+    const user = userEvent.setup();
+    const qc = makeQueryClient();
+    const tree = (key: string) => (
+      <QueryClientProvider client={qc}>
+        <GuidePanel key={key} kind="target" doc={garnetDoc} />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree("a"));
+    await user.click(await screen.findByRole("button", { name: /^Show \d+ more notes$/ }));
+    expect(screen.getByRole("button", { name: "Show fewer notes" })).toBeInTheDocument();
+    rerender(tree("b"));
+    expect(await screen.findByRole("button", { name: /^Show \d+ more notes$/ })).toBeInTheDocument();
+  });
+
+  it("keeps keyboard focus in the column after a hide", async () => {
+    const user = userEvent.setup();
+    panel();
+    const first = within(await screen.findByRole("list", { name: "Guide notes" })).getAllByRole("note")[0];
+    within(first).getByRole("button", { name: "Hide this note" }).focus();
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(document.activeElement).not.toBe(document.body));
+    expect(screen.getByRole("complementary", { name: "Evidence" })).toContainElement(document.activeElement as HTMLElement);
+    // Hide all: the panel goes, focus lands on the column (the aside takes focus when it has tabindex -1).
+    const next = within(screen.getByRole("list", { name: "Guide notes" })).getAllByRole("note")[0];
+    within(next).getByRole("button", { name: "Hide all guide notes" }).focus();
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(screen.queryByRole("list", { name: "Guide notes" })).not.toBeInTheDocument());
+    expect(document.activeElement).not.toBe(document.body);
   });
 });
