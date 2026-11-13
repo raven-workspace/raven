@@ -97,9 +97,12 @@ export interface ArchivedPage {
  *  rebuild sets them afresh and carries every other key forward. */
 const PAGE_STATE_KEYS = ["layout", "previousDoc", "previousLayout", "previousAt", "restored", "flattened", "originals"];
 
-/** `meta.originals` with `doc` appended, archived with the meta it was stored under (without `originals`). */
+/** `meta.originals` with `doc` appended, archived with the meta it was stored under (without `originals`). A doc the
+ *  archive already holds byte for byte is not added again, so swapping back and forth doesn't grow it. */
 export function archivePage(meta: SectionMeta, doc: ReportNode, why: ArchivedPage["why"], at = Date.now()): ArchivedPage[] {
   const { originals = [], ...rest } = meta;
+  const raw = JSON.stringify(doc);
+  if (originals.some((o) => JSON.stringify(o.doc) === raw)) return originals;
   return [...originals, { doc, layout: meta.layout ?? null, meta: rest as Record<string, unknown>, at, why }];
 }
 

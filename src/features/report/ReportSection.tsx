@@ -74,7 +74,7 @@ import {
   useSectionSaver,
   wantedSections,
 } from "./queries";
-import { flushReports, forgetReportSave, isReportSaveQueued, queueReportSave, trackReportWrite, useReportSaveStore } from "./saveQueue";
+import { flushReports, forgetReportSave, isReportSaveQueued, queueReportSave, settleReportSave, trackReportWrite, useReportSaveStore } from "./saveQueue";
 
 const HINTS: Hint[] = [
   { keys: "← →", label: "move along the tabs (J K from anywhere)", priority: 1 },
@@ -660,17 +660,23 @@ function ReportBody({
       reportError(e);
       setDraftFailed(e instanceof Error ? e.message : String(e));
     };
-    // Rebuild anyway: the unsaved change is dropped from the queue (it is never tried again) and lives on in the archived
-    // old page below (the queue patched the cache with it when it sent it). Should the rebuild fail, it is queued again.
+    // Rebuild anyway: once a write of it already on its way has settled (so it can't land after the rebuild), the
+    // unsaved change is dropped from the queue (it is never tried again) and lives on in the archived old page below
+    // (the queue patched the cache with it when it sent it). Should the rebuild fail, it is queued again.
     let requeue: (() => void) | null = null;
-    if (rebuildAnyway.current.delete(s.id) && isReportSaveQueued(s.id)) {
-      const unsaved = cachedSection(s);
-      forgetReportSave(s.id);
-      requeue = () => queueReportSave(qc, s.id, unsaved.doc as ReportNode, unsaved.meta as SectionMeta);
-    }
-    // A queued write of the old page (mid-debounce, or failed and waiting for its retry; a refused one is tried once
-    // more) goes out first, so it can never land after the rebuild and overwrite it; the page it wrote is the one kept.
-    flushReports()
+    const flushed = rebuildAnyway.current.delete(s.id)
+      ? settleReportSave(s.id).then(() => {
+          if (isReportSaveQueued(s.id)) {
+            const unsaved = cachedSection(s);
+            forgetReportSave(s.id);
+            requeue = () => queueReportSave(qc, s.id, unsaved.doc as ReportNode, unsaved.meta as SectionMeta);
+          }
+          return flushReports();
+        })
+      : // A queued write of the old page (mid-debounce, or failed and waiting for its retry; a refused one is tried once
+        // more) goes out first, so it can never land after the rebuild and overwrite it; the page it wrote is the one kept.
+        flushReports();
+    flushed
       .then(() => {
         // The section as the cache has it after the flush: the queue patches it with every write it sends, so its page
         // and meta are the latest, saved or not; its position is the current one (the reply's is left out of the cache,
@@ -699,7 +705,7 @@ function ReportBody({
                 previousAt: Date.now(),
                 originals: archivePage(was, now.doc as ReportNode, "rebuild"),
               }
-            : { ...ownerMeta(was), layout: DRAFT_LAYOUT };
+            : { ...ownerMeta(was), layout: DRAFT_LAYOUT, ...(was.originals ? { originals: was.originals } : {}) };
         return api
           .reportSectionUpsert(report.id, { kind: s.kind, targetKey: s.targetKey, position: now.position, doc, meta: meta as Record<string, unknown>, draftBuiltAt: Date.now() })
           .then((saved) => patchCachedSection(qc, s.id, { doc: saved.doc, meta: saved.meta, draftBuiltAt: saved.draftBuiltAt }))

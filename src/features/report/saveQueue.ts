@@ -226,6 +226,11 @@ export function isReportSaveQueued(id: string): boolean {
   return session.pending.has(id) || session.runs.has(id);
 }
 
+/** Resolves once this section's write on its way (if any) has settled. Never rejects. */
+export function settleReportSave(id: string): Promise<void> {
+  return session.runs.get(id) ?? Promise.resolve();
+}
+
 /** True while any report write is queued or on its way. */
 export function hasPendingReports(): boolean {
   return session.pending.size > 0 || session.runs.size > 0 || session.writes.size > 0;

@@ -1005,6 +1005,14 @@ describe("Report view: the result", () => {
       const after = ((await stored(section.id)).meta as SectionMeta).originals!;
       expect(after.slice(0, 2)).toEqual(archived);
       expect(after.map((a) => a.why)).toEqual(["rebuild", "restore", "restore"]);
+
+      // Toggling again swaps the same two pages: the archive holds both already and adds nothing.
+      fireEvent.click(screen.getByRole("button", { name: "Restore your previous page" }));
+      await waitFor(() => expect(paper().textContent).toContain(OWNER[0]));
+      fireEvent.click(screen.getByRole("button", { name: "Use the rebuilt page" }));
+      await waitFor(() => expect(paper().textContent).toBe(draftText));
+      await flushReports();
+      expect(((await stored(section.id)).meta as SectionMeta).originals).toEqual(after);
       expect(screen.getByRole("button", { name: "Restore your previous page" })).toBeInTheDocument();
     });
 
@@ -1109,6 +1117,62 @@ describe("Report view: the result", () => {
       expect(input.meta.originals?.at(-1)).toMatchObject({ doc: edited, layout: 5, why: "rebuild" });
       await flushReports();
       expect(save).toHaveBeenCalledTimes(3);
+    });
+
+    it("Rebuild anyway waits for a write of the old page already on its way, so it never lands after the rebuild", async () => {
+      const report = await api.reportGetOrCreate("e-exam");
+      const old = plainPage([{ type: "paragraph", content: [{ type: "text", text: "Old lnx02 page" }] }]);
+      const section = await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: old, meta: { layout: 5 }, draftBuiltAt: 1 });
+      const edited = plainPage([{ type: "paragraph", content: [{ type: "text", text: "Old lnx02 page, edited" }] }]);
+      const calls: string[] = [];
+      const realSave = api.reportSectionSave;
+      const realUpsert = api.reportSectionUpsert;
+      let mode: "fail" | "hold" = "fail";
+      let release: () => void = () => {};
+      vi.spyOn(api, "reportSectionSave").mockImplementation(async (id, doc, meta) => {
+        if (id !== section.id) return realSave(id, doc, meta);
+        if (mode === "fail") throw new Error("disk busy");
+        calls.push("save:start");
+        await new Promise<void>((r) => (release = r));
+        calls.push("save:end");
+        return realSave(id, doc, meta);
+      });
+      vi.spyOn(api, "reportSectionUpsert").mockImplementation(async (rid, input) => {
+        if (input.targetKey === LNX && input.draftBuiltAt !== null) calls.push("upsert");
+        return realUpsert(rid, input);
+      });
+      const qc = makeQueryClient();
+      queueReportSave(qc, section.id, edited as unknown as ReportNode, { layout: 5 });
+      await flushReports();
+      mount("e-exam", qc);
+      await ready();
+      const alert = () => screen.getByText(/An earlier change to this page couldn't be saved/).closest<HTMLElement>("[role=alert]")!;
+      await waitFor(() => expect(alert()).toBeInTheDocument());
+
+      // The queue's retry sends the write; it is on its way when the owner picks Rebuild anyway.
+      mode = "hold";
+      void flushReports();
+      await waitFor(() => expect(calls).toEqual(["save:start"]));
+      fireEvent.click(within(alert()).getByRole("button", { name: "Rebuild anyway" }));
+      await act(async () => {});
+      expect(calls).toEqual(["save:start"]);
+      await act(async () => release());
+      await waitFor(() => expect(calls).toEqual(["save:start", "save:end", "upsert"]));
+      const after = await stored(section.id);
+      expect(after.meta).toMatchObject({ layout: 6, previousDoc: edited });
+      expect(needsFlatten(after.doc as unknown as ReportNode)).toBe(false);
+    });
+
+    it("a section with no page yet keeps its archive when its draft is built", async () => {
+      const report = await api.reportGetOrCreate("e-exam");
+      const archived = [{ doc: plainPage([]) as unknown as ReportNode, layout: 4, meta: { layout: 4 }, at: 3, why: "rebuild" as const }];
+      await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: null, meta: { layout: 5, originals: archived }, draftBuiltAt: null });
+      const upsert = vi.spyOn(api, "reportSectionUpsert");
+      mount();
+      await ready();
+      await waitFor(() => expect(draftUpserts(upsert, LNX)).toHaveLength(1));
+      const [, input] = draftUpserts(upsert, LNX)[0] as [string, { meta: SectionMeta }];
+      expect(input.meta).toEqual({ layout: 6, originals: archived });
     });
 
     it("a rebuild carries the owner's meta forward and archives the old page with its whole meta", async () => {
