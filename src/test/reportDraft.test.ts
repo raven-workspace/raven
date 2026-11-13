@@ -3,7 +3,6 @@ import {
   addNewEvidence,
   buildTargetDraft,
   defaultKeep,
-  DRAFT_LAYOUT,
   endOfPhase,
   evidenceBlocks,
   evidenceIdsIn,
@@ -386,9 +385,8 @@ describe("the short draft (layout 4)", () => {
     expect(stepsNode([stepNode([])])).toEqual({ type: "steps", content: [stepNode([])] });
   });
 
-  it("keeps REPRODUCE_LABEL exported and moves the layout to 5", () => {
+  it("keeps REPRODUCE_LABEL exported", () => {
     expect(typeof REPRODUCE_LABEL).toBe("string");
-    expect(DRAFT_LAYOUT).toBe(5);
   });
 });
 

@@ -49,18 +49,18 @@ export interface CoverageOverride {
   note?: string;
 }
 
-/** The draft layout a section's page is built with. A page saved with a layout older than `UPGRADABLE_FROM` (or none)
- *  is rebuilt from scratch the first time it opens (2: OffSec's sample report structure; 3: one finding per heading,
- *  Additional findings, flags with their companions; 4: numbered steps with evidence chips, short draft, ports/result
- *  tables; 5: every placed block is the page's own editable copy, §10.8). A layout-4 page is upgraded in place
- *  (`upgradeDoc`): every owner-written node is kept.
+/** The draft layout a section's page is built with. A target or report-level page saved with any other layout (or
+ *  none) is rebuilt from scratch the first time it opens (2: OffSec's sample report structure; 3: one finding per
+ *  heading; 4: numbered steps with evidence chips; 5: every placed block the page's own editable copy, §10.8; 6: every
+ *  page one plain document, §11). An owner page (+ Page) is never rebuilt; one holding old nodes opens flattened
+ *  (`flattenToPlain`), its original kept in `previousDoc`.
  *
- *  GUARD: bumping this rebuilds every stored page older than `UPGRADABLE_FROM` on its next open. The page written
- *  before is kept in the section meta (`previousDoc`) and the page offers it back ("Restore your previous page"); a bump
- *  must keep that path working (reportSection.test.tsx: "a page rebuilt for a new layout offers the previous one back"). */
-export const DRAFT_LAYOUT = 5;
-/** The oldest layout `upgradeDoc` converts in place; older pages are rebuilt. */
-export const UPGRADABLE_FROM = 4;
+ *  GUARD: bumping this rebuilds every stored page on its next open. The page written before is kept byte for byte in the
+ *  section meta (`previousDoc`), the save queue is flushed first so no queued write of the old page lands after the
+ *  rebuild, and the page offers the old one back ("Restore your previous page", flattened to the plain schema). A bump
+ *  must keep that path working (reportSection.test.tsx: "a layout-5 page rebuilds as the plain draft and keeps the old
+ *  page byte for byte"). */
+export const DRAFT_LAYOUT = 6;
 
 /** Stored in `report_sections.meta`. */
 export interface SectionMeta {

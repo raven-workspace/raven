@@ -9,14 +9,16 @@ import App from "../App";
 import { api, resetAuditState } from "../audit/fakeApi";
 import { ReportSectionView } from "../features/report/ReportSection";
 import { pruneRemoved } from "../features/report/queries";
-import { DRAFT_LAYOUT } from "../engines/report";
-import { discardReports } from "../features/report/saveQueue";
+import { DRAFT_LAYOUT, needsFlatten, PAGE_NODE_TYPES, type ReportNode, type SectionMeta } from "../engines/report";
+import { discardReports, flushReports, queueReportSave } from "../features/report/saveQueue";
 import { ReportTabs, type TabItem } from "../features/report/ReportTabs";
 import { CheckList, TodoPanel } from "../features/report/TodoPanel";
 import { makeQueryClient } from "../lib/queryClient";
 import type { LogContent, LogEntryInput } from "../types/log";
 import type { ReportDoc } from "../types/report";
 import { TooltipProvider } from "../ui";
+import layout3Json from "./fixtures/report-layout3-owner.json";
+import layout5Json from "./fixtures/report-layout5-web01.json";
 
 vi.mock("../lib/api", () => import("../audit/fakeApi"));
 
@@ -92,6 +94,7 @@ async function ready() {
 }
 
 const LNX_ID = "h-exam-lnx";
+const nodeTypes = (n: ReportNode): string[] => [n.type, ...(n.content ?? []).flatMap(nodeTypes)];
 type UpsertInput = { targetKey: string | null; draftBuiltAt: number | null };
 const draftUpserts = (spy: { mock: { calls: unknown[][] } }, targetKey: string) =>
   spy.mock.calls.filter((call) => {
@@ -175,7 +178,7 @@ describe("Report view", () => {
     // lnx02's expected flags are set in the panel too.
     expect(within(panel).getByRole("group", { name: "Expected flags" })).toBeInTheDocument();
     await waitFor(() => expect(editors.length).toBe(3));
-    fireEvent.click(within(checks).getByText("Long block (80 lines of output)"));
+    fireEvent.click(within(checks).getByText("Long block (80 lines)"));
     await waitFor(() => expect(pageEditor().state.selection instanceof NodeSelection).toBe(true));
     expect(pageEditor().view.hasFocus() || pageEditor().view.dom.contains(document.activeElement)).toBe(true);
     // Esc in the panel closes it.
@@ -315,12 +318,15 @@ describe("Report view", () => {
     await waitFor(() => expect(paper().textContent).toContain("Old summary page"));
   });
 
-  it("builds a target's draft once, on its first open", async () => {
+  it("builds a target's plain draft once, on its first open", async () => {
     const upsert = vi.spyOn(api, "reportSectionUpsert");
     mount();
     await ready();
-    // The first target opens by default and gets its draft.
+    // The first target opens by default and gets its draft: a plain page at layout 6.
     await waitFor(() => expect(draftUpserts(upsert, "h-exam-lnx")).toHaveLength(1));
+    const [, input] = draftUpserts(upsert, "h-exam-lnx")[0] as [string, { meta: unknown; doc: ReportNode }];
+    expect(input.meta).toEqual({ layout: 6 });
+    expect(nodeTypes(input.doc).every((t) => PAGE_NODE_TYPES.includes(t))).toBe(true);
     await waitFor(() => expect(editors.length).toBeGreaterThan(0));
 
     fireEvent.click(rowFor("ms01"));
@@ -343,7 +349,7 @@ describe("Report view", () => {
         const view = editors[editors.length - 1].view;
         let at = 1;
         view.state.doc.descendants((n, p) => {
-          if (n.type.name === "slot" && at === 1) at = p + 1;
+          if (n.type.name === "paragraph" && at === 1) at = p + 1;
           return at === 1;
         });
         view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, at)).insertText(text));
@@ -611,100 +617,59 @@ const logInput = (title: string, content: LogContent, at: number): LogEntryInput
   content,
   at,
 });
-const evNode = (entryId: string) => ({ type: "evidence", attrs: { entryId, block: 0, keep: null, emphasis: [], appendix: "inline" } });
-
-/** lnx02's page, stored at the current layout: a foothold heading, a slot, a scan with `outputLines` lines of output, the post heading.
- *  `stepped` puts the slot and the scan in a steps list as one step, as drafts do. */
-async function seedLnx(outputLines = 3, meta: Record<string, unknown> = {}, stepped = false) {
+/** lnx02's page, stored as a plain page at the current layout (`lnxPage`), its scan's output `outputLines` lines long. */
+async function seedLnx(outputLines = 3, meta: Record<string, unknown> = {}) {
   const output = Array.from({ length: outputLines }, (_, i) => `line ${i}`).join("\n");
   const scan = await api.logCreate("e-exam", logInput("nmap scan", { kind: "command", blocks: [{ command: "nmap -sV 10.10.30.21", output }] }, 1_000));
   const report = await api.reportGetOrCreate("e-exam");
-  const doc = {
-    type: "doc",
-    content: [
-      { type: "phase", attrs: { phase: "foothold", hostId: LNX } },
-      ...(stepped
-        ? [{ type: "steps", content: [{ type: "step", attrs: { entryId: scan.id }, content: [{ type: "slot", attrs: { hint: "What you do next" } }, evNode(scan.id)] }] }]
-        : [{ type: "slot", attrs: { hint: "What you do next" } }, evNode(scan.id)]),
-      { type: "phase", attrs: { phase: "post", hostId: LNX } },
-      { type: "slot", attrs: { hint: "Proof" } },
-    ],
-  };
-  await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { layout: DRAFT_LAYOUT, ...meta }, draftBuiltAt: Date.now() });
+  await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: lnxPage(scan.id, output), meta: { layout: DRAFT_LAYOUT, ...meta }, draftBuiltAt: Date.now() });
   return scan;
 }
 
+const plainPage = (content: ReportNode[]): ReportDoc => ({ type: "doc", content }) as unknown as ReportDoc;
+const plainBlocks = (doc: ReportDoc): ReportNode[] => (doc as unknown as ReportNode).content ?? [];
+
+/** A plain lnx02 page: an h2 with its phase source, a hint paragraph, the scan's command and output, the post heading. */
+function lnxPage(scanId: string, output: string): ReportDoc {
+  return plainPage([
+    { type: "heading", attrs: { level: 2, source: `phase:${LNX}:foothold` }, content: [{ type: "text", text: "Initial access" }] },
+    { type: "paragraph", attrs: { hint: "What you do next" } },
+    { type: "codeBlock", attrs: { language: "", source: `entry:${scanId}:0:command` }, content: [{ type: "text", text: "nmap -sV 10.10.30.21" }] },
+    { type: "codeBlock", attrs: { language: "", source: `entry:${scanId}:0:output` }, content: [{ type: "text", text: output }] },
+    { type: "heading", attrs: { level: 2, source: `phase:${LNX}:post` }, content: [{ type: "text", text: "Post-exploitation" }] },
+  ]);
+}
+
 const pageEditor = () => editors[editors.length - 1];
-const evidenceIds = () => {
-  const ids: string[] = [];
-  pageEditor().state.doc.descendants((n) => {
-    if (n.type.name === "evidence") ids.push(n.attrs.entryId as string);
-  });
-  return ids;
-};
-const appendixTab = (label: string) => within(tabRow()).findByRole("tab", { name: new RegExp(`^${label}`) });
-
-describe("Report view: appendices and new evidence", () => {
-  // Skipped by the plain-page rollout (Task 4): pages move nothing to an appendix any more, so a target has no appendix tab. Rewritten or removed with the Report view (Tasks 6 to 10).
-  it.skip("Move to appendix adds an Appendix A tab; its page lists the moved block and links back", async () => {
-    await seedLnx();
-    mount();
-    await ready();
-    await waitFor(() => expect(editors.length).toBeGreaterThan(0));
-    // The scan is the page's third block.
-    const view = pageEditor().view;
-    fireEvent.pointerDown(view.dom);
-    act(() => view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, view.state.doc.child(0).nodeSize + view.state.doc.child(1).nodeSize))));
-    fireEvent.click(await screen.findByRole("button", { name: "Move to appendix" }));
-    expect(await screen.findByText("Full output: Appendix A.1, nmap scan")).toBeInTheDocument();
-    const appendixRow = await appendixTab("Appendix A");
-    expect(appendixRow).toHaveTextContent("lnx02");
-    expect(appendixRow).toHaveTextContent("1 item");
-
-    fireEvent.click(appendixRow);
-    expect(await screen.findByRole("heading", { name: "Appendix A: lnx02" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "A.1 nmap scan" })).toBeInTheDocument();
-    expect(screen.getByText("line 2")).toBeInTheDocument();
-
-    const before = editors.length;
-    fireEvent.click(screen.getByRole("button", { name: "Referenced from lnx02" }));
-    await waitFor(() => expect(editors.length).toBe(before + 1));
-    expect(rowFor("lnx02")).toHaveAttribute("aria-selected", "true");
-    await waitFor(() => {
-      const sel = pageEditor().state.selection;
-      expect(sel instanceof NodeSelection && sel.node.type.name === "evidence").toBe(true);
-    });
-  });
-
-  // Skipped by the plain-page rollout (Task 4): the move suggestion reads long code blocks, and a page moves nothing to an appendix. Rewritten or removed with the Report view (Tasks 6 to 10).
-  it.skip("a long block's soft check offers Move to appendix, which moves it", async () => {
+describe("Report view: long blocks, screenshots and new evidence", () => {
+  it("a long block's soft check suggests an appendix page and offers no action", async () => {
     await seedLnx(80);
     mount();
     await ready();
     await waitFor(() => expect(editors.length).toBeGreaterThan(0));
     const checks = openTodo();
-    // The fix is offered for the picked check only.
+    fireEvent.click(within(checks).getByText("Long block (80 lines)"));
+    // Picked, the check reads in full under its row; a page moves nothing to an appendix, so there is no Move.
+    expect(within(checks).getByText("This block is long (80 lines). Consider moving it to an appendix page.")).toBeInTheDocument();
     expect(within(checks).queryByRole("button", { name: "Move to appendix" })).toBeNull();
-    fireEvent.click(within(checks).getByText("Long block (80 lines of output)"));
-    // Picked, the check reads in full under its row.
-    expect(within(checks).getByText(/This block is long \(80 lines of output\)/)).toBeInTheDocument();
-    fireEvent.click(within(checks).getByRole("button", { name: "Move to appendix" }));
-    await waitFor(() => expect(pageEditor().state.doc.child(2).attrs.appendix).toBe("moved"));
-    expect(await appendixTab("Appendix A")).toBeInTheDocument();
+    // The pick selects the block itself: the scan's output.
+    await waitFor(() => {
+      const sel = pageEditor().state.selection;
+      expect(sel instanceof NodeSelection && sel.node.type.name === "codeBlock" && sel.node.textContent.startsWith("line 0")).toBe(true);
+    });
   });
 
-  // Skipped by the plain-page rollout (Task 4): legibility reads plain figures, which this Report view cannot render yet. Rewritten or removed with the Report view (Tasks 6 to 10).
-  it.skip("flags a screenshot too narrow to print legibly once its image loads", async () => {
+  it("flags a screenshot figure too narrow to print legibly once its image loads", async () => {
     const shot = await api.logCreate("e-exam", {
       ...logInput("Login page", { kind: "screenshot", attachmentId: "", caption: "Login page", fileName: "x.png" }, 500),
       attachment: { mime: "image/png", dataBase64: "AAAA" },
     } as LogEntryInput);
-    await seedLnx();
+    const { attachmentId } = shot.content as { attachmentId: string };
+    const scan = await seedLnx();
     const report = await api.reportGetOrCreate("e-exam");
-    const sections = await api.reportSectionsList(report.id);
-    const lnx = sections.find((s) => s.targetKey === LNX)!;
-    const doc = lnx.doc as unknown as { content: unknown[] };
-    await api.reportSectionSave(lnx.id, { ...doc, content: [...doc.content, { ...evNode(shot.id), attrs: { ...evNode(shot.id).attrs, block: null } }] } as unknown as ReportDoc, { layout: DRAFT_LAYOUT });
+    const lnx = (await api.reportSectionsList(report.id)).find((s) => s.targetKey === LNX)!;
+    const figure: ReportNode = { type: "figure", attrs: { attachmentId, entryId: shot.id, source: `entry:${shot.id}` }, content: [{ type: "text", text: "Login page" }] };
+    await api.reportSectionSave(lnx.id, plainPage([...plainBlocks(lnxPage(scan.id, "line 0")), figure]), { layout: DRAFT_LAYOUT });
     const { container } = mount();
     await ready();
     await waitFor(() => expect(container.querySelector(".report-figure img")).toBeTruthy());
@@ -714,123 +679,6 @@ describe("Report view: appendices and new evidence", () => {
     const checks = openTodo();
     fireEvent.click(await within(checks).findByText("Screenshot too narrow to print"));
     expect(within(checks).getByText('The screenshot "Login page" is narrower than would print legibly. Retake it larger or crop it tighter.')).toBeInTheDocument();
-  });
-
-  it("Add new evidence appends a newly proving entry, skips removed ones, and Undo takes it off again", async () => {
-    const removedFlag = await api.logCreate("e-exam", logInput("proof flag", { kind: "flag", flagKind: "proof", value: "p".repeat(32) }, 3_000));
-    const scan = await seedLnx(3, { removedEntryIds: [removedFlag.id] }, true);
-    const localFlag = await api.logCreate("e-exam", logInput("local flag", { kind: "flag", flagKind: "local", value: "l".repeat(32) }, 2_000));
-    const save = vi.spyOn(api, "reportSectionSave");
-    mount();
-    await ready();
-    await waitFor(() => expect(editors.length).toBeGreaterThan(0));
-    expect(evidenceIds()).toEqual([scan.id]);
-
-    fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
-    expect(await screen.findByText("Added 1 entry")).toBeInTheDocument();
-    expect(evidenceIds()).toEqual([scan.id, localFlag.id]);
-    // The flag is a new step at the end of the foothold's steps list, not a block beside it.
-    expect(pageEditor().state.doc.child(1).type.name).toBe("steps");
-    expect(pageEditor().state.doc.child(1).childCount).toBe(2);
-    await waitFor(() => expect(save.mock.calls.some(([, doc]) => JSON.stringify(doc).includes(localFlag.id))).toBe(true));
-
-    const writes = save.mock.calls.length;
-    // The notice's Undo, not the formatting toolbar's.
-    fireEvent.click(within(screen.getByText("Added 1 entry").closest<HTMLElement>("[role=status]")!).getByRole("button", { name: "Undo" }));
-    await waitFor(() => expect(evidenceIds()).toEqual([scan.id]));
-    expect(pageEditor().state.doc.child(1).childCount).toBe(1);
-    await waitFor(() => expect(save.mock.calls.length).toBeGreaterThan(writes));
-    expect(JSON.stringify(save.mock.calls.at(-1)![1])).not.toContain(localFlag.id);
-    expect(screen.queryByText("Added 1 entry")).not.toBeInTheDocument();
-  });
-
-  it("offers no Move to appendix on a report-level page", async () => {
-    mount();
-    await ready();
-    openPart("Front matter", /Methodology/);
-    await waitFor(() => expect(editors.length).toBeGreaterThan(1));
-    const view = pageEditor().view;
-    let pos = -1;
-    view.state.doc.forEach((n, offset) => {
-      if (pos === -1 && n.type.name === "generated") pos = offset;
-    });
-    expect(pos).toBeGreaterThanOrEqual(0);
-    fireEvent.pointerDown(view.dom);
-    act(() => view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos))));
-    await act(async () => {});
-    expect(screen.queryByRole("button", { name: "Move to appendix" })).toBeNull();
-  });
-
-  describe("deleting steps is remembered, so Add new evidence never brings them back", () => {
-    /** lnx02 with two flag steps in one steps list, each with a written sentence. */
-    async function seedSteps() {
-      const local = await api.logCreate("e-exam", logInput("local flag", { kind: "flag", flagKind: "local", value: "l".repeat(32) }, 2_000));
-      const proof = await api.logCreate("e-exam", logInput("proof flag", { kind: "flag", flagKind: "proof", value: "p".repeat(32) }, 3_000));
-      const report = await api.reportGetOrCreate("e-exam");
-      const step = (id: string, text: string) => ({ type: "step", attrs: { entryId: id }, content: [{ type: "slot", attrs: { hint: "Where" }, content: [{ type: "text", text }] }, evNode(id)] });
-      const doc = {
-        type: "doc",
-        content: [
-          { type: "phase", attrs: { phase: "foothold", hostId: LNX } },
-          { type: "steps", content: [step(local.id, "Read the local flag"), step(proof.id, "Read the proof flag")] },
-          { type: "phase", attrs: { phase: "post", hostId: LNX } },
-          { type: "slot", attrs: { hint: "Proof" } },
-        ],
-      };
-      await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: doc as unknown as ReportDoc, meta: { layout: DRAFT_LAYOUT }, draftBuiltAt: Date.now() });
-      mount();
-      await ready();
-      await waitFor(() => expect(editors.length).toBeGreaterThan(0));
-      await waitFor(() => expect(evidenceIds()).toEqual([local.id, proof.id]));
-      return { local, proof };
-    }
-    const stepAt = (index: number) => {
-      const steps: { node: import("prosekit/pm/model").Node; pos: number }[] = [];
-      pageEditor().state.doc.descendants((node, pos) => {
-        if (node.type.name === "step") steps.push({ node, pos });
-        return true;
-      });
-      return steps[index];
-    };
-    const addNew = async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
-      expect(await screen.findByText("Nothing new to add")).toBeInTheDocument();
-    };
-
-    it("a step deleted from the block menu", async () => {
-      const { local, proof } = await seedSteps();
-      const root = document.querySelector("prosekit-block-handle-root")!;
-      act(() => void root.dispatchEvent(Object.assign(new Event("stateChange"), { detail: stepAt(0) })));
-      fireEvent.click(screen.getByRole("button", { name: "Block actions", hidden: true }));
-      fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
-      await waitFor(() => expect(evidenceIds()).toEqual([proof.id]));
-      await addNew();
-      expect(evidenceIds()).not.toContain(local.id);
-    });
-
-    it("a selected step removed with Backspace", async () => {
-      const { local, proof } = await seedSteps();
-      const view = pageEditor().view;
-      fireEvent.pointerDown(view.dom);
-      act(() => view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, stepAt(1).pos))));
-      act(() => void fireEvent.keyDown(view.dom, { key: "Backspace", code: "Backspace", keyCode: 8 }));
-      await waitFor(() => expect(evidenceIds()).toEqual([local.id]));
-      await addNew();
-      expect(evidenceIds()).not.toContain(proof.id);
-    });
-
-    it("a text selection across two steps removed with Backspace", async () => {
-      const { local } = await seedSteps();
-      const view = pageEditor().view;
-      const first = stepAt(0).pos + 3; // inside the first step's sentence
-      const second = stepAt(1).pos + 3; // inside the second step's sentence
-      fireEvent.pointerDown(view.dom);
-      act(() => view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, first, second))));
-      act(() => void fireEvent.keyDown(view.dom, { key: "Backspace", code: "Backspace", keyCode: 8 }));
-      await waitFor(() => expect(evidenceIds()).not.toContain(local.id));
-      await addNew();
-      expect(evidenceIds()).not.toContain(local.id);
-    });
   });
 
   it("Add new evidence says when there is nothing new", async () => {
@@ -849,6 +697,12 @@ describe("Report view: appendices and new evidence", () => {
 
 describe("Report view: the result", () => {
   const paper = () => document.querySelector<HTMLElement>(".report-page")!;
+  /** The open target page's machine heading: its printed number and its text. */
+  const machineHeading = () => {
+    const h = paper().querySelector("h1[data-number]");
+    return h ? [h.getAttribute("data-number"), h.textContent] : null;
+  };
+  const text = (n: ReportNode): string => (n.text ?? "") + (n.content ?? []).map(text).join("");
 
   it("has one strip: the report's, in place of the engagement's", async () => {
     render(
@@ -906,20 +760,22 @@ describe("Report view: the result", () => {
     await waitFor(() => expect(h1()).toBe("3Methodologies"));
     openPart("Front matter", /Testing considerations/);
     await waitFor(() => expect(h1()).toBe("Testing Considerations"));
-    // The first target opens the Independent Challenges chapter; the next carries only its own heading.
+    // The first target opens the Independent Challenges chapter; the next carries only its own heading. A machine's
+    // heading takes the target's number; the phase headings under it are unnumbered.
+    const title = () => paper().querySelector(".report-title")?.textContent ?? null;
     fireEvent.click(rowFor("lnx02"));
-    await waitFor(() => expect(h1()).toBe("4Independent Challenges"));
-    expect(within(paper()).getByRole("heading", { level: 2, name: "4.1Target #1 – 10.10.30.21" })).toBeInTheDocument();
+    await waitFor(() => expect(title()).toBe("4Independent Challenges"));
+    await waitFor(() => expect(machineHeading()).toEqual(["4.1", "lnx02 (10.10.30.21)"]));
     fireEvent.click(rowFor("ms01"));
-    await waitFor(() => expect(within(paper()).getByRole("heading", { level: 2, name: "4.2Target #2 – 10.10.30.5" })).toBeInTheDocument());
-    expect(h1()).toBeUndefined();
-    const subs = within(paper()).getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
-    expect(subs[0]).toBe("4.2.1Service Enumeration");
-    expect(subs[1]).toMatch(/^4\.2\.2Initial Access – /);
-    expect(subs[2]).toMatch(/^4\.2\.3Privilege Escalation/);
-    expect(subs).toContain("4.2.4Post-Exploitation");
+    await waitFor(() => expect(machineHeading()).toEqual(["4.2", "ms01 (10.10.30.5)"]));
+    expect(title()).toBeNull();
+    const subs = within(paper()).getAllByRole("heading", { level: 2 });
+    expect(subs.map((h) => h.textContent)[0]).toBe("Service enumeration");
+    expect(subs.map((h) => h.textContent)[1]).toMatch(/^Initial access: /);
+    expect(subs.map((h) => h.textContent)[2]).toMatch(/^Privilege escalation: /);
+    expect(subs.every((h) => !h.hasAttribute("data-number"))).toBe(true);
     fireEvent.click(rowFor("AD set"));
-    await waitFor(() => expect(h1()).toBe("5Active Directory Set"));
+    await waitFor(() => expect(title()).toBe("5Active Directory Set"));
   });
 
   it("lists no generated appendices in the tab row", async () => {
@@ -930,36 +786,65 @@ describe("Report view: the result", () => {
     await waitFor(() => expect(within(paper()).queryByRole("heading", { level: 1 })?.textContent).toBe("Further Information"));
   });
 
-  it("prints a flag inline: Local.txt value: closes Initial Access, Proof.txt value: opens Post-Exploitation", async () => {
+  it("prints a flag as the last step of its phase: Read local.txt: then its proof", async () => {
     mount();
     await ready();
+    await waitFor(() => expect(editors.length).toBeGreaterThan(0));
     fireEvent.click(rowFor("ms01"));
-    // Flags in a step are chips in the editor (§10.2): open them all to see the blocks as they print.
-    fireEvent.click(await screen.findByRole("button", { name: "Open all evidence" }));
-    await waitFor(() => expect(within(paper()).getByText("Proof.txt value:")).toBeInTheDocument());
-    const order = [...paper().querySelectorAll("h3, .report-flag strong")].map((el) => el.textContent ?? "");
-    const at = (pred: (t: string) => boolean) => order.findIndex(pred);
-    expect(at((t) => t === "Local.txt value:")).toBeGreaterThan(at((t) => t.includes("Initial Access")));
-    expect(at((t) => t === "Local.txt value:")).toBeLessThan(at((t) => t.includes("Privilege Escalation")));
-    expect(at((t) => t === "Proof.txt value:")).toBe(at((t) => t.includes("Post-Exploitation")) + 1);
+    await waitFor(() => expect(machineHeading()?.[1]).toBe("ms01 (10.10.30.5)"));
+    const blocks = pageEditor().state.doc.toJSON().content as ReportNode[];
+    /** The last numbered step before the heading whose text starts with `heading`. */
+    const lastStepBefore = (heading: string) => {
+      const at = blocks.findIndex((b) => b.type === "heading" && text(b).startsWith(heading));
+      return blocks.slice(0, at).reverse().find((b) => b.type === "list" && b.attrs?.kind === "ordered")!;
+    };
+    const local = lastStepBefore("Privilege escalation").content!;
+    expect(text(local[0])).toBe("Read local.txt:");
+    expect(local[1].type).toBe("codeBlock");
+    expect(local[1].attrs?.source).toMatch(/^entry:.+:proof$/);
+    const proof = lastStepBefore("Also tested").content!;
+    expect(text(proof[0])).toBe("Read proof.txt:");
+    expect(proof[1].type).toBe("codeBlock");
+    expect(text(proof[1])).toContain("type proof.txt");
   });
 
-  it("prints the port table at the top of Service Enumeration, with a Notes cell per port", async () => {
+  it("prints the port table at the top of Service enumeration; typing in a Notes cell saves the page and not the services", async () => {
+    const save = vi.spyOn(api, "reportSectionSave");
+    const service = vi.spyOn(api, "serviceUpdate");
     mount();
     await ready();
-    await waitFor(() => expect(paper().querySelector(".report-table")).toBeTruthy());
-    const table = paper().querySelector(".report-table")!;
+    await waitFor(() => expect(paper().querySelector("table")).toBeTruthy());
+    const table = paper().querySelector("table")!;
     expect([...table.querySelectorAll("th")].map((th) => th.textContent)).toEqual(["Port", "Service", "Version", "Notes"]);
-    expect([...table.querySelectorAll("tbody tr")].map((tr) => tr.querySelector("td")?.textContent)).toEqual(["22/tcp", "8080/tcp"]);
-    expect(within(table as HTMLElement).getByRole("textbox", { name: "Notes for 22/tcp" })).toBeInTheDocument();
-    // Enumeration's heading comes first, the table under it.
-    const order = [...paper().querySelectorAll("h3, .report-table")].map((el) => el.tagName);
-    expect(order.slice(0, 2)).toEqual(["H3", "TABLE"]);
-    expect(paper().querySelector(".report-facts")).toBeNull();
+    expect([...table.querySelectorAll("tr")].slice(1).map((tr) => tr.querySelector("td")?.textContent)).toEqual(["22/tcp", "8080/tcp"]);
+    // Enumeration's heading comes right before the table.
+    const order = [...paper().querySelectorAll(".report-page-doc > h2, .report-page-doc table")].map((el) => el.tagName);
+    expect(order.slice(0, 2)).toEqual(["H2", "TABLE"]);
+    expect(table.closest(".report-page-doc")!.querySelector("h2")!.textContent).toBe("Service enumeration");
+
+    // The 22/tcp row's Notes cell: its paragraph's inside.
+    let at = -1;
+    pageEditor().state.doc.descendants((n, pos) => {
+      if (at !== -1) return false;
+      if (n.type.name === "tableRow" && n.child(0).textContent === "22/tcp") {
+        let cell = pos + 1;
+        for (let i = 0; i < 3; i++) cell += n.child(i).nodeSize;
+        at = cell + 2;
+      }
+      return true;
+    });
+    act(() => {
+      const view = pageEditor().view;
+      view.dispatch(view.state.tr.insertText("ssh keys reused", at));
+    });
+    expect([...table.querySelectorAll("tr")][1].querySelectorAll("td")[3].textContent).toBe("ssh keys reused");
+    fireEvent.click(rowFor("ms01"));
+    await waitFor(() => expect(save.mock.calls.some(([, doc]) => JSON.stringify(doc).includes("ssh keys reused"))).toBe(true));
+    expect(service).not.toHaveBeenCalled();
   });
 
-  /** A drafted machine page shows: its numbered sub-section headings (the old page in these tests has none). */
-  const rebuilt = () => paper().querySelector("h3");
+  /** A drafted machine page shows its numbered machine heading (the old page in these tests has none). */
+  const rebuilt = () => paper().querySelector("h1[data-number]");
 
   it("rebuilds a page saved with an older layout from scratch, once", async () => {
     const report = await api.reportGetOrCreate("e-exam");
@@ -971,14 +856,14 @@ describe("Report view: the result", () => {
     await waitFor(() => expect(draftUpserts(upsert, LNX)).toHaveLength(1));
     const [, input] = draftUpserts(upsert, LNX)[0] as [string, { meta: unknown; doc: unknown }];
     // The page written before is kept in the meta, never dropped.
-    expect(input.meta).toEqual({ layout: 4, previousDoc: old, previousLayout: null, previousAt: expect.any(Number) });
+    expect(input.meta).toEqual({ layout: 6, previousDoc: old, previousLayout: null, previousAt: expect.any(Number) });
     expect(JSON.stringify(input.doc)).not.toContain("Written under the old layout");
     await waitFor(() => expect(rebuilt()).toBeTruthy());
     expect(paper().textContent).not.toContain("Written under the old layout");
     // Opened again, the rebuilt page stays.
     fireEvent.click(rowFor("ms01"));
     fireEvent.click(rowFor("lnx02"));
-    await waitFor(() => expect(within(paper()).getByRole("heading", { level: 2, name: "4.1Target #1 – 10.10.30.21" })).toBeInTheDocument());
+    await waitFor(() => expect(machineHeading()).toEqual(["4.1", "lnx02 (10.10.30.21)"]));
     expect(draftUpserts(upsert, LNX)).toHaveLength(1);
   });
 
@@ -999,8 +884,9 @@ describe("Report view: the result", () => {
     const [id, doc, meta] = save.mock.calls[save.mock.calls.length - 1] as [string, ReportDoc, Record<string, unknown>];
     expect(id).toBe(section.id);
     expect(JSON.stringify(doc)).toContain("Written under the old layout");
-    expect(meta).toMatchObject({ layout: 4, previousLayout: 2, restored: true });
-    expect(JSON.stringify(meta.previousDoc)).toContain('"generated"');
+    expect(meta).toMatchObject({ layout: 6, previousLayout: 2, restored: true });
+    expect(JSON.stringify(meta.previousDoc)).toContain(`"facts:${LNX}"`);
+    expect(needsFlatten(doc as unknown as ReportNode)).toBe(false);
     // The second swap brings the rebuilt page back.
     fireEvent.click(screen.getByRole("button", { name: "Use the rebuilt page" }));
     await waitFor(() => expect(rebuilt()).toBeTruthy());
@@ -1050,16 +936,220 @@ describe("Report view: the result", () => {
     expect(within(checks).queryByText("Block from a now-private entry")).toBeNull();
   });
 
-  it("guards DRAFT_LAYOUT: a bump rebuilds every stored page, so it must keep each one in previousDoc", () => {
-    // Bumping it is a data-safety change: the rebuild test above must still see the old page in `previousDoc`.
-    expect(DRAFT_LAYOUT).toBe(4);
+  describe("plain pages at layout 6", () => {
+    const WEB = "h-exam-web";
+    const layout5 = layout5Json as ReportNode;
+    /** The four sentences the owner wrote on the layout-5 web01 page: a step's sentence, a port note, a finding edit, a caption. */
+    const OWNER = ["I read the backup config through the LFI first.", "Admin panel on 8080", "The upload filter trusts the extension only.", "Root shell on web01"];
+    const storeWeb01 = async () => {
+      const report = await api.reportGetOrCreate("e-exam");
+      return api.reportSectionUpsert(report.id, { kind: "target", targetKey: WEB, position: 2, doc: layout5 as unknown as ReportDoc, meta: { layout: 5 }, draftBuiltAt: 1 });
+    };
+    const stored = async (id: string) => {
+      const report = await api.reportGetOrCreate("e-exam");
+      return (await api.reportSectionsList(report.id)).find((s) => s.id === id)!;
+    };
+
+    it("a layout-5 page rebuilds as the plain draft and keeps the old page byte for byte", async () => {
+      const section = await storeWeb01();
+      const upsert = vi.spyOn(api, "reportSectionUpsert");
+      mount();
+      await ready();
+      fireEvent.click(rowFor("web01"));
+      await waitFor(() => expect(draftUpserts(upsert, WEB)).toHaveLength(1));
+      const [, input] = draftUpserts(upsert, WEB)[0] as [string, { meta: SectionMeta; doc: ReportNode }];
+      expect(input.meta.previousDoc).toEqual(layout5);
+      expect(JSON.stringify(input.meta.previousDoc)).toBe(JSON.stringify(layout5));
+      expect(input.meta).toMatchObject({ layout: 6, previousLayout: 5, previousAt: expect.any(Number) });
+      expect(needsFlatten(input.doc)).toBe(false);
+      // Stored so: the old page is in the meta, the plain draft is the page.
+      await waitFor(async () => expect((await stored(section.id)).meta).toMatchObject({ layout: 6, previousLayout: 5 }));
+      expect(JSON.stringify((await stored(section.id)).meta.previousDoc)).toBe(JSON.stringify(layout5));
+    });
+
+    it("Restore shows every owner sentence of a layout-5 page, as plain blocks", async () => {
+      const section = await storeWeb01();
+      const save = vi.spyOn(api, "reportSectionSave");
+      mount();
+      await ready();
+      fireEvent.click(rowFor("web01"));
+      await waitFor(() => expect(machineHeading()?.[1]).toBe("web01 (10.10.30.20)"));
+      await waitFor(() => expect(screen.getByText("This page was rebuilt for a new layout.")).toBeInTheDocument());
+      const draftText = paper().textContent;
+      fireEvent.click(screen.getByRole("button", { name: "Restore your previous page" }));
+      await waitFor(() => expect(paper().textContent).toContain(OWNER[0]));
+      for (const sentence of OWNER) expect(paper().textContent).toContain(sentence);
+      await waitFor(() => expect(save.mock.calls.some(([id]) => id === section.id)).toBe(true));
+      const [, doc, meta] = save.mock.calls.filter(([id]) => id === section.id).at(-1)! as [string, ReportDoc, SectionMeta];
+      expect(needsFlatten(doc as unknown as ReportNode)).toBe(false);
+      expect(meta).toMatchObject({ layout: 6, restored: true });
+
+      fireEvent.click(screen.getByRole("button", { name: "Use the rebuilt page" }));
+      await waitFor(() => expect(paper().textContent).toBe(draftText));
+      expect(screen.getByRole("button", { name: "Restore your previous page" })).toBeInTheDocument();
+    });
+
+    it("a queued write of the old page lands before the rebuild, never after it", async () => {
+      const report = await api.reportGetOrCreate("e-exam");
+      const old = plainPage([{ type: "paragraph", content: [{ type: "text", text: "Old lnx02 page" }] }]);
+      const section = await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: old, meta: { layout: 5 }, draftBuiltAt: 1 });
+      const edited = plainPage([{ type: "paragraph", content: [{ type: "text", text: "Old lnx02 page, edited before the rebuild" }] }]);
+      const calls: string[] = [];
+      const realSave = api.reportSectionSave;
+      const realUpsert = api.reportSectionUpsert;
+      let failOnce = true;
+      vi.spyOn(api, "reportSectionSave").mockImplementation(async (id, doc, meta) => {
+        if (id === section.id) calls.push(`save:${(meta as SectionMeta).layout}`);
+        if (id === section.id && failOnce) {
+          failOnce = false;
+          throw new Error("disk busy");
+        }
+        return realSave(id, doc, meta);
+      });
+      vi.spyOn(api, "reportSectionUpsert").mockImplementation(async (rid, input) => {
+        if (input.targetKey === LNX && input.draftBuiltAt !== null) calls.push(`upsert:${(input.meta as SectionMeta).layout}`);
+        return realUpsert(rid, input);
+      });
+      // An edit of the old page whose write failed: it waits in the queue for its retry.
+      const qc = makeQueryClient();
+      queueReportSave(qc, section.id, edited as unknown as ReportNode, { layout: 5 });
+      await flushReports();
+      expect(calls).toEqual(["save:5"]);
+
+      mount("e-exam", qc);
+      await ready();
+      await waitFor(() => expect(calls).toContain("upsert:6"));
+      await act(async () => {});
+      // The old page's write went out first; nothing of the old layout is written after the rebuild.
+      expect(calls).toEqual(["save:5", "save:5", "upsert:6"]);
+      const after = await stored(section.id);
+      expect(needsFlatten(after.doc as unknown as ReportNode)).toBe(false);
+      expect(after.meta).toMatchObject({ layout: 6, previousLayout: 5 });
+      expect(after.meta.previousDoc).toEqual(edited);
+    });
+
+    it("an old page whose queued write still fails is not rebuilt until the write lands", async () => {
+      const report = await api.reportGetOrCreate("e-exam");
+      const old = plainPage([{ type: "paragraph", content: [{ type: "text", text: "Old lnx02 page" }] }]);
+      const section = await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: old, meta: { layout: 5 }, draftBuiltAt: 1 });
+      const edited = plainPage([{ type: "paragraph", content: [{ type: "text", text: "Old lnx02 page, edited" }] }]);
+      const realSave = api.reportSectionSave;
+      let fail = true;
+      vi.spyOn(api, "reportSectionSave").mockImplementation(async (id, doc, meta) => {
+        if (id === section.id && fail) throw new Error("disk busy");
+        return realSave(id, doc, meta);
+      });
+      const upsert = vi.spyOn(api, "reportSectionUpsert");
+      const qc = makeQueryClient();
+      queueReportSave(qc, section.id, edited as unknown as ReportNode, { layout: 5 });
+      await flushReports();
+
+      mount("e-exam", qc);
+      await ready();
+      expect(await screen.findByText("Couldn't build this page's draft: an earlier change to this page isn't saved yet")).toBeInTheDocument();
+      expect(draftUpserts(upsert, LNX)).toHaveLength(0);
+
+      fail = false;
+      fireEvent.click(screen.getByRole("button", { name: "Retry building the draft" }));
+      await waitFor(() => expect(draftUpserts(upsert, LNX)).toHaveLength(1));
+      const [, input] = draftUpserts(upsert, LNX)[0] as [string, { meta: SectionMeta }];
+      expect(input.meta.previousDoc).toEqual(edited);
+    });
+
+    it("a page already at layout 6 is never rebuilt", async () => {
+      await seedLnx();
+      const upsert = vi.spyOn(api, "reportSectionUpsert");
+      mount();
+      await ready();
+      await waitFor(() => expect(editors.length).toBeGreaterThan(0));
+      expect(paper().textContent).toContain("nmap -sV 10.10.30.21");
+      fireEvent.click(rowFor("ms01"));
+      fireEvent.click(rowFor("lnx02"));
+      await waitFor(() => expect(paper().textContent).toContain("nmap -sV 10.10.30.21"));
+      expect(draftUpserts(upsert, LNX)).toHaveLength(0);
+    });
+
+    it("an owner page holding old evidence nodes opens flattened, its text kept and the original in previousDoc", async () => {
+      const original = layout3Json as ReportNode;
+      const report = await api.reportGetOrCreate("e-exam");
+      const page = await api.reportSectionUpsert(report.id, {
+        kind: "page",
+        targetKey: "p-owner",
+        position: 99,
+        doc: original as unknown as ReportDoc,
+        meta: { title: "Owner notes", placement: "body", layout: DRAFT_LAYOUT },
+        draftBuiltAt: 1,
+      });
+      const save = vi.spyOn(api, "reportSectionSave");
+      mount();
+      await ready();
+      fireEvent.click(tab("Owner notes"));
+      await waitFor(() => expect(paper().textContent).toContain("The sudo rule is the way to root."));
+      expect(paper().textContent).toContain("Every tool ran from the attacking machine unless the step says otherwise.");
+      // The flattened page is saved once, the page as stored kept in the meta.
+      await waitFor(() => expect(save.mock.calls.some(([id]) => id === page.id)).toBe(true));
+      const writes = save.mock.calls.filter(([id]) => id === page.id);
+      expect(writes).toHaveLength(1);
+      const [, doc, meta] = writes[0] as unknown as [string, ReportDoc, SectionMeta & { title: string }];
+      expect(needsFlatten(doc as unknown as ReportNode)).toBe(false);
+      expect(meta.previousDoc).toEqual(original);
+      expect(meta).toMatchObject({ title: "Owner notes", placement: "body", layout: DRAFT_LAYOUT, previousLayout: DRAFT_LAYOUT });
+    });
+
+    it("numbers a target's machine heading from the section order and renumbers after ⌥→", async () => {
+      mount();
+      await ready();
+      fireEvent.click(rowFor("lnx02"));
+      await waitFor(() => expect(machineHeading()).toEqual(["4.1", "lnx02 (10.10.30.21)"]));
+      rowFor("lnx02").focus();
+      fireEvent.keyDown(rowFor("lnx02"), { key: "ArrowRight", code: "ArrowRight", altKey: true });
+      await waitFor(() => expect(targetLabels()).toEqual(["1 ms01", "2 lnx02", "3 web01", "4 xfer03", "5 AD set"]));
+      await waitFor(() => expect(machineHeading()).toEqual(["4.2", "lnx02 (10.10.30.21)"]));
+    });
+
+    it("lnx02 never started shows the not-started line and only its heading", async () => {
+      mount();
+      await ready();
+      await waitFor(() => expect(machineHeading()?.[1]).toBe("lnx02 (10.10.30.21)"));
+      expect(screen.getByText("Nothing logged on lnx02 yet. The page fills in as you work.")).toBeInTheDocument();
+      // One machine heading on the page itself, and nothing drafted under a step or a hint.
+      const doc = paper().querySelector(".report-page-doc")!;
+      expect(doc.querySelectorAll("h1")).toHaveLength(1);
+      expect(doc.textContent).not.toContain("Steps to reproduce:");
+      expect(doc.querySelector('[data-list-kind="ordered"]')).toBeNull();
+    });
+  });
+
+  it("guards DRAFT_LAYOUT: it is 6, and a bump keeps every stored page in previousDoc", async () => {
+    // Bumping it is a data-safety change: every stored page under another layout is rebuilt, and must be kept.
+    expect(DRAFT_LAYOUT).toBe(6);
+    const report = await api.reportGetOrCreate("e-exam");
+    const old = plainPage([{ type: "paragraph", content: [{ type: "text", text: "Written one layout ago" }] }]);
+    await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: old, meta: { layout: DRAFT_LAYOUT - 1 }, draftBuiltAt: 1 });
+    const upsert = vi.spyOn(api, "reportSectionUpsert");
+    mount();
+    await ready();
+    await waitFor(() => expect(draftUpserts(upsert, LNX)).toHaveLength(1));
+    const [, input] = draftUpserts(upsert, LNX)[0] as [string, { meta: SectionMeta }];
+    expect(input.meta).toMatchObject({ layout: DRAFT_LAYOUT, previousDoc: old, previousLayout: DRAFT_LAYOUT - 1 });
   });
 
   it("groups checks of one kind into one row and cycles through them; the fix sits in a disclosure for the picked one", async () => {
+    // Two numbered steps, each opening with its entry's command and no sentence before it.
+    const scan = await seedLnx();
+    const whoami = await api.logCreate("e-exam", logInput("whoami", { kind: "command", blocks: [{ command: "whoami", output: "www-data" }] }, 2_000));
+    const report = await api.reportGetOrCreate("e-exam");
+    const lnx = (await api.reportSectionsList(report.id)).find((s) => s.targetKey === LNX)!;
+    const step = (entryId: string, command: string): ReportNode => ({
+      type: "list",
+      attrs: { kind: "ordered" },
+      content: [{ type: "codeBlock", attrs: { language: "", source: `entry:${entryId}:0:command` }, content: [{ type: "text", text: command }] }],
+    });
+    const blocks = plainBlocks(lnxPage(scan.id, "line 0"));
+    await api.reportSectionSave(lnx.id, plainPage([blocks[0], step(scan.id, "nmap -sV 10.10.30.21"), step(whoami.id, "whoami"), blocks[4]]), { layout: DRAFT_LAYOUT });
     mount();
     await ready();
-    fireEvent.click(rowFor("ms01"));
-    await waitFor(() => expect(editors.length).toBeGreaterThan(1));
+    await waitFor(() => expect(editors.length).toBeGreaterThan(0));
     await waitFor(() => expect(openTodo()).toHaveTextContent(/steps have no explanation/));
     const checks = openTodo();
     const explain = within(checks).getByText(/^\d+ steps have no explanation$/);
@@ -1095,26 +1185,15 @@ describe("Report view: appendix pages and free pages (+ Page)", () => {
     const report = await api.reportGetOrCreate("e-exam");
     return (await api.reportSectionsList(report.id)).filter((s) => s.kind === "page");
   };
-  /** lnx02's page with its scan moved out, so it has Appendix A. */
-  async function seedMoved() {
-    await seedLnx();
-    const report = await api.reportGetOrCreate("e-exam");
-    const lnx = (await api.reportSectionsList(report.id)).find((s) => s.targetKey === LNX)!;
-    const doc = JSON.parse(JSON.stringify(lnx.doc).replace('"appendix":"inline"', '"appendix":"moved"')) as ReportDoc;
-    await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: lnx.position, doc, meta: lnx.meta, draftBuiltAt: lnx.draftBuiltAt });
-  }
-
-  // Skipped by the plain-page rollout (Task 4): a target has no appendix letter now, so the appendix page is Appendix A. Rewritten or removed with the Report view (Tasks 6 to 10).
-  it.skip("+ Page → Appendix page adds a lettered tab after the targets' appendices, and opens it", async () => {
-    await seedMoved();
+  it("+ Page → Appendix page adds Appendix A after Closing, and opens it", async () => {
     mount();
     await ready();
-    await appendixTab("Appendix A");
     await addPage("Appendix page");
-    await waitFor(() => expect(tabLabels()).toEqual(["Front matter", ...TARGETS, "Closing", "Appendix A", "Appendix B"]));
-    expect(detailOf(tab("Appendix B"))).toBe("Untitled appendix");
-    expect(tab("Appendix B")).toHaveAttribute("aria-selected", "true");
-    await waitFor(() => expect(h1()).toBe("Appendix B – Untitled appendix"));
+    // A target has no appendix of its own: the first appendix page is A.
+    await waitFor(() => expect(tabLabels()).toEqual(["Front matter", ...TARGETS, "Closing", "Appendix A"]));
+    expect(detailOf(tab("Appendix A"))).toBe("Untitled appendix");
+    expect(tab("Appendix A")).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => expect(h1()).toBe("Appendix A – Untitled appendix"));
     const [stored] = await pages();
     expect(stored.meta).toMatchObject({ title: "Untitled appendix", placement: "appendix", layout: DRAFT_LAYOUT });
     expect(stored.targetKey).toBeTruthy();

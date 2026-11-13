@@ -1,14 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { examFixtures } from "../audit/examFixtures";
 import {
-  DRAFT_LAYOUT,
   evidenceCopy,
   findingBlocks,
   findingCopy,
   refreshNode,
   tableCopy,
   terminalBlocks,
-  UPGRADABLE_FROM,
   upgradeDoc,
 } from "../engines/report";
 import type { ReportData, ReportNode, ReportTarget } from "../engines/report";
@@ -211,11 +209,6 @@ function layout4(): ReportNode {
 }
 
 describe("upgradeDoc", () => {
-  it("moves the layout to 5, upgradable from 4", () => {
-    expect(DRAFT_LAYOUT).toBe(5);
-    expect(UPGRADABLE_FROM).toBe(4);
-  });
-
   it("keeps every owner paragraph byte for byte, trims, notes and placements, and leaves no vuln node", () => {
     const before = layout4();
     const up = upgradeDoc(before, data(), T, {});

@@ -216,8 +216,9 @@ export async function restorePage(qc: QueryClient, kept: ReportSection): Promise
   return back;
 }
 
-/** A stored page built with the current draft layout; any other (older, or none yet) is built afresh when it opens. An
- *  owner-written page (+ Page) is never built, so it is always current. */
+/** A stored page built with the current draft layout (6: a plain document); any other (older, or none yet) is rebuilt
+ *  as the plain draft when it opens, the stored page kept in `previousDoc`. An owner-written page (+ Page) is never
+ *  built, so it is always current: one holding old nodes is flattened when it opens instead. */
 export const hasCurrentPage = (s: ReportSection) =>
   s.doc != null && (s.kind === "page" || (s.meta as SectionMeta).layout === DRAFT_LAYOUT);
 

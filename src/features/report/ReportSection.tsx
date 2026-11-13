@@ -1,17 +1,19 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Editor } from "prosekit/core";
+import type { Node as PMNode } from "prosekit/pm/model";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams } from "react-router";
 import {
+  buildPlainTarget,
   buildSectionDraft,
-  buildTargetDraft,
   legibilityChecks,
   DRAFT_LAYOUT,
   expectedFlags,
+  flattenToPlain,
   isAppendixPage,
-  isFigure,
   isReady,
   isValidOsid,
+  needsFlatten,
   numberAppendices,
   reportChecks,
   reportDueAt,
@@ -21,8 +23,7 @@ import {
   sectionNumbers,
   subsectionNumbers,
   targetChecks,
-  targetHeadings,
-  type AppendixEntry,
+  targetNumbers,
   type AppendixIndex,
   type Check,
   type FlagKind,
@@ -44,8 +45,7 @@ import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useNotesStore } from "../notes/useNotesStore";
 import { usePayloadsStore } from "../payloads/usePayloadsStore";
 import { ReportDataContext, type ReportDataValue } from "./editor/ReportDataContext";
-import { AppendixSection, type AppendixPageEntry } from "./editor/AppendixSection";
-import { keepCopiedText, openFindBar, posAtPath, ReportEditor, selectBlockAt, setNodeAttrs } from "./editor/ReportEditor";
+import { keepCopiedText, openFindBar, posAtPath, ReportEditor, selectBlockAt } from "./editor/ReportEditor";
 import { AddEvidenceButton } from "./AddEvidenceButton";
 import { EvidenceDrawer, EvidenceRail } from "./EvidenceRail";
 import { ReportDetails } from "./ReportDetails";
@@ -72,7 +72,7 @@ import {
   useSectionSaver,
   wantedSections,
 } from "./queries";
-import { trackReportWrite, useReportSaveStore } from "./saveQueue";
+import { flushReports, isReportSaveQueued, trackReportWrite, useReportSaveStore } from "./saveQueue";
 
 const HINTS: Hint[] = [
   { keys: "← →", label: "move along the tabs (J K from anywhere)", priority: 1 },
@@ -114,53 +114,7 @@ const CLOSING_ORDER = ["further", "references", "engagement-tested"];
 const FRONT_TAB = "tab:front";
 const CLOSING_TAB = "tab:closing";
 
-const GENERATED_TITLE: Record<string, string> = {
-  "port-scan": "Port Scan Results",
-  tested: "Also tested",
-  "attack-chain": "Attack chain",
-};
-
 const EMPTY_DOC: ReportNode = { type: "doc", content: [] };
-
-/** An appendix entry's title: the entry's or file's own, or the table's name. */
-function appendixTitle(node: ReportNode, data: ReportData): string {
-  const a = node.attrs ?? {};
-  if (node.type === "evidence") return data.log.find((e) => e.id === a.entryId)?.title ?? "Evidence";
-  if (node.type === "exploit") return data.findingFiles.find((f) => f.id === a.fileId)?.name ?? "Exploit code";
-  return GENERATED_TITLE[String(a.kind)] ?? "Table";
-}
-
-/** Figures a section's page shows, in the editor's own terms (`isFigure`). */
-function countFigures(doc: ReportNode, data: ReportData): number {
-  const entryOf = (id: string) => data.log.find((e) => e.id === id);
-  let n = 0;
-  const walk = (node: ReportNode) => {
-    if (isFigure(node, entryOf)) n++;
-    node.content?.forEach(walk);
-  };
-  walk(doc);
-  return n;
-}
-
-/** The node at an index path ("0.2.1") of a stored page. */
-function nodeAtPath(doc: ReportNode, path: string): ReportNode | null {
-  let node: ReportNode | undefined = doc;
-  for (const part of path.split(".")) node = node?.content?.[Number(part)];
-  return node ?? null;
-}
-
-/** A target's appendix page (letters from A): the target and its moved entries, in page order. */
-interface AppendixPage {
-  id: string;
-  letter: string;
-  label: string;
-  /** The target as the appendix names it: "lnx02", "AD set (ad02, dc01)". */
-  name: string;
-  entry: Entry;
-  entries: AppendixEntry[];
-}
-
-const APPENDIX_ID = "appendix:";
 
 /** A warning with its Retry, above the page. */
 function WarnLine({ text, retryLabel, onRetry }: { text: string; retryLabel: string; onRetry(): void }) {
@@ -234,22 +188,36 @@ function usePageEdits(
     [openSection, docOf, saver, setLiveMeta],
   );
   /**
-   * Swaps the page with the one kept in the meta (`previousDoc`): the page written before a layout rebuild comes back,
-   * and the rebuilt one is kept in its place, so a second swap undoes it. The restored page is stored under the current
-   * layout, so it is never rebuilt again. Returns the page now open, or null when there is none to swap in.
+   * Swaps the page with the one kept in the meta (`previousDoc`), given as `doc` in the plain schema: the page written
+   * before a layout rebuild comes back, and the rebuilt one is kept in its place, so a second swap undoes it. The
+   * restored page is stored under the current layout, so it is never rebuilt again. Returns the page now open, or null
+   * when there is none to swap in.
    */
-  const swapPrevious = useCallback((): { doc: ReportNode; meta: SectionMeta } | null => {
-    if (!openSection) return null;
-    const cur = current.current?.id === openSection.id ? current.current : { id: openSection.id, doc: docOf(openSection), meta: openSection.meta as SectionMeta };
-    const previous = cur.meta.previousDoc;
-    if (!previous) return null;
-    const meta: SectionMeta = { ...cur.meta, layout: DRAFT_LAYOUT, previousDoc: cur.doc, restored: !cur.meta.restored };
-    current.current = { id: openSection.id, doc: previous, meta };
-    setLive({ id: openSection.id, doc: previous });
-    setLiveMeta({ id: openSection.id, meta });
-    saver.save(previous, meta);
-    return { doc: previous, meta };
-  }, [openSection, docOf, saver, setLive, setLiveMeta]);
+  const swapPrevious = useCallback(
+    (doc: ReportNode): { doc: ReportNode; meta: SectionMeta } | null => {
+      if (!openSection) return null;
+      const cur = current.current?.id === openSection.id ? current.current : { id: openSection.id, doc: docOf(openSection), meta: openSection.meta as SectionMeta };
+      if (!cur.meta.previousDoc) return null;
+      const meta: SectionMeta = { ...cur.meta, layout: DRAFT_LAYOUT, previousDoc: cur.doc, restored: !cur.meta.restored };
+      current.current = { id: openSection.id, doc, meta };
+      setLive({ id: openSection.id, doc });
+      setLiveMeta({ id: openSection.id, meta });
+      saver.save(doc, meta);
+      return { doc, meta };
+    },
+    [openSection, docOf, saver, setLive, setLiveMeta],
+  );
+  /** The open page becomes `doc` with `meta` (an old page flattened as it opens), saved like any change. */
+  const replacePage = useCallback(
+    (doc: ReportNode, meta: SectionMeta) => {
+      if (!openSection) return;
+      current.current = { id: openSection.id, doc, meta };
+      setLive({ id: openSection.id, doc });
+      setLiveMeta({ id: openSection.id, meta });
+      saver.save(doc, meta);
+    },
+    [openSection, saver, setLive, setLiveMeta],
+  );
   /** Merges `patch` into the open page's meta (a page's title) and saves it with the page as it is now. */
   const patchMeta = useCallback(
     (patch: Partial<SectionMeta> & Record<string, unknown>) => {
@@ -262,7 +230,7 @@ function usePageEdits(
     },
     [openSection, docOf, saver, setLiveMeta],
   );
-  return { onChange, onRemoveEvidence, onRestoreEvidence, swapPrevious, patchMeta };
+  return { onChange, onRemoveEvidence, onRestoreEvidence, swapPrevious, replacePage, patchMeta };
 }
 
 /** The engagement's Report section: client engagements get a placeholder this round. */
@@ -416,23 +384,32 @@ function ReportBody({
     return out;
   }, [sections, targets, data]);
 
-  // First drafts for sections not built yet, or built with an older layout (rebuilt from scratch; the page written before
-  // is kept in the meta, `previousDoc`): what their page will hold, so checks and numbering read it already.
+  // Plain first drafts for sections not built yet, or built with another layout (rebuilt from scratch; the page written
+  // before is kept in the meta, `previousDoc`): what their page will hold, so checks and numbering read it already.
   const drafts = useMemo(() => {
     const out = new Map<string, ReportNode>();
     for (const e of entries) {
       if (hasCurrentPage(e.section) || e.section.kind === "details" || e.section.kind === "page") continue;
-      out.set(e.section.id, e.target ? buildTargetDraft(data, e.target, reportMeta) : buildSectionDraft(e.section.kind, data, settings, reportMeta));
+      out.set(e.section.id, e.target ? buildPlainTarget(data, e.target, reportMeta) : buildSectionDraft(e.section.kind, data, settings, reportMeta));
     }
     return out;
   }, [entries, data, reportMeta, settings]);
 
-  // Every section's stored page (or the draft it will get). Only the open page changes per keystroke; it is read live.
-  const savedDocOf = useCallback(
-    (s: ReportSection): ReportNode => drafts.get(s.id) ?? (s.doc as ReportNode | null) ?? EMPTY_DOC,
-    [drafts],
+  // A stored page holding old nodes (an owner page, a page restored before plain pages) as the page reads it: flattened.
+  const plainOf = useCallback(
+    (doc: ReportNode, target: ReportTarget | undefined): ReportNode => (needsFlatten(doc) ? flattenToPlain(doc, data, target ?? null, reportMeta) : doc),
+    [data, reportMeta],
   );
-  const appendixDocs = useCallback(
+  const targetOf = useCallback((s: ReportSection) => entries.find((e) => e.section.id === s.id)?.target, [entries]);
+
+  // Every section's stored page (or the draft it will get), in the plain schema. Only the open page changes per
+  // keystroke; it is read live.
+  const savedDocOf = useCallback(
+    (s: ReportSection): ReportNode => drafts.get(s.id) ?? (s.doc ? plainOf(s.doc as ReportNode, targetOf(s)) : EMPTY_DOC),
+    [drafts, plainOf, targetOf],
+  );
+  // Appendix pages' letters (+ Page, placement appendix): a plain page moves nothing out, so these are the only appendices.
+  const appendixOf = useCallback(
     (docOf: (s: ReportSection) => ReportNode) =>
       numberAppendices(
         entries.map((e) => ({
@@ -443,31 +420,14 @@ function ReportBody({
           meta: e.section.meta,
           position: e.section.position,
         })),
-        (n) => appendixTitle(n, data),
       ),
-    [entries, data],
+    [entries],
   );
-  const savedAppendix = useMemo(() => appendixDocs(savedDocOf), [appendixDocs, savedDocOf]);
-  // Each target with moved content has an appendix page, lettered from A (spec §5.6).
-  const appendixPagesOf = useCallback(
-    (index: AppendixIndex): AppendixPage[] =>
-      entries.flatMap((e) => {
-        const list = e.target ? index.entries.filter((a) => a.sectionId === e.section.id) : [];
-        if (list.length === 0 || !e.target) return [];
-        // "lnx02", or "AD set (ad02, dc01)" for the AD set.
-        const name =
-          e.target.kind === "ad-set"
-            ? `AD set (${e.target.hostIds.map((id) => data.hosts.find((h) => h.id === id)?.name ?? "Host").join(", ")})`
-            : e.item.label;
-        return [{ id: `${APPENDIX_ID}${e.section.id}`, letter: list[0].letter, label: `Appendix ${list[0].letter}: ${name}`, name, entry: e, entries: list }];
-      }),
-    [entries, data],
-  );
+  const savedAppendix = useMemo(() => appendixOf(savedDocOf), [appendixOf, savedDocOf]);
 
-  // The open section: the one picked, else the first target, else the first item. An open appendix page has none.
+  // The open section: the one picked, else the first target, else the first item.
   const [openId, setOpenId] = useState<string | null>(null);
-  const openAppendix = openId?.startsWith(APPENDIX_ID) ? appendixPagesOf(savedAppendix).find((p) => p.id === openId) : undefined;
-  const open = openAppendix ? undefined : (entries.find((e) => e.item.id === openId) ?? entries.find((e) => e.target) ?? entries[0]);
+  const open = entries.find((e) => e.item.id === openId) ?? entries.find((e) => e.target) ?? entries[0];
   const openSection = open?.section;
 
   // The open page as it is now (typed but maybe not saved yet) and its meta.
@@ -483,8 +443,8 @@ function ReportBody({
   // With the open page live, so references stay right while editing; kept as the same object while its entries don't change.
   const appendix = useStableAppendix(
     useMemo(
-      () => (openLiveDoc && openSection ? appendixDocs((s) => (s.id === openSection.id ? openLiveDoc : savedDocOf(s))) : savedAppendix),
-      [openLiveDoc, openSection, appendixDocs, savedDocOf, savedAppendix],
+      () => (openLiveDoc && openSection ? appendixOf((s) => (s.id === openSection.id ? openLiveDoc : savedDocOf(s))) : savedAppendix),
+      [openLiveDoc, openSection, appendixOf, savedDocOf, savedAppendix],
     ),
   );
 
@@ -542,10 +502,8 @@ function ReportBody({
   );
   const pageLetter = (id: string) => appendix.pages?.find((p) => p.sectionId === id)?.letter ?? "?";
 
-  // The tab row (§10.1): Front matter, the targets in grading order, the free pages, Closing, then the appendices (they
-  // follow the live page) and the appendix pages. Front matter and Closing each hold several sections, switched by their
-  // segmented row.
-  const appendixPages = appendixPagesOf(appendix);
+  // The tab row (§10.1): Front matter, the targets in grading order, the free pages, Closing, then the appendix pages.
+  // Front matter and Closing each hold several sections, switched by their segmented row.
   const frontParts = entries.filter((e) => e.item.group === "front");
   const closingParts = entries
     .filter((e) => e.item.group === "closing")
@@ -566,24 +524,11 @@ function ReportBody({
     tabs.push({ id: e.section.id, label: title, state: "none", detail: `Section ${numbers.get(e.section.id)?.number ?? ""}`, page: true, title, reorderable: true });
   }
   if (closingParts.length > 0) tabs.push({ id: CLOSING_TAB, label: "Closing", state: "none" });
-  for (const p of appendixPages) {
-    const n = p.entries.length;
-    tabs.push({ id: p.id, label: `Appendix ${p.letter}`, state: "none", detail: `${p.entry.item.label}, ${n} ${n === 1 ? "item" : "items"}` });
-  }
   for (const e of entries.filter((x) => x.item.group === "appendix-pages")) {
     const title = pageTitleOf(e.section);
     tabs.push({ id: e.section.id, label: `Appendix ${pageLetter(e.section.id)}`, state: "none", detail: title, page: true, title, reorderable: true });
   }
-  const openTabId = openAppendix?.id ?? groupOf(open) ?? "";
-
-  const figureOffset = useMemo(() => {
-    let n = 0;
-    for (const e of entries) {
-      if (e.section.id === openSection?.id) break;
-      if (e.section.kind !== "details") n += countFigures(savedDocOf(e.section), data);
-    }
-    return n;
-  }, [entries, openSection?.id, savedDocOf, data]);
+  const openTabId = groupOf(open) ?? "";
 
   const openNumber = openSection ? numbers.get(openSection.id) : undefined;
   // The title at the top of the page: an appendix page is "Appendix C – <title>", unnumbered.
@@ -591,18 +536,15 @@ function ReportBody({
     openSection && isAppendixPage(openSection)
       ? { text: `Appendix ${pageLetter(openSection.id)} – ${pageTitleOf(openSection)}` }
       : { text: openNumber?.title?.text, number: openNumber?.title?.number ?? undefined };
+  // Numbered headings: a target page's machine headings ("4.1"; "5.1", "5.2" in the AD set), a report-level page's
+  // sub-sections ("3.1").
   const pageSubNumbers = useMemo(() => {
     const kind = openSection?.kind;
     const n = openNumber?.number;
-    return kind && n && kind !== "target" && kind !== "ad" ? (doc: ReportNode) => subsectionNumbers(kind, n, doc) : undefined;
-  }, [openSection?.kind, openNumber?.number]);
-  const standaloneOrdinal = open?.target?.kind === "standalone" ? entries.filter((e) => e.target?.kind === "standalone").findIndex((e) => e === open) + 1 : 0;
-  const headingsOf = useMemo(() => {
-    const target = open?.target;
-    const base = openNumber?.number;
-    if (!target || !base) return undefined;
-    return (doc: ReportNode) => targetHeadings(doc, data, target, base, standaloneOrdinal);
-  }, [open?.target, openNumber?.number, data, standaloneOrdinal]);
+    if (!kind || !n) return undefined;
+    if (openTarget) return (doc: ReportNode) => targetNumbers(doc, openTarget, n);
+    return (doc: ReportNode) => subsectionNumbers(kind, n, doc);
+  }, [openSection?.kind, openNumber?.number, openTarget]);
 
   // Autosave, flushed when the open section changes and on leaving.
   const saveFailed = useReportSaveStore((s) => s.unsaved);
@@ -618,38 +560,58 @@ function ReportBody({
     [openId_],
   );
 
-  const { onChange, onRemoveEvidence, onRestoreEvidence, swapPrevious, patchMeta } = usePageEdits(openSection, savedDocOf, saver, setLive, setLiveMeta);
+  const { onChange, onRemoveEvidence, onRestoreEvidence, swapPrevious, replacePage, patchMeta } = usePageEdits(openSection, savedDocOf, saver, setLive, setLiveMeta);
   // Each swap with the previous page remounts the editor on the page swapped in (it reads its document once).
   const [swaps, setSwaps] = useState(0);
-  // The document a page mounts with: the sections cache as it is now, which the save queue patches with every write.
+  // The stored page a section opens with: the sections cache as it is now, which the save queue patches with every write.
   // The `sections` prop reaches this view a render later, so a page opened (or swapped) right after a change would
   // otherwise mount on its older document and save over the change.
-  const mountDoc = (s: ReportSection): ReportNode =>
-    (qc.getQueryData<ReportSection[]>(reportSectionsKey(report.id))?.find((x) => x.id === s.id)?.doc ?? s.doc) as ReportNode;
+  const cachedSection = useCallback(
+    (s: ReportSection): ReportSection => qc.getQueryData<ReportSection[]>(reportSectionsKey(report.id))?.find((x) => x.id === s.id) ?? s,
+    [qc, report.id],
+  );
+  // Pages flattened as they opened in this view: each is flattened and saved once.
+  const flattenSaved = useRef(new Set<string>());
+  /** The document a page mounts with, in the plain schema. A stored page holding old nodes (an owner page, a page
+   *  restored before plain pages) opens flattened; the effect below saves it once, the original kept in `previousDoc`. */
+  const openDoc = (s: ReportSection): ReportNode => plainOf(cachedSection(s).doc as ReportNode, targetOf(s));
+  useEffect(() => {
+    const s = openSection;
+    if (!s || !hasCurrentPage(s) || flattenSaved.current.has(s.id)) return;
+    const cached = cachedSection(s);
+    const original = cached.doc as ReportNode | null;
+    if (!original || !needsFlatten(original)) return;
+    flattenSaved.current.add(s.id);
+    const doc = plainOf(original, targetOf(s));
+    const was = cached.meta as SectionMeta;
+    const meta: SectionMeta = { ...was, previousDoc: original, previousLayout: was.layout ?? null, previousAt: Date.now() };
+    delete meta.restored;
+    patchCachedSection(qc, s.id, { doc: doc as ReportDoc, meta: meta as Record<string, unknown> });
+    replacePage(doc, meta);
+  }, [openSection, cachedSection, plainOf, targetOf, qc, replacePage]);
   const [swapFailed, setSwapFailed] = useState<string | null>(null);
   const swapPage = () => {
     const s = openSection;
     const prev = (s && metaOf(s).previousDoc) || null;
     const editor = openEditor();
     if (!s || !prev || !editor) return;
-    // A page from an older layout may hold blocks this one no longer has: say so rather than break the page.
+    // The page swapped in is written in the plain schema; should it still not fit the page, say so rather than break it.
+    const plain = flattenToPlain(prev, data, open?.target ?? null, reportMeta);
     try {
-      editor.schema.nodeFromJSON(prev).check();
+      editor.schema.nodeFromJSON(plain).check();
     } catch (e) {
       setSwapFailed(e instanceof Error ? e.message : String(e));
       return;
     }
     setSwapFailed(null);
-    const next = swapPrevious();
+    const next = swapPrevious(plain);
     if (!next) return;
     patchCachedSection(qc, s.id, { doc: next.doc as ReportDoc, meta: next.meta as Record<string, unknown> });
     setSwaps((n) => n + 1);
   };
   // Front matter and Closing reopen on the part last shown in them.
   const lastPart = useRef<Partial<Record<string, string>>>({});
-  // An appendix page reads the stored pages: write the open page first, so a block moved a moment ago is on it.
   const openItem = (id: string) => {
-    if (id.startsWith(APPENDIX_ID)) void saver.flush();
     const group = groupOf(entries.find((e) => e.section.id === id));
     if (group === FRONT_TAB || group === CLOSING_TAB) lastPart.current[group] = id;
     setOpenId(id);
@@ -661,19 +623,13 @@ function ReportBody({
       openItem(parts.some((p) => p.section.id === last) ? last! : parts[0].section.id);
     } else openItem(id);
   };
-  // An appendix entry's link back: the block to select once its section's page has mounted.
-  const pendingPick = useRef<{ id: string; path: string } | null>(null);
   const onEditorReady = (id: string, editor: Editor) => {
     editorRef.current = { id, editor };
     setReadyEditor({ id, editor });
-    const pick = pendingPick.current;
-    if (pick?.id !== id) return;
-    pendingPick.current = null;
-    const pos = posAtPath(editor.state.doc, pick.path);
-    if (pos !== null) selectBlockAt(editor, pos);
   };
 
-  // A section opened with no page yet gets its first draft, built and stored once (draftBuiltAt marks it).
+  // A section opened with no page yet, or one under another layout, gets its plain draft, built and stored once
+  // (draftBuiltAt marks it).
   const building = useRef(new Set<string>());
   const [draftFailed, setDraftFailed] = useState<string | null>(null);
   useEffect(() => {
@@ -682,23 +638,34 @@ function ReportBody({
     const doc = drafts.get(s.id);
     if (!doc) return;
     building.current.add(s.id);
-    // The position as the sections cache has it now; the reply's position is left out of the cache, so a reorder
-    // made while the draft was on its way stays.
-    const position = qc.getQueryData<ReportSection[]>(reportSectionsKey(report.id))?.find((x) => x.id === s.id)?.position ?? s.position;
-    // A page written under an older layout is never dropped: it is kept in the meta for "Restore your previous page".
-    const meta: SectionMeta =
-      s.doc != null
-        ? { layout: DRAFT_LAYOUT, previousDoc: s.doc as ReportNode, previousLayout: (s.meta as SectionMeta).layout ?? null, previousAt: Date.now() }
-        : { layout: DRAFT_LAYOUT };
-    api
-      .reportSectionUpsert(report.id, { kind: s.kind, targetKey: s.targetKey, position, doc, meta: meta as Record<string, unknown>, draftBuiltAt: Date.now() })
-      .then((saved) => patchCachedSection(qc, s.id, { doc: saved.doc, meta: saved.meta, draftBuiltAt: saved.draftBuiltAt }))
-      .catch((e: unknown) => {
-        building.current.delete(s.id);
-        reportError(e);
-        setDraftFailed(e instanceof Error ? e.message : String(e));
-      });
-  }, [openSection, drafts, report.id, qc, draftFailed]);
+    const fail = (e: unknown) => {
+      building.current.delete(s.id);
+      reportError(e);
+      setDraftFailed(e instanceof Error ? e.message : String(e));
+    };
+    // A queued write of the old page (mid-debounce, or failed and waiting for its retry) goes out first, so it can
+    // never land after the rebuild and overwrite it; the page it wrote is the one kept.
+    flushReports()
+      .then(() => {
+        if (isReportSaveQueued(s.id)) throw new Error("an earlier change to this page isn't saved yet");
+        // The section as the cache has it after the flush: its page and layout are what the queue last wrote, and its
+        // position is the current one (the reply's is left out of the cache, so a reorder made meanwhile stays).
+        const now = cachedSection(s);
+        if (hasCurrentPage(now)) {
+          building.current.delete(s.id);
+          return;
+        }
+        // A page written under another layout is never dropped: it is kept in the meta for "Restore your previous page".
+        const meta: SectionMeta =
+          now.doc != null
+            ? { layout: DRAFT_LAYOUT, previousDoc: now.doc as ReportNode, previousLayout: (now.meta as SectionMeta).layout ?? null, previousAt: Date.now() }
+            : { layout: DRAFT_LAYOUT };
+        return api
+          .reportSectionUpsert(report.id, { kind: s.kind, targetKey: s.targetKey, position: now.position, doc, meta: meta as Record<string, unknown>, draftBuiltAt: Date.now() })
+          .then((saved) => patchCachedSection(qc, s.id, { doc: saved.doc, meta: saved.meta, draftBuiltAt: saved.draftBuiltAt }));
+      })
+      .catch(fail);
+  }, [openSection, drafts, report.id, qc, draftFailed, cachedSection]);
 
   // Report-details writes go out one at a time, in order; only the last one's reply reaches the cache, so a slower
   // earlier reply never overwrites a later change.
@@ -874,14 +841,17 @@ function ReportBody({
     const doc = editor.state.doc;
     // A suggested move names its block by index path (`move:0.3`).
     let pos: number | null = check.id.startsWith("move:") ? posAtPath(doc, check.id.slice("move:".length)) : null;
+    // The anchor's node by its index in the page (the checks' own walk), else the first block from its entry: a figure
+    // of it, or a block whose source names it.
+    const { entryId, nodeIndex } = check.anchor ?? {};
+    const fromEntry = (node: PMNode) =>
+      (node.type.name === "figure" && node.attrs.entryId === entryId) ||
+      (typeof node.attrs.source === "string" && /^entry:([^:]+)/.exec(node.attrs.source)?.[1] === entryId);
     let index = 0;
     if (pos === null)
       doc.descendants((node, p) => {
         if (pos !== null) return false;
-        const hit =
-          check.anchor?.entryId !== undefined
-            ? node.type.name === "evidence" && node.attrs.entryId === check.anchor.entryId
-            : check.anchor?.nodeIndex !== undefined && index === check.anchor.nodeIndex;
+        const hit = nodeIndex !== undefined ? index === nodeIndex : entryId !== undefined && fromEntry(node);
         index++;
         if (hit) pos = p;
         return true;
@@ -889,7 +859,7 @@ function ReportBody({
     if (pos !== null) selectBlockAt(editor, pos);
     else editor.view.focus();
   };
-  // A suggested move's fix is the Move action itself: the block goes to the appendix, leaving its reference.
+  // Text copied from a now-private or deleted entry: Keep the text makes it the owner's own.
   const checkAction = (check: Check): CheckAction | undefined => {
     const copied = /^copied-(?:private|deleted):(.+)$/.exec(check.id);
     if (copied) {
@@ -901,16 +871,7 @@ function ReportBody({
         },
       };
     }
-    if (!check.id.startsWith("move:")) return undefined;
-    const path = check.id.slice("move:".length);
-    return {
-      label: "Move to appendix",
-      run: () => {
-        const editor = openEditor();
-        const pos = editor ? posAtPath(editor.state.doc, path) : null;
-        if (editor && pos !== null) setNodeAttrs(editor, pos, { appendix: "moved" });
-      },
-    };
+    return undefined;
   };
 
   // The To do panel lists the open tab's checks: a target's own, Front matter's report-level ones.
@@ -927,7 +888,7 @@ function ReportBody({
     todoOpener.current = null;
     if (back?.isConnected) back.focus();
   };
-  const openChecks = openAppendix ? [] : open?.target ? (checks.get(open.section.id) ?? []) : open?.item.group === "front" ? reportLevel : [];
+  const openChecks = open?.target ? (checks.get(open.section.id) ?? []) : open?.item.group === "front" ? reportLevel : [];
   const machines = open?.target ? open.target.hostIds.map((id) => ({ hostId: id, name: data.hosts.find((h) => h.id === id)?.name ?? "Host" })) : [];
   const todoPanel = todoOpen ? (
     <TodoPanel
@@ -939,7 +900,7 @@ function ReportBody({
       actionFor={checkAction}
       onClose={closeTodo}
       flags={
-        !openAppendix && open?.target ? (
+        open?.target ? (
           <ExpectedFlags machines={machines} flagsOf={(id) => expectedFlags(open.target!, id, reportMeta)} onChange={setFlags} />
         ) : undefined
       }
@@ -955,37 +916,18 @@ function ReportBody({
             sectionMeta: openSectionMeta,
             onRemoveEvidence,
             reportMeta,
-            figureOffset,
             onImageWidth,
             canMove: Boolean(openTarget),
-            headingsOf,
             target: openTarget,
           }
         : null,
-    [data, appendix, openSectionMeta, onRemoveEvidence, reportMeta, figureOffset, onImageWidth, openTarget, headingsOf],
+    [data, appendix, openSectionMeta, onRemoveEvidence, reportMeta, onImageWidth, openTarget],
   );
 
   const notStarted = open?.target && !started(open.target);
-  const appendixView = openAppendix ? (
-    <AppendixSection
-      key={openAppendix.id}
-      title={openAppendix.label}
-      source={openAppendix.name}
-      entries={openAppendix.entries.flatMap((a): AppendixPageEntry[] => {
-        const path = a.key.slice(openAppendix.entry.section.id.length + 1);
-        const node = nodeAtPath(savedDocOf(openAppendix.entry.section), path);
-        return node ? [{ ref: `${a.letter}.${a.n}`, title: a.title, path, node }] : [];
-      })}
-      ctx={{ data, appendix: savedAppendix, sectionMeta: metaOf(openAppendix.entry.section), onRemoveEvidence: () => {}, reportMeta }}
-      onBack={(path) => {
-        pendingPick.current = { id: openAppendix.entry.section.id, path };
-        setOpenId(openAppendix.entry.section.id);
-      }}
-    />
-  ) : null;
   const includedHostIds = targets.flatMap((t) => t.hostIds);
   // Front matter's and Closing's segmented row, at the top of the page.
-  const parts = openAppendix ? null : open?.item.group === "front" ? frontParts : open?.item.group === "closing" ? closingParts : null;
+  const parts = open?.item.group === "front" ? frontParts : open?.item.group === "closing" ? closingParts : null;
   const partRow =
     parts && open ? (
       <div className="row-start-1 grid border-b border-line px-6 py-1">
@@ -1013,7 +955,7 @@ function ReportBody({
     />
   );
   // With a page open its bar comes first (wide, flush with the pane's top edge) and these lines sit under it.
-  const editorShown = !appendixView && openSection?.kind !== "details" && !!openSection && hasCurrentPage(openSection) && !!contextValue;
+  const editorShown = openSection?.kind !== "details" && !!openSection && hasCurrentPage(openSection) && !!contextValue;
   const notices = (
     <>
       {ensureFailed && <WarnLine text={`Couldn't add the report's new sections: ${ensureFailed}`} retryLabel="Retry setting up sections" onRetry={() => setEnsureFailed(null)} />}
@@ -1086,7 +1028,7 @@ function ReportBody({
               {todoPanel}
               <div ref={pageRef} className="row-start-3 grid min-h-0 content-start gap-4 overflow-y-auto px-6 py-6">
             {!editorShown && notices}
-            {appendixView ?? (openSection?.kind === "details" ? (
+            {openSection?.kind === "details" ? (
               <ReportDetails
                 key={report.id}
                 report={report}
@@ -1106,7 +1048,7 @@ function ReportBody({
                     title={openTitle.text}
                     titleNumber={openTitle.number}
                     subNumbers={pageSubNumbers}
-                    doc={mountDoc(openSection)}
+                    doc={openDoc(openSection)}
                     onChange={onChange}
                     onReady={(editor) => onEditorReady(openSection.id, editor)}
                     toolbarClassName="-mt-6"
@@ -1129,7 +1071,7 @@ function ReportBody({
               ) : draftFailed ? null : (
                 <LoadingState label="the draft" />
               )
-            ) : null)}
+            ) : null}
               </div>
             </div>
             {narrow ? (

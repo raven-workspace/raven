@@ -221,6 +221,11 @@ export function forgetReportSave(id: string) {
   }
 }
 
+/** True while a write of this section is queued (unsent, or failed and waiting for its retry) or on its way. */
+export function isReportSaveQueued(id: string): boolean {
+  return session.pending.has(id) || session.runs.has(id);
+}
+
 /** True while any report write is queued or on its way. */
 export function hasPendingReports(): boolean {
   return session.pending.size > 0 || session.runs.size > 0 || session.writes.size > 0;
