@@ -10,7 +10,7 @@ import { api, resetAuditState } from "../audit/fakeApi";
 import { reportSchema } from "../features/report/editor/extension";
 import { ReportSectionView } from "../features/report/ReportSection";
 import { pruneRemoved } from "../features/report/queries";
-import { DRAFT_LAYOUT, needsFlatten, PAGE_NODE_TYPES, type ReportNode, type SectionMeta } from "../engines/report";
+import { DRAFT_LAYOUT, needsFlatten, PAGE_NODE_TYPES, placedIdsIn, type ReportNode, type SectionMeta } from "../engines/report";
 import { discardReports, flushReports, queueReportSave } from "../features/report/saveQueue";
 import { ReportTabs, type TabItem } from "../features/report/ReportTabs";
 import { CheckList, TodoPanel } from "../features/report/TodoPanel";
@@ -998,6 +998,32 @@ describe("Report view: the result", () => {
       // Stored so: the old page is in the meta, the plain draft is the page.
       await waitFor(async () => expect((await stored(section.id)).meta).toMatchObject({ layout: 6, previousLayout: 5 }));
       expect(JSON.stringify((await stored(section.id)).meta.previousDoc)).toBe(JSON.stringify(layout5));
+    });
+
+    it("the rebuild leaves out what the owner removed, and the removal stays recorded after it saves", async () => {
+      const report = await api.reportGetOrCreate("e-exam");
+      const removed = ["l-exam-web01-grafana", "l-exam-web01-sudo", "tested:h-exam-web"];
+      const section = await api.reportSectionUpsert(report.id, { kind: "target", targetKey: WEB, position: 2, doc: layout5 as unknown as ReportDoc, meta: { layout: 5, removedEntryIds: removed }, draftBuiltAt: 1 });
+      const upsert = vi.spyOn(api, "reportSectionUpsert");
+      mount();
+      await ready();
+      fireEvent.click(rowFor("web01"));
+      await waitFor(() => expect(draftUpserts(upsert, WEB)).toHaveLength(1));
+      const [, input] = draftUpserts(upsert, WEB)[0] as [string, { meta: SectionMeta; doc: ReportNode }];
+      const placed = placedIdsIn(input.doc);
+      for (const id of removed) expect(placed.has(id)).toBe(false);
+      // The rest of the draft is there: the entries the owner kept.
+      expect(placed.has("l-exam-web01-tar")).toBe(true);
+      expect(input.meta.removedEntryIds).toEqual(removed);
+      await waitFor(() => expect(machineHeading()?.[1]).toBe("web01 (10.10.30.20)"));
+      expect(paper().textContent).not.toContain("sudo -l");
+      // A later save of the page goes through pruneRemoved: the removals stay recorded.
+      expect(pruneRemoved(input.doc, input.meta).removedEntryIds).toEqual(removed);
+      const save = vi.spyOn(api, "reportSectionSave");
+      queueReportSave(makeQueryClient(), section.id, input.doc, input.meta);
+      await flushReports();
+      const [, , meta] = save.mock.calls.filter(([id]) => id === section.id).at(-1)! as [string, ReportDoc, SectionMeta];
+      expect(meta.removedEntryIds).toEqual(removed);
     });
 
     it("Restore shows every owner sentence of a layout-5 page, as plain blocks", async () => {

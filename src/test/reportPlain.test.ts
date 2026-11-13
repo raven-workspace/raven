@@ -15,6 +15,8 @@ import {
   sourceBlocks,
   sourceOf,
   titleSentence,
+  withoutRemoved,
+  placedIdsIn,
   trimmedOutput,
   type ReportData,
   type ReportNode,
@@ -298,6 +300,25 @@ describe("plain entry blocks and Refresh sources", () => {
     expect(regenerated[0].attrs?.also).toEqual(["l-garnet-local"]);
     // A refresh of a block with no flag absorbed carries no `also`.
     expect(sourceBlocks("entry:l-garnet-head:0:output", data, target, {})![0].attrs?.also).toBeUndefined();
+  });
+
+  it("withoutRemoved leaves out a removed entry's blocks and empty steps, the Also tested list, and an absorbed flag's claim", () => {
+    const steps0 = steps.length;
+    const removed = ["l-garnet-head", "l-garnet-local", `tested:${GARNET_HOST}`];
+    const out = withoutRemoved(doc, removed);
+    const placed = placedIdsIn(out);
+    for (const id of removed) expect(placed.has(id)).toBe(false);
+    // The login step that printed local.txt stays; it just no longer claims the flag.
+    const holder = all(out).find((n) => textOf(n).includes("4c1d8e2f9a7b3065e2c4a9f1d7b80e36") && n.type === "codeBlock");
+    expect(holder).toBeDefined();
+    expect(holder!.attrs?.also).toBeUndefined();
+    // The head step is gone whole; no step is left empty.
+    expect(out.content!.filter((n) => n.type === "list" && n.attrs?.kind === "ordered")).toHaveLength(steps0 - 1);
+    expect(all(out).every((n) => n.type !== "list" || (n.content ?? []).length > 0)).toBe(true);
+    expect(all(out).some((n) => String(n.attrs?.source ?? "").startsWith("tested:") || n.attrs?.source === `phase:${GARNET_HOST}:tested`)).toBe(false);
+    // Everything else is the draft as it was.
+    expect(withoutRemoved(doc, [])).toBe(doc);
+    expect(placedIdsIn(withoutRemoved(doc, ["l-garnet-head"])).size).toBe(placedIdsIn(doc).size - 1);
   });
 
   it("an AD set opens with its attack-path table", () => {

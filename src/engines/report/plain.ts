@@ -893,6 +893,40 @@ export function placedIdsIn(doc: ReportNode): Set<string> {
 }
 
 /**
+ * A draft without what the owner took off the page (`removedEntryIds`), so a rebuild never puts it back: every block of
+ * a removed entry (its source's, a figure's), a numbered step left with nothing in it, and for a `tested:<hostId>` key
+ * that machine's Also tested heading and bullets. A block that shows a removed entry only in its `also` stays (it is
+ * another entry's), the removed id taken out of its `also`, so the page doesn't count that entry as placed.
+ */
+export function withoutRemoved(doc: ReportNode, removed: readonly string[]): ReportNode {
+  if (removed.length === 0) return doc;
+  const gone = new Set(removed);
+  const tested = new Set(removed.flatMap((k) => /^tested:([^:]+)$/.exec(k)?.[1] ?? []));
+  const entryOf = (n: ReportNode) => /^entry:([^:]+)/.exec(srcOf(n))?.[1] ?? (n.type === "figure" && typeof n.attrs?.entryId === "string" ? n.attrs.entryId : null);
+  const dropped = (n: ReportNode) => {
+    const id = entryOf(n);
+    if (id !== null && gone.has(id)) return true;
+    const m = /^(?:tested:([^:]+)|phase:([^:]+):tested)$/.exec(srcOf(n));
+    return m !== null && tested.has(m[1] ?? m[2]);
+  };
+  const clean = (n: ReportNode): ReportNode | null => {
+    if (dropped(n)) return null;
+    let out = n;
+    const also = n.attrs?.also;
+    if (Array.isArray(also) && also.some((id) => gone.has(id))) {
+      const kept = also.filter((id) => !gone.has(id));
+      const attrs = Object.fromEntries(Object.entries(n.attrs!).filter(([k]) => k !== "also"));
+      out = { ...n, attrs: kept.length > 0 ? { ...attrs, also: kept } : attrs };
+    }
+    if (!n.content || n.type === "text") return out;
+    const content = n.content.map(clean).filter((c): c is ReportNode => c !== null);
+    if (content.length === 0 && n.content.length > 0 && n.type === "list") return null;
+    return { ...out, content };
+  };
+  return clean(doc) ?? { ...doc, content: [] };
+}
+
+/**
  * Whether a screenshot comes along with another entry's step in the draft (it is not that step's lead), so on a page
  * with no cursor it joins the step holding that entry (`companionStepAt`).
  */

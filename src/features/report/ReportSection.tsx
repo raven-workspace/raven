@@ -26,6 +26,7 @@ import {
   subsectionNumbers,
   targetChecks,
   targetNumbers,
+  withoutRemoved,
   type Check,
   type FlagKind,
   type PageMeta,
@@ -398,7 +399,9 @@ function ReportBody({
     const out = new Map<string, ReportNode>();
     for (const e of entries) {
       if (hasCurrentPage(e.section) || e.section.kind === "details" || e.section.kind === "page") continue;
-      out.set(e.section.id, e.target ? buildPlainTarget(data, e.target, reportMeta) : buildSectionDraft(e.section.kind, data, settings, reportMeta));
+      // What the owner took off the page before (its removed entries, carried forward) stays off the rebuilt page.
+      const removed = (e.section.meta as SectionMeta | null)?.removedEntryIds ?? [];
+      out.set(e.section.id, e.target ? withoutRemoved(buildPlainTarget(data, e.target, reportMeta), removed) : buildSectionDraft(e.section.kind, data, settings, reportMeta));
     }
     return out;
   }, [entries, data, reportMeta, settings]);
@@ -689,6 +692,8 @@ function ReportBody({
         // A page written under another layout is never dropped: it is kept for "Restore your previous page" and, byte for
         // byte with its meta, in the archive. The owner's own meta (coverage, removed entries) carries forward.
         const was = now.meta as SectionMeta;
+        // The removals carried forward (the cache's, the latest) leave their entries off the page, so they survive.
+        const page = withoutRemoved(doc, was.removedEntryIds ?? []);
         const meta: SectionMeta =
           now.doc != null
             ? {
@@ -701,7 +706,7 @@ function ReportBody({
               }
             : { ...ownerMeta(was), layout: DRAFT_LAYOUT, ...(was.originals ? { originals: was.originals } : {}) };
         return api
-          .reportSectionUpsert(report.id, { kind: s.kind, targetKey: s.targetKey, position: now.position, doc, meta: meta as Record<string, unknown>, draftBuiltAt: Date.now() })
+          .reportSectionUpsert(report.id, { kind: s.kind, targetKey: s.targetKey, position: now.position, doc: page, meta: meta as Record<string, unknown>, draftBuiltAt: Date.now() })
           .then((saved) => patchCachedSection(qc, s.id, { doc: saved.doc, meta: saved.meta, draftBuiltAt: saved.draftBuiltAt }))
           .catch((e: unknown) => {
             requeue?.();
