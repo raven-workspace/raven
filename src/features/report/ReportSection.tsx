@@ -561,26 +561,31 @@ function ReportBody({
   );
   // Pages flattened as they opened in this view: each is flattened and saved once.
   const flattenSaved = useRef(new Set<string>());
-  // A page whose flattened form still doesn't fit the page's schema: not saved, the page as stored kept.
-  const [flattenFailed, setFlattenFailed] = useState<{ id: string; message: string } | null>(null);
+  /** The open page as the open-time flatten writes it, checked as Restore checks the page it swaps in; null for a page
+   *  that needs no flatten. One that doesn't fit (`error`) is never saved over the stored page. */
+  const openFlatten = useMemo((): { id: string; original: ReportNode; doc: ReportNode; error: string | null } | null => {
+    const s = openSection;
+    const original = s ? (cachedSection(s).doc as ReportNode | null) : null;
+    if (!s || !original || !needsFlatten(original)) return null;
+    const doc = plainOf(original, targetOf(s));
+    try {
+      reportSchema().nodeFromJSON(doc).check();
+      return { id: s.id, original, doc, error: null };
+    } catch (e) {
+      return { id: s.id, original, doc, error: e instanceof Error ? e.message : String(e) };
+    }
+  }, [openSection, cachedSection, plainOf, targetOf]);
+  const flattenFailed = openFlatten?.error ?? null;
   /** The document a page mounts with, in the plain schema. A stored page holding old nodes (an owner page, a page
    *  restored before plain pages) opens flattened; the effect below saves it once, the original kept in `previousDoc`. */
   const openDoc = (s: ReportSection): ReportNode => plainOf(cachedSection(s).doc as ReportNode, targetOf(s));
   useEffect(() => {
     const s = openSection;
     if (!s || !hasCurrentPage(s) || flattenSaved.current.has(s.id)) return;
-    const cached = cachedSection(s);
-    const original = cached.doc as ReportNode | null;
-    if (!original || !needsFlatten(original)) return;
+    if (!openFlatten || openFlatten.id !== s.id || openFlatten.error !== null) return;
     flattenSaved.current.add(s.id);
-    const doc = plainOf(original, targetOf(s));
-    // Checked as Restore checks the page it swaps in: one that doesn't fit is never saved over the stored page.
-    try {
-      reportSchema().nodeFromJSON(doc).check();
-    } catch (e) {
-      setFlattenFailed({ id: s.id, message: e instanceof Error ? e.message : String(e) });
-      return;
-    }
+    const { original, doc } = openFlatten;
+    const cached = cachedSection(s);
     const was = cached.meta as SectionMeta;
     // The page as stored goes into the archive. It becomes `previousDoc` (Restore) only when no earlier page holds that
     // place: a page kept from a rebuild stays the one Restore brings back.
@@ -590,7 +595,7 @@ function ReportBody({
       : { ...was, previousDoc: original, previousLayout: was.layout ?? null, previousAt: Date.now(), restored: false, flattened: true, originals };
     patchCachedSection(qc, s.id, { doc: doc as ReportDoc, meta: meta as Record<string, unknown> });
     replacePage(doc, meta);
-  }, [openSection, cachedSection, plainOf, targetOf, qc, replacePage]);
+  }, [openSection, openFlatten, cachedSection, qc, replacePage]);
   const [swapFailed, setSwapFailed] = useState<string | null>(null);
   const swapPage = () => {
     const s = openSection;
@@ -1064,8 +1069,8 @@ function ReportBody({
         </div>
       )}
       {swapFailed && <p role="alert" className="m-0 text-meta text-warn">{`Couldn't restore the previous page: ${swapFailed}`}</p>}
-      {flattenFailed && flattenFailed.id === openSection?.id && (
-        <p role="alert" className="m-0 text-meta text-warn">{`Couldn't convert this page to the new format, so it wasn't saved and the page as stored is unchanged: ${flattenFailed.message}`}</p>
+      {flattenFailed && (
+        <p role="alert" className="m-0 text-meta text-warn">{`Couldn't convert this page to the new format, so it wasn't saved and the page as stored is unchanged: ${flattenFailed}`}</p>
       )}
       {notStarted && open?.target && <p className="m-0 text-meta text-muted-2">Nothing logged on {open.item.label} yet. The page fills in as you work.</p>}
     </>
