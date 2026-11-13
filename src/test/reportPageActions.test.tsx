@@ -401,6 +401,58 @@ describe("the block menu: Refresh and Delete", () => {
     expect(await menuFor(container, find(editor(), (n) => n.textContent === "My own words"))).toEqual(["Delete"]);
   });
 
+  it("an entry's sentence refreshes as one: a title becomes the observations written since, and back", async () => {
+    const said = "The web root serves a .git folder.";
+    const written = withEntry("head", (e) => ({ ...e, observations: said }));
+    const { container, editor } = await ready(draft, written);
+    const title = find(editor(), bySource(`entry:${id("head")}:title`));
+    expect(await menuFor(container, title)).toEqual(["Refresh from log", "Delete"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Refresh from log" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const now = find(editor(), bySource(`entry:${id("head")}:observations`));
+    expect(now.node.textContent).toBe(said);
+    expect(editor().state.doc.nodeAt(now.pos + now.node.nodeSize)?.attrs.source).toBe(`entry:${id("head")}:0:command`);
+    // And back: with the observations cleared, the title sentence returns in their place.
+    const run = sourceRun(editor().state.doc, now.pos)!;
+    act(() => void refreshRun(editor(), run, garnet, target, {}));
+    const back = find(editor(), bySource(`entry:${id("head")}:title`));
+    const title0 = sourceBlocks(`entry:${id("head")}:title`, garnet, target, {})![0];
+    expect([back.node.textContent, back.node.attrs.gen]).toEqual([title0.content!.map((t) => t.text).join(""), title0.attrs!.gen]);
+    expect(isEdited([back.node])).toBe(false);
+  });
+
+  it("a block that regenerates to nothing offers no Refresh and is never taken away by one", async () => {
+    const data = newOutput("head", "");
+    const { container, editor } = await ready(draft, data);
+    const output = find(editor(), bySource(`entry:${id("head")}:0:output`));
+    expect(await menuFor(container, output)).toEqual(["Delete"]);
+    const before = json(editor());
+    expect(refreshRun(editor(), sourceRun(editor().state.doc, output.pos)!, data, target, {})).toBe(false);
+    expect(json(editor())).toEqual(before);
+  });
+
+  it("a result line or port table with nothing to show offers no Refresh", async () => {
+    const bare: ReportData = { ...garnet, services: [], grants: [], log: garnet.log.filter((e) => e.content.kind !== "flag") };
+    const result = draft.content!.find((n) => sourceOf(n) === `result:${GARNET_HOST}`)!;
+    const ports = draft.content!.find((n) => sourceOf(n) === `ports:${GARNET_HOST}`)!;
+    expect(result && ports).toBeTruthy();
+    const { container, editor } = await ready({ type: "doc", content: [result, ports] }, bare);
+    expect(await menuFor(container, find(editor(), bySource(`result:${GARNET_HOST}`)))).toEqual(["Delete"]);
+    fireEvent.keyDown(screen.getByRole("menu", { name: "Block actions" }), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    expect(await menuFor(container, find(editor(), bySource(`ports:${GARNET_HOST}`)))).toEqual(["Delete"]);
+  });
+
+  it("an empty hint paragraph is not edited: Refresh replaces it without asking", async () => {
+    const hint: ReportNode = { type: "paragraph", attrs: { hint: "No findings recorded yet", source: "table:findings" } };
+    const { container, editor } = await ready({ type: "doc", content: [hint] });
+    expect(isEdited([editor().state.doc.child(0)])).toBe(false);
+    expect(await menuFor(container, { node: editor().state.doc.child(0), pos: 0 })).toEqual(["Refresh from Raven", "Delete"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Refresh from Raven" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(editor().state.doc.child(0).type.name).toBe("table");
+  });
+
   it("the block menu never offers Move to appendix", async () => {
     const { container, editor } = await ready(draft);
     for (const pick of [(n: PMNode) => n.type.name === "figure", (n: PMNode) => n.type.name === "table", bySource(`entry:${id("head")}:0:output`)]) {
@@ -592,11 +644,12 @@ describe("removal tracking", () => {
     expect(onRemoveEvidence).toHaveBeenCalledWith(id("local"));
   });
 
-  it("a Refresh that takes an entry's blocks away is not the owner's removal", async () => {
-    const data = newOutput("head", "");
-    const { editor, onRemoveEvidence } = await ready({ type: "doc", content: [{ type: "codeBlock", attrs: { language: "", source: `entry:${id("head")}:0:output` }, content: [{ type: "text", text: "x" }] }] }, data);
+  it("a Refresh that swaps an entry's blocks is not the owner's removal", async () => {
+    const data = withEntry("head", (e) => ({ ...e, observations: "Seen." }));
+    const { editor, onRemoveEvidence } = await ready({ type: "doc", content: [{ type: "paragraph", attrs: { source: `entry:${id("head")}:title` }, content: [{ type: "text", text: "x" }] }] }, data);
     const run = sourceRun(editor().state.doc, 0)!;
     act(() => void refreshRun(editor(), run, data, target, {}));
+    expect(editor().state.doc.child(0).attrs.source).toBe(`entry:${id("head")}:observations`);
     expect(onRemoveEvidence).not.toHaveBeenCalled();
   });
 });

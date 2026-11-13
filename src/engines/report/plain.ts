@@ -680,6 +680,29 @@ export function sourceBlocks(source: string, data: ReportData, target: ReportTar
   return finish(source.startsWith("entry:") ? withAbsorbed(blocks, source, data, target, meta) : blocks);
 }
 
+const SENTENCE_SOURCE = /^entry:([^:]+):(?:title|observations)$/;
+
+/** The source Refresh groups a block under: an entry's sentence is one family (`entry:<id>:sentence`), whether the
+ *  page holds its title or its observations; every other source is its own. */
+export function refreshFamily(source: string): string {
+  const m = SENTENCE_SOURCE.exec(source);
+  return m ? `entry:${m[1]}:sentence` : source;
+}
+
+/**
+ * What Refresh puts in place of a run of `source` (`refreshFamily`): an entry's sentence is the sentence the draft
+ * writes now (its title, or its observations once written, or both), any other source its `sourceBlocks`. Null when
+ * that is nothing: an unknown, private or deleted source, or one that regenerates no block (a result line or port
+ * table with nothing to show). Refresh never takes a block away and puts nothing back.
+ */
+export function refreshBlocks(source: string, data: ReportData, target: ReportTarget | null, meta: ReportMeta): ReportNode[] | null {
+  const m = SENTENCE_SOURCE.exec(source);
+  const blocks = m
+    ? [...(sourceBlocks(`entry:${m[1]}:title`, data, target, meta) ?? []), ...(sourceBlocks(`entry:${m[1]}:observations`, data, target, meta) ?? [])]
+    : sourceBlocks(source, data, target, meta);
+  return blocks && blocks.length > 0 ? blocks : null;
+}
+
 /** An entry's regenerated blocks with the `also` the draft records on them (`absorb`): read off the draft of each
  *  machine the entry is on, block by block in the run's order. */
 function withAbsorbed(blocks: ReportNode[], source: string, data: ReportData, target: ReportTarget | null, meta: ReportMeta): ReportNode[] {

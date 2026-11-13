@@ -10,7 +10,8 @@ import {
   companionStepAt,
   draftedEntryBlocks,
   phaseInsertAt,
-  sourceBlocks,
+  refreshBlocks,
+  refreshFamily,
   stamp,
   type ReportData,
   type ReportMeta,
@@ -291,7 +292,8 @@ export function insertFigure(editor: Editor, entry: LogEntry, pos: number): PMNo
   return insertAtSpot(editor, (doc) => spotAfter(doc, Math.min(pos, doc.content.size), null, made), made);
 }
 
-/** A run of sibling blocks that share one source: Refresh replaces it as a whole. */
+/** A run of sibling blocks that share one source (an entry's title and observations count as one, `refreshFamily`):
+ *  Refresh replaces it as a whole. */
 export interface SourceRun {
   from: number;
   to: number;
@@ -299,7 +301,7 @@ export interface SourceRun {
   source: string;
 }
 
-/** The contiguous siblings around the block at `pos` that share its `source`; null when it has none. */
+/** The contiguous siblings around the block at `pos` whose source is of its family; null when it has none. */
 export function sourceRun(doc: PMNode, pos: number): SourceRun | null {
   const node = doc.nodeAt(pos);
   const source = node?.attrs.source;
@@ -307,7 +309,11 @@ export function sourceRun(doc: PMNode, pos: number): SourceRun | null {
   const $pos = doc.resolve(pos);
   const parent = $pos.parent;
   const index = $pos.index();
-  const same = (i: number) => parent.child(i).attrs.source === source;
+  const family = refreshFamily(source);
+  const same = (i: number) => {
+    const s = parent.child(i).attrs.source;
+    return typeof s === "string" && s !== "" && refreshFamily(s) === family;
+  };
   let first = index;
   while (first > 0 && same(first - 1)) first--;
   let last = index;
@@ -319,8 +325,8 @@ export function sourceRun(doc: PMNode, pos: number): SourceRun | null {
   return { from, to: from + nodes.reduce((n, b) => n + b.nodeSize, 0), nodes, source };
 }
 
-/** A run as it stands now: in place when its blocks still are, else the first run on the page with its source (it
- *  moved); null when the page no longer holds it. */
+/** A run as it stands now: in place when its blocks still are, else the first run on the page of its source's family
+ *  (it moved); null when the page no longer holds it. */
 export function currentRun(doc: PMNode, run: SourceRun): SourceRun | null {
   let pos = run.from;
   const inPlace = run.nodes.every((n) => {
@@ -329,25 +335,29 @@ export function currentRun(doc: PMNode, run: SourceRun): SourceRun | null {
     return here === n;
   });
   if (inPlace) return run;
+  const family = refreshFamily(run.source);
   let found: number | null = null;
   doc.descendants((node, at) => {
-    if (found === null && node.attrs.source === run.source) found = at;
+    if (found === null && typeof node.attrs.source === "string" && node.attrs.source !== "" && refreshFamily(node.attrs.source) === family) found = at;
     return found === null;
   });
   return found === null ? null : sourceRun(doc, found);
 }
 
+/** An empty paragraph showing a hint: it holds no words of anyone's. */
+const isEmptyHint = (n: PMNode) => n.type.name === "paragraph" && n.content.size === 0 && typeof n.attrs.hint === "string" && n.attrs.hint !== "";
+
 /** Whether the owner changed any of these blocks since they were generated: its hash differs from its `gen`, or it has
- *  none (a flattened block, whose words may be the owner's). */
+ *  none (a flattened block, whose words may be the owner's). An empty hint paragraph is never edited. */
 export function isEdited(nodes: PMNode[]): boolean {
-  return nodes.some((n) => typeof n.attrs.gen !== "string" || n.attrs.gen === "" || blockHash(n.toJSON() as ReportNode) !== n.attrs.gen);
+  return nodes.some((n) => !isEmptyHint(n) && (typeof n.attrs.gen !== "string" || n.attrs.gen === "" || blockHash(n.toJSON() as ReportNode) !== n.attrs.gen));
 }
 
-/** Replaces a run with its source's blocks as the draft writes them now (`sourceBlocks`), in one undo step of its own
- *  (⌘Z brings the owner's words back, never merged with their typing). False
- *  when the source offers no Refresh (unknown, private or deleted). */
+/** Replaces a run with its source's blocks as the draft writes them now (`refreshBlocks`), in one undo step of its own
+ *  (⌘Z brings the owner's words back, never merged with their typing). False, the page untouched, when the source
+ *  offers no Refresh (unknown, private or deleted, or regenerating nothing). */
 export function refreshRun(editor: Editor, run: SourceRun, data: ReportData, target: ReportTarget | null, meta: ReportMeta): boolean {
-  const blocks = sourceBlocks(run.source, data, target, meta);
+  const blocks = refreshBlocks(run.source, data, target, meta);
   if (!blocks) return false;
   const done = editor.exec((state, dispatch) => {
     const made = blocks.map((n) => state.schema.nodeFromJSON(n));

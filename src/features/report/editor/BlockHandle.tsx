@@ -5,7 +5,7 @@ import { useEditor } from "prosekit/react";
 import { BlockHandleDraggable, BlockHandlePopup, BlockHandlePositioner, BlockHandleRoot } from "prosekit/react/block-handle";
 import { DropIndicator } from "prosekit/react/drop-indicator";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { sourceBlocks } from "../../../engines/report";
+import { refreshBlocks } from "../../../engines/report";
 import { Button, Dialog, Tooltip } from "../../../ui";
 import { currentRun, deleteBlockAt, isEdited, refreshLabel, refreshRun, sourceRun, type SourceRun } from "./pageActions";
 import { useReportData } from "./ReportDataContext";
@@ -43,7 +43,7 @@ export function BlockHandle() {
   const meta = reportMeta ?? {};
   // The hovered block's run, while it still stands where the handle saw it.
   const run = menu && editor.mounted && editor.state.doc.nodeAt(menu.pos) === menu.node ? sourceRun(editor.state.doc, menu.pos) : null;
-  const canRefresh = run !== null && sourceBlocks(run.source, data, target ?? null, meta) !== null;
+  const canRefresh = run !== null && refreshBlocks(run.source, data, target ?? null, meta) !== null;
   const done = () => {
     setMenu(null);
     editor.focus();
