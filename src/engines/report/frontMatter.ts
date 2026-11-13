@@ -1,8 +1,7 @@
 import type { SectionKind } from "../../types/report";
 import type { Settings } from "../../types/settings";
-import { tableCopy } from "./copies";
-import { generated, slot } from "./draft";
-import type { CopiedKind, ReportData, ReportMeta, ReportNode } from "./types";
+import { hintPara, msfLine, plainTable, type PlainTableKind } from "./plainTables";
+import type { ReportData, ReportMeta, ReportNode } from "./types";
 
 const CONSIDERATIONS_HINT = "Anything that affected testing: positive, neutral or negative (VPN drops, machine reverts, time)";
 
@@ -93,46 +92,46 @@ export function introductionParts(text: string): Record<string, string> {
 /** The starting document of a report-level section (§5.5); `target`, `ad` and `details` have none here. Generated
  *  tables are the page's own copies (§10.8), built from `data` with the report's targets (`meta`). */
 export function buildSectionDraft(kind: SectionKind, data: ReportData, settings: Settings, meta: ReportMeta = {}): ReportNode {
-  const copy = (k: CopiedKind) => tableCopy(k, null, data, null, meta);
+  const copy = (k: PlainTableKind) => plainTable(k, data, meta);
   switch (kind) {
     case "introduction": {
       const parts = introductionParts(settings.reportIntroduction ?? "");
       return doc([
         ...INTRO_PARTS.flatMap(([name, hint]) => {
           const blocks = textBlocks(parts[name]);
-          return [heading(name), ...(blocks.length > 0 ? blocks : [slot(hint)])];
+          return [heading(name), ...(blocks.length > 0 ? blocks : [hintPara(hint)])];
         }),
         heading("Scope"),
-        copy("scope-table"),
+        ...copy("scope-table"),
       ]);
     }
     case "summary":
       return doc([
-        slot("What the engagement was"),
-        slot("What the targets did well"),
-        slot("Vulnerabilities and trends"),
-        slot("Wrap-up"),
-        copy("findings"),
+        hintPara("What the engagement was"),
+        hintPara("What the targets did well"),
+        hintPara("Vulnerabilities and trends"),
+        hintPara("Wrap-up"),
+        ...copy("findings"),
         heading("Recommendations"),
-        slot("Recommendations"),
+        hintPara("Recommendations"),
       ]);
     case "considerations":
-      return doc([slot(CONSIDERATIONS_HINT)]);
+      return doc([hintPara(CONSIDERATIONS_HINT)]);
     case "methodology":
       return doc([
         ...textBlocks(settings.reportMethodology ?? ""),
         ...STAGES.flatMap(([stage, fact]) => [
           heading(stage),
-          slot(`How ${stage.toLowerCase()} was done`),
-          ...(fact === "msf" ? [generated("msf", null)] : fact === "cleanup" ? [copy("cleanup")] : []),
+          hintPara(`How ${stage.toLowerCase()} was done`),
+          ...(fact === "msf" ? [msfLine(data)] : fact === "cleanup" ? copy("cleanup") : []),
         ]),
       ]);
     case "engagement-tested":
-      return doc([copy("tested")]);
+      return doc(copy("tested"));
     case "further":
-      return doc([slot("Further information")]);
+      return doc([hintPara("Further information")]);
     case "references":
-      return doc([slot("Anything else to cite"), copy("references")]);
+      return doc([hintPara("Anything else to cite"), ...copy("references")]);
     default:
       return doc([]);
   }

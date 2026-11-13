@@ -3,6 +3,7 @@ import type { LogEntry } from "../../types/log";
 import { findingBlocks, inlineMarkdown, labelled } from "./copies";
 import { testedLine, testedNotExploited } from "./coverage";
 import { findingPhaseMap, hostEntry, hostPlan, machinesInOrder, severityRank, stepsOf } from "./draft";
+import { msfLine, plainTable, type PlainTableKind } from "./plainTables";
 import { placingEntries } from "./prove";
 import { attackPathRows, portRows, resultLine } from "./tables";
 import { reportTargets } from "./targets";
@@ -664,6 +665,10 @@ function sourceRun(source: string, data: ReportData, target: ReportTarget | null
     const f = data.findings.find((x) => x.id === (findingMatch ? findingMatch[1] : file?.findingId));
     if (!f) return null;
     return [...findingHeader(f, data.findingFiles.filter((ff) => ff.findingId === f.id)), additionalItem(f)];
+  }
+  if (source === "msf") return [msfLine(data)];
+  if (kind === "table" && ["findings", "scope-table", "tested", "cleanup", "references"].includes(id) && source === `table:${id}`) {
+    return plainTable(id as PlainTableKind, data, meta);
   }
   if (source === "attack-path") {
     const set = target?.kind === "ad-set" ? target : reportTargets(data, meta).find((t) => t.kind === "ad-set");

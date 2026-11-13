@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSectionDraft, introductionParts, sectionNumbers, subsectionNumbers } from "../engines/report";
+import { buildSectionDraft, introductionParts, PLAIN_NODE_TYPES, plainTable, sectionNumbers, sourceBlocks, subsectionNumbers } from "../engines/report";
 import type { ReportData, ReportNode } from "../engines/report";
 import type { SectionKind } from "../types/report";
 import type { Settings } from "../types/settings";
@@ -17,18 +17,18 @@ const data = {
   hops: [],
   cleanup: [],
 } as unknown as ReportData;
-const hints = (doc: ReportNode) => (doc.content ?? []).filter((n) => n.type === "slot").map((n) => n.attrs?.hint);
 const headings = (doc: ReportNode) =>
   (doc.content ?? []).filter((n) => n.type === "heading").map((n) => n.content?.[0].text);
-/** Node types, a generated block as G:kind (live) or T:kind (the page's own table copy). */
-const kinds = (doc: ReportNode) =>
-  (doc.content ?? []).map((n) => (n.type === "generated" ? `G:${n.attrs?.kind}` : n.type === "table-block" ? `T:${n.attrs?.kind}` : n.type));
+const cellText = (n: ReportNode): string => (n.text ?? "") + (n.content ?? []).map(cellText).join("");
+const hints = (doc: ReportNode) => (doc.content ?? []).filter((n) => n.type === "paragraph" && !n.content).map((n) => n.attrs?.hint);
+/** Top-level block types, a sourced one as type@source. */
+const kinds = (doc: ReportNode) => (doc.content ?? []).map((n) => (n.attrs?.source ? `${n.type}@${n.attrs.source}` : n.type));
 
 describe("buildSectionDraft", () => {
-  it("lays section 1 out as Introduction, Objective and Requirements, empty slots without a Settings default", () => {
+  it("lays section 1 out as Introduction, Objective and Requirements, hint paragraphs without a Settings default", () => {
     const doc = buildSectionDraft("introduction", data, settings());
     expect(headings(doc)).toEqual(["Introduction", "Objective", "Requirements", "Scope"]);
-    expect(kinds(doc)).toEqual(["heading", "slot", "heading", "slot", "heading", "slot", "heading", "T:scope-table"]);
+    expect(kinds(doc)).toEqual(["heading", "paragraph", "heading", "paragraph", "heading", "paragraph", "heading", "paragraph@table:scope-table"]);
   });
 
   it("fills section 1 from the Settings default, split on its part lines, bullets as a list", () => {
@@ -44,7 +44,7 @@ describe("buildSectionDraft", () => {
       "  screenshots",
     ].join("\n");
     const doc = buildSectionDraft("introduction", data, settings("", text));
-    expect(kinds(doc)).toEqual(["heading", "paragraph", "heading", "paragraph", "heading", "paragraph", "list", "list", "heading", "T:scope-table"]);
+    expect(kinds(doc)).toEqual(["heading", "paragraph", "heading", "paragraph", "heading", "paragraph", "list", "list", "heading", "paragraph@table:scope-table"]);
     expect(doc.content?.[1].content?.[0].text).toBe("The exam report contains all efforts that were conducted.");
     expect(doc.content?.[3].content?.[0].text).toBe("Perform an internal penetration test.");
     expect(doc.content?.[6]).toEqual({
@@ -80,14 +80,14 @@ describe("buildSectionDraft", () => {
 
   it("lays out the summary: four prose slots, the findings table, then 2.1 Recommendations", () => {
     const doc = buildSectionDraft("summary", data, settings());
-    expect(hints(doc)).toEqual(["What the engagement was", "What the targets did well", "Vulnerabilities and trends", "Wrap-up", "Recommendations"]);
+    expect(hints(doc)).toEqual(["What the engagement was", "What the targets did well", "Vulnerabilities and trends", "Wrap-up", "No findings recorded yet", "Recommendations"]);
     expect(headings(doc)).toEqual(["Recommendations"]);
-    expect(kinds(doc)).toEqual(["slot", "slot", "slot", "slot", "T:findings", "heading", "slot"]);
+    expect(kinds(doc)).toEqual(["paragraph", "paragraph", "paragraph", "paragraph", "paragraph@table:findings", "heading", "paragraph"]);
   });
 
   it("ends the introduction with a Scope subheading and the scope table, numbered 1.4", () => {
     const doc = buildSectionDraft("introduction", data, settings());
-    expect(kinds(doc).slice(-2)).toEqual(["heading", "T:scope-table"]);
+    expect(kinds(doc).slice(-2)).toEqual(["heading", "paragraph@table:scope-table"]);
     expect(headings(doc).at(-1)).toBe("Scope");
     expect(subsectionNumbers("introduction", "1", doc).get((doc.content?.length ?? 0) - 2)).toBe("1.4");
   });
@@ -97,20 +97,61 @@ describe("buildSectionDraft", () => {
     expect(headings(filled)).toEqual(["Information Gathering", "Service Enumeration", "Penetration", "Maintaining Access", "House Cleaning"]);
     expect(kinds(filled)).toEqual([
       "paragraph",
-      "heading", "slot",
-      "heading", "slot",
-      "heading", "slot", "G:msf",
-      "heading", "slot",
-      "heading", "slot", "T:cleanup",
+      "heading", "paragraph",
+      "heading", "paragraph",
+      "heading", "paragraph", "paragraph@msf",
+      "heading", "paragraph",
+      "heading", "paragraph", "paragraph@table:cleanup",
     ]);
     expect(kinds(buildSectionDraft("methodology", data, settings()))[0]).toBe("heading");
   });
 
   it("builds the single-slot sections", () => {
     expect(hints(buildSectionDraft("considerations", data, settings()))[0]).toMatch(/^Anything that affected testing/);
-    expect(buildSectionDraft("engagement-tested", data, settings()).content?.[0].attrs).toMatchObject({ kind: "tested", hostId: null });
-    expect(kinds(buildSectionDraft("further", data, settings()))).toEqual(["slot"]);
-    expect(kinds(buildSectionDraft("references", data, settings()))).toContain("T:references");
+    expect(buildSectionDraft("engagement-tested", data, settings()).content?.[0].attrs).toMatchObject({ source: "table:tested", hint: "None recorded" });
+    expect(kinds(buildSectionDraft("further", data, settings()))).toEqual(["paragraph"]);
+    expect(kinds(buildSectionDraft("references", data, settings()))).toContain("paragraph@table:references");
+  });
+});
+
+const full = {
+  ...data,
+  checklist: [],
+  findingFiles: [],
+  attachments: [],
+  hosts: [{ id: "h1", name: "DC01", ip: "10.0.0.5", os: "Windows", private: false }],
+  findings: [{ id: "f1", title: "SMB signing", severity: "high", hostIds: ["h1"], serviceIds: [], stepEntryIds: [], refs: [], description: "", remediation: "", private: false }],
+} as unknown as ReportData;
+
+describe("plain front matter", () => {
+  const PLAIN = new Set([...PLAIN_NODE_TYPES]);
+  const types = (n: ReportNode): string[] => [n.type, ...(n.content ?? []).flatMap(types)];
+  it.each(["introduction", "summary", "considerations", "methodology", "engagement-tested", "further", "references"] as const)(
+    "%s is made of plain nodes only",
+    (kind) => {
+      expect(types(buildSectionDraft(kind, data, settings(), {})).every((t) => PLAIN.has(t))).toBe(true);
+    },
+  );
+  it("an unwritten summary prints nothing: hints and the findings hint only", () => {
+    const doc = buildSectionDraft("summary", { ...data, findings: [] }, settings(), {});
+    expect(doc.content!.filter((n) => n.type === "paragraph").every((p) => !p.content && typeof p.attrs?.hint === "string")).toBe(true);
+    expect(doc.content!.find((n) => n.attrs?.source === "table:findings")).toMatchObject({ type: "paragraph", attrs: { hint: "No findings recorded yet" } });
+  });
+  it("the summary's findings table is an ordinary table with its source", () => {
+    const t = buildSectionDraft("summary", full, settings(), {}).content!.find((n) => n.type === "table")!;
+    expect(t.attrs).toMatchObject({ source: "table:findings", gen: expect.any(String) });
+    expect(t.content![0].content!.map(cellText)).toEqual(["#", "Host", "Finding", "Severity", "Result"]);
+  });
+  it("Methodologies' Penetration carries the Metasploit line as plain text", () => {
+    const doc = buildSectionDraft("methodology", data, settings(), {});
+    expect(doc.content!.find((n) => n.attrs?.source === "msf")).toMatchObject({
+      type: "paragraph",
+      content: [{ type: "text", text: expect.stringMatching(/^Metasploit was (used on|not used)/) }],
+    });
+  });
+  it("sourceBlocks refreshes a front-matter table and the Metasploit line", () => {
+    expect(sourceBlocks("table:scope-table", full, null, {})).toEqual(plainTable("scope-table", full, {}));
+    expect(sourceBlocks("msf", data, null, {})).toHaveLength(1);
   });
 });
 
