@@ -314,7 +314,7 @@ describe("plain entry blocks and Refresh sources", () => {
 
 describe("the plain page's schema", () => {
   it("loads the garnet draft as it is, sources and figures kept", () => {
-    const editor = createEditor({ extension: defineReportExtension(undefined, undefined, undefined, undefined, true), defaultContent: doc as NodeJSON });
+    const editor = createEditor({ extension: defineReportExtension(), defaultContent: doc as NodeJSON });
     editor.state.doc.check();
     const back = editor.getDocJSON() as ReportNode;
     expect(all(back).map((n) => n.type)).toEqual(all(doc).map((n) => n.type));
@@ -322,10 +322,10 @@ describe("the plain page's schema", () => {
     expect(all(back).filter((n) => n.attrs?.source).length).toBe(all(doc).filter((n) => n.attrs?.source).length);
   });
 
-  it("leaves the live page's schema without them", () => {
+  it("is the one schema every page opens in: the figure and the source attr are always there", () => {
     const editor = createEditor({ extension: defineReportExtension() });
-    expect(editor.schema.nodes.figure).toBeUndefined();
-    expect(editor.schema.nodes.paragraph.spec.attrs?.source).toBeUndefined();
+    expect(editor.schema.nodes.figure).toBeDefined();
+    expect(editor.schema.nodes.paragraph.spec.attrs?.source).toBeDefined();
   });
 });
 

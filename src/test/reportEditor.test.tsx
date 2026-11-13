@@ -187,8 +187,8 @@ describe("ReportEditor evidence", () => {
   });
 
   it("marks text copied from an entry that is now private or deleted in amber, and only those", async () => {
-    const para = (fromEntry: string, text: string): ReportNode => ({ type: "paragraph", attrs: { fromEntry }, content: [{ type: "text", text }] });
-    const code: ReportNode = { type: "codeBlock", attrs: { language: "", fromEntry: "e1" }, content: [{ type: "text", text: "whoami" }] };
+    const para = (entryId: string, text: string): ReportNode => ({ type: "paragraph", attrs: { source: `entry:${entryId}:note` }, content: [{ type: "text", text }] });
+    const code: ReportNode = { type: "codeBlock", attrs: { language: "", source: "entry:e1:0:command" }, content: [{ type: "text", text: "whoami" }] };
     const hidden = entry({ id: "n1", kind: "note", private: true, content: { kind: "note", text: "kept" } });
     const { container } = setup(doc(para("n1", "now private"), para("n9", "deleted note"), para("e1", "still here"), code), data({ log: [hidden, entry({})] }));
     await waitFor(() => expect(container.querySelector("[data-source-gone]")).toBeTruthy());

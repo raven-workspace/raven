@@ -19,14 +19,6 @@
   color: var(--fg-2);
 }
 
-/* A plain draft's list item holds a sentence, code and figures: the page's block gap between them. Proposed for
-   page.css when the plain draft replaces the step lists. */
-.report-compare .report-page .list-content {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  row-gap: 12px;
-}
-
 /* The sample's own lists (Markdown on the left) get the same rhythm. */
 .report-compare .report-page li + li {
   margin-top: 4px;

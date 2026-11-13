@@ -201,19 +201,38 @@ const fromEntryAttr = (type: string) =>
     parseDOM: (dom: HTMLElement) => dom.getAttribute("data-from-entry"),
   });
 
-/** Where a plain draft's block came from ("entry:<id>:<block>", "finding:<id>:fix", "ports:<hostId>"), for Refresh and
- *  the checks: never shown, kept through copy and paste. */
-const sourceAttr = (type: string) =>
+/** A hidden attr: kept through the editor, copy and paste (as `data-*` on the DOM), never printed as text. */
+const hiddenAttr = (type: string, attr: string, dom: string) =>
   defineNodeAttr({
     type,
-    attr: "source",
+    attr,
     default: null,
-    toDOM: (value: string | null) => (value ? ["data-source", value] : null),
-    parseDOM: (dom: HTMLElement) => dom.getAttribute("data-source"),
+    toDOM: (value: string | null) => (value ? [dom, value] : null),
+    parseDOM: (el: HTMLElement) => el.getAttribute(dom),
   });
-const SOURCED = ["heading", "paragraph", "list", "codeBlock", "table", "figure"];
 
-/** A screenshot on a plain page: the image (by attachment) and its caption, ordinary editable text. */
+/** The entry ids a block already shows (`also`, a flag a step prints): a list, a space-separated `data-also`. */
+const alsoAttr = (type: string) =>
+  defineNodeAttr({
+    type,
+    attr: "also",
+    default: null,
+    toDOM: (value: string[] | null) => (Array.isArray(value) && value.length > 0 ? ["data-also", value.join(" ")] : null),
+    parseDOM: (el: HTMLElement) => el.getAttribute("data-also")?.split(" ").filter(Boolean) ?? null,
+  });
+
+/** The blocks that can carry a source: where it came from ("entry:<id>:<block>", "finding:<id>:fix", "ports:<hostId>"),
+ *  its `gen` hash as generated (for Refresh and the checks), and `also`. */
+const SOURCED = ["heading", "paragraph", "list", "codeBlock", "table", "figure"];
+const sourcedAttrs = () =>
+  union(
+    ...SOURCED.flatMap((type) => [hiddenAttr(type, "source", "data-source"), hiddenAttr(type, "gen", "data-gen"), alsoAttr(type)]),
+    // A paragraph's hint: shown in the editor while the paragraph is empty, never printed.
+    hiddenAttr("paragraph", "hint", "data-hint"),
+  );
+
+/** A screenshot on the page: the image (by attachment) and its caption, ordinary editable text. The HTML is the PDF's
+ *  contract: it fills `img[data-attachment]` with the file. */
 const figureSpec = defineNodeSpec({
   name: "figure",
   group: "block",
@@ -230,14 +249,29 @@ const figureSpec = defineNodeSpec({
   toDOM: (node: PMNode) => [
     "figure",
     { "data-report": "figure", "data-attachment": node.attrs.attachmentId as string, ...(node.attrs.entryId ? { "data-entry": node.attrs.entryId as string } : {}) },
+    ["img", { "data-attachment": node.attrs.attachmentId as string, alt: "" }],
     ["figcaption", 0],
   ],
 });
 
-/** What a plain page (the plain draft, `buildPlainTarget`) adds to the schema: the figure node and the `source` attr.
- *  Only a page opened as plain takes it, so the live pages' saved documents are unchanged. */
-const definePlainPage = () =>
-  union(figureSpec, ...SOURCED.map(sourceAttr), defineReactNodeView({ name: "figure", component: FigureView, as: "div", contentAs: "figcaption" }));
+/** Whether a paragraph is empty and has a hint to show. */
+const showsHint = (node: PMNode) => node.type.name === "paragraph" && node.content.size === 0 && typeof node.attrs.hint === "string" && node.attrs.hint !== "";
+
+/** An empty paragraph with a hint shows it (`p.report-hint[data-hint]`, drawn by page.css) until the owner types. */
+const hintPlaceholders = definePlugin(
+  new Plugin({
+    props: {
+      decorations: (state) => {
+        const decos: Decoration[] = [];
+        state.doc.descendants((node, pos) => {
+          if (showsHint(node)) decos.push(Decoration.node(pos, pos + node.nodeSize, { class: "report-hint", "data-hint": node.attrs.hint as string }));
+          return !node.isTextblock;
+        });
+        return decos.length === 0 ? null : DecorationSet.create(state.doc, decos);
+      },
+    },
+  }),
+);
 
 /** A numbered page's sub-section numbers by top-level index, read when the page redraws. */
 export type SubNumbers = { current: ((doc: ReportNode) => Map<number, string>) | undefined };
@@ -268,6 +302,13 @@ function headingNumbers(numbers: SubNumbers) {
  *  redraws. */
 export type SourceGone = { current: ((entryId: string) => "private" | "deleted" | null) | undefined };
 
+/** The log entry a block was copied from: a figure's `entryId`, else its `entry:<id>…` source. */
+function entryOf(node: PMNode): string | null {
+  if (node.type.name === "figure" && typeof node.attrs.entryId === "string" && node.attrs.entryId !== "") return node.attrs.entryId;
+  const source = node.attrs.source as unknown;
+  return typeof source === "string" ? (/^entry:([^:]+)/.exec(source)?.[1] ?? null) : null;
+}
+
 /**
  * Marks text copied from the log whose entry is now private or was deleted (`data-source-gone`): the page shows it in
  * amber, as it shows an evidence block whose entry went away.
@@ -281,8 +322,8 @@ function sourceGoneMarks(gone: SourceGone) {
           if (!of) return null;
           const decos: Decoration[] = [];
           state.doc.descendants((node, pos) => {
-            const from = node.attrs.fromEntry as unknown;
-            if (typeof from !== "string" || from === "") return true;
+            const from = entryOf(node);
+            if (from === null) return true;
             const why = of(from);
             if (why) decos.push(Decoration.node(pos, pos + node.nodeSize, { "data-source-gone": why }));
             return false;
@@ -377,10 +418,11 @@ const pageKeymap = (numbers: SubNumbers) =>
     "Mod-.": toggleMark({ type: "superscript" }),
   });
 
-/** What an empty block says while the cursor is in it. A slot shows its own hint, so it takes none here. */
+/** What an empty block says while the cursor is in it. A slot and a hint paragraph show their own hint, so they take
+ *  none here. */
 function placeholderFor(state: EditorState): string {
   const parent = state.selection.$from.parent;
-  if (parent.type.name === "slot") return "";
+  if (parent.type.name === "slot" || showsHint(parent)) return "";
   if (parent.type.name === "heading") return "Heading";
   return "Write, or type / to insert";
 }
@@ -447,13 +489,13 @@ function holdPositions(held: HeldPositions) {
   );
 }
 
-/** The report page's schema and node views: the editing set plus Raven's report vocabulary. */
+/** The report page's one schema and node views: the editing set, the figure and the hidden attrs every page uses, plus
+ *  the old page machinery (slots, steps, atoms), kept so stored pages still open until they are flattened. */
 export function defineReportExtension(
   numbers: SubNumbers = { current: undefined },
   held: HeldPositions = new Set(),
   gone: SourceGone = { current: undefined },
   guides: GuideSlots = new GuideSlots(),
-  plain = false,
 ): Extension {
   return union(
     headingNumbers(numbers),
@@ -486,6 +528,9 @@ export function defineReportExtension(
       atomSpec(name, attrs),
       defineReactNodeView({ name, component, as: "div", stopEvent: stopControlEvents }),
     ]),
-    ...(plain ? [definePlainPage()] : []),
+    sourcedAttrs(),
+    hintPlaceholders,
+    figureSpec,
+    defineReactNodeView({ name: "figure", component: FigureView, as: "div", contentAs: "figcaption" }),
   );
 }

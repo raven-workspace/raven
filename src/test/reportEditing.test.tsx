@@ -74,6 +74,8 @@ const ev = (entryId: string, extra: Record<string, unknown> = {}): ReportNode =>
 const para = (text?: string): ReportNode => ({ type: "paragraph", ...(text ? { content: [{ type: "text", text }] } : {}) });
 const slot = (text?: string): ReportNode => ({ type: "slot", attrs: { hint: "What you do next, and why" }, ...(text ? { content: [{ type: "text", text }] } : {}) });
 const doc = (...content: ReportNode[]): ReportNode => ({ type: "doc", content });
+/** The hidden attrs every sourced block carries in the editor's JSON, empty. */
+const NO_SOURCE = { source: null, gen: null, also: null };
 const noRefs: AppendixIndex = { entries: [], refFor: () => null };
 const standalone: ReportTarget = { key: "h1", kind: "standalone", hostIds: ["h1"] };
 
@@ -164,7 +166,7 @@ describe("Notes are the owner's text on the page", () => {
 
   it("a note saved as a frozen block opens as paragraphs to edit, and one undo brings the block back", async () => {
     const { editor, onChange } = await ready(doc(slot("Before"), ev("n1", { block: null })), [note("n1", "Rough idea")]);
-    await waitFor(() => expect(json(editor()).content?.[1]).toEqual({ type: "paragraph", attrs: { fromEntry: "n1", fromField: null }, content: [{ type: "text", text: "Rough idea" }] }));
+    await waitFor(() => expect(json(editor()).content?.[1]).toEqual({ type: "paragraph", attrs: { fromEntry: "n1", fromField: null, ...NO_SOURCE, hint: null }, content: [{ type: "text", text: "Rough idea" }] }));
     expect(onChange).toHaveBeenCalled();
     // Typing in it edits the page, never the log.
     cursorAt(editor(), editor().state.doc.child(0).nodeSize + 1 + "Rough idea".length);
@@ -209,7 +211,7 @@ describe("Edit on page", () => {
     fireEvent.click(edit);
     expect(json(editor()).content?.[1]).toEqual({
       type: "codeBlock",
-      attrs: { language: "bash", fromEntry: "e1" },
+      attrs: { language: "bash", fromEntry: "e1", ...NO_SOURCE },
       content: [{ type: "text", text: "kali$ nmap -p- 10.0.0.5\nPORT   STATE SERVICE\n22/tcp open  ssh\n… 1 line omitted" }],
     });
     undo(editor());
@@ -229,7 +231,7 @@ describe("Edit on page", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Edit on page (stops following the log entry)" }));
     expect(json(editor()).content?.[0]).toEqual({
       type: "codeBlock",
-      attrs: { language: "http", fromEntry: "h-1" },
+      attrs: { language: "http", fromEntry: "h-1", ...NO_SOURCE },
       content: [{ type: "text", text: "POST /login HTTP/1.1\nHost: 10.0.0.5\n\nuser=admin\n\nHTTP/1.1 302 Found" }],
     });
   });

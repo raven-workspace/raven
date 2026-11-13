@@ -131,7 +131,7 @@ export default function ReportCompare() {
       <section aria-label="Raven's draft of garnet">
         <p className="report-compare-label">Raven: plain draft of garnet (editable)</p>
         <ReportDataContext.Provider value={value}>
-          <ReportEditor sectionId="compare-garnet" plain doc={doc} subNumbers={(d) => targetNumbers(d, TARGET, "4.1")} onChange={() => {}} onReady={() => {}} />
+          <ReportEditor sectionId="compare-garnet" doc={doc} subNumbers={(d) => targetNumbers(d, TARGET, "4.1")} onChange={() => {}} onReady={() => {}} />
         </ReportDataContext.Provider>
       </section>
     </div>
