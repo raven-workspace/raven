@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GARNET_HOST, garnetFixtures } from "../audit/examFixtures";
 import { FIXTURES } from "../audit/fixtures";
-import { applyKeep, buildPlainTarget, flattenToPlain, needsFlatten, PAGE_NODE_TYPES, type ReportData, type ReportNode, type ReportTarget } from "../engines/report";
+import { applyKeep, buildPlainTarget, flattenToPlain, needsFlatten, PAGE_NODE_TYPES, targetChecks, type ReportData, type ReportNode, type ReportTarget } from "../engines/report";
 import type { LogEntry } from "../types/log";
 import layout3Json from "./fixtures/report-layout3-owner.json";
 import layout4Json from "./fixtures/report-layout4-ms01.json";
@@ -105,6 +105,12 @@ describe("flattenToPlain", () => {
     expect(PAGE_NODE_TYPES).toContain("blockquote");
     expect(PAGE_NODE_TYPES).toContain("horizontalRule");
     expect(PAGE_NODE_TYPES).not.toContain("slot");
+  });
+
+  it("targetChecks over the flattened layout-5 web01 page raises no fail", () => {
+    const flat = flattenToPlain(layout5, exam, web01Target, {});
+    const checks = targetChecks({ data: exam, target: web01Target, doc: flat, meta: {}, sectionId: "t-web" });
+    expect(checks.filter((c) => c.level === "fail").map((c) => c.id)).toEqual([]);
   });
 
   it("flattenToPlain keeps every string of a layout-5 page", () => {

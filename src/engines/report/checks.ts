@@ -47,6 +47,7 @@ interface Visit {
   node: ReportNode;
   path: string;
   index: number;
+  parent: ReportNode;
   siblings: ReportNode[];
   at: number;
 }
@@ -58,7 +59,7 @@ function visit(doc: ReportNode): Visit[] {
     const kids = node.content ?? [];
     kids.forEach((child, i) => {
       const p = path === "" ? `${i}` : `${path}.${i}`;
-      out.push({ node: child, path: p, index: index++, siblings: kids, at: i });
+      out.push({ node: child, path: p, index: index++, parent: node, siblings: kids, at: i });
       walk(child, p);
     });
   };
@@ -85,7 +86,9 @@ const firstSourced = (n: ReportNode): ReportNode | undefined => {
   return undefined;
 };
 
-const isStep = (n: ReportNode) => n.type === "list" && n.attrs?.kind === "ordered";
+const isOrdered = (n: ReportNode) => n.type === "list" && n.attrs?.kind === "ordered";
+/** A step is an ordered list item that is not itself nested in an ordered list. */
+const isStep = (n: ReportNode, parent: ReportNode) => isOrdered(n) && !isOrdered(parent);
 
 /**
  * The checks on numbered steps (an ordered list item): a step whose first child is not a sentence is unexplained; a
@@ -99,7 +102,7 @@ function stepChecks(nodes: Visit[], sectionId: string): Check[] {
   let h1 = "";
   let h2 = "";
   let n = 0;
-  for (const { node, path, index } of nodes) {
+  for (const { node, parent, path, index } of nodes) {
     if (node.type === "heading") {
       const level = Number(node.attrs?.level ?? 1);
       if (level === 1) {
@@ -112,7 +115,7 @@ function stepChecks(nodes: Visit[], sectionId: string): Check[] {
       }
       continue;
     }
-    if (!isStep(node)) continue;
+    if (!isStep(node, parent)) continue;
     n++;
     const lead = firstSourced(node);
     const entryId = lead ? (entryOfSource(lead) ?? "") : "";
@@ -133,7 +136,6 @@ function stepChecks(nodes: Visit[], sectionId: string): Check[] {
   }
   return [...explain.sort((x, y) => Number(y.shot) - Number(x.shot)).map((e) => e.check), ...out];
 }
-
 
 /**
  * Credentials that moved you (§10.6): one found on a machine (`sourceHostId`) that got you onto another, by an access
@@ -449,8 +451,8 @@ const PLURAL: Record<string, (n: number) => string> = {
   "proof-path": (n) => `${n} proofs don't read the flag from its usual location`,
   "proof-shot": (n) => `${n} proof screenshots: Raven can't read them; check each shows the target IP`,
   gone: (n) => `${n} blocks on the page come from a deleted finding or file`,
-  "copied-private": (n) => `${n} entries now private had text copied to the page`,
-  "copied-deleted": (n) => `${n} deleted entries had text copied to the page`,
+  "copied-private": (n) => `${n} blocks on the page come from now-private entries`,
+  "copied-deleted": (n) => `${n} blocks on the page come from deleted entries`,
   output: (n) => `${n} commands on the page show no output`,
   explain: (n) => `${n} steps have no explanation`,
   "step-replay": (n) => `${n} steps have no command or output under them`,
@@ -486,8 +488,8 @@ const SHORT: Record<string, (c: Check) => string> = {
   "proof-path": (c) => `${part(c, 2)}.txt read from an odd place`,
   "proof-shot": (c) => `${part(c, 2)}.txt: screenshot shows IP?`,
   gone: () => "Deleted finding or file on the page",
-  "copied-private": () => "Text from a now-private entry",
-  "copied-deleted": () => "Text from a deleted entry",
+  "copied-private": () => "Block from a now-private entry",
+  "copied-deleted": () => "Block from a deleted entry",
   output: () => "A command shows no output",
   explain: () => "A step has no explanation",
   "step-replay": (c) => `Step ${/^Step (\d+)/.exec(c.text)?.[1] ?? ""} can't be replayed`,

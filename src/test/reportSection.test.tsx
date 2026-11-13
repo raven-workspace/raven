@@ -1043,11 +1043,11 @@ describe("Report view: the result", () => {
     await ready();
     await waitFor(() => expect(paper().querySelector('[data-source-gone="private"]')).toBeTruthy());
     const checks = openTodo();
-    fireEvent.click(within(checks).getByText("Text from a now-private entry"));
+    fireEvent.click(within(checks).getByText("Block from a now-private entry"));
     fireEvent.click(within(checks).getByRole("button", { name: "Keep the text" }));
     await waitFor(() => expect(paper().querySelector("[data-source-gone]")).toBeNull());
     expect(paper().textContent).toContain("creds in the share");
-    expect(within(checks).queryByText("Text from a now-private entry")).toBeNull();
+    expect(within(checks).queryByText("Block from a now-private entry")).toBeNull();
   });
 
   it("guards DRAFT_LAYOUT: a bump rebuilds every stored page, so it must keep each one in previousDoc", () => {

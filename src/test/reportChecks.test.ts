@@ -468,8 +468,8 @@ describe("targetChecks", () => {
         ["copied-private:n1", "fail", 0],
         ["copied-private:s1", "fail", 2],
       ]);
-      expect(groupChecks(run(data({ log: priv }), page).filter((c) => c.id.startsWith("copied"))).map((g) => g.text)).toEqual(["2 entries now private had text copied to the page"]);
-      expect(groupChecks(run(data({ log: priv }), doc(words("copied words", "entry:n1:note"), ...goodDoc().content!)).filter((c) => c.id.startsWith("copied"))).map((g) => g.text)).toEqual(["Text from a now-private entry"]);
+      expect(groupChecks(run(data({ log: priv }), page).filter((c) => c.id.startsWith("copied"))).map((g) => g.text)).toEqual(["2 blocks on the page come from now-private entries"]);
+      expect(groupChecks(run(data({ log: priv }), doc(words("copied words", "entry:n1:note"), ...goodDoc().content!)).filter((c) => c.id.startsWith("copied"))).map((g) => g.text)).toEqual(["Block from a now-private entry"]);
     });
     it("says nothing while the entries are there", () => {
       const page = doc(words("copied words", "entry:n1:note"), ...goodDoc().content!);
@@ -563,6 +563,16 @@ describe("targetChecks", () => {
     const t: ReportTarget = { key: GARNET_HOST, kind: "standalone", hostIds: [GARNET_HOST] };
     const ids = targetChecks({ data: garnet, target: t, doc: buildPlainTarget(garnet, t, {}), meta: {}, sectionId: "t1" }).map((c) => c.id);
     expect(ids.filter((id) => id.startsWith("caption-step") || id.startsWith("appendix-ref"))).toEqual([]);
+  });
+  it("a nested ordered list item is no step", () => {
+    const inner = step(words("Nested, no command."));
+    const page = doc(step(words("Outer:"), ...cmd("c1"), inner));
+    expect(find(run(data({ log: [entry({ id: "c1" }), flag()] }), page), "step-replay")).toBeUndefined();
+  });
+  it("words copied-deleted for a block and for several", () => {
+    const one = groupChecks([{ id: "copied-deleted:a", level: "fail", text: "x" }]);
+    const two = groupChecks([{ id: "copied-deleted:a", level: "fail", text: "x" }, { id: "copied-deleted:b", level: "fail", text: "x" }]);
+    expect([one[0].text, two[0].text]).toEqual(["Block from a deleted entry", "2 blocks on the page come from deleted entries"]);
   });
   it("the garnet draft as drafted has no fail", () => {
     const garnet = garnetFixtures(1_700_000_000_000);
