@@ -1,7 +1,9 @@
+import { createEditor, type NodeJSON } from "prosekit/core";
 import { describe, expect, it } from "vitest";
 import { GARNET_HOST, garnetFixtures } from "../audit/examFixtures";
 import { FIXTURES } from "../audit/fixtures";
 import { applyKeep, buildPlainTarget, flattenToPlain, needsFlatten, PAGE_NODE_TYPES, targetChecks, type ReportData, type ReportNode, type ReportTarget } from "../engines/report";
+import { defineReportExtension } from "../features/report/editor/extension";
 import type { LogEntry } from "../types/log";
 import layout3Json from "./fixtures/report-layout3-owner.json";
 import layout4Json from "./fixtures/report-layout4-ms01.json";
@@ -184,9 +186,31 @@ describe("flattenToPlain", () => {
   it("does not print a stored copy whose entry is now private", () => {
     const data = withEntry({ id: "p1", private: true, content: { kind: "command", blocks: [{ command: "id", output: "uid=0(root)" }] } });
     const doc = evidenceDoc({ entryId: "p1", block: 0, copy: { command: "id", output: "uid=0(root)" } });
-    expect(flattenToPlain(doc, data).content).toEqual([]);
+    expect(flattenToPlain(doc, data).content).toEqual([{ type: "paragraph" }]);
     // Without data nothing says it is private: the page's own copy prints.
     expect(code(flattenToPlain(doc))).toEqual([["entry:p1:0:command", "id"], ["entry:p1:0:output", "uid=0(root)"]]);
+  });
+
+  it("a list, quote or cell emptied by a private entry's copy keeps an empty paragraph, so the page always validates", () => {
+    const data = withEntry({ id: "p1", private: true, content: { kind: "command", blocks: [{ command: "id", output: "uid=0(root)" }] } });
+    const copy = { type: "evidence", attrs: { entryId: "p1", block: 0, keep: null, emphasis: [], appendix: "inline", copy: { command: "id", output: "uid=0(root)" } } };
+    const cell = (type: string) => ({ type, content: [copy] });
+    const doc: ReportNode = {
+      type: "doc",
+      content: [
+        { type: "list", attrs: { kind: "ordered" }, content: [copy] },
+        { type: "blockquote", content: [copy] },
+        { type: "table", content: [{ type: "tableRow", content: [cell("tableHeaderCell")] }, { type: "tableRow", content: [cell("tableCell")] }] },
+      ],
+    };
+    const flat = flattenToPlain(doc, data);
+    expect(flat.content![0]).toEqual({ type: "list", attrs: { kind: "ordered" }, content: [{ type: "paragraph" }] });
+    expect(flat.content![1]).toEqual({ type: "blockquote", content: [{ type: "paragraph" }] });
+    const schema = createEditor({ extension: defineReportExtension() }).schema;
+    expect(() => schema.nodeFromJSON(flat as NodeJSON).check()).not.toThrow();
+    // A page with nothing left is one empty paragraph.
+    const gone = flattenToPlain(evidenceDoc({ entryId: "p1", block: 0, copy: { command: "id", output: "uid=0(root)" } }), data);
+    expect(() => schema.nodeFromJSON(gone as NodeJSON).check()).not.toThrow();
   });
 
   it("prints a split block's whole output, from its copy or else the log", () => {

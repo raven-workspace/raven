@@ -312,7 +312,12 @@ function slot(n: ReportNode, ctx: Ctx): ReportNode[] {
   return [para(label ? [bold(label), text(" "), ...content] : content)];
 }
 
-/** A block of the page's own schema: kept, its children flattened; `fromEntry` turned into a source. */
+/** The containers the schema requires to hold a block: emptied by the flatten (every child a private entry's copy), each
+ *  keeps one empty paragraph. */
+const NEEDS_BLOCK = ["doc", "list", "blockquote", "tableCell", "tableHeaderCell"];
+
+/** A block of the page's own schema: kept, its children flattened (a required block put back, `NEEDS_BLOCK`);
+ *  `fromEntry` turned into a source. */
 function own(n: ReportNode, ctx: Ctx): ReportNode {
   let attrs = n.attrs;
   if (attrs && ("fromEntry" in attrs || "fromField" in attrs)) {
@@ -321,7 +326,9 @@ function own(n: ReportNode, ctx: Ctx): ReportNode {
     if (id && !sourceOf(n)) rest.source = fromField === "observations" ? `entry:${id}:observations` : `entry:${id}:note`;
     attrs = Object.keys(rest).length > 0 ? rest : undefined;
   }
-  const out: ReportNode = { ...n, ...(n.content ? { content: n.content.flatMap((c) => flat(c, ctx)) } : {}) };
+  let content = n.content?.flatMap((c) => flat(c, ctx));
+  if (content?.length === 0 && NEEDS_BLOCK.includes(n.type)) content = [para([])];
+  const out: ReportNode = { ...n, ...(content ? { content } : {}) };
   if (attrs) out.attrs = attrs;
   else delete out.attrs;
   return out;

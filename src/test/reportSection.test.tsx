@@ -7,6 +7,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { api, resetAuditState } from "../audit/fakeApi";
+import { reportSchema } from "../features/report/editor/extension";
 import { ReportSectionView } from "../features/report/ReportSection";
 import { pruneRemoved } from "../features/report/queries";
 import { DRAFT_LAYOUT, needsFlatten, PAGE_NODE_TYPES, type ReportNode, type SectionMeta } from "../engines/report";
@@ -1253,6 +1254,36 @@ describe("Report view: the result", () => {
       expect(meta).toMatchObject({ title: "Owner notes", placement: "body", layout: DRAFT_LAYOUT, previousLayout: DRAFT_LAYOUT, flattened: true });
       expect(meta.originals).toEqual([{ doc: original, layout: DRAFT_LAYOUT, meta: { title: "Owner notes", placement: "body", layout: DRAFT_LAYOUT }, at: expect.any(Number), why: "flatten" }]);
       expect(screen.getByText("This page was converted to the new format.")).toBeInTheDocument();
+      // Only converted, never rebuilt: there is no earlier page of the owner's to bring back.
+      expect(screen.queryByRole("button", { name: "Restore your previous page" })).toBeNull();
+    });
+
+    it("a page whose list held only a now-private entry's copy opens flattened into a page that fits the schema", async () => {
+      const report = await api.reportGetOrCreate("e-exam");
+      const raw = {
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "Owner intro" }] },
+          { type: "list", attrs: { kind: "ordered" }, content: [{ type: "evidence", attrs: { entryId: "l-exam-ms01-private", block: 0, keep: null, emphasis: [], appendix: "inline" } }] },
+        ],
+      };
+      const page = await api.reportSectionUpsert(report.id, {
+        kind: "page",
+        targetKey: "p-private",
+        position: 99,
+        doc: raw as unknown as ReportDoc,
+        meta: { title: "Private notes", placement: "body", layout: DRAFT_LAYOUT },
+        draftBuiltAt: 1,
+      });
+      const save = vi.spyOn(api, "reportSectionSave");
+      mount();
+      await ready();
+      fireEvent.click(tab("Private notes"));
+      await waitFor(() => expect(paper().textContent).toContain("Owner intro"));
+      await waitFor(() => expect(save.mock.calls.some(([id]) => id === page.id)).toBe(true));
+      const [, doc] = save.mock.calls.filter(([id]) => id === page.id)[0] as unknown as [string, ReportDoc];
+      expect(() => reportSchema().nodeFromJSON(doc).check()).not.toThrow();
+      expect(screen.queryByRole("alert")).toBeNull();
     });
 
     it("a page with a kept previous page that still holds an old node opens flattened and keeps that previous page", async () => {

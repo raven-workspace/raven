@@ -4,6 +4,7 @@ import {
   defineHistory,
   defineKeymap,
   defineNodeAttr,
+  createEditor,
   defineNodeSpec,
   definePlugin,
   setBlockType,
@@ -41,7 +42,7 @@ import { defineTable } from "prosekit/extensions/table";
 import { defineText } from "prosekit/extensions/text";
 import { defineUnderline } from "prosekit/extensions/underline";
 import { defineVirtualSelection } from "prosekit/extensions/virtual-selection";
-import type { Node as PMNode } from "prosekit/pm/model";
+import type { Node as PMNode, Schema } from "prosekit/pm/model";
 import { Plugin, PluginKey, type Command, type EditorState } from "prosekit/pm/state";
 import { Decoration, DecorationSet } from "prosekit/pm/view";
 import type { ReportNode } from "../../../engines/report";
@@ -437,4 +438,10 @@ export function defineReportExtension(
     figureSpec,
     defineReactNodeView({ name: "figure", component: FigureView, as: "div", contentAs: "figcaption" }),
   );
+}
+
+let schema: Schema | null = null;
+/** The page's schema on its own, to check a document before it is opened or saved (`nodeFromJSON(…).check()`). */
+export function reportSchema(): Schema {
+  return (schema ??= createEditor({ extension: defineReportExtension() }).schema);
 }

@@ -46,6 +46,7 @@ import { Button, Dialog, EmptyState, ErrorState, LoadingState, queryState, Timed
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useNotesStore } from "../notes/useNotesStore";
 import { usePayloadsStore } from "../payloads/usePayloadsStore";
+import { reportSchema } from "./editor/extension";
 import { ReportDataContext, type ReportDataValue } from "./editor/ReportDataContext";
 import { keepCopiedText, openFindBar, posAtPath, ReportEditor, selectBlockAt } from "./editor/ReportEditor";
 import { AddEvidenceButton } from "./AddEvidenceButton";
@@ -560,6 +561,8 @@ function ReportBody({
   );
   // Pages flattened as they opened in this view: each is flattened and saved once.
   const flattenSaved = useRef(new Set<string>());
+  // A page whose flattened form still doesn't fit the page's schema: not saved, the page as stored kept.
+  const [flattenFailed, setFlattenFailed] = useState<{ id: string; message: string } | null>(null);
   /** The document a page mounts with, in the plain schema. A stored page holding old nodes (an owner page, a page
    *  restored before plain pages) opens flattened; the effect below saves it once, the original kept in `previousDoc`. */
   const openDoc = (s: ReportSection): ReportNode => plainOf(cachedSection(s).doc as ReportNode, targetOf(s));
@@ -571,6 +574,13 @@ function ReportBody({
     if (!original || !needsFlatten(original)) return;
     flattenSaved.current.add(s.id);
     const doc = plainOf(original, targetOf(s));
+    // Checked as Restore checks the page it swaps in: one that doesn't fit is never saved over the stored page.
+    try {
+      reportSchema().nodeFromJSON(doc).check();
+    } catch (e) {
+      setFlattenFailed({ id: s.id, message: e instanceof Error ? e.message : String(e) });
+      return;
+    }
     const was = cached.meta as SectionMeta;
     // The page as stored goes into the archive. It becomes `previousDoc` (Restore) only when no earlier page holds that
     // place: a page kept from a rebuild stays the one Restore brings back.
@@ -1045,12 +1055,18 @@ function ReportBody({
                 ? "This page was converted to the new format."
                 : "This page was rebuilt for a new layout."}
           </p>
-          <Button size="sm" onClick={swapPage}>
-            {openSectionMeta.restored ? "Use the rebuilt page" : "Restore your previous page"}
-          </Button>
+          {/* A page only converted to the new format holds the same words: nothing of the owner's to bring back. */}
+          {(openSectionMeta.restored || !openSectionMeta.flattened) && (
+            <Button size="sm" onClick={swapPage}>
+              {openSectionMeta.restored ? "Use the rebuilt page" : "Restore your previous page"}
+            </Button>
+          )}
         </div>
       )}
       {swapFailed && <p role="alert" className="m-0 text-meta text-warn">{`Couldn't restore the previous page: ${swapFailed}`}</p>}
+      {flattenFailed && flattenFailed.id === openSection?.id && (
+        <p role="alert" className="m-0 text-meta text-warn">{`Couldn't convert this page to the new format, so it wasn't saved and the page as stored is unchanged: ${flattenFailed.message}`}</p>
+      )}
       {notStarted && open?.target && <p className="m-0 text-meta text-muted-2">Nothing logged on {open.item.label} yet. The page fills in as you work.</p>}
     </>
   );
