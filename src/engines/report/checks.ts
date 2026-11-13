@@ -1,7 +1,6 @@
 import type { Report } from "../../types/report";
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
-import type { AppendixIndex } from "./appendix";
 import { suggestMoves } from "./appendix";
 import { serviceCoverage } from "./coverage";
 import { isWeakCaption } from "./figures";
@@ -30,8 +29,6 @@ export interface TargetChecksInput {
   target: ReportTarget;
   doc: ReportNode;
   meta: ReportMeta;
-  /** Ignored: a page moves nothing to an appendix any more. Task 10 removes it. */
-  appendixRefs?: AppendixIndex;
   /** The target's section id, for the ids of the checks anchored to a path in the page. */
   sectionId: string;
   /** The section's coverage overrides, by service id. */

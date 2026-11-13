@@ -1,4 +1,4 @@
-import { inlineMarkdown } from "./copies";
+import { inlineMarkdown } from "./findingText";
 import { testedLine, testedNotExploited } from "./coverage";
 import { stamp } from "./stamp";
 import { findingRows, scopeRows } from "./tables";

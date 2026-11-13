@@ -110,17 +110,14 @@
 }
 
 .report-page h1,
-.report-page h2,
-.report-page .report-h2 {
+.report-page h2 {
   font-size: 22px;
   line-height: 28px;
   font-weight: 600;
 }
 
 .report-page h3,
-.report-page h4,
-.report-page .report-h3,
-.report-page .report-h4 {
+.report-page h4 {
   font-size: 15px;
   line-height: 22px;
   font-weight: 600;
@@ -145,22 +142,6 @@
   box-shadow: -2px 0 0 var(--page-code-bg), 2px 0 0 var(--page-code-bg);
 }
 
-/* Blocks */
-
-.report-page .report-block {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  row-gap: 8px;
-  border-radius: 4px;
-  outline: 2px solid transparent;
-  outline-offset: 4px;
-}
-
-.report-page .report-block[data-selected] {
-  outline-color: var(--page-ink);
-}
-
 .report-page .report-code {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -169,58 +150,6 @@
   border-radius: 4px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-.report-page .report-cmd {
-  font-weight: 600;
-}
-
-/* A blank output line keeps its height, as the terminal showed it. */
-.report-page .report-line {
-  min-height: 19px;
-}
-
-.report-page .report-line[data-emphasis] {
-  font-weight: 700;
-  background: var(--page-paper);
-}
-
-/* Picking lines on a selected block: a number column to click, dropped lines faded. */
-.report-page .report-pick {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
-}
-
-/* While trimming, a cut line is struck through and dimmed; the run picked carries a rule in the number column, the
-   line cursor an ink one. */
-.report-page .report-line[data-dropped] {
-  color: var(--page-placeholder);
-  text-decoration: line-through;
-  text-decoration-color: var(--page-rule);
-}
-
-.report-page .report-pick[data-picked] {
-  background: var(--page-paper);
-}
-
-.report-page .report-pick[data-picked] > .report-ln {
-  box-shadow: inset -2px 0 0 var(--page-placeholder);
-}
-
-.report-page .report-pick[data-cursor] > .report-ln {
-  box-shadow: inset -2px 0 0 var(--page-ink);
-  color: var(--page-ink);
-}
-
-/* Dragging down the line numbers picks a run: no text selection on the way. */
-.report-page .report-pick > .report-ln {
-  user-select: none;
-  touch-action: none;
-}
-
-.report-page .report-omitted {
-  color: var(--page-placeholder);
-  font-style: italic;
 }
 
 .report-page .report-figure {
@@ -235,10 +164,7 @@
   border-color: var(--page-rule);
 }
 
-.report-page .report-figure figcaption,
-.report-page .report-ref,
-.report-page .report-none,
-.report-page .report-note {
+.report-page .report-figure figcaption {
   color: var(--page-placeholder);
 }
 
@@ -248,10 +174,6 @@
   padding: 0 40px 16px;
   font-size: 26px;
   line-height: 32px;
-}
-
-.report-page .report-label {
-  font-weight: 600;
 }
 
 /* A heading's number, as OffSec's sample sets it: the number, then a fixed gap before the words. */
@@ -270,420 +192,8 @@
   margin-right: 8px;
 }
 
-/* A finding's labelled line with nothing in it yet: a placeholder, like a slot's hint. */
-.report-page .report-missing {
-  color: var(--page-placeholder);
-}
-
-.report-page .report-prose {
-  white-space: pre-wrap;
-}
-
-.report-page .report-vuln,
-.report-page .report-flag,
-.report-page .report-http {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  row-gap: 8px;
-}
-
-.report-page .report-http-line {
-  font-family: var(--page-mono);
-  font-size: 13px;
-  line-height: 19px;
-  font-weight: 600;
-}
-
-/* Exploit diff */
-
-.report-page .report-diff-line {
-  display: grid;
-  grid-template-columns: 32px 16px minmax(0, 1fr);
-}
-
-.report-page .report-diff-line[data-diff="add"] {
-  font-weight: 700;
-  background: var(--page-paper);
-}
-
-.report-page .report-diff-line[data-diff="del"] {
-  color: var(--page-placeholder);
-  text-decoration: line-through;
-}
-
-.report-page .report-ln {
-  color: var(--page-placeholder);
-  text-align: right;
-  padding-right: 8px;
-  font: inherit;
-  font-weight: 400;
-  background: none;
-  border: 0;
-  cursor: pointer;
-}
-
-.report-page .report-ln:focus-visible {
-  outline: 2px solid var(--page-ink);
-  outline-offset: 2px;
-}
-
-/* Tables */
-
-.report-page .report-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.report-page .report-table th,
-.report-page .report-table td {
-  text-align: left;
-  vertical-align: top;
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--page-rule);
-}
-
-/* IPs and host names: their column's width is set from their text (GeneratedView's Table), so they keep one line;
-   digits are tabular so 1ch is exactly one digit. A name wider than its estimate (capitals run wide) wraps inside its
-   own column as a last resort rather than overprinting the next one. */
-.report-page .report-table[data-fixed] {
-  table-layout: fixed;
-}
-
-.report-page .report-table .report-fit {
-  overflow-wrap: anywhere;
-  font-variant-numeric: tabular-nums;
-}
-
-.report-page .report-table th {
-  font-weight: 600;
-  border-bottom-color: var(--page-ink);
-}
-
-/* A port table's Notes cell: the owner's words, typed straight into the cell. It reads as the table's text; hovered,
-   it shows the code tint so the empty cell can be found, and typed in, a ring. */
-.report-page .report-cell-input {
-  width: 100%;
-  min-width: 0;
-  /* A 24px target, like every control. */
-  min-height: 24px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  border-radius: 2px;
-  outline: 2px solid transparent;
-  outline-offset: 2px;
-}
-
-.report-page .report-cell-input:hover {
-  background: var(--page-code-bg);
-}
-
-.report-page .report-cell-input:focus-visible {
-  outline-color: var(--page-ink);
-}
-
-/* "Result: shell as `ronan`, then root. local.txt `…`." right under a machine's heading. */
-.report-page .report-result {
-  margin: 0;
-}
-
-/* Steps to reproduce (§10.2): the bold label, then numbered steps, each number in a column of its own beside the
-   step's sentence and evidence; "+ Step" under the list. The label and the button are the page's chrome. */
-
-.report-page .report-steps,
-.report-page .report-steps-list {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  row-gap: 12px;
-}
-
-.report-page .report-steps-label {
-  font-weight: 600;
-}
-
-.report-page .report-step {
-  display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr);
-}
-
-/* The step's number, set in the meta role and level with the sentence's first line; it is the step's drag handle. */
-.report-page .report-step-num {
-  padding-top: 2px;
-  font-size: var(--text-meta);
-  line-height: var(--text-meta--line-height);
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  cursor: grab;
-  user-select: none;
-}
-
-.report-page .report-step-num:active {
-  cursor: grabbing;
-}
-
-.report-page .report-step-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  row-gap: 12px;
-}
-
-/* Under the list, in line with the steps' text. */
-.report-page .report-steps-end {
-  display: grid;
-  justify-items: start;
-  padding-left: 2rem;
-}
-
-.report-page .report-add-step {
-  /* A 24px target, like every control. */
-  min-height: 24px;
-  padding: 0 6px;
-  margin-left: -6px;
-  border: 0;
-  border-radius: 4px;
-  background: none;
-  font: inherit;
-  font-size: var(--text-meta);
-  line-height: var(--text-meta--line-height);
-  color: var(--page-placeholder);
-  cursor: pointer;
-}
-
-.report-page .report-add-step:hover {
-  color: var(--page-ink);
-  background: var(--page-code-bg);
-}
-
-.report-page .report-add-step:focus-visible {
-  outline: 2px solid var(--page-ink);
-  outline-offset: 2px;
-}
-
-/* Slots: an empty one shows its hint, which never exports */
-
-.report-page .report-slot {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.report-page .report-slot > * {
-  grid-area: 1 / 1;
-}
-
-.report-page .report-slot-hint {
-  color: var(--page-placeholder);
-  pointer-events: none;
-  user-select: none;
-}
-
-/* A labelled slot ("Steps to reproduce the attack:"): the label leads the owner's text in bold, as the sample prints it;
-   the hint sits after it, held in place by an invisible copy. */
-.report-page .report-slot-text[data-label]::before {
-  content: attr(data-label) " ";
-  font-weight: 600;
-}
-
-.report-page .report-slot-text[data-label] > * {
-  display: inline;
-}
-
-.report-page .report-slot-spacer {
-  visibility: hidden;
-  font-weight: 600;
-}
-
-/* Evidence chips (§10.2): evidence in a step, collapsed to one line in the editor; open, the block as it prints
-   under a bar of its actions. View state only: the PDF always prints every block in full. */
-
-.report-page .report-chip {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: auto;
-  justify-content: start;
-  align-items: center;
-  gap: 8px;
-  justify-self: start;
-  max-width: 100%;
-  min-height: 28px;
-  padding: 2px 8px;
-  border: 1px solid var(--page-rule);
-  border-radius: 5px;
-  background: var(--page-code-bg);
-  color: var(--page-ink);
-  font: inherit;
-  font-size: var(--text-meta);
-  line-height: var(--text-meta--line-height);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 120ms cubic-bezier(0.16, 1, 0.3, 1); /* EASE_OUT, src/ui/motion.ts */
-}
-
-.report-page button.report-chip:hover {
-  border-color: var(--page-placeholder);
-}
-
-.report-page .report-chip:focus-visible {
-  outline: 2px solid var(--page-ink);
-  outline-offset: 2px;
-}
-
-/* A moved block's chip is dashed, as the reference it stands for. */
-.report-page .report-chip[data-moved] {
-  border-style: dashed;
-  background: transparent;
-}
-
-/* A deleted or private entry: the amber placeholder's words, as a chip. */
-.report-page .report-chip[data-gone] {
-  color: var(--page-amber-ink);
-  border: 1px dashed var(--page-amber-line);
-  background: transparent;
-  cursor: default;
-}
-
-.report-page .report-chip-mono,
-.report-page .report-chip-text {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.report-page .report-chip-mono {
-  font-family: var(--page-mono);
-}
-
-.report-page .report-chip-meta {
-  color: var(--page-placeholder);
-  white-space: nowrap;
-}
-
-.report-page .report-chip-thumb {
-  display: grid;
-  height: 40px;
-  margin: 2px 0;
-}
-
-.report-page .report-chip-thumb img,
-.report-page .report-chip-thumb > div {
-  height: 40px;
-  width: auto;
-  max-height: 40px;
-  min-width: 40px;
-  border-radius: 3px;
-  border-color: var(--page-rule);
-}
-
-.report-page .report-open {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  border: 1px solid var(--page-rule);
-  border-radius: 5px;
-}
-
-.report-page .report-open-bar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  padding: 2px 4px 2px 10px;
-  border-bottom: 1px solid var(--page-rule);
-  font-size: var(--text-meta);
-  line-height: var(--text-meta--line-height);
-  color: var(--page-placeholder);
-}
-
-/* What the block is, then how much shows: set apart by space, never a joining "·". */
-.report-page .report-open-label {
-  display: grid;
-  grid-auto-flow: column;
-  justify-content: start;
-  gap: 12px;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.report-page .report-open-actions {
-  display: grid;
-  grid-auto-flow: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.report-page .report-open-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  row-gap: 8px;
-  padding: 8px 10px;
-}
-
-.report-page .report-bar-btn,
-.report-page .report-bar-icon {
-  min-height: 24px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--page-ink);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.report-page .report-bar-btn {
-  padding: 0 6px;
-}
-
-.report-page .report-bar-icon {
-  display: grid;
-  place-items: center;
-  width: 24px;
-}
-
-.report-page .report-bar-btn:hover,
-.report-page .report-bar-icon:hover,
-.report-page .report-bar-btn[aria-pressed="true"],
-.report-page .report-bar-icon[aria-pressed="true"] {
-  background: var(--page-code-bg);
-}
-
-.report-page .report-bar-btn:disabled {
-  color: var(--page-placeholder);
-  cursor: not-allowed;
-}
-
-.report-page .report-bar-btn:focus-visible,
-.report-page .report-bar-icon:focus-visible {
-  outline: 2px solid var(--page-ink);
-  outline-offset: 1px;
-}
-
-.report-page .report-cut {
-  padding: 0 10px 6px;
-  font-size: var(--text-meta);
-  line-height: var(--text-meta--line-height);
-  color: var(--page-placeholder);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .report-page .report-chip {
-    transition: none;
-  }
-}
-
-/* Amber placeholder: a referenced row that was deleted or made private */
-
-.report-page .report-gone {
-  padding: 8px 12px;
-  color: var(--page-amber-ink);
-  border: 1px dashed var(--page-amber-line);
-  border-radius: 4px;
-}
-
 /* Text copied from the log (a note, observations, a command edited on the page) whose entry is now private or was
    deleted: amber like the placeholder, with the reason above it. The text stays the owner's to keep or cut. */
-
 .report-page [data-source-gone] {
   padding: 8px 12px;
   border: 1px dashed var(--page-amber-line);
@@ -707,43 +217,6 @@
 
 .report-page [data-source-gone="deleted"]::before {
   content: "Copied from an entry that was deleted";
-}
-
-/* A target's appendix page (lettered from A): read-only, each moved block under its number. */
-
-.report-page .report-appendix,
-.report-page .report-appendix-entry {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  row-gap: 12px;
-}
-
-.report-page .report-appendix-entry {
-  row-gap: 8px;
-}
-
-/* The same side margins as the editor's page (its 40px gutters). */
-.report-page .report-appendix {
-  padding: 0 40px;
-}
-
-/* A link back to the page that references the entry: underlined, as links in prose are. */
-.report-page .report-backlink {
-  justify-self: start;
-  /* A 24px target, like every control. */
-  min-height: 24px;
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  color: var(--page-placeholder);
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.report-page .report-backlink:focus-visible {
-  outline: 2px solid var(--page-ink);
-  outline-offset: 2px;
 }
 
 /* Selected text on paper reads as ink on a paper highlight, not the app's light-on-dark selection. */
@@ -819,7 +292,6 @@
   opacity: 0.4;
 }
 
-/* While trimming: the hint, or Keep all, on its own line above the output. */
 /* The owner's own blocks: quotes, dividers, tables, code blocks, the text marks. One house style, no colours. */
 
 .report-page a {
@@ -864,14 +336,13 @@
   line-height: 0;
 }
 
-/* A table the owner writes (credentials found, users and hashes): the generated tables' hairlines, a header row in
+/* A table on the page (the draft's ports and findings tables, or one the owner writes): hairlines, a header row in
    bold over an ink rule, fixed column widths the owner can drag. */
 .report-page .tableWrapper {
   overflow-x: auto;
 }
 
-/* Scoped to the owner's tables (ProseKit wraps each in .tableWrapper): the generated tables size their columns to
-   content (an IP as wide as itself), which a fixed layout would break. */
+/* ProseKit wraps each table in .tableWrapper. */
 .report-page .tableWrapper table {
   width: 100%;
   border-collapse: collapse;
@@ -917,7 +388,7 @@
   background: var(--page-ink);
 }
 
-/* A code block the owner writes: the evidence blocks' tint, coloured by token in ink tones only (no colour on paper).
+/* A code block: the page's code tint, coloured by token in ink tones only (no colour on paper).
    Its language picker is Ink chrome in the top right corner, shown while hovered or typed in; it never prints. */
 .report-page .report-codeblock {
   position: relative;
@@ -1070,83 +541,11 @@
   display: block;
 }
 
-/* A screenshot's caption, typed in place: it reads as the caption, and its prompt as a placeholder. */
-.report-page .report-caption {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  color: var(--page-placeholder);
-}
-
-.report-page .report-caption > span {
-  white-space: pre;
-}
-
-/* A 24px target, like every control; the caption's own line is 22px. */
-.report-page .report-caption-input {
-  min-width: 0;
-  height: 24px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 2px;
-  background: none;
-  font: inherit;
-  color: inherit;
-  outline: none;
-}
-
-.report-page .report-caption-input::placeholder {
-  color: var(--page-amber-ink);
-}
-
-.report-page .report-caption-input:focus-visible {
-  box-shadow: 0 0 0 2px var(--page-paper), 0 0 0 3px var(--page-ink);
-}
-
-/* A screenshot sized on the page: the corner handle shows while the block is hovered or selected. */
-.report-page .report-resizable {
-  position: relative;
-  display: block;
-  max-width: 100%;
-  justify-self: start;
-}
-
-.report-page .report-resizable img {
-  display: block;
-  width: 100%;
-  height: auto;
-  max-height: none;
-}
-
-/* Inside the image's corner, so it never reaches past the page's measure. */
-.report-page .report-resize-handle {
-  position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 12px;
-  height: 12px;
-  border: 1px solid var(--page-ink);
-  border-radius: 2px;
-  background: var(--page-paper);
-  cursor: nwse-resize;
-  opacity: 0;
-  transition: opacity 120ms cubic-bezier(0.16, 1, 0.3, 1); /* FADE_MS, EASE_OUT: src/ui/motion.ts */
-}
-
-.report-page .report-block:hover .report-resize-handle,
-.report-page .report-block[data-selected] .report-resize-handle,
-.report-page .report-resizable[data-resizing] .report-resize-handle {
-  opacity: 1;
-}
-
 /* The owner's headings (Heading 1 to 3): a step under the page's numbered section headings (22px, with their number),
    so the drafted structure still reads first; 1 > 2 > 3 by size, 3 by weight alone. They never take a number. Only
-   heading nodes themselves (at the top level, or inside a quote, a list, a table cell or a step): the machine and phase
-   headings drawn by node views keep their own sizes. */
+   heading nodes themselves (at the top level, or inside a quote, a list item or a table cell). */
 .report-page .ProseMirror > h1:not([data-number]),
-.report-page .ProseMirror :is(blockquote, .list-content, td, th) > h1,
-.report-page .ProseMirror .report-step-body h1 {
+.report-page .ProseMirror :is(blockquote, .list-content, td, th) > h1 {
   font-size: 19px;
   line-height: 26px;
   font-weight: 600;
@@ -1154,16 +553,14 @@
 }
 
 .report-page .ProseMirror > h2:not([data-number]),
-.report-page .ProseMirror :is(blockquote, .list-content, td, th) > h2,
-.report-page .ProseMirror .report-step-body h2 {
+.report-page .ProseMirror :is(blockquote, .list-content, td, th) > h2 {
   font-size: 16px;
   line-height: 24px;
   font-weight: 600;
 }
 
 .report-page .ProseMirror > h3,
-.report-page .ProseMirror :is(blockquote, .list-content, td, th) > h3,
-.report-page .ProseMirror .report-step-body h3 {
+.report-page .ProseMirror :is(blockquote, .list-content, td, th) > h3 {
   font-size: 14px;
   line-height: 22px;
   font-weight: 600;
@@ -1173,8 +570,7 @@
 /* On a target or AD page the numbered sub-sections ("4.2.1 Service Enumeration") are 15px: the owner's headings sit
    at or under that size and differ by weight and spacing, so they never outrank the structure. */
 .report-page[data-page="target"] .ProseMirror > h1:not([data-number]),
-.report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h1,
-.report-page[data-page="target"] .ProseMirror .report-step-body h1 {
+.report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h1 {
   font-size: 15px;
   line-height: 22px;
   font-weight: 700;
@@ -1182,8 +578,7 @@
 }
 
 .report-page[data-page="target"] .ProseMirror > h2:not([data-number]),
-.report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h2,
-.report-page[data-page="target"] .ProseMirror .report-step-body h2 {
+.report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h2 {
   font-size: 14px;
   line-height: 22px;
   font-weight: 700;
@@ -1191,23 +586,11 @@
 }
 
 .report-page[data-page="target"] .ProseMirror > h3,
-.report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h3,
-.report-page[data-page="target"] .ProseMirror .report-step-body h3 {
+.report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h3 {
   font-size: 14px;
   line-height: 22px;
   font-weight: 600;
   font-style: italic;
-}
-
-/* Find matches inside log blocks (read-only, drawn from the log): CSS custom highlights, the same tones as the
-   owner's text matches. Names are the find bar's own. */
-::highlight(report-find) {
-  background-color: #ece3b8;
-}
-
-::highlight(report-find-active) {
-  background-color: #16161a;
-  color: #f4f3ef;
 }
 
 /* A screenshot on a plain page (the `figure` node): the image, then its caption as the owner's text, numbered by the

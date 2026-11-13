@@ -5,7 +5,7 @@ import type { Editor } from "prosekit/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GARNET_HOST, garnetFixtures } from "../audit/examFixtures";
 import { buildPlainTarget, buildSectionDraft, type ReportData, type ReportNode } from "../engines/report";
-import { GUIDES, guideFor, guidesOf, sectionGuide, type GuideId } from "../engines/report/guides";
+import { GUIDES, guidesOf, sectionGuide, type GuideId } from "../engines/report/guides";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext";
 import { GuidePanel } from "../features/report/GuidePanel";
 import { ReportEditor } from "../features/report/editor/ReportEditor";
@@ -38,8 +38,6 @@ const data = {
   credAttempts: [],
 } as unknown as ReportData;
 
-const ports: ReportNode = { type: "generated", attrs: { kind: "ports", hostId: "h1", appendix: "inline", notes: {} } };
-const vuln = (findingId = "f1"): ReportNode => ({ type: "vuln", attrs: { findingId } });
 const para = (text: string): ReportNode => ({ type: "paragraph", content: [{ type: "text", text }] });
 const heading = (text: string): ReportNode => ({ type: "heading", attrs: { level: 2 }, content: [{ type: "text", text }] });
 const doc = (...content: ReportNode[]): ReportNode => ({ type: "doc", content });
@@ -49,8 +47,8 @@ function setup(page: ReportNode) {
   const ref: { editor: Editor | null } = { editor: null };
   const utils = render(
     <QueryClientProvider client={makeQueryClient()}>
-      <ReportDataContext.Provider value={{ data, appendix: { entries: [], refFor: () => null }, sectionMeta: {}, onRemoveEvidence: vi.fn() }}>
-        <ReportEditor sectionId="s1" doc={page} onChange={onChange} onReady={(e) => (ref.editor = e)} />
+      <ReportDataContext.Provider value={{ data, onRemoveEvidence: vi.fn() }}>
+        <ReportEditor doc={page} onChange={onChange} onReady={(e) => (ref.editor = e)} />
       </ReportDataContext.Provider>
     </QueryClientProvider>,
   );
@@ -84,30 +82,7 @@ describe("guide catalog", () => {
     expect(GUIDES.tested.body).toBe("What you tried that didn't work. It shows a reader the coverage. Operator mistakes stay private.");
   });
 
-  it("matches each part to its guide", () => {
-    const gen = (kind: string): ReportNode => ({ type: "generated", attrs: { kind, hostId: "h1", appendix: "inline" } });
-    const phase = (p: string, findingId: string | null = null): ReportNode => ({ type: "phase", attrs: { phase: p, hostId: "h1", findingId } });
-    expect(guideFor(gen("ports"), "target")).toBe("ports");
-    expect(guideFor(gen("result"), "target")).toBe("result");
-    expect(guideFor(gen("findings"), "summary")).toBe("findings-table");
-    expect(guideFor(gen("attack-path"), "ad")).toBe("attack-path");
-    expect(guideFor(gen("tested"), "engagement-tested")).toBe("tested");
-    // On a machine the Also tested heading carries it, not its table too.
-    expect(guideFor(gen("tested"), "target")).toBeNull();
-    expect(guideFor(phase("tested"), "target")).toBe("tested");
-    expect(guideFor(phase("post"), "target")).toBe("post");
-    expect(guideFor(phase("additional"), "target")).toBe("additional");
-    expect(guideFor(phase("additional", "f1"), "target")).toBeNull();
-    expect(guideFor(phase("foothold"), "target")).toBeNull();
-    expect(guideFor(vuln(), "target")).toBe("vuln");
-    expect(guideFor({ type: "steps", content: [] }, "target")).toBe("steps");
-    expect(guideFor({ type: "exploit", attrs: { fileId: "x" } }, "target")).toBe("exploit");
-    expect(guideFor(heading("Introduction"), "introduction")).toBe("introduction");
-    expect(guideFor(heading("Scope"), "introduction")).toBe("scope");
-    expect(guideFor(heading("Recommendations"), "summary")).toBe("recommendations");
-    expect(guideFor(heading("House Cleaning"), "methodology")).toBe("house-cleaning");
-    expect(guideFor(heading("Scope"), "summary")).toBeNull();
-    expect(guideFor(para("Introduction"), "introduction")).toBeNull();
+  it("matches each page to its guide", () => {
     expect(sectionGuide("summary")).toBe("summary");
     expect(sectionGuide("considerations")).toBe("considerations");
     expect(sectionGuide("methodology")).toBe("methodology");
@@ -179,7 +154,7 @@ describe("guide notes beside the page", () => {
   const titles = () => within(screen.getByRole("list", { name: "Guide notes" })).getAllByRole("note").map((n) => n.getAttribute("aria-label"));
 
   it("guide notes sit beside the page, never inside the paper", async () => {
-    const { container } = setup(doc(ports, vuln()));
+    const { container } = setup(doc(heading("Scope"), para("In scope: 10.0.0.5")));
     await waitFor(() => expect(container.querySelector(".ProseMirror")).toBeTruthy());
     await new Promise((r) => setTimeout(r, 20));
     expect(document.querySelector(".report-page [data-guide], .ProseMirror [data-guide]")).toBeNull();

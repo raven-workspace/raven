@@ -117,40 +117,9 @@ const HEADING_GUIDES: Partial<Record<SectionKind, Record<string, GuideId>>> = {
   methodology: { "house cleaning": "house-cleaning" },
 };
 
-const GENERATED_GUIDES: Record<string, GuideId> = {
-  ports: "ports",
-  result: "result",
-  findings: "findings-table",
-  "attack-path": "attack-path",
-};
-
 const PHASE_GUIDES: Record<string, GuideId> = { post: "post", additional: "additional", tested: "tested" };
 
 const textOf = (node: ReportNode): string => node.text ?? (node.content ?? []).map(textOf).join("");
-
-/** The guide shown above a block, or null. */
-export function guideFor(node: ReportNode, sectionKind: SectionKind): GuideId | null {
-  const attrs = node.attrs ?? {};
-  switch (node.type) {
-    case "phase":
-      // A finding's own heading under a phase takes none: the phase's heading has it.
-      return attrs.findingId ? null : (PHASE_GUIDES[String(attrs.phase)] ?? null);
-    case "vuln":
-      return "vuln";
-    case "steps":
-      return "steps";
-    case "exploit":
-      return "exploit";
-    case "generated":
-      // On a machine, Also tested's heading carries the guide; the report-level page has only the table.
-      if (attrs.kind === "tested") return sectionKind === "engagement-tested" ? "tested" : null;
-      return GENERATED_GUIDES[String(attrs.kind)] ?? null;
-    case "heading":
-      return HEADING_GUIDES[sectionKind]?.[textOf(node).trim().toLowerCase()] ?? null;
-    default:
-      return null;
-  }
-}
 
 /** The guide shown at the top of a whole page, or null. */
 export function sectionGuide(kind: SectionKind, placement?: PageMeta["placement"]): GuideId | null {

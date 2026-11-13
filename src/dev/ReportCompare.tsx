@@ -1,7 +1,7 @@
 import { useEffect, useMemo, type ReactNode } from "react";
 import { garnetFixtures, GARNET_HOST } from "../audit/examFixtures";
 import { AUDIT_NOW } from "../audit/fixtures";
-import { buildPlainTarget, targetNumbers, type AppendixIndex, type ReportTarget } from "../engines/report";
+import { buildPlainTarget, targetNumbers, type ReportTarget } from "../engines/report";
 import { parseMarkdown, type Block, type Inline } from "../engines/manual/markdown";
 import { ReportDataContext, type ReportDataValue } from "../features/report/editor/ReportDataContext";
 import { ReportEditor } from "../features/report/editor/ReportEditor";
@@ -16,7 +16,6 @@ const sample = Object.values(local)[0] ?? "### 4.1 \n\nNo sample: put your repor
 /** The sample's §4.1, from its heading up to §4.2's. */
 const SECTION = sample.slice(sample.indexOf("### 4.1 "), sample.indexOf("### 4.2 "));
 const TARGET: ReportTarget = { key: GARNET_HOST, kind: "standalone", hostIds: [GARNET_HOST] };
-const NO_APPENDIX: AppendixIndex = { entries: [], refFor: () => null };
 
 function inline(parts: Inline[]): ReactNode[] {
   return parts.map((p, i) => {
@@ -101,7 +100,7 @@ export default function ReportCompare() {
   const data = useMemo(() => garnetFixtures(AUDIT_NOW), []);
   const doc = useMemo(() => buildPlainTarget(data, TARGET, {}), [data]);
   const value = useMemo(
-    (): ReportDataValue => ({ data, appendix: NO_APPENDIX, sectionMeta: {}, onRemoveEvidence: () => {}, target: TARGET, reportMeta: {} }),
+    (): ReportDataValue => ({ data, onRemoveEvidence: () => {}, target: TARGET, reportMeta: {} }),
     [data],
   );
   // The app's window never scrolls (global.css); this page does, so a full-page screenshot holds both columns.
@@ -131,7 +130,7 @@ export default function ReportCompare() {
       <section aria-label="Raven's draft of garnet">
         <p className="report-compare-label">Raven: plain draft of garnet (editable)</p>
         <ReportDataContext.Provider value={value}>
-          <ReportEditor sectionId="compare-garnet" doc={doc} subNumbers={(d) => targetNumbers(d, TARGET, "4.1")} onChange={() => {}} onReady={() => {}} />
+          <ReportEditor doc={doc} subNumbers={(d) => targetNumbers(d, TARGET, "4.1")} onChange={() => {}} onReady={() => {}} />
         </ReportDataContext.Provider>
       </section>
     </div>

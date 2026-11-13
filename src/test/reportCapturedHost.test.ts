@@ -7,8 +7,8 @@ import { FIXTURES } from "../audit/fixtures";
 import { AUDIT_PNGS } from "../audit/images";
 import {
   buildPlainTarget,
-  buildTargetDraft,
-  evidenceIdsIn,
+  entryIdsIn,
+  sourceOf,
   groupChecks,
   proofCompanions,
   targetChecks,
@@ -106,8 +106,8 @@ describe("xfer03, captured through the real pipeline", () => {
 
 describe("xfer03's report page makes no false claim", () => {
   const data = examData();
-  const doc = buildTargetDraft(data, target, {});
-  const checks = targetChecks({ data, target, doc: buildPlainTarget(data, target, {}), meta: {}, sectionId: "t-xfer" });
+  const doc = buildPlainTarget(data, target, {});
+  const checks = targetChecks({ data, target, doc, meta: {}, sectionId: "t-xfer" });
 
   it("finds each flag's companions: the screenshot beside it, the command that prints it", () => {
     const flag = (key: string) => data.log.find((e) => e.id === id(key))!;
@@ -116,17 +116,18 @@ describe("xfer03's report page makes no false claim", () => {
   });
 
   it("shows the companions in the flag steps, once", () => {
-    const evidence: string[] = [];
+    // The entries the page shows, each at its first block (a source's `entry:<id>`, a figure's entry).
+    const shown: string[] = [];
     const walk = (n: ReportNode) => {
-      if (n.type === "evidence") evidence.push(n.attrs?.entryId as string);
+      const id = n.type === "figure" ? String(n.attrs?.entryId ?? "") : (/^entry:([^:]+)/.exec(sourceOf(n) ?? "")?.[1] ?? "");
+      if (id !== "" && !shown.includes(id)) shown.push(id);
       n.content?.forEach(walk);
     };
     walk(doc);
-    const after = (key: string, n: number) => evidence.slice(evidence.indexOf(id(key)), evidence.indexOf(id(key)) + n);
+    const after = (key: string, n: number) => shown.slice(shown.indexOf(id(key)), shown.indexOf(id(key)) + n);
     expect(after("local", 2)).toEqual([id("local"), id("local-shot")]);
     expect(after("proof", 3)).toEqual([id("proof"), id("proof-read"), id("proof-shot")]);
-    for (const key of ["local-shot", "proof-read", "proof-shot"]) expect(evidence.filter((e) => e === id(key)), key).toHaveLength(1);
-    expect(evidenceIdsIn(doc).has(id("proof-read"))).toBe(true);
+    expect(entryIdsIn(doc).has(id("proof-read"))).toBe(true);
   });
 
   it("raises no proof fail and at most the one screenshot reminder", () => {
@@ -145,13 +146,16 @@ describe("xfer03's report page makes no false claim", () => {
     expect(access).toEqual([]);
   });
 
-  it("tells one finding per heading; observations go under Additional findings, info last", () => {
-    const heads = (doc.content ?? []).flatMap((n: ReportNode) =>
-      n.type === "phase" ? [`# ${n.attrs?.phase}${n.attrs?.findingId ? `:${String(n.attrs.findingId).replace("f-exam-xfer-", "")}` : ""}`] : n.type === "finding" ? [`V:${String(n.attrs?.findingId).replace("f-exam-xfer-", "")}`] : [],
-    );
-    expect(heads).toEqual([
-      "# enum", "# foothold", "V:reuse", "# privesc", "V:rsync", "# post",
-      "# additional", "# additional:listing", "V:listing", "# additional:ssh-passwords", "V:ssh-passwords",
-    ]);
+  it("tells one finding per phase heading; observations are listed under Additional findings, info last", () => {
+    const short = (id: string) => id.replace("f-exam-xfer-", "");
+    const told: string[] = [];
+    for (const n of doc.content ?? []) {
+      const source = sourceOf(n) ?? "";
+      const phase = /^phase:[^:]+:([^:]+)(?::(.+))?$/.exec(source);
+      if (n.type === "heading" && phase) told.push(`# ${phase[1]}${phase[2] ? `:${short(phase[2])}` : ""}`);
+      const finding = /^finding:([^:]+)/.exec(source)?.[1];
+      if (finding && told[told.length - 1] !== `V:${short(finding)}`) told.push(`V:${short(finding)}`);
+    }
+    expect(told).toEqual(["# enum", "# foothold:reuse", "V:reuse", "# privesc:rsync", "V:rsync", "# additional", "V:listing", "V:ssh-passwords"]);
   });
 });

@@ -2,15 +2,12 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Editor } from "prosekit/core";
-import { NodeSelection, TextSelection } from "prosekit/pm/state";
+import { TextSelection } from "prosekit/pm/state";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useMemo, useState } from "react";
-import { addNewEvidence, evidenceIdsIn, evidenceNodes, type AppendixIndex, type ReportData, type ReportNode, type ReportTarget } from "../engines/report";
+import type { ReportData, ReportNode, ReportTarget } from "../engines/report";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext";
 import { openFindBar, ReportEditor } from "../features/report/editor/ReportEditor";
 import { blockScore, fuzzyScore } from "../features/report/editor/SlashMenu";
-import { unusedEntries } from "../features/report/EvidenceRail";
-import { pruneRemoved } from "../features/report/saveQueue";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
@@ -38,16 +35,8 @@ const entry = (o: Record<string, unknown>) =>
     content: { kind: "command", blocks: [{ command: "nmap -p- 10.0.0.5", output: "PORT   STATE SERVICE\n22/tcp open  ssh\n80/tcp open  http" }] },
     ...o,
   }) as unknown as LogEntry;
-const note = (id: string, text: string) => entry({ id, kind: "note", title: "Rough notes", content: { kind: "note", text } });
 const shot = (id: string, caption: string) =>
   entry({ id, kind: "screenshot", title: caption, content: { kind: "screenshot", attachmentId: "a1", caption, fileName: "x.png" } });
-const http = entry({
-  id: "h-1",
-  kind: "http",
-  title: "Login request",
-  content: { kind: "http", request: "POST /login HTTP/1.1\nHost: 10.0.0.5\n\nuser=admin", response: "HTTP/1.1 302 Found" },
-});
-
 const data = (log: LogEntry[], hosts: Host[] = [host("h1", "ms01")]) =>
   ({
     engagement: { id: "eng", kind: "exam-sim" },
@@ -67,16 +56,9 @@ const data = (log: LogEntry[], hosts: Host[] = [host("h1", "ms01")]) =>
     credentials: [], credAttempts: [],
   }) as unknown as ReportData;
 
-const ev = (entryId: string, extra: Record<string, unknown> = {}): ReportNode => ({
-  type: "evidence",
-  attrs: { entryId, block: 0, keep: null, emphasis: [], appendix: "inline", ...extra },
-});
 const para = (text?: string): ReportNode => ({ type: "paragraph", ...(text ? { content: [{ type: "text", text }] } : {}) });
-const slot = (text?: string): ReportNode => ({ type: "slot", attrs: { hint: "What you do next, and why" }, ...(text ? { content: [{ type: "text", text }] } : {}) });
+const code = (text: string): ReportNode => ({ type: "codeBlock", attrs: { language: "" }, content: [{ type: "text", text }] });
 const doc = (...content: ReportNode[]): ReportNode => ({ type: "doc", content });
-/** The hidden attrs every sourced block carries in the editor's JSON, empty. */
-const NO_SOURCE = { source: null, gen: null, also: null };
-const noRefs: AppendixIndex = { entries: [], refFor: () => null };
 const standalone: ReportTarget = { key: "h1", kind: "standalone", hostIds: ["h1"] };
 
 type Opts = { target?: ReportTarget; hosts?: Host[]; subNumbers?: (doc: ReportNode) => Map<number, string> };
@@ -88,9 +70,9 @@ function setup(page: ReportNode, log: LogEntry[] = [entry({})], opts: Opts = {})
   const utils = render(
     <QueryClientProvider client={qc}>
       <ReportDataContext.Provider
-        value={{ data: data(log, opts.hosts), appendix: noRefs, sectionMeta: {}, onRemoveEvidence: vi.fn(), target: opts.target ?? standalone, canMove: true }}
+        value={{ data: data(log, opts.hosts), onRemoveEvidence: vi.fn(), target: opts.target ?? standalone }}
       >
-        <ReportEditor sectionId="s1" doc={page} subNumbers={opts.subNumbers} onChange={onChange} onReady={(e) => (ref.editor = e)} />
+        <ReportEditor doc={page} subNumbers={opts.subNumbers} onChange={onChange} onReady={(e) => (ref.editor = e)} />
       </ReportDataContext.Provider>
     </QueryClientProvider>,
   );
@@ -105,7 +87,6 @@ async function ready(page: ReportNode, log?: LogEntry[], opts?: Opts) {
 }
 
 const json = (editor: Editor) => editor.getDocJSON() as ReportNode;
-const undo = (editor: Editor) => act(() => void fireEvent.keyDown(editor.view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true }));
 const cursorAt = (editor: Editor, pos: number, to = pos) =>
   act(() => {
     const view = editor.view;
@@ -135,108 +116,6 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-describe("Notes are the owner's text on the page", () => {
-  it("a note entry inserts as editable paragraphs that keep the entry they came from", () => {
-    expect(evidenceNodes(note("n1", "Port 80 runs IIS 7.5\nold!\n\nTry the upload page"))).toEqual([
-      { type: "paragraph", attrs: { fromEntry: "n1" }, content: [{ type: "text", text: "Port 80 runs IIS 7.5" }, { type: "hardBreak" }, { type: "text", text: "old!" }] },
-      { type: "paragraph", attrs: { fromEntry: "n1" }, content: [{ type: "text", text: "Try the upload page" }] },
-    ]);
-  });
-
-  it("an entry's observations stand in for the step's empty slot, as editable paragraphs", () => {
-    const nodes = evidenceNodes(entry({ observations: "SSH and HTTP only" }));
-    expect(nodes[0]).toEqual({ type: "paragraph", attrs: { fromEntry: "e1", fromField: "observations" }, content: [{ type: "text", text: "SSH and HTTP only" }] });
-    expect(nodes[1]).toMatchObject({ type: "evidence", attrs: { entryId: "e1" } });
-  });
-
-  it("an observation left on the page after its command is removed doesn't place the command: it stays removed and listed as unused", () => {
-    const cmd = entry({ observations: "SSH and HTTP only" });
-    // The step went on the page, then the owner removed the command block and kept the observation.
-    const page = doc(evidenceNodes(cmd)[0]);
-    expect(evidenceIdsIn(page).has("e1")).toBe(false);
-    expect(pruneRemoved(page, { removedEntryIds: ["e1"] })).toEqual({ removedEntryIds: ["e1"] });
-    expect(unusedEntries(data([cmd]), standalone, page).map((e) => e.id)).toEqual(["e1"]);
-    const added = addNewEvidence(page, data([cmd]), standalone, {}, ["e1"]);
-    expect(added.added).toEqual([]);
-  });
-
-  it("text taken from an entry puts the entry on the page", () => {
-    expect([...evidenceIdsIn(doc({ type: "paragraph", attrs: { fromEntry: "n1" } }, { type: "codeBlock", attrs: { fromEntry: "e1" } }))]).toEqual(["n1", "e1"]);
-  });
-
-  it("a note saved as a frozen block opens as paragraphs to edit, and one undo brings the block back", async () => {
-    const { editor, onChange } = await ready(doc(slot("Before"), ev("n1", { block: null })), [note("n1", "Rough idea")]);
-    await waitFor(() => expect(json(editor()).content?.[1]).toEqual({ type: "paragraph", attrs: { fromEntry: "n1", fromField: null, ...NO_SOURCE, hint: null }, content: [{ type: "text", text: "Rough idea" }] }));
-    expect(onChange).toHaveBeenCalled();
-    // Typing in it edits the page, never the log.
-    cursorAt(editor(), editor().state.doc.child(0).nodeSize + 1 + "Rough idea".length);
-    type(editor(), " here");
-    expect(json(editor()).content?.[1].content?.[0].text).toBe("Rough idea here");
-    expect(m.logUpdate).not.toHaveBeenCalled();
-    undo(editor());
-    undo(editor());
-    await waitFor(() => expect(json(editor()).content?.[1]).toMatchObject({ type: "evidence", attrs: { entryId: "n1" } }));
-  });
-});
-
-describe("Screenshot captions", () => {
-  it("are written on the page: the node keeps them, the log is untouched", async () => {
-    const { editor } = await ready(doc(ev("s1", { block: null })), [shot("s1", "Login page")]);
-    const caption = await screen.findByLabelText("Figure 1 caption");
-    expect(caption).toHaveValue("Login page");
-    fireEvent.change(caption, { target: { value: "The admin login, reached without a password" } });
-    expect(json(editor()).content?.[0].attrs).toMatchObject({ caption: "The admin login, reached without a password" });
-    expect(m.logUpdate).not.toHaveBeenCalled();
-    // An undo shows in the field.
-    fireEvent.blur(caption);
-    undo(editor());
-    await waitFor(() => expect(screen.getByLabelText("Figure 1 caption")).toHaveValue("Login page"));
-  });
-
-  it("can be resized; Full width puts it back", async () => {
-    const { editor } = await ready(doc(ev("s1", { block: null, width: 420 })), [shot("s1", "Login page")]);
-    act(() => editor().view.dispatch(editor().view.state.tr.setSelection(NodeSelection.create(editor().view.state.doc, 0))));
-    fireEvent.click(await screen.findByRole("button", { name: "Full width" }));
-    expect(json(editor()).content?.[0].attrs).toMatchObject({ width: null });
-  });
-});
-
-describe("Edit on page", () => {
-  it("turns a command block into a code block the owner edits, detached from the log; undo brings the live block back", async () => {
-    const { editor } = await ready(doc(slot("Scan"), ev("e1", { keep: [[0, 1]] })));
-    act(() => editor().view.dispatch(editor().view.state.tr.setSelection(NodeSelection.create(editor().view.state.doc, editor().state.doc.child(0).nodeSize))));
-    const edit = await screen.findByRole("button", { name: "Edit on page (stops following the log entry)" });
-    // The prompt reads the attacker's machines from Settings.
-    await waitFor(() => expect(document.querySelector(".report-cmd")).toHaveTextContent("kali$ nmap"));
-    fireEvent.click(edit);
-    expect(json(editor()).content?.[1]).toEqual({
-      type: "codeBlock",
-      attrs: { language: "bash", fromEntry: "e1", ...NO_SOURCE },
-      content: [{ type: "text", text: "kali$ nmap -p- 10.0.0.5\nPORT   STATE SERVICE\n22/tcp open  ssh\n… 1 line omitted" }],
-    });
-    undo(editor());
-    expect(json(editor()).content?.[1]).toMatchObject({ type: "evidence", attrs: { entryId: "e1", keep: [[0, 1]] } });
-  });
-
-  it("isn't offered on a split block, whose full copy lives in the appendix", async () => {
-    const { editor } = await ready(doc(ev("e1", { appendix: "split" })));
-    act(() => editor().view.dispatch(editor().view.state.tr.setSelection(NodeSelection.create(editor().view.state.doc, 0))));
-    await screen.findByRole("button", { name: "Remove" });
-    expect(screen.queryByRole("button", { name: /^Edit on page/ })).toBeNull();
-  });
-
-  it("does the same for an HTTP block: request, then response", async () => {
-    const { editor } = await ready(doc(ev("h-1", { block: null })), [http]);
-    act(() => editor().view.dispatch(editor().view.state.tr.setSelection(NodeSelection.create(editor().view.state.doc, 0))));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit on page (stops following the log entry)" }));
-    expect(json(editor()).content?.[0]).toEqual({
-      type: "codeBlock",
-      attrs: { language: "http", fromEntry: "h-1", ...NO_SOURCE },
-      content: [{ type: "text", text: "POST /login HTTP/1.1\nHost: 10.0.0.5\n\nuser=admin\n\nHTTP/1.1 302 Found" }],
-    });
-  });
-});
-
 describe("Markdown shortcuts", () => {
   const cases: [string, string, Partial<ReportNode>][] = [
     ["# ", "Heading 1", { type: "heading", attrs: { level: 1 } }],
@@ -256,16 +135,16 @@ describe("Markdown shortcuts", () => {
       expect(json(editor()).content?.[0]).toMatchObject(expected);
     });
 
-  it('"# " in a step\'s second paragraph makes the heading there, not at the top of the page', async () => {
-    const step = { type: "step", attrs: { entryId: null }, content: [para("Read the notes"), para()] };
-    const { editor } = await ready(doc(para("Intro"), { type: "steps", content: [step] }));
-    // Intro is 7 wide (0..7); steps opens at 7, the step at 8, its first paragraph at 9 ("Read the notes", 14 chars),
-    // so the empty second paragraph's inside is at 9 + 16 + 1.
-    cursorAt(editor(), 26);
+  it('"# " in a list item\'s second paragraph makes the heading there, not at the top of the page', async () => {
+    const item: ReportNode = { type: "list", attrs: { kind: "ordered" }, content: [para("Read the notes"), para()] };
+    const { editor } = await ready(doc(para("Intro"), item));
+    // Intro is 7 wide (0..7); the list opens at 7, its first paragraph at 8 ("Read the notes", 14 chars),
+    // so the empty second paragraph's inside is at 8 + 16 + 1.
+    cursorAt(editor(), 25);
     type(editor(), "# Owner");
     const top = json(editor()).content!;
     expect(top[0]).toMatchObject({ type: "paragraph", content: [{ text: "Intro" }] });
-    expect(top[1].content?.[0].content?.[1]).toMatchObject({ type: "heading", content: [{ text: "Owner" }] });
+    expect(top[1].content?.[1]).toMatchObject({ type: "heading", content: [{ text: "Owner" }] });
   });
 
   it("stops at heading 3: #### stays text", async () => {
@@ -469,7 +348,7 @@ describe("Slash menu", () => {
 
 describe("Headings", () => {
   it("Heading 1, 2 and 3 are one click each on the toolbar, pressed while on, and a second click goes back to a paragraph", async () => {
-    const { editor } = await ready(doc(slot("Foothold notes")));
+    const { editor } = await ready(doc(para("Foothold notes")));
     cursorAt(editor(), 2);
     const bar = within(screen.getByRole("toolbar", { name: "Formatting" }));
     for (const level of [1, 2, 3]) {
@@ -606,7 +485,7 @@ describe("Images", () => {
   it("lands where it was pasted, though the owner typed above it while it saved", async () => {
     let save: (e: LogEntry) => void = () => {};
     m.logCreate.mockImplementation(() => new Promise((r) => (save = r)));
-    const { editor } = await ready(doc(para("First"), slot("Uploaded the shell"), para("Last")));
+    const { editor } = await ready(doc(para("First"), para("Uploaded the shell"), para("Last")));
     const d = editor().state.doc;
     cursorAt(editor(), d.child(0).nodeSize + 2);
     paste(editor(), png());
@@ -661,64 +540,20 @@ describe("Find and replace", () => {
   });
 });
 
-describe("Find in log blocks", () => {
-  it("counts and steps through matches in the log's blocks too, read-only, and Replace leaves them as logged", async () => {
-    const { editor } = await ready(doc(para("the port list"), ev("e1")));
-    // The evidence block draws the nmap output from the log.
-    await waitFor(() => expect(document.querySelector(".report-cmd")).toBeInTheDocument());
+describe("Find in code blocks", () => {
+  it("counts and steps through matches in code blocks too, and Replace all changes them with the rest of the text", async () => {
+    const { editor } = await ready(doc(para("the port list"), code("PORT   STATE SERVICE\n22/tcp open  ssh")));
     act(() => void openFindBar(editor()));
     fireEvent.change(await screen.findByLabelText("Find"), { target: { value: "port" } });
-    // "port" in the owner's paragraph, "PORT" in the output header (case folded).
+    // "port" in the paragraph, "PORT" in the code block (case folded).
     await waitFor(() => expect(screen.getByText("1 of 2")).toBeInTheDocument());
-    expect(screen.getByText(/1 match in log blocks stay as logged/)).toBeInTheDocument();
     fireEvent.keyDown(screen.getByLabelText("Find"), { key: "Enter" });
     await waitFor(() => expect(screen.getByText("2 of 2")).toBeInTheDocument());
-    expect(screen.getByText(/This match is in a block from the log: read-only/)).toBeInTheDocument();
-    // Replace acts on the current match: off while it is in a log block, on again on the owner's text.
-    expect(screen.getByRole("button", { name: "Replace" })).toBeDisabled();
-    fireEvent.keyDown(screen.getByLabelText("Find"), { key: "Enter" });
-    await waitFor(() => expect(screen.getByText("1 of 2")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Replace" })).toBeEnabled();
-    fireEvent.change(screen.getByLabelText("Replace with"), { target: { value: "PORT" } });
+    fireEvent.change(screen.getByLabelText("Replace with"), { target: { value: "SERVICE" } });
     fireEvent.click(screen.getByRole("button", { name: "Replace all" }));
-    expect(json(editor()).content?.[0].content?.[0].text).toBe("the PORT list");
-    expect(json(editor()).content?.[1]).toMatchObject({ type: "evidence", attrs: { entryId: "e1" } });
-  });
-});
-
-describe("Find after the log changes", () => {
-  it("collects the matches again when the log data behind the blocks is fetched again", async () => {
-    const page = doc(para("the port list"), ev("e1"));
-    const ref: { editor: Editor | null } = { editor: null };
-    let swap: (log: LogEntry[]) => void = () => {};
-    const onChange = vi.fn();
-    const onReady = (e: Editor) => (ref.editor = e);
-    const editorEl = <ReportEditor sectionId="s1" doc={page} onChange={onChange} onReady={onReady} />;
-    // Only the context value changes: the editor element and its props stay the same object.
-    function Host() {
-      const [log, setLog] = useState<LogEntry[]>([entry({})]);
-      swap = setLog;
-      const value = useMemo(() => ({ data: data(log), appendix: noRefs, sectionMeta: {}, onRemoveEvidence: onChange, target: standalone, canMove: true }), [log]);
-      return <ReportDataContext.Provider value={value}>{editorEl}</ReportDataContext.Provider>;
-    }
-    render(
-      <QueryClientProvider client={makeQueryClient()}>
-        <Host />
-      </QueryClientProvider>,
-    );
-    await waitFor(() => expect(ref.editor?.mounted).toBe(true));
-    await waitFor(() => expect(document.querySelector(".report-cmd")).toBeInTheDocument());
-    const before = ref.editor!.state.doc;
-    act(() => void openFindBar(ref.editor!));
-    fireEvent.change(await screen.findByLabelText("Find"), { target: { value: "port" } });
-    await waitFor(() => expect(screen.getByText("1 of 2")).toBeInTheDocument());
-    // Let the find bar's own collection (on the next frame) settle first, so only the data change can recount.
-    await act(() => new Promise((r) => setTimeout(r, 100)));
-    const edited = entry({ content: { kind: "command", blocks: [{ command: "nmap -p- 10.0.0.5", output: "PORT STATE\n22/tcp open ssh\nport 80 too" }] } });
-    act(() => swap([edited]));
-    await waitFor(() => expect(document.querySelector(".report-page")?.textContent).toContain("port 80 too"));
-    expect(ref.editor!.state.doc).toBe(before);
-    await waitFor(() => expect(screen.getByText("1 of 3")).toBeInTheDocument());
+    expect(json(editor()).content?.[0].content?.[0].text).toBe("the SERVICE list");
+    expect(json(editor()).content?.[1].content?.[0].text).toBe("SERVICE   STATE SERVICE\n22/tcp open  ssh");
   });
 });
 
@@ -777,7 +612,7 @@ describe("Block handle menu", () => {
   const openMenu = () => fireEvent.click(screen.getByRole("button", { name: "Block actions", hidden: true }));
 
   it("a scroll closes the block menu, so it never stays open without its handle", async () => {
-    const { container, editor } = await ready(doc(para("Intro"), ev("e1")));
+    const { container, editor } = await ready(doc(para("Intro"), code("nmap -p-")));
     hover(container, editor(), "paragraph");
     openMenu();
     expect(await screen.findByRole("menu", { name: "Block actions" })).toBeInTheDocument();
@@ -785,13 +620,12 @@ describe("Block handle menu", () => {
     await waitFor(() => expect(screen.queryByRole("menu", { name: "Block actions" })).toBeNull());
   });
 
-  it("deletes the hovered block; a paragraph offers no Move to appendix", async () => {
-    const { container, editor } = await ready(doc(para("Intro"), ev("e1")));
+  it("deletes the hovered block", async () => {
+    const { container, editor } = await ready(doc(para("Intro"), code("nmap -p-")));
     hover(container, editor(), "paragraph");
     openMenu();
     expect(await screen.findByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: "Move to appendix" })).toBeNull();
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
-    await waitFor(() => expect(json(editor()).content?.map((n) => n.type)).toEqual(["evidence"]));
+    await waitFor(() => expect(json(editor()).content?.map((n) => n.type)).toEqual(["codeBlock"]));
   });
 });

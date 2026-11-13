@@ -12,7 +12,6 @@ import {
   phaseInsertAt,
   sourceBlocks,
   stamp,
-  type DocPath,
   type ReportData,
   type ReportMeta,
   type ReportNode,
@@ -106,25 +105,6 @@ export function deleteBlockAt(editor: Editor, block: { node: PMNode; pos: number
     return true;
   });
 }
-
-/** The position a `DocPath` names (top-level index, then child indices; the last is where nodes go in their parent),
- *  or null when the page has no such place. */
-export function pathPos(doc: PMNode, path: DocPath): number | null {
-  let at = 0;
-  let parent = doc;
-  for (let depth = 0; depth < path.length; depth++) {
-    const index = path[depth];
-    if (index > parent.childCount) return null;
-    for (let i = 0; i < index; i++) at += parent.child(i).nodeSize;
-    if (depth < path.length - 1) {
-      if (index >= parent.childCount) return null;
-      parent = parent.child(index);
-      at += 1;
-    }
-  }
-  return at;
-}
-
 
 /** Marks a transaction the page makes itself (Add new evidence's Undo, a Refresh, notes turned into text): what it
  *  takes off the page is not the owner's removal. */

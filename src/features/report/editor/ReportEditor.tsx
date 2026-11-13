@@ -1,62 +1,24 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createEditor, definePlugin, Priority, union, type Editor, type NodeJSON } from "prosekit/core";
 import { defineFileDropHandler, defineFilePasteHandler } from "prosekit/extensions/file";
 import type { Node as PMNode } from "prosekit/pm/model";
 import { isHistoryTransaction } from "prosekit/pm/history";
 import { NodeSelection, Plugin, PluginKey, type Command, type Transaction } from "prosekit/pm/state";
 import { ProseKit, useDocChange, useExtension, useKeymap } from "prosekit/react";
-import { ownerParagraphs, placedIdsIn, isFigure, stepTitleBefore, type DocPath, type EvidenceAttrs, type PageHeadings, type ReportData, type ReportNode } from "../../../engines/report";
+import { placedIdsIn, type ReportNode } from "../../../engines/report";
 import { reportError } from "../../../lib/lockSignal";
 import { RavenError } from "../../../types/errors";
 import { BlockHandle } from "./BlockHandle";
 import { BubbleMenu } from "./BubbleMenu";
-import { CHIP_TYPES, chipKey, ChipStateProvider, useChipControls } from "./ChipState";
 import { defineReportExtension, type HeldPositions, type SourceGone, type SubNumbers } from "./extension";
 import { FindBar } from "./FindBar";
 import { FormatToolbar } from "./FormatToolbar";
-import { hostAtPos, insertFigure, PageActionsContext, pathPos, PROGRAMMATIC, saveScreenshot, type PageActions } from "./pageActions";
-import { PageLayoutContext, useReportData, type PageLayout } from "./ReportDataContext";
+import { hostAtPos, insertFigure, PageActionsContext, PROGRAMMATIC, saveScreenshot, type PageActions } from "./pageActions";
+import { useReportData } from "./ReportDataContext";
 import { SlashMenu } from "./SlashMenu";
 import { TableHandles } from "./TableHandles";
 import "../page.css";
-
-/** Whether an evidence node shows a screenshot on the page, so it takes a figure number (a moved one doesn't). */
-const hasFigure = (node: PMNode, data: ReportData) =>
-  isFigure({ type: node.type.name, attrs: node.attrs }, (id) => data.log.find((e) => e.id === id));
-
-/** Figure numbers, index paths and fallback captions' step titles for the current document, keyed by node (nodes are immutable per state). */
-function layoutOf(doc: PMNode, data: ReportData, sectionId: string, figureOffset: number, touched: boolean, headings: PageHeadings | null): PageLayout {
-  const figures = new Map<PMNode, number>();
-  const paths = new Map<PMNode, string>();
-  const stepped = new Set<PMNode>();
-  const walk = (node: PMNode, path: string) =>
-    node.forEach((child, _offset, i) => {
-      const p = path === "" ? `${i}` : `${path}.${i}`;
-      paths.set(child, p);
-      if (node.type.name === "step") stepped.add(child);
-      if (hasFigure(child, data)) figures.set(child, figureOffset + figures.size + 1);
-      walk(child, p);
-    });
-  walk(doc, "");
-  // An uncaptioned screenshot's caption falls back to the step it tags along with: the block above it, as it is now.
-  const entryOf = (id: string) => data.log.find((e) => e.id === id);
-  const top: { type: string; attrs: Record<string, unknown> }[] = [];
-  doc.forEach((n) => top.push({ type: n.type.name, attrs: n.attrs }));
-  const steps = new Map<PMNode, string | null>();
-  doc.forEach((child, _offset, i) => {
-    if (child.type.name === "evidence" && entryOf(String(child.attrs.entryId))?.kind === "screenshot") steps.set(child, stepTitleBefore(top, i, entryOf));
-  });
-  return {
-    sectionId,
-    figureOf: (n) => figures.get(n) ?? null,
-    pathOf: (n) => paths.get(n) ?? null,
-    stepTitleOf: (n) => steps.get(n) ?? null,
-    inStep: (n) => stepped.has(n),
-    touched,
-    heading: (key) => headings?.get(key) ?? null,
-  };
-}
 
 /** Each page's held positions (see `HeldPositions`), by its editor. */
 const heldPositions = new WeakMap<Editor, HeldPositions>();
@@ -75,56 +37,6 @@ export function hasPageCursor(editor: Editor): boolean {
   return touched.has(editor);
 }
 
-/** Inserts nodes after the block the cursor is in, or after a selected block; it never replaces one. */
-export function insertNodesAtCursor(editor: Editor, nodes: ReportNode[]): boolean {
-  return editor.exec((state, dispatch) => {
-    const made = nodes.map((n) => state.schema.nodeFromJSON(n));
-    const { selection } = state;
-    if (dispatch) {
-      const at =
-        selection instanceof NodeSelection ? selection.to : selection.$from.depth === 0 ? selection.from : selection.$from.after(1);
-      dispatch(state.tr.insert(at, made).scrollIntoView());
-    }
-    return true;
-  });
-}
-
-/** Inserts nodes at a path (`DocPath`: top-level index, then child indices; the last is where the nodes go in their
- *  parent), as `endOfPhase` returns it. */
-export function insertNodesAt(editor: Editor, path: DocPath, nodes: ReportNode[]): boolean {
-  return editor.exec((state, dispatch) => {
-    const at = pathPos(state.doc, path);
-    if (at === null) return false;
-    dispatch?.(state.tr.insert(at, nodes.map((n) => state.schema.nodeFromJSON(n))).scrollIntoView());
-    return true;
-  });
-}
-
-/** Inserts an evidence block after the block the cursor is in, or after a selected block; it never replaces one. */
-export function insertEvidenceAtCursor(editor: Editor, attrs: EvidenceAttrs): boolean {
-  return insertNodesAtCursor(editor, [{ type: "evidence", attrs: attrs as unknown as Record<string, unknown> }]);
-}
-
-/** Removes the node that starts at `pos`. */
-export function removeNodeAt(editor: Editor, pos: number): boolean {
-  return editor.exec((state, dispatch) => {
-    const node = state.doc.nodeAt(pos);
-    if (!node) return false;
-    dispatch?.(state.tr.delete(pos, pos + node.nodeSize));
-    return true;
-  });
-}
-
-/** Merges `attrs` into the attributes of the node at `pos`. */
-export function setNodeAttrs(editor: Editor, pos: number, attrs: Record<string, unknown>): boolean {
-  return editor.exec((state, dispatch) => {
-    const node = state.doc.nodeAt(pos);
-    if (!node) return false;
-    dispatch?.(state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...attrs }));
-    return true;
-  });
-}
-
 /** Makes text copied from a log entry the owner's own: every block that came from `entryId` drops its source, so it
  *  no longer follows that entry's privacy or deletion. One transaction, so one undo brings the link back. */
 export function keepCopiedText(editor: Editor, entryId: string): boolean {
@@ -134,10 +46,8 @@ export function keepCopiedText(editor: Editor, entryId: string): boolean {
       const source = typeof node.attrs.source === "string" ? node.attrs.source : "";
       const fromSource = source === `entry:${entryId}` || source.startsWith(`entry:${entryId}:`);
       const figure = node.type.name === "figure" && node.attrs.entryId === entryId;
-      if (node.attrs.fromEntry !== entryId && !fromSource && !figure) return true;
+      if (!fromSource && !figure) return true;
       const attrs: Record<string, unknown> = { ...node.attrs };
-      if ("fromEntry" in attrs) attrs.fromEntry = null;
-      if ("fromField" in attrs) attrs.fromField = null;
       if (fromSource) Object.assign(attrs, { source: null, gen: null });
       if (figure) attrs.entryId = null;
       // Same size, so later positions hold; a list or table goes on to its own blocks with their sources.
@@ -150,7 +60,7 @@ export function keepCopiedText(editor: Editor, entryId: string): boolean {
   });
 }
 
-/** The position of the node at an index path from the doc root ("0.2.1"), as appendix keys and move checks name it. */
+/** The position of the node at an index path from the doc root ("0.2.1"), as the "long block" checks name it. */
 export function posAtPath(doc: PMNode, path: string): number | null {
   let node = doc;
   let pos = -1;
@@ -180,7 +90,7 @@ const ownEntryIds = (node: PMNode) => placedIdsIn({ type: node.type.name, attrs:
 
 /**
  * What a transaction took off the page: entries (and Also tested lists) named by blocks in the ranges it deleted
- * (inside a step list too) that the page no longer names anywhere (`placedIdsIn`'s rule: a source, a figure's entry,
+ * (inside a list item too) that the page no longer names anywhere (`placedIdsIn`'s rule: a source, a figure's entry,
  * an `also`, a `tested:<hostId>` source). None for
  * the page's own transactions (`PROGRAMMATIC`) and for undo and redo.
  */
@@ -233,45 +143,6 @@ function removedEvidencePlugin(onRemove: (entryId: string) => void) {
   });
 }
 
-/**
- * Brings the page to `after`, a copy of `before` (the page as it is) with blocks added (at the top level or inside a
- * block, such as a step in a steps list) and none removed or reordered, by inserting only the new blocks, so the
- * owner's cursor and history stay. Returns the inserted nodes.
- */
-export function insertAdded(editor: Editor, before: ReportNode, after: ReportNode): PMNode[] {
-  const inserted: number[] = [];
-  const same = (a: ReportNode, b: ReportNode) => a === b || JSON.stringify(a) === JSON.stringify(b);
-  // The same steps list or step with blocks added inside it (`addNewEvidence` adds steps and evidence there).
-  const grown = (a: ReportNode, b: ReportNode) =>
-    (a.type === "steps" || a.type === "step") && a.type === b.type && JSON.stringify(a.attrs ?? null) === JSON.stringify(b.attrs ?? null);
-  editor.exec((state, dispatch) => {
-    const tr = state.tr;
-    // Walks `now` against `was`, the children of the node whose content starts at `start`. Insertions only ever land
-    // after every position recorded so far, so those stay valid.
-    const merge = (was: ReportNode[], now: ReportNode[], start: number) => {
-      let pos = start;
-      let j = 0;
-      for (const n of now) {
-        if (j < was.length && (same(n, was[j]) || grown(n, was[j]))) {
-          if (!same(n, was[j])) merge(was[j].content ?? [], n.content ?? [], pos + 1);
-          pos += tr.doc.nodeAt(pos)!.nodeSize;
-          j++;
-          continue;
-        }
-        const made = state.schema.nodeFromJSON(n);
-        tr.insert(pos, made);
-        inserted.push(pos);
-        pos += made.nodeSize;
-      }
-    };
-    merge(before.content ?? [], after.content ?? [], 0);
-    dispatch?.(tr.setMeta(PROGRAMMATIC, true));
-    return true;
-  });
-  const doc = editor.state.doc;
-  return inserted.map((p) => doc.nodeAt(p)).filter((n): n is PMNode => n !== null);
-}
-
 /** Removes these exact nodes (top-level or nested) where they still stand unchanged; ones the owner has since edited stay. */
 export function removeExact(editor: Editor, nodes: PMNode[]): boolean {
   const set = new Set(nodes);
@@ -286,30 +157,6 @@ export function removeExact(editor: Editor, nodes: PMNode[]): boolean {
     const tr = state.tr;
     for (const [from, to] of spans.reverse()) tr.delete(from, to);
     dispatch?.(tr.setMeta(PROGRAMMATIC, true));
-    return true;
-  });
-}
-
-/**
- * Turns note entries that a page saved as frozen blocks into the paragraphs the owner edits (text copied, the entry kept
- * as `fromEntry`): one transaction, so one undo brings the blocks back. A note that is gone or private stays a block,
- * so its amber placeholder still shows.
- */
-export function convertNoteBlocks(editor: Editor, data: ReportData): boolean {
-  return editor.exec((state, dispatch) => {
-    const spans: { from: number; to: number; nodes: ReportNode[] }[] = [];
-    state.doc.descendants((node, pos) => {
-      if (node.type.name !== "evidence") return true;
-      const entry = data.log.find((e) => e.id === node.attrs.entryId);
-      if (entry && !entry.private && entry.content.kind === "note") spans.push({ from: pos, to: pos + node.nodeSize, nodes: ownerParagraphs(entry.content.text, entry.id) });
-      return false;
-    });
-    if (spans.length === 0) return false;
-    if (dispatch) {
-      const tr = state.tr;
-      for (const span of spans.reverse()) tr.replaceWith(span.from, span.to, span.nodes.map((n) => state.schema.nodeFromJSON(n)));
-      dispatch(tr.setMeta(PROGRAMMATIC, true));
-    }
     return true;
   });
 }
@@ -341,6 +188,8 @@ const moveSelectedBlock =
     }
     return true;
   };
+
+const BLOCK_KEYS = { "Alt-ArrowUp": moveSelectedBlock(-1), "Alt-ArrowDown": moveSelectedBlock(1) };
 
 /** Editor hooks that need the ProseKit context: change reporting, the page's keys, and images pasted or dropped. */
 function PageHooks({
@@ -374,36 +223,7 @@ function PageHooks({
   );
   // Whatever takes evidence off the page is remembered as removed, so Add new evidence never brings it back.
   useExtension(useMemo(() => definePlugin(removedEvidencePlugin(onRemoveEvidence)), [onRemoveEvidence]));
-  const keymap = useMemo(() => {
-    // ⌫ or Delete on a selected block (evidence, a step, a steps list) removes the whole block.
-    const removeBlock: Command = (state, dispatch) => {
-      const sel = state.selection;
-      if (!(sel instanceof NodeSelection) || !["evidence", "step", "steps"].includes(sel.node.type.name)) return false;
-      dispatch?.(state.tr.deleteSelection().scrollIntoView());
-      return true;
-    };
-    return { Backspace: removeBlock, Delete: removeBlock, "Alt-ArrowUp": moveSelectedBlock(-1), "Alt-ArrowDown": moveSelectedBlock(1) };
-  }, []);
-  useKeymap(keymap, { priority: Priority.high });
-  // A selected chip in a step: ↵ opens it, Esc closes it (the selection stays on it).
-  const chips = useChipControls();
-  const chipKeys = useMemo(() => {
-    const selectedChip = (state: Parameters<Command>[0]) => {
-      const sel = state.selection;
-      if (!(sel instanceof NodeSelection) || !CHIP_TYPES.has(sel.node.type.name) || sel.$from.parent.type.name !== "step") return null;
-      return chipKey(sel.node);
-    };
-    const toggle =
-      (open: boolean): Command =>
-      (state, dispatch) => {
-        const key = selectedChip(state);
-        if (key === null || chips.isOpen(key) === open) return false;
-        if (dispatch) chips.setOpen(key, open);
-        return true;
-      };
-    return { Enter: toggle(true), Escape: toggle(false) };
-  }, [chips]);
-  useKeymap(chipKeys, { priority: Priority.high });
+  useKeymap(BLOCK_KEYS, { priority: Priority.high });
   return null;
 }
 
@@ -412,7 +232,6 @@ function PageHooks({
  * with a drag handle in the page's left gutter. The document is read once at mount; key it by section.
  */
 export function ReportEditor({
-  sectionId,
   title,
   titleNumber,
   subNumbers,
@@ -423,7 +242,6 @@ export function ReportEditor({
   toolbarClassName,
   notices,
 }: {
-  sectionId: string;
   /** A report-level page's title, printed at the top of the paper; it comes from the section kind and is never stored. */
   title?: string;
   /** The title's number ("3"), printed before it as OffSec's sample does. */
@@ -472,17 +290,6 @@ export function ReportEditor({
     // Redraw so the headings take the numbers now, not at the next keystroke.
     if (editor.mounted) editor.view.updateState(editor.view.state);
   });
-  const [current, setCurrent] = useState<PMNode>(() => editor.state.doc);
-  const figureOffset = value.figureOffset ?? 0;
-  // `touched` (what hasPageCursor reads) is the one record; this count only re-renders the page when it changes.
-  const [touches, countTouch] = useReducer((n: number) => n + 1, 0);
-  const pageTouched = touches > 0 && touched.has(editor);
-  const headingsOf = value.headingsOf;
-  const layout = useMemo(
-    () => layoutOf(current, value.data, sectionId, figureOffset, pageTouched, headingsOf ? headingsOf(current.toJSON() as ReportNode) : null),
-    [current, value.data, sectionId, figureOffset, pageTouched, headingsOf],
-  );
-
   const callbacks = useRef({ onChange, onReady });
   useEffect(() => {
     callbacks.current = { onChange, onReady };
@@ -492,8 +299,7 @@ export function ReportEditor({
   }, [editor]);
 
   const onDoc = useCallback(
-    (next: PMNode) => {
-      setCurrent(next);
+    () => {
       callbacks.current.onChange(editor.getDocJSON() as ReportNode);
     },
     [editor],
@@ -530,12 +336,6 @@ export function ReportEditor({
     return { addImage, pickImage: () => fileInput.current?.click() };
   }, [editor, qc]);
 
-  // Once the page is up, frozen note blocks become text, saved like any change (the page's change reporting may not
-  // be listening yet).
-  useEffect(() => {
-    if (editor.mounted && convertNoteBlocks(editor, live.current.data)) onDoc(editor.state.doc);
-  }, [editor, onDoc]);
-
   const [find, setFind] = useState<{ open: boolean; focus: number }>({ open: false, focus: 0 });
   const openFind = useCallback(() => setFind((f) => ({ open: true, focus: f.focus + 1 })), []);
   useEffect(() => {
@@ -549,7 +349,6 @@ export function ReportEditor({
       const mark = () => {
         if (touched.has(editor)) return;
         touched.add(editor);
-        countTouch();
       };
       el.addEventListener("focusin", mark);
       el.addEventListener("pointerdown", mark);
@@ -563,8 +362,6 @@ export function ReportEditor({
   );
 
   return (
-    <PageLayoutContext.Provider value={layout}>
-      <ChipStateProvider>
         <ProseKit editor={editor}>
           <PageActionsContext.Provider value={actions}>
             <PageHooks onDoc={onDoc} onRemoveEvidence={value.onRemoveEvidence} onImage={actions.addImage} />
@@ -608,7 +405,5 @@ export function ReportEditor({
             <SlashMenu />
           </PageActionsContext.Provider>
         </ProseKit>
-      </ChipStateProvider>
-    </PageLayoutContext.Provider>
   );
 }

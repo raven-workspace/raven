@@ -26,7 +26,6 @@ import {
   subsectionNumbers,
   targetChecks,
   targetNumbers,
-  type AppendixIndex,
   type Check,
   type FlagKind,
   type PageMeta,
@@ -129,17 +128,6 @@ function WarnLine({ text, retryLabel, onRetry }: { text: string; retryLabel: str
       </Button>
     </div>
   );
-}
-
-/** The appendix index, kept as the same object while its entries are unchanged, so node views don't re-render per keystroke. */
-function useStableAppendix(index: AppendixIndex): AppendixIndex {
-  const sig = JSON.stringify([index.entries, index.pages]);
-  const [kept, setKept] = useState({ sig, index });
-  if (kept.sig !== sig) {
-    setKept({ sig, index });
-    return index;
-  }
-  return kept.index;
 }
 
 /**
@@ -419,21 +407,10 @@ function ReportBody({
     [drafts, plainOf, targetOf],
   );
   // Appendix pages' letters (+ Page, placement appendix): a plain page moves nothing out, so these are the only appendices.
-  const appendixOf = useCallback(
-    (docOf: (s: ReportSection) => ReportNode) =>
-      numberAppendices(
-        entries.map((e) => ({
-          id: e.section.id,
-          kind: e.section.kind,
-          targetKey: e.section.targetKey,
-          doc: e.section.kind === "details" ? null : docOf(e.section),
-          meta: e.section.meta,
-          position: e.section.position,
-        })),
-      ),
+  const appendix = useMemo(
+    () => numberAppendices(entries.map((e) => ({ id: e.section.id, kind: e.section.kind, meta: e.section.meta, position: e.section.position }))),
     [entries],
   );
-  const savedAppendix = useMemo(() => appendixOf(savedDocOf), [appendixOf, savedDocOf]);
 
   // The open section: the one picked, else the first target, else the first item.
   const [openId, setOpenId] = useState<string | null>(null);
@@ -450,14 +427,6 @@ function ReportBody({
   );
   const openLiveDoc = openSection && live?.id === openSection.id ? live.doc : null;
 
-  // With the open page live, so references stay right while editing; kept as the same object while its entries don't change.
-  const appendix = useStableAppendix(
-    useMemo(
-      () => (openLiveDoc && openSection ? appendixOf((s) => (s.id === openSection.id ? openLiveDoc : savedDocOf(s))) : savedAppendix),
-      [openLiveDoc, openSection, appendixOf, savedDocOf, savedAppendix],
-    ),
-  );
-
   // Other targets' checks read their stored pages; only the open target's are recomputed as you type.
   const savedChecks = useMemo(() => {
     const out = new Map<string, Check[]>();
@@ -465,11 +434,11 @@ function ReportBody({
       if (!e.target) continue;
       out.set(
         e.section.id,
-        targetChecks({ data, target: e.target, doc: savedDocOf(e.section), meta: reportMeta, appendixRefs: savedAppendix, sectionId: e.section.id, coverage: (e.section.meta as SectionMeta).coverage }),
+        targetChecks({ data, target: e.target, doc: savedDocOf(e.section), meta: reportMeta, sectionId: e.section.id, coverage: (e.section.meta as SectionMeta).coverage }),
       );
     }
     return out;
-  }, [entries, data, savedDocOf, reportMeta, savedAppendix]);
+  }, [entries, data, savedDocOf, reportMeta]);
   const openTarget = open?.target;
   const openSectionMeta = openSection ? metaOf(openSection) : undefined;
   // Screenshots' natural widths as their images load on the open page: view state for the legibility check, never stored.
@@ -482,10 +451,10 @@ function ReportBody({
     if (!openTarget || !openSection) return null;
     const doc = openLiveDoc ?? savedDocOf(openSection);
     return [
-      ...targetChecks({ data, target: openTarget, doc, meta: reportMeta, appendixRefs: appendix, sectionId: openSection.id, coverage: openSectionMeta?.coverage }),
+      ...targetChecks({ data, target: openTarget, doc, meta: reportMeta, sectionId: openSection.id, coverage: openSectionMeta?.coverage }),
       ...legibilityChecks(doc, data, shotWidths),
     ];
-  }, [openTarget, openSection, data, openLiveDoc, savedDocOf, reportMeta, appendix, openSectionMeta, shotWidths]);
+  }, [openTarget, openSection, data, openLiveDoc, savedDocOf, reportMeta, openSectionMeta, shotWidths]);
   const checks = useMemo(
     () => (openChecksLive && openSection ? new Map(savedChecks).set(openSection.id, openChecksLive) : savedChecks),
     [savedChecks, openChecksLive, openSection],
@@ -963,16 +932,13 @@ function ReportBody({
       openSectionMeta
         ? {
             data,
-            appendix,
-            sectionMeta: openSectionMeta,
             onRemoveEvidence,
             reportMeta,
             onImageWidth,
-            canMove: Boolean(openTarget),
             target: openTarget,
           }
         : null,
-    [data, appendix, openSectionMeta, onRemoveEvidence, reportMeta, onImageWidth, openTarget],
+    [data, openSectionMeta, onRemoveEvidence, reportMeta, onImageWidth, openTarget],
   );
 
   const notStarted = open?.target && !started(open.target);
@@ -1125,7 +1091,6 @@ function ReportBody({
                 <ReportDataContext.Provider value={contextValue}>
                   <ReportEditor
                     key={`${openSection.id}:${swaps}`}
-                    sectionId={openSection.id}
                     title={openTitle.text}
                     titleNumber={openTitle.number}
                     subNumbers={pageSubNumbers}

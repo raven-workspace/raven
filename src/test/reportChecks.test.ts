@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { absoluteClaims, buildPlainTarget, checkKind, groupChecks, isReady, legibilityChecks, proofFacts, reportChecks, stepTitleBefore, targetChecks, fixSteps } from "../engines/report";
+import { absoluteClaims, buildPlainTarget, checkKind, groupChecks, isReady, legibilityChecks, proofFacts, reportChecks, targetChecks, fixSteps } from "../engines/report";
 import { GARNET_HOST, garnetFixtures } from "../audit/examFixtures";
 import type { Check, ReportData, ReportNode, ReportTarget } from "../engines/report";
 import type { Host } from "../types/host";
@@ -657,24 +657,6 @@ describe("groupChecks", () => {
       expect(g.text, k).toMatch(/^2 /);
       expect(g.text, k).not.toMatch(/\.$/);
     }
-  });
-});
-
-describe("stepTitleBefore", () => {
-  const top = (...ids: string[]) => ids.map((id) => ({ type: "evidence", attrs: { entryId: id } }));
-  const log = [
-    entry({ id: "c1", title: "Full port scan" }),
-    entry({ id: "p1", title: "secret box", private: true }),
-    entry({ id: "s0", kind: "screenshot", title: "Screenshot", private: true }),
-    entry({ id: "s1", kind: "screenshot", title: "Screenshot" }),
-  ];
-  const of = (id: string) => log.find((e) => e.id === id);
-  it("takes the nearest step above, past screenshots (private ones too)", () => {
-    expect(stepTitleBefore(top("c1", "s0", "s1"), 2, of)).toBe("Full port scan");
-  });
-  it("never borrows a title when the step above is private or deleted", () => {
-    expect(stepTitleBefore(top("c1", "p1", "s1"), 2, of)).toBeNull();
-    expect(stepTitleBefore(top("c1", "gone", "s1"), 2, of)).toBeNull();
   });
 });
 

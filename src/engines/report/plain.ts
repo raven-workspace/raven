@@ -1,6 +1,6 @@
 import type { Finding, FindingFile } from "../../types/findings";
 import type { LogEntry } from "../../types/log";
-import { findingBlocks, inlineMarkdown, labelled } from "./copies";
+import { findingBlocks, inlineMarkdown, labelled } from "./findingText";
 import { testedLine, testedNotExploited } from "./coverage";
 import { entryPhase, findingPhaseMap, hostEntry, hostPlan, machinesInOrder, severityRank, stepsOf } from "./draft";
 import { msfLine, PLAIN_TABLE_KINDS, plainTable } from "./plainTables";

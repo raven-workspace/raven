@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import type { Editor } from "prosekit/core";
 import { NodeSelection, TextSelection } from "prosekit/pm/state";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppendixIndex, ReportData, ReportNode } from "../engines/report";
+import type { ReportData, ReportNode } from "../engines/report";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext";
 import { ReportEditor } from "../features/report/editor/ReportEditor";
 import { api } from "../lib/api";
@@ -53,25 +53,19 @@ const data = (log: LogEntry[]) =>
     credentials: [], credAttempts: [],
   }) as unknown as ReportData;
 
-const ev = (entryId: string, extra: Record<string, unknown> = {}): ReportNode => ({
-  type: "evidence",
-  attrs: { entryId, block: null, keep: null, emphasis: [], appendix: "inline", ...extra },
-});
-const slot = (text?: string): ReportNode => ({
-  type: "slot",
-  attrs: { hint: "What this shows" },
-  ...(text ? { content: [{ type: "text", text }] } : {}),
-});
+/** A plain page's blocks: a paragraph, a code block and a screenshot figure (by log entry). */
+const para = (text?: string): ReportNode => ({ type: "paragraph", ...(text ? { content: [{ type: "text", text }] } : {}) });
+const code = (text: string): ReportNode => ({ type: "codeBlock", attrs: { language: "" }, content: [{ type: "text", text }] });
+const figure = (entryId: string): ReportNode => ({ type: "figure", attrs: { attachmentId: "a1", entryId } });
 const doc = (...content: ReportNode[]): ReportNode => ({ type: "doc", content });
-const noRefs: AppendixIndex = { entries: [], refFor: () => null };
 
 function setup(page: ReportNode, log: LogEntry[] = [entry({})], services: unknown[] = [], subNumbers?: (doc: ReportNode) => Map<number, string>) {
   const onChange = vi.fn();
   const ref: { editor: Editor | null } = { editor: null };
   const utils = render(
     <QueryClientProvider client={makeQueryClient()}>
-      <ReportDataContext.Provider value={{ data: { ...data(log), services } as ReportData, appendix: noRefs, sectionMeta: {}, onRemoveEvidence: vi.fn() }}>
-        <ReportEditor sectionId="s1" doc={page} subNumbers={subNumbers} onChange={onChange} onReady={(e) => (ref.editor = e)} />
+      <ReportDataContext.Provider value={{ data: { ...data(log), services } as ReportData, onRemoveEvidence: vi.fn() }}>
+        <ReportEditor doc={page} subNumbers={subNumbers} onChange={onChange} onReady={(e) => (ref.editor = e)} />
       </ReportDataContext.Provider>
     </QueryClientProvider>,
   );
@@ -111,7 +105,7 @@ const dataTransfer = () => {
 
 const topLevel = (editor: Editor) => {
   const out: string[] = [];
-  editor.state.doc.forEach((n) => out.push(n.type.name === "evidence" ? (n.attrs.entryId as string) : n.type.name));
+  editor.state.doc.forEach((n) => out.push(n.type.name === "figure" ? (n.attrs.entryId as string) : n.type.name));
   return out;
 };
 
@@ -128,7 +122,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("Block handle", () => {
   it("shows a Drag to move handle beside the hovered block", async () => {
-    const { container, editor } = setup(doc(slot("Intro"), ev("e1"), slot()));
+    const { container, editor } = setup(doc(para("Intro"), code("nmap -p-"), para()));
     await waitFor(() => expect(editor()?.mounted).toBe(true));
     const grip = screen.getByLabelText("Drag to move");
     const positioner = container.querySelector(".report-handle")!;
@@ -141,8 +135,7 @@ describe("Block handle", () => {
 
   it("drags a screenshot to after the first block, attrs unchanged, and undo puts it back", async () => {
     const log = [entry({}), shot("s1", "Login page")];
-    const moved = ev("s1", { emphasis: [], appendix: "inline", keep: null });
-    const { editor, onChange } = setup(doc(slot("Intro"), ev("e1"), slot("After"), moved), log);
+    const { editor, onChange } = setup(doc(para("Intro"), figure("e1"), para("After"), figure("s1")), log);
     await waitFor(() => expect(editor()?.mounted).toBe(true));
     const view = editor().view;
     const before = editor().state.doc.child(3).attrs;
@@ -161,12 +154,12 @@ describe("Block handle", () => {
     const drop = new MouseEvent("drop", { clientX: 400, clientY: 90, bubbles: true, cancelable: true });
     Object.defineProperty(drop, "dataTransfer", { value: transfer });
     act(() => void view.dom.dispatchEvent(drop));
-    expect(topLevel(editor())).toEqual(["slot", "s1", "e1", "slot"]);
+    expect(topLevel(editor())).toEqual(["paragraph", "s1", "e1", "paragraph"]);
     expect(editor().state.doc.child(1).attrs).toEqual(before);
     expect(onChange).toHaveBeenCalled();
 
     fireEvent.keyDown(view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true });
-    expect(topLevel(editor())).toEqual(["slot", "e1", "slot", "s1"]);
+    expect(topLevel(editor())).toEqual(["paragraph", "e1", "paragraph", "s1"]);
   });
 });
 
@@ -179,7 +172,7 @@ describe("Formatting toolbar", () => {
   }
 
   it("is there before the owner touches the page, its tools off while the selection is a block", async () => {
-    const { editor } = setup(doc(ev("e1"), slot("Intro")));
+    const { editor } = setup(doc(code("nmap -p-"), para("Intro")));
     await waitFor(() => expect(editor()?.mounted).toBe(true));
     const bar = screen.getByRole("toolbar", { name: "Formatting" });
     expect(bar).not.toHaveAttribute("inert");
@@ -193,7 +186,7 @@ describe("Formatting toolbar", () => {
 
   it("keeps the page's numbered headings out of lists, headings and block types", async () => {
     const numbered = () => new Map([[0, "3.3"]]);
-    const { editor } = await ready(doc({ type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Penetration" }] }, slot("x")), numbered);
+    const { editor } = await ready(doc({ type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Penetration" }] }, para("x")), numbered);
     act(() => {
       const view = editor().view;
       view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)));
@@ -205,9 +198,9 @@ describe("Formatting toolbar", () => {
     expect(bar.getByRole("button", { name: "Bold" })).toBeEnabled();
   });
 
-  it("Block type turns a slot into a code block, and Paragraph back into prose", async () => {
+  it("Block type turns a paragraph into a code block, and Paragraph back into prose", async () => {
     const user = userEvent.setup();
-    const { editor } = await ready(doc(slot("id; whoami")));
+    const { editor } = await ready(doc(para("id; whoami")));
     act(() => {
       const view = editor().view;
       view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)));
@@ -226,8 +219,8 @@ describe("Formatting toolbar", () => {
     expect(editor().getDocJSON().content?.[0]).toMatchObject({ type: "paragraph", content: [{ text: "id; whoami" }] });
   });
 
-  it("Bold toggles the bold mark on a text selection in a slot, and shows as pressed", async () => {
-    const { editor } = await ready(doc(slot("Port 22 is open")));
+  it("Bold toggles the bold mark on a text selection, and shows as pressed", async () => {
+    const { editor } = await ready(doc(para("Port 22 is open")));
     act(() => {
       const view = editor().view;
       view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 1, 5)));
@@ -241,8 +234,8 @@ describe("Formatting toolbar", () => {
     expect(editor().getDocJSON().content?.[0].content?.[0]).not.toHaveProperty("marks");
   });
 
-  it("Numbered list wraps the slot in an ordered list", async () => {
-    const { editor } = await ready(doc(slot("First step")));
+  it("Numbered list wraps the paragraph in an ordered list", async () => {
+    const { editor } = await ready(doc(para("First step")));
     act(() => {
       const view = editor().view;
       view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)));
@@ -250,12 +243,12 @@ describe("Formatting toolbar", () => {
     const bar = within(screen.getByRole("toolbar", { name: "Formatting" }));
     fireEvent.click(bar.getByRole("button", { name: "Numbered list" }));
     const top = editor().getDocJSON().content?.[0];
-    expect(top).toMatchObject({ type: "list", attrs: { kind: "ordered" }, content: [{ type: "slot" }] });
+    expect(top).toMatchObject({ type: "list", attrs: { kind: "ordered" }, content: [{ type: "paragraph" }] });
     await waitFor(() => expect(bar.getByRole("button", { name: "Numbered list" })).toHaveAttribute("aria-pressed", "true"));
   });
 
   it("disables formatting while a block is selected", async () => {
-    const { editor } = await ready(doc(slot("Intro"), ev("e1")));
+    const { editor } = await ready(doc(para("Intro"), code("nmap -p-")));
     act(() => {
       const view = editor().view;
       view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, view.state.doc.child(0).nodeSize)));
@@ -268,7 +261,7 @@ describe("Formatting toolbar", () => {
   });
 
   it("⌘⇧K opens the link field, and Enter links the selection", async () => {
-    const { editor } = await ready(doc(slot("the login page")));
+    const { editor } = await ready(doc(para("the login page")));
     act(() => {
       const view = editor().view;
       view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 5, 15)));
@@ -283,15 +276,5 @@ describe("Formatting toolbar", () => {
       { type: "text", text: "login page", marks: [{ type: "link", attrs: expect.objectContaining({ href: "http://10.0.0.5/login" }) }] },
     ]);
     expect(screen.queryByLabelText("Link address")).toBeNull();
-  });
-});
-
-describe("Generated tables", () => {
-  it("keeps the IP address on one line, as wide as its content; Ports Open takes the slack", async () => {
-    const svc = { id: "s1", hostId: "h1", port: 3000, protocol: "tcp" };
-    const { container } = setup(doc({ type: "generated", attrs: { kind: "port-scan", hostId: "h1", appendix: "inline" } }), [entry({})], [svc]);
-    await waitFor(() => expect(container.querySelector("td.report-fit")).toBeTruthy());
-    expect(container.querySelector("th.report-fit")).toHaveTextContent("IP Address");
-    expect(container.querySelectorAll("td.report-fit")).toHaveLength(1);
   });
 });

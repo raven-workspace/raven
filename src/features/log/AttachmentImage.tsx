@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 
@@ -7,19 +6,13 @@ export function AttachmentImage({
   id,
   alt,
   onWidth,
-  onMissing,
 }: {
   id: string;
   alt: string;
   /** The image's natural width once it loads. */
   onWidth?(width: number): void;
-  /** Called when the file cannot be loaded (deleted, or never saved). */
-  onMissing?(): void;
 }) {
-  const { data, isError } = useQuery({ queryKey: ["attachment", id], queryFn: () => api.attachmentGet(id), staleTime: Infinity });
-  useEffect(() => {
-    if (isError) onMissing?.();
-  }, [isError, onMissing]);
+  const { data } = useQuery({ queryKey: ["attachment", id], queryFn: () => api.attachmentGet(id), staleTime: Infinity });
   if (!data) return <div className="h-16 w-full rounded-sm border border-line" aria-hidden />;
   return (
     <img

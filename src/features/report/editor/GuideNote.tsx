@@ -1,7 +1,7 @@
 import { X } from "@phosphor-icons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { ALL_GUIDES, GUIDES, guideHidden, type GuideId } from "../../../engines/report";
+import { ALL_GUIDES, GUIDES, type GuideId } from "../../../engines/report";
 import { api } from "../../../lib/api";
 import { reportError } from "../../../lib/lockSignal";
 import type { Settings } from "../../../types/settings";
@@ -58,11 +58,4 @@ export function useGuideSettings() {
   const hide = useCallback((id: GuideId) => save((now) => (now.includes(id) ? now : [...now, id])), [save]);
   const hideAll = useCallback(() => save(() => [ALL_GUIDES]), [save]);
   return { hidden, hide, hideAll };
-}
-
-/** A guide note outside the editor (a target's appendix page), shown unless Settings hides it. */
-export function StandaloneGuide({ id }: { id: GuideId }) {
-  const { hidden, hide, hideAll } = useGuideSettings();
-  if (hidden === null || guideHidden(hidden, id)) return null;
-  return <GuideNote id={id} onHide={() => hide(id)} onHideAll={hideAll} />;
 }

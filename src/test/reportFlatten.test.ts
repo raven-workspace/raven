@@ -325,3 +325,12 @@ describe("flattenToPlain", () => {
     expect(walk(flattenToPlain(layout4, exam, ms01Target, {}))).toBe(true);
   });
 });
+
+describe("the old page machinery is gone", () => {
+  it("no source file outside flatten.ts names a removed node type", async () => {
+    const files = import.meta.glob("../{engines,features,dev}/**/*.{ts,tsx}", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+    const OLD = /type:\s*"(slot|generated|evidence|finding|table-block|steps|step|phase|vuln|exploit)"|name:\s*"(slot|generated|evidence|finding|table-block|steps|step|phase|vuln|exploit)"/;
+    const hits = Object.entries(files).filter(([path, src]) => !path.endsWith("/flatten.ts") && OLD.test(src)).map(([p]) => p);
+    expect(hits).toEqual([]);
+  });
+});

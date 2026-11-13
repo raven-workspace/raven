@@ -5,7 +5,7 @@ import type { Node as PMNode } from "prosekit/pm/model";
 import { TextSelection } from "prosekit/pm/state";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GARNET_HOST, garnetFixtures } from "../audit/examFixtures";
-import { blockHash, buildPlainTarget, buildSectionDraft, type AppendixIndex, type ReportNode, type ReportTarget } from "../engines/report";
+import { blockHash, buildPlainTarget, buildSectionDraft, type ReportNode, type ReportTarget } from "../engines/report";
 import { defineReportExtension } from "../features/report/editor/extension";
 import { deleteBlockAt } from "../features/report/editor/pageActions";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext";
@@ -21,7 +21,6 @@ const m = vi.mocked(api, true);
 const E = "eng";
 const data = garnetFixtures(1_700_000_000_000);
 const target: ReportTarget = { key: GARNET_HOST, kind: "standalone", hostIds: [GARNET_HOST] };
-const noRefs: AppendixIndex = { entries: [], refFor: () => null };
 
 const doc = (content: ReportNode[]): ReportNode => ({ type: "doc", content });
 const text = (t: string): ReportNode => ({ type: "text", text: t });
@@ -93,8 +92,8 @@ function page(content: ReportNode) {
   qc = makeQueryClient();
   render(
     <QueryClientProvider client={qc}>
-      <ReportDataContext.Provider value={{ data, appendix: noRefs, sectionMeta: {}, onRemoveEvidence: vi.fn(), target }}>
-        <ReportEditor sectionId="s1" doc={content} onChange={vi.fn()} onReady={(e) => (ref.editor = e)} />
+      <ReportDataContext.Provider value={{ data, onRemoveEvidence: vi.fn(), target }}>
+        <ReportEditor doc={content} onChange={vi.fn()} onReady={(e) => (ref.editor = e)} />
       </ReportDataContext.Provider>
     </QueryClientProvider>,
   );

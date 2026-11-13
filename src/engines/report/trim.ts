@@ -1,13 +1,5 @@
-const INLINE_MAX_LINES = 60;
-
 /** Lines of an output as kept ranges index them: "" has none, a trailing newline ends an empty last line. */
 export const lineCount = (text: string) => (text === "" ? 0 : text.split(/\r?\n/).length);
-const DEFAULT_HEAD_LINES = 40;
-
-/** The lines an output starts with on the page: all of it when short, else the first 40 for the owner to widen. */
-export function defaultKeep(lineCount: number): [number, number][] | null {
-  return lineCount <= INLINE_MAX_LINES ? null : [[0, DEFAULT_HEAD_LINES - 1]];
-}
 
 export type KeptItem = { kind: "line"; n: number; text: string } | { kind: "omitted"; count: number };
 

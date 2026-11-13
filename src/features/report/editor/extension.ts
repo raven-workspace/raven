@@ -44,161 +44,16 @@ import { defineVirtualSelection } from "prosekit/extensions/virtual-selection";
 import type { Node as PMNode } from "prosekit/pm/model";
 import { Plugin, type Command, type EditorState } from "prosekit/pm/state";
 import { Decoration, DecorationSet } from "prosekit/pm/view";
-import { STEP_HINT, type ReportNode } from "../../../engines/report";
-import { defineReactNodeView, type ReactNodeViewComponent } from "prosekit/react";
+import type { ReportNode } from "../../../engines/report";
+import { defineReactNodeView } from "prosekit/react";
 import { hljsParser } from "./codeHighlight";
-import { addStep, moveCell } from "./commands";
+import { moveCell } from "./commands";
 import { CodeBlockView } from "./nodes/CodeBlockView";
-import { EvidenceView } from "./nodes/EvidenceView";
 import { FigureView } from "./nodes/FigureView";
-import { ExploitView } from "./nodes/ExploitView";
-import { GeneratedView } from "./nodes/GeneratedView";
-import { PhaseView } from "./nodes/PhaseView";
-import { SlotView } from "./nodes/SlotView";
-import { STEP_NUMBER, StepsView, StepView } from "./nodes/StepsView";
-import { VulnView } from "./nodes/VulnView";
 
-/** The atom blocks the page is built from, with their attribute defaults (types.ts holds the contract). */
-const ATOMS: { name: string; attrs: Record<string, unknown>; component: ReactNodeViewComponent }[] = [
-  { name: "phase", attrs: { phase: "foothold", hostId: "", findingId: null }, component: PhaseView },
-  {
-    name: "evidence",
-    attrs: { entryId: "", block: null, keep: null, emphasis: [], appendix: "inline", caption: null, width: null },
-    component: EvidenceView,
-  },
-  { name: "generated", attrs: { kind: "facts", hostId: null, appendix: "inline", notes: {} }, component: GeneratedView },
-  { name: "vuln", attrs: { findingId: "" }, component: VulnView },
-  { name: "exploit", attrs: { fileId: "", markedLines: [], appendix: "inline" }, component: ExploitView },
-];
-
-/** Clicks and typing in controls inside a node view (line-number toggles, a caption, the Tools appendix's fields) stay
- *  with the control, not ProseMirror. */
-const stopControlEvents = (event: Event) => event.target instanceof Element && event.target.closest("button, input, textarea, [role=combobox], [data-trim]") !== null;
-
-/** Atoms serialise their attrs so copy and paste between positions keeps them. */
-function atomSpec(name: string, defaults: Record<string, unknown>) {
-  return defineNodeSpec({
-    name,
-    group: "block",
-    atom: true,
-    draggable: true,
-    selectable: true,
-    attrs: Object.fromEntries(Object.entries(defaults).map(([k, v]) => [k, { default: v }])),
-    parseDOM: [
-      {
-        tag: `div[data-report="${name}"]`,
-        getAttrs: (dom: HTMLElement) => {
-          try {
-            return JSON.parse(dom.getAttribute("data-attrs") ?? "{}") as Record<string, unknown>;
-          } catch {
-            return false;
-          }
-        },
-      },
-    ],
-    toDOM: (node: PMNode) => ["div", { "data-report": name, "data-attrs": JSON.stringify(node.attrs) }],
-  });
-}
-
-const slotSpec = defineNodeSpec({
-  name: "slot",
-  group: "block",
-  content: "inline*",
-  attrs: { hint: { default: "" }, label: { default: "" } },
-  parseDOM: [
-    {
-      tag: "p[data-report=slot]",
-      getAttrs: (dom: HTMLElement) => ({ hint: dom.getAttribute("data-hint") ?? "", label: dom.getAttribute("data-label") ?? "" }),
-    },
-  ],
-  toDOM: (node: PMNode) => ["p", { "data-report": "slot", "data-hint": node.attrs.hint as string, "data-label": node.attrs.label as string }, 0],
-});
-
-/** A numbered Steps to reproduce list (§10.2). Never empty: deleting its last step deletes the list (ProseMirror's
- *  deleteRange widens to the parent a deletion would leave invalid). */
-const stepsSpec = defineNodeSpec({
-  name: "steps",
-  group: "block",
-  content: "step+",
-  parseDOM: [{ tag: 'div[data-report="steps"]' }],
-  toDOM: () => ["div", { "data-report": "steps" }, 0],
-});
-
-/** One step: the owner's sentence (a slot until written, or paragraphs), then its evidence. Dragged by its number. */
-const stepSpec = defineNodeSpec({
-  name: "step",
-  content: "(slot | paragraph) block*",
-  attrs: { entryId: { default: null } },
-  defining: true,
-  draggable: true,
-  parseDOM: [
-    {
-      tag: 'div[data-report="step"]',
-      getAttrs: (dom: HTMLElement) => {
-        try {
-          return JSON.parse(dom.getAttribute("data-attrs") ?? "{}") as Record<string, unknown>;
-        } catch {
-          return false;
-        }
-      },
-    },
-  ],
-  toDOM: (node: PMNode) => ["div", { "data-report": "step", "data-attrs": JSON.stringify(node.attrs) }, 0],
-});
-
-/** Gives each step its number in its list (from 1, again in every list), which its view prints: a decoration, so the
- *  numbers follow every insertion, removal and move. */
-const stepNumbers = definePlugin(
-  new Plugin({
-    props: {
-      decorations: (state) => {
-        const decos: Decoration[] = [];
-        state.doc.descendants((node, pos) => {
-          if (node.type.name !== "steps") return true;
-          node.forEach((step, offset, i) => {
-            const from = pos + 1 + offset;
-            decos.push(Decoration.node(from, from + step.nodeSize, {}, { [STEP_NUMBER]: i + 1 }));
-          });
-          return true;
-        });
-        return decos.length === 0 ? null : DecorationSet.create(state.doc, decos);
-      },
-    },
-  }),
-);
-
-/**
- * A step whose sentence goes while evidence stays (its text deleted up to the chip) is refilled by ProseMirror with a
- * default slot, whose hint is empty: it takes the step's hint, so the owner still sees what to write there.
- */
-const stepHints = definePlugin(
-  new Plugin({
-    appendTransaction: (trs, _old, state) => {
-      if (!trs.some((tr) => tr.docChanged)) return null;
-      const tr = state.tr;
-      state.doc.descendants((node, pos) => {
-        if (node.type.name !== "step") return !node.isTextblock && !node.isAtom;
-        const first = node.firstChild;
-        if (first?.type.name === "slot" && first.attrs.hint === "") tr.setNodeMarkup(pos + 1, undefined, { ...first.attrs, hint: STEP_HINT });
-        return false;
-      });
-      return tr.docChanged ? tr : null;
-    },
-  }),
-);
-
-/** ⌘⇧↵ adds a step. */
-const stepsKeymap = defineKeymap({ "Mod-Shift-Enter": addStep() });
-
-/** The log entry a block's text came from (a note, observations, a command edited on the page): provenance only. */
-const fromEntryAttr = (type: string) =>
-  defineNodeAttr({
-    type,
-    attr: "fromEntry",
-    default: null,
-    toDOM: (value: string | null) => (value ? ["data-from-entry", value] : null),
-    parseDOM: (dom: HTMLElement) => dom.getAttribute("data-from-entry"),
-  });
+/** Clicks and typing in controls inside a node view (the code block's language picker) stay with the control, not
+ *  ProseMirror. */
+const stopControlEvents = (event: Event) => event.target instanceof Element && event.target.closest("button, input, textarea, [role=combobox]") !== null;
 
 /** A hidden attr: kept through the editor, copy and paste (as `data-*` on the DOM), never printed as text. */
 const hiddenAttr = (type: string, attr: string, dom: string) =>
@@ -210,7 +65,7 @@ const hiddenAttr = (type: string, attr: string, dom: string) =>
     parseDOM: (el: HTMLElement) => el.getAttribute(dom),
   });
 
-/** The entry ids a block already shows (`also`, a flag a step prints): a list, a space-separated `data-also`. */
+/** The entry ids a block already shows (`also`): a list, a space-separated `data-also`. */
 const alsoAttr = (type: string) =>
   defineNodeAttr({
     type,
@@ -417,11 +272,10 @@ const pageKeymap = (numbers: SubNumbers) =>
     "Mod-.": toggleMark({ type: "superscript" }),
   });
 
-/** What an empty block says while the cursor is in it. A slot and a hint paragraph show their own hint, so they take
- *  none here. */
+/** What an empty block says while the cursor is in it. A hint paragraph shows its own hint, so it takes none here. */
 function placeholderFor(state: EditorState): string {
   const parent = state.selection.$from.parent;
-  if (parent.type.name === "slot" || showsHint(parent)) return "";
+  if (showsHint(parent)) return "";
   if (parent.type.name === "heading") return "Heading";
   return "Write, or type / to insert";
 }
@@ -488,8 +342,7 @@ function holdPositions(held: HeldPositions) {
   );
 }
 
-/** The report page's one schema and node views: the editing set, the figure and the hidden attrs every page uses, plus
- *  the old page machinery (slots, steps, atoms), kept so stored pages still open until they are flattened. */
+/** The report page's one schema and node views: the editing set, the figure and the hidden attrs every page uses. */
 export function defineReportExtension(
   numbers: SubNumbers = { current: undefined },
   held: HeldPositions = new Set(),
@@ -501,30 +354,7 @@ export function defineReportExtension(
     holdPositions(held),
     defineEditing(numbers),
     activeCodeBlock,
-    fromEntryAttr("paragraph"),
-    defineNodeAttr({
-      type: "paragraph",
-      attr: "fromField",
-      default: null,
-      toDOM: (value: string | null) => (value ? ["data-from-field", value] : null),
-      parseDOM: (dom: HTMLElement) => dom.getAttribute("data-from-field"),
-    }),
-    fromEntryAttr("codeBlock"),
-
     defineReactNodeView({ name: "codeBlock", component: CodeBlockView, as: "div", contentAs: "code", stopEvent: stopControlEvents }),
-    slotSpec,
-    defineReactNodeView({ name: "slot", component: SlotView, as: "div", contentAs: "div" }),
-    stepsSpec,
-    stepSpec,
-    stepNumbers,
-    stepHints,
-    stepsKeymap,
-    defineReactNodeView({ name: "steps", component: StepsView, as: "div", contentAs: "div", stopEvent: stopControlEvents }),
-    defineReactNodeView({ name: "step", component: StepView, as: "div", contentAs: "div" }),
-    ...ATOMS.flatMap(({ name, attrs, component }) => [
-      atomSpec(name, attrs),
-      defineReactNodeView({ name, component, as: "div", stopEvent: stopControlEvents }),
-    ]),
     sourcedAttrs(),
     hintPlaceholders,
     figureSpec,

@@ -2,54 +2,30 @@ import { describe, expect, it } from "vitest";
 import { numberAppendices, sectionNumbers, suggestMoves } from "../engines/report";
 import type { ReportNode } from "../engines/report";
 
-const ev = (appendix: string, entryId = "e1", extra = {}): ReportNode => ({ type: "evidence", attrs: { entryId, block: 0, keep: null, emphasis: [], appendix, ...extra } });
 const doc = (...content: ReportNode[]): ReportNode => ({ type: "doc", content });
-const title = (n: ReportNode) => String(n.attrs?.entryId);
-
-describe("numberAppendices", () => {
-  it("gives a target no appendix entries, whatever its page holds", () => {
-    const idx = numberAppendices(
-      [
-        { id: "t1", kind: "target", targetKey: "h1", doc: doc(ev("moved", "a")) },
-        { id: "ad", kind: "ad", targetKey: "ad-set", doc: doc(ev("split", "b")) },
-      ],
-      title,
-    );
-    expect(idx.entries).toEqual([]);
-    expect(idx.refFor("t1:0")).toBeNull();
-    expect(idx.pages).toEqual([]);
-  });
-});
 
 describe("appendix pages and free pages (+ Page)", () => {
-  const page = (id: string, placement: "appendix" | "body", position: number, d: ReportNode = doc()) => ({
+  const page = (id: string, placement: "appendix" | "body", position: number) => ({
     id,
     kind: "page" as const,
-    targetKey: `k-${id}`,
     position,
-    doc: d,
     meta: { title: `Page ${id}`, placement },
   });
-  it("letters appendix pages from A, by position, and numbers none of their content", () => {
-    const idx = numberAppendices(
-      [
-        { id: "t1", kind: "target", targetKey: "h1", doc: doc() },
-        // Listed out of position order: letters follow position.
-        page("p3", "appendix", 9),
-        page("p2", "appendix", 7, doc(ev("moved", "x"))),
-        page("b1", "body", 8),
-      ],
-      title,
-    );
+  it("letters appendix pages from A, by position; targets and body pages take none", () => {
+    const idx = numberAppendices([
+      { id: "t1", kind: "target" },
+      // Listed out of position order: letters follow position.
+      page("p3", "appendix", 9),
+      page("p2", "appendix", 7),
+      page("b1", "body", 8),
+    ]);
     expect(idx.pages).toEqual([
       { sectionId: "p2", letter: "A" },
       { sectionId: "p3", letter: "B" },
     ]);
-    expect(idx.entries).toEqual([]);
-    expect(idx.refFor("p2:0")).toBeNull();
   });
-  it("with no target appendices an appendix page is Appendix A", () => {
-    expect(numberAppendices([page("p1", "appendix", 0)], title).pages).toEqual([{ sectionId: "p1", letter: "A" }]);
+  it("a lone appendix page is Appendix A", () => {
+    expect(numberAppendices([page("p1", "appendix", 0)]).pages).toEqual([{ sectionId: "p1", letter: "A" }]);
   });
   it("numbers a free page as a body section after the targets; an appendix page takes no number", () => {
     const n = sectionNumbers([

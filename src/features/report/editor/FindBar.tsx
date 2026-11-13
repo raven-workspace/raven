@@ -6,70 +6,30 @@ import { useEditor, useExtension } from "prosekit/react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Button, IconButton, Input, Toolbar } from "../../../ui";
 import type { EditingExtension } from "./extension";
-import { useReportData } from "./ReportDataContext";
 
-/** A match on the page: in the owner's text (editable, replaceable), or in a block drawn from the log (read-only). */
-export type Hit = { kind: "text"; from: number; to: number; at: number } | { kind: "log"; range: Range; at: number };
+/** A match in the page's text: its range in the document, and where it stands for ordering. */
+export type Hit = { from: number; to: number };
 
-/** Text inside a log block that is the page's chrome, not its content: never searched. */
-const CHROME = "button, input, select, textarea, [data-trim], [role=toolbar]";
-
-/**
- * Every match of `search` on the page, in page order: the owner's text from the document, and the text the log and
- * generated blocks show (their live content, which the document doesn't hold).
- */
+/** Every match of `search` in the page's text (code blocks and table cells too), in page order. */
 export function findHits(editor: Editor, search: string, caseSensitive: boolean): Hit[] {
   if (search === "" || !editor.mounted) return [];
   const fold = (t: string) => (caseSensitive ? t : t.toLowerCase());
   const needle = fold(search);
   const hits: Hit[] = [];
-  const view = editor.view;
   editor.state.doc.descendants((node, pos) => {
-    if (node.isTextblock) {
-      // One character per inline leaf (a hard break), so offsets are positions.
-      const text = fold(node.textBetween(0, node.content.size, undefined, "￼"));
-      for (let i = text.indexOf(needle); i !== -1; i = text.indexOf(needle, i + needle.length))
-        hits.push({ kind: "text", from: pos + 1 + i, to: pos + 1 + i + needle.length, at: pos + 1 + i });
-      return false;
-    }
-    if (!node.isAtom) return true;
-    const dom = view.nodeDOM(pos);
-    if (!(dom instanceof HTMLElement)) return false;
-    const walker = dom.ownerDocument.createTreeWalker(dom, NodeFilter.SHOW_TEXT, {
-      acceptNode: (t) => (t.parentElement?.closest(CHROME) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
-    });
-    let k = 0;
-    for (let t = walker.nextNode(); t; t = walker.nextNode()) {
-      const text = fold(t.textContent ?? "");
-      for (let i = text.indexOf(needle); i !== -1; i = text.indexOf(needle, i + needle.length)) {
-        const range = dom.ownerDocument.createRange();
-        range.setStart(t, i);
-        range.setEnd(t, i + needle.length);
-        // Inside the block, in reading order: after its position, before the next one.
-        hits.push({ kind: "log", range, at: pos + 0.5 + k++ / 1e6 });
-      }
-    }
+    if (!node.isTextblock) return true;
+    // One character per inline leaf (a hard break), so offsets are positions.
+    const text = fold(node.textBetween(0, node.content.size, undefined, "￼"));
+    for (let i = text.indexOf(needle); i !== -1; i = text.indexOf(needle, i + needle.length)) hits.push({ from: pos + 1 + i, to: pos + 1 + i + needle.length });
     return false;
   });
-  return hits.sort((a, b) => a.at - b.at);
-}
-
-/** CSS custom highlights for matches in log blocks (WebKit, Chromium); a no-op where the API is missing (jsdom). */
-function paintLogHits(all: Range[], active: Range | null) {
-  const registry = (globalThis.CSS as unknown as { highlights?: Map<string, unknown> } | undefined)?.highlights;
-  const Make = (globalThis as unknown as { Highlight?: new (...r: Range[]) => unknown }).Highlight;
-  if (!registry || !Make) return;
-  registry.set("report-find", new Make(...all));
-  if (active) registry.set("report-find-active", new Make(active));
-  else registry.delete("report-find-active");
+  return hits;
 }
 
 /**
- * Find and replace on the page (ProseKit's search for the owner's text, plus the text log and generated blocks show):
- * every match is highlighted and counted; ↵ and ⇧↵ step through them in page order, scrolling to each. Matches in log
- * blocks are read-only: Replace is off while one is current, Replace all changes the owner's text only, and both say
- * so. Matches are collected again when the page or the log data behind its blocks changes. Esc closes and puts the cursor back.
- * In Replace, ↵ replaces the current match and moves on; ⌘↵ replaces them all.
+ * Find and replace on the page (ProseKit's search): every match is highlighted and counted; ↵ and ⇧↵ step through
+ * them in page order, scrolling to each. Matches are collected again when the page changes. Esc closes and puts the
+ * cursor back. In Replace, ↵ replaces the current match and moves on; ⌘↵ replaces them all.
  */
 export function FindBar({ focusKey, onClose }: { focusKey: number; onClose(): void }) {
   const editor = useEditor<EditingExtension>({ update: true });
@@ -89,9 +49,7 @@ export function FindBar({ focusKey, onClose }: { focusKey: number; onClose(): vo
   }, [focusKey]);
 
   const doc = editor.mounted ? editor.state.doc : null;
-  // The log blocks draw live data: when it is fetched again (an entry edited, a new paste), their text changes.
-  const { data } = useReportData();
-  // The page and its log blocks as drawn: collected on the next frame, once their node views have rendered.
+  // The page's matches, collected on the next frame, once the editor has drawn.
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const next = findHits(editor, search, caseSensitive);
@@ -99,26 +57,12 @@ export function FindBar({ focusKey, onClose }: { focusKey: number; onClose(): vo
       setIndex((i) => Math.min(i, Math.max(0, next.length - 1)));
     });
     return () => cancelAnimationFrame(frame);
-  }, [editor, doc, data, search, caseSensitive]);
+  }, [editor, doc, search, caseSensitive]);
 
-  const current = hits[index] ?? null;
-  useEffect(() => {
-    paintLogHits(
-      hits.flatMap((h) => (h.kind === "log" ? [h.range] : [])),
-      current?.kind === "log" ? current.range : null,
-    );
-  }, [hits, current]);
-  useEffect(() => () => paintLogHits([], null), []);
-
-  /** Shows a match: the owner's text is selected (the search marks it current); a log block's match scrolls into view. */
+  /** Selects a match (the search marks it current) and scrolls to it. */
   const show = (hit: Hit) => {
     const view = editor.view;
-    if (hit.kind === "text") {
-      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, hit.from, hit.to)).scrollIntoView());
-    } else {
-      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.selection.from)));
-      (hit.range.startContainer.parentElement as HTMLElement | null)?.scrollIntoView?.({ block: "center" });
-    }
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, hit.from, hit.to)).scrollIntoView());
   };
   const step = (dir: 1 | -1) => {
     if (hits.length === 0) return;
@@ -132,21 +76,16 @@ export function FindBar({ focusKey, onClose }: { focusKey: number; onClose(): vo
     // The first match at or after the cursor, as the search selects it.
     const found = findHits(editor, q.search, q.caseSensitive);
     const from = editor.state.selection.from;
-    const first = Math.max(0, found.findIndex((h) => h.at >= from));
     setHits(found);
-    setIndex(first);
-    if (found[first]?.kind === "log") show(found[first]);
+    setIndex(Math.max(0, found.findIndex((h) => h.from >= from)));
   };
   const close = () => {
     editor.commands.setSearchQuery({ search: "" });
-    paintLogHits([], null);
     onClose();
     editor.focus();
   };
-  // Replace acts on the current match only when it is the owner's text: a match in a log block is read-only.
-  const canReplace = current?.kind === "text";
   const replaceOne = () => {
-    if (canReplace) editor.commands.replaceCurrent();
+    if (hits.length > 0) editor.commands.replaceCurrent();
   };
   const onFindKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -169,8 +108,6 @@ export function FindBar({ focusKey, onClose }: { focusKey: number; onClose(): vo
       close();
     }
   };
-  const editable = hits.filter((h) => h.kind === "text").length;
-  const inLog = hits.length - editable;
   const none = search !== "" && hits.length === 0;
 
   return (
@@ -217,22 +154,16 @@ export function FindBar({ focusKey, onClose }: { focusKey: number; onClose(): vo
             onKeyDown={onReplaceKey}
           />
           <Toolbar gap={2}>
-            <Button size="sm" disabled={!canReplace} onClick={replaceOne}>
+            <Button size="sm" disabled={hits.length === 0} onClick={replaceOne}>
               Replace
             </Button>
-            <Button size="sm" disabled={editable === 0} onClick={() => editor.commands.replaceAll()}>
+            <Button size="sm" disabled={hits.length === 0} onClick={() => editor.commands.replaceAll()}>
               Replace all
             </Button>
           </Toolbar>
         </div>
         <IconButton icon={XIcon} label="Close" shortcut="Esc" onClick={close} />
       </div>
-      {inLog > 0 && (
-        <p className="m-0 text-meta text-muted-2">
-          {current?.kind === "log" ? "This match is in a block from the log: read-only. " : ""}
-          {`Replace changes your own text only; ${inLog} ${inLog === 1 ? "match" : "matches"} in log blocks stay as logged.`}
-        </p>
-      )}
     </div>
   );
 }

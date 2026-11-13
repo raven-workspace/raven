@@ -14,7 +14,6 @@ import {
   phaseInsertAt,
   sourceBlocks,
   sourceOf,
-  type AppendixIndex,
   type ReportData,
   type ReportNode,
   type ReportTarget,
@@ -36,7 +35,6 @@ const m = vi.mocked(api, true);
 
 const garnet = garnetFixtures(1_700_000_000_000);
 const target: ReportTarget = { key: GARNET_HOST, kind: "standalone", hostIds: [GARNET_HOST] };
-const noRefs: AppendixIndex = { entries: [], refFor: () => null };
 const draft = buildPlainTarget(garnet, target, {});
 const id = (name: string) => `l-garnet-${name}`;
 const entry = (data: ReportData, name: string) => data.log.find((e) => e.id === id(name))!;
@@ -61,8 +59,8 @@ function page(content: ReportNode, data: ReportData = garnet) {
   const utils = render(
     <QueryClientProvider client={makeQueryClient()}>
       <TooltipProvider>
-        <ReportDataContext.Provider value={{ data, appendix: noRefs, sectionMeta: {}, onRemoveEvidence, target, reportMeta: {} }}>
-          <ReportEditor sectionId="s1" doc={content} onChange={vi.fn()} onReady={(e) => (ref.editor = e)} />
+        <ReportDataContext.Provider value={{ data, onRemoveEvidence, target, reportMeta: {} }}>
+          <ReportEditor doc={content} onChange={vi.fn()} onReady={(e) => (ref.editor = e)} />
         </ReportDataContext.Provider>
       </TooltipProvider>
     </QueryClientProvider>,

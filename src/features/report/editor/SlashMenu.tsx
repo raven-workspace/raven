@@ -107,7 +107,7 @@ export function openEvidenceSearch(editor: Editor) {
   editor.exec((state, dispatch) => {
     const sel = state.selection;
     const parent = sel.$from.parent;
-    if (sel instanceof TextSelection && sel.empty && (parent.type.name === "paragraph" || parent.type.name === "slot") && parent.content.size === 0) {
+    if (sel instanceof TextSelection && sel.empty && parent.type.name === "paragraph" && parent.content.size === 0) {
       evidenceOnly.set(editor, { slash: sel.from, newParagraph: false });
       dispatch?.(triggerAutocomplete(state.tr.insertText("/")).scrollIntoView());
       return true;
