@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { Button, IconButton, Input, Toolbar } from "../../../ui";
 import type { EditingExtension } from "./extension";
 
-/** A match in the page's text: its range in the document, and where it stands for ordering. */
+/** A match in the page's text: its range in the document. */
 export type Hit = { from: number; to: number };
 
 /** Every match of `search` in the page's text (code blocks and table cells too), in page order. */

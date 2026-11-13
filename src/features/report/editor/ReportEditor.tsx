@@ -362,48 +362,48 @@ export function ReportEditor({
   );
 
   return (
-        <ProseKit editor={editor}>
-          <PageActionsContext.Provider value={actions}>
-            <PageHooks onDoc={onDoc} onRemoveEvidence={value.onRemoveEvidence} onImage={actions.addImage} />
-            <FormatToolbar
-              end={toolbarEnd}
-              className={toolbarClassName}
-              onFind={openFind}
-              findBar={find.open && <FindBar focusKey={find.focus} onClose={() => setFind((f) => ({ ...f, open: false }))} />}
-            />
-            {notices}
-            {imageError && (
-              <p role="alert" className="m-0 text-meta text-warn">
-                Couldn't save the image as a screenshot: {imageError}
-              </p>
-            )}
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              hidden
-              aria-hidden
-              tabIndex={-1}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                e.target.value = "";
-                if (file) actions.addImage(file);
-              }}
-            />
-            <div className="report-page" data-page={value.target ? "target" : "report"}>
-              {title && (
-                <h1 className="report-title">
-                  {titleNumber && <span className="report-num">{titleNumber}</span>}
-                  {title}
-                </h1>
-              )}
-              <div ref={mount} className="report-page-doc" />
-              <BlockHandle />
-              <TableHandles />
-            </div>
-            <BubbleMenu />
-            <SlashMenu />
-          </PageActionsContext.Provider>
-        </ProseKit>
+    <ProseKit editor={editor}>
+      <PageActionsContext.Provider value={actions}>
+        <PageHooks onDoc={onDoc} onRemoveEvidence={value.onRemoveEvidence} onImage={actions.addImage} />
+        <FormatToolbar
+          end={toolbarEnd}
+          className={toolbarClassName}
+          onFind={openFind}
+          findBar={find.open && <FindBar focusKey={find.focus} onClose={() => setFind((f) => ({ ...f, open: false }))} />}
+        />
+        {notices}
+        {imageError && (
+          <p role="alert" className="m-0 text-meta text-warn">
+            Couldn't save the image as a screenshot: {imageError}
+          </p>
+        )}
+        <input
+          ref={fileInput}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          hidden
+          aria-hidden
+          tabIndex={-1}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) actions.addImage(file);
+          }}
+        />
+        <div className="report-page" data-page={value.target ? "target" : "report"}>
+          {title && (
+            <h1 className="report-title">
+              {titleNumber && <span className="report-num">{titleNumber}</span>}
+              {title}
+            </h1>
+          )}
+          <div ref={mount} className="report-page-doc" />
+          <BlockHandle />
+          <TableHandles />
+        </div>
+        <BubbleMenu />
+        <SlashMenu />
+      </PageActionsContext.Provider>
+    </ProseKit>
   );
 }

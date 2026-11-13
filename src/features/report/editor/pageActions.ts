@@ -106,7 +106,7 @@ export function deleteBlockAt(editor: Editor, block: { node: PMNode; pos: number
   });
 }
 
-/** Marks a transaction the page makes itself (Add new evidence's Undo, a Refresh, notes turned into text): what it
+/** Marks a transaction the page makes itself (Add new evidence's Undo or a Refresh): what it
  *  takes off the page is not the owner's removal. */
 export const PROGRAMMATIC = "raven:programmatic";
 
