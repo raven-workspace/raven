@@ -31,6 +31,7 @@
   line-height: 22px;
 }
 
+/* Every block on the page (code, figures, tables, text) sits 12px from the next; figures and tables need no rule of their own. */
 .report-page .ProseMirror {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -103,8 +104,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-.report-page .prosemirror-flat-list + .prosemirror-flat-list {
-  margin-top: -8px;
+/* Consecutive list items keep the page's 12px block gap: no negative margin pulls them together. */
+.report-page .ProseMirror > .prosemirror-flat-list + .prosemirror-flat-list {
+  margin-top: 0;
 }
 
 .report-page h1,
