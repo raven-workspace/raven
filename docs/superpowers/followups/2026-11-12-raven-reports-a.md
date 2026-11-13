@@ -186,3 +186,14 @@ Screenshots in `.superpowers/sdd/2026-11-12-raven-reports-rework/shots/wk-*.png`
 ### Owner request (2026-11-12): screenshots directly on findings
 Add screenshots from a finding: paste, drop or pick a file. Each one creates a normal screenshot log entry on the finding's host, with its caption, and is appended to the finding's steps (reorderable). Also add "Link a screenshot from the log" for existing captures. The plain draft places a finding's screenshot as a figure after the step it belongs to; for an Additional finding it goes under that finding's bullet. Open question for the owner: does it also show in the log timeline? (Recommended: yes.) Build after the one-machine proof.
 - Owner answer: yes, it appears in the log timeline. **Binding: never duplicated in the report.** One log entry is placed once. A screenshot linked to a finding is placed only with that finding's step. It never also tags along with a nearby step, never appears as a separate figure elsewhere, and doesn't show as "not in the report" in the log column once it's placed. "Link a screenshot from the log" links the existing entry; it never copies it. Test: one screenshot linked to a finding and taken within the tag-along window of another step appears exactly once in the draft.
+
+## Plain pages rollout (2026-11-13, plan 2026-11-13-raven-reports-plain-rollout)
+
+Shipped on feat/reports: every report page is a plain editable document (layout 6); old pages rebuilt with the original kept in `previousDoc` and an append-only `meta.originals` archive; Refresh from log per block; guide notes, checks and the log column beside the page; notice clear of the sidebar; 12px block rhythm; content-sized table columns. Controller WebKit 1400 gate passed after fixes.
+
+Open for the owner:
+- "Move to appendix" was removed from the block menu (appendices are owner pages; cut/paste is the manual path). Re-add as a one-click move if wanted.
+- The Evidence column's open/closed state is not remembered between visits (E toggles it).
+- A rebuild drops an Also tested list the owner had deleted, heading included.
+- Residual: a flag added by hand as its own step, then its lead step added later, prints the value twice (both ordinary text).
+- Next: screenshots on findings (exactly-once placement), then Plan B (page style, PDF/.7z export).
