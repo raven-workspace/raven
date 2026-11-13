@@ -17,7 +17,7 @@ import type { Note, RuledOut } from "../types/notes";
 import type { Service } from "../types/service";
 import type { Settings } from "../types/settings";
 import { capturedHost } from "./capturedHost";
-import { examFixtures } from "./examFixtures";
+import { examFixtures, garnetFixtures } from "./examFixtures";
 import { AUDIT_PNGS } from "./images";
 
 export const AUDIT_IDS = {
@@ -159,6 +159,7 @@ const hosts: Host[] = [
   host("h-exam-lnx", "e-exam", "lnx02", "10.10.30.21", "linux"),
   // Captured as the owner really captures (capturedHost.ts): bare flag values, proof in separate entries, no grants.
   host("h-exam-xfer", "e-exam", "xfer03", "10.10.30.22", "linux", { boardColumn: "post-exploitation", access: "root" }),
+  host("h-exam-garnet", "e-exam", "garnet", "10.10.30.31", "linux", { boardColumn: "post-exploitation", access: "root" }),
   // A long name, so the drawer's host chip is at its widest next to "Paste into Web shell ?cmd=".
   host("h-pay-iis", "e-pay", "intranet-gateway-iis-frontend-07.corp.example.test", "198.51.100.20", "windows", { boardColumn: "initial-foothold", access: "user" }),
   host("h-pay-pg", "e-pay", "pg01.example.test", "198.51.100.30", "linux"),
@@ -354,7 +355,9 @@ const payloadBuilds: PayloadBuild[] = [
 
 const exam = examFixtures(AUDIT_NOW);
 const xfer = capturedHost(AUDIT_NOW, hosts.filter((h) => h.engagementId === "e-exam"));
-const log: LogEntry[] = [...labLog, ...exam.log, ...xfer.log, ...payLog];
+// garnet: the plain-report proof machine, a standalone target on the mock exam.
+const garnet = garnetFixtures(AUDIT_NOW);
+const log: LogEntry[] = [...labLog, ...exam.log, ...xfer.log, ...garnet.log, ...payLog];
 
 const attachments: Attachment[] = (Object.keys(AUDIT_PNGS) as (keyof typeof AUDIT_PNGS)[]).map((k) => ({
   id: `a-${k}`, mime: "image/png", dataBase64: AUDIT_PNGS[k].base64,
@@ -551,7 +554,7 @@ const checklist: ChecklistItem[] = [
 
 const progress: Record<string, Progress> = {
   "e-lab": { hostsTotal: 6, hostsRooted: 2, flagsFound: 2, flagsTotal: 12 },
-  "e-exam": { hostsTotal: 6, hostsRooted: 5, flagsFound: 8, flagsTotal: 10 },
+  "e-exam": { hostsTotal: 7, hostsRooted: 6, flagsFound: 10, flagsTotal: 12 },
   "e-old": { hostsTotal: 1, hostsRooted: 1, flagsFound: 2, flagsTotal: 2 },
   "e-pay": { hostsTotal: 2, hostsRooted: 0, flagsFound: 0, flagsTotal: 4 },
   "e-board": { hostsTotal: 23, hostsRooted: 1, flagsFound: 0, flagsTotal: 0 },
@@ -585,13 +588,14 @@ const settings: Settings = {
 };
 
 export const FIXTURES: AuditFixtures = {
-  engagements, hosts, services: [...services, ...exam.services, ...xfer.services], log, attachments,
+  engagements, hosts, services: [...services, ...exam.services, ...xfer.services, ...garnet.services], log, attachments,
   checklist: [...checklist, ...exam.checklist, ...xfer.checklist],
   notes: [...notes, ...exam.notes], ruledOut: [...ruledOut, ...exam.ruledOut], hostIdentity, vectors, tunnels, interfaceDismissals,
-  hops: [...hops, ...exam.hops], credentials: [...credentials, ...exam.credentials, ...xfer.credentials],
-  usernames: [...usernames, ...exam.usernames, ...xfer.usernames], credAttempts: [...credAttempts, ...xfer.credAttempts],
+  hops: [...hops, ...exam.hops], credentials: [...credentials, ...exam.credentials, ...xfer.credentials, ...garnet.credentials],
+  usernames: [...usernames, ...exam.usernames, ...xfer.usernames, ...garnet.usernames], credAttempts: [...credAttempts, ...xfer.credAttempts],
   triedPairs: [...triedPairs, ...xfer.triedPairs], payloadBuilds, reports: exam.reports, reportSections: exam.reportSections, extractions,
-  accessGrants: [...accessGrants, ...exam.accessGrants], findings: [...findings, ...exam.findings, ...xfer.findings], findingFiles: [...findingFiles, ...exam.findingFiles], failedAttempts: [...failedAttempts, ...exam.failedAttempts],
+  accessGrants: [...accessGrants, ...exam.accessGrants, ...garnet.grants], findings: [...findings, ...exam.findings, ...xfer.findings, ...garnet.findings], findingFiles: [...findingFiles, ...exam.findingFiles, ...garnet.findingFiles],
+  failedAttempts: [...failedAttempts, ...exam.failedAttempts, ...garnet.attempts],
   cleanup: [...cleanup, ...exam.cleanup], backups, settings,
 };
 

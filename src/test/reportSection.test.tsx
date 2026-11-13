@@ -22,6 +22,12 @@ import layout3Json from "./fixtures/report-layout3-owner.json";
 import layout5Json from "./fixtures/report-layout5-web01.json";
 
 vi.mock("../lib/api", () => import("../audit/fakeApi"));
+// The audit fixture also stores web01's layout-5 page (the audit's Restore screens); these tests store their own
+// (storeWeb01) where they need it, so every target starts undrafted, in grading order.
+vi.mock("../audit/fixtures", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../audit/fixtures")>();
+  return { ...real, FIXTURES: { ...real.FIXTURES, reportSections: real.FIXTURES.reportSections.filter((s) => s.kind !== "target") } };
+});
 
 // The real editor, with a handle on its instance so a test can type into the page.
 const editors: Editor[] = [];
@@ -83,7 +89,7 @@ const openPart = (group: "Front matter" | "Closing", part: RegExp) => {
   fireEvent.click(tab(group));
   fireEvent.click(within(screen.getByRole("tablist", { name: `${group} parts` })).getByRole("tab", { name: part }));
 };
-const TARGETS = ["1 lnx02", "2 ms01", "3 web01", "4 xfer03", "5 AD set"];
+const TARGETS = ["1 lnx02", "2 garnet", "3 ms01", "4 web01", "5 xfer03", "6 AD set"];
 /** Opens the To do panel from the strip (unless it is open) and returns its checks. */
 const openTodo = () => {
   if (!screen.queryByRole("region", { name: "To do" })) fireEvent.click(screen.getByRole("button", { name: /^To do/ }));
@@ -158,11 +164,11 @@ describe("Report view", () => {
     await ready();
     rowFor("lnx02").focus();
     fireEvent.keyDown(rowFor("lnx02"), { key: "ArrowRight", code: "ArrowRight" });
-    expect(document.activeElement).toBe(rowFor("ms01"));
+    expect(document.activeElement).toBe(rowFor("garnet"));
     expect(rowFor("lnx02")).toHaveAttribute("aria-selected", "true");
-    fireEvent.keyDown(rowFor("ms01"), { key: "Enter", code: "Enter" });
-    await waitFor(() => expect(rowFor("ms01")).toHaveAttribute("aria-selected", "true"));
-    fireEvent.keyDown(rowFor("ms01"), { key: "ArrowLeft", code: "ArrowLeft" });
+    fireEvent.keyDown(rowFor("garnet"), { key: "Enter", code: "Enter" });
+    await waitFor(() => expect(rowFor("garnet")).toHaveAttribute("aria-selected", "true"));
+    fireEvent.keyDown(rowFor("garnet"), { key: "ArrowLeft", code: "ArrowLeft" });
     fireEvent.keyDown(document.activeElement!, { key: "ArrowLeft", code: "ArrowLeft" });
     expect(document.activeElement).toBe(tab("Front matter"));
   });
@@ -380,13 +386,13 @@ describe("Report view", () => {
     const upsert = vi.spyOn(api, "reportSectionUpsert");
     const { qc } = mount();
     await ready();
-    await waitFor(() => expect(targetRows()).toHaveLength(5));
+    await waitFor(() => expect(targetRows()).toHaveLength(6));
 
     await act(async () => {
       await api.hostDelete("h-exam-web");
       await qc.invalidateQueries();
     });
-    await waitFor(() => expect(targetLabels()).toEqual(["1 lnx02", "2 ms01", "3 xfer03", "4 AD set"]));
+    await waitFor(() => expect(targetLabels()).toEqual(["1 lnx02", "2 garnet", "3 ms01", "4 xfer03", "5 AD set"]));
 
     let created = "";
     await act(async () => {
@@ -516,11 +522,11 @@ describe("Report view", () => {
     });
     mount();
     await ready();
-    await waitFor(() => expect(targetRows()).toHaveLength(5));
+    await waitFor(() => expect(targetRows()).toHaveLength(6));
     const first = rowFor("lnx02");
     first.focus();
     fireEvent.keyDown(first, { key: "ArrowRight", code: "ArrowRight", altKey: true });
-    const order = ["1 ms01", "2 lnx02", "3 web01", "4 xfer03", "5 AD set"];
+    const order = ["1 garnet", "2 lnx02", "3 ms01", "4 web01", "5 xfer03", "6 AD set"];
     await waitFor(() => expect(targetLabels()).toEqual(order));
     await act(async () => release());
     await waitFor(() => expect(editors.length).toBeGreaterThan(0));
@@ -560,7 +566,7 @@ describe("Report view", () => {
     });
     const { qc } = mount();
     await ready();
-    await waitFor(() => expect(targetRows()).toHaveLength(5));
+    await waitFor(() => expect(targetRows()).toHaveLength(6));
 
     fail = true;
     await act(async () => {
@@ -568,7 +574,7 @@ describe("Report view", () => {
       await qc.invalidateQueries();
     });
     expect(await screen.findByText(/Couldn't add the report's new sections/)).toBeInTheDocument();
-    expect(targetRows()).toHaveLength(5);
+    expect(targetRows()).toHaveLength(6);
 
     fail = false;
     fireEvent.click(screen.getByRole("button", { name: "Retry setting up sections" }));
@@ -601,16 +607,16 @@ describe("Report view", () => {
     const reorder = vi.spyOn(api, "reportSectionsReorder");
     mount();
     await ready();
-    await waitFor(() => expect(targetRows()).toHaveLength(5));
+    await waitFor(() => expect(targetRows()).toHaveLength(6));
     const first = rowFor("lnx02");
     const lnxId = first.dataset.id!;
-    const msId = rowFor("ms01").dataset.id!;
+    const garnetId = rowFor("garnet").dataset.id!;
     first.focus();
     fireEvent.keyDown(first, { key: "ArrowRight", code: "ArrowRight", altKey: true });
-    await waitFor(() => expect(targetLabels()).toEqual(["1 ms01", "2 lnx02", "3 web01", "4 xfer03", "5 AD set"]));
+    await waitFor(() => expect(targetLabels()).toEqual(["1 garnet", "2 lnx02", "3 ms01", "4 web01", "5 xfer03", "6 AD set"]));
     expect(reorder).toHaveBeenCalledTimes(1);
     const ids = reorder.mock.calls[0][1];
-    expect(ids.indexOf(msId)).toBeLessThan(ids.indexOf(lnxId));
+    expect(ids.indexOf(garnetId)).toBeLessThan(ids.indexOf(lnxId));
     expect(document.activeElement).toBe(rowFor("lnx02"));
   });
 });
@@ -776,7 +782,7 @@ describe("Report view: the result", () => {
     await waitFor(() => expect(title()).toBe("4Independent Challenges"));
     await waitFor(() => expect(machineHeading()).toEqual(["4.1", "lnx02 (10.10.30.21)"]));
     fireEvent.click(rowFor("ms01"));
-    await waitFor(() => expect(machineHeading()).toEqual(["4.2", "ms01 (10.10.30.5)"]));
+    await waitFor(() => expect(machineHeading()).toEqual(["4.3", "ms01 (10.10.30.5)"]));
     expect(title()).toBeNull();
     const subs = within(paper()).getAllByRole("heading", { level: 2 });
     expect(subs.map((h) => h.textContent)[0]).toBe("Service enumeration");
@@ -1273,7 +1279,7 @@ describe("Report view: the result", () => {
       await waitFor(() => expect(machineHeading()).toEqual(["4.1", "lnx02 (10.10.30.21)"]));
       rowFor("lnx02").focus();
       fireEvent.keyDown(rowFor("lnx02"), { key: "ArrowRight", code: "ArrowRight", altKey: true });
-      await waitFor(() => expect(targetLabels()).toEqual(["1 ms01", "2 lnx02", "3 web01", "4 xfer03", "5 AD set"]));
+      await waitFor(() => expect(targetLabels()).toEqual(["1 garnet", "2 lnx02", "3 ms01", "4 web01", "5 xfer03", "6 AD set"]));
       await waitFor(() => expect(machineHeading()).toEqual(["4.2", "lnx02 (10.10.30.21)"]));
     });
 

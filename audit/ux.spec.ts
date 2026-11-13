@@ -49,7 +49,9 @@ const NEEDS_DATA = new Set([
   // No import under `empty`: the Manual shows its empty state, with no note or link to open.
   "manual-tool", "manual-card-drawer",
   // No hosts under `empty`: the Report shows "No hosts yet", with no tab, page or check to open.
-  "report-details", "report-target", "report-ad", "report-appendix", "report-narrow", "report-chip-open", "report-todo", "report-free-page",
+  "report-details", "report-target", "report-ad", "report-narrow", "report-todo", "report-free-page", "report-front-introduction",
+  "report-front-summary", "report-front-methodology", "report-closing", "report-web01", "report-web01-restored", "report-refresh-confirm",
+  "report-notice",
 ]);
 
 for (const screen of STATE_SCREENS) {
@@ -92,11 +94,12 @@ test("report: ms01's proof passes its checks", async ({ page }) => {
   await page.clock.install({ time: AUDIT_NOW });
   await page.goto("/e/e-exam/s/report");
   await openReportItem("ms01")(page);
-  await page.locator(".report-page .report-chip").first().waitFor();
+  await page.locator(".report-page >> role=heading[name=/^4\\.\\d+ ms01 \\(10\\.10\\.30\\.5\\)$/]").waitFor();
   const checks = await reportChecks(page);
   await expect(checks).toBeVisible();
-  // The list is the real one: the silent download step's check is on it, as a soft one (downloads print nothing).
-  await expect(checks.getByText("A command shows no output")).toBeVisible();
+  // The list is the real one, read from ms01's drafted page (the PrintSpoofer run is on it): nothing left to do.
+  await expect(page.locator(".report-page .report-codeblock", { hasText: "PrintSpoofer64.exe -i -c powershell.exe" }).first()).toBeVisible();
+  await expect(checks.getByText("Nothing to do on this tab")).toBeVisible();
   // ipconfig with 10.10.30.5, whoami, hostname, type from the Desktop, a screenshot: no proof check is left.
   await expect(checks.getByText(/proof/i)).toHaveCount(0);
   await expect(checks.getByText(/No (local|proof)\.txt/)).toHaveCount(0);
@@ -129,6 +132,8 @@ const PRIVATE_TEXT = [
   "The sa password is the Umbraco one", "Hunch only",
   "Read every file feroxbuster finds",
   "Felt slow on this one",
+  // garnet: an operator slip, private.
+  "Ran ./exp from my home folder",
 ];
 
 test("report: nothing private shows on any page, check or evidence tab", async ({ page }) => {

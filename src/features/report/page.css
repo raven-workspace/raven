@@ -142,6 +142,17 @@
   box-shadow: -2px 0 0 var(--page-code-bg), 2px 0 0 var(--page-code-bg);
 }
 
+/* A short code token stays on one line (the editor marks it): code wraps between tokens, not at a hyphen inside one. */
+.report-page .report-token {
+  white-space: nowrap;
+}
+
+/* A code block wraps to the page from its first paint, before its view (language picker, tint) mounts around it. */
+.report-page .ProseMirror pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .report-page .report-code {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -183,9 +194,9 @@
   margin-right: 8px;
 }
 
-/* A numbered report-level page's sub-sections (3.1, 3.2): the number is computed from the outline (headings.ts) and
-   set on the heading by the editor; a heading the owner adds has none. */
-.report-page .ProseMirror > h2[data-number]::before {
+/* A numbered report-level page's sub-sections (3.1, 3.2) and a target's machine heading (4.2): the number is computed
+   from the outline (headings.ts) and set on the heading by the editor; a heading the owner adds has none. */
+.report-page .ProseMirror > :is(h1, h2)[data-number]::before {
   content: attr(data-number);
   display: inline-block;
   min-width: 48px;

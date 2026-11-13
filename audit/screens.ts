@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { AUDIT_IDS, AUDIT_NOTE_IDS } from "../src/audit/fixtures";
 import { AUDIT_PNGS } from "../src/audit/images";
 
@@ -51,9 +51,6 @@ export const reportTab = (page: Page, label: string) => {
   const exact = new RegExp(`^(\\d+ )?${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
   return page.getByRole("tablist", { name: "Report pages" }).getByRole("tab").filter({ has: page.locator("[data-tab-label]", { hasText: exact }) });
 };
-/** The tab of a target's appendix: lettered by order, it names its target under the letter ("ms01, 1 item"). */
-export const appendixTab = (page: Page, target: string) =>
-  page.getByRole("tablist", { name: "Report pages" }).getByRole("tab").filter({ has: page.locator("[data-tab-label]", { hasText: /^Appendix [A-Z]$/ }) }).filter({ hasText: `${target}, ` });
 /**
  * Opens a report page from the tab row: a target or a tab by its label, or "Report details", the first part of Front
  * matter. The row lists every section once the report has set them up (Front matter is the first tab).
@@ -71,29 +68,36 @@ export const reportChecks = async (page: Page) => {
   if ((await todo.getAttribute("aria-expanded")) !== "true") await todo.click();
   return page.getByRole("list", { name: "Checks" }).and(page.locator(":visible")).first();
 };
-/** The evidence rail: a column from 1200px of pane, else a drawer opened from the strip. */
-export const openReportRail = async (page: Page) => {
-  const toggle = page.locator("section[aria-label='Report']").getByRole("button", { name: "Evidence", exact: true });
-  if ((await toggle.isVisible()) && (await toggle.getAttribute("aria-pressed")) !== "true") await toggle.click();
+/** Opens a part of Front matter or Closing: its tab, then the part in the segmented row ("2 Summary" reads as Summary). */
+export const openReportPart = (group: "Front matter" | "Closing", part: string) => async (page: Page) => {
+  await reportTab(page, "Front matter").waitFor();
+  await reportTab(page, group).click();
+  await page.getByRole("tablist", { name: `${group} parts` }).getByRole("tab", { name: new RegExp(`^(\\d+ )?${part}$`) }).click();
 };
-/** ms01's 400-line winPEAS run, added from the log column (its long output goes to an appendix), then its target's
- *  appendix page opened. */
-const moveWinPeas = async (page: Page) => {
-  await openReportItem("ms01")(page);
-  await page.locator(".report-page .report-chip").first().waitFor();
-  await openReportRail(page);
-  await page.getByRole("button", { name: /^Add winPEAS on ms01/ }).click();
-  const chip = page.locator(".report-page .report-chip", { hasText: "winPEASx64.exe" });
-  await chip.waitFor();
-  // A plain + add puts the whole run on the page: its chip's Move to appendix sends it after.
-  if ((await chip.getAttribute("data-moved")) === null) {
-    await chip.click();
-    await page.locator(".report-page .report-open").getByRole("button", { name: "Move to appendix" }).click();
-  }
-  // The drawer (under 1200px of pane) would cover the tab row's end: close it from its own button.
-  const close = page.locator("aside[aria-label='Evidence']").getByRole("button", { name: "Close" });
-  if (await close.isVisible()) await close.click();
-  await appendixTab(page, "ms01").click();
+/** garnet's page, drafted: its machine heading carries the target's number. */
+export const GARNET_HEADING = ".report-page >> role=heading[name=/^4\\.\\d+ garnet \\(10\\.10\\.30\\.31\\)$/]";
+export const openGarnet = async (page: Page) => {
+  await openReportItem("garnet")(page);
+  await page.locator(GARNET_HEADING).waitFor();
+};
+/** garnet's "Confirm the repository is readable" output on the page: one plain code block copied from the log. */
+export const garnetOutput = (page: Page) => page.locator(".report-page .report-codeblock").filter({ hasText: /^ref: refs\/heads\/main/ });
+/** Clicks into a block's text and moves to the end of the clicked line, ready to type. ProseMirror takes up a click's
+ *  selection a moment after mouseup; a key pressed sooner acts at the old selection. */
+export const caretAtEnd = async (page: Page, block: Locator) => {
+  await block.click();
+  await page.waitForTimeout(150);
+  await page.keyboard.press("End");
+};
+/** Opens a block's actions from its handle: the pointer moves onto the block (the handle shows for the block under
+ *  it), then onto the handle's menu button. */
+export const openBlockActions = async (page: Page, block: Locator) => {
+  await block.scrollIntoViewIfNeeded();
+  const box = (await block.boundingBox())!;
+  await page.mouse.move(box.x + 40, box.y + box.height / 2, { steps: 4 });
+  await page.mouse.move(box.x + 60, box.y + box.height / 2, { steps: 4 });
+  await page.locator(".report-handle-popup[data-state='open']").waitFor();
+  await page.locator(".report-handle").getByRole("button", { name: "Block actions" }).click();
 };
 const NOTE_PANE = "section[aria-label='Note']";
 
@@ -442,15 +446,40 @@ export const SCREENS: Screen[] = [
   { id: "manual-empty", path: "/manual?audit=empty", ready: "text=Import your Field Manual to fill the Manual" },
   // The Report on the mock exam: the report exists with no sections, so opening it drafts every page.
   { id: "report-details", path: REPORT, ready: "role=heading[name='Report details']", setup: openReportItem("Report details") },
-  { id: "report-target", path: REPORT, ready: ".report-page >> role=heading[name=/^4\\.\\d+ Target #\\d+ – 10\\.10\\.30\\.5$/]", setup: openReportItem("ms01") },
+  { id: "report-target", path: REPORT, ready: GARNET_HEADING, setup: openReportItem("garnet") },
   { id: "report-ad", path: REPORT, ready: ".report-page >> role=heading[name=/^5 Active Directory Set$/]", setup: openReportItem("AD set") },
-  { id: "report-appendix", path: REPORT, ready: "role=heading[name=/^Appendix [A-Z]: ms01$/]", setup: moveWinPeas },
+  { id: "report-front-introduction", path: REPORT, ready: ".report-page >> role=heading[name=/^1 OffSec Certified Professional Exam Report$/]", setup: openReportPart("Front matter", "Introduction") },
+  { id: "report-front-summary", path: REPORT, ready: ".report-page >> role=heading[name=/^2 High-Level Summary$/]", setup: openReportPart("Front matter", "Summary") },
+  { id: "report-front-methodology", path: REPORT, ready: ".report-page >> role=heading[name=/^3 Methodologies$/]", setup: openReportPart("Front matter", "Methodology") },
+  { id: "report-closing", path: REPORT, ready: ".report-page >> role=heading[name='Further Information']", setup: openReportPart("Closing", "Further information") },
+  // web01 is stored at layout 5: opening it rebuilds the plain page, keeps the old one and offers it back.
+  { id: "report-web01", path: REPORT, ready: "text=This page was rebuilt for a new layout.", setup: openReportItem("web01") },
   {
-    // A chip opened in place: the block as it prints, under its bar (Trim, Highlight, Edit text, Move to appendix).
-    id: "report-chip-open", path: REPORT, ready: ".report-page .report-open .report-code",
+    id: "report-web01-restored", path: REPORT, ready: "text=This is your page from before the new layout.",
     setup: async (page) => {
-      await openReportItem("ms01")(page);
-      await page.locator(".report-page .report-chip", { hasText: "whoami /priv" }).click();
+      await openReportItem("web01")(page);
+      await page.getByRole("button", { name: "Restore your previous page" }).click();
+    },
+  },
+  {
+    // An edited block copied from the log: Refresh from log asks before it replaces the owner's text.
+    id: "report-refresh-confirm", path: REPORT, ready: "role=dialog[name='Replace this block with the current version?']",
+    setup: async (page) => {
+      await openGarnet(page);
+      const block = garnetOutput(page);
+      await caretAtEnd(page, block.locator("pre"));
+      await page.keyboard.type(" X");
+      await openBlockActions(page, block);
+      await page.getByRole("menu", { name: "Block actions" }).getByRole("menuitem", { name: "Refresh from log" }).click();
+    },
+  },
+  {
+    // Add new evidence's notice, held open by the pointer (it closes itself after 5s).
+    id: "report-notice", path: REPORT, ready: "body > [role=status]",
+    setup: async (page) => {
+      await openGarnet(page);
+      await page.getByRole("button", { name: "Add new evidence" }).click();
+      await page.locator("body > [role=status]").hover();
     },
   },
   {
@@ -458,7 +487,7 @@ export const SCREENS: Screen[] = [
     id: "report-todo", path: REPORT, ready: "role=list[name='Checks'] >> visible=true",
     setup: async (page) => {
       await openReportItem("AD set")(page);
-      await page.locator(".report-page .report-chip").first().waitFor();
+      await page.locator(".report-page >> role=heading[name=/^5 Active Directory Set$/]").waitFor();
       await reportChecks(page);
     },
   },
@@ -474,8 +503,7 @@ export const SCREENS: Screen[] = [
     // Under 1200px of pane the evidence rail is a drawer, opened from the strip; wider, it is the third column.
     id: "report-narrow", path: REPORT, ready: "role=tablist[name='Evidence'] >> visible=true",
     setup: async (page) => {
-      await openReportItem("ms01")(page);
-      await page.locator(".report-page .report-chip").first().waitFor();
+      await openGarnet(page);
       const toggle = page.locator("section[aria-label='Report']").getByRole("button", { name: "Evidence", exact: true });
       if (await toggle.isVisible()) await toggle.click();
       // Checked once the drawer has faded in, not halfway through (a half-faded row reads as low contrast).

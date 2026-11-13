@@ -18,6 +18,7 @@ import type { Engagement } from "../types/engagement";
 import type { Host } from "../types/host";
 import type { Service } from "../types/service";
 import { DA_NTLM, FLAGS, GARNET, OUTPUT, PROOF, REVERSE_SHELL_B64 } from "./examTexts";
+import layout5Web01 from "../test/fixtures/report-layout5-web01.json" with { type: "json" };
 
 const E = "e-exam";
 const MS01 = "h-exam-ms01";
@@ -446,6 +447,11 @@ export function examFixtures(now: number) {
       "Content discovery: SecLists raft-small-directories.txt and common.txt.",
       "Password guessing and cracking: SecLists 10k-most-common.txt and rockyou.txt.",
     ]),
+    // web01 as the owner left it under layout 5: opening it rebuilds the plain page and offers Restore.
+    {
+      id: "rs-exam-web01", reportId: "rep-exam", kind: "target", targetKey: WEB, position: 2,
+      doc: layout5Web01 as unknown as ReportSection["doc"], meta: { layout: 5 }, draftBuiltAt: ago(15), updatedAt: ago(15),
+    },
   ];
 
   return { reportSections, log, services, findings, findingFiles, failedAttempts, ruledOut, usernames, accessGrants, hops, credentials, checklist, notes, cleanup, reports };

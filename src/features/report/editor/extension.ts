@@ -42,7 +42,7 @@ import { defineText } from "prosekit/extensions/text";
 import { defineUnderline } from "prosekit/extensions/underline";
 import { defineVirtualSelection } from "prosekit/extensions/virtual-selection";
 import type { Node as PMNode } from "prosekit/pm/model";
-import { Plugin, type Command, type EditorState } from "prosekit/pm/state";
+import { Plugin, PluginKey, type Command, type EditorState } from "prosekit/pm/state";
 import { Decoration, DecorationSet } from "prosekit/pm/view";
 import type { ReportNode } from "../../../engines/report";
 import { defineReactNodeView } from "prosekit/react";
@@ -188,6 +188,40 @@ function sourceGoneMarks(gone: SourceGone) {
     }),
   );
 }
+
+/** The longest code token kept on one line, as the Manual keeps its own; a longer one (a hash, base64) still breaks
+ *  anywhere to fit the page. */
+const TOKEN_MAX = 40;
+/** A code token with a hyphen, dot, slash or other mark a browser may wrap at: "libcap-dev", "5.15.0-70.77". */
+const BREAKABLE_TOKEN = /\S*[^\w\s]\S*/g;
+
+function codeTokens(doc: PMNode): DecorationSet {
+  const decos: Decoration[] = [];
+  doc.descendants((node, pos, parent) => {
+    if (!node.isText) return true;
+    if (parent?.type.name !== "codeBlock" && !node.marks.some((m) => m.type.name === "code")) return false;
+    for (const m of (node.text ?? "").matchAll(BREAKABLE_TOKEN)) {
+      if (m[0].length <= TOKEN_MAX) decos.push(Decoration.inline(pos + m.index, pos + m.index + m[0].length, { class: "report-token" }));
+    }
+    return false;
+  });
+  return DecorationSet.create(doc, decos);
+}
+
+const codeTokensKey = new PluginKey<DecorationSet>("reportCodeTokens");
+
+/** Code never wraps inside a short token (`span.report-token`, nowrap in page.css): a line breaks between "apt-get" and
+ *  "install", never at the hyphen in "apt-get". Recomputed only when the page changes. */
+const unbrokenCodeTokens = definePlugin(
+  new Plugin<DecorationSet>({
+    key: codeTokensKey,
+    state: {
+      init: (_, state) => codeTokens(state.doc),
+      apply: (tr, set) => (tr.docChanged ? codeTokens(tr.doc) : set),
+    },
+    props: { decorations: (state) => codeTokensKey.getState(state) },
+  }),
+);
 
 /** Marks the code block the cursor is in (`data-active`), so its language picker shows while the owner types in it. */
 const activeCodeBlock = definePlugin(
@@ -354,6 +388,7 @@ export function defineReportExtension(
     holdPositions(held),
     defineEditing(numbers),
     activeCodeBlock,
+    unbrokenCodeTokens,
     defineReactNodeView({ name: "codeBlock", component: CodeBlockView, as: "div", contentAs: "code", stopEvent: stopControlEvents }),
     sourcedAttrs(),
     hintPlaceholders,
