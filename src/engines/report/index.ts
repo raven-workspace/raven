@@ -21,3 +21,4 @@ export * from "./copies";
 export * from "./terminal";
 export * from "./plain";
 export * from "./plainTables";
+export * from "./flatten";

