@@ -7,6 +7,7 @@ import { GARNET_HOST, garnetFixtures } from "../audit/examFixtures";
 import { buildPlainTarget, buildSectionDraft, type ReportData, type ReportNode } from "../engines/report";
 import { GUIDES, guideFor, guidesOf, sectionGuide, type GuideId } from "../engines/report/guides";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext";
+import { GuidePanel } from "../features/report/GuidePanel";
 import { ReportEditor } from "../features/report/editor/ReportEditor";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
@@ -43,13 +44,13 @@ const para = (text: string): ReportNode => ({ type: "paragraph", content: [{ typ
 const heading = (text: string): ReportNode => ({ type: "heading", attrs: { level: 2 }, content: [{ type: "text", text }] });
 const doc = (...content: ReportNode[]): ReportNode => ({ type: "doc", content });
 
-function setup(page: ReportNode, sectionKind: SectionKind = "target") {
+function setup(page: ReportNode) {
   const onChange = vi.fn();
   const ref: { editor: Editor | null } = { editor: null };
   const utils = render(
     <QueryClientProvider client={makeQueryClient()}>
       <ReportDataContext.Provider value={{ data, appendix: { entries: [], refFor: () => null }, sectionMeta: {}, onRemoveEvidence: vi.fn() }}>
-        <ReportEditor sectionId="s1" sectionKind={sectionKind} doc={page} onChange={onChange} onReady={(e) => (ref.editor = e)} />
+        <ReportEditor sectionId="s1" doc={page} onChange={onChange} onReady={(e) => (ref.editor = e)} />
       </ReportDataContext.Provider>
     </QueryClientProvider>,
   );
@@ -165,65 +166,78 @@ describe("guidesOf", () => {
   });
 });
 
-describe("guide notes on the page", () => {
-  it("shows the ports guide above a ports table, never in the document", async () => {
-    const page = doc(ports, para("After"));
-    const { editor, container } = setup(page);
-    const shown = await note("ports");
-    expect(shown).toHaveTextContent(GUIDES.ports.body);
-    // Above the table it guides.
-    const table = container.querySelector('[data-block="generated"], [data-report="generated"]') ?? container.querySelector(".ProseMirror > :not(.report-guide-slot)");
-    expect(table).toBeTruthy();
-    expect(shown.compareDocumentPosition(table!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // Chrome only: not saved, so not copied or exported.
-    expect((editor().getDocJSON() as ReportNode).content?.map((n) => n.type)).toEqual(["generated", "paragraph"]);
-    expect(JSON.stringify(editor().getDocJSON())).not.toContain("Keep the ports");
-  });
+describe("guide notes beside the page", () => {
+  const garnetDoc = buildPlainTarget(garnetFixtures(1_700_000_000_000), { key: GARNET_HOST, kind: "standalone", hostIds: [GARNET_HOST] }, {});
+  const panel = (d: ReportNode = garnetDoc, kind: SectionKind = "target", qc = makeQueryClient()) =>
+    render(
+      <QueryClientProvider client={qc}>
+        <aside aria-label="Evidence">
+          <GuidePanel kind={kind} doc={d} />
+        </aside>
+      </QueryClientProvider>,
+    );
+  const titles = () => within(screen.getByRole("list", { name: "Guide notes" })).getAllByRole("note").map((n) => n.getAttribute("aria-label"));
 
-  it("Hide this note hides it and saves its id", async () => {
-    const user = userEvent.setup();
-    setup(doc(ports, vuln()));
-    const shown = await note("ports");
-    await user.click(within(shown).getByRole("button", { name: "Hide this note" }));
-    expect(m.settingsUpdate).toHaveBeenCalledWith({ reportGuidesHidden: ["ports"] });
-    await waitFor(() => expect(screen.queryByRole("note", { name: GUIDES.ports.title })).not.toBeInTheDocument());
-    expect(screen.getByRole("note", { name: GUIDES.vuln.title })).toBeInTheDocument();
-  });
-
-  it("Hide all guide notes saves *", async () => {
-    const user = userEvent.setup();
-    setup(doc(ports, vuln()));
-    const shown = await note("ports");
-    await user.click(within(shown).getByRole("button", { name: "Hide all guide notes" }));
-    expect(m.settingsUpdate).toHaveBeenCalledWith({ reportGuidesHidden: ["*"] });
-    await waitFor(() => expect(screen.queryAllByRole("note")).toHaveLength(0));
-  });
-
-  it("leaves hidden notes out, and * leaves them all out", async () => {
-    m.settingsGet.mockResolvedValue(settings(["ports"]));
-    setup(doc(ports, vuln()));
-    await note("vuln");
-    expect(screen.queryByRole("note", { name: GUIDES.ports.title })).not.toBeInTheDocument();
-  });
-
-  it("shows nothing when every note is hidden", async () => {
-    m.settingsGet.mockResolvedValue(settings(["*"]));
+  it("guide notes sit beside the page, never inside the paper", async () => {
     const { container } = setup(doc(ports, vuln()));
     await waitFor(() => expect(container.querySelector(".ProseMirror")).toBeTruthy());
     await new Promise((r) => setTimeout(r, 20));
-    expect(screen.queryAllByRole("note")).toHaveLength(0);
+    expect(document.querySelector(".report-page [data-guide], .ProseMirror [data-guide]")).toBeNull();
+    panel();
+    const aside = screen.getByRole("complementary", { name: "Evidence" });
+    expect(await within(aside).findByRole("list", { name: "Guide notes" })).toBeInTheDocument();
   });
 
-  it("shows each guide once on a page", async () => {
-    setup(doc(vuln("f1"), para("x"), vuln("f2")));
-    await note("vuln");
-    expect(screen.getAllByRole("note", { name: GUIDES.vuln.title })).toHaveLength(1);
+  it("lists the open page's guides in page order, folding the rest behind a count", async () => {
+    const user = userEvent.setup();
+    panel();
+    await screen.findByRole("list", { name: "Guide notes" });
+    const want = guidesOf(garnetDoc, "target").map((id) => GUIDES[id].title);
+    expect(titles()).toEqual(want.slice(0, 2));
+    await user.click(screen.getByRole("button", { name: `Show ${want.length - 2} more notes` }));
+    expect(titles()).toEqual(want);
+    await user.click(screen.getByRole("button", { name: "Show fewer notes" }));
+    expect(titles()).toEqual(want.slice(0, 2));
   });
 
-  it("shows a page's own guide at its top", async () => {
-    const { container } = setup(doc(para("What the engagement was")), "summary");
-    const shown = await note("summary");
-    const first = container.querySelector(".ProseMirror p");
-    expect(shown.compareDocumentPosition(first!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  it("Hide this note hides it in every report", async () => {
+    const user = userEvent.setup();
+    // Settings is stored: what one save writes, the next read returns.
+    m.settingsUpdate.mockImplementation(async (patch) => {
+      const next = { ...settings(), ...patch } as Settings;
+      m.settingsGet.mockResolvedValue(next);
+      return next;
+    });
+    const qc = makeQueryClient();
+    const first = panel(garnetDoc, "target", qc);
+    await user.click(within(await note("ports")).getByRole("button", { name: "Hide this note" }));
+    expect(m.settingsUpdate).toHaveBeenCalledWith({ reportGuidesHidden: ["ports"] });
+    await waitFor(() => expect(screen.queryByRole("note", { name: GUIDES.ports.title })).not.toBeInTheDocument());
+    first.unmount();
+    // Another target page, same Settings: no ports note.
+    panel(garnetDoc, "target", qc);
+    await screen.findByRole("list", { name: "Guide notes" });
+    await user.click(screen.getByRole("button", { name: /^Show \d+ more notes$/ }));
+    expect(screen.queryByRole("note", { name: GUIDES.ports.title })).not.toBeInTheDocument();
+  });
+
+  it("Hide all guide notes writes '*' and the panel goes", async () => {
+    const user = userEvent.setup();
+    panel();
+    await user.click(within(await note("result")).getByRole("button", { name: "Hide all guide notes" }));
+    expect(m.settingsUpdate).toHaveBeenCalledWith({ reportGuidesHidden: ["*"] });
+    await waitFor(() => expect(screen.queryByRole("list", { name: "Guide notes" })).not.toBeInTheDocument());
+  });
+
+  it("shows nothing while Settings is hidden-all, and the Settings toggle brings them back", async () => {
+    m.settingsGet.mockResolvedValue(settings(["*"]));
+    const qc = makeQueryClient();
+    const first = panel(garnetDoc, "target", qc);
+    await waitFor(() => expect(qc.getQueryData(["settings"])).toBeTruthy());
+    expect(screen.queryByRole("list", { name: "Guide notes" })).not.toBeInTheDocument();
+    first.unmount();
+    qc.setQueryData(["settings"], settings([]));
+    panel(garnetDoc, "target", qc);
+    expect(await screen.findByRole("list", { name: "Guide notes" })).toBeInTheDocument();
   });
 });

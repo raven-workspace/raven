@@ -49,7 +49,6 @@ import { defineReactNodeView, type ReactNodeViewComponent } from "prosekit/react
 import { hljsParser } from "./codeHighlight";
 import { addStep, moveCell } from "./commands";
 import { CodeBlockView } from "./nodes/CodeBlockView";
-import { defineGuideNotes, GuideSlots } from "./GuideNote";
 import { EvidenceView } from "./nodes/EvidenceView";
 import { FigureView } from "./nodes/FigureView";
 import { ExploitView } from "./nodes/ExploitView";
@@ -495,11 +494,9 @@ export function defineReportExtension(
   numbers: SubNumbers = { current: undefined },
   held: HeldPositions = new Set(),
   gone: SourceGone = { current: undefined },
-  guides: GuideSlots = new GuideSlots(),
 ): Extension {
   return union(
     headingNumbers(numbers),
-    defineGuideNotes(guides),
     sourceGoneMarks(gone),
     holdPositions(held),
     defineEditing(numbers),

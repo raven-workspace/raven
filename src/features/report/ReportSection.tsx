@@ -50,6 +50,7 @@ import { ReportDataContext, type ReportDataValue } from "./editor/ReportDataCont
 import { keepCopiedText, openFindBar, posAtPath, ReportEditor, selectBlockAt } from "./editor/ReportEditor";
 import { AddEvidenceButton } from "./AddEvidenceButton";
 import { EvidenceDrawer, EvidenceRail } from "./EvidenceRail";
+import { GuidePanel } from "./GuidePanel";
 import { ReportDetails } from "./ReportDetails";
 import { ReportStrip } from "./ReportStrip";
 import { focusReportTab, PartTabs, ReportTabs, type TabItem } from "./ReportTabs";
@@ -994,8 +995,14 @@ function ReportBody({
       </div>
     ) : null;
   const railDoc = openSection ? (openLiveDoc ?? savedDocOf(openSection)) : EMPTY_DOC;
+  const guides =
+    openSection && openSection.kind !== "details" && hasCurrentPage(openSection) && contextValue ? (
+      <GuidePanel kind={openSection.kind} placement={openSection.kind === "page" ? (openSection.meta as Partial<PageMeta>).placement : undefined} doc={railDoc} />
+    ) : null;
   const rail = (
-    <EvidenceRail
+    <>
+      {guides}
+      <EvidenceRail
       target={open?.target}
       data={data}
       doc={railDoc}
@@ -1003,7 +1010,8 @@ function ReportBody({
       didWell={openSection?.kind === "summary"}
       meta={reportMeta}
       onInserted={onRestoreEvidence}
-    />
+      />
+    </>
   );
   // With a page open its bar comes first (wide, flush with the pane's top edge) and these lines sit under it.
   const editorShown = openSection?.kind !== "details" && !!openSection && hasCurrentPage(openSection) && !!contextValue;
@@ -1118,8 +1126,6 @@ function ReportBody({
                   <ReportEditor
                     key={`${openSection.id}:${swaps}`}
                     sectionId={openSection.id}
-                    sectionKind={openSection.kind}
-                    placement={openSection.kind === "page" ? (openSection.meta as Partial<PageMeta>).placement : undefined}
                     title={openTitle.text}
                     titleNumber={openTitle.number}
                     subNumbers={pageSubNumbers}

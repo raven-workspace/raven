@@ -1,14 +1,9 @@
 import { X } from "@phosphor-icons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useSyncExternalStore } from "react";
-import { createPortal } from "react-dom";
-import { definePlugin } from "prosekit/core";
-import { Plugin } from "prosekit/pm/state";
-import { Decoration, DecorationSet } from "prosekit/pm/view";
-import { ALL_GUIDES, GUIDES, guideFor, guideHidden, type GuideId } from "../../../engines/report";
+import { useCallback } from "react";
+import { ALL_GUIDES, GUIDES, guideHidden, type GuideId } from "../../../engines/report";
 import { api } from "../../../lib/api";
 import { reportError } from "../../../lib/lockSignal";
-import type { SectionKind } from "../../../types/report";
 import type { Settings } from "../../../types/settings";
 import { IconButton } from "../../../ui";
 
@@ -70,116 +65,4 @@ export function StandaloneGuide({ id }: { id: GuideId }) {
   const { hidden, hide, hideAll } = useGuideSettings();
   if (hidden === null || guideHidden(hidden, id)) return null;
   return <GuideNote id={id} onHide={() => hide(id)} onHideAll={hideAll} />;
-}
-
-/**
- * Where a page's guide notes go. The editor plugin places an empty element above each guided block (a widget
- * decoration: never in the document, so never saved, copied or exported) and registers it here; the page renders each
- * note into its element through a portal, so the note keeps the app's context.
- */
-export class GuideSlots {
-  /** Ids Settings hides; null until it loads. */
-  hidden: readonly string[] | null = null;
-  /** The page's kind; without one the page shows no notes. */
-  sectionKind: SectionKind | undefined;
-  /** The note for the page as a whole, at its top. */
-  pageGuide: GuideId | null = null;
-  private mounts = new Map<GuideId, HTMLElement>();
-  private snapshot: [GuideId, HTMLElement][] = [];
-  private listeners = new Set<() => void>();
-
-  attach(id: GuideId, el: HTMLElement) {
-    this.mounts.set(id, el);
-    this.emit();
-  }
-
-  detach(id: GuideId, el: HTMLElement) {
-    if (this.mounts.get(id) !== el) return;
-    this.mounts.delete(id);
-    this.emit();
-  }
-
-  subscribe = (listener: () => void) => {
-    this.listeners.add(listener);
-    return () => void this.listeners.delete(listener);
-  };
-
-  getSnapshot = () => this.snapshot;
-
-  private emit() {
-    this.snapshot = [...this.mounts];
-    for (const l of this.listeners) l();
-  }
-}
-
-/** The editor plugin: one widget above the first block of each guide on the page (a guide shows once per page). */
-export function defineGuideNotes(slots: GuideSlots) {
-  return definePlugin(
-    new Plugin({
-      props: {
-        decorations: (state) => {
-          const { hidden, sectionKind, pageGuide } = slots;
-          if (hidden === null || sectionKind === undefined || hidden.includes(ALL_GUIDES)) return null;
-          const decos: Decoration[] = [];
-          const seen = new Set<GuideId>();
-          const add = (id: GuideId | null, pos: number) => {
-            if (id === null || seen.has(id) || guideHidden(hidden, id)) return;
-            seen.add(id);
-            decos.push(
-              Decoration.widget(
-                pos,
-                () => {
-                  const el = document.createElement("div");
-                  el.className = "report-guide-slot";
-                  el.contentEditable = "false";
-                  slots.attach(id, el);
-                  return el;
-                },
-                {
-                  side: -1,
-                  key: `guide-${id}`,
-                  ignoreSelection: true,
-                  // Clicks and keys in the note's buttons stay with them.
-                  stopEvent: () => true,
-                  destroy: (el) => slots.detach(id, el as HTMLElement),
-                },
-              ),
-            );
-          };
-          add(pageGuide, 0);
-          state.doc.descendants((node, pos) => {
-            const name = node.type.name;
-            add(guideFor({ type: name, attrs: node.attrs, text: name === "heading" ? node.textContent : undefined }, sectionKind), pos);
-            // Guided blocks sit at the top level or in a container; a steps list's insides take none.
-            return !node.isTextblock && !node.isAtom && name !== "steps";
-          });
-          return decos.length === 0 ? null : DecorationSet.create(state.doc, decos);
-        },
-      },
-    }),
-  );
-}
-
-/** Renders the page's guide notes into the elements the plugin placed. `onLeave` runs after a hide, so focus goes
- *  back to the page rather than to nothing. */
-export function GuidePortals({ slots, onLeave }: { slots: GuideSlots; onLeave(): void }) {
-  const mounts = useSyncExternalStore(slots.subscribe, slots.getSnapshot);
-  const { hide, hideAll } = useGuideSettings();
-  return mounts.map(([id, el]) =>
-    createPortal(
-      <GuideNote
-        id={id}
-        onHide={() => {
-          hide(id);
-          onLeave();
-        }}
-        onHideAll={() => {
-          hideAll();
-          onLeave();
-        }}
-      />,
-      el,
-      id,
-    ),
-  );
 }

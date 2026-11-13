@@ -104,6 +104,14 @@ const draftUpserts = (spy: { mock: { calls: unknown[][] } }, targetKey: string) 
   });
 
 describe("Report view", () => {
+  it("puts the open page's guide notes in the right-hand column, above the log", async () => {
+    mount();
+    await ready();
+    const list = await screen.findByRole("list", { name: "Guide notes" });
+    expect(list.closest("[aria-label='Evidence'], [role='dialog']")).toBeTruthy();
+    expect(document.querySelector(".ProseMirror [data-guide]")).toBeNull();
+  });
+
   it("lists the targets in grading order with the AD set last, and names the file from the OSID", async () => {
     mount();
     await ready();
