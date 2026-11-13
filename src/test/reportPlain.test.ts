@@ -1,12 +1,28 @@
 import { createEditor, type NodeJSON } from "prosekit/core";
 import { describe, expect, it } from "vitest";
 import { GARNET_HOST, garnetFixtures } from "../audit/examFixtures";
+import { FIXTURES } from "../audit/fixtures";
 import { defineReportExtension } from "../features/report/editor/extension";
-import { buildPlainTarget, openPortLines, PLAIN_NODE_TYPES, titleSentence, trimmedOutput, type ReportNode, type ReportTarget } from "../engines/report";
+import {
+  blockHash,
+  buildPlainTarget,
+  entryBlocks,
+  entryIdsIn,
+  machinesInOrder,
+  openPortLines,
+  PLAIN_NODE_TYPES,
+  reportTargets,
+  sourceBlocks,
+  titleSentence,
+  trimmedOutput,
+  type ReportData,
+  type ReportNode,
+  type ReportTarget,
+} from "../engines/report";
 
 const data = garnetFixtures(1_700_000_000_000);
 const target: ReportTarget = { key: GARNET_HOST, kind: "standalone", hostIds: [GARNET_HOST] };
-const doc = buildPlainTarget(data, target, {}, "4.1");
+const doc = buildPlainTarget(data, target, {});
 
 const all = (n: ReportNode): ReportNode[] => [n, ...(n.content ?? []).flatMap(all)];
 const textOf = (n: ReportNode): string => (n.text ?? "") + (n.content ?? []).map(textOf).join("");
@@ -31,7 +47,7 @@ describe("buildPlainTarget (garnet)", () => {
   it("opens with the sample's headings, in order", () => {
     const headings = all(doc).filter((n) => n.type === "heading").map(textOf);
     expect(headings).toEqual([
-      "4.1 garnet (10.10.30.31)",
+      "garnet (10.10.30.31)",
       "Service enumeration",
       "Initial access: Jenkins script console with default credentials",
       "Privilege escalation: sudo CVE-2021-3156",
@@ -141,6 +157,144 @@ describe("buildPlainTarget (garnet)", () => {
     expect(text).not.toContain("Wrong working directory");
     const sources = all(doc).map((n) => String(n.attrs?.source ?? ""));
     for (const id of data.log.filter((e) => e.private).map((e) => e.id)) expect(sources.some((s) => s.includes(id))).toBe(false);
+  });
+});
+
+const logEntry = (id: string) => data.log.find((e) => e.id === id)!;
+const garnetFinding = data.findings.find((f) => f.title === "Jenkins script console with default credentials")!;
+const emptyHostData: ReportData = { ...data, hosts: [...data.hosts, { ...data.hosts.find((h) => h.id === GARNET_HOST)!, id: "h-empty", name: "empty", ip: "10.10.30.99" }] };
+
+/** The exam engagement's report data as the audit serves it (as reportCapturedHost.test.ts builds it). */
+function examFixtureData(): ReportData {
+  const E = "e-exam";
+  const hosts = FIXTURES.hosts.filter((h) => h.engagementId === E);
+  const ids = new Set(hosts.map((h) => h.id));
+  return {
+    engagement: FIXTURES.engagements.find((e) => e.id === E)!,
+    hosts,
+    services: FIXTURES.services.filter((s) => ids.has(s.hostId)),
+    log: FIXTURES.log.filter((e) => e.engagementId === E),
+    checklist: FIXTURES.checklist.filter((c) => ids.has(c.ownerId) || c.ownerId === E),
+    findings: FIXTURES.findings.filter((f) => f.engagementId === E),
+    findingFiles: FIXTURES.findingFiles,
+    attempts: FIXTURES.failedAttempts.filter((a) => a.engagementId === E),
+    ruledOut: FIXTURES.ruledOut.filter((r) => r.engagementId === E),
+    grants: FIXTURES.accessGrants.filter((g) => g.engagementId === E),
+    usernames: FIXTURES.usernames.filter((u) => u.engagementId === E),
+    hops: FIXTURES.hops.filter((h) => h.engagementId === E),
+    cleanup: FIXTURES.cleanup.filter((c) => c.engagementId === E),
+    notes: FIXTURES.notes.filter((n) => n.engagementId === E),
+    credentials: FIXTURES.credentials.filter((c) => c.engagementId === E),
+    credAttempts: FIXTURES.credAttempts.filter((c) => c.engagementId === E),
+  };
+}
+const examData = examFixtureData();
+const adTarget = reportTargets(examData, {}).find((t) => t.kind === "ad-set")!;
+
+/** Contiguous siblings sharing a `source`, at the top level and inside every list item, as `[source, blocks]`. */
+function sourcedRuns(n: ReportNode): [string, ReportNode[]][] {
+  const out: [string, ReportNode[]][] = [];
+  const walk = (siblings: ReportNode[]) => {
+    let run: [string, ReportNode[]] | null = null;
+    for (const b of siblings) {
+      const source = typeof b.attrs?.source === "string" ? b.attrs.source : null;
+      if (source && run && run[0] === source) run[1].push(b);
+      else {
+        run = source ? [source, [b]] : null;
+        if (run) out.push(run);
+      }
+      if (b.type === "list") walk(b.content ?? []);
+    }
+  };
+  walk(n.content ?? []);
+  return out;
+}
+
+/** The garnet draft's placed entries: every step's, the scan's and the proof flag's (private ones and the slip never).
+ *  The local flag joins the login step, which already prints its value, so it leaves no block of its own. */
+const expectedPlacedIds = [
+  "nmap", "head", "dump", "show", "spray", "ssh", "local-shot", "kernel", "build", "fuse", "exp", "proof-read", "proof-shot", "proof",
+].map((k) => `l-garnet-${k}`);
+
+describe("plain entry blocks and Refresh sources", () => {
+  it("a git diff pasted into a remediation is a code block, never a list or italics", () => {
+    const f = { ...garnetFinding, remediation: "Remove the secret:\n\ndiff --git a/config.php b/config.php\n-$db_pass = 'Spring2024!';\n+$db_pass = getenv('DB_PASS');\n*keep* this" };
+    const fix = sourceBlocks(`finding:${f.id}:fix`, { ...data, findings: [f] }, target, {})!;
+    expect(fix.some((b) => b.type === "codeBlock" && b.content![0].text!.includes("-$db_pass"))).toBe(true);
+    expect(JSON.stringify(fix)).not.toContain('"type":"list"');
+    expect(JSON.stringify(fix)).not.toContain('"italic"');
+    expect(fix.every((b) => b.attrs?.source === `finding:${f.id}:fix`)).toBe(true);
+  });
+
+  it("a machine with nothing logged is its heading alone", () => {
+    const empty = buildPlainTarget(emptyHostData, { key: "h-empty", kind: "standalone", hostIds: ["h-empty"] }, {});
+    expect(empty.content).toHaveLength(1);
+    expect(empty.content![0]).toMatchObject({ type: "heading", attrs: { level: 1, source: "facts:h-empty" } });
+  });
+
+  it("entryBlocks gives an entry the draft's own sentence, command, trimmed output and figures", () => {
+    const blocks = entryBlocks(data, logEntry("l-garnet-head"));
+    expect(blocks.map((b) => [b.type, b.attrs?.source])).toEqual([
+      ["paragraph", "entry:l-garnet-head:title"],
+      ["codeBlock", "entry:l-garnet-head:0:command"],
+      ["codeBlock", "entry:l-garnet-head:0:output"],
+    ]);
+    for (const b of blocks) expect(b.attrs?.gen).toBe(blockHash(b));
+  });
+
+  it("sourceBlocks regenerates every block of the draft identically", () => {
+    const runs = sourcedRuns(doc);
+    expect(runs.length).toBeGreaterThan(30);
+    for (const [source, run] of runs) {
+      if (source.startsWith("phase:") || source.startsWith("phase-steps:")) continue;
+      expect([source, sourceBlocks(source, data, target, {})]).toEqual([source, run]);
+    }
+  });
+
+  it("sourceBlocks regenerates every exam target's draft identically", () => {
+    for (const t of reportTargets(examData, {})) {
+      for (const [source, run] of sourcedRuns(buildPlainTarget(examData, t, {}))) {
+        if (source.startsWith("phase:") || source.startsWith("phase-steps:")) continue;
+        expect([t.key, source, sourceBlocks(source, examData, t, {})]).toEqual([t.key, source, run]);
+      }
+    }
+  });
+
+  it("sourceBlocks returns null for a private or deleted source", () => {
+    expect(sourceBlocks("entry:l-garnet-private:title", data, target, {})).toBeNull();
+    expect(sourceBlocks("entry:nope:title", data, target, {})).toBeNull();
+    expect(sourceBlocks("finding:nope:fix", data, target, {})).toBeNull();
+    expect(sourceBlocks("file:nope", data, target, {})).toBeNull();
+    expect(sourceBlocks(`entry:l-garnet-head:bogus`, data, target, {})).toBeNull();
+    expect(sourceBlocks(`file:${data.findingFiles[0].id}:x`, data, target, {})).toBeNull();
+    expect(sourceBlocks("ports:nope", data, target, {})).toBeNull();
+    expect(sourceBlocks("phase:h-exam-garnet:foothold", data, target, {})).toBeNull();
+    expect(sourceBlocks(`phase-steps:${GARNET_HOST}`, data, target, {})).toBeNull();
+    expect(sourceBlocks("whatever:x", data, target, {})).toBeNull();
+  });
+
+  it("every sourced block carries gen = blockHash, and attrs never change the hash", () => {
+    for (const b of doc.content!) if (b.attrs?.source) expect(b.attrs.gen).toBe(blockHash(b));
+    const p = doc.content![1];
+    expect(blockHash(p)).toMatch(/^[0-9a-f]{8}$/);
+    expect(blockHash({ ...p, attrs: { ...p.attrs, source: null, hint: null, gen: "x", level: 9 } })).toBe(blockHash(p));
+    expect(blockHash({ ...p, content: [...p.content!, { type: "text", text: "!" }] })).not.toBe(blockHash(p));
+  });
+
+  it("entryIdsIn reads sources and figures", () => {
+    expect(entryIdsIn(doc)).toEqual(new Set(expectedPlacedIds));
+    expect(entryIdsIn({ type: "doc", content: [{ type: "figure", attrs: { entryId: "l-x", attachmentId: "a" } }] })).toEqual(new Set(["l-x"]));
+  });
+
+  it("an AD set opens with its attack-path table", () => {
+    const ad = buildPlainTarget(examData, adTarget, {});
+    expect(ad.content!.slice(0, 2).map((b) => [b.type, b.attrs?.source])).toEqual([["paragraph", "attack-path"], ["table", "attack-path"]]);
+    expect(ad.content!.filter((b) => b.type === "heading" && b.attrs?.level === 1).map((b) => b.attrs!.source)).toEqual(machinesInOrder(examData, adTarget).map((id) => `facts:${id}`));
+    expect(sourceBlocks("attack-path", examData, null, {})).toEqual(ad.content!.slice(0, 2));
+    for (const [source, run] of sourcedRuns(ad)) {
+      if (source.startsWith("phase:") || source.startsWith("phase-steps:")) continue;
+      expect([source, sourceBlocks(source, examData, adTarget, {})]).toEqual([source, run]);
+    }
   });
 });
 

@@ -32,8 +32,9 @@ function trimBlank(lines: string[]): string[] {
 /**
  * Finding text split into prose and code runs, so pasted terminal text (a git diff, a commit, PHP, a shell session)
  * prints as code and never as Markdown lists or italics. A run is code when it is a fenced block (fences dropped), or a
- * run of two or more code-like lines (`CODE_LINE`), blank lines between two of them included. A single code-like line
- * inside prose stays prose.
+ * run of two or more code-like lines (`CODE_LINE`), blank lines between two of them included. A run that opens a diff
+ * (`diff --git`) also holds every line up to the next blank one: a context line that lost its leading space when copied
+ * ("*keep* this") is still the diff, never prose. A single code-like line inside prose stays prose.
  */
 export function terminalBlocks(text: string): TextRun[] {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
@@ -70,8 +71,9 @@ export function terminalBlocks(text: string): TextRun[] {
       let j = i;
       let count = 0;
       let end = i;
+      const diff = /^diff --git /.test(line);
       while (j < lines.length && !FENCE.test(lines[j])) {
-        if (isCodeLine(lines[j])) {
+        if (isCodeLine(lines[j]) || (diff && !isBlank(lines[j]) && !isBlank(lines[j - 1] ?? ""))) {
           count++;
           end = j + 1;
         } else if (!isBlank(lines[j])) break;

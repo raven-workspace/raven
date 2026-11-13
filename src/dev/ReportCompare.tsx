@@ -99,7 +99,7 @@ function SampleSection({ markdown }: { markdown: string }) {
  */
 export default function ReportCompare() {
   const data = useMemo(() => garnetFixtures(AUDIT_NOW), []);
-  const doc = useMemo(() => buildPlainTarget(data, TARGET, {}, "4.1"), [data]);
+  const doc = useMemo(() => buildPlainTarget(data, TARGET, {}), [data]);
   const value = useMemo(
     (): ReportDataValue => ({ data, appendix: NO_APPENDIX, sectionMeta: {}, onRemoveEvidence: () => {}, target: TARGET, reportMeta: {} }),
     [data],

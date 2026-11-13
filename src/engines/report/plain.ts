@@ -4,7 +4,8 @@ import { findingBlocks, inlineMarkdown, labelled } from "./copies";
 import { testedLine, testedNotExploited } from "./coverage";
 import { findingPhaseMap, hostEntry, hostPlan, machinesInOrder, severityRank, stepsOf } from "./draft";
 import { placingEntries } from "./prove";
-import { portRows, resultLine } from "./tables";
+import { attackPathRows, portRows, resultLine } from "./tables";
+import { reportTargets } from "./targets";
 import { isPortScan } from "./tools";
 import type { Phase, ReportData, ReportMeta, ReportNode, ReportTarget } from "./types";
 import { splitAffected } from "./wording";
@@ -13,7 +14,9 @@ import { splitAffected } from "./wording";
  * A target written as a plain document (the owner's sample report, §4.1 Quartz): only ordinary editable nodes
  * (headings, paragraphs, flat lists, code blocks, tables, hard breaks) and one `figure` per screenshot (image plus an
  * editable caption). No slots, chips or atoms. Each generated block carries a `source` attr ("entry:<id>:<block>",
- * "finding:<id>:fix", "ports:<hostId>") for a later Refresh and the checks; it never shows on the page.
+ * "finding:<id>:fix", "ports:<hostId>") for Refresh and the checks, and a `gen` attr (`blockHash` of the block as
+ * generated) so an owner edit shows; neither prints on the page. Every source is produced by one function here, and
+ * `sourceBlocks` regenerates a source through that same function.
  */
 
 /** The node types a plain draft is made of. */
@@ -204,6 +207,12 @@ function sentenceOf(entry: LogEntry): ReportNode[] {
   return [para(inlineMarkdown(titleSentence(entry.title)), `entry:${entry.id}:title`), ...sourced(said, `entry:${entry.id}:observations`)];
 }
 
+/** A flag's sentence: the owner's observations when written, else "Read local.txt:". */
+function flagSentence(flag: LogEntry): ReportNode[] {
+  if (flag.observations?.trim()) return sourced(textBlocks(flag.observations.trim()), `entry:${flag.id}:observations`);
+  return [para([text(`Read ${flag.content.kind === "flag" ? flag.content.flagKind : "the"}.txt:`)], `entry:${flag.id}:title`)];
+}
+
 /** One step in progress: its blocks, and the outputs it shows (to leave out a flag proof printed already). */
 interface Step {
   blocks: ReportNode[];
@@ -381,11 +390,13 @@ function portTable(data: ReportData, hostId: string): ReportNode | null {
   };
 }
 
+/** The host's first port scan: the one Service enumeration prints. */
+const firstScan = (data: ReportData, hostId: string): LogEntry | undefined =>
+  data.log.filter((e) => !e.private && e.hostIds.includes(hostId) && isPortScan(e)).sort((a, b) => a.at - b.at || a.createdAt - b.createdAt)[0];
+
 /** The host's first port scan as a code block, then its open ports (script lines only under a finding's ports). */
 function portScan(data: ReportData, hostId: string): ReportNode[] {
-  const scan = data.log
-    .filter((e) => !e.private && e.hostIds.includes(hostId) && isPortScan(e))
-    .sort((a, b) => a.at - b.at || a.createdAt - b.createdAt)[0];
+  const scan = firstScan(data, hostId);
   if (!scan || scan.content.kind !== "command") return [];
   // Script blocks only under the ports a finding is about, and only the ones it mentions (http-git under 80).
   const scripted = new Map<number, string>();
@@ -416,10 +427,39 @@ function additionalItem(f: Finding): ReportNode {
   return listItem("bullet", content, `finding:${f.id}`);
 }
 
-/** One machine of the target, in the sample's order. */
-function machineBlock(data: ReportData, target: ReportTarget, meta: ReportMeta, hostId: string, ordinal: string): ReportNode[] {
+/** A machine's heading: "<name> (<IP>)", "<name>" with no IP. Its number is the page's (`targetNumbers`). */
+function factsHeading(data: ReportData, hostId: string): ReportNode {
   const host = data.hosts.find((h) => h.id === hostId);
-  const out: ReportNode[] = [heading(1, `${ordinal} ${host?.name ?? hostId}${host?.ip ? ` (${host.ip})` : ""}`, `facts:${hostId}`)];
+  return heading(1, `${host?.name ?? hostId}${host?.ip ? ` (${host.ip})` : ""}`, `facts:${hostId}`);
+}
+
+/** Also tested: one bullet per thing tried that went nowhere. */
+const testedBullets = (data: ReportData, hostId: string): ReportNode[] =>
+  testedNotExploited(data, hostId).map((t) => listItem("bullet", [para([text(testedLine(t))])], `tested:${hostId}`));
+
+/** An AD set's attack path: a bold "Attack path" line and its Step | From | Technique | To | Access gained table. */
+function attackPathBlocks(data: ReportData, hostIds: string[]): ReportNode[] {
+  const rows = attackPathRows(data, hostIds);
+  if (rows.length === 0) return [];
+  const ticked = (value: string) => value.split(/`([^`]*)`/).flatMap((t, i) => (t === "" ? [] : [i % 2 === 1 ? code(t) : text(t)]));
+  const cell = (type: string, content: ReportNode[]): ReportNode => ({ type, content: [para(content)] });
+  const row = (type: string, cells: ReportNode[][]): ReportNode => ({ type: "tableRow", content: cells.map((c) => cell(type, c)) });
+  return [
+    para([bold("Attack path")], "attack-path"),
+    {
+      type: "table",
+      attrs: { source: "attack-path" },
+      content: [
+        row("tableHeaderCell", ["Step", "From", "Technique", "To", "Access gained"].map((h) => [text(h)])),
+        ...rows.map((r) => row("tableCell", [[text(String(r.step))], [text(r.from)], [text(r.technique)], [text(r.to)], ticked(r.access)])),
+      ],
+    },
+  ];
+}
+
+/** One machine of the target, in the sample's order. */
+function machineBlock(data: ReportData, target: ReportTarget, meta: ReportMeta, hostId: string): ReportNode[] {
+  const out: ReportNode[] = [factsHeading(data, hostId)];
   const result = resultParagraph(data, target, hostId, meta);
   if (result) out.push(result);
 
@@ -446,10 +486,7 @@ function machineBlock(data: ReportData, target: ReportTarget, meta: ReportMeta, 
       for (const s of shots) evidence(data, s, last);
       return;
     }
-    const sentence = flag.observations?.trim()
-      ? sourced(textBlocks(flag.observations.trim()), `entry:${flag.id}:observations`)
-      : [para([text(`Read ${flag.content.kind === "flag" ? flag.content.flagKind : "the"}.txt:`)], `entry:${flag.id}:title`)];
-    const step: Step = { blocks: sentence, shown: [] };
+    const step: Step = { blocks: flagSentence(flag), shown: [] };
     for (const c of commands) evidence(data, c, step);
     flagEvidence(data, flag, step);
     for (const s of shots) evidence(data, s, step);
@@ -509,27 +546,143 @@ function machineBlock(data: ReportData, target: ReportTarget, meta: ReportMeta, 
     .sort((a, b) => severityRank(a) - severityRank(b) || a.title.localeCompare(b.title));
   if (extra.length > 0) out.push(heading(2, ADDITIONAL_HEADING, `phase:${hostId}:additional`), ...extra.map(additionalItem));
 
-  const tested = testedNotExploited(data, hostId);
-  if (tested.length > 0) {
-    out.push(heading(2, TESTED_HEADING, `phase:${hostId}:tested`), ...tested.map((t) => listItem("bullet", [para([text(testedLine(t))])], `tested:${hostId}`)));
-  }
+  const tested = testedBullets(data, hostId);
+  if (tested.length > 0) out.push(heading(2, TESTED_HEADING, `phase:${hostId}:tested`), ...tested);
   return out;
 }
 
 /**
- * A target as a plain document in the order of the sample's §4.1: "<ordinal> <name> (<IP>)", the Result line, Service
+ * A target as a plain document in the order of the sample's §4.1: "<name> (<IP>)", the Result line, Service
  * enumeration (ports table, the scan and its open ports), one heading per finding that enabled a phase ("Initial
  * access: <title>", "Privilege escalation: <title>") with its labelled lines and numbered steps (each step a sentence,
  * the command, its trimmed output, the screenshots that came with it; the flags close their phase), Additional
- * findings as bullets, Also tested. An AD set's machines follow one another, numbered "<ordinal>.1", "<ordinal>.2".
+ * findings as bullets, Also tested. An AD set opens with its attack path, then its machines follow one another.
+ * Headings carry no number: the page numbers them (`targetNumbers`). Every sourced block is stamped (`stamp`), the
+ * blocks of each step included.
  */
-export function buildPlainTarget(data: ReportData, target: ReportTarget, meta: ReportMeta, ordinal: string): ReportNode {
+export function buildPlainTarget(data: ReportData, target: ReportTarget, meta: ReportMeta): ReportNode {
   const machines = machinesInOrder(data, target);
-  const content =
-    target.kind === "standalone"
-      ? machineBlock(data, target, meta, machines[0], ordinal)
-      : machines.flatMap((id, i) => machineBlock(data, target, meta, id, `${ordinal}.${i + 1}`));
-  return normalize({ type: "doc", content });
+  const content = [
+    ...(target.kind === "ad-set" ? attackPathBlocks(data, target.hostIds) : []),
+    ...machines.flatMap((id) => machineBlock(data, target, meta, id)),
+  ];
+  const doc = normalize({ type: "doc", content });
+  // A step's list item has no source of its own: its blocks are stamped one by one.
+  const blocks = stamp(doc.content ?? []).map((b) => (b.type === "list" && !sourceOf(b) ? { ...b, content: stamp(b.content ?? []) } : b));
+  return { ...doc, content: blocks };
+}
+
+/* ------------------------------------------------------------------ Refresh */
+
+/** A block's `source` attr, or null. */
+export function sourceOf(node: ReportNode): string | null {
+  const source = node.attrs?.source;
+  return typeof source === "string" && source !== "" ? source : null;
+}
+
+/** FNV-1a 32-bit as 8 hex digits over a block's canonical form: type, text, sorted mark names and children in order.
+ *  Attrs are left out, so a block read back from the editor (with its default attrs) hashes as the engine's does. */
+export function blockHash(node: ReportNode): string {
+  const canon = (n: ReportNode): unknown[] => [n.type, n.text ?? "", (n.marks ?? []).map((m) => m.type).sort(), (n.content ?? []).map(canon)];
+  let hash = 0x811c9dc5;
+  for (const byte of new TextEncoder().encode(JSON.stringify(canon(node)))) {
+    hash ^= byte;
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+/** Each top-level block with a source, its `gen` set to its hash as generated. */
+export const stamp = (blocks: ReportNode[]): ReportNode[] =>
+  blocks.map((b) => (sourceOf(b) ? { ...b, attrs: { ...b.attrs, gen: blockHash(b) } } : b));
+
+/** Blocks as the page holds them: text normalised, sourced blocks stamped. */
+const finish = (blocks: ReportNode[]): ReportNode[] => stamp(blocks.map(normalize));
+
+/** Every block an entry can put on a page, as a draft step holds them (a flag: "Read local.txt:" and its proof). */
+function entryRun(data: ReportData, entry: LogEntry): ReportNode[] {
+  const flag = entry.content.kind === "flag";
+  const step: Step = { blocks: flag ? flagSentence(entry) : sentenceOf(entry), shown: [] };
+  if (flag) flagEvidence(data, entry, step);
+  else evidence(data, entry, step);
+  return step.blocks;
+}
+
+/** One entry's blocks exactly as a draft step holds them: its sentence, then its evidence. Stamped. */
+export function entryBlocks(data: ReportData, entry: LogEntry): ReportNode[] {
+  return finish(entryRun(data, entry));
+}
+
+const ENTRY_SOURCE = /^entry:([^:]+)(?::(?:\d+:(?:command|output)|title|observations|request|response|note|proof|value))?$/;
+const FINDING_SOURCE = /^finding:([^:]+)(?::(?:explanation|fix|severity|affected|exploit))?$/;
+
+/** The target a machine belongs to: the page's own, else the report's target holding it, else the machine alone. */
+function targetOf(data: ReportData, target: ReportTarget | null, meta: ReportMeta, hostId: string): ReportTarget {
+  if (target?.hostIds.includes(hostId)) return target;
+  return reportTargets(data, meta).find((t) => t.hostIds.includes(hostId)) ?? { key: hostId, kind: "standalone", hostIds: [hostId] };
+}
+
+/** Every block of a source, before the filter: the function that wrote it in the draft. Null when the source is
+ *  unknown or its entry, finding, file or host is private or gone. */
+function sourceRun(source: string, data: ReportData, target: ReportTarget | null, meta: ReportMeta): ReportNode[] | null {
+  const [kind, id] = source.split(":");
+  const entryMatch = ENTRY_SOURCE.exec(source);
+  if (entryMatch) {
+    const entry = data.log.find((e) => e.id === entryMatch[1]);
+    if (!entry || entry.private) return null;
+    // A host's first port scan is printed by Service enumeration, not as a step.
+    const scanned = entry.hostIds.filter((h) => firstScan(data, h)?.id === entry.id).flatMap((h) => portScan(data, h));
+    return scanned.some((b) => sourceOf(b) === source) ? scanned : entryRun(data, entry);
+  }
+  const findingMatch = FINDING_SOURCE.exec(source);
+  if (findingMatch || source === `file:${id}`) {
+    const file = kind === "file" ? data.findingFiles.find((ff) => ff.id === id) : undefined;
+    const f = data.findings.find((x) => x.id === (findingMatch ? findingMatch[1] : file?.findingId));
+    if (!f) return null;
+    return [...findingHeader(f, data.findingFiles.filter((ff) => ff.findingId === f.id)), additionalItem(f)];
+  }
+  if (source === "attack-path") {
+    const set = target?.kind === "ad-set" ? target : reportTargets(data, meta).find((t) => t.kind === "ad-set");
+    return set ? attackPathBlocks(data, set.hostIds) : [];
+  }
+  const hostKinds = ["facts", "result", "ports", "tested"];
+  if (!hostKinds.includes(kind) || source !== `${kind}:${id}`) return null;
+  if (!data.hosts.some((h) => h.id === id)) return null;
+  switch (kind) {
+    case "facts":
+      return [factsHeading(data, id)];
+    case "result":
+      return [resultParagraph(data, targetOf(data, target, meta, id), id, meta)].filter((n): n is ReportNode => n !== null);
+    case "ports":
+      return [portTable(data, id)].filter((n): n is ReportNode => n !== null);
+    default:
+      return testedBullets(data, id);
+  }
+}
+
+/**
+ * The blocks a source produces, regenerated from the log, findings and files as the draft would write them now, and
+ * stamped: one block, or the whole run of a multi-block source (observations, a labelled finding part, the Also tested
+ * bullets). Null for `phase:*`, `phase-steps:*`, an unknown source, and a private or deleted entry, finding, file or
+ * host: those offer no Refresh.
+ */
+export function sourceBlocks(source: string, data: ReportData, target: ReportTarget | null, meta: ReportMeta): ReportNode[] | null {
+  const run = sourceRun(source, data, target, meta);
+  return run ? finish(run.filter((b) => sourceOf(b) === source)) : null;
+}
+
+/** The entry ids a page holds: those in `entry:<id>…` sources at any depth, and every figure's `entryId`. */
+export function entryIdsIn(doc: ReportNode): Set<string> {
+  const ids = new Set<string>();
+  const walk = (n: ReportNode) => {
+    const source = sourceOf(n);
+    const m = source ? /^entry:([^:]+)/.exec(source) : null;
+    if (m) ids.add(m[1]);
+    if (n.type === "figure" && typeof n.attrs?.entryId === "string" && n.attrs.entryId !== "") ids.add(n.attrs.entryId);
+    n.content?.forEach(walk);
+  };
+  walk(doc);
+  return ids;
 }
 
 /** Text nodes as ProseMirror stores them: neighbours with the same marks joined, empty ones dropped. */
