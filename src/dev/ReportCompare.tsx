@@ -7,7 +7,11 @@ import { ReportDataContext, type ReportDataValue } from "../features/report/edit
 import { ReportEditor } from "../features/report/editor/ReportEditor";
 import "../features/report/page.css";
 import "./reportCompare.css";
-import sample from "../../docs/Mock exam A — model report.md?raw";
+
+/** The owner's sample report holds real lab flags and passwords, so it never lives in the repo: drop a copy into the
+ *  git-ignored `.local/` folder as `sample-report.md` to see it here. */
+const local = import.meta.glob<string>("../../.local/sample-report.md", { query: "?raw", import: "default", eager: true });
+const sample = Object.values(local)[0] ?? "### 4.1 \n\nNo sample: put your report at .local/sample-report.md.\n\n### 4.2 ";
 
 /** The sample's §4.1, from its heading up to §4.2's. */
 const SECTION = sample.slice(sample.indexOf("### 4.1 "), sample.indexOf("### 4.2 "));
