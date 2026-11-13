@@ -819,12 +819,46 @@ export function missingEntries(doc: ReportNode, data: ReportData, target: Report
     .sort((a, b) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id));
 }
 
+/** What `removedEntryIds` records when the owner deletes a machine's whole Also tested list. */
+export const testedKey = (hostId: string) => `tested:${hostId}`;
+
+/** What a page places that its owner can remove and Add new evidence would bring back: its entries (`entryIdsIn`)
+ *  and each machine's Also tested list (`testedKey`, from a `tested:<hostId>` block). */
+export function placedIdsIn(doc: ReportNode): Set<string> {
+  const ids = entryIdsIn(doc);
+  const walk = (n: ReportNode) => {
+    const m = /^tested:([^:]+)$/.exec(srcOf(n));
+    if (m) ids.add(testedKey(m[1]));
+    n.content?.forEach(walk);
+  };
+  walk(doc);
+  return ids;
+}
+
+/**
+ * Whether a screenshot comes along with another entry's step in the draft (it is not that step's lead), so on a page
+ * with no cursor it joins the step holding that entry (`companionStepAt`).
+ */
+export function joinsAStep(data: ReportData, target: ReportTarget, meta: ReportMeta, entry: LogEntry): boolean {
+  return companionStepAt(buildPlainTarget(data, target, meta), data, target, meta, entry) !== null;
+}
+
 /**
  * A machine's Also tested run as the draft writes it, for Add new evidence, when the page holds no `tested:<hostId>`
  * block and the draft has some: the bullets at the end of the page's Also tested region, or the heading and the
- * bullets at the end of the machine's part of the page. Null otherwise.
+ * bullets at the end of the machine's part of the page. Null otherwise, and when the owner deleted it (its
+ * `testedKey` is in `removed`).
  */
-export function missingTested(doc: ReportNode, data: ReportData, target: ReportTarget, meta: ReportMeta, hostId: string): { index: number; blocks: ReportNode[] } | null {
+export function missingTested(
+  doc: ReportNode,
+  data: ReportData,
+  target: ReportTarget,
+  meta: ReportMeta,
+  hostId: string,
+  removed: readonly string[] = [],
+): { index: number; blocks: ReportNode[] } | null {
+  // The owner deleted the list: it stays deleted.
+  if (removed.includes(testedKey(hostId))) return null;
   const content = doc.content ?? [];
   const has = (n: ReportNode): boolean => srcOf(n) === `tested:${hostId}` || (n.content ?? []).some(has);
   if (content.some(has)) return null;

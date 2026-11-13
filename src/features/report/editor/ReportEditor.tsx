@@ -6,7 +6,7 @@ import type { Node as PMNode } from "prosekit/pm/model";
 import { isHistoryTransaction } from "prosekit/pm/history";
 import { NodeSelection, Plugin, PluginKey, type Command, type Transaction } from "prosekit/pm/state";
 import { ProseKit, useDocChange, useExtension, useKeymap } from "prosekit/react";
-import { entryIdsIn, ownerParagraphs, isFigure, stepTitleBefore, type DocPath, type EvidenceAttrs, sectionGuide, type PageHeadings, type PageMeta, type ReportData, type ReportNode } from "../../../engines/report";
+import { ownerParagraphs, placedIdsIn, isFigure, stepTitleBefore, type DocPath, type EvidenceAttrs, sectionGuide, type PageHeadings, type PageMeta, type ReportData, type ReportNode } from "../../../engines/report";
 import { reportError } from "../../../lib/lockSignal";
 import { RavenError } from "../../../types/errors";
 import type { SectionKind } from "../../../types/report";
@@ -179,12 +179,14 @@ export function selectBlockAt(editor: Editor, pos: number) {
 
 export { PROGRAMMATIC };
 
-/** The entries a block names itself (its `entry:` source, a figure's `entryId`, its `also`), not its children's. */
-const ownEntryIds = (node: PMNode) => entryIdsIn({ type: node.type.name, attrs: node.attrs });
+/** What a block places itself (its entry by source, a figure's `entryId`, its `also`, a machine's Also tested list by
+ *  a `tested:` source), not its children's. */
+const ownEntryIds = (node: PMNode) => placedIdsIn({ type: node.type.name, attrs: node.attrs });
 
 /**
- * The entries a transaction took off the page: entries named by blocks in the ranges it deleted (inside a step list
- * too) that the page no longer names anywhere (`entryIdsIn`'s rule: a source, a figure's entry, an `also`). None for
+ * What a transaction took off the page: entries (and Also tested lists) named by blocks in the ranges it deleted
+ * (inside a step list too) that the page no longer names anywhere (`placedIdsIn`'s rule: a source, a figure's entry,
+ * an `also`, a `tested:<hostId>` source). None for
  * the page's own transactions (`PROGRAMMATIC`) and for undo and redo.
  */
 export function removedByTransaction(tr: Transaction): string[] {

@@ -64,6 +64,8 @@ export const DRAFT_LAYOUT = 6;
 
 /** Stored in `report_sections.meta`. */
 export interface SectionMeta {
+  /** What the owner took off the page, so Add new evidence won't bring it back: entry ids, and `tested:<hostId>` for a
+   *  machine's whole Also tested list (`testedKey`). */
   removedEntryIds?: string[];
   coverage?: Record<string, CoverageOverride>;
   /** The draft layout the page was built with (`DRAFT_LAYOUT`). */

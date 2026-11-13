@@ -4,6 +4,7 @@ import { createContext, useContext } from "react";
 import { Fragment, type Node as PMNode } from "prosekit/pm/model";
 import { closeHistory } from "prosekit/pm/history";
 import { NodeSelection } from "prosekit/pm/state";
+import { StepMap } from "prosekit/pm/transform";
 import {
   blockHash,
   companionStepAt,
@@ -180,6 +181,45 @@ function endUndoGroup(editor: Editor) {
   });
 }
 
+/** The ranges inserted on a page while `collectInserted` runs, kept current as later inserts shift or grow them. */
+const tracked = new WeakMap<Editor, { from: number; to: number }[]>();
+
+/** Records an insert of `size` at `from` (replacing up to `to`): earlier ranges map through it (an insert inside one
+ *  grows it), then each inserted block's range is added. */
+function track(editor: Editor, from: number, to: number, made: PMNode[]) {
+  const ranges = tracked.get(editor);
+  if (!ranges) return;
+  const size = made.reduce((n, b) => n + b.nodeSize, 0);
+  const map = new StepMap([from, to - from, size]);
+  for (const r of ranges) {
+    r.from = map.map(r.from, 1);
+    r.to = map.map(r.to, -1);
+  }
+  let at = from;
+  for (const b of made) {
+    ranges.push({ from: at, to: at + b.nodeSize });
+    at += b.nodeSize;
+  }
+}
+
+/**
+ * Runs inserts (`insertEntry`, `insertBlocksAt`) and returns exactly what they added, as it stands on the page after
+ * the last: a block added into a block added earlier (a screenshot joining a step added in the same run) counts as
+ * part of that one. For Add new evidence's Undo (`removeExact`).
+ */
+export function collectInserted(editor: Editor, run: () => void): PMNode[] {
+  const ranges: { from: number; to: number }[] = [];
+  tracked.set(editor, ranges);
+  try {
+    run();
+  } finally {
+    tracked.delete(editor);
+  }
+  const doc = editor.state.doc;
+  const outer = ranges.filter((r, i) => !ranges.some((o, j) => j !== i && o.from <= r.from && r.to <= o.to && (o.from < r.from || r.to < o.to)));
+  return outer.map((r) => doc.nodeAt(r.from)).filter((n, i): n is PMNode => n !== null && n.nodeSize === outer[i].to - outer[i].from);
+}
+
 /** Inserts `made` at `spot` in one transaction, an undo step of its own (never merged with typing before or after
  *  it); returns the nodes as they stand on the page after it. */
 function insertAtSpot(editor: Editor, spot: (doc: PMNode) => Spot, made: PMNode[]): PMNode[] {
@@ -187,7 +227,10 @@ function insertAtSpot(editor: Editor, spot: (doc: PMNode) => Spot, made: PMNode[
   editor.exec((state, dispatch) => {
     const { from, to } = spot(state.doc);
     at = from;
-    dispatch?.(closeHistory(state.tr.replaceWith(from, to, made)).scrollIntoView());
+    if (dispatch) {
+      dispatch(closeHistory(state.tr.replaceWith(from, to, made)).scrollIntoView());
+      track(editor, from, to, made);
+    }
     return true;
   });
   if (at === null) return [];

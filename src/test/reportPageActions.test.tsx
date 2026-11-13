@@ -9,6 +9,7 @@ import {
   buildPlainTarget,
   entryBlocks,
   missingEntries,
+  missingTested,
   PAGE_NODE_TYPES,
   phaseInsertAt,
   sourceBlocks,
@@ -485,6 +486,17 @@ describe("Add new evidence", () => {
     expect(onRemoveEvidence).not.toHaveBeenCalled();
   });
 
+  it("Undo takes off exactly what one run added, a screenshot that joined a step added in the same run included", async () => {
+    const { editor, onRemoveEvidence } = await ready(without("ssh"));
+    const before = json(editor());
+    addButton(editor(), []);
+    fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
+    await screen.findByText("Added 2 entries");
+    fireEvent.click(within(screen.getByText("Added 2 entries").closest<HTMLElement>("[role=status]")!).getByRole("button", { name: "Undo" }));
+    expect(json(editor())).toEqual(before);
+    expect(onRemoveEvidence).not.toHaveBeenCalled();
+  });
+
   it("restores a machine's Also tested list when the page has none; Undo takes it off too", async () => {
     const page = { ...draft, content: draft.content!.filter((n) => !(sourceOf(n) ?? "").includes("tested")) };
     const { editor } = await ready(page);
@@ -523,6 +535,37 @@ describe("Add new evidence", () => {
 });
 
 describe("removal tracking", () => {
+  it("deleting a machine's whole Also tested list records it; undo un-records it; Add new evidence leaves it deleted", async () => {
+    const { editor, onRemoveEvidence } = await ready(draft);
+    const key = `tested:${GARNET_HOST}`;
+    const tail = () => {
+      const doc = editor().state.doc;
+      let from = 0;
+      doc.forEach((n, offset) => void (n.attrs.source === `phase:${GARNET_HOST}:tested` && (from = offset)));
+      return { from, to: doc.content.size };
+    };
+    act(() => {
+      const { from, to } = tail();
+      editor().view.dispatch(editor().state.tr.delete(from, to));
+    });
+    expect(onRemoveEvidence).toHaveBeenCalledWith(key);
+    expect(pruneRemoved(json(editor()), { removedEntryIds: [key] })).toEqual({ removedEntryIds: [key] });
+    // Recorded: Add new evidence won't bring it back.
+    expect(missingTested(json(editor()), garnet, target, {}, GARNET_HOST, [key])).toBeNull();
+    expect(missingTested(json(editor()), garnet, target, {}, GARNET_HOST, [])).not.toBeNull();
+    render(
+      <TooltipProvider>
+        <AddEvidenceButton editor={editor()} data={garnet} target={target} meta={{}} removed={[key]} onAdded={vi.fn()} />
+      </TooltipProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add new evidence" }));
+    expect(await screen.findByText("Nothing new to add")).toBeInTheDocument();
+    // Undo brings it back: the save drops it from the removed list.
+    fireEvent.keyDown(editor().view.dom, { key: "z", code: "KeyZ", keyCode: 90, ctrlKey: true });
+    expect(pruneRemoved(json(editor()), { removedEntryIds: [key] })).toEqual({ removedEntryIds: [] });
+    expect(onRemoveEvidence).toHaveBeenCalledTimes(1);
+  });
+
   it("deleting every block of an entry records it as removed; undo un-records it", async () => {
     const { editor, onRemoveEvidence } = await ready(draft);
     // One block of the step: the entry is still on the page.

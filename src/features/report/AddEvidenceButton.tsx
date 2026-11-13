@@ -1,9 +1,9 @@
 import type { Editor } from "prosekit/core";
 import type { Node as PMNode } from "prosekit/pm/model";
 import { useCallback, useState } from "react";
-import { entryIdsIn, machinesInOrder, missingEntries, missingTested, type ReportData, type ReportMeta, type ReportNode, type ReportTarget } from "../../engines/report";
+import { draftedEntryBlocks, entryIdsIn, joinsAStep, machinesInOrder, missingEntries, missingTested, type ReportData, type ReportMeta, type ReportNode, type ReportTarget } from "../../engines/report";
 import { Button, TimedNotice } from "../../ui";
-import { insertBlocksAt, insertEntry } from "./editor/pageActions";
+import { collectInserted, insertBlocksAt, insertEntry } from "./editor/pageActions";
 import { removeExact } from "./editor/ReportEditor";
 
 /** What the last run added: its words, and the blocks it put on the page (null when it added nothing). */
@@ -39,21 +39,30 @@ export function AddEvidenceButton({
   const run = () => {
     if (!editor) return;
     const page = () => editor.getDocJSON() as ReportNode;
-    const nodes: PMNode[] = [];
+    const missing = missingEntries(page(), data, target, meta, removed);
+    // An entry another missing one shows in its own blocks (a flag its output prints) comes with it, whatever the order.
+    const absorbed = new Set(missing.flatMap((e) => [...entryIdsIn({ type: "doc", content: draftedEntryBlocks(data, target, meta, e) })].filter((id) => id !== e.id)));
+    // Leads first: an absorbed entry is looked at once the entry that shows it is in, and a screenshot that comes along
+    // with a step once that step is on the page.
+    const joining = new Set(missing.filter((e) => joinsAStep(data, target, meta, e)).map((e) => e.id));
+    const rank = (e: (typeof missing)[number]) => (absorbed.has(e.id) ? 1 : joining.has(e.id) ? 2 : 0);
+    const order = [...missing].sort((a, b) => rank(a) - rank(b));
     let n = 0;
-    for (const entry of missingEntries(page(), data, target, meta, removed)) {
-      // An entry an earlier insert already placed (a flag its output prints) is not added again.
-      if (entryIdsIn(page()).has(entry.id)) continue;
-      nodes.push(...insertEntry(editor, data, target, entry, false, meta));
-      n++;
-    }
     let tested = false;
-    for (const hostId of machinesInOrder(data, target)) {
-      const run = missingTested(page(), data, target, meta, hostId);
-      if (!run) continue;
-      nodes.push(...insertBlocksAt(editor, run.index, run.blocks));
-      tested = true;
-    }
+    const nodes = collectInserted(editor, () => {
+      for (const entry of order) {
+        // Placed by an earlier insert (in its `also`): not added twice.
+        if (entryIdsIn(page()).has(entry.id)) continue;
+        insertEntry(editor, data, target, entry, false, meta);
+        n++;
+      }
+      for (const hostId of machinesInOrder(data, target)) {
+        const run = missingTested(page(), data, target, meta, hostId, removed);
+        if (!run) continue;
+        insertBlocksAt(editor, run.index, run.blocks);
+        tested = true;
+      }
+    });
     if (nodes.length === 0) {
       setAdded({ text: "Nothing new to add", nodes: null });
       return;
