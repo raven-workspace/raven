@@ -60,13 +60,19 @@ export const useReportSaveStore = create<{ unsaved: boolean; refused: { sectionI
   refused: null,
 }));
 
-/** What the owner is told when the backend refuses a page for good; null when a retry may land. */
-export function refusalOf(e: unknown): string | null {
+/** What the owner is told when the backend refuses a page for good; null when a retry may land. A page refused for
+ *  size whose archive of earlier versions (`meta.originals`) is at least half of what was sent says that is the bulk,
+ *  not the owner's text. */
+export function refusalOf(e: unknown, write?: Write): string | null {
   const err = RavenError.from(e);
-  if (err.code === "validation")
-    return /8 MiB/.test(err.message)
-      ? "This page is over 8 MiB and can't be saved. Cut some text."
-      : `This page can't be saved: ${err.message}. Change it to save again.`;
+  if (err.code === "validation") {
+    if (!/8 MiB/.test(err.message)) return `This page can't be saved: ${err.message}. Change it to save again.`;
+    const archive = write?.meta.originals ? JSON.stringify(write.meta.originals).length : 0;
+    const total = write ? JSON.stringify(write.doc).length + JSON.stringify(write.meta).length : 0;
+    return archive > 0 && archive * 2 >= total
+      ? "This page can't be saved: with the earlier versions of it Raven keeps, it is over 8 MiB. Most of that is those kept versions, not your text."
+      : "This page is over 8 MiB and can't be saved. Cut some text.";
+  }
   if (err.code === "not_found") return "This page no longer exists, so it can't be saved. Copy what you need from it, then reopen the report.";
   return null;
 }
@@ -133,7 +139,7 @@ async function sendRun(s: Session, id: string): Promise<void> {
         s.refused.delete(id);
       } catch (e) {
         s.failed.add(id);
-        const refused = refusalOf(e);
+        const refused = refusalOf(e, { doc: w.doc, meta });
         if (refused) s.refused.set(id, refused);
         else s.refused.delete(id);
         reportError(e);

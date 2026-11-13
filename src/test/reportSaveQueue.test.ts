@@ -113,6 +113,17 @@ describe("report save queue", () => {
     expect(hasPendingReports()).toBe(false);
   });
 
+  it("a page refused for size mostly because of its kept earlier versions says so, never blaming the owner's text", async () => {
+    vi.useFakeTimers();
+    m.reportSectionSave.mockRejectedValue({ code: "validation", message: "this page is over 8 MiB", field: "doc" });
+    const big = page("x".repeat(5_000));
+    queueReportSave(qc, "s1", page("short"), { originals: [{ doc: big, layout: 5, meta: {}, at: 1, why: "rebuild" }] });
+    await vi.advanceTimersByTimeAsync(600);
+    const message = useReportSaveStore.getState().refused?.message;
+    expect(message).toMatch(/earlier versions/);
+    expect(message).not.toMatch(/Cut some text/);
+  });
+
   it("treats a page that no longer exists as refused too", async () => {
     vi.useFakeTimers();
     m.reportSectionSave.mockRejectedValue({ code: "not_found", message: "not found" });

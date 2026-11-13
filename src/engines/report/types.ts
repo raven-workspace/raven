@@ -86,7 +86,9 @@ export interface SectionMeta {
   originals?: ArchivedPage[];
 }
 
-/** A stored page as it was before Raven replaced it (`SectionMeta.originals`). */
+/** A stored page as it was before Raven replaced it (`SectionMeta.originals`). Its `meta` holds the page it kept in
+ *  `previousDoc` as `previousDocRef` (the index of the archive entry whose `doc` is that page, byte for byte) when the
+ *  archive holds it already; `archivedMeta` gives it back whole. */
 export interface ArchivedPage {
   doc: ReportNode;
   layout: number | null;
@@ -99,13 +101,34 @@ export interface ArchivedPage {
  *  rebuild sets them afresh and carries every other key forward. */
 const PAGE_STATE_KEYS = ["layout", "previousDoc", "previousLayout", "previousAt", "restored", "flattened", "originals"];
 
-/** `meta.originals` with `doc` appended, archived with the meta it was stored under (without `originals`). A doc the
- *  archive already holds byte for byte is not added again, so swapping back and forth doesn't grow it. */
+/**
+ * `meta.originals` with `doc` appended, archived with the meta it was stored under (without `originals`). A doc the
+ * archive already holds byte for byte is not added again, so swapping back and forth doesn't grow it; and a
+ * `previousDoc` in that meta the archive holds (or that is `doc` itself) is stored as `previousDocRef`, its index, so
+ * each swap adds at most the one page swapped out. Entries already there are never removed or rewritten.
+ */
 export function archivePage(meta: SectionMeta, doc: ReportNode, why: ArchivedPage["why"], at = Date.now()): ArchivedPage[] {
   const { originals = [], ...rest } = meta;
   const raw = JSON.stringify(doc);
-  if (originals.some((o) => JSON.stringify(o.doc) === raw)) return originals;
-  return [...originals, { doc, layout: meta.layout ?? null, meta: rest as Record<string, unknown>, at, why }];
+  const raws = originals.map((o) => JSON.stringify(o.doc));
+  if (raws.includes(raw)) return originals;
+  const kept: Record<string, unknown> = { ...rest };
+  if (rest.previousDoc) {
+    const prev = JSON.stringify(rest.previousDoc);
+    const ref = prev === raw ? originals.length : raws.indexOf(prev);
+    if (ref !== -1) {
+      delete kept.previousDoc;
+      kept.previousDocRef = ref;
+    }
+  }
+  return [...originals, { doc, layout: meta.layout ?? null, meta: kept, at, why }];
+}
+
+/** An archive entry's meta as it was stored: a `previousDocRef` resolved back to the `previousDoc` it names. */
+export function archivedMeta(originals: ArchivedPage[], index: number): Record<string, unknown> {
+  const { previousDocRef, ...meta } = originals[index]?.meta ?? {};
+  if (typeof previousDocRef !== "number") return { ...meta };
+  return { ...meta, previousDoc: originals[previousDocRef]?.doc ?? null };
 }
 
 /** The owner's own keys of a section meta (coverage, removed entries, a page's title…): what a rebuild carries forward. */
