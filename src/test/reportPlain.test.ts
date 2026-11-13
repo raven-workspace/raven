@@ -13,6 +13,7 @@ import {
   PLAIN_NODE_TYPES,
   reportTargets,
   sourceBlocks,
+  sourceOf,
   titleSentence,
   trimmedOutput,
   type ReportData,
@@ -210,10 +211,9 @@ function sourcedRuns(n: ReportNode): [string, ReportNode[]][] {
   return out;
 }
 
-/** The garnet draft's placed entries: every step's, the scan's and the proof flag's (private ones and the slip never).
- *  The local flag joins the login step, which already prints its value, so it leaves no block of its own. */
+/** The garnet draft's placed entries: every step's, the scan's and the flags' (private ones and the slip never). */
 const expectedPlacedIds = [
-  "nmap", "head", "dump", "show", "spray", "ssh", "local-shot", "kernel", "build", "fuse", "exp", "proof-read", "proof-shot", "proof",
+  "nmap", "head", "dump", "show", "spray", "ssh", "local-shot", "local", "kernel", "build", "fuse", "exp", "proof-read", "proof-shot", "proof",
 ].map((k) => `l-garnet-${k}`);
 
 describe("plain entry blocks and Refresh sources", () => {
@@ -284,6 +284,20 @@ describe("plain entry blocks and Refresh sources", () => {
   it("entryIdsIn reads sources and figures", () => {
     expect(entryIdsIn(doc)).toEqual(new Set(expectedPlacedIds));
     expect(entryIdsIn({ type: "doc", content: [{ type: "figure", attrs: { entryId: "l-x", attachmentId: "a" } }] })).toEqual(new Set(["l-x"]));
+  });
+
+  it("a flag whose value a step already prints is recorded on the block that prints it", () => {
+    const holders = all(doc).filter((n) => Array.isArray(n.attrs?.also) && (n.attrs.also as string[]).includes("l-garnet-local"));
+    expect(holders).toHaveLength(1);
+    expect(holders[0].type).toBe("codeBlock");
+    expect(textOf(holders[0])).toContain("4c1d8e2f9a7b3065e2c4a9f1d7b80e36");
+    expect(sourceOf(holders[0])).not.toMatch(/^entry:l-garnet-local[:]?/);
+    expect(entryIdsIn(doc).has("l-garnet-local")).toBe(true);
+    const regenerated = sourceBlocks(sourceOf(holders[0])!, data, target, {})!;
+    expect(regenerated).toEqual([holders[0]]);
+    expect(regenerated[0].attrs?.also).toEqual(["l-garnet-local"]);
+    // A refresh of a block with no flag absorbed carries no `also`.
+    expect(sourceBlocks("entry:l-garnet-head:0:output", data, target, {})![0].attrs?.also).toBeUndefined();
   });
 
   it("an AD set opens with its attack-path table", () => {

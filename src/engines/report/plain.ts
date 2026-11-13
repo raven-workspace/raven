@@ -294,6 +294,28 @@ function flagEvidence(data: ReportData, entry: LogEntry, step: Step) {
   if (c.attachmentId) step.blocks.push(figure(c.attachmentId, `${c.flagKind}.txt`, entry.id));
 }
 
+/** Whether a block is one of an entry's own (`entry:<id>` or `entry:<id>:…`). */
+const isEntryBlock = (b: ReportNode, entryId: string) => {
+  const source = sourceOf(b);
+  return source === `entry:${entryId}` || (source?.startsWith(`entry:${entryId}:`) ?? false);
+};
+
+/**
+ * An entry whose evidence a step already holds (a flag whose value an output prints) is recorded on the block that
+ * holds it, in a hidden `also` attr (entry ids, in order, once each): the block that prints `value`, else the step's
+ * last sourced block. So the page still knows the entry is placed (`entryIdsIn`).
+ */
+function absorb(step: Step, entryId: string, value: string) {
+  const textIn = (n: ReportNode): string => (n.text ?? "") + (n.content ?? []).map(textIn).join("");
+  const lastIndex = (test: (b: ReportNode) => boolean) => step.blocks.reduce((found, b, i) => (test(b) ? i : found), -1);
+  let at = lastIndex((b) => b.type === "codeBlock" && value !== "" && textIn(b).includes(value));
+  if (at === -1) at = lastIndex((b) => sourceOf(b) !== null);
+  if (at === -1) return;
+  const b = step.blocks[at];
+  const also = Array.isArray(b.attrs?.also) ? (b.attrs.also as string[]) : [];
+  if (!also.includes(entryId)) step.blocks[at] = { ...b, attrs: { ...b.attrs, also: [...also, entryId] } };
+}
+
 const isFlag = (e: LogEntry | undefined) => e?.content.kind === "flag";
 const flagValue = (e: LogEntry) => (e.content.kind === "flag" ? e.content.value.trim() : "");
 
@@ -482,7 +504,9 @@ function machineBlock(data: ReportData, target: ReportTarget, meta: ReportMeta, 
     const last = list[list.length - 1];
     const value = flagValue(flag);
     if (commands.length === 0 && last && value.length >= 8 && last.shown.some((o) => o.includes(value))) {
+      const before = last.blocks.length;
       flagEvidence(data, flag, last);
+      if (!last.blocks.slice(before).some((b) => isEntryBlock(b, flag.id))) absorb(last, flag.id, value);
       for (const s of shots) evidence(data, s, last);
       return;
     }
@@ -668,10 +692,33 @@ function sourceRun(source: string, data: ReportData, target: ReportTarget | null
  */
 export function sourceBlocks(source: string, data: ReportData, target: ReportTarget | null, meta: ReportMeta): ReportNode[] | null {
   const run = sourceRun(source, data, target, meta);
-  return run ? finish(run.filter((b) => sourceOf(b) === source)) : null;
+  if (!run) return null;
+  const blocks = run.filter((b) => sourceOf(b) === source);
+  return finish(source.startsWith("entry:") ? withAbsorbed(blocks, source, data, target, meta) : blocks);
 }
 
-/** The entry ids a page holds: those in `entry:<id>…` sources at any depth, and every figure's `entryId`. */
+/** An entry's regenerated blocks with the `also` the draft records on them (`absorb`): read off the draft of each
+ *  machine the entry is on, block by block in the run's order. */
+function withAbsorbed(blocks: ReportNode[], source: string, data: ReportData, target: ReportTarget | null, meta: ReportMeta): ReportNode[] {
+  const id = ENTRY_SOURCE.exec(source)?.[1];
+  const entry = data.log.find((e) => e.id === id);
+  const drafted: ReportNode[] = [];
+  const walk = (n: ReportNode) => {
+    if (sourceOf(n) === source) drafted.push(n);
+    else n.content?.forEach(walk);
+  };
+  for (const hostId of entry?.hostIds ?? []) {
+    if (!data.hosts.some((h) => h.id === hostId)) continue;
+    machineBlock(data, targetOf(data, target, meta, hostId), meta, hostId).forEach(walk);
+  }
+  return blocks.map((b, i) => {
+    const also = drafted[i]?.attrs?.also;
+    return Array.isArray(also) && also.length > 0 ? { ...b, attrs: { ...b.attrs, also: [...also] } } : b;
+  });
+}
+
+/** The entry ids a page holds: those in `entry:<id>…` sources at any depth, every figure's `entryId`, and every id in
+ *  an `also` attr (an entry a block already shows). */
 export function entryIdsIn(doc: ReportNode): Set<string> {
   const ids = new Set<string>();
   const walk = (n: ReportNode) => {
@@ -679,6 +726,7 @@ export function entryIdsIn(doc: ReportNode): Set<string> {
     const m = source ? /^entry:([^:]+)/.exec(source) : null;
     if (m) ids.add(m[1]);
     if (n.type === "figure" && typeof n.attrs?.entryId === "string" && n.attrs.entryId !== "") ids.add(n.attrs.entryId);
+    if (Array.isArray(n.attrs?.also)) for (const id of n.attrs.also) if (typeof id === "string" && id !== "") ids.add(id);
     n.content?.forEach(walk);
   };
   walk(doc);

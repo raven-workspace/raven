@@ -3,6 +3,7 @@ import { examFixtures } from "../audit/examFixtures";
 import {
   DRAFT_LAYOUT,
   evidenceCopy,
+  findingBlocks,
   findingCopy,
   refreshNode,
   tableCopy,
@@ -46,6 +47,19 @@ describe("terminalBlocks", () => {
 
   it("keeps a single code-like line inside prose as prose", () => {
     expect(terminalBlocks("The config sets\n    PasswordAuthentication yes\nby default.").map((r) => r.kind)).toEqual(["prose"]);
+  });
+
+  it("keeps a diff's context line that lost its leading space in the diff; prose after a blank line stays prose", () => {
+    const diff = "diff --git a/app.conf b/app.conf\n-debug = true\n+debug = false\n*keep* this";
+    expect(terminalBlocks(diff)).toEqual([{ kind: "code", text: diff }]);
+    const runs = terminalBlocks(`${diff}\n\nThen restart the service.`);
+    expect(runs).toEqual([
+      { kind: "code", text: diff },
+      { kind: "prose", text: "Then restart the service." },
+    ]);
+    const blocks = findingBlocks(`${diff}\n\nThen restart the service.`);
+    expect(blocks.map((b) => b.type)).toEqual(["codeBlock", "paragraph"]);
+    expect(blocks[1].content).toEqual([{ type: "text", text: "Then restart the service." }]);
   });
 
   it("reads shell prompts and PowerShell prompts as code", () => {
