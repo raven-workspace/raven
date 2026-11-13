@@ -1409,6 +1409,75 @@ test("Report: a long note with an IP in the ports table stays in its cell and on
   });
 });
 
+test("Report: table columns size to their content and a word that fits never breaks inside, in WebKit too", async ({ page, playwright, baseURL }) => {
+  // Equal columns once broke "SeImpersonatePrivil|ege" and "CVE-|2023-0386" while # and Step wasted room.
+  await inBothEngines(page, playwright, baseURL, async (p) => {
+    await p.setViewportSize({ width: 1400, height: 900 });
+    await p.clock.install({ time: AUDIT_NOW });
+    await p.goto("/e/e-exam/s/report");
+    /** The table whose header row starts with `first`: each column's width, and every word that fits its cell yet
+     *  spans two lines. */
+    const measure = async (first: string) => {
+      const table = p.locator(".report-page .ProseMirror table").filter({ has: p.locator("tr:first-child > :first-child", { hasText: new RegExp(`^${first}$`) }) }).first();
+      await expect(table).toBeVisible();
+      // Laid out: a page just opened draws its table a frame after the heading.
+      await expect.poll(() => table.locator("tr").first().locator("th, td").first().evaluate((c) => c.getBoundingClientRect().width)).toBeGreaterThan(0);
+      return table.evaluate((t: HTMLTableElement) => {
+        const widths = Object.fromEntries([...t.rows[0]!.cells].map((c) => [c.textContent?.trim() ?? "", c.getBoundingClientRect().width]));
+        const broken: string[] = [];
+        for (const cell of t.querySelectorAll("td, th")) {
+          const style = getComputedStyle(cell);
+          const room = cell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+          const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+          for (let n = walker.nextNode() as Text | null; n; n = walker.nextNode() as Text | null) {
+            for (const m of n.data.matchAll(/\S+/g)) {
+              const range = document.createRange();
+              range.setStart(n, m.index);
+              range.setEnd(n, m.index + m[0].length);
+              const rects = [...range.getClientRects()].filter((r) => r.width > 0);
+              const lines = new Set(rects.map((r) => Math.round(r.top)));
+              const wide = Math.max(...rects.map((r) => r.right)) - Math.min(...rects.map((r) => r.left));
+              if (lines.size > 1 && wide <= room) broken.push(m[0]);
+            }
+          }
+        }
+        const range = document.createRange();
+        const word = [...t.querySelectorAll("td")].flatMap((c) => {
+          const w = document.createTreeWalker(c, NodeFilter.SHOW_TEXT);
+          const out: [Text, number][] = [];
+          for (let n = w.nextNode() as Text | null; n; n = w.nextNode() as Text | null) {
+            const i = n.data.indexOf("SeImpersonatePrivilege");
+            if (i >= 0) out.push([n, i]);
+          }
+          return out;
+        })[0];
+        let rects = -1;
+        if (word) {
+          range.setStart(word[0], word[1]);
+          range.setEnd(word[0], word[1] + "SeImpersonatePrivilege".length);
+          rects = range.getClientRects().length;
+        }
+        return { widths, broken, seImpersonateRects: rects };
+      });
+    };
+
+    await openReportPart("Front matter", "Summary")(p);
+    // With the evidence column docked: the paper at its narrowest at the owner's width.
+    await p.locator("section[aria-label='Report']").getByRole("button", { name: "Evidence", exact: true }).click();
+    await p.getByRole("tablist", { name: "Evidence" }).waitFor();
+    const findings = await measure("#");
+    expect(findings.broken, "words broken in the findings table").toEqual([]);
+    expect(findings.seImpersonateRects, "SeImpersonatePrivilege on one line").toBe(1);
+    expect(findings.widths["#"]!).toBeLessThan(findings.widths["Finding"]!);
+
+    await openReportItem("AD set")(p);
+    await p.locator(".report-page >> role=heading[name=/^5 Active Directory Set$/]").waitFor();
+    const path = await measure("Step");
+    expect(path.broken, "words broken in the attack path").toEqual([]);
+    expect(path.widths["Step"]!).toBeLessThan(path.widths["Technique"]!);
+  });
+});
+
 test("Report: a code token never reaches past its block, at the narrowest report width", async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 900 });
   await page.clock.install({ time: AUDIT_NOW });

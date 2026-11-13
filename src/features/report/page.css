@@ -351,18 +351,21 @@
 }
 
 /* A table on the page (the draft's ports and findings tables, or one the owner writes): hairlines, a header row in
-   bold over an ink rule, fixed column widths the owner can drag. */
+   bold over an ink rule. Columns size to their content: a short column (#, Port, Severity) fits its words, the text
+   column takes the rest. A dragged column keeps at least its dragged width. */
 .report-page .tableWrapper {
   overflow-x: auto;
 }
 
-/* ProseKit wraps each table in .tableWrapper. */
+/* ProseKit wraps each table in .tableWrapper. Automatic layout: no column is narrower than its longest word. */
 .report-page .tableWrapper table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed;
+  table-layout: auto;
 }
 
+/* A cell breaks only between words (not "anywhere", as the rest of the page may): its longest word is the column's
+   floor, so a word that fits never breaks inside. The editor marks a cell's longer words (cellWords). */
 .report-page .tableWrapper td,
 .report-page .tableWrapper th {
   position: relative;
@@ -371,6 +374,25 @@
   text-align: left;
   padding: 4px 8px;
   border-bottom: 1px solid var(--page-rule);
+  overflow-wrap: break-word;
+}
+
+/* A short word with a hyphen, dot or slash ("CVE-2021-3156", "10.10.30.31") stays on one line. */
+.report-page .report-cell-word {
+  white-space: nowrap;
+}
+
+/* A long word's parts ("C:\", "Windows\", "PrintSpoofer64.exe"): each whole, a line may break between them. */
+.report-page .report-cell-part {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+/* Longer than any column should be (a hash, a token with no marks): breaks anywhere to fit, never past the cell. */
+.report-page .report-cell-long {
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-width: 100%;
 }
 
 .report-page .tableWrapper th {

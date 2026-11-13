@@ -195,9 +195,50 @@ const TOKEN_MAX = 40;
 /** A code token with a hyphen, dot, slash or other mark a browser may wrap at: "libcap-dev", "5.15.0-70.77". */
 const BREAKABLE_TOKEN = /\S*[^\w\s]\S*/g;
 
+/** The longest word in a table cell kept whole: a column is never narrower than it (its min-content width). */
+const CELL_WORD_MAX = 32;
+/** A word in a cell with a mark a browser may wrap at, which would break "CVE-2021-3156" at its hyphen. */
+const MARKED_WORD = /[^\w\s]/;
+/** A longer word's parts, each ending at a path or hyphen mark: "C:\", "Windows\", "Tasks\", "PrintSpoofer64.exe". */
+const WORD_PART = /[^\\/-]*[\\/-]|[^\\/-]+/g;
+
+/** A table cell's words, so a word that fits its column never breaks inside it. A short word with a hyphen, dot
+ *  or slash keeps on one line (`report-cell-word`); a longer one breaks only between its parts, each an inline block
+ *  (`report-cell-part`); a part (or a word with no marks) longer than CELL_WORD_MAX breaks anywhere to fit
+ *  (`report-cell-long`). Plain words need nothing: a cell breaks only at spaces (page.css). */
+function cellWords(cell: PMNode, at: number, decos: Decoration[]) {
+  cell.descendants((node, pos) => {
+    if (!node.isText) return true;
+    const from = at + pos;
+    for (const m of (node.text ?? "").matchAll(/\S+/g)) {
+      const word = m[0];
+      const start = from + m.index;
+      if (word.length <= CELL_WORD_MAX) {
+        if (word.length > 1 && MARKED_WORD.test(word)) decos.push(Decoration.inline(start, start + word.length, { class: "report-cell-word" }));
+        continue;
+      }
+      const parts = [...word.matchAll(WORD_PART)];
+      if (parts.length === 1) {
+        decos.push(Decoration.inline(start, start + word.length, { class: "report-cell-long" }));
+        continue;
+      }
+      for (const part of parts) {
+        const long = part[0].length > CELL_WORD_MAX ? " report-cell-long" : "";
+        decos.push(Decoration.inline(start + part.index, start + part.index + part[0].length, { class: `report-cell-part${long}` }));
+      }
+    }
+    return false;
+  });
+}
+
 function codeTokens(doc: PMNode): DecorationSet {
   const decos: Decoration[] = [];
   doc.descendants((node, pos, parent) => {
+    // A table cell's text, code or not, follows the cell's own rules.
+    if (node.type.name === "tableCell" || node.type.name === "tableHeaderCell") {
+      cellWords(node, pos + 1, decos);
+      return false;
+    }
     if (!node.isText) return true;
     if (parent?.type.name !== "codeBlock" && !node.marks.some((m) => m.type.name === "code")) return false;
     for (const m of (node.text ?? "").matchAll(BREAKABLE_TOKEN)) {
@@ -211,7 +252,8 @@ function codeTokens(doc: PMNode): DecorationSet {
 const codeTokensKey = new PluginKey<DecorationSet>("reportCodeTokens");
 
 /** Code never wraps inside a short token that fits its line (`span.report-token`, an inline block in page.css): a line
- *  breaks between "apt-get" and "install", not at the hyphen in "apt-get". Recomputed only when the page changes. */
+ *  breaks between "apt-get" and "install", not at the hyphen in "apt-get". A table cell's words likewise (cellWords).
+ *  Recomputed only when the page changes. */
 const unbrokenCodeTokens = definePlugin(
   new Plugin<DecorationSet>({
     key: codeTokensKey,

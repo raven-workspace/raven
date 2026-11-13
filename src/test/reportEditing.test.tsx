@@ -557,6 +557,33 @@ describe("Find in code blocks", () => {
   });
 });
 
+describe("Table cells keep their words whole", () => {
+  const cell = (type: string, text: string): ReportNode => ({ type, content: [para(text)] });
+  const table = (rows: string[][]): ReportNode => ({
+    type: "table",
+    content: rows.map((r, i) => ({ type: "tableRow", content: r.map((t) => cell(i === 0 ? "tableHeaderCell" : "tableCell", t)) })),
+  });
+  const marked = (container: HTMLElement, cls: string) => [...container.querySelectorAll(`td .${cls}, th .${cls}`)].map((e) => e.textContent);
+
+  it("keeps a short marked word on one line, breaks a long path between its parts, and a long bare word anywhere", async () => {
+    const hash = "4c1d8e2f9a7b3065e2c4a9f1d7b80e36aa77";
+    const { container } = await ready(
+      doc(
+        table([
+          ["#", "Finding", "Item"],
+          ["1", "SeImpersonatePrivilege abuse via sudo CVE-2021-3156", `C:\\Windows\\Tasks\\PrintSpoofer64.exe ${hash}`],
+        ]),
+        para("Outside a table CVE-2021-3156 is ordinary text."),
+      ),
+    );
+    await waitFor(() => expect(marked(container, "report-cell-word")).toEqual(["CVE-2021-3156"]));
+    // A plain word needs nothing: the cell breaks only at spaces, so its longest word is the column's floor.
+    expect(marked(container, "report-cell-part")).toEqual(["C:\\", "Windows\\", "Tasks\\", "PrintSpoofer64.exe"]);
+    expect(marked(container, "report-cell-long")).toEqual([hash]);
+    expect(container.querySelectorAll(".ProseMirror > p [class^='report-cell']")).toHaveLength(0);
+  });
+});
+
 describe("Placeholder", () => {
   it("an empty paragraph with the cursor in it says how to insert", async () => {
     const { editor } = await ready(doc(para("x"), para()));
