@@ -4,6 +4,7 @@ import type { Node as PMNode } from "prosekit/pm/model";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams } from "react-router";
 import {
+  archivePage,
   buildPlainTarget,
   buildSectionDraft,
   legibilityChecks,
@@ -15,6 +16,7 @@ import {
   isValidOsid,
   needsFlatten,
   numberAppendices,
+  ownerMeta,
   reportChecks,
   reportDueAt,
   reportFileName,
@@ -72,7 +74,7 @@ import {
   useSectionSaver,
   wantedSections,
 } from "./queries";
-import { flushReports, isReportSaveQueued, trackReportWrite, useReportSaveStore } from "./saveQueue";
+import { flushReports, forgetReportSave, isReportSaveQueued, queueReportSave, trackReportWrite, useReportSaveStore } from "./saveQueue";
 
 const HINTS: Hint[] = [
   { keys: "← →", label: "move along the tabs (J K from anywhere)", priority: 1 },
@@ -198,7 +200,14 @@ function usePageEdits(
       if (!openSection) return null;
       const cur = current.current?.id === openSection.id ? current.current : { id: openSection.id, doc: docOf(openSection), meta: openSection.meta as SectionMeta };
       if (!cur.meta.previousDoc) return null;
-      const meta: SectionMeta = { ...cur.meta, layout: DRAFT_LAYOUT, previousDoc: cur.doc, restored: !cur.meta.restored };
+      // The page swapped out stays in the archive as it was, whatever later swaps do to `previousDoc`.
+      const meta: SectionMeta = {
+        ...cur.meta,
+        layout: DRAFT_LAYOUT,
+        previousDoc: cur.doc,
+        restored: !cur.meta.restored,
+        originals: archivePage(cur.meta, cur.doc, "restore"),
+      };
       current.current = { id: openSection.id, doc, meta };
       setLive({ id: openSection.id, doc });
       setLiveMeta({ id: openSection.id, meta });
@@ -584,8 +593,12 @@ function ReportBody({
     flattenSaved.current.add(s.id);
     const doc = plainOf(original, targetOf(s));
     const was = cached.meta as SectionMeta;
-    const meta: SectionMeta = { ...was, previousDoc: original, previousLayout: was.layout ?? null, previousAt: Date.now() };
-    delete meta.restored;
+    // The page as stored goes into the archive. It becomes `previousDoc` (Restore) only when no earlier page holds that
+    // place: a page kept from a rebuild stays the one Restore brings back.
+    const originals = archivePage(was, original, "flatten");
+    const meta: SectionMeta = was.previousDoc
+      ? { ...was, originals }
+      : { ...was, previousDoc: original, previousLayout: was.layout ?? null, previousAt: Date.now(), restored: false, flattened: true, originals };
     patchCachedSection(qc, s.id, { doc: doc as ReportDoc, meta: meta as Record<string, unknown> });
     replacePage(doc, meta);
   }, [openSection, cachedSection, plainOf, targetOf, qc, replacePage]);
@@ -632,9 +645,13 @@ function ReportBody({
   // (draftBuiltAt marks it).
   const building = useRef(new Set<string>());
   const [draftFailed, setDraftFailed] = useState<string | null>(null);
+  // A section whose rebuild waits on an earlier change to its old page that isn't saved (failed or refused).
+  const [draftBlocked, setDraftBlocked] = useState<string | null>(null);
+  // Sections the owner asked to rebuild anyway: their unsaved change goes into the archived old page instead.
+  const rebuildAnyway = useRef(new Set<string>());
   useEffect(() => {
     const s = openSection;
-    if (!s || hasCurrentPage(s) || s.kind === "details" || draftFailed || building.current.has(s.id)) return;
+    if (!s || hasCurrentPage(s) || s.kind === "details" || draftFailed || draftBlocked === s.id || building.current.has(s.id)) return;
     const doc = drafts.get(s.id);
     if (!doc) return;
     building.current.add(s.id);
@@ -643,29 +660,56 @@ function ReportBody({
       reportError(e);
       setDraftFailed(e instanceof Error ? e.message : String(e));
     };
-    // A queued write of the old page (mid-debounce, or failed and waiting for its retry) goes out first, so it can
-    // never land after the rebuild and overwrite it; the page it wrote is the one kept.
+    // Rebuild anyway: the unsaved change is dropped from the queue (it is never tried again) and lives on in the archived
+    // old page below (the queue patched the cache with it when it sent it). Should the rebuild fail, it is queued again.
+    let requeue: (() => void) | null = null;
+    if (rebuildAnyway.current.delete(s.id) && isReportSaveQueued(s.id)) {
+      const unsaved = cachedSection(s);
+      forgetReportSave(s.id);
+      requeue = () => queueReportSave(qc, s.id, unsaved.doc as ReportNode, unsaved.meta as SectionMeta);
+    }
+    // A queued write of the old page (mid-debounce, or failed and waiting for its retry; a refused one is tried once
+    // more) goes out first, so it can never land after the rebuild and overwrite it; the page it wrote is the one kept.
     flushReports()
       .then(() => {
-        if (isReportSaveQueued(s.id)) throw new Error("an earlier change to this page isn't saved yet");
-        // The section as the cache has it after the flush: its page and layout are what the queue last wrote, and its
-        // position is the current one (the reply's is left out of the cache, so a reorder made meanwhile stays).
+        // The section as the cache has it after the flush: the queue patches it with every write it sends, so its page
+        // and meta are the latest, saved or not; its position is the current one (the reply's is left out of the cache,
+        // so a reorder made meanwhile stays).
         const now = cachedSection(s);
+        if (isReportSaveQueued(s.id)) {
+          requeue?.();
+          building.current.delete(s.id);
+          setDraftBlocked(s.id);
+          return;
+        }
         if (hasCurrentPage(now)) {
           building.current.delete(s.id);
           return;
         }
-        // A page written under another layout is never dropped: it is kept in the meta for "Restore your previous page".
+        // A page written under another layout is never dropped: it is kept for "Restore your previous page" and, byte for
+        // byte with its meta, in the archive. The owner's own meta (coverage, removed entries) carries forward.
+        const was = now.meta as SectionMeta;
         const meta: SectionMeta =
           now.doc != null
-            ? { layout: DRAFT_LAYOUT, previousDoc: now.doc as ReportNode, previousLayout: (now.meta as SectionMeta).layout ?? null, previousAt: Date.now() }
-            : { layout: DRAFT_LAYOUT };
+            ? {
+                ...ownerMeta(was),
+                layout: DRAFT_LAYOUT,
+                previousDoc: now.doc as ReportNode,
+                previousLayout: was.layout ?? null,
+                previousAt: Date.now(),
+                originals: archivePage(was, now.doc as ReportNode, "rebuild"),
+              }
+            : { ...ownerMeta(was), layout: DRAFT_LAYOUT };
         return api
           .reportSectionUpsert(report.id, { kind: s.kind, targetKey: s.targetKey, position: now.position, doc, meta: meta as Record<string, unknown>, draftBuiltAt: Date.now() })
-          .then((saved) => patchCachedSection(qc, s.id, { doc: saved.doc, meta: saved.meta, draftBuiltAt: saved.draftBuiltAt }));
+          .then((saved) => patchCachedSection(qc, s.id, { doc: saved.doc, meta: saved.meta, draftBuiltAt: saved.draftBuiltAt }))
+          .catch((e: unknown) => {
+            requeue?.();
+            throw e;
+          });
       })
       .catch(fail);
-  }, [openSection, drafts, report.id, qc, draftFailed, cachedSection]);
+  }, [openSection, drafts, report.id, qc, draftFailed, draftBlocked, cachedSection]);
 
   // Report-details writes go out one at a time, in order; only the last one's reply reaches the cache, so a slower
   // earlier reply never overwrites a later change.
@@ -966,10 +1010,34 @@ function ReportBody({
       )}
       {saveFailed && <p className="m-0 text-meta text-warn">Some typing isn't saved yet. Raven keeps trying; keep Raven open until this goes.</p>}
       {draftFailed && <WarnLine text={`Couldn't build this page's draft: ${draftFailed}`} retryLabel="Retry building the draft" onRetry={() => setDraftFailed(null)} />}
+      {draftBlocked && draftBlocked === openSection?.id && (
+        <div role="alert" className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-3">
+          <p className="m-0 text-meta text-warn">
+            An earlier change to this page couldn't be saved, so Raven kept the old page and hasn't rebuilt it. Retry saves
+            that change, then rebuilds. Rebuild anyway keeps the change in the old page, which Restore brings back.
+          </p>
+          <Button size="sm" onClick={() => setDraftBlocked(null)}>
+            Retry
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              rebuildAnyway.current.add(draftBlocked);
+              setDraftBlocked(null);
+            }}
+          >
+            Rebuild anyway
+          </Button>
+        </div>
+      )}
       {openSectionMeta?.previousDoc && (
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
           <p className="m-0 text-meta text-muted-2">
-            {openSectionMeta.restored ? "This is your page from before the new layout." : "This page was rebuilt for a new layout."}
+            {openSectionMeta.restored
+              ? "This is your page from before the new layout."
+              : openSectionMeta.flattened
+                ? "This page was converted to the new format."
+                : "This page was rebuilt for a new layout."}
           </p>
           <Button size="sm" onClick={swapPage}>
             {openSectionMeta.restored ? "Use the rebuilt page" : "Restore your previous page"}
@@ -1068,7 +1136,7 @@ function ReportBody({
                     }
                   />
                 </ReportDataContext.Provider>
-              ) : draftFailed ? null : (
+              ) : draftFailed || draftBlocked === openSection.id ? null : (
                 <LoadingState label="the draft" />
               )
             ) : null}

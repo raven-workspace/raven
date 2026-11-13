@@ -77,6 +77,35 @@ export interface SectionMeta {
   previousAt?: number | null;
   /** The owner restored the earlier page: `previousDoc` holds the rebuilt one. */
   restored?: boolean;
+  /** `previousDoc` holds the page as stored before it was converted to the plain schema as it opened (not rebuilt). */
+  flattened?: boolean;
+  /** Every stored page Raven replaced (a layout rebuild, the open-time conversion, a Restore swap), byte for byte, with
+   *  the meta it had (without `originals`). Append-only: entries are never removed or rewritten. */
+  originals?: ArchivedPage[];
+}
+
+/** A stored page as it was before Raven replaced it (`SectionMeta.originals`). */
+export interface ArchivedPage {
+  doc: ReportNode;
+  layout: number | null;
+  meta: Record<string, unknown>;
+  at: number;
+  why: "rebuild" | "flatten" | "restore";
+}
+
+/** Section meta keys that describe the page's own state (layout and rebuild bookkeeping), not the owner's choices: a
+ *  rebuild sets them afresh and carries every other key forward. */
+const PAGE_STATE_KEYS = ["layout", "previousDoc", "previousLayout", "previousAt", "restored", "flattened", "originals"];
+
+/** `meta.originals` with `doc` appended, archived with the meta it was stored under (without `originals`). */
+export function archivePage(meta: SectionMeta, doc: ReportNode, why: ArchivedPage["why"], at = Date.now()): ArchivedPage[] {
+  const { originals = [], ...rest } = meta;
+  return [...originals, { doc, layout: meta.layout ?? null, meta: rest as Record<string, unknown>, at, why }];
+}
+
+/** The owner's own keys of a section meta (coverage, removed entries, a page's title…): what a rebuild carries forward. */
+export function ownerMeta(meta: SectionMeta): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(meta).filter(([k]) => !PAGE_STATE_KEYS.includes(k)));
 }
 
 export type TargetKind = "standalone" | "ad-set";

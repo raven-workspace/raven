@@ -16,6 +16,7 @@ import { CheckList, TodoPanel } from "../features/report/TodoPanel";
 import { makeQueryClient } from "../lib/queryClient";
 import type { LogContent, LogEntryInput } from "../types/log";
 import type { ReportDoc } from "../types/report";
+import { RavenError } from "../types/errors";
 import { TooltipProvider } from "../ui";
 import layout3Json from "./fixtures/report-layout3-owner.json";
 import layout5Json from "./fixtures/report-layout5-web01.json";
@@ -856,7 +857,15 @@ describe("Report view: the result", () => {
     await waitFor(() => expect(draftUpserts(upsert, LNX)).toHaveLength(1));
     const [, input] = draftUpserts(upsert, LNX)[0] as [string, { meta: unknown; doc: unknown }];
     // The page written before is kept in the meta, never dropped.
-    expect(input.meta).toEqual({ layout: 6, previousDoc: old, previousLayout: null, previousAt: expect.any(Number) });
+    // The owner's removed entries carry forward; the old page and its meta are archived as they were.
+    expect(input.meta).toEqual({
+      removedEntryIds: ["l-x"],
+      layout: 6,
+      previousDoc: old,
+      previousLayout: null,
+      previousAt: expect.any(Number),
+      originals: [{ doc: old, layout: null, meta: { removedEntryIds: ["l-x"] }, at: expect.any(Number), why: "rebuild" }],
+    });
     expect(JSON.stringify(input.doc)).not.toContain("Written under the old layout");
     await waitFor(() => expect(rebuilt()).toBeTruthy());
     expect(paper().textContent).not.toContain("Written under the old layout");
@@ -984,8 +993,18 @@ describe("Report view: the result", () => {
       expect(needsFlatten(doc as unknown as ReportNode)).toBe(false);
       expect(meta).toMatchObject({ layout: 6, restored: true });
 
+      // The stored layout-5 page survives the swaps, byte for byte, in the archive; the rebuilt page swapped out joins it.
+      await flushReports();
+      const archived = ((await stored(section.id)).meta as SectionMeta).originals!;
+      expect(JSON.stringify(archived[0].doc)).toBe(JSON.stringify(layout5));
+      expect(archived.map((a) => a.why)).toEqual(["rebuild", "restore"]);
+
       fireEvent.click(screen.getByRole("button", { name: "Use the rebuilt page" }));
       await waitFor(() => expect(paper().textContent).toBe(draftText));
+      await flushReports();
+      const after = ((await stored(section.id)).meta as SectionMeta).originals!;
+      expect(after.slice(0, 2)).toEqual(archived);
+      expect(after.map((a) => a.why)).toEqual(["rebuild", "restore", "restore"]);
       expect(screen.getByRole("button", { name: "Restore your previous page" })).toBeInTheDocument();
     });
 
@@ -1046,14 +1065,65 @@ describe("Report view: the result", () => {
 
       mount("e-exam", qc);
       await ready();
-      expect(await screen.findByText("Couldn't build this page's draft: an earlier change to this page isn't saved yet")).toBeInTheDocument();
+      const blocked = await screen.findByText(/An earlier change to this page couldn't be saved, so Raven kept the old page/);
       expect(draftUpserts(upsert, LNX)).toHaveLength(0);
 
       fail = false;
-      fireEvent.click(screen.getByRole("button", { name: "Retry building the draft" }));
+      fireEvent.click(within(blocked.closest<HTMLElement>("[role=alert]")!).getByRole("button", { name: "Retry" }));
       await waitFor(() => expect(draftUpserts(upsert, LNX)).toHaveLength(1));
       const [, input] = draftUpserts(upsert, LNX)[0] as [string, { meta: SectionMeta }];
       expect(input.meta.previousDoc).toEqual(edited);
+    });
+
+    it("a refused write of the old page blocks the rebuild in plain words; Retry tries it again, Rebuild anyway archives it", async () => {
+      const report = await api.reportGetOrCreate("e-exam");
+      const old = plainPage([{ type: "paragraph", content: [{ type: "text", text: "Old lnx02 page" }] }]);
+      const section = await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: old, meta: { layout: 5 }, draftBuiltAt: 1 });
+      const edited = plainPage([{ type: "paragraph", content: [{ type: "text", text: "Old lnx02 page, too big to save" }] }]);
+      const save = vi.spyOn(api, "reportSectionSave").mockImplementation(async (id) => {
+        throw new RavenError("validation", `section ${id} is over 8 MiB`);
+      });
+      const upsert = vi.spyOn(api, "reportSectionUpsert");
+      const qc = makeQueryClient();
+      queueReportSave(qc, section.id, edited as unknown as ReportNode, { layout: 5 });
+      await flushReports();
+      expect(save).toHaveBeenCalledTimes(1);
+
+      mount("e-exam", qc);
+      await ready();
+      const alert = () => screen.getByText(/An earlier change to this page couldn't be saved, so Raven kept the old page/).closest<HTMLElement>("[role=alert]")!;
+      await waitFor(() => expect(alert()).toBeInTheDocument());
+      // The rebuild tried the refused write once more first.
+      expect(save).toHaveBeenCalledTimes(2);
+      expect(draftUpserts(upsert, LNX)).toHaveLength(0);
+      // Retry tries it again; still refused, the page stays as it was.
+      fireEvent.click(within(alert()).getByRole("button", { name: "Retry" }));
+      await waitFor(() => expect(save).toHaveBeenCalledTimes(3));
+      await waitFor(() => expect(alert()).toBeInTheDocument());
+      expect(draftUpserts(upsert, LNX)).toHaveLength(0);
+      // Rebuild anyway: the unsaved page is the one kept, and its write never goes out again.
+      fireEvent.click(within(alert()).getByRole("button", { name: "Rebuild anyway" }));
+      await waitFor(() => expect(draftUpserts(upsert, LNX)).toHaveLength(1));
+      const [, input] = draftUpserts(upsert, LNX)[0] as [string, { meta: SectionMeta }];
+      expect(input.meta.previousDoc).toEqual(edited);
+      expect(input.meta.originals?.at(-1)).toMatchObject({ doc: edited, layout: 5, why: "rebuild" });
+      await flushReports();
+      expect(save).toHaveBeenCalledTimes(3);
+    });
+
+    it("a rebuild carries the owner's meta forward and archives the old page with its whole meta", async () => {
+      const report = await api.reportGetOrCreate("e-exam");
+      const older = plainPage([{ type: "paragraph", content: [{ type: "text", text: "Written under layout 3" }] }]);
+      const old = plainPage([{ type: "paragraph", content: [{ type: "text", text: "Written under layout 5" }] }]);
+      const was = { layout: 5, coverage: { s1: { result: "tested", note: "checked by hand" } }, removedEntryIds: ["l-gone"], previousDoc: older, previousLayout: 3, previousAt: 7 };
+      await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: old, meta: was, draftBuiltAt: 1 });
+      const upsert = vi.spyOn(api, "reportSectionUpsert");
+      mount();
+      await ready();
+      await waitFor(() => expect(draftUpserts(upsert, LNX)).toHaveLength(1));
+      const [, input] = draftUpserts(upsert, LNX)[0] as [string, { meta: SectionMeta }];
+      expect(input.meta).toMatchObject({ coverage: was.coverage, removedEntryIds: ["l-gone"], layout: 6, previousDoc: old, previousLayout: 5 });
+      expect(input.meta.originals).toEqual([{ doc: old, layout: 5, meta: was, at: expect.any(Number), why: "rebuild" }]);
     });
 
     it("a page already at layout 6 is never rebuilt", async () => {
@@ -1093,7 +1163,35 @@ describe("Report view: the result", () => {
       const [, doc, meta] = writes[0] as unknown as [string, ReportDoc, SectionMeta & { title: string }];
       expect(needsFlatten(doc as unknown as ReportNode)).toBe(false);
       expect(meta.previousDoc).toEqual(original);
-      expect(meta).toMatchObject({ title: "Owner notes", placement: "body", layout: DRAFT_LAYOUT, previousLayout: DRAFT_LAYOUT });
+      expect(meta).toMatchObject({ title: "Owner notes", placement: "body", layout: DRAFT_LAYOUT, previousLayout: DRAFT_LAYOUT, flattened: true });
+      expect(meta.originals).toEqual([{ doc: original, layout: DRAFT_LAYOUT, meta: { title: "Owner notes", placement: "body", layout: DRAFT_LAYOUT }, at: expect.any(Number), why: "flatten" }]);
+      expect(screen.getByText("This page was converted to the new format.")).toBeInTheDocument();
+    });
+
+    it("a page with a kept previous page that still holds an old node opens flattened and keeps that previous page", async () => {
+      const report = await api.reportGetOrCreate("e-exam");
+      const kept = plainPage([{ type: "paragraph", content: [{ type: "text", text: "The page before the rebuild" }] }]);
+      const raw = {
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "Rebuilt page text" }] },
+          { type: "evidence", attrs: { entryId: "l-exam-web01-sudo", block: 0, keep: null, emphasis: [], appendix: "inline" } },
+        ],
+      };
+      const was = { layout: DRAFT_LAYOUT, previousDoc: kept, previousLayout: 5, previousAt: 7 };
+      const section = await api.reportSectionUpsert(report.id, { kind: "target", targetKey: LNX, position: 0, doc: raw as unknown as ReportDoc, meta: was, draftBuiltAt: 1 });
+      const save = vi.spyOn(api, "reportSectionSave");
+      mount();
+      await ready();
+      await waitFor(() => expect(paper().textContent).toContain("Rebuilt page text"));
+      await waitFor(() => expect(save.mock.calls.some(([id]) => id === section.id)).toBe(true));
+      const [, doc, meta] = save.mock.calls.filter(([id]) => id === section.id)[0] as unknown as [string, ReportDoc, SectionMeta];
+      expect(needsFlatten(doc as unknown as ReportNode)).toBe(false);
+      expect(meta).toMatchObject({ previousDoc: kept, previousLayout: 5, previousAt: 7 });
+      expect(meta.flattened).toBeUndefined();
+      expect(meta.originals).toEqual([{ doc: raw, layout: DRAFT_LAYOUT, meta: was, at: expect.any(Number), why: "flatten" }]);
+      // Its Restore still brings back the page from before the rebuild.
+      expect(screen.getByText("This page was rebuilt for a new layout.")).toBeInTheDocument();
     });
 
     it("numbers a target's machine heading from the section order and renumbers after ⌥→", async () => {
