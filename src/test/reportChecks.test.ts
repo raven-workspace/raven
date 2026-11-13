@@ -263,7 +263,7 @@ describe("targetChecks", () => {
     it("is soft for a command on the page with no output block, anchored at its command", () => {
       const c = find(run(data({ log: [blank(), flag()] }), doc(words("Listed."), noOutput("c1"), ...goodDoc().content!)), "output")!;
       expect(c).toMatchObject({
-        id: "output:c1",
+        id: "output:c1:0",
         level: "soft",
         text: "A command on the page shows no output. Fine if it printed nothing; otherwise paste its output.",
         anchor: { entryId: "c1", nodeIndex: 2 },
@@ -272,9 +272,24 @@ describe("targetChecks", () => {
     it("says nothing when the entry returned nothing, or an output block is there", () => {
       expect(find(run(data({ log: [blank({ returnedNothing: true }), flag()] }), doc(noOutput("c1"), ...goodDoc().content!)), "output")).toBeUndefined();
       expect(find(run(data({ log: [blank(), flag()] }), doc(...cmd("c1"), ...goodDoc().content!)), "output")).toBeUndefined();
-      // Any output block of the entry counts, a second command with none included.
+    });
+    it("is per command block: a silent command is flagged even when the entry's other command has output", () => {
+      // The silent download first, then the run that prints: the download has no output before the next command.
+      const two = entry({ id: "c2", content: { kind: "command", blocks: [{ command: "iwr x", output: "" }, { command: "run", output: "ok" }] } });
+      const page = doc(code("iwr x", "entry:c2:0:command"), code("run", "entry:c2:1:command"), code("ok", "entry:c2:1:output"), ...goodDoc().content!);
+      const cs = run(data({ log: [two, flag()] }), page).filter((c) => c.id.startsWith("output"));
+      expect(cs.map((c) => [c.id, c.level, c.anchor])).toEqual([["output:c2:0", "soft", { entryId: "c2", nodeIndex: 0 }]]);
+    });
+    it("a command followed by its output, then a later silent command of the same entry, flags only the later one", () => {
       const two = entry({ id: "c2", content: { kind: "command", blocks: [{ command: "a", output: "x" }, { command: "b", output: "" }] } });
-      expect(find(run(data({ log: [two, flag()] }), doc(...cmd("c2"), noOutput("c2"), ...goodDoc().content!)), "output")).toBeUndefined();
+      const cs = run(data({ log: [two, flag()] }), doc(...cmd("c2"), code("b", "entry:c2:1:command"), ...goodDoc().content!)).filter((c) => c.id.startsWith("output"));
+      expect(cs.map((c) => c.id)).toEqual(["output:c2:1"]);
+    });
+    it("an output block of another entry between them does not answer the command", () => {
+      const a = entry({ id: "ca", content: { kind: "command", blocks: [{ command: "a", output: "" }] } });
+      const b = entry({ id: "cb" });
+      const page = doc(code("a", "entry:ca:0:command"), ...cmd("cb"), ...goodDoc().content!);
+      expect(run(data({ log: [a, b, flag()] }), page).filter((c) => c.id.startsWith("output")).map((c) => c.id)).toEqual(["output:ca:0"]);
     });
   });
 

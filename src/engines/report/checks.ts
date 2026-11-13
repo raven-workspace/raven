@@ -285,16 +285,22 @@ export function targetChecks(input: TargetChecksInput): Check[] {
   for (const host of hosts) out.push(...proofChecks(host, expectedFlags(target, host.id, meta), data, onPage));
 
   // A block from a private or deleted entry: the words or picture on the page may be what was hidden or meant to go.
-  // One check per entry, at its first block. A command with no output block is soft, and only when the entry has one.
+  // One check per entry, at its first block. A command block with no output block of its entry after it (before that
+  // entry's next command block) is soft, per block.
   const seenEntry = new Set<string>();
-  const commands = new Map<string, number>();
-  const outputs = new Set<string>();
+  /** Per entry, the command block still waiting for an output block: its block number and node index. */
+  const waiting = new Map<string, { block: string; index: number }>();
+  const silent: { id: string; block: string; index: number }[] = [];
   for (const { node, index } of nodes) {
     const source = sourceOf(node) ?? "";
-    const cmd = /^entry:([^:]+):\d+:command$/.exec(source)?.[1];
-    if (cmd && !commands.has(cmd)) commands.set(cmd, index);
+    const cmd = /^entry:([^:]+):(\d+):command$/.exec(source);
+    if (cmd) {
+      const was = waiting.get(cmd[1]!);
+      if (was) silent.push({ id: cmd[1]!, ...was });
+      waiting.set(cmd[1]!, { block: cmd[2]!, index });
+    }
     const res = /^entry:([^:]+):\d+:output$/.exec(source)?.[1];
-    if (res) outputs.add(res);
+    if (res) waiting.delete(res);
     const id = figureEntry(node) || entryOfSource(node) || "";
     if (id === "" || seenEntry.has(id)) continue;
     seenEntry.add(id);
@@ -306,11 +312,12 @@ export function targetChecks(input: TargetChecksInput): Check[] {
         : { id: `copied-deleted:${id}`, level: "fail", text: "A block on the page comes from an entry that was deleted.", anchor: { nodeIndex: index } },
     );
   }
-  for (const [id, index] of commands) {
+  for (const [id, was] of waiting) silent.push({ id, ...was });
+  for (const { id, block, index } of silent.sort((a, b) => a.index - b.index)) {
     const entry = entryOf(id);
-    if (outputs.has(id) || !entry || entry.private || entry.content.kind !== "command" || entry.returnedNothing) continue;
+    if (!entry || entry.private || entry.content.kind !== "command" || entry.returnedNothing) continue;
     // Soft: downloads (iwr, certutil) and other quiet commands print nothing, and that is fine to show.
-    out.push({ id: `output:${id}`, level: "soft", text: "A command on the page shows no output. Fine if it printed nothing; otherwise paste its output.", anchor: { entryId: id, nodeIndex: index } });
+    out.push({ id: `output:${id}:${block}`, level: "soft", text: "A command on the page shows no output. Fine if it printed nothing; otherwise paste its output.", anchor: { entryId: id, nodeIndex: index } });
   }
 
   // A finding or file that was deleted: one check per id, at its first block.

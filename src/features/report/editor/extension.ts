@@ -210,8 +210,8 @@ function codeTokens(doc: PMNode): DecorationSet {
 
 const codeTokensKey = new PluginKey<DecorationSet>("reportCodeTokens");
 
-/** Code never wraps inside a short token (`span.report-token`, nowrap in page.css): a line breaks between "apt-get" and
- *  "install", never at the hyphen in "apt-get". Recomputed only when the page changes. */
+/** Code never wraps inside a short token that fits its line (`span.report-token`, an inline block in page.css): a line
+ *  breaks between "apt-get" and "install", not at the hyphen in "apt-get". Recomputed only when the page changes. */
 const unbrokenCodeTokens = definePlugin(
   new Plugin<DecorationSet>({
     key: codeTokensKey,

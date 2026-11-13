@@ -1274,7 +1274,9 @@ test("Report: every block type takes typing and the log stays as it was, in WebK
     await p.keyboard.type("X");
     const typed = p.locator(".report-page .ProseMirror > p", { hasText: /^X$/ });
     await expect(typed, "summary hint paragraph").toHaveCount(1);
-    expect(await p.locator(`.report-page .ProseMirror > p[data-hint='${hintText}'].report-hint`).count()).toBe(0);
+    // Its hint no longer shows: no empty hint paragraph carries that hint any more.
+    const stillShown = await p.locator(".report-page .ProseMirror > p.report-hint").evaluateAll((els, h) => els.filter((e) => e.getAttribute("data-hint") === h).length, hintText);
+    expect(stillShown).toBe(0);
     // The page is the owner's copy: the command's output in the log is what the terminal printed.
     await p.getByRole("link", { name: /^Log\b/ }).first().click();
     await expect.poll(() => new URL(p.url()).pathname).toBe("/e/e-exam/s/log");
@@ -1295,19 +1297,20 @@ test("Report: consecutive blocks never touch, in WebKit at 1400", async ({ page,
         const r = el.getBoundingClientRect();
         return r.height > 0 && getComputedStyle(el).display !== "none";
       };
-      const out: { pair: string; gap: number }[] = [];
+      const out: { pair: string; gap: number; inList: boolean }[] = [];
       for (const parent of [root, ...root.querySelectorAll(".list-content")]) {
         const kids = [...parent.children].filter(shown);
         for (let i = 1; i < kids.length; i++) {
           const prev = kids[i - 1]!.getBoundingClientRect();
           const next = kids[i]!.getBoundingClientRect();
           const name = (el: Element) => `${el.tagName.toLowerCase()} "${(el.textContent ?? "").slice(0, 30)}"`;
-          out.push({ pair: `${name(kids[i - 1]!)} → ${name(kids[i]!)}`, gap: Math.round((next.top - prev.bottom) * 10) / 10 });
+          out.push({ pair: `${name(kids[i - 1]!)} → ${name(kids[i]!)}`, gap: Math.round((next.top - prev.bottom) * 10) / 10, inList: parent !== root });
         }
       }
       return out;
     });
     expect(gaps.length).toBeGreaterThan(20);
+    expect(gaps.filter((g) => g.inList).length, "pairs inside a step").toBeGreaterThan(0);
     expect(gaps.filter((g) => g.gap < 8)).toEqual([]);
   });
 });
@@ -1319,8 +1322,14 @@ test("Report: the notice sits clear of the sidebar, expanded and collapsed", asy
   await openGarnet(page);
   await page.getByRole("button", { name: "Add new evidence" }).click();
   const notice = page.locator("body > [role=status]");
-  const sidebar = page.locator("[data-slot='sidebar-gap']");
-  const clearance = async () => (await notice.boundingBox())!.x - ((await sidebar.boundingBox())?.x ?? 0) - ((await sidebar.boundingBox())?.width ?? 0);
+  // The gap reserves the sidebar's width in the layout but has no height (never "visible"); the fixed container beside
+  // it is the sidebar as drawn, and ends where the gap does.
+  const sidebar = page.locator("[data-slot='sidebar-container']");
+  const clearance = async () => {
+    const gap = (await sidebar.boundingBox())!;
+    return (await notice.boundingBox())!.x - (gap.x + gap.width);
+  };
+  await expect(sidebar).toBeVisible();
   await expect(notice).toBeVisible();
   await expect(page.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
   expect(await clearance()).toBeGreaterThanOrEqual(8);
@@ -1329,5 +1338,59 @@ test("Report: the notice sits clear of the sidebar, expanded and collapsed", asy
   // The notice may have closed itself (5s): ask again, and it opens where the folded sidebar leaves room.
   if (!(await notice.isVisible())) await page.getByRole("button", { name: "Add new evidence" }).click();
   await expect(notice).toBeVisible();
+  await expect(sidebar).toBeVisible();
   await expect.poll(clearance).toBeGreaterThanOrEqual(8);
+});
+
+test("Report: a long note with an IP in the ports table stays in its cell and on the page, in WebKit", async ({ page, playwright, baseURL }) => {
+  // The owner's app is WebKit (WKWebView), where an automatic table layout once let an IP overprint the next column.
+  await inBothEngines(page, playwright, baseURL, async (p) => {
+    await p.setViewportSize({ width: 1400, height: 900 });
+    await p.clock.install({ time: AUDIT_NOW });
+    await p.goto("/e/e-exam/s/report");
+    await openGarnet(p);
+    const table = p.locator(".report-page .ProseMirror table").first();
+    const notes = await table.locator("tr").first().locator("th, td").evaluateAll((cells) => cells.findIndex((c) => c.textContent?.trim() === "Notes"));
+    expect(notes).toBeGreaterThanOrEqual(0);
+    await caretAtEnd(p, table.locator("tr").nth(1).locator("td").nth(notes));
+    await p.keyboard.type("172.31.166.143 WORKSTATION-FINANCE-WWW-01 admin panel behind basic auth, default credentials rejected");
+    await expect(table).toContainText("172.31.166.143");
+    const result = await table.evaluate((t) => {
+      const doc = t.closest(".ProseMirror")!;
+      const style = getComputedStyle(doc);
+      const contentRight = doc.getBoundingClientRect().right - parseFloat(style.paddingRight);
+      const bad: string[] = [];
+      for (const row of t.querySelectorAll("tr")) {
+        const cells = [...row.querySelectorAll("th, td")];
+        cells.forEach((c, i) => {
+          if (c.scrollWidth > c.clientWidth + 1) bad.push(`cell ${i} overflows: "${c.textContent?.slice(0, 30)}"`);
+          // The cell's text never reaches into the next cell.
+          const range = document.createRange();
+          range.selectNodeContents(c);
+          const textRight = Math.max(...[...range.getClientRects()].map((r) => r.right), 0);
+          const next = cells[i + 1];
+          if (next && textRight > next.getBoundingClientRect().left + 0.5) bad.push(`cell ${i} overlaps cell ${i + 1}: "${c.textContent?.slice(0, 30)}"`);
+        });
+      }
+      return { bad, tableRight: t.getBoundingClientRect().right, contentRight };
+    });
+    expect(result.bad).toEqual([]);
+    expect(result.tableRight).toBeLessThanOrEqual(result.contentRight + 0.5);
+  });
+});
+
+test("Report: a code token never reaches past its block, at the narrowest report width", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.clock.install({ time: AUDIT_NOW });
+  await page.goto("/e/e-exam/s/report");
+  await openGarnet(page);
+  await page.locator(".report-page .report-token").first().waitFor();
+  const past = await page.locator(".report-page .ProseMirror").evaluate((root) =>
+    [...root.querySelectorAll(".report-token")].flatMap((t) => {
+      const box = (t.closest("pre") ?? t.closest("p, td, th, figcaption"))!.getBoundingClientRect();
+      const r = t.getBoundingClientRect();
+      return r.right > box.right + 0.5 || r.left < box.left - 0.5 ? [`"${t.textContent}" ${Math.round(r.right - box.right)}px past`] : [];
+    }),
+  );
+  expect(past).toEqual([]);
 });

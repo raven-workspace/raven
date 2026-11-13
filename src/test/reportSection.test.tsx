@@ -131,6 +131,15 @@ describe("Report view", () => {
     expect(await screen.findByRole("group", { name: "Report OSCP-OS-?????-Exam-Report.pdf" })).toBeInTheDocument();
   });
 
+  it("lists a target page stored before the others first, the newly drafted ones after it in grading order", async () => {
+    // A report opened before a layout change (the audit's web01): its stored page keeps its place, new pages follow.
+    const report = await api.reportGetOrCreate("e-exam");
+    await api.reportSectionUpsert(report.id, { kind: "target", targetKey: "h-exam-web", position: 2, doc: null, meta: {}, draftBuiltAt: null });
+    mount();
+    await ready();
+    await waitFor(() => expect(targetLabels()).toEqual(["1 web01", "2 lnx02", "3 garnet", "4 ms01", "5 xfer03", "6 AD set"]));
+  });
+
   it("shows a tab row in grading order: Front matter first, the targets, then Closing", async () => {
     mount();
     await ready();

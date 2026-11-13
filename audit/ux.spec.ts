@@ -8,7 +8,7 @@ import { collectOptOuts } from "./checks/optouts";
 import { collectStateIssues, type AuditState } from "./checks/states";
 import { collectUxIssues } from "./checks/ux";
 import { writeIssues } from "./report";
-import { openReportItem, reportChecks, SCREENS } from "./screens";
+import { openBlockActions, openReportItem, reportChecks, SCREENS } from "./screens";
 import { CHECK_IDS, gateFailures } from "./types";
 
 const WIDTH = 1280;
@@ -97,9 +97,14 @@ test("report: ms01's proof passes its checks", async ({ page }) => {
   await page.locator(".report-page >> role=heading[name=/^4\\.\\d+ ms01 \\(10\\.10\\.30\\.5\\)$/]").waitFor();
   const checks = await reportChecks(page);
   await expect(checks).toBeVisible();
-  // The list is the real one, read from ms01's drafted page (the PrintSpoofer run is on it): nothing left to do.
-  await expect(page.locator(".report-page .report-codeblock", { hasText: "PrintSpoofer64.exe -i -c powershell.exe" }).first()).toBeVisible();
-  await expect(checks.getByText("Nothing to do on this tab")).toBeVisible();
+  // As drafted, the silent download shares its block with the PrintSpoofer run, whose output follows: nothing to do.
+  await expect(checks.getByText("A command shows no output")).toHaveCount(0);
+  // The list is the real one: delete the run's output and its command is flagged, as a soft check (some commands
+  // print nothing).
+  await openBlockActions(page, page.locator(".report-page .report-codeblock", { hasText: "[+] Found privilege: SeImpersonatePrivilege" }).first());
+  await page.getByRole("menu", { name: "Block actions" }).getByRole("menuitem", { name: "Delete" }).click();
+  const after = await reportChecks(page);
+  await expect(after.getByText("A command shows no output")).toBeVisible();
   // ipconfig with 10.10.30.5, whoami, hostname, type from the Desktop, a screenshot: no proof check is left.
   await expect(checks.getByText(/proof/i)).toHaveCount(0);
   await expect(checks.getByText(/No (local|proof)\.txt/)).toHaveCount(0);

@@ -142,9 +142,12 @@
   box-shadow: -2px 0 0 var(--page-code-bg), 2px 0 0 var(--page-code-bg);
 }
 
-/* A short code token stays on one line (the editor marks it): code wraps between tokens, not at a hyphen inside one. */
+/* A short code token (the editor marks it) moves to the next line whole rather than wrapping at a hyphen inside it.
+   Wider than its block, it still breaks to fit: it never pushes past the block's edge. */
 .report-page .report-token {
-  white-space: nowrap;
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 /* A code block wraps to the page from its first paint, before its view (language picker, tint) mounts around it. */
