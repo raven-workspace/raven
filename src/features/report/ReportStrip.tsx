@@ -58,7 +58,7 @@ export function ReportStrip({
   todoOpen: boolean;
   /** Toggles the panel; `button` is where focus returns when it closes. */
   onTodo(button: HTMLElement): void;
-  /** Under 1200px the evidence rail is a drawer: its toggle sits at the strip's right. */
+  /** Under 1200px the evidence column opens and closes (docked beside the page, or a drawer when narrower): its toggle sits at the strip's right. */
   rail?: { open: boolean; onToggle(): void };
 }) {
   const now = useNow();

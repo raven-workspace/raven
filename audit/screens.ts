@@ -8,9 +8,13 @@ export interface Screen {
   /** A Playwright selector that must be visible before checks run. */
   ready: string;
   setup?: (page: Page) => Promise<void>;
+  /** The widths it runs at, when not every one of `WIDTHS` (a layout that exists only at one window size). */
+  widths?: readonly number[];
 }
 
 export const WIDTHS = [900, 1024, 1280, 1440] as const;
+/** The widths a screen runs at. */
+export const widthsOf = (screen: Pick<Screen, "widths"> | undefined): readonly number[] => screen?.widths ?? WIDTHS;
 
 const E = `/e/${AUDIT_IDS.labEngagement}`;
 const H = `${E}/h/${AUDIT_IDS.webHost}`;
@@ -500,7 +504,17 @@ export const SCREENS: Screen[] = [
     },
   },
   {
-    // Under 1200px of pane the evidence rail is a drawer, opened from the strip; wider, it is the third column.
+    // The owner's window (1400, sidebar open): about 1160px of pane, so the evidence column opens from the strip and
+    // docks beside the page, the paper narrowing to make room.
+    id: "report-dock", path: REPORT, ready: "aside[aria-label='Evidence']:not(.fixed) >> role=tablist[name='Evidence']", widths: [1400],
+    setup: async (page) => {
+      await openGarnet(page);
+      await page.locator("section[aria-label='Report']").getByRole("button", { name: "Evidence", exact: true }).click();
+    },
+  },
+  {
+    // Under 1000px of pane the evidence column is a drawer over the page; from 1000 it docks beside the page, from
+    // 1200 it is always there. Both open from the strip's Evidence button.
     id: "report-narrow", path: REPORT, ready: "role=tablist[name='Evidence'] >> visible=true",
     setup: async (page) => {
       await openGarnet(page);

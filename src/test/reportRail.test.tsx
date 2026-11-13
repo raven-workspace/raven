@@ -264,10 +264,10 @@ describe("Evidence rail: the log column", () => {
     expect(await screen.findByText("No credential results or access recorded for this target.")).toBeInTheDocument();
   });
 
-  it("is a drawer under 1200px, toggled by E", async () => {
+  it("is a drawer under 1000px, toggled by E", async () => {
     await seed();
     const width = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-      const w = this.getAttribute("aria-label") === "Report" ? 1100 : 0;
+      const w = this.getAttribute("aria-label") === "Report" ? 900 : 0;
       return { width: w, height: 0, top: 0, left: 0, right: w, bottom: 0, x: 0, y: 0, toJSON: () => ({}) };
     });
     mount();
@@ -298,10 +298,41 @@ describe("Evidence rail: the log column", () => {
     act(() => useNotesStore.setState({ open: false }));
   });
 
-  it("Esc meant for a field, a menu, a list or a popover leaves the drawer open", async () => {
+  it("from 1000px to under 1200px docks beside the page, toggled by E, and stays when Notes opens", async () => {
     await seed();
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
       const w = this.getAttribute("aria-label") === "Report" ? 1100 : 0;
+      return { width: w, height: 0, top: 0, left: 0, right: w, bottom: 0, x: 0, y: 0, toJSON: () => ({}) };
+    });
+    mount();
+    await waitFor(() => expect(editors.length).toBeGreaterThan(0));
+    expect(screen.queryByRole("tab", { name: /Unused/ })).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "e" });
+    expect(await screen.findByRole("tab", { name: /Unused/ })).toBeInTheDocument();
+    const column = screen.getByRole("complementary", { name: "Evidence" });
+    // A grid column beside the page, not the fixed drawer over it.
+    expect(column.className).not.toMatch(/\bfixed\b/);
+    expect(screen.getByRole("button", { name: "Evidence" })).toHaveAttribute("aria-pressed", "true");
+
+    // Notes is a drawer of its own: the docked column stays.
+    act(() => useNotesStore.setState({ open: true }));
+    expect(screen.getByRole("tab", { name: /Unused/ })).toBeInTheDocument();
+    act(() => useNotesStore.setState({ open: false }));
+
+    fireEvent.keyDown(window, { key: "e" });
+    await waitFor(() => expect(screen.queryByRole("tab", { name: /Unused/ })).not.toBeInTheDocument());
+
+    // ⌥3 opens it and puts focus on the column.
+    fireEvent.keyDown(window, { code: "Digit3", altKey: true });
+    await screen.findByRole("tab", { name: /Unused/ });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("complementary", { name: "Evidence" })));
+  });
+
+  it("Esc meant for a field, a menu, a list or a popover leaves the drawer open", async () => {
+    await seed();
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const w = this.getAttribute("aria-label") === "Report" ? 900 : 0;
       return { width: w, height: 0, top: 0, left: 0, right: w, bottom: 0, x: 0, y: 0, toJSON: () => ({}) };
     });
     mount();

@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SCREENS, WIDTHS } from "./screens";
+import { SCREENS, widthsOf } from "./screens";
 import { FAILING_CHECKS, type Issue, type RawIssue } from "./types";
 
 const OUT = fileURLToPath(new URL("../audit-output/", import.meta.url));
@@ -90,7 +90,8 @@ export function renderMarkdown(all: Issue[], screenIds: string[], shots: Set<str
     lines.push("", `## ${s}`, "");
     const { groups, more } = groupRows(issues.filter((x) => x.screen === s));
     const ranAt = (w: number) => ran.has(`${s}@${w}`) || shots.has(`${s}@${w}.png`);
-    const didRun = screenIds.includes(s) ? WIDTHS.some(ranAt) : true;
+    const widths = widthsOf(SCREENS.find((x) => x.id === s));
+    const didRun = screenIds.includes(s) ? widths.some(ranAt) : true;
     if (!didRun) lines.push("Did not run.");
     else if (groups.length === 0) lines.push("No issues.");
     for (const g of groups) {
@@ -98,7 +99,7 @@ export function renderMarkdown(all: Issue[], screenIds: string[], shots: Set<str
     }
     for (const m of more) lines.push(`- …${m.count} more ${m.check} groups in report.json`);
     if (screenIds.includes(s) && didRun) {
-      const missing = WIDTHS.filter((w) => !ranAt(w));
+      const missing = widths.filter((w) => !ranAt(w));
       if (missing.length > 0) lines.push("", `Did not run at: ${missing.join(", ")}`);
     }
     const state = /^(.+)~(empty|loading|error)$/.exec(s);
@@ -108,7 +109,7 @@ export function renderMarkdown(all: Issue[], screenIds: string[], shots: Set<str
       continue;
     }
     if (!screenIds.includes(s)) continue;
-    const links = WIDTHS.filter((w) => shots.has(`${s}@${w}.png`)).map((w) => `[${s}@${w}](shots/${s}@${w}.png)`);
+    const links = widths.filter((w) => shots.has(`${s}@${w}.png`)).map((w) => `[${s}@${w}](shots/${s}@${w}.png)`);
     lines.push("", links.length > 0 ? links.join(" · ") : "No screenshots: this screen did not run.");
   }
   return lines.join("\n") + "\n";

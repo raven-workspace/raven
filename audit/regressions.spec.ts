@@ -1226,10 +1226,10 @@ test("Report: the formatting bar fits its pane at 1400 with the evidence rail op
 });
 
 test("Report: Esc closes the evidence drawer and stays on the report, in WebKit too", async ({ page, playwright, baseURL }) => {
-  // The owner's window with the sidebar open: under 1200px of pane, so the rail is a drawer. The drawer mounts after
-  // the engagement's own Esc (back to the dashboard), which once heard the key first.
+  // A 1200 window with the sidebar open: under 1000px of pane, so the rail is a drawer. The drawer mounts after the
+  // engagement's own Esc (back to the dashboard), which once heard the key first.
   await inBothEngines(page, playwright, baseURL, async (p) => {
-    await p.setViewportSize({ width: 1400, height: 900 });
+    await p.setViewportSize({ width: 1200, height: 900 });
     await p.clock.install({ time: AUDIT_NOW });
     await p.goto("/e/e-exam/s/report");
     await openGarnet(p);
@@ -1239,6 +1239,36 @@ test("Report: Esc closes the evidence drawer and stays on the report, in WebKit 
     await p.keyboard.press("Escape");
     await expect(drawer).toHaveCount(0);
     expect(new URL(p.url()).pathname).toBe("/e/e-exam/s/report");
+  });
+});
+
+test("Report: at the owner's 1400 with the sidebar open, the evidence column opens beside the page, never over it, in WebKit too", async ({ page, playwright, baseURL }) => {
+  await inBothEngines(page, playwright, baseURL, async (p) => {
+    await p.setViewportSize({ width: 1400, height: 900 });
+    await p.clock.install({ time: AUDIT_NOW });
+    await p.goto("/e/e-exam/s/report");
+    await openGarnet(p);
+    await expect(p.getByRole("button", { name: "Collapse sidebar" }).first()).toBeVisible();
+    const toggle = p.locator("section[aria-label='Report']").getByRole("button", { name: "Evidence", exact: true });
+    const paper = p.locator(".report-page");
+    const closedWidth = (await paper.boundingBox())!.width;
+    await toggle.click();
+    const column = p.locator("aside[aria-label='Evidence']");
+    await expect(column.getByRole("tablist", { name: "Evidence" })).toBeVisible();
+    expect(await column.evaluate((el) => getComputedStyle(el).position), "docked, not a drawer").not.toBe("fixed");
+    const page_ = (await paper.boundingBox())!;
+    const col = (await column.boundingBox())!;
+    expect(page_.x + page_.width).toBeLessThanOrEqual(col.x + 0.5);
+    expect(page_.width, "the paper narrows").toBeLessThan(closedWidth);
+    // The paper keeps a readable measure, and its code blocks stay inside it.
+    const text = (await p.locator(".report-page .ProseMirror").boundingBox())!;
+    expect(text.width).toBeGreaterThanOrEqual(560);
+    const over = await p.locator(".report-page .ProseMirror pre").evaluateAll((els) => els.filter((e) => e.scrollWidth > e.clientWidth + 1).length);
+    expect(over).toBe(0);
+    // A toggle the owner controls: the strip's Evidence button closes it again and the paper takes the room back.
+    await toggle.click();
+    await expect(column).toHaveCount(0);
+    await expect.poll(async () => (await paper.boundingBox())!.width).toBe(closedWidth);
   });
 });
 

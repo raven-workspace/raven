@@ -37,7 +37,8 @@ import {
 } from "../../engines/report";
 import { api } from "../../lib/api";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
-import { useNarrow } from "../../lib/useNarrow";
+import { cx } from "../../lib/cx";
+import { useWidth } from "../../lib/useNarrow";
 import { reportError } from "../../lib/lockSignal";
 import type { Report, ReportDoc, ReportPatch, ReportSection } from "../../types/report";
 import type { Settings } from "../../types/settings";
@@ -94,9 +95,17 @@ const HINTS: Hint[] = [
   { keys: "> ``` ---", label: "at a line's start: quote, code block, divider", priority: 15 },
   { keys: "F2 ⌫", label: "on a page's tab: rename, delete", priority: 16 },
 ];
-/** Under 1200px the evidence rail is a drawer, which E opens. */
+/** Under 1200px the evidence column is the owner's to open and close, with E. */
 const NARROW_HINTS: Hint[] = [...HINTS, { keys: "E", label: "evidence", priority: 5 }];
+/** From this pane width the evidence column always sits beside the page. */
 const RAIL_BREAKPOINT = 1200;
+/** From this pane width (and under 1200) the column, when open, docks beside the page and the paper narrows: 320px of
+ *  column still leaves the paper about 560px of text. Narrower, the column is a drawer over the page. */
+const DOCK_BREAKPOINT = 1000;
+/** Where the evidence column sits: always beside the page, beside it while open, or a drawer over it while open. */
+type RailMode = "column" | "dock" | "drawer";
+const railModeAt = (width: number): RailMode =>
+  width === 0 || width >= RAIL_BREAKPOINT ? "column" : width >= DOCK_BREAKPOINT ? "dock" : "drawer";
 
 const LABEL = SECTION_NAMES;
 
@@ -795,21 +804,38 @@ function ReportBody({
   const navRef = useRef<HTMLDivElement | null>(null);
   const pageRef = useRef<HTMLDivElement | null>(null);
   const railRef = useRef<HTMLElement | null>(null);
-  const [sectionRef, narrow] = useNarrow<HTMLElement>(RAIL_BREAKPOINT);
+  const [sectionRef, paneWidth] = useWidth<HTMLElement>();
+  const railMode = railModeAt(paneWidth);
+  // Under 1200px the column is a toggle (the strip's Evidence button, E); docked or a drawer is the width's call.
+  const narrow = railMode !== "column";
   const [railOpen, setRailOpen] = useState(false);
   const [railFocus, setRailFocus] = useState(0);
-  // The evidence drawer shares the right edge with Notes, Arsenal and Payloads: opening one slides the other out.
+  // The column takes its own grid track (the paper narrows beside it): always when wide, while open when docked.
+  const railBeside = railMode === "column" || (railMode === "dock" && railOpen);
+  // The evidence drawer shares the right edge with Notes, Arsenal and Payloads: opening one slides the other out. A
+  // docked column is part of the page's layout, as the wide column is, and stays.
   const toggleRail = (open: boolean) => {
-    if (open) {
+    if (open && railMode === "drawer") {
       useNotesStore.getState().close();
       useArsenalStore.getState().close();
       usePayloadsStore.getState().close();
     }
     setRailOpen(open);
   };
-  useEffect(() => useNotesStore.subscribe((st) => { if (st.open) setRailOpen(false); }), []);
-  useEffect(() => useArsenalStore.subscribe((st) => { if (st.open) setRailOpen(false); }), []);
-  useEffect(() => usePayloadsStore.subscribe((st) => { if (st.open) setRailOpen(false); }), []);
+  useEffect(() => {
+    if (railMode !== "drawer") return;
+    const closeDrawer = (st: { open: boolean }) => {
+      if (st.open) setRailOpen(false);
+    };
+    const offs = [useNotesStore.subscribe(closeDrawer), useArsenalStore.subscribe(closeDrawer), usePayloadsStore.subscribe(closeDrawer)];
+    return () => offs.forEach((off) => off());
+  }, [railMode]);
+  // ⌥3 on a docked column: open it, then focus it once it is drawn.
+  useEffect(() => {
+    if (railFocus > 0 && railMode === "dock") railRef.current?.focus();
+    // Only a new ⌥3 moves focus, not a resize.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [railFocus]);
   usePageShortcuts("Report", narrow ? NARROW_HINTS : HINTS);
   useKeydown((e) => {
     if (!narrow || !isFreeKey(e) || e.shiftKey || e.key.toLowerCase() !== "e") return;
@@ -840,8 +866,7 @@ function ReportBody({
       if (narrow) {
         toggleRail(true);
         setRailFocus((n) => n + 1);
-      }
-      else railRef.current?.focus();
+      } else railRef.current?.focus();
     }
     else if (openEditor()) openEditor()!.focus();
     else pageRef.current?.querySelector<HTMLElement>("input, textarea, button")?.focus();
@@ -1071,7 +1096,7 @@ function ReportBody({
             exportSlot={null}
             listRef={navRef}
           />
-          <div className="grid min-h-0 grid-cols-[minmax(0,1fr)] @min-[1200px]/report:grid-cols-[minmax(0,1fr)_320px]">
+          <div className={cx("grid min-h-0", railBeside ? "grid-cols-[minmax(0,1fr)_320px]" : "grid-cols-[minmax(0,1fr)]")}>
             <div className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)]">
               {partRow}
               {todoPanel}
@@ -1120,20 +1145,20 @@ function ReportBody({
             ) : null}
               </div>
             </div>
-            {narrow ? (
+            {railMode === "drawer" ? (
               <EvidenceDrawer open={railOpen} focusKey={railFocus} onClose={() => setRailOpen(false)}>
                 {rail}
               </EvidenceDrawer>
-            ) : (
+            ) : railBeside ? (
               <aside
                 ref={railRef}
                 tabIndex={-1}
                 aria-label="Evidence"
-                className="hidden min-h-0 content-start overflow-y-auto border-l border-line px-4 py-4 outline-none @min-[1200px]/report:grid"
+                className="grid min-h-0 content-start overflow-y-auto border-l border-line px-4 py-4 outline-none"
               >
                 {rail}
               </aside>
-            )}
+            ) : null}
           </div>
         </>
       )}
