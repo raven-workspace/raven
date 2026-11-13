@@ -49,7 +49,7 @@ const NEEDS_DATA = new Set([
   // No import under `empty`: the Manual shows its empty state, with no note or link to open.
   "manual-tool", "manual-card-drawer",
   // No hosts under `empty`: the Report shows "No hosts yet", with no tab, page or check to open.
-  "report-details", "report-target", "report-ad", "report-narrow", "report-todo", "report-free-page", "report-front-introduction",
+  "report-details", "report-target", "report-ad", "report-dock", "report-narrow", "report-todo", "report-free-page", "report-front-introduction",
   "report-front-summary", "report-front-methodology", "report-closing", "report-web01", "report-web01-restored", "report-refresh-confirm",
   "report-notice",
 ]);
