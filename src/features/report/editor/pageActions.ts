@@ -9,10 +9,12 @@ import {
   blockHash,
   companionStepAt,
   draftedEntryBlocks,
+  draftOf,
   phaseInsertAt,
   refreshBlocks,
   refreshFamily,
   stamp,
+  type Drafted,
   type ReportData,
   type ReportMeta,
   type ReportNode,
@@ -249,12 +251,21 @@ function cursorInHeading(editor: Editor): boolean {
  * cursor's block, inside its list or step: an empty paragraph without a hint is replaced, a hint paragraph never is.
  * Without one, a screenshot that came along with a step on the page joins that step (`companionStepAt`); anything else
  * goes as a new numbered step at the end of the entry's phase (`phaseInsertAt`), after its heading and "Steps to
- * reproduce:" when the page has none yet.
+ * reproduce:" when the page has none yet. The target's draft is built once per call, or once per run by a caller
+ * placing many (`drafted`, from `draftOf`).
  */
-export function insertEntry(editor: Editor, data: ReportData, target: ReportTarget, entry: LogEntry, atCursor: boolean, meta: ReportMeta = {}): PMNode[] {
+export function insertEntry(
+  editor: Editor,
+  data: ReportData,
+  target: ReportTarget,
+  entry: LogEntry,
+  atCursor: boolean,
+  meta: ReportMeta = {},
+  drafted: Drafted = draftOf(data, target, meta),
+): PMNode[] {
   const schema = editor.state.schema;
   if (atCursor && !cursorInHeading(editor)) {
-    const made = draftedEntryBlocks(data, target, meta, entry).map((n) => schema.nodeFromJSON(n));
+    const made = draftedEntryBlocks(data, target, meta, entry, drafted).map((n) => schema.nodeFromJSON(n));
     return insertAtSpot(
       editor,
       (doc) => {
@@ -265,7 +276,7 @@ export function insertEntry(editor: Editor, data: ReportData, target: ReportTarg
     );
   }
   const doc = editor.state.doc.toJSON() as ReportNode;
-  const joins = companionStepAt(doc, data, target, meta, entry);
+  const joins = companionStepAt(doc, data, target, meta, entry, drafted);
   if (joins) {
     const made = joins.blocks.map((n) => schema.nodeFromJSON(n));
     return insertAtSpot(
@@ -278,7 +289,7 @@ export function insertEntry(editor: Editor, data: ReportData, target: ReportTarg
     );
   }
   const { index, before } = phaseInsertAt(doc, data, target, entry);
-  return insertBlocksAt(editor, index, [...before, { type: "list", attrs: { kind: "ordered" }, content: draftedEntryBlocks(data, target, meta, entry) }]);
+  return insertBlocksAt(editor, index, [...before, { type: "list", attrs: { kind: "ordered" }, content: draftedEntryBlocks(data, target, meta, entry, drafted) }]);
 }
 
 /**

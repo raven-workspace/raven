@@ -703,22 +703,48 @@ export function refreshBlocks(source: string, data: ReportData, target: ReportTa
   return blocks && blocks.length > 0 ? blocks : null;
 }
 
+/** A target's draft (`buildPlainTarget`) by machine: the top-level blocks from each machine's heading to the next. */
+function machineParts(draft: ReportNode): Map<string, ReportNode[]> {
+  const parts = new Map<string, ReportNode[]>();
+  let current: ReportNode[] | null = null;
+  for (const n of draft.content ?? []) {
+    const m = n.type === "heading" ? /^facts:([^:]+)$/.exec(srcOf(n)) : null;
+    if (m) parts.set(m[1], (current = []));
+    current?.push(n);
+  }
+  return parts;
+}
+
+/** A page's draft built once and handed down, so a run placing many entries never builds it per entry. */
+export interface Drafted {
+  target: ReportTarget;
+  doc: ReportNode;
+  byMachine: Map<string, ReportNode[]>;
+}
+
+/** `target`'s draft, built once, for the placing functions below. */
+export function draftOf(data: ReportData, target: ReportTarget, meta: ReportMeta): Drafted {
+  const doc = buildPlainTarget(data, target, meta);
+  return { target, doc, byMachine: machineParts(doc) };
+}
+
 /** An entry's regenerated blocks with the `also` the draft records on them (`absorb`): read off the draft of each
- *  machine the entry is on, block by block in the run's order. */
-function withAbsorbed(blocks: ReportNode[], source: string, data: ReportData, target: ReportTarget | null, meta: ReportMeta): ReportNode[] {
+ *  machine the entry is on, block by block in the run's order. A machine of `drafted`'s target is read off it. */
+function withAbsorbed(blocks: ReportNode[], source: string, data: ReportData, target: ReportTarget | null, meta: ReportMeta, drafted?: Drafted): ReportNode[] {
   const id = ENTRY_SOURCE.exec(source)?.[1];
   const entry = data.log.find((e) => e.id === id);
-  const drafted: ReportNode[] = [];
+  const found: ReportNode[] = [];
   const walk = (n: ReportNode) => {
-    if (sourceOf(n) === source) drafted.push(n);
+    if (sourceOf(n) === source) found.push(n);
     else n.content?.forEach(walk);
   };
   for (const hostId of entry?.hostIds ?? []) {
     if (!data.hosts.some((h) => h.id === hostId)) continue;
-    machineBlock(data, targetOf(data, target, meta, hostId), meta, hostId).forEach(walk);
+    const own = drafted && drafted.target === target ? drafted.byMachine.get(hostId) : undefined;
+    (own ?? machineBlock(data, targetOf(data, target, meta, hostId), meta, hostId)).forEach(walk);
   }
   return blocks.map((b, i) => {
-    const also = drafted[i]?.attrs?.also;
+    const also = found[i]?.attrs?.also;
     return Array.isArray(also) && also.length > 0 ? { ...b, attrs: { ...b.attrs, also: [...also] } } : b;
   });
 }
@@ -798,11 +824,12 @@ export function phaseInsertAt(doc: ReportNode, data: ReportData, target: ReportT
 /**
  * One entry's blocks as the draft places them (`entryBlocks`), each carrying the `also` the draft records on it: an
  * entry whose evidence one of these blocks already shows (a flag its output prints) is placed with it, never twice.
+ * `drafted` is the target's draft when the caller built it already (`draftOf`).
  */
-export function draftedEntryBlocks(data: ReportData, target: ReportTarget, meta: ReportMeta, entry: LogEntry): ReportNode[] {
+export function draftedEntryBlocks(data: ReportData, target: ReportTarget, meta: ReportMeta, entry: LogEntry, drafted?: Drafted): ReportNode[] {
   const blocks = entryBlocks(data, entry);
   const sources = [...new Set(blocks.map(srcOf).filter((s) => s !== ""))];
-  const withAlso = new Map(sources.map((s) => [s, withAbsorbed(blocks.filter((b) => srcOf(b) === s), s, data, target, meta)]));
+  const withAlso = new Map(sources.map((s) => [s, withAbsorbed(blocks.filter((b) => srcOf(b) === s), s, data, target, meta, drafted)]));
   const seen = new Map<string, number>();
   return blocks.map((b) => {
     const s = srcOf(b);
@@ -819,9 +846,16 @@ export function draftedEntryBlocks(data: ReportData, target: ReportTarget, meta:
  * screenshot's own blocks from the draft go at its end. Null when the screenshot leads a step of its own, or the page
  * has no such step: it then goes as a step of its own.
  */
-export function companionStepAt(doc: ReportNode, data: ReportData, target: ReportTarget, meta: ReportMeta, entry: LogEntry): { index: number; blocks: ReportNode[] } | null {
+export function companionStepAt(
+  doc: ReportNode,
+  data: ReportData,
+  target: ReportTarget,
+  meta: ReportMeta,
+  entry: LogEntry,
+  drafted?: Drafted,
+): { index: number; blocks: ReportNode[] } | null {
   if (entry.content.kind !== "screenshot") return null;
-  const step = (buildPlainTarget(data, target, meta).content ?? []).find((n) => isStepList(n) && (n.content ?? []).some((b) => ownIds(b).has(entry.id)));
+  const step = ((drafted ?? draftOf(data, target, meta)).doc.content ?? []).find((n) => isStepList(n) && (n.content ?? []).some((b) => ownIds(b).has(entry.id)));
   if (!step || ownIds(step.content![0]).has(entry.id)) return null;
   const others = [...entryIdsIn(step)].filter((id) => id !== entry.id);
   const content = doc.content ?? [];
@@ -834,8 +868,8 @@ export function companionStepAt(doc: ReportNode, data: ReportData, target: Repor
  * Add new evidence's entries: those the draft would place now (`entryIdsIn(buildPlainTarget(…))`) that the page holds
  * no block of and the owner hasn't removed, in time order.
  */
-export function missingEntries(doc: ReportNode, data: ReportData, target: ReportTarget, meta: ReportMeta, removed: readonly string[]): LogEntry[] {
-  const wanted = entryIdsIn(buildPlainTarget(data, target, meta));
+export function missingEntries(doc: ReportNode, data: ReportData, target: ReportTarget, meta: ReportMeta, removed: readonly string[], drafted?: Drafted): LogEntry[] {
+  const wanted = entryIdsIn(drafted?.doc ?? buildPlainTarget(data, target, meta));
   const onPage = entryIdsIn(doc);
   return data.log
     .filter((e) => wanted.has(e.id) && !onPage.has(e.id) && !removed.includes(e.id))
@@ -862,8 +896,10 @@ export function placedIdsIn(doc: ReportNode): Set<string> {
  * Whether a screenshot comes along with another entry's step in the draft (it is not that step's lead), so on a page
  * with no cursor it joins the step holding that entry (`companionStepAt`).
  */
-export function joinsAStep(data: ReportData, target: ReportTarget, meta: ReportMeta, entry: LogEntry): boolean {
-  return companionStepAt(buildPlainTarget(data, target, meta), data, target, meta, entry) !== null;
+export function joinsAStep(data: ReportData, target: ReportTarget, meta: ReportMeta, entry: LogEntry, drafted?: Drafted): boolean {
+  if (entry.content.kind !== "screenshot") return false;
+  const d = drafted ?? draftOf(data, target, meta);
+  return companionStepAt(d.doc, data, target, meta, entry, d) !== null;
 }
 
 /**
@@ -879,18 +915,19 @@ export function missingTested(
   meta: ReportMeta,
   hostId: string,
   removed: readonly string[] = [],
+  drafted?: Drafted,
 ): { index: number; blocks: ReportNode[] } | null {
   // The owner deleted the list: it stays deleted.
   if (removed.includes(testedKey(hostId))) return null;
   const content = doc.content ?? [];
   const has = (n: ReportNode): boolean => srcOf(n) === `tested:${hostId}` || (n.content ?? []).some(has);
   if (content.some(has)) return null;
-  const drafted = buildPlainTarget(data, target, meta).content ?? [];
-  const bullets = drafted.filter((n) => srcOf(n) === `tested:${hostId}`);
+  const draft = (drafted?.doc ?? buildPlainTarget(data, target, meta)).content ?? [];
+  const bullets = draft.filter((n) => srcOf(n) === `tested:${hostId}`);
   if (bullets.length === 0) return null;
   const head = content.findIndex((n) => n.type === "heading" && srcOf(n) === `phase:${hostId}:tested`);
   if (head !== -1) return { index: regionEnd(content, head), blocks: bullets };
-  const title = drafted.filter((n) => srcOf(n) === `phase:${hostId}:tested`);
+  const title = draft.filter((n) => srcOf(n) === `phase:${hostId}:tested`);
   return { index: hostEnd(content, hostId), blocks: [...title, ...bullets] };
 }
 
