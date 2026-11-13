@@ -48,6 +48,12 @@ vi.mock("../features/report/editor/ReportEditor", async (importOriginal) => {
   };
 });
 
+// The page's schema as it is; a test can make its check fail (`failSchema`).
+vi.mock("../features/report/editor/extension", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../features/report/editor/extension")>();
+  return { ...real, reportSchema: vi.fn(real.reportSchema) };
+});
+
 // The audit fixture's report holds two owner-written pages; these tests start from a report without them.
 beforeEach(async () => {
   for (const s of await api.reportSectionsList("rep-exam")) if (s.kind === "page") await api.reportSectionDelete("rep-exam", s.id);
@@ -1282,6 +1288,37 @@ describe("Report view: the result", () => {
       expect(screen.getByText("This page was converted to the new format.")).toBeInTheDocument();
       // Only converted, never rebuilt: there is no earlier page of the owner's to bring back.
       expect(screen.queryByRole("button", { name: "Restore your previous page" })).toBeNull();
+    });
+
+    it("a page whose conversion fails the schema check opens no editable page and is never saved", async () => {
+      const report = await api.reportGetOrCreate("e-exam");
+      const raw = { type: "doc", content: [{ type: "slot", attrs: { hint: "x" }, content: [{ type: "text", text: "Owner words" }] }] };
+      const page = await api.reportSectionUpsert(report.id, {
+        kind: "page",
+        targetKey: "p-broken",
+        position: 99,
+        doc: raw as unknown as ReportDoc,
+        meta: { title: "Broken notes", placement: "body", layout: DRAFT_LAYOUT },
+        draftBuiltAt: 1,
+      });
+      const schema = vi.mocked(reportSchema);
+      const real = schema.getMockImplementation()!;
+      schema.mockImplementation(() => ({ nodeFromJSON: () => ({ check: () => { throw new Error("Invalid content for node list"); } }) }) as never);
+      try {
+        const save = vi.spyOn(api, "reportSectionSave");
+        mount();
+        await ready();
+        fireEvent.click(tab("Broken notes"));
+        expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't convert this page to the new format");
+        expect(screen.getByRole("alert")).toHaveTextContent("Invalid content for node list");
+        expect(document.querySelector(".ProseMirror")).toBeNull();
+        expect(editors).toHaveLength(0);
+        await flushReports();
+        expect(save.mock.calls.some(([id]) => id === page.id)).toBe(false);
+        expect(JSON.stringify((await api.reportSectionsList(report.id)).find((x) => x.id === page.id)!.doc)).toBe(JSON.stringify(raw));
+      } finally {
+        schema.mockImplementation(real);
+      }
     });
 
     it("a page whose list held only a now-private entry's copy opens flattened into a page that fits the schema", async () => {

@@ -1025,7 +1025,8 @@ function ReportBody({
     </>
   );
   // With a page open its bar comes first (wide, flush with the pane's top edge) and these lines sit under it.
-  const editorShown = openSection?.kind !== "details" && !!openSection && hasCurrentPage(openSection) && !!contextValue;
+  // A page whose conversion failed its check never mounts: nothing editable, so autosave can't write over the stored page.
+  const editorShown = openSection?.kind !== "details" && !!openSection && hasCurrentPage(openSection) && !!contextValue && !flattenFailed;
   const notices = (
     <>
       {ensureFailed && <WarnLine text={`Couldn't add the report's new sections: ${ensureFailed}`} retryLabel="Retry setting up sections" onRetry={() => setEnsureFailed(null)} />}
@@ -1138,7 +1139,7 @@ function ReportBody({
                 onSave={saveReport}
               />
             ) : openSection && contextValue ? (
-              hasCurrentPage(openSection) ? (
+              flattenFailed ? null : hasCurrentPage(openSection) ? (
                 <ReportDataContext.Provider value={contextValue}>
                   <ReportEditor
                     key={`${openSection.id}:${swaps}`}
