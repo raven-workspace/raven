@@ -321,6 +321,40 @@ describe("plain entry blocks and Refresh sources", () => {
     expect(placedIdsIn(withoutRemoved(doc, ["l-garnet-head"])).size).toBe(placedIdsIn(doc).size - 1);
   });
 
+  it("withoutRemoved drops a Steps to reproduce label and a phase heading the removals leave bare, nothing else", () => {
+    const h = (level: number, source: string): ReportNode => ({ type: "heading", attrs: { level, source }, content: [{ type: "text", text: source }] });
+    const p = (source: string): ReportNode => ({ type: "paragraph", attrs: { source }, content: [{ type: "text", text: source }] });
+    const step = (id: string): ReportNode => ({ type: "list", attrs: { kind: "ordered" }, content: [p(`entry:${id}:title`)] });
+    const page: ReportNode = {
+      type: "doc",
+      content: [
+        h(1, "facts:h"),
+        h(2, "phase:h:foothold"),
+        p("phase-steps:h"),
+        step("a"),
+        h(2, "phase:h:privesc"),
+        p("finding:f:explanation"),
+        p("phase-steps:h"),
+        step("b"),
+        step("keep"),
+        h(2, "phase:h:post"),
+        p("phase-steps:h"),
+        step("c"),
+        h(2, "phase:h:additional"),
+        h(3, "phase:h:additional:f2"),
+        step("d"),
+        h(1, "facts:h2"),
+      ],
+    };
+    const out = withoutRemoved(page, ["a", "b", "c", "d"]);
+    // Foothold: its only step gone, its label and heading go. Privesc: its heading stays over the finding's lines, and
+    // its label while a step is left. Post: bare, gone. Additional: the sub-heading left bare goes, then its heading.
+    expect(out.content!.map(sourceOf)).toEqual(["facts:h", "phase:h:privesc", "finding:f:explanation", "phase-steps:h", null, "facts:h2"]);
+    expect(out.content![4]).toEqual(step("keep"));
+    // A real draft has nothing bare: removing an id it doesn't hold leaves it as it is.
+    expect(withoutRemoved(doc, ["l-nope"])).toEqual(doc);
+  });
+
   it("an AD set opens with its attack-path table", () => {
     const ad = buildPlainTarget(examData, adTarget, {});
     expect(ad.content!.slice(0, 2).map((b) => [b.type, b.attrs?.source])).toEqual([["paragraph", "attack-path"], ["table", "attack-path"]]);

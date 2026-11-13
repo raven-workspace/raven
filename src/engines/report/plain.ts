@@ -896,7 +896,9 @@ export function placedIdsIn(doc: ReportNode): Set<string> {
  * A draft without what the owner took off the page (`removedEntryIds`), so a rebuild never puts it back: every block of
  * a removed entry (its source's, a figure's), a numbered step left with nothing in it, and for a `tested:<hostId>` key
  * that machine's Also tested heading and bullets. A block that shows a removed entry only in its `also` stays (it is
- * another entry's), the removed id taken out of its `also`, so the page doesn't count that entry as placed.
+ * another entry's), the removed id taken out of its `also`, so the page doesn't count that entry as placed. Then what
+ * that leaves bare goes too (`withoutBare`): a "Steps to reproduce:" label with no step after it in its region, and a
+ * phase heading with nothing under it.
  */
 export function withoutRemoved(doc: ReportNode, removed: readonly string[]): ReportNode {
   if (removed.length === 0) return doc;
@@ -923,7 +925,27 @@ export function withoutRemoved(doc: ReportNode, removed: readonly string[]): Rep
     if (content.length === 0 && n.content.length > 0 && n.type === "list") return null;
     return { ...out, content };
   };
-  return clean(doc) ?? { ...doc, content: [] };
+  const out = clean(doc) ?? { ...doc, content: [] };
+  return { ...out, content: withoutBare(out.content ?? []) };
+}
+
+/** Top-level blocks without a "Steps to reproduce:" label (`phase-steps:*`) that has no numbered step after it before
+ *  the next level 1 or 2 heading, and without a phase heading (`phase:*`) whose next block is a heading of its level
+ *  or above, or the end. Read from the end, so a heading left bare by a sub-heading going goes too. */
+function withoutBare(content: ReportNode[]): ReportNode[] {
+  const level = (n: ReportNode) => (n.attrs?.level as number | undefined) ?? 1;
+  const out: ReportNode[] = [];
+  for (let i = content.length - 1; i >= 0; i--) {
+    const n = content[i];
+    if (srcOf(n).startsWith("phase-steps:")) {
+      const end = out.findIndex(breaksRegion);
+      if (!(end === -1 ? out : out.slice(0, end)).some(isStepList)) continue;
+    }
+    const next = out[0];
+    if (n.type === "heading" && srcOf(n).startsWith("phase:") && (!next || (next.type === "heading" && level(next) <= level(n)))) continue;
+    out.unshift(n);
+  }
+  return out;
 }
 
 /**
