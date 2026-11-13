@@ -1006,6 +1006,11 @@
   pointer-events: none;
 }
 
+/* A figure whose screenshot file is gone: the page's amber ink, readable on the paper. */
+.report-page .report-missing {
+  color: var(--page-amber-ink);
+}
+
 /* An empty paragraph's hint ("What the engagement was"), at the page's 14px, until the owner types; never printed.
    Out of the flow, as the placeholder is, so the caret sits at the line's start. */
 .report-page p.report-hint::before {

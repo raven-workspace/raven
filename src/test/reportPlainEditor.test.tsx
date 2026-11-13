@@ -9,7 +9,7 @@ import { blockHash, buildPlainTarget, buildSectionDraft, type AppendixIndex, typ
 import { defineReportExtension } from "../features/report/editor/extension";
 import { deleteBlockAt } from "../features/report/editor/pageActions";
 import { ReportDataContext } from "../features/report/editor/ReportDataContext";
-import { ReportEditor } from "../features/report/editor/ReportEditor";
+import { keepCopiedText, ReportEditor } from "../features/report/editor/ReportEditor";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import { RavenError } from "../types/errors";
@@ -87,9 +87,10 @@ function inside(editor: Editor, pick: (node: PMNode, parent: PMNode | null) => b
   return at;
 }
 
+let qc = makeQueryClient();
 function page(content: ReportNode) {
   const ref: { editor: Editor | null } = { editor: null };
-  const qc = makeQueryClient();
+  qc = makeQueryClient();
   render(
     <QueryClientProvider client={qc}>
       <ReportDataContext.Provider value={{ data, appendix: noRefs, sectionMeta: {}, onRemoveEvidence: vi.fn(), target }}>
@@ -204,11 +205,45 @@ describe("one plain schema for every page", () => {
     m.attachmentGet.mockRejectedValue(new RavenError("not_found", "gone"));
     const editor = await ready(doc([figure("a-missing", "Root shell", "l-1")]));
     const line = await screen.findByText("This screenshot's file is missing. Delete the figure, or add the screenshot again from the log.");
-    expect(line).toHaveClass("text-warn");
+    // The page's amber ink (readable on the paper), not the dark UI's warn colour.
+    expect(line).toHaveClass("report-missing");
+    expect(line).not.toHaveClass("text-warn");
     typeAt(editor, 1 + "Root shell".length, " on web01");
     expect((editor.getDocJSON() as ReportNode).content![0].content![0].text).toBe("Root shell on web01");
     act(() => void deleteBlockAt(editor, { node: editor.state.doc.child(0), pos: 0 }));
     expect(editor.state.doc.childCount).toBe(1); // an empty paragraph remains
     expect(editor.state.doc.child(0).type.name).toBe("paragraph");
+  });
+
+  it("a missing screenshot shows again once its file loads", async () => {
+    m.attachmentGet.mockRejectedValue(new RavenError("not_found", "gone"));
+    await ready(doc([figure("a-back", "Root shell", "l-1")]));
+    const words = "This screenshot's file is missing. Delete the figure, or add the screenshot again from the log.";
+    await screen.findByText(words);
+    m.attachmentGet.mockResolvedValue({ id: "a-back", mime: "image/png", dataBase64: "AAAA" });
+    await act(() => qc.invalidateQueries({ queryKey: ["attachment", "a-back"] }));
+    await waitFor(() => expect(screen.queryByText(words)).toBeNull());
+    expect(document.querySelector(".report-plain-figure img")).not.toBeNull();
+  });
+
+  it("Keep the text clears the entry from nested blocks and from a figure that names it only by entryId", () => {
+    const e = createEditor({
+      extension: defineReportExtension(),
+      defaultContent: doc([
+        {
+          type: "list",
+          attrs: { kind: "ordered", source: "entry:l-1:title" },
+          content: [
+            { type: "paragraph", attrs: { source: "entry:l-1:title" }, content: [text("Run it")] },
+            { type: "codeBlock", attrs: { language: "", source: "entry:l-1:0:command", gen: "abc" }, content: [text("whoami")] },
+          ],
+        },
+        { type: "figure", attrs: { attachmentId: "a-1", entryId: "l-1" }, content: [text("Shot")] },
+        { type: "paragraph", attrs: { source: "entry:l-2:note" }, content: [text("Other")] },
+      ]) as NodeJSON,
+    });
+    expect(keepCopiedText(e, "l-1")).toBe(true);
+    const left = all(e.getDocJSON() as ReportNode).filter((n) => n.attrs?.source || n.attrs?.gen || n.attrs?.entryId);
+    expect(left.map((n) => [n.type, n.attrs?.source ?? null, n.attrs?.entryId ?? null])).toEqual([["paragraph", "entry:l-2:note", null]]);
   });
 });
