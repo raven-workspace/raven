@@ -1,6 +1,6 @@
 import { inlineMarkdown } from "./copies";
 import { testedLine, testedNotExploited } from "./coverage";
-import { stamp } from "./plain";
+import { stamp } from "./stamp";
 import { findingRows, scopeRows } from "./tables";
 import { reportTargets } from "./targets";
 import { msfHosts, msfModules } from "./tools";
@@ -8,7 +8,8 @@ import type { ReportData, ReportMeta, ReportNode } from "./types";
 
 /** The generated tables and lines of the report-level pages, as plain blocks: ordinary tables and paragraphs, each
  *  top-level block carrying its `source` ("table:<kind>", "msf") and a `gen` hash for Refresh. */
-export type PlainTableKind = "findings" | "scope-table" | "tested" | "cleanup" | "references";
+export const PLAIN_TABLE_KINDS = ["findings", "scope-table", "tested", "cleanup", "references"] as const;
+export type PlainTableKind = (typeof PLAIN_TABLE_KINDS)[number];
 
 const text = (value: string): ReportNode => ({ type: "text", text: value });
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -42,7 +43,7 @@ export function plainTable(kind: PlainTableKind, data: ReportData, meta: ReportM
       }
       case "tested": {
         const rows = testedNotExploited(data, null);
-        if (rows.length === 0) return "None recorded";
+        if (rows.length === 0) return "Services you tested that led nowhere appear here as you log them";
         return [table(["Tested", "Why it went nowhere"], rows.map((r) => [testedLine({ ...r, reason: "" }), r.reason]), source)];
       }
       case "cleanup": {
@@ -57,7 +58,7 @@ export function plainTable(kind: PlainTableKind, data: ReportData, meta: ReportM
           (f) => f.hostIds.some((id) => onTargets.has(id)) || f.serviceIds.some((id) => onTargets.has(data.services.find((s) => s.id === id)?.hostId ?? "")),
         );
         const refs = [...new Set(linked.flatMap((f) => f.refs))];
-        if (refs.length === 0) return "None recorded";
+        if (refs.length === 0) return "References from your findings appear here";
         return refs.map((r): ReportNode => ({ type: "paragraph", attrs: { source }, content: inlineMarkdown(r) }));
       }
     }

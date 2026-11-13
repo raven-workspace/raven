@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSectionDraft, introductionParts, PLAIN_NODE_TYPES, plainTable, sectionNumbers, sourceBlocks, subsectionNumbers } from "../engines/report";
+import { buildSectionDraft, introductionParts, msfLine, PLAIN_NODE_TYPES, plainTable, sectionNumbers, sourceBlocks, subsectionNumbers } from "../engines/report";
 import type { ReportData, ReportNode } from "../engines/report";
 import type { SectionKind } from "../types/report";
 import type { Settings } from "../types/settings";
@@ -108,7 +108,7 @@ describe("buildSectionDraft", () => {
 
   it("builds the single-slot sections", () => {
     expect(hints(buildSectionDraft("considerations", data, settings()))[0]).toMatch(/^Anything that affected testing/);
-    expect(buildSectionDraft("engagement-tested", data, settings()).content?.[0].attrs).toMatchObject({ source: "table:tested", hint: "None recorded" });
+    expect(buildSectionDraft("engagement-tested", data, settings()).content?.[0].attrs).toMatchObject({ source: "table:tested", hint: "Services you tested that led nowhere appear here as you log them" });
     expect(kinds(buildSectionDraft("further", data, settings()))).toEqual(["paragraph"]);
     expect(kinds(buildSectionDraft("references", data, settings()))).toContain("paragraph@table:references");
   });
@@ -152,6 +152,40 @@ describe("plain front matter", () => {
   it("sourceBlocks refreshes a front-matter table and the Metasploit line", () => {
     expect(sourceBlocks("table:scope-table", full, null, {})).toEqual(plainTable("scope-table", full, {}));
     expect(sourceBlocks("msf", data, null, {})).toHaveLength(1);
+  });
+  it("a draft's empty findings hint is replaced by the table once findings exist", () => {
+    expect(buildSectionDraft("summary", data, settings(), {}).content!.some((n) => n.attrs?.source === "table:findings" && n.type === "paragraph")).toBe(true);
+    const refreshed = sourceBlocks("table:findings", full, null, {})!;
+    expect(refreshed).toHaveLength(1);
+    expect(refreshed[0]).toMatchObject({ type: "table", attrs: { source: "table:findings" } });
+  });
+  it("hints for empty tested and references say where the content comes from", () => {
+    expect(plainTable("tested", data, {})[0].attrs?.hint).toBe("Services you tested that led nowhere appear here as you log them");
+    expect(plainTable("references", data, {})[0].attrs?.hint).toBe("References from your findings appear here");
+  });
+  it("tested, cleanup and references print rows when there are some", () => {
+    const rich = {
+      ...full,
+      attempts: [],
+      ruledOut: [{ id: "r1", text: "FTP anonymous", reason: "login refused", private: false, hostId: null, sourceKind: "manual", sourceId: null }],
+      cleanup: [{ id: "c1", hostId: "h1", kind: "file", target: "C:\\shell.exe", status: "removed" }],
+      findings: [{ ...full.findings[0], refs: ["CVE-2020-0796"] }],
+    } as unknown as ReportData;
+    const tested = plainTable("tested", rich, {})[0];
+    expect(tested).toMatchObject({ type: "table", attrs: { source: "table:tested" } });
+    expect(tested.content![1].content!.map(cellText)).toEqual(["FTP anonymous", "login refused"]);
+    expect(plainTable("cleanup", rich, {})[0].content![1].content!.map(cellText)).toEqual(["C:\\shell.exe", "DC01", "file", "Removed"]);
+    const refs = plainTable("references", rich, {});
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({ type: "paragraph", attrs: { source: "table:references", gen: expect.any(String) } });
+    expect(cellText(refs[0])).toBe("CVE-2020-0796");
+  });
+  it("the Metasploit line names the host and the modules", () => {
+    const used = {
+      ...full,
+      log: [{ id: "m1", private: false, hostIds: ["h1"], content: { kind: "command", blocks: [{ command: "msfconsole -q\nuse exploit/windows/smb/ms17_010_eternalblue", output: "" }] } }],
+    } as unknown as ReportData;
+    expect(cellText(msfLine(used))).toBe("Metasploit was used on DC01 (10.0.0.5): exploit/windows/smb/ms17_010_eternalblue.");
   });
 });
 
