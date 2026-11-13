@@ -29,7 +29,7 @@ export function numberAppendices(sections: { id: string; kind: SectionKind; meta
   return { pages };
 }
 
-/** Code blocks long enough that the owner should move them to an appendix page; `key` is the block's index path ("0.2.1"), to be prefixed with the section id. */
+/** Code blocks long enough that the owner should move them to an appendix page; `key` is the block's index path ("0.2.1"); its check's id is `move:<key>`. */
 export function suggestMoves(doc: ReportNode): { key: string; reason: string }[] {
   const out: { key: string; reason: string }[] = [];
   const walk = (node: ReportNode, path: string) => {

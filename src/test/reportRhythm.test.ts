@@ -13,4 +13,8 @@ describe("report block rhythm", () => {
     expect(css).toMatch(/\.report-page \.ProseMirror > \.prosemirror-flat-list \+ \.prosemirror-flat-list \{[^}]*margin-top: 0/);
     expect(css).not.toMatch(/margin-top: -\d/);
   });
+
+  it("the warning over a copy whose entry went private or was deleted is at least 13px", () => {
+    expect(css).toMatch(/\.report-page \[data-source-gone\]::before \{[^}]*font-size: 13px/);
+  });
 });

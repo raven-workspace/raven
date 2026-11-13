@@ -194,30 +194,6 @@ export function serviceCoverage(
     });
 }
 
-export interface ChainHop {
-  from: string | null;
-  to: string;
-  via: string;
-  entryId: string | null;
-}
-
-/** Hops into the AD hosts plus admin/system grants on them, ordered by time. A grant made by the step that also made
- *  a hop into that host is that hop, so it is listed once. */
-export function attackChain(data: ReportData, hostIds: string[]): ChainHop[] {
-  const ids = new Set(hostIds);
-  const hops = data.hops.filter((h) => ids.has(h.toHostId));
-  const isHop = (hostId: string, entryId: string | null) => entryId != null && hops.some((h) => h.toHostId === hostId && h.logEntryId === entryId);
-  const steps: (ChainHop & { at: number })[] = [
-    ...hops.map((h) => ({ from: h.fromHostId, to: h.toHostId, via: h.via, entryId: h.logEntryId, at: h.at })),
-    ...data.grants
-      .filter((g) => ids.has(g.hostId) && (g.level === "admin" || g.level === "system") && !isHop(g.hostId, g.logEntryId))
-      .map((g) => ({ from: null, to: g.hostId, via: g.via, entryId: g.logEntryId, at: g.at })),
-  ];
-  return steps
-    .sort((a, b) => a.at - b.at)
-    .map(({ from, to, via, entryId }) => ({ from, to, via, entryId }));
-}
-
 export interface TestedItem {
   title: string;
   /** The reason in plain words: "blocked by a control: WAF", or the ruled-out item's reason. */

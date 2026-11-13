@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { absoluteClaims, buildPlainTarget, checkKind, groupChecks, isReady, legibilityChecks, proofFacts, reportChecks, targetChecks, fixSteps } from "../engines/report";
+import { absoluteClaims, buildPlainTarget, checkKind, groupChecks, isReady, legibilityChecks, proofFacts, reportChecks, targetChecks } from "../engines/report";
 import { GARNET_HOST, garnetFixtures } from "../audit/examFixtures";
 import type { Check, ReportData, ReportNode, ReportTarget } from "../engines/report";
 import type { Host } from "../types/host";
@@ -672,27 +672,5 @@ describe("groupChecks", () => {
       expect(g.text, k).toMatch(/^2 /);
       expect(g.text, k).not.toMatch(/\.$/);
     }
-  });
-});
-
-describe("fixSteps", () => {
-  it("splits on bullets, blank lines and sentence ends", () => {
-    expect(fixSteps("- Patch Umbraco\n- Rotate the sa password\n\nRemove the share.\nDisable SMBv1")).toEqual([
-      "Patch Umbraco",
-      "Rotate the sa password",
-      "Remove the share.",
-      "Disable SMBv1",
-    ]);
-  });
-
-  it("never ends a step after a common abbreviation", () => {
-    expect(fixSteps("Restrict the service accounts, e.g.\nsvc_sql and svc_web.\nRemove old tools, etc.\nand reboot.")).toEqual([
-      "Restrict the service accounts, e.g. svc_sql and svc_web.",
-      "Remove old tools, etc. and reboot.",
-    ]);
-    expect(fixSteps("Harden hosts, i.e.\nthe DCs.\nUse a vendor fix vs.\na workaround.")).toEqual([
-      "Harden hosts, i.e. the DCs.",
-      "Use a vendor fix vs. a workaround.",
-    ]);
   });
 });

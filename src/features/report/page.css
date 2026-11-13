@@ -218,7 +218,7 @@
   display: block;
   margin-bottom: 4px;
   font-family: var(--page-sans);
-  font-size: 12px;
+  font-size: 13px;
   font-style: normal;
   font-weight: 400;
   color: var(--page-amber-ink);
@@ -603,8 +603,8 @@
   letter-spacing: 0.01em;
 }
 
-/* On a target or AD page the numbered sub-sections ("4.2.1 Service Enumeration") are 15px: the owner's headings sit
-   at or under that size and differ by weight and spacing, so they never outrank the structure. */
+/* On a target or AD page only the machine headings carry a number ("4.1", "4.2.1" in an AD set). Every other heading
+   (a phase's, the owner's own) is 15px or under and differs by weight and spacing, so none outranks a machine. */
 .report-page[data-page="target"] .ProseMirror > h1:not([data-number]),
 .report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h1 {
   font-size: 15px;

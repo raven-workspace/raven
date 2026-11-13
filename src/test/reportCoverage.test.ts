@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attackChain, isPortScan, msfModules, requestPort, serviceCoverage, testedLine, testedNotExploited } from "../engines/report";
+import { isPortScan, msfModules, requestPort, serviceCoverage, testedLine, testedNotExploited } from "../engines/report";
 import type { ReportData } from "../engines/report";
 import type { Host } from "../types/host";
 import type { LogEntry } from "../types/log";
@@ -147,24 +147,6 @@ describe("testedLine", () => {
     );
     expect(testedLine({ title: "SSH brute force on 22", reason: "no access", port: 22 })).toBe("SSH brute force on 22: no access");
     expect(testedLine({ title: "FTP anonymous login", reason: "", port: null })).toBe("FTP anonymous login");
-  });
-});
-
-describe("attackChain", () => {
-  it("orders hops and admin grants by time", () => {
-    const d = data();
-    d.hops = [{ fromHostId: H, toHostId: "h2", via: "psexec", logEntryId: "l1", at: 20 }] as never;
-    d.grants = [
-      { hostId: "h2", level: "system", via: "dcsync", logEntryId: "l2", at: 30 },
-      { hostId: "h2", level: "user", via: "x", logEntryId: null, at: 10 },
-    ] as never;
-    expect(attackChain(d, ["h2"]).map((s) => s.via)).toEqual(["psexec", "dcsync"]);
-  });
-  it("lists a hop once when the same step also granted SYSTEM on the host it reached", () => {
-    const d = data();
-    d.hops = [{ fromHostId: H, toHostId: "h2", via: "Pass the hash (psexec)", logEntryId: "l1", at: 20 }] as never;
-    d.grants = [{ hostId: "h2", level: "system", via: "Pass the hash (psexec)", logEntryId: "l1", at: 20 }] as never;
-    expect(attackChain(d, ["h2"])).toEqual([{ from: H, to: "h2", via: "Pass the hash (psexec)", entryId: "l1" }]);
   });
 });
 
