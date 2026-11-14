@@ -98,6 +98,24 @@
         ],
         "createdAt": "2026-11-10T04:10:57.790Z",
         "reason": "Claude: decision mock only; dimmed host page behind palette, house kbd caps, palette result rows mirror the shipped Palette"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "instrument sans",
+        "createdAt": "2026-11-12T00:05:18.456Z",
+        "reason": "agent: DESIGN.md declares Instrument Sans Variable / JetBrains Mono Variable; static Google Fonts names in decision mocks are the same families"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "jetbrains mono",
+        "createdAt": "2026-11-12T00:05:18.474Z",
+        "reason": "agent: DESIGN.md declares Instrument Sans Variable / JetBrains Mono Variable; static Google Fonts names in decision mocks are the same families"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "sans\",system-ui,sans-serif",
+        "createdAt": "2026-11-12T00:05:18.510Z",
+        "reason": "agent: DESIGN.md declares Instrument Sans Variable / JetBrains Mono Variable; static Google Fonts names in decision mocks are the same families"
       }
     ]
   }

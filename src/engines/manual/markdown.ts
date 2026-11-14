@@ -60,7 +60,13 @@ function fenceInfo(info: string): { lang: string; title?: string } {
   return title ? { lang, title } : { lang };
 }
 
-export function parseMarkdown(body: string): Block[] {
+/** `urls`: an external `[label](url)` keeps its URL as text ("label (url)"), for printed pages; the Manual drops it. */
+export interface MarkdownOptions {
+  urls?: boolean;
+}
+
+export function parseMarkdown(body: string, opts: MarkdownOptions = {}): Block[] {
+  const parseInline = (s: string) => parseInlineWith(s, opts);
   const lines = body.replace(/\r\n?/g, "\n").split("\n");
   const ids = anchorIds();
   // h1 and h4+ are not in the outline: their ids come from a counter of their own, namespaced (`h1-…`, `h4-…`), so they
@@ -170,7 +176,7 @@ const PUNCT = /[\\`*_{}[\]()#+\-.!|<>~]/;
  */
 type Atom = { node: Inline; len: number; first: string; last: string };
 
-function atomAt(s: string, i: number): Atom | null {
+function atomAt(s: string, i: number, opts: MarkdownOptions = {}): Atom | null {
   const c = s[i];
   if (c === "\\" && PUNCT.test(s[i + 1] ?? "")) return { node: { text: s[i + 1] }, len: 2, first: s[i + 1], last: s[i + 1] };
   if (c === "`") {
@@ -193,7 +199,10 @@ function atomAt(s: string, i: number): Atom | null {
   if (c === "[") {
     // External links stay text (Raven is offline): the label is what reads.
     const m = /^\[([^\]]+)\]\(([^)\s]*)\)/.exec(s.slice(i));
-    if (m) return { node: { text: m[1] }, len: m[0].length, first: m[1][0], last: m[1][m[1].length - 1] };
+    if (m) {
+      const text = opts.urls && m[2] && m[2] !== m[1] ? `${m[1]} (${m[2]})` : m[1];
+      return { node: { text }, len: m[0].length, first: text[0], last: text[text.length - 1] };
+    }
   }
   if (c === "<") {
     // A line break inside a table cell reads as a space.
@@ -226,6 +235,11 @@ function settle(items: Item[]): Inline[] {
  * strongs, and `_` never opens or closes inside a word).
  */
 export function parseInline(s: string): Inline[] {
+  return parseInlineWith(s, {});
+}
+
+/** `parseInline` with options (`MarkdownOptions`). */
+export function parseInlineWith(s: string, opts: MarkdownOptions): Inline[] {
   const items: Item[] = [];
   let buf = "";
   const flush = () => {
@@ -253,7 +267,7 @@ export function parseInline(s: string): Inline[] {
       i += n;
       continue;
     }
-    const atom = atomAt(s, i);
+    const atom = atomAt(s, i, opts);
     if (atom) {
       if ("text" in atom.node) buf += atom.node.text;
       else {

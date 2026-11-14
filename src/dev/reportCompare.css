@@ -1,0 +1,25 @@
+/* /__compare/garnet (audit mode only): the sample and Raven's plain draft side by side, at the same width. */
+
+.report-compare {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 16px;
+  align-items: start;
+  padding: 16px;
+}
+
+.report-compare > section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 8px;
+}
+
+.report-compare-label {
+  margin: 0;
+  color: var(--fg-2);
+}
+
+/* The sample's own lists (Markdown on the left) get the same rhythm. */
+.report-compare .report-page li + li {
+  margin-top: 4px;
+}

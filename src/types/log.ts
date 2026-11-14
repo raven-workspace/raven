@@ -6,7 +6,8 @@ export type LogKind = "command" | "screenshot" | "http" | "note" | "flag";
 export type FlagKind = "local" | "proof";
 
 /** Mirrors the Rust `CommandBlock`. */
-export type CommandBlock = { command: string; output: string; shell?: string };
+/** `root`: pasted at a bare `#` prompt (a root shell whose prompt names no user). */
+export type CommandBlock = { command: string; output: string; shell?: string; root?: true };
 
 /** Mirrors the Rust `LogContent`; `kind` is the tag and equals the entry's `kind`. */
 export type LogContent =

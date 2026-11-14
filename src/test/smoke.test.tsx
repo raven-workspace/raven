@@ -20,7 +20,7 @@ function mount(path: string) {
 describe("smoke", () => {
   beforeEach(() => {
     vi.mocked(api.vaultStatus).mockResolvedValue({ exists: true, unlocked: true });
-    vi.mocked(api.settingsGet).mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
+    vi.mocked(api.settingsGet).mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Docker build", "Mac"], attackerIp: "", listenerPort: "", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "", reportIntroduction: "", reportGuidesHidden: [] });
     vi.mocked(api.engagementsList).mockResolvedValue([]);
   });
 

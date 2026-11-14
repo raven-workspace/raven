@@ -3,6 +3,8 @@ import type { CommandBlock } from '../../types/log'
 export interface DetectedPrompt {
   shell: string
   command: string
+  /** A bare `#` prompt (or Kali's `└─#`): a root shell whose prompt names no user. */
+  root?: true
 }
 
 type PromptRule = (m: RegExpExecArray) => string
@@ -32,15 +34,15 @@ export function detectPrompt(line: string): DetectedPrompt | null {
     if (m) return { shell: shellOf(m), command: (m[m.length - 1] ?? '').trim() }
   }
   const kali = KALI_PROMPT.exec(line)
-  if (kali) return { shell: 'sh', command: (kali[1] ?? '').trim() }
+  if (kali) return { shell: 'sh', command: (kali[1] ?? '').trim(), ...(line.startsWith('└─#') ? { root: true as const } : {}) }
   const bare = BARE_PROMPT.exec(line)
-  if (bare) return { shell: 'sh', command: (bare[1] ?? '').trim() }
+  if (bare) return { shell: 'sh', command: (bare[1] ?? '').trim(), ...(line.startsWith('#') ? { root: true as const } : {}) }
   return null
 }
 
-function finish(command: string, outputLines: string[], shell?: string): CommandBlock {
+function finish(command: string, outputLines: string[], shell?: string, root?: true): CommandBlock {
   const output = outputLines.join('\n').replace(/^(?:[ \t]*\n)+/, '').trimEnd()
-  return shell ? { command, output, shell } : { command, output }
+  return { command, output, ...(shell ? { shell } : {}), ...(root ? { root } : {}) }
 }
 
 /** Split a pasted terminal block (Warp copy, shell session) into command blocks. */
@@ -56,7 +58,7 @@ export function splitPaste(text: string): CommandBlock[] {
     if (headers[i]) return null
     const d = detectPrompt(line)
     const header = i > 0 ? headers[i - 1] : null
-    return d && header && KALI_PROMPT.test(line) ? { ...d, shell: header } : d
+    return d && header && KALI_PROMPT.test(line) ? { shell: header, command: d.command } : d
   })
   // Bare `$`/`#` lines only count when a distinctive prompt is also present.
   const hasStrong = detected.some((d) => d !== null && d.shell !== 'sh')
@@ -67,9 +69,9 @@ export function splitPaste(text: string): CommandBlock[] {
   }
 
   const blocks: CommandBlock[] = []
-  let cur: { command: string; shell?: string; out: string[] } | null = null
+  let cur: { command: string; shell?: string; root?: true; out: string[] } | null = null
   const close = () => {
-    if (cur) blocks.push(finish(cur.command, cur.out, cur.shell))
+    if (cur) blocks.push(finish(cur.command, cur.out, cur.shell, cur.root))
     cur = null
   }
 
@@ -78,7 +80,7 @@ export function splitPaste(text: string): CommandBlock[] {
     const p = prompts[i]
     if (p) {
       close()
-      if (p.command) cur = { command: p.command, shell: p.shell, out: [] }
+      if (p.command) cur = { command: p.command, shell: p.shell, ...(p.root ? { root: p.root } : {}), out: [] }
       return
     }
     if (cur) cur.out.push(line)

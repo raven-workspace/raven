@@ -43,7 +43,7 @@ const finding = (o: Partial<Finding> & { id: string; title: string }): Finding =
   createdAt: 1, updatedAt: 1, ...o,
 });
 const file = (o: Partial<FindingFile> & { id: string; name: string }): FindingFile => ({
-  findingId: "f1", language: null, content: "", createdAt: 1, updatedAt: 1, ...o,
+  findingId: "f1", language: null, content: "", modified: false, originalUrl: null, originalContent: null, createdAt: 1, updatedAt: 1, ...o,
 });
 
 function mount(path: string, findings: Finding[], files: FindingFile[] = [], log: LogEntry[] | "never" | Error = [L1, L2, L3, L4], servicesError?: Error) {
@@ -84,7 +84,7 @@ beforeEach(() => {
   useCaptureStore.getState().reset();
   useFindingDraftStore.getState().clearAll();
   m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
-  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false });
+  m.settingsGet.mockResolvedValue({ autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)"], attackerIp: "10.10.14.9", listenerPort: "4444", kaliUser: "kali", windowsToolsDir: "~/tools/windows", linuxToolsDir: "~/tools/linux", fieldManualPath: "~/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "", reportIntroduction: "", reportGuidesHidden: [] });
   m.engagementsList.mockResolvedValue([E1]);
   m.engagementsProgress.mockResolvedValue({});
 });
@@ -217,7 +217,7 @@ describe("unsaved file drafts", () => {
     const dlg = await openEdit(user, "Shell upload");
     await pasteDraft(user, dlg);
     await user.click(within(dlg).getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(m.findingFileCreate).toHaveBeenCalledWith("f1", { name: "poc.lua", language: "lua", content: "print(1)" }));
+    await waitFor(() => expect(m.findingFileCreate).toHaveBeenCalledWith("f1", { name: "poc.lua", language: "lua", content: "print(1)", modified: false, originalUrl: undefined, originalContent: undefined }));
     await waitFor(() => expect(m.findingUpdate).toHaveBeenCalled());
     expect(m.findingFileCreate.mock.invocationCallOrder[0]).toBeLessThan(m.findingUpdate.mock.invocationCallOrder[0]);
   });
@@ -336,7 +336,7 @@ describe("finding files", () => {
     await user.click(within(dlg).getByLabelText("File content"));
     await user.paste("print('hi')");
     await user.click(within(dlg).getByRole("button", { name: "Save file" }));
-    await waitFor(() => expect(m.findingFileCreate).toHaveBeenCalledWith("f1", { name: "exploit.py", language: "python", content: "print('hi')" }));
+    await waitFor(() => expect(m.findingFileCreate).toHaveBeenCalledWith("f1", { name: "exploit.py", language: "python", content: "print('hi')", modified: false, originalUrl: undefined, originalContent: undefined }));
   });
 
   it("files over 1 MiB are refused with a message", async () => {

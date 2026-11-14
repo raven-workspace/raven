@@ -29,7 +29,7 @@ const STEP = { of: 1, bar: 2, cleanup: 3, threads: 4, name: 5, msf: 6, lhost: 7,
 const LAST_STEP = 9;
 
 /** One labelled value. `step` marks the part as droppable at that step. */
-function Cell({ label, value, step, tone }: { label: string; value: string; step?: number; tone?: "warn" }) {
+export function Cell({ label, value, step, tone }: { label: string; value: string; step?: number; tone?: "warn" }) {
   return (
     <span role="group" aria-label={`${label} ${value}`} data-drop={step} className="grid grid-flow-col items-center gap-2">
       <span className={labelClass}>{label}</span>
@@ -43,7 +43,7 @@ function Cell({ label, value, step, tone }: { label: string; value: string; step
  * its own width: drops follow the space the strip has, not the window width. Runs before paint on every render
  * (the clock changes the text width) and whenever the strip is resized.
  */
-function useFitStrip() {
+export function useFitStrip(lastStep: number = LAST_STEP) {
   const outer = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const fit = useCallback(() => {
@@ -55,8 +55,8 @@ function useFitStrip() {
     };
     let step = 0;
     show(step);
-    while (box.scrollWidth > box.clientWidth && step < LAST_STEP) show(++step);
-  }, []);
+    while (box.scrollWidth > box.clientWidth && step < lastStep) show(++step);
+  }, [lastStep]);
   // After every render (the clock changes the text width), before paint.
   useLayoutEffect(() => fit());
   // One observer for the strip's life: the strip itself (window/sidebar resize) and its cells (a late text change,

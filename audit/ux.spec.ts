@@ -8,7 +8,7 @@ import { collectOptOuts } from "./checks/optouts";
 import { collectStateIssues, type AuditState } from "./checks/states";
 import { collectUxIssues } from "./checks/ux";
 import { writeIssues } from "./report";
-import { SCREENS } from "./screens";
+import { openBlockActions, openReportItem, reportChecks, SCREENS } from "./screens";
 import { CHECK_IDS, gateFailures } from "./types";
 
 const WIDTH = 1280;
@@ -48,6 +48,10 @@ const NEEDS_DATA = new Set([
   "sidebar-rail-tip",
   // No import under `empty`: the Manual shows its empty state, with no note or link to open.
   "manual-tool", "manual-card-drawer",
+  // No hosts under `empty`: the Report shows "No hosts yet", with no tab, page or check to open.
+  "report-details", "report-target", "report-ad", "report-dock", "report-narrow", "report-todo", "report-free-page", "report-front-introduction",
+  "report-front-summary", "report-front-methodology", "report-closing", "report-web01", "report-web01-restored", "report-refresh-confirm",
+  "report-notice",
 ]);
 
 for (const screen of STATE_SCREENS) {
@@ -83,3 +87,95 @@ for (const screen of STATE_SCREENS) {
     });
   }
 }
+
+// The Report on the mock exam, as the owner uses it.
+test("report: ms01's proof passes its checks", async ({ page }) => {
+  await page.setViewportSize({ width: WIDTH, height: 900 });
+  await page.clock.install({ time: AUDIT_NOW });
+  await page.goto("/e/e-exam/s/report");
+  await openReportItem("ms01")(page);
+  await page.locator(".report-page >> role=heading[name=/^4\\.\\d+ ms01 \\(10\\.10\\.30\\.5\\)$/]").waitFor();
+  const checks = await reportChecks(page);
+  await expect(checks).toBeVisible();
+  // As drafted, the silent download shares its block with the PrintSpoofer run, whose output follows: nothing to do.
+  await expect(checks.getByText("A command shows no output")).toHaveCount(0);
+  // The list is the real one: delete the run's output and its command is flagged, as a soft check (some commands
+  // print nothing).
+  await openBlockActions(page, page.locator(".report-page .report-codeblock", { hasText: "[+] Found privilege: SeImpersonatePrivilege" }).first());
+  await page.getByRole("menu", { name: "Block actions" }).getByRole("menuitem", { name: "Delete" }).click();
+  const after = await reportChecks(page);
+  await expect(after.getByText("A command shows no output")).toBeVisible();
+  // ipconfig with 10.10.30.5, whoami, hostname, type from the Desktop, a screenshot: no proof check is left.
+  await expect(checks.getByText(/proof/i)).toHaveCount(0);
+  await expect(checks.getByText(/No (local|proof)\.txt/)).toHaveCount(0);
+});
+
+test("report: an OSID that is not OS- and digits turns the file name amber", async ({ page }) => {
+  await page.setViewportSize({ width: WIDTH, height: 900 });
+  await page.clock.install({ time: AUDIT_NOW });
+  await page.goto("/e/e-exam/s/report");
+  const strip = page.getByRole("group", { name: "Report status" });
+  const name = strip.getByText(/^OSCP-OS-.*-Exam-Report\.pdf$/);
+  await expect(name).toHaveText("OSCP-OS-48213-Exam-Report.pdf");
+  const amber = () => name.evaluate((el) => getComputedStyle(el).color);
+  const before = await amber();
+  await openReportItem("Report details")(page);
+  const osid = page.getByLabel("OSID");
+  await osid.fill("os-1");
+  await osid.blur();
+  await expect(name).toHaveText("OSCP-OS-?????-Exam-Report.pdf");
+  // The warn tone: #e0a030.
+  await expect.poll(amber).toBe("rgb(224, 160, 48)");
+  expect(before).not.toBe("rgb(224, 160, 48)");
+});
+
+// Private items of the mock exam: a private entry, an operator attempt, a private ruled-out item, a finding's lessons,
+// a private note. None may show on any page, check or evidence tab.
+const PRIVATE_TEXT = [
+  "Reused a password from my lab notes", "Lab-Notes-Pass1!",
+  "Ran the 32-bit PrintSpoofer build", "Picked the wrong binary",
+  "The sa password is the Umbraco one", "Hunch only",
+  "Read every file feroxbuster finds",
+  "Felt slow on this one",
+  // garnet: an operator slip, private.
+  "Ran ./exp from my home folder",
+];
+
+test("report: nothing private shows on any page, check or evidence tab", async ({ page }) => {
+  // Every page, every tab, every string: slower than one screen.
+  test.setTimeout(120_000);
+  // Wide enough for the outline and the evidence rail to sit beside the page.
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.clock.install({ time: AUDIT_NOW });
+  await page.goto("/e/e-exam/s/report");
+  const row = page.getByRole("tablist", { name: "Report pages" });
+  await row.getByRole("tab", { name: /^Front matter/ }).waitFor();
+  const tabIds = await row.getByRole("tab").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.id!));
+  expect(tabIds.length).toBeGreaterThan(6);
+  // Every page: each tab, and each part of Front matter and Closing.
+  const pages: { tab: string; part?: string }[] = [];
+  for (const id of tabIds) {
+    await row.locator(`[role=tab][data-id='${id}']`).click();
+    const parts = page.getByRole("tablist", { name: /^(Front matter|Closing) parts$/ });
+    const partIds = (await parts.count()) ? await parts.getByRole("tab").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.id!)) : [];
+    if (partIds.length === 0) pages.push({ tab: id });
+    for (const part of partIds) pages.push({ tab: id, part });
+  }
+  expect(pages.length).toBeGreaterThan(10);
+  const rail = page.getByRole("tablist", { name: "Evidence" });
+  // A public item from the same sources does show: the search below would find a private one.
+  let publicSeen = 0;
+  for (const { tab: id, part } of pages) {
+    await row.locator(`[role=tab][data-id='${id}']`).click();
+    if (part) await page.getByRole("tablist", { name: /^(Front matter|Closing) parts$/ }).locator(`[role=tab][data-id='${part}']`).click();
+    await page.locator(".report-page").or(page.getByLabel("OSID")).first().waitFor();
+    const tabs = rail.getByRole("tab");
+    const count = await tabs.count();
+    for (let t = 0; t < Math.max(1, count); t++) {
+      if (count > 0) await tabs.nth(t).click();
+      for (const text of PRIVATE_TEXT) await expect(page.getByText(text), `${text} on ${id}, tab ${t}`).toHaveCount(0);
+      publicSeen += await page.getByText("Anonymous access is refused").count();
+    }
+  }
+  expect(publicSeen).toBeGreaterThan(0);
+});

@@ -2,6 +2,7 @@
 // addresses, RFC 5737 addresses (192.0.2.10 for the attacker; 198.51.100.x and example.test for the Payloads drill)
 // and placeholder secrets only. Timestamps are relative to AUDIT_NOW so screenshots are stable.
 import type { PayloadBuild } from "../types/payloadBuild";
+import type { Report, ReportSection } from "../types/report";
 import type { AccessGrant, CredAttempt, Credential, TriedPair, Username } from "../types/credentials";
 import type { ChecklistItem } from "../types/checklist";
 import type { CleanupItem } from "../types/cleanup";
@@ -15,6 +16,8 @@ import type { Hop, InterfaceDismissal, Tunnel } from "../types/network";
 import type { Note, RuledOut } from "../types/notes";
 import type { Service } from "../types/service";
 import type { Settings } from "../types/settings";
+import { capturedHost } from "./capturedHost";
+import { examFixtures, garnetFixtures } from "./examFixtures";
 import { AUDIT_PNGS } from "./images";
 
 export const AUDIT_IDS = {
@@ -58,6 +61,8 @@ export interface AuditFixtures {
   credAttempts: CredAttempt[];
   triedPairs: TriedPair[];
   payloadBuilds: PayloadBuild[];
+  reports: Report[];
+  reportSections: ReportSection[];
   extractions: Extraction[];
   accessGrants: AccessGrant[];
   findings: Finding[];
@@ -143,13 +148,18 @@ const hosts: Host[] = [
   host("h-print", "e-lab", "print01", "10.10.20.40", "windows"),
   host("h-backup", "e-lab", "backup-nas-finance-replica.acme.corp", "10.10.20.45", "linux"),
   host("h-jenkins", "e-lab", "dev-jenkins", "10.10.20.50", "linux", { boardColumn: "vulnerability-detection" }),
-  host("h-int-files", "e-lab", "int-files", "10.10.21.12", "windows"),
+  host("h-int-xfer", "e-lab", "int-xfer", "10.10.21.12", "windows"),
   host("h-hr-ws03", "e-lab", "hr-ws03", "10.10.20.73", "windows"),
-  host("h-exam-ms01", "e-exam", "ms01", "10.10.30.5", "windows", { boardColumn: "initial-foothold", access: "user" }),
-  host("h-exam-dc01", "e-exam", "dc01", "10.10.30.10", "windows", { adSet: true, adSetEffective: true }),
-  host("h-exam-ad02", "e-exam", "ad02", "10.10.30.11", "windows", { adSet: true, adSetEffective: true, boardColumn: "vulnerability-detection" }),
-  host("h-exam-web", "e-exam", "web01", "10.10.30.20", "linux", { boardColumn: "privilege-escalation", access: "user" }),
+  // The mock exam as it stands near the end: ms01, web01 and the AD set rooted, lnx02 never started (examFixtures.ts).
+  host("h-exam-ms01", "e-exam", "ms01", "10.10.30.5", "windows", { boardColumn: "post-exploitation", access: "root" }),
+  host("h-exam-dc01", "e-exam", "dc01", "10.10.30.10", "windows", { adSet: true, adSetEffective: true, boardColumn: "post-exploitation", access: "root" }),
+  host("h-exam-ad02", "e-exam", "ad02", "10.10.30.11", "windows", { adSet: true, adSetEffective: true, boardColumn: "post-exploitation", access: "root" }),
+  host("h-exam-app03", "e-exam", "app03", "10.10.30.12", "windows", { adSet: true, adSetEffective: true, boardColumn: "post-exploitation", access: "user" }),
+  host("h-exam-web", "e-exam", "web01", "10.10.30.20", "linux", { boardColumn: "post-exploitation", access: "root" }),
   host("h-exam-lnx", "e-exam", "lnx02", "10.10.30.21", "linux"),
+  // Captured as the owner really captures (capturedHost.ts): bare flag values, proof in separate entries, no grants.
+  host("h-exam-xfer", "e-exam", "xfer03", "10.10.30.22", "linux", { boardColumn: "post-exploitation", access: "root" }),
+  host("h-exam-garnet", "e-exam", "garnet", "10.10.30.31", "linux", { boardColumn: "post-exploitation", access: "root" }),
   // A long name, so the drawer's host chip is at its widest next to "Paste into Web shell ?cmd=".
   host("h-pay-iis", "e-pay", "intranet-gateway-iis-frontend-07.corp.example.test", "198.51.100.20", "windows", { boardColumn: "initial-foothold", access: "user" }),
   host("h-pay-pg", "e-pay", "pg01.example.test", "198.51.100.30", "linux"),
@@ -238,18 +248,6 @@ const services: Service[] = [
   svc("h-ws07", 22, "ssh", "OpenSSH 8.4p1 Debian"),
   svc("h-ws07", 5900, "vnc", "VNC (protocol 3.8)"),
 
-  // exam
-  svc("h-exam-ms01", 80, "http", "Microsoft IIS httpd 10.0", confirmed("IIS", "10.0")),
-  svc("h-exam-ms01", 445, "microsoft-ds?", null),
-  svc("h-exam-ms01", 1433, "ms-sql-s", "Microsoft SQL Server 2019"),
-  svc("h-exam-dc01", 88, "kerberos-sec", "Microsoft Windows Kerberos"),
-  svc("h-exam-dc01", 389, "ldap", "Microsoft Windows Active Directory LDAP"),
-  svc("h-exam-dc01", 445, "microsoft-ds?", null),
-  svc("h-exam-ad02", 88, "kerberos-sec", "Microsoft Windows Kerberos"),
-  svc("h-exam-ad02", 389, "ldap", "Microsoft Windows Active Directory LDAP"),
-  svc("h-exam-web", 22, "ssh", "OpenSSH 8.2p1"),
-  svc("h-exam-web", 80, "http", "Apache httpd 2.4.41", confirmed("Apache httpd", "2.4.41")),
-  svc("h-exam-lnx", 22, "ssh", "OpenSSH 7.6p1"),
   svc("h-pay-iis", 80, "http", "Microsoft IIS httpd 10.0", confirmed("IIS", "10.0")),
   svc("h-pay-iis", 445, "microsoft-ds?", null),
   svc("h-pay-pg", 22, "ssh", "OpenSSH 8.9p1 Ubuntu 3ubuntu0.6"),
@@ -330,25 +328,6 @@ const labLog: LogEntry[] = [
   cmd("Password spray across the subnet", "nxc smb 10.10.20.0/24 -u svc_backup -p 'Autumn2026!'", "SMB 10.10.20.15 [+] acme.corp\\svc_backup:Autumn2026!", ["h-web", "h-dc01", "h-fs01", "h-sql01"]),
 ];
 
-const examLog: LogEntry[] = [
-  note("Exam started", "Timebox running. Metasploit reserved for ms01 only.", [], { engagementId: "e-exam", at: ago(3 * HOUR) }),
-  cmd("Initial scan", "nmap -p- -sV 10.10.30.0/24", "Nmap done: 256 IP addresses (5 hosts up)", ["h-exam-ms01"], { engagementId: "e-exam", at: ago(2.5 * HOUR) }),
-  cmd("Web enumeration", "gobuster dir -u http://10.10.30.20 -w common.txt", "/admin (Status: 301)", ["h-exam-web"], { engagementId: "e-exam", at: ago(2 * HOUR) }),
-  // Several commands in one step: each command must read as one unit with its own output.
-  entry({
-    kind: "command", title: "Admin check, proof and identity on ms01", hostIds: ["h-exam-ms01"], engagementId: "e-exam", at: ago(1.5 * HOUR),
-    observations: "Root proof captured.",
-    content: {
-      kind: "command",
-      blocks: [
-        { command: 'whoami /groups | findstr /i "High"', output: "Mandatory Label\\High Mandatory Level    Label    S-1-16-12288" },
-        { command: "type C:\\Users\\Administrator\\Desktop\\proof.txt", output: "0123456789abcdef0123456789abcdef" },
-        { command: "whoami; hostname; ipconfig", output: "exam\\administrator\nMS01\n\nWindows IP Configuration\n\nEthernet adapter Ethernet0:\n\n   IPv4 Address. . . . . . . . . . . : 10.10.30.5\n   Subnet Mask . . . . . . . . . . . : 255.255.255.0\n   Default Gateway . . . . . . . . . : 10.10.30.254" },
-      ],
-    },
-  }),
-].map((e, i) => ({ ...e, id: `l-exam-${i + 1}` }));
-
 // The IIS host: a ?cmd= web shell that answers (so the paste context is "Web shell ?cmd="), then an nc.exe payload
 // logged from the drawer that failed there (so nc-exe stays a fit, marked "Failed here before").
 const payLog: LogEntry[] = [
@@ -374,7 +353,11 @@ const payloadBuilds: PayloadBuild[] = [
   { engagementId: "e-pay", hostId: "h-pay-iis", payloadId: "nishang-cradle", lhost: "192.0.2.77", lport: "4444", at: ago(30 * HOUR) },
 ];
 
-const log: LogEntry[] = [...labLog, ...examLog, ...payLog];
+const exam = examFixtures(AUDIT_NOW);
+const xfer = capturedHost(AUDIT_NOW, hosts.filter((h) => h.engagementId === "e-exam"));
+// garnet: the plain-report proof machine, a standalone target on the mock exam.
+const garnet = garnetFixtures(AUDIT_NOW);
+const log: LogEntry[] = [...labLog, ...exam.log, ...xfer.log, ...garnet.log, ...payLog];
 
 const attachments: Attachment[] = (Object.keys(AUDIT_PNGS) as (keyof typeof AUDIT_PNGS)[]).map((k) => ({
   id: `a-${k}`, mime: "image/png", dataBase64: AUDIT_PNGS[k].base64,
@@ -482,7 +465,7 @@ const findings: Finding[] = [
 ];
 
 const findingFiles: FindingFile[] = [
-  { id: "ff-1", findingId: "f-1", name: "kerberoast.sh", language: "bash", content: "#!/bin/sh\nimpacket-GetUserSPNs acme.corp/svc_backup:'Password123!' -dc-ip 10.10.20.10 -request\n", createdAt: ago(20 * MIN), updatedAt: ago(20 * MIN) },
+  { id: "ff-1", findingId: "f-1", name: "kerberoast.sh", language: "bash", content: "#!/bin/sh\nimpacket-GetUserSPNs acme.corp/svc_backup:'Password123!' -dc-ip 10.10.20.10 -request\n", modified: false, originalUrl: null, originalContent: null, createdAt: ago(20 * MIN), updatedAt: ago(20 * MIN) },
 ];
 
 const failedAttempts: FailedAttempt[] = [
@@ -571,7 +554,7 @@ const checklist: ChecklistItem[] = [
 
 const progress: Record<string, Progress> = {
   "e-lab": { hostsTotal: 6, hostsRooted: 2, flagsFound: 2, flagsTotal: 12 },
-  "e-exam": { hostsTotal: 5, hostsRooted: 0, flagsFound: 1, flagsTotal: 6 },
+  "e-exam": { hostsTotal: 7, hostsRooted: 6, flagsFound: 10, flagsTotal: 12 },
   "e-old": { hostsTotal: 1, hostsRooted: 1, flagsFound: 2, flagsTotal: 2 },
   "e-pay": { hostsTotal: 2, hostsRooted: 0, flagsFound: 0, flagsTotal: 4 },
   "e-board": { hostsTotal: 23, hostsRooted: 1, flagsFound: 0, flagsTotal: 0 },
@@ -587,11 +570,33 @@ const settings: Settings = {
   autoLockMinutes: 30, backupRetention: 14, machines: ["Kali (VM)", "Windows 11 (VM)"], attackerIp: "192.0.2.10",
   listenerPort: "4444", kaliUser: "audit", windowsToolsDir: "~/tools/windows", linuxToolsDir: "/opt/tools",
   fieldManualPath: "/Users/audit/Documents/Field-Manual", nvdKeySet: true,
+  reportName: "Sam Rivera", reportEmail: "sam.rivera@example.com", reportOsid: "OS-48213", reportMethodology: "",
+  // As the owner pastes it once: their own wording for section 1, split on its part lines.
+  reportIntroduction: [
+    "This report documents the work done in the OffSec Certified Professional exam: every step needed to reproduce",
+    "each compromise, with its evidence and proof.",
+    "Objective",
+    "Perform an internal penetration test against the exam network, methodically, from first scan to full control,",
+    "and report it as a real engagement.",
+    "Requirements",
+    "The report includes:",
+    "· A high-level summary and recommendations",
+    "· The methodology and a walkthrough of every step",
+    "· Each finding with screenshots, commands and the proof files",
+  ].join("\n"),
+  reportGuidesHidden: [],
 };
 
 export const FIXTURES: AuditFixtures = {
-  engagements, hosts, services, log, attachments, checklist, notes, ruledOut, hostIdentity, vectors, tunnels, interfaceDismissals, hops, credentials, usernames,
-  credAttempts, triedPairs, payloadBuilds, extractions, accessGrants, findings, findingFiles, failedAttempts, cleanup, backups, settings,
+  engagements, hosts, services: [...services, ...exam.services, ...xfer.services, ...garnet.services], log, attachments,
+  checklist: [...checklist, ...exam.checklist, ...xfer.checklist],
+  notes: [...notes, ...exam.notes], ruledOut: [...ruledOut, ...exam.ruledOut], hostIdentity, vectors, tunnels, interfaceDismissals,
+  hops: [...hops, ...exam.hops], credentials: [...credentials, ...exam.credentials, ...xfer.credentials, ...garnet.credentials],
+  usernames: [...usernames, ...exam.usernames, ...xfer.usernames, ...garnet.usernames], credAttempts: [...credAttempts, ...xfer.credAttempts],
+  triedPairs: [...triedPairs, ...xfer.triedPairs], payloadBuilds, reports: exam.reports, reportSections: exam.reportSections, extractions,
+  accessGrants: [...accessGrants, ...exam.accessGrants, ...garnet.grants], findings: [...findings, ...exam.findings, ...xfer.findings, ...garnet.findings], findingFiles: [...findingFiles, ...exam.findingFiles, ...garnet.findingFiles],
+  failedAttempts: [...failedAttempts, ...exam.failedAttempts, ...garnet.attempts],
+  cleanup: [...cleanup, ...exam.cleanup], backups, settings,
 };
 
 export const FIXTURE_PROGRESS = progress;

@@ -1,7 +1,7 @@
 import { Check, Copy, PencilSimple, Trash } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import type { FindingFile } from "../../types/findings";
-import { ActionCell, Button, Field, IconButton, Input, Select, Textarea, fieldLabelClass } from "../../ui";
+import { ActionCell, Button, Field, IconButton, Input, Select, Textarea, Toggle, fieldLabelClass } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { CodeView, guessLanguage, LANGUAGES } from "./CodeView";
 import { useFindingFileMutations, useFindingFiles } from "./queries";
@@ -17,6 +17,10 @@ interface Draft {
   /** "auto" follows the file name's extension. */
   language: string;
   content: string;
+  /** An exploit adapted from a public one; the original is kept beside it. */
+  modified: boolean;
+  originalUrl: string;
+  originalContent: string;
 }
 
 /** The open file form, held by the finding's draft so closing the split never loses pasted text. */
@@ -31,6 +35,9 @@ function initialFields(file?: FindingFile): Draft {
     name: file?.name ?? "",
     language: file?.language && file.language !== guessLanguage(file.name) ? file.language : AUTO,
     content: file?.content ?? "",
+    modified: file?.modified ?? false,
+    originalUrl: file?.originalUrl ?? "",
+    originalContent: file?.originalContent ?? "",
   };
 }
 
@@ -83,9 +90,18 @@ function FileForm({ findingId, file, value, onChange, onDone, onDirty, register 
     const name = d.name.trim();
     if (name === "") return fail("Give the file a name");
     if (bytes(d.content) > MAX_BYTES) return fail("The content is over 1 MiB");
+    if (d.modified && bytes(d.originalContent) > MAX_BYTES) return fail("The original code is over 1 MiB");
     setError(undefined);
     setBusy(true);
-    const input = { name, language: d.language === AUTO ? guessLanguage(name) : d.language, content: d.content };
+    const input = {
+      name,
+      language: d.language === AUTO ? guessLanguage(name) : d.language,
+      content: d.content,
+      modified: d.modified,
+      // Blank clears. Unmodified sends neither, so the backend keeps the stored original for when the toggle goes back on.
+      originalUrl: d.modified ? d.originalUrl.trim() : undefined,
+      originalContent: d.modified ? d.originalContent : undefined,
+    };
     try {
       if (file) await update.mutateAsync({ id: file.id, input });
       else await create.mutateAsync(input);
@@ -101,7 +117,8 @@ function FileForm({ findingId, file, value, onChange, onDone, onDirty, register 
     return false;
   }
 
-  const dirty = d.name !== initial.name || d.language !== initial.language || d.content !== initial.content;
+  const dirty = d.name !== initial.name || d.language !== initial.language || d.content !== initial.content
+    || d.modified !== initial.modified || d.originalUrl !== initial.originalUrl || d.originalContent !== initial.originalContent;
   // An untouched form has nothing to save: the finding's Save must not be blocked by it.
   const flush = async () => (dirty ? submit() : true);
   const submitRef = useRef(flush);
@@ -132,6 +149,19 @@ function FileForm({ findingId, file, value, onChange, onDone, onDirty, register 
       <Field label="File content">
         <Textarea mono rows={8} wrap="off" value={d.content} onChange={(e) => setD({ ...d, content: e.target.value })} />
       </Field>
+      <div className="grid justify-items-start">
+        <Toggle on={d.modified} onChange={(modified) => setD({ ...d, modified })}>Modified exploit</Toggle>
+      </div>
+      {d.modified && (
+        <>
+          <Field label="Original URL">
+            <Input mono value={d.originalUrl} placeholder="https://www.exploit-db.com/exploits/50000" onChange={(e) => setD({ ...d, originalUrl: e.target.value })} />
+          </Field>
+          <Field label="Original code">
+            <Textarea mono rows={6} wrap="off" value={d.originalContent} onChange={(e) => setD({ ...d, originalContent: e.target.value })} />
+          </Field>
+        </>
+      )}
       <div className="grid grid-cols-[max-content_minmax(0,1fr)_max-content_max-content] items-center gap-2">
         <input
           ref={picker}
@@ -163,7 +193,10 @@ function FileRow({ findingId, file, onEdit }: { findingId: string; file: Finding
     <li className="grid gap-2 border-b border-line py-2">
       <div className="grid grid-cols-[minmax(0,1fr)_max-content_max-content] items-center gap-3">
         <span className="truncate font-mono text-code text-fg" title={file.name}>{file.name}</span>
-        <span className="text-meta text-muted">{file.language ?? guessLanguage(file.name)}</span>
+        <span className="grid grid-flow-col gap-2 text-meta text-muted">
+          {file.modified && <span className="text-accent">Modified</span>}
+          <span>{file.language ?? guessLanguage(file.name)}</span>
+        </span>
         <ActionCell>
           <IconButton
             icon={copied ? Check : Copy}

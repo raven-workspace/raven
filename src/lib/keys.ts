@@ -16,9 +16,10 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   return target.closest('[role="combobox"], [role="listbox"]') !== null;
 }
 
-/** True while any modal dialog (Radix) is open. */
+/** True while any modal dialog (Radix) is open. The report page's bubble menu is a ProseKit popover that keeps
+ *  role="dialog" while closed too; it is no modal, so it never counts. */
 export function isDialogOpen(): boolean {
-  return document.querySelector('[role="dialog"], [role="alertdialog"]') !== null;
+  return document.querySelector('[role="dialog"]:not(prosekit-inline-popover-popup), [role="alertdialog"]') !== null;
 }
 
 /** True when a plain app shortcut (no ⌘/Ctrl/Alt) may handle this key. */

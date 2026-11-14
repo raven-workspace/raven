@@ -43,6 +43,7 @@ import type {
   UsernameInput,
 } from "../types/credentials";
 import type { PayloadBuild } from "../types/payloadBuild";
+import type { Report, ReportDoc, ReportPatch, ReportSection, SectionInput } from "../types/report";
 import type { Hop, HopInput, InterfaceDismissal, Tunnel, TunnelInput } from "../types/network";
 import type { Host, HostInput, BoardColumn } from "../types/host";
 import type { Engagement, EngagementInput, EngagementStatus } from "../types/engagement";
@@ -214,6 +215,15 @@ export const api = {
   credAttemptDelete: (id: string) => call<null>("cred_attempt_delete", { id }),
   payloadBuildsList: (engagementId: string) => call<PayloadBuild[]>("payload_builds_list", { engagementId }),
   payloadBuildRecord: (input: PayloadBuild) => call<PayloadBuild>("payload_build_record", { input }),
+  reportGetOrCreate: (engagementId: string) => call<Report>("report_get_or_create", { engagementId }),
+  reportUpdate: (id: string, patch: ReportPatch) => call<Report>("report_update", { id, patch }),
+  reportSectionsList: (reportId: string) => call<ReportSection[]>("report_sections_list", { reportId }),
+  reportSectionUpsert: (reportId: string, input: SectionInput) => call<ReportSection>("report_section_upsert", { reportId, input }),
+  reportSectionSave: (id: string, doc: ReportDoc, meta: Record<string, unknown>) =>
+    call<ReportSection>("report_section_save", { id, doc, meta }),
+  reportSectionsReorder: (reportId: string, ids: string[]) => call<null>("report_sections_reorder", { reportId, ids }),
+  /** Owner-written pages only (kind `page`); any other section is refused. */
+  reportSectionDelete: (reportId: string, id: string) => call<null>("report_section_delete", { reportId, id }),
   triedPairsList: (engagementId: string) => call<TriedPair[]>("tried_pairs_list", { engagementId }),
   triedPairsUpsert: (engagementId: string, inputs: TriedPairInput[]) =>
     call<TriedPair[]>("tried_pairs_upsert", { engagementId, inputs }),

@@ -88,7 +88,7 @@ beforeEach(() => {
   useArsenalStore.setState({ open: false, cardId: null, blockId: null, solo: null });
   m.settingsGet.mockResolvedValue({
     autoLockMinutes: 30, backupRetention: 14, machines: ["kali"], attackerIp: "192.0.2.9", listenerPort: "4444", kaliUser: "kali",
-    windowsToolsDir: "", linuxToolsDir: "", fieldManualPath: "/v/fm", nvdKeySet: false,
+    windowsToolsDir: "", linuxToolsDir: "", fieldManualPath: "/v/fm", nvdKeySet: false, reportName: "", reportEmail: "", reportOsid: "", reportMethodology: "", reportIntroduction: "", reportGuidesHidden: [],
   });
   m.engagementGet.mockResolvedValue(E1);
   // On /manual the fill scope waits for the engagement list (exam rules fail closed until it loads).

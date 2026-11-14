@@ -1,0 +1,43 @@
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "paragraph",
+      "attrs": {
+        "fromEntry": null,
+        "fromField": null
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Every tool ran from the attacking machine unless the step says otherwise."
+        }
+      ]
+    },
+    {
+      "type": "evidence",
+      "attrs": {
+        "entryId": "l-exam-web01-sudo",
+        "block": 0,
+        "keep": null,
+        "emphasis": [],
+        "appendix": "inline",
+        "caption": null,
+        "width": null
+      }
+    },
+    {
+      "type": "slot",
+      "attrs": {
+        "hint": "Say what this shows",
+        "label": ""
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "The sudo rule is the way to root."
+        }
+      ]
+    }
+  ]
+}

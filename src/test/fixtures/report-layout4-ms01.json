@@ -1,0 +1,298 @@
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "generated",
+      "attrs": {
+        "kind": "facts",
+        "hostId": "h-exam-ms01",
+        "appendix": "inline"
+      }
+    },
+    {
+      "type": "generated",
+      "attrs": {
+        "kind": "result",
+        "hostId": "h-exam-ms01",
+        "appendix": "inline"
+      }
+    },
+    {
+      "type": "phase",
+      "attrs": {
+        "phase": "enum",
+        "hostId": "h-exam-ms01"
+      }
+    },
+    {
+      "type": "generated",
+      "attrs": {
+        "kind": "ports",
+        "hostId": "h-exam-ms01",
+        "appendix": "inline",
+        "notes": {}
+      }
+    },
+    {
+      "type": "phase",
+      "attrs": {
+        "phase": "foothold",
+        "hostId": "h-exam-ms01"
+      }
+    },
+    {
+      "type": "vuln",
+      "attrs": {
+        "findingId": "f-exam-umbraco"
+      }
+    },
+    {
+      "type": "steps",
+      "content": [
+        {
+          "type": "step",
+          "attrs": {
+            "entryId": "l-exam-ms01-notes"
+          },
+          "content": [
+            {
+              "type": "slot",
+              "attrs": {
+                "hint": "Say what this step does"
+              }
+            },
+            {
+              "type": "evidence",
+              "attrs": {
+                "entryId": "l-exam-ms01-notes",
+                "block": 0,
+                "keep": null,
+                "emphasis": [],
+                "appendix": "inline"
+              }
+            }
+          ]
+        },
+        {
+          "type": "step",
+          "attrs": {
+            "entryId": "l-exam-ms01-rce"
+          },
+          "content": [
+            {
+              "type": "slot",
+              "attrs": {
+                "hint": "Say what this step does"
+              }
+            },
+            {
+              "type": "exploit",
+              "attrs": {
+                "fileId": "ff-exam-46153",
+                "markedLines": [],
+                "appendix": "inline"
+              }
+            },
+            {
+              "type": "slot",
+              "attrs": {
+                "hint": "Explain each change"
+              }
+            },
+            {
+              "type": "evidence",
+              "attrs": {
+                "entryId": "l-exam-ms01-rce",
+                "block": 0,
+                "keep": null,
+                "emphasis": [],
+                "appendix": "inline"
+              }
+            },
+            {
+              "type": "evidence",
+              "attrs": {
+                "entryId": "l-exam-ms01-rce",
+                "block": 1,
+                "keep": null,
+                "emphasis": [],
+                "appendix": "inline"
+              }
+            },
+            {
+              "type": "evidence",
+              "attrs": {
+                "entryId": "l-exam-ms01-shell",
+                "block": null,
+                "keep": null,
+                "emphasis": [],
+                "appendix": "inline"
+              }
+            }
+          ]
+        },
+        {
+          "type": "step",
+          "attrs": {
+            "entryId": "l-exam-ms01-local"
+          },
+          "content": [
+            {
+              "type": "slot",
+              "attrs": {
+                "hint": "Say where you read the flag"
+              }
+            },
+            {
+              "type": "evidence",
+              "attrs": {
+                "entryId": "l-exam-ms01-local",
+                "block": null,
+                "keep": null,
+                "emphasis": [],
+                "appendix": "inline"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "phase",
+      "attrs": {
+        "phase": "privesc",
+        "hostId": "h-exam-ms01"
+      }
+    },
+    {
+      "type": "vuln",
+      "attrs": {
+        "findingId": "f-exam-printspoofer"
+      }
+    },
+    {
+      "type": "steps",
+      "content": [
+        {
+          "type": "step",
+          "attrs": {
+            "entryId": "l-exam-ms01-privs"
+          },
+          "content": [
+            {
+              "type": "slot",
+              "attrs": {
+                "hint": "Say what this step does"
+              }
+            },
+            {
+              "type": "evidence",
+              "attrs": {
+                "entryId": "l-exam-ms01-privs",
+                "block": 0,
+                "keep": null,
+                "emphasis": [],
+                "appendix": "inline"
+              }
+            }
+          ]
+        },
+        {
+          "type": "step",
+          "attrs": {
+            "entryId": "l-exam-ms01-spoofer"
+          },
+          "content": [
+            {
+              "type": "slot",
+              "attrs": {
+                "hint": "Say what this step does"
+              }
+            },
+            {
+              "type": "evidence",
+              "attrs": {
+                "entryId": "l-exam-ms01-spoofer",
+                "block": 0,
+                "keep": null,
+                "emphasis": [],
+                "appendix": "inline"
+              }
+            },
+            {
+              "type": "evidence",
+              "attrs": {
+                "entryId": "l-exam-ms01-spoofer",
+                "block": 1,
+                "keep": null,
+                "emphasis": [],
+                "appendix": "inline"
+              }
+            },
+            {
+              "type": "evidence",
+              "attrs": {
+                "entryId": "l-exam-ms01-system",
+                "block": null,
+                "keep": null,
+                "emphasis": [],
+                "appendix": "inline"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "phase",
+      "attrs": {
+        "phase": "post",
+        "hostId": "h-exam-ms01"
+      }
+    },
+    {
+      "type": "steps",
+      "content": [
+        {
+          "type": "step",
+          "attrs": {
+            "entryId": "l-exam-ms01-proof"
+          },
+          "content": [
+            {
+              "type": "slot",
+              "attrs": {
+                "hint": "Say where you read the flag"
+              }
+            },
+            {
+              "type": "evidence",
+              "attrs": {
+                "entryId": "l-exam-ms01-proof",
+                "block": null,
+                "keep": null,
+                "emphasis": [],
+                "appendix": "inline"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "phase",
+      "attrs": {
+        "phase": "tested",
+        "hostId": "h-exam-ms01"
+      }
+    },
+    {
+      "type": "generated",
+      "attrs": {
+        "kind": "tested",
+        "hostId": "h-exam-ms01",
+        "appendix": "inline"
+      }
+    }
+  ]
+}

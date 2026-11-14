@@ -8,6 +8,7 @@ import { useSaveSummaryStore } from "../capture/useSaveSummaryStore";
 import { useCaptureStore } from "../capture/useCaptureStore";
 import { useCredPickStore } from "../checklist/credPick";
 import { useFindingDraftStore } from "../findings/useFindingDraftStore";
+import { discardReports, flushReports, hasPendingReports } from "../report/saveQueue";
 import { discardNotes, flushNotes, hasPendingNotes, sessionGeneration, setNotesQueryClient, startNotesSession } from "../notes/useNotesStore";
 import type { UnlockResult, VaultStatus } from "../../types/vault";
 import { Button, IconButton, TitleBar, TitleBarButton, TitleBarGroup, TitleBarIconButton, TitleBarShortcuts, type Hint, Wordmark } from "../../ui";
@@ -115,6 +116,8 @@ export function VaultGate({ children }: { children: ReactNode }) {
     // Notes too: after a lock no note text stays in memory. `lock()` has already started the
     // flush, which works from a snapshot.
     discardNotes();
+    // Queued report writes too: `lock()` has already started sending them.
+    discardReports();
     // A copied secret must not outlive the lock.
     void clearSecretClipboard().catch(() => {});
     setNotice(null);
@@ -138,7 +141,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
     clearTimeout(retryTimer.current);
     let gen = sessionGeneration();
     if (notesSaved) {
-      // Field notes are saved before the backend locks. If that save failed the text is
+      // Field notes and report pages are saved before the backend locks. If a save failed the text is
       // dropped anyway (see markLocked); a failed save must not keep the vault open.
       await notesSaved;
       // Only if no unlock happened meanwhile, so a quick re-unlock isn't wiped.
@@ -177,9 +180,12 @@ export function VaultGate({ children }: { children: ReactNode }) {
     // The UI locks at once, never leaving data on screen; the backend lock is
     // retried until the backend confirms it.
     // Start saving notes first: markLocked clears them from the store.
+    // Report writes too (the Report view's unmount flush would run after the backend locked).
     const notesSaved = hasPendingNotes() ? flushNotes().catch(reportError) : undefined;
+    const reportsSaved = hasPendingReports() ? flushReports() : undefined;
+    const saved = notesSaved && reportsSaved ? Promise.all([notesSaved, reportsSaved]).then(() => undefined) : (notesSaved ?? reportsSaved);
     markLocked();
-    void lockBackend(notesSaved);
+    void lockBackend(saved);
   }, [markLocked, lockBackend]);
 
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet, enabled: unlocked });

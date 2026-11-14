@@ -103,3 +103,6 @@ replit.nix
 .windsurf/
 .windsurfrules
 
+
+# Owner-private material (real lab flags/passwords): never commit.
+.local/

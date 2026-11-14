@@ -26,6 +26,16 @@ const MAX_PATH_LEN: usize = 500;
 /// The NIST NVD API key. Stored in the encrypted vault; never sent to the frontend.
 const NVD_KEY_KEY: &str = "nvd_api_key";
 const MAX_NVD_KEY_LEN: usize = 128;
+const REPORT_NAME_KEY: &str = "report_candidate_name";
+const REPORT_EMAIL_KEY: &str = "report_email";
+const REPORT_OSID_KEY: &str = "report_osid";
+const REPORT_METHODOLOGY_KEY: &str = "report_methodology";
+const REPORT_INTRODUCTION_KEY: &str = "report_introduction";
+const REPORT_GUIDES_HIDDEN_KEY: &str = "report_guides_hidden";
+const MAX_GUIDE_ID_LEN: usize = 64;
+const MAX_GUIDES_HIDDEN: usize = 200;
+const MAX_REPORT_FIELD_LEN: usize = 2000;
+const MAX_REPORT_METHODOLOGY_LEN: usize = 20000;
 const RETENTION_RANGE: std::ops::RangeInclusive<u32> = 1..=200;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -48,6 +58,15 @@ pub struct Settings {
     pub field_manual_path: String,
     /// Whether an NVD API key is stored. The key itself is never returned.
     pub nvd_key_set: bool,
+    /// Report cover defaults, copied into each new report. Blank allowed.
+    pub report_name: String,
+    pub report_email: String,
+    pub report_osid: String,
+    pub report_methodology: String,
+    /// Default text of section 1 (Introduction, Objective, Requirements) for new reports.
+    pub report_introduction: String,
+    /// Report guide notes the owner dismissed, by id; `"*"` hides them all. Empty by default.
+    pub report_guides_hidden: Vec<String>,
 }
 
 #[derive(Clone, Default, Deserialize)]
@@ -64,6 +83,12 @@ pub struct SettingsPatch {
     pub field_manual_path: Option<String>,
     /// Sets the NVD API key; an empty string clears it.
     pub nvd_api_key: Option<String>,
+    pub report_name: Option<String>,
+    pub report_email: Option<String>,
+    pub report_osid: Option<String>,
+    pub report_methodology: Option<String>,
+    pub report_introduction: Option<String>,
+    pub report_guides_hidden: Option<Vec<String>>,
 }
 
 /// Debug output never shows the NVD API key, only whether the patch sets one.
@@ -80,6 +105,12 @@ impl std::fmt::Debug for SettingsPatch {
             .field("linux_tools_dir", &self.linux_tools_dir)
             .field("field_manual_path", &self.field_manual_path)
             .field("nvd_api_key", &self.nvd_api_key.as_ref().map(|_| "<redacted>"))
+            .field("report_name", &self.report_name)
+            .field("report_email", &self.report_email)
+            .field("report_osid", &self.report_osid)
+            .field("report_methodology", &self.report_methodology)
+            .field("report_introduction", &self.report_introduction)
+            .field("report_guides_hidden", &self.report_guides_hidden)
             .finish()
     }
 }
@@ -129,6 +160,15 @@ pub fn get(conn: &Connection) -> AppResult<Settings> {
         linux_tools_dir,
         field_manual_path,
         nvd_key_set: !zeroize::Zeroizing::new(nvd_api_key(conn)).is_empty(),
+        report_name: text(REPORT_NAME_KEY),
+        report_email: text(REPORT_EMAIL_KEY),
+        report_osid: text(REPORT_OSID_KEY),
+        report_methodology: text(REPORT_METHODOLOGY_KEY),
+        report_introduction: text(REPORT_INTRODUCTION_KEY),
+        report_guides_hidden: serde_json::from_str::<Vec<String>>(&text(REPORT_GUIDES_HIDDEN_KEY))
+            .ok()
+            .and_then(|v| clean_guides_hidden(v).ok())
+            .unwrap_or_default(),
     })
 }
 
@@ -231,6 +271,34 @@ fn clean_nvd_key(s: &str) -> AppResult<String> {
     }
 }
 
+/// Blank allowed; trimmed; at most `max` characters.
+fn clean_report_text(field: &str, s: &str, max: usize) -> AppResult<String> {
+    let s = s.trim();
+    if s.chars().count() > max {
+        Err(bad(field, &format!("at most {max} characters")))
+    } else {
+        Ok(s.to_string())
+    }
+}
+
+/// Trims each id and drops repeats (first wins): at most 200 ids of 1-64 characters.
+fn clean_guides_hidden(list: Vec<String>) -> AppResult<Vec<String>> {
+    let mut out: Vec<String> = Vec::new();
+    for id in list {
+        let id = id.trim().to_string();
+        if id.is_empty() || id.chars().count() > MAX_GUIDE_ID_LEN || id.chars().any(char::is_control) {
+            return Err(bad("reportGuidesHidden", "each guide id must be 1-64 characters"));
+        }
+        if !out.contains(&id) {
+            out.push(id);
+        }
+    }
+    if out.len() > MAX_GUIDES_HIDDEN {
+        return Err(bad("reportGuidesHidden", "at most 200 hidden guide notes"));
+    }
+    Ok(out)
+}
+
 fn put(conn: &Connection, key: &str, v: u32) -> AppResult<()> {
     put_text(conn, key, &v.to_string())
 }
@@ -254,7 +322,19 @@ pub fn update(conn: &Connection, patch: SettingsPatch) -> AppResult<Settings> {
     let linux_tools = patch.linux_tools_dir.as_deref().map(|v| clean_tools_dir("linuxToolsDir", v)).transpose()?;
     let field_manual = patch.field_manual_path.as_deref().map(|v| clean_path("fieldManualPath", v)).transpose()?;
     let nvd_key = patch.nvd_api_key.as_deref().map(clean_nvd_key).transpose()?;
+    let report = |field: &str, v: &Option<String>, max: usize| v.as_deref().map(|v| clean_report_text(field, v, max)).transpose();
+    let report_name = report("reportName", &patch.report_name, MAX_REPORT_FIELD_LEN)?;
+    let report_email = report("reportEmail", &patch.report_email, MAX_REPORT_FIELD_LEN)?;
+    let report_osid = report("reportOsid", &patch.report_osid, MAX_REPORT_FIELD_LEN)?;
+    let report_methodology = report("reportMethodology", &patch.report_methodology, MAX_REPORT_METHODOLOGY_LEN)?;
+    let report_introduction = report("reportIntroduction", &patch.report_introduction, MAX_REPORT_METHODOLOGY_LEN)?;
+    let guides_hidden = patch.report_guides_hidden.map(clean_guides_hidden).transpose()?;
     for (key, v) in [
+        (REPORT_NAME_KEY, report_name),
+        (REPORT_EMAIL_KEY, report_email),
+        (REPORT_OSID_KEY, report_osid),
+        (REPORT_METHODOLOGY_KEY, report_methodology),
+        (REPORT_INTRODUCTION_KEY, report_introduction),
         (KALI_USER_KEY, kali_user),
         (WINDOWS_TOOLS_KEY, windows_tools),
         (LINUX_TOOLS_KEY, linux_tools),
@@ -286,6 +366,10 @@ pub fn update(conn: &Connection, patch: SettingsPatch) -> AppResult<Settings> {
     if let Some(m) = machines {
         let json = serde_json::to_string(&m).map_err(|e| AppError::Db(e.to_string()))?;
         put_text(conn, MACHINES_KEY, &json)?;
+    }
+    if let Some(ids) = guides_hidden {
+        let json = serde_json::to_string(&ids).map_err(|e| AppError::Db(e.to_string()))?;
+        put_text(conn, REPORT_GUIDES_HIDDEN_KEY, &json)?;
     }
     get(conn)
 }
@@ -486,5 +570,74 @@ mod tests {
         assert_eq!(nvd_api_key(c), "");
         let n: i64 = c.query_row("SELECT COUNT(*) FROM settings WHERE key='nvd_api_key'", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn settings_report_defaults_round_trip() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let s = get(c).unwrap();
+        assert_eq!((s.report_name.as_str(), s.report_email.as_str(), s.report_osid.as_str(), s.report_methodology.as_str()), ("", "", "", ""));
+        let p = SettingsPatch {
+            report_name: Some("Ada Lovelace".into()),
+            report_email: Some("ada@example.com".into()),
+            report_osid: Some("OS-12345".into()),
+            report_methodology: Some("Scoped to the lab network.".into()),
+            ..Default::default()
+        };
+        let s = update(c, p).unwrap();
+        assert_eq!((s.report_name.as_str(), s.report_email.as_str(), s.report_osid.as_str(), s.report_methodology.as_str()), ("Ada Lovelace", "ada@example.com", "OS-12345", "Scoped to the lab network."));
+        assert_eq!(get(c).unwrap(), s);
+        match update(c, SettingsPatch { report_name: Some("a".repeat(2001)), ..Default::default() }) {
+            Err(AppError::Validation { field, .. }) => assert_eq!(field, "reportName"),
+            o => panic!("{o:?}"),
+        }
+        match update(c, SettingsPatch { report_methodology: Some("a".repeat(20001)), ..Default::default() }) {
+            Err(AppError::Validation { field, .. }) => assert_eq!(field, "reportMethodology"),
+            o => panic!("{o:?}"),
+        }
+        assert_eq!(get(c).unwrap().report_name, "Ada Lovelace");
+    }
+
+    #[test]
+    fn settings_report_introduction_round_trips_and_is_capped() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        assert_eq!(get(c).unwrap().report_introduction, "");
+        let text = "Introduction\nThe report contains all efforts.\nObjective\nAn internal test.";
+        let s = update(c, SettingsPatch { report_introduction: Some(text.into()), ..Default::default() }).unwrap();
+        assert_eq!(s.report_introduction, text);
+        assert_eq!(get(c).unwrap().report_introduction, text);
+        match update(c, SettingsPatch { report_introduction: Some("a".repeat(20001)), ..Default::default() }) {
+            Err(AppError::Validation { field, .. }) => assert_eq!(field, "reportIntroduction"),
+            o => panic!("{o:?}"),
+        }
+    }
+
+    #[test]
+    fn settings_report_guides_round_trip_and_capped() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        assert!(get(c).unwrap().report_guides_hidden.is_empty());
+        let s = update(c, SettingsPatch { report_guides_hidden: Some(vec!["ports".into(), " vuln ".into(), "ports".into()]), ..Default::default() }).unwrap();
+        assert_eq!(s.report_guides_hidden, vec!["ports".to_string(), "vuln".to_string()]);
+        assert_eq!(get(c).unwrap().report_guides_hidden, s.report_guides_hidden);
+        let j = serde_json::to_string(&s).unwrap();
+        assert!(j.contains("\"reportGuidesHidden\":[\"ports\",\"vuln\"]"), "{j}");
+        // a patch without the list keeps it
+        let s = update(c, SettingsPatch { auto_lock_minutes: Some(10), ..Default::default() }).unwrap();
+        assert_eq!(s.report_guides_hidden.len(), 2);
+        // "*" hides all; an empty list shows them again
+        assert_eq!(update(c, SettingsPatch { report_guides_hidden: Some(vec!["*".into()]), ..Default::default() }).unwrap().report_guides_hidden, vec!["*".to_string()]);
+        assert!(update(c, SettingsPatch { report_guides_hidden: Some(vec![]), ..Default::default() }).unwrap().report_guides_hidden.is_empty());
+        let too_many: Vec<String> = (0..201).map(|i| format!("g{i}")).collect();
+        for bad in [vec!["a".repeat(65)], vec!["".into()], too_many] {
+            match update(c, SettingsPatch { report_guides_hidden: Some(bad), ..Default::default() }) {
+                Err(AppError::Validation { field, .. }) => assert_eq!(field, "reportGuidesHidden"),
+                o => panic!("{o:?}"),
+            }
+        }
+        let max: Vec<String> = (0..200).map(|i| format!("{i}{}", "g".repeat(60))).collect();
+        assert_eq!(update(c, SettingsPatch { report_guides_hidden: Some(max), ..Default::default() }).unwrap().report_guides_hidden.len(), 200);
     }
 }

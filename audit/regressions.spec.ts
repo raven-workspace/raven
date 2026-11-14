@@ -1,7 +1,7 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Browser, type Locator, type Page } from "@playwright/test";
 import { AUDIT_NOTE_IDS, AUDIT_NOW, FIXTURES } from "../src/audit/fixtures";
 import { MEANS_HEADER } from "../src/engines/manual/lookup";
-import { SCREENS } from "./screens";
+import { caretAtEnd, garnetOutput, openGarnet, openReportItem, openReportPart, SCREENS } from "./screens";
 
 // Hard regressions: unlike the audit checks, these fail the run.
 
@@ -1170,4 +1170,354 @@ test("Interfaces: the inline subnet is a 24px target and keeps its line height",
   });
   expect(h.btn).toBeGreaterThanOrEqual(24);
   expect(h.line, "not grown by the button").toBe(h.plain);
+});
+
+// ---------------------------------------------------------------- Report: the page as a grader reads it
+
+/** The owner's window: about 1400 wide, the sidebar folded to its rail, so the evidence rail is a column. */
+async function openReportAt1400(page: Page, target: string) {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.clock.install({ time: AUDIT_NOW });
+  await page.goto("/e/e-exam/s/report");
+  const fold = page.getByRole("button", { name: "Collapse sidebar" });
+  await fold.first().waitFor();
+  await fold.first().click();
+  await openReportItem(target)(page);
+  await page.locator(".report-page .ProseMirror > *").first().waitFor();
+}
+
+/** Runs a check in Chromium (the test's page), then in WebKit at the owner's 1400x900: the owner's app is a WKWebView. */
+async function inBothEngines(page: Page, playwright: { webkit: { launch(): Promise<Browser> } }, baseURL: string | undefined, run: (p: Page) => Promise<void>) {
+  await run(page);
+  const browser = await playwright.webkit.launch();
+  try {
+    await run(await browser.newPage({ baseURL, viewport: { width: 1400, height: 900 } }));
+  } finally {
+    await browser.close();
+  }
+}
+
+test("Report: code shows the characters typed, with no font ligatures", async ({ page }) => {
+  await openReportAt1400(page, "garnet");
+  const code = page.locator(".report-page .report-code").first();
+  expect(await code.evaluate((el) => getComputedStyle(el).fontVariantLigatures)).toBe("none");
+});
+
+test("Report: the formatting bar fits its pane at 1400 with the evidence rail open, the core controls in reach", async ({ page }) => {
+  await openReportAt1400(page, "garnet");
+  await expect(page.getByRole("tablist", { name: "Evidence" })).toBeVisible();
+  const bar = page.getByRole("toolbar", { name: "Formatting" });
+  const add = page.getByRole("button", { name: "Add new evidence" });
+  const barBox = (await bar.boundingBox())!;
+  const addBox = (await add.boundingBox())!;
+  // Every control on the bar ends before Add new evidence; the rest are under More.
+  const rights = await bar.locator("button, [role=combobox]").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().right));
+  for (const r of rights) expect(r).toBeLessThanOrEqual(addBox.x);
+  expect(barBox.x + barBox.width).toBeLessThanOrEqual(addBox.x);
+  // The owner's order of what must stay: the core marks, the headings, the two lists, undo and redo.
+  const kept = ["Bold", "Italic", "Inline code", "Link", "Heading 1", "Heading 2", "Heading 3", "Bulleted list", "Numbered list", "Undo", "Redo"];
+  for (const name of kept) await expect(bar.getByRole("button", { name })).toBeVisible();
+  // Find and replace is in reach: on the bar when it fits, else under More.
+  const find = bar.getByRole("button", { name: "Find and replace" });
+  if (!(await find.isVisible())) {
+    await bar.getByRole("button", { name: "More formatting" }).click();
+    await expect(page.getByRole("dialog", { name: "More formatting" }).getByRole("button", { name: "Find and replace" })).toBeVisible();
+  }
+});
+
+test("Report: Esc closes the evidence drawer and stays on the report, in WebKit too", async ({ page, playwright, baseURL }) => {
+  // A 1200 window with the sidebar open: under 1000px of pane, so the rail is a drawer. The drawer mounts after the
+  // engagement's own Esc (back to the dashboard), which once heard the key first.
+  await inBothEngines(page, playwright, baseURL, async (p) => {
+    await p.setViewportSize({ width: 1200, height: 900 });
+    await p.clock.install({ time: AUDIT_NOW });
+    await p.goto("/e/e-exam/s/report");
+    await openGarnet(p);
+    await p.locator("section[aria-label='Report']").getByRole("button", { name: "Evidence", exact: true }).click();
+    const drawer = p.locator("aside.fixed[aria-label='Evidence']");
+    await expect(drawer).toBeVisible();
+    await p.keyboard.press("Escape");
+    await expect(drawer).toHaveCount(0);
+    expect(new URL(p.url()).pathname).toBe("/e/e-exam/s/report");
+  });
+});
+
+test("Report: at the owner's 1400 with the sidebar open, the evidence column opens beside the page, never over it, in WebKit too", async ({ page, playwright, baseURL }) => {
+  await inBothEngines(page, playwright, baseURL, async (p) => {
+    await p.setViewportSize({ width: 1400, height: 900 });
+    await p.clock.install({ time: AUDIT_NOW });
+    await p.goto("/e/e-exam/s/report");
+    await openGarnet(p);
+    await expect(p.getByRole("button", { name: "Collapse sidebar" }).first()).toBeVisible();
+    const toggle = p.locator("section[aria-label='Report']").getByRole("button", { name: "Evidence", exact: true });
+    const paper = p.locator(".report-page");
+    const closedWidth = (await paper.boundingBox())!.width;
+    await toggle.click();
+    const column = p.locator("aside[aria-label='Evidence']");
+    await expect(column.getByRole("tablist", { name: "Evidence" })).toBeVisible();
+    expect(await column.evaluate((el) => getComputedStyle(el).position), "docked, not a drawer").not.toBe("fixed");
+    const page_ = (await paper.boundingBox())!;
+    const col = (await column.boundingBox())!;
+    expect(page_.x + page_.width).toBeLessThanOrEqual(col.x + 0.5);
+    expect(page_.width, "the paper narrows").toBeLessThan(closedWidth);
+    // The paper keeps a readable measure, and its code blocks stay inside it.
+    const text = (await p.locator(".report-page .ProseMirror").boundingBox())!;
+    expect(text.width).toBeGreaterThanOrEqual(560);
+    const over = await p.locator(".report-page .ProseMirror pre").evaluateAll((els) => els.filter((e) => e.scrollWidth > e.clientWidth + 1).length);
+    expect(over).toBe(0);
+    // A toggle the owner controls: the strip's Evidence button closes it again and the paper takes the room back.
+    await toggle.click();
+    await expect(column).toHaveCount(0);
+    await expect.poll(async () => (await paper.boundingBox())!.width).toBe(closedWidth);
+  });
+});
+
+test("Report: every block type takes typing and the log stays as it was, in WebKit", async ({ page, playwright, baseURL }) => {
+  await inBothEngines(page, playwright, baseURL, async (p) => {
+    await p.setViewportSize({ width: 1400, height: 900 });
+    await p.clock.install({ time: AUDIT_NOW });
+    await p.goto("/e/e-exam/s/report");
+    await openGarnet(p);
+    const doc = p.locator(".report-page .ProseMirror");
+    const notesColumn = await doc.locator("table").first().locator("tr").first().locator("th, td").evaluateAll((cells) => cells.findIndex((c) => c.textContent?.trim() === "Notes"));
+    expect(notesColumn, "the ports table has a Notes column").toBeGreaterThanOrEqual(0);
+    const blocks: [string, Locator][] = [
+      ["paragraph", doc.locator(":scope > p").filter({ hasText: /^Vulnerability explanation:/ }).first()],
+      ["step sentence", doc.locator("[data-list-kind='ordered'] .list-content > p").first()],
+      ["code block", garnetOutput(p).locator("pre")],
+      ["ports Notes cell", doc.locator("table").first().locator("tr").nth(1).locator("td").nth(notesColumn)],
+      ["figure caption", doc.locator("figcaption").first()],
+    ];
+    const xs = (l: Locator) => l.evaluate((el) => (el.textContent ?? "").split("X").length - 1);
+    for (const [name, block] of blocks) {
+      const before = await xs(block);
+      await caretAtEnd(p, block);
+      await p.keyboard.type("X");
+      await expect.poll(() => xs(block), name).toBe(before + 1);
+    }
+    // The summary's first hint paragraph: empty, its hint showing, until the owner types.
+    await openReportPart("Front matter", "Summary")(p);
+    const hint = p.locator(".report-page .ProseMirror > p[data-hint]").first();
+    const hintText = await hint.getAttribute("data-hint");
+    await hint.click();
+    await p.waitForTimeout(150);
+    await p.keyboard.type("X");
+    const typed = p.locator(".report-page .ProseMirror > p", { hasText: /^X$/ });
+    await expect(typed, "summary hint paragraph").toHaveCount(1);
+    // Its hint no longer shows: no empty hint paragraph carries that hint any more.
+    const stillShown = await p.locator(".report-page .ProseMirror > p.report-hint").evaluateAll((els, h) => els.filter((e) => e.getAttribute("data-hint") === h).length, hintText);
+    expect(stillShown).toBe(0);
+    // The page is the owner's copy: the command's output in the log is what the terminal printed.
+    await p.getByRole("link", { name: /^Log\b/ }).first().click();
+    await expect.poll(() => new URL(p.url()).pathname).toBe("/e/e-exam/s/log");
+    await p.getByText("Confirm the repository is readable", { exact: true }).click();
+    const output = p.locator("pre").filter({ hasText: /^ref: refs\/heads\/main/ });
+    await expect(output).toHaveText("ref: refs/heads/main");
+  });
+});
+
+test("Report: consecutive blocks never touch, in WebKit at 1400", async ({ page, playwright, baseURL }) => {
+  await inBothEngines(page, playwright, baseURL, async (p) => {
+    await p.setViewportSize({ width: 1400, height: 900 });
+    await p.clock.install({ time: AUDIT_NOW });
+    await p.goto("/e/e-exam/s/report");
+    await openGarnet(p);
+    const gaps = await p.locator(".report-page .ProseMirror").evaluate((root) => {
+      const shown = (el: Element) => {
+        const r = el.getBoundingClientRect();
+        return r.height > 0 && getComputedStyle(el).display !== "none";
+      };
+      const out: { pair: string; gap: number; inList: boolean }[] = [];
+      for (const parent of [root, ...root.querySelectorAll(".list-content")]) {
+        const kids = [...parent.children].filter(shown);
+        for (let i = 1; i < kids.length; i++) {
+          const prev = kids[i - 1]!.getBoundingClientRect();
+          const next = kids[i]!.getBoundingClientRect();
+          const name = (el: Element) => `${el.tagName.toLowerCase()} "${(el.textContent ?? "").slice(0, 30)}"`;
+          out.push({ pair: `${name(kids[i - 1]!)} → ${name(kids[i]!)}`, gap: Math.round((next.top - prev.bottom) * 10) / 10, inList: parent !== root });
+        }
+      }
+      return out;
+    });
+    expect(gaps.length).toBeGreaterThan(20);
+    expect(gaps.filter((g) => g.inList).length, "pairs inside a step").toBeGreaterThan(0);
+    expect(gaps.filter((g) => g.gap < 8)).toEqual([]);
+  });
+});
+
+test("Report: the notice sits clear of the sidebar, expanded and collapsed", async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.clock.install({ time: AUDIT_NOW });
+  await page.goto("/e/e-exam/s/report");
+  await openGarnet(page);
+  await page.getByRole("button", { name: "Add new evidence" }).click();
+  const notice = page.locator("body > [role=status]");
+  // The gap reserves the sidebar's width in the layout but has no height (never "visible"); the fixed container beside
+  // it is the sidebar as drawn, and ends where the gap does.
+  const sidebar = page.locator("[data-slot='sidebar-container']");
+  const clearance = async () => {
+    const gap = (await sidebar.boundingBox())!;
+    return (await notice.boundingBox())!.x - (gap.x + gap.width);
+  };
+  await expect(sidebar).toBeVisible();
+  await expect(notice).toBeVisible();
+  await expect(page.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+  expect(await clearance()).toBeGreaterThanOrEqual(8);
+  await page.getByRole("button", { name: "Collapse sidebar" }).click();
+  await page.getByRole("button", { name: "Expand sidebar" }).waitFor();
+  // The notice may have closed itself (5s): ask again, and it opens where the folded sidebar leaves room.
+  if (!(await notice.isVisible())) await page.getByRole("button", { name: "Add new evidence" }).click();
+  await expect(notice).toBeVisible();
+  await expect(sidebar).toBeVisible();
+  await expect.poll(clearance).toBeGreaterThanOrEqual(8);
+});
+
+test("Report: a long note with an IP in the ports table stays in its cell and on the page, in WebKit", async ({ page, playwright, baseURL }) => {
+  // The owner's app is WebKit (WKWebView), where an automatic table layout once let an IP overprint the next column.
+  await inBothEngines(page, playwright, baseURL, async (p) => {
+    await p.setViewportSize({ width: 1400, height: 900 });
+    await p.clock.install({ time: AUDIT_NOW });
+    await p.goto("/e/e-exam/s/report");
+    await openGarnet(p);
+    const table = p.locator(".report-page .ProseMirror table").first();
+    const notes = await table.locator("tr").first().locator("th, td").evaluateAll((cells) => cells.findIndex((c) => c.textContent?.trim() === "Notes"));
+    expect(notes).toBeGreaterThanOrEqual(0);
+    await caretAtEnd(p, table.locator("tr").nth(1).locator("td").nth(notes));
+    await p.keyboard.type("172.31.166.143 WORKSTATION-FINANCE-WWW-01 admin panel behind basic auth, default credentials rejected");
+    await expect(table).toContainText("172.31.166.143");
+    const result = await table.evaluate((t) => {
+      const doc = t.closest(".ProseMirror")!;
+      const style = getComputedStyle(doc);
+      const contentRight = doc.getBoundingClientRect().right - parseFloat(style.paddingRight);
+      const bad: string[] = [];
+      for (const row of t.querySelectorAll("tr")) {
+        const cells = [...row.querySelectorAll("th, td")];
+        cells.forEach((c, i) => {
+          if (c.scrollWidth > c.clientWidth + 1) bad.push(`cell ${i} overflows: "${c.textContent?.slice(0, 30)}"`);
+          // The cell's text never reaches into the next cell.
+          const range = document.createRange();
+          range.selectNodeContents(c);
+          const textRight = Math.max(...[...range.getClientRects()].map((r) => r.right), 0);
+          const next = cells[i + 1];
+          if (next && textRight > next.getBoundingClientRect().left + 0.5) bad.push(`cell ${i} overlaps cell ${i + 1}: "${c.textContent?.slice(0, 30)}"`);
+        });
+      }
+      return { bad, tableRight: t.getBoundingClientRect().right, contentRight };
+    });
+    expect(result.bad).toEqual([]);
+    expect(result.tableRight).toBeLessThanOrEqual(result.contentRight + 0.5);
+  });
+});
+
+test("Report: table columns size to their content and a word that fits never breaks inside, in WebKit too", async ({ page, playwright, baseURL }) => {
+  // Equal columns once broke "SeImpersonatePrivil|ege" and "CVE-|2023-0386" while # and Step wasted room.
+  await inBothEngines(page, playwright, baseURL, async (p) => {
+    await p.setViewportSize({ width: 1400, height: 900 });
+    await p.clock.install({ time: AUDIT_NOW });
+    await p.goto("/e/e-exam/s/report");
+    /** The table whose header row starts with `first`: each column's width, and every word that fits its cell yet
+     *  spans two lines. */
+    const measure = async (first: string) => {
+      const table = p.locator(".report-page .ProseMirror table").filter({ has: p.locator("tr:first-child > :first-child", { hasText: new RegExp(`^${first}$`) }) }).first();
+      await expect(table).toBeVisible();
+      // Laid out: a page just opened draws its table a frame after the heading.
+      await expect.poll(() => table.locator("tr").first().locator("th, td").first().evaluate((c) => c.getBoundingClientRect().width)).toBeGreaterThan(0);
+      return table.evaluate((t: HTMLTableElement) => {
+        const widths = Object.fromEntries([...t.rows[0]!.cells].map((c) => [c.textContent?.trim() ?? "", c.getBoundingClientRect().width]));
+        const broken: string[] = [];
+        for (const cell of t.querySelectorAll("td, th")) {
+          const style = getComputedStyle(cell);
+          const room = cell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+          const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+          for (let n = walker.nextNode() as Text | null; n; n = walker.nextNode() as Text | null) {
+            for (const m of n.data.matchAll(/\S+/g)) {
+              const range = document.createRange();
+              range.setStart(n, m.index);
+              range.setEnd(n, m.index + m[0].length);
+              const rects = [...range.getClientRects()].filter((r) => r.width > 0);
+              const lines = new Set(rects.map((r) => Math.round(r.top)));
+              const wide = Math.max(...rects.map((r) => r.right)) - Math.min(...rects.map((r) => r.left));
+              if (lines.size > 1 && wide <= room) broken.push(m[0]);
+            }
+          }
+        }
+        const range = document.createRange();
+        const word = [...t.querySelectorAll("td")].flatMap((c) => {
+          const w = document.createTreeWalker(c, NodeFilter.SHOW_TEXT);
+          const out: [Text, number][] = [];
+          for (let n = w.nextNode() as Text | null; n; n = w.nextNode() as Text | null) {
+            const i = n.data.indexOf("SeImpersonatePrivilege");
+            if (i >= 0) out.push([n, i]);
+          }
+          return out;
+        })[0];
+        let rects = -1;
+        if (word) {
+          range.setStart(word[0], word[1]);
+          range.setEnd(word[0], word[1] + "SeImpersonatePrivilege".length);
+          rects = range.getClientRects().length;
+        }
+        return { widths, broken, seImpersonateRects: rects };
+      });
+    };
+
+    await openReportPart("Front matter", "Summary")(p);
+    // With the evidence column docked: the paper at its narrowest at the owner's width.
+    await p.locator("section[aria-label='Report']").getByRole("button", { name: "Evidence", exact: true }).click();
+    await p.getByRole("tablist", { name: "Evidence" }).waitFor();
+    const findings = await measure("#");
+    expect(findings.broken, "words broken in the findings table").toEqual([]);
+    expect(findings.seImpersonateRects, "SeImpersonatePrivilege on one line").toBe(1);
+    expect(findings.widths["#"]!).toBeLessThan(findings.widths["Finding"]!);
+
+    await openReportItem("AD set")(p);
+    await p.locator(".report-page >> role=heading[name=/^5 Active Directory Set$/]").waitFor();
+    const path = await measure("Step");
+    expect(path.broken, "words broken in the attack path").toEqual([]);
+    expect(path.widths["Step"]!).toBeLessThan(path.widths["Technique"]!);
+  });
+});
+
+test("Report: a code token never reaches past its block, at the narrowest report width", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.clock.install({ time: AUDIT_NOW });
+  await page.goto("/e/e-exam/s/report");
+  await openGarnet(page);
+  await page.locator(".report-page .report-token").first().waitFor();
+  const past = await page.locator(".report-page .ProseMirror").evaluate((root) =>
+    [...root.querySelectorAll(".report-token")].flatMap((t) => {
+      const box = (t.closest("pre") ?? t.closest("p, td, th, figcaption"))!.getBoundingClientRect();
+      const r = t.getBoundingClientRect();
+      return r.right > box.right + 0.5 || r.left < box.left - 0.5 ? [`"${t.textContent}" ${Math.round(r.right - box.right)}px past`] : [];
+    }),
+  );
+  expect(past).toEqual([]);
+});
+
+test("Report: dragging a screenshot's corner resizes it, and Full width puts it back, in WebKit too", async ({ page, playwright, baseURL }) => {
+  await inBothEngines(page, playwright, baseURL, async (p) => {
+    await p.setViewportSize({ width: 1400, height: 900 });
+    await p.clock.install({ time: AUDIT_NOW });
+    await p.goto("/e/e-exam/s/report");
+    await openGarnet(p);
+    const fig = p.locator(".report-page .report-plain-figure").first();
+    await fig.scrollIntoViewIfNeeded();
+    const img = fig.locator(".report-resizable img");
+    await expect(img).toBeVisible();
+    const before = (await img.boundingBox())!.width;
+    await fig.hover();
+    const handle = fig.locator(".report-resize-handle");
+    await expect(handle).toBeVisible();
+    const h = (await handle.boundingBox())!;
+    await p.mouse.move(h.x + h.width / 2, h.y + h.height / 2);
+    await p.mouse.down();
+    await p.mouse.move(h.x - 200, h.y - 100, { steps: 8 });
+    await p.mouse.up();
+    await expect.poll(async () => (await img.boundingBox())!.width).toBeLessThan(before - 100);
+    // The size is the page's: Full width in the block menu clears it.
+    await fig.hover();
+    await p.getByRole("button", { name: "Block actions" }).first().click();
+    await p.getByRole("menuitem", { name: "Full width" }).click();
+    await expect.poll(async () => Math.round((await img.boundingBox())!.width)).toBe(Math.round(before));
+  });
 });

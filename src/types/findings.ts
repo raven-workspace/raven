@@ -66,14 +66,23 @@ export interface FindingFile {
   name: string;
   language: string | null;
   content: string;
+  /** True when this exploit was adapted from a public one. */
+  modified: boolean;
+  originalUrl: string | null;
+  /** The unmodified original, up to 1 MiB. */
+  originalContent: string | null;
   createdAt: number;
   updatedAt: number;
 }
 
+/** On update, a modified/originalUrl/originalContent that is absent keeps its current value; a blank string clears it. */
 export interface FindingFileInput {
   name: string;
   language?: string | null;
   content: string;
+  modified?: boolean;
+  originalUrl?: string | null;
+  originalContent?: string | null;
 }
 
 /** Mirrors the Rust `FailedAttempt`. */

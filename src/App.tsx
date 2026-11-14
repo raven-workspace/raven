@@ -14,6 +14,8 @@ import { useVault, VaultGate } from "./features/vault/VaultGate";
 // Dev-only component gallery. `import.meta.env.DEV` is false in builds, so the
 // route and its chunk are dropped from release bundles.
 const UiGallery = import.meta.env.DEV ? lazy(() => import("./dev/UiGallery")) : null;
+// Audit mode only (`npm run dev:audit`): the sample report's §4.1 beside Raven's plain draft of the garnet fixture.
+const ReportCompare = import.meta.env.MODE === "audit" ? lazy(() => import("./dev/ReportCompare")) : null;
 
 function SettingsRoute() {
   useEscapeTo("/");
@@ -35,6 +37,16 @@ export default function App() {
         <Route path="manual/:noteId?" element={<ManualPage />} />
         <Route path="payloads" element={<PayloadsWorkbench />} />
         <Route path="settings" element={<SettingsRoute />} />
+        {ReportCompare && (
+          <Route
+            path="__compare/garnet"
+            element={
+              <Suspense fallback={null}>
+                <ReportCompare />
+              </Suspense>
+            }
+          />
+        )}
         {UiGallery && (
           <Route
             path="__ui"

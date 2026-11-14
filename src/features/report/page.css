@@ -1,0 +1,687 @@
+/* The report page: provisional house style (spec §4.3). The style round replaces values, not selectors. */
+
+.report-page {
+  --page-paper: #f4f3ef;
+  --page-ink: #16161a;
+  --page-code-bg: #e9e7e1;
+  --page-placeholder: #66655f;
+  /* Hints the editor shows and the page never prints. */
+  --page-muted: var(--page-placeholder);
+  --page-rule: #d6d3cb;
+  --page-amber-ink: #7a5414;
+  --page-amber-line: #b3802a;
+  /* Highlight and find matches: a warm tint that prints as a light grey. */
+  --page-mark: #ece3b8;
+  /* Code tokens: ink tones only (house style), strings and values a step lighter. */
+  --page-string: #3d4a2c;
+  --page-token: #2c3a52;
+  --page-sans: "Instrument Sans Variable", system-ui, sans-serif;
+  --page-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  position: relative;
+  display: grid;
+  /* 760px of text plus the 40px gutters inside the editor, where the drag handle sits. */
+  grid-template-columns: minmax(0, 840px);
+  justify-content: center;
+  padding: 32px 0;
+  background: var(--page-paper);
+  color: var(--page-ink);
+  font-family: var(--page-sans);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+/* Every block on the page (code, figures, tables, text) sits 12px from the next; figures and tables need no rule of their own. */
+.report-page .ProseMirror {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 12px;
+  /* The gutters are part of the editor, so hovering one still finds the block beside it. */
+  padding: 0 40px;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.report-page p,
+.report-page ul,
+.report-page ol,
+.report-page h1,
+.report-page h2,
+.report-page h3,
+.report-page h4,
+.report-page figure,
+.report-page pre {
+  margin: 0;
+}
+
+.report-page ul,
+.report-page ol {
+  padding-left: 24px;
+}
+
+.report-page ul {
+  list-style: disc;
+}
+
+.report-page ol {
+  list-style: decimal;
+}
+
+/* The owner's lists (ProseKit's flat lists, one block per item): a bullet or a number in a 24px hanging indent, items
+   of one list 4px apart rather than a block gap. */
+.report-page .prosemirror-flat-list {
+  position: relative;
+  padding-left: 24px;
+}
+
+.report-page .prosemirror-flat-list > .list-marker {
+  position: absolute;
+  left: 0;
+  width: 24px;
+}
+
+.report-page .prosemirror-flat-list[data-list-kind="bullet"]::before {
+  content: "•";
+  position: absolute;
+  left: 8px;
+}
+
+.report-page .prosemirror-flat-list[data-list-kind="ordered"] {
+  counter-increment: report-list;
+}
+
+.report-page :not(.prosemirror-flat-list[data-list-kind="ordered"]) + .prosemirror-flat-list[data-list-kind="ordered"],
+.report-page .prosemirror-flat-list[data-list-kind="ordered"]:first-child {
+  counter-reset: report-list;
+  counter-increment: report-list;
+}
+
+.report-page .prosemirror-flat-list[data-list-kind="ordered"]::before {
+  content: counter(report-list) ".";
+  position: absolute;
+  left: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Consecutive list items keep the page's 12px block gap: no negative margin pulls them together. */
+.report-page .ProseMirror > .prosemirror-flat-list + .prosemirror-flat-list {
+  margin-top: 0;
+}
+
+.report-page h1,
+.report-page h2 {
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.report-page h3,
+.report-page h4 {
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 600;
+}
+
+.report-page code,
+.report-page pre,
+.report-page .report-code {
+  font-family: var(--page-mono);
+  font-size: 13px;
+  line-height: 19px;
+  /* JetBrains Mono would draw "=>" as an arrow and "!=" as a sign: code must show the characters typed. */
+  font-variant-ligatures: none;
+}
+
+/* The tint reaches past the text without padding, so code next to a bracket or quote leaves no gap: "(`x`)" reads
+   as "(x)". */
+.report-page code {
+  background: var(--page-code-bg);
+  padding: 0;
+  border-radius: 2px;
+  box-shadow: -2px 0 0 var(--page-code-bg), 2px 0 0 var(--page-code-bg);
+}
+
+/* A short code token (the editor marks it) moves to the next line whole rather than wrapping at a hyphen inside it.
+   Wider than its block, it still breaks to fit: it never pushes past the block's edge. */
+.report-page .report-token {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+/* A code block wraps to the page from its first paint, before its view (language picker, tint) mounts around it. */
+.report-page .ProseMirror pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.report-page .report-code {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 8px 12px;
+  background: var(--page-code-bg);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.report-page .report-figure {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 8px;
+}
+
+.report-page .report-figure img {
+  max-width: 100%;
+  max-height: none;
+  border-color: var(--page-rule);
+}
+
+.report-page .report-figure figcaption {
+  color: var(--page-placeholder);
+}
+
+/* A page's chapter title ("3 Methodologies"), numbered from the outline: above the editor, inside the same side
+   margins, a step above the page's own headings. */
+.report-page .report-title {
+  padding: 0 40px 16px;
+  font-size: 26px;
+  line-height: 32px;
+}
+
+/* A heading's number, as OffSec's sample sets it: the number, then a fixed gap before the words. */
+.report-page .report-num {
+  display: inline-block;
+  min-width: 48px;
+  margin-right: 8px;
+}
+
+/* A numbered report-level page's sub-sections (3.1, 3.2) and a target's machine heading (4.2): the number is computed
+   from the outline (headings.ts) and set on the heading by the editor; a heading the owner adds has none. */
+.report-page .ProseMirror > :is(h1, h2)[data-number]::before {
+  content: attr(data-number);
+  display: inline-block;
+  min-width: 48px;
+  margin-right: 8px;
+}
+
+/* Text copied from the log (a note, observations, a command edited on the page) whose entry is now private or was
+   deleted: amber like the placeholder, with the reason above it. The text stays the owner's to keep or cut. */
+.report-page [data-source-gone] {
+  padding: 8px 12px;
+  border: 1px dashed var(--page-amber-line);
+  border-radius: 4px;
+}
+
+.report-page [data-source-gone]::before {
+  display: block;
+  margin-bottom: 4px;
+  font-family: var(--page-sans);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 400;
+  color: var(--page-amber-ink);
+  white-space: normal;
+}
+
+.report-page [data-source-gone="private"]::before {
+  content: "Copied from an entry that is now private";
+}
+
+.report-page [data-source-gone="deleted"]::before {
+  content: "Copied from an entry that was deleted";
+}
+
+/* Selected text on paper reads as ink on a paper highlight, not the app's light-on-dark selection. */
+.report-page ::selection {
+  background: var(--page-rule);
+  color: var(--page-ink);
+}
+
+/* A selected block shows its outline, not the browser's text highlight (ProseMirror's own rule; its stylesheet isn't loaded). */
+.report-page .ProseMirror-hideselection *::selection {
+  background: transparent;
+}
+
+.report-page .ProseMirror-hideselection {
+  caret-color: transparent;
+}
+
+/* Drag handle: in the left gutter beside the hovered block. Ink on paper, as the page's own controls are. */
+
+.report-page > .report-handle-root {
+  display: contents;
+}
+
+.report-page .report-handle {
+  z-index: 10;
+}
+
+.report-page .report-handle-popup {
+  display: grid;
+  transition: opacity 120ms cubic-bezier(0.16, 1, 0.3, 1); /* EASE_OUT, src/ui/motion.ts */
+}
+
+.report-page .report-handle-popup[data-state="closed"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.report-page .report-handle-grip {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  color: var(--page-placeholder);
+  cursor: grab;
+}
+
+.report-page .report-handle-grip:hover {
+  color: var(--page-ink);
+  background: var(--page-code-bg);
+}
+
+/* The block menu's ⋯ sits under the grip; a click, not a drag. */
+.report-page .report-handle-menu {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.report-page .report-handle-grip[data-dragging] {
+  cursor: grabbing;
+}
+
+/* Where a dragged block will land. */
+.report-page .report-drop {
+  z-index: 10;
+  background: var(--page-ink);
+  border-radius: 1px;
+}
+
+/* The block being dragged stays visible in place, faded, until it lands. */
+.report-page .ProseMirror.prosekit-dragging .ProseMirror-selectednode {
+  opacity: 0.4;
+}
+
+/* The owner's own blocks: quotes, dividers, tables, code blocks, the text marks. One house style, no colours. */
+
+.report-page a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.report-page blockquote {
+  margin: 0;
+  padding-left: 16px;
+  border-left: 2px solid var(--page-rule);
+  display: grid;
+  row-gap: 8px;
+}
+
+.report-page .prosekit-horizontal-rule {
+  padding: 8px 0;
+}
+
+.report-page .prosekit-horizontal-rule hr {
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--page-rule);
+}
+
+.report-page .prosekit-horizontal-rule.ProseMirror-selectednode hr {
+  border-top-color: var(--page-ink);
+}
+
+.report-page mark {
+  background: var(--page-mark);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.report-page sub,
+.report-page sup {
+  /* The floor: nothing on the page under 12px. */
+  font-size: 12px;
+  line-height: 0;
+}
+
+/* A table on the page (the draft's ports and findings tables, or one the owner writes): hairlines, a header row in
+   bold over an ink rule. Columns size to their content: a short column (#, Port, Severity) fits its words, the text
+   column takes the rest. A dragged column keeps at least its dragged width. */
+.report-page .tableWrapper {
+  overflow-x: auto;
+}
+
+/* ProseKit wraps each table in .tableWrapper. Automatic layout: no column is narrower than its longest word. */
+.report-page .tableWrapper table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+/* A cell breaks only between words (not "anywhere", as the rest of the page may): its longest word is the column's
+   floor, so a word that fits never breaks inside. The editor marks a cell's longer words (cellWords). */
+.report-page .tableWrapper td,
+.report-page .tableWrapper th {
+  position: relative;
+  box-sizing: border-box;
+  vertical-align: top;
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--page-rule);
+  overflow-wrap: break-word;
+}
+
+/* A short word with a hyphen, dot or slash ("CVE-2021-3156", "10.10.30.31") stays on one line. */
+.report-page .report-cell-word {
+  white-space: nowrap;
+}
+
+/* A long word's parts ("C:\", "Windows\", "PrintSpoofer64.exe"): each whole, a line may break between them. */
+.report-page .report-cell-part {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+/* Longer than any column should be (a hash, a token with no marks): breaks anywhere to fit, never past the cell. */
+.report-page .report-cell-long {
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-width: 100%;
+}
+
+.report-page .tableWrapper th {
+  font-weight: 600;
+  border-bottom-color: var(--page-ink);
+}
+
+.report-page .ProseMirror .selectedCell {
+  background: var(--page-code-bg);
+}
+
+.report-page .ProseMirror .column-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -2px;
+  width: 4px;
+  z-index: 5;
+  pointer-events: none;
+  background: var(--page-ink);
+}
+
+.report-page .ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+
+/* Where a dragged row or column will land. */
+.report-page .report-table-drop {
+  background: var(--page-ink);
+}
+
+/* A code block: the page's code tint, coloured by token in ink tones only (no colour on paper).
+   Its language picker is Ink chrome in the top right corner, shown while hovered or typed in; it never prints. */
+.report-page .report-codeblock {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.report-page .report-codeblock pre > code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  white-space: pre-wrap;
+}
+
+.report-page .report-codeblock-lang {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms cubic-bezier(0.16, 1, 0.3, 1); /* FADE_MS, EASE_OUT: src/ui/motion.ts */
+}
+
+.report-page .report-codeblock:hover .report-codeblock-lang,
+.report-page .report-codeblock[data-active] .report-codeblock-lang,
+.report-page .report-codeblock-lang:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* The app's own token colours (Ink, global.css) never reach the paper: ink first, then the house tones below. */
+.report-page .report-codeblock [class*="hljs-"] {
+  color: var(--page-ink);
+}
+
+.report-page .report-codeblock .hljs-keyword,
+.report-page .report-codeblock .hljs-selector-tag,
+.report-page .report-codeblock .hljs-built_in,
+.report-page .report-codeblock .hljs-section {
+  font-weight: 700;
+}
+
+.report-page .report-codeblock .hljs-comment,
+.report-page .report-codeblock .hljs-quote,
+.report-page .report-codeblock .hljs-meta {
+  color: var(--page-placeholder);
+  font-style: italic;
+}
+
+.report-page .report-codeblock .hljs-string,
+.report-page .report-codeblock .hljs-regexp {
+  color: var(--page-string);
+}
+
+.report-page .report-codeblock .hljs-number,
+.report-page .report-codeblock .hljs-literal,
+.report-page .report-codeblock .hljs-attr,
+.report-page .report-codeblock .hljs-attribute,
+.report-page .report-codeblock .hljs-variable {
+  color: var(--page-token);
+}
+
+/* Task lists: the checkbox in the 24px hanging indent where a bullet would be. */
+.report-page .prosemirror-flat-list[data-list-kind="task"] > .list-marker {
+  display: grid;
+  place-items: center;
+  height: 22px;
+}
+
+.report-page .prosemirror-flat-list[data-list-kind="task"] > .list-marker input {
+  margin: 0;
+  accent-color: var(--page-ink);
+  cursor: pointer;
+}
+
+.report-page .prosemirror-flat-list[data-list-kind="task"][data-list-checked] > .list-content {
+  color: var(--page-placeholder);
+  text-decoration: line-through;
+}
+
+/* An empty block with the cursor in it says what to do; never printed. */
+.report-page .prosekit-placeholder::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  height: 0;
+  color: var(--page-placeholder);
+  pointer-events: none;
+}
+
+/* A figure whose screenshot file is gone: the page's amber ink, readable on the paper. */
+.report-page .report-missing {
+  color: var(--page-amber-ink);
+}
+
+/* An empty paragraph's hint ("What the engagement was"), at the page's 14px, until the owner types; never printed.
+   Out of the flow, as the placeholder is, so the caret sits at the line's start. */
+.report-page p.report-hint::before {
+  content: attr(data-hint);
+  position: absolute;
+  height: 0;
+  color: var(--page-muted);
+  pointer-events: none;
+}
+
+/* A list item holds a sentence, code and figures: the page's block gap between them. */
+.report-page .list-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 12px;
+}
+
+/* The / and query typed for the slash menu. */
+.report-page .prosekit-autocomplete-match {
+  background: var(--page-code-bg);
+  border-radius: 2px;
+}
+
+/* Find and replace: every match tinted, the current one in ink. */
+.report-page .ProseMirror-search-match {
+  background: var(--page-mark);
+}
+
+.report-page .ProseMirror-active-search-match {
+  background: var(--page-ink);
+  color: var(--page-paper);
+}
+
+/* A text selection the bubble menu acts on, kept visible while focus is in the menu. */
+.report-page .prosekit-virtual-selection {
+  background: var(--page-rule);
+}
+
+.report-page .ProseMirror-gapcursor {
+  position: relative;
+  display: none;
+  pointer-events: none;
+}
+
+.report-page .ProseMirror-gapcursor::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  display: block;
+  width: 20px;
+  border-top: 1px solid var(--page-ink);
+}
+
+.report-page .ProseMirror-focused .ProseMirror-gapcursor {
+  display: block;
+}
+
+/* The owner's headings (Heading 1 to 3): a step under the page's numbered section headings (22px, with their number),
+   so the drafted structure still reads first; 1 > 2 > 3 by size, 3 by weight alone. They never take a number. Only
+   heading nodes themselves (at the top level, or inside a quote, a list item or a table cell). */
+.report-page .ProseMirror > h1:not([data-number]),
+.report-page .ProseMirror :is(blockquote, .list-content, td, th) > h1 {
+  font-size: 19px;
+  line-height: 26px;
+  font-weight: 600;
+  padding-top: 4px;
+}
+
+.report-page .ProseMirror > h2:not([data-number]),
+.report-page .ProseMirror :is(blockquote, .list-content, td, th) > h2 {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.report-page .ProseMirror > h3,
+.report-page .ProseMirror :is(blockquote, .list-content, td, th) > h3 {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* On a target or AD page only the machine headings carry a number ("4.1", "4.2.1" in an AD set). Every other heading
+   (a phase's, the owner's own) is 15px or under and differs by weight and spacing, so none outranks a machine. */
+.report-page[data-page="target"] .ProseMirror > h1:not([data-number]),
+.report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h1 {
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 700;
+  padding-top: 8px;
+}
+
+.report-page[data-page="target"] .ProseMirror > h2:not([data-number]),
+.report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h2 {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 700;
+  padding-top: 4px;
+}
+
+.report-page[data-page="target"] .ProseMirror > h3,
+.report-page[data-page="target"] .ProseMirror :is(blockquote, .list-content, td, th) > h3 {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 600;
+  font-style: italic;
+}
+
+/* A screenshot on a plain page (the `figure` node): the image, then its caption as the owner's text, numbered by the
+   page in document order. */
+.report-page .ProseMirror {
+  counter-reset: report-figure;
+}
+
+.report-page .report-plain-figure {
+  counter-increment: report-figure;
+}
+
+/* "Figure N. " then the caption text on the same line, wrapping under itself. */
+.report-page .report-plain-caption {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  color: var(--page-placeholder);
+}
+
+.report-page .report-plain-caption::before {
+  content: "Figure " counter(report-figure) ".\00a0";
+  white-space: pre;
+}
+
+/* A screenshot's size: drag the bottom-right corner (shown while the figure is hovered, selected or being resized). */
+.report-page .report-resizable {
+  position: relative;
+  display: block;
+  max-width: 100%;
+  justify-self: start;
+}
+
+.report-page .report-resizable img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: none;
+}
+
+.report-page .report-resize-handle {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--page-ink);
+  border-radius: 2px;
+  background: var(--page-paper);
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 120ms cubic-bezier(0.16, 1, 0.3, 1); /* FADE_MS, EASE_OUT: src/ui/motion.ts */
+}
+
+.report-page .report-plain-figure:hover .report-resize-handle,
+.report-page .ProseMirror-selectednode .report-resize-handle,
+.report-page .report-resizable[data-resizing] .report-resize-handle {
+  opacity: 1;
+}

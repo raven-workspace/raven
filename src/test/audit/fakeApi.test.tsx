@@ -110,13 +110,14 @@ describe("audit fake api", () => {
     const exam = await api.engagementGet("e-exam");
     expect(exam.kind).toBe("exam-sim");
     expect(exam.msfHostId).toBe("h-exam-ms01");
-    expect(await api.hostsList("e-exam")).toHaveLength(5);
+    expect(await api.hostsList("e-exam")).toHaveLength(8);
 
     const entries = await api.logList("e-lab");
     expect(entries.length).toBeGreaterThanOrEqual(25);
     const shots = entries.filter((e) => e.kind === "screenshot");
     expect(shots).toHaveLength(4);
-    const declared = Object.values(AUDIT_PNGS).map((p) => `${p.width}x${p.height}`).sort();
+    // The lab's four flat shapes; the rendered terminal shots belong to the mock exam.
+    const declared = [AUDIT_PNGS.wide, AUDIT_PNGS.tall, AUDIT_PNGS.hd, AUDIT_PNGS.tiny].map((p) => `${p.width}x${p.height}`).sort();
     const actual: string[] = [];
     for (const s of shots) {
       if (s.content.kind !== "screenshot") throw new Error("not a screenshot");
