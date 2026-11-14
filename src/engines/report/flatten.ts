@@ -143,9 +143,9 @@ function textBlocks(t: EvidenceText, entryId: string, http: boolean, keep: unkno
   });
 }
 
-const figure = (attachmentId: string, caption: string, entryId: string): ReportNode => ({
+const figure = (attachmentId: string, caption: string, entryId: string, width: unknown = null): ReportNode => ({
   type: "figure",
-  attrs: { attachmentId, entryId, source: `entry:${entryId}` },
+  attrs: { attachmentId, entryId, source: `entry:${entryId}`, ...(typeof width === "number" && width > 0 ? { width: Math.round(width) } : {}) },
   ...(caption.trim() ? { content: [text(caption.trim())] } : {}),
 });
 
@@ -167,7 +167,7 @@ function evidence(n: ReportNode, ctx: Ctx): ReportNode[] {
 
   if (entry?.content.kind === "screenshot") {
     const c = entry.content;
-    return [figure(c.attachmentId, caption ?? (c.caption.trim() || entry.title), entry.id)];
+    return [figure(c.attachmentId, caption ?? (c.caption.trim() || entry.title), entry.id, attrs.width)];
   }
   const flagPicture = (): ReportNode[] =>
     entry?.content.kind === "flag" && entry.content.attachmentId ? [figure(entry.content.attachmentId, caption ?? `${entry.content.flagKind}.txt`, entry.id)] : [];

@@ -1493,3 +1493,31 @@ test("Report: a code token never reaches past its block, at the narrowest report
   );
   expect(past).toEqual([]);
 });
+
+test("Report: dragging a screenshot's corner resizes it, and Full width puts it back, in WebKit too", async ({ page, playwright, baseURL }) => {
+  await inBothEngines(page, playwright, baseURL, async (p) => {
+    await p.setViewportSize({ width: 1400, height: 900 });
+    await p.clock.install({ time: AUDIT_NOW });
+    await p.goto("/e/e-exam/s/report");
+    await openGarnet(p);
+    const fig = p.locator(".report-page .report-plain-figure").first();
+    await fig.scrollIntoViewIfNeeded();
+    const img = fig.locator(".report-resizable img");
+    await expect(img).toBeVisible();
+    const before = (await img.boundingBox())!.width;
+    await fig.hover();
+    const handle = fig.locator(".report-resize-handle");
+    await expect(handle).toBeVisible();
+    const h = (await handle.boundingBox())!;
+    await p.mouse.move(h.x + h.width / 2, h.y + h.height / 2);
+    await p.mouse.down();
+    await p.mouse.move(h.x - 200, h.y - 100, { steps: 8 });
+    await p.mouse.up();
+    await expect.poll(async () => (await img.boundingBox())!.width).toBeLessThan(before - 100);
+    // The size is the page's: Full width in the block menu clears it.
+    await fig.hover();
+    await p.getByRole("button", { name: "Block actions" }).first().click();
+    await p.getByRole("menuitem", { name: "Full width" }).click();
+    await expect.poll(async () => Math.round((await img.boundingBox())!.width)).toBe(Math.round(before));
+  });
+});

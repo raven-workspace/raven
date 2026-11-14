@@ -28,7 +28,7 @@ function walkItems(e: KeyboardEvent<HTMLDivElement>) {
 /**
  * The page's drag handle: hovering a block shows it in the left gutter, and dragging it moves the block (attrs and
  * all, in one undoable step) to where the drop line shows. Beside it, ⋯ opens the block's menu: Refresh (from the log,
- * a finding or Raven) where the block's source can be written again, and Delete. Refresh replaces the block's whole
+ * a finding or Raven) where the block's source can be written again, Full width on a resized screenshot, and Delete. Refresh replaces the block's whole
  * run (`sourceRun`); when the owner has edited it, it asks first. No add button: insertion stays in the evidence rail.
  */
 export function BlockHandle() {
@@ -117,6 +117,20 @@ export function BlockHandle() {
                       }}
                     >
                       {refreshLabel(run.source)}
+                    </button>
+                  )}
+                  {menu?.node.type.name === "figure" && menu.node.attrs.width != null && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={ITEM}
+                      onClick={() => {
+                        const { pos, node } = menu;
+                        if (editor.state.doc.nodeAt(pos) === node) editor.view.dispatch(editor.state.tr.setNodeAttribute(pos, "width", null));
+                        done();
+                      }}
+                    >
+                      Full width
                     </button>
                   )}
                   <button

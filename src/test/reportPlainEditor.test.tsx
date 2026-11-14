@@ -200,6 +200,26 @@ describe("one plain schema for every page", () => {
     expect(html).not.toContain(">abc<");
   });
 
+  it("a resized figure keeps its width for the PDF; a bad width is full width", () => {
+    const sized = { ...figure("a-1", "Root shell", "l-1"), attrs: { attachmentId: "a-1", entryId: "l-1", width: 420 } };
+    const odd = { ...figure("a-2", "Other", "l-1"), attrs: { attachmentId: "a-2", entryId: "l-1", width: -3 } };
+    const html = createEditor({ extension: defineReportExtension(), defaultContent: doc([sized, odd]) as NodeJSON }).getDocHTML();
+    expect(html).toContain('data-width="420"');
+    expect(html).toContain('<img data-attachment="a-1" alt="" style="width: 420px; max-width: 100%;">');
+    expect(html).toContain('<img data-attachment="a-2" alt="">');
+    const back = createEditor({ extension: defineReportExtension(), defaultContent: doc([]) as NodeJSON });
+    back.setContent(html);
+    expect(back.state.doc.child(0).attrs.width).toBe(420);
+    expect(back.state.doc.child(1).attrs.width).toBeNull();
+  });
+
+  it("a screenshot on the page has a corner to resize it", async () => {
+    m.attachmentGet.mockResolvedValue({ id: "a-1", mime: "image/png", dataBase64: "AAAA" });
+    await ready(doc([{ ...figure("a-1", "Root shell", "l-1"), attrs: { attachmentId: "a-1", entryId: "l-1", width: 420 } }]));
+    await waitFor(() => expect(document.querySelector(".report-plain-figure img")).not.toBeNull());
+    expect(document.querySelector('.report-plain-figure .report-resizable [aria-label="Resize the screenshot"]')).not.toBeNull();
+  });
+
   it("a figure whose screenshot file is missing says so and stays editable", async () => {
     m.attachmentGet.mockRejectedValue(new RavenError("not_found", "gone"));
     const editor = await ready(doc([figure("a-missing", "Root shell", "l-1")]));

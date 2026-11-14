@@ -159,6 +159,14 @@ describe("flattenToPlain", () => {
     expect(textOf(ports!)).toContain("Admin panel on 8080");
   });
 
+  it("keeps a resized screenshot's width on its figure", () => {
+    const resized = (n: ReportNode): ReportNode =>
+      n.type === "evidence" && n.attrs?.entryId === "l-exam-web01-root-shot" ? { ...n, attrs: { ...n.attrs, width: 420.4 } } : { ...n, ...(n.content ? { content: n.content.map(resized) } : {}) };
+    const flat = flattenToPlain(resized(layout5), exam, web01Target, {});
+    const figure = all(flat).find((n) => n.type === "figure" && n.attrs?.entryId === "l-exam-web01-root-shot")!;
+    expect(figure.attrs?.width).toBe(420);
+  });
+
   it("applies an evidence copy's kept ranges, the gaps written as omitted lines", () => {
     const doc: ReportNode = {
       type: "doc",

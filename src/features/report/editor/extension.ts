@@ -51,6 +51,7 @@ import { hljsParser } from "./codeHighlight";
 import { moveCell } from "./commands";
 import { CodeBlockView } from "./nodes/CodeBlockView";
 import { FigureView } from "./nodes/FigureView";
+import { figureWidth } from "./nodes/figureWidth";
 
 /** Clicks and typing in controls inside a node view (the code block's language picker) stay with the control, not
  *  ProseMirror. */
@@ -87,26 +88,39 @@ const sourcedAttrs = () =>
   );
 
 /** A screenshot on the page: the image (by attachment) and its caption, ordinary editable text. The HTML is the PDF's
- *  contract: it fills `img[data-attachment]` with the file. */
+ *  contract: it fills `img[data-attachment]` with the file. `width` is the size it was dragged to, in CSS px at the
+ *  page's measure; null = full width. */
 const figureSpec = defineNodeSpec({
   name: "figure",
   group: "block",
   content: "inline*",
   draggable: true,
-  attrs: { attachmentId: { default: "" }, entryId: { default: null } },
+  attrs: { attachmentId: { default: "" }, entryId: { default: null }, width: { default: null } },
   parseDOM: [
     {
       tag: 'figure[data-report="figure"]',
       contentElement: "figcaption",
-      getAttrs: (dom: HTMLElement) => ({ attachmentId: dom.getAttribute("data-attachment") ?? "", entryId: dom.getAttribute("data-entry") }),
+      getAttrs: (dom: HTMLElement) => ({
+        attachmentId: dom.getAttribute("data-attachment") ?? "",
+        entryId: dom.getAttribute("data-entry"),
+        width: figureWidth(dom.getAttribute("data-width")),
+      }),
     },
   ],
-  toDOM: (node: PMNode) => [
-    "figure",
-    { "data-report": "figure", "data-attachment": node.attrs.attachmentId as string, ...(node.attrs.entryId ? { "data-entry": node.attrs.entryId as string } : {}) },
-    ["img", { "data-attachment": node.attrs.attachmentId as string, alt: "" }],
-    ["figcaption", 0],
-  ],
+  toDOM: (node: PMNode) => {
+    const width = figureWidth(node.attrs.width);
+    return [
+      "figure",
+      {
+        "data-report": "figure",
+        "data-attachment": node.attrs.attachmentId as string,
+        ...(node.attrs.entryId ? { "data-entry": node.attrs.entryId as string } : {}),
+        ...(width !== null ? { "data-width": String(width) } : {}),
+      },
+      ["img", { "data-attachment": node.attrs.attachmentId as string, alt: "", ...(width !== null ? { style: `width: ${width}px; max-width: 100%` } : {}) }],
+      ["figcaption", 0],
+    ];
+  },
 });
 
 /** Whether a paragraph is empty and has a hint to show. */
