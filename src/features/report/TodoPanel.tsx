@@ -1,4 +1,4 @@
-import { Check as CheckIcon, Circle, WarningCircle, X } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, Check as CheckIcon, Circle, WarningCircle, X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { groupChecks, type Check, type CheckGroup, type FlagKind } from "../../engines/report";
 import { cx } from "../../lib/cx";
@@ -13,16 +13,19 @@ export interface CheckAction {
 /**
  * The open target's checks, in plain words, one line per kind: several checks of a kind read as a count ("12 steps
  * have no explanation") and each click on the row takes the page to the next of them. The picked check
- * shows which one it is, its fix (in a disclosure) and its one-press action under its row.
+ * shows which one it is, its fix (in a disclosure), its one-press action and Dismiss (a false positive) under its row.
  */
 export function CheckList({
   checks,
   onPick,
   actionFor,
+  onDismiss,
 }: {
   checks: Check[];
   onPick(check: Check): void;
   actionFor?(check: Check): CheckAction | undefined;
+  /** Takes checks off the list (a false positive), by id. */
+  onDismiss?(ids: string[]): void;
 }) {
   const [picked, setPicked] = useState<{ key: string; at: number } | null>(null);
   const [fixOpen, setFixOpen] = useState(false);
@@ -85,10 +88,24 @@ export function CheckList({
                       <code className="block py-1 pl-6 font-mono text-meta text-fg-2 [overflow-wrap:anywhere]">{check.fix}</code>
                     </Disclosure>
                   )}
-                  {action && (
-                    <Button size="sm" className="justify-self-start" onClick={action.run}>
-                      {action.label}
-                    </Button>
+                  {(action || onDismiss) && (
+                    <div className="grid auto-cols-max grid-flow-col justify-start gap-2">
+                      {action && (
+                        <Button size="sm" onClick={action.run}>
+                          {action.label}
+                        </Button>
+                      )}
+                      {onDismiss && (
+                        <Button size="sm" onClick={() => onDismiss([check.id])}>
+                          Dismiss
+                        </Button>
+                      )}
+                      {onDismiss && many && (
+                        <Button size="sm" onClick={() => onDismiss(g.checks.map((c) => c.id))}>
+                          {`Dismiss all ${g.checks.length}`}
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -136,7 +153,8 @@ export function ExpectedFlags({
 
 
 /**
- * The open tab's To do (§10.1): its checks in plain words, and a target's expected flags, at the top of the page pane.
+ * The open tab's To do (§10.1): its checks in plain words, the ones the owner dismissed (folded, each can come back),
+ * and a target's expected flags, at the top of the page pane.
  * A check click takes the page to its block; Esc anywhere in the panel, or its close button, closes it.
  */
 export function TodoPanel({
@@ -146,10 +164,17 @@ export function TodoPanel({
   onOpenTab,
   onPick,
   actionFor,
+  dismissed = [],
+  onDismiss,
+  onRestore,
   onClose,
   className,
 }: {
   checks: Check[];
+  /** The tab's checks the owner dismissed, listed apart (folded) with a way back. */
+  dismissed?: Check[];
+  onDismiss?(ids: string[]): void;
+  onRestore?(ids: string[]): void;
   /** A target's expected flags, set per machine. */
   flags?: ReactNode;
   /** The other tabs that still have checks to do (the strip's count is report-wide): each opens its tab. */
@@ -164,6 +189,7 @@ export function TodoPanel({
   // and the arrows work at once.
   const ref = useRef<HTMLElement>(null);
   const [moved, setMoved] = useState(0);
+  const [dismissedOpen, setDismissedOpen] = useState(false);
   useEffect(() => {
     const panel = ref.current;
     (panel?.querySelector<HTMLElement>('[aria-label="Checks"] button') ?? panel)?.focus();
@@ -189,7 +215,22 @@ export function TodoPanel({
         <IconButton icon={X} label="Close To do" shortcut="Esc" onClick={onClose} />
       </header>
       <div className="grid min-h-0 content-start overflow-y-auto pb-2 pl-4 pr-4">
-        <CheckList checks={checks} onPick={onPick} actionFor={actionFor} />
+        <CheckList checks={checks} onPick={onPick} actionFor={actionFor} onDismiss={onDismiss} />
+        {dismissed.length > 0 && onRestore && (
+          <div className="pt-2">
+            <Disclosure label="Dismissed" count={dismissed.length} open={dismissedOpen} onOpenChange={setDismissedOpen}>
+              <ul aria-label="Dismissed checks" className="m-0 grid list-none p-0">
+                {dismissed.map((c) => (
+                  <li key={c.id} className="grid min-h-7 grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 py-1 pl-2 pr-2 text-meta text-muted-2">
+                    <span aria-hidden />
+                    <span className="min-w-0">{c.text}</span>
+                    <IconButton icon={ArrowCounterClockwise} label="Bring back" onClick={() => onRestore([c.id])} />
+                  </li>
+                ))}
+              </ul>
+            </Disclosure>
+          </div>
+        )}
         {others.length > 0 && onOpenTab && (
           <div className="grid gap-1 pt-2">
             <span className="pl-2 text-meta text-muted-2">Still to do on</span>

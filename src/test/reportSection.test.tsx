@@ -217,6 +217,34 @@ describe("Report view", () => {
     await waitFor(() => expect(screen.queryByRole("region", { name: "To do" })).toBeNull());
   });
 
+  it("a dismissed check leaves To do and the tab's count, is saved with the page, and can be brought back", async () => {
+    await seedLnx(80);
+    const save = vi.spyOn(api, "reportSectionSave");
+    const { unmount } = mount();
+    await ready();
+    await waitFor(() => expect(editors.length).toBe(1));
+    const count = () => Number(rowFor("lnx02").querySelector<HTMLElement>("[data-tab-state]")?.textContent?.match(/^(\d+)/)?.[1] ?? 0);
+    const before = count();
+    fireEvent.click(rowFor("lnx02").querySelector<HTMLElement>("[data-tab-state]")!);
+    const panel = await screen.findByRole("region", { name: "To do" });
+    const checks = within(panel).getByRole("list", { name: "Checks" });
+    fireEvent.click(within(checks).getByText("2 flags are not on the page"));
+    fireEvent.click(within(panel).getByRole("button", { name: "Dismiss all 2" }));
+    await waitFor(() => expect(within(checks).queryByText("2 flags are not on the page")).toBeNull());
+    expect(count()).toBe(before - 2);
+    fireEvent.click(within(panel).getByRole("button", { name: "Dismissed (2)" }));
+    const dismissed = within(panel).getByRole("list", { name: "Dismissed checks" });
+    expect(within(dismissed).getAllByRole("listitem")).toHaveLength(2);
+    // One comes back: it is on the list (and counted) again.
+    fireEvent.click(within(dismissed).getAllByRole("button", { name: "Bring back" })[0]);
+    await waitFor(() => expect(count()).toBe(before - 1));
+    expect(within(panel).getByRole("button", { name: "Dismissed (1)" })).toBeInTheDocument();
+    unmount();
+    const metas = save.mock.calls.map(([, , meta]) => meta as { dismissedChecks?: string[] });
+    expect(metas.at(-1)?.dismissedChecks).toHaveLength(1);
+    expect(metas.at(-1)?.dismissedChecks?.[0]).toMatch(/^proof-missing:lnx02:/);
+  });
+
   it("the strip's To do opens the panel with focus in it; Esc and Close To do hand focus back to the button", async () => {
     await seedLnx(80);
     mount();
@@ -1670,6 +1698,39 @@ describe("TodoPanel", () => {
     expect(within(panel).getByRole("list", { name: "Checks" })).toBeInTheDocument();
     fireEvent.keyDown(within(panel).getAllByRole("button")[0], { key: "Escape" });
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe("TodoPanel dismissals", () => {
+  it("dismisses the picked check, or all of its kind, and lists dismissed ones folded", () => {
+    const onDismiss = vi.fn();
+    const onRestore = vi.fn();
+    const checks = [
+      { id: "explain:a", level: "soft" as const, text: "A step has no explanation before it." },
+      { id: "explain:b", level: "soft" as const, text: "A step has no explanation before it." },
+    ];
+    render(
+      <TooltipProvider>
+        <TodoPanel
+          checks={checks}
+          dismissed={[{ id: "caption:x", level: "soft", text: "A screenshot caption is over 10 words." }]}
+          onPick={() => {}}
+          onDismiss={onDismiss}
+          onRestore={onRestore}
+          onClose={() => {}}
+        />
+      </TooltipProvider>,
+    );
+    const panel = screen.getByRole("region", { name: "To do" });
+    expect(within(panel).queryByRole("button", { name: "Dismiss" })).toBeNull();
+    fireEvent.click(within(within(panel).getByRole("list", { name: "Checks" })).getAllByRole("button")[0]);
+    fireEvent.click(within(panel).getByRole("button", { name: "Dismiss" }));
+    expect(onDismiss).toHaveBeenLastCalledWith(["explain:a"]);
+    fireEvent.click(within(panel).getByRole("button", { name: "Dismiss all 2" }));
+    expect(onDismiss).toHaveBeenLastCalledWith(["explain:a", "explain:b"]);
+    fireEvent.click(within(panel).getByRole("button", { name: "Dismissed (1)" }));
+    fireEvent.click(within(panel).getByRole("button", { name: "Bring back" }));
+    expect(onRestore).toHaveBeenCalledWith(["caption:x"]);
   });
 });
 

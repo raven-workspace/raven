@@ -468,11 +468,26 @@ function ReportBody({
       ...legibilityChecks(doc, data, shotWidths),
     ];
   }, [openTarget, openSection, data, openLiveDoc, savedDocOf, reportMeta, openSectionMeta, shotWidths]);
-  const checks = useMemo(
+  const allChecks = useMemo(
     () => (openChecksLive && openSection ? new Map(savedChecks).set(openSection.id, openChecksLive) : savedChecks),
     [savedChecks, openChecksLive, openSection],
   );
-  const reportLevel = useMemo(() => reportChecks({ report, targets, data }), [report, targets, data]);
+  // What the owner dismissed from To do (false positives) is left out of every count and list; the panel lists it apart.
+  const checks = useMemo(() => {
+    const out = new Map<string, Check[]>();
+    for (const e of entries) {
+      const list = allChecks.get(e.section.id);
+      if (!list) continue;
+      const off = new Set(metaOf(e.section).dismissedChecks ?? []);
+      out.set(e.section.id, off.size === 0 ? list : list.filter((c) => !off.has(c.id)));
+    }
+    return out;
+  }, [allChecks, entries, metaOf]);
+  const allReportLevel = useMemo(() => reportChecks({ report, targets, data }), [report, targets, data]);
+  const reportLevel = useMemo(() => {
+    const off = new Set(reportMeta.dismissedChecks ?? []);
+    return off.size === 0 ? allReportLevel : allReportLevel.filter((c) => !off.has(c.id));
+  }, [allReportLevel, reportMeta]);
 
   const targetEntries = entries.filter((e) => e.target);
   const readyCount = targetEntries.filter((e) => isReady(checks.get(e.section.id) ?? [])).length;
@@ -954,6 +969,19 @@ function ReportBody({
     if (back?.isConnected) back.focus();
   };
   const openChecks = open?.target ? (checks.get(open.section.id) ?? []) : open?.item.group === "front" ? reportLevel : [];
+  // The open tab's dismissed checks that still fire (a dismissal whose check stopped firing lists nothing).
+  const shown = new Set(openChecks.map((c) => c.id));
+  const openDismissed = (open?.target ? (allChecks.get(open.section.id) ?? []) : open?.item.group === "front" ? allReportLevel : []).filter((c) => !shown.has(c.id));
+  /** Dismisses checks from the open tab's To do (`on`), or brings them back: a target's in its page meta, Front
+   *  matter's in the report's. */
+  const setDismissed = (ids: string[], on: boolean) => {
+    const next = (was: string[] = []) => (on ? [...new Set([...was, ...ids])] : was.filter((id) => !ids.includes(id)));
+    if (open?.target && openSection) patchMeta({ dismissedChecks: next(metaOf(openSection).dismissedChecks) });
+    else if (open?.item.group === "front") {
+      const cached = (qc.getQueryData<Report>(reportKey(report.engagementId))?.meta ?? report.meta) as ReportMeta;
+      saveReport({ meta: { dismissedChecks: next(cached.dismissedChecks) } });
+    }
+  };
   const machines = open?.target ? open.target.hostIds.map((id) => ({ hostId: id, name: data.hosts.find((h) => h.id === id)?.name ?? "Host" })) : [];
   const todoPanel = todoOpen ? (
     <TodoPanel
@@ -963,6 +991,9 @@ function ReportBody({
       onOpenTab={openTab}
       onPick={pickCheck}
       actionFor={checkAction}
+      dismissed={openDismissed}
+      onDismiss={(ids) => setDismissed(ids, true)}
+      onRestore={(ids) => setDismissed(ids, false)}
       onClose={closeTodo}
       flags={
         open?.target ? (

@@ -41,6 +41,8 @@ export interface ReportMeta {
   examEndAt?: number;
   examDate?: string;
   reportDate?: string;
+  /** Report-level check ids the owner dismissed from To do (a false positive): not counted, listed as dismissed. */
+  dismissedChecks?: string[];
 }
 
 export type CoverageResult = "exploited" | "tested" | "untested";
@@ -68,6 +70,9 @@ export interface SectionMeta {
    *  machine's whole Also tested list (`testedKey`). */
   removedEntryIds?: string[];
   coverage?: Record<string, CoverageOverride>;
+  /** Check ids the owner dismissed from this page's To do (a false positive): not counted, listed as dismissed. Owner
+   *  meta: kept across rebuilds. */
+  dismissedChecks?: string[];
   /** The draft layout the page was built with (`DRAFT_LAYOUT`). */
   layout?: number;
   /** The page as it was before a rebuild for a new layout, kept so the owner can restore it; after a restore, the
