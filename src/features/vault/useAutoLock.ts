@@ -9,7 +9,8 @@ const ACTIVITY_EVENTS = ["keydown", "pointerdown", "pointermove", "wheel"] as co
 interface Options {
   /** Only counts down (and handles ⌘L) while true. */
   enabled: boolean;
-  onLock: () => void;
+  /** `reason`: "key" for ⌘L, "idle" for the timeout (which may land right after wake, with someone at the screen). */
+  onLock: (reason: "key" | "idle") => void;
 }
 
 /**
@@ -33,13 +34,13 @@ export function useAutoLock(minutes: number, { enabled, onLock }: Options) {
     const ms = clamped * 60_000;
     let lastActivity = Date.now();
     let locked = false;
-    const lockNow = () => {
+    const lockNow = (reason: "key" | "idle") => {
       if (locked) return;
       locked = true;
-      onLockRef.current();
+      onLockRef.current(reason);
     };
     const check = () => {
-      if (Date.now() - lastActivity >= ms) lockNow();
+      if (Date.now() - lastActivity >= ms) lockNow("idle");
     };
     const touch = () => {
       // Input after a long gap (e.g. right after wake) must not count before the check.
@@ -49,7 +50,7 @@ export function useAutoLock(minutes: number, { enabled, onLock }: Options) {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey && e.key.toLowerCase() === "l") {
         e.preventDefault();
-        lockNow();
+        lockNow("key");
         return;
       }
       touch();

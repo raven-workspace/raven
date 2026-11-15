@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { BookOpenText, Gear, Lock, MagnifyingGlass, Package, Stack, X } from "@phosphor-icons/react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { api } from "../../lib/api";
@@ -15,6 +15,7 @@ import { Button, IconButton, TitleBar, TitleBarButton, TitleBarGroup, TitleBarIc
 import { SetupScreen } from "./SetupScreen";
 import { UnlockScreen, type CipherControls } from "./UnlockScreen";
 import { CipherBackdrop, type CipherHandle } from "./CipherBackdrop";
+import { freezeCopy, type FrozenCopy } from "./frozenCopy";
 import { setImported } from "../../engines/library/store";
 import { applySnapshot, FIELD_MANUAL_KEY, useVaultNewer } from "../fieldManual/queries";
 import { useAutoLock } from "./useAutoLock";
@@ -47,6 +48,12 @@ export function useVault(): VaultContextValue {
 
 const DEFAULT_AUTO_LOCK_MINUTES = 30;
 const LOCK_RETRY_MS = 2000;
+/** The lock's reverse sweep takes about half a second; past this the frozen copy goes regardless. */
+const CLOSE_MAX_MS = 1500;
+
+function reducedMotion(): boolean {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+}
 /** How long the unlock notice (e.g. "backup saved") stays before it clears itself. A failure stays until dismissed. */
 const NOTICE_MS = 8000;
 
@@ -176,9 +183,36 @@ export function VaultGate({ children }: { children: ReactNode }) {
     retryTimer.current = setTimeout(() => void run(), LOCK_RETRY_MS);
   }, [qc]);
 
-  const lock = useCallback(() => {
+  // The lock's reverse sweep: the cipher field closes in over a frozen copy of the app (see frozenCopy).
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const frozenHostRef = useRef<HTMLDivElement>(null);
+  const frozen = useRef<FrozenCopy | null>(null);
+  const [closing, setClosing] = useState(false);
+  const [sweeping, setSweeping] = useState(false);
+  const endClose = useCallback(() => {
+    frozen.current = null;
+    setClosing(false);
+  }, []);
+  useLayoutEffect(() => {
+    if (!closing) return;
+    const host = frozenHostRef.current;
+    const copy = frozen.current;
+    if (host && copy) {
+      host.append(copy.el);
+      copy.restoreScroll();
+    }
+    const t = setTimeout(endClose, CLOSE_MAX_MS);
+    return () => clearTimeout(t);
+  }, [closing, endClose]);
+
+  const lock = useCallback((opts?: { quiet?: boolean }) => {
     // The UI locks at once, never leaving data on screen; the backend lock is
-    // retried until the backend confirms it.
+    // retried until the backend confirms it. Only a frozen, inert picture of the screen stays for the reverse
+    // sweep to close over, and only for a lock the user asked for: an idle lock can land right after wake, with
+    // someone else at the screen. Never while hidden (it would wait there) or mid-unlock-sweep either.
+    const body = bodyRef.current;
+    const animate = !opts?.quiet && !sweeping && !document.hidden && !reducedMotion();
+    const copy = body && animate ? freezeCopy(body) : null;
     // Start saving notes first: markLocked clears them from the store.
     // Report writes too (the Report view's unmount flush would run after the backend locked).
     const notesSaved = hasPendingNotes() ? flushNotes().catch(reportError) : undefined;
@@ -186,10 +220,17 @@ export function VaultGate({ children }: { children: ReactNode }) {
     const saved = notesSaved && reportsSaved ? Promise.all([notesSaved, reportsSaved]).then(() => undefined) : (notesSaved ?? reportsSaved);
     markLocked();
     void lockBackend(saved);
-  }, [markLocked, lockBackend]);
+    if (copy) {
+      frozen.current = copy;
+      setClosing(true);
+    }
+  }, [markLocked, lockBackend, sweeping]);
 
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet, enabled: unlocked });
-  useAutoLock(settings.data?.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES, { enabled: unlocked, onLock: lock });
+  useAutoLock(settings.data?.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES, {
+    enabled: unlocked,
+    onLock: (reason) => lock({ quiet: reason === "idle" }),
+  });
 
   // ⌘K: the palette, from anywhere while unlocked (capture phase, like ⌘L). Never over another dialog.
   useEffect(() => {
@@ -244,7 +285,6 @@ export function VaultGate({ children }: { children: ReactNode }) {
   // The lock screen's ciphertext field. It outlives the unlock form by one sweep, which reveals the app.
   const cipherRef = useRef<CipherHandle>(null);
   const [calm, setCalm] = useState(false);
-  const [sweeping, setSweeping] = useState(false);
   const cipher = useMemo<CipherControls>(() => ({ pulse: (k) => cipherRef.current?.pulse(k), setCalm }), []);
 
   /** The unlock sweep. Start it while the password field is still on screen: it's where the sweep starts from. */
@@ -262,6 +302,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
   };
 
   const onUnlocked = (r: UnlockResult) => {
+    endClose();
     startSweep();
     clearTimeout(retryTimer.current);
     startNotesSession();
@@ -298,7 +339,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
       <TitleBarButton hint="⌘K" icon={MagnifyingGlass} onClick={() => usePaletteStore.getState().open()}>Search</TitleBarButton>
       <TitleBarGroup>
         <TitleBarShortcuts everywhere={EVERYWHERE} />
-        <TitleBarIconButton icon={Lock} label="Lock" shortcut="⌘L" onClick={lock} />
+        <TitleBarIconButton icon={Lock} label="Lock" shortcut="⌘L" onClick={() => lock()} />
         <span
           title={vaultNewer ? "The Field Manual has changes to import" : undefined}
           className="relative grid"
@@ -310,7 +351,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
     </>
   ) : undefined;
 
-  const showCipher = (!!status && !unlocked && !loadFailed && !calm) || sweeping;
+  const showCipher = (!!status && !unlocked && !loadFailed && !calm) || sweeping || closing;
 
   let body: ReactNode = null;
   if (loadFailed) {
@@ -377,8 +418,9 @@ export function VaultGate({ children }: { children: ReactNode }) {
         right={right}
       />
       <div className="relative min-h-0">
-        {showCipher && <CipherBackdrop ref={cipherRef} front={sweeping} />}
-        <div className="relative h-full overflow-auto">{body}</div>
+        {showCipher && <CipherBackdrop ref={cipherRef} front={sweeping || closing} onClosed={closing ? endClose : undefined} />}
+        {closing && <div ref={frozenHostRef} aria-hidden="true" className="pointer-events-none absolute inset-0 z-[5] overflow-hidden" />}
+        <div ref={bodyRef} className="relative h-full overflow-auto">{body}</div>
       </div>
     </div>
   );
