@@ -205,13 +205,13 @@ export function VaultGate({ children }: { children: ReactNode }) {
     return () => clearTimeout(t);
   }, [closing, endClose]);
 
-  const lock = useCallback((opts?: { quiet?: boolean }) => {
+  const lock = useCallback(() => {
     // The UI locks at once, never leaving data on screen; the backend lock is
     // retried until the backend confirms it. Only a frozen, inert picture of the screen stays for the reverse
-    // sweep to close over, and only for a lock the user asked for: an idle lock can land right after wake, with
-    // someone else at the screen. Never while hidden (it would wait there) or mid-unlock-sweep either.
+    // sweep to close over, auto-lock included (owner call: macOS locks with the display, so after wake the Mac's
+    // own password comes first). Never while hidden (it would wait there) or mid-unlock-sweep.
     const body = bodyRef.current;
-    const animate = !opts?.quiet && !sweeping && !document.hidden && !reducedMotion();
+    const animate = !sweeping && !document.hidden && !reducedMotion();
     const copy = body && animate ? freezeCopy(body) : null;
     // Start saving notes first: markLocked clears them from the store.
     // Report writes too (the Report view's unmount flush would run after the backend locked).
@@ -227,10 +227,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
   }, [markLocked, lockBackend, sweeping]);
 
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settingsGet, enabled: unlocked });
-  useAutoLock(settings.data?.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES, {
-    enabled: unlocked,
-    onLock: (reason) => lock({ quiet: reason === "idle" }),
-  });
+  useAutoLock(settings.data?.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES, { enabled: unlocked, onLock: lock });
 
   // ⌘K: the palette, from anywhere while unlocked (capture phase, like ⌘L). Never over another dialog.
   useEffect(() => {

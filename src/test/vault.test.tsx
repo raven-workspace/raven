@@ -281,6 +281,11 @@ describe("vault gate", () => {
       vi.setSystemTime(Date.now() + 8 * 60 * 60_000);
       act(fire);
       expect(m.vaultLock).toHaveBeenCalledTimes(1);
+      // The live app is gone; the lock sweep's frozen copy is inert, then goes too.
+      for (const el of document.querySelectorAll("[data-testid=inside]")) expect(el.closest("[inert]")).not.toBeNull();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
       expect(screen.queryByTestId("inside")).not.toBeInTheDocument();
     });
   }

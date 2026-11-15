@@ -6,7 +6,7 @@ describe("freezeCopy (the picture the lock's reverse sweep closes over)", () => 
     const src = document.createElement("div");
     src.innerHTML = `<p id="note">secret</p><input id="q" autofocus /><button>Go</button>`;
     const { el } = freezeCopy(src);
-    expect(el.inert).toBe(true);
+    expect(el.hasAttribute("inert")).toBe(true);
     expect(el.getAttribute("aria-hidden")).toBe("true");
     expect(el.querySelector("[id]")).toBeNull();
     expect(el.querySelector("[autofocus]")).toBeNull();

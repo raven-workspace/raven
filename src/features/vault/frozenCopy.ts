@@ -22,7 +22,7 @@ export function freezeCopy(source: HTMLElement): FrozenCopy {
     t.removeAttribute("id");
     t.removeAttribute("autofocus");
   }
-  el.inert = true;
+  el.setAttribute("inert", "");
   el.setAttribute("aria-hidden", "true");
   return {
     el,
