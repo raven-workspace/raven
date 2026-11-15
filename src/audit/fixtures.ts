@@ -82,19 +82,19 @@ const engagements: Engagement[] = [
     id: "e-lab", name: LAB_NAME, kind: "lab", client: null, subLabel: "PEN-200 lab, challenge 3 (long-running)",
     scopeCidrs: ["10.10.20.0/24", "10.10.21.0/24"], domain: "acme.corp", startsAt: null, endsAt: null,
     timeboxStart: null, timeboxMinutes: null, status: "active", createdAt: ago(72 * HOUR), updatedAt: ago(5 * MIN),
-    lastActivityAt: ago(5 * MIN), lastRanOn: "Kali (VM)", msfHostId: null,
+    lastActivityAt: ago(5 * MIN), lastRanOn: "Kali (VM)", msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
   },
   {
     id: "e-exam", name: "Mock exam 2", kind: "exam-sim", client: null, subLabel: "Set B",
     scopeCidrs: ["10.10.30.0/24"], domain: "exam.corp", startsAt: null, endsAt: null,
     timeboxStart: ago(3 * HOUR), timeboxMinutes: 1425, status: "active", createdAt: ago(3 * HOUR),
-    updatedAt: ago(20 * MIN), lastActivityAt: ago(20 * MIN), lastRanOn: "Kali (VM)", msfHostId: "h-exam-ms01",
+    updatedAt: ago(20 * MIN), lastActivityAt: ago(20 * MIN), lastRanOn: "Kali (VM)", msfHostId: "h-exam-ms01", timeboxPausedMs: 0, timeboxPausedAt: null,
   },
   {
     id: "e-old", name: "Contoso web assessment", kind: "client", client: "Contoso Ltd", subLabel: null,
     scopeCidrs: ["10.60.5.0/24"], domain: null, startsAt: ago(40 * 24 * HOUR), endsAt: ago(30 * 24 * HOUR),
     timeboxStart: null, timeboxMinutes: null, status: "archived", createdAt: ago(45 * 24 * HOUR),
-    updatedAt: ago(29 * 24 * HOUR), lastActivityAt: ago(30 * 24 * HOUR), lastRanOn: null, msfHostId: null,
+    updatedAt: ago(29 * 24 * HOUR), lastActivityAt: ago(30 * 24 * HOUR), lastRanOn: null, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
   },
   // Payloads: RFC 5737 addresses and example.test names only. Older than e-lab, so /arsenal and /payloads still
   // default to e-lab when opened directly.
@@ -102,7 +102,7 @@ const engagements: Engagement[] = [
     id: "e-pay", name: "Payloads drill", kind: "lab", client: null, subLabel: null,
     scopeCidrs: ["198.51.100.0/24"], domain: "example.test", startsAt: null, endsAt: null,
     timeboxStart: null, timeboxMinutes: null, status: "active", createdAt: ago(48 * HOUR), updatedAt: ago(24 * HOUR),
-    lastActivityAt: ago(24 * HOUR), lastRanOn: "Kali (VM)", msfHostId: null,
+    lastActivityAt: ago(24 * HOUR), lastRanOn: "Kali (VM)", msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
   },
   // Board stress: a 20-host lane next to empty lanes (RFC 5737 addresses, example.test names). Archived, so it only
   // adds one row to the dashboard's past table.
@@ -110,7 +110,7 @@ const engagements: Engagement[] = [
     id: "e-board", name: "Board sweep", kind: "lab", client: null, subLabel: null,
     scopeCidrs: ["203.0.113.0/24"], domain: "example.test", startsAt: null, endsAt: null,
     timeboxStart: null, timeboxMinutes: null, status: "archived", createdAt: ago(20 * 24 * HOUR),
-    updatedAt: ago(19 * 24 * HOUR), lastActivityAt: ago(19 * 24 * HOUR), lastRanOn: "Kali (VM)", msfHostId: null,
+    updatedAt: ago(19 * 24 * HOUR), lastActivityAt: ago(19 * 24 * HOUR), lastRanOn: "Kali (VM)", msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
   },
   // Findings list: every severity, long titles and host names, attempts with and without a log entry. Archived, so it
   // only adds one row to the dashboard's past table.
@@ -118,7 +118,7 @@ const engagements: Engagement[] = [
     id: "e-fl", name: "Findings list drill", kind: "lab", client: null, subLabel: null,
     scopeCidrs: ["192.0.2.0/24"], domain: "example.test", startsAt: null, endsAt: null,
     timeboxStart: null, timeboxMinutes: null, status: "archived", createdAt: ago(18 * 24 * HOUR),
-    updatedAt: ago(17 * 24 * HOUR), lastActivityAt: ago(17 * 24 * HOUR), lastRanOn: "Kali (VM)", msfHostId: null,
+    updatedAt: ago(17 * 24 * HOUR), lastActivityAt: ago(17 * 24 * HOUR), lastRanOn: "Kali (VM)", msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
   },
 ];
 

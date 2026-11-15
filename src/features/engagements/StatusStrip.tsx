@@ -7,7 +7,12 @@ import { Chip, labelClass } from "../../ui";
 import { useCleanupCounts } from "../cleanup/queries";
 import { useProgress } from "../hosts/queries";
 import { useThreadCounts } from "../notes/useThreadCounts";
-import { TimeBar } from "./ActiveCard";
+import { PauseIcon, PlayIcon } from "@phosphor-icons/react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "../../lib/api";
+import { reportError } from "../../lib/lockSignal";
+import { IconButton } from "../../ui";
+import { TIMEBOX_TEXT, TimeBar } from "./ActiveCard";
 import {
   EMPTY_PROGRESS,
   dateRange,
@@ -15,6 +20,8 @@ import {
   hasTimebox,
   timeLeft,
   timeboxElapsed,
+  timeboxNow,
+  timeboxState,
 } from "./format";
 import { Listener } from "./Listener";
 import { MsfLock } from "./MsfLock";
@@ -108,7 +115,7 @@ export function StatusStrip({ engagement: e, named = false }: { engagement: Enga
         )}
         {named && e.status === "archived" && <span data-drop={STEP.name}><Chip>archived</Chip></span>}
         {hasTimebox(e) ? (
-          <TimeboxStatus start={e.timeboxStart} minutes={e.timeboxMinutes} now={now} />
+          <TimeboxStatus engagement={e} now={now} />
         ) : (
           <Cell label="Dates" value={dateRange(e.startsAt, e.endsAt, now)} />
         )}
@@ -123,16 +130,44 @@ export function StatusStrip({ engagement: e, named = false }: { engagement: Enga
   );
 }
 
-function TimeboxStatus({ start, minutes, now }: { start: number | null; minutes: number; now: number }) {
-  const left = timeLeft(start, minutes, now);
-  const over = left === "Time's up";
-  const of: ReactNode = <span data-drop={STEP.of} className="text-faint">of {formatDuration(minutes)}</span>;
+/**
+ * The exam-sim clock. Pause/resume is a click only, never a key, so a real exam can't be paused by a stray press;
+ * locking Raven never pauses it either (owner call: an unnoticed pause is worse than a running clock).
+ */
+function TimeboxStatus({ engagement: e, now }: { engagement: Engagement & { timeboxMinutes: number }; now: number }) {
+  const qc = useQueryClient();
+  const clock = timeboxNow(e, now);
+  const state = timeboxState(e, now);
+  const toggle = useMutation({
+    mutationFn: (paused: boolean) => api.engagementSetTimeboxPaused(e.id, paused),
+    onSuccess: (saved) => {
+      qc.setQueryData(["engagement", e.id], saved);
+      void qc.invalidateQueries({ queryKey: ["engagements"] });
+    },
+    onError: reportError,
+  });
+  const paused = state === "paused";
+  const of: ReactNode = <span data-drop={STEP.of} className="text-faint">of {formatDuration(e.timeboxMinutes)}</span>;
   return (
     <span className="grid grid-flow-col items-center gap-2">
       <span className={labelClass}>Timebox</span>
-      <span className={cx("font-mono text-meta", over ? "text-warn" : "text-fg")}>{left}</span>
+      {(state === "running" || paused) && (
+        <IconButton
+          icon={paused ? PlayIcon : PauseIcon}
+          label={paused ? "Resume timebox" : "Pause timebox"}
+          disabled={toggle.isPending}
+          onClick={() => toggle.mutate(!paused)}
+          className="-mx-1"
+        />
+      )}
+      <span className={cx("font-mono text-meta", TIMEBOX_TEXT[state])}>{timeLeft(e.timeboxStart, e.timeboxMinutes, clock)}</span>
+      {toggle.isError && !toggle.isPending && (
+        <span role="alert" className="text-meta text-warn">
+          {toggle.variables ? "Didn't pause" : "Didn't resume"}
+        </span>
+      )}
       <span data-drop={STEP.bar} className="w-24">
-        <TimeBar fraction={timeboxElapsed(start, minutes, now)} over={over} />
+        <TimeBar fraction={timeboxElapsed(e.timeboxStart, e.timeboxMinutes, clock)} state={state} />
       </span>
       {of}
     </span>

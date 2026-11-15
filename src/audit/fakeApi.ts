@@ -136,7 +136,7 @@ const base = {
   engagementGet: async (id: string) => clone(find(db.engagements, id)),
   engagementCreate: async (input) => {
     const e = assign(
-      { id: nid("e"), client: null, subLabel: null, scopeCidrs: [], domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active" as const, createdAt: now(), updatedAt: now(), lastActivityAt: null, lastRanOn: null, msfHostId: null } as unknown as (typeof db.engagements)[number],
+      { id: nid("e"), client: null, subLabel: null, scopeCidrs: [], domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active" as const, createdAt: now(), updatedAt: now(), lastActivityAt: null, lastRanOn: null, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null } as unknown as (typeof db.engagements)[number],
       input,
     );
     db.engagements.push(e);
@@ -146,6 +146,14 @@ const base = {
   engagementSetStatus: async (id: string, status) => clone(assign(find(db.engagements, id), { status }, { updatedAt: now() })),
   engagementSetMsfHost: async (engagementId: string, hostId: string | null) =>
     clone(assign(find(db.engagements, engagementId), { msfHostId: hostId }, { updatedAt: now() })),
+  engagementSetTimeboxPaused: async (id: string, paused: boolean) => {
+    const e = find(db.engagements, id);
+    const t = now();
+    if (paused && e.timeboxPausedAt === null) return clone(assign(e, { timeboxPausedAt: t }, { updatedAt: t }));
+    if (!paused && e.timeboxPausedAt !== null)
+      return clone(assign(e, { timeboxPausedMs: e.timeboxPausedMs + (t - e.timeboxPausedAt), timeboxPausedAt: null }, { updatedAt: t }));
+    return clone(e);
+  },
   engagementDelete: async (id: string) => remove(db.engagements, id),
 
   hostsList: async (engagementId: string) => clone(db.hosts.filter((h) => h.engagementId === engagementId)),

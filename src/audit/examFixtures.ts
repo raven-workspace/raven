@@ -961,7 +961,7 @@ export function garnetFixtures(now: number): ReportData {
   const engagement: Engagement = {
     id: E, name: "Mock exam 2", kind: "exam-sim", client: null, subLabel: "Set B", scopeCidrs: ["10.10.30.0/24"], domain: "exam.corp", startsAt: null,
     endsAt: null, timeboxStart: ago(320), timeboxMinutes: 1425, status: "active", createdAt: ago(320), updatedAt: ago(245), lastActivityAt: ago(245),
-    lastRanOn: "Kali (VM)", msfHostId: null,
+    lastRanOn: "Kali (VM)", msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
   };
   return {
     engagement, hosts: [host], services, log, checklist, findings, findingFiles, attempts, ruledOut: [], grants, usernames, hops: [], cleanup: [], notes: [],

@@ -36,6 +36,7 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
     (13, include_str!("../../migrations/0013_payload_builds.sql")),
     (14, include_str!("../../migrations/0014_interface_dismissals.sql")),
     (15, include_str!("../../migrations/0015_reports.sql")),
+    (16, include_str!("../../migrations/0016_timebox_pause.sql")),
 ];
 
 const FK_OFF_MARKER: &str = "-- raven:foreign-keys-off";
@@ -301,14 +302,14 @@ mod tests {
         .unwrap();
         let mut hook_calls = 0;
         let out = migrate(&mut c, &mut |f, t| {
-            assert_eq!((f, t), (1, 15));
+            assert_eq!((f, t), (1, 16));
             hook_calls += 1;
             Ok(())
         })
         .unwrap();
         assert_eq!(hook_calls, 1);
-        assert_eq!(out, MigrationOutcome { from: 1, to: 15 });
-        assert_eq!(version(&c), 15);
+        assert_eq!(out, MigrationOutcome { from: 1, to: 16 });
+        assert_eq!(version(&c), 16);
         for t in ["hosts", "services", "log_entries", "log_entry_hosts", "attachments"] {
             let n: i64 = c
                 .query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1", [t], |r| r.get(0))
@@ -662,16 +663,42 @@ mod tests {
         c.execute("INSERT INTO settings (key, value) VALUES ('k', 'v')", []).unwrap();
         let mut hook_calls = 0;
         let out = migrate(&mut c, &mut |f, t| {
-            assert_eq!((f, t), (8, 15));
+            assert_eq!((f, t), (8, 16));
             hook_calls += 1;
             Ok(())
         })
         .unwrap();
         assert_eq!(hook_calls, 1);
-        assert_eq!(out, MigrationOutcome { from: 8, to: 15 });
+        assert_eq!(out, MigrationOutcome { from: 8, to: 16 });
         let kept: i64 = c.query_row("SELECT count(*) FROM settings WHERE key='k'", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1);
         c.execute("INSERT INTO field_manual (id, imported_at, snapshot) VALUES (1, 1, '{}')", []).unwrap();
         assert!(c.execute("INSERT INTO field_manual (id, imported_at, snapshot) VALUES (2, 1, '{}')", []).is_err());
+    }
+
+    #[test]
+    fn migration_0016_from_v15_adds_running_timebox_pause_state() {
+        let (_d, _p, mut c) = file_db();
+        migrate_with(&mut c, &MIGRATIONS[..15], &mut |_, _| panic!("hook on fresh db")).unwrap();
+        c.execute(
+            "INSERT INTO engagements (id,name,kind,scope_cidrs,timebox_start,timebox_minutes,status,created_at,updated_at) \
+             VALUES ('e1','x','exam-sim','[]',5,1425,'active',1,1)",
+            [],
+        )
+        .unwrap();
+        let mut hook_calls = 0;
+        let out = migrate(&mut c, &mut |f, t| {
+            assert_eq!((f, t), (15, 16));
+            hook_calls += 1;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!((hook_calls, out), (1, MigrationOutcome { from: 15, to: 16 }));
+        let (ms, at, start): (i64, Option<i64>, i64) = c
+            .query_row("SELECT timebox_paused_ms, timebox_paused_at, timebox_start FROM engagements WHERE id='e1'", [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })
+            .unwrap();
+        assert_eq!((ms, at, start), (0, None, 5));
     }
 }

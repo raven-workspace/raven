@@ -25,7 +25,7 @@ const m = vi.mocked(api, true);
 const E1: Engagement = {
   id: "e1", name: "Lab A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
-  createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
+  createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
 };
 const host = (id: string, name: string, ip: string): Host => ({
   id, engagementId: "e1", name, ip, os: "windows", boardColumn: "vulnerability-detection", boardManual: false,

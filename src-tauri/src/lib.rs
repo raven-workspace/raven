@@ -61,6 +61,7 @@ pub fn run() {
             commands::engagement_set_status,
             commands::engagement_delete,
             commands::engagement_set_msf_host,
+            commands::engagement_set_timebox_paused,
             commands::hosts_list,
             commands::host_create,
             commands::host_update,

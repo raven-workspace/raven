@@ -14,7 +14,7 @@ const host = (p: Partial<Host> = {}): Host => ({
 const eng = (p: Partial<Engagement> = {}): Engagement => ({
   id: 'e1', name: 'Eng', kind: 'lab', client: null, subLabel: null, scopeCidrs: [], domain: null, startsAt: null,
   endsAt: null, timeboxStart: null, timeboxMinutes: null, status: 'active', createdAt: 0, updatedAt: 0,
-  lastActivityAt: null, lastRanOn: null, msfHostId: null, ...p,
+  lastActivityAt: null, lastRanOn: null, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null, ...p,
 });
 const tun = (p: Partial<Tunnel> = {}): Tunnel => ({
   id: 't1', engagementId: 'e1', kind: 'ligolo', viaHostId: 'pivot', subnets: ['10.60.1.0/24'], callbackIp: '240.0.0.1',

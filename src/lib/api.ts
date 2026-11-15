@@ -115,6 +115,8 @@ export const api = {
     call<Engagement>("engagement_set_status", { id, status }),
   engagementSetMsfHost: (engagementId: string, hostId: string | null) =>
     call<Engagement>("engagement_set_msf_host", { engagementId, hostId }),
+  engagementSetTimeboxPaused: (id: string, paused: boolean) =>
+    call<Engagement>("engagement_set_timebox_paused", { id, paused }),
   engagementDelete: (id: string) => call<null>("engagement_delete", { id }),
 
   hostsList: (engagementId: string) => call<Host[]>("hosts_list", { engagementId }),

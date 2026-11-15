@@ -252,6 +252,11 @@ pub async fn engagement_set_msf_host(app: AppHandle, engagement_id: String, host
 }
 
 #[tauri::command]
+pub async fn engagement_set_timebox_paused(app: AppHandle, id: String, paused: bool) -> AppResult<Engagement> {
+    with_vault(app, move |v| engagements::set_timebox_paused(v.conn()?, &id, paused)).await
+}
+
+#[tauri::command]
 pub async fn hosts_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<Host>> {
     with_vault(app, move |v| hosts::list(v.conn()?, &engagement_id)).await
 }

@@ -34,7 +34,7 @@ const LOOKUP: ManualNote = AUDIT_NOTE_SOURCES.flatMap(([p, t]) => (p.includes("Z
 const E1: Engagement = {
   id: "e1", name: "Lab Zz", kind: "lab", client: null, subLabel: null, scopeCidrs: ["198.51.100.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
-  createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
+  createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
 };
 const H1: Host = {
   id: "h1", engagementId: "e1", name: "zzfs01", ip: "198.51.100.21", os: "windows", boardColumn: "information-gathering", boardManual: false,
