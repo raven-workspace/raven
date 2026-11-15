@@ -20,10 +20,14 @@ function reducedMotion(): boolean {
 /**
  * The lock screen's ciphertext field. Fills its positioned parent; the parent also holds the form marked with
  * CIPHER_CLEAR and CIPHER_ORIGIN. `front` lifts it over the app for the unlock sweep.
+ *
+ * `onClosed` (read once, at mount): open with the lock's reverse sweep instead of the intro decode, and call it when
+ * the field has closed in.
  */
-export function CipherBackdrop({ ref, front }: { ref?: Ref<CipherHandle>; front: boolean }) {
+export function CipherBackdrop({ ref, front, onClosed }: { ref?: Ref<CipherHandle>; front: boolean; onClosed?: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fieldRef = useRef<CipherField | null>(null);
+  const onClosedRef = useRef(onClosed);
 
   /** The marked elements' boxes, in canvas coordinates. */
   const measure = () => {
@@ -54,7 +58,12 @@ export function CipherBackdrop({ ref, front }: { ref?: Ref<CipherHandle>; front:
     };
     // The glyphs are JetBrains Mono: wait for it, or the intro starts in the fallback face.
     const fonts = document.fonts?.load(field.fontSpec).catch(() => undefined) ?? Promise.resolve();
-    void fonts.then(() => live && layout(true));
+    const closeIn = onClosedRef.current;
+    void fonts.then(() => {
+      if (!live) return;
+      layout(!closeIn);
+      if (closeIn) void field.close().then(() => live && closeIn());
+    });
     const ro = new ResizeObserver(() => laidOut && layout(false));
     if (canvas.parentElement) ro.observe(canvas.parentElement);
     const onVis = () => field.setHidden(document.hidden);

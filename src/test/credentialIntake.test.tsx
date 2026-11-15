@@ -20,7 +20,7 @@ const m = vi.mocked(api, true);
 const E1: Engagement = {
   id: "e1", name: "Lab A", kind: "lab", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
-  createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: "Kali (VM)", msfHostId: null,
+  createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: "Kali (VM)", msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
 };
 const host = (over: Partial<Host> & Pick<Host, "id" | "name">): Host => ({
   engagementId: "e1", ip: null, os: "windows", boardColumn: "vulnerability-detection", boardManual: false, dualHomed: false,

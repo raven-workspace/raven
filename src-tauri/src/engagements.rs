@@ -6,7 +6,8 @@ use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 
 const COLS: &str = "id, name, kind, client, sub_label, scope_cidrs, domain, starts_at, ends_at, \
-                    timebox_start, timebox_minutes, status, created_at, updated_at, last_activity_at, last_ran_on, msf_host_id";
+                    timebox_start, timebox_minutes, status, created_at, updated_at, last_activity_at, last_ran_on, msf_host_id, \
+                    timebox_paused_ms, timebox_paused_at";
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,6 +30,10 @@ pub struct Engagement {
     pub last_ran_on: Option<String>,
     /// The host that holds the Metasploit lock, if any.
     pub msf_host_id: Option<String>,
+    /// Exam sims: time the timebox has spent paused, not counting a pause still running.
+    pub timebox_paused_ms: i64,
+    /// Exam sims: when the running pause began; `None` while the timebox runs.
+    pub timebox_paused_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -126,6 +131,8 @@ fn from_row(r: &Row) -> rusqlite::Result<Engagement> {
         last_activity_at: r.get(14)?,
         last_ran_on: r.get(15)?,
         msf_host_id: r.get(16)?,
+        timebox_paused_ms: r.get(17)?,
+        timebox_paused_at: r.get(18)?,
     })
 }
 
@@ -176,7 +183,10 @@ pub fn update(conn: &Connection, id: &str, input: EngagementInput) -> AppResult<
     };
     let n = tx.execute(
         "UPDATE engagements SET name=?2, kind=?3, client=?4, sub_label=?5, scope_cidrs=?6, domain=?7, \
-         starts_at=?8, ends_at=?9, timebox_start=?10, timebox_minutes=?11, updated_at=?12 WHERE id=?1",
+         starts_at=?8, ends_at=?9, timebox_start=?10, timebox_minutes=?11, updated_at=?12, \
+         timebox_paused_ms = CASE WHEN ?10 IS NULL OR ?11 IS NULL THEN 0 ELSE timebox_paused_ms END, \
+         timebox_paused_at = CASE WHEN ?10 IS NULL OR ?11 IS NULL THEN NULL ELSE timebox_paused_at END \
+         WHERE id=?1",
         params![
             id, i.name, i.kind, i.client, i.sub_label,
             serde_json::to_string(&i.scope_cidrs).map_err(|e| AppError::Db(e.to_string()))?,
@@ -203,6 +213,30 @@ pub fn set_last_ran_on(conn: &Connection, id: &str, value: Option<&str>) -> AppR
 pub fn set_msf_host(conn: &Connection, id: &str, host_id: Option<&str>) -> AppResult<Engagement> {
     crate::notes::check_scope(conn, id, host_id)?;
     conn.execute("UPDATE engagements SET msf_host_id = ?2, updated_at = ?3 WHERE id = ?1", params![id, host_id, system_now_ms()])?;
+    get(conn, id)
+}
+
+/// Pauses or resumes an exam sim's timebox. Pausing an already paused timebox, or resuming a running
+/// one, changes nothing. Only a started exam-sim timebox can pause.
+pub fn set_timebox_paused(conn: &Connection, id: &str, paused: bool) -> AppResult<Engagement> {
+    let e = get(conn, id)?;
+    let now = system_now_ms();
+    if paused {
+        if e.timebox_paused_at.is_some() {
+            return Ok(e);
+        }
+        match (e.kind.as_str(), e.timebox_start, e.timebox_minutes) {
+            ("exam-sim", Some(start), Some(_)) if start <= now => {}
+            _ => return Err(invalid("timeboxPaused", "only a started exam-sim timebox can pause")),
+        }
+        conn.execute("UPDATE engagements SET timebox_paused_at = ?2, updated_at = ?2 WHERE id = ?1", params![id, now])?;
+    } else {
+        let Some(at) = e.timebox_paused_at else { return Ok(e) };
+        conn.execute(
+            "UPDATE engagements SET timebox_paused_ms = timebox_paused_ms + ?2, timebox_paused_at = NULL, updated_at = ?3 WHERE id = ?1",
+            params![id, (now - at).max(0), now],
+        )?;
+    }
     get(conn, id)
 }
 
@@ -359,6 +393,51 @@ mod tests {
         let j = serde_json::to_value(&e).unwrap();
         assert_eq!(j["scopeCidrs"][0], "10.0.0.0/24");
         assert!(j.get("subLabel").is_some() && j.get("lastActivityAt").is_some());
+    }
+
+    #[test]
+    fn timebox_pause_and_resume_accumulate() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let mut i = input("sim", "exam-sim");
+        i.timebox_start = Some(system_now_ms() - 60_000);
+        i.timebox_minutes = Some(1425);
+        let e = create(c, i.clone()).unwrap();
+        assert_eq!((e.timebox_paused_ms, e.timebox_paused_at), (0, None));
+        // Resuming a running timebox changes nothing.
+        assert_eq!(set_timebox_paused(c, &e.id, false).unwrap().timebox_paused_at, None);
+        let p = set_timebox_paused(c, &e.id, true).unwrap();
+        let at = p.timebox_paused_at.expect("paused");
+        // Pausing twice keeps the first pause's start.
+        assert_eq!(set_timebox_paused(c, &e.id, true).unwrap().timebox_paused_at, Some(at));
+        // Pretend the pause began 10 minutes ago.
+        c.execute("UPDATE engagements SET timebox_paused_at = ?2 WHERE id = ?1", params![e.id, at - 600_000]).unwrap();
+        let r = set_timebox_paused(c, &e.id, false).unwrap();
+        assert_eq!(r.timebox_paused_at, None);
+        assert!(r.timebox_paused_ms >= 600_000 && r.timebox_paused_ms < 660_000, "{}", r.timebox_paused_ms);
+        // Editing the engagement keeps the paused total; clearing the timebox resets it.
+        assert_eq!(update(c, &e.id, i.clone()).unwrap().timebox_paused_ms, r.timebox_paused_ms);
+        set_timebox_paused(c, &e.id, true).unwrap();
+        let mut cleared = i.clone();
+        cleared.timebox_start = None;
+        let u = update(c, &e.id, cleared).unwrap();
+        assert_eq!((u.timebox_paused_ms, u.timebox_paused_at), (0, None));
+    }
+
+    #[test]
+    fn timebox_pause_needs_a_started_exam_sim_timebox() {
+        let (_d, v) = unlocked();
+        let c = v.conn().unwrap();
+        let lab = create(c, input("lab", "lab")).unwrap();
+        assert_eq!(field(set_timebox_paused(c, &lab.id, true)), "timeboxPaused");
+        let mut i = input("sim", "exam-sim");
+        i.timebox_minutes = Some(1425);
+        let not_started = create(c, i.clone()).unwrap();
+        assert_eq!(field(set_timebox_paused(c, &not_started.id, true)), "timeboxPaused");
+        i.timebox_start = Some(system_now_ms() + 3_600_000);
+        let future = create(c, i).unwrap();
+        assert_eq!(field(set_timebox_paused(c, &future.id, true)), "timeboxPaused");
+        assert!(matches!(set_timebox_paused(c, "nope", true), Err(AppError::NotFound)));
     }
 
     #[test]

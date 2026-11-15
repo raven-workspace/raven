@@ -86,7 +86,7 @@ describe('isMetasploitLine', () => {
 const engagement = (over: Partial<Engagement> = {}): Engagement => ({
   id: 'lab', name: 'Acme', kind: 'exam-sim', client: null, subLabel: null, scopeCidrs: [], domain: null, startsAt: null,
   endsAt: null, timeboxStart: null, timeboxMinutes: null, status: 'active', createdAt: 0, updatedAt: 0,
-  lastActivityAt: null, lastRanOn: null, msfHostId: null, ...over,
+  lastActivityAt: null, lastRanOn: null, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null, ...over,
 });
 const host = (id: string, name: string, ip: string): Host => ({
   id, engagementId: 'lab', name, ip, os: 'windows', boardColumn: 'information-gathering', boardManual: false, access: 'none',

@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../../App";
@@ -18,7 +18,7 @@ const m = vi.mocked(api, true);
 const E1: Engagement = {
   id: "e1", name: "Lab A", kind: "exam-sim", client: null, subLabel: null, scopeCidrs: ["192.0.2.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
-  createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
+  createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
 };
 
 beforeEach(() => {
@@ -128,5 +128,37 @@ describe("status strip and title bar", () => {
     const strip = await mountStrip();
     expect(await within(strip).findByRole("group", { name: "Rooted unavailable" })).toBeInTheDocument();
     expect(strip).not.toHaveTextContent("0/0");
+  });
+  it("a running exam-sim timebox shows a pause button and its time in the accent", async () => {
+    const running: Engagement = { ...E1, timeboxStart: Date.now() - 60 * 60_000, timeboxMinutes: 1425 };
+    m.engagementGet.mockResolvedValue(running);
+    m.engagementsList.mockResolvedValue([running]);
+    m.engagementSetTimeboxPaused.mockResolvedValue({ ...running, timeboxPausedAt: Date.now() });
+    const strip = await mountStrip();
+    const pause = await within(strip).findByRole("button", { name: "Pause timebox" });
+    expect(within(strip).getByText(/left$/).className).toMatch(/\btext-accent\b/);
+    fireEvent.click(pause);
+    await waitFor(() => expect(m.engagementSetTimeboxPaused).toHaveBeenCalledWith("e1", true));
+    expect(await within(strip).findByRole("button", { name: "Resume timebox" })).toBeInTheDocument();
+  });
+
+  it("a paused timebox shows its frozen time in grey and a resume button", async () => {
+    const start = Date.now() - 30 * 60 * 60_000;
+    const paused: Engagement = { ...E1, timeboxStart: start, timeboxMinutes: 1425, timeboxPausedAt: start + 2 * 60 * 60_000 };
+    m.engagementGet.mockResolvedValue(paused);
+    m.engagementsList.mockResolvedValue([paused]);
+    const strip = await mountStrip();
+    expect(await within(strip).findByRole("button", { name: "Resume timebox" })).toBeInTheDocument();
+    const time = within(strip).getByText("21h 45m left");
+    expect(time.className).toMatch(/\btext-muted\b/);
+  });
+
+  it("a timebox that is over or not started has no pause button", async () => {
+    const notStarted: Engagement = { ...E1, timeboxStart: null, timeboxMinutes: 1425 };
+    m.engagementGet.mockResolvedValue(notStarted);
+    m.engagementsList.mockResolvedValue([notStarted]);
+    const strip = await mountStrip();
+    await within(strip).findByText("Not started");
+    expect(within(strip).queryByRole("button", { name: /timebox/ })).toBeNull();
   });
 });

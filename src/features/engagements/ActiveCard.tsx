@@ -14,14 +14,28 @@ import {
   scopeSummary,
   timeLeft,
   timeboxElapsed,
+  timeboxNow,
+  timeboxState,
+  type TimeboxState,
 } from "./format";
 
-/** Hairline progress bar. Amber once the time is up; never the accent (time isn't a held fact). */
-export function TimeBar({ fraction, over }: { fraction: number; over?: boolean }) {
+/** Text colour of a timebox's time left: accent while it runs, muted while paused, amber once the time is up. */
+export const TIMEBOX_TEXT: Record<TimeboxState, string> = {
+  "not-started": "text-fg",
+  running: "text-accent",
+  paused: "text-muted",
+  over: "text-warn",
+};
+
+/** Hairline progress bar of a timebox, coloured like its time left (owner call: the accent shows it running). */
+export function TimeBar({ fraction, state }: { fraction: number; state: TimeboxState }) {
   return (
     <div className="h-[3px] w-full overflow-hidden rounded-full bg-line-2" aria-hidden>
       <div
-        className={cx("h-full rounded-full", over ? "bg-warn" : "bg-fg-2")}
+        className={cx(
+          "h-full rounded-full",
+          { "not-started": "bg-fg-2", running: "bg-accent", paused: "bg-muted", over: "bg-warn" }[state],
+        )}
         style={{ width: `${Math.round(fraction * 100)}%` }}
       />
     </div>
@@ -135,15 +149,15 @@ export function ActiveCard({ engagement: e, now }: { engagement: Engagement; now
 }
 
 function TimeboxLine({ engagement: e, now }: { engagement: Engagement & { timeboxMinutes: number }; now: number }) {
-  const left = timeLeft(e.timeboxStart, e.timeboxMinutes, now);
-  const over = left === "Time's up";
+  const clock = timeboxNow(e, now);
+  const state = timeboxState(e, now);
   return (
     <div className="grid gap-2">
       <p className="m-0 grid grid-flow-col justify-start gap-4 text-meta">
         <Stat label="Timebox" value={formatDuration(e.timeboxMinutes)} />
-        <span className={cx("font-mono text-code", over ? "text-warn" : "text-fg")}>{left}</span>
+        <span className={cx("font-mono text-code", TIMEBOX_TEXT[state])}>{timeLeft(e.timeboxStart, e.timeboxMinutes, clock)}</span>
       </p>
-      <TimeBar fraction={timeboxElapsed(e.timeboxStart, e.timeboxMinutes, now)} over={over} />
+      <TimeBar fraction={timeboxElapsed(e.timeboxStart, e.timeboxMinutes, clock)} state={state} />
     </div>
   );
 }

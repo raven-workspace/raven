@@ -31,7 +31,7 @@ function eng(over: Partial<Engagement> & Pick<Engagement, "id" | "name">): Engag
     createdAt: 1_700_000_000_000,
     updatedAt: 1_700_000_000_000,
     lastActivityAt: null,
-    lastRanOn: null, msfHostId: null,
+    lastRanOn: null, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
     ...over,
   };
 }
@@ -49,7 +49,7 @@ function fixtures(): Engagement[] {
       timeboxStart: now - 2 * HOUR,
       timeboxMinutes: 1425,
       lastActivityAt: now - 12 * MIN,
-      lastRanOn: null, msfHostId: null,
+      lastRanOn: null, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
     }),
     eng({ id: "e4", name: "Acme Corp internal", kind: "client", client: "Acme Corp", subLabel: "assumed breach" }),
     eng({ id: "e2", name: "Acme", kind: "lab", status: "archived" }),

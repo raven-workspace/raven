@@ -18,7 +18,7 @@ const flag = (id: string, hostId: string, isPrivate = false): LogEntry =>
   }) as unknown as LogEntry;
 
 const eng = (kind: EngagementKind, extra: Partial<Engagement> = {}): Engagement =>
-  ({ id: "e1", kind, timeboxStart: null, timeboxMinutes: null, ...extra }) as Engagement;
+  ({ id: "e1", kind, timeboxStart: null, timeboxMinutes: null, timeboxPausedMs: 0, timeboxPausedAt: null, ...extra }) as Engagement;
 
 const data = (kind: EngagementKind, hosts: Host[], log: LogEntry[] = []): ReportData =>
   ({

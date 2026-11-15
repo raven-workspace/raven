@@ -17,10 +17,12 @@ export function reportFileName(osid: string): string {
   return `OSCP-${isValidOsid(osid) ? osid : "OS-?????"}-Exam-Report.pdf`;
 }
 
-/** Exam end plus 24 h for the report; null when there is no exam end to count from. */
-export function reportDueAt(engagement: Engagement, meta: ReportMeta): number | null {
+/** Exam end plus 24 h for the report; null when there is no exam end to count from. Timebox pauses push the end back. */
+export function reportDueAt(engagement: Engagement, meta: ReportMeta, now: number = Date.now()): number | null {
   if (engagement.kind === "client") return null;
   if (meta.examEndAt != null) return meta.examEndAt + DAY_MS;
   if (engagement.kind !== "exam-sim" || engagement.timeboxStart == null || engagement.timeboxMinutes == null) return null;
-  return engagement.timeboxStart + engagement.timeboxMinutes * 60_000 + DAY_MS;
+  const pausedAt = engagement.timeboxPausedAt;
+  const paused = engagement.timeboxPausedMs + (pausedAt != null ? Math.max(0, now - pausedAt) : 0);
+  return engagement.timeboxStart + engagement.timeboxMinutes * 60_000 + paused + DAY_MS;
 }

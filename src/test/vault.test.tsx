@@ -202,6 +202,18 @@ describe("vault gate", () => {
     expect(screen.queryByTestId("inside")).not.toBeInTheDocument();
   });
 
+  it("cmd+L closes the cipher field over an inert frozen copy, which then goes", async () => {
+    const user = userEvent.setup();
+    m.vaultStatus.mockResolvedValue({ exists: true, unlocked: true });
+    mount();
+    await screen.findByTestId("inside");
+    await user.keyboard("{Meta>}l{/Meta}");
+    expect(await screen.findByLabelText("Password")).toBeInTheDocument();
+    // Whatever copy is still on screen can't be reached or read out.
+    for (const el of document.querySelectorAll("[data-testid=inside]")) expect(el.closest("[inert]")).not.toBeNull();
+    await vi.waitFor(() => expect(screen.queryByTestId("inside")).not.toBeInTheDocument());
+  });
+
   it("locking clears the clipboard after a secret copy, and leaves it alone after a non-secret copy", async () => {
     const user = userEvent.setup();
     const write = vi.spyOn(navigator.clipboard, "writeText");
@@ -269,6 +281,11 @@ describe("vault gate", () => {
       vi.setSystemTime(Date.now() + 8 * 60 * 60_000);
       act(fire);
       expect(m.vaultLock).toHaveBeenCalledTimes(1);
+      // The live app is gone; the lock sweep's frozen copy is inert, then goes too.
+      for (const el of document.querySelectorAll("[data-testid=inside]")) expect(el.closest("[inert]")).not.toBeNull();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
       expect(screen.queryByTestId("inside")).not.toBeInTheDocument();
     });
   }

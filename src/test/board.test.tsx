@@ -27,7 +27,7 @@ const E1: Engagement = {
   createdAt: 1,
   updatedAt: 1,
   lastActivityAt: null,
-  lastRanOn: null, msfHostId: null,
+  lastRanOn: null, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
 };
 
 function host(over: Partial<Host> & Pick<Host, "id" | "name">): Host {

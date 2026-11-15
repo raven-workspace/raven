@@ -5,6 +5,7 @@
  * - Pulse: a ring from the password field's centre that brightens and re-rolls the cells it passes
  *   (accent per keystroke, warn on a wrong password).
  * - Sweep: on unlock an accent ring clears the field outward and reveals the app underneath.
+ * - Close: on lock the same ring runs in reverse, closing the field in from the edges onto the password field.
  *
  * Frames are drawn only while something moves; at rest the canvas holds still. Reduced motion draws the settled
  * field and nothing else. All colours come from the Ink tokens.
@@ -32,6 +33,8 @@ interface Ring {
   band: number;
   life: number;
   sweep: boolean;
+  /** A sweep that runs inward (the lock): its radius shrinks from the far corner to the origin. */
+  reverse?: boolean;
 }
 
 export type PulseKind = "key" | "error";
@@ -78,6 +81,9 @@ export class CipherField {
   private ringId = 0;
   private origin = { x: 0, y: 0 };
   private sweepDone: (() => void) | null = null;
+  /** Set once the lock's reverse sweep has closed: every later frame paints the solid backdrop, so the frozen copy
+   * of the app under the canvas never shows through between the sweep's end and its removal. */
+  private covered = false;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -176,17 +182,29 @@ export class CipherField {
 
   /** The unlock: an accent ring clears the field from the password field outward. Resolves when it's gone. */
   sweep(): Promise<void> {
+    return this.ringSweep(false);
+  }
+
+  private ringSweep(reverse: boolean): Promise<void> {
     if (this.reduced || !this.ctx) return Promise.resolve();
+    this.finishSweep();
+    // The unlock sweep must reveal the app when it ends, even on a field that a lock's sweep closed.
+    this.covered = false;
     const { x, y } = this.origin;
     const far = Math.max(Math.hypot(x, y), Math.hypot(this.w - x, y), Math.hypot(x, this.h - y), Math.hypot(this.w - x, this.h - y));
     const speed = Math.hypot(this.w, this.h) / 420;
     const band = 80;
     this.rings = [];
-    this.rings.push({ id: ++this.ringId, t0: performance.now(), x, y, col: this.palette.accent, speed, band, life: (far + band) / speed, sweep: true });
+    this.rings.push({ id: ++this.ringId, t0: performance.now(), x, y, col: this.palette.accent, speed, band, life: (far + band) / speed, sweep: true, reverse });
     this.kick();
     return new Promise((resolve) => {
       this.sweepDone = resolve;
     });
+  }
+
+  /** The lock: the unlock sweep in reverse, closing the field in onto the password field. Resolves when it's closed. */
+  close(): Promise<void> {
+    return this.ringSweep(true);
   }
 
   /** Stops drawing. Any pending sweep resolves. */
@@ -217,6 +235,7 @@ export class CipherField {
   private readonly frame = (now: number) => {
     this.raf = 0;
     const sweepWas = this.rings.some((r) => r.sweep);
+    if (this.rings.some((r) => r.reverse && now - r.t0 >= r.life)) this.covered = true;
     this.rings = this.rings.filter((r) => now - r.t0 < r.life);
     this.draw(now);
     if (sweepWas && !this.rings.some((r) => r.sweep)) this.finishSweep();
@@ -228,8 +247,12 @@ export class CipherField {
     const { bg, tiers } = this.palette;
     ctx.clearRect(0, 0, this.w, this.h);
     const s = this.rings.find((r) => r.sweep);
-    const sr = s ? (now - s.t0) * s.speed : 0;
-    if (s) {
+    // The ring's radius: outward from 0 for the unlock, inward from past the far corner to 0 for the lock.
+    const sr = s ? (s.reverse ? s.life - (now - s.t0) : now - s.t0) * s.speed : 0;
+    if (!s && this.covered) {
+      ctx.fillStyle = css(bg);
+      ctx.fillRect(0, 0, this.w, this.h);
+    } else if (s) {
       // Everything not yet decrypted stays covered; the app shows through the hole.
       ctx.fillStyle = css(bg);
       ctx.beginPath();

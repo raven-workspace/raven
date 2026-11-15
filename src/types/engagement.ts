@@ -21,6 +21,10 @@ export interface Engagement {
   lastRanOn: string | null;
   /** The host holding the Metasploit lock, if any. */
   msfHostId: string | null;
+  /** Exam sims: time the timebox has spent paused, not counting a pause still running. */
+  timeboxPausedMs: number;
+  /** Exam sims: when the running pause began; null while the timebox runs. */
+  timeboxPausedAt: number | null;
 }
 
 /** Mirrors the Rust `EngagementInput` (create and full update). */

@@ -17,7 +17,7 @@ const m = vi.mocked(api, true);
 const E1: Engagement = {
   id: "e1", name: "Lab Zz", kind: "exam-sim", client: null, subLabel: null, scopeCidrs: ["192.0.2.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
-  createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
+  createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
 };
 const H: Host = {
   id: "h1", engagementId: "e1", name: "zzlin01", ip: "192.0.2.20", os: "linux", boardColumn: "information-gathering", boardManual: false,

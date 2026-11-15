@@ -36,6 +36,29 @@ export function timeboxElapsed(timeboxStart: number | null, timeboxMinutes: numb
   return Math.min(1, (now - timeboxStart) / (timeboxMinutes * MIN));
 }
 
+type TimeboxPause = Pick<Engagement, "timeboxPausedMs" | "timeboxPausedAt">;
+
+/**
+ * The timebox's own clock: real time minus the time spent paused, frozen while paused. Pass it as `now`
+ * to `timeLeft` and `timeboxElapsed`.
+ */
+export function timeboxNow(e: TimeboxPause, now: number): number {
+  return Math.min(now, e.timeboxPausedAt ?? now) - e.timeboxPausedMs;
+}
+
+export type TimeboxState = "not-started" | "running" | "paused" | "over";
+
+/** Where an exam sim's timebox stands right now. */
+export function timeboxState(
+  e: TimeboxPause & Pick<Engagement, "timeboxStart"> & { timeboxMinutes: number },
+  now: number,
+): TimeboxState {
+  const left = timeLeft(e.timeboxStart, e.timeboxMinutes, timeboxNow(e, now));
+  if (left === "Not started") return "not-started";
+  if (left === "Time's up") return "over";
+  return e.timeboxPausedAt !== null ? "paused" : "running";
+}
+
 /** An exam sim with a timebox shows time remaining instead of dates. */
 export function hasTimebox(e: Pick<Engagement, "kind" | "timeboxMinutes">): e is typeof e & { timeboxMinutes: number } {
   return e.kind === "exam-sim" && e.timeboxMinutes !== null;

@@ -22,7 +22,7 @@ const m = vi.mocked(api, true);
 const E1: Engagement = {
   id: "e1", name: "Lab A", kind: "exam-sim", client: null, subLabel: null, scopeCidrs: ["10.10.10.0/24"],
   domain: null, startsAt: null, endsAt: null, timeboxStart: null, timeboxMinutes: null, status: "active",
-  createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null,
+  createdAt: 1, updatedAt: 1, lastActivityAt: null, lastRanOn: null, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
 };
 const host = (id: string, name: string, over: Partial<Host> = {}): Host => ({
   id, engagementId: "e1", name, ip: "10.10.10.5", os: "windows", boardColumn: "information-gathering", boardManual: false,
@@ -103,7 +103,7 @@ describe("metasploit lock", () => {
 
   it("release asks first and clears the lock", async () => {
     const user = userEvent.setup();
-    m.engagementSetMsfHost.mockResolvedValue({ ...E1, msfHostId: null });
+    m.engagementSetMsfHost.mockResolvedValue({ ...E1, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null });
     mount("/e/e1", { ...E1, msfHostId: "h1" });
     await user.click(await screen.findByRole("button", { name: /Metasploit SRV11/ }));
     const release = await screen.findByRole("button", { name: "Release lock" });
