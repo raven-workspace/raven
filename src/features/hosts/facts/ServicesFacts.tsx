@@ -259,7 +259,7 @@ function DeleteServiceDialog({ engagementId, service, onClose }: { engagementId:
 
 type Open = { id: string; mode: "confirm" | "edit" | "delete" };
 
-/** The host's services: port, identity (confirmed beats nmap's guess) and the user's verdict, candidates first. */
+/** The host's services: port, identity (confirmed beats nmap's guess) and the user's verdict, in port order. */
 export function ServicesFacts({ engagementId, hostId, entries, open, onToggle }: {
   engagementId: string;
   hostId: string;

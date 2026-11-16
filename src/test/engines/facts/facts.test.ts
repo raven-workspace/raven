@@ -112,7 +112,7 @@ describe("foldServices", () => {
 });
 
 describe("sortServices", () => {
-  it("orders candidate, identify, untested, dead_end, then port", () => {
+  it("is port order only: verdicts and unidentified names never move a row", () => {
     const out = sortServices([
       svc({ port: 22, verdict: "dead_end" }),
       svc({ port: 80 }),
@@ -121,7 +121,22 @@ describe("sortServices", () => {
       svc({ port: 21, verdict: "candidate" }),
       svc({ port: 25 }),
     ]);
-    expect(out.map((s) => s.port)).toEqual([21, 8080, 9999, 25, 80, 22]);
+    expect(out.map((s) => s.port)).toEqual([21, 22, 25, 80, 8080, 9999]);
+  });
+
+  it("a version scan's unsure names stay in place (lab: 5986 ssl/wsmans? read as missing)", () => {
+    const sv: [number, string][] = [
+      [80, "http"], [2855, "msrp?"], [2856, "ssl/cesdinv?"], [3389, "ms-wbt-server"], [5060, "sip-proxy"], [5066, "websocket"],
+      [5080, "sip-proxy"], [5986, "ssl/wsmans?"], [7443, "ssl/oracleas-https?"], [7680, "pando-pub?"], [8021, "freeswitch-event"],
+      [8081, "websocket"], [8082, "ssl/websocket"],
+    ];
+    const out = sortServices([...sv].reverse().map(([port, nmapService]) => svc({ port, nmapService })));
+    expect(out.map((s) => s.port)).toEqual(sv.map(([p]) => p));
+  });
+
+  it("the same port number: tcp before udp", () => {
+    const out = sortServices([svc({ port: 53, protocol: "udp", verdict: "candidate" }), svc({ port: 53, protocol: "tcp" })]);
+    expect(out.map((s) => s.protocol)).toEqual(["tcp", "udp"]);
   });
 });
 
