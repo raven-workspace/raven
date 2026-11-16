@@ -48,8 +48,10 @@ export function foldServices(services: Service[]): { rows: Service[]; rpc: Servi
   return { rows, rpc, udp };
 }
 
-const ORDER: Record<EffectiveVerdict, number> = { candidate: 0, identify: 1, untested: 2, dead_end: 3 };
-
+/**
+ * Port order, always (tcp before udp on the same number). Owner call 2026-11-15: rows that jump when a verdict or a
+ * version scan's "?" names change read as missing ports; the row's icons carry the verdict and identity instead.
+ */
 export function sortServices(rows: Service[]): Service[] {
-  return [...rows].sort((a, b) => ORDER[effectiveVerdict(a)] - ORDER[effectiveVerdict(b)] || a.port - b.port);
+  return [...rows].sort((a, b) => a.port - b.port || (a.protocol === b.protocol ? 0 : a.protocol === "tcp" ? -1 : 1));
 }

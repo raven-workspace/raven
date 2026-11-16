@@ -202,17 +202,17 @@ describe("S toggles Services", () => {
 });
 
 describe("services grid", () => {
-  it("is a port / identity / verdict grid, sorted candidate, identify, untested, dead end", async () => {
+  it("is a port / identity / verdict grid in port order, whatever the verdicts", async () => {
     mount({ services: [SSH, svc("s4", 21, { nmapService: "ftp", verdict: "dead_end" }), SMB, NGINX] });
     const g = await group("Services");
     const list = (await g.findAllByRole("list"))[0];
     expect(list.className).toContain("grid-cols-[6ch_minmax(0,1fr)_auto]");
     const rows = within(list).getAllByRole("button", { name: /\/tcp/ }).filter((b) => b.hasAttribute("data-service-row"));
     expect(rows.map((r) => r.getAttribute("aria-label"))).toEqual([
+      "21/tcp ftp, dead end",
+      "22/tcp ssh OpenSSH 8.2, untested",
       "80/tcp nginx 1.18, candidate",
       "445/tcp microsoft-ds?, identify",
-      "22/tcp ssh OpenSSH 8.2, untested",
-      "21/tcp ftp, dead end",
     ]);
   });
 
