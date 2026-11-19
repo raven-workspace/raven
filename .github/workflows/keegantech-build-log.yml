@@ -1,0 +1,24 @@
+# Rebuilds keegantech.dev when main changes, so the Raven dossier's build log
+# (pulled from this repo's commits at build time) stays current.
+# KEEGANTECH_DEPLOY_HOOK is a Cloudflare Workers Builds deploy hook URL.
+name: Update keegantech.dev build log
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: keegantech-build-log
+  cancel-in-progress: true
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Trigger keegantech.dev rebuild
+        env:
+          HOOK: ${{ secrets.KEEGANTECH_DEPLOY_HOOK }}
+        run: curl -fsS -X POST "$HOOK" -o /dev/null
