@@ -2,7 +2,7 @@ import type { ListenerId } from "./types";
 
 export interface ListenerDef {
   label: string;
-  /** Placeholders ({LPORT} {LHOST} {TARGET_IP} {BIND_PORT} {MSF_PAYLOAD}) are filled by buildListener. */
+  /** Placeholders ({LPORT} {LHOST} {TARGET_IP} {BIND_PORT} {MSF_PAYLOAD}) are filled by fillListener. */
   template: string;
   /** Kali connects out to a bind shell instead of waiting for a callback. */
   connect?: boolean;
@@ -35,8 +35,4 @@ export function fillListener(template: string, values: Record<string, string>): 
     const v = (values[name] ?? "").trim();
     return v === "" ? m : v;
   });
-}
-
-export function buildListener(id: ListenerId, values: Record<string, string>): string {
-  return fillListener(LISTENERS[id].template, values);
 }

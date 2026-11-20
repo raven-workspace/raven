@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { scanCommandLines } from '../../../engines/checklist';
+import { scanProvenanceLines } from '../../../engines/checklist';
 
 const BODY = `Nmap scan report for 10.10.10.5
 Host is up (0.050s latency).
@@ -10,21 +10,18 @@ PORT   STATE SERVICE VERSION
 const header = (cmd: string) => `# Nmap 7.94 scan initiated Mon Nov  2 10:00:00 2026 as: ${cmd}\n${BODY}`;
 const NO_COMMAND = BODY.split('\n').slice(0, 5).join('\n');
 
-describe('scanCommandLines', () => {
+describe('scanProvenanceLines', () => {
   it('reads the nmap as: header', () => {
-    expect(scanCommandLines(header('nmap -p- -T4 -oN full.nmap 10.10.10.5'))).toEqual(['nmap -p- -T4 -oN full.nmap 10.10.10.5']);
+    expect(scanProvenanceLines(header('nmap -p- -T4 -oN full.nmap 10.10.10.5'))).toEqual(['nmap -p- -T4 -oN full.nmap 10.10.10.5']);
   });
 
   it('output with no command yields nothing', () => {
-    expect(scanCommandLines(NO_COMMAND)).toEqual([]);
+    expect(scanProvenanceLines(NO_COMMAND)).toEqual([]);
   });
 
-  it('reads a pasted prompt line and the XML args attribute', () => {
-    expect(scanCommandLines(`kali@kali:~$ nmap -p- 10.10.10.5\n${NO_COMMAND}`)).toEqual(['nmap -p- 10.10.10.5']);
-    expect(scanCommandLines(`└─$ sudo nmap -p- 10.10.10.5\n${NO_COMMAND}`)).toEqual(['sudo nmap -p- 10.10.10.5']);
-    expect(scanCommandLines(`# nmap -p- 10.10.10.5\n${NO_COMMAND}`)).toEqual(['nmap -p- 10.10.10.5']);
-    expect(scanCommandLines(`nmap -p- 10.10.10.5\n${NO_COMMAND}`)).toEqual(['nmap -p- 10.10.10.5']);
+  it('reads the XML args attribute but not typed-looking lines', () => {
+    expect(scanProvenanceLines(`kali@kali:~$ nmap -p- 10.10.10.5\n${NO_COMMAND}`)).toEqual([]);
     const xml = '<?xml version="1.0"?>\n<nmaprun scanner="nmap" args="nmap -p- -oX full.xml 10.10.10.5" start="1">\n</nmaprun>';
-    expect(scanCommandLines(xml)).toEqual(['nmap -p- -oX full.xml 10.10.10.5']);
+    expect(scanProvenanceLines(xml)).toEqual(['nmap -p- -oX full.xml 10.10.10.5']);
   });
 });

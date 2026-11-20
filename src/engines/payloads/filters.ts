@@ -1,5 +1,5 @@
 import type { PasteContext } from "./context";
-import { urlEncodeShell, utf16leBase64 } from "./encode";
+import { utf16leBase64 } from "./encode";
 import type { PayloadPart } from "./types";
 
 /** A wrapper that hides the payload's characters from a filtered injection point. */
@@ -87,6 +87,3 @@ export function applyFilter(raw: string, f: Exclude<FilterId, "off">): { text: s
       };
   }
 }
-
-/** URL-encodes filtered text. A filter only runs with nothing unresolved, so every {…} left (${IFS}) is encoded. */
-export const urlEncodeFiltered = (s: string) => urlEncodeShell(s);

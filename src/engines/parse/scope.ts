@@ -50,24 +50,6 @@ export function ipInScope(ip: string, scope: string[]): boolean {
   });
 }
 
-/** Unique IPv4s as whole tokens, in first-seen order. */
-export function extractIps(text: string): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const m of text.matchAll(/(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d]|\.\d)/g)) {
-    const ip = m[0];
-    if (ipToInt(ip) === null || seen.has(ip)) continue;
-    seen.add(ip);
-    out.push(ip);
-  }
-  return out;
-}
-
-export function isIgnoredIp(ip: string, lhost?: string): boolean {
-  if (lhost && ip === lhost) return true;
-  return ip === '0.0.0.0' || ip.startsWith('127.');
-}
-
 /** The network an address sits in, as a CIDR string: `networkOf("172.16.5.10", 24)` is `"172.16.5.0/24"`. */
 export function networkOf(ip: string, prefix: number): string {
   const n = ipToInt(ip);

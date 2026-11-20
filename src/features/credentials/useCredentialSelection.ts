@@ -9,7 +9,7 @@ type Ctx = Parameters<typeof resolveSelection>[2];
  * Selected credential (`cred`) and work tab (`tab=inventory`) live in the URL so back/refresh keep them.
  * While `ready` is false (data still loading) the URL is never rewritten, so a deep link survives.
  */
-export function useCredentialSelection(_eid: string, creds: Credential[], ctx: Ctx, ready: boolean) {
+export function useCredentialSelection(creds: Credential[], ctx: Ctx, ready: boolean) {
   const [params, setParams] = useSearchParams();
   const requested = params.get("cred");
   const selectedId = ready ? resolveSelection(requested, creds, ctx) : (requested ?? undefined);

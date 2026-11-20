@@ -1,4 +1,3 @@
-import { EmptyState } from "../../ui";
 import { EngagementChecklist } from "../checklist/EngagementChecklist";
 import { Board } from "../board/Board";
 import { LogSection } from "../log/LogSection";
@@ -8,13 +7,13 @@ import { NetworkSection } from "../network/NetworkSection";
 import { ReportSectionView } from "../report/ReportSection";
 
 export const SECTIONS = [
-  { id: "board", label: "Board", empty: "" },
-  { id: "log", label: "Log", empty: "Log arrives in a later build step" },
-  { id: "credentials", label: "Credentials", empty: "Credentials arrive in a later build step" },
-  { id: "findings", label: "Findings", empty: "Findings arrive in a later build step" },
-  { id: "network", label: "Network", empty: "" },
-  { id: "checklist", label: "Engagement checklist", empty: "The engagement checklist arrives in a later build step" },
-  { id: "report", label: "Report", empty: "" },
+  { id: "board", label: "Board" },
+  { id: "log", label: "Log" },
+  { id: "credentials", label: "Credentials" },
+  { id: "findings", label: "Findings" },
+  { id: "network", label: "Network" },
+  { id: "checklist", label: "Engagement checklist" },
+  { id: "report", label: "Report" },
 ] as const;
 
 export type SectionId = (typeof SECTIONS)[number]["id"];
@@ -31,7 +30,5 @@ export function SectionView({ section }: { section: SectionId }) {
   if (section === "findings") return <FindingsSection />;
   if (section === "network") return <NetworkSection />;
   if (section === "checklist") return <EngagementChecklist />;
-  if (section === "report") return <ReportSectionView />;
-  const s = SECTIONS.find((x) => x.id === section)!;
-  return <EmptyState title={s.empty} />;
+  return <ReportSectionView />;
 }

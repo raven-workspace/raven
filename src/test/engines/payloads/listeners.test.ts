@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { LISTENERS, buildListener } from "../../../engines/payloads/listeners";
+import { LISTENERS, fillListener } from "../../../engines/payloads/listeners";
 import type { ListenerId } from "../../../engines/payloads/types";
+
+const build = (id: ListenerId, values: Record<string, string>) => fillListener(LISTENERS[id].template, values);
 
 const VALUES = {
   LHOST: "192.0.2.10", LPORT: "443", TARGET_IP: "198.51.100.20", BIND_PORT: "4444",
   MSF_PAYLOAD: "windows/x64/meterpreter/reverse_tcp",
 };
 
-describe("buildListener", () => {
+describe("fillListener", () => {
   const want: Record<ListenerId, string> = {
     penelope: "penelope -O -p 443",
     "rlwrap-nc": "rlwrap nc -lvnp 443",
@@ -19,7 +21,7 @@ describe("buildListener", () => {
     "connect-penelope": "penelope -O -c 198.51.100.20 -p 4444",
   };
   it.each(Object.entries(want))("%s", (id, text) => {
-    expect(buildListener(id as ListenerId, VALUES)).toBe(text);
+    expect(build(id as ListenerId, VALUES)).toBe(text);
   });
   it("covers every listener id", () => {
     expect(Object.keys(LISTENERS).sort()).toEqual(Object.keys(want).sort());
@@ -29,8 +31,8 @@ describe("buildListener", () => {
     expect(connect).toEqual(["connect-nc", "connect-penelope", "connect-socat"]);
   });
   it("a missing value stays visible as its placeholder", () => {
-    expect(buildListener("penelope", {})).toBe("penelope -O -p {LPORT}");
-    expect(buildListener("connect-nc", { TARGET_IP: " " , BIND_PORT: "4444" })).toBe("rlwrap nc -nv {TARGET_IP} 4444");
+    expect(build("penelope", {})).toBe("penelope -O -p {LPORT}");
+    expect(build("connect-nc", { TARGET_IP: " " , BIND_PORT: "4444" })).toBe("rlwrap nc -nv {TARGET_IP} 4444");
   });
   it("penelope's note names the rlwrap fallback; socat's says reset", () => {
     expect(LISTENERS.penelope.note).toBe("No penelope? rlwrap nc -lvnp {LPORT}");

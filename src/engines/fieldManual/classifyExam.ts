@@ -59,11 +59,9 @@ function runsBannedTool(template: string): boolean {
  * prohibited automatic tool (or Responder outside analyse mode); `metasploit` when a line spends the exam's
  * Metasploit use by the engine's own rule (`isMetasploitLine`: a module other than multi/handler) or uses a
  * Meterpreter payload. A multi/handler alone never counts. Only for vault-added commands: a matched built-in keeps
- * its own rule.
- * `note` is accepted for compatibility and ignored: its prose is not safe to keyword-match.
+ * its own rule. The command's note is never read: its prose is not safe to keyword-match.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function classifyExam(template: string, cardExam?: string, _note?: string): ExamRule | undefined {
+export function classifyExam(template: string, cardExam?: string): ExamRule | undefined {
   if (cardExam === 'prohibited' || runsBannedTool(template)) return 'banned';
   const lines = nonCommentLines(template);
   if (lines.some((l) => isMetasploitLine(l) || METERPRETER.test(l))) return 'metasploit';

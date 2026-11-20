@@ -29,21 +29,3 @@ export interface LibraryCommand {
   /** Built-ins only: lines that must / must not match `match` (tested). */
   matchExamples?: { hit: string[]; miss: string[] };
 }
-
-export interface CommandLibraryUser {
-  added: (LibraryCommand & { updatedAt: string })[];
-  edited: Record<string, Partial<LibraryCommand> & { updatedAt: string }>;
-  /** id -> when it was retired. Retired iff present and later than `unretired[id]` (if any). */
-  retired: Record<string, string>;
-  /** id -> when it was restored. Lets a restore sync (retired merges per key, so its entry never goes away). */
-  unretired?: Record<string, string>;
-  /** goalId -> command ids */
-  preferred: Record<string, { order: string[]; updatedAt: string }>;
-}
-
-export const EMPTY_LIBRARY_USER: CommandLibraryUser = {
-  added: [],
-  edited: {},
-  retired: {},
-  preferred: {},
-};
