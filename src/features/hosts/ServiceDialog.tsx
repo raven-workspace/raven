@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent } from "react";
 import type { Service, ServiceProtocol } from "../../types/service";
 import { Button, Dialog, Field, Input, Select } from "../../ui";
 import { useServiceMutations } from "../services/queries";
+import "./ServiceDialog.scss";
 
 const PROTOCOLS = [
   { value: "tcp", label: "tcp" },
@@ -57,8 +58,8 @@ export function ServiceDialog({ engagementId, hostId, service, onClose }: Servic
         </>
       }
     >
-      <form id={formId} onSubmit={submit} noValidate className="grid gap-4">
-        <div className="grid grid-cols-2 gap-3">
+      <form id={formId} onSubmit={submit} noValidate className="service-dialog">
+        <div className="service-dialog__pair">
           <Field label="Port">
             <Input autoFocus mono inputMode="numeric" value={port} onChange={(e) => setPort(e.target.value)} placeholder="80" />
           </Field>
@@ -72,7 +73,7 @@ export function ServiceDialog({ engagementId, hostId, service, onClose }: Servic
         <Field label="Version">
           <Input mono value={version} onChange={(e) => setVersion(e.target.value)} placeholder="Apache httpd 2.4.41" />
         </Field>
-        {error && <p className="m-0 text-meta text-warn">{error}</p>}
+        {error && <p className="service-dialog__error">{error}</p>}
       </form>
     </Dialog>
   );

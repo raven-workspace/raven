@@ -1,0 +1,49 @@
+@use "@/styles/abstracts" as *;
+
+@layer features {
+  .host-dialog {
+    display: grid;
+    gap: var(--space-lg);
+  }
+
+  // OS / Access.
+  .host-dialog__pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-md);
+  }
+
+  .host-dialog__dual-homed {
+    justify-self: flex-start;
+  }
+
+  .host-dialog__ad-set {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .host-dialog__ad-label {
+    display: block;
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .host-dialog__ad-choices {
+    align-items: center;
+  }
+
+  .host-dialog__ad-auto {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .host-dialog__error {
+    @include type(meta);
+    color: var(--warn);
+  }
+
+  // Delete sits at the footer's left edge.
+  .host-dialog__delete {
+    margin-right: auto;
+  }
+}

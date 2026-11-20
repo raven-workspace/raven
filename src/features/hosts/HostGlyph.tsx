@@ -1,6 +1,7 @@
 import { CheckCircle } from "@phosphor-icons/react";
 import type { BoardColumn } from "../../types/host";
 import { COLUMN_LABELS } from "./columns";
+import "./HostGlyph.scss";
 
 /** Pie fill in quarters: 0 = empty ring, 4 = full disc. */
 const FILL: Partial<Record<BoardColumn, 0 | 1 | 2 | 3 | 4>> = {
@@ -28,7 +29,7 @@ export function HostGlyph({ column }: { column: BoardColumn }) {
     <span
       role="img"
       aria-label={COLUMN_LABELS[column]}
-      className={`grid size-4 place-items-center ${done ? "text-accent" : "text-muted-2"}`}
+      className={done ? "host-glyph host-glyph--done" : "host-glyph"}
     >
       {done ? (
         <CheckCircle size={16} weight="regular" aria-hidden />

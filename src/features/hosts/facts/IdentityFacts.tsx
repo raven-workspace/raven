@@ -2,7 +2,6 @@ import { PencilSimpleIcon } from "@phosphor-icons/react";
 import { useId, useMemo, useState, type FormEvent } from "react";
 import { credLabel, dedupeHashCaptures, foldCrackedHashes, usernameLabel } from "../../../engines/credentials";
 import { vectorsFromIdentity } from "../../../engines/facts";
-import { cx } from "../../../lib/cx";
 import type { HostIdentity } from "../../../types/hostFacts";
 import type { Host } from "../../../types/host";
 import { Button, ChipSet, IconButton, Input, Toolbar } from "../../../ui";
@@ -12,6 +11,7 @@ import { useHostFactsMutations, useHostIdentity } from "../queries";
 import { EntryLink, FactGroup, SummaryCell } from "./FactGroup";
 import { identityFromLog } from "./identityFromLog";
 import { RavenError } from "../../../types/errors";
+import "./IdentityFacts.scss";
 
 /** `MS01\iis`, `iis@corp` and `iis` are the same account name. */
 export const bareName = (name: string) => (name.split("\\").pop() ?? name).split("@")[0].trim().toLowerCase();
@@ -19,8 +19,6 @@ export const bareName = (name: string) => (name.split("\\").pop() ?? name).split
 const isNotablePriv = (p: string) => vectorsFromIdentity({ privileges: [p], groups: [] }).length > 0;
 const isNotableGroup = (g: string) => vectorsFromIdentity({ privileges: [], groups: [g] }).length > 0;
 const splitList = (s: string) => s.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
-
-const KV = "grid grid-cols-[6ch_minmax(0,1fr)] gap-x-2 gap-y-1 text-meta";
 
 function IdentityForm({ engagementId, host, identity, onDone }: {
   engagementId: string;
@@ -56,7 +54,7 @@ function IdentityForm({ engagementId, host, identity, onDone }: {
   return (
     <form
       aria-label="Edit who am I"
-      className="grid gap-2"
+      className="identity-form"
       onSubmit={(e) => void submit(e)}
       onKeyDown={(e) => {
         if (e.key !== "Escape") return;
@@ -64,21 +62,21 @@ function IdentityForm({ engagementId, host, identity, onDone }: {
         onDone();
       }}
     >
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-2 gap-y-2 text-meta">
-        <label htmlFor={`${idBase}-user`} className="text-muted">User</label>
+      <div className="identity-form__fields">
+        <label htmlFor={`${idBase}-user`} className="identity-form__label">User</label>
         <Input id={`${idBase}-user`} autoFocus mono placeholder="e.g. corp\svc_web" value={username} onChange={(e) => setUsername(e.target.value)} />
-        <label htmlFor={`${idBase}-privs`} className="text-muted">Privileges</label>
-        <div className="grid min-w-0 gap-1">
+        <label htmlFor={`${idBase}-privs`} className="identity-form__label">Privileges</label>
+        <div className="identity-form__field">
           <Input id={`${idBase}-privs`} mono aria-describedby={`${idBase}-privs-hint`} placeholder="e.g. SeImpersonatePrivilege SeBackupPrivilege" value={privileges} onChange={(e) => setPrivileges(e.target.value)} />
-          <p id={`${idBase}-privs-hint`} className="m-0 text-meta text-muted">Separate with spaces</p>
+          <p id={`${idBase}-privs-hint`} className="fact-group__note">Separate with spaces</p>
         </div>
-        <label htmlFor={`${idBase}-groups`} className="text-muted">Groups</label>
-        <div className="grid min-w-0 gap-1">
+        <label htmlFor={`${idBase}-groups`} className="identity-form__label">Groups</label>
+        <div className="identity-form__field">
           <Input id={`${idBase}-groups`} mono aria-describedby={`${idBase}-groups-hint`} placeholder="e.g. docker sudo" value={groups} onChange={(e) => setGroups(e.target.value)} />
-          <p id={`${idBase}-groups-hint`} className="m-0 text-meta text-muted">Separate with spaces</p>
+          <p id={`${idBase}-groups-hint`} className="fact-group__note">Separate with spaces</p>
         </div>
       </div>
-      {error && <p role="alert" className="m-0 text-meta text-warn">{error}</p>}
+      {error && <p role="alert" className="fact-group__error">{error}</p>}
       <Toolbar>
         <Button size="sm" variant="primary" type="submit" disabled={pending}>Save</Button>
         <Button size="sm" onClick={onDone}>Cancel</Button>
@@ -150,14 +148,14 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
       }
     >
       {/* Shown whatever the branch: identity can be saved and a vector upsert still fail. */}
-      {readError && <p role="alert" className="m-0 text-meta text-warn">{readError}</p>}
+      {readError && <p role="alert" className="fact-group__error">{readError}</p>}
       {identityQ.isError ? (
-        <p role="alert" className="m-0 text-meta text-warn">Couldn't load who you are here: {identityQ.error.message}</p>
+        <p role="alert" className="fact-group__error">Couldn't load who you are here: {identityQ.error.message}</p>
       ) : editing ? (
         <IdentityForm engagementId={engagementId} host={host} identity={identity} onDone={() => setEditing(false)} />
       ) : !identity ? (
-        <div className="grid gap-2">
-          <p className="m-0 text-meta text-muted">Not known yet. Log whoami /all or id output on this host.</p>
+        <div className="identity-facts__empty">
+          <p className="fact-group__note">Not known yet. Log whoami /all or id output on this host.</p>
           {fromLog && fromLog.sources > 0 && (
             <div>
               <Button size="sm" onClick={() => void readFromLog()} disabled={setIdentity.isPending || upsertVector.isPending}>
@@ -167,22 +165,22 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
           )}
         </div>
       ) : (
-        <dl className={cx(KV, "m-0")}>
-          <dt className="text-muted">user</dt>
-          <dd className="m-0 min-w-0 truncate font-mono text-fg" title={identity.username}>{identity.username}</dd>
+        <dl className="identity-facts__kv">
+          <dt className="identity-facts__key">user</dt>
+          <dd className="identity-facts__user" title={identity.username}>{identity.username}</dd>
           {grant && (
             <>
-              <dt className="text-muted">via</dt>
-              <dd className="m-0 min-w-0 text-fg-2">{grant.via}</dd>
+              <dt className="identity-facts__key">via</dt>
+              <dd className="identity-facts__value identity-facts__value--text">{grant.via}</dd>
             </>
           )}
           {identity.privileges.length > 0 && (
             <>
-              <dt className="text-muted">privs</dt>
-              <dd className="m-0 min-w-0">
-                <ChipSet className="gap-y-0 text-code">
+              <dt className="identity-facts__key">privs</dt>
+              <dd className="identity-facts__value">
+                <ChipSet className="identity-facts__chips">
                   {identity.privileges.map((p) => (
-                    <span key={p} className={isNotablePriv(p) ? "text-accent" : "text-muted"}>{p}</span>
+                    <span key={p} className={isNotablePriv(p) ? "identity-facts__item--notable" : "identity-facts__item"}>{p}</span>
                   ))}
                 </ChipSet>
               </dd>
@@ -190,19 +188,19 @@ export function IdentityFacts({ engagementId, host, open, onToggle, onOpenEntry 
           )}
           {identity.groups.length > 0 && (
             <>
-              <dt className="text-muted">groups</dt>
-              <dd className="m-0 min-w-0">
-                <ChipSet className="gap-y-0 text-code">
-                  {groups.map((g) => <span key={g} className="text-accent">{g}</span>)}
-                  {otherGroups > 0 && <span className="text-muted">{groups.length > 0 ? `+${otherGroups} more` : `${otherGroups} group${otherGroups === 1 ? "" : "s"}`}</span>}
+              <dt className="identity-facts__key">groups</dt>
+              <dd className="identity-facts__value">
+                <ChipSet className="identity-facts__chips">
+                  {groups.map((g) => <span key={g} className="identity-facts__item--notable">{g}</span>)}
+                  {otherGroups > 0 && <span className="identity-facts__item">{groups.length > 0 ? `+${otherGroups} more` : `${otherGroups} group${otherGroups === 1 ? "" : "s"}`}</span>}
                 </ChipSet>
               </dd>
             </>
           )}
           {source && (
             <>
-              <dt className="text-muted">from</dt>
-              <dd className="m-0 min-w-0">
+              <dt className="identity-facts__key">from</dt>
+              <dd className="identity-facts__value">
                 <EntryLink title={source.title} onClick={() => onOpenEntry?.(source.id)} />
               </dd>
             </>
@@ -246,18 +244,18 @@ export function OtherAccountsFacts({ engagementId, host, open, onToggle }: {
   return (
     <FactGroup title="Other accounts" summary={summary} open={open} onToggle={onToggle}>
       {failed ? (
-        <p role="alert" className="m-0 text-meta text-warn">Couldn't load credentials: {failed.message}</p>
+        <p role="alert" className="fact-group__error">Couldn't load credentials: {failed.message}</p>
       ) : !ready ? null : rows.length === 0 ? (
-        <p className="m-0 text-meta text-muted">None yet. Uncracked hashes and credentials found on this host show here.</p>
+        <p className="fact-group__note">None yet. Uncracked hashes and credentials found on this host show here.</p>
       ) : (
-        <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 p-0 text-meta">
+        <ul className="other-accounts">
           {rows.slice(0, OTHER_ACCOUNTS_SHOWN).map((r) => (
-            <li key={r.id} className="col-span-2 grid grid-cols-subgrid items-baseline">
-              <span className="truncate font-mono text-fg" title={r.label}>{r.label}</span>
-              <span className="text-meta text-muted">{r.kind}</span>
+            <li key={r.id} className="other-accounts__row">
+              <span className="other-accounts__label" title={r.label}>{r.label}</span>
+              <span className="other-accounts__kind">{r.kind}</span>
             </li>
           ))}
-          {more > 0 && <li className="col-span-2 text-meta text-muted">+{more} more on the Credentials page</li>}
+          {more > 0 && <li className="other-accounts__more">+{more} more on the Credentials page</li>}
         </ul>
       )}
     </FactGroup>

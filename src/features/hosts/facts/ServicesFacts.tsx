@@ -13,6 +13,7 @@ import { ConfirmServiceDialog } from "../ConfirmServiceDialog";
 import { ServiceDialog } from "../ServiceDialog";
 import { FactGroup, SummaryCell } from "./FactGroup";
 import { ConfirmDelete } from "../../checklist/ConfirmDelete";
+import "./ServicesFacts.scss";
 
 const VERDICT_LABEL: Record<EffectiveVerdict, string> = {
   candidate: "candidate",
@@ -26,8 +27,7 @@ const VERDICT_CHIP: Record<EffectiveVerdict, ChipVariant> = {
   untested: "default",
   dead_end: "default",
 };
-const GRID = "grid grid-cols-[6ch_minmax(0,1fr)_auto] gap-x-2";
-const ROW = "col-span-3 grid grid-cols-subgrid items-center border-b border-line";
+const ROW = "services-facts__row";
 
 /** What the folded Services line counts: confirmed identities, the first candidate (the entry), and unidentified ones. */
 export function servicesSummaryParts(services: Service[]) {
@@ -109,26 +109,26 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
         title={verdict === "dead_end" ? `${proto}: dead end. Change it from the verdict menu` : `${proto}: C candidate, U untested, D dead end`}
         onClick={onOpen}
         onKeyDown={onKeyDown}
-        className="col-span-2 grid min-h-8 cursor-default grid-cols-subgrid items-center py-1 text-left hover:bg-surface focus-visible:bg-surface"
+        className="services-facts__service"
       >
-        <span className="text-code text-fg-2">
+        <span className="services-facts__port">
           {s.port}
-          {s.protocol === "udp" && <span className="text-faint">u</span>}
+          {s.protocol === "udp" && <span className="services-facts__udp">u</span>}
         </span>
-        <span className="grid min-w-0 grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 text-meta">
-          <span className={id.confirmed ? "text-accent" : "text-fg-2"}>
+        <span className="services-facts__ident">
+          <span className={id.confirmed ? "services-facts__mark services-facts__mark--confirmed" : "services-facts__mark"}>
             {id.confirmed && <CheckIcon size={16} weight="regular" aria-hidden />}
-            {id.confirmed && <span className="sr-only">confirmed</span>}
+            {id.confirmed && <span className="services-facts__sr-only">confirmed</span>}
             {!id.confirmed && id.unidentified && <QuestionIcon size={16} weight="regular" aria-hidden />}
-            {!id.confirmed && id.unidentified && <span className="sr-only">unidentified</span>}
+            {!id.confirmed && id.unidentified && <span className="services-facts__sr-only">unidentified</span>}
           </span>
           <span
-            className={cx("truncate", id.confirmed ? "text-fg" : "text-muted")}
+            className={cx("services-facts__label", id.confirmed && "services-facts__label--confirmed")}
             title={id.confirmed && guess ? `nmap: ${guess}` : id.label || undefined}
           >
             {id.label || "unidentified"}
           </span>
-          {s.state !== "open" && <span className="text-code text-muted-2">{s.state}</span>}
+          {s.state !== "open" && <span className="services-facts__state">{s.state}</span>}
         </span>
       </button>
       {/* A status chip as a toggle (DESIGN.md Chips): a 28px target, its action in a tooltip. */}
@@ -138,15 +138,15 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
           aria-label={`Verdict for ${proto}: ${VERDICT_LABEL[verdict]}`}
           aria-expanded={asking === "menu"}
           onClick={() => setAsking(asking === "menu" ? undefined : "menu")}
-          className="grid min-h-7 cursor-default place-items-center justify-self-start"
+          className="services-facts__verdict"
         >
-          <Chip variant={VERDICT_CHIP[verdict]} className={verdict === "dead_end" ? "text-muted line-through" : undefined}>
+          <Chip variant={VERDICT_CHIP[verdict]} className={verdict === "dead_end" ? "services-facts__chip--dead" : undefined}>
             {VERDICT_LABEL[verdict]}
           </Chip>
         </button>
       </Tooltip>
       {asking === "menu" && (
-        <div className="col-span-3 grid grid-flow-col items-center justify-start gap-2 pb-2">
+        <div className="services-facts__menu">
           <ToggleGroup
             type="single"
             size="sm"
@@ -171,7 +171,7 @@ function ServiceRow({ s, onOpen, onVerdict, pending }: {
       )}
       {asking === "reason" && (
         <form
-          className="col-span-3 pb-2"
+          className="services-facts__reason"
           onSubmit={(e) => {
             e.preventDefault();
             if (pending || reason.trim() === "") return;
@@ -218,15 +218,15 @@ export function FoldedRows({ label, services, render, defaultOpen = false }: {
           aria-expanded={open}
           title={open ? `Fold ${label}` : `Show ${label}`}
           onClick={() => setOpen(!open)}
-          className="col-span-3 grid min-h-8 cursor-default grid-cols-subgrid items-center py-1 text-left text-meta text-muted hover:text-fg"
+          className="services-facts__fold"
         >
           <DisclosureCaret open={open} />
-          <span className="col-span-2">{label}</span>
+          <span className="services-facts__fold-label">{label}</span>
         </button>
       </li>
       {/* The folded rows sit in their own list item so they can open and close as one; subgrid keeps the columns. */}
-      <Collapse open={open} as="li" className="col-span-3 grid grid-cols-subgrid">
-        <ul aria-label={label} className="col-span-3 m-0 grid list-none grid-cols-subgrid p-0">{sortServices(services).map(render)}</ul>
+      <Collapse open={open} as="li" className="services-facts__folded">
+        <ul aria-label={label} className="services-facts__folded-list">{sortServices(services).map(render)}</ul>
       </Collapse>
     </>
   );
@@ -290,17 +290,17 @@ export function ServicesFacts({ engagementId, hostId, entries, open, onToggle }:
       }
     >
       {services.isError ? (
-        <p role="alert" className="m-0 text-meta text-warn">Couldn't load services: {services.error.message}</p>
+        <p role="alert" className="fact-group__error">Couldn't load services: {services.error.message}</p>
       ) : services.data?.length === 0 ? (
-        <p className="m-0 text-meta text-muted">No services yet. Paste an nmap scan to capture them.</p>
+        <p className="fact-group__note">No services yet. Paste an nmap scan to capture them.</p>
       ) : (
-        <ul data-services-grid className={cx(GRID, "m-0 list-none p-0")}>
+        <ul data-services-grid className="services-facts">
           {sortServices(rows).map(row)}
           <FoldedRows label={`msrpc ×${rpc.length}`} services={rpc} render={row} />
           <FoldedRows label={`${udp.length} UDP`} services={udp} render={row} />
         </ul>
       )}
-      {setVerdict.error && <p role="alert" className="m-0 text-meta text-warn">Couldn't set the verdict: {setVerdict.error.message}</p>}
+      {setVerdict.error && <p role="alert" className="fact-group__error">Couldn't set the verdict: {setVerdict.error.message}</p>}
       {current && dialog?.mode === "confirm" && (
         <ConfirmServiceDialog
           engagementId={engagementId}

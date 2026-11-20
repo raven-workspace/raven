@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -147,11 +148,14 @@ describe("host view", () => {
     mount();
     const facts = await screen.findByRole("region", { name: "Facts" });
     const root = screen.getByRole("region", { name: "Host" }).parentElement!;
-    expect(root.className).toMatch(/@container\/host/);
+    expect(root).toHaveClass("host-view");
+    const scss = readFileSync("src/features/hosts/HostView.scss", "utf8");
+    expect(scss).toMatch(/\.host-view \{\s*container-type: inline-size;\s*container-name: host;/);
     // Header, then the work area: no hint row (the shortcuts live behind the header's ?).
-    expect(root.className).toMatch(/grid-rows-\[auto_minmax\(0,1fr\)\]/);
+    expect(scss).toMatch(/\.host-view \{[^}]*grid-template-rows: auto minmax\(0, 1fr\);/);
     const body = facts.parentElement!.parentElement!;
-    expect(body.className).toContain("@min-[760px]/host:grid-cols-[minmax(16rem,1fr)_minmax(0,1.4fr)]");
+    expect(body).toHaveClass("host-view__body");
+    expect(scss).toMatch(/@container host \(min-width: 760px\) \{\s*\.host-view__body \{\s*grid-template-columns: minmax\(16rem, 1fr\) minmax\(0, 1\.4fr\);/);
     expect(body).toContainElement(screen.getByRole("tablist"));
   });
 
@@ -159,7 +163,7 @@ describe("host view", () => {
     mount();
     const header = within(await screen.findByRole("region", { name: "Host" }));
     expect(header.getByText("dc01")).toBeInTheDocument();
-    expect(header.getByText("10.10.10.5")).toHaveClass("font-mono");
+    expect(header.getByText("10.10.10.5")).toHaveClass("host-header__ip");
     expect(header.getByText("Windows")).toBeInTheDocument();
     expect(header.getByText("user")).toHaveAttribute("data-variant", "accent");
     expect(header.getByText("Vulnerability detection")).toBeInTheDocument();
@@ -200,7 +204,7 @@ describe("host view", () => {
     mount();
     const title = within(await screen.findByRole("region", { name: "Host" })).getByRole("heading", { level: 1 });
     expect(title).toHaveAttribute("title", long);
-    expect(title).toHaveClass("truncate");
+    expect(title).toHaveClass("host-header__name");
   });
 
   it("host delete confirm says what goes with it and what stays", async () => {

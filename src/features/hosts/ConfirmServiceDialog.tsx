@@ -3,6 +3,7 @@ import type { LogEntry } from "../../types/log";
 import type { Service } from "../../types/service";
 import { Button, Dialog, Field, Input, Select } from "../../ui";
 import { useServiceMutations } from "../services/queries";
+import "./ConfirmServiceDialog.scss";
 
 const NONE = "none";
 
@@ -63,7 +64,7 @@ export function ConfirmServiceDialog({ engagementId, service, entries, onClose, 
           <Button disabled={pending} onClick={onEdit}>
             Edit
           </Button>
-          <Button variant="quiet-danger" className="mr-auto" disabled={pending} onClick={onDelete}>
+          <Button variant="quiet-danger" className="confirm-service__delete" disabled={pending} onClick={onDelete}>
             Delete
           </Button>
           {confirmed && (
@@ -78,7 +79,7 @@ export function ConfirmServiceDialog({ engagementId, service, entries, onClose, 
         </>
       }
     >
-      <form id={formId} onSubmit={submit} noValidate className="grid gap-4">
+      <form id={formId} onSubmit={submit} noValidate className="confirm-service">
         <Field label="Product">
           <Input autoFocus value={product} onChange={(e) => setProduct(e.target.value)} placeholder="OpenSSH" />
         </Field>
@@ -93,7 +94,7 @@ export function ConfirmServiceDialog({ engagementId, service, entries, onClose, 
             options={[{ value: NONE, label: "Nothing yet" }, ...entries.map((e) => ({ value: e.id, label: e.title }))]}
           />
         </Field>
-        {error && <p className="m-0 text-meta text-warn">{error}</p>}
+        {error && <p className="confirm-service__error">{error}</p>}
       </form>
     </Dialog>
   );

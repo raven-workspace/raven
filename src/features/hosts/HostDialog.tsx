@@ -7,6 +7,7 @@ import { useEngagement } from "../engagements/queries";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { RavenError } from "../../types/errors";
 import { OS_LABELS } from "./columns";
+import "./HostDialog.scss";
 
 /** What a host delete takes with it (FK cascades) and what stays. */
 const HOST_DELETE_DETAIL =
@@ -97,7 +98,7 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
       footer={
         <>
           {host && (
-            <Button variant="quiet-danger" className="mr-auto" onClick={() => setDeleting(true)}>
+            <Button variant="quiet-danger" className="host-dialog__delete" onClick={() => setDeleting(true)}>
               Delete host
             </Button>
           )}
@@ -108,14 +109,14 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
         </>
       }
     >
-      <form id={formId} onSubmit={submit} noValidate className="grid gap-4">
+      <form id={formId} onSubmit={submit} noValidate className="host-dialog">
         <Field label="Name" error={errors.name}>
           <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="dc01" />
         </Field>
         <Field label="IP" error={errors.ip}>
           <Input mono value={ip} onChange={(e) => setIp(e.target.value)} placeholder="10.10.10.5" />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="host-dialog__pair">
           <Field label="OS">
             <Select options={OS_OPTIONS} value={os} onValueChange={setOs} />
           </Field>
@@ -123,13 +124,13 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
             <Select options={ACCESS_OPTIONS} value={access} onValueChange={(v) => setAccess(v as HostAccess)} />
           </Field>
         </div>
-        <Toggle on={dualHomed} onChange={setDualHomed} className="justify-self-start">
+        <Toggle on={dualHomed} onChange={setDualHomed} className="host-dialog__dual-homed">
           Dual-homed (reaches another network)
         </Toggle>
         {examSim && (
-          <div role="radiogroup" aria-label="Part of the AD set" className="grid gap-2">
-            <span className="block text-meta text-muted-2">Part of the AD set</span>
-            <ChipSet className="items-center">
+          <div role="radiogroup" aria-label="Part of the AD set" className="host-dialog__ad-set">
+            <span className="host-dialog__ad-label">Part of the AD set</span>
+            <ChipSet className="host-dialog__ad-choices">
               {AD_CHOICES.map((c) => (
                 <Toggle
                   key={c.value}
@@ -143,12 +144,12 @@ function HostForm({ engagementId, host, onClose }: { engagementId: string; host?
                 </Toggle>
               ))}
               {adChoice === "auto" && (
-                <span className="text-meta text-muted">{host?.adSet == null && host?.adSetEffective ? "(auto: DC detected)" : "(auto)"}</span>
+                <span className="host-dialog__ad-auto">{host?.adSet == null && host?.adSetEffective ? "(auto: DC detected)" : "(auto)"}</span>
               )}
             </ChipSet>
           </div>
         )}
-        {errors.form && <p className="m-0 text-meta text-warn">{errors.form}</p>}
+        {errors.form && <p className="host-dialog__error">{errors.form}</p>}
       </form>
       {host && deleting && <DeleteHostDialog host={host} onClose={() => setDeleting(false)} />}
     </Dialog>

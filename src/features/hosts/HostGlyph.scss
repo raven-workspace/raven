@@ -1,0 +1,16 @@
+@use "@/styles/abstracts" as *;
+
+@layer features {
+  // Progress pie for a host's board column, in a fixed 16px box. Accent only for "reporting".
+  .host-glyph {
+    display: grid;
+    width: 1rem;
+    height: 1rem;
+    place-items: center;
+    color: var(--muted-2);
+  }
+
+  .host-glyph--done {
+    color: var(--accent);
+  }
+}

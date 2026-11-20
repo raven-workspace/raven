@@ -10,6 +10,7 @@ import { IdentityFacts, OtherAccountsFacts } from "./IdentityFacts";
 import { ServicesFacts } from "./ServicesFacts";
 import { useFactFolds, type FactGroupId } from "./useFactFolds";
 import { VectorsFacts } from "./VectorsFacts";
+import "./FactsColumn.scss";
 
 const BEFORE: FactGroupId[] = ["coverage", "services", "credentials"];
 const AFTER: FactGroupId[] = ["identity", "vectors", "accounts"];
@@ -51,7 +52,7 @@ export function FactsColumn({ engagementId, host, variant, onOpenEntry }: {
   const order: FactGroupId[] = phase === "before" ? [...BEFORE, ...AFTER] : [...AFTER, "services", "coverage", "credentials"];
 
   return (
-    <div aria-label="Facts" role="region" className="grid">
+    <div aria-label="Facts" role="region" className="facts-column">
       <InterfaceNudge engagementId={engagementId} host={host} onOpenEntry={onOpenEntry} />
       {order.map((g) => groups[g])}
     </div>

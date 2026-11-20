@@ -1,0 +1,108 @@
+@use "@/styles/abstracts" as *;
+
+@layer features {
+  // Who am I: key and value columns.
+  .identity-facts__kv {
+    display: grid;
+    grid-template-columns: 6ch minmax(0, 1fr);
+    column-gap: var(--space-sm);
+    row-gap: var(--space-xs);
+    @include type(meta);
+  }
+
+  .identity-facts__key {
+    color: var(--muted);
+  }
+
+  .identity-facts__value {
+    min-width: 0;
+  }
+
+  .identity-facts__value--text {
+    color: var(--fg-2);
+  }
+
+  .identity-facts__user {
+    min-width: 0;
+    @include truncate;
+    @include mono;
+    color: var(--fg);
+  }
+
+  .identity-facts__chips {
+    row-gap: 0;
+    @include type(code);
+  }
+
+  .identity-facts__item {
+    color: var(--muted);
+  }
+
+  // A privilege or group that opens a privesc vector.
+  .identity-facts__item--notable {
+    color: var(--accent);
+  }
+
+  .identity-facts__empty {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .identity-form {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .identity-form__fields {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: var(--space-sm);
+    row-gap: var(--space-sm);
+    @include type(meta);
+  }
+
+  .identity-form__label {
+    color: var(--muted);
+  }
+
+  .identity-form__field {
+    display: grid;
+    min-width: 0;
+    gap: var(--space-xs);
+  }
+
+  // Other accounts: name and kind share two columns across rows (subgrid).
+  .other-accounts {
+    display: grid;
+    list-style-type: none;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--space-sm);
+    row-gap: var(--space-xs);
+    @include type(meta);
+  }
+
+  .other-accounts__row {
+    grid-column: span 2 / span 2;
+    display: grid;
+    grid-template-columns: subgrid;
+    align-items: baseline;
+  }
+
+  .other-accounts__label {
+    @include truncate;
+    @include mono;
+    color: var(--fg);
+  }
+
+  .other-accounts__kind {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .other-accounts__more {
+    grid-column: span 2 / span 2;
+    @include type(meta);
+    color: var(--muted);
+  }
+}

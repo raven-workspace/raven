@@ -1,6 +1,8 @@
 import { ArrowUpRightIcon, CaretRightIcon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
+import { cx } from "../../../lib/cx";
 import { Collapse, Toolbar, labelClass } from "../../../ui";
+import "./FactGroup.scss";
 
 /**
  * One phrase of a folded group's summary, written so it reads on its own: a count before its noun ("3 confirmed"),
@@ -15,18 +17,18 @@ export function SummaryCell({ label, count, tone, shrink = "value", children }: 
   tone?: "accent" | "warn";
   children?: ReactNode;
 }) {
-  const colour = tone === "accent" ? "text-accent" : tone === "warn" ? "text-warn" : "text-fg-2";
+  const value = cx("summary-cell__value", tone && `summary-cell__value--${tone}`);
   if (count !== undefined) {
     return (
-      <span data-summary-cell={label} className="mr-4 inline-block whitespace-nowrap last:mr-0">
-        <span className={colour}>{count}</span> <span className="text-muted-2">{label}</span>
+      <span data-summary-cell={label} className="summary-cell">
+        <span className={value}>{count}</span> <span className="summary-cell__label">{label}</span>
       </span>
     );
   }
   return (
-    <span data-summary-cell={label} className={`mr-4 inline-grid max-w-full min-w-0 items-center gap-1 whitespace-nowrap align-bottom last:mr-0 ${shrink === "label" ? "grid-cols-[minmax(0,1fr)_auto]" : "grid-cols-[auto_minmax(0,1fr)]"}`}>
-      <span className={`text-muted-2 ${shrink === "label" ? "min-w-0 truncate" : ""}`}>{label}:</span>
-      <span className={`min-w-0 ${colour} ${shrink === "label" ? "" : "truncate"}`}>{children}</span>
+    <span data-summary-cell={label} className={cx("summary-cell summary-cell--value", shrink === "label" && "summary-cell--shrink-label")}>
+      <span className={cx("summary-cell__label", shrink === "label" && "summary-cell__label--shrink")}>{label}:</span>
+      <span className={cx(value, shrink !== "label" && "summary-cell__value--truncate")}>{children}</span>
     </span>
   );
 }
@@ -51,21 +53,21 @@ export function FactGroup({ title, summary, open, onToggle, shortcut, actions, c
   const hint = shortcut ? ` (${shortcut})` : "";
   return (
     <section aria-label={title}>
-      <header className="grid min-h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-line">
+      <header className="fact-group__header">
         <button
           type="button"
           aria-expanded={open}
           title={`${open ? "Fold" : "Open"} ${title}${hint}`}
           onClick={onToggle}
-          className="group grid min-h-7 w-full min-w-0 cursor-default grid-cols-[16px_minmax(0,1fr)] items-center gap-x-2 gap-y-1 py-1 text-left"
+          className="fact-group__toggle"
         >
-          <CaretRightIcon size={16} weight="regular" aria-hidden className={`text-muted transition-transform duration-150 group-hover:text-fg motion-reduce:transition-none ${open ? "rotate-90" : ""}`} />
-          <h2 className={`${labelClass} m-0 truncate group-hover:text-fg`}>{title}</h2>
-          {!open && summary && <span className="col-start-2 min-w-0 text-meta text-muted">{summary}</span>}
+          <CaretRightIcon size={16} weight="regular" aria-hidden className={cx("fact-group__caret", open && "fact-group__caret--open")} />
+          <h2 className={cx(labelClass, "fact-group__title")}>{title}</h2>
+          {!open && summary && <span className="fact-group__summary">{summary}</span>}
         </button>
         {open && actions && <Toolbar>{actions}</Toolbar>}
       </header>
-      <Collapse open={open} contentClassName="grid gap-2 pt-2 pb-4">{children}</Collapse>
+      <Collapse open={open} contentClassName="fact-group__body">{children}</Collapse>
     </section>
   );
 }
@@ -82,10 +84,10 @@ export function EntryLink({ title, label = title, onClick, className }: {
       type="button"
       title={title}
       onClick={onClick}
-      className={`grid min-h-7 min-w-0 cursor-default grid-cols-[16px_minmax(0,1fr)] items-center gap-1 text-left text-meta text-fg-2 underline-offset-2 hover:text-fg hover:underline ${className ?? ""}`}
+      className={cx("entry-link", className)}
     >
       <ArrowUpRightIcon size={16} weight="regular" aria-hidden />
-      <span className="truncate">{label}</span>
+      <span className="entry-link__label">{label}</span>
     </button>
   );
 }

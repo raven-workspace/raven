@@ -7,6 +7,7 @@ import { ActionCell, Button, Chip, IconButton, Input, Tooltip, type ChipVariant 
 import { ConfirmDelete } from "../../checklist/ConfirmDelete";
 import { useHostFactsMutations, useVectors } from "../queries";
 import { FactGroup, SummaryCell } from "./FactGroup";
+import "./VectorsFacts.scss";
 
 const STATUS_LABEL: Record<VectorStatus, string> = { try: "try", untested: "untested", ruled_out: "ruled out" };
 const STATUS_CHIP: Record<VectorStatus, ChipVariant> = { try: "accent", untested: "default", ruled_out: "default" };
@@ -23,7 +24,7 @@ function LineInput({ label, placeholder, pending, onSave, onCancel }: {
   const [text, setText] = useState("");
   return (
     <form
-      className="col-span-full"
+      className="vectors-facts__line-form"
       onSubmit={(e) => {
         e.preventDefault();
         if (!pending && text.trim() !== "") onSave(text.trim());
@@ -51,11 +52,11 @@ function VectorRow({ v, engagementId, hostId }: { v: PrivescVector; engagementId
   const [deleting, setDeleting] = useState(false);
   const ruledOut = v.status === "ruled_out";
   const status = (
-    <Chip variant={STATUS_CHIP[v.status]} className={ruledOut ? "text-muted line-through" : undefined}>{STATUS_LABEL[v.status]}</Chip>
+    <Chip variant={STATUS_CHIP[v.status]} className={ruledOut ? "vectors-facts__status--ruled-out" : undefined}>{STATUS_LABEL[v.status]}</Chip>
   );
   return (
-    <li className="col-span-full grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-2 border-b border-line py-2 @min-[26rem]:col-span-3 @min-[26rem]:grid-cols-subgrid">
-      <span className={cx("col-span-2 min-w-0 truncate text-meta @min-[26rem]:col-span-1", ruledOut ? "text-muted" : "text-fg")} title={v.title}>{v.title}</span>
+    <li className="vectors-facts__row">
+      <span className={cx("vectors-facts__title", ruledOut && "vectors-facts__title--ruled-out")} title={v.title}>{v.title}</span>
       {/* A status chip as a toggle (DESIGN.md Chips): a 28px target, its action in a tooltip. */}
       {ruledOut ? (
         <Tooltip content="Reopen as untested">
@@ -63,7 +64,7 @@ function VectorRow({ v, engagementId, hostId }: { v: PrivescVector; engagementId
             type="button"
             aria-label={`Reopen ${v.title}`}
             onClick={() => setVectorStatus.mutate({ id: v.id, status: "untested" })}
-            className="grid min-h-7 cursor-default place-items-center justify-self-start"
+            className="vectors-facts__status-button"
           >
             {status}
           </button>
@@ -74,13 +75,13 @@ function VectorRow({ v, engagementId, hostId }: { v: PrivescVector; engagementId
             type="button"
             aria-label={`${v.title}: ${STATUS_LABEL[v.status]}`}
             onClick={() => setVectorStatus.mutate({ id: v.id, status: v.status === "try" ? "untested" : "try" })}
-            className="grid min-h-7 cursor-default place-items-center justify-self-start"
+            className="vectors-facts__status-button"
           >
             {status}
           </button>
         </Tooltip>
       )}
-      <div className="justify-self-end"><ActionCell>
+      <div className="vectors-facts__actions"><ActionCell>
         {!ruledOut && (
           <Button size="sm" onClick={() => setRuling(true)} aria-label={`Rule out ${v.title}`}>Rule out</Button>
         )}
@@ -95,7 +96,7 @@ function VectorRow({ v, engagementId, hostId }: { v: PrivescVector; engagementId
           onSave={(reason) => setVectorStatus.mutate({ id: v.id, status: "ruled_out", reason }, { onSuccess: () => setRuling(false) })}
         />
       )}
-      {setVectorStatus.error && <p role="alert" className="col-span-full m-0 text-meta text-warn">{setVectorStatus.error.message}</p>}
+      {setVectorStatus.error && <p role="alert" className="vectors-facts__row-error">{setVectorStatus.error.message}</p>}
       {deleting && (
         <ConfirmDelete
           title={`Delete ${v.title}?`}
@@ -147,12 +148,12 @@ export function VectorsFacts({ engagementId, host, open, onToggle }: {
       }
     >
       {vectorsQ.isError ? (
-        <p role="alert" className="m-0 text-meta text-warn">Couldn't load the vectors: {vectorsQ.error.message}</p>
+        <p role="alert" className="fact-group__error">Couldn't load the vectors: {vectorsQ.error.message}</p>
       ) : (
-        <ul className="@container m-0 grid list-none grid-cols-[minmax(0,1fr)_auto_auto] gap-x-2 p-0">
+        <ul className="vectors-facts">
           {vectors.map((v) => <VectorRow key={v.id} v={v} engagementId={engagementId} hostId={host.id} />)}
           {adding && (
-            <li className="col-span-3 grid grid-cols-subgrid py-1">
+            <li className="vectors-facts__adding">
               <LineInput
                 label="New privesc vector"
                 placeholder="Unquoted service path… Enter adds, Esc cancels"
@@ -163,11 +164,11 @@ export function VectorsFacts({ engagementId, host, open, onToggle }: {
             </li>
           )}
           {vectors.length === 0 && !adding && (
-            <li className="col-span-3 text-meta text-muted">None yet. Notable privileges from whoami or id add them, or add one.</li>
+            <li className="vectors-facts__empty">None yet. Notable privileges from whoami or id add them, or add one.</li>
           )}
         </ul>
       )}
-      {upsertVector.error && <p role="alert" className="m-0 text-meta text-warn">Couldn't add the vector: {upsertVector.error.message}</p>}
+      {upsertVector.error && <p role="alert" className="fact-group__error">Couldn't add the vector: {upsertVector.error.message}</p>}
     </FactGroup>
   );
 }

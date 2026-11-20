@@ -9,6 +9,7 @@ import { COLUMN_LABELS } from "../columns";
 import { useHosts } from "../queries";
 import { FactGroup, SummaryCell } from "./FactGroup";
 import { useEngagement } from "../../engagements/queries";
+import "./CoverageFacts.scss";
 
 /** Steps done out of the ones that apply (N/A steps don't count against the stage). */
 function tally(goalIds: string[], state: Record<string, ItemState | undefined>) {
@@ -54,16 +55,16 @@ export function CoverageFacts({ engagementId, host, open, onToggle }: {
   return (
     <FactGroup title="Coverage" summary={summary} open={open} onToggle={onToggle}>
       {failed ? (
-        <p role="alert" className="m-0 text-meta text-warn">Couldn't load the checklist: {failed.message}</p>
+        <p role="alert" className="fact-group__error">Couldn't load the checklist: {failed.message}</p>
       ) : (
-        <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 p-0 text-meta">
+        <ul className="coverage-facts">
           {rows.map((r) => (
-            <li key={r.stage.id} className="col-span-2 grid grid-cols-subgrid items-center">
-              <span className={cx("min-w-0 truncate", r.stage.id === current?.id ? "text-fg" : "text-muted")}>{r.stage.title}</span>
-              <span className="text-code text-fg-2">{r.done}/{r.applicable}</span>
-              <span aria-hidden className="col-span-2 h-0.5 overflow-hidden rounded-full bg-line">
+            <li key={r.stage.id} className="coverage-facts__row">
+              <span className={cx("coverage-facts__stage", r.stage.id === current?.id && "coverage-facts__stage--current")}>{r.stage.title}</span>
+              <span className="coverage-facts__count">{r.done}/{r.applicable}</span>
+              <span aria-hidden className="coverage-facts__bar">
                 <span
-                  className={cx("block h-full", r.done === r.applicable ? "bg-accent" : "bg-fg-2")}
+                  className={cx("coverage-facts__fill", r.done === r.applicable && "coverage-facts__fill--done")}
                   style={{ width: `${r.applicable === 0 ? 100 : Math.round((r.done / r.applicable) * 100)}%` }}
                 />
               </span>

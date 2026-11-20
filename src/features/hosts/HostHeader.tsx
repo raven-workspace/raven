@@ -6,6 +6,7 @@ import { threadsLabel, useThreadCounts } from "../notes/useThreadCounts";
 import { HostDialog } from "./HostDialog";
 import { COLUMN_LABELS, OS_LABELS } from "./columns";
 import { useEngagement } from "../engagements/queries";
+import "./HostHeader.scss";
 
 /**
  * The host's name with its Edit pencil right beside it, so it reads as "edit this host". Stuck? lives at the end of the
@@ -18,18 +19,18 @@ export function HostHeader({ host }: { host: Host }) {
   const engagement = useEngagement(host.engagementId);
   const examSim = engagement.data?.kind === "exam-sim";
   return (
-    <section aria-label="Host" className="grid gap-y-1">
+    <section aria-label="Host" className="host-header">
       {/* Its own grid: the details row below must not widen the name's track and push the pencil away from it. */}
-      <div className="grid min-w-0 grid-cols-[minmax(0,max-content)_auto] items-center justify-start gap-x-1">
-        <h1 title={host.name} className="m-0 min-w-0 truncate text-title text-fg">
+      <div className="host-header__name-row">
+        <h1 title={host.name} className="host-header__name">
           {host.name}
         </h1>
         <IconButton icon={PencilSimple} label="Edit host" onClick={() => setEditing(true)} />
       </div>
-      <ChipSet className="items-center gap-x-4 gap-y-2">
-        {host.ip && <span className="font-mono text-code text-fg-2">{host.ip}</span>}
+      <ChipSet className="host-header__details">
+        {host.ip && <span className="host-header__ip">{host.ip}</span>}
         {host.os && (
-          <span className="grid grid-flow-col items-center gap-2 text-meta text-fg-2">
+          <span className="host-header__os">
             {(host.os === "windows" || host.os === "linux") && <BrandIcon brand={host.os} />}
             {OS_LABELS[host.os]}
           </span>

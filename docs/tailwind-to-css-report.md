@@ -381,3 +381,34 @@
 ### Verification
 - [x] Unit tests, type check, lint
 - [x] Pixel diff and audit gate: see the hosts unit
+
+## Unit: hosts
+
+### Changes
+- HostView.scss: `.host-view` is the `host` container (`container-type: inline-size; container-name: host`);
+  `@container host (min-width: 760px)` puts Facts beside the work column (`minmax(16rem, 1fr) minmax(0, 1.4fr)`, one
+  row, 24px gap) and lifts the facts' 40vh cap, exactly as the `@min-[760px]/host:` variants did. `data-host-layout`
+  (measured) is unchanged.
+- HostHeader, HostGlyph (`--done`), NextTab (`.full-checklist-toggle`), HostDialog, ServiceDialog,
+  ConfirmServiceDialog.
+- facts/: FactGroup.scss (`.fact-group__*` header, toggle, caret turning on `--duration-turn`, body; shared
+  `.fact-group__note` and `.fact-group__error` lines; `.summary-cell`; `.entry-link`), ServicesFacts.scss (subgrid rows,
+  folded runs, its own visually-hidden class for the ✓/? labels), VectorsFacts.scss (an anonymous container:
+  `@container (min-width: 26rem)` switches a row to the list's subgrid), IdentityFacts.scss (Who am I, its form, Other
+  accounts), HostCredentialsFacts.scss, CoverageFacts.scss, FactsColumn.scss.
+- HostCredentialsFacts puts `.host-creds__proof` on EntryLink with two classes.
+
+### Verification
+- [x] Unit tests: hostView and hostFacts assert the BEM classes, and the container query and grid tracks against
+  HostView.scss
+- [x] Type check and lint
+- [x] Pixel diff: 297/297 identical (3 flaky on retry: findings@900/1280 and manual-search@1440, not in these units),
+  one run over stuck, notes, checklist, network and hosts together
+- [x] Audit gate: 660/660. Under heavy machine load, the regressions that wait for `button /Search/` can hit a strict-mode
+  race with a checklist step named "Search …", and the payloads drawer :kbd runs time out (they time out at the
+  base commit under the same load too). Each passes on rerun, and 6 repeats of the three host-page specs pass on
+  both this branch and the base
+
+### Follow-up
+- stuck, notes, checklist, network and hosts have no Tailwind utilities left (the shadcn ToggleGroup and Tabs keep
+  their own until unit 25).

@@ -3,6 +3,7 @@ import { useWidth } from "../../lib/useWidth";
 import { SCROLL_PANE } from "../../ui/controlStyles";
 import { useLocation, useNavigate } from "react-router";
 import { isDialogOpen, isFreeKey, isTypingTarget, useKeydown } from "../../lib/keys";
+import { cx } from "../../lib/cx";
 import { Button, EmptyState, Kbd, LoadingState, queryState, usePageShortcuts, type Hint } from "../../ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/shadcn/tabs";
 import type { Finding } from "../../types/findings";
@@ -23,6 +24,7 @@ import { FullChecklistToggle } from "./NextTab";
 import { HostChecklist } from "../checklist/HostChecklist";
 import { useHosts } from "./queries";
 import { anyDrawerOpen } from "../drawers";
+import "./HostView.scss";
 
 const TABS = [
   { id: "next", label: "Next", code: "Digit1" },
@@ -206,7 +208,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   const facts = <FactsColumn engagementId={engagementId} host={host} variant={stacked ? "stacked" : "column"} onOpenEntry={openInLog} />;
 
   return (
-    <div ref={rootRef} data-host-layout={width === undefined ? undefined : stacked ? "stacked" : "columns"} className="@container/host grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4">
+    <div ref={rootRef} data-host-layout={width === undefined ? undefined : stacked ? "stacked" : "columns"} className="host-view">
       {/* No hint row: it cost a full line of log and facts. The keys are in the title bar's shortcut list (?). */}
       <HostHeader host={host} />
       {split ? (
@@ -218,14 +220,14 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
           onClose={() => setSplit(null)}
         />
       ) : (
-        <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 @min-[760px]/host:grid-cols-[minmax(16rem,1fr)_minmax(0,1.4fr)] @min-[760px]/host:grid-rows-1 @min-[760px]/host:gap-6">
-          <div className={`max-h-[40vh] ${SCROLL_PANE} @min-[760px]/host:max-h-none`}>{facts}</div>
+        <div className="host-view__body">
+          <div className={cx("host-view__facts", SCROLL_PANE)}>{facts}</div>
           <Tabs
             value={tab}
             onValueChange={(v) => selectTab(v as TabId)}
-            className="min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)]"
+            className="host-view__tabs"
           >
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+            <div className="host-view__tab-bar">
               <TabsList aria-label="Host work">
                 {TABS.map((t, i) => (
                   <TabsTrigger key={t.id} value={t.id} title={`${t.label} (⌥${i + 1})`} onClick={() => selectTab(t.id)}>
@@ -234,11 +236,11 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
                 ))}
               </TabsList>
               {/* The tab's own control, then Stuck?: the work column's way out when the next steps run dry. */}
-              <div className="grid grid-flow-col items-center gap-4">
+              <div className="host-view__tab-controls">
                 {tab === "log" && <OrderButton order={order} onChange={setOrder} />}
                 {tab === "next" && (
-                  <div className="grid grid-flow-col items-center gap-3">
-                    {jumpNote && <span role="status" className="text-meta text-muted">{jumpNote}</span>}
+                  <div className="host-view__next-controls">
+                    {jumpNote && <span role="status" className="host-view__note">{jumpNote}</span>}
                     <FullChecklistToggle full={fullChecklist} onChange={setFullChecklist} />
                   </div>
                 )}
@@ -247,14 +249,14 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
                 </Button>
               </div>
             </div>
-            <TabsContent value={tab} aria-label={TABS.find((t) => t.id === tab)!.label} className={`border-t border-line ${SCROLL_PANE}`}>
+            <TabsContent value={tab} aria-label={TABS.find((t) => t.id === tab)!.label} className={cx("host-view__panel", SCROLL_PANE)}>
               {tab === "log" ? (
                 !log.data ? (
                   queryState([log], "the log") ?? <LoadingState label="the log" />
                 ) : entries.length === 0 ? (
-                  <p className="text-meta text-muted">Nothing logged on this host yet. Press L to capture.</p>
+                  <p className="host-view__note">Nothing logged on this host yet. Press L to capture.</p>
                 ) : (
-                  <div className="grid gap-3">
+                  <div className="host-view__log">
                     <LogDays entries={entries} row={(e) => <LogEntryRow key={e.id} entry={e} hosts={hosts.data} currentHostId={hostId} defaultOpen={e.id === openEntry} />} />
                   </div>
                 )

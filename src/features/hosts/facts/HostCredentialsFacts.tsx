@@ -20,6 +20,7 @@ import { useAccessGrantMutations, useAccessGrants, useCredAttempts, useCredentia
 import { TestGrid } from "../../credentials/TestGrid";
 import { useLog } from "../../log/queries";
 import { EntryLink, FactGroup, SummaryCell } from "./FactGroup";
+import "./HostCredentialsFacts.scss";
 
 const WORKS = new Set<CredAttempt["result"]>(["admin", "valid"]);
 
@@ -76,9 +77,9 @@ export function HostCredentialsFacts({ engagementId: eid, host, open, onToggle, 
   return (
     <FactGroup title="Host Credentials" summary={summary} open={open} onToggle={onToggle}>
       {failed ? (
-        <p role="alert" className="m-0 text-meta text-warn">Couldn't load credentials: {failed.message}</p>
+        <p role="alert" className="fact-group__error">Couldn't load credentials: {failed.message}</p>
       ) : !ready ? null : (
-        <div className="grid gap-6">
+        <div className="host-creds">
           <HostResults
             attempts={attempts.filter((a) => a.hostId === host.id)}
             creds={creds}
@@ -103,27 +104,27 @@ function HostAccess({ eid, host, usernames, grants }: { eid: string; host: Host;
     return u ? usernameLabel(u) : "removed username";
   };
   return (
-    <section aria-label="Access without a secret" className="grid gap-2">
-      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-        <h3 className={`m-0 ${labelClass}`}>Access without a secret</h3>
+    <section aria-label="Access without a secret" className="host-creds__section">
+      <header className="host-creds__section-head">
+        <h3 className={labelClass}>Access without a secret</h3>
         <Button size="sm" onClick={() => setAdding(true)} disabled={usernames.length === 0}>
           <PlusIcon size={16} weight="regular" aria-hidden /> Add access
         </Button>
       </header>
       {grants.length === 0 ? (
-        <p className="m-0 text-meta text-muted">
+        <p className="fact-group__note">
           {usernames.length === 0 ? "No usernames yet. List one on the Credentials page first." : "None on this host."}
         </p>
       ) : (
-        <ul className="m-0 list-none border-t border-line p-0">
+        <ul className="host-creds__list">
           {grants.map((g) => (
-            <li key={g.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2 gap-y-1 border-b border-line py-2 text-meta">
-              <span className="truncate font-mono text-fg" title={nameOf(g.usernameId)}>{nameOf(g.usernameId)}</span>
+            <li key={g.id} className="host-creds__grant">
+              <span className="host-creds__name" title={nameOf(g.usernameId)}>{nameOf(g.usernameId)}</span>
               <Chip variant="accent">{LEVEL_LABEL[g.level]}</Chip>
               <Button size="sm" aria-label={`Remove access as ${nameOf(g.usernameId)} on ${host.name}`} onClick={() => setRemoving(g)}>
                 Remove
               </Button>
-              {g.via && <span className="col-span-3 truncate text-muted" title={g.via}>via {g.via}</span>}
+              {g.via && <span className="host-creds__via" title={g.via}>via {g.via}</span>}
             </li>
           ))}
         </ul>
@@ -174,7 +175,7 @@ function AddHostAccess({ eid, host, usernames, onClose }: { eid: string; host: H
         </>
       }
     >
-      <div className="grid grid-cols-3 gap-3">
+      <div className="host-creds__dialog-fields">
         <Field label="Username" error={errors.usernameId}>
           <Select
             placeholder="Pick a username"
@@ -190,7 +191,7 @@ function AddHostAccess({ eid, host, usernames, onClose }: { eid: string; host: H
           <Input value={via} onChange={(e) => setVia(e.target.value)} placeholder="webshell" />
         </Field>
       </div>
-      {errors.form && <p role="alert" className="m-0 mt-2 text-meta text-warn">{errors.form}</p>}
+      {errors.form && <p role="alert" className="host-creds__dialog-error">{errors.form}</p>}
     </Dialog>
   );
 }
@@ -201,7 +202,7 @@ const commandName = (title: string) => title.split(/\s+[^\w\s]\s+/)[0];
 /** Accent only for access that works; warn for errored. */
 function ResultChip({ result }: { result: CredAttempt["result"] }) {
   const variant = WORKS.has(result) ? "accent" : result === "errored" ? "warn" : "default";
-  return <Chip variant={variant} className="justify-self-end">{result}</Chip>;
+  return <Chip variant={variant} className="host-creds__result">{result}</Chip>;
 }
 
 /** Newest first; two lines per result so it fits the Facts column: who and the result, then where and the proof. */
@@ -221,28 +222,28 @@ function HostResults({ attempts, creds, usernames, titles, onOpenEntry }: {
   };
   const rows = [...attempts].sort((a, b) => b.at - a.at);
   return (
-    <section aria-label="Results against this host" className="grid gap-2">
-      <h3 className={`m-0 ${labelClass}`}>Results against this host</h3>
+    <section aria-label="Results against this host" className="host-creds__section">
+      <h3 className={labelClass}>Results against this host</h3>
       {rows.length === 0 ? (
-        <p className="m-0 text-meta text-muted">Nothing tried here yet. Paste nxc output into Add to log to record results.</p>
+        <p className="fact-group__note">Nothing tried here yet. Paste nxc output into Add to log to record results.</p>
       ) : (
-        <ul className="m-0 list-none border-t border-line p-0">
+        <ul className="host-creds__list">
           {rows.map((a) => {
             const title = a.logEntryId ? titles.get(a.logEntryId) : undefined;
             const who = subject(a);
             return (
-              <li key={a.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 border-b border-line py-2">
-                <span className="truncate font-mono text-code text-fg" title={who}>{who}</span>
+              <li key={a.id} className="host-creds__attempt">
+                <span className="host-creds__who" title={who}>{who}</span>
                 <ResultChip result={a.result} />
-                <span className="grid min-w-0 auto-cols-[minmax(0,max-content)] grid-flow-col items-baseline justify-start gap-2 font-mono text-code text-muted">
-                  <span className="text-fg-2">{a.service.toUpperCase()}{a.port ? ` ${a.port}` : ""}</span>
+                <span className="host-creds__where">
+                  <span className="host-creds__service">{a.service.toUpperCase()}{a.port ? ` ${a.port}` : ""}</span>
                   {a.authMode === "local" && <span>local</span>}
-                  <span className="truncate" title={a.detail || undefined}>{a.detail}</span>
+                  <span className="host-creds__detail" title={a.detail || undefined}>{a.detail}</span>
                 </span>
                 {a.logEntryId && title !== undefined ? (
-                  <EntryLink title={title} label={commandName(title)} onClick={() => onOpenEntry?.(a.logEntryId!)} className="max-w-[20ch] justify-self-end" />
+                  <EntryLink title={title} label={commandName(title)} onClick={() => onOpenEntry?.(a.logEntryId!)} className="host-creds__proof" />
                 ) : (
-                  <span className="justify-self-end text-meta text-faint">{a.logEntryId ? "log entry removed" : "no proof"}</span>
+                  <span className="host-creds__no-proof">{a.logEntryId ? "log entry removed" : "no proof"}</span>
                 )}
               </li>
             );

@@ -1,0 +1,54 @@
+@use "@/styles/abstracts" as *;
+
+@layer features {
+  // Stage, done/applicable, then a 2px bar under both (subgrid rows).
+  .coverage-facts {
+    display: grid;
+    list-style-type: none;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--space-md);
+    row-gap: var(--space-xs);
+    @include type(meta);
+  }
+
+  .coverage-facts__row {
+    grid-column: span 2 / span 2;
+    display: grid;
+    grid-template-columns: subgrid;
+    align-items: center;
+  }
+
+  .coverage-facts__stage {
+    min-width: 0;
+    @include truncate;
+    color: var(--muted);
+  }
+
+  .coverage-facts__stage--current {
+    color: var(--fg);
+  }
+
+  .coverage-facts__count {
+    @include type(code);
+    color: var(--fg-2);
+  }
+
+  .coverage-facts__bar {
+    grid-column: span 2 / span 2;
+    height: 0.125rem;
+    overflow: hidden;
+    border-radius: var(--radius-full);
+    background-color: var(--line);
+  }
+
+  // Its width is set inline.
+  .coverage-facts__fill {
+    display: block;
+    height: 100%;
+    background-color: var(--fg-2);
+  }
+
+  .coverage-facts__fill--done {
+    background-color: var(--accent);
+  }
+}
