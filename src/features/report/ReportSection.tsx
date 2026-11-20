@@ -38,7 +38,7 @@ import {
 import { api } from "../../lib/api";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
 import { cx } from "../../lib/cx";
-import { useWidth } from "../../lib/useNarrow";
+import { useWidthRef } from "../../lib/useWidth";
 import { reportError } from "../../lib/lockSignal";
 import type { Report, ReportPatch, ReportSection } from "../../types/report";
 import type { Settings } from "../../types/settings";
@@ -841,7 +841,7 @@ function ReportBody({
   const navRef = useRef<HTMLDivElement | null>(null);
   const pageRef = useRef<HTMLDivElement | null>(null);
   const railRef = useRef<HTMLElement | null>(null);
-  const [sectionRef, paneWidth] = useWidth<HTMLElement>();
+  const [sectionRef, paneWidth] = useWidthRef<HTMLElement>();
   const railMode = railModeAt(paneWidth);
   // Under 1200px the column is a toggle (the strip's Evidence button, E); docked or a drawer is the width's call.
   const narrow = railMode !== "column";

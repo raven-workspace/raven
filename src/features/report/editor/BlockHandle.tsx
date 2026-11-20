@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { refreshBlocks } from "../../../engines/report";
 import { Button, Dialog, Tooltip } from "../../../ui";
 import { currentRun, deleteBlockAt, isEdited, refreshLabel, refreshRun, sourceRun, type SourceRun } from "./pageActions";
-import { useReportData } from "./ReportDataContext";
+import { usePageContext } from "./ReportDataContext";
 
 type Hovered = { node: PMNode; pos: number } | null;
 
@@ -33,7 +33,7 @@ function walkItems(e: KeyboardEvent<HTMLDivElement>) {
  */
 export function BlockHandle() {
   const editor = useEditor();
-  const { data, target, reportMeta } = useReportData();
+  const { data, target, reportMeta } = usePageContext();
   // The block the handle is beside, and the one the open menu acts on (held while the pointer is in the menu).
   const hovered = useRef<Hovered>(null);
   const [menu, setMenu] = useState<Hovered>(null);

@@ -15,7 +15,7 @@ import { defineReportExtension, type HeldPositions, type SourceGone, type SubNum
 import { FindBar } from "./FindBar";
 import { FormatToolbar } from "./FormatToolbar";
 import { hostAtPos, insertFigure, PageActionsContext, PROGRAMMATIC, saveScreenshot, type PageActions } from "./pageActions";
-import { useReportData } from "./ReportDataContext";
+import { usePageContext } from "./ReportDataContext";
 import { SlashMenu } from "./SlashMenu";
 import { TableHandles } from "./TableHandles";
 import "../page.css";
@@ -259,7 +259,7 @@ export function ReportEditor({
   /** Lines about the page (save warnings, "nothing logged yet"), between the bar and the paper. */
   notices?: ReactNode;
 }) {
-  const value = useReportData();
+  const value = usePageContext();
   const [initialDoc] = useState(doc);
   const editor = useMemo(() => {
     const numbers: SubNumbers = { current: undefined };

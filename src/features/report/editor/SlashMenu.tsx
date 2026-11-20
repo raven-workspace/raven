@@ -27,7 +27,7 @@ import { KIND_LABELS } from "../../log/kindLabels";
 import { inPageHeading, insertTable, setBlockKind, type PageEditor } from "./commands";
 import type { EditingExtension } from "./extension";
 import { insertEntry, usePageActions } from "./pageActions";
-import { useReportData } from "./ReportDataContext";
+import { usePageContext } from "./ReportDataContext";
 
 interface BlockItem {
   id: string;
@@ -180,7 +180,7 @@ const ITEM =
 export function SlashMenu() {
   const editor = useEditor<EditingExtension>();
   const actions = usePageActions();
-  const { data, target, reportMeta } = useReportData();
+  const { data, target, reportMeta } = usePageContext();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [onlyEvidence, setOnlyEvidence] = useState(false);
