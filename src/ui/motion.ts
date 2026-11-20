@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 
 /**
  * Raven's motion: quiet, short, and only where it explains a change. Sections open and close, tab markers glide,
@@ -20,6 +20,21 @@ const DRAWER_SHIFT = "translateX(16px)";
 
 export function prefersReducedMotion(): boolean {
   return typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/**
+ * A flag that `flash()` turns on for `ms` (a "Copied" tick). Flashing again restarts the timer; unmounting clears it.
+ */
+export function useFlash(ms: number) {
+  const [on, setOn] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const flash = useCallback(() => {
+    setOn(true);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setOn(false), ms);
+  }, [ms]);
+  return [on, flash] as const;
 }
 
 /** WAAPI is missing in jsdom: callers skip the animation and land in the end state at once. */

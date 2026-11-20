@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from "react";
 import type { CommandSet } from "../../engines/credentials";
-import { Button, CommandBlock } from "../../ui";
+import { Button, CommandBlock, useFlash } from "../../ui";
 import { copySecret } from "../../lib/clipboard";
 
 const NOTICE: Record<NonNullable<CommandSet["notice"]>, string> = {
@@ -10,21 +9,9 @@ const NOTICE: Record<NonNullable<CommandSet["notice"]>, string> = {
 };
 
 function CopyUsersButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
+  const [copied, flash] = useFlash(1500);
   return (
-    <Button
-      size="sm"
-      aria-label="Copy users.txt for spray"
-      onClick={() =>
-        void copySecret(text).then(() => {
-          setCopied(true);
-          clearTimeout(timer.current);
-          timer.current = setTimeout(() => setCopied(false), 1500);
-        })
-      }
-    >
+    <Button size="sm" aria-label="Copy users.txt for spray" onClick={() => void copySecret(text).then(flash)}>
       {copied ? "Copied" : "Copy users.txt"}
     </Button>
   );

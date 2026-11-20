@@ -3,7 +3,7 @@ import { usernameKey, usernameLabel } from "../../engines/credentials";
 import type { AccessGrant, Username } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import { Trash } from "@phosphor-icons/react";
-import { ActionCell, Button, Dialog, IconButton, Input, labelClass } from "../../ui";
+import { ActionCell, Button, Dialog, IconButton, Input, labelClass, useFlash } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { AccessFields, AccessGrantTags, EMPTY_ACCESS, type AccessDraft } from "./AccessGrants";
 import { useAccessGrantMutations, useUsernameMutations } from "./queries";
@@ -28,7 +28,7 @@ export function UsernamesList({ eid, usernames, grants, hosts }: {
   const [error, setError] = useState<string>();
   const [deleting, setDeleting] = useState<Username>();
   const [granting, setGranting] = useState<Username>();
-  const [copied, setCopied] = useState(false);
+  const [copied, flash] = useFlash(1500);
 
   const add = (e: FormEvent) => {
     e.preventDefault();
@@ -46,10 +46,7 @@ export function UsernamesList({ eid, usernames, grants, hosts }: {
 
   const copyAll = () => {
     const file = [...new Set(usernames.map((u) => u.username))].join("\n");
-    void copyPlain(file).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
+    void copyPlain(file).then(flash);
   };
 
   return (

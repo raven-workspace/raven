@@ -1,7 +1,7 @@
 import { Check, Copy, PencilSimple, Trash } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import type { FindingFile } from "../../types/findings";
-import { ActionCell, Button, Field, IconButton, Input, Select, Textarea, Toggle, fieldLabelClass } from "../../ui";
+import { ActionCell, Button, Field, useFlash, IconButton, Input, Select, Textarea, Toggle, fieldLabelClass } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { CodeView, guessLanguage, LANGUAGES } from "./CodeView";
 import { useFindingFileMutations, useFindingFiles } from "./queries";
@@ -187,7 +187,7 @@ function FileForm({ findingId, file, value, onChange, onDone, onDirty, register 
 function FileRow({ findingId, file, onEdit }: { findingId: string; file: FindingFile; onEdit: () => void }) {
   const { remove } = useFindingFileMutations(findingId);
   const [deleting, setDeleting] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, flash] = useFlash(1500);
   const [copyError, setCopyError] = useState<string>();
   return (
     <li className="grid gap-2 border-b border-line py-2">
@@ -204,8 +204,7 @@ function FileRow({ findingId, file, onEdit }: { findingId: string; file: Finding
             onClick={() => copyPlain(file.content).then(
               () => {
                 setCopyError(undefined);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1500);
+                flash();
               },
               () => setCopyError("Couldn't copy to the clipboard"),
             )}

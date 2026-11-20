@@ -1,28 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Check, Copy, Eye, EyeSlash } from "@phosphor-icons/react";
-import { IconButton } from "../../ui";
+import { IconButton, useFlash } from "../../ui";
 import { copySecret } from "../../lib/clipboard";
 
 export const MASK = "••••••••";
 
-/** Copy puts the real value on the clipboard without revealing it. */
-export function CopySecretButton({ secret, label }: { secret: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
-  return (
-    <IconButton
-      icon={copied ? Check : Copy}
-      label={`Copy ${label}`}
-      onClick={() => {
-        void copySecret(secret).then(() => {
-          setCopied(true);
-          clearTimeout(timer.current);
-          timer.current = setTimeout(() => setCopied(false), 1500);
-        });
-      }}
-    />
-  );
+/** Copy puts the real value on the clipboard without revealing it (`copy` swaps in a plain copy for non-secrets). */
+export function CopySecretButton({ secret, label, copy = copySecret }: { secret: string; label: string; copy?: (text: string) => Promise<unknown> }) {
+  const [copied, flash] = useFlash(1500);
+  return <IconButton icon={copied ? Check : Copy} label={`Copy ${label}`} onClick={() => void copy(secret).then(flash)} />;
 }
 
 /**
