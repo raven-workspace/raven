@@ -31,83 +31,95 @@ export interface ScanImportResult {
 
 const isValidPort = (p: number): boolean => !isNaN(p) && p >= 1 && p <= 65535;
 
+/** Nmap XML with DTDs, entity declarations and unknown entity references stripped, before it reaches DOMParser. */
+function sanitizeNmapXml(xmlContent: string): string {
+  // Defense against XML entity expansion (Billion Laughs) and XXE constructs.
+  // Handles multi-line / nested DTD internal subsets (strip all <!DOCTYPE ... [ ... ]> and <!ENTITY... blocks)
+  return xmlContent
+    .replace(/<!DOCTYPE\b[^>[]*\[[\s\S]*?\][^>]*>/gi, '')
+    .replace(/<!DOCTYPE\b[^>]*>/gi, '')
+    .replace(/<!ENTITY\b[\s\S]*?>/gi, '')
+    .replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)[a-zA-Z0-9_-]+;/gi, '');
+}
+
+/** One `<host>` of an Nmap XML run: the name of its first `<hostname>` as written (`firstHostname`), and every
+ *  distinct non-empty name (`hostnames`). */
+interface XmlHost {
+  ip?: string;
+  firstHostname?: string;
+  hostnames: string[];
+  os?: string;
+  ports: ParsedPort[];
+}
+
+/** An open or open|filtered `<port>`, or null. */
+function xmlPort(portEl: Element): ParsedPort | null {
+  const stateEl = portEl.querySelector('state');
+  const state = stateEl?.getAttribute('state') || 'closed';
+  if (state !== 'open' && state !== 'open|filtered') return null;
+
+  const portNum = parseInt(portEl.getAttribute('portid') || '0', 10);
+  if (!isValidPort(portNum)) return null;
+  const protocol = (portEl.getAttribute('protocol') || 'tcp').toLowerCase();
+  const serviceEl = portEl.querySelector('service');
+  const service = (serviceEl?.getAttribute('name') || 'unknown').toLowerCase();
+
+  const product = serviceEl?.getAttribute('product') || '';
+  const versionNum = serviceEl?.getAttribute('version') || '';
+  const extrainfo = serviceEl?.getAttribute('extrainfo') || '';
+  const fullVersion = [product, versionNum, extrainfo].filter(Boolean).join(' ') || 'Unknown Version';
+
+  return { port: portNum, protocol, state, service, version: fullVersion };
+}
+
+/** Every `<host>` of an Nmap XML run, in order. Null when there is no DOMParser, the XML doesn't parse, or it holds no
+ *  `<nmaprun>`. */
+function xmlHosts(xmlContent: string): XmlHost[] | null {
+  if (typeof window === 'undefined' || typeof DOMParser === 'undefined') return null;
+
+  const doc = new DOMParser().parseFromString(sanitizeNmapXml(xmlContent), 'text/xml');
+  // Safeguard against XML parsing errors
+  if (doc.querySelector('parsererror') || !doc.querySelector('nmaprun')) return null;
+
+  return Array.from(doc.querySelectorAll('host'), (hostNode) => {
+    const addressNode =
+      hostNode.querySelector('address[addrtype="ipv4"]') ||
+      hostNode.querySelector('address[addrtype="ipv6"]') ||
+      hostNode.querySelector('address');
+
+    const hostnames: string[] = [];
+    hostNode.querySelectorAll('hostname').forEach((h) => {
+      const n = h.getAttribute('name');
+      if (n && !hostnames.includes(n)) hostnames.push(n);
+    });
+
+    const ports: ParsedPort[] = [];
+    hostNode.querySelectorAll('ports > port').forEach((portEl) => {
+      const port = xmlPort(portEl);
+      if (port) ports.push(port);
+    });
+
+    return {
+      ip: addressNode?.getAttribute('addr') || undefined,
+      firstHostname: hostNode.querySelector('hostname')?.getAttribute('name') || undefined,
+      hostnames,
+      os: hostNode.querySelector('osmatch')?.getAttribute('name') || undefined,
+      ports,
+    };
+  });
+}
+
 /**
  * Parse Nmap XML output using browser DOMParser with <parsererror> safeguard
  */
 export function parseNmapXml(xmlContent: string): ScanImportResult | null {
   try {
-    if (typeof window === 'undefined' || typeof DOMParser === 'undefined') return null;
+    const xml = xmlHosts(xmlContent);
+    if (!xml || xml.length === 0) return null;
 
-    // Defense against XML entity expansion (Billion Laughs) and XXE constructs.
-    // Handles multi-line / nested DTD internal subsets (strip all <!DOCTYPE ... [ ... ]> and <!ENTITY... blocks)
-    const sanitizedXml = xmlContent
-      .replace(/<!DOCTYPE\b[^>[]*\[[\s\S]*?\][^>]*>/gi, '')
-      .replace(/<!DOCTYPE\b[^>]*>/gi, '')
-      .replace(/<!ENTITY\b[\s\S]*?>/gi, '')
-      .replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)[a-zA-Z0-9_-]+;/gi, '');
-
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(sanitizedXml, 'text/xml');
-
-    // Safeguard against XML parsing errors
-    const parserError = doc.querySelector('parsererror');
-    if (parserError) return null;
-
-    const nmaprun = doc.querySelector('nmaprun');
-    if (!nmaprun) return null;
-
-    const hostNodes = doc.querySelectorAll('host');
-    if (!hostNodes || hostNodes.length === 0) return null;
-
-    const parsedHosts: ParsedHost[] = [];
-    const allPorts: ParsedPort[] = [];
-
-    hostNodes.forEach((hostNode) => {
-      const addressNode =
-        hostNode.querySelector('address[addrtype="ipv4"]') ||
-        hostNode.querySelector('address[addrtype="ipv6"]') ||
-        hostNode.querySelector('address');
-      const hostIp = addressNode?.getAttribute('addr') || undefined;
-
-      const hostnameNode = hostNode.querySelector('hostname');
-      const hostName = hostnameNode?.getAttribute('name') || undefined;
-
-      const osMatchNode = hostNode.querySelector('osmatch');
-      const hostOs = osMatchNode?.getAttribute('name') || undefined;
-
-      const hostPorts: ParsedPort[] = [];
-      const portNodes = hostNode.querySelectorAll('ports > port');
-      portNodes.forEach((portEl) => {
-        const stateEl = portEl.querySelector('state');
-        const state = stateEl?.getAttribute('state') || 'closed';
-        if (state !== 'open' && state !== 'open|filtered') return;
-
-        const portNum = parseInt(portEl.getAttribute('portid') || '0', 10);
-        if (!isValidPort(portNum)) return;
-        const protocol = (portEl.getAttribute('protocol') || 'tcp').toLowerCase();
-        const serviceEl = portEl.querySelector('service');
-        const service = (serviceEl?.getAttribute('name') || 'unknown').toLowerCase();
-        
-        const product = serviceEl?.getAttribute('product') || '';
-        const versionNum = serviceEl?.getAttribute('version') || '';
-        const extrainfo = serviceEl?.getAttribute('extrainfo') || '';
-        const fullVersion = [product, versionNum, extrainfo].filter(Boolean).join(' ') || 'Unknown Version';
-
-        const parsedPort: ParsedPort = { port: portNum, protocol, state, service, version: fullVersion };
-        hostPorts.push(parsedPort);
-        allPorts.push(parsedPort);
-      });
-
-      if (hostPorts.length > 0 || hostIp) {
-        parsedHosts.push({
-          ip: hostIp,
-          hostname: hostName,
-          os: hostOs,
-          ports: hostPorts,
-        });
-      }
-    });
-
+    const parsedHosts: ParsedHost[] = xml
+      .filter((h) => h.ports.length > 0 || h.ip)
+      .map((h) => ({ ip: h.ip, hostname: h.firstHostname, os: h.os, ports: h.ports }));
     if (parsedHosts.length === 0) return null;
 
     const primaryHost = parsedHosts[0];
@@ -117,12 +129,43 @@ export function parseNmapXml(xmlContent: string): ScanImportResult | null {
       detectedIp: primaryHost.ip,
       detectedHost: primaryHost.hostname,
       detectedOs: primaryHost.os,
-      ports: primaryHost.ports.length > 0 ? primaryHost.ports : allPorts,
+      ports: primaryHost.ports.length > 0 ? primaryHost.ports : xml.flatMap((h) => h.ports),
       hosts: parsedHosts,
     };
   } catch {
     return null;
   }
+}
+
+/** One `Host:` line of greppable Nmap: its IPv4 address and name (`ip` unset when the line names no IPv4 address),
+ *  its OS field, and its open ports. */
+function gnmapLine(line: string): { ip?: string; hostname?: string; os?: string; ports: ParsedPort[] } {
+  const hostMatch = line.match(/^Host:\s*([0-9]{1,3}(?:\.[0-9]{1,3}){3})\s*(?:\(([^)]*)\))?/);
+  const osField = line.match(/\tOS:\s*([^\t\r\n]+)/);
+
+  const ports: ParsedPort[] = [];
+  const portsPart = line.split('Ports:')[1];
+  if (portsPart) {
+    for (const pe of portsPart.split(',')) {
+      const parts = pe.trim().split('/');
+      if (parts.length < 5) continue;
+      const portNum = parseInt(parts[0], 10);
+      const state = parts[1]?.toLowerCase();
+      const proto = parts[2]?.toLowerCase() || 'tcp';
+      const service = parts[4]?.toLowerCase() || 'unknown';
+      const version = (parts[6] || parts[5] || 'Unknown Version').trim();
+      const isOpenState = state === 'open' || state === 'open|filtered';
+      if (!isOpenState || !isValidPort(portNum)) continue;
+      ports.push({ port: portNum, protocol: proto, state: state || 'open', service, version });
+    }
+  }
+
+  return {
+    ip: hostMatch?.[1],
+    hostname: hostMatch?.[2] || undefined,
+    os: osField ? osField[1].trim() : undefined,
+    ports,
+  };
 }
 
 /**
@@ -131,51 +174,29 @@ export function parseNmapXml(xmlContent: string): ScanImportResult | null {
 function parseGrepableNmap(content: string): ScanImportResult | null {
   if (!content.includes('Ports:') && !content.includes('# Nmap')) return null;
 
-  const lines = content.split('\n');
   let detectedIp: string | undefined;
   let detectedHost: string | undefined;
   const ports: ParsedPort[] = [];
   const hostsByIp = new Map<string, ParsedHost>();
 
-  for (const line of lines) {
-    if (line.startsWith('Host:')) {
-      const hostMatch = line.match(/^Host:\s*([0-9]{1,3}(?:\.[0-9]{1,3}){3})\s*(?:\(([^)]*)\))?/);
-      let lineHost: ParsedHost | undefined;
-      if (hostMatch) {
-        detectedIp = hostMatch[1];
-        if (hostMatch[2]) detectedHost = hostMatch[2];
-        lineHost = hostsByIp.get(hostMatch[1]);
-        if (!lineHost) {
-          lineHost = { ip: hostMatch[1], ports: [] };
-          hostsByIp.set(hostMatch[1], lineHost);
-        }
-        if (hostMatch[2] && !lineHost.hostname) lineHost.hostname = hostMatch[2];
-        const osField = line.match(/\tOS:\s*([^\t\r\n]+)/);
-        if (osField && !lineHost.os) lineHost.os = osField[1].trim();
+  for (const line of content.split('\n')) {
+    if (!line.startsWith('Host:')) continue;
+    const parsed = gnmapLine(line);
+    let lineHost: ParsedHost | undefined;
+    if (parsed.ip) {
+      detectedIp = parsed.ip;
+      if (parsed.hostname) detectedHost = parsed.hostname;
+      lineHost = hostsByIp.get(parsed.ip);
+      if (!lineHost) {
+        lineHost = { ip: parsed.ip, ports: [] };
+        hostsByIp.set(parsed.ip, lineHost);
       }
-
-      const portsPart = line.split('Ports:')[1];
-      if (portsPart) {
-        const portEntries = portsPart.split(',');
-        for (const pe of portEntries) {
-          const parts = pe.trim().split('/');
-          if (parts.length >= 5) {
-            const portNum = parseInt(parts[0], 10);
-            const state = parts[1]?.toLowerCase();
-            const proto = parts[2]?.toLowerCase() || 'tcp';
-            const service = parts[4]?.toLowerCase() || 'unknown';
-            const version = (parts[6] || parts[5] || 'Unknown Version').trim();
-
-            const isOpenState = state === 'open' || state === 'open|filtered';
-            if (isOpenState && isValidPort(portNum)) {
-              const gnmapPort: ParsedPort = { port: portNum, protocol: proto, state: state || 'open', service, version };
-              ports.push(gnmapPort);
-              lineHost?.ports.push(gnmapPort);
-            }
-          }
-        }
-      }
+      if (parsed.hostname && !lineHost.hostname) lineHost.hostname = parsed.hostname;
+      if (parsed.os !== undefined && !lineHost.os) lineHost.os = parsed.os;
     }
+    // A line whose address isn't IPv4 still adds its ports to the scan's.
+    ports.push(...parsed.ports);
+    lineHost?.ports.push(...parsed.ports);
   }
 
   if (ports.length === 0 && !detectedIp) return null;
@@ -245,41 +266,30 @@ const IPV4_SRC = String.raw`(?:\d{1,3}\.){3}\d{1,3}`;
 const IPV6_SRC = String.raw`(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}(?:%\w+)?`;
 const HOST_REPORT_REGEX = new RegExp(`Nmap scan report for (?:([^\\s(]+)\\s\\()?(${IPV4_SRC}|${IPV6_SRC})?`, 'i');
 const PORT_LINE_REGEX = /^(\d{1,5})\/(tcp|udp)\s+(open(?:\|filtered)?)\s+(\S+)\s*([^\r\n]*)/i;
+const OPEN_PORT_LINE = /^\s*\d{1,5}\/(?:tcp|udp)\s+open/im;
 
-/**
- * Parse Standard Nmap text output (.nmap / console output)
- * Supports IPv4/IPv6 target identification and service versioning
- */
-function parseNmapText(content: string): ScanImportResult | null {
-  // Also accept headerless snippets made of bare "22/tcp open ssh" port lines
-  const hasOpenPortLine = /^\s*\d{1,5}\/(?:tcp|udp)\s+open/im.test(content);
-  if (!content.includes('Nmap scan report') && !content.includes('PORT') && !content.includes('STATE') && !hasOpenPortLine) {
-    return null;
-  }
-
-  let detectedIp: string | undefined;
-  let detectedHost: string | undefined;
-
+/** The first "Nmap scan report for" line's address and name: `name (ip)`, or a bare address, or a bare name. */
+function reportHeader(content: string): { ip?: string; name?: string } {
   const hostMatch = content.match(HOST_REPORT_REGEX);
-  if (hostMatch) {
-    if (hostMatch[2]) {
-      detectedIp = hostMatch[2];
-      detectedHost = hostMatch[1] || hostMatch[2];
-    } else if (hostMatch[1]) {
-      // Check if hostMatch[1] looks like an IP
-      if (new RegExp(`^${IPV4_SRC}$`).test(hostMatch[1]) || new RegExp(`^${IPV6_SRC}$`).test(hostMatch[1])) {
-        detectedIp = hostMatch[1];
-        detectedHost = hostMatch[1];
-      } else {
-        detectedHost = hostMatch[1];
-      }
-    }
-  }
+  if (!hostMatch) return {};
+  if (hostMatch[2]) return { ip: hostMatch[2], name: hostMatch[1] || undefined };
+  if (!hostMatch[1]) return {};
+  // Check if hostMatch[1] looks like an IP
+  if (new RegExp(`^${IPV4_SRC}$`).test(hostMatch[1]) || new RegExp(`^${IPV6_SRC}$`).test(hostMatch[1])) return { ip: hostMatch[1] };
+  return { name: hostMatch[1] };
+}
 
+/** The OS a "Service Info:" line names. */
+function serviceInfoOs(content: string): string | undefined {
   const osMatch = content.match(/Service Info:[^\n\r]*?\bOSs?:\s*([^;\n\r]+)/i);
+  return osMatch ? osMatch[1].trim() : undefined;
+}
 
+/** The open ports of Nmap text's port lines, at most `cap` of them. */
+function nmapTextPorts(content: string, cap = Infinity): ParsedPort[] {
   const ports: ParsedPort[] = [];
   for (const line of content.split(/\r?\n/)) {
+    if (ports.length >= cap) break;
     const pMatch = line.trim().match(PORT_LINE_REGEX);
     if (!pMatch) continue;
     const portNum = parseInt(pMatch[1], 10);
@@ -292,12 +302,34 @@ function parseNmapText(content: string): ScanImportResult | null {
       version: pMatch[5].trim() || 'Unknown Version',
     });
   }
+  return ports;
+}
+
+/** Nmap text cut into one section per "Nmap scan report for" line, from that line to the next. */
+const reportSections = (content: string): string[] =>
+  content.split(/^(?=Nmap scan report for )/im).filter((sec) => /^Nmap scan report for /i.test(sec));
+
+/**
+ * Parse Standard Nmap text output (.nmap / console output)
+ * Supports IPv4/IPv6 target identification and service versioning
+ */
+function parseNmapText(content: string): ScanImportResult | null {
+  // Also accept headerless snippets made of bare "22/tcp open ssh" port lines
+  const hasOpenPortLine = OPEN_PORT_LINE.test(content);
+  if (!content.includes('Nmap scan report') && !content.includes('PORT') && !content.includes('STATE') && !hasOpenPortLine) {
+    return null;
+  }
+
+  const header = reportHeader(content);
+  const detectedIp = header.ip;
+  const detectedHost = header.name ?? header.ip;
+  const ports = nmapTextPorts(content);
 
   if (ports.length === 0 && !detectedIp) return null;
 
   // Multi-host report: one "Nmap scan report for" section per host
   let hosts: ParsedHost[] | undefined;
-  const sections = content.split(/^(?=Nmap scan report for )/im).filter((sec) => /^Nmap scan report for /i.test(sec));
+  const sections = reportSections(content);
   if (sections.length > 1) {
     hosts = sections.map((sec) => {
       const sub = parseNmapText(sec);
@@ -314,7 +346,7 @@ function parseNmapText(content: string): ScanImportResult | null {
     format: 'nmap-text',
     detectedIp,
     detectedHost,
-    detectedOs: osMatch ? osMatch[1].trim() : undefined,
+    detectedOs: serviceInfoOs(content),
     ports,
     ...(hosts ? { hosts } : {}),
   };
@@ -403,11 +435,13 @@ export interface ParsedMultiHost {
 const MAX_MULTI_HOSTS = 256;
 const MAX_PORTS_PER_MULTI_HOST = 512;
 
+/** Adds a host to `map` under `dedupeKey`, or merges it into the one already there: new hostnames appended, the first
+ *  OS kept, ports appended. Past the caps, a new host is dropped and extra ports are ignored. */
 function addMultiHost(
   map: Map<string, ParsedMultiHost>,
   dedupeKey: string,
   ip: string,
-  hostname: string | undefined,
+  hostnames: readonly string[],
   os: string | undefined,
   ports: ParsedPort[]
 ): void {
@@ -418,31 +452,14 @@ function addMultiHost(
     existing = { ip, hostnames: [], os, ports: [] };
     map.set(dedupeKey, existing);
   }
-  if (hostname && !existing.hostnames.includes(hostname)) existing.hostnames.push(hostname);
+  for (const hostname of hostnames) {
+    if (hostname && !existing.hostnames.includes(hostname)) existing.hostnames.push(hostname);
+  }
   if (!existing.os && os) existing.os = os;
   for (const p of ports) {
     if (existing.ports.length >= MAX_PORTS_PER_MULTI_HOST) break;
     existing.ports.push(p);
   }
-}
-
-function parseMultiHostPortBlock(content: string): ParsedPort[] {
-  const ports: ParsedPort[] = [];
-  for (const line of content.split(/\r?\n/)) {
-    if (ports.length >= MAX_PORTS_PER_MULTI_HOST) break;
-    const pMatch = line.trim().match(PORT_LINE_REGEX);
-    if (!pMatch) continue;
-    const portNum = parseInt(pMatch[1], 10);
-    if (!isValidPort(portNum)) continue;
-    ports.push({
-      port: portNum,
-      protocol: pMatch[2].toLowerCase(),
-      state: pMatch[3].toLowerCase(),
-      service: pMatch[4].toLowerCase(),
-      version: pMatch[5].trim() || 'Unknown Version',
-    });
-  }
-  return ports;
 }
 
 function normalizeJsonPort(raw: unknown): ParsedPort | null {
@@ -505,14 +522,7 @@ function parseMultiHostJson(trimmed: string): ParsedMultiHost[] | null {
     }
 
     if (!ip && ports.length === 0) return;
-    const dedupeKey = ip || `__noip_${noIpCounter++}__`;
-    addMultiHost(map, dedupeKey, ip, hostnames[0], os, ports);
-    const existing = map.get(dedupeKey);
-    if (existing) {
-      for (const hn of hostnames.slice(1)) {
-        if (!existing.hostnames.includes(hn)) existing.hostnames.push(hn);
-      }
-    }
+    addMultiHost(map, ip || `__noip_${noIpCounter++}__`, ip, hostnames, os, ports);
   };
 
   if (Array.isArray(data)) {
@@ -548,65 +558,15 @@ export function parseMultiHostScan(raw: string): ParsedMultiHost[] {
 
     // 1. Nmap XML — multiple <host> elements
     if (trimmed.startsWith('<?xml') || trimmed.includes('<nmaprun') || trimmed.includes('<host>')) {
-      if (typeof window === 'undefined' || typeof DOMParser === 'undefined') return [];
-
-      const sanitizedXml = trimmed
-        .replace(/<!DOCTYPE\b[^>[]*\[[\s\S]*?\][^>]*>/gi, '')
-        .replace(/<!DOCTYPE\b[^>]*>/gi, '')
-        .replace(/<!ENTITY\b[\s\S]*?>/gi, '')
-        .replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)[a-zA-Z0-9_-]+;/gi, '');
-
-      const doc = new DOMParser().parseFromString(sanitizedXml, 'text/xml');
-      if (doc.querySelector('parsererror') || !doc.querySelector('nmaprun')) return [];
-
-      const hostNodes = doc.querySelectorAll('host');
+      const xml = xmlHosts(trimmed);
+      if (!xml) return [];
       let noIpCounter = 0;
-      hostNodes.forEach((hostNode) => {
-        if (map.size >= MAX_MULTI_HOSTS) return;
-        const addressNode =
-          hostNode.querySelector('address[addrtype="ipv4"]') ||
-          hostNode.querySelector('address[addrtype="ipv6"]') ||
-          hostNode.querySelector('address');
-        const ip = addressNode?.getAttribute('addr') || '';
-
-        const hostnames: string[] = [];
-        hostNode.querySelectorAll('hostname').forEach((h) => {
-          const n = h.getAttribute('name');
-          if (n && !hostnames.includes(n)) hostnames.push(n);
-        });
-
-        const osMatchNode = hostNode.querySelector('osmatch');
-        const os = osMatchNode?.getAttribute('name') || undefined;
-
-        const ports: ParsedPort[] = [];
-        hostNode.querySelectorAll('ports > port').forEach((portEl) => {
-          if (ports.length >= MAX_PORTS_PER_MULTI_HOST) return;
-          const stateEl = portEl.querySelector('state');
-          const state = stateEl?.getAttribute('state') || 'closed';
-          if (state !== 'open' && state !== 'open|filtered') return;
-          const portNum = parseInt(portEl.getAttribute('portid') || '0', 10);
-          if (!isValidPort(portNum)) return;
-          const protocol = (portEl.getAttribute('protocol') || 'tcp').toLowerCase();
-          const serviceEl = portEl.querySelector('service');
-          const service = (serviceEl?.getAttribute('name') || 'unknown').toLowerCase();
-          const product = serviceEl?.getAttribute('product') || '';
-          const versionNum = serviceEl?.getAttribute('version') || '';
-          const extrainfo = serviceEl?.getAttribute('extrainfo') || '';
-          const fullVersion = [product, versionNum, extrainfo].filter(Boolean).join(' ') || 'Unknown Version';
-          ports.push({ port: portNum, protocol, state, service, version: fullVersion });
-        });
-
-        if (!ip && ports.length === 0) return;
-        const dedupeKey = ip || `__noip_${noIpCounter++}__`;
-        addMultiHost(map, dedupeKey, ip, hostnames[0], os, ports);
-        const existing = map.get(dedupeKey);
-        if (existing) {
-          for (const hn of hostnames.slice(1)) {
-            if (!existing.hostnames.includes(hn)) existing.hostnames.push(hn);
-          }
-        }
-      });
-
+      for (const host of xml) {
+        if (map.size >= MAX_MULTI_HOSTS) break;
+        const ip = host.ip ?? '';
+        if (!ip && host.ports.length === 0) continue;
+        addMultiHost(map, ip || `__noip_${noIpCounter++}__`, ip, host.hostnames, host.os, host.ports);
+      }
       return Array.from(map.values());
     }
 
@@ -622,78 +582,32 @@ export function parseMultiHostScan(raw: string): ParsedMultiHost[] {
     if (trimmed.includes('Host:') && (trimmed.includes('Ports:') || trimmed.includes('# Nmap'))) {
       for (const line of trimmed.split('\n')) {
         if (!line.startsWith('Host:')) continue;
-        const hostMatch = line.match(/^Host:\s*([0-9]{1,3}(?:\.[0-9]{1,3}){3})\s*(?:\(([^)]*)\))?/);
-        if (!hostMatch) continue;
-        const ip = hostMatch[1];
-        const hostname = hostMatch[2] || undefined;
-        const osField = line.match(/\tOS:\s*([^\t\r\n]+)/);
-        const os = osField ? osField[1].trim() : undefined;
-
-        const ports: ParsedPort[] = [];
-        const portsPart = line.split('Ports:')[1];
-        if (portsPart) {
-          for (const pe of portsPart.split(',')) {
-            if (ports.length >= MAX_PORTS_PER_MULTI_HOST) break;
-            const parts = pe.trim().split('/');
-            if (parts.length < 5) continue;
-            const portNum = parseInt(parts[0], 10);
-            const state = parts[1]?.toLowerCase();
-            const proto = parts[2]?.toLowerCase() || 'tcp';
-            const service = parts[4]?.toLowerCase() || 'unknown';
-            const version = (parts[6] || parts[5] || 'Unknown Version').trim();
-            const isOpenState = state === 'open' || state === 'open|filtered';
-            if (!isOpenState || !isValidPort(portNum)) continue;
-            ports.push({ port: portNum, protocol: proto, state: state || 'open', service, version });
-          }
-        }
-
-        if (!ip && ports.length === 0) continue;
-        addMultiHost(map, ip, ip, hostname, os, ports);
+        const { ip, hostname, os, ports } = gnmapLine(line);
+        if (!ip) continue;
+        addMultiHost(map, ip, ip, hostname ? [hostname] : [], os, ports);
       }
       if (map.size > 0) return Array.from(map.values());
     }
 
     // 4. Plain / normal terminal output — repeated "Nmap scan report for <name> (<ip>)" blocks
-    const sections = trimmed.split(/^(?=Nmap scan report for )/im).filter((sec) => /^Nmap scan report for /i.test(sec));
     let noIpCounter = 0;
-    if (sections.length > 0) {
-      for (const sec of sections) {
-        if (map.size >= MAX_MULTI_HOSTS) break;
-        const hostMatch = sec.match(HOST_REPORT_REGEX);
-        let ip = '';
-        let hostname: string | undefined;
-        if (hostMatch) {
-          if (hostMatch[2]) {
-            ip = hostMatch[2];
-            hostname = hostMatch[1] || undefined;
-          } else if (hostMatch[1]) {
-            if (new RegExp(`^${IPV4_SRC}$`).test(hostMatch[1]) || new RegExp(`^${IPV6_SRC}$`).test(hostMatch[1])) {
-              ip = hostMatch[1];
-            } else {
-              hostname = hostMatch[1];
-            }
-          }
-        }
-        const osMatch = sec.match(/Service Info:[^\n\r]*?\bOSs?:\s*([^;\n\r]+)/i);
-        const os = osMatch ? osMatch[1].trim() : undefined;
-        const ports = parseMultiHostPortBlock(sec);
-
-        if (!ip && ports.length === 0) continue;
-        const dedupeKey = ip || `__noip_${noIpCounter++}__`;
-        addMultiHost(map, dedupeKey, ip, hostname, os, ports);
-      }
-      if (map.size > 0) return Array.from(map.values());
+    for (const sec of reportSections(trimmed)) {
+      if (map.size >= MAX_MULTI_HOSTS) break;
+      const { ip = '', name } = reportHeader(sec);
+      const ports = nmapTextPorts(sec, MAX_PORTS_PER_MULTI_HOST);
+      if (!ip && ports.length === 0) continue;
+      addMultiHost(map, ip || `__noip_${noIpCounter++}__`, ip, name ? [name] : [], serviceInfoOs(sec), ports);
     }
+    if (map.size > 0) return Array.from(map.values());
 
     // No host-report headers at all: treat the whole paste as a single headerless host
     // if it contains bare port lines (e.g. a snippet of "22/tcp open ssh" lines).
-    const hasOpenPortLine = /^\s*\d{1,5}\/(?:tcp|udp)\s+open/im.test(trimmed);
-    if (hasOpenPortLine) {
-      const ports = parseMultiHostPortBlock(trimmed);
+    if (OPEN_PORT_LINE.test(trimmed)) {
+      const ports = nmapTextPorts(trimmed, MAX_PORTS_PER_MULTI_HOST);
       if (ports.length > 0) {
         const ipMatch = trimmed.match(new RegExp(IPV4_SRC));
         const ip = ipMatch ? ipMatch[0] : '';
-        addMultiHost(map, ip || '__noip_0__', ip, undefined, undefined, ports);
+        addMultiHost(map, ip || '__noip_0__', ip, [], undefined, ports);
       }
     }
 
