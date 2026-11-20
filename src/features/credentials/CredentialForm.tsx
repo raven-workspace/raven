@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from "react";
 import {
+  asCredential,
   credLabel,
   findDuplicateCredential,
   identifyHash,
@@ -106,12 +107,7 @@ export function CredentialForm({ eid, hosts, credentials, edit, onClose, onSaved
         ...(type === "hash" && hashType.trim() ? { hashType: hashType.trim() } : {}),
       };
       // Never create a duplicate: offer the existing one instead.
-      const probe: Credential = {
-        id: "", engagementId: eid, type, username: input.username ?? "", domain: input.domain ?? null, secret,
-        hashType: input.hashType ?? null, scope, localHostId: input.localHostId ?? null, sourceHostId: null,
-        source: null, notes: null, crackStatus: null, crackedFrom: null, fromSecretId: null, createdAt: 0, updatedAt: 0,
-      };
-      const dup = findDuplicateCredential(credentials.filter((c) => c.id !== edit?.id), probe);
+      const dup = findDuplicateCredential(credentials.filter((c) => c.id !== edit?.id), asCredential({ ...input, engagementId: eid }));
       if (dup) {
         setDuplicate(dup);
         return;

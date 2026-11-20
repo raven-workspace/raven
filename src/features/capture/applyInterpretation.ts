@@ -13,6 +13,7 @@ import {
   type Tick,
 } from "../../engines/checklist";
 import {
+  asCredential,
   findStoredCredential,
   identifyHash,
   ntHalf,
@@ -315,11 +316,10 @@ export async function applyInterpretation(
         username = `${shortHostName(name).toUpperCase()}$`;
       }
       if (c.scope === "local" && !hostId) continue;
-      const candidate: Credential = {
-        id: "", engagementId, type: c.type, username, domain: c.domain, secret: c.secret, hashType: c.hashType,
+      const candidate = asCredential({
+        engagementId, type: c.type, username, domain: c.domain, secret: c.secret, hashType: c.hashType,
         scope: c.scope, localHostId: c.scope === "local" ? hostId : null, sourceHostId: hostId, source: c.source,
-        notes: null, crackStatus: null, crackedFrom: null, fromSecretId: null, createdAt: 0, updatedAt: 0,
-      };
+      });
       const stored = findStoredCredential(creds, candidate);
       if (stored) {
         noteReproved(record.reprovedCredentialIds, stored.id, before.credentials);

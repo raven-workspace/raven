@@ -134,9 +134,9 @@ function secretMatches(cred: Credential, secret: string): boolean {
 
 /**
  * A planned credential as a stored one, so the keys and `findDuplicateCredential` (the one dedupe rule) apply to
- * it. The id is synthetic and never stored.
+ * it. The id is synthetic and never stored (empty by default: an unsaved credential).
  */
-function asCredential(i: PlannedCredential, id: string): Credential {
+export function asCredential(i: PlannedCredential, id = ''): Credential {
   return {
     id, engagementId: i.engagementId, type: i.type, username: i.username ?? '', domain: i.domain ?? null,
     secret: i.secret ?? '', hashType: i.hashType ?? null, scope: i.scope ?? 'domain', localHostId: i.localHostId ?? null,
@@ -219,7 +219,7 @@ export function planCredentialIntake(input: {
   });
   // Local credentials are per-host; keep them apart even when username and secret coincide.
   const pendingKey = (input: PlannedCredential, authMode: CredAuthMode, hostId: string) =>
-    credKey(asCredential(input, '')) + (authMode === 'local' ? `|local:${hostId}` : '');
+    credKey(asCredential(input)) + (authMode === 'local' ? `|local:${hostId}` : '');
 
   for (const block of blocks) {
     const results: NxcAuthResult[] = parseNxcAuthResults(block.output, knownSecretsOf(block.command));
