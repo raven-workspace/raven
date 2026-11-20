@@ -4,7 +4,6 @@ import { fillCommand, filterForKind } from "../../engines/checklist";
 import { isHttp, transferMethods, TRANSFER_CARD, withToolsDirs } from "../../engines/generators/transfer";
 import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/store";
 import { copyPlain } from "../../lib/clipboard";
-import { cx } from "../../lib/cx";
 import { isDialogOpen, useKeydown } from "../../lib/keys";
 import { shortHostName } from "../../lib/hostName";
 import { reportError } from "../../lib/lockSignal";
@@ -16,6 +15,7 @@ import { fillLibraryCommand } from "../checklist/goalCommands";
 import { useFillBase } from "../palette/fillData";
 import { FilePicker } from "./FilePicker";
 import { RavenError } from "../../types/errors";
+import "./TransferGenerator.scss";
 
 type Os = "windows" | "linux";
 const DEFAULT_DIR: Record<Os, string> = { windows: "C:\\Windows\\Temp", linux: "/tmp" };
@@ -24,11 +24,6 @@ const METHOD_GROUPS = [
   { label: "HTTP", test: isHttp },
   { label: "Other", test: (g: string) => !isHttp(g) },
 ];
-const FIELD_COLS: Record<number, string> = {
-  2: "grid-cols-[max-content_max-content_minmax(0,1fr)]",
-  3: "grid-cols-[max-content_max-content_max-content_minmax(0,1fr)]",
-  4: "grid-cols-[max-content_max-content_max-content_max-content_minmax(0,1fr)]",
-};
 const dirKey = (os: Os) => `raven.transfer.dir.${os}`;
 const readDir = (os: Os): string => {
   try {
@@ -159,29 +154,28 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
   const target = method ? fill(method.target) : [];
 
   return (
-    <section aria-label="Transfer a file" className="grid gap-4">
-      <h2 className="m-0 text-heading text-fg">Transfer a file</h2>
-      <div className={cx("grid items-start gap-x-4 gap-y-3", FIELD_COLS[2 + Number(!contextOs) + Number(usesPort)])}>
-        <label className="grid gap-2 text-meta text-muted-2">
+    <section aria-label="Transfer a file" className="transfer-generator">
+      <h2 className="transfer-generator__title">Transfer a file</h2>
+      <div className={`transfer-generator__fields transfer-generator__fields--${2 + Number(!contextOs) + Number(usesPort)}`}>
+        <label className="transfer-generator__field">
           <span>File</span>
-          <FilePicker ref={fileRef} name="FILE" os={os} className="max-w-full" value={file} onChange={setFile} />
+          <FilePicker ref={fileRef} name="FILE" os={os} className="transfer-generator__file" value={file} onChange={setFile} />
         </label>
         {!contextOs && (
-          <div className="grid gap-2 text-meta text-muted-2">
+          <div className="transfer-generator__field">
             <span>OS</span>
             <Select
-              aria-label="Target OS" value={osPick} onValueChange={(v) => setOsPick(v as Os)} className="w-32"
+              aria-label="Target OS" value={osPick} onValueChange={(v) => setOsPick(v as Os)} className="transfer-generator__os"
               options={[{ value: "windows", label: "Windows" }, { value: "linux", label: "Linux" }]}
             />
           </div>
         )}
-        <label className="grid gap-2 text-meta text-muted-2">
+        <label className="transfer-generator__field">
           <span>Folder</span>
           <Input
             mono
             aria-label="Folder"
-            width="w-48"
-            className="max-w-full"
+            className="transfer-generator__folder"
             placeholder={DEFAULT_DIR[os]}
             value={dir}
             onChange={(e) => {
@@ -191,19 +185,19 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
           />
         </label>
         {usesPort && (
-          <label className="grid gap-2 text-meta text-muted-2">
+          <label className="transfer-generator__field">
             <span>Port</span>
-            <Input mono aria-label="Port" width="w-20" value={port} onChange={(e) => setPort(e.target.value)} />
+            <Input mono aria-label="Port" className="transfer-generator__port" value={port} onChange={(e) => setPort(e.target.value)} />
           </label>
         )}
       </div>
 
-      <div className="grid gap-2">
+      <div className="transfer-generator__methods">
         {METHOD_GROUPS.map(({ label, test }) => {
           const group = methods.map((m, i) => ({ m, i })).filter(({ m }) => test(m.group));
           if (group.length === 0) return null;
           return (
-            <div key={label} className="grid grid-cols-[56px_minmax(0,1fr)] items-baseline gap-x-2">
+            <div key={label} className="transfer-generator__method-group">
               <span className={labelClass}>{label}</span>
               <ChipSet role="tablist" aria-label={`${label} methods`}>
                 {group.map(({ m, i }) => (
@@ -218,10 +212,7 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
                     tabIndex={m.id === method?.id ? 0 : -1}
                     onKeyDown={(e) => onTabKey(e, i)}
                     onClick={() => setMethodId(m.id)}
-                    className={cx(
-                      "cursor-default rounded-sm px-2 py-1 text-body whitespace-nowrap",
-                      m.id === method?.id ? "bg-accent/10 text-accent" : "text-fg-2 hover:bg-surface-hi",
-                    )}
+                    className="transfer-generator__method"
                   >
                     {m.label}
                   </button>
@@ -231,29 +222,29 @@ export function TransferGenerator({ engagementId, hostId: viewHostId, os: contex
           );
         })}
       </div>
-      {methods.length === 0 && <p className="m-0 text-meta text-muted">No transfer methods are allowed here.</p>}
+      {methods.length === 0 && <p className="transfer-generator__note">No transfer methods are allowed here.</p>}
 
       {method && (
-        <div className="grid gap-4">
+        <div className="transfer-generator__halves">
           {kali.length > 0 && (
-            <div className="grid gap-2">
-              <h3 className="m-0 text-body text-fg-2">1. On Kali</h3>
+            <div className="transfer-generator__half">
+              <h3 className="transfer-generator__half-title">1. On Kali</h3>
               <CommandList commands={kali} hostName={shortName} focusToken={focusToken} />
             </div>
           )}
           {target.length > 0 && (
-            <div className="grid gap-2">
-              <h3 title={hostName} className="m-0 truncate text-body text-fg-2">{kali.length > 0 ? "2" : "1"}. On {hostName}</h3>
+            <div className="transfer-generator__half">
+              <h3 title={hostName} className="transfer-generator__half-title transfer-generator__half-title--truncate">{kali.length > 0 ? "2" : "1"}. On {hostName}</h3>
               <CommandList commands={target} hostName={shortName} focusToken={focusToken} guard={guard} {...(targetCmd ? { guardAs: targetCmd } : {})} />
-              <p className="m-0 text-meta text-muted">
+              <p className="transfer-generator__note">
                 <Kbd>⌘↵</Kbd> copies the {host ? hostName : "target"} half and logs it{host ? "" : " (pick a host)"}.
               </p>
             </div>
           )}
-          {target.length === 0 && <p className="m-0 text-meta text-muted">Kali only: nothing to run on {hostName}.</p>}
+          {target.length === 0 && <p className="transfer-generator__note">Kali only: nothing to run on {hostName}.</p>}
         </div>
       )}
-      {status && <p role="status" className="m-0 text-meta text-muted">{status}</p>}
+      {status && <p role="status" className="transfer-generator__note">{status}</p>}
     </section>
   );
 }

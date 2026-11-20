@@ -430,3 +430,19 @@
 - [x] Pixel diff: 297/297 (two manual-search shots passed on retry)
 - [x] Audit gate: 660/660 (dc-next@900 and host-findings@900 failed once on the status strip's width, unrelated to the
       palette, and passed on rerun)
+
+## Unit: generators
+
+### Changes
+- TransferGenerator.scss (`.transfer-generator`, its fields row with `--2|3|4` track modifiers in place of the
+  `FIELD_COLS` map, field, method group and method tabs, halves) and FilePicker.scss (`.file-picker`, `__note`).
+- The method tabs key on `aria-selected` (accent tint when selected, hover tint on the others).
+- The Folder and Port inputs no longer pass `width="w-48"` / `width="w-20"`: `.transfer-generator__folder` and
+  `__port` carry the width on the Input primitive (features beat components, as the utilities did).
+
+### Verification
+- [x] Unit tests (no assertion named these utilities)
+- [x] Type check and lint
+- [x] Pixel diff: 297/297 (manual-search failed under load in the full run and passed when rerun alone; the manual
+      page has no generator on it)
+- [x] Audit gate: 660/660

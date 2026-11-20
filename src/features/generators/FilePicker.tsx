@@ -2,6 +2,7 @@ import { useMemo, type Ref } from "react";
 import { getToolkit } from "../../engines/library/store";
 import { TokenInput } from "../palette/TokenInput";
 import type { Suggestion } from "../palette/suggest";
+import "./FilePicker.scss";
 
 /** Tokens that name a file to transfer: they get the Toolkit picker. */
 export const isFileToken = (name: string): boolean => {
@@ -25,10 +26,10 @@ export function FilePicker({ name, os, value, onChange, className, placeholder, 
   const suggestions: Suggestion[] = files.map((f) => ({ value: f.file, hint: f.staged ? f.purpose : `${f.purpose}, not staged` }));
   const picked = files.find((f) => f.file === value.trim());
   return (
-    <span className="inline-grid gap-1">
+    <span className="file-picker">
       <TokenInput name={name} className={className} placeholder={placeholder} autoValue={autoValue} value={value} suggestions={suggestions} onChange={onChange} ref={ref} />
       {picked && !picked.staged && (
-        <span role="note" className="max-w-xs text-meta text-warn">
+        <span role="note" className="file-picker__note">
           not staged on Kali; get it from: {picked.where || "unknown"}
           {picked.note ? ` ${picked.note}` : ""}
         </span>
