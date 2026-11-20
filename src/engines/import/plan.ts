@@ -18,6 +18,7 @@ import { boxesOf, listImportable, machinesOf } from "./list";
 import { gatherLogs, type RawLog } from "./logs";
 import { lootItemsByMachine, lootSection, mapLoot, VIA_NOT_RECORDED } from "./loot";
 import type { OldBackup, OldMachine } from "./types";
+import { isObj, hasText, arr, oneLine, toMs } from "./values";
 
 /** EngagementInput with every field explicit, plus id and status. */
 export interface PlanEngagement {
@@ -137,11 +138,7 @@ export interface ImportPlan {
 const importedFlagTitle = (flagKind: FlagKind, host: { name: string } | null) =>
   host ? `${flagTitle(flagKind)} · ${host.name}` : flagTitle(flagKind);
 
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
-const hasText = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
-const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 const textOr = <T>(v: unknown, fallback: T): string | T => (hasText(v) ? v : fallback);
-const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
 /** The first `max` code points (Rust counts chars, and a cut must never split a surrogate pair). */
 const cutChars = (s: string, max: number): string => {
   const cps = Array.from(s);
@@ -182,17 +179,6 @@ export function validBase64(s: string): boolean {
 function singleIp(raw: string): string | null {
   const bare = raw.endsWith("/32") ? raw.slice(0, -3) : raw;
   return !bare.includes("/") && validCidr(bare) ? bare : null;
-}
-
-/** Epoch-ms numbers are kept; ISO strings are parsed; anything else is `fallback`. */
-function toMs<T>(v: unknown, fallback: T): number | T {
-  // Whole milliseconds that fit an i64 exactly: Rust stores these as INTEGER.
-  if (typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= Number.MAX_SAFE_INTEGER) return Math.trunc(v);
-  if (typeof v === "string") {
-    const ms = Date.parse(v);
-    if (Number.isFinite(ms)) return ms;
-  }
-  return fallback;
 }
 
 const OS: Record<string, HostOs> = { windows: "windows", linux: "linux", bsd: "linux", android: "linux", macos: "linux" };

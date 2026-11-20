@@ -2,6 +2,7 @@
 // boxes (old utils/logRehome.ts), and legacy `commandOutputs` / `rawScanOutput` folded in exactly as old
 // utils/engagementLogMigration.ts migrateLegacyLogs does. Raw old shapes come back; plan.ts maps them.
 import type { OldMachine } from "./types";
+import { isObj, hasText, arr } from "./values";
 
 export type RawLog = Record<string, unknown>;
 
@@ -13,9 +14,6 @@ export interface GatheredLogs {
   duplicate: number;
 }
 
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
-const hasText = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
-const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 const idsOf = (v: unknown): Set<string> => new Set(arr(v).filter((x): x is string => typeof x === "string"));
 
 /** Old updatedAtMs: the machine's updatedAt, else now. */

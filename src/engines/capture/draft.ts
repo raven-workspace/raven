@@ -9,8 +9,7 @@ import { ipInScope } from '../parse/scope';
 import { httpParts, httpTitle } from './http';
 import { findFlagInPaste } from './flag';
 import { detectKind } from './kind';
-import { screenshotFileName } from './screenshot';
-import { commandTitle, flagTitle, noteTitle } from './titles';
+import { commandTitle, flagTitle, noteTitle, screenshotFileName } from './titles';
 
 export type { ScanPort };
 

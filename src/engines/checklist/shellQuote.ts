@@ -52,7 +52,8 @@ export function hasUnmodelledQuoting(template: string): boolean {
 }
 
 const SAFE_BARE = /^[A-Za-z0-9@%+=:,./_-]+$/;
-const singleQuoted = (v: string) => `'${v.replace(/'/g, `'\\''`)}'`;
+/** POSIX single-quoting: wraps `v` in '…', and an embedded ' becomes '\'' . */
+export const singleQuoted = (v: string): string => `'${v.replace(/'/g, `'\\''`)}'`;
 
 /** Escape `value` for a Bourne shell at the given quoting context so it stays one literal word. */
 export function shellEscape(value: string, ctx: QuoteContext): string {

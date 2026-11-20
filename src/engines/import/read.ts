@@ -1,4 +1,5 @@
 import type { OldBackup } from "./types";
+import { isObj } from "./values";
 
 const ENCRYPTED_MSG = "This backup is encrypted. Export an unencrypted backup from old Raven and import that.";
 const NOT_BACKUP = "Not an old-Raven backup.";
@@ -9,8 +10,6 @@ const FORBIDDEN = new Set(["__proto__", "constructor", "prototype"]);
 export type ReadResult =
   | { ok: true; backup: OldBackup; version: "2.0.0" | "3.0.0" }
   | { ok: false; error: string };
-
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** Old utils/backupCrypto.ts isEncryptedBackup: BOM-tolerant, never throws. */
 function isEncrypted(text: string): boolean {

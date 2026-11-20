@@ -27,7 +27,8 @@ export const LISTENERS: Record<ListenerId, ListenerDef> = {
   "connect-penelope": { label: "penelope", template: "penelope -O -c {TARGET_IP} -p {BIND_PORT}", connect: true },
 };
 
-const PLACEHOLDER = /\{([A-Z][A-Z0-9_]*)\}/g;
+/** A `{NAME}` template placeholder. Global: use it only with `.replace` / `.matchAll`, which ignore and reset `lastIndex`. */
+export const PLACEHOLDER = /\{([A-Z][A-Z0-9_]*)\}/g;
 
 /** Fills a listener template; a blank or missing value stays visible as its {NAME}. */
 export function fillListener(template: string, values: Record<string, string>): string {

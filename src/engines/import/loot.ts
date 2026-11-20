@@ -7,24 +7,10 @@ import type {
 } from "../../types/credentials";
 import { attemptKey, defaultHashType, findDuplicateCredential, stripLineBreaks, usernameKey } from "../credentials/keys";
 import type { OldBackup, OldMachine } from "./types";
+import { isObj, hasText, arr, oneLine, toMs } from "./values";
 
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
-const hasText = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
-const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 const optText = (v: unknown): string | null => (hasText(v) ? v.trim() : null);
 const oneOf = <T extends string>(set: Set<string>, v: unknown): T | null => (typeof v === "string" && set.has(v) ? (v as T) : null);
-const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
-
-/** Epoch-ms numbers are kept; ISO strings are parsed; anything else is `fallback`. */
-function toMs(v: unknown, fallback: number): number {
-  // Whole milliseconds that fit an i64 exactly: Rust stores these as INTEGER.
-  if (typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= Number.MAX_SAFE_INTEGER) return Math.trunc(v);
-  if (typeof v === "string") {
-    const ms = Date.parse(v);
-    if (Number.isFinite(ms)) return ms;
-  }
-  return fallback;
-}
 
 const CRED_TYPES = new Set<string>(["password", "hash", "ticket", "key", "token", "other"]);
 const SCOPES = new Set<string>(["domain", "local", "app"]);

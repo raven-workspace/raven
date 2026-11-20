@@ -1,12 +1,9 @@
-import { isUsableNt } from './text'
+import { dumpKey, isSystemLogon, isUsableNt } from './text'
 import type { FoundCredential, FoundTick, Parser } from './types'
 
 const NULL = '(null)'
 const NT = /^\s*\* NTLM\s*:\s*([0-9a-fA-F]{32})\s*$/
 const DCSYNC_HASH = /^\s*Hash NTLM:\s*([0-9a-fA-F]{32})\s*$/
-// Virtual / system logon accounts carry random machine secrets, never a typed password.
-const SYSTEM_DOMAIN = /^(Window Manager|Font Driver Host|NT AUTHORITY|NT SERVICE)$/i
-const SYSTEM_USER = /^(DWM|UMFD)-\d+$/i
 
 const value = (line: string, re: RegExp): string | null => {
   const m = re.exec(line)
@@ -26,7 +23,7 @@ export const mimikatz: Parser = {
     const seen = new Set<string>()
     let domainHashes = 0
     const add = (c: FoundCredential) => {
-      const k = [c.username, c.domain, c.type, c.secret].join('\u0000')
+      const k = dumpKey(c)
       if (seen.has(k)) return
       seen.add(k)
       credentials.push(c)
@@ -66,7 +63,7 @@ export const mimikatz: Parser = {
       if (pw && user) {
         const secret = pw[1]
         if (secret === '' || secret === NULL) continue
-        if (user.endsWith('$') || SYSTEM_USER.test(user) || SYSTEM_DOMAIN.test(domain)) continue
+        if (user.endsWith('$') || isSystemLogon(user, domain)) continue
         const local = domain !== '' && domain.toLowerCase() === logonServer.toLowerCase()
         add({
           username: user, domain: domain || null, type: 'password', secret, hashType: null,

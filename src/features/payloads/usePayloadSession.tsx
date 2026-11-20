@@ -2,7 +2,7 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import { DERIVED_TOKENS } from "../../engines/payloads/build";
 import { encodePs } from "../../engines/payloads/encodePs";
-import { LISTENERS } from "../../engines/payloads/listeners";
+import { LISTENERS, PLACEHOLDER } from "../../engines/payloads/listeners";
 import type { BuiltPayload, GeneratorId, ListenerId, PayloadDef } from "../../engines/payloads/types";
 import { api } from "../../lib/api";
 import { copyPlain } from "../../lib/clipboard";
@@ -68,7 +68,6 @@ export const GENERATOR_LIST_ID = "payloads-generators";
 export const inGeneratorList = () => document.activeElement?.closest(`#${GENERATOR_LIST_ID}`) != null;
 export const isGenerator = (g: string | null): g is GeneratorId => GENERATORS.some((x) => x.id === g);
 
-const PLACEHOLDER = /\{([A-Z][A-Z0-9_]*)\}/g;
 const namesIn = (text: string) => [...text.matchAll(PLACEHOLDER)].map((m) => m[1]!);
 /** The listener placeholders that are fill values; LHOST and LPORT have their own fields, MSF_PAYLOAD comes from the def. */
 const LISTENER_FIELDS = new Set(["TARGET_IP", "BIND_PORT"]);

@@ -1,5 +1,6 @@
 import type { CredAttempt, Credential, Username } from '../../types/credentials';
 import type { Host } from '../../types/host';
+import { singleQuoted } from '../checklist/shellQuote';
 import type { Service } from '../../types/service';
 import { authModesFor, cellFor, hostSprayServices, isNtlmHash, isOwnerless, isSprayable } from './matrix';
 import type { CredAuthMode, SprayService } from './types';
@@ -21,7 +22,7 @@ const SERVICE_ORDER: SprayService[] = ['smb', 'winrm', 'rdp', 'mssql', 'ssh', 'f
 const NO_AUTH_FLAGS: SprayService[] = ['ssh', 'ftp', 'vnc', 'nfs'];
 
 export function shellQuote(s: string): string {
-  return `'${s.replace(/'/g, `'\\''`)}'`;
+  return singleQuoted(s);
 }
 
 const safeName = (s: string) => s.replace(/[^A-Za-z0-9._-]/g, '_') || 'cred';

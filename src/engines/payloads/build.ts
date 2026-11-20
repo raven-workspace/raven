@@ -1,11 +1,10 @@
 import { urlEncodeShell, utf16leBase64 } from "./encode";
 import { wrapForContext, type PasteContext } from "./context";
 import { applyFilter, FILTER_CONTEXTS, filterFitsOs, type FilterId } from "./filters";
-import { fillListener, LISTENERS } from "./listeners";
+import { fillListener, LISTENERS, PLACEHOLDER } from "./listeners";
 import { POWERSHELL_TCP } from "./psScripts";
 import type { BuiltPayload, ListenerId, PayloadDef } from "./types";
 
-const PLACEHOLDER = /\{([A-Z][A-Z0-9_]*)\}/g;
 /** The web server for a served file: 80, or 8000 when the listener takes 80, so the two never clash. */
 const ALT_SERVE_PORT = "8000";
 
