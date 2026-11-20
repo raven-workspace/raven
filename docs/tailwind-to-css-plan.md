@@ -67,6 +67,19 @@ with every screen pixel-identical. Inventory: [tailwind-to-css-inventory.md](tai
 | 25 | src/ui/shadcn (sidebar, button, toggle, tabs, sheet, scroll-area, …) | High | + tw-animate replacements | |
 | 26 | Remove Tailwind: preflight → `base.scss`, `@theme` → `:root`, drop packages, `cn`, `cva`, convention tests rewritten, DESIGN.md | Med | full suite, build, audit, pixel, manual QA | |
 
+## Feature conventions
+
+- One `.scss` per component file, next to it (`TestGrid.tsx` + `TestGrid.scss`), imported by that file; BEM block named
+  after the component in kebab-case (`.test-grid`), so class names are unique app-wide. All rules in `@layer features`.
+- A class a feature puts on a `src/ui` primitive needs nothing special: `features` beats `components`.
+- A class a feature puts on **another feature's** component shares that component's layer, so it is written with two
+  classes (`.finding-split .finding-split__hosts`), never one, and wins on specificity rather than load order.
+- Grid tracks go in `grid-template-columns` / `-rows` exactly as the arbitrary value had them (DESIGN.md's grid rule).
+  Container queries become `@container <name> (min-width: …)`; named groups become ancestor selectors on the group's
+  block and attribute.
+- No flex for feature layout (DESIGN.md), no new colours, spacing from `--space-*` (plus the existing documented
+  exceptions such as the 94px title-bar inset).
+
 ## Per-unit procedure
 
 1. Resolve the unit's classes to the CSS Tailwind actually emits (variants, `--tw-*` interplay such as `leading-none`
