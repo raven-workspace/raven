@@ -6,6 +6,7 @@ import { Button, Disclosure, Field, Input, Panel } from "../../ui";
 import type { Drift } from "../../engines/fieldManual/drift";
 import { useFieldManual, useImportFieldManual } from "../fieldManual/queries";
 import { settingsKey, useSettings } from "./queries";
+import "./FieldManualSection.scss";
 
 /** Settings › Field Manual: where the vault is, import it now, and what the last import did. */
 export function FieldManualSection() {
@@ -63,17 +64,17 @@ export function FieldManualSection() {
       <Field label="Vault folder">
         <Input mono value={path} placeholder="~/…/Field-Manual" onChange={(e) => setPath(e.target.value)} onBlur={() => void savePath()} />
       </Field>
-      {error && <p role="alert" className="m-0 mt-2 text-meta text-warn">{error}</p>}
+      {error && <p role="alert" className="field-manual-section__error">{error}</p>}
       {s && (
-        <p className="m-0 mt-3 text-meta text-fg-2">
+        <p className="field-manual-section__summary">
           Last import {new Date(s.importedAt).toLocaleString()}: {s.cards.length} cards,{" "}
           {Object.keys(s.overlay ?? {}).length + (s.added?.length ?? 0)} commands
           {s.notes ? `, ${s.notes.length} notes` : ""}.
         </p>
       )}
       {r && (
-        <ul className="m-0 mt-2 grid list-none gap-1 p-0 text-meta text-muted">
-          {r.warnings?.map((w) => <li key={w} className="text-warn">{w}</li>)}
+        <ul className="field-manual-section__report">
+          {r.warnings?.map((w) => <li key={w} className="field-manual-section__warning">{w}</li>)}
           <li>Cards: {r.cardsAdded} added, {r.cardsChanged} changed, {r.cardsRemoved} gone from the vault</li>
           <li>Commands: {r.commandsAdded} added, {r.commandsChanged} changed</li>
           {r.commandsRemovedKept.length > 0 && (
@@ -93,13 +94,13 @@ export function FieldManualSection() {
 function Lines({ label, lines }: { label: string; lines: string[] }) {
   const [open, setOpen] = useState(false);
   // An empty group is one plain line, indented to the Disclosure labels (4px pad + 16px caret + 8px gap).
-  if (lines.length === 0) return <li className="grid min-h-7 items-center pl-1 text-body text-muted-2"><span className="pl-6">{label} (0)</span></li>;
+  if (lines.length === 0) return <li className="field-manual-section__empty-group"><span className="field-manual-section__empty-label">{label} (0)</span></li>;
   return (
     <li>
       <Disclosure label={label} count={lines.length} open={open} onOpenChange={setOpen}>
-        <ul className="m-0 mt-1 grid list-none gap-1 p-0 pl-8 font-mono text-code text-fg-2">
+        <ul className="field-manual-section__lines">
           {lines.map((l, i) => (
-            <li key={`${i}-${l}`} className="break-words">
+            <li key={`${i}-${l}`} className="field-manual-section__line">
               {l}
             </li>
           ))}
@@ -112,9 +113,9 @@ function Lines({ label, lines }: { label: string; lines: string[] }) {
 /** Spec §5 drift: where the vault and Raven disagree. */
 function DriftReport({ drift: d }: { drift: Drift }) {
   return (
-    <div className="mt-3">
-      <h3 className="m-0 text-heading text-fg-2">Drift</h3>
-      <ul className="m-0 mt-1 grid list-none gap-1 p-0 text-meta text-muted">
+    <div className="field-manual-section__drift">
+      <h3 className="field-manual-section__drift-title">Drift</h3>
+      <ul className="field-manual-section__drift-groups">
         <Lines label="Playbook items with no Raven step" lines={d.noStep.map((i) => `${i.file.split("/").pop()}: ${i.text}`)} />
         <Lines label="Steps whose playbook item is gone or reworded" lines={d.reworded.map((x) => `${x.goalId}: ${x.text}`)} />
         <Lines label="Raven-only steps" lines={d.ravenOnlySteps} />

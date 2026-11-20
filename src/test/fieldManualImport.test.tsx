@@ -80,7 +80,7 @@ describe("Field Manual import", () => {
       report: { cardsAdded: 0, cardsChanged: 0, cardsRemoved: 0, commandsAdded: 0, commandsChanged: 0, commandsRemovedKept: [], classified: [], warnings: ["No notes found; kept the last import's 3 notes. Check iCloud has downloaded the vault."] },
     } as never);
     mount(<FieldManualSection />);
-    expect(await screen.findByText(/kept the last import's 3 notes/)).toHaveClass("text-warn");
+    expect(await screen.findByText(/kept the last import's 3 notes/)).toHaveClass("field-manual-section__warning");
   });
 
   it("a failed scan shows an error and leaves the library and snapshot unchanged", async () => {

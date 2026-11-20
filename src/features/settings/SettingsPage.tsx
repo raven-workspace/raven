@@ -8,6 +8,7 @@ import { Button, Chip, Dialog, EmptyState, Field, Input, Panel, SETTINGS_COLUMN,
 import { FieldManualSection } from "./FieldManualSection";
 import { settingsKey, useSettings } from "./queries";
 import { RavenError } from "../../types/errors";
+import "./SettingsPage.scss";
 
 export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -38,7 +39,7 @@ function NumberSetting({
 }) {
   const [text, setText] = useState(String(value));
   return (
-    <Field label={label} error={error} className="w-44">
+    <Field label={label} error={error} className="settings-page__number">
       <Input
         type="number"
         inputMode="numeric"
@@ -109,8 +110,8 @@ function NvdKeySetting({
     if (v !== "") onSave(v, () => setText(""));
   };
   return (
-    <div className="grid gap-3">
-      <div className="grid grid-cols-[minmax(0,22rem)_auto_auto] items-end justify-start gap-3">
+    <div className="settings-page__stack">
+      <div className="settings-page__key-row">
         <Field label="NVD API key" error={error}>
           <Input
             type="password"
@@ -135,9 +136,9 @@ function NvdKeySetting({
           Clear key
         </Button>
       </div>
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2">
+      <div className="settings-page__aside settings-page__aside--top">
         <Chip variant={set ? "accent" : "default"}>{set ? "Set" : "Not set"}</Chip>
-        <p className="m-0 text-meta text-muted">
+        <p className="settings-page__note">
           Looks up CVEs you add to findings. Only the CVE ID and this key are sent, to NIST NVD. Without a key, use the
           CVSS builder.
         </p>
@@ -164,8 +165,8 @@ function ReportDetails({
   const err = (field: string) => (fieldError?.field === field ? fieldError.msg : undefined);
   const osidTrimmed = osid.trim();
   return (
-    <div className="grid gap-4">
-      <div className="grid grid-cols-[minmax(0,16rem)_minmax(0,16rem)_minmax(0,10rem)] justify-start gap-6">
+    <div className="settings-page__stack settings-page__stack--loose">
+      <div className="settings-page__fields settings-page__fields--report">
         <Field label="Your name" error={err("reportName")}>
           <Input
             value={name}
@@ -192,7 +193,7 @@ function ReportDetails({
         </Field>
       </div>
       {osidTrimmed !== "" && !isValidOsid(osidTrimmed) && (
-        <p className="m-0 text-meta text-warn">OSIDs look like OS-12345</p>
+        <p className="settings-page__error">OSIDs look like OS-12345</p>
       )}
       <Field
         label="Default introduction, objective and requirements"
@@ -214,12 +215,12 @@ function ReportDetails({
           onBlur={() => methodology.trim() !== settings.reportMethodology && onSave({ reportMethodology: methodology.trim() })}
         />
       </Field>
-      <p className="m-0 text-meta text-muted">Copied into each new report. Edit them per report afterwards.</p>
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
+      <p className="settings-page__note">Copied into each new report. Edit them per report afterwards.</p>
+      <div className="settings-page__aside">
         <Button size="sm" disabled={(settings.reportGuidesHidden ?? []).length === 0} onClick={() => onSave({ reportGuidesHidden: [] })}>
           Show guide notes again
         </Button>
-        <p className="m-0 text-meta text-muted">The notes above each part of the report, in the report editor.</p>
+        <p className="settings-page__note">The notes above each part of the report, in the report editor.</p>
       </div>
     </div>
   );
@@ -270,13 +271,13 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
   });
 
   return (
-    <div data-testid="settings-root" className="raven-page mx-auto grid gap-4 py-6" style={{ maxWidth: SETTINGS_COLUMN.max, paddingInline: SETTINGS_COLUMN.inset }}>
-      <h1 className="m-0 text-title text-fg">Settings</h1>
-      {error && <p role="alert" className="m-0 text-meta text-warn">{error}</p>}
+    <div data-testid="settings-root" className="raven-page settings-page" style={{ maxWidth: SETTINGS_COLUMN.max, paddingInline: SETTINGS_COLUMN.inset }}>
+      <h1 className="settings-page__title">Settings</h1>
+      {error && <p role="alert" className="settings-page__error">{error}</p>}
       {queryState([settings], "settings")}
       {settings.data && (
         <Panel title="Security and backups">
-          <div className="grid grid-flow-col justify-start gap-6">
+          <div className="settings-page__fields">
             <NumberSetting
               key={settings.data.autoLockMinutes}
               label="Auto-lock (minutes)"
@@ -300,13 +301,13 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
       )}
       {settings.data && (
         <Panel title="Attacker">
-          <div className="grid grid-flow-col justify-start gap-6">
+          <div className="settings-page__fields">
             <TextSetting
               key={`ip-${settings.data.attackerIp}`}
               label="Your IP (tun0)"
               value={settings.data.attackerIp}
               placeholder="10.10.14.9"
-              className="w-44"
+              className="settings-page__number"
               error={fieldError?.field === "attackerIp" ? fieldError.msg : undefined}
               onSave={(v) => update.mutate({ attackerIp: v })}
             />
@@ -315,13 +316,13 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
               label="Listener port"
               value={settings.data.listenerPort}
               placeholder="4444"
-              className="w-28"
+              className="settings-page__port"
               error={fieldError?.field === "listenerPort" ? fieldError.msg : undefined}
               onSave={(v) => update.mutate({ listenerPort: v })}
             />
           </div>
-          <p className="m-0 mt-3 text-meta text-muted">Filled into checklist commands as LHOST and LPORT</p>
-          <div className="mt-4 grid grid-cols-[minmax(0,11rem)_minmax(0,16rem)_minmax(0,16rem)] justify-start gap-6">
+          <p className="settings-page__note settings-page__note--spaced">Filled into checklist commands as LHOST and LPORT</p>
+          <div className="settings-page__fields settings-page__fields--tools">
             <TextSetting
               key={`ku-${settings.data.kaliUser}`}
               label="Kali user"
@@ -385,17 +386,17 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
         {backups.data && backups.data.length === 0 && (
           <EmptyState title="No backups yet" body="Raven backs up daily when you unlock. Use Back up now any time." />
         )}
-        <ul className="m-0 grid list-none p-0">
+        <ul className="settings-page__backups">
           {backups.data?.map((b) => (
             <li
               key={b.file}
-              className="grid grid-cols-[max-content_minmax(0,1fr)_max-content_auto] items-center gap-3 border-b border-line py-2 last:border-b-0"
+              className="settings-page__backup"
             >
-              <span className="font-mono text-code text-fg-2">{new Date(b.createdAt).toLocaleString()}</span>
-              <span className="grid justify-items-start">
+              <span className="settings-page__when">{new Date(b.createdAt).toLocaleString()}</span>
+              <span className="settings-page__reason">
                 <Chip>{b.reason}</Chip>
               </span>
-              <span className="font-mono text-code text-muted tabular-nums">{formatBytes(b.sizeBytes)}</span>
+              <span className="settings-page__size">{formatBytes(b.sizeBytes)}</span>
               <Button size="sm" onClick={() => setRestoreTarget(b)}>
                 Restore
               </Button>
@@ -422,12 +423,12 @@ export function SettingsPage({ onRestored }: { onRestored: () => void }) {
         }
       >
         {restoreTarget && (
-          <div className="mb-3 grid grid-cols-[max-content_minmax(0,1fr)] items-center justify-items-start gap-3">
-            <span className="font-mono text-code text-fg-2">{new Date(restoreTarget.createdAt).toLocaleString()}</span>
+          <div className="settings-page__restore-target">
+            <span className="settings-page__when">{new Date(restoreTarget.createdAt).toLocaleString()}</span>
             <Chip>{restoreTarget.reason}</Chip>
           </div>
         )}
-        <p className="m-0 text-body text-fg-2">
+        <p className="settings-page__restore-text">
           Restore this backup? Raven will save a backup of the current data first, then lock. Unlock with your password
           to continue.
         </p>

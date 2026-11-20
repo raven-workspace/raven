@@ -246,3 +246,14 @@
 ### Verification
 - [x] Type check, lint, unit tests
 - [x] Pixel diff 297/297, audit gate
+
+## Unit: settings
+
+### Changes
+- SettingsPage.scss (`.settings-page` and its elements; field widths `__number` 11rem and `__port` 7rem ride on
+  `Field`'s root) and FieldManualSection.scss (`.field-manual-section__*`, including the drift report's indented lines).
+- The Field Manual import test asserts `.field-manual-section__warning` instead of `text-warn`.
+
+### Verification
+- [x] Type check, lint, unit tests
+- [x] Pixel diff 297/297, audit gate
