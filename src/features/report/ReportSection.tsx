@@ -16,7 +16,6 @@ import {
   isValidOsid,
   needsFlatten,
   numberAppendices,
-  ownerMeta,
   reportChecks,
   reportDueAt,
   reportFileName,
@@ -35,7 +34,6 @@ import {
   type ReportTarget,
   type SectionMeta,
 } from "../../engines/report";
-import { api } from "../../lib/api";
 import { isDialogOpen, isFreeKey, useKeydown } from "../../lib/keys";
 import { cx } from "../../lib/cx";
 import { useWidthRef } from "../../lib/useWidth";
@@ -46,7 +44,6 @@ import { Button, Dialog, EmptyState, ErrorState, LoadingState, queryState, Timed
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { useNotesStore } from "../notes/useNotesStore";
 import { usePayloadsStore } from "../payloads/usePayloadsStore";
-import { reportSchema } from "./editor/extension";
 import { ReportDataContext, type ReportDataValue } from "./editor/ReportDataContext";
 import { keepCopiedText, openFindBar, posAtPath, ReportEditor, selectBlockAt } from "./editor/ReportEditor";
 import { AddEvidenceButton } from "./AddEvidenceButton";
@@ -60,7 +57,6 @@ import {
   BACK_KINDS,
   createPage,
   deletePage,
-  ensureSections,
   FRONT_KINDS,
   hasCurrentPage,
   hasEngagementTested,
@@ -76,10 +72,10 @@ import {
   useReportSections,
   useReportWriter,
   useSectionSaver,
-  wantedSections,
   pageTitle,
 } from "./queries";
-import { flushReports, forgetReportSave, isReportSaveQueued, queueReportSave, settleReportSave, useReportSaveStore } from "./saveQueue";
+import { useReportSaveStore } from "./saveQueue";
+import { useDraftBuild, useEnsureSections, useOpenFlatten } from "./useSectionLifecycle";
 import { useSettings } from "../settings/queries";
 import { useEngagement } from "../engagements/queries";
 import { RavenError } from "../../types/errors";
@@ -330,32 +326,7 @@ function ReportBody({
   const qc = useQueryClient();
   const reportMeta = report.meta;
   const targets = useMemo(() => reportTargets(data, reportMeta), [data, reportMeta]);
-  const [ensureFailed, setEnsureFailed] = useState<string | null>(null);
-
-  // Missing sections (first open, a new host) are created once; one run at a time, so nothing is upserted twice.
-  const ensuring = useRef(false);
-  useEffect(() => {
-    if (ensuring.current || ensureFailed) return;
-    const have = new Set(sections.map((s) => sectionKey(s.kind, s.targetKey)));
-    if (wantedSections(targets, data).every((w) => have.has(sectionKey(w.kind, w.targetKey)))) return;
-    ensuring.current = true;
-    ensureSections(report, targets, data, sections)
-      .then((created) => {
-        qc.setQueryData<ReportSection[]>(reportSectionsKey(report.id), (list = []) => [
-          ...list.filter((s) => !created.some((c) => c.id === s.id)),
-          ...created,
-        ]);
-      })
-      .catch((e: unknown) => {
-        reportError(e);
-        // Sections created before the failure are stored: reload the list so the outline shows them.
-        void qc.invalidateQueries({ queryKey: reportSectionsKey(report.id) });
-        setEnsureFailed(RavenError.from(e).message);
-      })
-      .finally(() => {
-        ensuring.current = false;
-      });
-  }, [report, targets, data, sections, qc, ensureFailed]);
+  const { ensureFailed, retryEnsure } = useEnsureSections(report, targets, data, sections);
 
   // The report's sections in §5.7 order (numbering, figures and appendix letters follow it). Sections whose target is
   // gone (deleted host, unticked lab host) are hidden, never deleted.
@@ -575,43 +546,10 @@ function ReportBody({
     (s: ReportSection): ReportSection => qc.getQueryData<ReportSection[]>(reportSectionsKey(report.id))?.find((x) => x.id === s.id) ?? s,
     [qc, report.id],
   );
-  // Pages flattened as they opened in this view: each is flattened and saved once.
-  const flattenSaved = useRef(new Set<string>());
-  /** The open page as the open-time flatten writes it, checked as Restore checks the page it swaps in; null for a page
-   *  that needs no flatten. One that doesn't fit (`error`) is never saved over the stored page. */
-  const openFlatten = useMemo((): { id: string; original: ReportNode; doc: ReportNode; error: string | null } | null => {
-    const s = openSection;
-    const original = s ? cachedSection(s).doc : null;
-    if (!s || !original || !needsFlatten(original)) return null;
-    const doc = plainOf(original, targetOf(s));
-    try {
-      reportSchema().nodeFromJSON(doc).check();
-      return { id: s.id, original, doc, error: null };
-    } catch (e) {
-      return { id: s.id, original, doc, error: RavenError.from(e).message };
-    }
-  }, [openSection, cachedSection, plainOf, targetOf]);
-  const flattenFailed = openFlatten?.error ?? null;
+  const flattenFailed = useOpenFlatten(openSection, cachedSection, plainOf, targetOf, replacePage);
   /** The document a page mounts with, in the plain schema. A stored page holding old nodes (an owner page, a page
-   *  restored before plain pages) opens flattened; the effect below saves it once, the original kept in `previousDoc`. */
+   *  restored before plain pages) opens flattened; `useOpenFlatten` saves it once, the original kept in `previousDoc`. */
   const openDoc = (s: ReportSection): ReportNode => plainOf(cachedSection(s).doc as ReportNode, targetOf(s));
-  useEffect(() => {
-    const s = openSection;
-    if (!s || !hasCurrentPage(s) || flattenSaved.current.has(s.id)) return;
-    if (!openFlatten || openFlatten.id !== s.id || openFlatten.error !== null) return;
-    flattenSaved.current.add(s.id);
-    const { original, doc } = openFlatten;
-    const cached = cachedSection(s);
-    const was = cached.meta as SectionMeta;
-    // The page as stored goes into the archive. It becomes `previousDoc` (Restore) only when no earlier page holds that
-    // place: a page kept from a rebuild stays the one Restore brings back.
-    const originals = archivePage(was, original, "flatten");
-    const meta: SectionMeta = was.previousDoc
-      ? { ...was, originals }
-      : { ...was, previousDoc: original, previousLayout: was.layout ?? null, previousAt: Date.now(), restored: false, flattened: true, originals };
-    patchCachedSection(qc, s.id, { doc, meta: meta as Record<string, unknown> });
-    replacePage(doc, meta);
-  }, [openSection, openFlatten, cachedSection, qc, replacePage]);
   const [swapFailed, setSwapFailed] = useState<string | null>(null);
   const swapPage = () => {
     const s = openSection;
@@ -647,83 +585,7 @@ function ReportBody({
   };
   const onEditorReady = (id: string, editor: Editor) => setReadyEditor({ id, editor });
 
-  // A section opened with no page yet, or one under another layout, gets its plain draft, built and stored once
-  // (draftBuiltAt marks it).
-  const building = useRef(new Set<string>());
-  const [draftFailed, setDraftFailed] = useState<string | null>(null);
-  // A section whose rebuild waits on an earlier change to its old page that isn't saved (failed or refused).
-  const [draftBlocked, setDraftBlocked] = useState<string | null>(null);
-  // Sections the owner asked to rebuild anyway: their unsaved change goes into the archived old page instead.
-  const rebuildAnyway = useRef(new Set<string>());
-  useEffect(() => {
-    const s = openSection;
-    if (!s || hasCurrentPage(s) || s.kind === "details" || draftFailed || draftBlocked === s.id || building.current.has(s.id)) return;
-    const doc = drafts.get(s.id);
-    if (!doc) return;
-    building.current.add(s.id);
-    const fail = (e: unknown) => {
-      building.current.delete(s.id);
-      reportError(e);
-      setDraftFailed(RavenError.from(e).message);
-    };
-    // Rebuild anyway: once a write of it already on its way has settled (so it can't land after the rebuild), the
-    // unsaved change is dropped from the queue (it is never tried again) and lives on in the archived old page below
-    // (the queue patched the cache with it when it sent it). Should the rebuild fail, it is queued again.
-    let requeue: (() => void) | null = null;
-    const flushed = rebuildAnyway.current.delete(s.id)
-      ? settleReportSave(s.id).then(() => {
-          if (isReportSaveQueued(s.id)) {
-            const unsaved = cachedSection(s);
-            forgetReportSave(s.id);
-            requeue = () => queueReportSave(qc, s.id, unsaved.doc as ReportNode, unsaved.meta as SectionMeta);
-          }
-          return flushReports();
-        })
-      : // A queued write of the old page (mid-debounce, or failed and waiting for its retry; a refused one is tried once
-        // more) goes out first, so it can never land after the rebuild and overwrite it; the page it wrote is the one kept.
-        flushReports();
-    flushed
-      .then(() => {
-        // The section as the cache has it after the flush: the queue patches it with every write it sends, so its page
-        // and meta are the latest, saved or not; its position is the current one (the reply's is left out of the cache,
-        // so a reorder made meanwhile stays).
-        const now = cachedSection(s);
-        if (isReportSaveQueued(s.id)) {
-          requeue?.();
-          building.current.delete(s.id);
-          setDraftBlocked(s.id);
-          return;
-        }
-        if (hasCurrentPage(now)) {
-          building.current.delete(s.id);
-          return;
-        }
-        // A page written under another layout is never dropped: it is kept for "Restore your previous page" and, byte for
-        // byte with its meta, in the archive. The owner's own meta (coverage, removed entries) carries forward.
-        const was = now.meta as SectionMeta;
-        // The removals carried forward (the cache's, the latest) leave their entries off the page, so they survive.
-        const page = withoutRemoved(doc, was.removedEntryIds ?? []);
-        const meta: SectionMeta =
-          now.doc != null
-            ? {
-                ...ownerMeta(was),
-                layout: DRAFT_LAYOUT,
-                previousDoc: now.doc,
-                previousLayout: was.layout ?? null,
-                previousAt: Date.now(),
-                originals: archivePage(was, now.doc, "rebuild"),
-              }
-            : { ...ownerMeta(was), layout: DRAFT_LAYOUT, ...(was.originals ? { originals: was.originals } : {}) };
-        return api
-          .reportSectionUpsert(report.id, { kind: s.kind, targetKey: s.targetKey, position: now.position, doc: page, meta: meta as Record<string, unknown>, draftBuiltAt: Date.now() })
-          .then((saved) => patchCachedSection(qc, s.id, { doc: saved.doc, meta: saved.meta, draftBuiltAt: saved.draftBuiltAt }))
-          .catch((e: unknown) => {
-            requeue?.();
-            throw e;
-          });
-      })
-      .catch(fail);
-  }, [openSection, drafts, report.id, qc, draftFailed, draftBlocked, cachedSection]);
+  const { draftFailed, retryDraft, draftBlocked, retryBlocked, rebuildAnyway } = useDraftBuild(openSection, drafts, report.id, cachedSection);
 
   // Report-details writes go out one at a time, in order.
   const { saveReport, cachedMeta } = useReportWriter(report);
@@ -1021,29 +883,26 @@ function ReportBody({
   const editorShown = openSection?.kind !== "details" && !!openSection && hasCurrentPage(openSection) && !!contextValue && !flattenFailed;
   const notices = (
     <>
-      {ensureFailed && <WarnLine text={`Couldn't add the report's new sections: ${ensureFailed}`} retryLabel="Retry setting up sections" onRetry={() => setEnsureFailed(null)} />}
+      {ensureFailed && <WarnLine text={`Couldn't add the report's new sections: ${ensureFailed}`} retryLabel="Retry setting up sections" onRetry={retryEnsure} />}
       {saveRefused && (
         <p role="alert" className="m-0 text-meta text-warn">
           {`${entries.find((e) => e.section.id === saveRefused.sectionId)?.item.label ?? "A page"}: ${saveRefused.message}`}
         </p>
       )}
       {saveFailed && <p className="m-0 text-meta text-warn">Some typing isn't saved yet. Raven keeps trying; keep Raven open until this goes.</p>}
-      {draftFailed && <WarnLine text={`Couldn't build this page's draft: ${draftFailed}`} retryLabel="Retry building the draft" onRetry={() => setDraftFailed(null)} />}
+      {draftFailed && <WarnLine text={`Couldn't build this page's draft: ${draftFailed}`} retryLabel="Retry building the draft" onRetry={retryDraft} />}
       {draftBlocked && draftBlocked === openSection?.id && (
         <div role="alert" className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-3">
           <p className="m-0 text-meta text-warn">
             An earlier change to this page couldn't be saved, so Raven kept the old page and hasn't rebuilt it. Retry saves
             that change, then rebuilds. Rebuild anyway keeps the change in the old page, which Restore brings back.
           </p>
-          <Button size="sm" onClick={() => setDraftBlocked(null)}>
+          <Button size="sm" onClick={retryBlocked}>
             Retry
           </Button>
           <Button
             size="sm"
-            onClick={() => {
-              rebuildAnyway.current.add(draftBlocked);
-              setDraftBlocked(null);
-            }}
+            onClick={() => rebuildAnyway(draftBlocked)}
           >
             Rebuild anyway
           </Button>
@@ -1090,7 +949,7 @@ function ReportBody({
       {entries.length === 0 ? (
         ensureFailed ? (
           <Padded>
-            <ErrorState title="Couldn't set up the report" hint="Retry. If it keeps failing, lock and unlock Raven." onRetry={() => setEnsureFailed(null)} detail={ensureFailed} />
+            <ErrorState title="Couldn't set up the report" hint="Retry. If it keeps failing, lock and unlock Raven." onRetry={retryEnsure} detail={ensureFailed} />
           </Padded>
         ) : (
           <Padded>
