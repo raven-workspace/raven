@@ -6,6 +6,7 @@ import { BrandIcon, Chip } from "../../ui";
 import { OS_LABELS } from "../hosts/columns";
 import { ThreadDot } from "../notes/ThreadDot";
 import { useThreadCounts } from "../notes/useThreadCounts";
+import "./BoardCard.scss";
 
 export interface BoardCardProps {
   host: Host;
@@ -37,15 +38,15 @@ export function BoardCard({ host, onShift, msf = false }: BoardCardProps) {
       data-host-id={host.id}
       onDragStart={onDragStart}
       onKeyDown={onKeyDown}
-      className="grid min-w-0 gap-3 rounded border border-line-2 bg-bg p-2 text-fg no-underline transition-colors duration-100 hover:border-line-strong @min-[150px]:p-3"
+      className="board-card"
     >
       {/* Two groups, spaced apart: who it is (name, IP), then what it is and what's held (OS, access). */}
-      <span className="grid min-w-0 gap-1">
-        <span className={cx("grid min-w-0 items-start gap-1", msf ? "grid-cols-[minmax(0,1fr)_16px_8px]" : "grid-cols-[minmax(0,1fr)_8px]")}>
-          <span title={host.name} className="line-clamp-2 break-words text-body font-semibold">{host.name}</span>
+      <span className="board-card__who">
+        <span className={cx("board-card__name-row", msf && "board-card__name-row--msf")}>
+          <span title={host.name} className="board-card__name">{host.name}</span>
           {msf && (
             // The exam's one Metasploit host, so it's never used on a second box by mistake. Sits on the name's first line.
-            <span role="img" aria-label="Metasploit host" title="Metasploit host" className="grid h-5 items-center">
+            <span role="img" aria-label="Metasploit host" title="Metasploit host" className="board-card__msf">
               <BrandIcon brand="metasploit" />
             </span>
           )}
@@ -53,7 +54,7 @@ export function BoardCard({ host, onShift, msf = false }: BoardCardProps) {
         </span>
         {host.ip && (
           // One line wherever the window can be; in a lane narrower than the address it breaks only after a dot, never mid-octet.
-          <span className="font-mono text-code text-muted-2">
+          <span className="board-card__ip">
             {host.ip.split(".").map((part, i, all) => (
               <Fragment key={i}>{part}{i < all.length - 1 && <>.<wbr /></>}</Fragment>
             ))}
@@ -63,17 +64,14 @@ export function BoardCard({ host, onShift, msf = false }: BoardCardProps) {
       {(host.os || host.access !== "none") && (
         // Wide enough (a lane body of 156px: "Windows" and a "root" or "user" chip need about 130px inside 12px padding), the access
         // chip ends the OS row; narrower, it sits under the OS. Either way every card in a lane has the same shape.
-        <div className="grid min-w-0 items-center justify-items-start gap-x-2 gap-y-1 @min-[156px]:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="board-card__what">
           {host.os && (
             // OS is metadata, not state: the brand icon and its name as text (DESIGN.md Chips).
             <span
-              className={cx(
-                "grid min-w-0 max-w-full items-center gap-1 text-meta text-fg-2",
-                host.os === "other" ? "grid-cols-[minmax(0,1fr)]" : "grid-cols-[16px_minmax(0,1fr)]",
-              )}
+              className={cx("board-card__os", host.os === "other" && "board-card__os--other")}
             >
               {host.os !== "other" && <BrandIcon brand={host.os} />}
-              <span className="truncate">{OS_LABELS[host.os]}</span>
+              <span className="board-card__os-name">{OS_LABELS[host.os]}</span>
             </span>
           )}
           {host.access !== "none" && <Chip variant="accent">{host.access}</Chip>}

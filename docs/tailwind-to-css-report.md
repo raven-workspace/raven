@@ -220,3 +220,16 @@
 - [x] Type check and lint
 - [x] Pixel diff: 297/297 (credentials, the dock, inventory and matrix screens identical at every width)
 - [x] Audit gate
+
+## Unit: board
+
+### Changes
+- Board.scss (`.board`, `.board__lanes`, `.board__lane` with `[data-over="true"]` for the drop edge, `.board__lane-header`
+  as the 144px container, `.board__lane-heading`, `.board__lane-title`, `.board__count(--empty)`, `.board__lane-body` as
+  the card container) and BoardCard.scss (`.board-card` and its elements; padding and the OS row follow the lane body
+  through `@container (width >= 150px | 156px)`).
+- The board test asserts `.board-card__ip` instead of `font-mono`.
+
+### Verification
+- [x] Type check, lint, unit tests
+- [x] Pixel diff 297/297, audit gate (run together with cleanup, settings and vault)

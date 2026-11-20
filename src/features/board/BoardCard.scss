@@ -1,0 +1,99 @@
+@use "@/styles/abstracts" as *;
+
+// A host card in a lane. Its padding and OS row follow the lane body's width (the lane body is the container).
+@layer features {
+  .board-card {
+    display: grid;
+    min-width: 0;
+    gap: var(--space-md);
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius);
+    background-color: var(--bg);
+    padding: var(--space-sm);
+    color: var(--fg);
+    text-decoration-line: none;
+    @include transition-colors;
+
+    @media (hover: hover) {
+      &:hover {
+        border-color: var(--line-strong);
+      }
+    }
+
+    @container (width >= 150px) {
+      padding: var(--space-md);
+    }
+  }
+
+  .board-card__who {
+    display: grid;
+    min-width: 0;
+    gap: var(--space-xs);
+  }
+
+  .board-card__name-row {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) 8px;
+    align-items: flex-start;
+    gap: var(--space-xs);
+  }
+
+  .board-card__name-row--msf {
+    grid-template-columns: minmax(0, 1fr) 16px 8px;
+  }
+
+  .board-card__name {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    @include type(body);
+    font-weight: 600;
+    overflow-wrap: break-word;
+  }
+
+  .board-card__msf {
+    display: grid;
+    height: 1.25rem;
+    align-items: center;
+  }
+
+  .board-card__ip {
+    @include type(code);
+    color: var(--muted-2);
+  }
+
+  // From a 156px lane body the access chip ends the OS row; narrower, it sits under the OS.
+  .board-card__what {
+    display: grid;
+    min-width: 0;
+    align-items: center;
+    justify-items: start;
+    column-gap: var(--space-sm);
+    row-gap: var(--space-xs);
+
+    @container (width >= 156px) {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+  }
+
+  .board-card__os {
+    display: grid;
+    min-width: 0;
+    max-width: 100%;
+    grid-template-columns: 16px minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-xs);
+    @include type(meta);
+    color: var(--fg-2);
+  }
+
+  .board-card__os--other {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .board-card__os-name {
+    @include truncate;
+  }
+}

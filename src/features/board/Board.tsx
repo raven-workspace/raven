@@ -7,6 +7,7 @@ import { COLUMN_LABELS } from "../hosts/columns";
 import { HostDialog } from "../hosts/HostDialog";
 import { useHostMutations, useHosts } from "../hosts/queries";
 import { BoardCard } from "./BoardCard";
+import "./Board.scss";
 import { useEngagement } from "../engagements/queries";
 
 /**
@@ -89,11 +90,11 @@ export function Board() {
 
   return (
     <div
-      className="grid h-full gap-2"
+      className="board"
       style={{ gridTemplateRows: moveError ? "auto minmax(0, 1fr)" : "minmax(0, 1fr)" }}
     >
       {moveError && (
-        <p role="alert" className="m-0 text-meta text-warn">
+        <p role="alert" className="board__error">
           {moveError}
         </p>
       )}
@@ -101,7 +102,7 @@ export function Board() {
           the whole header row taller and every lane's first card still starts on the same line. */}
       <div
         ref={root}
-        className="grid gap-3"
+        className="board__lanes"
         style={{
           gridTemplateColumns: `repeat(${BOARD_COLUMNS.length}, minmax(0, 1fr))`,
           gridTemplateRows: "auto 1fr",
@@ -125,21 +126,18 @@ export function Board() {
               }}
               onDrop={(e) => onDrop(e, col)}
               style={{ gridRow: "span 2", gridTemplateRows: "subgrid" }}
-              className={cx(
-                // A filled surface, not an outline: six tall empty boxes read as a cage. The drop target gets the edge.
-                "grid min-h-40 min-w-0 gap-2 rounded border bg-surface p-2",
-                over === col ? "border-accent" : "border-transparent",
-              )}
+              // A filled surface, not an outline; the drop target (data-over) gets the edge.
+              className="board__lane"
             >
               {/* Narrow lanes (under 144px inside, i.e. below about 1200px wide) put the count under the title, so
                   "Vulnerability" never collides with it; wider lanes keep it beside. The shared row absorbs both. */}
-              <header className="@container">
-                <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-x-2 @min-[144px]:grid-cols-[minmax(0,1fr)_auto]">
-                  <span lang="en" className={cx(labelClass, "min-w-0 break-words hyphens-manual")}>{softHyphenate(COLUMN_LABELS[col])}</span>
-                  <span className={cx("text-meta tabular-nums", cards.length ? "text-muted-2" : "text-faint")}>{cards.length}</span>
+              <header className="board__lane-header">
+                <div className="board__lane-heading">
+                  <span lang="en" className={cx(labelClass, "board__lane-title")}>{softHyphenate(COLUMN_LABELS[col])}</span>
+                  <span className={cx("board__count", !cards.length && "board__count--empty")}>{cards.length}</span>
                 </div>
               </header>
-              <div data-lane-body className="@container grid min-w-0 content-start gap-2">
+              <div data-lane-body className="board__lane-body">
                 {cards.map((h) => (
                   <BoardCard key={h.id} host={h} onShift={shift} msf={h.id === msfHostId} />
                 ))}
