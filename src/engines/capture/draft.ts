@@ -2,8 +2,8 @@ import type { BoardColumn, HostOs } from '../../types/host';
 import type { CommandBlock, LogContent, LogKind } from '../../types/log';
 import type { ScanPort } from '../../types/service';
 import { HOST_IP, hostsNamedIn, isKaliLabel, namedHostsInLine, shellHost, type HostRef } from '../attribution';
-import { analyzeCommandOutput, detectOsFromScan } from '../parse/commandOutput';
-import { parseMultiHostScan, type ParsedPort } from '../parse/scan';
+import { detectOsFromScan } from '../parse/commandOutput';
+import { detectAndParseScan, parseMultiHostScan, type ParsedPort } from '../parse/scan';
 import { splitPaste } from '../parse/logPaste';
 import { ipInScope } from '../parse/scope';
 import { httpParts, httpTitle } from './http';
@@ -93,9 +93,8 @@ const REPORT_HEADER = /^Nmap scan report for (?:(\S+) \()?([^\s)]+)\)?/i;
  * contributes only `target`'s own section.
  */
 function scanFor(output: string, target: HostRef, domain: string): CaptureDraft['scan'] {
-  const analysis = analyzeCommandOutput(output);
-  const result = analysis.scan;
-  if (!result || result.format === 'raw-ports') return null;
+  const result = detectAndParseScan(output);
+  if (!result || result.ports.length === 0 || result.format === 'raw-ports') return null;
 
   const hosts = parseMultiHostScan(output);
   if (hosts.length > 1) {
@@ -117,7 +116,7 @@ function scanFor(output: string, target: HostRef, domain: string): CaptureDraft[
   // Rustscan "Open ip:port" lines for several IPs: which port is whose is not reliable, so no scan.
   const openIps = new Set(Array.from(output.matchAll(/Open\s+((?:\d{1,3}\.){3}\d{1,3}):\d+/g), (m) => m[1]));
   if (openIps.size > 1) return null;
-  return { hostId: target.id, ports: toScanPorts(result.ports, result.format), os: analysis.os?.os ?? null };
+  return { hostId: target.id, ports: toScanPorts(result.ports, result.format), os: detectOsFromScan(result, output.trim())?.os ?? null };
 }
 
 export function buildDraft(input: DraftInput): CaptureDraft {
