@@ -257,3 +257,19 @@
 ### Verification
 - [x] Type check, lint, unit tests
 - [x] Pixel diff 297/297, audit gate
+
+## Unit: vault
+
+### Changes
+- screens.scss (`.vault-screen` and its elements, shared by SetupScreen, UnlockScreen's unlock and damaged-database
+  forms and VaultGate's load error), VaultGate.scss (`.vault-gate` frame, title-bar home link and wordmark, settings dot,
+  notice bar, stage/frozen copy/body), CipherBackdrop.scss (`.cipher-backdrop`, `--front`), DecodingWordmark.scss (the
+  wordmark always renders `.decoding-wordmark`: block, full width; letters and glyphs as classes).
+- Backup radio rows key their selected look on `[aria-checked="true"]` (the dot on `[aria-checked="true"] > …`); the
+  1px accent focus ring keeps the base layer's 2px offset, as before.
+- Motion untouched: CipherBackdrop and DecodingWordmark animate from script; only their static classes moved.
+
+### Verification
+- [x] Type check, lint, unit tests
+- [x] Pixel diff 297/297 (manual-search@1280 failed every retry once under heavy machine load, then passed 4/4 alone)
+- [x] Audit gate 660/660 (the title-bar regression timed out once under load; passed alone)

@@ -32,6 +32,8 @@ import { Palette } from "../palette/Palette";
 import { usePaletteStore } from "../palette/usePaletteStore";
 import { useSettings } from "../settings/queries";
 import { prefersReducedMotion } from "../../ui/motion";
+import "./screens.scss";
+import "./VaultGate.scss";
 
 interface VaultContextValue {
   /** Locks the vault now (same path as ⌘L and the idle timer). */
@@ -338,10 +340,10 @@ export function VaultGate({ children }: { children: ReactNode }) {
         <TitleBarIconButton icon={Lock} label="Lock" shortcut="⌘L" onClick={() => lock()} />
         <span
           title={vaultNewer ? "The Field Manual has changes to import" : undefined}
-          className="relative grid"
+          className="vault-gate__settings"
         >
           <TitleBarIconButton icon={Gear} label="Settings" current={pathname === "/settings"} onClick={() => navigate("/settings")} />
-          {vaultNewer && <span aria-hidden="true" className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />}
+          {vaultNewer && <span aria-hidden="true" className="vault-gate__settings-dot" />}
         </span>
       </TitleBarGroup>
     </>
@@ -352,9 +354,9 @@ export function VaultGate({ children }: { children: ReactNode }) {
   let body: ReactNode = null;
   if (loadFailed) {
     body = (
-      <main className="grid h-full place-items-center px-6">
-        <div className="grid w-[320px] justify-items-start gap-3">
-          <p className="m-0 text-meta text-fg-2">Raven couldn't check its data.</p>
+      <main className="vault-screen">
+        <div className="vault-screen__load-error">
+          <p className="vault-screen__text">Raven couldn't check its data.</p>
           <Button onClick={() => void retryLoad()} disabled={retrying} aria-busy={retrying}>
             {retrying ? "Trying…" : "Try again"}
           </Button>
@@ -375,10 +377,10 @@ export function VaultGate({ children }: { children: ReactNode }) {
     body = (
       <VaultContext.Provider value={ctx}>
         {(notice || backupError) && (
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-line px-4 py-1 text-meta text-muted">
-            <div className="grid min-w-0 gap-1">
-              {notice && <p className="m-0">{notice}</p>}
-              {backupError && <p className="m-0">Daily backup failed: {backupError}</p>}
+          <div className="vault-gate__notice">
+            <div className="vault-gate__notice-lines">
+              {notice && <p>{notice}</p>}
+              {backupError && <p>Daily backup failed: {backupError}</p>}
             </div>
             <IconButton
               icon={X}
@@ -400,23 +402,23 @@ export function VaultGate({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="grid h-full grid-rows-[auto_minmax(0,1fr)] bg-bg">
+    <div className="vault-gate">
       <TitleBar
         left={
           unlocked ? (
-            <Link to="/" className="-ml-1 grid h-7 items-center rounded-sm px-1 opacity-90 hover:opacity-100">
-              <Wordmark className="h-3" />
+            <Link to="/" className="vault-gate__home">
+              <Wordmark className="vault-gate__wordmark" />
             </Link>
           ) : undefined
         }
         // Setup and unlock carry the wordmark themselves; only the load error needs this one.
-        title={!unlocked && (!status || loadFailed) ? <Wordmark className="h-3" /> : undefined}
+        title={!unlocked && (!status || loadFailed) ? <Wordmark className="vault-gate__wordmark" /> : undefined}
         right={right}
       />
-      <div className="relative min-h-0">
+      <div className="vault-gate__stage">
         {showCipher && <CipherBackdrop ref={cipherRef} front={sweeping || closing} onClosed={closing ? endClose : undefined} />}
-        {closing && <div ref={frozenHostRef} aria-hidden="true" className="pointer-events-none absolute inset-0 z-[5] overflow-hidden" />}
-        <div ref={bodyRef} className="relative h-full overflow-auto">{body}</div>
+        {closing && <div ref={frozenHostRef} aria-hidden="true" className="vault-gate__frozen" />}
+        <div ref={bodyRef} className="vault-gate__body">{body}</div>
       </div>
     </div>
   );

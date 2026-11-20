@@ -1,0 +1,16 @@
+@use "@/styles/abstracts" as *;
+
+// The lock screen's ciphertext canvas fills its positioned parent; --front lifts it over the app for the sweep.
+@layer features {
+  .cipher-backdrop {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .cipher-backdrop--front {
+    z-index: 10;
+  }
+}

@@ -1,0 +1,148 @@
+@use "@/styles/abstracts" as *;
+
+// The full-window screens before the app: setup, unlock, damaged database, load error. One centred form each; the
+// width is the screen's own.
+@layer features {
+  .vault-screen {
+    display: grid;
+    height: 100%;
+    place-items: center;
+    padding-inline: var(--space-xl);
+  }
+
+  .vault-screen__form {
+    display: grid;
+    gap: var(--space-lg);
+  }
+
+  .vault-screen__form--setup {
+    width: 380px;
+  }
+
+  .vault-screen__form--unlock {
+    width: 320px;
+  }
+
+  .vault-screen__form--damaged {
+    width: 420px;
+  }
+
+  // Setup's heading and its warning.
+  .vault-screen__intro {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .vault-screen__title {
+    @include type(title);
+    color: var(--fg);
+  }
+
+  .vault-screen__lede {
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .vault-screen__text {
+    @include type(meta);
+    color: var(--fg-2);
+  }
+
+  .vault-screen__notice {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .vault-screen__error {
+    @include type(meta);
+    color: var(--warn);
+  }
+
+  // The decoding wordmark (or its heading) sits a step further from the form.
+  .vault-screen__wordmark {
+    margin-bottom: var(--space-sm);
+  }
+
+  .vault-screen__field {
+    display: grid;
+  }
+
+  .vault-screen__damaged-mark {
+    height: 1.5rem;
+  }
+
+  // An error and its Try again.
+  .vault-screen__retry {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-md);
+  }
+
+  // The load error: a sentence and a button, left-aligned.
+  .vault-screen__load-error {
+    display: grid;
+    width: 320px;
+    justify-items: start;
+    gap: var(--space-md);
+  }
+
+  // The backups to restore from, as a radio group.
+  .vault-screen__backups {
+    display: grid;
+    max-height: 16rem;
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+  }
+
+  .vault-screen__backup {
+    display: grid;
+    cursor: default;
+    grid-template-columns: 6px max-content minmax(0, 1fr);
+    align-items: center;
+    justify-items: start;
+    gap: var(--space-md);
+    border-bottom: 1px solid var(--line);
+    padding: var(--space-sm) var(--space-md);
+    color: var(--fg-2);
+    text-align: left;
+
+    &:last-child {
+      border-bottom-width: 0;
+    }
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--surface);
+      }
+    }
+
+    &:focus-visible {
+      outline-width: 1px;
+      outline-color: var(--accent);
+    }
+
+    &[aria-checked="true"] {
+      background-color: var(--surface);
+      color: var(--fg);
+    }
+  }
+
+  .vault-screen__backup-dot {
+    width: 0.375rem;
+    height: 0.375rem;
+    flex-shrink: 0;
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius-full);
+
+    [aria-checked="true"] > & {
+      border-width: 0;
+      background-color: var(--fg);
+    }
+  }
+
+  .vault-screen__backup-date {
+    @include type(code);
+  }
+}

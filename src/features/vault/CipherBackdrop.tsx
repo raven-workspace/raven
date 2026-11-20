@@ -2,6 +2,7 @@ import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
 import { cx } from "../../lib/cx";
 import { CipherField, type PulseKind } from "./cipherField";
 import { prefersReducedMotion } from "../../ui/motion";
+import "./CipherBackdrop.scss";
 
 export interface CipherHandle {
   pulse: (kind: PulseKind) => void;
@@ -95,7 +96,7 @@ export function CipherBackdrop({ ref, front, onClosed }: { ref?: Ref<CipherHandl
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className={cx("pointer-events-none absolute inset-0 size-full", front && "z-10")}
+      className={cx("cipher-backdrop", front && "cipher-backdrop--front")}
     />
   );
 }

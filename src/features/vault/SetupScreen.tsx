@@ -4,6 +4,7 @@ import { Button, Field, Input } from "../../ui";
 import { CIPHER_CLEAR, CIPHER_ORIGIN } from "./CipherBackdrop";
 import { DecodingWordmark } from "./DecodingWordmark";
 import type { CipherControls } from "./UnlockScreen";
+import "./screens.scss";
 
 export const MIN_PASSWORD = 12;
 
@@ -45,12 +46,12 @@ export function SetupScreen({
   }
 
   return (
-    <main className="grid h-full place-items-center px-6">
-      <form onSubmit={submit} className="grid w-[380px] gap-4" {...CIPHER_CLEAR}>
-        <DecodingWordmark className="mb-2 block h-auto w-full" />
-        <div className="grid gap-2">
-          <h1 className="m-0 text-title text-fg">Create your Raven password</h1>
-          <p className="m-0 text-meta text-muted-2">
+    <main className="vault-screen">
+      <form onSubmit={submit} className="vault-screen__form vault-screen__form--setup" {...CIPHER_CLEAR}>
+        <DecodingWordmark className="vault-screen__wordmark" />
+        <div className="vault-screen__intro">
+          <h1 className="vault-screen__title">Create your Raven password</h1>
+          <p className="vault-screen__lede">
             This password encrypts everything Raven stores. It can't be recovered: if you forget it, the data is gone.
           </p>
         </div>
@@ -83,7 +84,7 @@ export function SetupScreen({
             {...CIPHER_ORIGIN}
           />
         </Field>
-        {error?.field === "form" && <p role="alert" className="m-0 text-meta text-warn">{error.msg}</p>}
+        {error?.field === "form" && <p role="alert" className="vault-screen__error">{error.msg}</p>}
         <Button type="submit" variant="primary" disabled={busy}>
           Create password
         </Button>

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { api } from "../../lib/api";
-import { cx } from "../../lib/cx";
 import type { BackupInfo } from "../../types/backup";
 import type { UnlockResult } from "../../types/vault";
 import { Button, Chip, Field, Input, Wordmark } from "../../ui";
@@ -8,6 +7,7 @@ import { CIPHER_CLEAR, CIPHER_ORIGIN } from "./CipherBackdrop";
 import type { PulseKind } from "./cipherField";
 import { DecodingWordmark } from "./DecodingWordmark";
 import { prefersReducedMotion } from "../../ui/motion";
+import "./screens.scss";
 
 function errorText(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
@@ -116,10 +116,10 @@ function UnlockForm({
   }
 
   return (
-    <main className="grid h-full place-items-center px-6">
-      <form onSubmit={submit} className="grid w-[320px] gap-4" {...CIPHER_CLEAR}>
-        <h1 className="m-0 mb-2"><DecodingWordmark className="block h-auto w-full" /></h1>
-        <div ref={fieldRef} className="grid">
+    <main className="vault-screen">
+      <form onSubmit={submit} className="vault-screen__form vault-screen__form--unlock" {...CIPHER_CLEAR}>
+        <h1 className="vault-screen__wordmark"><DecodingWordmark /></h1>
+        <div ref={fieldRef} className="vault-screen__field">
           <Field label="Password" error={error ?? undefined}>
             <Input
               ref={ref}
@@ -135,7 +135,7 @@ function UnlockForm({
             />
           </Field>
         </div>
-        {notice && <p className="m-0 text-meta text-muted">{notice}</p>}
+        {notice && <p className="vault-screen__notice">{notice}</p>}
         <Button type="submit" variant="primary" disabled={busy} aria-busy={busy}>
           {busy ? "Unlocking…" : "Unlock"}
         </Button>
@@ -208,13 +208,13 @@ function DamagedPanel({ onRestored }: { onRestored: () => void }) {
   }
 
   return (
-    <main className="grid h-full place-items-center px-6">
-      <form onSubmit={submit} className="grid w-[420px] gap-4">
-        <h1 className="m-0"><Wordmark className="h-6" /></h1>
-        <p className="m-0 text-meta text-fg-2">Raven can't read its database file. Restore a backup to continue.</p>
+    <main className="vault-screen">
+      <form onSubmit={submit} className="vault-screen__form vault-screen__form--damaged">
+        <h1><Wordmark className="vault-screen__damaged-mark" /></h1>
+        <p className="vault-screen__text">Raven can't read its database file. Restore a backup to continue.</p>
         {listError && (
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-            <p role="alert" className="m-0 text-meta text-warn">{listError}</p>
+          <div className="vault-screen__retry">
+            <p role="alert" className="vault-screen__error">{listError}</p>
             <Button
               size="sm"
               onClick={() => {
@@ -226,13 +226,13 @@ function DamagedPanel({ onRestored }: { onRestored: () => void }) {
             </Button>
           </div>
         )}
-        {backups && backups.length === 0 && <p className="m-0 text-meta text-muted">No backups yet</p>}
+        {backups && backups.length === 0 && <p className="vault-screen__notice">No backups yet</p>}
         {backups && backups.length > 0 && (
           <div
             role="radiogroup"
             aria-label="Backup"
             onKeyDown={onBackupKey}
-            className="m-0 grid max-h-64 overflow-y-auto rounded-sm border border-line"
+            className="vault-screen__backups"
           >
             {backups.map((b) => {
               const on = file === b.file;
@@ -244,16 +244,10 @@ function DamagedPanel({ onRestored }: { onRestored: () => void }) {
                   aria-checked={on}
                   tabIndex={on ? 0 : -1}
                   onClick={() => choose(b.file)}
-                  className={cx(
-                    "grid cursor-default grid-cols-[6px_max-content_minmax(0,1fr)] items-center justify-items-start gap-3 border-b border-line px-3 py-2 text-left last:border-b-0 focus-visible:outline-1 focus-visible:outline-accent",
-                    on ? "bg-surface text-fg" : "text-fg-2 hover:bg-surface",
-                  )}
+                  className="vault-screen__backup"
                 >
-                  <span
-                    aria-hidden
-                    className={cx("size-1.5 shrink-0 rounded-full", on ? "bg-fg" : "border border-line-2")}
-                  />
-                  <span className="font-mono text-code">{new Date(b.createdAt).toLocaleString()}</span>
+                  <span aria-hidden className="vault-screen__backup-dot" />
+                  <span className="vault-screen__backup-date">{new Date(b.createdAt).toLocaleString()}</span>
                   <Chip>{b.reason}</Chip>
                 </button>
               );

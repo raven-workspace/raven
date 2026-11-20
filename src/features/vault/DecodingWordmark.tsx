@@ -1,6 +1,8 @@
 import { useLayoutEffect, useRef } from "react";
 import raw from "../../assets/raven-wordmark.svg?raw";
 import { prefersReducedMotion } from "../../ui/motion";
+import { cx } from "../../lib/cx";
+import "./DecodingWordmark.scss";
 
 /** The wordmark's own art: one source of truth for the letter shapes. */
 const VIEWBOX = /viewBox="([^"]+)"/.exec(raw)?.[1] ?? "0 0 1 1";
@@ -60,7 +62,7 @@ export function DecodingWordmark({ className }: { className?: string }) {
   }, []);
 
   return (
-    <svg viewBox={VIEWBOX} role="img" aria-label="Raven" className={className}>
+    <svg viewBox={VIEWBOX} role="img" aria-label="Raven" className={cx("decoding-wordmark", className)}>
       {LETTERS.map((l, i) => (
         <path
           key={l.id}
@@ -68,7 +70,7 @@ export function DecodingWordmark({ className }: { className?: string }) {
             paths.current[i] = el;
           }}
           d={l.d}
-          className={l.accent ? "fill-accent" : "fill-fg"}
+          className={cx("decoding-wordmark__letter", l.accent && "decoding-wordmark__letter--accent")}
         />
       ))}
       {CENTRES_X.map((x, i) => (
@@ -83,7 +85,7 @@ export function DecodingWordmark({ className }: { className?: string }) {
           dominantBaseline="central"
           fontSize={190}
           aria-hidden="true"
-          className="fill-faint font-mono"
+          className="decoding-wordmark__glyph"
           style={{ display: "none" }}
         />
       ))}
