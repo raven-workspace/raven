@@ -481,7 +481,7 @@ describe("Manual: On this page follows the reading", () => {
     await openNote("Bb Basics");
     const bar = screen.getByTestId("section-indicator");
     expect(bar).not.toBeVisible();
-    expect(bar).toHaveClass("bg-accent", "transition-[transform,height]", "motion-reduce:transition-none");
+    expect(bar).toHaveClass("manual-outline__bar");
     layOut();
     press("]");
     expect(bar).toBeVisible();
@@ -656,13 +656,13 @@ describe("Manual: loading and layout", () => {
     mount(["/manual"]);
     await screen.findByRole("main", { name: "Manual" });
     expect(screen.queryByText("Opening the Manual…")).toBeNull();
-    expect(await screen.findByText("Opening the Manual…", {}, { timeout: 1500 })).toHaveClass("text-muted");
+    expect(await screen.findByText("Opening the Manual…", {}, { timeout: 1500 })).toHaveClass("manual-page__loading");
   });
 
   it("the rail track narrows with the window", async () => {
     mount(["/manual"]);
     await openNote("Bb Basics");
-    expect(screen.getByRole("main", { name: "Manual" }).querySelector("[class*='clamp(200px,20vw,260px)']")).not.toBeNull();
+    expect(screen.getByRole("main", { name: "Manual" }).querySelector(".manual-page__reader")).not.toBeNull(); // clamp(200px, 20vw, 260px) rail track
   });
 });
 
@@ -708,9 +708,10 @@ describe("Manual: the host commands fill for", () => {
     expect(await screen.findByText("Copied for zzweb01")).toBeInTheDocument();
     // The IP keeps its own track; the slot is the one that truncates.
     const row = screen.getByTestId("manual-host-ip").parentElement!;
-    expect(row.className).toMatch(/grid-cols-\[max-content_max-content_minmax\(0,1fr\)\]/);
-    expect(screen.getByTestId("manual-host-ip")).not.toHaveClass("truncate");
-    expect(screen.getByText("Copied for zzweb01")).toHaveClass("truncate", "min-w-0");
+    // .manual-page__host-row: max-content max-content minmax(0, 1fr); .manual-page__status truncates.
+    expect(row).toHaveClass("manual-page__host-row");
+    expect(screen.getByTestId("manual-host-ip")).toHaveClass("manual-page__host-ip");
+    expect(screen.getByText("Copied for zzweb01")).toHaveClass("manual-page__status");
     await user.click(screen.getByRole("button", { name: "Host zzweb01" }));
     await user.click(await screen.findByRole("option", { name: /zzdb02/ }));
     expect(await pre("zzscan -t 198.51.100.22")).toBeInTheDocument();
@@ -881,9 +882,10 @@ describe("Manual: focus follows intent, one Tab stop, hints", () => {
   it("the pane focus cue is the host row's hairline, not an inset frame", async () => {
     mount(["/manual"]);
     await openNote("Bb Basics");
-    expect(pane().className).not.toMatch(/shadow-\[inset/);
+    expect(pane()).toHaveClass("manual-page__pane");
     const row = document.querySelector("[data-host-row]") as HTMLElement;
-    expect(row.className).toMatch(/data-\[pane-focused\]:border-accent/);
+    // .manual-page__host-row[data-pane-focused] takes the accent border.
+    expect(row).toHaveClass("manual-page__host-row");
     act(() => (document.activeElement as HTMLElement | null)?.blur());
     expect(row).not.toHaveAttribute("data-pane-focused");
     act(() => pane().focus());
@@ -937,8 +939,8 @@ describe("Manual: focus follows intent, one Tab stop, hints", () => {
     press("[", { metaKey: true });
     expect(await screen.findByText("No previous note")).toBeInTheDocument();
     // A neutral aside, not the accent a copy's confirm uses.
-    expect(screen.getByText("No previous note")).toHaveClass("text-muted");
-    expect(screen.getByText("No previous note")).not.toHaveClass("text-accent");
+    expect(screen.getByText("No previous note")).toHaveClass("manual-page__status");
+    expect(screen.getByText("No previous note")).not.toHaveClass("manual-page__status--ok");
   });
 
   it("the hint line keeps five; [ ] and ⌥H stay, / and ⌘[ wait in the ? list", async () => {

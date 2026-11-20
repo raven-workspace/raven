@@ -2,6 +2,8 @@ import { useRef, type KeyboardEvent } from "react";
 import type { LibraryCommand } from "../../engines/library/types";
 import { CommandBlock } from "../../ui";
 import { BANNED, useNoteCommand, type FillBase } from "./useNoteCommand";
+import { cx } from "../../lib/cx";
+import "./ManualCommand.scss";
 
 export type { FillBase };
 
@@ -53,10 +55,10 @@ export function ManualCommand({ command, label, caption, fill, output = false, b
   return (
     <div
       ref={root} role="group" aria-label={`Note command: ${label}`} tabIndex={0} onKeyDown={onKeyDown}
-      className="grid gap-1 rounded-sm outline-accent outline-offset-4 outline-none focus:outline-1 focus:outline-solid"
+      className="manual-command"
     >
       {/* An untitled block has no caption row (no empty gap above it). Copy results show in the page's status slot. */}
-      {caption && <span className="truncate text-meta text-muted-2">{caption}</span>}
+      {caption && <span className="manual-command__caption">{caption}</span>}
       <CommandBlock
         text={cmd.text}
         {...(cmd.copyText !== undefined ? { copyText: cmd.copyText } : {})}
@@ -72,8 +74,8 @@ export function ManualCommand({ command, label, caption, fill, output = false, b
             return r;
           })}
       />
-      {known && banned && <p className="m-0 text-meta text-warn">{BANNED}</p>}
-      {known && msf && <p className={`m-0 text-meta ${msf.breach ? "text-warn" : "text-muted"}`}>{msf.text}</p>}
+      {known && banned && <p className="manual-command__rule manual-command__rule--warn">{BANNED}</p>}
+      {known && msf && <p className={cx("manual-command__rule", msf.breach && "manual-command__rule--warn")}>{msf.text}</p>}
     </div>
   );
 }

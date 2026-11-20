@@ -11,6 +11,9 @@ import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { inlineOf, InlineView, type Ctx } from "./NoteView";
 import { useManualNotes } from "./useManualNotes";
 import { BANNED, useNoteCommand, type FillBase } from "./useNoteCommand";
+import { cx } from "../../lib/cx";
+import "./ManualCommand.scss";
+import "./AnswerCard.scss";
 
 /** Command rows shown before "+ n more". */
 const SHOWN = 3;
@@ -64,7 +67,7 @@ function CardCommand({ command, base }: { command: LibraryCommand; base: FillBas
   return (
     <div
       ref={root} role="group" aria-label={`Answer command: ${cmd.text}`} tabIndex={0} onKeyDown={onKeyDown} data-card-stop=""
-      className="grid gap-1 rounded-sm outline-accent outline-offset-2 outline-none focus:outline-1 focus:outline-solid"
+      className="manual-command manual-command--tight"
     >
       <CommandBlock
         text={cmd.text}
@@ -77,8 +80,8 @@ function CardCommand({ command, base }: { command: LibraryCommand; base: FillBas
             return r;
           })}
       />
-      {known && banned && <p className="m-0 text-meta text-warn">{BANNED}</p>}
-      {known && msf && <p className={`m-0 text-meta ${msf.breach ? "text-warn" : "text-muted"}`}>{msf.text}</p>}
+      {known && banned && <p className="manual-command__rule manual-command__rule--warn">{BANNED}</p>}
+      {known && msf && <p className={cx("manual-command__rule", msf.breach && "manual-command__rule--warn")}>{msf.text}</p>}
     </div>
   );
 }
@@ -134,25 +137,25 @@ export function AnswerCard({ row, base, onClose }: { row: LookupRow; base: FillB
   return (
     <section
       ref={rootRef} aria-label="Answer" onKeyDown={onKeyDown}
-      className="grid max-h-[40vh] min-w-0 content-start gap-1 overflow-y-auto rounded-sm border border-line bg-surface px-4 py-3"
+      className="answer-card"
     >
-      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
+      <div className="answer-card__head">
         <span className={labelClass}>Answer</span>
-        <span className="truncate text-meta text-muted">{row.tableName}</span>
+        <span className="answer-card__table">{row.tableName}</span>
         {/* Esc is the way to close; the button is for the pointer, so it is no Tab stop. */}
-        <IconButton icon={XIcon} label="Close card" shortcut="Esc" tabIndex={-1} onClick={onClose} className="-my-1" />
+        <IconButton icon={XIcon} label="Close card" shortcut="Esc" tabIndex={-1} onClick={onClose} className="answer-card__close" />
       </div>
-      <p className="m-0 font-mono text-heading text-fg [overflow-wrap:anywhere]">{row.key}</p>
-      {row.means.length > 0 && ctx && <p className="m-0 text-body text-fg"><InlineView parts={row.means} ctx={ctx} /></p>}
-      {row.cause.length > 0 && ctx && <p className="m-0 text-meta text-muted">Usually: <InlineView parts={row.cause} ctx={ctx} /></p>}
+      <p className="answer-card__key">{row.key}</p>
+      {row.means.length > 0 && ctx && <p className="answer-card__means"><InlineView parts={row.means} ctx={ctx} /></p>}
+      {row.cause.length > 0 && ctx && <p className="answer-card__cause">Usually: <InlineView parts={row.cause} ctx={ctx} /></p>}
       {shown.length > 0 && (
-        <div className="mt-2 grid gap-2">
+        <div className="answer-card__commands">
           {/* The same command can sit twice in one cell: the index keeps the keys apart. */}
           {shown.map((c, i) => <CardCommand key={`${i}:${c.id}`} command={c} base={base} />)}
           {hidden > 0 && (
             <button
               type="button" data-card-stop="" data-card-more="" onClick={() => setMore(true)}
-              className="cursor-pointer justify-self-start rounded-sm border-0 bg-transparent p-0 text-meta text-muted-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid"
+              className="answer-card__more"
             >
               + {hidden} more
             </button>
@@ -160,18 +163,18 @@ export function AnswerCard({ row, base, onClose }: { row: LookupRow; base: FillB
         </div>
       )}
       {ctx && rest && (
-        <p data-card-action="" className="m-0 mt-1 text-meta text-muted-2"><InlineView parts={rest} ctx={ctx} /></p>
+        <p data-card-action="" className="answer-card__action"><InlineView parts={rest} ctx={ctx} /></p>
       )}
       {cardId && (
-        <p className="m-0 mt-1 text-meta text-muted">
+        <p className="answer-card__card">
           Card:{" "}
           <button
             type="button" onClick={() => useArsenalStore.getState().openCard(cardId, undefined, { from: "manual" })}
-            className="cursor-pointer rounded-sm border-0 bg-transparent p-0 font-[inherit] text-fg-2 underline decoration-line-2 underline-offset-2 hover:text-accent hover:decoration-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid"
+            className="answer-card__card-link"
           >
             {cardTitle}
           </button>{" "}
-          <span className="text-muted-2">↗ Arsenal</span>
+          <span className="answer-card__arsenal">↗ Arsenal</span>
         </p>
       )}
     </section>

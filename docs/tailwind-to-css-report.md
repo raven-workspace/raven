@@ -273,3 +273,24 @@
 - [x] Type check, lint, unit tests
 - [x] Pixel diff 297/297 (manual-search@1280 failed every retry once under heavy machine load, then passed 4/4 alone)
 - [x] Audit gate 660/660 (the title-bar regression timed out once under load; passed alone)
+
+## Unit: manual
+
+### Changes
+- One sheet per component: ManualPage.scss (page, reader grid with the `@media (width >= 1100px)` outline track, host
+  row keyed on `[data-pane-focused]`, match bar, status slot `--ok|--warn`, note pane with `--pane-bg`, aside), ManualRail.scss,
+  ManualOutline.scss (track, sliding bar with its 150ms decelerate transition and reduced-motion off), NoteView.scss,
+  NoteTable.scss, ManualCommand.scss (also used by AnswerCard's commands, `--tight` for the 2px offset), InlineCommand.scss,
+  AnswerCard.scss.
+- NoteTable's `group/nt` variants become `.note-table[data-stacked] …` rules; the dropped cause column keeps its
+  `!important` (`.note-table[data-dropped="low"] [data-col="low"]`), so it still beats the stacked cells' grid.
+- ManualRail no longer imports the Arsenal's `ON` utility string: the open note's look (accent wash, accent text, 2px bar)
+  is in ManualRail.scss on `[aria-current="page"]`, so the Arsenal's own migration can't change it.
+- The host chip's width (`max-w-80`) is `.manual-page__host-cell .manual-page__host-chip` (two classes: HostChip is the
+  Arsenal's component).
+- `--ease-out` / `duration-150` → `--ease-decelerate` / `--duration-turn` (same values).
+- Tests: 17 assertions moved from utilities to the classes that carry them (noteView, manualPage, answerCard).
+
+### Verification
+- [x] Type check, lint, unit tests
+- [x] Pixel diff 297/297 (findings@900 flaky on one attempt), audit gate (with engagements)

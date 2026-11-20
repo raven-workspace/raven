@@ -2,8 +2,8 @@ import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type RefOb
 import { shortTitle, type ManualNote } from "../../engines/manual";
 import { cx } from "../../lib/cx";
 import { Input, labelClass } from "../../ui";
-import { ON } from "../arsenal/styles";
 import { MANUAL_GROUPS } from "./useManualNotes";
+import "./ManualRail.scss";
 
 export const MANUAL_FILTER_ID = "manual-filter";
 
@@ -52,31 +52,28 @@ export function ManualRail({ notes, currentId, filter, onFilter, filterRef, onOp
   };
 
   return (
-    <nav aria-label="Manual notes" className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 border-r border-line px-3 py-4">
+    <nav aria-label="Manual notes" className="manual-rail">
       <Input
         id={MANUAL_FILTER_ID} ref={filterRef} type="search" aria-label="Filter the Manual" placeholder="Filter the Manual"
         value={filter} onChange={(e) => onFilter(e.target.value)} onKeyDown={onFilterKey}
       />
-      <div ref={listRef} onKeyDown={onListKey} className="relative grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden">
-        {shown.length === 0 && <p className="m-0 px-2 text-meta text-muted">No note matches</p>}
+      <div ref={listRef} onKeyDown={onListKey} className="manual-rail__list">
+        {shown.length === 0 && <p className="manual-rail__empty">No note matches</p>}
         {MANUAL_GROUPS.map(({ folder, label }) => {
           const group = shown.filter((n) => n.folder === folder);
           if (group.length === 0) return null;
           return (
-            <div key={folder} role="group" aria-label={label} className="grid gap-0">
-              <span aria-hidden="true" className={`${labelClass} px-2 pb-1`}>{label}</span>
+            <div key={folder} role="group" aria-label={label} className="manual-rail__group">
+              <span aria-hidden="true" className={cx(labelClass, "manual-rail__group-label")}>{label}</span>
               {group.map((n) => {
                 const on = n.id === currentId;
                 return (
                   <button
                     key={n.id} type="button" data-note={n.id} title={n.title} aria-current={on ? "page" : undefined}
                     tabIndex={n.id === tabStop ? 0 : -1} onClick={() => onOpen(n.id)}
-                    className={cx(
-                      "grid min-h-7 w-full cursor-default items-center rounded-sm border-0 bg-transparent px-2 py-1 text-left text-body",
-                      on ? ON : "text-fg-2 hover:bg-surface-hi",
-                    )}
+                    className="manual-rail__note"
                   >
-                    <span className="truncate">{shortTitle(n.title)}</span>
+                    <span className="manual-rail__title">{shortTitle(n.title)}</span>
                   </button>
                 );
               })}

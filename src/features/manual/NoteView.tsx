@@ -15,11 +15,12 @@ import { useFillBase } from "../palette/fillData";
 import { InlineCommand } from "./InlineCommand";
 import { ManualCommand, type FillBase } from "./ManualCommand";
 import { NoteTable } from "./NoteTable";
+import "./NoteView.scss";
 
 /** Prose keeps a reading measure; tables, code and commands take the full width of the note pane. */
-const PROSE = "m-0 max-w-[56ch] text-read text-fg-2 [text-wrap:pretty]";
+const PROSE = "note-view__prose";
 /** A caption or bold label opens a group: room above it, close to what it names (none extra right under a heading). */
-const LEADS = "mt-4 -mb-1 first:mt-0 [:is(h2,h3,h4)+&]:mt-0";
+const LEADS = "note-view__leads";
 /** A paragraph that is only bold text (with at most a closing colon or full stop) labels what follows it. */
 const isLabel = (parts: Inline[]) => {
   const solid = parts.filter((p) => !("text" in p) || p.text.trim() !== "");
@@ -31,7 +32,7 @@ const PLACEHOLDER = /\{[A-Za-z][A-Za-z0-9_]*\}/;
 const OUTPUT_LANGS = new Set(["text", "txt", "output", "console", "plaintext", "plain"]);
 /** Inline code up to this length with no space is one token: it keeps to one line (the narrowest line holds 40 characters). */
 const TOKEN_MAX = 40;
-const LINK_CLASS = "text-fg-2 underline decoration-line-2 underline-offset-2 hover:text-accent hover:decoration-accent";
+const LINK_CLASS = "note-view__link";
 
 export interface Ctx {
   note: ManualNote;
@@ -66,7 +67,7 @@ export function InlineView({ parts, ctx }: { parts: Inline[]; ctx: Ctx }): React
     const trail = "link" in p && next && "text" in next ? TRAIL.exec(next.text)?.[0] : undefined;
     if (!trail) return <InlinePart key={i} p={p} ctx={ctx} />;
     cut = trail.length;
-    return <span key={i} className="whitespace-nowrap"><InlinePart p={p} ctx={ctx} />{marked(trail, ctx.re)}</span>;
+    return <span key={i} className="note-view__nowrap"><InlinePart p={p} ctx={ctx} />{marked(trail, ctx.re)}</span>;
   });
 }
 
@@ -76,9 +77,9 @@ function InlinePart({ p, ctx }: { p: Exclude<Inline, { text: string }>; ctx: Ctx
     // A short single token (a status code, a flag, a path) never breaks inside: not at a backslash or dot either.
     if (!ctx.plainCode && isInlineCommand(p.code)) return <InlineCommand command={inlineOf(p.code, ctx)} base={ctx.base} highlight={ctx.re} />;
     const token = p.code.length <= TOKEN_MAX && !/\s/.test(p.code);
-    return <code className={cx("font-mono text-code text-fg [overflow-wrap:break-word]", token && "whitespace-nowrap")}>{marked(p.code, ctx.re)}</code>;
+    return <code className={cx("note-view__code", token && "note-view__code--token")}>{marked(p.code, ctx.re)}</code>;
   }
-  if ("strong" in p) return <strong className="font-medium text-fg"><InlineView parts={p.strong} ctx={ctx} /></strong>;
+  if ("strong" in p) return <strong className="note-view__strong"><InlineView parts={p.strong} ctx={ctx} /></strong>;
   if ("em" in p) return <em><InlineView parts={p.em} ctx={ctx} /></em>;
   const { target, heading, label } = p.link;
   const to = resolveLink(target, ctx.notes, ctx.cards, heading);
@@ -86,7 +87,7 @@ function InlinePart({ p, ctx }: { p: Exclude<Inline, { text: string }>; ctx: Ctx
   const aliased = label !== target;
   if (to.kind === "note") {
     const title = aliased ? label : shortTitle(ctx.notes.find((n) => n.id === to.noteId)?.title ?? label);
-    return <Link to={`/manual/${encodeURIComponent(to.noteId)}${to.heading ? `#${to.heading}` : ""}`} className={`py-1 ${LINK_CLASS}`}>{marked(title, ctx.re)}</Link>;
+    return <Link to={`/manual/${encodeURIComponent(to.noteId)}${to.heading ? `#${to.heading}` : ""}`} className={`${LINK_CLASS} note-view__note-link`}>{marked(title, ctx.re)}</Link>;
   }
   if (to.kind === "card") {
     const card = ctx.cards.find((c) => c.id === to.cardId);
@@ -95,14 +96,14 @@ function InlinePart({ p, ctx }: { p: Exclude<Inline, { text: string }>; ctx: Ctx
       <button
         type="button" title={`Open the card ${card?.title ?? label} in the Arsenal`}
         onClick={() => useArsenalStore.getState().openCard(to.cardId, undefined, { from: "manual" })}
-        className={`inline-block cursor-pointer border-0 bg-transparent p-0 text-left font-[inherit] leading-6 ${LINK_CLASS}`}
+        className={`${LINK_CLASS} note-view__card-link`}
       >
         {marked(title, ctx.re)}
       </button>
     );
   }
   // Unresolved: plain muted text, never a dead link.
-  return <span className="text-muted">{marked(aliased ? label : label.replace(/-/g, " "), ctx.re)}</span>;
+  return <span className="note-view__unresolved">{marked(aliased ? label : label.replace(/-/g, " "), ctx.re)}</span>;
 }
 
 /** Each note's inline commands, by log title and code: the same object every render, so their fill is not redone. */
@@ -196,23 +197,23 @@ function BlockView({ block, n, ctx: shared, base, section, tableName, tableAncho
   switch (block.kind) {
     case "heading": {
       const inner = <InlineView parts={block.inline} ctx={ctx} />;
-      if (block.level === 1) return <h1 id={block.id} className="m-0 mb-2 max-w-[760px] scroll-mt-4 text-read-title text-fg [text-wrap:balance]">{inner}</h1>;
-      if (block.level === 2) return <h2 id={block.id} className="m-0 mt-4 max-w-[760px] scroll-mt-4 border-t border-line pt-4 text-title text-fg [text-wrap:balance] first:mt-0 first:border-t-0 first:pt-0 [h1+&]:mt-0 [h1+&]:border-t-0 [h1+&]:pt-0">{inner}</h2>;
-      if (block.level === 3) return <h3 id={block.id} className="m-0 mt-4 max-w-[760px] scroll-mt-4 text-heading text-fg [text-wrap:balance] first:mt-0">{inner}</h3>;
-      return <h4 id={block.id} className="m-0 mt-2 max-w-[760px] scroll-mt-4 text-body font-semibold text-fg first:mt-0">{inner}</h4>;
+      if (block.level === 1) return <h1 id={block.id} className="note-view__h1">{inner}</h1>;
+      if (block.level === 2) return <h2 id={block.id} className="note-view__h2">{inner}</h2>;
+      if (block.level === 3) return <h3 id={block.id} className="note-view__h3">{inner}</h3>;
+      return <h4 id={block.id} className="note-view__h4">{inner}</h4>;
     }
     case "paragraph":
       return (
-        <p id={block.anchor} className={block.anchor ? `m-0 max-w-[760px] scroll-mt-4 text-heading text-fg [text-wrap:balance] ${LEADS}` : isLabel(block.inline) ? `${PROSE} ${LEADS} [&_strong]:font-semibold` : PROSE}>
+        <p id={block.anchor} className={block.anchor ? `note-view__caption ${LEADS}` : isLabel(block.inline) ? `${PROSE} ${LEADS} note-view__label` : PROSE}>
           <InlineView parts={block.inline} ctx={ctx} />
           {/* A caption's note after its bold name reads as body text, not as part of the heading. */}
-          {block.trail && <span className="text-body font-normal text-muted-2"> <InlineView parts={block.trail} ctx={ctx} /></span>}
+          {block.trail && <span className="note-view__trail"> <InlineView parts={block.trail} ctx={ctx} /></span>}
         </p>
       );
     case "list": {
       const items = block.items.map((it, i) => <li key={i}><InlineView parts={it} ctx={ctx} /></li>);
-      const cls = `${PROSE} grid gap-2 pl-6 marker:text-muted`;
-      return block.ordered ? <ol className={`${cls} list-decimal`}>{items}</ol> : <ul className={`${cls} list-disc`}>{items}</ul>;
+      const cls = `${PROSE} note-view__list`;
+      return block.ordered ? <ol className={`${cls} note-view__list--ordered`}>{items}</ol> : <ul className={`${cls} note-view__list--bullets`}>{items}</ul>;
     }
     case "table":
       return (
@@ -259,7 +260,7 @@ export const NoteView = memo(function NoteView({ note, notes, cards, hostId, eng
   const tableNames = useMemo(() => tableNamesOf(blocks, note), [blocks, note]);
   let code = 0;
   return (
-    <article aria-label={note.title} className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 [&_[tabindex='-1']]:outline-none">
+    <article aria-label={note.title} className="note-view">
       {blocks.map((b, i) => (
         <BlockView key={i} block={b} n={b.kind === "code" ? code++ : -1} ctx={ctx} base={base} section={sections[i] ?? ""} tableName={tableNames[i]?.name} tableAnchor={tableNames[i]?.anchor} />
       ))}

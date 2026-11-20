@@ -151,7 +151,7 @@ describe("answer card", () => {
     const calls: { el: Element; card: string | null }[] = [];
     Element.prototype.scrollIntoView = function (this: Element, opts?: boolean | ScrollIntoViewOptions) {
       if (typeof opts === "object" && opts.block === "center") {
-        calls.push({ el: this, card: document.querySelector("[aria-label=Answer] p.font-mono")?.textContent ?? null });
+        calls.push({ el: this, card: document.querySelector("[aria-label=Answer] p.answer-card__key")?.textContent ?? null });
       }
     };
     // "secret": STATUS_ZZ_LOGON's means first, then STATUS_ZZ_EXPIRED's.

@@ -4,6 +4,7 @@ import { reportError } from "../../lib/lockSignal";
 import { highlight as highlightText, rangesOf } from "../../ui/highlight";
 import { useNoteCommand, type FillBase } from "./useNoteCommand";
 import { escapeRegExp } from "../../engines/regex";
+import "./InlineCommand.scss";
 
 const PLACEHOLDER = /\{[A-Za-z][A-Za-z0-9_]*\}/;
 
@@ -22,7 +23,7 @@ export function InlineCommand({ command, base, highlight }: { command: LibraryCo
   const pieces = parts.map((t, i) => {
     const start = starts[i] ?? 0;
     const shown = found.length > 0 ? highlightText(t, start, found) : t;
-    return i % 2 === 1 ? <mark key={i} className="bg-transparent text-warn">{shown}</mark> : <Fragment key={i}>{shown}</Fragment>;
+    return i % 2 === 1 ? <mark key={i} className="inline-command__token">{shown}</mark> : <Fragment key={i}>{shown}</Fragment>;
   });
 
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
@@ -35,7 +36,7 @@ export function InlineCommand({ command, base, highlight }: { command: LibraryCo
     <button
       type="button" aria-label={`Copy command: ${cmd.text}`}
       onClick={() => void copy().catch(reportError)} onKeyDown={onKeyDown}
-      className="cursor-pointer rounded-sm border-0 bg-transparent p-0 min-h-6 text-left font-mono text-code text-fg underline decoration-line-strong decoration-dotted underline-offset-4 [overflow-wrap:break-word] hover:decoration-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid"
+      className="inline-command"
     >
       {pieces}
     </button>

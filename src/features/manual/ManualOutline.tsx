@@ -3,6 +3,7 @@ import type { OutlineEntry } from "../../engines/manual";
 import { parseInline, type Inline } from "../../engines/manual/markdown";
 import { cx } from "../../lib/cx";
 import { prefersReducedMotion } from "../../ui/motion";
+import "./ManualOutline.scss";
 
 /** Within this many px of the pane's top the first entry is current; within this many of its end, the last. */
 const EDGE = 48;
@@ -177,7 +178,7 @@ export function useOutlineSpy(paneRef: RefObject<HTMLElement | null>, noteId: st
 function OutlineText({ parts }: { parts: Inline[] }): ReactNode {
   return parts.map((p, i) => {
     if ("text" in p) return p.text;
-    if ("code" in p) return <code key={i} className="font-mono text-code">{p.code}</code>;
+    if ("code" in p) return <code key={i} className="manual-outline__code">{p.code}</code>;
     if ("strong" in p) return <OutlineText key={i} parts={p.strong} />;
     if ("em" in p) return <OutlineText key={i} parts={p.em} />;
     return p.link.label;
@@ -233,36 +234,35 @@ export function ManualOutline({ outline, current, onPick, follow = false }: {
   };
   // Before a section is current the note sits at its top: the first h2's own entries show.
   const open = owner(Math.max(current, 0));
-  if (outline.length === 0) return <p className="m-0 px-3 text-meta text-muted">No sections</p>;
+  if (outline.length === 0) return <p className="manual-outline__empty">No sections</p>;
   return (
-    <div ref={listRef} className="relative grid">
-      <span aria-hidden className="absolute inset-y-0 left-0 w-px bg-line" />
+    <div ref={listRef} className="manual-outline">
+      <span aria-hidden className="manual-outline__track" />
       <span
         ref={barRef} aria-hidden hidden data-testid="section-indicator"
-        className="absolute left-0 top-0 w-0.5 rounded-full bg-accent transition-[transform,height] duration-150 ease-out motion-reduce:transition-none"
+        className="manual-outline__bar"
       />
-      <ul className="m-0 grid list-none gap-0 p-0">
+      <ul className="manual-outline__list">
         {outline.map((o, i) => {
           const on = i === current;
           if (o.kind !== "h2" && owner(i) !== open) return null;
           return (
-            <li key={o.id} className="grid">
+            <li key={o.id} className="manual-outline__item">
               <button
                 type="button" data-index={i} aria-current={on ? "location" : undefined} onClick={() => onPick(i)}
                 className={cx(
-                  "grid min-h-7 w-full cursor-default items-start rounded-sm border-0 bg-transparent py-1 pr-2 text-left text-meta transition-colors duration-150 motion-reduce:transition-none",
-                  o.kind === "h2" ? "pl-3" : "pl-6",
-                  o.kind === "table" && "grid-cols-[max-content_minmax(0,1fr)] gap-2",
-                  on ? "text-fg" : "text-muted-2 hover:text-fg",
+                  "manual-outline__entry",
+                  o.kind === "h2" && "manual-outline__entry--h2",
+                  o.kind === "table" && "manual-outline__entry--table",
                 )}
               >
                 {o.kind === "table" ? (
                   <>
-                    <span className={on ? undefined : "text-muted"}>Table {o.number}</span>
-                    <span className="min-w-0 [overflow-wrap:anywhere]"><OutlineText parts={parseInline(o.text)} /></span>
+                    <span className="manual-outline__number">Table {o.number}</span>
+                    <span className="manual-outline__text"><OutlineText parts={parseInline(o.text)} /></span>
                   </>
                 ) : (
-                  <span className="min-w-0 [overflow-wrap:anywhere]"><OutlineText parts={parseInline(o.text)} /></span>
+                  <span className="manual-outline__text"><OutlineText parts={parseInline(o.text)} /></span>
                 )}
               </button>
             </li>

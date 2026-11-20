@@ -1,0 +1,72 @@
+@use "@/styles/abstracts" as *;
+
+// The Manual's left rail: the title filter over the notes in their groups.
+@layer features {
+  .manual-rail {
+    display: grid;
+    min-height: 0;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: var(--space-md);
+    border-right: 1px solid var(--line);
+    padding: var(--space-lg) var(--space-md);
+  }
+
+  .manual-rail__list {
+    position: relative;
+    display: grid;
+    min-height: 0;
+    align-content: flex-start;
+    gap: var(--space-lg);
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .manual-rail__empty {
+    padding-inline: var(--space-sm);
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .manual-rail__group {
+    display: grid;
+    gap: 0;
+  }
+
+  .manual-rail__group-label {
+    padding-inline: var(--space-sm);
+    padding-bottom: var(--space-xs);
+  }
+
+  // A note; the open one (aria-current) carries the Arsenal's selected-row look: accent wash and a 2px accent bar.
+  .manual-rail__note {
+    display: grid;
+    min-height: 1.75rem;
+    width: 100%;
+    cursor: default;
+    align-items: center;
+    border-width: 0;
+    border-radius: var(--radius-sm);
+    background-color: transparent;
+    padding: var(--space-xs) var(--space-sm);
+    text-align: left;
+    @include type(body);
+    color: var(--fg-2);
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--surface-hi);
+      }
+    }
+
+    &[aria-current="page"] {
+      background-color: var(--accent);
+      background-color: color-mix(in oklab, var(--accent) 10%, transparent);
+      color: var(--accent);
+      box-shadow: inset 2px 0 0 var(--accent);
+    }
+  }
+
+  .manual-rail__title {
+    @include truncate;
+  }
+}

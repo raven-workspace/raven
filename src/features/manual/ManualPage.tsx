@@ -18,6 +18,8 @@ import { NoteView } from "./NoteView";
 import { useManualStatus } from "./useManualStatus";
 import { useManualStore, type ManualPlace } from "./useManualStore";
 import { firstNote, useManualNotes, type ManualStatus } from "./useManualNotes";
+import { cx } from "../../lib/cx";
+import "./ManualPage.scss";
 
 /** The "Opening the Manual…" line waits this long, so a quick load shows nothing. */
 const LOADING_MS = 300;
@@ -75,7 +77,7 @@ const EMPTY_TITLE: Record<Exclude<ManualStatus, "loading" | "ready" | "error">, 
 function ManualEmpty({ status }: { status: keyof typeof EMPTY_TITLE }) {
   const navigate = useNavigate();
   return (
-    <div className="grid content-start px-6 py-6">
+    <div className="manual-page__state">
       <EmptyState
         title={EMPTY_TITLE[status]}
         body="The Manual holds your Field Manual's Tools, Foundations and Reporting notes."
@@ -129,7 +131,7 @@ function firstAfter(pane: HTMLElement, anchor: string): number {
 }
 
 /** The reader column's rows: the host row, then the match bar and the answer card when they show, then the note. */
-const ROWS = ["grid-rows-[auto_minmax(0,1fr)]", "grid-rows-[auto_auto_minmax(0,1fr)]", "grid-rows-[auto_auto_auto_minmax(0,1fr)]"];
+const ROWS = [undefined, "manual-page__column--3", "manual-page__column--4"];
 
 /** The lookup row a match sits in (by its table's anchor and its row), or null in prose or any other table. */
 function rowOf(note: ManualNote, el: HTMLElement | null): LookupRow | null {
@@ -160,15 +162,15 @@ function MatchBar({ query, at, count }: { query: string; at: number; count: numb
   return (
     <div
       role="status" aria-label="Search in this note"
-      className="grid min-h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-line px-8 py-2 text-meta"
+      className="manual-page__match-bar"
     >
-      <span className="truncate"><span className="text-muted">Search </span><span className="font-mono text-code text-fg">{query}</span></span>
-      <span className={count === 0 ? "text-warn" : "text-fg-2"}>{count === 0 ? "No match in this note" : at < 0 ? `${count} ${count === 1 ? "match" : "matches"}` : `match ${at + 1} of ${count}`}</span>
+      <span className="manual-page__query"><span className="manual-page__query-label">Search </span><span className="manual-page__query-text">{query}</span></span>
+      <span className={cx("manual-page__match-count", count === 0 && "manual-page__match-count--none")}>{count === 0 ? "No match in this note" : at < 0 ? `${count} ${count === 1 ? "match" : "matches"}` : `match ${at + 1} of ${count}`}</span>
     </div>
   );
 }
 
-const TONE = { ok: "text-accent", warn: "text-warn", muted: "text-muted" } as const;
+const TONE = { ok: "manual-page__status--ok", warn: "manual-page__status--warn", muted: undefined } as const;
 
 /**
  * The one status line: what the last copy, hold-back or jump said, right-aligned in the host row. It clears itself
@@ -176,7 +178,7 @@ const TONE = { ok: "text-accent", warn: "text-warn", muted: "text-muted" } as co
  */
 function StatusSlot() {
   const { text, tone } = useManualStatus();
-  return <span role="status" className={`col-start-3 min-w-0 truncate text-right text-meta ${TONE[tone]}`}>{text}</span>;
+  return <span role="status" className={cx("manual-page__status", TONE[tone])}>{text}</span>;
 }
 
 /** What the page's Esc needs of the answer card: close it if one shows (true when it did). */
@@ -478,61 +480,61 @@ function Reader({ notes, noteId, cardEscRef, onCard }: {
   const pick = (i: number) => goSection(i, jumpBehavior());
 
   return (
-    <div className="grid min-h-0 grid-cols-[clamp(200px,20vw,260px)_minmax(0,1fr)] min-[1100px]:grid-cols-[clamp(200px,20vw,260px)_minmax(0,1fr)_220px]">
+    <div className="manual-page__reader">
       <ManualRail notes={notes} currentId={note?.id ?? null} filter={filter} onFilter={setFilter} filterRef={filterRef} onOpen={open} />
-      <div className={`grid min-h-0 ${ROWS[(query && note ? 1 : 0) + (shownCard ? 1 : 0)]}`}>
+      <div className={cx("manual-page__column", ROWS[(query && note ? 1 : 0) + (shownCard ? 1 : 0)])}>
         {/* What the note's commands fill for, and where ⌘↵ logs: kept above the scroll so it never moves. */}
         <div
           data-host-row="" {...(paneFocused ? { "data-pane-focused": "" } : {})}
-          className="grid min-h-12 grid-cols-[max-content_max-content_minmax(0,1fr)] items-center gap-3 border-b border-line px-8 py-2 text-meta data-[pane-focused]:border-accent"
+          className="manual-page__host-row"
         >
           {engagementId ? (
             <>
-              <div data-host-chip-cell="" className="grid">
-                <HostChip ref={hostRef} hosts={base.d.hosts} value={base.host?.id ?? null} onChange={setHostId} align="start" className="max-w-80" />
+              <div data-host-chip-cell="" className="manual-page__host-cell">
+                <HostChip ref={hostRef} hosts={base.d.hosts} value={base.host?.id ?? null} onChange={setHostId} align="start" className="manual-page__host-chip" />
               </div>
-              <span data-testid="manual-host-ip" className="font-mono text-code text-muted">{base.host?.ip ?? ""}</span>
+              <span data-testid="manual-host-ip" className="manual-page__host-ip">{base.host?.ip ?? ""}</span>
             </>
           ) : (
-            !scopePending && <span className="col-span-2 text-muted">No active engagement</span>
+            !scopePending && <span className="manual-page__no-engagement">No active engagement</span>
           )}
           <StatusSlot />
         </div>
         {query && note && <MatchBar query={query} at={match.at} count={match.count} />}
         {/* The answer card: fixed above the note's scroll (it never moves with the note), its own scroll past 40vh. */}
         {cardRow && note && (
-          <div ref={cardBoxRef} className="grid min-w-0 border-b border-line px-8 py-3">
+          <div ref={cardBoxRef} className="manual-page__card-box">
             <AnswerCard key={`${cardRow.anchor}:${cardRow.row}`} row={cardRow} base={base} onClose={closeCard} />
           </div>
         )}
         <section
           id={MANUAL_NOTE_ID} ref={paneRef} aria-label="Note" tabIndex={-1} onScroll={onScroll}
           onFocus={() => setPaneFocused(true)} onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setPaneFocused(false)}
-          className="relative grid min-h-0 content-start gap-4 overflow-y-auto overflow-x-hidden px-8 py-4 outline-none [--pane-bg:var(--bg)]"
+          className="manual-page__pane"
         >
           {note && (
             <>
               {note.outline.length > 0 && (
-                <div className="min-[1100px]:hidden">
+                <div className="manual-page__inline-outline">
                   <Disclosure label="On this page" count={note.outline.length} open={outlineOpen} onOpenChange={setOutlineOpen}>
-                    <nav aria-label="On this page" className="grid pt-2">
+                    <nav aria-label="On this page" className="manual-page__inline-outline-nav">
                       <ManualOutline key={note.id} outline={note.outline} current={spy.current} onPick={pick} />
                     </nav>
                   </Disclosure>
                 </div>
               )}
-              <div onClickCapture={onClickCapture} className="grid min-w-0">
+              <div onClickCapture={onClickCapture} className="manual-page__note">
                 <NoteView key={note.id} note={note} notes={notes} cards={cards} hostId={hostId} engagementId={engagementId} query={query} />
               </div>
             </>
           )}
         </section>
       </div>
-      <aside aria-label="Outline" className="relative hidden min-h-0 content-start overflow-y-auto overflow-x-hidden border-l border-line px-3 pb-4 min-[1100px]:grid">
+      <aside aria-label="Outline" className="manual-page__aside">
         {/* Sticky, so the label never scrolls away while the aside follows a long outline. */}
-        <h2 data-outline-head="" className={`${labelClass} sticky top-0 z-10 m-0 bg-bg px-3 pt-4 pb-2`}>On this page</h2>
+        <h2 data-outline-head="" className={cx(labelClass, "manual-page__aside-head")}>On this page</h2>
         {note && (
-          <nav aria-label="On this page" className="grid">
+          <nav aria-label="On this page" className="manual-page__aside-nav">
             <ManualOutline key={note.id} outline={note.outline} current={spy.current} onPick={pick} follow />
           </nav>
         )}
@@ -590,7 +592,7 @@ export function ManualPage() {
   if (status === "ready") body = <Reader notes={notes} noteId={noteId} cardEscRef={cardEscRef} onCard={setCardShown} />;
   else if (status === "error") {
     body = (
-      <div className="grid content-start px-6 py-6">
+      <div className="manual-page__state">
         <ErrorState
           title="Couldn't load the Manual"
           hint="Retry. If it keeps failing, import the Field Manual again from Settings."
@@ -600,11 +602,11 @@ export function ManualPage() {
       </div>
     );
   } else if (status !== "loading") body = <ManualEmpty status={status} />;
-  else if (slow) body = <p className="m-0 content-start px-8 py-4 text-meta text-muted">Opening the Manual…</p>;
+  else if (slow) body = <p className="manual-page__loading">Opening the Manual…</p>;
   return (
-    <main aria-label="Manual" data-hint-surface="" className="raven-page grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto]">
+    <main aria-label="Manual" data-hint-surface="" className="raven-page manual-page">
       {body ?? <div />}
-      <footer className="grid border-t border-line px-6 py-2">
+      <footer className="manual-page__footer">
         <HintLine hints={hints} more={status === "ready" ? MORE.filter((h) => !hints.some((x) => x.keys === h.keys)) : []} ariaLabel="Manual shortcuts" />
       </footer>
     </main>
