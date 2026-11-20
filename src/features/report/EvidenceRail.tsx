@@ -12,6 +12,7 @@ import {
   type ReportMeta,
   type ReportNode,
   type ReportTarget,
+  keptFromReport,
 } from "../../engines/report";
 import { openThreads } from "../../engines/notes/threads";
 import { detectAndParseScan } from "../../engines/parse/scan";
@@ -29,15 +30,12 @@ import { clockTime } from "../engagements/format";
 type RailTab = "unused" | "notes" | "creds";
 
 
-/** An entry the report keeps to the operator: a failed attempt logged with an operator-only reason (or kept private). */
-const operatorOnly = (data: ReportData, e: LogEntry) => data.attempts.some((a) => a.logEntryId === e.id && (a.private || a.reasonKind === "operator"));
-
 /** Host-linked, non-private entries (any host of the target) with no block on the page sourced from them
  *  (`entryIdsIn`), in time order. An entry behind an operator-reason attempt never shows. */
 export function unusedEntries(data: ReportData, target: ReportTarget, doc: ReportNode): LogEntry[] {
   const onPage = entryIdsIn(doc);
   return data.log
-    .filter((e) => !e.private && !onPage.has(e.id) && e.hostIds.some((h) => target.hostIds.includes(h)) && !operatorOnly(data, e))
+    .filter((e) => !keptFromReport(data, e) && !onPage.has(e.id) && e.hostIds.some((h) => target.hostIds.includes(h)))
     .sort((a, b) => a.at - b.at || a.createdAt - b.createdAt || a.id.localeCompare(b.id));
 }
 
