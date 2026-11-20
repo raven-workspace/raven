@@ -39,7 +39,7 @@ pub fn normalize_cve_id(cve: &str) -> AppResult<String> {
     if ok {
         Ok(id)
     } else {
-        Err(AppError::Validation { field: "cveId".into(), message: "use a CVE ID like CVE-2021-44228".into() })
+        Err(AppError::validation("cveId", "use a CVE ID like CVE-2021-44228"))
     }
 }
 

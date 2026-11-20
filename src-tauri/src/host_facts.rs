@@ -38,10 +38,6 @@ pub struct VectorInput {
     pub source: String,
 }
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 fn host_engagement(conn: &Connection, host_id: &str) -> AppResult<String> {
     match conn.query_row("SELECT engagement_id FROM hosts WHERE id = ?1", [host_id], |r| r.get(0)) {
         Ok(e) => Ok(e),
@@ -89,7 +85,7 @@ pub fn identity_get(conn: &Connection, host_id: &str) -> AppResult<Option<HostId
 pub fn identity_set(conn: &Connection, input: HostIdentity) -> AppResult<HostIdentity> {
     let username = input.username.trim().to_string();
     if username.is_empty() || username.chars().count() > 200 {
-        return Err(invalid("username", "username must be 1-200 characters"));
+        return Err(AppError::validation("username", "username must be 1-200 characters"));
     }
     let engagement_id = host_engagement(conn, &input.host_id)?;
     let entry_id = input.entry_id.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
@@ -100,7 +96,7 @@ pub fn identity_set(conn: &Connection, input: HostIdentity) -> AppResult<HostIde
             |r| r.get(0),
         )?;
         if !ok {
-            return Err(invalid("entryId", "entry must belong to this engagement"));
+            return Err(AppError::validation("entryId", "entry must belong to this engagement"));
         }
     }
     let privileges = serde_json::to_string(&clean_list(&input.privileges)).map_err(|e| AppError::Db(e.to_string()))?;
@@ -146,7 +142,7 @@ fn check_status(status: &str) -> AppResult<()> {
     if matches!(status, "try" | "untested" | "ruled_out") {
         Ok(())
     } else {
-        Err(invalid("status", "status must be try, untested or ruled_out"))
+        Err(AppError::validation("status", "status must be try, untested or ruled_out"))
     }
 }
 
@@ -157,14 +153,14 @@ fn check_status(status: &str) -> AppResult<()> {
 pub fn vector_upsert(conn: &Connection, host_id: &str, input: VectorInput) -> AppResult<PrivescVector> {
     let title = input.title.trim().to_string();
     if title.is_empty() || title.chars().count() > 200 {
-        return Err(invalid("title", "title must be 1-200 characters"));
+        return Err(AppError::validation("title", "title must be 1-200 characters"));
     }
     check_status(&input.status)?;
     if !matches!(input.source.as_str(), "auto" | "manual") {
-        return Err(invalid("source", "source must be auto or manual"));
+        return Err(AppError::validation("source", "source must be auto or manual"));
     }
     if input.status == "ruled_out" {
-        return Err(invalid("status", "rule a vector out with a reason"));
+        return Err(AppError::validation("status", "rule a vector out with a reason"));
     }
     host_engagement(conn, host_id)?;
     let now = system_now_ms();
@@ -206,7 +202,7 @@ pub fn vector_set_status(conn: &Connection, id: &str, status: &str, reason: Opti
     check_status(status)?;
     let reason = reason.map(str::trim).filter(|s| !s.is_empty());
     if status == "ruled_out" && reason.is_none() {
-        return Err(invalid("reason", "a ruled-out vector needs a reason"));
+        return Err(AppError::validation("reason", "a ruled-out vector needs a reason"));
     }
     let v = vector_get(conn, id)?;
     let engagement_id = host_engagement(conn, &v.host_id)?;

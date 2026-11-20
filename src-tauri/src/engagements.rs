@@ -59,10 +59,6 @@ pub struct EngagementInput {
     pub timebox_minutes: Option<i64>,
 }
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 pub(crate) fn valid_cidr(s: &str) -> bool {
     let (ip, prefix) = match s.split_once('/') {
         Some((ip, p)) => (ip, Some(p)),
@@ -85,28 +81,28 @@ fn opt_trim(v: &Option<String>) -> Option<String> {
 fn normalise(mut i: EngagementInput) -> AppResult<EngagementInput> {
     i.name = i.name.trim().to_string();
     if i.name.is_empty() || i.name.chars().count() > 120 {
-        return Err(invalid("name", "name must be 1-120 characters"));
+        return Err(AppError::validation("name", "name must be 1-120 characters"));
     }
     if !matches!(i.kind.as_str(), "exam-sim" | "lab" | "client") {
-        return Err(invalid("kind", "kind must be exam-sim, lab or client"));
+        return Err(AppError::validation("kind", "kind must be exam-sim, lab or client"));
     }
     i.client = opt_trim(&i.client);
     i.sub_label = opt_trim(&i.sub_label);
     i.domain = opt_trim(&i.domain);
     i.scope_cidrs = i.scope_cidrs.iter().map(|c| c.trim().to_string()).collect();
     if let Some(bad) = i.scope_cidrs.iter().find(|c| !valid_cidr(c)) {
-        return Err(invalid("scopeCidrs", &format!("invalid IPv4 CIDR: {bad}")));
+        return Err(AppError::validation("scopeCidrs", format!("invalid IPv4 CIDR: {bad}")));
     }
     if let (Some(s), Some(e)) = (i.starts_at, i.ends_at)
         && e < s {
-            return Err(invalid("endsAt", "end must not be before start"));
+            return Err(AppError::validation("endsAt", "end must not be before start"));
         }
     if i.kind != "exam-sim" {
         i.timebox_start = None;
         i.timebox_minutes = None;
     } else if let Some(m) = i.timebox_minutes
         && !(1..=4320).contains(&m) {
-            return Err(invalid("timeboxMinutes", "timebox must be 1-4320 minutes"));
+            return Err(AppError::validation("timeboxMinutes", "timebox must be 1-4320 minutes"));
         }
     Ok(i)
 }
@@ -227,7 +223,7 @@ pub fn set_timebox_paused(conn: &Connection, id: &str, paused: bool) -> AppResul
         }
         match (e.kind.as_str(), e.timebox_start, e.timebox_minutes) {
             ("exam-sim", Some(start), Some(_)) if start <= now => {}
-            _ => return Err(invalid("timeboxPaused", "only a started exam-sim timebox can pause")),
+            _ => return Err(AppError::validation("timeboxPaused", "only a started exam-sim timebox can pause")),
         }
         conn.execute("UPDATE engagements SET timebox_paused_at = ?2, updated_at = ?2 WHERE id = ?1", params![id, now])?;
     } else {
@@ -321,7 +317,7 @@ pub fn progress_all(conn: &Connection) -> AppResult<std::collections::HashMap<St
 
 pub fn set_status(conn: &Connection, id: &str, status: &str) -> AppResult<Engagement> {
     if !matches!(status, "active" | "archived") {
-        return Err(invalid("status", "status must be active or archived"));
+        return Err(AppError::validation("status", "status must be active or archived"));
     }
     let n = conn.execute("UPDATE engagements SET status=?2, updated_at=?3 WHERE id=?1", params![id, status, system_now_ms()])?;
     if n == 0 {

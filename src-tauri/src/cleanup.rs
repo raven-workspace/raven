@@ -42,10 +42,6 @@ pub struct CleanupInput {
     pub suggestion_key: Option<String>,
 }
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 fn blank_to_none(s: Option<&str>) -> Option<String> {
     s.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
 }
@@ -81,7 +77,7 @@ pub fn get(conn: &Connection, id: &str) -> AppResult<CleanupItem> {
 fn get_live(conn: &Connection, id: &str) -> AppResult<CleanupItem> {
     let item = get(conn, id)?;
     if item.status == "dismissed" {
-        return Err(invalid("status", "a dismissed suggestion cannot be changed"));
+        return Err(AppError::validation("status", "a dismissed suggestion cannot be changed"));
     }
     Ok(item)
 }
@@ -103,16 +99,16 @@ struct Clean {
 
 fn clean(conn: &Connection, engagement_id: &str, i: &CleanupInput) -> AppResult<Clean> {
     if !matches!(i.kind.as_str(), "file" | "account" | "service" | "other") {
-        return Err(invalid("kind", "kind must be file, account, service or other"));
+        return Err(AppError::validation("kind", "kind must be file, account, service or other"));
     }
     let target = i.target.trim().to_string();
     let n = target.chars().count();
     if n == 0 || n > 500 {
-        return Err(invalid("target", "target must be 1-500 characters"));
+        return Err(AppError::validation("target", "target must be 1-500 characters"));
     }
     let notes = blank_to_none(i.notes.as_deref());
     if notes.as_ref().is_some_and(|n| n.chars().count() > 2000) {
-        return Err(invalid("notes", "notes must be at most 2000 characters"));
+        return Err(AppError::validation("notes", "notes must be at most 2000 characters"));
     }
     let host_id = blank_to_none(i.host_id.as_deref());
     if let Some(h) = &host_id {
@@ -122,7 +118,7 @@ fn clean(conn: &Connection, engagement_id: &str, i: &CleanupInput) -> AppResult<
             |r| r.get(0),
         )?;
         if !ok {
-            return Err(invalid("hostId", "host is not part of this engagement"));
+            return Err(AppError::validation("hostId", "host is not part of this engagement"));
         }
     }
     let source_entry_id = blank_to_none(i.source_entry_id.as_deref());
@@ -133,7 +129,7 @@ fn clean(conn: &Connection, engagement_id: &str, i: &CleanupInput) -> AppResult<
             |r| r.get(0),
         )?;
         if !ok {
-            return Err(invalid("sourceEntryId", "log entry is not part of this engagement"));
+            return Err(AppError::validation("sourceEntryId", "log entry is not part of this engagement"));
         }
     }
     Ok(Clean { host_id, kind: i.kind.clone(), target, notes, source_entry_id })
@@ -163,7 +159,7 @@ pub fn create(conn: &Connection, engagement_id: &str, input: CleanupInput) -> Ap
     if let Some(k) = &key
         && key_taken(conn, engagement_id, k)?
     {
-        return Err(invalid("suggestionKey", "this suggestion is already on the list or dismissed"));
+        return Err(AppError::validation("suggestionKey", "this suggestion is already on the list or dismissed"));
     }
     let id = uuid::Uuid::new_v4().to_string();
     let now = system_now_ms();
@@ -204,10 +200,10 @@ pub fn dismiss(conn: &Connection, engagement_id: &str, suggestion_key: &str) -> 
     let key = suggestion_key.trim();
     let n = key.chars().count();
     if n == 0 || n > 500 {
-        return Err(invalid("suggestionKey", "suggestion key must be 1-500 characters"));
+        return Err(AppError::validation("suggestionKey", "suggestion key must be 1-500 characters"));
     }
     if key_taken(conn, engagement_id, key)? {
-        return Err(invalid("suggestionKey", "this suggestion is already on the list or dismissed"));
+        return Err(AppError::validation("suggestionKey", "this suggestion is already on the list or dismissed"));
     }
     let now = system_now_ms();
     conn.execute(

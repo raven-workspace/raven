@@ -133,10 +133,6 @@ pub struct FailedAttemptInput {
     pub log_entry_id: Option<String>,
 }
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 fn blank_to_none(s: Option<&str>) -> Option<String> {
     s.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
 }
@@ -242,27 +238,27 @@ struct CleanFinding {
 fn clean_finding(conn: &Connection, engagement_id: &str, i: &FindingInput) -> AppResult<CleanFinding> {
     let title = i.title.trim().to_string();
     if title.is_empty() {
-        return Err(invalid("title", "title must not be blank"));
+        return Err(AppError::validation("title", "title must not be blank"));
     }
     let severity = blank_to_none(i.severity.as_deref());
     if severity.as_deref().is_some_and(|s| !matches!(s, "critical" | "high" | "medium" | "low" | "info")) {
-        return Err(invalid("severity", "severity must be critical, high, medium, low or info"));
+        return Err(AppError::validation("severity", "severity must be critical, high, medium, low or info"));
     }
     let status = i.status.clone().unwrap_or_else(|| "draft".into());
     if !matches!(status.as_str(), "draft" | "confirmed" | "reported") {
-        return Err(invalid("status", "status must be draft, confirmed or reported"));
+        return Err(AppError::validation("status", "status must be draft, confirmed or reported"));
     }
     if i.cvss_score.is_some_and(|s| !(0.0..=10.0).contains(&s)) {
-        return Err(invalid("cvssScore", "CVSS score must be 0-10"));
+        return Err(AppError::validation("cvssScore", "CVSS score must be 0-10"));
     }
     if i.refs.len() > MAX_REFS {
-        return Err(invalid("refs", "at most 100 references"));
+        return Err(AppError::validation("refs", "at most 100 references"));
     }
     let mut refs = Vec::with_capacity(i.refs.len());
     for r in &i.refs {
         let r = r.trim();
         if r.is_empty() {
-            return Err(invalid("refs", "references must not be blank"));
+            return Err(AppError::validation("refs", "references must not be blank"));
         }
         refs.push(r.to_string());
     }
@@ -274,7 +270,7 @@ fn clean_finding(conn: &Connection, engagement_id: &str, i: &FindingInput) -> Ap
         ("lessons", &i.lessons),
     ] {
         if text.len() > MAX_CONTENT {
-            return Err(invalid(field, "text is too long (1 MiB max)"));
+            return Err(AppError::validation(field, "text is too long (1 MiB max)"));
         }
     }
     let host_ids = dedupe(&i.host_ids);
@@ -394,13 +390,13 @@ fn file_row(r: &Row) -> rusqlite::Result<FindingFile> {
 fn clean_file(i: &FindingFileInput) -> AppResult<(String, Option<String>)> {
     let name = i.name.trim().to_string();
     if name.is_empty() {
-        return Err(invalid("name", "name must not be blank"));
+        return Err(AppError::validation("name", "name must not be blank"));
     }
     if i.content.len() > MAX_CONTENT {
-        return Err(invalid("content", "content is too long (1 MiB max)"));
+        return Err(AppError::validation("content", "content is too long (1 MiB max)"));
     }
     if i.original_content.as_deref().is_some_and(|c| c.len() > MAX_CONTENT) {
-        return Err(invalid("originalContent", "original content is too long (1 MiB max)"));
+        return Err(AppError::validation("originalContent", "original content is too long (1 MiB max)"));
     }
     Ok((name, blank_to_none(i.language.as_deref())))
 }
@@ -499,21 +495,21 @@ struct CleanAttempt {
 fn clean_attempt(conn: &Connection, engagement_id: &str, i: &FailedAttemptInput) -> AppResult<CleanAttempt> {
     let title = i.title.trim().to_string();
     if title.is_empty() {
-        return Err(invalid("title", "title must not be blank"));
+        return Err(AppError::validation("title", "title must not be blank"));
     }
     let reason = i.reason.trim().to_string();
     if reason.is_empty() {
-        return Err(invalid("reason", "reason must not be blank"));
+        return Err(AppError::validation("reason", "reason must not be blank"));
     }
     if reason.len() > MAX_CONTENT {
-        return Err(invalid("reason", "reason is too long (1 MiB max)"));
+        return Err(AppError::validation("reason", "reason is too long (1 MiB max)"));
     }
     let reason_kind = blank_to_none(i.reason_kind.as_deref());
     if reason_kind.is_none() {
-        return Err(invalid("reasonKind", "say why it failed"));
+        return Err(AppError::validation("reasonKind", "say why it failed"));
     }
     if reason_kind.as_deref().is_some_and(|k| !matches!(k, "control" | "precondition" | "access" | "operator")) {
-        return Err(invalid("reasonKind", "reason kind must be control, precondition, access or operator"));
+        return Err(AppError::validation("reasonKind", "reason kind must be control, precondition, access or operator"));
     }
     let host_id = blank_to_none(i.host_id.as_deref());
     if let Some(h) = &host_id {

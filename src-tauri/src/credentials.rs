@@ -119,10 +119,6 @@ pub struct AccessGrantInput {
     pub at: Option<i64>,
 }
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 /// Ruling F-R1: a secret keeps its spaces as entered; only leading and trailing line breaks go.
 fn strip_line_breaks(s: &str) -> &str {
     s.trim_matches(|c| c == '\r' || c == '\n')
@@ -241,16 +237,16 @@ fn check_log_scope(conn: &Connection, engagement_id: &str, id: &str) -> AppResul
 /// Validates and normalises an input into a Credential (id and timestamps filled by the caller).
 fn build(conn: &Connection, engagement_id: &str, i: CredentialInput) -> AppResult<Credential> {
     if !matches!(i.kind.as_str(), "password" | "hash" | "ticket" | "key" | "token" | "other") {
-        return Err(invalid("type", "type must be password, hash, ticket, key, token or other"));
+        return Err(AppError::validation("type", "type must be password, hash, ticket, key, token or other"));
     }
     let scope = blank_to_none(i.scope.as_deref()).unwrap_or_else(|| "domain".into());
     if !matches!(scope.as_str(), "domain" | "local" | "app") {
-        return Err(invalid("scope", "scope must be domain, local or app"));
+        return Err(AppError::validation("scope", "scope must be domain, local or app"));
     }
     let local_host_id = blank_to_none(i.local_host_id.as_deref());
     match (scope == "local", &local_host_id) {
-        (true, None) => return Err(invalid("localHostId", "a local credential needs its host")),
-        (false, Some(_)) => return Err(invalid("localHostId", "only a local credential has a host")),
+        (true, None) => return Err(AppError::validation("localHostId", "a local credential needs its host")),
+        (false, Some(_)) => return Err(AppError::validation("localHostId", "only a local credential has a host")),
         _ => {}
     }
     check_scope(conn, engagement_id, local_host_id.as_deref())?;
@@ -299,7 +295,7 @@ fn check_crack_status(s: &str) -> AppResult<()> {
     if matches!(s, "uncracked" | "cracked" | "uncrackable") {
         Ok(())
     } else {
-        Err(invalid("crackStatus", "crack status must be uncracked, cracked or uncrackable"))
+        Err(AppError::validation("crackStatus", "crack status must be uncracked, cracked or uncrackable"))
     }
 }
 
@@ -339,11 +335,11 @@ pub fn update(conn: &Connection, id: &str, input: CredentialInput) -> AppResult<
     let current = get(conn, id)?;
     let c = build(conn, &current.engagement_id, input)?;
     if find_duplicate(conn, &c, id)?.is_some() {
-        return Err(invalid("secret", "A credential with these values already exists"));
+        return Err(AppError::validation("secret", "A credential with these values already exists"));
     }
     for link in [&c.cracked_from, &c.from_secret_id] {
         if link.as_deref() == Some(id) {
-            return Err(invalid("crackedFrom", "a credential cannot link to itself"));
+            return Err(AppError::validation("crackedFrom", "a credential cannot link to itself"));
         }
     }
     // Absent keeps the current status; a hash with none starts uncracked; a non-hash has none.
@@ -395,11 +391,11 @@ pub fn set_crack_status(conn: &Connection, id: &str, status: &str) -> AppResult<
 pub fn crack(conn: &Connection, hash_id: &str, plaintext: &str) -> AppResult<Credential> {
     let hash = get(conn, hash_id)?;
     if hash.kind != "hash" {
-        return Err(invalid("type", "only a hash can be cracked"));
+        return Err(AppError::validation("type", "only a hash can be cracked"));
     }
     let plaintext = strip_line_breaks(plaintext);
     if plaintext.trim().is_empty() {
-        return Err(invalid("plaintext", "plaintext is required"));
+        return Err(AppError::validation("plaintext", "plaintext is required"));
     }
     let tx = conn.unchecked_transaction()?;
     let now = system_now_ms();
@@ -492,7 +488,7 @@ pub fn username_create(conn: &Connection, engagement_id: &str, input: UsernameIn
     check_scope(conn, engagement_id, None)?;
     let username = input.username.trim().to_string();
     if username.is_empty() {
-        return Err(invalid("username", "username is required"));
+        return Err(AppError::validation("username", "username is required"));
     }
     let domain = blank_to_none(input.domain.as_deref());
     let source_host_id = blank_to_none(input.source_host_id.as_deref());
@@ -541,11 +537,11 @@ pub fn grants_list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Acce
 
 fn grant_insert(conn: &Connection, engagement_id: &str, username_id: &str, i: &AccessGrantInput) -> AppResult<AccessGrant> {
     if !matches!(i.level.as_str(), "user" | "admin" | "system") {
-        return Err(invalid("level", "level must be user, admin or system"));
+        return Err(AppError::validation("level", "level must be user, admin or system"));
     }
     let via = i.via.trim();
     if via.is_empty() {
-        return Err(invalid("via", "say how access was gained"));
+        return Err(AppError::validation("via", "say how access was gained"));
     }
     check_scope(conn, engagement_id, Some(&i.host_id))?;
     let ok: bool = conn.query_row(
@@ -586,10 +582,10 @@ pub fn convert_to_access(conn: &Connection, cred_id: &str, grant: AccessGrantInp
     let cred = get(conn, cred_id)?;
     let placeholder = matches!(cred.secret.trim().to_lowercase().as_str(), "" | "none" | "n/a" | "-");
     if cred.kind != "password" || !placeholder {
-        return Err(invalid("secret", "only a placeholder password credential can be converted"));
+        return Err(AppError::validation("secret", "only a placeholder password credential can be converted"));
     }
     if cred.username.trim().is_empty() {
-        return Err(invalid("username", "the credential has no username to convert"));
+        return Err(AppError::validation("username", "the credential has no username to convert"));
     }
     let tx = conn.unchecked_transaction()?;
     let user = username_create(

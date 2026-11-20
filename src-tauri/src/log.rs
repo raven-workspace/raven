@@ -121,10 +121,6 @@ const COLS: &str = "id, engagement_id, kind, title, title_edited, ran_on, observ
     returned_nothing, private, content, at, created_at, updated_at, payload_id, payload_values";
 const MAX_ATTACHMENT: usize = 25 * 1024 * 1024;
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 fn opt_trim(v: &Option<String>) -> Option<String> {
     v.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
 }
@@ -189,13 +185,13 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<LogEntry>> 
 pub(crate) fn check_title(t: &str) -> AppResult<String> {
     let t = t.trim().to_string();
     if t.is_empty() || t.chars().count() > 300 {
-        return Err(invalid("title", "title must be 1-300 characters"));
+        return Err(AppError::validation("title", "title must be 1-300 characters"));
     }
     Ok(t)
 }
 
 pub(crate) fn check_content(c: &LogContent) -> AppResult<()> {
-    let bad = |m: &str| Err(invalid("content", m));
+    let bad = |m: &str| Err(AppError::validation("content", m));
     match c {
         LogContent::Command { blocks } => {
             if blocks.is_empty() || blocks.iter().any(|b| b.command.trim().is_empty()) {
@@ -221,7 +217,7 @@ fn check_hosts(conn: &Connection, engagement_id: &str, ids: &[String]) -> AppRes
             |r| r.get(0),
         )?;
         if !ok {
-            return Err(invalid("hostIds", "host does not belong to this engagement"));
+            return Err(AppError::validation("hostIds", "host does not belong to this engagement"));
         }
         if !out.contains(id) {
             out.push(id.clone());
@@ -232,7 +228,7 @@ fn check_hosts(conn: &Connection, engagement_id: &str, ids: &[String]) -> AppRes
 
 /// Validates the upload and returns the decoded bytes.
 pub(crate) fn decode_attachment(a: &NewAttachment) -> AppResult<Vec<u8>> {
-    let bad = |m: &str| invalid("attachment", m);
+    let bad = |m: &str| AppError::validation("attachment", m);
     if !matches!(a.mime.as_str(), "image/png" | "image/jpeg" | "image/webp" | "image/gif") {
         return Err(bad("attachment must be a png, jpeg, webp or gif image"));
     }
@@ -267,8 +263,8 @@ pub fn create(conn: &Connection, engagement_id: &str, input: LogEntryInput) -> A
     let wants_attachment = matches!(content, LogContent::Screenshot { .. } | LogContent::Flag { .. });
     let attachment = match (&input.attachment, &content) {
         (Some(a), _) if wants_attachment => Some(decode_attachment(a)?),
-        (None, LogContent::Screenshot { .. }) => return Err(invalid("attachment", "a screenshot needs an image")),
-        (Some(_), _) => return Err(invalid("attachment", "this kind of entry takes no attachment")),
+        (None, LogContent::Screenshot { .. }) => return Err(AppError::validation("attachment", "a screenshot needs an image")),
+        (Some(_), _) => return Err(AppError::validation("attachment", "this kind of entry takes no attachment")),
         _ => None,
     };
 
@@ -352,7 +348,7 @@ pub fn update(conn: &Connection, id: &str, input: LogEntryInput) -> AppResult<Lo
     let title = check_title(&input.title)?;
     check_content(&input.content)?;
     if input.content.kind() != old.kind {
-        return Err(invalid("content", "an entry's kind cannot change"));
+        return Err(AppError::validation("content", "an entry's kind cannot change"));
     }
     let host_ids = check_hosts(conn, &old.engagement_id, &input.host_ids)?;
     let mut content = input.content.clone();

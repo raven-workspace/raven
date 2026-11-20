@@ -64,10 +64,6 @@ pub struct HopInput {
     pub at: Option<i64>,
 }
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 struct CleanTunnel {
     kind: String,
     via: String,
@@ -79,21 +75,21 @@ struct CleanTunnel {
 
 fn clean_tunnel(conn: &Connection, engagement_id: &str, i: TunnelInput) -> AppResult<CleanTunnel> {
     if !matches!(i.kind.as_str(), "ligolo" | "chisel" | "ssh" | "socks" | "other") {
-        return Err(invalid("kind", "kind must be ligolo, chisel, ssh, socks or other"));
+        return Err(AppError::validation("kind", "kind must be ligolo, chisel, ssh, socks or other"));
     }
     if !matches!(i.status.as_str(), "up" | "down") {
-        return Err(invalid("status", "status must be up or down"));
+        return Err(AppError::validation("status", "status must be up or down"));
     }
     let subnets: Vec<String> = i.subnets.iter().map(|s| s.trim().to_string()).collect();
     if subnets.len() > MAX_SUBNETS {
-        return Err(invalid("subnets", "too many subnets"));
+        return Err(AppError::validation("subnets", "too many subnets"));
     }
     if let Some(bad) = subnets.iter().find(|s| !valid_cidr(s)) {
-        return Err(invalid("subnets", &format!("invalid IPv4 CIDR: {bad}")));
+        return Err(AppError::validation("subnets", format!("invalid IPv4 CIDR: {bad}")));
     }
     let callback_ip = i.callback_ip.trim().to_string();
     if !callback_ip.is_empty() && (callback_ip.contains('/') || !valid_cidr(&callback_ip)) {
-        return Err(invalid("callbackIp", "must be a single IPv4 address"));
+        return Err(AppError::validation("callbackIp", "must be a single IPv4 address"));
     }
     check_scope(conn, engagement_id, Some(&i.via_host_id))?;
     let notes = i.notes.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
@@ -177,10 +173,10 @@ struct CleanHop {
 fn clean_hop(conn: &Connection, engagement_id: &str, i: HopInput) -> AppResult<CleanHop> {
     let via = i.via.trim().to_string();
     if via.is_empty() {
-        return Err(invalid("via", "via must not be blank"));
+        return Err(AppError::validation("via", "via must not be blank"));
     }
     if i.from_host_id.as_deref() == Some(i.to_host_id.as_str()) {
-        return Err(invalid("toHostId", "a hop must go to a different host"));
+        return Err(AppError::validation("toHostId", "a hop must go to a different host"));
     }
     check_scope(conn, engagement_id, Some(&i.to_host_id))?;
     if let Some(f) = &i.from_host_id {
@@ -283,12 +279,12 @@ pub fn interface_dismissals_list(conn: &Connection, engagement_id: &str) -> AppR
 pub fn interface_dismiss(conn: &Connection, engagement_id: &str, host_id: &str, subnet: &str) -> AppResult<()> {
     check_scope(conn, engagement_id, None)?;
     match check_scope(conn, engagement_id, Some(host_id)) {
-        Err(AppError::NotFound) => return Err(invalid("hostId", "host is not in this engagement")),
+        Err(AppError::NotFound) => return Err(AppError::validation("hostId", "host is not in this engagement")),
         r => r?,
     }
     let subnet = subnet.trim();
     if !valid_cidr(subnet) {
-        return Err(invalid("subnet", &format!("invalid IPv4 CIDR: {subnet}")));
+        return Err(AppError::validation("subnet", format!("invalid IPv4 CIDR: {subnet}")));
     }
     conn.execute(
         "INSERT OR IGNORE INTO interface_dismissals (engagement_id, host_id, subnet, created_at) VALUES (?1,?2,?3,?4)",

@@ -49,10 +49,6 @@ pub struct CredAttemptInput {
     pub at: Option<i64>,
 }
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 fn blank_to_none(s: Option<&str>) -> Option<String> {
     s.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
 }
@@ -121,17 +117,17 @@ struct Clean {
 
 fn clean(conn: &Connection, engagement_id: &str, i: &CredAttemptInput, now: i64) -> AppResult<Clean> {
     if !SERVICES.contains(&i.service.as_str()) {
-        return Err(invalid("service", "unknown service"));
+        return Err(AppError::validation("service", "unknown service"));
     }
     if !matches!(i.result.as_str(), "admin" | "valid" | "failed" | "errored") {
-        return Err(invalid("result", "result must be admin, valid, failed or errored"));
+        return Err(AppError::validation("result", "result must be admin, valid, failed or errored"));
     }
     let auth_mode = i.auth_mode.as_deref().unwrap_or("domain");
     if !matches!(auth_mode, "domain" | "local") {
-        return Err(invalid("authMode", "auth mode must be domain or local"));
+        return Err(AppError::validation("authMode", "auth mode must be domain or local"));
     }
     if i.port.is_some_and(|p| !(1..=65535).contains(&p)) {
-        return Err(invalid("port", "port must be 1-65535"));
+        return Err(AppError::validation("port", "port must be 1-65535"));
     }
     in_scope(conn, "credentials", engagement_id, &i.cred_id)?;
     check_scope(conn, engagement_id, Some(&i.host_id))?;

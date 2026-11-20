@@ -265,7 +265,7 @@ pub fn take(vault: &Vault, reason: &str) -> AppResult<BackupInfo> {
 
 pub fn take_at(vault: &Vault, reason: &str, now_ms: i64) -> AppResult<BackupInfo> {
     if !valid_reason(reason) {
-        return Err(AppError::Validation { field: "reason".into(), message: "invalid backup reason".into() });
+        return Err(AppError::validation("reason", "invalid backup reason"));
     }
     let conn = vault.conn()?;
     let pragma = vault.key_pragma()?;
@@ -299,7 +299,7 @@ pub fn take_at(vault: &Vault, reason: &str, now_ms: i64) -> AppResult<BackupInfo
 /// so the next normal `take` prunes with the real setting.
 pub fn take_file_level(paths: &DataPaths, reason: &str, now_ms: i64) -> AppResult<BackupInfo> {
     if !valid_reason(reason) {
-        return Err(AppError::Validation { field: "reason".into(), message: "invalid backup reason".into() });
+        return Err(AppError::validation("reason", "invalid backup reason"));
     }
     ensure_backups_dir(paths)?;
     let tmp = tmp_path(paths);
@@ -340,10 +340,10 @@ pub fn restore(vault: &mut Vault, file: &str) -> AppResult<()> {
 
 fn validate_backup_name(file: &str) -> AppResult<()> {
     if file.is_empty() || file.contains('/') || file.contains('\\') || file.contains("..") || file.contains('\0') {
-        return Err(AppError::Validation { field: "file".into(), message: "invalid backup file name".into() });
+        return Err(AppError::validation("file", "invalid backup file name"));
     }
     if parse_name(file).is_none() {
-        return Err(AppError::Validation { field: "file".into(), message: "not a Raven backup file".into() });
+        return Err(AppError::validation("file", "not a Raven backup file"));
     }
     Ok(())
 }
@@ -375,10 +375,7 @@ pub fn restore_at(vault: &mut Vault, file: &str, now_ms: i64) -> AppResult<()> {
         match open_with_pragma(&staged, &pragma) {
             Ok(_) => {}
             Err(rusqlite::Error::SqliteFailure(e, _)) if e.code == ErrorCode::NotADatabase => {
-                return Err(AppError::Validation {
-                    field: "file".into(),
-                    message: "This backup was made with a different password".into(),
-                });
+                return Err(AppError::validation("file", "This backup was made with a different password"));
             }
             Err(e) => return Err(e.into()),
         }
@@ -406,10 +403,7 @@ pub fn restore_locked_at(vault: &mut Vault, file: &str, password: &str, now_ms: 
     validate_backup_name(file)?;
     // While unlocked, `restore` is the path: it takes a pre-restore backup first.
     if vault.is_unlocked() {
-        return Err(AppError::Validation {
-            field: "file".into(),
-            message: "Lock Raven before restoring this way".into(),
-        });
+        return Err(AppError::validation("file", "Lock Raven before restoring this way"));
     }
     let paths = vault.paths().clone();
     let src = paths.backups.join(file);
@@ -420,7 +414,7 @@ pub fn restore_locked_at(vault: &mut Vault, file: &str, password: &str, now_ms: 
     let companion = companion.is_file().then_some(companion);
     let meta = VaultMeta::read(companion.as_deref().unwrap_or(&paths.vault_meta))?;
     let wrong_password =
-        || AppError::Validation { field: "password".into(), message: "Wrong password for this backup".into() };
+        || AppError::validation("password", "Wrong password for this backup");
     let key = meta.derive_key(&normalize_password(password))?;
     let verified = match meta.verifier_matches(&key) {
         Some(false) => return Err(wrong_password()),
@@ -440,7 +434,7 @@ pub fn restore_locked_at(vault: &mut Vault, file: &str, password: &str, now_ms: 
             Ok(_) => {}
             // The verifier proved the password, so the backup file itself is unreadable.
             Err(e) if verified && is_unreadable(&e) => {
-                return Err(AppError::Validation { field: "file".into(), message: "This backup is damaged".into() });
+                return Err(AppError::validation("file", "This backup is damaged"));
             }
             Err(rusqlite::Error::SqliteFailure(e, _)) if !verified && e.code == ErrorCode::NotADatabase => {
                 return Err(wrong_password());

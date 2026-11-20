@@ -47,10 +47,6 @@ pub struct RuledOutInput {
     pub private: bool,
 }
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 /// The engagement must exist, and a host (if given) must belong to it; otherwise `NotFound`.
 pub(crate) fn check_scope(conn: &Connection, engagement_id: &str, host_id: Option<&str>) -> AppResult<()> {
     let ok: bool = match host_id {
@@ -103,7 +99,7 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<Note>> {
 
 pub fn save(conn: &Connection, engagement_id: &str, host_id: Option<&str>, body: &str, private: bool) -> AppResult<Note> {
     if body.len() > MAX_BODY {
-        return Err(invalid("body", "note is too long (1 MiB max)"));
+        return Err(AppError::validation("body", "note is too long (1 MiB max)"));
     }
     check_scope(conn, engagement_id, host_id)?;
     let owner = host_id.unwrap_or(engagement_id);
@@ -141,16 +137,16 @@ pub fn ruled_out_create(conn: &Connection, input: RuledOutInput) -> AppResult<Ru
     let text = input.text.trim().to_string();
     let reason = input.reason.trim().to_string();
     if text.is_empty() {
-        return Err(invalid("text", "text must not be blank"));
+        return Err(AppError::validation("text", "text must not be blank"));
     }
     if reason.is_empty() {
-        return Err(invalid("reason", "reason must not be blank"));
+        return Err(AppError::validation("reason", "reason must not be blank"));
     }
     if text.len() > MAX_BODY {
-        return Err(invalid("text", "text is too long (1 MiB max)"));
+        return Err(AppError::validation("text", "text is too long (1 MiB max)"));
     }
     if reason.len() > MAX_BODY {
-        return Err(invalid("reason", "reason is too long (1 MiB max)"));
+        return Err(AppError::validation("reason", "reason is too long (1 MiB max)"));
     }
     check_scope(conn, &input.engagement_id, input.host_id.as_deref())?;
     let id = uuid::Uuid::new_v4().to_string();

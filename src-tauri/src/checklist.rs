@@ -52,10 +52,6 @@ pub struct ChecklistItemInput {
     pub evidence: Vec<Evidence>,
 }
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<ChecklistItem>> {
     let mut st = conn.prepare(
         "SELECT owner_id, goal_id, status, notes, completed_at, auto, auto_from, evidence, updated_at, status_manual \
@@ -84,7 +80,7 @@ pub fn list(conn: &Connection, engagement_id: &str) -> AppResult<Vec<ChecklistIt
 /// Upserts every item in one transaction (all or nothing) and returns the engagement's full list.
 pub fn put(conn: &Connection, engagement_id: &str, items: &[ChecklistItemInput]) -> AppResult<Vec<ChecklistItem>> {
     if items.len() > MAX_ITEMS {
-        return Err(invalid("items", "too many items (max 500)"));
+        return Err(AppError::validation("items", "too many items (max 500)"));
     }
     let exists: bool =
         conn.query_row("SELECT EXISTS(SELECT 1 FROM engagements WHERE id = ?1)", [engagement_id], |r| r.get(0))?;
@@ -95,14 +91,14 @@ pub fn put(conn: &Connection, engagement_id: &str, items: &[ChecklistItemInput])
     let now = system_now_ms();
     for it in items {
         if it.goal_id.trim().is_empty() {
-            return Err(invalid("goalId", "goal id is required"));
+            return Err(AppError::validation("goalId", "goal id is required"));
         }
         if !matches!(it.status.as_str(), "todo" | "in_progress" | "done" | "na") {
-            return Err(invalid("status", "status must be todo, in_progress, done or na"));
+            return Err(AppError::validation("status", "status must be todo, in_progress, done or na"));
         }
         if let Some(a) = &it.auto_from
             && !matches!(a.as_str(), "na" | "in_progress") {
-                return Err(invalid("autoFrom", "autoFrom must be na or in_progress"));
+                return Err(AppError::validation("autoFrom", "autoFrom must be na or in_progress"));
             }
         let owned: bool = it.owner_id == engagement_id
             || tx.query_row(
@@ -111,7 +107,7 @@ pub fn put(conn: &Connection, engagement_id: &str, items: &[ChecklistItemInput])
                 |r| r.get(0),
             )?;
         if !owned {
-            return Err(invalid("ownerId", "owner is not part of this engagement"));
+            return Err(AppError::validation("ownerId", "owner is not part of this engagement"));
         }
         let evidence = serde_json::to_string(&it.evidence).map_err(|e| AppError::Db(e.to_string()))?;
         tx.execute(
@@ -150,7 +146,7 @@ pub fn apply_cover(
     revert: &[GoalRef],
 ) -> AppResult<Vec<ChecklistItem>> {
     if cover.len() + revert.len() > MAX_ITEMS * 4 {
-        return Err(invalid("cover", "too many items"));
+        return Err(AppError::validation("cover", "too many items"));
     }
     let exists: bool =
         conn.query_row("SELECT EXISTS(SELECT 1 FROM engagements WHERE id = ?1)", [engagement_id], |r| r.get(0))?;
@@ -167,7 +163,7 @@ pub fn apply_cover(
                 |r| r.get(0),
             )?;
         if !owned || g.goal_id.trim().is_empty() {
-            return Err(invalid("ownerId", "owner is not part of this engagement"));
+            return Err(AppError::validation("ownerId", "owner is not part of this engagement"));
         }
     }
     for g in revert {
@@ -202,7 +198,7 @@ pub fn apply_facts(
     revert: &[GoalRef],
 ) -> AppResult<Vec<ChecklistItem>> {
     if done.len() + revert.len() > MAX_ITEMS * 4 {
-        return Err(invalid("facts", "too many items"));
+        return Err(AppError::validation("facts", "too many items"));
     }
     let exists: bool =
         conn.query_row("SELECT EXISTS(SELECT 1 FROM engagements WHERE id = ?1)", [engagement_id], |r| r.get(0))?;
@@ -219,7 +215,7 @@ pub fn apply_facts(
                 |r| r.get(0),
             )?;
         if !owned || g.goal_id.trim().is_empty() {
-            return Err(invalid("ownerId", "owner is not part of this engagement"));
+            return Err(AppError::validation("ownerId", "owner is not part of this engagement"));
         }
     }
     for g in revert {

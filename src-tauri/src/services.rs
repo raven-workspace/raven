@@ -59,10 +59,6 @@ pub struct ConfirmInput {
 const COLS: &str = "id, host_id, port, protocol, state, nmap_service, nmap_version, \
     confirmed_product, confirmed_version, confirmed_entry_id, verdict, created_at, updated_at";
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 fn from_row(r: &Row) -> rusqlite::Result<Service> {
     Ok(Service {
         id: r.get(0)?,
@@ -90,7 +86,7 @@ fn check_port(port: i64) -> AppResult<()> {
     if (1..=65535).contains(&port) {
         Ok(())
     } else {
-        Err(invalid("port", "port must be 1-65535"))
+        Err(AppError::validation("port", "port must be 1-65535"))
     }
 }
 
@@ -99,7 +95,7 @@ fn check_protocol(p: &str) -> AppResult<String> {
     if matches!(p.as_str(), "tcp" | "udp") {
         Ok(p)
     } else {
-        Err(invalid("protocol", "protocol must be tcp or udp"))
+        Err(AppError::validation("protocol", "protocol must be tcp or udp"))
     }
 }
 
@@ -183,7 +179,7 @@ pub fn create(conn: &Connection, host_id: &str, input: ServiceInput) -> AppResul
     let (port, protocol, svc, ver) = clean_input(&input)?;
     host_exists(conn, host_id)?;
     if port_taken(conn, host_id, port, &protocol, "")? {
-        return Err(invalid("port", DUP_PORT));
+        return Err(AppError::validation("port", DUP_PORT));
     }
     let id = uuid::Uuid::new_v4().to_string();
     let now = system_now_ms();
@@ -199,7 +195,7 @@ pub fn update(conn: &Connection, id: &str, input: ServiceInput) -> AppResult<Ser
     let (port, protocol, svc, ver) = clean_input(&input)?;
     let current = get(conn, id)?;
     if port_taken(conn, &current.host_id, port, &protocol, id)? {
-        return Err(invalid("port", DUP_PORT));
+        return Err(AppError::validation("port", DUP_PORT));
     }
     conn.execute(
         "UPDATE services SET port=?2, protocol=?3, nmap_service=?4, nmap_version=?5, updated_at=?6 WHERE id=?1",
@@ -213,7 +209,7 @@ pub fn update(conn: &Connection, id: &str, input: ServiceInput) -> AppResult<Ser
 pub fn confirm(conn: &Connection, id: &str, input: ConfirmInput) -> AppResult<Service> {
     let product = input.product.trim().to_string();
     if product.is_empty() || product.chars().count() > 80 {
-        return Err(invalid("product", "product must be 1-80 characters"));
+        return Err(AppError::validation("product", "product must be 1-80 characters"));
     }
     let version = blank_to_none(input.version.as_deref());
     let entry_id = blank_to_none(input.entry_id.as_deref());
@@ -226,7 +222,7 @@ pub fn confirm(conn: &Connection, id: &str, input: ConfirmInput) -> AppResult<Se
             |r| r.get(0),
         )?;
         if !ok {
-            return Err(invalid("entryId", "entry must belong to this engagement"));
+            return Err(AppError::validation("entryId", "entry must belong to this engagement"));
         }
     }
     conn.execute(
@@ -265,12 +261,12 @@ fn service_label(s: &Service) -> String {
 pub fn set_verdict(conn: &Connection, id: &str, verdict: Option<&str>, reason: Option<&str>) -> AppResult<Service> {
     if let Some(v) = verdict {
         if !matches!(v, "candidate" | "untested" | "dead_end") {
-            return Err(invalid("verdict", "verdict must be candidate, untested or dead_end"));
+            return Err(AppError::validation("verdict", "verdict must be candidate, untested or dead_end"));
         }
     }
     let reason = blank_to_none(reason);
     if verdict == Some("dead_end") && reason.is_none() {
-        return Err(invalid("reason", "a dead end needs a reason"));
+        return Err(AppError::validation("reason", "a dead end needs a reason"));
     }
     let svc = get(conn, id)?;
     let tx = conn.unchecked_transaction()?;

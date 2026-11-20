@@ -158,13 +158,13 @@ const MAX_REPORT_FIELD_LEN: usize = 2000;
 pub fn update(conn: &Connection, id: &str, patch: ReportPatch) -> AppResult<Report> {
     for (field, value) in [("candidateName", &patch.candidate_name), ("email", &patch.email), ("osid", &patch.osid), ("title", &patch.title)] {
         if value.as_deref().is_some_and(|v| v.chars().count() > MAX_REPORT_FIELD_LEN) {
-            return Err(AppError::Validation { field: field.into(), message: format!("at most {MAX_REPORT_FIELD_LEN} characters") });
+            return Err(AppError::validation(field, format!("at most {MAX_REPORT_FIELD_LEN} characters")));
         }
     }
     let cur = report_by(conn, "id", id)?.ok_or(AppError::NotFound)?;
     let title = patch.title.unwrap_or(cur.title);
     if title.trim().is_empty() {
-        return Err(AppError::Validation { field: "title".into(), message: "title is required".into() });
+        return Err(AppError::validation("title", "title is required"));
     }
     conn.execute(
         "UPDATE reports SET candidate_name=?1, email=?2, osid=?3, title=?4, meta=?5, updated_at=?6 WHERE id=?7",
@@ -230,13 +230,13 @@ fn section_texts(doc: Option<&Value>, meta: &Value) -> AppResult<(Option<String>
     let doc = doc.map(to_text);
     let meta = to_text(meta);
     if doc.as_ref().map_or(0, String::len) + meta.len() > MAX_SECTION_BYTES {
-        return Err(AppError::Validation { field: "doc".into(), message: "this page is over 8 MiB".into() });
+        return Err(AppError::validation("doc", "this page is over 8 MiB"));
     }
     Ok((doc, meta))
 }
 
 fn validate(input: &SectionInput) -> AppResult<()> {
-    let bad = |field: &str, message: &str| Err(AppError::Validation { field: field.into(), message: message.into() });
+    let bad = |field: &str, message: &str| Err(AppError::validation(field, message));
     if !KINDS.contains(&input.kind.as_str()) {
         return bad("kind", "unknown section kind");
     }
@@ -308,7 +308,7 @@ pub fn section_delete(conn: &Connection, report_id: &str, id: &str) -> AppResult
         Err(e) => return Err(e.into()),
     };
     if kind != "page" {
-        return Err(AppError::Validation { field: "kind".into(), message: "only pages can be deleted".into() });
+        return Err(AppError::validation("kind", "only pages can be deleted"));
     }
     conn.execute("DELETE FROM report_sections WHERE id = ?1", [id])?;
     Ok(())

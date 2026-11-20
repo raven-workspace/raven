@@ -174,17 +174,14 @@ pub fn get(conn: &Connection) -> AppResult<Settings> {
 
 fn check(field: &str, v: Option<u32>, range: &std::ops::RangeInclusive<u32>) -> AppResult<()> {
     match v {
-        Some(n) if !range.contains(&n) => Err(AppError::Validation {
-            field: field.into(),
-            message: format!("must be between {} and {}", range.start(), range.end()),
-        }),
+        Some(n) if !range.contains(&n) => Err(AppError::validation(field, format!("must be between {} and {}", range.start(), range.end()))),
         _ => Ok(()),
     }
 }
 
 /// Trims each label, drops case-insensitive duplicates (first wins), enforces 1-20 labels of 1-40 chars.
 fn clean_machines(list: Vec<String>) -> AppResult<Vec<String>> {
-    let bad = |m: &str| AppError::Validation { field: "machines".into(), message: m.into() };
+    let bad = |m: &str| AppError::validation("machines", m);
     let mut out: Vec<String> = Vec::new();
     for m in list {
         let m = m.trim().to_string();
@@ -201,17 +198,13 @@ fn clean_machines(list: Vec<String>) -> AppResult<Vec<String>> {
     Ok(out)
 }
 
-fn bad(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 /// Blank, or a single IPv4 address (no prefix).
 fn clean_ip(s: &str) -> AppResult<String> {
     let s = s.trim();
     if s.is_empty() || (!s.contains('/') && crate::engagements::valid_cidr(s)) {
         Ok(s.to_string())
     } else {
-        Err(bad("attackerIp", "must be blank or a single IPv4 address"))
+        Err(AppError::validation("attackerIp", "must be blank or a single IPv4 address"))
     }
 }
 
@@ -223,7 +216,7 @@ fn clean_port(s: &str) -> AppResult<String> {
     }
     match s.parse::<u16>() {
         Ok(n) if n >= 1 && s.bytes().all(|b| b.is_ascii_digit()) => Ok(n.to_string()),
-        _ => Err(bad("listenerPort", "must be blank or a port from 1 to 65535")),
+        _ => Err(AppError::validation("listenerPort", "must be blank or a port from 1 to 65535")),
     }
 }
 
@@ -234,7 +227,7 @@ fn clean_kali_user(s: &str) -> AppResult<String> {
     if ok {
         Ok(s.to_string())
     } else {
-        Err(bad("kaliUser", "use letters, digits, _ - . only (max 32)"))
+        Err(AppError::validation("kaliUser", "use letters, digits, _ - . only (max 32)"))
     }
 }
 
@@ -242,7 +235,7 @@ fn clean_kali_user(s: &str) -> AppResult<String> {
 fn clean_path(field: &str, s: &str) -> AppResult<String> {
     let s = s.trim();
     if s.chars().count() > MAX_PATH_LEN || s.chars().any(char::is_control) {
-        Err(bad(field, "must be a single-line path of at most 500 characters"))
+        Err(AppError::validation(field, "must be a single-line path of at most 500 characters"))
     } else {
         Ok(s.to_string())
     }
@@ -255,7 +248,7 @@ fn clean_tools_dir(field: &str, s: &str) -> AppResult<String> {
     let b = s.as_bytes();
     let drive = b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && matches!(b[2], b'\\' | b'/');
     if drive || s.contains('\\') {
-        Err(bad(field, "must be a folder on Kali, like ~/tools/windows"))
+        Err(AppError::validation(field, "must be a folder on Kali, like ~/tools/windows"))
     } else {
         Ok(s)
     }
@@ -267,7 +260,7 @@ fn clean_nvd_key(s: &str) -> AppResult<String> {
     if s.len() <= MAX_NVD_KEY_LEN && s.bytes().all(|b| b.is_ascii_graphic()) {
         Ok(s.to_string())
     } else {
-        Err(bad("nvdApiKey", "paste the key exactly as NVD sent it"))
+        Err(AppError::validation("nvdApiKey", "paste the key exactly as NVD sent it"))
     }
 }
 
@@ -275,7 +268,7 @@ fn clean_nvd_key(s: &str) -> AppResult<String> {
 fn clean_report_text(field: &str, s: &str, max: usize) -> AppResult<String> {
     let s = s.trim();
     if s.chars().count() > max {
-        Err(bad(field, &format!("at most {max} characters")))
+        Err(AppError::validation(field, format!("at most {max} characters")))
     } else {
         Ok(s.to_string())
     }
@@ -287,14 +280,14 @@ fn clean_guides_hidden(list: Vec<String>) -> AppResult<Vec<String>> {
     for id in list {
         let id = id.trim().to_string();
         if id.is_empty() || id.chars().count() > MAX_GUIDE_ID_LEN || id.chars().any(char::is_control) {
-            return Err(bad("reportGuidesHidden", "each guide id must be 1-64 characters"));
+            return Err(AppError::validation("reportGuidesHidden", "each guide id must be 1-64 characters"));
         }
         if !out.contains(&id) {
             out.push(id);
         }
     }
     if out.len() > MAX_GUIDES_HIDDEN {
-        return Err(bad("reportGuidesHidden", "at most 200 hidden guide notes"));
+        return Err(AppError::validation("reportGuidesHidden", "at most 200 hidden guide notes"));
     }
     Ok(out)
 }

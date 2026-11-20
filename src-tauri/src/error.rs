@@ -37,6 +37,10 @@ pub enum AppError {
 pub type AppResult<T> = Result<T, AppError>;
 
 impl AppError {
+    pub fn validation(field: &str, message: impl Into<String>) -> Self {
+        AppError::Validation { field: field.into(), message: message.into() }
+    }
+
     pub fn code(&self) -> &'static str {
         match self {
             AppError::Locked => "locked",

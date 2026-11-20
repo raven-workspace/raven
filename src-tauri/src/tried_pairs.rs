@@ -45,10 +45,6 @@ pub struct TriedPairInput {
 
 const COLS: &str = "id, engagement_id, username, domain, secret, secret_kind, host_id, service, auth_mode, log_entry_id, at";
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 fn blank_to_none(s: Option<&str>) -> Option<String> {
     s.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
 }
@@ -85,20 +81,20 @@ pub fn upsert(conn: &Connection, engagement_id: &str, inputs: &[TriedPairInput])
     for i in inputs {
         let username = i.username.trim();
         if username.is_empty() {
-            return Err(invalid("username", "username is required"));
+            return Err(AppError::validation("username", "username is required"));
         }
         if i.secret.is_empty() {
-            return Err(invalid("secret", "secret is required"));
+            return Err(AppError::validation("secret", "secret is required"));
         }
         if !matches!(i.secret_kind.as_str(), "password" | "hash") {
-            return Err(invalid("secretKind", "secret kind must be password or hash"));
+            return Err(AppError::validation("secretKind", "secret kind must be password or hash"));
         }
         let auth_mode = i.auth_mode.as_deref().unwrap_or("domain");
         if !matches!(auth_mode, "domain" | "local") {
-            return Err(invalid("authMode", "auth mode must be domain or local"));
+            return Err(AppError::validation("authMode", "auth mode must be domain or local"));
         }
         if i.service.trim().is_empty() {
-            return Err(invalid("service", "service is required"));
+            return Err(AppError::validation("service", "service is required"));
         }
         check_scope(&tx, engagement_id, Some(&i.host_id))?;
         let domain = blank_to_none(i.domain.as_deref());

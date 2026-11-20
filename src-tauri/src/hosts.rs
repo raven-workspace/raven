@@ -74,10 +74,6 @@ fn present_or_null<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Opti
     Option::<bool>::deserialize(d).map(Some)
 }
 
-fn invalid(field: &str, message: &str) -> AppError {
-    AppError::Validation { field: field.into(), message: message.into() }
-}
-
 /// A single IPv4 address (no prefix, or `/32`), returned without the `/32`.
 pub(crate) fn single_ip(s: &str) -> Option<String> {
     let bare = s.strip_suffix("/32").unwrap_or(s);
@@ -96,23 +92,23 @@ struct Clean {
 fn normalise(i: HostInput) -> AppResult<Clean> {
     let ip = match i.ip.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         None => None,
-        Some(raw) => Some(single_ip(raw).ok_or_else(|| invalid("ip", "must be a single IPv4 address"))?),
+        Some(raw) => Some(single_ip(raw).ok_or_else(|| AppError::validation("ip", "must be a single IPv4 address"))?),
     };
     let mut name = i.name.trim().to_string();
     if name.is_empty() {
         name = ip.clone().unwrap_or_default();
     }
     if name.is_empty() || name.chars().count() > 80 {
-        return Err(invalid("name", "name must be 1-80 characters"));
+        return Err(AppError::validation("name", "name must be 1-80 characters"));
     }
     let os = i.os.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
     if let Some(o) = &os
         && !matches!(o.as_str(), "windows" | "linux" | "other") {
-            return Err(invalid("os", "os must be windows, linux or other"));
+            return Err(AppError::validation("os", "os must be windows, linux or other"));
         }
     let access = i.access.as_deref().map(str::trim).filter(|s| !s.is_empty()).unwrap_or("none").to_string();
     if !matches!(access.as_str(), "none" | "user" | "root") {
-        return Err(invalid("access", "access must be none, user or root"));
+        return Err(AppError::validation("access", "access must be none, user or root"));
     }
     Ok(Clean { name, ip, os, access, dual_homed: i.dual_homed, ad_set: i.ad_set })
 }
@@ -180,7 +176,7 @@ pub fn create(conn: &Connection, engagement_id: &str, input: HostInput) -> AppRe
     }
     if let Some(ip) = &c.ip
         && ip_taken(conn, engagement_id, ip, "")? {
-            return Err(invalid("ip", DUP_IP));
+            return Err(AppError::validation("ip", DUP_IP));
         }
     let id = uuid::Uuid::new_v4().to_string();
     let now = system_now_ms();
@@ -197,7 +193,7 @@ pub fn update(conn: &Connection, id: &str, input: HostInput) -> AppResult<Host> 
     let current = get(conn, id)?;
     if let Some(ip) = &c.ip
         && ip_taken(conn, &current.engagement_id, ip, id)? {
-            return Err(invalid("ip", DUP_IP));
+            return Err(AppError::validation("ip", DUP_IP));
         }
     conn.execute(
         "UPDATE hosts SET name=?2, ip=?3, os=?4, access=?5, dual_homed=COALESCE(?6, dual_homed), \
@@ -210,7 +206,7 @@ pub fn update(conn: &Connection, id: &str, input: HostInput) -> AppResult<Host> 
 /// Moves a host to a board column by hand; this pins it there (`board_manual`).
 pub fn move_to(conn: &Connection, id: &str, column: &str) -> AppResult<Host> {
     if !matches!(column, "information-gathering" | "vulnerability-detection" | "initial-foothold" | "privilege-escalation" | "post-exploitation" | "reporting") {
-        return Err(invalid("column", "column must be one of the six PEN-200 stages"));
+        return Err(AppError::validation("column", "column must be one of the six PEN-200 stages"));
     }
     let n = conn.execute(
         "UPDATE hosts SET board_column=?2, board_manual=1, updated_at=?3 WHERE id=?1",
@@ -236,7 +232,7 @@ pub fn mark_access_reviewed(conn: &Connection, id: &str) -> AppResult<Host> {
 /// derived value does the host move (and unpin), so a hand placement holds until the next stage completes.
 pub fn sync_board(conn: &Connection, id: &str, derived: &str) -> AppResult<Host> {
     if !matches!(derived, "information-gathering" | "vulnerability-detection" | "initial-foothold" | "privilege-escalation" | "post-exploitation" | "reporting") {
-        return Err(invalid("derived", "column must be one of the six PEN-200 stages"));
+        return Err(AppError::validation("derived", "column must be one of the six PEN-200 stages"));
     }
     let current = get(conn, id)?;
     if current.board_derived.as_deref() == Some(derived) {

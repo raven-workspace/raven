@@ -387,12 +387,8 @@ pub(crate) fn apply_plan(conn: &Connection, plan: &ImportPlanInput, now: i64) ->
     Ok(sum)
 }
 
-fn invalid(field: &str, message: String) -> AppError {
-    AppError::Validation { field: field.into(), message }
-}
-
 fn dangling(field: &str, id: &str) -> AppError {
-    invalid(field, format!("{field} {id} is neither in this import nor in the database"))
+    AppError::validation(field, format!("{field} {id} is neither in this import nor in the database"))
 }
 
 /// Order-preserving dedupe.
@@ -435,7 +431,7 @@ impl Ctx<'_> {
         let owner = self.find(&format!("SELECT engagement_id FROM {table} WHERE id = ?1"), [id])?;
         match owner {
             None => Err(dangling(field, id)),
-            Some(e) if e != engagement_id => Err(invalid(field, format!("{field} {id} belongs to another engagement"))),
+            Some(e) if e != engagement_id => Err(AppError::validation(field, format!("{field} {id} belongs to another engagement"))),
             Some(_) => Ok(id.to_string()),
         }
     }
@@ -475,7 +471,7 @@ impl Ctx<'_> {
         )?;
         match owner {
             None => Err(dangling(field, id)),
-            Some(e) if e != engagement_id => Err(invalid(field, format!("{field} {id} belongs to another engagement"))),
+            Some(e) if e != engagement_id => Err(AppError::validation(field, format!("{field} {id} belongs to another engagement"))),
             Some(_) => Ok(id.to_string()),
         }
     }
@@ -484,10 +480,10 @@ impl Ctx<'_> {
         // The rules engagements.rs applies on every edit (Ruling T6-R2).
         let name = e.name.trim();
         if name.is_empty() || name.chars().count() > 120 {
-            return Err(invalid("name", format!("engagement {}: name must be 1-120 characters", e.id)));
+            return Err(AppError::validation("name", format!("engagement {}: name must be 1-120 characters", e.id)));
         }
         if let Some(bad) = e.scope_cidrs.iter().find(|c| !crate::engagements::valid_cidr(c.trim())) {
-            return Err(invalid("scopeCidrs", format!("engagement {}: invalid IPv4 CIDR: {bad}", e.id)));
+            return Err(AppError::validation("scopeCidrs", format!("engagement {}: invalid IPv4 CIDR: {bad}", e.id)));
         }
         if self.exists("engagements", &e.id)? {
             return Ok(false);
@@ -512,17 +508,17 @@ impl Ctx<'_> {
         // The rules hosts.rs applies on every edit (Ruling T6-R2).
         let name = h.name.trim();
         if name.is_empty() || name.chars().count() > 80 {
-            return Err(invalid("name", format!("host {}: name must be 1-80 characters", h.id)));
+            return Err(AppError::validation("name", format!("host {}: name must be 1-80 characters", h.id)));
         }
         if let Some(ip) = &h.ip
             && crate::hosts::single_ip(ip).as_deref() != Some(ip.as_str())
         {
-            return Err(invalid("ip", format!("host {}: {ip} is not a single IPv4 address", h.id)));
+            return Err(AppError::validation("ip", format!("host {}: {ip} is not a single IPv4 address", h.id)));
         }
         self.host_engagement.insert(h.id.clone(), h.engagement_id.clone());
         if let Some(stored) = self.find("SELECT engagement_id FROM hosts WHERE id = ?1", [&h.id])? {
             if stored != h.engagement_id {
-                return Err(invalid(
+                return Err(AppError::validation(
                     "hostId",
                     format!("{name} was already imported into another engagement; import it from there or delete it first"),
                 ));
@@ -535,7 +531,7 @@ impl Ctx<'_> {
         {
             // Ruling T6-R1: two planned hosts on one IP must never merge; only a host the user already had does.
             if self.added_hosts.contains(&existing) {
-                return Err(invalid("ip", format!("hosts {existing} and {} in this import share the IP {ip}", h.id)));
+                return Err(AppError::validation("ip", format!("hosts {existing} and {} in this import share the IP {ip}", h.id)));
             }
             self.hosts.insert(h.id.clone(), existing);
             self.merged_names.insert(h.id.clone(), name.to_string());
@@ -582,7 +578,7 @@ impl Ctx<'_> {
         let title = crate::log::check_title(&e.title)?;
         crate::log::check_content(&e.content)?;
         if e.kind != e.content.kind() {
-            return Err(invalid("content", format!("entry {} has kind {} but {} content", e.id, e.kind, e.content.kind())));
+            return Err(AppError::validation("content", format!("entry {} has kind {} but {} content", e.id, e.kind, e.content.kind())));
         }
         let mut host_ids = Vec::with_capacity(e.host_ids.len());
         for h in &e.host_ids {
@@ -598,9 +594,9 @@ impl Ctx<'_> {
         let upload = match (&e.attachment, &content) {
             (Some(a), _) if wants_attachment => Some((a.mime.clone(), crate::log::decode_attachment(a)?)),
             (None, LogContent::Screenshot { .. }) => {
-                return Err(invalid("attachment", format!("screenshot entry {} has no image", e.id)));
+                return Err(AppError::validation("attachment", format!("screenshot entry {} has no image", e.id)));
             }
-            (Some(_), _) => return Err(invalid("attachment", format!("entry {} takes no attachment", e.id))),
+            (Some(_), _) => return Err(AppError::validation("attachment", format!("entry {} takes no attachment", e.id))),
             _ => None,
         };
         let att_id = upload.as_ref().map(|_| uuid::Uuid::new_v4().to_string());
@@ -636,7 +632,7 @@ impl Ctx<'_> {
         let eng = n.engagement_id.as_str();
         self.engagement_ref(eng)?;
         if n.body.len() > crate::notes::MAX_BODY {
-            return Err(invalid("body", format!("note {} is longer than 1 MiB", n.owner_id)));
+            return Err(AppError::validation("body", format!("note {} is longer than 1 MiB", n.owner_id)));
         }
         let (owner, host_id) = match &n.host_id {
             None if n.owner_id == eng => (eng.to_string(), None),
@@ -644,7 +640,7 @@ impl Ctx<'_> {
                 let h = self.host_ref(eng, h, "hostId")?;
                 (h.clone(), Some(h))
             }
-            _ => return Err(invalid("ownerId", format!("note owner {} does not match its host", n.owner_id))),
+            _ => return Err(AppError::validation("ownerId", format!("note owner {} does not match its host", n.owner_id))),
         };
         if self.find("SELECT owner_id FROM notes WHERE owner_id = ?1", [&owner])?.is_some() {
             // A merged host whose user-made host already has a note: the user's note is never touched; the
@@ -685,7 +681,7 @@ impl Ctx<'_> {
         let eng = i.engagement_id.as_str();
         self.engagement_ref(eng)?;
         if i.goal_id.trim().is_empty() {
-            return Err(invalid("goalId", "goal id is required".into()));
+            return Err(AppError::validation("goalId", "goal id is required"));
         }
         let owner = if i.owner_id == eng { eng.to_string() } else { self.host_ref(eng, &i.owner_id, "ownerId")? };
         for ev in &i.evidence {
@@ -713,14 +709,14 @@ impl Ctx<'_> {
         let via = self.host_ref(eng, &t.via_host_id, "viaHostId")?;
         // The rules network.rs applies on every edit.
         if t.subnets.len() > crate::network::MAX_SUBNETS {
-            return Err(invalid("subnets", format!("tunnel {} has too many subnets", t.id)));
+            return Err(AppError::validation("subnets", format!("tunnel {} has too many subnets", t.id)));
         }
         if let Some(bad) = t.subnets.iter().find(|c| !crate::engagements::valid_cidr(c.trim())) {
-            return Err(invalid("subnets", format!("tunnel {}: invalid IPv4 CIDR: {bad}", t.id)));
+            return Err(AppError::validation("subnets", format!("tunnel {}: invalid IPv4 CIDR: {bad}", t.id)));
         }
         let cb = t.callback_ip.trim();
         if !cb.is_empty() && (cb.contains('/') || !crate::engagements::valid_cidr(cb)) {
-            return Err(invalid("callbackIp", format!("tunnel {}: callback must be a single IPv4 address", t.id)));
+            return Err(AppError::validation("callbackIp", format!("tunnel {}: callback must be a single IPv4 address", t.id)));
         }
         if self.exists("tunnels", &t.id)? {
             return Ok(false);
@@ -740,11 +736,11 @@ impl Ctx<'_> {
         let to = self.host_ref(eng, &h.to_host_id, "toHostId")?;
         let from = self.opt_host_ref(eng, &h.from_host_id, "fromHostId")?;
         if from.as_deref() == Some(to.as_str()) {
-            return Err(invalid("toHostId", format!("hop {} goes from a host to itself", h.id)));
+            return Err(AppError::validation("toHostId", format!("hop {} goes from a host to itself", h.id)));
         }
         let log_entry_id = self.opt_entry_ref(eng, &h.log_entry_id, "logEntryId")?;
         if h.via.trim().is_empty() {
-            return Err(invalid("via", format!("hop {} has no via", h.id)));
+            return Err(AppError::validation("via", format!("hop {} has no via", h.id)));
         }
         if self.exists("hops", &h.id)? {
             return Ok(false);
@@ -762,13 +758,13 @@ impl Ctx<'_> {
         self.engagement_ref(eng)?;
         // The rules findings.rs applies on every edit.
         if f.title.trim().is_empty() {
-            return Err(invalid("title", format!("finding {} has no title", f.id)));
+            return Err(AppError::validation("title", format!("finding {} has no title", f.id)));
         }
         if f.cvss_score.is_some_and(|s| !(0.0..=10.0).contains(&s)) {
-            return Err(invalid("cvssScore", format!("finding {} has a CVSS score outside 0-10", f.id)));
+            return Err(AppError::validation("cvssScore", format!("finding {} has a CVSS score outside 0-10", f.id)));
         }
         if f.refs.len() > crate::findings::MAX_REFS || f.refs.iter().any(|r| r.trim().is_empty()) {
-            return Err(invalid("refs", format!("finding {}: at most 100 non-blank references", f.id)));
+            return Err(AppError::validation("refs", format!("finding {}: at most 100 non-blank references", f.id)));
         }
         for (field, text) in [
             ("description", &f.description),
@@ -778,7 +774,7 @@ impl Ctx<'_> {
             ("lessons", &f.lessons),
         ] {
             if text.len() > crate::findings::MAX_CONTENT {
-                return Err(invalid(field, format!("finding {}: {field} is longer than 1 MiB", f.id)));
+                return Err(AppError::validation(field, format!("finding {}: {field} is longer than 1 MiB", f.id)));
             }
         }
         let host_ids = dedupe(f.host_ids.iter().map(|h| self.host_ref(eng, h, "hostIds")).collect::<AppResult<_>>()?);
@@ -819,7 +815,7 @@ impl Ctx<'_> {
         self.engagement_ref(eng)?;
         let local_host = self.opt_host_ref(eng, &c.local_host_id, "localHostId")?;
         if (c.scope == "local") != local_host.is_some() {
-            return Err(invalid("localHostId", format!("credential {}: only a local credential has a host", c.id)));
+            return Err(AppError::validation("localHostId", format!("credential {}: only a local credential has a host", c.id)));
         }
         let source_host = self.opt_host_ref(eng, &c.source_host_id, "sourceHostId")?;
         let mut links = [None, None];
@@ -827,7 +823,7 @@ impl Ctx<'_> {
             if let Some(l) = link {
                 let l = self.cred_ref(eng, l, field)?;
                 if l == c.id {
-                    return Err(invalid(field, format!("credential {} links to itself", c.id)));
+                    return Err(AppError::validation(field, format!("credential {} links to itself", c.id)));
                 }
                 *slot = Some(l);
             }
@@ -877,7 +873,7 @@ impl Ctx<'_> {
         let eng = u.engagement_id.as_str();
         self.engagement_ref(eng)?;
         if u.username.trim().is_empty() {
-            return Err(invalid("username", format!("username {} is blank", u.id)));
+            return Err(AppError::validation("username", format!("username {} is blank", u.id)));
         }
         let source_host = self.opt_host_ref(eng, &u.source_host_id, "sourceHostId")?;
         if self.exists("usernames", &u.id)? {
@@ -907,7 +903,7 @@ impl Ctx<'_> {
         let host = self.host_ref(eng, &g.host_id, "hostId")?;
         let log_entry_id = self.opt_entry_ref(eng, &g.log_entry_id, "logEntryId")?;
         if g.via.trim().is_empty() {
-            return Err(invalid("via", format!("access grant {} has no via", g.id)));
+            return Err(AppError::validation("via", format!("access grant {} has no via", g.id)));
         }
         if self.exists("access_grants", &g.id)? {
             return Ok(false);
@@ -928,7 +924,7 @@ impl Ctx<'_> {
         let host = self.host_ref(eng, &a.host_id, "hostId")?;
         let log_entry_id = self.opt_entry_ref(eng, &a.log_entry_id, "logEntryId")?;
         if a.port.is_some_and(|p| !(1..=65535).contains(&p)) {
-            return Err(invalid("port", format!("attempt {} has a port outside 1-65535", a.id)));
+            return Err(AppError::validation("port", format!("attempt {} has a port outside 1-65535", a.id)));
         }
         if self.exists("cred_attempts", &a.id)? {
             return Ok(false);

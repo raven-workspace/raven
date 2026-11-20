@@ -275,10 +275,7 @@ impl Vault {
         let password = normalize_password(password);
         // Counts Unicode scalar values of the NFC form.
         if password.chars().count() < MIN_PASSWORD_CHARS {
-            return Err(AppError::Validation {
-                field: "password".into(),
-                message: format!("password must be at least {MIN_PASSWORD_CHARS} characters"),
-            });
+            return Err(AppError::validation("password", format!("password must be at least {MIN_PASSWORD_CHARS} characters")));
         }
         if self.exists() {
             return Err(AppError::VaultExists);
