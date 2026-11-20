@@ -1,0 +1,67 @@
+@use "@/styles/abstracts" as *;
+
+// A command with its Copy button. Wrapped (default), each space-separated token never breaks inside itself; unwrapped,
+// the line scrolls and fades out at the right edge.
+@layer components {
+  .command-block {
+    display: grid;
+    gap: var(--space-xs);
+  }
+
+  .command-block__label {
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .command-block__box {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 28px;
+    align-items: start;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+  }
+
+  // Joined to what follows (a filled preview's notes).
+  .command-block__box--attached {
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+
+  .command-block__text {
+    min-width: 0;
+    @include type(code);
+    color: var(--fg-2);
+  }
+
+  .command-block__text--wrap {
+    overflow-x: hidden;
+    white-space: pre-wrap;
+  }
+
+  .command-block__text--scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-right: var(--space-xl);
+    padding-bottom: var(--space-md);
+    white-space: pre;
+    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  }
+
+  .command-block__token {
+    display: inline-block;
+  }
+
+  .command-block__text--wrap .command-block__token {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  // An unresolved {PLACEHOLDER} or a flagged token.
+  .command-block__warn {
+    background-color: transparent;
+    color: var(--warn);
+  }
+}

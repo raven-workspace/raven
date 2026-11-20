@@ -1,0 +1,49 @@
+@use "@/styles/abstracts" as *;
+
+@layer components {
+  // One hint: its key caps, then its label.
+  .hint {
+    display: inline-grid;
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: start;
+    gap: 6px;
+    @include type(meta);
+    color: var(--muted-2);
+    white-space: nowrap;
+  }
+
+  // "⌥H ⌥C" is two caps side by side in one hint.
+  .hint__keys {
+    display: inline-grid;
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: start;
+    gap: var(--space-xs);
+  }
+
+  // Fills its parent's width; hints that don't fit are dropped (lowest priority first) behind "?".
+  .hint-line {
+    display: grid;
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: start;
+    column-gap: var(--space-xl);
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .hint-line__more {
+    display: inline-grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+
+    @media (hover: hover) {
+      &:hover {
+        opacity: 0.8;
+      }
+    }
+  }
+}

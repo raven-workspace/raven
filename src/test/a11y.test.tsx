@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { CommandList } from "../features/checklist/CommandList";
+import { CommandList } from "../features/checklist/CommandList/CommandList";
 import { TitleBarButton } from "../ui/TitleBar";
 
 describe("a11y leftovers", () => {

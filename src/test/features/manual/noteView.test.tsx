@@ -9,9 +9,9 @@ import type { CardMeta } from "../../../engines/library/store";
 import { parseNote, type ManualNote } from "../../../engines/manual";
 import { useArsenalStore } from "../../../features/arsenal/useArsenalStore";
 import { logCommand } from "../../../features/capture/logCommand";
-import { NoteTable } from "../../../features/manual/NoteTable";
+import { NoteTable } from "../../../features/manual/NoteTable/NoteTable";
 import { useManualStatus } from "../../../features/manual/useManualStatus";
-import { NoteView } from "../../../features/manual/NoteView";
+import { NoteView } from "../../../features/manual/NoteView/NoteView";
 import { api } from "../../../lib/api";
 import { makeQueryClient } from "../../../lib/queryClient";
 import type { Engagement } from "../../../types/engagement";
@@ -121,7 +121,7 @@ describe("NoteView links", () => {
     mount();
     const el = screen.getByText("Missing Page");
     expect(el.closest("a,button")).toBeNull();
-    expect(el).toHaveClass("text-muted");
+    expect(el).toHaveClass("note-view__unresolved");
   });
 });
 
@@ -143,7 +143,7 @@ describe("NoteView link titles", () => {
     mount();
     const el = screen.getByText("Shell Stabilization");
     expect(el.closest("a,button")).toBeNull();
-    expect(el).toHaveClass("text-muted");
+    expect(el).toHaveClass("note-view__unresolved");
   });
 });
 
@@ -269,7 +269,7 @@ describe("NoteView commands", () => {
     const user = userEvent.setup();
     mount();
     const line = await screen.findByText("Not allowed in the exam");
-    expect(line).toHaveClass("text-warn");
+    expect(line).toHaveClass("manual-command__rule--warn");
     // The note text is never hidden.
     expect(screen.getByText((_, el) => el?.tagName === "PRE" && el.textContent === "sqlmap -u http://198.51.100.20/zz")).toBeInTheDocument();
     await navigator.clipboard.writeText("untouched");
@@ -382,8 +382,8 @@ describe("NoteView tables", () => {
     const { container } = mount(FLAGS);
     const cells = cellsOf(container);
     const [key1, desc1, key2, desc2, key3] = cells;
-    for (const c of [key1, key2, key3]) expect(c).toHaveClass("whitespace-nowrap");
-    for (const c of [desc1, desc2, cells[5], cells[7]]) expect(c).not.toHaveClass("whitespace-nowrap");
+    for (const c of [key1, key2, key3]) expect(c).toHaveClass("note-table__cell--key");
+    for (const c of [desc1, desc2, cells[5], cells[7]]) expect(c).not.toHaveClass("note-table__cell--key");
   });
 
   it("code in a key cell is plain code, never an inline command", () => {
@@ -399,7 +399,7 @@ describe("NoteView tables", () => {
     const { container } = mount(FLAGS);
     const long = cellsOf(container)[6];
     expect(long).toHaveTextContent("--zz-listen-address 192.0.2.10:8443");
-    expect(long).not.toHaveClass("whitespace-nowrap");
+    expect(long).not.toHaveClass("note-table__cell--key");
   });
 
   it("when the one-line keys can't fit, the table stacks instead of overflowing, and its keys may wrap again", () => {
@@ -407,8 +407,8 @@ describe("NoteView tables", () => {
     const { container } = mount(FLAGS);
     const table = container.querySelector("table")!;
     expect(table).toHaveAttribute("data-stacked");
-    // Stacked, the no-wrap is lifted so a key never overflows its value track.
-    expect(cellsOf(container)[0]).toHaveClass("group-data-stacked/nt:whitespace-normal");
+    // Stacked, the no-wrap is lifted so a key never overflows its value track (NoteTable.scss: `[data-stacked] .note-table__cell--key`).
+    expect(cellsOf(container)[0]).toHaveClass("note-table__cell--key");
     expect(cellsOf(container)[0]).toHaveAccessibleName(/^Flag\s*-m MODE$/);
   });
 
@@ -424,14 +424,15 @@ describe("NoteView tables", () => {
     widths(500, 600);
     const { container } = mount(COLS);
     const ths = [...container.querySelectorAll("thead th")] as HTMLElement[];
-    expect(ths[2]).toHaveClass("min-w-[32ch]");
+    expect(ths[2]).toHaveClass("note-table__col--action");
     expect(ths[1]).toHaveAttribute("data-col", "low");
     expect(ths[0]).not.toHaveAttribute("data-col");
     const tds = cellsOf(container);
-    expect(tds[2]).toHaveClass("min-w-[32ch]");
+    expect(tds[2]).toHaveClass("note-table__col--action");
     expect(tds[1]).toHaveAttribute("data-col", "low");
     expect(tds[0]).not.toHaveAttribute("data-col");
-    expect(ths[1]).toHaveClass("group-data-[dropped=low]/nt:hidden!");
+    // Hidden by `[data-dropped="low"] [data-col="low"]` (NoteTable.scss).
+    expect(ths[1].closest("table")).toHaveClass("note-table");
   });
 
   it("drops the cause column only when that is what makes the table fit; else stacks", () => {
@@ -465,20 +466,22 @@ describe("NoteView tables", () => {
     const label = key.querySelector("[data-column-label]")!;
     // Never a bare `sr-only` (position:absolute escapes the note's scroller and stretches the document): display:none as a
     // table (the th names the column), screen-reader-only only while stacked.
-    expect(label).toHaveClass("hidden", "group-data-stacked/nt:block", "group-data-stacked/nt:sr-only");
+    expect(label).toHaveClass("note-table__label", "note-table__label--key");
     expect(label.classList.contains("sr-only")).toBe(false);
     const value = key.querySelector("span:not([data-column-label])")!;
-    expect(value).toHaveClass("group-data-stacked/nt:font-semibold", "group-data-stacked/nt:text-fg");
-    expect(key).toHaveClass("group-data-stacked/nt:col-span-2");
+    expect(value).toHaveClass("note-table__value--key");
+    expect(key).toHaveClass("note-table__cell");
     // Other cells keep their visible name.
-    expect(cellsOf(container)[2].querySelector("[data-column-label]")).toHaveClass("group-data-stacked/nt:block");
+    const other = cellsOf(container)[2].querySelector("[data-column-label]")!;
+    expect(other).toHaveClass("note-table__label");
+    expect(other).not.toHaveClass("note-table__label--key");
   });
 
   it("a short inline code token never wraps inside; a long or spaced one may", () => {
     const note = parseNote("04-Foundations/Zz-Codes.md", "# Zz Codes\nSee `\\\\zzfs01.example.test\\pipe\\zz` and `zz --flag value`.\n")!;
     mount(note);
-    expect(screen.getByText("\\\\zzfs01.example.test\\pipe\\zz")).toHaveClass("whitespace-nowrap");
-    expect(screen.getByText("zz --flag value")).not.toHaveClass("whitespace-nowrap");
+    expect(screen.getByText("\\\\zzfs01.example.test\\pipe\\zz")).toHaveClass("note-view__code--token");
+    expect(screen.getByText("zz --flag value")).not.toHaveClass("note-view__code--token");
   });
 });
 
@@ -509,7 +512,7 @@ describe("NoteView emphasis around code", () => {
 describe("safe Markdown", () => {
   it("the Manual never injects HTML", () => {
     const root = join(__dirname, "..", "..", "..", "..");
-    for (const f of ["src/engines/manual/anchors.ts", "src/engines/manual/markdown.ts", "src/engines/manual/links.ts", "src/features/manual/NoteView.tsx", "src/features/manual/NoteTable.tsx", "src/features/manual/ManualCommand.tsx"]) {
+    for (const f of ["src/engines/manual/anchors.ts", "src/engines/manual/markdown.ts", "src/engines/manual/links.ts", "src/features/manual/NoteView/NoteView.tsx", "src/features/manual/NoteTable/NoteTable.tsx", "src/features/manual/ManualCommand/ManualCommand.tsx"]) {
       expect(readFileSync(join(root, f), "utf8"), f).not.toMatch(/dangerouslySetInnerHTML|innerHTML|outerHTML|insertAdjacentHTML/);
     }
   });

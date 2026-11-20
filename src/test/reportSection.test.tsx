@@ -8,12 +8,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { api, resetAuditState } from "../audit/fakeApi";
 import { reportSchema } from "../features/report/editor/extension";
-import { ReportSectionView } from "../features/report/ReportSection";
+import { ReportSectionView } from "../features/report/ReportSection/ReportSection";
 import { pruneRemoved } from "../features/report/queries";
 import { DRAFT_LAYOUT, needsFlatten, PAGE_NODE_TYPES, placedIdsIn, type ReportNode, type SectionMeta } from "../engines/report";
 import { discardReports, flushReports, queueReportSave } from "../features/report/saveQueue";
-import { ReportTabs, type TabItem } from "../features/report/ReportTabs";
-import { CheckList, TodoPanel } from "../features/report/TodoPanel";
+import { ReportTabs, type TabItem } from "../features/report/ReportTabs/ReportTabs";
+import { CheckList, TodoPanel } from "../features/report/TodoPanel/TodoPanel";
 import { makeQueryClient } from "../lib/queryClient";
 import type { LogContent, LogEntryInput } from "../types/log";
 import { RavenError } from "../types/errors";
@@ -31,8 +31,8 @@ vi.mock("../audit/fixtures", async (importOriginal) => {
 
 // The real editor, with a handle on its instance so a test can type into the page.
 const editors: Editor[] = [];
-vi.mock("../features/report/editor/ReportEditor", async (importOriginal) => {
-  const real = await importOriginal<typeof import("../features/report/editor/ReportEditor")>();
+vi.mock("../features/report/editor/ReportEditor/ReportEditor", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../features/report/editor/ReportEditor/ReportEditor")>();
   return {
     ...real,
     ReportEditor: (props: ComponentProps<typeof real.ReportEditor>) => (
@@ -199,7 +199,7 @@ describe("Report view", () => {
     expect(screen.queryByRole("region", { name: "To do" })).toBeNull();
     const state = rowFor("lnx02").querySelector<HTMLElement>("[data-tab-state]")!;
     expect(state.textContent).toMatch(/^\d+ to do$/);
-    expect(state).toHaveClass("text-warn");
+    expect(state).toHaveClass("report-tab__state--todo");
     fireEvent.click(state);
     const panel = await screen.findByRole("region", { name: "To do" });
     await waitFor(() => expect(rowFor("lnx02")).toHaveAttribute("aria-selected", "true"));

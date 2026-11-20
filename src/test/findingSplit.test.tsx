@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { useArsenalStore } from "../features/arsenal/useArsenalStore";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
-import { toDraft } from "../features/findings/FindingEditor";
+import { toDraft } from "../features/findings/FindingEditor/FindingEditor";
 import { useFindingDraftStore } from "../features/findings/useFindingDraftStore";
 import { resetNotesStore } from "../features/notes/useNotesStore";
 import { api } from "../lib/api";
@@ -547,7 +547,7 @@ describe("finding split: services list inside the editor pane", () => {
     const list = await within(form).findByTestId("service-list");
     // jsdom has no layout: the classes are the contract here. The list is its own scroll pane, so it pads like one
     // (overlay scrollbars sit over its own content, not the editor pane's); Playwright checks pixels.
-    expect(list).toHaveClass("overflow-y-auto", "p-1", "pr-3");
+    expect(list).toHaveClass("scroll-pane");
   });
 });
 

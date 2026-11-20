@@ -7,7 +7,7 @@ import { Decoration } from "prosekit/pm/view";
 import type { HighlightParser } from "prosekit/extensions/code-block";
 // The findings code view registers the app's languages on the shared highlight.js core; the page adds the ones its
 // evidence needs (raw HTTP, JSON, SQL, HTML).
-import { LANGUAGES } from "../../findings/CodeView";
+import { LANGUAGES } from "../../findings/CodeView/CodeView";
 
 for (const [name, def] of Object.entries({ http, json, sql, xml })) if (!hljs.getLanguage(name)) hljs.registerLanguage(name, def);
 

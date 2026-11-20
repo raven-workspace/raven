@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { cx } from "../lib/cx";
 import { X } from "@phosphor-icons/react";
 import { IconButton } from "./IconButton";
+import "./Dialog.scss";
 
 export interface DialogProps {
   open: boolean;
@@ -40,7 +41,7 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
     <RD.Root open={open} onOpenChange={onOpenChange}>
       <RD.Portal>
         {/* Overlay and panel share one layer, so a dialog opened from a dialog (a delete confirm) dims the one below. */}
-        <RD.Overlay ref={overlayRef} className="raven-overlay fixed inset-0 z-50 bg-bg/80" />
+        <RD.Overlay ref={overlayRef} className="raven-overlay dialog-overlay" />
         <RD.Content
           ref={contentRef}
           {...(description ? {} : { "aria-describedby": undefined })}
@@ -55,30 +56,21 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
             );
             (first ?? root).focus();
           }}
-          className={cx(
-            "raven-dialog fixed left-1/2 z-50 flex -translate-x-1/2 flex-col",
-            size === "xl"
-              ? "top-[6vh] max-h-[calc(94vh-24px)] w-[min(820px,calc(100vw-32px))]"
-              : size === "lg"
-                ? "top-[8vh] max-h-[calc(92vh-24px)] w-[min(560px,calc(100vw-32px))]"
-                : "top-[18vh] max-h-[calc(82vh-24px)] w-[min(480px,calc(100vw-32px))]",
-            "rounded border border-line-2 bg-surface text-fg-2",
-            className,
-          )}
+          className={cx("raven-dialog dialog", `dialog--${size}`, className)}
         >
-          <header className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b border-line px-4 py-3">
-            <div className="min-w-0">
-              <RD.Title className="m-0 text-heading text-fg">{title}</RD.Title>
+          <header className="dialog__header">
+            <div className="dialog__heading">
+              <RD.Title className="dialog__title">{title}</RD.Title>
               {description && (
-                <RD.Description className="m-0 mt-1 text-meta text-muted">{description}</RD.Description>
+                <RD.Description className="dialog__description">{description}</RD.Description>
               )}
             </div>
             <RD.Close asChild>
               <IconButton icon={X} label="Close" shortcut="Esc" />
             </RD.Close>
           </header>
-          {children !== undefined && <div data-popup-bounds="" className="min-h-0 overflow-y-auto px-4 py-4">{children}</div>}
-          {footer && <footer className="flex shrink-0 justify-end gap-2 border-t border-line px-4 py-3">{footer}</footer>}
+          {children !== undefined && <div data-popup-bounds="" className="dialog__body">{children}</div>}
+          {footer && <footer className="dialog__footer">{footer}</footer>}
         </RD.Content>
       </RD.Portal>
     </RD.Root>

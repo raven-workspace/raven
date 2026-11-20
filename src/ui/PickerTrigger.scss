@@ -1,0 +1,52 @@
+@use "@/styles/abstracts" as *;
+
+// A context picker button: "Host  192.0.2.10 v". An unset value says "Pick one" in warn.
+@layer components {
+  .picker-trigger {
+    display: inline-grid;
+    grid-auto-flow: column;
+    align-items: center;
+    gap: var(--space-sm);
+    max-width: 100%;
+    height: 1.75rem;
+    padding-inline: var(--space-sm);
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius-sm);
+    background-color: transparent;
+    text-align: left;
+    user-select: none;
+    cursor: default;
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--surface-hi);
+      }
+    }
+  }
+
+  .picker-trigger__prefix {
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .picker-trigger__value {
+    min-width: 0;
+    @include truncate;
+    @include type(body);
+    color: var(--fg);
+  }
+
+  // A clue says the value may be wrong (the value itself stays).
+  .picker-trigger__value--warn {
+    color: var(--warn);
+  }
+
+  .picker-trigger__placeholder {
+    @include type(body);
+    color: var(--warn);
+  }
+
+  .picker-trigger__caret {
+    color: var(--fg-2);
+  }
+}

@@ -2,8 +2,8 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { HostChip, isHostPickKey } from "../features/arsenal/HostChip";
-import type { HostChipHandle } from "../features/arsenal/HostChip";
+import { HostChip, isHostPickKey } from "../features/arsenal/HostChip/HostChip";
+import type { HostChipHandle } from "../features/arsenal/HostChip/HostChip";
 import type { Host } from "../types/host";
 
 const host = (id: string, name: string, ip: string | null): Host => ({
@@ -58,7 +58,9 @@ describe("HostChip", () => {
     const user = userEvent.setup();
     const { chip } = setup();
     await user.click(chip());
-    expect(screen.getByRole("listbox").className).toContain("min-w-[max(100%,12rem)]");
+    // ChipPicker.scss: the list is at least as wide as the trigger (min-width: max(100%, 12rem)) unless `wide`.
+    expect(screen.getByRole("listbox")).toHaveClass("chip-picker__list");
+    expect(screen.getByRole("listbox")).not.toHaveClass("chip-picker__list--wide");
   });
 
   it("typing while focus is elsewhere never changes the host", async () => {

@@ -120,7 +120,7 @@ describe("board", () => {
     const foot = column("Vulnerability detection");
     expect(within(foot).getByText("1")).toBeInTheDocument();
     const card = within(foot).getByRole("link", { name: /dc01/ });
-    expect(within(card).getByText("10.10.10.5")).toHaveClass("font-mono");
+    expect(within(card).getByText("10.10.10.5")).toHaveClass("board-card__ip");
     // OS is metadata: brand icon plus its name as text, never a chip.
     const os = within(card).getByText("Windows");
     expect(os).not.toHaveAttribute("data-variant");

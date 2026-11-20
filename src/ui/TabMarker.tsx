@@ -1,5 +1,7 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
 import { useFadeOnChange } from "./motion";
+import { cx } from "../lib/cx";
+import "./TabMarker.scss";
 
 const TAB = { selected: '[role="tab"][aria-selected="true"]', items: '[role="tab"]', attributes: ["aria-selected"] };
 
@@ -74,7 +76,7 @@ export function TabMarker({ className, follow = TAB }: {
       ref={ref}
       aria-hidden
       data-tab-marker
-      className={`pointer-events-none absolute top-0 left-0 -z-10 opacity-0 transition-[transform,width,height] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${className}`}
+      className={cx("tab-marker", className)}
     />
   );
 }

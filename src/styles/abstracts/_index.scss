@@ -1,0 +1,6 @@
+// Shared SCSS for component stylesheets. Every component .scss starts with:
+//   @use "@/styles/abstracts" as *;
+// Runtime design tokens stay CSS custom properties in src/styles/tokens.css (one source, readable from JS and
+// page.css); SCSS adds only what CSS variables can't do: mixins, and values media queries need at build time.
+@forward "layers";
+@forward "mixins";

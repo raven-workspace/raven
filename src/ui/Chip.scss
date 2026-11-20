@@ -1,0 +1,44 @@
+@use "@/styles/abstracts" as *;
+
+@layer components {
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    height: 22px;
+    padding-inline: var(--space-sm);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-full);
+    @include type(label);
+    white-space: nowrap;
+    color: var(--fg-2);
+  }
+
+  .chip--mono {
+    @include mono;
+  }
+
+  // Only when it means something: held access, confirmed.
+  .chip--accent {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  // Dead, locked or errored.
+  .chip--warn {
+    border-color: var(--warn);
+    color: var(--warn);
+  }
+
+  // The one wrapping flex: a set of chips (or legend units) that may flow onto several lines.
+  .chip-set {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+  }
+
+  .chip-set--wide {
+    column-gap: var(--space-xl);
+    row-gap: var(--space-sm);
+  }
+}

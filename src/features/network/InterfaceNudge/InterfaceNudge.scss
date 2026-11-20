@@ -1,0 +1,104 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  // A group like the fact groups below it: label over a hairline.
+  .interface-nudge {
+    display: grid;
+    gap: var(--space-xs);
+    padding-bottom: var(--space-lg);
+  }
+
+  .interface-nudge__header {
+    display: grid;
+    min-height: 2rem;
+    grid-template-columns: 16px minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--space-sm);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .interface-nudge__title {
+    grid-column-start: 2;
+    @include truncate;
+  }
+
+  .interface-nudge__error {
+    @include type(meta);
+    color: var(--warn);
+  }
+
+  .interface-nudge__list {
+    display: grid;
+    list-style-type: none;
+  }
+
+  // The facts column is narrow: the sentence and Dismiss share the first line, the action takes the second.
+  .interface-nudge__item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 28px;
+    align-items: flex-start;
+    column-gap: var(--space-sm);
+    row-gap: var(--space-xs);
+    border-bottom: 1px solid var(--line);
+    padding-block: var(--space-sm);
+
+    &:last-child {
+      border-bottom-width: 0;
+    }
+  }
+
+  .interface-nudge__text {
+    min-width: 0;
+    padding-block: var(--space-xs);
+    @include type(body);
+    color: var(--fg-2);
+  }
+
+  .interface-nudge__nowrap {
+    white-space: nowrap;
+  }
+
+  // The subnet: an underlined mono button that opens the logged command.
+  .interface-nudge__subnet {
+    margin-block: -0.125rem;
+    display: inline-grid;
+    min-height: 1.5rem;
+    align-items: center;
+    cursor: default;
+    @include type(code);
+    color: var(--fg);
+    text-decoration-line: underline;
+    text-decoration-color: var(--line-strong);
+    text-underline-offset: 4px;
+  }
+
+  @media (hover: hover) {
+    .interface-nudge__subnet:enabled:hover {
+      text-decoration-color: var(--fg);
+    }
+  }
+
+  .interface-nudge__subnet:disabled {
+    text-decoration-line: none;
+  }
+
+  .interface-nudge__accept {
+    justify-self: flex-start;
+  }
+
+  // Virtual adapters: one quiet line, hairline-separated.
+  .interface-nudge__also {
+    display: grid;
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: flex-start;
+    column-gap: var(--space-sm);
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .interface-nudge__also-item {
+    border-left: 1px solid var(--line-strong);
+    padding-left: var(--space-sm);
+  }
+}

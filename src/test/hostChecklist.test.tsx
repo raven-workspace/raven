@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
-import { GoalRow } from "../features/checklist/GoalRow";
+import { GoalRow } from "../features/checklist/GoalRow/GoalRow";
 import { setImported } from "../engines/library/store";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { useCredPickStore } from "../features/checklist/credPick";
@@ -154,7 +154,7 @@ describe("host checklist tab", () => {
     await openChecklist(user);
     const marks = await screen.findAllByText("{USER}");
     expect(marks[0].tagName).toBe("MARK");
-    expect(marks[0]).toHaveClass("text-warn");
+    expect(marks[0]).toHaveClass("command-block__warn");
   });
 
   it("exam-sim host shows no banned command", async () => {
@@ -203,7 +203,7 @@ describe("host checklist tab", () => {
     mount();
     await openChecklist(user);
     const notes = await screen.findAllByText(/via tunnel on web07/);
-    expect(notes[0]).toHaveClass("text-warn");
+    expect(notes[0]).toHaveClass("chip--warn");
     expect(notes[0]).toHaveTextContent("(down)");
   });
 

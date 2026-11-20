@@ -1,0 +1,94 @@
+@use "@/styles/abstracts/index" as *;
+
+// A saved finding's files: the list, each with its highlighted code, and the add / edit file form.
+@layer features {
+  .finding-files {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .finding-files__header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .finding-files__error {
+    @include type(meta);
+    color: var(--warn);
+  }
+
+  .finding-files__hint {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .finding-files__list {
+    display: grid;
+  }
+
+  .finding-files__file {
+    display: grid;
+    gap: var(--space-sm);
+    padding-block: var(--space-sm);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .finding-files__file-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content max-content;
+    align-items: center;
+    gap: var(--space-md);
+  }
+
+  .finding-files__file-name {
+    @include truncate;
+    @include type(code);
+    color: var(--fg);
+  }
+
+  .finding-files__file-meta {
+    display: grid;
+    grid-auto-flow: column;
+    gap: var(--space-sm);
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .finding-files__modified {
+    color: var(--accent);
+  }
+
+  .finding-files__form {
+    display: grid;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius-sm);
+  }
+
+  .finding-files__pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-md);
+  }
+
+  .finding-files__toggle {
+    display: grid;
+    justify-items: start;
+  }
+
+  .finding-files__form-actions {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .finding-files__form-hint {
+    @include truncate;
+    @include type(meta);
+    color: var(--muted);
+  }
+}

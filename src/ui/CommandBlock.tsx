@@ -1,7 +1,9 @@
 import { Check, Copy } from "@phosphor-icons/react";
 import { Fragment } from "react";
 import { copyPlain, copySecret } from "../lib/clipboard";
+import { cx } from "../lib/cx";
 import { useFlash } from "./motion";
+import "./CommandBlock.scss";
 import { reportError } from "../lib/lockSignal";
 import { highlight as highlightText, rangesOf } from "./highlight";
 import { IconButton } from "./IconButton";
@@ -50,7 +52,6 @@ function marks(token: string, re: RegExp | null): { text: string; warn: boolean 
 }
 
 export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, copyText, copyLabel, onCopyAction, highlight, wrap = true, copyTabIndex, attached }: CommandBlockProps) {
-  const token = wrap ? "inline-block max-w-full [overflow-wrap:anywhere]" : "inline-block";
   const [copied, flashDone] = useFlash(1200);
   const pattern = [...(placeholders ? ["\\{[A-Za-z0-9_]+\\}"] : []), ...[...(tokens ?? [])].sort((a, b) => b.length - a.length).map(escapeRegExp)];
   const re = pattern.length > 0 ? new RegExp(`(${pattern.join("|")})`) : null;
@@ -60,11 +61,11 @@ export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, 
   const starts: number[] = [];
   if (found.length > 0) pieces.reduce((at, t) => (starts.push(at), at + t.length), 0);
   return (
-    <div className="grid gap-1">
-      {label && <span className="text-meta text-muted-2">{label}</span>}
-      <div className={`grid grid-cols-[minmax(0,1fr)_28px] items-start gap-2 rounded-sm border border-line bg-surface px-2 py-2${attached ? " rounded-b-none" : ""}`}>
+    <div className="command-block">
+      {label && <span className="command-block__label">{label}</span>}
+      <div className={cx("command-block__box", attached && "command-block__box--attached")}>
         <pre
-          className={wrap ? "m-0 min-w-0 overflow-x-hidden font-mono text-code whitespace-pre-wrap text-fg-2" : "m-0 min-w-0 overflow-x-auto overflow-y-hidden pr-6 pb-3 font-mono text-code whitespace-pre text-fg-2 [mask-image:linear-gradient(to_right,#000_calc(100%-24px),transparent)]"}
+          className={cx("command-block__text", wrap ? "command-block__text--wrap" : "command-block__text--scroll")}
           {...(name ? { role: "group", "aria-label": `Command: ${name}` } : {})}
         >
           <code>
@@ -73,8 +74,8 @@ export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, 
               if (found.length === 0) {
                 if (/^\s+$/.test(t)) return <Fragment key={i}>{t}</Fragment>;
                 return (
-                  <span key={i} data-token className={token}>
-                    {marks(t, re).map((m, j) => (m.warn ? <mark key={j} className="bg-transparent text-warn">{m.text}</mark> : m.text))}
+                  <span key={i} data-token className="command-block__token">
+                    {marks(t, re).map((m, j) => (m.warn ? <mark key={j} className="command-block__warn">{m.text}</mark> : m.text))}
                   </span>
                 );
               }
@@ -86,10 +87,10 @@ export function CommandBlock({ text, label, name, onCopy, placeholders, tokens, 
               // Each space-separated token never breaks (browsers would otherwise break after a hyphen), even around a
               // placeholder; the spaces between tokens are the only break points.
               return (
-                <span key={i} data-token className={token}>
+                <span key={i} data-token className="command-block__token">
                   {parts.map((m, j) => {
                     const shown = highlightText(m.text, partStarts[j], found);
-                    return m.warn ? <mark key={j} className="bg-transparent text-warn">{shown}</mark> : <Fragment key={j}>{shown}</Fragment>;
+                    return m.warn ? <mark key={j} className="command-block__warn">{shown}</mark> : <Fragment key={j}>{shown}</Fragment>;
                   })}
                 </span>
               );

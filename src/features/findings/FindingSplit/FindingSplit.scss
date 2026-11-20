@@ -1,0 +1,54 @@
+@use "@/styles/abstracts/index" as *;
+
+// Adding or editing a finding in place. From the host page's two-column width (760px of the `host` container) the
+// context and the form sit side by side; below it one pane shows at a time (data-pane) and a button flips them.
+@layer features {
+  .finding-split {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: var(--space-md);
+    height: 100%;
+    min-height: 0;
+  }
+
+  .finding-split__context {
+    display: none;
+    grid-template-rows: minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .finding-split[data-pane="context"] .finding-split__context {
+    display: grid;
+  }
+
+  // With .scroll-pane.
+  .finding-split__editor {
+    display: none;
+    min-width: 0;
+  }
+
+  .finding-split[data-pane="editor"] .finding-split__editor {
+    display: block;
+  }
+
+  @container host (min-width: 760px) {
+    .finding-split {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+      grid-template-rows: repeat(1, minmax(0, 1fr));
+      gap: var(--space-xl);
+    }
+
+    .finding-split__flip {
+      display: none;
+    }
+
+    .finding-split .finding-split__context {
+      display: grid;
+    }
+
+    .finding-split .finding-split__editor {
+      display: block;
+    }
+  }
+}

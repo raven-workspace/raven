@@ -1,0 +1,45 @@
+@use "sass:list";
+
+// A type role from DESIGN.md (tokens: --text-<role>, --text-<role>--line-height, and --text-<role>--font-weight for
+// title, heading, read-title and label). `code` is the monospace role: it also sets the family and turns ligatures off.
+$weighted-roles: (title, heading, read-title, label);
+
+// JetBrains Mono with ligatures off: `!=` drawn as one glyph misleads anyone retyping a command.
+@mixin mono {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
+
+// Colour-only state change (hover, press).
+@mixin transition-colors {
+  transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke;
+  transition-timing-function: var(--ease-standard);
+  transition-duration: var(--duration-fast);
+}
+
+@mixin type($role) {
+  font-size: var(--text-#{$role});
+  line-height: var(--text-#{$role}--line-height);
+  @if list.index($weighted-roles, $role) {
+    font-weight: var(--text-#{$role}--font-weight);
+  }
+  @if $role == code {
+    @include mono;
+  }
+}
+
+// At most $lines lines, the last ellipsized. It sets display, so a later display in the same rule overrides it.
+@mixin line-clamp($lines) {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: $lines;
+}
+
+// One line, ellipsized.
+@mixin truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

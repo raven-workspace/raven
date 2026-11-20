@@ -1,0 +1,22 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  // A screenshot at its own size, never stretched: it keeps its aspect ratio, shrinks to the column and stops at 420px tall.
+  .attachment-image {
+    align-self: start;
+    width: auto;
+    max-width: 100%;
+    height: auto;
+    max-height: 420px;
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius-sm);
+  }
+
+  // Its place while it loads.
+  .attachment-image__placeholder {
+    width: 100%;
+    height: 4rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+  }
+}

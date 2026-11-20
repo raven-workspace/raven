@@ -1,0 +1,39 @@
+@use "@/styles/abstracts" as *;
+
+// A bottom-left notice that closes itself; its left edge follows the sidebar (set inline).
+@layer components {
+  .timed-notice {
+    position: fixed;
+    bottom: var(--space-lg);
+    z-index: var(--z-popover);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: var(--space-sm) var(--space-md);
+    width: min(400px, calc(100vw - 2rem));
+    padding: var(--space-md);
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+    @include type(meta);
+  }
+
+  .timed-notice__body {
+    display: grid;
+    min-width: 0;
+  }
+
+  // With an action, the content spans both rows beside Close and the action.
+  .timed-notice__body--beside-action {
+    grid-row: span 2 / span 2;
+  }
+
+  .timed-notice__close,
+  .timed-notice__action {
+    justify-self: end;
+  }
+
+  .timed-notice__action {
+    display: grid;
+  }
+}

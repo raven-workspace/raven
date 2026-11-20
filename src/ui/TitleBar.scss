@@ -1,0 +1,106 @@
+@use "@/styles/abstracts" as *;
+
+// The 38px window chrome. Content is pinned to the window edges: the wordmark after 94px on the left (the macOS traffic
+// lights' 78px plus 16px of air), the controls 24px from the right.
+@layer components {
+  .title-bar {
+    display: grid;
+    flex-shrink: 0;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-sm);
+    height: 38px;
+    padding-right: var(--space-xl);
+    padding-left: 94px;
+    border-bottom: 1px solid var(--line);
+    @include type(meta);
+    color: var(--muted-2);
+    user-select: none;
+  }
+
+  .title-bar__left {
+    display: grid;
+    grid-auto-flow: column;
+    align-items: center;
+  }
+
+  // pointer-events: none so a drag on the text still lands on the drag region.
+  .title-bar__title {
+    pointer-events: none;
+    @include truncate;
+  }
+
+  .title-bar__right {
+    display: grid;
+    grid-auto-flow: column;
+    align-items: center;
+    gap: var(--space-lg);
+  }
+
+  // A run of title-bar controls that belong together; runs are set apart by space, never a divider.
+  .title-bar-group {
+    display: grid;
+    grid-auto-flow: column;
+    align-items: center;
+    gap: var(--space-xs);
+  }
+
+  // Title-bar controls are chrome, not page buttons: no border, the background only on hover. The control for the page
+  // on screen (aria-current) or an open drawer or popover (aria-expanded) sits on the surface tint in accent.
+  .title-bar-control {
+    border-radius: var(--radius-sm);
+    color: var(--fg-2);
+    user-select: none;
+    cursor: default;
+    @include transition-colors;
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--surface-hi);
+        color: var(--fg);
+      }
+    }
+
+    &[aria-current="page"],
+    &[aria-expanded="true"] {
+      background-color: var(--surface);
+      color: var(--accent);
+    }
+  }
+
+  .title-bar-control--text {
+    display: inline-grid;
+    grid-auto-flow: column;
+    align-items: center;
+    gap: var(--space-sm);
+    height: 1.75rem;
+    padding-inline: var(--space-sm);
+    @include type(body);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .title-bar-control--icon {
+    display: inline-grid;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+  }
+
+  .shortcuts-popover {
+    gap: var(--space-lg);
+    outline: none;
+  }
+
+  .shortcuts-popover__group {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  // Where a non-modal drawer docks: under the title bar, never over it.
+  .below-title-bar {
+    top: 38px;
+    bottom: 0;
+  }
+}

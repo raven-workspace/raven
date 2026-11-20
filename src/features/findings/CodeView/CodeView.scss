@@ -1,0 +1,14 @@
+@use "@/styles/abstracts/index" as *;
+
+// Highlighted, read-only code (the colours are global.css's highlight.js theme).
+@layer features {
+  .code-view {
+    overflow: auto;
+    max-height: 320px;
+    padding: var(--space-md);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background-color: var(--bg);
+    @include type(code);
+  }
+}

@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes } from "react";
 import { cx } from "../lib/cx";
 import { Kbd } from "./Kbd";
+import "./Toggle.scss";
 
 export interface ToggleProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onChange"> {
   on: boolean;
@@ -16,11 +17,7 @@ export function Toggle({ on, onChange, keys, className, children, ...rest }: Tog
       type="button"
       aria-pressed={on}
       onClick={() => onChange(!on)}
-      className={cx(
-        "inline-flex h-7 items-center gap-2 rounded-sm border px-2 text-body cursor-default",
-        on ? "border-accent text-accent" : "border-line-2 text-fg-2 hover:text-fg",
-        className,
-      )}
+      className={cx("toggle", className)}
       {...rest}
     >
       {children}

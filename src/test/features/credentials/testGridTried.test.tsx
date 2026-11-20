@@ -1,7 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { TestGrid } from "../../../features/credentials/TestGrid";
+import { TestGrid } from "../../../features/credentials/TestGrid/TestGrid";
 import { makeQueryClient } from "../../../lib/queryClient";
 import type { TriedPair } from "../../../types/credentials";
 import { byHost, cred, hostWith } from "../../engines/credentials/fixtures";

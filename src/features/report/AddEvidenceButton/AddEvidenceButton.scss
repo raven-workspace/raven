@@ -1,0 +1,12 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  // What the last run did, in its notice: accent when it added something, muted when there was nothing new.
+  .add-evidence__result {
+    color: var(--muted);
+  }
+
+  .add-evidence__result--added {
+    color: var(--accent);
+  }
+}

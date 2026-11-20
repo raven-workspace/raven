@@ -1,0 +1,83 @@
+@use "@/styles/abstracts" as *;
+
+// Hairline buttons on black. Hover, focus and disabled rules carry :enabled / :disabled, so a disabled button never
+// lights up and its own look wins over any variant.
+@layer components {
+  .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    border: 1px solid;
+    border-radius: var(--radius-sm);
+    background-color: var(--bg);
+    font-weight: 500;
+    white-space: nowrap;
+    user-select: none;
+    cursor: default;
+    @include transition-colors;
+
+    &:disabled {
+      border-color: var(--line);
+      background-color: var(--bg);
+      color: var(--faint);
+      cursor: not-allowed;
+    }
+  }
+
+  .button--sm {
+    height: 1.75rem;
+    padding-inline: var(--space-sm);
+    @include type(body);
+  }
+
+  .button--md {
+    height: 2rem;
+    padding-inline: var(--space-md);
+    @include type(body);
+  }
+
+  // Accent text and hairline on black. Never a filled accent block.
+  .button--primary {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .button--ghost {
+    border-color: var(--line-2);
+    color: var(--fg-2);
+  }
+
+  // No red in Ink: destructive actions use the warning amber.
+  .button--danger {
+    border-color: var(--warn);
+    color: var(--warn);
+  }
+
+  // Neutral at rest (one amber at rest per screen); amber on hover and keyboard focus.
+  .button--quiet-danger {
+    border-color: var(--line-2);
+    color: var(--fg-2);
+  }
+
+  @media (hover: hover) {
+    .button:enabled:hover {
+      background-color: var(--surface-hi);
+    }
+
+    .button--ghost:enabled:hover {
+      border-color: var(--line-strong);
+      color: var(--fg);
+    }
+
+    .button--quiet-danger:enabled:hover {
+      border-color: var(--warn);
+      color: var(--warn);
+    }
+  }
+
+  .button--quiet-danger:enabled:focus-visible {
+    border-color: var(--warn);
+    color: var(--warn);
+  }
+}

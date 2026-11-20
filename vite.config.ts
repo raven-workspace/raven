@@ -1,14 +1,13 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { auditApiPlugin } from "./src/audit/vitePlugin";
+import { auditApiPlugin } from "./src/audit/vitePlugin.ts";
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), tailwindcss(), ...(mode === "audit" ? [auditApiPlugin()] : [])],
+  plugins: [react(), ...(mode === "audit" ? [auditApiPlugin()] : [])],
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

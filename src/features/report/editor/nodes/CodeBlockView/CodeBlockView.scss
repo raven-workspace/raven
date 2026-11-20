@@ -1,0 +1,8 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  // A code block's language picker (Ink chrome; page.css places and fades it).
+  .code-block-view__language {
+    width: 9rem;
+  }
+}

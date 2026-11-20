@@ -1,0 +1,13 @@
+@use "@/styles/abstracts/index" as *;
+
+// The credential picker's box. Its width limit comes from the caller's class; without one it takes half its row.
+@layer features {
+  .cred-chip {
+    display: grid;
+    min-width: 0;
+  }
+
+  .cred-chip--share {
+    max-width: 50%;
+  }
+}

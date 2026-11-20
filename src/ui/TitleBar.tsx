@@ -8,6 +8,7 @@ import { usePageShortcutsStore } from "./pageShortcuts";
 import { cx } from "../lib/cx";
 import { Kbd } from "./Kbd";
 import { Tooltip } from "./Tooltip";
+import "./TitleBar.scss";
 
 export interface TitleBarProps {
   /** Interactive content at the far left, after the traffic lights (e.g. the home link). */
@@ -29,31 +30,27 @@ export interface TitleBarProps {
  * Where a non-modal drawer docks: under the title bar, never over it, so the bar's controls stay whole and the window
  * keeps its drag region. Modal panels with an overlay (Capture) cover the whole window instead.
  */
-export const BELOW_TITLE_BAR = "top-[38px] bottom-0";
+export const BELOW_TITLE_BAR = "below-title-bar";
 
 export function TitleBar({ left, title, right, className }: TitleBarProps) {
   return (
     <div
       data-tauri-drag-region
-      className={cx(
-        "grid h-[38px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-line pl-[94px] pr-6 text-meta text-muted-2 select-none",
-        className,
-      )}
+      className={cx("title-bar", className)}
     >
-      <div className="grid grid-flow-col items-center">{left}</div>
+      <div className="title-bar__left">{left}</div>
       {/* pointer-events-none so a drag on the text still lands on the drag region */}
-      <span className="pointer-events-none truncate">{title}</span>
-      <div className="grid grid-flow-col items-center gap-4">{right}</div>
+      <span className="title-bar__title">{title}</span>
+      <div className="title-bar__right">{right}</div>
     </div>
   );
 }
 
 /*
  * Title-bar controls are chrome, not page buttons: no border, the background only on hover. The control for the page on
- * screen, or a drawer that's open, sits on the surface tint in accent, so where you are reads without a row of boxes.
+ * screen (aria-current), or a drawer or popover that's open (aria-expanded), sits on the surface tint in accent, so where
+ * you are reads without a row of boxes (TitleBar.scss).
  */
-const chrome = "rounded-sm cursor-default select-none transition-colors duration-100";
-const chromeState = (on: boolean | undefined) => (on ? "bg-surface text-accent" : "text-fg-2 hover:bg-surface-hi hover:text-fg");
 
 /** A title-bar action: the accessible name is the visible word; the key hint is decoration. */
 export function TitleBarButton({
@@ -79,7 +76,7 @@ export function TitleBarButton({
       onClick={onClick}
       aria-current={current ? "page" : undefined}
       aria-expanded={open}
-      className={cx("inline-grid h-7 grid-flow-col items-center gap-2 px-2 text-body font-medium whitespace-nowrap", chrome, chromeState(current || open))}
+      className="title-bar-control title-bar-control--text"
     >
       {Glyph && <Glyph size={16} weight="regular" aria-hidden />}
       {children}
@@ -104,16 +101,16 @@ export function TitleBarIconButton({
   onClick?: () => void;
 }) {
   return (
-    <Tooltip side="bottom" content={<span>{label}{shortcut && <span className="ml-2 font-mono text-muted">{shortcut}</span>}</span>}>
+    <Tooltip side="bottom" content={<span>{label}{shortcut && <span className="tooltip__key">{shortcut}</span>}</span>}>
       <button
         type="button"
         aria-label={label}
         aria-current={current ? "page" : undefined}
         aria-keyshortcuts={shortcut?.replace("⌘", "Meta+")}
         onClick={onClick}
-        className={cx("inline-grid size-7 place-items-center p-0", chrome, chromeState(current))}
+        className="title-bar-control title-bar-control--icon"
       >
-        <Glyph size={16} weight="regular" aria-hidden className="shrink-0" />
+        <Glyph size={16} weight="regular" aria-hidden />
       </button>
     </Tooltip>
   );
@@ -121,7 +118,7 @@ export function TitleBarIconButton({
 
 /** A run of title-bar controls that belong together; runs are set apart by space, never a divider. */
 export function TitleBarGroup({ children }: { children: ReactNode }) {
-  return <div className="grid grid-flow-col items-center gap-1">{children}</div>;
+  return <div className="title-bar-group">{children}</div>;
 }
 
 /**
@@ -144,27 +141,27 @@ export function TitleBarShortcuts({ everywhere }: { everywhere: Hint[] }) {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
   const group = (title: string, hints: Hint[]) => (
-    <section aria-label={title} className="grid gap-2">
-      <h2 className={`m-0 ${labelClass}`}>{title}</h2>
+    <section aria-label={title} className="shortcuts-popover__group">
+      <h2 className={labelClass}>{title}</h2>
       {hints.map((h) => <HintUnit key={h.keys} hint={h} />)}
     </section>
   );
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
-      <Tooltip side="bottom" content={<span>Shortcuts<span className="ml-2 font-mono text-muted">?</span></span>}>
+      <Tooltip side="bottom" content={<span>Shortcuts<span className="tooltip__key">?</span></span>}>
         <Popover.Trigger asChild>
           <button
             type="button"
             aria-label="Shortcuts"
             aria-keyshortcuts="?"
-            className={cx("inline-grid size-7 place-items-center p-0", chrome, chromeState(open))}
+            className="title-bar-control title-bar-control--icon"
           >
-            <QuestionIcon size={16} weight="regular" aria-hidden className="shrink-0" />
+            <QuestionIcon size={16} weight="regular" aria-hidden />
           </button>
         </Popover.Trigger>
       </Tooltip>
       <Popover.Portal>
-        <Popover.Content align="end" sideOffset={6} className="z-50 grid gap-4 rounded-md border border-line-strong bg-surface p-3 shadow-lg outline-none">
+        <Popover.Content align="end" sideOffset={6} className="popover-panel shortcuts-popover">
           {page && group(page.title, page.hints)}
           {group("Everywhere", everywhere)}
         </Popover.Content>

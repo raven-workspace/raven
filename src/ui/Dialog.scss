@@ -1,0 +1,86 @@
+@use "@/styles/abstracts" as *;
+
+// Modal: hairline border, --surface panel. Motion is in global.css (.raven-overlay, .raven-dialog).
+@layer components {
+  .dialog-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-dialog);
+    background-color: var(--bg);
+    background-color: color-mix(in oklab, var(--bg) 80%, transparent);
+  }
+
+  .dialog {
+    position: fixed;
+    left: 50%;
+    z-index: var(--z-dialog);
+    display: flex;
+    flex-direction: column;
+    translate: -50% 0;
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius);
+    background-color: var(--surface);
+    color: var(--fg-2);
+  }
+
+  .dialog--md {
+    top: 18vh;
+    width: min(480px, calc(100vw - 32px));
+    max-height: calc(82vh - 24px);
+  }
+
+  // Forms: wider, higher on screen.
+  .dialog--lg {
+    top: 8vh;
+    width: min(560px, calc(100vw - 32px));
+    max-height: calc(92vh - 24px);
+  }
+
+  // Forms with embedded lists and code.
+  .dialog--xl {
+    top: 6vh;
+    width: min(820px, calc(100vw - 32px));
+    max-height: calc(94vh - 24px);
+  }
+
+  .dialog__header {
+    display: grid;
+    flex-shrink: 0;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .dialog__heading {
+    min-width: 0;
+  }
+
+  .dialog__title {
+    @include type(heading);
+    color: var(--fg);
+  }
+
+  .dialog__description {
+    margin-top: var(--space-xs);
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  // The body scrolls when it doesn't fit.
+  .dialog__body {
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--space-lg);
+  }
+
+  .dialog__footer {
+    display: flex;
+    flex-shrink: 0;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg);
+    border-top: 1px solid var(--line);
+  }
+}

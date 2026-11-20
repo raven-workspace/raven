@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Draft } from "./FindingEditor";
+import type { Draft } from "./FindingEditor/FindingEditor";
 
 /** One draft per engagement, host page and finding (`new` for one not yet saved). */
 export const draftKey = (eid: string, hostId: string | null, findingId: string | null) =>

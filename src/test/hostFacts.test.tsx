@@ -132,8 +132,8 @@ describe("facts by phase", () => {
     mount({ host: host({ access: "user", boardColumn: "initial-foothold" }), identity: IDENTITY, vectors: [vector("v1", "SeImpersonatePrivilege abuse", "try")] });
     const who = await group("Who am I");
     expect(await who.findByText("ms01\\iis_apppool")).toBeInTheDocument();
-    expect(who.getByText("SeImpersonatePrivilege")).toHaveClass("text-accent");
-    expect(who.getByText("SeChangeNotifyPrivilege")).not.toHaveClass("text-accent");
+    expect(who.getByText("SeImpersonatePrivilege")).toHaveClass("identity-facts__item--notable");
+    expect(who.getByText("SeChangeNotifyPrivilege")).not.toHaveClass("identity-facts__item--notable");
     expect(who.getByRole("button", { name: /whoami \/all/ })).toBeInTheDocument();
     const vectors = await group("Privesc vectors");
     expect(await vectors.findByText("SeImpersonatePrivilege abuse")).toBeInTheDocument();
@@ -206,7 +206,7 @@ describe("services grid", () => {
     mount({ services: [SSH, svc("s4", 21, { nmapService: "ftp", verdict: "dead_end" }), SMB, NGINX] });
     const g = await group("Services");
     const list = (await g.findAllByRole("list"))[0];
-    expect(list.className).toContain("grid-cols-[6ch_minmax(0,1fr)_auto]");
+    expect(list).toHaveClass("services-facts");
     const rows = within(list).getAllByRole("button", { name: /\/tcp/ }).filter((b) => b.hasAttribute("data-service-row"));
     expect(rows.map((r) => r.getAttribute("aria-label"))).toEqual([
       "21/tcp ftp, dead end",
@@ -220,10 +220,11 @@ describe("services grid", () => {
     mount();
     const g = await group("Services");
     const nginx = (await g.findByText(/nginx 1\.18/)).closest("span")!;
-    expect(nginx).toHaveClass("text-fg");
+    expect(nginx).toHaveClass("services-facts__label--confirmed");
     expect(nginx).toHaveAttribute("title", "nmap: http Apache 2.4");
-    expect(within(nginx.parentElement!).getByText("confirmed").parentElement).toHaveClass("text-accent");
-    expect(g.getByText("ssh OpenSSH 8.2")).toHaveClass("text-muted");
+    expect(within(nginx.parentElement!).getByText("confirmed").parentElement).toHaveClass("services-facts__mark--confirmed");
+    expect(g.getByText("ssh OpenSSH 8.2")).toHaveClass("services-facts__label");
+    expect(g.getByText("ssh OpenSSH 8.2")).not.toHaveClass("services-facts__label--confirmed");
     const smb = g.getByRole("button", { name: /^445\/tcp/ });
     expect(within(smb).getByText("unidentified")).toBeInTheDocument();
   });
@@ -297,7 +298,7 @@ describe("services grid", () => {
     const g = await group("Services");
     const chip = await g.findByRole("button", { name: "Verdict for 22/tcp: untested" });
     expect(chip).not.toHaveAttribute("title");
-    expect(chip).toHaveClass("min-h-7");
+    expect(chip).toHaveClass("services-facts__verdict");
     chip.focus();
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Set the verdict (C, U or D on the row)");
   });
@@ -526,7 +527,7 @@ describe("who am I and privesc vectors", () => {
     const del = await (await group("Privesc vectors")).findByRole("button", { name: "Delete SeImpersonatePrivilege abuse" });
     expect(del).toHaveAccessibleName("Delete SeImpersonatePrivilege abuse");
     // Destructive tone: muted at rest, amber only on hover or focus.
-    expect(del).toHaveClass("text-muted");
+    expect(del).toHaveClass("icon-button--destructive");
     await user.click(del);
     expect(m.vectorDelete).not.toHaveBeenCalled();
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete vector" }));

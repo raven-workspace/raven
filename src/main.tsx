@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router";
 import "@fontsource-variable/instrument-sans";
 import "@fontsource-variable/jetbrains-mono";
 import "./styles/global.css";
+import "./styles/base.scss";
 import App from "./App";
 import { makeQueryClient } from "./lib/queryClient";
 

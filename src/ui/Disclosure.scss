@@ -1,0 +1,62 @@
+@use "@/styles/abstracts" as *;
+
+@mixin caret-turn {
+  transition-property: transform, translate, scale, rotate;
+  transition-timing-function: var(--ease-decelerate);
+  transition-duration: var(--duration-turn);
+
+  @media (prefers-reduced-motion: reduce) {
+    transition-property: none;
+  }
+}
+
+@layer components {
+  // One right-pointing caret that turns down when open, rather than two icons swapped.
+  .disclosure-caret {
+    flex-shrink: 0;
+    @include caret-turn;
+  }
+
+  .disclosure-caret--open {
+    rotate: 90deg;
+  }
+
+  // The same turn for an IconButton showing a caret: its glyph follows the button's aria-expanded.
+  .caret-turn > svg {
+    @include caret-turn;
+  }
+
+  .caret-turn[aria-expanded="true"] > svg {
+    rotate: 90deg;
+  }
+
+  // Collapsible secondary content: a full-width row, 28px tall.
+  .disclosure__toggle {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    min-height: 1.75rem;
+    padding-inline: var(--space-xs);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background-color: transparent;
+    text-align: left;
+    @include type(body);
+    color: var(--muted-2);
+    user-select: none;
+    cursor: default;
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--surface-hi);
+        color: var(--fg);
+      }
+    }
+  }
+
+  .disclosure__label {
+    @include truncate;
+  }
+}

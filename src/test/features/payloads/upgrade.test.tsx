@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../../../App";
 import { buildPayload } from "../../../engines/payloads/build";
 import { REVERSE_SHELLS } from "../../../engines/payloads/reverseShells";
-import { PayloadBlock } from "../../../features/payloads/PayloadView";
+import { PayloadBlock } from "../../../features/payloads/PayloadView/PayloadView";
 import { setImported } from "../../../engines/library/store";
 import { useArsenalStore } from "../../../features/arsenal/useArsenalStore";
 import { useLastEngagementStore } from "../../../features/arsenal/useFillScope";

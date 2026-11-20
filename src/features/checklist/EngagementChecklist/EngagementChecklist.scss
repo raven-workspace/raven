@@ -1,0 +1,81 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  .engagement-checklist {
+    display: grid;
+    gap: var(--space-xl);
+  }
+
+  // Tick from log and its status.
+  .engagement-checklist__tick {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-md);
+  }
+
+  .engagement-checklist__tick-status {
+    display: grid;
+    min-width: 0;
+    gap: var(--space-xs);
+  }
+
+  .engagement-checklist__tick-message {
+    @include type(meta);
+    color: var(--fg-2);
+  }
+
+  .engagement-checklist__error {
+    @include type(meta);
+    color: var(--warn);
+  }
+
+  .engagement-checklist__setup {
+    display: grid;
+    gap: var(--space-xs);
+  }
+
+  .engagement-checklist__list {
+    list-style-type: none;
+  }
+
+  .engagement-checklist__playbooks {
+    display: grid;
+    gap: var(--space-md);
+  }
+
+  // Sub-heading above the first row of each group.
+  .engagement-checklist__group {
+    list-style-type: none;
+    padding-top: var(--space-md);
+    padding-bottom: var(--space-xs);
+
+    &:first-child {
+      padding-top: 0;
+    }
+  }
+
+  .engagement-checklist__group-title {
+    @include type(meta);
+    font-weight: 500;
+    color: var(--muted-2);
+  }
+
+  .engagement-checklist__network-note {
+    padding-top: var(--space-sm);
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .engagement-checklist__network-link {
+    color: var(--fg-2);
+    text-decoration-line: underline;
+    text-underline-offset: 2px;
+  }
+
+  @media (hover: hover) {
+    .engagement-checklist__network-link:hover {
+      color: var(--fg);
+    }
+  }
+}

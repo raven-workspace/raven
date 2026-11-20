@@ -1,0 +1,38 @@
+@use "@/styles/abstracts/index" as *;
+
+// Where the paste lands: a screenshot's preview, or a flag's image thumbnail above its value.
+@layer features {
+  .paste-area__preview {
+    padding: var(--space-sm);
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius-sm);
+
+    &:focus-visible {
+      outline-style: solid;
+      outline-width: 1px;
+      outline-color: var(--accent);
+    }
+  }
+
+  .paste-area__image {
+    display: block;
+    max-width: 100%;
+    max-height: 18rem;
+    margin-inline: auto;
+  }
+
+  .paste-area__thumb-row {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: start;
+    justify-content: start;
+    gap: var(--space-sm);
+  }
+
+  .paste-area__thumb {
+    max-width: 10rem;
+    max-height: 6rem;
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius-sm);
+  }
+}

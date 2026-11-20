@@ -1,0 +1,77 @@
+@use "@/styles/abstracts/index" as *;
+
+// The kanban: lanes share two rows (header, cards) through a subgrid; the track counts are set inline.
+@layer features {
+  .board {
+    display: grid;
+    height: 100%;
+    gap: var(--space-sm);
+  }
+
+  .board__error {
+    @include type(meta);
+    color: var(--warn);
+  }
+
+  .board__lanes {
+    display: grid;
+    gap: var(--space-md);
+  }
+
+  // A filled surface, not an outline: six tall empty boxes read as a cage. The drop target gets the edge.
+  .board__lane {
+    display: grid;
+    min-height: 10rem;
+    min-width: 0;
+    gap: var(--space-sm);
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background-color: var(--surface);
+    padding: var(--space-sm);
+
+    &[data-over="true"] {
+      border-color: var(--accent);
+    }
+  }
+
+  .board__lane-header {
+    container-type: inline-size;
+  }
+
+  // Narrow lanes put the count under the title; from 144px inside it sits beside.
+  .board__lane-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: flex-start;
+    column-gap: var(--space-sm);
+
+    @container (width >= 144px) {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+  }
+
+  .board__lane-title {
+    min-width: 0;
+    overflow-wrap: break-word;
+    -webkit-hyphens: manual;
+    hyphens: manual;
+  }
+
+  .board__count {
+    @include type(meta);
+    color: var(--muted-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .board__count--empty {
+    color: var(--faint);
+  }
+
+  .board__lane-body {
+    container-type: inline-size;
+    display: grid;
+    min-width: 0;
+    align-content: flex-start;
+    gap: var(--space-sm);
+  }
+}

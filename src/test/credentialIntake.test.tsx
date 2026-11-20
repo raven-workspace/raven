@@ -544,8 +544,7 @@ describe("Host Credentials fact group", () => {
     expect(within(rows[0]!).getByText("admin")).toHaveAttribute("data-variant", "accent");
     const errored = within(rows[2]!).getByText("errored");
     expect(errored).toHaveAttribute("data-variant", "warn");
-    expect(errored).toHaveClass("border-warn", "text-warn");
-    expect(errored).not.toHaveClass("text-fg-2");
+    expect(errored).toHaveClass("chip--warn");
     await user.click(within(rows[0]!).getByRole("button", { name: /nxc smb spray/ }));
     expect(screen.getByRole("tab", { name: "Log" })).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByRole("button", { name: /nxc smb spray/, expanded: true })).toBeInTheDocument();

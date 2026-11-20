@@ -2,7 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { TestGrid } from "../../../features/credentials/TestGrid";
+import { TestGrid } from "../../../features/credentials/TestGrid/TestGrid";
 import { makeQueryClient } from "../../../lib/queryClient";
 import type { TriedPair } from "../../../types/credentials";
 import { byHost, cred, hostWith } from "../../engines/credentials/fixtures";
@@ -69,7 +69,7 @@ describe("TestGrid selection", () => {
     const row = document.querySelector('[data-cred-id="c2"]')!;
     expect(row).toHaveAttribute("aria-selected", "true");
     expect(row).toHaveAttribute("data-state", "selected");
-    expect(row.querySelector("th")!.className).toContain("shadow-[inset_2px_0_0_var(--accent)]");
+    expect(row.querySelector("th")).toHaveClass("test-grid__row-head--selected"); // the inset accent bar
     expect(document.querySelector('[data-cred-id="c1"]')).not.toHaveAttribute("aria-selected");
   });
 

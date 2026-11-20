@@ -4,32 +4,21 @@ import { breaks, files } from "./conventionsRules";
 const F = "src/features/x/X.tsx";
 const U = "src/ui/X.tsx";
 
+const FS = "src/features/x/X.scss";
+const US = "src/ui/X.scss";
+
 describe("feature-flex matcher", () => {
-  it("sees plain string constants", () => {
-    expect(breaks("feature-flex", F, 'const BOX = "inline-flex gap-2";')).toBe(
-      true,
-    );
-    expect(breaks("feature-flex", F, "const base = 'flex gap-2';")).toBe(true);
+  it("flags a flex container, its direction or wrapping, growth and space-between in feature sheets", () => {
+    for (const d of ["display: flex", "display: inline-flex", "flex-direction: column", "flex-wrap: wrap", "flex: 1", "flex-grow: 1", "justify-content: space-between"])
+      expect(breaks("feature-flex", FS, `.a { ${d}; }`), d).toBe(true);
   });
-  it("sees nested cx( calls", () => {
-    expect(
-      breaks("feature-flex", F, 'cx(a(b), c && "p-2", "justify-between")'),
-    ).toBe(true);
+  it("allows grid, flex-shrink, flex: none, and flex in src/ui", () => {
+    expect(breaks("feature-flex", FS, ".a { display: grid; flex-shrink: 0; flex: none; justify-content: center; }")).toBe(false);
+    expect(breaks("feature-flex", US, ".a { display: flex; }")).toBe(false);
   });
-  it("ignores prose, other files and flex-like words", () => {
-    expect(
-      breaks("feature-flex", F, 'const s = "Let it grow, then flex.";'),
-    ).toBe(false);
-    expect(breaks("feature-flex", F, 'const s = "grow";')).toBe(false);
-    expect(
-      breaks("feature-flex", F, '<div className="grid flexible-x" />'),
-    ).toBe(false);
-    expect(breaks("feature-flex", U, 'const BOX = "flex gap-2";')).toBe(false);
-  });
-  it("ignores comments", () => {
-    expect(breaks("feature-flex", F, '// "flex gap-2"\nconst a = 1;')).toBe(
-      false,
-    );
+  it("ignores comments and markup files", () => {
+    expect(breaks("feature-flex", FS, "// display: flex;\n.a { display: grid; }")).toBe(false);
+    expect(breaks("feature-flex", "src/features/x/X.tsx", 'const BOX = "display: flex;";')).toBe(false);
   });
 });
 
@@ -89,9 +78,11 @@ describe("esc-close matcher", () => {
 });
 
 describe("tiny-type and joined-strings", () => {
-  it("tiny-type ignores comments", () => {
-    expect(breaks("tiny-type", U, "// was text-xs\nconst a = 1;")).toBe(false);
-    expect(breaks("tiny-type", U, '<i className="text-[11px]" />')).toBe(true);
+  it("tiny-type: font sizes come only from the type roles", () => {
+    expect(breaks("tiny-type", US, ".a { font-size: var(--text-meta); } .b { font-size: inherit; } .c { font-size: 1em; }")).toBe(false);
+    for (const d of ["font-size: 11px", "font-size: 0.7rem", "font-size: var(--text-xs)", "font-size: calc(var(--text-meta) - 1px)", "font: 12px/1 sans-serif"])
+      expect(breaks("tiny-type", US, `.a { ${d}; }`), d).toBe(true);
+    expect(breaks("tiny-type", US, "// font-size: 11px;\n.a { color: var(--fg); }")).toBe(false);
   });
   it("joined-strings skips <p> prose", () => {
     expect(breaks("joined-strings", U, "<p>a — b</p>")).toBe(false);
@@ -110,98 +101,69 @@ describe("tiny-type and joined-strings", () => {
 });
 
 describe("unknown-color matcher", () => {
-  const bad = (s: string) => breaks("unknown-color", F, s);
-  it("flags colours tokens.css does not define, with variants and opacity", () => {
-    expect(bad('<a className="hover:bg-surface-2" />')).toBe(true);
-    expect(bad('<a className="text-red-500" />')).toBe(true);
-    expect(bad('<a className="border-gray-300/50" />')).toBe(true);
-    expect(bad('<a className="md:focus-visible:ring-blue-400" />')).toBe(true);
+  const bad = (scss: string) => breaks("unknown-color", FS, scss);
+  it("accepts tokens, color-mix of tokens and the special values", () => {
+    expect(bad(".a { color: var(--fg-2); background-color: color-mix(in oklab, var(--accent) 10%, transparent); border-color: currentColor; }")).toBe(false);
+    expect(bad(".a { box-shadow: inset 2px 0 0 var(--accent); outline-color: transparent; fill: inherit; }")).toBe(false);
   });
-  it("accepts token colours, special values and the important suffix", () => {
-    expect(bad('<a className="bg-surface-hi/50 text-fg-2 border-line-strong hover:text-accent" />')).toBe(false);
-    expect(bad('<a className="bg-transparent text-current border-inherit text-warn!" />')).toBe(false);
+  it("flags raw colours anywhere: hex, colour functions and named colours", () => {
+    for (const d of ["color: #fff", "background: rgb(1, 2, 3)", "border-color: hsl(0 0% 50%)", "outline-color: oklch(0.5 0.1 120)", "color: red", "border: 1px solid white", "--pane-bg: #123456", "box-shadow: 0 0 0 1px #fff"])
+      expect(bad(`.a { ${d}; }`), d).toBe(true);
   });
-  it("accepts the shadcn colour names global.css aliases to Ink tokens", () => {
-    expect(bad('<a className="bg-sidebar text-sidebar-foreground hover:bg-sidebar-accent border-sidebar-border ring-sidebar-ring" />')).toBe(false);
-    expect(bad('<a className="bg-background text-foreground bg-popover text-muted-foreground border-input bg-destructive/10" />')).toBe(false);
-    expect(bad('<a className="bg-chart-1" />')).toBe(true);
+  it("allows black only as a shadow's or a mask's darkness", () => {
+    expect(bad(".a { box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6); mask-image: linear-gradient(to right, #000 80%, transparent); }")).toBe(false);
+    expect(bad(".a { background: #000; }")).toBe(true);
   });
-  it("flags arbitrary colour values", () => {
-    for (const c of ["bg-[#123]", "text-[color:var(--x)]", "border-[rgb(1,2,3)]", "from-[#fff]", "hover:bg-[hsl(0_0%_50%)]", "ring-[oklch(0.5_0.1_120)]", "text-[#abcdef]/50"])
-      expect(bad(`<a className="${c}" />`), c).toBe(true);
+  it("flags var() references nothing declares, but not library or locally set ones", () => {
+    expect(bad(".a { color: var(--nope); }")).toBe(true);
+    expect(bad(".a { max-height: var(--radix-select-content-available-height); width: var(--sidebar-width); }")).toBe(false);
   });
-  it("flags named colours, unknown vars, colours anywhere in an arbitrary value, and arbitrary colour properties", () => {
-    for (const c of ["bg-[red]", "text-[white]", "bg-[var(--x)]", "bg-(--x)", "shadow-[0_0_0_1px_#fff]", "shadow-[0_0_0_1px_red]", "[color:#123]", "[background-color:rgb(1,2,3)]", "hover:[color:var(--nope)]", "[--pane-bg:#000]"])
-      expect(bad(`<a className="${c}" />`), c).toBe(true);
-  });
-  it("accepts token vars in arbitrary values and local vars defined from tokens", () => {
-    expect(bad('<a className="shadow-[inset_2px_0_0_var(--accent)] shadow-[0_0_0_1px_var(--sidebar-border)] accent-[var(--color-accent)] [--pane-bg:var(--bg)] bg-(--pane-bg,var(--surface))" />')).toBe(false);
-  });
-  it("accepts arbitrary non-colour values", () => {
-    expect(bad('<a className="border-[2px] bg-[url(/a.png)] bg-[length:4px_4px] text-[length:13px] from-[10%]" />')).toBe(false);
-  });
-  it("strips named-group and arbitrary variants before judging", () => {
-    expect(bad('<a className="group-hover/item:text-accent [&>svg]:text-muted data-[state=open]:bg-surface-hi" />')).toBe(false);
-    expect(bad('<a className="group-hover/item:text-red-500" />')).toBe(true);
-    expect(bad('<a className="[&>svg]:text-red-500" />')).toBe(true);
-  });
-  it("accepts per-side border colours that are tokens", () => {
-    expect(bad('<a className="border-l-accent border-t-line border-x-line-2 border-b-transparent" />')).toBe(false);
-    expect(bad('<a className="border-l-red-500" />')).toBe(true);
-  });
-  it("does not treat type roles, sizes, widths or modes as colours", () => {
-    expect(
-      bad('<a className="text-title text-body text-meta text-sm text-2xl text-left border-2 border-t border-dashed outline-none ring-2 bg-none from-10% stroke-2 divide-y" />'),
-    ).toBe(false);
+  it("skips url() and non-colour words", () => {
+    expect(bad('.a { background-image: url("/red.png"); grid-template-areas: "tan"; }')).toBe(false);
   });
 });
 
 describe("off-scale-spacing matcher", () => {
-  const bad = (s: string, file = F) => breaks("off-scale-spacing", file, s);
-  it("flags half steps, steps off the scale and arbitrary px, with variants and negatives", () => {
-    for (const c of ["p-1.5", "px-0.5", "gap-x-5", "mt-7", "hover:gap-2.5", "md:-ml-3.5", "py-10", "gap-[6px]", "pt-[10px]", "space-y-12"])
-      expect(bad(`<a className="${c}" />`), c).toBe(true);
+  const bad = (scss: string, file = FS) => breaks("off-scale-spacing", file, scss);
+  it("flags lengths off the 4/8/12/16/24/32 scale", () => {
+    for (const d of ["padding: 6px", "gap: 0.375rem", "margin-top: 10px", "padding-inline: var(--space-sm) 5px", "column-gap: 1.25rem", "margin: calc(var(--space-sm) + 2px)"])
+      expect(bad(`.a { ${d}; }`), d).toBe(true);
   });
-  it("accepts the 4/8/12/16/24/32 scale, zero, px, auto, and non-spacing utilities", () => {
-    expect(bad('<a className="p-1 px-2 py-3 gap-4 gap-x-6 mt-8 -ml-2 m-0 mx-auto pt-px gap-[0] size-7 h-7 w-0.5 top-1.5 inset-2.5 text-body" />')).toBe(false);
+  it("accepts the space tokens and their negatives, 0, auto and 1px, with !important", () => {
+    expect(bad(".a { padding: 0 var(--space-md); margin: auto; gap: var(--space-xs); margin-block: calc(var(--space-xs) * -1); margin-top: -1px; padding: var(--space-sm) !important; }")).toBe(false);
   });
-  it("sees px inside arbitrary expressions", () => {
-    expect(bad('<a className="pl-[max(78px,calc(50%_-_10px))]" />')).toBe(true);
-    expect(bad('<a className="pr-[max(var(--a),calc(50%_+_var(--b)))]" />')).toBe(false);
-  });
-  it("sees lengths after an underscore in arbitrary values", () => {
-    expect(bad('<a className="pl-[calc(50%_-_10px)]" />')).toBe(true);
-    expect(bad('<a className="p-[6px_10px]" />')).toBe(true);
-    expect(bad('<a className="p-[0_0]" />')).toBe(false);
+  it("does not judge non-spacing lengths", () => {
+    expect(bad(".a { width: 28px; height: 1.75rem; inset: 2px; border-width: 3px; }")).toBe(false);
   });
   it("allows the title bar's 94px traffic-light inset, only in TitleBar", () => {
-    expect(bad('<a className="pl-[94px]" />', "src/ui/TitleBar.tsx")).toBe(false);
-    expect(bad('<a className="pl-[78px]" />', "src/ui/TitleBar.tsx")).toBe(true);
-    expect(bad('<a className="pl-[94px]" />')).toBe(true);
-    expect(bad('<a className="pl-[80px]" />', "src/ui/TitleBar.tsx")).toBe(true);
+    expect(bad(".a { padding-left: 94px; }", "src/ui/TitleBar.scss")).toBe(false);
+    expect(bad(".a { padding-left: 78px; }", "src/ui/TitleBar.scss")).toBe(true);
+    expect(bad(".a { padding-left: 94px; }")).toBe(true);
   });
   it("allows the inline subnet's -2px target bleed, only in InterfaceNudge", () => {
-    expect(bad('<a className="-my-0.5 min-h-6" />', "src/features/network/InterfaceNudge.tsx")).toBe(false);
-    expect(bad('<a className="-mx-0.5" />', "src/features/network/InterfaceNudge.tsx")).toBe(true);
-    expect(bad('<a className="-my-0.5" />')).toBe(true);
+    expect(bad(".a { margin-block: -0.125rem; }", "src/features/network/InterfaceNudge/InterfaceNudge.scss")).toBe(false);
+    expect(bad(".a { margin-inline: -0.125rem; }", "src/features/network/InterfaceNudge/InterfaceNudge.scss")).toBe(true);
+    expect(bad(".a { margin-block: -0.125rem; }")).toBe(true);
   });
   it("allows only the documented 6px hint gap, only in HintLine", () => {
-    expect(bad('<a className="gap-[6px]" />', "src/ui/HintLine.tsx")).toBe(false);
-    expect(bad('<a className="gap-x-5" />', "src/ui/HintLine.tsx")).toBe(true);
+    expect(bad(".a { gap: 6px; }", "src/ui/HintLine.scss")).toBe(false);
+    expect(bad(".a { gap: 5px; }", "src/ui/HintLine.scss")).toBe(true);
   });
 });
 
 describe("scan scope", () => {
-  it("covers .ts and .tsx under features and ui, App.tsx, and engines", () => {
+  it("covers .ts, .tsx and .scss under features and ui, App.tsx, and engines", () => {
     expect(files).toContain("src/App.tsx");
+    expect(files).toContain("src/ui/Button.scss");
+    expect(files).toContain("src/features/credentials/TestGrid/TestGrid.scss");
     expect(files).toContain("src/features/palette/suggest.ts");
     expect(files).toContain("src/ui/controlStyles.ts");
     expect(files).toContain("src/engines/stuck/engagementStuck.ts");
     expect(files.filter((f) => f.startsWith("src/engines/") && !f.endsWith(".ts"))).toEqual([]);
   });
-  it("tiny-type catches rem and em arbitrary sizes", () => {
-    for (const c of ["text-[0.7rem]", "text-[.75em]", "text-[1rem]", "md:text-[0.6875rem]"])
-      expect(breaks("tiny-type", U, `<i className="${c}" />`), c).toBe(true);
+  it("style rules read only stylesheets, markup rules only markup", () => {
+    expect(breaks("tiny-type", U, '<i style={{ fontSize: "11px" }} />')).toBe(false);
+    expect(breaks("esc-close", US, ".a { content: '<Kbd>esc</Kbd>'; }")).toBe(false);
   });
   it("joined-strings sees UI strings in .ts files", () => {
     expect(breaks("joined-strings", "src/features/x/x.ts", "const s = { hint: `${dc.name} · DC` };")).toBe(true);
@@ -223,6 +185,6 @@ describe("joined-strings in engines (narrow)", () => {
   });
   it("applies no markup rules to engines", () => {
     for (const r of ["tiny-type", "feature-flex", "hand-hint", "esc-close", "unknown-color", "off-scale-spacing"] as const)
-      expect(breaks(r, E, 'const c = "text-xs flex bg-[#fff] p-1.5"; <div><Kbd>a</Kbd><Kbd>esc</Kbd></div>'), r).toBe(false);
+      expect(breaks(r, E, 'const c = ".a { font-size: 9px; display: flex; color: #fff; padding: 6px; }"; <div><Kbd>a</Kbd><Kbd>esc</Kbd></div>'), r).toBe(false);
   });
 });

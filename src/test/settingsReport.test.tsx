@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { SettingsPage } from "../features/settings/SettingsPage";
+import { SettingsPage } from "../features/settings/SettingsPage/SettingsPage";
 import { api } from "../lib/api";
 import type { Settings } from "../types/settings";
 

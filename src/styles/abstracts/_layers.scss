@@ -1,0 +1,5 @@
+// Cascade layers, lowest to highest (declared first in src/styles/global.css; repeated here so a component sheet is
+// right whichever stylesheet loads first): the reset and element defaults in `base`, src/ui primitives in
+// `components`, feature styles in `features` (a feature's class on a primitive beats the primitive's own rules).
+// Unlayered rules (global.css's motion and highlight.js theme, the report's page.css) beat all three.
+@layer base, components, features;

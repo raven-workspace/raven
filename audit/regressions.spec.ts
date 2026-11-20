@@ -43,6 +43,8 @@ for (const path of ["/arsenal", "/"]) {
 const PANE_CHECK = `(() => {
   const bad = [];
   const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden"; };
+  // Inside the host page's container (or the finding split's, which takes the same name), whatever class declares it.
+  const inHost = (el) => { for (let n = el; n; n = n.parentElement) if (getComputedStyle(n).containerName === "host") return true; return false; };
   const focusables = document.querySelectorAll('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
   for (const el of focusables) {
     if (!visible(el)) continue;
@@ -50,7 +52,7 @@ const PANE_CHECK = `(() => {
     while (pane && !/auto|scroll/.test(getComputedStyle(pane).overflowY)) pane = pane.parentElement;
     if (!pane || pane === document.body) continue;
     // Overlay scrollbars (macOS WKWebView) reserve no gutter: the pane itself must pad the right edge.
-    if (pane.closest('[class*="@container/host"]') && parseFloat(getComputedStyle(pane).paddingRight) < 12) bad.push("padding-right < 12px: " + (pane.getAttribute("aria-label") || pane.className.slice(0, 40)));
+    if (inHost(pane) && parseFloat(getComputedStyle(pane).paddingRight) < 12) bad.push("padding-right < 12px: " + (pane.getAttribute("aria-label") || pane.className.slice(0, 40)));
     const p = pane.getBoundingClientRect();
     const r = el.getBoundingClientRect();
     const left = p.left + pane.clientLeft;
@@ -647,7 +649,7 @@ test("tried pairs render muted in the test matrix with no sideways scroll", asyn
     await tried.first().waitFor();
     await expect(tried.first()).toContainText("drew");
     await expect(tried.first()).toContainText("tried");
-    await expect(tried.first()).toHaveClass(/text-muted/);
+    await expect(tried.first()).toHaveClass(/test-grid__row--tried/); // muted (TestGrid.scss)
     await expect(tried.first().getByRole("img", { name: /failed \(tried\)/ }).first()).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `the page scrolls sideways at ${width}`).toBe(true);
   }
@@ -1234,7 +1236,7 @@ test("Report: Esc closes the evidence drawer and stays on the report, in WebKit 
     await p.goto("/e/e-exam/s/report");
     await openGarnet(p);
     await p.locator("section[aria-label='Report']").getByRole("button", { name: "Evidence", exact: true }).click();
-    const drawer = p.locator("aside.fixed[aria-label='Evidence']");
+    const drawer = p.locator("aside.evidence-drawer[aria-label='Evidence']");
     await expect(drawer).toBeVisible();
     await p.keyboard.press("Escape");
     await expect(drawer).toHaveCount(0);

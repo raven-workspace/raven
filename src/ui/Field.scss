@@ -1,0 +1,24 @@
+@use "@/styles/abstracts" as *;
+
+@layer components {
+  .field {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .field__label {
+    display: block;
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .field__hint {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .field__error {
+    @include type(meta);
+    color: var(--warn);
+  }
+}

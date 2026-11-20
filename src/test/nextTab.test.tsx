@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
-import { GoalRow } from "../features/checklist/GoalRow";
+import { GoalRow } from "../features/checklist/GoalRow/GoalRow";
 import { useCaptureStore } from "../features/capture/useCaptureStore";
 import { applicableGoals } from "../engines/checklist";
 import { api } from "../lib/api";

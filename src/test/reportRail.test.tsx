@@ -7,7 +7,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, resetAuditState } from "../audit/fakeApi";
 import { DRAFT_LAYOUT, sourceOf, type ReportNode } from "../engines/report";
-import { ReportSectionView } from "../features/report/ReportSection";
+import { ReportSectionView } from "../features/report/ReportSection/ReportSection";
 import { useNotesStore } from "../features/notes/useNotesStore";
 import { makeQueryClient } from "../lib/queryClient";
 import type { LogContent, LogEntryInput } from "../types/log";
@@ -16,8 +16,8 @@ import { TooltipProvider } from "../ui";
 vi.mock("../lib/api", () => import("../audit/fakeApi"));
 
 const editors: Editor[] = [];
-vi.mock("../features/report/editor/ReportEditor", async (importOriginal) => {
-  const real = await importOriginal<typeof import("../features/report/editor/ReportEditor")>();
+vi.mock("../features/report/editor/ReportEditor/ReportEditor", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../features/report/editor/ReportEditor/ReportEditor")>();
   return {
     ...real,
     ReportEditor: (props: ComponentProps<typeof real.ReportEditor>) => (
@@ -311,7 +311,8 @@ describe("Evidence rail: the log column", () => {
     expect(await screen.findByRole("tab", { name: /Unused/ })).toBeInTheDocument();
     const column = screen.getByRole("complementary", { name: "Evidence" });
     // A grid column beside the page, not the fixed drawer over it.
-    expect(column.className).not.toMatch(/\bfixed\b/);
+    expect(column).not.toHaveClass("evidence-drawer");
+    expect(column).toHaveClass("report-section__rail");
     expect(screen.getByRole("button", { name: "Evidence" })).toHaveAttribute("aria-pressed", "true");
 
     // Notes is a drawer of its own: the docked column stays.

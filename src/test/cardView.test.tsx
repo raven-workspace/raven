@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setImported, type CardMeta } from "../engines/library/store";
 import type { LibraryCommand } from "../engines/library/types";
-import { CardView } from "../features/arsenal/CardView";
+import { CardView } from "../features/arsenal/CardView/CardView";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
@@ -94,8 +94,8 @@ describe("CardView reading view", () => {
     mount("zz-b");
     await pre("zzb 10.10.10.5");
     // An outline 6px clear of the block (an outline takes no room, so the block never widens its column).
-    expect(blockEl("zz-b")).toHaveClass("outline-1", "outline-solid", "outline-accent");
-    expect(blockEl("zz-a")).not.toHaveClass("outline-solid");
+    expect(blockEl("zz-b")).toHaveClass("command-pane__block", "command-pane__block--marked");
+    expect(blockEl("zz-a")).not.toHaveClass("command-pane__block--marked");
   });
 
   it("j/k move between blocks and c copies the focused one", async () => {

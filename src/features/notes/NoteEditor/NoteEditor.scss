@@ -1,0 +1,50 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  // Threads and ruled-out items (when any), the text, then the footer: the text takes the slack.
+  .note-editor {
+    display: grid;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: var(--space-sm);
+  }
+
+  .note-editor--lists {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .note-editor__lists {
+    display: grid;
+    align-content: flex-start;
+    gap: var(--space-md);
+  }
+
+  .note-editor__text {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .note-editor__footer {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .note-editor__error {
+    @include type(meta);
+    color: var(--warn);
+  }
+
+  // Private toggle, save status.
+  .note-editor__status-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .note-editor__status {
+    justify-self: flex-end;
+    @include type(meta);
+    color: var(--muted);
+  }
+}

@@ -159,8 +159,8 @@ test("non-label text under 13px fails; 12px labels, chips and key caps pass", as
   const body = gateFailures(await gateRun(page, `<p style="margin:0;font-size:12px">Body copy at twelve pixels</p>`));
   expect(body.some((f) => f.startsWith("tiny-text "))).toBe(true);
   const roles = await gateRun(page, [
-    `<span class="text-label" style="font-size:12px;text-transform:uppercase">Services</span>`,
-    `<span class="text-label" style="font-size:12px;border:1px solid;border-radius:999px">open</span>`,
+    `<span class="section-label" style="font-size:12px;text-transform:uppercase">Services</span>`,
+    `<span class="section-label" style="font-size:12px;border:1px solid;border-radius:999px">open</span>`,
     `<kbd style="font-size:12px">K</kbd>`,
     `<p style="margin:0;font-size:13px">Meta text at thirteen</p>`,
   ].join(""));

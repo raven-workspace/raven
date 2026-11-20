@@ -1,0 +1,203 @@
+@use "@/styles/abstracts/index" as *;
+
+// The engagement sidebar: its layout inside the Sidebar parts (src/ui/shadcn/sidebar), and its own elements. A `--rail`
+// modifier is the collapsed 56px rail.
+@layer features {
+  // The heading and the collapse button, in a 28px column; on the rail the button alone, centred.
+  .engagement-sidebar__header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 28px;
+    align-items: center;
+    gap: 0;
+    padding: var(--space-lg) var(--space-md) var(--space-sm);
+  }
+
+  .engagement-sidebar__header--rail {
+    grid-template-columns: 28px;
+    justify-content: center;
+    padding-inline: var(--space-xs);
+  }
+
+  .engagement-sidebar__content {
+    position: relative;
+    isolation: isolate;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-bottom: var(--space-lg);
+  }
+
+  // The rail's short rules above and between the menus.
+  .engagement-sidebar__rule {
+    width: 1.5rem;
+    margin-inline: auto;
+  }
+
+  .engagement-sidebar__rule--first {
+    margin-bottom: var(--space-sm);
+  }
+
+  .engagement-sidebar__rule--between {
+    margin-block: var(--space-sm);
+  }
+
+  .engagement-sidebar__group {
+    padding: 0 var(--space-md);
+  }
+
+  .engagement-sidebar__group--rail {
+    padding-inline: var(--space-xs);
+  }
+
+  .engagement-sidebar__group-label {
+    height: auto;
+    margin: var(--space-lg) 0 0;
+    padding: 0 var(--space-sm) var(--space-sm);
+  }
+
+  .engagement-sidebar__menu {
+    gap: var(--space-xs);
+  }
+
+  .engagement-sidebar__menu--rail {
+    align-items: center;
+  }
+
+  // Links draw no current background or bar, even on hover: the marker does.
+  .engagement-sidebar__link {
+    cursor: default;
+
+    &[data-active="true"] {
+      background-color: transparent;
+      box-shadow: none;
+    }
+  }
+
+  // Icon, label, key number.
+  .engagement-sidebar__section-row {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    height: 30px;
+    padding-block: 0;
+    padding-inline: var(--space-sm);
+  }
+
+  // Glyph, name over IP, thread dot.
+  .engagement-sidebar__host-row {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    gap: var(--space-sm);
+    padding-inline: var(--space-sm);
+  }
+
+  // The glyph over the short name, in one centred track.
+  .engagement-sidebar__host-row--rail {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    gap: var(--space-xs);
+  }
+
+  .engagement-sidebar__nav {
+    display: grid;
+    height: 100%;
+    min-height: 0;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .engagement-sidebar__heading {
+    @include type(label);
+    color: var(--faint);
+    padding-inline: var(--space-sm);
+  }
+
+  // Screen readers only (the collapsed rail's headings).
+  .engagement-sidebar__sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  // The one marker that slides between the current section and host: surface and accent bar.
+  .engagement-sidebar__marker {
+    border-radius: var(--radius-sm);
+    background-color: var(--surface-hi);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+
+  // A section's key number, in its rail tooltip and beside its name.
+  .engagement-sidebar__key {
+    @include mono;
+    color: var(--muted);
+    margin-left: var(--space-sm);
+  }
+
+  .engagement-sidebar__count {
+    @include mono;
+    @include type(meta);
+    color: var(--faint);
+  }
+
+  .engagement-sidebar__host-tip {
+    display: grid;
+  }
+
+  .engagement-sidebar__host-tip-ip {
+    @include type(code);
+  }
+
+  // The collapsed rail's short host name.
+  .engagement-sidebar__rail-name {
+    @include mono;
+    @include type(meta);
+  }
+
+  // Pinned to the glyph's corner so the rail's 56px column keeps its layout.
+  .engagement-sidebar__rail-dot {
+    position: absolute;
+    top: 0.375rem;
+    right: var(--space-sm);
+    display: grid;
+  }
+
+  .engagement-sidebar__host-text {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .engagement-sidebar__host-name {
+    @include truncate;
+  }
+
+  .engagement-sidebar__host-ip {
+    @include truncate;
+    @include mono;
+    @include type(meta);
+    color: var(--faint);
+  }
+
+  .engagement-sidebar__empty {
+    padding-inline: var(--space-sm);
+    @include type(meta);
+    color: var(--faint);
+  }
+
+  .engagement-sidebar__add {
+    display: grid;
+    margin-top: var(--space-xs);
+    justify-items: center;
+  }
+
+  .engagement-sidebar__add--expanded {
+    grid-template-columns: 16px;
+    padding-inline: var(--space-sm);
+  }
+}

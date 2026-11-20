@@ -5,9 +5,9 @@ import type { Editor } from "prosekit/core";
 import { TextSelection } from "prosekit/pm/state";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReportData, ReportNode, ReportTarget } from "../engines/report";
-import { ReportDataContext } from "../features/report/editor/ReportDataContext";
-import { openFindBar, ReportEditor } from "../features/report/editor/ReportEditor";
-import { blockScore, fuzzyScore } from "../features/report/editor/SlashMenu";
+import { ReportDataContext } from "../features/report/editor/ReportDataContext/ReportDataContext";
+import { openFindBar, ReportEditor } from "../features/report/editor/ReportEditor/ReportEditor";
+import { blockScore, fuzzyScore } from "../features/report/editor/SlashMenu/SlashMenu";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Engagement } from "../types/engagement";
@@ -606,7 +606,7 @@ describe("Placeholder", () => {
 
 describe("Report details", () => {
   it("caps each text field at the backend's 2000 characters", async () => {
-    const { ReportDetails } = await import("../features/report/ReportDetails");
+    const { ReportDetails } = await import("../features/report/ReportDetails/ReportDetails");
     const report = { id: "r1", engagementId: "eng", candidateName: "", email: "", osid: "", title: "OSCP Exam Report", meta: {} } as unknown as Report;
     render(<ReportDetails report={report} engagement={{ id: "eng", kind: "exam-sim" } as Engagement} hosts={[]} includedHostIds={[]} onSave={vi.fn()} />);
     for (const label of ["Your name", "Email", "OSID", "Report title"]) expect(screen.getByLabelText(label)).toHaveAttribute("maxLength", "2000");
@@ -615,7 +615,7 @@ describe("Report details", () => {
 
 describe("Formatting bar on a narrow pane", () => {
   it("folds the lowest priority first and keeps the bar's order", async () => {
-    const { fitItems } = await import("../features/report/editor/FormatToolbar");
+    const { fitItems } = await import("../features/report/editor/FormatToolbar/FormatToolbar");
     const item = (id: string, group: string, priority: number, width = 28) => ({ id, group, priority, width, node: null });
     const items = [
       item("block", "block", 30, 128),

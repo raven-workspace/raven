@@ -421,7 +421,7 @@ describe("Payloads drawer", () => {
     const { d } = await openOn("/e/e1/h/h2");
     const os = await d.findByRole("button", { name: "OS: not set" });
     const paste = d.getByRole("button", { name: "Paste into: not set" });
-    for (const chip of [os, paste]) expect(chip.querySelector(".text-warn")).not.toBeNull();
+    for (const chip of [os, paste]) expect(chip.querySelector(".picker-trigger__placeholder, .picker-trigger__value--warn")).not.toBeNull();
     expect(d.getByRole("heading", { name: "Bash /dev/tcp" })).toBeInTheDocument();
     expect(d.queryByRole("button", { name: /^Don't fit here/ })).not.toBeInTheDocument();
     expect(within(d.getByRole("listbox", { name: "Fits" })).getByRole("option", { name: /^nc\.exe -e(?! bind)/ })).toBeInTheDocument();
@@ -545,7 +545,7 @@ describe("Payloads drawer: chips and keys", () => {
       expect(field).toHaveFocus();
       expect(field).toHaveAttribute("aria-invalid", "true");
       expect(field).toHaveAccessibleDescription("1–65535");
-      expect(d.getByText("1–65535")).toHaveClass("text-warn");
+      expect(d.getByText("1–65535")).toHaveClass("context-chips__invalid");
       expect(usePayloadsStore.getState().overrides.h1?.port).toBeUndefined();
     }
     expect(await navigator.clipboard.readText()).toBe("untouched");

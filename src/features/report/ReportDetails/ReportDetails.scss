@@ -1,0 +1,71 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  // The "Report details" page: the cover's facts in an Ink form.
+  .report-details {
+    display: grid;
+    align-content: start;
+    gap: var(--space-xl);
+    padding: var(--space-xl);
+  }
+
+  .report-details__title {
+    @include type(title);
+    color: var(--fg);
+  }
+
+  .report-details__fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+    gap: var(--space-lg);
+  }
+
+  // Hosts in this report (lab engagements).
+  .report-details__hosts {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .report-details__empty {
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .report-details__host-list {
+    display: grid;
+    gap: var(--space-xs);
+  }
+
+  // One host: checkbox, name, IP.
+  .report-details__host {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-sm);
+    min-height: 1.75rem;
+    padding-inline: var(--space-sm);
+    border-radius: var(--radius-sm);
+    cursor: default;
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--surface);
+      }
+    }
+  }
+
+  .report-details__check {
+    accent-color: var(--accent);
+  }
+
+  .report-details__host-name {
+    @include truncate;
+    @include type(body);
+    color: var(--fg-2);
+  }
+
+  .report-details__host-ip {
+    @include type(code);
+    color: var(--faint);
+  }
+}

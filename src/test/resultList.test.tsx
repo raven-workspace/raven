@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ResultList } from "../features/arsenal/ResultList";
+import { ResultList } from "../features/arsenal/ResultList/ResultList";
 
 const groups = [{ key: "g", rows: [
   { id: "r1", title: "A command with a very long descriptive title", tag: "nxc", mono: true, stack: true },
@@ -17,9 +17,9 @@ describe("ResultList", () => {
   it("a stacked row puts the tool on its own line under the title", () => {
     render(<ResultList id="l" label="L" groups={groups} selected={0} onActivate={() => {}} />);
     const stacked = screen.getByRole("option", { name: /very long/ });
-    const tool = stacked.querySelector("span.font-mono")!;
+    const tool = stacked.querySelector("span.result-list__tag--mono")!;
     expect(tool).toHaveTextContent("nxc");
-    expect(stacked).toHaveClass("grid-cols-[minmax(0,1fr)]");
-    expect(screen.getByRole("option", { name: /plain row/ })).toHaveClass("grid-cols-[minmax(0,1fr)_auto]");
+    expect(stacked).toHaveClass("result-list__row--stack");
+    expect(screen.getByRole("option", { name: /plain row/ })).not.toHaveClass("result-list__row--stack");
   });
 });

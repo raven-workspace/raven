@@ -1,0 +1,46 @@
+@use "@/styles/abstracts" as *;
+
+// A 28px square icon button. `active` sets aria-pressed only: its intended highlight never rendered (it lost to the
+// transparent background in the order Tailwind emitted them), and the migration keeps the look as it was.
+@layer components {
+  .icon-button {
+    display: inline-grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background-color: transparent;
+    color: var(--fg-2);
+    user-select: none;
+    cursor: default;
+    @include transition-colors;
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--surface-hi);
+        color: var(--fg);
+      }
+    }
+  }
+
+  .icon-button--destructive {
+    color: var(--muted);
+
+    @media (hover: hover) {
+      &:hover {
+        color: var(--warn);
+      }
+    }
+
+    &:focus-visible {
+      color: var(--warn);
+    }
+  }
+
+  .icon-button:disabled {
+    color: var(--faint);
+    cursor: not-allowed;
+  }
+}

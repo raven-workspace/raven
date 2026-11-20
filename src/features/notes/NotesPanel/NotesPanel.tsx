@@ -1,0 +1,165 @@
+import { useEffect, useRef, type MouseEvent } from "react";
+import { isDialogOpen } from "../../../lib/keys";
+import type { Engagement } from "../../../types/engagement";
+import { BELOW_TITLE_BAR, Kbd, Toolbar, labelClass, useDrawerPresence } from "../../../ui/index";
+import { cx } from "../../../lib/cx";
+import { useHosts } from "../../hosts/queries";
+import { NoteEditor } from "../NoteEditor/NoteEditor";
+import { flushQuietly, MIN_WIDTH, maxWidth, noteKey, useNotesStore, type NotesScope } from "../useNotesStore";
+import "./NotesPanel.scss";
+
+/**
+ * Field notes (`N`): a panel over the right side of the engagement screen holding the current
+ * host's notes, or the engagement's. Text autosaves and is never dropped: it lives in the notes
+ * store until the backend confirms it, and is flushed on close, scope switch, route change and lock.
+ */
+export function NotesPanel({ engagement, hostId }: { engagement: Engagement; hostId: string | null }) {
+  const open = useNotesStore((s) => s.open);
+  const storedScope = useNotesStore((s) => s.scope);
+  const width = useNotesStore((s) => s.width);
+  const scope: NotesScope = hostId && storedScope === "host" ? "host" : "engagement";
+  const target = { engagementId: engagement.id, hostId: scope === "host" ? hostId : null };
+  const key = noteKey(target);
+
+  // Route change (other host or scope), closing the screen: save what is pending right away.
+  useEffect(() => () => flushQuietly(), [key]);
+
+  // Leaving the engagement closes the panel (its text is flushed by the effect above).
+  useEffect(() => () => useNotesStore.setState({ open: false }), []);
+
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const textRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (open) {
+      const active = document.activeElement;
+      returnFocus.current = active instanceof HTMLElement && active !== document.body ? active : null;
+      textRef.current?.focus();
+    } else if (returnFocus.current?.isConnected) {
+      returnFocus.current.focus();
+      returnFocus.current = null;
+    }
+  }, [open]);
+
+  // Capture phase: Esc and ⌘E reach the panel before the shell's own Esc handler, whatever the load order.
+  const onKey = useRef<(e: KeyboardEvent) => void>(() => {});
+  useEffect(() => {
+    onKey.current = (e) => {
+      const { open: isOpen, close, setScope } = useNotesStore.getState();
+      if (!isOpen || e.defaultPrevented || isDialogOpen()) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close();
+      } else if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "e" && hostId) {
+        e.preventDefault();
+        setScope(scope === "host" ? "engagement" : "host");
+      }
+    };
+  });
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => onKey.current(e);
+    window.addEventListener("keydown", on, true);
+    return () => window.removeEventListener("keydown", on, true);
+  }, []);
+
+  // Slides in from the right edge like the other drawers, and back out before it unmounts.
+  const [present, panelRef] = useDrawerPresence<HTMLElement>(open);
+  if (!present) return null;
+  return <PanelBody engagement={engagement} hostId={hostId} scope={scope} width={width} textRef={textRef} panelRef={panelRef} />;
+}
+
+function PanelBody({
+  engagement,
+  hostId,
+  scope,
+  width,
+  textRef,
+  panelRef,
+}: {
+  engagement: Engagement;
+  hostId: string | null;
+  scope: NotesScope;
+  width: number;
+  textRef: React.RefObject<HTMLTextAreaElement | null>;
+  panelRef: React.RefObject<HTMLElement | null>;
+}) {
+  const hosts = useHosts(engagement.id);
+  const hostName = hosts.data?.find((h) => h.id === hostId)?.name;
+  const target = { engagementId: engagement.id, hostId: scope === "host" ? hostId : null };
+  const setScope = useNotesStore((s) => s.setScope);
+  const scopeName = scope === "host" ? hostName : engagement.name;
+  const title = scopeName ? `Notes: ${scopeName}` : "Notes";
+
+  const startDrag = (e: MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = width;
+    const { setWidth } = useNotesStore.getState();
+    const onMove = (ev: globalThis.MouseEvent) => setWidth(startWidth + (startX - ev.clientX), false);
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      setWidth(useNotesStore.getState().width, true);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  return (
+    <aside
+      ref={panelRef}
+      aria-label={title}
+      style={{ width }}
+      className={cx("notes-panel", BELOW_TITLE_BAR)}
+    >
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize notes"
+        aria-valuemin={MIN_WIDTH}
+        aria-valuemax={maxWidth()}
+        aria-valuenow={width}
+        tabIndex={0}
+        onMouseDown={startDrag}
+        onKeyDown={(e) => {
+          if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+          e.preventDefault();
+          useNotesStore.getState().setWidth(width + (e.key === "ArrowLeft" ? 24 : -24));
+        }}
+        className="notes-panel__resize"
+      />
+      <header className="notes-panel__header">
+        {/* The space keeps "Notes SRV11" readable as one heading name; the grid ignores it. */}
+        <h2 className="notes-panel__title">
+          <span className={labelClass}>Notes</span>{" "}
+          {scopeName && <span className="notes-panel__scope-name" title={scopeName}>{scopeName}</span>}
+        </h2>
+        <Toolbar>
+          <div role="group" aria-label="Scope" className="notes-panel__scopes">
+            <Segment on={scope === "host"} disabled={!hostId} onClick={() => setScope("host")}>
+              Host
+            </Segment>
+            <Segment on={scope === "engagement"} onClick={() => setScope("engagement")}>
+              Engagement
+            </Segment>
+          </div>
+          <Kbd aria-hidden>⌘E</Kbd>
+        </Toolbar>
+      </header>
+      <NoteEditor target={target} textRef={textRef} className="notes-panel__editor" />
+    </aside>
+  );
+}
+
+function Segment({ on, disabled, onClick, children }: { on: boolean; disabled?: boolean; onClick: () => void; children: string }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      disabled={disabled}
+      onClick={onClick}
+      className="notes-panel__segment"
+    >
+      {children}
+    </button>
+  );
+}

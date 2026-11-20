@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SaveSummary } from "../../../features/capture/SaveSummary";
+import { SaveSummary } from "../../../features/capture/SaveSummary/SaveSummary";
 import { useSaveSummaryStore } from "../../../features/capture/useSaveSummaryStore";
 import { afterEntrySaved } from "../../../features/checklist/ticks";
-import { ExtractedLine } from "../../../features/log/ExtractedLine";
+import { ExtractedLine } from "../../../features/log/ExtractedLine/ExtractedLine";
 import { extractionsKey, invalidateAfterSave } from "../../../features/log/extractions";
 import { triedPairsKey } from "../../../features/credentials/queries";
 import { api } from "../../../lib/api";
@@ -92,10 +92,10 @@ describe("save summary toast", () => {
     show();
     const win = screen.getByText("2 hashes dumped");
     const count = screen.getByText("+3 services");
-    expect(win).toHaveClass("text-accent");
-    expect(count).not.toHaveClass("text-accent");
+    expect(win).toHaveClass("save-summary__win");
+    expect(count).not.toHaveClass("save-summary__win");
     expect(win.compareDocumentPosition(count) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByText("Ticked 'Dump hashes' on DC01")).not.toHaveClass("text-accent");
+    expect(screen.getByText("Ticked 'Dump hashes' on DC01")).not.toHaveClass("save-summary__win");
   });
 
   it("Undo calls extractionUndo then afterEntrySaved", async () => {
@@ -123,7 +123,7 @@ describe("ExtractedLine", () => {
     vi.useRealTimers();
     m.extractionsList.mockResolvedValue([extraction()]);
     wrap(<ExtractedLine entry={entry} />);
-    expect(await screen.findByText("2 hashes dumped")).toHaveClass("text-accent");
+    expect(await screen.findByText("2 hashes dumped")).toHaveClass("extracted-line__win");
     expect(screen.getByText(", +2 more", { exact: false })).toBeInTheDocument();
     const toggle = screen.getByRole("button", { expanded: false });
     fireEvent.click(toggle);
@@ -140,7 +140,7 @@ describe("ExtractedLine", () => {
     vi.useRealTimers();
     m.extractionsList.mockResolvedValue([extraction({ undoneAt: 5 })]);
     wrap(<ExtractedLine entry={entry} />);
-    expect(await screen.findByText("Extracted (undone)")).toHaveClass("text-muted");
+    expect(await screen.findByText("Extracted (undone)")).toHaveClass("extracted-line__undone");
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
   });
 });

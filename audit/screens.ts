@@ -506,7 +506,7 @@ export const SCREENS: Screen[] = [
   {
     // The owner's window (1400, sidebar open): about 1160px of pane, so the evidence column opens from the strip and
     // docks beside the page, the paper narrowing to make room.
-    id: "report-dock", path: REPORT, ready: "aside[aria-label='Evidence']:not(.fixed) >> role=tablist[name='Evidence']", widths: [1400],
+    id: "report-dock", path: REPORT, ready: "aside[aria-label='Evidence']:not(.evidence-drawer) >> role=tablist[name='Evidence']", widths: [1400],
     setup: async (page) => {
       await openGarnet(page);
       await page.locator("section[aria-label='Report']").getByRole("button", { name: "Evidence", exact: true }).click();

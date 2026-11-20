@@ -1,5 +1,6 @@
 import { cloneElement, isValidElement, useId, type ReactElement, type ReactNode } from "react";
 import { cx } from "../lib/cx";
+import "./Field.scss";
 
 interface ControlProps {
   id?: string;
@@ -34,18 +35,18 @@ export function Field({ label, children, hint, error, id, className }: FieldProp
     : children;
 
   return (
-    <div className={cx("grid gap-2", className)}>
-      <label htmlFor={controlId} className="block text-meta text-muted-2">
+    <div className={cx("field", className)}>
+      <label htmlFor={controlId} className="field__label">
         {label}
       </label>
       {control}
       {hint && (
-        <p id={hintId} className="m-0 text-meta text-muted">
+        <p id={hintId} className="field__hint">
           {hint}
         </p>
       )}
       {error && (
-        <p id={errorId} className="m-0 text-meta text-warn">
+        <p id={errorId} className="field__error">
           {error}
         </p>
       )}

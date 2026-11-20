@@ -1,0 +1,7 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  .confirm-delete__error {
+    color: var(--warn);
+  }
+}

@@ -1,0 +1,28 @@
+@use "@/styles/abstracts" as *;
+
+// An on/off switch: 28px like the other in-row controls, hairline, accent only while on.
+@layer components {
+  .toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    height: 1.75rem;
+    padding-inline: var(--space-sm);
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius-sm);
+    @include type(body);
+    color: var(--fg-2);
+    cursor: default;
+
+    @media (hover: hover) {
+      &:hover {
+        color: var(--fg);
+      }
+    }
+
+    &[aria-pressed="true"] {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+  }
+}

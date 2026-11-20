@@ -1,0 +1,8 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  // A figure whose screenshot file is gone; its amber ink comes from page.css's .report-missing.
+  .figure-view__missing {
+    @include type(meta);
+  }
+}

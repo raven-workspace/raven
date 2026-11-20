@@ -1,0 +1,9 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  // A failure above the page (a pasted image that couldn't be saved).
+  .report-editor__alert {
+    @include type(meta);
+    color: var(--warn);
+  }
+}

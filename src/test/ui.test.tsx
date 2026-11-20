@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
@@ -82,10 +83,12 @@ describe("Select focus", () => {
       />,
     );
     const item = await screen.findByRole("option", { name: "Exam sim" });
-    expect(item.className).not.toMatch(/\boutline-none\b/);
-    expect(item.className).toContain("data-highlighted:outline-1");
-    expect(item.className).toContain("data-highlighted:outline-accent");
-    expect(item.className).toContain("-outline-offset-1");
+    expect(item).toHaveClass("select-item");
+    // jsdom applies no stylesheets: the rule itself carries the ring (1px accent, drawn inside the item's edge).
+    const scss = readFileSync("src/ui/Select.scss", "utf8");
+    const item$ = scss.slice(scss.indexOf(".select-item {"));
+    expect(item$).toMatch(/outline-offset: -1px;/);
+    expect(item$.slice(item$.indexOf("&[data-highlighted]"))).toMatch(/^&\[data-highlighted\] \{[^}]*outline: 1px solid var\(--accent\);/);
     act(() => item.focus());
     await waitFor(() => expect(item).toHaveAttribute("data-highlighted"));
   });

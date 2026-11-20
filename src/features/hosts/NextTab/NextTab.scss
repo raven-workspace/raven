@@ -1,0 +1,21 @@
+@use "@/styles/abstracts/index" as *;
+
+@layer features {
+  // "Full checklist" and its caret, in the tab row.
+  .full-checklist-toggle {
+    display: grid;
+    min-height: 1.75rem;
+    cursor: default;
+    grid-auto-flow: column;
+    align-items: center;
+    gap: var(--space-xs);
+    @include type(meta);
+    color: var(--fg-2);
+  }
+
+  @media (hover: hover) {
+    .full-checklist-toggle:hover {
+      color: var(--fg);
+    }
+  }
+}

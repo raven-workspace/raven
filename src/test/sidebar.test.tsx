@@ -1,12 +1,13 @@
+import { readFileSync } from "node:fs";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { WEDGE } from "../features/hosts/HostGlyph";
-import { Sidebar, railName } from "../features/engagements/Sidebar";
+import { WEDGE } from "../features/hosts/HostGlyph/HostGlyph";
+import { Sidebar, railName } from "../features/engagements/Sidebar/Sidebar";
 import { useSidebarStore } from "../features/engagements/useSidebarStore";
-import { LogEntryRow } from "../features/log/LogEntryRow";
+import { LogEntryRow } from "../features/log/LogEntryRow/LogEntryRow";
 import { api } from "../lib/api";
 import { makeQueryClient } from "../lib/queryClient";
 import type { Host } from "../types/host";
@@ -52,13 +53,13 @@ describe("sidebar", () => {
     mount();
     const link = (await screen.findByText("web-portal-dmz-frontend-01")).closest("a")!;
     expect(link).toHaveAttribute("title", FULL);
-    expect(within(link).getByText("10.10.20.15")).toHaveClass("font-mono");
+    expect(within(link).getByText("10.10.20.15")).toHaveClass("engagement-sidebar__host-ip");
   });
 
   it("a long host name truncates in the sidebar with its title", async () => {
     mount();
     const short = await screen.findByText("web-portal-dmz-frontend-01");
-    expect(short).toHaveClass("truncate");
+    expect(short).toHaveClass("engagement-sidebar__host-name");
     expect(short.closest("a")).toHaveAttribute("title", FULL);
   });
 
@@ -83,7 +84,7 @@ describe("sidebar", () => {
     web.focus();
     const tip = await screen.findByRole("tooltip");
     expect(within(tip).getByText(FULL)).toBeInTheDocument();
-    expect(within(tip).getByText("10.10.20.15")).toHaveClass("font-mono");
+    expect(within(tip).getByText("10.10.20.15")).toHaveClass("engagement-sidebar__host-tip-ip");
   });
 
   it("the collapsed rail keeps the open-thread dot on a host with threads", async () => {
@@ -92,7 +93,7 @@ describe("sidebar", () => {
       { ownerId: "h2", engagementId: "e1", hostId: "h2", body: "? is 445 reachable\n? other", private: false, updatedAt: 1 },
     ]);
     mount();
-    const link = (await screen.findByText("dc01", { selector: "span.sr-only" })).closest("a")!;
+    const link = (await screen.findByText("dc01", { selector: "span.engagement-sidebar__sr-only" })).closest("a")!;
     expect(await within(link).findByRole("img", { name: "2 open threads" })).toBeInTheDocument();
     const other = screen.getByText("web").closest("a")!;
     expect(within(other).queryByRole("img", { name: /open thread/ })).toBeNull();
@@ -125,7 +126,7 @@ describe("sidebar", () => {
     expect(board).not.toHaveAttribute("title");
     await user.tab();
     board.focus();
-    const tip = (await screen.findAllByText("Board")).find((n) => n.closest("[role=tooltip]") || n.parentElement?.className.includes("z-50"));
+    const tip = (await screen.findAllByText("Board")).find((n) => n.closest("[role=tooltip], .tooltip"));
     expect(tip).toBeTruthy();
     expect(await screen.findAllByText("1")).not.toHaveLength(0);
   });
@@ -143,14 +144,16 @@ describe("sidebar", () => {
     const dc = await screen.findByText("dc01", { selector: "[aria-hidden]" });
     expect(dc).not.toHaveClass("truncate");
     const a = dc.closest("a")!;
-    expect(a).toHaveClass("w-full");
+    expect(a).toHaveClass("engagement-sidebar__host-row--rail");
     // Lit = shadcn's active state. The link draws nothing itself: one marker for the whole sidebar, --surface-hi
     // (sidebar-accent) plus the 2px accent bar (sidebar-primary), slides to the active link.
     expect(a).toHaveAttribute("data-active", "true");
-    expect(a).toHaveClass("data-active:bg-transparent", "data-active:shadow-none");
+    expect(a).toHaveClass("engagement-sidebar__link");
+    expect(readFileSync("src/features/engagements/Sidebar/Sidebar.scss", "utf8")).toMatch(
+      /\.engagement-sidebar__link \{[^}]*&\[data-active="true"\] \{\s*background-color: transparent;\s*box-shadow: none;/,
+    );
     const marker = document.querySelector("nav [data-tab-marker]")!;
-    expect(marker).toHaveClass("bg-sidebar-accent");
-    expect(marker.className).toContain("shadow-[inset_2px_0_0_var(--sidebar-primary)]");
+    expect(marker).toHaveClass("engagement-sidebar__marker");
     expect(screen.getByText("web").closest("a")).toHaveAttribute("data-active", "false");
   });
 
@@ -159,17 +162,22 @@ describe("sidebar", () => {
     mount();
     const host = (await screen.findByText("dc01", { selector: "[aria-hidden]" })).closest("a")!;
     const board = screen.getByRole("link", { name: "Board" });
+    const scss = readFileSync("src/ui/shadcn/sidebar.scss", "utf8");
     // Section links: a fixed 32px box on the rail, the 16px icon centred by 8px padding.
-    expect(board.className).toContain("group-data-[collapsible=icon]:size-8!");
-    expect(board.className).toContain("group-data-[collapsible=icon]:p-2!");
+    expect(board).toHaveClass("sidebar-menu-button");
+    expect(board).not.toHaveClass("sidebar-menu-button--lg");
+    expect(scss).toMatch(/#\{\$rail\} &:not\(\.sidebar-menu-button--lg\) \{\s*width: 2rem !important;\s*height: 2rem !important;\s*padding: var\(--space-sm\) !important;/);
     // Host rows: 48px wide, glyph centred in a single track.
-    expect(host.className).toContain("group-data-[collapsible=icon]:w-12!");
-    expect(host).toHaveClass("justify-items-center", "grid-cols-[minmax(0,1fr)]");
+    expect(host).toHaveClass("sidebar-menu-button--lg", "engagement-sidebar__host-row--rail");
+    expect(scss).toMatch(/\.sidebar-menu-button--lg \{[^}]*#\{\$rail\} & \{\s*width: 3rem !important;/);
+    expect(readFileSync("src/features/engagements/Sidebar/Sidebar.scss", "utf8")).toMatch(
+      /\.engagement-sidebar__host-row--rail \{[^}]*grid-template-columns: minmax\(0, 1fr\);\s*justify-items: center;/,
+    );
     // Both lists centre their items in the same rail column, so the centres share one line.
     const sections = board.closest("ul")!;
     const hosts = host.closest("ul")!;
     expect(sections).not.toBe(hosts);
-    for (const ul of [sections, hosts]) expect(ul).toHaveClass("group-data-[collapsible=icon]:items-center");
+    for (const ul of [sections, hosts]) expect(ul).toHaveClass("engagement-sidebar__menu--rail");
     expect(sections.closest("[data-sidebar=group]")!.className).toBe(hosts.closest("[data-sidebar=group]")!.className);
   });
 
@@ -199,12 +207,16 @@ describe("sidebar", () => {
     mount();
     const row = (await screen.findByText("dc01")).closest("a")!;
     const wrap = screen.getByRole("button", { name: "Add host" }).parentElement!.parentElement ?? screen.getByRole("button", { name: "Add host" }).parentElement!;
-    const cols = (el: Element) => /grid-cols-\[(16px)[_\]]/.exec(el.className)?.[1];
-    expect(cols(row)).toBe("16px");
-    const w = screen.getByRole("button", { name: "Add host" }).closest("div.grid")!;
-    expect(cols(w)).toBe("16px");
-    expect(w).toHaveClass("px-2");
-    expect(row).toHaveClass("px-2");
+    const scss = readFileSync("src/features/engagements/Sidebar/Sidebar.scss", "utf8");
+    const rule = (cls: string) => new RegExp(`\\.${cls} \\{([^}]*)\\}`).exec(scss)?.[1] ?? "";
+    expect(row).toHaveClass("engagement-sidebar__host-row");
+    expect(rule("engagement-sidebar__host-row")).toMatch(/grid-template-columns: 16px[ ;]/);
+    expect(rule("engagement-sidebar__add--expanded")).toMatch(/grid-template-columns: 16px;/);
+    const w = screen.getByRole("button", { name: "Add host" }).closest("div.engagement-sidebar__add")!;
+    // .engagement-sidebar__add--expanded: one 16px track and 8px inline padding, as the host rows.
+    expect(w).toHaveClass("engagement-sidebar__add--expanded");
+    for (const cls of ["engagement-sidebar__host-row", "engagement-sidebar__add--expanded"])
+      expect(rule(cls)).toMatch(/padding-inline: var\(--space-sm\);/);
     expect(wrap).toBeTruthy();
   });
 
@@ -282,7 +294,7 @@ describe("log row chip", () => {
     renderRow(<LogEntryRow entry={e} hosts={hosts} onPick={() => {}} />);
     const caret = screen.getByRole("button", { name: "Show t" });
     expect(caret).not.toHaveAttribute("title");
-    expect(caret).toHaveClass("size-7");
+    expect(caret).toHaveClass("icon-button");
     expect(caret.querySelector("svg")).toHaveAttribute("width", "16");
     caret.focus();
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Show the entry");

@@ -7,8 +7,8 @@ import { api } from "../lib/api";
 import { copyPlain, copySecret } from "../lib/clipboard";
 import { makeQueryClient } from "../lib/queryClient";
 import { RavenError } from "../types/errors";
-import { SetupScreen } from "../features/vault/SetupScreen";
-import { VaultGate } from "../features/vault/VaultGate";
+import { SetupScreen } from "../features/vault/SetupScreen/SetupScreen";
+import { VaultGate } from "../features/vault/VaultGate/VaultGate";
 
 vi.mock("../lib/api");
 const m = vi.mocked(api, true);

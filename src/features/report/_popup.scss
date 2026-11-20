@@ -1,0 +1,20 @@
+// Shared by the report's popovers and menus (tab menus, the block menu, the bubble and slash menus, the table handles'
+// menus, the toolbar's More): the strong hairline on the surface tint, lifted off the page by a soft shadow.
+@mixin report-popup {
+  display: grid;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background-color: var(--surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+
+// A ProseKit positioner (a custom element): a block while open, hidden when closed or before ProseKit marks its state.
+@mixin prosekit-positioner($z) {
+  z-index: $z;
+  display: block;
+
+  &[data-state="closed"],
+  &:not([data-state]) {
+    display: none;
+  }
+}

@@ -276,7 +276,7 @@ describe("auto-tick wiring", () => {
     const warning = await within(dialog).findByText(
       "Metasploit is already locked to another host on this engagement. This entry uses it on a different host.",
     );
-    expect(warning).toHaveClass("text-warn");
+    expect(warning).toHaveClass("capture-form__warning");
     // Saving is still allowed, and the lock stays where it is.
     await saveCapture(user);
     await vi.waitFor(() => expect(m.logCreate).toHaveBeenCalledTimes(2));

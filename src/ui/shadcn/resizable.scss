@@ -1,0 +1,61 @@
+@use "@/styles/abstracts" as *;
+
+// The library also sets the group's display and direction inline.
+@layer components {
+  .resizable-group {
+    display: flex;
+    width: 100%;
+    height: 100%;
+
+    &[aria-orientation="vertical"] {
+      flex-direction: column;
+    }
+  }
+
+  // A hairline between panels with an 8px hit area (::after) centred on it. Focus brightens the line rather than
+  // drawing a ring (the stock outline-none won over its focus-visible outline).
+  .resizable-handle {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1px;
+    background-color: var(--line);
+    outline-style: none;
+    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke;
+    transition-timing-function: var(--ease-standard);
+    transition-duration: 150ms;
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset-block: 0;
+      left: 50%;
+      width: var(--space-sm);
+      translate: -50% 0;
+    }
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--line-strong);
+      }
+    }
+
+    &:focus-visible {
+      background-color: var(--line-strong);
+    }
+
+    // Between stacked panels: a horizontal line, its hit area spanning the width.
+    &[aria-orientation="horizontal"] {
+      width: 100%;
+      height: 1px;
+
+      &::after {
+        left: 0;
+        width: 100%;
+        height: var(--space-sm);
+        translate: 0 -50%;
+      }
+    }
+  }
+}

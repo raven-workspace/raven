@@ -1,0 +1,43 @@
+@use "@/styles/abstracts" as *;
+
+// Toolbar, Row and ActionCell: the row primitives feature layouts are built from.
+@layer components {
+  // A single-line run of controls. Never wraps.
+  .toolbar {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .toolbar--loose {
+    gap: var(--space-md);
+  }
+
+  // A grid row; its tracks come from the `tracks` prop.
+  .row {
+    display: grid;
+    align-items: center;
+    gap: var(--space-md);
+  }
+
+  .row--top {
+    align-items: flex-start;
+  }
+
+  // The right-hand action column of a Row.
+  .action-cell {
+    justify-content: flex-end;
+  }
+
+  // Vertical scroll pane: 4px so focus outlines are not clipped, 12px right so overlay scrollbars (WKWebView) never sit
+  // over controls.
+  .scroll-pane {
+    position: relative;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--space-xs);
+    padding-right: var(--space-md);
+    scrollbar-gutter: stable;
+  }
+}

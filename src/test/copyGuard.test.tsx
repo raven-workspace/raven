@@ -213,7 +213,7 @@ describe("copy guard in the app", () => {
     await user.click(fetchBtn);
     const status = await d.findByText("Copied for dc01. 1 placeholder left");
     expect(status).toHaveAttribute("role", "status");
-    expect(status).toHaveClass("text-warn");
+    expect(status).toHaveClass("command-list__status--warn");
     expect(await navigator.clipboard.readText()).toBe("zzfetch http://10.10.14.9/{FILE}");
   });
 
@@ -241,6 +241,6 @@ describe("copy guard in the app", () => {
     await user.type(await screen.findByRole("combobox", { name: "Search" }), "zzfetch");
     const marks = await screen.findAllByText("{FILE}");
     const mark = marks.find((el) => el.tagName === "MARK");
-    expect(mark).toHaveClass("text-warn");
+    expect(mark).toHaveClass("command-pre__mark");
   });
 });

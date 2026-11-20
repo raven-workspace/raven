@@ -154,7 +154,7 @@ The checklist (what they've done, what their options are next) and the host fact
   - import from old Raven.
 - **Vault.** Local-only. The encrypted database is unlocked by a vault password, auto-locks, and makes no network calls at runtime except NIST NVD CVE lookups.
 - **Data safety.** Since 2026-10-25, stored data is real lab data. Changes need migrations and must take a backup first.
-- **Stack:** Tauri 2, React 19, TypeScript, Tailwind 4 and Vite.
+- **Stack:** Tauri 2, React 19, TypeScript, SCSS and Vite.
 - **Visual audit.** `npm run audit:visual` runs the UI against synthetic stress data for layout, accessibility, keyboard and UX checks.
 
 ## Brand Commitments

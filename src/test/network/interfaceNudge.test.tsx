@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { FactsColumn } from "../../features/hosts/facts/FactsColumn";
+import { FactsColumn } from "../../features/hosts/facts/FactsColumn/FactsColumn";
 import { api } from "../../lib/api";
 import { makeQueryClient } from "../../lib/queryClient";
 import type { Host } from "../../types/host";

@@ -1,0 +1,61 @@
+@use "@/styles/abstracts" as *;
+
+// Rows ruled by --line hairlines (none under the last), uppercase label headings, cells that don't wrap.
+@layer components {
+  .data-table-container {
+    position: relative;
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .data-table {
+    width: 100%;
+    @include type(body);
+  }
+
+  .data-table__header tr {
+    border-bottom-width: 1px;
+  }
+
+  .data-table__body tr:last-child {
+    border-width: 0;
+  }
+
+  .data-table__row {
+    border-bottom: 1px solid var(--line);
+    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke;
+    transition-timing-function: var(--ease-standard);
+    transition-duration: 150ms;
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--surface-hi);
+        background-color: color-mix(in oklab, var(--surface-hi) 50%, transparent);
+      }
+    }
+
+    &:has([aria-expanded="true"]),
+    &[data-state="selected"] {
+      background-color: var(--surface-hi);
+    }
+  }
+
+  .data-table__head,
+  .data-table__cell {
+    padding: var(--space-sm);
+    vertical-align: middle;
+    white-space: nowrap;
+
+    &:has([role="checkbox"]) {
+      padding-right: 0;
+    }
+  }
+
+  .data-table__head {
+    @include type(label);
+    text-align: left;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+}

@@ -1,0 +1,39 @@
+@use "@/styles/abstracts" as *;
+
+// Wordmark, brand logos and search matches.
+@layer components {
+  // Height comes from the caller; width follows the art.
+  .wordmark {
+    display: block;
+    width: auto;
+    user-select: none;
+  }
+
+  // The SVGs are single-colour (some white, some black): normalise to the muted foreground.
+  .brand-icon {
+    width: 1rem;
+    height: 1rem;
+    filter: brightness(0%) invert(100%);
+    opacity: 0.7;
+  }
+
+  // 24px at full strength, for a logo that stands alone as a node's mark.
+  .brand-icon--large {
+    width: 1.5rem;
+    height: 1.5rem;
+    opacity: 1;
+  }
+
+  // A search match: a quiet accent wash; the current match (data-current, set by the page) is solid accent.
+  .match {
+    border-radius: 2px;
+    background-color: var(--accent);
+    background-color: color-mix(in oklab, var(--accent) 20%, transparent);
+    color: var(--fg);
+
+    &[data-current] {
+      background-color: var(--accent);
+      color: var(--bg);
+    }
+  }
+}

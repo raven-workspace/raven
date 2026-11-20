@@ -1,0 +1,20 @@
+@use "@/styles/abstracts" as *;
+
+// A 1px --line-2 rule across its container (horizontal) or down its row (vertical). The orientation rules keep the
+// block's specificity, so a caller's class can still size or place the rule.
+@layer components {
+  .separator {
+    flex-shrink: 0;
+    background-color: var(--line-2);
+
+    &:where([data-orientation="horizontal"]) {
+      height: 1px;
+      width: 100%;
+    }
+
+    &:where([data-orientation="vertical"]) {
+      width: 1px;
+      align-self: stretch;
+    }
+  }
+}

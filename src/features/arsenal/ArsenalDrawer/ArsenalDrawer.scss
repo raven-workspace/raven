@@ -1,0 +1,104 @@
+@use "@/styles/abstracts/index" as *;
+
+// The Arsenal (`A`): a drawer on the right edge under the title bar. Search bar and chips, the list or the card, the
+// filled command under a results list (a fixed row, so picking another command never moves the list), the hint line.
+@layer features {
+  .arsenal-drawer {
+    position: fixed;
+    right: 0;
+    z-index: var(--z-drawer);
+    display: grid;
+    width: 500px;
+    max-width: 70vw;
+    border-left: 1px solid var(--line-2);
+    background-color: var(--surface);
+    color: var(--fg-2);
+  }
+
+  .arsenal-drawer__body {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .arsenal-drawer__body--preview {
+    grid-template-rows: auto minmax(0, 1fr) minmax(0, 40%) auto;
+  }
+
+  .arsenal-drawer__header {
+    display: grid;
+    flex-shrink: 0;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--line);
+  }
+
+  // The search bar and Full screen; inside a card or a category, ← Back first.
+  .arsenal-drawer__bar {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .arsenal-drawer__bar--back {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .arsenal-drawer__search {
+    display: grid;
+    min-width: 7rem;
+  }
+
+  .arsenal-drawer__chips {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    justify-items: start;
+    gap: var(--space-md);
+  }
+
+  .arsenal-drawer__chip {
+    max-width: 100%;
+  }
+
+  .arsenal-drawer__view {
+    min-height: 0;
+    padding: var(--space-md) var(--space-lg);
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .arsenal-drawer__empty {
+    padding: var(--space-sm) var(--space-xs);
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .arsenal-drawer__preview {
+    display: grid;
+    align-content: flex-start;
+    gap: var(--space-xs);
+    min-height: 0;
+    padding: var(--space-md) var(--space-lg);
+    overflow-x: hidden;
+    overflow-y: auto;
+    border-top: 1px solid var(--line);
+  }
+
+  // A copy note: a confirmation in muted, a hold-back or a failure in amber.
+  .arsenal-drawer__note {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .arsenal-drawer__note--warn {
+    color: var(--warn);
+  }
+
+  .arsenal-drawer__footer {
+    display: grid;
+    padding: var(--space-sm) var(--space-lg);
+    border-top: 1px solid var(--line);
+  }
+}

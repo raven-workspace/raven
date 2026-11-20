@@ -1,0 +1,17 @@
+@use "@/styles/abstracts" as *;
+
+@layer components {
+  // The uppercase tracked section label ("Hosts").
+  .section-label {
+    @include type(label);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  // A form field's label: sentence case.
+  .field-label {
+    @include type(meta);
+    color: var(--muted-2);
+  }
+}

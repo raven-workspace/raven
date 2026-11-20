@@ -1,0 +1,38 @@
+@use "@/styles/abstracts/index" as *;
+
+// A note's code block as a command (and the Answer card's commands): a focusable group whose ring shows on any focus,
+// 1px and clear of the block. The exam-rule lines sit under it.
+@layer features {
+  .manual-command {
+    display: grid;
+    gap: var(--space-xs);
+    border-radius: var(--radius-sm);
+    outline-style: none;
+    outline-color: var(--accent);
+    outline-offset: 4px;
+
+    &:focus {
+      outline-style: solid;
+      outline-width: 1px;
+    }
+  }
+
+  .manual-command--tight {
+    outline-offset: 2px;
+  }
+
+  .manual-command__caption {
+    @include truncate;
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .manual-command__rule {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .manual-command__rule--warn {
+    color: var(--warn);
+  }
+}

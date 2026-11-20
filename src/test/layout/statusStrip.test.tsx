@@ -94,8 +94,7 @@ describe("status strip and title bar", () => {
   it("controls are the last track, inset like the content column", async () => {
     await mountStrip();
     const bar = document.querySelector<HTMLElement>("[data-tauri-drag-region]")!;
-    expect(bar.className).toMatch(/grid-cols-\[auto_minmax\(0,1fr\)_auto\]/);
-    expect(bar.className).toMatch(/\bpr-6\b/);
+    expect(bar).toHaveClass("title-bar");
     const group = screen.getByRole("button", { name: "Settings" }).closest("[data-tauri-drag-region] > div")!;
     expect(bar.lastElementChild).toBe(group);
     expect(bar.firstElementChild!.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -136,7 +135,7 @@ describe("status strip and title bar", () => {
     m.engagementSetTimeboxPaused.mockResolvedValue({ ...running, timeboxPausedAt: Date.now() });
     const strip = await mountStrip();
     const pause = await within(strip).findByRole("button", { name: "Pause timebox" });
-    expect(within(strip).getByText(/left$/).className).toMatch(/\btext-accent\b/);
+    expect(within(strip).getByText(/left$/)).toHaveClass("timebox-text--running");
     fireEvent.click(pause);
     await waitFor(() => expect(m.engagementSetTimeboxPaused).toHaveBeenCalledWith("e1", true));
     expect(await within(strip).findByRole("button", { name: "Resume timebox" })).toBeInTheDocument();
@@ -150,7 +149,7 @@ describe("status strip and title bar", () => {
     const strip = await mountStrip();
     expect(await within(strip).findByRole("button", { name: "Resume timebox" })).toBeInTheDocument();
     const time = within(strip).getByText("21h 45m left");
-    expect(time.className).toMatch(/\btext-muted\b/);
+    expect(time).toHaveClass("timebox-text--paused");
   });
 
   it("a timebox that is over or not started has no pause button", async () => {

@@ -1,9 +1,10 @@
+import { readFileSync } from "node:fs";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { CommandList } from "../features/checklist/CommandList";
-import { CredentialPicker } from "../features/checklist/CredentialPicker";
-import { GoalRow } from "../features/checklist/GoalRow";
+import { CommandList } from "../features/checklist/CommandList/CommandList";
+import { CredentialPicker } from "../features/checklist/CredentialPicker/CredentialPicker";
+import { GoalRow } from "../features/checklist/GoalRow/GoalRow";
 import type { Credential } from "../types/credentials";
 
 // jsdom has no layout: these check the classes that decide wrapping (U5–U7).
@@ -19,19 +20,21 @@ describe("layout (U5–U7)", () => {
     const label = screen.getByText("Commands use:");
     const picker = screen.getByRole("combobox", { name: "Commands use" });
     expect(label.parentElement).toBe(picker.parentElement);
-    expect(label.parentElement!.className).toMatch(/\bgrid\b/);
-    expect(picker.className).toMatch(/w-full/);
+    expect(label.parentElement).toHaveClass("credential-picker");
+    expect(picker).toHaveClass("credential-picker__select");
+    const scss = readFileSync("src/features/checklist/CredentialPicker/CredentialPicker.scss", "utf8");
+    expect(scss).toMatch(/\.credential-picker \{\s*display: grid;/);
+    expect(scss).toMatch(/\.credential-picker__select \{\s*width: 100%;/);
     expect(picker.getAttribute("title")).toContain("ted_admin");
-    expect(picker.querySelector(".truncate")).not.toBeNull();
+    expect(picker.querySelector(".select-trigger__value")).not.toBeNull();
   });
 
   it("U6: a command block wraps at whitespace, keeps each word whole, and its text stays selectable and copyable as written", () => {
     render(<CommandList commands={[{ id: "a", title: "Run it", text: "nxc smb 10.10.67.140 -u tom", unresolved: [], msfMarker: false }]} />);
     const pre = screen.getByText((_, el) => el?.tagName === "PRE");
-    expect(pre.className).not.toMatch(/break-all|break-words|wrap-anywhere|wrap-break-word/);
-    expect(pre.className).toMatch(/whitespace-pre-wrap/);
-    expect(pre.className).toMatch(/overflow-x-hidden/);
-    expect(pre.className).not.toMatch(/overflow-x-(auto|scroll)/);
+    // Wraps at whitespace (pre-wrap, no word breaking) and never scrolls sideways: the wrapping variant.
+    expect(pre).toHaveClass("command-block__text", "command-block__text--wrap");
+    expect(pre).not.toHaveClass("command-block__text--scroll");
     expect(pre.textContent).toBe("nxc smb 10.10.67.140 -u tom");
   });
 
@@ -42,8 +45,7 @@ describe("layout (U5–U7)", () => {
     expect(block).toContainElement(copy);
     // A fixed 28px track for Copy, 8px from the text: the text never runs under it.
     const row = copy.parentElement!;
-    expect(row.className).toMatch(/grid-cols-\[minmax\(0,1fr\)_28px\]/);
-    expect(row.className).toMatch(/\bgap-2\b/);
+    expect(row).toHaveClass("command-block__box");
     expect(copy.className).not.toMatch(/absolute/);
     expect(copy.querySelector("svg")).not.toBeNull();
     const desc = screen.getByText(/A long description/);
@@ -60,10 +62,14 @@ describe("layout (U5–U7)", () => {
     const segs = within(group).getAllByRole("radio");
     expect(segs.map((b) => b.textContent)).toEqual(["To do", "Doing", "Done", "N/A"]);
     expect(segs.filter((b) => b.getAttribute("aria-checked") === "true").map((b) => b.textContent)).toEqual(["Doing"]);
-    expect(group.className).toMatch(/\bh-7\b/);
-    for (const s of segs) expect(s.className).toMatch(/\bh-full\b/);
-    expect(group.className).toMatch(/rounded-sm/);
-    expect(screen.getByText("Because.").parentElement!.className).toMatch(/gap-3/);
+    // A 28px pill whose segments fill its height.
+    expect(group).toHaveClass("toggle-group");
+    for (const s of segs) expect(s).toHaveClass("toggle-group__item");
+    const scss = readFileSync("src/ui/shadcn/toggle-group.scss", "utf8");
+    expect(scss).toMatch(/\.toggle-group \{[^}]*height: 1\.75rem;[^}]*border-radius: var\(--radius-sm\);/);
+    expect(scss).toMatch(/\.toggle-group__item \{[^}]*height: 100%;/);
+    expect(screen.getByText("Because.").parentElement).toHaveClass("goal-row__body");
+    expect(readFileSync("src/features/checklist/GoalRow/GoalRow.scss", "utf8")).toMatch(/\.goal-row__body \{[^}]*gap: var\(--space-md\);/);
   });
 
   it("pressing the selected status again keeps it", async () => {
@@ -84,7 +90,8 @@ describe("layout (U5–U7)", () => {
     const block = screen.getByTestId("command-block");
     const words = [...block.querySelectorAll("[data-token]")];
     expect(words.map((w) => w.textContent)).toEqual(["rustscan", "-a", "10.10.20.15", "--", "-sC", "-sV"]);
-    for (const w of words) expect(w.className).toMatch(/inline-block max-w-full \[overflow-wrap:anywhere\]/);
+    for (const w of words) expect(w).toHaveClass("command-block__token");
+    expect(block.querySelector("pre")).toHaveClass("command-block__text--wrap");
     expect(block.querySelector("pre")!.textContent).toBe("rustscan -a 10.10.20.15 -- -sC -sV");
   });
 

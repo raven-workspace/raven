@@ -63,6 +63,8 @@ for (const screen of STATE_SCREENS) {
       // While loading or failing, a screen's setup may legitimately not find its controls: give up quickly and check what rendered.
       // With data (empty), a failing setup is a real error.
       page.setDefaultTimeout(2000);
+      // ...but loading the page itself gets the usual time: on a cold dev server the first navigations take longer than 2s.
+      page.setDefaultNavigationTimeout(30_000);
       await page.setViewportSize({ width: WIDTH, height: 900 });
       await page.clock.install({ time: AUDIT_NOW });
       // The scenario goes in the query, before any #anchor.
