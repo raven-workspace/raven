@@ -1,4 +1,4 @@
-import { cells, parseInlineWith, TABLE_SEPARATOR, type Inline } from "../manual/markdown";
+import { cells, isTableRow, isTableStart, parseInlineWith, type Inline } from "../manual/markdown";
 import { terminalBlocks } from "./terminal";
 import { bold, codeBlock, joinText, listItem, para, table, text as textNode, type Mark } from "./nodes";
 import type { ReportNode } from "./types";
@@ -24,7 +24,6 @@ const inline = inlineMarkdown;
 const BULLET_ITEM = /^\s*[-*]\s(?=\S)(.*)$/;
 const ORDERED_ITEM = /^\s*\d+[.)]\s(?=\S)(.*)$/;
 const HEADING = /^\s*#{1,6}\s+(.*?)\s*#*\s*$/;
-const isTableRow = (line: string) => line.trim().startsWith("|");
 
 /**
  * A prose run as page blocks: paragraphs split on blank lines (wrapped lines joined), inline Markdown only. Two or more
@@ -55,7 +54,7 @@ function proseBlocks(text: string): ReportNode[] {
       i++;
       continue;
     }
-    if (isTableRow(line) && i + 1 < lines.length && TABLE_SEPARATOR.test(lines[i + 1]) && lines[i + 1].includes("-")) {
+    if (isTableStart(lines, i)) {
       flush();
       const head = cells(line).map(inline);
       const rows: ReportNode[][][] = [];

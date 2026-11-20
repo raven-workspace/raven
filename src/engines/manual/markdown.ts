@@ -30,7 +30,36 @@ const QUOTE = /^\s*>\s?/;
 const startsBlock = (line: string): boolean =>
   FENCE.test(line) || OUTLINE_HEADING.test(line) || DEEP_HEADING.test(line) || tableCaption(line) !== null;
 
-const isTableRow = (line: string) => line.trim().startsWith("|");
+/** A line of a pipe table: it starts with `|`. */
+export const isTableRow = (line: string) => line.trim().startsWith("|");
+
+/** Whether a pipe table starts at `lines[i]`: a `|` row, then a separator row (`| --- |`). */
+export const isTableStart = (lines: string[], i: number) =>
+  isTableRow(lines[i]) && i + 1 < lines.length && TABLE_SEPARATOR.test(lines[i + 1]) && lines[i + 1].includes("-");
+
+/**
+ * The fenced code block opening at `lines[i]`, or null when that line is no fence: the info string after the fence,
+ * the body, and the index after the closing fence. Same rule as the outline: a fence closes on the next fence line of
+ * the same character (or the end of the text). CommonMark: the opening fence's indent (a fence inside a list item)
+ * comes off each body line, so a copied command never starts with a space.
+ */
+export function readFence(lines: string[], i: number): { info: string; text: string; next: number } | null {
+  const line = lines[i];
+  const fence = FENCE.exec(line);
+  if (!fence) return null;
+  const ch = fence[1][0];
+  const indent = /^[ \t]*/.exec(line)![0].length;
+  const dedent = (l: string) => l.replace(new RegExp(`^[ \\t]{0,${indent}}`), "");
+  const text: string[] = [];
+  let j = i + 1;
+  while (j < lines.length) {
+    const f = FENCE.exec(lines[j]);
+    if (f && f[1][0] === ch) break;
+    text.push(dedent(lines[j]));
+    j++;
+  }
+  return { info: line.replace(FENCE, ""), text: text.join("\n"), next: j + 1 };
+}
 
 /** Cells of a pipe-table row: split on unescaped pipes; `\|` is a literal pipe. */
 export function cells(line: string): string[] {
@@ -76,24 +105,10 @@ export function parseMarkdown(body: string, opts: MarkdownOptions = {}): Block[]
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
-    const fence = FENCE.exec(line);
+    const fence = readFence(lines, i);
     if (fence) {
-      // Same rule as the outline: a fence closes on the next fence line of the same character (or the end of the note).
-      const ch = fence[1][0];
-      // CommonMark: the opening fence's indent (a fence inside a list item) comes off each content line, so a copied
-      // command never starts with a space.
-      const indent = /^[ \t]*/.exec(line)![0].length;
-      const dedent = (l: string) => l.replace(new RegExp(`^[ \\t]{0,${indent}}`), "");
-      const text: string[] = [];
-      i++;
-      while (i < lines.length) {
-        const f = FENCE.exec(lines[i]);
-        if (f && f[1][0] === ch) break;
-        text.push(dedent(lines[i]));
-        i++;
-      }
-      i++;
-      out.push({ kind: "code", ...fenceInfo(line.replace(FENCE, "")), text: text.join("\n") });
+      out.push({ kind: "code", ...fenceInfo(fence.info), text: fence.text });
+      i = fence.next;
       continue;
     }
     const h = OUTLINE_HEADING.exec(line);
@@ -125,7 +140,7 @@ export function parseMarkdown(body: string, opts: MarkdownOptions = {}): Block[]
       i++;
       continue;
     }
-    if (isTableRow(line) && i + 1 < lines.length && TABLE_SEPARATOR.test(lines[i + 1]) && lines[i + 1].includes("-")) {
+    if (isTableStart(lines, i)) {
       const head = cells(line).map(parseInline);
       const rows: Inline[][][] = [];
       i += 2;

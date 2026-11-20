@@ -1,4 +1,5 @@
 import type { SectionKind } from "../../types/report";
+import { HOUSE_CLEANING, INTRODUCTION, RECOMMENDATIONS, SCOPE } from "./frontMatter";
 import { sourceOf } from "./stamp";
 import type { PageMeta, ReportNode } from "./types";
 
@@ -110,11 +111,11 @@ export const GUIDES: Record<GuideId, { title: string; body: string }> = {
   },
 };
 
-/** Sub-section headings that carry a guide, by the page they're drafted on (frontMatter.ts names them). */
+/** Sub-section headings that carry a guide, by the page they're drafted on (named in frontMatter.ts). */
 const HEADING_GUIDES: Partial<Record<SectionKind, Record<string, GuideId>>> = {
-  introduction: { introduction: "introduction", scope: "scope" },
-  summary: { recommendations: "recommendations" },
-  methodology: { "house cleaning": "house-cleaning" },
+  introduction: { [INTRODUCTION.toLowerCase()]: "introduction", [SCOPE.toLowerCase()]: "scope" },
+  summary: { [RECOMMENDATIONS.toLowerCase()]: "recommendations" },
+  methodology: { [HOUSE_CLEANING.toLowerCase()]: "house-cleaning" },
 };
 
 const PHASE_GUIDES: Record<string, GuideId> = { post: "post", additional: "additional", tested: "tested" };

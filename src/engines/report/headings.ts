@@ -1,4 +1,5 @@
 import type { SectionKind } from "../../types/report";
+import { DRAFTED_SUBSECTIONS } from "./frontMatter";
 import type { PageMeta, ReportNode, ReportTarget } from "./types";
 
 /** A heading as the page prints it: its number ("4.1.2", or null for an unnumbered one) and its words. */
@@ -84,19 +85,13 @@ export function sectionNumbers(sections: { id: string; kind: SectionKind; meta?:
   return out;
 }
 
-/** The sub-sections a report-level page is drafted with, as the sample names them. Only these are numbered: a heading
- *  the owner adds is theirs and stays unnumbered. */
-const SUBSECTIONS: Partial<Record<SectionKind, string[]>> = {
-  introduction: ["Introduction", "Objective", "Requirements", "Scope"],
-  summary: ["Recommendations"],
-  methodology: ["Information Gathering", "Service Enumeration", "Penetration", "Maintaining Access", "House Cleaning"],
-};
-
 const textOf = (n: ReportNode): string => (n.text ?? "") + (n.content ?? []).map(textOf).join("");
 
-/** A numbered page's sub-section numbers ("3.1"…), by top-level index, in page order (OffSec's sample: 1.1, 2.1, 3.5). */
+/** A numbered page's sub-section numbers ("3.1"…), by top-level index, in page order (OffSec's sample: 1.1, 2.1, 3.5).
+ *  Only the sub-sections it is drafted with (`DRAFTED_SUBSECTIONS`) are numbered: a heading the owner adds is theirs and
+ *  stays unnumbered. */
 export function subsectionNumbers(kind: SectionKind, number: string, doc: ReportNode): Map<number, string> {
-  const names = new Set((SUBSECTIONS[kind] ?? []).map((n) => n.toLowerCase()));
+  const names = new Set((DRAFTED_SUBSECTIONS[kind] ?? []).map((n) => n.toLowerCase()));
   const out = new Map<number, string>();
   (doc.content ?? []).forEach((n, i) => {
     if (n.type === "heading" && names.has(textOf(n).trim().toLowerCase())) out.set(i, `${number}.${out.size + 1}`);

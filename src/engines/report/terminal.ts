@@ -1,7 +1,8 @@
+import { FENCE } from "../manual/anchors";
+import { readFence } from "../manual/markdown";
+
 /** A run of finding text: prose (read as inline Markdown) or code (printed as written, in a code block). */
 export type TextRun = { kind: "prose"; text: string } | { kind: "code"; text: string };
-
-const FENCE = /^\s*(`{3,}|~{3,})/;
 
 /** Lines that read as pasted terminal text: diff and git output, indented code, a shell or PowerShell prompt. */
 const CODE_LINE = [
@@ -49,21 +50,11 @@ export function terminalBlocks(text: string): TextRun[] {
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
-    const fence = FENCE.exec(line);
+    const fence = readFence(lines, i);
     if (fence) {
-      const ch = fence[1][0];
-      const indent = /^[ \t]*/.exec(line)![0].length;
-      const body: string[] = [];
-      i++;
-      while (i < lines.length) {
-        const f = FENCE.exec(lines[i]);
-        if (f && f[1][0] === ch) break;
-        body.push(lines[i].replace(new RegExp(`^[ \\t]{0,${indent}}`), ""));
-        i++;
-      }
-      i++;
       flushProse();
-      out.push({ kind: "code", text: body.join("\n") });
+      out.push({ kind: "code", text: fence.text });
+      i = fence.next;
       continue;
     }
     if (isCodeLine(line)) {
