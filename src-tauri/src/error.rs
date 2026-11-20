@@ -26,6 +26,9 @@ pub enum AppError {
     Offline(String),
     #[error("NVD refused the request (key rejected or rate-limited)")]
     KeyRejected,
+    /// NVD is overloaded or rate-limiting (503/429/5xx): the machine is online, so this is not `Offline`.
+    #[error("NVD is busy or unavailable; try again shortly")]
+    NvdBusy,
     /// The write would replace something that must stay as it is.
     #[error("{0}")]
     Conflict(String),
@@ -48,6 +51,7 @@ impl AppError {
             AppError::NoKey => "no_key",
             AppError::Offline(_) => "offline",
             AppError::KeyRejected => "key_rejected",
+            AppError::NvdBusy => "nvd_busy",
             AppError::Conflict(_) => "conflict",
         }
     }
@@ -112,6 +116,9 @@ mod tests {
         let v = serde_json::to_value(AppError::KeyRejected).unwrap();
         assert_eq!(v["code"], "key_rejected");
         assert_eq!(v["message"], "NVD refused the request (key rejected or rate-limited)");
+        let busy = serde_json::to_value(AppError::NvdBusy).unwrap();
+        assert_eq!(busy["code"], "nvd_busy");
+        assert_eq!(busy["message"], "NVD is busy or unavailable; try again shortly");
     }
 
     #[test]

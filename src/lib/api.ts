@@ -76,7 +76,7 @@ export const api = {
   settingsGet: () => call<Settings>("settings_get"),
   settingsUpdate: (patch: SettingsPatch) => call<Settings>("settings_update", { patch }),
   /** NIST NVD lookup, the one network call (runs in Rust; the key never reaches the webview).
-   *  Rejects with `no_key`, `offline`, `key_rejected`, `not_found` or `validation`. */
+   *  Rejects with `no_key`, `offline`, `nvd_busy`, `key_rejected`, `not_found` or `validation`. */
   nvdLookup: (cveId: string) => call<NvdRecord>("nvd_lookup", { cveId }),
 
   backupNow: () => call<BackupInfo>("backup_now"),
