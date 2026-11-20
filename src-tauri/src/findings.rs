@@ -128,10 +128,7 @@ pub struct FailedAttemptInput {
     #[serde(default)]
     pub reason_kind: Option<String>,
     pub reason: String,
-    /// Ignored: privacy is derived from `reason_kind`.
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub private: bool,
+    // No `private`: privacy is derived from `reason_kind`, and a client's flag is dropped on deserialize.
     #[serde(default)]
     pub log_entry_id: Option<String>,
 }
@@ -643,14 +640,13 @@ mod tests {
         FindingInput { title: title.into(), ..Default::default() }
     }
 
-    fn att(title: &str, kind: Option<&str>, private: bool) -> FailedAttemptInput {
+    fn att(title: &str, kind: Option<&str>) -> FailedAttemptInput {
         FailedAttemptInput {
             host_id: None,
             finding_id: None,
             title: title.into(),
             reason_kind: kind.map(str::to_string),
             reason: "because".into(),
-            private,
             log_entry_id: None,
         }
     }
@@ -753,24 +749,26 @@ mod tests {
         let (_d, v) = unlocked();
         let c = v.conn().unwrap();
         let e = eng(c, "A");
-        let a = attempt_create(c, &e, att("typo'd the payload", Some("operator"), false)).unwrap();
+        let a = attempt_create(c, &e, att("typo'd the payload", Some("operator"))).unwrap();
         assert!(a.private);
-        let b = attempt_create(c, &e, att("blocked by EDR", Some("control"), true)).unwrap();
+        // A client-sent `"private": true` is dropped on deserialize.
+        let json = r#"{"title":"blocked by EDR","reasonKind":"control","reason":"because","private":true}"#;
+        let b = attempt_create(c, &e, serde_json::from_str::<FailedAttemptInput>(json).unwrap()).unwrap();
         assert!(!b.private);
-        let n = attempt_create(c, &e, att("other", Some("precondition"), true)).unwrap();
+        let n = attempt_create(c, &e, att("other", Some("precondition"))).unwrap();
         assert!(!n.private);
         // update re-derives
-        let mut u = att("blocked by EDR", Some("operator"), false);
+        let mut u = att("blocked by EDR", Some("operator"));
         u.reason = "my mistake".into();
         let b2 = attempt_update(c, &b.id, u).unwrap();
         assert!(b2.private);
-        let a2 = attempt_update(c, &a.id, att("x", Some("access"), true)).unwrap();
+        let a2 = attempt_update(c, &a.id, att("x", Some("access"))).unwrap();
         assert!(!a2.private);
         let stored: i64 = c.query_row("SELECT private FROM failed_attempts WHERE id = ?1", [&a.id], |r| r.get(0)).unwrap();
         assert_eq!(stored, 0);
         assert_eq!(attempts_list(c, &e).unwrap().len(), 3);
-        assert!(attempt_create(c, &e, att("  ", Some("control"), false)).is_err());
-        let mut blank = att("t", Some("control"), false);
+        assert!(attempt_create(c, &e, att("  ", Some("control"))).is_err());
+        let mut blank = att("t", Some("control"));
         blank.reason = " ".into();
         assert!(matches!(attempt_create(c, &e, blank), Err(AppError::Validation { field, .. }) if field == "reason"));
         attempt_delete(c, &a.id).unwrap();
@@ -783,11 +781,11 @@ mod tests {
         let c = v.conn().unwrap();
         let e = eng(c, "A");
         let is_kind = |r: Result<FailedAttempt, AppError>| matches!(r, Err(AppError::Validation { field, .. }) if field == "reasonKind");
-        assert!(is_kind(attempt_create(c, &e, att("t", None, false))));
-        assert!(is_kind(attempt_create(c, &e, att("t", Some("  "), false))));
-        let a = attempt_create(c, &e, att("t", Some("control"), false)).unwrap();
-        assert!(is_kind(attempt_update(c, &a.id, att("t", None, false))));
-        assert!(is_kind(attempt_update(c, &a.id, att("t", Some(""), false))));
+        assert!(is_kind(attempt_create(c, &e, att("t", None))));
+        assert!(is_kind(attempt_create(c, &e, att("t", Some("  ")))));
+        let a = attempt_create(c, &e, att("t", Some("control"))).unwrap();
+        assert!(is_kind(attempt_update(c, &a.id, att("t", None))));
+        assert!(is_kind(attempt_update(c, &a.id, att("t", Some("")))));
     }
 
     #[test]
@@ -884,14 +882,14 @@ mod tests {
         u.host_ids = vec![hb.clone()];
         assert!(matches!(finding_update(c, &fa.id, u), Err(AppError::NotFound)));
         assert!(findings_list(c, &a).unwrap()[0].host_ids.is_empty());
-        let mut x = att("t", Some("control"), false);
+        let mut x = att("t", Some("control"));
         x.host_id = Some(hb);
         assert!(matches!(attempt_create(c, &a, x), Err(AppError::NotFound)));
-        let mut x = att("t", Some("control"), false);
+        let mut x = att("t", Some("control"));
         x.log_entry_id = Some(eb);
         assert!(matches!(attempt_create(c, &a, x), Err(AppError::NotFound)));
         let fb = finding_create(c, &b, fin("b")).unwrap();
-        let mut x = att("t", Some("control"), false);
+        let mut x = att("t", Some("control"));
         x.finding_id = Some(fb.id);
         assert!(matches!(attempt_create(c, &a, x), Err(AppError::NotFound)));
         assert!(matches!(findings_list(c, "nope"), Err(AppError::NotFound)));

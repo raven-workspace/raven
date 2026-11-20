@@ -731,7 +731,7 @@ mod tests {
         let (_d, mut v) = setup();
         let b = take_at(&v, "manual", T0).unwrap();
         v.lock();
-        let l = crate::commands::backups_list_inner(&v).unwrap();
+        let l = list(v.paths()).unwrap();
         assert_eq!(l.len(), 1);
         assert_eq!(l[0].file, b.file);
     }

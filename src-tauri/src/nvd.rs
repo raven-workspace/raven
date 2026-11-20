@@ -126,14 +126,7 @@ pub fn begin(conn: &Connection, key: &str, cve: &str) -> AppResult<Step> {
     Ok(Step::Fetch { cve })
 }
 
-/// Parses a fetched answer (empty `vulnerabilities` is `not_found`) and caches the raw JSON.
-pub fn finish(conn: &Connection, cve: &str, raw: &str) -> AppResult<NvdRecord> {
-    let rec = read_answer(raw)?;
-    store(conn, cve, raw)?;
-    Ok(rec)
-}
-
-/// Parses a fetched answer without caching it.
+/// Parses a fetched answer (empty `vulnerabilities` is `not_found`) without caching it.
 pub fn read_answer(raw: &str) -> AppResult<NvdRecord> {
     let json: Value =
         serde_json::from_str(raw).map_err(|_| AppError::Offline("NVD sent an answer Raven can't read".into()))?;
@@ -155,7 +148,7 @@ pub fn status_error(code: u16) -> AppError {
     match code {
         401 | 403 => AppError::KeyRejected,
         404 => AppError::NotFound,
-        429 | 500 | 502 | 503 | 504 => AppError::NvdBusy,
+        c if transient(c) => AppError::NvdBusy,
         _ => AppError::Offline(format!("NVD answered {code}")),
     }
 }
@@ -202,23 +195,6 @@ pub fn fetch(key: &str, cve: &str) -> AppResult<String> {
     fetch_from(NVD_URL, key, cve)
 }
 
-/// Cache first, then `fetch` (given the key and the normalized ID), caching the answer on success.
-pub fn lookup_with(
-    conn: &Connection,
-    key: &str,
-    cve: &str,
-    fetch: impl FnOnce(&str, &str) -> AppResult<String>,
-) -> AppResult<NvdRecord> {
-    match begin(conn, key, cve)? {
-        Step::Cached(rec) => Ok(rec),
-        Step::Fetch { cve } => finish(conn, &cve, &fetch(key, &cve)?),
-    }
-}
-
-pub fn lookup(conn: &Connection, key: &str, cve: &str) -> AppResult<NvdRecord> {
-    lookup_with(conn, key, cve, fetch)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,6 +203,24 @@ mod tests {
     use serde_json::json;
     use std::io::{Read, Write};
     use std::net::TcpListener;
+
+    /// The `nvd_lookup` command's flow (`begin` → fetch → `read_answer` → `store`) with an injectable fetch.
+    fn lookup_with(
+        conn: &Connection,
+        key: &str,
+        cve: &str,
+        fetch: impl FnOnce(&str, &str) -> AppResult<String>,
+    ) -> AppResult<NvdRecord> {
+        match begin(conn, key, cve)? {
+            Step::Cached(rec) => Ok(rec),
+            Step::Fetch { cve } => {
+                let raw = fetch(key, &cve)?;
+                let rec = read_answer(&raw)?;
+                store(conn, &cve, &raw)?;
+                Ok(rec)
+            }
+        }
+    }
 
     fn unlocked() -> (tempfile::TempDir, Vault) {
         let dir = tempfile::tempdir().unwrap();

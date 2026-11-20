@@ -1,4 +1,5 @@
-//! Tauri command layer: thin wrappers over testable `*_inner` functions.
+//! Tauri command layer: each command takes the vault lock off the main thread (`with_vault`) and calls
+//! into the module that owns the data.
 //!
 //! `vault_create` returns nothing on success and leaves the vault
 //! unlocked (no daily backup: a brand-new vault has nothing to back up).
@@ -52,10 +53,6 @@ pub struct UnlockResult {
     pub daily_backup_error: Option<String>,
 }
 
-pub fn vault_status_inner(v: &Vault) -> VaultStatus {
-    VaultStatus { exists: v.exists(), unlocked: v.is_unlocked() }
-}
-
 pub fn vault_unlock_inner(v: &mut Vault, password: &str) -> AppResult<UnlockResult> {
     let o = v.unlock_with_daily(password)?;
     Ok(UnlockResult {
@@ -64,18 +61,6 @@ pub fn vault_unlock_inner(v: &mut Vault, password: &str) -> AppResult<UnlockResu
         daily_backup: o.daily_backup,
         daily_backup_error: o.daily_backup_error,
     })
-}
-
-pub fn backups_list_inner(v: &Vault) -> AppResult<Vec<BackupInfo>> {
-    backup::list(v.paths())
-}
-
-pub fn settings_get_inner(v: &Vault) -> AppResult<Settings> {
-    settings::get(v.conn()?)
-}
-
-pub fn engagements_list_inner(v: &Vault) -> AppResult<Vec<Engagement>> {
-    engagements::list(v.conn()?)
 }
 
 fn guard(s: &VaultState) -> std::sync::MutexGuard<'_, Vault> {
@@ -111,7 +96,7 @@ where
 
 #[tauri::command]
 pub async fn vault_status(app: AppHandle) -> AppResult<VaultStatus> {
-    with_vault(app, |v| Ok(vault_status_inner(v))).await
+    with_vault(app, |v| Ok(VaultStatus { exists: v.exists(), unlocked: v.is_unlocked() })).await
 }
 
 #[tauri::command]
@@ -135,7 +120,7 @@ pub async fn vault_lock(app: AppHandle) -> AppResult<()> {
 
 #[tauri::command]
 pub async fn settings_get(app: AppHandle) -> AppResult<Settings> {
-    with_vault(app, |v| settings_get_inner(v)).await
+    with_vault(app, |v| settings::get(v.conn()?)).await
 }
 
 #[tauri::command]
@@ -173,7 +158,7 @@ pub async fn backup_now(app: AppHandle) -> AppResult<BackupInfo> {
 
 #[tauri::command]
 pub async fn backups_list(app: AppHandle) -> AppResult<Vec<BackupInfo>> {
-    with_vault(app, |v| backups_list_inner(v)).await
+    with_vault(app, |v| backup::list(v.paths())).await
 }
 
 /// Restore a backup while locked (the live database is damaged). Leaves the vault locked.
@@ -218,7 +203,7 @@ pub async fn backup_restore(app: AppHandle, file: String) -> AppResult<()> {
 
 #[tauri::command]
 pub async fn engagements_list(app: AppHandle) -> AppResult<Vec<Engagement>> {
-    with_vault(app, |v| engagements_list_inner(v)).await
+    with_vault(app, |v| engagements::list(v.conn()?)).await
 }
 
 #[tauri::command]
@@ -653,50 +638,6 @@ pub async fn cleanup_counts(app: AppHandle) -> AppResult<HashMap<String, i64>> {
     with_vault(app, move |v| cleanup::counts(v.conn()?)).await
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::paths::DataPaths;
-    use crate::vault::Vault;
-
-    #[test]
-    fn commands_error_when_locked() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut v = Vault::new(DataPaths::for_root(dir.path().to_path_buf()));
-        assert_eq!(engagements_list_inner(&v), Err(AppError::Locked));
-        assert_eq!(settings_get_inner(&v), Err(AppError::Locked));
-        v.create_for_test("correct horse battery").unwrap();
-        assert_eq!(engagements_list_inner(&v).unwrap(), vec![]);
-        assert_eq!(vault_status_inner(&v), VaultStatus { exists: true, unlocked: true });
-        v.lock();
-        assert_eq!(engagements_list_inner(&v), Err(AppError::Locked));
-        assert!(vault_status_inner(&v).exists);
-    }
-
-    #[test]
-    fn off_main_runs_on_another_thread_and_returns_result() {
-        let caller = std::thread::current().id();
-        let worker = tauri::async_runtime::block_on(off_main(|| Ok(std::thread::current().id()))).unwrap();
-        assert_ne!(worker, caller);
-        let err: AppResult<()> = tauri::async_runtime::block_on(off_main(|| Err(AppError::Locked)));
-        assert_eq!(err, Err(AppError::Locked));
-    }
-
-    #[test]
-    fn unlock_outcome_is_camel_case() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut v = Vault::new(DataPaths::for_root(dir.path().to_path_buf()));
-        v.create_for_test("correct horse battery").unwrap();
-        v.lock();
-        let j = serde_json::to_value(vault_unlock_inner(&mut v, "correct horse battery").unwrap()).unwrap();
-        assert!(j.get("migratedFrom").is_some() && j.get("migratedTo").is_some());
-        assert!(j.get("dailyBackup").is_some() && j.get("dailyBackupError").is_some());
-        if let Some(b) = j["dailyBackup"].as_object() {
-            assert!(b.contains_key("createdAt") && b.contains_key("sizeBytes"));
-        }
-    }
-}
-
 #[tauri::command]
 pub async fn findings_list(app: AppHandle, engagement_id: String) -> AppResult<Vec<Finding>> {
     with_vault(app, move |v| findings::findings_list(v.conn()?, &engagement_id)).await
@@ -868,4 +809,49 @@ pub async fn report_section_delete(app: AppHandle, report_id: String, id: String
 #[tauri::command]
 pub async fn report_sections_reorder(app: AppHandle, report_id: String, ids: Vec<String>) -> AppResult<()> {
     with_vault(app, move |v| reports::sections_reorder(v.conn()?, &report_id, ids)).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::paths::DataPaths;
+    use crate::vault::Vault;
+
+    #[test]
+    fn commands_error_when_locked() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut v = Vault::new(DataPaths::for_root(dir.path().to_path_buf()));
+        let list = |v: &Vault| v.conn().and_then(engagements::list);
+        assert_eq!(list(&v), Err(AppError::Locked));
+        assert_eq!(v.conn().and_then(settings::get), Err(AppError::Locked));
+        v.create_for_test("correct horse battery").unwrap();
+        assert_eq!(list(&v).unwrap(), vec![]);
+        assert!(v.exists() && v.is_unlocked());
+        v.lock();
+        assert_eq!(list(&v), Err(AppError::Locked));
+        assert!(v.exists());
+    }
+
+    #[test]
+    fn off_main_runs_on_another_thread_and_returns_result() {
+        let caller = std::thread::current().id();
+        let worker = tauri::async_runtime::block_on(off_main(|| Ok(std::thread::current().id()))).unwrap();
+        assert_ne!(worker, caller);
+        let err: AppResult<()> = tauri::async_runtime::block_on(off_main(|| Err(AppError::Locked)));
+        assert_eq!(err, Err(AppError::Locked));
+    }
+
+    #[test]
+    fn unlock_outcome_is_camel_case() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut v = Vault::new(DataPaths::for_root(dir.path().to_path_buf()));
+        v.create_for_test("correct horse battery").unwrap();
+        v.lock();
+        let j = serde_json::to_value(vault_unlock_inner(&mut v, "correct horse battery").unwrap()).unwrap();
+        assert!(j.get("migratedFrom").is_some() && j.get("migratedTo").is_some());
+        assert!(j.get("dailyBackup").is_some() && j.get("dailyBackupError").is_some());
+        if let Some(b) = j["dailyBackup"].as_object() {
+            assert!(b.contains_key("createdAt") && b.contains_key("sizeBytes"));
+        }
+    }
 }

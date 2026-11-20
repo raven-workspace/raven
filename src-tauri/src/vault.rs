@@ -238,6 +238,7 @@ impl Vault {
     }
 
     /// Replace the pre-migration backup hook (default: `backup::pre_migration_hook`).
+    #[cfg(test)]
     pub fn set_backup_hook(&mut self, hook: BackupHook) {
         self.backup_hook = Some(hook);
     }

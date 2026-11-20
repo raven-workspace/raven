@@ -549,7 +549,7 @@ mod tests {
         let p = SettingsPatch { nvd_api_key: Some(key.into()), ..Default::default() };
         assert!(!format!("{p:?}").contains(key));
         // settings_get never carries the key, under any field name
-        let j = serde_json::to_string(&crate::commands::settings_get_inner(&v).unwrap()).unwrap();
+        let j = serde_json::to_string(&get(v.conn().unwrap()).unwrap()).unwrap();
         assert!(!j.contains(key), "{j}");
         assert!(j.contains("\"nvdKeySet\":true"), "{j}");
         assert!(!j.contains("nvdApiKey"), "{j}");
