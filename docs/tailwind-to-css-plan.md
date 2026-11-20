@@ -61,9 +61,9 @@ with every screen pixel-identical. Inventory: [tailwind-to-css-inventory.md](tai
 | 2 | Form primitives: Input, Textarea, Field, Select, Toggle | Med | + focus/disabled/invalid states | Done |
 | 3 | Controls: Button, IconButton, Chip, ChipSet, Toolbar, Row, ActionCell | Med | + callers' `className` | Done |
 | 4 | Shell: Panel, Dialog, Collapse, Disclosure, TitleBar, Tooltip, CommandBlock, HintLine, the rest of src/ui | Med–High | + dialog motion, reduced motion | Done |
-| 5–20 | Features, smallest first: palette, generators, board, cleanup, settings, capture, stuck, notes, vault, log, checklist, network, arsenal, manual, engagements, hosts | Med | tests, pixel diff at all widths | |
-| 21–23 | payloads, credentials (TestGrid: sticky cells, snapping), findings | High | + manual QA of sticky/scroll | |
-| 24 | report (TodoPanel, EvidenceRail, ReportTabs) | High | + page.css interplay | |
+| 5–20 | Features, smallest first: palette, generators, board, cleanup, settings, capture, stuck, notes, vault, log, checklist, network, arsenal, manual, engagements, hosts | Med | tests, pixel diff at all widths | Done |
+| 21–23 | payloads, credentials (TestGrid: sticky cells, snapping), findings | High | + manual QA of sticky/scroll | Done |
+| 24 | report (TodoPanel, EvidenceRail, ReportTabs) | High | + page.css interplay | Done |
 | 25 | src/ui/shadcn (sidebar, button, toggle, tabs, sheet, scroll-area, …) | High | + tw-animate replacements | |
 | 26 | Remove Tailwind: preflight → `base.scss`, `@theme` → `:root`, drop packages, `cn`, `cva`, convention tests rewritten, DESIGN.md | Med | full suite, build, audit, pixel, manual QA | |
 
