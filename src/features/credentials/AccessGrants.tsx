@@ -1,8 +1,8 @@
 import { useState } from "react";
-import type { AccessGrant, AccessLevel, Username } from "../../types/credentials";
+import type { AccessGrant, AccessGrantInput, AccessLevel, Username } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import { X } from "@phosphor-icons/react";
-import { Chip, ChipSet, Field, IconButton, Input, Select } from "../../ui";
+import { Button, Chip, ChipSet, Dialog, Field, IconButton, Input, Select } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { usernameLabel } from "../../engines/credentials";
 import { useAccessGrantMutations } from "./queries";
@@ -84,5 +84,49 @@ export function AccessGrantTags({ eid, username, grants, hosts }: {
         />
       )}
     </>
+  );
+}
+
+/**
+ * Records access on a host: the host, the level and how it was gained. Shared by "Add access" on a username and
+ * "Convert to access-only" on a credential; `onSubmit` runs the mutation and reports a failure through `onError`.
+ */
+export function AccessGrantDialog({ title, description, action, hosts, pending, onSubmit, onClose }: {
+  title: string;
+  description?: string;
+  action: string;
+  hosts: Host[];
+  pending: boolean;
+  onSubmit: (grant: AccessGrantInput, onError: (message: string) => void) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState<AccessDraft>(EMPTY_ACCESS);
+  const [errors, setErrors] = useState<{ hostId?: string; via?: string; form?: string }>({});
+  const save = () => {
+    const errs = {
+      ...(draft.hostId === "" ? { hostId: "Choose a host" } : {}),
+      ...(draft.via.trim() === "" ? { via: "Say how access was gained" } : {}),
+    };
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+    onSubmit({ hostId: draft.hostId, level: draft.level, via: draft.via.trim() }, (form) => setErrors({ form }));
+  };
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      size="lg"
+      title={title}
+      {...(description ? { description } : {})}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={pending} onClick={save}>{action}</Button>
+        </>
+      }
+    >
+      <AccessFields value={draft} onChange={setDraft} hosts={hosts} errors={errors} />
+      {errors.form && <p role="alert" className="m-0 mt-2 text-meta text-warn">{errors.form}</p>}
+    </Dialog>
   );
 }

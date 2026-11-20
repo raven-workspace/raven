@@ -3,9 +3,9 @@ import { usernameKey, usernameLabel } from "../../engines/credentials";
 import type { AccessGrant, Username } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import { Trash } from "@phosphor-icons/react";
-import { ActionCell, Button, Dialog, IconButton, Input, labelClass, useFlash } from "../../ui";
+import { ActionCell, Button, IconButton, Input, labelClass, useFlash } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
-import { AccessFields, AccessGrantTags, EMPTY_ACCESS, type AccessDraft } from "./AccessGrants";
+import { AccessGrantDialog, AccessGrantTags } from "./AccessGrants";
 import { useAccessGrantMutations, useUsernameMutations } from "./queries";
 import { copyPlain } from "../../lib/clipboard";
 
@@ -90,35 +90,14 @@ export function UsernamesList({ eid, usernames, grants, hosts }: {
 
 function GrantDialog({ eid, username, hosts, onClose }: { eid: string; username: Username; hosts: Host[]; onClose: () => void }) {
   const gm = useAccessGrantMutations(eid);
-  const [draft, setDraft] = useState<AccessDraft>(EMPTY_ACCESS);
-  const [errors, setErrors] = useState<{ hostId?: string; via?: string; form?: string }>({});
-  const save = () => {
-    const errs = {
-      ...(draft.hostId === "" ? { hostId: "Choose a host" } : {}),
-      ...(draft.via.trim() === "" ? { via: "Say how access was gained" } : {}),
-    };
-    setErrors(errs);
-    if (Object.keys(errs).length > 0) return;
-    gm.create.mutate(
-      { usernameId: username.id, grant: { hostId: draft.hostId, level: draft.level, via: draft.via.trim() } },
-      { onSuccess: onClose, onError: (e) => setErrors({ form: e.message }) },
-    );
-  };
   return (
-    <Dialog
-      open
-      onOpenChange={(o) => !o && onClose()}
-      size="lg"
+    <AccessGrantDialog
       title={`Add access for ${usernameLabel(username)}`}
-      footer={
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={gm.create.isPending} onClick={save}>Add access</Button>
-        </>
-      }
-    >
-      <AccessFields value={draft} onChange={setDraft} hosts={hosts} errors={errors} />
-      {errors.form && <p role="alert" className="m-0 mt-2 text-meta text-warn">{errors.form}</p>}
-    </Dialog>
+      action="Add access"
+      hosts={hosts}
+      pending={gm.create.isPending}
+      onClose={onClose}
+      onSubmit={(grant, onError) => gm.create.mutate({ usernameId: username.id, grant }, { onSuccess: onClose, onError: (e) => onError(e.message) })}
+    />
   );
 }
