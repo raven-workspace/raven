@@ -15,7 +15,7 @@ import { GoalRow } from "./GoalRow";
 import { useChecklist, useChecklistMutations } from "./queries";
 import { useHopMutations, useTunnels } from "../network/queries";
 import { useEngagementServices } from "../services/queries";
-import { useSettings } from "../settings/queries";
+import { useSettings, settingsFill } from "../settings/queries";
 import { useEngagement } from "../engagements/queries";
 import { RavenError } from "../../types/errors";
 
@@ -103,7 +103,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
   const entries = log.data ?? [];
   const input: FillInput = {
     host, engagement: eng, hosts, servicesByHost, tunnels,
-    attackerIp: settings.data?.attackerIp ?? "", kaliUser: settings.data?.kaliUser, listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
+    ...settingsFill(settings.data), cred: creds.cred,
     listenerPorts: loggedListenerPorts(entries),
   };
 

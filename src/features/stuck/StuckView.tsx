@@ -20,7 +20,7 @@ import { useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
 import { useNote } from "../notes/queries";
 import { noteKey, useNotesStore } from "../notes/useNotesStore";
-import { useSettings } from "../settings/queries";
+import { useSettings, settingsFill } from "../settings/queries";
 import { useEngagement } from "../engagements/queries";
 
 const WIDTH = 440;
@@ -143,7 +143,7 @@ function Body({ root, engagementId, host, onClose, onOpenGoal, skipRestoreRef }:
     });
     const input: FillInput = {
       host, engagement: eng, hosts, servicesByHost, tunnels,
-      attackerIp: settings.data.attackerIp, kaliUser: settings.data.kaliUser, listenerPort: settings.data.listenerPort, cred: creds.cred,
+      ...settingsFill(settings.data), cred: creds.cred,
     };
     const filled = s.commands
       .map((c) => ({ ...c, commands: goalCommands(c.goalId, input, eng).commands }))

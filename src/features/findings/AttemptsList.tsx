@@ -3,11 +3,11 @@ import { useState } from "react";
 import type { FailedAttempt } from "../../types/findings";
 import { ActionCell, Button, Chip, IconButton, labelClass, queryState } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
-import { hostLabel } from "../credentials/AccessGrants";
 import { useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
 import { AttemptForm, REASON_LABELS } from "./AttemptForm";
 import { useFailedAttemptMutations, useFailedAttempts, useFindings } from "./queries";
+import { hostLabel } from "../../lib/hostName";
 
 /** Things tried that failed. With `hostId`, only that host's attempts and new ones start on it. */
 export function AttemptsList({ eid, hostId, onOpenEntry }: {

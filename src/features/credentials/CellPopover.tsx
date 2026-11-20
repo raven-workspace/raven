@@ -5,8 +5,8 @@ import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
 import { Button, ChipSet, Dialog, labelClass } from "../../ui";
 import { sectionPath } from "../engagements/sections";
-import { hostLabel } from "./AccessGrants";
 import { useCredAttemptMutations } from "./queries";
+import { hostLabel } from "../../lib/hostName";
 
 const MODE_LABEL: Record<AuthMode, string> = { domain: "Domain auth", local: "Local auth (--local-auth)" };
 const MANUAL: AttemptResult[] = ["admin", "valid", "failed"];

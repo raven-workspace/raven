@@ -4,7 +4,7 @@ import { isCveId, nvdFill, scoreCvss, scoreToSeverity, type NvdFillResult } from
 import { api } from "../../lib/api";
 import { copyPlain } from "../../lib/clipboard";
 import { CopySecretButton } from "../credentials/MaskedSecret";
-import { shortHostName } from "../../lib/hostName";
+import { shortHostName, hostLabel } from "../../lib/hostName";
 import { isDialogOpen } from "../../lib/keys";
 import { reportError } from "../../lib/lockSignal";
 import { RavenError } from "../../types/errors";
@@ -12,7 +12,6 @@ import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
 import type { Finding, FindingInput, FindingStatus, NvdRecord, Severity } from "../../types/findings";
 import { ActionCell, Button, Chip, ChipSet, Dialog, Disclosure, Field, IconButton, Input, Select, Textarea, Toggle, fieldLabelClass } from "../../ui";
-import { hostLabel } from "../credentials/AccessGrants";
 import { useLog } from "../log/queries";
 import { CvssBuilder } from "./CvssBuilder";
 import { FindingFiles, type FileFormDraft } from "./FindingFiles";

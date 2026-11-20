@@ -15,13 +15,12 @@ import type { Service } from "../../../types/service";
 import { Button, Chip, Dialog, Field, Input, Select, labelClass } from "../../../ui";
 import { ConfirmDelete } from "../../checklist/ConfirmDelete";
 import { useEngagementServices } from "../../services/queries";
-import { LEVEL_LABEL } from "../../credentials/AccessGrants";
+import { LEVEL_LABEL, LEVEL_OPTIONS } from "../../credentials/AccessGrants";
 import { useAccessGrantMutations, useAccessGrants, useCredAttempts, useCredentials, useUsernames } from "../../credentials/queries";
 import { TestGrid } from "../../credentials/TestGrid";
 import { useLog } from "../../log/queries";
 import { EntryLink, FactGroup, SummaryCell } from "./FactGroup";
 
-const LEVEL_OPTIONS = (Object.keys(LEVEL_LABEL) as AccessLevel[]).map((value) => ({ value, label: LEVEL_LABEL[value] }));
 const WORKS = new Set<CredAttempt["result"]>(["admin", "valid"]);
 
 /** What works on this host (results that got in, access without a secret) and how many credentials are still untried here. */

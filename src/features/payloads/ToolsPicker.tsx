@@ -1,10 +1,11 @@
 import * as Popover from "@radix-ui/react-popover";
-import { useEffect, useId, useImperativeHandle, useRef, useState, type KeyboardEvent, type Ref } from "react";
+import { useId, useImperativeHandle, useRef, useState, type KeyboardEvent, type Ref } from "react";
 import { TOOL_LABEL } from "../../engines/payloads/fit";
 import type { ToolId } from "../../engines/payloads/types";
 import { cx } from "../../lib/cx";
 import { PickerTrigger } from "../../ui";
 import type { ChipPickerHandle } from "../arsenal/ChipPicker";
+import { useEscapeWhile } from "../../lib/keys";
 
 type Tick = "present" | "missing";
 type State = "unknown" | Tick;
@@ -59,16 +60,7 @@ export function ToolsPicker({ own, log, onChange, align = "start", ref }: {
 
   // Esc closes only the list; focus stays on the trigger. What keeps the drawer open is the drawer's own Esc handler, which
   // leaves Esc alone while the focused trigger is aria-expanded; preventDefault here also stops Radix's own dismiss.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      setOpen(false);
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [open]);
+  useEscapeWhile(open, () => setOpen(false));
 
   /** One step through from your log (or unknown) → on box → missing, round again. */
   const cycle = (t: ToolId, dir: 1 | -1) => {

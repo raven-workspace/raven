@@ -17,12 +17,13 @@ import type { Service } from "../../types/service";
 import { Button, Chip, Dialog, IconButton } from "../../ui";
 import { ScrollArea } from "../../ui/shadcn/scroll-area";
 import { Separator } from "../../ui/shadcn/separator";
-import { AccessFields, EMPTY_ACCESS, hostLabel, type AccessDraft } from "./AccessGrants";
+import { AccessFields, EMPTY_ACCESS, type AccessDraft } from "./AccessGrants";
 import { DockWork } from "./DockWork";
 import { StateChip } from "./InventoryList";
 import { MaskedSecret } from "./MaskedSecret";
 import { useCredentialMutations } from "./queries";
 import { dockTabs } from "./selection";
+import { hostLabel } from "../../lib/hostName";
 
 interface Props {
   eid: string;

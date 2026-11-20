@@ -19,7 +19,8 @@ import { useNotesStore } from "../notes/useNotesStore";
 import { StuckView } from "../stuck/StuckView";
 import { FactsColumn } from "./facts/FactsColumn";
 import { HostHeader } from "./HostHeader";
-import { FullChecklistToggle, NextTab } from "./NextTab";
+import { FullChecklistToggle } from "./NextTab";
+import { HostChecklist } from "../checklist/HostChecklist";
 import { useHosts } from "./queries";
 
 const TABS = [
@@ -258,7 +259,8 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
                   </div>
                 )
               ) : tab === "next" ? (
-                <NextTab engagementId={engagementId} host={host} full={fullChecklist} onShowFull={() => setFullChecklist(true)} focusGoal={focusGoal} onOpenEntry={openInLog} />
+                // The next steps: the current stage's open steps, or with the full checklist every stage, done ones included.
+                <HostChecklist engagementId={engagementId} host={host} scope={fullChecklist ? "all" : "next"} onShowFull={() => setFullChecklist(true)} focusGoal={focusGoal} onOpenEntry={openInLog} />
               ) : (
                 <HostFindings engagementId={engagementId} host={host} onOpenEntry={openInLog} onOpenFinding={openFinding} />
               )}

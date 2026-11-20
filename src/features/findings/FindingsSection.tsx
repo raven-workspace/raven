@@ -5,12 +5,12 @@ import { sortFindingsBySeverity } from "../../engines/findings";
 import type { Finding } from "../../types/findings";
 import { ActionCell, Button, Chip, EmptyState, IconButton, labelClass, queryState } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
-import { hostLabel } from "../credentials/AccessGrants";
 import { useHosts } from "../hosts/queries";
 import { sectionPath } from "../engagements/sections";
 import { AttemptsList } from "./AttemptsList";
 import { FindingSplit } from "./FindingSplit";
 import { useFindingMutations, useFindings } from "./queries";
+import { hostLabel } from "../../lib/hostName";
 
 /** Critical and high use the warn colour; the rest stay neutral. */
 export function SeverityChip({ severity }: { severity: Finding["severity"] }) {

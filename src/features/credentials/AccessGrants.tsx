@@ -6,11 +6,11 @@ import { Chip, ChipSet, Field, IconButton, Input, Select } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { usernameLabel } from "../../engines/credentials";
 import { useAccessGrantMutations } from "./queries";
+import { hostLabel } from "../../lib/hostName";
 
 export const LEVEL_LABEL: Record<AccessLevel, string> = { user: "user", admin: "admin", system: "SYSTEM / root" };
-const LEVEL_OPTIONS = (Object.keys(LEVEL_LABEL) as AccessLevel[]).map((value) => ({ value, label: LEVEL_LABEL[value] }));
+export const LEVEL_OPTIONS = (Object.keys(LEVEL_LABEL) as AccessLevel[]).map((value) => ({ value, label: LEVEL_LABEL[value] }));
 
-export const hostLabel = (h: Host | undefined): string => (h ? h.name || h.ip || h.id : "removed host");
 
 export interface AccessDraft {
   hostId: string;

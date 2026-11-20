@@ -34,9 +34,10 @@ import { checklistKey, useChecklist, useChecklistMutations } from "./queries";
 import { useHops, useTunnels } from "../network/queries";
 import { useEngagementServices } from "../services/queries";
 import { loadTickContext, tickFromLog } from "./ticks";
-import { useSettings } from "../settings/queries";
+import { useSettings, settingsFill } from "../settings/queries";
 import { useEngagement } from "../engagements/queries";
 import { RavenError } from "../../types/errors";
+import { blankHost } from "../hosts/blankHost";
 
 /** Sub-heading above the first row of each group. */
 const GroupHeading = ({ children }: { children: ReactNode }) => (
@@ -80,13 +81,10 @@ export function EngagementChecklist() {
 
   // Engagement goals have no host of their own: fill against the DC, else show each template unfilled.
   const dc = dcForFill(hosts, servicesByHost);
-  const stand: Host = {
-    ...(dc ?? { name: "", ip: null, os: null, engagementId: eng.id, boardColumn: "information-gathering", boardManual: false, dualHomed: false, boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 0, updatedAt: 0 }),
-    id: eng.id,
-  };
+  const stand: Host = { ...(dc ?? blankHost(eng.id)), id: eng.id };
   const input: FillInput = {
     host: stand, engagement: eng, hosts, servicesByHost, tunnels,
-    attackerIp: settings.data?.attackerIp ?? "", kaliUser: settings.data?.kaliUser, listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
+    ...settingsFill(settings.data), cred: creds.cred,
   };
   // The Log section has no deep link to one entry yet: open the section.
   const openEntry = () => void navigate(sectionPath(id, "log"));

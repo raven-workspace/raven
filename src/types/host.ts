@@ -1,4 +1,13 @@
-export type BoardColumn = "information-gathering" | "vulnerability-detection" | "initial-foothold" | "privilege-escalation" | "post-exploitation" | "reporting";
+/** The board's lanes, in order. */
+export const BOARD_COLUMNS = [
+  "information-gathering",
+  "vulnerability-detection",
+  "initial-foothold",
+  "privilege-escalation",
+  "post-exploitation",
+  "reporting",
+] as const;
+export type BoardColumn = (typeof BOARD_COLUMNS)[number];
 export type HostOs = "windows" | "linux" | "other";
 export type HostAccess = "none" | "user" | "root";
 

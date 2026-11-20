@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { SCROLL_PANE } from "../../ui/controlStyles";
 import { cx } from "../../lib/cx";
-import { shortHostName } from "../../lib/hostName";
+import { shortHostName, hostLabel } from "../../lib/hostName";
 import { isDialogOpen, isFreeKey, isTypingTarget } from "../../lib/keys";
 import type { Finding } from "../../types/findings";
 import { Button } from "../../ui";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { usePayloadsStore } from "../payloads/usePayloadsStore";
 import { useEngagementServices } from "../services/queries";
-import { hostLabel } from "../credentials/AccessGrants";
 import { useHosts } from "../hosts/queries";
 import { useNotesStore } from "../notes/useNotesStore";
 import { draftChanged, FindingEditor, toDraft, type Draft } from "./FindingEditor";

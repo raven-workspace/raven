@@ -1,11 +1,10 @@
 import { foldServices, serviceIdentity, sortServices } from "../../engines/facts";
 import { SCROLL_PANE } from "../../ui/controlStyles";
 import { cx } from "../../lib/cx";
-import { shortHostName } from "../../lib/hostName";
+import { shortHostName, hostLabel } from "../../lib/hostName";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
 import { fieldLabelClass } from "../../ui";
-import { hostLabel } from "../credentials/AccessGrants";
 import { FoldedRows } from "../hosts/facts/ServicesFacts";
 
 // The services grid of the Facts column (port, identity), with a checkbox track in front.

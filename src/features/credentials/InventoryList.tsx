@@ -8,9 +8,9 @@ import { revealRow } from "../../lib/revealRow";
 import { ScrollArea } from "../../ui/shadcn/scroll-area";
 import { ToggleGroup, ToggleGroupItem } from "../../ui/shadcn/toggle-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../ui/shadcn/table";
-import { hostLabel } from "./AccessGrants";
 import { UsernamesList } from "./UsernamesList";
 import { useInventoryKind, type InventoryKind } from "./useCredentialSelection";
+import { hostLabel } from "../../lib/hostName";
 
 const STATE_LABEL: Record<OverallState, string> = {
   admin: "admin",

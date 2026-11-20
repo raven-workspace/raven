@@ -4,26 +4,23 @@ import { portChoices, resolveCred, type FillInput } from "../../engines/checklis
 import { api } from "../../lib/api";
 import type { Engagement } from "../../types/engagement";
 import type { Host } from "../../types/host";
-import type { Service } from "../../types/service";
 import { useCredPickStore } from "../checklist/credPick";
 import { tunnelsKey } from "../network/queries";
 import { engagementServicesKey } from "../services/queries";
 import { credAttemptsKey, credentialsKey } from "../credentials/queries";
 import { useFillScope } from "../arsenal/useFillScope";
-import { useSettings } from "../settings/queries";
+import { useSettings, settingsFill } from "../settings/queries";
 import { useEngagement } from "../engagements/queries";
 import { useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
+import { blankHost } from "../hosts/blankHost";
+import { servicesByHostOf } from "../checklist/state";
 
 const NO_HOSTS: Host[] = [];
 const DASHBOARD_ENGAGEMENT: Engagement = {
   id: "", name: "", kind: "lab", client: null, subLabel: null, scopeCidrs: [], domain: null, startsAt: null, endsAt: null,
   timeboxStart: null, timeboxMinutes: null, status: "active", createdAt: 0, updatedAt: 0, lastActivityAt: null, lastRanOn: null, msfHostId: null, timeboxPausedMs: 0, timeboxPausedAt: null,
 };
-const noHost = (engagementId: string): Host => ({
-  id: "", engagementId, name: "", ip: null, os: null, boardColumn: "information-gathering", boardManual: false, dualHomed: false,
-  boardDerived: null, accessReviewedAt: null, adSet: null, adSetEffective: false, access: "none", createdAt: 0, updatedAt: 0,
-});
 
 export function useEngagementFillData(engagementId: string) {
   const enabled = engagementId !== "";
@@ -58,11 +55,10 @@ export function useFillBase(engagementId: string, hostId: string | null) {
 
   const makeInput = useCallback(
     (overrides: Record<string, string>): FillInput => {
-      const servicesByHost = new Map<string, Service[]>();
-      for (const s of d.services ?? []) servicesByHost.set(s.hostId, [...(servicesByHost.get(s.hostId) ?? []), s]);
+      const servicesByHost = servicesByHostOf(d.services ?? []);
       const input: FillInput = {
-        host: host ?? noHost(engagementId), engagement, hosts: d.hosts, servicesByHost, tunnels: d.tunnels ?? [],
-        attackerIp: d.settings?.attackerIp ?? "", kaliUser: d.settings?.kaliUser, listenerPort: d.settings?.listenerPort ?? "",
+        host: host ?? blankHost(engagementId), engagement, hosts: d.hosts, servicesByHost, tunnels: d.tunnels ?? [],
+        ...settingsFill(d.settings),
         cred,
         overrides,
       };

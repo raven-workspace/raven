@@ -5,10 +5,10 @@ import type { CredAttempt, Credential, TriedPair } from "../../types/credentials
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
 import { ChipSet, labelClass } from "../../ui";
-import { hostLabel } from "./AccessGrants";
 import { CellPopover } from "./CellPopover";
 import { revealRow } from "../../lib/revealRow";
 import { MaskedSecret } from "./MaskedSecret";
+import { hostLabel } from "../../lib/hostName";
 
 const META: Record<CellState, { glyph: string; label: string; aria: string; tone: string }> = {
   admin: { glyph: "A", label: "Admin", aria: "admin", tone: "border-accent bg-accent text-bg font-semibold" },

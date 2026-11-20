@@ -6,6 +6,7 @@ import { useHostMutations } from "./queries";
 import { useEngagement } from "../engagements/queries";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { RavenError } from "../../types/errors";
+import { OS_LABELS } from "./columns";
 
 /** What a host delete takes with it (FK cascades) and what stays. */
 const HOST_DELETE_DETAIL =
@@ -15,9 +16,7 @@ const HOST_DELETE_DETAIL =
 
 const OS_OPTIONS = [
   { value: "unknown", label: "Unknown" },
-  { value: "windows", label: "Windows" },
-  { value: "linux", label: "Linux" },
-  { value: "other", label: "Other" },
+  ...(Object.keys(OS_LABELS) as HostOs[]).map((value) => ({ value, label: OS_LABELS[value] })),
 ];
 type AdChoice = "auto" | "on" | "off";
 const AD_CHOICES: { value: AdChoice; label: string }[] = [

@@ -3,9 +3,9 @@ import type { FailedAttempt, FailedAttemptInput, Finding, ReasonKind } from "../
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
 import { Button, ChipSet, Dialog, Field, Input, Select, Toggle, fieldLabelClass } from "../../ui";
-import { hostLabel } from "../credentials/AccessGrants";
 import { useFailedAttemptMutations } from "./queries";
 import { RavenError } from "../../types/errors";
+import { hostLabel } from "../../lib/hostName";
 
 export const REASON_LABELS: Record<ReasonKind, string> = {
   control: "Blocked by a control",

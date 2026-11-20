@@ -10,10 +10,11 @@ import {
 import type { Credential, CredentialInput, CredentialScope, CredentialType } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import { Button, ChipSet, Dialog, Field, Input, Select, Textarea, Toggle, labelClass } from "../../ui";
-import { AccessFields, EMPTY_ACCESS, hostLabel, type AccessDraft } from "./AccessGrants";
+import { AccessFields, EMPTY_ACCESS, type AccessDraft } from "./AccessGrants";
 import { useAccessGrantMutations, useCredentialMutations, useUsernameMutations, useUsernames } from "./queries";
 import { parseUsername } from "./UsernamesList";
 import { RavenError } from "../../types/errors";
+import { hostLabel } from "../../lib/hostName";
 
 type Mode = "credential" | "secret" | "username";
 const MODES: { id: Mode; label: string }[] = [

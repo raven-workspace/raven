@@ -5,17 +5,10 @@ import { resolveSelection } from "./selection";
 
 type Ctx = Parameters<typeof resolveSelection>[2];
 
-/**
- * Selected credential (`cred`) and work tab (`tab=inventory`) live in the URL so back/refresh keep them.
- * While `ready` is false (data still loading) the URL is never rewritten, so a deep link survives.
- */
-export function useCredentialSelection(creds: Credential[], ctx: Ctx, ready: boolean) {
-  const [params, setParams] = useSearchParams();
-  const requested = params.get("cred");
-  const selectedId = ready ? resolveSelection(requested, creds, ctx) : (requested ?? undefined);
-  const tab: "matrix" | "inventory" = params.get("tab") === "inventory" ? "inventory" : "matrix";
-
-  const write = useCallback(
+/** Edits the URL's search params in place (replace, so back skips the change). */
+function useWriteParams() {
+  const [, setParams] = useSearchParams();
+  return useCallback(
     (mutate: (p: URLSearchParams) => void) =>
       setParams((prev) => {
         const next = new URLSearchParams(prev);
@@ -24,6 +17,19 @@ export function useCredentialSelection(creds: Credential[], ctx: Ctx, ready: boo
       }, { replace: true }),
     [setParams],
   );
+}
+
+/**
+ * Selected credential (`cred`) and work tab (`tab=inventory`) live in the URL so back/refresh keep them.
+ * While `ready` is false (data still loading) the URL is never rewritten, so a deep link survives.
+ */
+export function useCredentialSelection(creds: Credential[], ctx: Ctx, ready: boolean) {
+  const [params] = useSearchParams();
+  const requested = params.get("cred");
+  const selectedId = ready ? resolveSelection(requested, creds, ctx) : (requested ?? undefined);
+  const tab: "matrix" | "inventory" = params.get("tab") === "inventory" ? "inventory" : "matrix";
+
+  const write = useWriteParams();
 
   const select = useCallback((id: string) => write((p) => p.set("cred", id)), [write]);
   const setTab = useCallback(
@@ -51,18 +57,13 @@ const KINDS: readonly string[] = ["passwords", "hashes", "tickets", "machines", 
 
 /** The Inventory filter (`kind=`) lives in the URL; All is the absence of the param. Unknown values read as All. */
 export function useInventoryKind(): [InventoryKind | "all", (k: InventoryKind | "all") => void] {
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
+  const write = useWriteParams();
   const raw = params.get("kind") ?? "";
   const kind = KINDS.includes(raw) ? (raw as InventoryKind) : "all";
   const setKind = useCallback(
-    (k: InventoryKind | "all") =>
-      setParams((prev) => {
-        const next = new URLSearchParams(prev);
-        if (k === "all") next.delete("kind");
-        else next.set("kind", k);
-        return next;
-      }, { replace: true }),
-    [setParams],
+    (k: InventoryKind | "all") => write((p) => (k === "all" ? p.delete("kind") : p.set("kind", k))),
+    [write],
   );
   return [kind, setKind];
 }
