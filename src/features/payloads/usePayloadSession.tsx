@@ -14,13 +14,12 @@ import { Input, type Hint } from "../../ui";
 import type { ChipPickerHandle } from "../arsenal/ChipPicker";
 import { copyKey, useCopyGuard } from "../arsenal/copyGuard";
 import { isHostPickKey, type HostChipHandle } from "../arsenal/HostChip";
-import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { logCommand } from "../capture/logCommand";
-import { useNotesStore } from "../notes/useNotesStore";
 import { payloadBuildsKey } from "./queries";
 import { contextLabel, hasToggles, isRanked, OS_LABEL, showsFilter, usePayloadFit } from "./usePayloadFit";
 import { usePayloadsStore } from "./usePayloadsStore";
 import { RavenError } from "../../types/errors";
+import { anyDrawerOpen } from "../drawers";
 
 /** In ⌥1–⌥6 order. */
 export const GENERATORS: { id: GeneratorId; label: string }[] = [
@@ -62,7 +61,7 @@ export function hintsFor(g: GeneratorId, esc: string, extra: Hint[] = [], ordere
   ];
 }
 /** The Arsenal or Notes drawer is open over this view: its keys win. */
-export const otherDrawerOpen = () => useArsenalStore.getState().open || useNotesStore.getState().open;
+export const otherDrawerOpen = () => anyDrawerOpen("payloads");
 /** The Workbench's generator list (`P` focuses it). */
 export const GENERATOR_LIST_ID = "payloads-generators";
 export const inGeneratorList = () => document.activeElement?.closest(`#${GENERATOR_LIST_ID}`) != null;

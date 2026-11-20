@@ -5,14 +5,12 @@ import { shortHostName, hostLabel } from "../../lib/hostName";
 import { isDialogOpen, isFreeKey, isTypingTarget } from "../../lib/keys";
 import type { Finding } from "../../types/findings";
 import { Button } from "../../ui";
-import { useArsenalStore } from "../arsenal/useArsenalStore";
-import { usePayloadsStore } from "../payloads/usePayloadsStore";
 import { useEngagementServices } from "../services/queries";
 import { useHosts } from "../hosts/queries";
-import { useNotesStore } from "../notes/useNotesStore";
 import { draftChanged, FindingEditor, toDraft, type Draft } from "./FindingEditor";
 import { SplitLeftPane, type ContextTab } from "./SplitLeftPane";
 import { draftKey, useFindingDraftStore } from "./useFindingDraftStore";
+import { anyDrawerOpen } from "../drawers";
 
 type Pane = "context" | "editor";
 
@@ -84,7 +82,7 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
       if (isFlipChord(e)) {
         e.preventDefault();
         setPane((p) => (p === "editor" ? "context" : "editor"));
-      } else if ((e.key === "n" || e.key === "N") && isFreeKey(e) && !useArsenalStore.getState().open && !usePayloadsStore.getState().open) {
+      } else if ((e.key === "n" || e.key === "N") && isFreeKey(e) && !anyDrawerOpen("notes")) {
         // N: the left pane's notes, not the notes panel (left alone while the Arsenal drawer is up).
         e.preventDefault();
         setTab("notes");
@@ -92,7 +90,7 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
       } else if (e.key === "Escape" && !rootRef.current?.contains(e.target as Node) && !isTypingTarget(e.target)) {
         // Esc from inside the split is handled on the way back up (below), so a field's own Esc goes first.
         // A drawer over the page (Arsenal, notes) closes before the split does.
-        if (useArsenalStore.getState().open || usePayloadsStore.getState().open || useNotesStore.getState().open) return;
+        if (anyDrawerOpen()) return;
         e.preventDefault();
         closeRef.current();
       }

@@ -3,7 +3,7 @@ import { PASTE_CONTEXTS, type PasteContext } from "../../engines/payloads/contex
 import type { SqlEngine, SqlPoint, SqlValues } from "../../engines/payloads/sql";
 import type { FilterId } from "../../engines/payloads/filters";
 import type { GeneratorId, ListenerId, ToolId } from "../../engines/payloads/types";
-import { useNotesStore } from "../notes/useNotesStore";
+import { registerDrawer } from "../drawers";
 
 /** What you picked over the inferred value for one host. Wins over inference; lasts the session (memory only). */
 export interface PayloadOverride {
@@ -35,7 +35,7 @@ interface PayloadsState {
   lhost: string | null;
   /** The listener you picked for a payload, by payload id, for this session. */
   listenerPick: Record<string, ListenerId>;
-  /** Opens or closes the drawer. Opening closes Notes (they share the right edge; the Arsenal store closes itself). */
+  /** Opens or closes the drawer. */
   toggle: () => void;
   /** Opens the drawer on one generator (the Arsenal's and ⌘K's way in). */
   show: (g: GeneratorId) => void;
@@ -55,11 +55,9 @@ export const usePayloadsStore = create<PayloadsState>()((set, get) => ({
   listenerPick: {},
   toggle: () => {
     if (get().open) return get().close();
-    if (useNotesStore.getState().open) useNotesStore.getState().close();
     set({ open: true });
   },
   show: (generator) => {
-    if (useNotesStore.getState().open) useNotesStore.getState().close();
     set({ open: true, generator });
   },
   close: () => set({ open: false }),
@@ -77,7 +75,4 @@ export const usePayloadsStore = create<PayloadsState>()((set, get) => ({
   pickListener: (payloadId, id) => set((s) => ({ listenerPick: { ...s.listenerPick, [payloadId]: id } })),
 }));
 
-// Notes and the drawer share the right edge: opening Notes closes the drawer.
-useNotesStore.subscribe((s) => {
-  if (s.open && usePayloadsStore.getState().open) usePayloadsStore.getState().close();
-});
+registerDrawer("payloads", usePayloadsStore);
