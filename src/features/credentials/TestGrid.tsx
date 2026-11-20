@@ -4,7 +4,10 @@ import type { Cell } from "../../engines/credentials";
 import type { CredAttempt, Credential, TriedPair } from "../../types/credentials";
 import type { Host } from "../../types/host";
 import type { Service } from "../../types/service";
-import { ChipSet, labelClass } from "../../ui";
+import { ChipSet, IconButton, labelClass } from "../../ui";
+import { Trash } from "@phosphor-icons/react";
+import { ConfirmDelete } from "../checklist/ConfirmDelete";
+import { useForgetTried } from "./queries";
 import { CellPopover } from "./CellPopover";
 import { revealRow } from "../../lib/revealRow";
 import { MaskedSecret } from "./MaskedSecret";
@@ -70,13 +73,16 @@ function Legend({ present }: { present: ReadonlySet<LegendKey> }) {
 /** A hash shown by its ends: enough to tell tried hashes apart without the whole value. */
 const truncatedHash = (h: string) => (h.length > 16 ? `${h.slice(0, 8)}…${h.slice(-4)}` : h);
 
+type TriedRow = ReturnType<typeof triedRows>[number];
+
 /** One muted row per (username, domain, secret): the failed sprays kept without becoming credentials. */
 function triedRows(tried: TriedPair[]) {
-  const rows = new Map<string, { key: string; username: string; domain: string | null; secret: string; kind: TriedPair["secretKind"]; cells: Set<string> }>();
+  const rows = new Map<string, { key: string; username: string; domain: string | null; secret: string; kind: TriedPair["secretKind"]; cells: Set<string>; ids: string[] }>();
   for (const t of tried) {
     const key = `${t.username.toLowerCase()}\0${(t.domain ?? "").toLowerCase()}\0${t.secret}`;
-    const row = rows.get(key) ?? { key, username: t.username, domain: t.domain, secret: t.secret, kind: t.secretKind, cells: new Set<string>() };
+    const row = rows.get(key) ?? { key, username: t.username, domain: t.domain, secret: t.secret, kind: t.secretKind, cells: new Set<string>(), ids: [] };
     row.cells.add(`${t.hostId}:${t.service}`);
+    row.ids.push(t.id);
     rows.set(key, row);
   }
   return [...rows.values()];
@@ -148,6 +154,8 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
   const [open, setOpen] = useState<{ credId: string; hostId: string; service: SprayService }>();
   const rows = useMemo(() => creds.filter(isSprayable), [creds]);
   const triedList = useMemo(() => triedRows(tried), [tried]);
+  const [forgetting, setForgetting] = useState<TriedRow>();
+  const forget = useForgetTried(eid);
   const groups = useMemo(
     () => hosts.map((host) => ({ host, services: hostSprayServices(host, servicesByHost.get(host.id) ?? []) })).filter((g) => g.services.length > 0),
     [hosts, servicesByHost],
@@ -297,7 +305,10 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
                         <MaskedSecret secret={t.secret} label={`secret tried for ${who}`} />
                       )}
                     </div>
-                    <div className="text-meta" title={`${t.domain ? `${t.domain}: ` : ""}tried ${t.kind}, not a credential`}>tried {t.kind}</div>
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1">
+                      <span className="text-meta" title={`${t.domain ? `${t.domain}: ` : ""}tried ${t.kind}, not a credential`}>tried {t.kind}</span>
+                      <IconButton icon={Trash} tone="destructive" label={`Forget the tried ${t.kind} for ${who}`} onClick={() => setForgetting(t)} />
+                    </div>
                   </th>
                   {groups.flatMap(({ host, services }) =>
                     services.map((service, i) => {
@@ -320,6 +331,17 @@ export function TestGrid({ eid, hosts, creds, attempts, servicesByHost, tried = 
         </div>
         {fade && <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-linear-to-l from-bg to-transparent" />}
       </div>
+      {forgetting && (
+        <ConfirmDelete
+          title={`Forget the tried ${forgetting.kind} for ${forgetting.domain ? `${forgetting.domain}\\` : ""}${forgetting.username}?`}
+          detail={`Its row goes from the matrix (${forgetting.cells.size} ${forgetting.cells.size === 1 ? "cell" : "cells"}). The log keeps the commands that tried it.`}
+          label="Forget"
+          pending={forget.isPending}
+          error={forget.error?.message}
+          onCancel={() => setForgetting(undefined)}
+          onConfirm={() => forget.mutate(forgetting.ids, { onSuccess: () => setForgetting(undefined) })}
+        />
+      )}
       {open && openCred && openHost && (
         <CellPopover
           eid={eid}

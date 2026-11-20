@@ -46,6 +46,18 @@ export function useTriedPairs(eid: string) {
   return useQuery({ queryKey: triedPairsKey(eid), queryFn: () => api.triedPairsList(eid) });
 }
 
+/** Forgets one tried row: every tried pair for that username and secret, one delete each. */
+export function useForgetTried(eid: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      for (const id of ids) await api.triedPairDelete(id);
+    },
+    // Settled: a failure part-way still shows what is left.
+    onSettled: () => void qc.invalidateQueries({ queryKey: triedPairsKey(eid) }),
+  });
+}
+
 /** Every mutation invalidates its own key, plus attempts when they may change. */
 export function useCredentialMutations(eid: string) {
   const qc = useQueryClient();
