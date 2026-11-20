@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { SCROLL_PANE } from "../../ui/controlStyles";
-import { cx } from "../../lib/cx";
 import { shortHostName, hostLabel } from "../../lib/hostName";
 import { isDialogOpen, isFreeKey, isTypingTarget } from "../../lib/keys";
 import type { Finding } from "../../types/findings";
@@ -11,6 +10,7 @@ import { draftChanged, FindingEditor, toDraft, type Draft } from "./FindingEdito
 import { SplitLeftPane, type ContextTab } from "./SplitLeftPane";
 import { draftKey, useFindingDraftStore } from "./useFindingDraftStore";
 import { anyDrawerOpen } from "../drawers";
+import "./FindingSplit.scss";
 
 type Pane = "context" | "editor";
 
@@ -126,16 +126,16 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
       data-testid="finding-split"
       data-pane={pane}
       onKeyDown={onKeyDown}
-      className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 @min-[760px]/host:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] @min-[760px]/host:grid-rows-1 @min-[760px]/host:gap-6"
+      className="finding-split"
     >
-      <div className="@min-[760px]/host:hidden">
+      <div className="finding-split__flip">
         <Button size="sm" title="Flip between the finding and the host (⌘\)" onClick={() => setPane(pane === "editor" ? "context" : "editor")}>
           {pane === "editor" ? "Show the host's log, facts and notes" : "Back to the finding"}
         </Button>
       </div>
       <section
         aria-label="Host context"
-        className={cx("min-h-0 min-w-0 grid-rows-[minmax(0,1fr)]", pane === "context" ? "grid" : "hidden", "@min-[760px]/host:grid")}
+        className="finding-split__context"
       >
         <SplitLeftPane
           eid={eid}
@@ -150,7 +150,7 @@ export function FindingSplit({ eid, hostId, edit, onClose }: {
       </section>
       <section
         aria-label="Finding"
-        className={cx(SCROLL_PANE, "min-w-0", pane === "editor" ? "block" : "hidden", "@min-[760px]/host:block")}
+        className={`finding-split__editor ${SCROLL_PANE}`}
       >
         <FindingEditor
           eid={eid}

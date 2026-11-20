@@ -11,6 +11,7 @@ import { LogEntryRow } from "../log/LogEntryRow";
 import { useLog } from "../log/queries";
 import { byOrder, useLogOrder } from "../log/useLogOrder";
 import { NoteEditor } from "../notes/NoteEditor";
+import "./SplitLeftPane.scss";
 
 export type ContextTab = "log" | "facts" | "notes";
 const TABS: { id: ContextTab; label: string; title: string }[] = [
@@ -54,7 +55,7 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
   }, [tab, activeId]);
 
   return (
-    <div className={cx("grid min-h-0 gap-3", affected.length > 1 ? "grid-rows-[auto_auto_minmax(0,1fr)]" : "grid-rows-[auto_minmax(0,1fr)]")}>
+    <div className={cx("split-left-pane", affected.length > 1 && "split-left-pane--switcher")}>
       {affected.length > 1 && (
         <ChipSet role="group" aria-label="Host">
           {affected.map((h) => (
@@ -64,17 +65,14 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
               aria-pressed={h.id === activeId}
               title={hostLabel(h)}
               onClick={() => setChosen(h.id)}
-              className={cx(
-                "inline-grid h-7 cursor-default items-center rounded-sm border px-2 text-meta",
-                h.id === activeId ? "border-accent text-accent" : "border-line-2 text-fg-2 hover:text-fg",
-              )}
+              className="split-left-pane__host"
             >
               {shortHostName(hostLabel(h))}
             </button>
           ))}
         </ChipSet>
       )}
-      <div role="tablist" aria-label="Finding context" className="relative isolate grid grid-flow-col auto-cols-max justify-start gap-2">
+      <div role="tablist" aria-label="Finding context" className="split-left-pane__tabs">
         <TabMarker className={TAB_MARK} />
         {TABS.map((t) => {
           const disabled = t.id === "facts" && !active;
@@ -87,10 +85,7 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
               disabled={disabled}
               title={disabled ? "Pick an affected host to see its facts" : t.title}
               onClick={() => onTab(t.id)}
-              className={cx(
-                "h-7 cursor-default rounded-[var(--radius-sm)] px-3 text-body disabled:opacity-40",
-                tab === t.id ? "font-semibold text-fg" : "text-muted hover:text-fg",
-              )}
+              className="split-left-pane__tab"
             >
               {t.label}
             </button>
@@ -101,15 +96,15 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
         ref={panelRef}
         role="tabpanel"
         aria-label={TABS.find((t) => t.id === tab)!.label}
-        className={`@container/ctx grid grid-rows-[minmax(min-content,1fr)] border-t border-line ${SCROLL_PANE}`}
+        className={`split-left-pane__panel ${SCROLL_PANE}`}
       >
         {tab === "log" ? (
           log.isError ? (
-            <p role="alert" className="text-meta text-warn">Couldn't load the log: {log.error.message}</p>
+            <p role="alert" className="split-left-pane__error">Couldn't load the log: {log.error.message}</p>
           ) : entries.length === 0 && log.data ? (
-            <p className="text-meta text-muted">Nothing logged {active ? "on this host" : "yet"}. Press L to capture.</p>
+            <p className="split-left-pane__hint">Nothing logged {active ? "on this host" : "yet"}. Press L to capture.</p>
           ) : (
-            <ul className="m-0 list-none p-0">
+            <ul>
               {entries.map((e) => {
                 const n = steps.indexOf(e.id);
                 return (
@@ -127,7 +122,13 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
             </ul>
           )
         ) : tab === "notes" ? (
-          <NoteEditor key={activeId ?? ""} target={{ engagementId: eid, hostId: activeId }} textRef={notesRef} className="min-h-[16rem] py-2" />
+          <NoteEditor
+            key={activeId ?? ""}
+            target={{ engagementId: eid, hostId: activeId }}
+            textRef={notesRef}
+            // Utilities until NoteEditor is converted: its own min-h-0 utility would beat a feature class here.
+            className="min-h-[16rem] py-2"
+          />
         ) : active ? (
           <FactsColumn
             engagementId={eid}
@@ -139,7 +140,7 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
             }}
           />
         ) : (
-          <p className="text-meta text-muted">Pick an affected host to see its facts.</p>
+          <p className="split-left-pane__hint">Pick an affected host to see its facts.</p>
         )}
       </div>
     </div>

@@ -162,3 +162,28 @@
 
 ### Differences and risks
 - The finding split's pick-mode row below 30rem of pane is not in every pixel screen; its rules are Tailwind's output.
+
+## Unit: findings
+
+### Changes
+- One sheet per component in `@layer features`: FindingsSection, HostFindings, AttemptsList, AttemptForm, FindingSplit,
+  SplitLeftPane, FindingEditor, FindingSteps, FindingFiles, CodeView, CvssBuilder, RefSuggestions, ServicePicker.
+- Container queries: the `host` container (`.findings-section__split`; HostView still declares its own) drives
+  FindingSplit at 760px; FindingSteps declares `steps` (480px); SplitLeftPane's panel declares `ctx` for LogEntryRow.
+- FindingSplit's narrow one-pane mode keys on its existing `data-pane`; tabs, host switch and CVSS segments key on
+  `aria-selected` / `aria-pressed`, with hover only on the unselected ones as before.
+- New mixin `line-clamp($lines)`. FindingSteps' title keeps `display: block` after it, as `block` beat `line-clamp-2`.
+- Dropped no-op utilities: `m-0`, `p-0`, `px-0`, `list-none` and `bg-transparent` that restate preflight.
+- Audit: the scroll-pane padding check found the host container by its `@container/host` class; it now reads the
+  computed `container-name`, so it keeps covering the finding split on the Findings page.
+
+### Left on Tailwind
+- `min-h-[16rem] py-2` on SplitLeftPane's `NoteEditor`: NoteEditor's own `min-h-0` utility would beat a feature
+  class. Convert with the notes unit.
+- `TAB_MARK` (src/ui/shadcn/tabs) on the context tabs' TabMarker: unit 25.
+
+### Verification
+- [x] Unit tests (no assertion named a findings utility)
+- [x] Type check and lint
+- [x] Pixel diff: findings, findings-list, host-findings identical at every width
+- [x] Audit gate

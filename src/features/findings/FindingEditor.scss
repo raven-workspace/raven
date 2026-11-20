@@ -1,0 +1,122 @@
+@use "@/styles/abstracts" as *;
+
+// The finding form: a sticky header (title, host, Save / Close), then the fields.
+@layer features {
+  .finding-editor {
+    display: grid;
+  }
+
+  .finding-editor__header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    align-items: center;
+    gap: var(--space-md);
+    padding-bottom: var(--space-sm);
+    border-bottom: 1px solid var(--line);
+    background-color: var(--bg);
+  }
+
+  .finding-editor__heading {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: baseline;
+    gap: var(--space-sm);
+    min-width: 0;
+  }
+
+  .finding-editor__title {
+    @include truncate;
+    @include type(heading);
+    color: var(--fg);
+  }
+
+  .finding-editor__host {
+    @include truncate;
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .finding-editor__body {
+    display: grid;
+    gap: var(--space-lg);
+    padding-top: var(--space-md);
+  }
+
+  .finding-editor__pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-md);
+  }
+
+  .finding-editor__group {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .finding-editor__hint {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .finding-editor__error {
+    @include type(meta);
+    color: var(--warn);
+  }
+
+  .finding-editor__refs {
+    display: grid;
+    gap: var(--space-xs);
+  }
+
+  .finding-editor__ref {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .finding-editor__ref-text {
+    @include truncate;
+    @include type(code);
+    color: var(--fg);
+  }
+
+  // Holds the copy button's place for a reference that isn't a URL.
+  .finding-editor__spacer {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  .finding-editor__add-ref {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-sm);
+  }
+
+  .finding-editor__nvd-diff {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    align-items: center;
+    gap: var(--space-sm);
+    @include type(meta);
+    color: var(--fg-2);
+  }
+
+  // A run of inline parts in a field's label or hint (the suggested score; "Lessons" and its Private chip).
+  .finding-editor__inline {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--space-sm);
+  }
+
+  .finding-editor__score {
+    @include type(code);
+    color: var(--fg);
+  }
+}

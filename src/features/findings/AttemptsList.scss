@@ -1,0 +1,112 @@
+@use "@/styles/abstracts" as *;
+
+// Things tried that failed: one subgrid row each (title and reason, the host when listing every host, actions).
+@layer features {
+  .attempts-list {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .attempts-list__header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-md);
+  }
+
+  .attempts-list__count {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .attempts-list__empty {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .attempts-list__list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    column-gap: var(--space-md);
+  }
+
+  .attempts-list__list--hosts {
+    grid-template-columns: minmax(0, 1fr) max-content max-content;
+  }
+
+  .attempts-list__row {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+    align-items: flex-start;
+    padding: var(--space-sm);
+    border-bottom: 1px solid var(--line);
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--surface);
+      }
+    }
+
+    &:has(:focus-visible) {
+      background-color: var(--surface);
+    }
+  }
+
+  .attempts-list__main {
+    display: grid;
+    gap: var(--space-xs);
+    min-width: 0;
+  }
+
+  .attempts-list__title-line {
+    display: grid;
+    grid-template-columns: minmax(0, max-content) max-content;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--space-sm);
+    height: 1.25rem;
+  }
+
+  .attempts-list__title {
+    margin-block: calc(var(--space-xs) * -1);
+    padding-block: var(--space-xs);
+    border-radius: var(--radius-sm);
+    @include truncate;
+    @include type(body);
+    text-align: left;
+    color: var(--fg);
+    cursor: default;
+  }
+
+  // Why it failed is the point of an attempt: up to two lines, not one.
+  .attempts-list__reason {
+    @include line-clamp(2);
+    @include type(meta);
+    overflow-wrap: break-word;
+    color: var(--muted);
+  }
+
+  .attempts-list__host {
+    display: grid;
+    align-content: center;
+    height: 1.25rem;
+    min-width: 0;
+    max-width: 24ch;
+  }
+
+  .attempts-list__host-name {
+    @include truncate;
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .attempts-list__actions {
+    margin-block: calc(var(--space-xs) * -1);
+  }
+
+  // Holds the open-entry button's place when there is no entry.
+  .attempts-list__spacer {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+}

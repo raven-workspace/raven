@@ -6,6 +6,7 @@ import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { CodeView, guessLanguage, LANGUAGES } from "./CodeView";
 import { useFindingFileMutations, useFindingFiles } from "./queries";
 import { copyPlain } from "../../lib/clipboard";
+import "./FindingFiles.scss";
 
 const MAX_BYTES = 1024 * 1024;
 const AUTO = "auto";
@@ -137,8 +138,8 @@ function FileForm({ findingId, file, value, onChange, onDone, onDirty, register 
   }, [register, onDirty]);
 
   return (
-    <div className="grid gap-3 rounded-sm border border-line-2 p-3">
-      <div className="grid grid-cols-2 gap-3">
+    <div className="finding-files__form">
+      <div className="finding-files__pair">
         <Field label="File name">
           <Input mono value={d.name} placeholder="poc.lua" onChange={(e) => setD({ ...d, name: e.target.value })} />
         </Field>
@@ -149,7 +150,7 @@ function FileForm({ findingId, file, value, onChange, onDone, onDirty, register 
       <Field label="File content">
         <Textarea mono rows={8} wrap="off" value={d.content} onChange={(e) => setD({ ...d, content: e.target.value })} />
       </Field>
-      <div className="grid justify-items-start">
+      <div className="finding-files__toggle">
         <Toggle on={d.modified} onChange={(modified) => setD({ ...d, modified })}>Modified exploit</Toggle>
       </div>
       {d.modified && (
@@ -162,7 +163,7 @@ function FileForm({ findingId, file, value, onChange, onDone, onDirty, register 
           </Field>
         </>
       )}
-      <div className="grid grid-cols-[max-content_minmax(0,1fr)_max-content_max-content] items-center gap-2">
+      <div className="finding-files__form-actions">
         <input
           ref={picker}
           type="file"
@@ -175,11 +176,11 @@ function FileForm({ findingId, file, value, onChange, onDone, onDirty, register 
           }}
         />
         <Button size="sm" onClick={() => picker.current?.click()}>Choose file</Button>
-        <span className="truncate text-meta text-muted">Text only, up to 1 MiB.</span>
+        <span className="finding-files__form-hint">Text only, up to 1 MiB.</span>
         <Button size="sm" aria-label="Cancel file" onClick={onDone}>Cancel</Button>
         <Button size="sm" variant="primary" disabled={busy} onClick={() => { if (!busy) void submit(); }}>Save file</Button>
       </div>
-      {error && <p role="alert" className="m-0 text-meta text-warn">{error}</p>}
+      {error && <p role="alert" className="finding-files__error">{error}</p>}
     </div>
   );
 }
@@ -190,11 +191,11 @@ function FileRow({ findingId, file, onEdit }: { findingId: string; file: Finding
   const [copied, flash] = useFlash(1500);
   const [copyError, setCopyError] = useState<string>();
   return (
-    <li className="grid gap-2 border-b border-line py-2">
-      <div className="grid grid-cols-[minmax(0,1fr)_max-content_max-content] items-center gap-3">
-        <span className="truncate font-mono text-code text-fg" title={file.name}>{file.name}</span>
-        <span className="grid grid-flow-col gap-2 text-meta text-muted">
-          {file.modified && <span className="text-accent">Modified</span>}
+    <li className="finding-files__file">
+      <div className="finding-files__file-head">
+        <span className="finding-files__file-name" title={file.name}>{file.name}</span>
+        <span className="finding-files__file-meta">
+          {file.modified && <span className="finding-files__modified">Modified</span>}
           <span>{file.language ?? guessLanguage(file.name)}</span>
         </span>
         <ActionCell>
@@ -213,7 +214,7 @@ function FileRow({ findingId, file, onEdit }: { findingId: string; file: Finding
           <IconButton icon={Trash} tone="destructive" label={`Delete ${file.name}`} onClick={() => setDeleting(true)} />
         </ActionCell>
       </div>
-      {copyError && <p role="alert" className="m-0 text-meta text-warn">{copyError}</p>}
+      {copyError && <p role="alert" className="finding-files__error">{copyError}</p>}
       <CodeView code={file.content} language={file.language ?? guessLanguage(file.name)} />
       {deleting && (
         <ConfirmDelete
@@ -244,12 +245,12 @@ export function FindingFiles({ findingId, form, onForm, onDirty, register }: {
   const formReady = form !== null && (form.fileId === null || files.data !== undefined);
   const open = (file?: FindingFile) => onForm({ fileId: file?.id ?? null, ...initialFields(file) });
   return (
-    <div role="group" aria-label="Finding files" className="grid gap-2">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+    <div role="group" aria-label="Finding files" className="finding-files">
+      <div className="finding-files__header">
         <span className={fieldLabelClass}>Files</span>
         {!form && <Button size="sm" onClick={() => open()}>Add file</Button>}
       </div>
-      {files.isError && <p role="alert" className="m-0 text-meta text-warn">Couldn't load files: {files.error.message}</p>}
+      {files.isError && <p role="alert" className="finding-files__error">Couldn't load files: {files.error.message}</p>}
       {formReady && (
         <FileForm
           key={formFile?.id ?? "new"}
@@ -262,9 +263,9 @@ export function FindingFiles({ findingId, form, onForm, onDirty, register }: {
           register={register}
         />
       )}
-      {files.data && files.data.length === 0 && !form && <p className="m-0 text-meta text-muted">No files yet. Paste exploit code or choose a file.</p>}
+      {files.data && files.data.length === 0 && !form && <p className="finding-files__hint">No files yet. Paste exploit code or choose a file.</p>}
       {files.data && files.data.length > 0 && (
-        <ul className="m-0 grid list-none p-0">
+        <ul className="finding-files__list">
           {files.data.map((f) => <FileRow key={f.id} findingId={findingId} file={f} onEdit={() => open(f)} />)}
         </ul>
       )}

@@ -1,0 +1,33 @@
+@use "@/styles/abstracts" as *;
+
+// CVE and EDB ids found in the log and notes, as one-click chips.
+@layer features {
+  .ref-suggestions {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .ref-suggestions__label {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .ref-suggestions__ref {
+    display: inline-grid;
+    align-items: center;
+    height: 1.75rem;
+    padding-inline: var(--space-sm);
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius-sm);
+    @include type(code);
+    color: var(--fg-2);
+    cursor: default;
+
+    @media (hover: hover) {
+      &:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+    }
+  }
+}

@@ -8,6 +8,7 @@ import { useLog } from "../log/queries";
 import { AttemptForm, REASON_LABELS } from "./AttemptForm";
 import { useFailedAttemptMutations, useFailedAttempts, useFindings } from "./queries";
 import { hostLabel } from "../../lib/hostName";
+import "./AttemptsList.scss";
 
 /** Things tried that failed. With `hostId`, only that host's attempts and new ones start on it. */
 export function AttemptsList({ eid, hostId, onOpenEntry }: {
@@ -31,36 +32,36 @@ export function AttemptsList({ eid, hostId, onOpenEntry }: {
   const rows = attemptsQ.data.filter((a) => hostId === undefined || a.hostId === hostId).sort((a, b) => b.createdAt - a.createdAt);
 
   return (
-    <section aria-label="Attempts" className="grid gap-2">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-        <h3 className={`m-0 ${labelClass}`}>Attempts <span className="tabular-nums">{rows.length}</span></h3>
+    <section aria-label="Attempts" className="attempts-list">
+      <div className="attempts-list__header">
+        <h3 className={labelClass}>Attempts <span className="attempts-list__count">{rows.length}</span></h3>
         <Button onClick={() => setEditor({})}>Add attempt</Button>
       </div>
 
       {rows.length === 0 ? (
-        <p className="m-0 text-meta text-muted">Nothing failed yet. Note what was tried and why it didn't work.</p>
+        <p className="attempts-list__empty">Nothing failed yet. Note what was tried and why it didn't work.</p>
       ) : (
-        <ul className={`m-0 grid list-none gap-x-3 p-0 ${showHost ? "grid-cols-[minmax(0,1fr)_max-content_max-content]" : "grid-cols-[minmax(0,1fr)_max-content]"}`}>
+        <ul className={showHost ? "attempts-list__list attempts-list__list--hosts" : "attempts-list__list"}>
           {rows.map((a) => {
             const host = a.hostId && showHost ? hostLabel(hosts.find((h) => h.id === a.hostId)) : "";
             const reason = `${REASON_LABELS[a.reasonKind]}: ${a.reason}`;
             return (
-              <li key={a.id} className="col-span-full grid grid-cols-subgrid items-start border-b border-line p-2 hover:bg-surface has-[:focus-visible]:bg-surface">
-                <span className="grid min-w-0 gap-1">
-                  <span className="grid h-5 grid-cols-[minmax(0,max-content)_max-content] items-center justify-start gap-2">
-                    <button type="button" data-testid="attempt-title" title={a.title} onClick={() => setEditor({ edit: a })} className="-my-1 cursor-default truncate rounded-sm bg-transparent px-0 py-1 text-left text-body text-fg">{a.title}</button>
+              <li key={a.id} className="attempts-list__row">
+                <span className="attempts-list__main">
+                  <span className="attempts-list__title-line">
+                    <button type="button" data-testid="attempt-title" title={a.title} onClick={() => setEditor({ edit: a })} className="attempts-list__title">{a.title}</button>
                     {a.private && <Chip>Private</Chip>}
                   </span>
                   {/* Why it failed is the point of an attempt: up to two lines, not one. */}
-                  <span className="line-clamp-2 break-words text-meta text-muted" title={reason}>{reason}</span>
+                  <span className="attempts-list__reason" title={reason}>{reason}</span>
                 </span>
-                {showHost && <span className="grid h-5 max-w-[24ch] min-w-0 content-center"><span className="truncate text-meta text-muted-2" title={host}>{host}</span></span>}
-                <span className="-my-1">
+                {showHost && <span className="attempts-list__host"><span className="attempts-list__host-name" title={host}>{host}</span></span>}
+                <span className="attempts-list__actions">
                   <ActionCell>
                   {a.logEntryId && entryIds.has(a.logEntryId) ? (
                     <IconButton icon={ArrowSquareOut} label={`Open log entry for ${a.title}`} onClick={() => onOpenEntry(a.logEntryId!)} />
                   ) : (
-                    <span aria-hidden className="size-7" />
+                    <span aria-hidden className="attempts-list__spacer" />
                   )}
                   <IconButton icon={PencilSimple} label={`Edit ${a.title}`} onClick={() => setEditor({ edit: a })} />
                   <IconButton icon={Trash} tone="destructive" label={`Delete ${a.title}`} onClick={() => setDeleting(a)} />

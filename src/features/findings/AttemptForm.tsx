@@ -6,6 +6,7 @@ import { Button, ChipSet, Dialog, Field, Input, Select, Toggle, fieldLabelClass 
 import { useFailedAttemptMutations } from "./queries";
 import { RavenError } from "../../types/errors";
 import { hostLabel } from "../../lib/hostName";
+import "./AttemptForm.scss";
 
 export const REASON_LABELS: Record<ReasonKind, string> = {
   control: "Blocked by a control",
@@ -76,11 +77,11 @@ export function AttemptForm({ eid, hosts, findings, log, edit, defaultHostId, on
         </>
       }
     >
-      <div className="grid gap-4">
+      <div className="attempt-form">
         <Field label="What was tried" error={errors.title}>
           <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="attempt-form__pair">
           <Field label="Host">
             <Select
               options={withNone("No host", hosts.map((h) => ({ value: h.id, label: hostLabel(h) })))}
@@ -99,7 +100,7 @@ export function AttemptForm({ eid, hosts, findings, log, edit, defaultHostId, on
         <Field label="Log entry">
           <Select options={withNone("No log entry", logOptions)} value={logEntryId ?? NONE} onValueChange={(v) => setLogEntryId(pick(v))} />
         </Field>
-        <div role="radiogroup" aria-label="Why it failed" className="grid gap-2">
+        <div role="radiogroup" aria-label="Why it failed" className="attempt-form__reasons">
           <span className={fieldLabelClass}>Why it failed</span>
           <ChipSet>
             {REASONS.map((r) => (
@@ -108,13 +109,13 @@ export function AttemptForm({ eid, hosts, findings, log, edit, defaultHostId, on
               </Toggle>
             ))}
           </ChipSet>
-          {errors.kind && <p className="m-0 text-meta text-warn">{errors.kind}</p>}
-          {kind === "operator" && <p className="m-0 text-meta text-muted">Never appears in a report</p>}
+          {errors.kind && <p className="attempt-form__error">{errors.kind}</p>}
+          {kind === "operator" && <p className="attempt-form__note">Never appears in a report</p>}
         </div>
         <Field label="Reason" error={errors.reason}>
           <Input value={reason} onChange={(e) => setReason(e.target.value)} />
         </Field>
-        {errors.form && <p role="alert" className="m-0 text-meta text-warn">{errors.form}</p>}
+        {errors.form && <p role="alert" className="attempt-form__error">{errors.form}</p>}
       </div>
     </Dialog>
   );

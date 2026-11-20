@@ -1,0 +1,93 @@
+@use "@/styles/abstracts" as *;
+
+// The CVSS base-metric picker: a version switch and score, then one segmented control per metric.
+@layer features {
+  .cvss-builder {
+    display: grid;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+  }
+
+  .cvss-builder__top {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-md);
+  }
+
+  // A run of segments (the versions, or one metric's options).
+  .cvss-builder__segments {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    gap: var(--space-xs);
+  }
+
+  .cvss-builder__score {
+    justify-self: flex-end;
+    @include mono;
+    @include type(meta);
+    font-variant-numeric: tabular-nums;
+    color: var(--fg-2);
+  }
+
+  .cvss-builder__score-value {
+    color: var(--fg);
+  }
+
+  .cvss-builder__group {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .cvss-builder__metric {
+    display: grid;
+    grid-template-columns: 10rem minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .cvss-builder__metric-name {
+    @include type(meta);
+    color: var(--fg-2);
+  }
+
+  .cvss-builder__metric-key {
+    @include mono;
+    color: var(--muted);
+  }
+
+  // A segment: accent while pressed, a hairline otherwise. The colour change eases out over 150ms.
+  .cvss-builder__segment {
+    display: inline-grid;
+    align-items: center;
+    height: 1.75rem;
+    padding-inline: var(--space-sm);
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius-sm);
+    @include type(meta);
+    color: var(--fg-2);
+    cursor: default;
+    @include transition-colors;
+    transition-timing-function: var(--ease-decelerate);
+    transition-duration: var(--duration-turn);
+
+    &[aria-pressed="true"] {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    @media (hover: hover) {
+      &:not([aria-pressed="true"]):hover {
+        border-color: var(--line-strong);
+        color: var(--fg);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      transition-property: none;
+    }
+  }
+}

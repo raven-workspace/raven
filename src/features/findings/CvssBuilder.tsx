@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { parseCvssAny, scoreCvss, type CvssVersion } from "../../engines/findings/cvss4";
 import { scoreToSeverity } from "../../engines/findings/cvss";
-import { cx } from "../../lib/cx";
 import { labelClass } from "../../ui";
+import "./CvssBuilder.scss";
 
 interface MetricDef {
   key: string;
@@ -75,12 +75,6 @@ function buildVector(version: CvssVersion, picks: Record<string, string>): strin
   return [`CVSS:${version}`, ...base.map((m) => `${m.key}:${picks[m.key]}`), ...extras.map((k) => `${k}:${picks[k]}`)].join("/");
 }
 
-const segment =
-  "inline-grid h-7 items-center rounded-sm border px-2 text-meta cursor-default " +
-  "transition-colors duration-150 ease-out motion-reduce:transition-none";
-const segmentOn = "border-accent text-accent";
-const segmentOff = "border-line-2 text-fg-2 hover:border-line-strong hover:text-fg";
-
 /**
  * A compact CVSS base-metric picker for findings with no CVE, or when NVD can't be reached.
  * One segmented control per base metric; 3.1 or 4.0 (default 4.0). Writes the vector once every metric is picked.
@@ -132,9 +126,9 @@ export function CvssBuilder({ value, onChange }: { value: string; onChange(vecto
   const picked = base.filter((m) => picks[m.key] !== undefined).length;
 
   return (
-    <div className="grid gap-3 rounded-sm border border-line p-3">
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
-        <div role="group" aria-label="CVSS version" className="grid grid-flow-col auto-cols-max gap-1">
+    <div className="cvss-builder">
+      <div className="cvss-builder__top">
+        <div role="group" aria-label="CVSS version" className="cvss-builder__segments">
           {/* A stored 3.0 vector keeps its version, shown as its own pressed segment; 3.1 stays one click away. */}
           {(version === "3.0" ? (["4.0", "3.1", "3.0"] as const) : (["4.0", "3.1"] as const)).map((v) => {
             const on = v === version;
@@ -146,17 +140,17 @@ export function CvssBuilder({ value, onChange }: { value: string; onChange(vecto
                 aria-disabled={v === "3.0" ? true : undefined}
                 title={v === "3.0" ? "Stored as CVSS 3.0" : undefined}
                 onClick={() => (v === "3.0" ? undefined : switchTo(v))}
-                className={cx(segment, on ? segmentOn : segmentOff)}
+                className="cvss-builder__segment"
               >
                 CVSS {v}
               </button>
             );
           })}
         </div>
-        <output aria-label="CVSS score" className="justify-self-end font-mono text-meta tabular-nums text-fg-2">
+        <output aria-label="CVSS score" className="cvss-builder__score">
           {score !== null ? (
             <>
-              <span className="text-fg">{score.toFixed(1)}</span> {scoreToSeverity(score)}
+              <span className="cvss-builder__score-value">{score.toFixed(1)}</span> {scoreToSeverity(score)}
             </>
           ) : (
             `${picked} of ${base.length} picked`
@@ -164,19 +158,19 @@ export function CvssBuilder({ value, onChange }: { value: string; onChange(vecto
         </output>
       </div>
       {groupsFor(version).map((g) => (
-        <section key={g.heading} aria-label={g.heading} className="grid gap-2">
-          <h4 className={cx(labelClass, "m-0")}>{g.heading}</h4>
+        <section key={g.heading} aria-label={g.heading} className="cvss-builder__group">
+          <h4 className={labelClass}>{g.heading}</h4>
           {g.metrics.map((m) => (
             <div
               key={m.key}
               role="group"
               aria-label={`${m.name} (${m.key})`}
-              className="grid grid-cols-[10rem_minmax(0,1fr)] items-center gap-2"
+              className="cvss-builder__metric"
             >
-              <span className="text-meta text-fg-2">
-                <span className="font-mono text-muted">{m.key}</span> {m.name}
+              <span className="cvss-builder__metric-name">
+                <span className="cvss-builder__metric-key">{m.key}</span> {m.name}
               </span>
-              <div className="grid grid-flow-col auto-cols-max gap-1">
+              <div className="cvss-builder__segments">
                 {m.options.map(([v, label]) => {
                   const on = picks[m.key] === v;
                   return (
@@ -185,7 +179,7 @@ export function CvssBuilder({ value, onChange }: { value: string; onChange(vecto
                       type="button"
                       aria-pressed={on}
                       onClick={() => pick(m.key, v)}
-                      className={cx(segment, on ? segmentOn : segmentOff)}
+                      className="cvss-builder__segment"
                     >
                       {label}
                     </button>

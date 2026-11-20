@@ -11,6 +11,7 @@ import { AttemptsList } from "./AttemptsList";
 import { FindingSplit } from "./FindingSplit";
 import { useFindingMutations, useFindings } from "./queries";
 import { hostLabel } from "../../lib/hostName";
+import "./FindingsSection.scss";
 
 /** Critical and high use the warn colour; the rest stay neutral. */
 export function SeverityChip({ severity }: { severity: Finding["severity"] }) {
@@ -35,7 +36,7 @@ export function FindingsSection() {
     // The same split as the host page: with one affected host its context shows; otherwise the switcher or the engagement's.
     const only = editor.edit?.hostIds.length === 1 ? editor.edit.hostIds[0]! : null;
     return (
-      <div className="@container/host h-full min-h-0">
+      <div className="findings-section__split">
         <FindingSplit key={editor.edit?.id ?? "new"} eid={id} hostId={only} edit={editor.edit ?? "new"} onClose={() => setEditor(null)} />
       </div>
     );
@@ -43,9 +44,9 @@ export function FindingsSection() {
   const names = (f: Finding) => f.hostIds.map((hid) => hostLabel(hosts.find((h) => h.id === hid))).join(", ");
 
   return (
-    <section aria-label="Findings" className="grid gap-4">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-        <h3 className={`m-0 ${labelClass}`}>Findings <span className="tabular-nums">{sorted.length}</span></h3>
+    <section aria-label="Findings" className="findings-section">
+      <div className="findings-section__header">
+        <h3 className={labelClass}>Findings <span className="findings-section__count">{sorted.length}</span></h3>
         <Button variant="primary" onClick={() => setEditor({})}>Add finding</Button>
       </div>
 
@@ -53,41 +54,41 @@ export function FindingsSection() {
         <EmptyState title="No findings yet" />
       ) : (
         // One grid for the header and the rows, so every column lines up with its name.
-        <div className="grid grid-cols-[max-content_minmax(0,1fr)_max-content_max-content_max-content] gap-x-3">
-          <div aria-hidden className={`col-span-full grid grid-cols-subgrid border-b border-line px-2 pb-2 ${labelClass}`}>
+        <div className="findings-section__table">
+          <div aria-hidden className={`findings-section__head ${labelClass}`}>
             <span>Severity</span>
             <span>Finding</span>
             <span>Status</span>
-            <span className="text-right">CVSS</span>
+            <span className="findings-section__head-score">CVSS</span>
             <span />
           </div>
-          <ul className="col-span-full m-0 grid list-none grid-cols-subgrid p-0">
+          <ul className="findings-section__rows">
             {sorted.map((f) => (
-              <li key={f.id} className="col-span-full grid grid-cols-subgrid items-start border-b border-line p-2 hover:bg-surface has-[:focus-visible]:bg-surface">
-                <span className="grid h-5 content-center justify-self-start"><SeverityChip severity={f.severity} /></span>
-                <span className="grid min-w-0 gap-1">
+              <li key={f.id} className="findings-section__row">
+                <span className="findings-section__severity"><SeverityChip severity={f.severity} /></span>
+                <span className="findings-section__main">
                   {/* The title opens the finding: the whole name is the target, not only the pencil. */}
                   <button
                     type="button"
                     data-testid="finding-title"
                     title={f.title}
                     onClick={() => setEditor({ edit: f })}
-                    className="-my-1 line-clamp-2 cursor-default break-words rounded-sm bg-transparent px-0 py-1 text-left text-body text-fg"
+                    className="findings-section__title"
                   >
                     {f.title}
                   </button>
                   {f.hostIds.length > 0 && (
-                    <span className="grid grid-cols-[minmax(0,max-content)_max-content] justify-start gap-2 text-meta text-muted-2" title={names(f)}>
-                      <span className="truncate">{hostLabel(hosts.find((h) => h.id === f.hostIds[0]))}</span>
+                    <span className="findings-section__hosts" title={names(f)}>
+                      <span className="findings-section__host">{hostLabel(hosts.find((h) => h.id === f.hostIds[0]))}</span>
                       {f.hostIds.length > 1 && <span>{`+${f.hostIds.length - 1}`}</span>}
                     </span>
                   )}
                 </span>
                 {/* A draft is still unconfirmed, so it sits a step quieter than confirmed and reported. */}
-                <span className={`grid h-5 content-center text-meta ${f.status === "draft" ? "text-muted-2" : "text-fg-2"}`}>{f.status}</span>
-                <span className="min-w-[3ch] text-right font-mono text-code tabular-nums text-fg-2">{f.cvssScore !== null ? f.cvssScore.toFixed(1) : ""}</span>
+                <span className={f.status === "draft" ? "findings-section__status findings-section__status--draft" : "findings-section__status"}>{f.status}</span>
+                <span className="findings-section__score">{f.cvssScore !== null ? f.cvssScore.toFixed(1) : ""}</span>
                 {/* 28px buttons centred on the 20px first line. */}
-                <span className="-my-1">
+                <span className="findings-section__actions">
                   <ActionCell>
                     <IconButton icon={PencilSimple} label={`Edit ${f.title}`} onClick={() => setEditor({ edit: f })} />
                     <IconButton icon={Trash} tone="destructive" label={`Delete ${f.title}`} onClick={() => setDeleting(f)} />

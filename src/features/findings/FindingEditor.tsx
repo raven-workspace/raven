@@ -20,6 +20,7 @@ import { useFindingMutations } from "./queries";
 import { useFindingDraftStore } from "./useFindingDraftStore";
 import { RefSuggestions } from "./RefSuggestions";
 import { ServicePicker } from "./ServicePicker";
+import "./FindingEditor.scss";
 
 const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"];
 const SEVERITY_OPTIONS = [{ value: "none", label: "Unrated" }, ...SEVERITIES.map((s) => ({ value: s, label: s }))];
@@ -337,11 +338,11 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
     });
 
   return (
-    <form aria-label={title} onSubmit={(e) => e.preventDefault()} className="grid">
-      <header className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-3 border-b border-line bg-bg pb-2">
-        <div className="grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] items-baseline gap-2">
-          <h2 className="m-0 truncate text-heading text-fg">{title}</h2>
-          {hostName && <span className="truncate text-meta text-muted" title={hostName}>{hostName}</span>}
+    <form aria-label={title} onSubmit={(e) => e.preventDefault()} className="finding-editor">
+      <header className="finding-editor__header">
+        <div className="finding-editor__heading">
+          <h2 className="finding-editor__title">{title}</h2>
+          {hostName && <span className="finding-editor__host" title={hostName}>{hostName}</span>}
         </div>
         <ActionCell>
           {dirty && (
@@ -352,12 +353,12 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
         </ActionCell>
       </header>
 
-      <div className="grid gap-4 pt-3">
-        {notice && <p role="status" className="m-0 text-meta text-muted">{notice}</p>}
+      <div className="finding-editor__body">
+        {notice && <p role="status" className="finding-editor__hint">{notice}</p>}
         <Field label="Title" error={titleError}>
           <Input autoFocus value={d.title} onChange={(e) => set("title", e.target.value)} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="finding-editor__pair">
           <Field label="Severity">
             <Select
               options={SEVERITY_OPTIONS}
@@ -374,7 +375,7 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
           </Field>
         </div>
 
-        <div role="group" aria-label="Affected hosts" className="grid gap-2">
+        <div role="group" aria-label="Affected hosts" className="finding-editor__group">
           <span className={fieldLabelClass}>Affected hosts</span>
           <ChipSet>
             {hosts.map((h) => (
@@ -382,29 +383,29 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
                 {shortHostName(hostLabel(h))}
               </Toggle>
             ))}
-            {hosts.length === 0 && <span className="text-meta text-muted">No hosts yet</span>}
+            {hosts.length === 0 && <span className="finding-editor__hint">No hosts yet</span>}
           </ChipSet>
         </div>
 
         <ServicePicker hosts={affected} servicesByHost={servicesByHost} error={servicesError} value={d.serviceIds} onChange={(ids) => set("serviceIds", ids)} />
 
-        <div className="grid gap-2">
+        <div className="finding-editor__group">
           <span className={fieldLabelClass}>References</span>
           {d.refs.length > 0 && (
-            <ul className="m-0 grid list-none gap-1 p-0">
+            <ul className="finding-editor__refs">
               {d.refs.map((r) => (
-                <li key={r} className="grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-2">
+                <li key={r} className="finding-editor__ref">
                   {/* No opener plugin: a link would be a dead click in the desktop app, so a URL is copied instead. */}
-                  <span className="truncate font-mono text-code text-fg" title={r}>{r}</span>
+                  <span className="finding-editor__ref-text" title={r}>{r}</span>
                   <ActionCell>
-                    {isUrl(r) ? <CopySecretButton secret={r} label={r} copy={copyPlain} /> : <span aria-hidden className="size-7" />}
+                    {isUrl(r) ? <CopySecretButton secret={r} label={r} copy={copyPlain} /> : <span aria-hidden className="finding-editor__spacer" />}
                     <IconButton icon={X} tone="destructive" label={`Remove ${r}`} onClick={() => update((p) => ({ ...p, refs: p.refs.filter((x) => x !== r), nvdPending: p.nvdPending.filter((x) => x !== r) }))} />
                   </ActionCell>
                 </li>
               ))}
             </ul>
           )}
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+          <div className="finding-editor__add-ref">
             <Input
               mono
               aria-label="Add reference"
@@ -422,25 +423,25 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
             <Button onClick={() => { addRef(newRef); setNewRef(""); }}>Add</Button>
           </div>
           <RefSuggestions eid={eid} hostIds={d.hostIds} added={d.refs} onAdd={addRef} />
-          <span aria-live="polite" className="text-meta text-muted">
+          <span aria-live="polite" className="finding-editor__hint">
             {nvd.looking ? `Looking up ${nvd.looking} on NVD…` : nvd.line ?? ""}
           </span>
           {nvd.diffs.map((df) => (
-            <p key={df.field} className="m-0 grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-2 text-meta text-fg-2">
+            <p key={df.field} className="finding-editor__nvd-diff">
               <span>NVD has a different {FIELD_NAME[df.field]}</span>
               <Button size="sm" onClick={() => set(df.field, df.nvd)}>use NVD</Button>
             </p>
           ))}
         </div>
 
-        <div className="grid gap-2">
+        <div className="finding-editor__group">
           <Field
             label="CVSS vector"
             error={vector !== "" && score === null ? "Not a valid CVSS 3.1 or 4.0 vector" : undefined}
             hint={
               score !== null && suggested ? (
-                <span className="grid grid-flow-col auto-cols-max items-center justify-start gap-2">
-                  <span className="font-mono text-code text-fg">{score.toFixed(1)}</span>
+                <span className="finding-editor__inline">
+                  <span className="finding-editor__score">{score.toFixed(1)}</span>
                   <span>Suggested: {suggested}</span>
                   {d.severity !== suggested && (
                     <Button size="sm" onClick={() => set("severity", suggested)}>Use suggested</Button>
@@ -471,14 +472,14 @@ export function FindingEditor({ eid, hosts, servicesByHost, servicesError, edit,
             register={registerFlush}
           />
         ) : (
-          <p className="m-0 text-meta text-muted">Save the finding to attach files.</p>
+          <p className="finding-editor__hint">Save the finding to attach files.</p>
         )}
 
-        <Field label={<span className="grid grid-flow-col auto-cols-max items-center justify-start gap-2">Lessons <Chip>Private</Chip></span>} hint="Never included in an export or report.">
+        <Field label={<span className="finding-editor__inline">Lessons <Chip>Private</Chip></span>} hint="Never included in an export or report.">
           <Textarea rows={3} value={d.lessons} onChange={(e) => set("lessons", e.target.value)} />
         </Field>
 
-        {formError && <p role="alert" className="m-0 text-meta text-warn">{formError}</p>}
+        {formError && <p role="alert" className="finding-editor__error">{formError}</p>}
       </div>
       {confirmDiscard && (
         <Dialog
