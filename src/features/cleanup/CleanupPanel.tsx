@@ -4,17 +4,16 @@ import { PencilSimple, Plus, Trash, X } from "@phosphor-icons/react";
 import type { CleanupItem, CleanupKind } from "../../types/cleanup";
 import type { Host } from "../../types/host";
 import type { LogEntry } from "../../types/log";
+import { cx } from "../../lib/cx";
 import { Button, Chip, ChipSet, IconButton, Panel, labelClass, queryState } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { shortDate } from "../engagements/format";
 import { CleanupDialog, KIND_OPTIONS } from "./CleanupDialog";
 import { useCleanup, useCleanupMutations } from "./queries";
+import "./CleanupPanel.scss";
 
 const EMPTY = "Nothing left on targets yet. Uploads, created accounts and services you log will be suggested here.";
 const KIND_LABEL = Object.fromEntries(KIND_OPTIONS.map((o) => [o.value, o.label])) as Record<CleanupKind, string>;
-const subhead = `m-0 ${labelClass}`;
-/** Kind chip, text, the domain verb, Edit, Delete: the same tracks in every row so the icons line up. */
-const ITEM_ROW = "grid grid-cols-[80px_minmax(0,1fr)_120px_28px_28px] items-start gap-2 border-b border-line py-2 last:border-b-0";
 
 export function CleanupPanel({ engagementId, hosts, entries, domain }: {
   engagementId: string;
@@ -60,23 +59,23 @@ export function CleanupPanel({ engagementId, hosts, entries, domain }: {
     const removedRow = i.status === "removed";
     const host = hostName(i.hostId);
     return (
-      <li key={i.id} className={ITEM_ROW}>
-        <div className="grid h-7 items-center justify-start"><Chip>{KIND_LABEL[i.kind]}</Chip></div>
-        <div className="grid min-w-0 gap-1">
-          <span className={`truncate py-1 text-code ${removedRow ? "text-muted" : "text-fg"}`} title={i.target}>{i.target}</span>
+      <li key={i.id} className="cleanup-row">
+        <div className="cleanup-row__kind"><Chip>{KIND_LABEL[i.kind]}</Chip></div>
+        <div className="cleanup-row__body">
+          <span className={cx("cleanup-row__target", removedRow && "cleanup-row__target--removed")} title={i.target}>{i.target}</span>
           {(host || i.notes || (removedRow && i.removedAt !== null)) && (
             <ChipSet>
-              {host && <span className="text-meta text-muted-2">{host}</span>}
-              {i.notes && <span className="min-w-0 truncate text-meta text-muted-2" title={i.notes}>{i.notes}</span>}
+              {host && <span className="cleanup-row__meta">{host}</span>}
+              {i.notes && <span className="cleanup-row__meta cleanup-row__note" title={i.notes}>{i.notes}</span>}
               {removedRow && i.removedAt !== null && (
-                <span className="text-meta text-muted-2">Removed {shortDate(i.removedAt, yearOf(i.removedAt))}</span>
+                <span className="cleanup-row__meta">Removed {shortDate(i.removedAt, yearOf(i.removedAt))}</span>
               )}
             </ChipSet>
           )}
         </div>
         <Button
           size="sm"
-          className="justify-self-end"
+          className="cleanup-row__verb"
           aria-pressed={removedRow}
           aria-label={removedRow ? `Restore ${i.target}` : `Mark ${i.target} removed`}
           onClick={() => {
@@ -94,20 +93,20 @@ export function CleanupPanel({ engagementId, hosts, entries, domain }: {
 
   return (
     <Panel title="Cleanup" aria-label="Cleanup" actions={<IconButton icon={Plus} label="Add item" onClick={() => setEditing("new")} />}>
-      {actionError && <p role="alert" className="mb-2 mt-0 text-meta text-warn">{actionError}</p>}
+      {actionError && <p role="alert" className="cleanup-panel__error">{actionError}</p>}
       {suggestions.length > 0 && (
-        <div className="mb-3 grid gap-1">
-          <h3 className={subhead}>Suggested</h3>
-          <ul className="m-0 grid list-none p-0">
+        <div className="cleanup-panel__group cleanup-panel__group--suggested">
+          <h3 className={labelClass}>Suggested</h3>
+          <ul className="cleanup-panel__list">
             {suggestions.map((s) => {
               const host = hostName(s.hostId);
               return (
-                <li key={s.key} className="grid grid-cols-[80px_minmax(0,1fr)_28px_28px] items-start gap-2 border-b border-line py-2 last:border-b-0">
-                  <div className="grid h-7 items-center justify-start"><Chip>{KIND_LABEL[s.kind]}</Chip></div>
-                  <div className="grid min-w-0 gap-1">
-                    <span className="truncate py-1 text-code text-fg" title={s.target}>{s.target}</span>
-                    {host && <span className="text-meta text-muted-2">{host}</span>}
-                    <span title={s.command} className="truncate text-code text-muted">{s.command}</span>
+                <li key={s.key} className="cleanup-row cleanup-row--suggestion">
+                  <div className="cleanup-row__kind"><Chip>{KIND_LABEL[s.kind]}</Chip></div>
+                  <div className="cleanup-row__body">
+                    <span className="cleanup-row__target" title={s.target}>{s.target}</span>
+                    {host && <span className="cleanup-row__meta">{host}</span>}
+                    <span title={s.command} className="cleanup-row__command">{s.command}</span>
                   </div>
                   <IconButton
                     icon={Plus}
@@ -129,19 +128,19 @@ export function CleanupPanel({ engagementId, hosts, entries, domain }: {
         </div>
       )}
       {open.length === 0 && removed.length === 0 && suggestions.length === 0 ? (
-        <p className="m-0 text-meta text-muted">{EMPTY}</p>
+        <p className="cleanup-panel__empty">{EMPTY}</p>
       ) : (
         <>
           {open.length > 0 && (
-            <div className="grid gap-1">
-              <h3 className={subhead}>On target</h3>
-              <ul className="m-0 grid list-none p-0">{open.map(itemRow)}</ul>
+            <div className="cleanup-panel__group">
+              <h3 className={labelClass}>On target</h3>
+              <ul className="cleanup-panel__list">{open.map(itemRow)}</ul>
             </div>
           )}
           {removed.length > 0 && (
-            <div className="mt-3 grid gap-1">
-              <h3 className={subhead}>Removed</h3>
-              <ul className="m-0 grid list-none p-0">{removed.map(itemRow)}</ul>
+            <div className="cleanup-panel__group cleanup-panel__group--removed">
+              <h3 className={labelClass}>Removed</h3>
+              <ul className="cleanup-panel__list">{removed.map(itemRow)}</ul>
             </div>
           )}
         </>

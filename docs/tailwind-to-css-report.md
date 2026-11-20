@@ -233,3 +233,16 @@
 ### Verification
 - [x] Type check, lint, unit tests
 - [x] Pixel diff 297/297, audit gate (run together with cleanup, settings and vault)
+
+## Unit: cleanup
+
+### Changes
+- CleanupPanel.scss (`.cleanup-panel__*`, `.cleanup-row` with `--suggestion` for the four-track suggestion row) and
+  CleanupDialog.scss. The `font-mono` the dialog passed to `Input` becomes `.cleanup-dialog__target` (the `mono` mixin:
+  family and ligatures only, body size kept, so not `Input mono`). The Mark removed button's `justify-self-end` is
+  `.cleanup-row__verb`.
+- Dropped preflight no-ops (`m-0`, `p-0`, `list-none`, `mt-0`).
+
+### Verification
+- [x] Type check, lint, unit tests
+- [x] Pixel diff 297/297, audit gate

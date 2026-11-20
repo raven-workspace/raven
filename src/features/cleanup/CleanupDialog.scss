@@ -1,0 +1,24 @@
+@use "@/styles/abstracts" as *;
+
+@layer features {
+  .cleanup-dialog__form {
+    display: grid;
+    gap: var(--space-lg);
+  }
+
+  .cleanup-dialog__pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-md);
+  }
+
+  // The monospace family on the body-size input (not the code role's size).
+  .cleanup-dialog__target {
+    @include mono;
+  }
+
+  .cleanup-dialog__error {
+    @include type(meta);
+    color: var(--warn);
+  }
+}

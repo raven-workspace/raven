@@ -1,0 +1,95 @@
+@use "@/styles/abstracts" as *;
+
+// What was left on targets: suggestions from the log, then open and removed items.
+@layer features {
+  .cleanup-panel__error {
+    margin-bottom: var(--space-sm);
+    @include type(meta);
+    color: var(--warn);
+  }
+
+  .cleanup-panel__group {
+    display: grid;
+    gap: var(--space-xs);
+  }
+
+  .cleanup-panel__group--suggested {
+    margin-bottom: var(--space-md);
+  }
+
+  .cleanup-panel__group--removed {
+    margin-top: var(--space-md);
+  }
+
+  .cleanup-panel__list {
+    display: grid;
+  }
+
+  .cleanup-panel__empty {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  // Kind chip, text, the domain verb, Edit, Delete: the same tracks in every row so the icons line up. A suggestion
+  // has no verb column.
+  .cleanup-row {
+    display: grid;
+    grid-template-columns: 80px minmax(0, 1fr) 120px 28px 28px;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    border-bottom: 1px solid var(--line);
+    padding-block: var(--space-sm);
+
+    &:last-child {
+      border-bottom-width: 0;
+    }
+  }
+
+  .cleanup-row--suggestion {
+    grid-template-columns: 80px minmax(0, 1fr) 28px 28px;
+  }
+
+  .cleanup-row__kind {
+    display: grid;
+    height: 1.75rem;
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  .cleanup-row__body {
+    display: grid;
+    min-width: 0;
+    gap: var(--space-xs);
+  }
+
+  .cleanup-row__target {
+    @include truncate;
+    padding-block: var(--space-xs);
+    @include type(code);
+    color: var(--fg);
+  }
+
+  .cleanup-row__target--removed {
+    color: var(--muted);
+  }
+
+  .cleanup-row__meta {
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .cleanup-row__note {
+    min-width: 0;
+    @include truncate;
+  }
+
+  .cleanup-row__command {
+    @include truncate;
+    @include type(code);
+    color: var(--muted);
+  }
+
+  .cleanup-row__verb {
+    justify-self: flex-end;
+  }
+}

@@ -3,6 +3,7 @@ import type { CleanupItem, CleanupKind } from "../../types/cleanup";
 import type { Host } from "../../types/host";
 import { Button, Dialog, Field, Input, Select, Textarea } from "../../ui";
 import { useCleanupMutations } from "./queries";
+import "./CleanupDialog.scss";
 
 export const KIND_OPTIONS: { value: CleanupKind; label: string }[] = [
   { value: "file", label: "File" },
@@ -50,8 +51,8 @@ export function CleanupDialog({ engagementId, hosts, item, onClose }: {
         </>
       }
     >
-      <form id={formId} onSubmit={submit} noValidate className="grid gap-4">
-        <div className="grid grid-cols-2 gap-3">
+      <form id={formId} onSubmit={submit} noValidate className="cleanup-dialog__form">
+        <div className="cleanup-dialog__pair">
           <Field label="Kind">
             <Select options={KIND_OPTIONS} value={kind} onValueChange={(v) => setKind(v as CleanupKind)} />
           </Field>
@@ -64,12 +65,12 @@ export function CleanupDialog({ engagementId, hosts, item, onClose }: {
           </Field>
         </div>
         <Field label="Target">
-          <Input autoFocus value={target} onChange={(e) => setTarget(e.target.value)} placeholder="path, account, service name…" className="font-mono" />
+          <Input autoFocus value={target} onChange={(e) => setTarget(e.target.value)} placeholder="path, account, service name…" className="cleanup-dialog__target" />
         </Field>
         <Field label="Notes">
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
         </Field>
-        {error && <p role="alert" className="m-0 text-meta text-warn">{error}</p>}
+        {error && <p role="alert" className="cleanup-dialog__error">{error}</p>}
       </form>
     </Dialog>
   );
