@@ -92,10 +92,10 @@ describe("save summary toast", () => {
     show();
     const win = screen.getByText("2 hashes dumped");
     const count = screen.getByText("+3 services");
-    expect(win).toHaveClass("text-accent");
-    expect(count).not.toHaveClass("text-accent");
+    expect(win).toHaveClass("save-summary__win");
+    expect(count).not.toHaveClass("save-summary__win");
     expect(win.compareDocumentPosition(count) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByText("Ticked 'Dump hashes' on DC01")).not.toHaveClass("text-accent");
+    expect(screen.getByText("Ticked 'Dump hashes' on DC01")).not.toHaveClass("save-summary__win");
   });
 
   it("Undo calls extractionUndo then afterEntrySaved", async () => {

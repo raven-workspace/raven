@@ -3,6 +3,7 @@ import type { LogKind } from "../../types/log";
 import { XIcon } from "@phosphor-icons/react";
 import { IconButton, Textarea } from "../../ui";
 import type { PastedImage } from "./imagePaste";
+import "./PasteArea.scss";
 
 const PLACEHOLDER: Record<LogKind, string> = {
   command: "Paste a terminal block",
@@ -35,17 +36,17 @@ export function PasteArea({ kind, text, image, bindRef, onText, onPaste, onKeyDo
         tabIndex={0}
         aria-label="Paste"
         onPaste={onPaste}
-        className="rounded-sm border border-line-2 p-2 focus-visible:outline-1 focus-visible:outline-accent"
+        className="paste-area__preview"
       >
-        <img src={image.objectUrl} alt="Pasted screenshot" className="mx-auto block max-h-72 max-w-full" />
+        <img src={image.objectUrl} alt="Pasted screenshot" className="paste-area__image" />
       </div>
     );
   }
   return (
     <>
       {kind === "flag" && image && (
-        <div className="grid grid-cols-[auto_auto] items-start justify-start gap-2">
-          <img src={image.objectUrl} alt="Pasted image" className="max-h-24 max-w-40 rounded-sm border border-line-2" />
+        <div className="paste-area__thumb-row">
+          <img src={image.objectUrl} alt="Pasted image" className="paste-area__thumb" />
           <IconButton icon={XIcon} label="Remove image" onClick={onRemoveImage} />
         </div>
       )}

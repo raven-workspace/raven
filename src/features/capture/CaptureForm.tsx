@@ -22,6 +22,7 @@ import { reportError } from "../../lib/lockSignal";
 import { EMPTY_DRAFT, useCaptureStore, type PanelDraft } from "./useCaptureStore";
 import { useSettings } from "../settings/queries";
 import { RavenError } from "../../types/errors";
+import "./CaptureForm.scss";
 
 const NO_HOSTS: Host[] = [];
 const NO_MACHINES: string[] = [];
@@ -182,10 +183,10 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
   };
 
   return (
-    <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto_auto]" onKeyDown={onKeyDown}>
-      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-4 py-3">
-        <div className="grid min-w-0 grid-flow-col auto-cols-max items-center justify-start gap-2">
-          <RD.Title className="m-0 text-heading text-fg">Add to log</RD.Title>
+    <div className="capture-form" onKeyDown={onKeyDown}>
+      <header className="capture-form__header">
+        <div className="capture-form__heading">
+          <RD.Title className="capture-form__title">Add to log</RD.Title>
           {pd.private && <Chip>Private, not in reports</Chip>}
         </div>
         <RD.Close asChild>
@@ -193,8 +194,8 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
         </RD.Close>
       </header>
 
-      <div className="grid min-h-0 content-start gap-4 overflow-y-auto px-4 py-4">
-        {notice && <p className="m-0 rounded-sm border border-warn px-3 py-2 text-meta text-warn">{notice}</p>}
+      <div className="capture-form__body">
+        {notice && <p className="capture-form__notice">{notice}</p>}
         <KindChips kind={kind} onChange={(k) => set({ kind: k })} />
 
         <PasteArea
@@ -228,12 +229,12 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
         />
 
         <HostChips hosts={hosts} linked={r.edits.hostIds} onLinked={(hostIds) => set({ hostIds })} />
-        {r.servicesLine && <p className="m-0 text-code text-muted">{r.servicesLine}</p>}
+        {r.servicesLine && <p className="capture-form__services">{r.servicesLine}</p>}
         {r.credentialsLine && (
           // The only cue that saving writes credential rows: foreground text with a key, unlike the services line.
-          <p className="m-0 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 text-code text-fg">
-            <KeyIcon size={16} weight="regular" aria-hidden className="text-accent" />
-            <span className="min-w-0">{r.credentialsLine}</span>
+          <p className="capture-form__credentials">
+            <KeyIcon size={16} weight="regular" aria-hidden className="capture-form__key" />
+            <span className="capture-form__credentials-text">{r.credentialsLine}</span>
           </p>
         )}
         <Field label="Ran on">
@@ -242,7 +243,7 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
             onValueChange={(ranOn) => set({ ranOn })}
             placeholder="Machine"
             options={ranOnOptions.map((v) => ({ value: v, label: v }))}
-            className="w-56"
+            className="capture-form__ran-on"
           />
         </Field>
 
@@ -273,10 +274,10 @@ export function CaptureForm({ engagement, pasteRef }: { engagement: Engagement; 
         </Toolbar>
       </div>
 
-      {msfWarning && <p className="m-0 border-t border-line px-4 pt-3 text-meta text-warn">{msfWarning}</p>}
-      <footer className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-t border-line px-4 py-3">
+      {msfWarning && <p className="capture-form__warning">{msfWarning}</p>}
+      <footer className="capture-form__footer">
         <Button onClick={discard}>Discard</Button>
-        <p role="alert" className="m-0 min-w-0 truncate text-meta text-warn">
+        <p role="alert" className="capture-form__error">
           {error}
         </p>
         <Button variant="primary" onClick={() => void save()} disabled={!r.canSave || saving}>

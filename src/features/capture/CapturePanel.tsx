@@ -3,6 +3,7 @@ import { useRef } from "react";
 import type { Engagement } from "../../types/engagement";
 import { CaptureForm } from "./CaptureForm";
 import { useCaptureStore } from "./useCaptureStore";
+import "./CapturePanel.scss";
 
 /**
  * The capture sheet (`L`): slides over the right of the engagement screen. Esc closes it and
@@ -16,7 +17,7 @@ export function CapturePanel({ engagement }: { engagement: Engagement }) {
   return (
     <RD.Root open={open} onOpenChange={(o) => !o && close()}>
       <RD.Portal>
-        <RD.Overlay className="fixed inset-0 z-40 bg-bg/60" />
+        <RD.Overlay className="capture-panel__overlay" />
         <RD.Content
           aria-describedby={undefined}
           onOpenAutoFocus={(e) => {
@@ -30,7 +31,7 @@ export function CapturePanel({ engagement }: { engagement: Engagement }) {
               el.focus();
             }
           }}
-          className="fixed inset-y-0 right-0 z-50 grid w-[min(580px,100vw)] grid-rows-[minmax(0,1fr)] border-l border-line-2 bg-surface text-fg-2"
+          className="capture-panel"
         >
           <CaptureForm engagement={engagement} pasteRef={pasteRef} />
         </RD.Content>

@@ -516,7 +516,7 @@ describe("capture panel", () => {
       expect(within(dialog).getByRole("radio", { name: "Screenshot" })).toBeChecked(),
     );
     expect(within(dialog).getByRole("img", { name: "Pasted screenshot" })).toHaveAttribute("src", "blob:shot");
-    expect(within(dialog).getByText("10.10.10.5_vulns_shot.png")).toHaveClass("text-code");
+    expect(within(dialog).getByText("10.10.10.5_vulns_shot.png")).toHaveClass("kind-fields__file-name");
     await user.type(within(dialog).getByLabelText("Caption"), "login page :8080");
     expect(within(dialog).getByText("10.10.10.5_vulns_port8080.png")).toBeInTheDocument();
     await user.keyboard("{Meta>}{Enter}{/Meta}");

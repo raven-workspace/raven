@@ -446,3 +446,22 @@
 - [x] Pixel diff: 297/297 (manual-search failed under load in the full run and passed when rerun alone; the manual
       page has no generator on it)
 - [x] Audit gate: 660/660
+
+## Unit: capture
+
+### Changes
+- CapturePanel.scss (`.capture-panel`, `__overlay`), CaptureForm.scss (`.capture-form` and its header, body, notice,
+  services and credentials lines, warning, footer, error), HostChips.scss, KindFields.scss (the local/proof switch
+  keys on `aria-pressed`), PasteArea.scss (the preview's 1px accent focus outline), SaveSummary.scss.
+- The scrim keeps its own z-index (40, between the drawers' 30 and the sheet's 50); the sheet uses `--z-dialog`.
+
+### Left on Tailwind
+- `KindChips` passes `gap-2 text-body` to the shadcn `ToggleGroupItem`, which merges caller classes into its own
+  utilities with tailwind-merge (`cn`). A feature-layer class would lose to the shadcn utilities that the merge now
+  drops, so these two stay until shadcn is converted (unit 25).
+
+### Verification
+- [x] Unit tests (SaveSummary and the screenshot file name assert the semantic classes)
+- [x] Type check and lint
+- [x] Pixel diff: 297/297
+- [x] Audit gate: 660/660

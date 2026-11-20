@@ -3,6 +3,7 @@ import { reportError } from "../../lib/lockSignal";
 import { Button, TimedNotice } from "../../ui";
 import { undoExtraction } from "../log/extractions";
 import { useSaveSummaryStore } from "./useSaveSummaryStore";
+import "./SaveSummary.scss";
 
 /** What the last save filed, bottom-left (the capture panel is on the right). Closes itself; the timer waits while hovered or focused. */
 export function SaveSummary() {
@@ -33,15 +34,15 @@ export function SaveSummary() {
         </Button>
       }
     >
-      <ul className="m-0 grid list-none gap-1 p-0">
+      <ul className="save-summary">
         {summary.wins.map((t, i) => (
-          <li key={`w${i}`} className="text-accent">{t}</li>
+          <li key={`w${i}`} className="save-summary__win">{t}</li>
         ))}
         {summary.counts.map((t, i) => (
-          <li key={`c${i}`} className="text-muted">{t}</li>
+          <li key={`c${i}`} className="save-summary__line">{t}</li>
         ))}
         {summary.ticks.map((t, i) => (
-          <li key={`t${i}`} className="text-muted">{t}</li>
+          <li key={`t${i}`} className="save-summary__line">{t}</li>
         ))}
       </ul>
     </TimedNotice>
