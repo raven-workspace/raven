@@ -13,6 +13,7 @@ import { CONNECTOR_PX, HostNode, NODE_MAX_PX, NODE_PX, PathTree, type NodeContex
 import { TunnelForm } from "./TunnelForm";
 import { useSettings } from "../settings/queries";
 import { prefersReducedMotion } from "../../ui/motion";
+import "./NetworkSection.scss";
 
 /** How long an arrival's node keeps its accent outline. */
 const FOCUS_MS = 2000;
@@ -105,28 +106,28 @@ export function NetworkSection() {
     <section
       aria-label="Network"
       ref={setRoot}
-      className="grid min-w-0 gap-6"
+      className="network-section"
       style={{ "--node-w": `${nodeWidth(width, path.columns)}px` } as CSSProperties}
     >
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
-        <h3 className={`m-0 ${labelClass}`}>Network</h3>
+      <div className="network-section__head">
+        <h3 className={labelClass}>Network</h3>
         <Button onClick={() => setDialog({ kind: "hop" })}>Add hop</Button>
         <Button onClick={() => setDialog({ kind: "tunnel" })}>Add tunnel</Button>
       </div>
 
       {/* 4px of room (padding, cancelled by the margin) so a focused node's outline is not clipped by the scroller. */}
-      <div ref={pathRef} className="-m-1 grid gap-3 overflow-x-auto p-1">
+      <div ref={pathRef} className="network-section__path">
         <PathTree path={path} attackerIp={settings.data!.attackerIp.trim()} variant={variant} ctx={ctx} />
-        {path.roots.length === 0 && <p className="m-0 text-meta text-muted-2">Your first foothold records your first hop.</p>}
+        {path.roots.length === 0 && <p className="network-section__empty">Your first foothold records your first hop.</p>}
       </div>
 
       {path.unreached.length > 0 && (
-        <section aria-label="Not reached" className="grid gap-3">
-          <h4 className={`m-0 ${labelClass}`}>Not reached</h4>
+        <section aria-label="Not reached" className="network-section__unreached">
+          <h4 className={labelClass}>Not reached</h4>
           {/* Tree: the tree's node width. List: as wide as the list, so both end on the same edge. */}
-          <ul className={cx("m-0 grid list-none gap-3 p-0", variant === "tree" ? "grid-cols-[repeat(auto-fill,var(--node-w))]" : "max-w-144 grid-cols-[repeat(auto-fill,minmax(13rem,1fr))]")}>
+          <ul className={cx("network-section__tray", `network-section__tray--${variant}`)}>
             {path.unreached.map((h) => (
-              <li key={h.id} className="grid">
+              <li key={h.id} className="network-section__tray-item">
                 <HostNode host={h} ctx={ctx} dim wide={variant === "list"} />
               </li>
             ))}

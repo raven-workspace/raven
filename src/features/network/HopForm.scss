@@ -1,0 +1,25 @@
+@use "@/styles/abstracts" as *;
+
+@layer features {
+  .hop-form {
+    display: grid;
+    gap: var(--space-lg);
+  }
+
+  // From / To.
+  .hop-form__pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-md);
+  }
+
+  .hop-form__error {
+    @include type(meta);
+    color: var(--warn);
+  }
+
+  // Delete sits at the footer's left edge.
+  .hop-form__delete {
+    margin-right: auto;
+  }
+}

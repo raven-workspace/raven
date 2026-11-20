@@ -5,6 +5,7 @@ import { Button, Dialog, Field, Input, Select } from "../../ui";
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { useHopMutations } from "./queries";
 import { RavenError } from "../../types/errors";
+import "./HopForm.scss";
 
 const KALI = "kali";
 
@@ -48,7 +49,7 @@ export function HopForm({ engagementId, hosts, hop, onClose }: { engagementId: s
       footer={
         <>
           {hop && (
-            <Button variant="quiet-danger" className="mr-auto" onClick={() => { setDeleteError(undefined); setDeleting(true); }}>Delete hop</Button>
+            <Button variant="quiet-danger" className="hop-form__delete" onClick={() => { setDeleteError(undefined); setDeleting(true); }}>Delete hop</Button>
           )}
           <Button onClick={onClose}>Cancel</Button>
           <Button type="submit" form={formId} variant="primary" disabled={pending}>
@@ -57,8 +58,8 @@ export function HopForm({ engagementId, hosts, hop, onClose }: { engagementId: s
         </>
       }
     >
-      <form id={formId} onSubmit={submit} noValidate className="grid gap-4">
-        <div className="grid grid-cols-2 gap-3">
+      <form id={formId} onSubmit={submit} noValidate className="hop-form">
+        <div className="hop-form__pair">
           <Field label="From">
             <Select options={[{ value: KALI, label: "Kali" }, ...hosts.map((h) => ({ value: h.id, label: h.name }))]} value={from} onValueChange={setFrom} />
           </Field>
@@ -69,7 +70,7 @@ export function HopForm({ engagementId, hosts, hop, onClose }: { engagementId: s
         <Field label="Via" error={errors.via}>
           <Input autoFocus value={via} onChange={(e) => setVia(e.target.value)} placeholder="creds, exploit, share…" />
         </Field>
-        {errors.form && <p role="alert" className="m-0 text-meta text-warn">{errors.form}</p>}
+        {errors.form && <p role="alert" className="hop-form__error">{errors.form}</p>}
       </form>
       {hop && deleting && (
         <ConfirmDelete

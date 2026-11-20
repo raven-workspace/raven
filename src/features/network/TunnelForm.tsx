@@ -6,6 +6,7 @@ import { Button, Dialog, Field, Input, Select, Toggle, fieldLabelClass } from ".
 import { ConfirmDelete } from "../checklist/ConfirmDelete";
 import { useTunnelMutations } from "./queries";
 import { RavenError } from "../../types/errors";
+import "./TunnelForm.scss";
 
 const KINDS: { value: TunnelKind; label: string }[] = [
   { value: "ligolo", label: "Ligolo" },
@@ -71,7 +72,7 @@ export function TunnelForm({ engagementId, hosts, tunnel, initial, onClose }: {
       footer={
         <>
           {tunnel && (
-            <Button variant="quiet-danger" className="mr-auto" onClick={() => { setDeleteError(undefined); setDeleting(true); }}>Delete tunnel</Button>
+            <Button variant="quiet-danger" className="tunnel-form__delete" onClick={() => { setDeleteError(undefined); setDeleting(true); }}>Delete tunnel</Button>
           )}
           <Button onClick={onClose}>Cancel</Button>
           <Button type="submit" form={formId} variant="primary" disabled={pending}>
@@ -80,8 +81,8 @@ export function TunnelForm({ engagementId, hosts, tunnel, initial, onClose }: {
         </>
       }
     >
-      <form id={formId} onSubmit={submit} noValidate className="grid gap-4">
-        <div className="grid grid-cols-2 gap-3">
+      <form id={formId} onSubmit={submit} noValidate className="tunnel-form">
+        <div className="tunnel-form__pair">
           <Field label="Kind">
             <Select options={KINDS} value={kind} onValueChange={(v) => setKind(v as TunnelKind)} />
           </Field>
@@ -95,11 +96,11 @@ export function TunnelForm({ engagementId, hosts, tunnel, initial, onClose }: {
         <Field label="Callback IP" hint="Kali's address as seen from the pivot" error={errors.callbackIp}>
           <Input mono value={callback} onChange={(e) => setCallback(e.target.value)} placeholder="10.10.14.9" />
         </Field>
-        <div className="grid grid-cols-[max-content_max-content] items-center justify-start gap-2">
+        <div className="tunnel-form__status">
           <span className={fieldLabelClass}>Status</span>
           <Toggle on={status === "up"} onChange={(on) => setStatus(on ? "up" : "down")}>{status === "up" ? "Up" : "Down"}</Toggle>
         </div>
-        {errors.form && <p role="alert" className="m-0 text-meta text-warn">{errors.form}</p>}
+        {errors.form && <p role="alert" className="tunnel-form__error">{errors.form}</p>}
       </form>
       {tunnel && deleting && (
         <ConfirmDelete

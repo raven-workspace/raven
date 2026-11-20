@@ -366,3 +366,18 @@
   grid, gaps, muted description, full-width picker) against the rule in the component's sheet
 - [x] Type check and lint
 - [x] Pixel diff and audit gate: see the hosts unit
+
+## Unit: network
+
+### Changes
+- PathTree.scss: `.path-tree` (`--tree`/`--list`), `.path-node` (one hairline card at `--node-w`, `--wide`, `--dim`
+  dashed, a 2px accent outline on `[data-focused]` with its 150ms outline transition and the reduced-motion opt-out),
+  tunnel and Needs tunnel chip buttons (the chip lights on the button's hover), and the tree connectors as
+  `::before`/`::after` on `.path-tree__children` and `.path-tree__child` (`--recorded` solid, `--unrecorded` dashed).
+- NetworkSection.scss (the Not reached tray: `--tree` uses `--node-w` tracks, `--list` caps at 36rem),
+  InterfaceNudge.scss, HopForm.scss, TunnelForm.scss.
+- Preflight no-ops dropped on buttons (`border-0 bg-transparent p-0`), `m-0`/`p-0` on lists.
+
+### Verification
+- [x] Unit tests, type check, lint
+- [x] Pixel diff and audit gate: see the hosts unit

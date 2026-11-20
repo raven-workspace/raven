@@ -1,0 +1,313 @@
+@use "@/styles/abstracts" as *;
+
+// The attack path: Kali and the hosts reached from it, as a left-to-right tree or an indented list.
+@layer features {
+  .path-tree {
+    display: grid;
+    list-style-type: none;
+  }
+
+  .path-tree--tree {
+    justify-content: flex-start;
+  }
+
+  .path-tree--list {
+    max-width: 36rem;
+  }
+
+  .path-tree__root {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .path-tree--tree .path-tree__root {
+    justify-items: start;
+  }
+
+  // The node's box: one hairline card. In the tree every node is the section's `--node-w` wide; in the list a node
+  // fills its row. Dashed when the host is not reached; a 2px accent outline when focused.
+  .path-node {
+    display: grid;
+    width: var(--node-w, 13rem);
+    min-width: 0;
+    gap: var(--space-xs);
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius);
+    background-color: var(--bg);
+    padding: var(--space-sm) var(--space-md);
+    outline-offset: 2px;
+    outline-color: var(--accent);
+    transition-property: outline-color;
+    transition-timing-function: var(--ease-standard);
+    transition-duration: 150ms;
+
+    &[data-focused] {
+      outline-style: solid;
+      outline-width: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      transition-property: none;
+    }
+  }
+
+  .path-node--wide {
+    width: 100%;
+  }
+
+  .path-node--dim {
+    border-style: dashed;
+  }
+
+  // Glyph (16px; the Kali node's icon is 24px), name, and in the list the IP.
+  .path-node__head {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .path-node__head--wide {
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+  }
+
+  .path-node__head--kali {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  .path-node__head--kali.path-node__head--wide {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+  }
+
+  .path-node__name {
+    display: block;
+    @include truncate;
+    border-radius: var(--radius-sm);
+    @include type(code);
+    color: var(--fg);
+    text-decoration-line: none;
+    text-underline-offset: 4px;
+  }
+
+  .path-node__name--dim {
+    color: var(--muted-2);
+  }
+
+  @media (hover: hover) {
+    .path-node__name:hover {
+      text-decoration-line: underline;
+    }
+  }
+
+  .path-node__kali {
+    @include type(body);
+    font-weight: 600;
+    color: var(--fg);
+  }
+
+  .path-node__ip {
+    @include type(meta);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  // Under the 16px glyph column (or the Kali node's 24px one).
+  .path-node__ip--under {
+    padding-left: var(--space-xl);
+  }
+
+  .path-node__ip--under-kali {
+    padding-left: var(--space-2xl);
+  }
+
+  .path-node__chips {
+    min-width: 0;
+  }
+
+  // `not recorded`, under the IP.
+  .path-node__no-hop {
+    @include truncate;
+    padding-left: var(--space-xl);
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  // `via {how}`: a text button that edits the hop.
+  .path-node__via {
+    margin-left: var(--space-xl);
+    display: block;
+    min-width: 0;
+    cursor: default;
+    border-radius: var(--radius-sm);
+    text-align: left;
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  @media (hover: hover) {
+    .path-node__via:hover {
+      color: var(--fg);
+    }
+  }
+
+  .path-node__via-text {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .path-node__tip {
+    display: grid;
+  }
+
+  .path-node__tip-detail {
+    color: var(--muted);
+  }
+
+  .path-node__tip-detail--mono {
+    @include mono;
+  }
+
+  // A chip-shaped button (a tunnel, or Needs tunnel): the chip lights up on hover.
+  .path-node__chip-button {
+    display: grid;
+    min-height: 1.75rem;
+    cursor: default;
+    align-items: center;
+    border-radius: var(--radius-full);
+  }
+
+  .path-node__chip-button--tunnel {
+    min-width: 0;
+    max-width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
+
+  .path-node__tunnel-chip {
+    max-width: 100%;
+  }
+
+  @media (hover: hover) {
+    .path-node__chip-button:hover .path-node__chip {
+      background-color: var(--surface-hi);
+    }
+  }
+
+  // A hairline between the parts of a tunnel chip.
+  .path-node__tunnel-rule {
+    height: 0.75rem;
+    width: 1px;
+    flex-shrink: 0;
+    background-color: var(--line-strong);
+  }
+
+  .path-node__tunnel-subnet {
+    min-width: 0;
+    @include truncate;
+    @include mono;
+  }
+
+  .path-node__tunnel-more {
+    flex-shrink: 0;
+  }
+
+  // Tree layout. Connectors are hairlines at one height: the middle of a node's first line (8px padding + half its
+  // 20px line = 18px from the node's top). Every node is top-aligned with its first child.
+  // One subtree, left to right: `[node] [children stack]`.
+  .path-tree__branch {
+    display: grid;
+    grid-template-columns: max-content max-content;
+    align-items: flex-start;
+  }
+
+  // The children stack, with a stub from the parent's right edge into it.
+  .path-tree__children {
+    position: relative;
+    display: grid;
+    list-style-type: none;
+    padding-left: var(--space-lg);
+
+    &::before {
+      content: "";
+      position: absolute;
+      top: 18px;
+      left: 0;
+      height: 1px;
+      width: 1rem;
+      background-color: var(--line-strong);
+    }
+  }
+
+  // Each child's piece of the spine (first child's middle to last child's middle) and its stub into the child.
+  .path-tree__child {
+    position: relative;
+    display: grid;
+    grid-template-columns: max-content;
+    padding-bottom: var(--space-md);
+    padding-left: var(--space-xl);
+
+    &::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 1px;
+      background-color: var(--line-strong);
+    }
+
+    &::after {
+      content: "";
+      position: absolute;
+      top: 18px;
+      left: 0;
+      width: 1.5rem;
+    }
+
+    &:first-child::before {
+      top: 18px;
+    }
+
+    &:last-child {
+      padding-bottom: 0;
+    }
+
+    &:last-child::before {
+      bottom: auto;
+      height: 18px;
+    }
+
+    &:only-child::before {
+      display: none;
+    }
+  }
+
+  // A recorded hop: a solid stub.
+  .path-tree__child--recorded::after {
+    height: 1px;
+    background-color: var(--line-strong);
+  }
+
+  // No hop recorded: a dashed stub.
+  .path-tree__child--unrecorded::after {
+    height: 0;
+    border-top: 1px dashed var(--line-strong);
+  }
+
+  // The narrow form: one level of indent (with a hairline guide) per hop depth.
+  .path-tree__level {
+    margin-left: var(--space-lg);
+    display: grid;
+    gap: var(--space-sm);
+    list-style-type: none;
+    border-left: 1px solid var(--line-2);
+    padding-left: var(--space-lg);
+  }
+
+  .path-tree__level-item {
+    display: grid;
+    gap: var(--space-sm);
+  }
+}

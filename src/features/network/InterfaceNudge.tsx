@@ -2,14 +2,13 @@ import { PlusIcon, X } from "@phosphor-icons/react";
 import { useMemo, useRef, useState } from "react";
 import { readInterfaces } from "../../engines/facts";
 import type { Host } from "../../types/host";
+import { cx } from "../../lib/cx";
 import { Button, IconButton, labelClass } from "../../ui";
 import { useInterfaceDismiss, useInterfaceDismissals, useTunnels } from "./queries";
 import { useHostMutations, useHosts } from "../hosts/queries";
 import { useLog } from "../log/queries";
 import { TunnelForm } from "./TunnelForm";
-
-/** The facts column is narrow: the sentence and Dismiss share the first line, the action takes the second. */
-const ROW = "grid grid-cols-[minmax(0,1fr)_28px] items-start gap-x-2 gap-y-1 border-b border-line py-2 last:border-b-0";
+import "./InterfaceNudge.scss";
 
 /**
  * Logged `ip a` / `ifconfig` / `ipconfig` output showed a subnet this host reaches and nothing else does yet:
@@ -60,23 +59,23 @@ export function InterfaceNudge({ engagementId, host, onOpenEntry }: {
   if (suggestions.length === 0 && reading.alsoSeen.length === 0 && !adding) return null;
 
   return (
-    <section aria-label="Network interfaces" className="grid gap-1 pb-4">
-      <header className="grid min-h-8 grid-cols-[16px_minmax(0,1fr)] items-center gap-x-2 border-b border-line">
-        <h2 className={`${labelClass} col-start-2 m-0 truncate`}>Interfaces</h2>
+    <section aria-label="Network interfaces" className="interface-nudge">
+      <header className="interface-nudge__header">
+        <h2 className={cx(labelClass, "interface-nudge__title")}>Interfaces</h2>
       </header>
-      {error && <p role="alert" className="m-0 text-meta text-warn">{error}</p>}
+      {error && <p role="alert" className="interface-nudge__error">{error}</p>}
       {suggestions.length > 0 && (
-        <ul className="m-0 grid list-none p-0">
+        <ul className="interface-nudge__list">
           {suggestions.map((s) => (
-            <li key={s.key} className={ROW}>
-              <p className="m-0 min-w-0 py-1 text-body text-fg-2">
+            <li key={s.key} className="interface-nudge__item">
+              <p className="interface-nudge__text">
                 {s.iface} {s.ip}/{s.prefix} reaches{" "}
-                <span className="whitespace-nowrap"><button
+                <span className="interface-nudge__nowrap"><button
                   type="button"
                   onClick={() => onOpenEntry?.(s.entryId)}
                   disabled={!onOpenEntry}
                   title="Open the logged command"
-                  className="-my-0.5 inline-grid min-h-6 items-center cursor-default border-0 bg-transparent p-0 font-mono text-code text-fg underline decoration-line-strong underline-offset-4 enabled:hover:decoration-fg disabled:no-underline"
+                  className="interface-nudge__subnet"
                 >
                   {s.subnet}
                 </button>.</span>
@@ -86,7 +85,7 @@ export function InterfaceNudge({ engagementId, host, onOpenEntry }: {
                 label={`Dismiss ${s.subnet} on ${host.name}`}
                 onClick={() => act(s.key, (settled) => dismiss.mutate({ hostId: host.id, subnet: s.subnet }, { onError: (e) => setError(e.message), onSettled: settled }))}
               />
-              <Button size="sm" className="justify-self-start" onClick={() => accept(s.key, s.subnet)}>
+              <Button size="sm" className="interface-nudge__accept" onClick={() => accept(s.key, s.subnet)}>
                 <PlusIcon size={16} weight="regular" aria-hidden /> {host.dualHomed ? "Add tunnel" : "Mark dual-homed and add tunnel"}
               </Button>
             </li>
@@ -94,10 +93,10 @@ export function InterfaceNudge({ engagementId, host, onOpenEntry }: {
         </ul>
       )}
       {reading.alsoSeen.length > 0 && (
-        <p className="m-0 grid grid-flow-col items-center justify-start gap-x-2 text-meta text-muted">
+        <p className="interface-nudge__also">
           <span>Also seen:</span>
           {reading.alsoSeen.map((a, i) => (
-            <span key={a.subnet} className={i === 0 ? "" : "border-l border-line-strong pl-2"}>{a.iface} {a.ip}/{a.prefix} (virtual)</span>
+            <span key={a.subnet} className={i === 0 ? undefined : "interface-nudge__also-item"}>{a.iface} {a.ip}/{a.prefix} (virtual)</span>
           ))}
         </p>
       )}

@@ -1,0 +1,33 @@
+@use "@/styles/abstracts" as *;
+
+@layer features {
+  .tunnel-form {
+    display: grid;
+    gap: var(--space-lg);
+  }
+
+  .tunnel-form__pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-md);
+  }
+
+  // "Status" and the Up/Down toggle.
+  .tunnel-form__status {
+    display: grid;
+    grid-template-columns: max-content max-content;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--space-sm);
+  }
+
+  .tunnel-form__error {
+    @include type(meta);
+    color: var(--warn);
+  }
+
+  // Delete sits at the footer's left edge.
+  .tunnel-form__delete {
+    margin-right: auto;
+  }
+}
