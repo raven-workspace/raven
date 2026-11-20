@@ -149,26 +149,52 @@ pub fn store(conn: &Connection, cve: &str, raw: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// Maps an HTTP error status: 401/403 is `key_rejected` (NVD also answers 403 when rate-limited), 404 `not_found`, anything else `offline`.
+/// Maps an HTTP error status: 401/403 is `key_rejected` (NVD also answers 403 when rate-limited),
+/// 404 `not_found`, a busy/overloaded 429 or 5xx is `nvd_busy` (online, so not `offline`), anything else `offline`.
 pub fn status_error(code: u16) -> AppError {
     match code {
         401 | 403 => AppError::KeyRejected,
         404 => AppError::NotFound,
+        429 | 500 | 502 | 503 | 504 => AppError::NvdBusy,
         _ => AppError::Offline(format!("NVD answered {code}")),
     }
 }
 
+/// A transient status worth retrying: NVD overloaded (503), rate-limiting (429), or a passing 5xx.
+fn transient(code: u16) -> bool {
+    matches!(code, 429 | 500 | 502 | 503 | 504)
+}
+
+/// Backoff before each retry. NVD is slow and frequently 503s or hangs under load, so one attempt is
+/// not enough; these waits (plus the attempts around them) stay well inside a background lookup's budget.
+const BACKOFF: [Duration; 2] = [Duration::from_millis(900), Duration::from_millis(2500)];
+
 /// One GET to `base?cveId=<cve>` with the `apiKey` header and a 10s timeout; returns the raw body.
-/// Redirects are not followed, so the key is only ever sent to `base`.
+/// Redirects are not followed, so the key is only ever sent to `base`. Retries transient failures
+/// (503/429/5xx and timeouts) with a short backoff before giving up.
 pub fn fetch_from(base: &str, key: &str, cve: &str) -> AppResult<String> {
+    fetch_retrying(base, key, cve, &BACKOFF)
+}
+
+/// `fetch_from`'s core with an injectable backoff schedule (empty = a single attempt), for the tests.
+fn fetch_retrying(base: &str, key: &str, cve: &str, backoff: &[Duration]) -> AppResult<String> {
     let agent = ureq::AgentBuilder::new().timeout(TIMEOUT).redirects(0).build();
-    match agent.get(&format!("{base}?cveId={cve}")).set("apiKey", key.trim()).call() {
-        Ok(resp) if resp.status() == 200 => {
-            resp.into_string().map_err(|_| AppError::Offline("the NVD answer was cut off".into()))
+    let url = format!("{base}?cveId={cve}");
+    let mut waits = backoff.iter();
+    loop {
+        // `retry`: this failure may clear on another try (server busy or the request timed out / dropped).
+        let (err, retry) = match agent.get(&url).set("apiKey", key.trim()).call() {
+            Ok(resp) if resp.status() == 200 => {
+                return resp.into_string().map_err(|_| AppError::Offline("the NVD answer was cut off".into()));
+            }
+            Ok(resp) => (status_error(resp.status()), transient(resp.status())),
+            Err(ureq::Error::Status(code, _)) => (status_error(code), transient(code)),
+            Err(ureq::Error::Transport(_)) => (AppError::Offline("no connection to NVD".into()), true),
+        };
+        match waits.next() {
+            Some(&w) if retry => std::thread::sleep(w),
+            _ => return Err(err),
         }
-        Ok(resp) => Err(status_error(resp.status())),
-        Err(ureq::Error::Status(code, _)) => Err(status_error(code)),
-        Err(ureq::Error::Transport(_)) => Err(AppError::Offline("no connection to NVD".into())),
     }
 }
 
@@ -354,7 +380,11 @@ mod tests {
         assert_eq!(status_error(401), AppError::KeyRejected);
         assert_eq!(status_error(403), AppError::KeyRejected);
         assert_eq!(status_error(404), AppError::NotFound);
-        assert_eq!(status_error(503).code(), "offline");
+        // NVD overloaded or rate-limiting: busy, not offline (the machine is online).
+        for code in [429, 500, 502, 503, 504] {
+            assert_eq!(status_error(code), AppError::NvdBusy, "{code}");
+        }
+        assert_eq!(status_error(418).code(), "offline");
     }
 
     /// Serves one canned HTTP response on a loopback port and hands back the request it received.
@@ -397,9 +427,51 @@ mod tests {
 
     #[test]
     fn nvd_fetch_without_a_connection_is_offline() {
-        // Bind then drop, so the port is closed and the connection is refused.
+        // Bind then drop, so the port is closed and the connection is refused. No backoff: a single attempt.
         let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-        let r = fetch_from(&format!("http://127.0.0.1:{port}/x"), "k", "CVE-2020-1234");
+        let r = fetch_retrying(&format!("http://127.0.0.1:{port}/x"), "k", "CVE-2020-1234", &[]);
         assert_eq!(r.unwrap_err().code(), "offline");
+    }
+
+    /// Serves a sequence of canned responses, one per connection, so a retry reaches the next one.
+    fn serve_seq(responses: &'static [&'static str]) -> (String, std::thread::JoinHandle<()>) {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}/rest/json/cves/2.0", l.local_addr().unwrap());
+        let h = std::thread::spawn(move || {
+            for response in responses {
+                let (mut s, _) = l.accept().unwrap();
+                let mut buf = Vec::new();
+                let mut chunk = [0u8; 1024];
+                while !buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                    let n = s.read(&mut chunk).unwrap();
+                    if n == 0 {
+                        break;
+                    }
+                    buf.extend_from_slice(&chunk[..n]);
+                }
+                s.write_all(response.as_bytes()).unwrap();
+            }
+        });
+        (base, h)
+    }
+
+    #[test]
+    fn nvd_fetch_retries_a_503_then_succeeds() {
+        let (base, h) = serve_seq(&[
+            "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+        ]);
+        assert_eq!(fetch_retrying(&base, "k", "CVE-2020-1234", &[Duration::ZERO]).unwrap(), "{}");
+        h.join().unwrap();
+    }
+
+    #[test]
+    fn nvd_fetch_gives_up_busy_after_the_backoff_is_spent() {
+        let (base, h) = serve_seq(&[
+            "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        ]);
+        assert_eq!(fetch_retrying(&base, "k", "CVE-2020-1234", &[Duration::ZERO]), Err(AppError::NvdBusy));
+        h.join().unwrap();
     }
 }

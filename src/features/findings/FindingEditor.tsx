@@ -95,6 +95,8 @@ function lookupLine(cve: string, e: unknown): string {
       return "Add an NVD API key in Settings to look up CVEs. Use the builder.";
     case "offline":
       return "No connection. Use the builder.";
+    case "nvd_busy":
+      return "NVD is busy right now. Try again in a moment, or use the builder.";
     case "key_rejected":
       return err.message || "NVD rejected the key";
     case "not_found":

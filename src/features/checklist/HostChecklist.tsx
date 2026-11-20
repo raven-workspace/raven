@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, useMemo, useRef, useState } from "react";
-import { applicableGoals, currentStage, hostViewStages, type FillInput } from "../../engines/checklist";
+import { applicableGoals, currentStage, hostViewStages, loggedListenerPorts, type FillInput } from "../../engines/checklist";
 import { api } from "../../lib/api";
 import type { Host } from "../../types/host";
 import { Button, Input, Select, fieldLabelClass, labelClass, queryState } from "../../ui";
@@ -101,6 +101,7 @@ export function HostChecklist({ engagementId, host, onOpenEntry, focusGoal, scop
   const input: FillInput = {
     host, engagement: eng, hosts, servicesByHost, tunnels,
     attackerIp: settings.data?.attackerIp ?? "", kaliUser: settings.data?.kaliUser, listenerPort: settings.data?.listenerPort ?? "", cred: creds.cred,
+    listenerPorts: loggedListenerPorts(entries),
   };
 
   const commandsFor = (goalId: string) => goalCommands(goalId, input, eng);

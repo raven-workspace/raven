@@ -24,6 +24,8 @@ export interface FilledCommand {
   fileToken?: { hostId: string; os: "windows" | "linux" | null; token: "FILE" | "SCRIPT" };
   /** Uses {PORT} and the host has several matching open ports: the step shows a port chip. */
   portToken?: { key: string; choices: number[]; picked: number };
+  /** Its {LPORT} is already held by a logged listener: warn and name the next free port. */
+  portClash?: { port: number; suggested: number };
   /** The raw unresolved tokens as they appear in `text`, to mark. */
   tokens?: string[];
 }
@@ -94,10 +96,15 @@ export function CommandList({ commands, hostName = null, focusToken = noToken, f
               onCopyAction={(button) => copy(c, button)}
             />
           </div>
-          {(c.msfMarker || c.viaTunnel || (c.dcByName && !hideDcNote)) && (
+          {(c.msfMarker || c.viaTunnel || c.portClash || (c.dcByName && !hideDcNote)) && (
             <ChipSet>
               {c.dcByName && !hideDcNote && <Chip title="No Kerberos/LDAP seen: the DC was picked by its host name">DC (by name)</Chip>}
               {c.msfMarker && <Chip>uses your one Metasploit host</Chip>}
+              {c.portClash && (
+                <Chip variant="warn" title={`A listener on ${c.portClash.port} is already in the log; a second reverse shell on it will clash`}>
+                  port {c.portClash.port} already has a listener; try {c.portClash.suggested}
+                </Chip>
+              )}
               {c.viaTunnel && (() => {
                 const label = c.viaTunnel.down ? `via tunnel on ${c.viaTunnel.viaHostName} (down)` : `via tunnel on ${c.viaTunnel.viaHostName}`;
                 const variant = c.viaTunnel.down ? "warn" : "default";

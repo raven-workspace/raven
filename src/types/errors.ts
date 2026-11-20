@@ -11,6 +11,7 @@ export type ErrorCode =
   | "no_key"
   | "offline"
   | "key_rejected"
+  | "nvd_busy"
   | "conflict";
 
 /** The JSON shape of a rejected Tauri command (Rust `AppError`). */
@@ -33,6 +34,7 @@ const CODES: readonly ErrorCode[] = [
   "no_key",
   "offline",
   "key_rejected",
+  "nvd_busy",
   "conflict",
 ];
 

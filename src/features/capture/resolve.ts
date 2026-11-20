@@ -1,8 +1,8 @@
-import { buildDraft, credentialsInPaste, type PastedCredential, detectKind, findFlagInPaste, flagTitle, noteTitle, screenshotFileName, type CaptureDraft, type DraftInput } from "../../engines/capture";
+import { buildDraft, credentialsInPaste, type PastedCredential, detectKind, findFlagInPaste, flagTitle, noteTitle, proofShotFlag, screenshotFileName, type CaptureDraft, type DraftInput } from "../../engines/capture";
 import { OS_LABELS } from "../hosts/columns";
 import { KIND_LABELS } from "../log/kindLabels";
 import type { BoardColumn, Host, HostOs } from "../../types/host";
-import type { FlagKind, LogContent, LogKind } from "../../types/log";
+import type { FlagKind, LogContent, LogEntry, LogKind } from "../../types/log";
 import { shortHostName } from "../../lib/hostName";
 import type { CaptureEdits } from "./saveCapture";
 import type { PanelDraft } from "./useCaptureStore";
@@ -32,6 +32,9 @@ export interface CaptureContext {
   lastRanOn: string | null;
   /** Host preselected because capture was opened from its view. */
   presetHostId: string | null;
+  /** The engagement's log: a screenshot right after a flag is named for it, and no two screenshots share a name. */
+  log?: readonly LogEntry[];
+  now?: number;
 }
 
 export interface Resolved {
@@ -90,6 +93,8 @@ export function resolveCapture(pd: PanelDraft, ctx: CaptureContext): Resolved {
       column: selectedHost?.boardColumn ?? null,
       caption: pd.caption,
       mime: pd.image?.mime ?? "image/png",
+      flag: proofShotFlag(ctx.log ?? [], selectedHost?.id ?? null, ctx.now ?? Date.now()),
+      taken: new Set((ctx.log ?? []).flatMap((e) => (e.content.kind === "screenshot" ? [e.content.fileName] : []))),
     });
     content = { ...content, caption: pd.caption.trim(), fileName };
     autoTitle = noteTitle(pd.caption) || "Screenshot";
