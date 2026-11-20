@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:audit": "vite --mode audit --port 5199 --strictPort",
+    "dev:audit": "vite --mode audit --port ${AUDIT_PORT:-5199} --strictPort",
     "build": "tsc -b && vite build",
     "tauri": "tauri",
     "test": "vitest run",

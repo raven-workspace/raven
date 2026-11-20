@@ -1,6 +1,6 @@
 # Visual audit
 
-Drives the real UI against the in-memory fake backend (`npm run dev:audit`, port 5199) across every screen in `audit/screens.ts` x 4 widths.
+Drives the real UI against the in-memory fake backend (`npm run dev:audit`, port 5199 or `$AUDIT_PORT`) across every screen in `audit/screens.ts` x 4 widths.
 
 - Run: `npm run audit:visual` (selftest + visual + keyboard + ux: flows and states). Playwright starts and stops the dev server itself.
 - `npm run audit:selftest` runs only the self-tests; it also boots the 5199 dev server and writes a "No screens ran" report.

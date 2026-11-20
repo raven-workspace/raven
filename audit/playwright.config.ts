@@ -1,5 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// AUDIT_PORT lets several checkouts (git worktrees) run the audit at once.
+const PORT = Number(process.env.AUDIT_PORT ?? 5199);
+
 export default defineConfig({
   testDir: ".",
   // The pixel diff runs only on its own (npm run audit:baseline / audit:pixel): it needs a baseline to compare against.
@@ -13,10 +16,10 @@ export default defineConfig({
   fullyParallel: true,
   globalSetup: "./setup.ts",
   globalTeardown: "./report.ts",
-  webServer: { command: "npm run dev:audit", url: "http://localhost:5199", reuseExistingServer: false },
+  webServer: { command: "npm run dev:audit", url: `http://localhost:${PORT}`, reuseExistingServer: false },
   use: {
     ...devices["Desktop Chrome"],
-    baseURL: "http://localhost:5199",
+    baseURL: `http://localhost:${PORT}`,
     headless: true,
     locale: "en-US",
     timezoneId: "UTC",
