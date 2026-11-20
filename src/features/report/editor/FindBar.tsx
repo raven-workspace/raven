@@ -6,6 +6,7 @@ import { useEditor, useExtension } from "prosekit/react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Button, IconButton, Input, Toolbar } from "../../../ui";
 import type { EditingExtension } from "./extension";
+import "./FindBar.scss";
 
 /** A match in the page's text: its range in the document. */
 export type Hit = { from: number; to: number };
@@ -111,9 +112,9 @@ export function FindBar({ focusKey, onClose }: { focusKey: number; onClose(): vo
   const none = search !== "" && hits.length === 0;
 
   return (
-    <div role="search" aria-label="Find on this page" className="grid gap-1 border-t border-line py-1">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
-        <div className="grid grid-cols-[minmax(0,240px)_auto_minmax(0,240px)_auto] items-center gap-2">
+    <div role="search" aria-label="Find on this page" className="find-bar">
+      <div className="find-bar__row">
+        <div className="find-bar__fields">
           <Input
             ref={findRef}
             aria-label="Find"
@@ -126,7 +127,7 @@ export function FindBar({ focusKey, onClose }: { focusKey: number; onClose(): vo
             onKeyDown={onFindKey}
           />
           <Toolbar gap={2}>
-            <span aria-live="polite" className={none ? "min-w-16 text-meta text-warn tabular-nums" : "min-w-16 text-meta text-muted-2 tabular-nums"}>
+            <span aria-live="polite" className={none ? "find-bar__count find-bar__count--none" : "find-bar__count"}>
               {search === "" ? "" : hits.length === 0 ? "No matches" : `${index + 1} of ${hits.length}`}
             </span>
             <IconButton icon={ArrowUp} label="Previous match" shortcut="⇧↵" disabled={hits.length === 0} onClick={() => step(-1)} />

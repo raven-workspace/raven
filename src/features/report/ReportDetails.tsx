@@ -5,6 +5,7 @@ import type { Host } from "../../types/host";
 import type { Report, ReportPatch } from "../../types/report";
 import { Field, Input, labelClass } from "../../ui";
 import { fromDateTimeInput, toDateTimeInput } from "../engagements/format";
+import "./ReportDetails.scss";
 
 /** The backend's cap on a details field (characters). */
 const MAX_FIELD = 2000;
@@ -50,9 +51,9 @@ export function ReportDetails({
   };
 
   return (
-    <section aria-label="Report details" className="grid content-start gap-6 px-6 py-6">
-      <h2 className="m-0 text-title text-fg">Report details</h2>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-4">
+    <section aria-label="Report details" className="report-details">
+      <h2 className="report-details__title">Report details</h2>
+      <div className="report-details__fields">
         <Field label="Your name">
           <Input maxLength={MAX_FIELD} value={name} onChange={(e) => setName(e.target.value)} onBlur={() => saveText("candidateName", name)} />
         </Field>
@@ -96,23 +97,23 @@ export function ReportDetails({
         )}
       </div>
       {lab && (
-        <fieldset className="m-0 grid gap-2 border-0 p-0">
+        <fieldset className="report-details__hosts">
           <legend className={labelClass}>Hosts in this report</legend>
           {hosts.length === 0 ? (
-            <p className="m-0 text-meta text-muted-2">No hosts in this engagement yet.</p>
+            <p className="report-details__empty">No hosts in this engagement yet.</p>
           ) : (
-            <ul className="m-0 grid list-none gap-1 p-0">
+            <ul className="report-details__host-list">
               {hosts.map((h) => (
                 <li key={h.id}>
-                  <label className="grid min-h-7 cursor-default grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 rounded-sm px-2 hover:bg-surface">
+                  <label className="report-details__host">
                     <input
                       type="checkbox"
                       checked={includedHostIds.includes(h.id)}
                       onChange={(e) => toggleHost(h.id, e.target.checked)}
-                      className="accent-[var(--color-accent)]"
+                      className="report-details__check"
                     />
-                    <span className="truncate text-body text-fg-2">{h.name}</span>
-                    <span className="font-mono text-code text-faint">{h.ip}</span>
+                    <span className="report-details__host-name">{h.name}</span>
+                    <span className="report-details__host-ip">{h.ip}</span>
                   </label>
                 </li>
               ))}

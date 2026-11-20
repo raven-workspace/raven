@@ -7,6 +7,7 @@ import { reportError } from "../../../lib/lockSignal";
 import type { Settings } from "../../../types/settings";
 import { IconButton } from "../../../ui";
 import { settingsKey, useSettings } from "../../settings/queries";
+import "./GuideNote.scss";
 
 /**
  * One guide note (spec §10.5): editor chrome in the app's own dark style, so it never reads as report text. It is
@@ -19,11 +20,11 @@ export function GuideNote({ id, onHide }: { id: GuideId; onHide(): void }) {
       role="note"
       aria-label={guide.title}
       data-guide={id}
-      className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 rounded-md border border-line-strong bg-surface py-2 pr-1 pl-3 font-ui text-meta text-fg-2 select-none"
+      className="guide-note"
     >
-      <p className="m-0 pt-1 font-semibold text-fg">{guide.title}</p>
+      <p className="guide-note__title">{guide.title}</p>
       <IconButton icon={X} label="Hide this note" onClick={onHide} />
-      <p className="col-span-2 m-0 pr-2">{guide.body}</p>
+      <p className="guide-note__body">{guide.body}</p>
     </aside>
   );
 }

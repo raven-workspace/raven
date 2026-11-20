@@ -6,6 +6,7 @@ import { api } from "../../../../lib/api";
 import { AttachmentImage } from "../../../log/AttachmentImage";
 import { ReportDataContext } from "../ReportDataContext";
 import { figureWidth } from "./figureWidth";
+import "./FigureView.scss";
 
 /** A screenshot on the page: the image, then its caption as ordinary editable text (empty: no caption printed). A
  *  file that is gone says so in the page's amber while its query fails (it shows again once the file loads); the
@@ -23,7 +24,7 @@ export function FigureView({ node, contentRef, setAttrs }: ReactNodeViewProps) {
     <figure className="report-figure report-plain-figure" data-report="figure">
       <div contentEditable={false}>
         {missing ? (
-          <p className="report-missing m-0 text-meta" contentEditable={false}>
+          <p className="report-missing figure-view__missing" contentEditable={false}>
             This screenshot's file is missing. Delete the figure, or add the screenshot again from the log.
           </p>
         ) : (

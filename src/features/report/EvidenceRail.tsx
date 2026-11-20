@@ -26,6 +26,7 @@ import { KIND_LABELS } from "../log/kindLabels";
 import { insertEntry } from "./editor/pageActions";
 import { hasPageCursor } from "./editor/ReportEditor";
 import { clockTime } from "../engagements/format";
+import "./EvidenceRail.scss";
 
 type RailTab = "unused" | "notes" | "creds";
 
@@ -152,25 +153,25 @@ function RailItem({ row, onAct }: { row: RailRow; onAct(row: RailRow, from: HTML
       data-rail-row=""
       aria-label={`${entry.title}, ${KIND_LABELS[entry.kind]} at ${clockTime(entry.at)}`}
       onKeyDown={onKey}
-      className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-sm border-l-2 border-line-2 py-1 pr-1 pl-3 outline-none hover:bg-surface-hi focus-visible:bg-surface-hi focus-visible:ring-1 focus-visible:ring-accent"
+      className="evidence-rail__row"
     >
-      <span className="grid min-w-0 gap-1">
-        <span className="grid grid-cols-[auto_minmax(0,1fr)] gap-2 text-code text-muted" title={lead}>
-          <time dateTime={new Date(entry.at).toISOString()} className="tabular-nums">
+      <span className="evidence-rail__row-body">
+        <span className="evidence-rail__row-lead" title={lead}>
+          <time dateTime={new Date(entry.at).toISOString()} className="evidence-rail__row-time">
             {clockTime(entry.at)}
           </time>{" "}
-          <span className="truncate">{lead}</span>
+          <span className="evidence-rail__row-what">{lead}</span>
         </span>
-        <span className="truncate text-meta text-fg-2" title={line}>
+        <span className="evidence-rail__row-line" title={line}>
           {line}
         </span>
-        {note && <span className="text-meta text-muted-2">{NOTE_TEXT[note]}</span>}
+        {note && <span className="evidence-rail__row-note">{NOTE_TEXT[note]}</span>}
       </span>
       <Tooltip
         content={
           <>
             <span>Add to the step you're on, else the end of its phase</span>
-            <span className="ml-2 font-mono text-muted">⌘↵</span>
+            <span className="tooltip__key">⌘↵</span>
           </>
         }
       >
@@ -209,23 +210,23 @@ function LogTab({
     onInserted(row.entry.id);
   };
 
-  if (groups.length === 0) return <p className="m-0 text-meta text-muted-2">Everything logged on this target is in the report.</p>;
+  if (groups.length === 0) return <p className="evidence-rail__empty">Everything logged on this target is in the report.</p>;
   const name = (id: string) => data.hosts.find((h) => h.id === id)?.name ?? "Host";
   const hosts = [...new Set(groups.map((g) => g.hostId))];
   return (
-    <div role="group" aria-label="Unused log entries" data-rail-log="" className="grid gap-4">
+    <div role="group" aria-label="Unused log entries" data-rail-log="" className="evidence-rail__stack">
       {hosts.map((hostId) => (
-        <section key={hostId} aria-label={`${name(hostId)} log`} className="grid gap-3">
-          <h3 className={cx(labelClass, "m-0 grid grid-flow-col justify-start gap-2")}>
+        <section key={hostId} aria-label={`${name(hostId)} log`} className="evidence-rail__host">
+          <h3 className={cx(labelClass, "evidence-rail__host-label")}>
             <span>{`${name(hostId)} log`}</span>{" "}
-            <span className="text-muted-2">not in the report</span>
+            <span className="evidence-rail__host-label-note">not in the report</span>
           </h3>
           {groups
             .filter((g) => g.hostId === hostId)
             .map((g) => (
-              <section key={g.phase} className="grid gap-2">
-                <h4 className="m-0 text-body font-semibold text-fg">{g.label}</h4>
-                <ul aria-label={hosts.length > 1 ? `${name(hostId)} ${g.label}` : g.label} className="m-0 grid list-none gap-2 p-0">
+              <section key={g.phase} className="evidence-rail__block">
+                <h4 className="evidence-rail__phase">{g.label}</h4>
+                <ul aria-label={hosts.length > 1 ? `${name(hostId)} ${g.label}` : g.label} className="evidence-rail__list">
                   {g.rows.map((r) => (
                     <RailItem key={r.entry.id} row={r} onAct={act} />
                   ))}
@@ -242,12 +243,12 @@ function LogTab({
 function NoteLines({ body }: { body: string }) {
   const threads = new Set(openThreads(body).map((t) => t.line));
   return (
-    <div className="grid gap-1 text-body text-fg-2 select-text">
+    <div className="evidence-rail__note">
       {body.split("\n").map((line, i) => (
-        <p key={i} className="m-0 grid grid-cols-[8px_minmax(0,1fr)] items-baseline gap-2 whitespace-pre-wrap break-words">
-          <span aria-hidden className={cx("size-1.5 rounded-full", threads.has(i) && "bg-fg-2")} />
+        <p key={i} className="evidence-rail__note-line">
+          <span aria-hidden className={cx("evidence-rail__dot", threads.has(i) && "evidence-rail__dot--thread")} />
           <span>
-            {threads.has(i) && <span className="sr-only">Open thread: </span>}
+            {threads.has(i) && <span className="evidence-rail__sr">Open thread: </span>}
             {line}
           </span>
         </p>
@@ -258,8 +259,8 @@ function NoteLines({ body }: { body: string }) {
 
 function Block({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <section aria-label={label} className="grid gap-2">
-      <h3 className={cx(labelClass, "m-0")}>{label}</h3>
+    <section aria-label={label} className="evidence-rail__block">
+      <h3 className={labelClass}>{label}</h3>
       {children}
     </section>
   );
@@ -273,10 +274,10 @@ function NotesTab({ data, target, didWell }: { data: ReportData; target?: Report
   const ruledOut = target ? data.ruledOut.filter((r) => !r.private && r.hostId !== null && target.hostIds.includes(r.hostId)) : [];
   const controls = didWell ? data.attempts.filter((a) => !a.private && a.reasonKind === "control") : [];
   if (notes.length === 0 && ruledOut.length === 0 && controls.length === 0) {
-    return <p className="m-0 text-meta text-muted-2">No notes for this page yet. Write them in the notes panel (N).</p>;
+    return <p className="evidence-rail__empty">No notes for this page yet. Write them in the notes panel (N).</p>;
   }
   return (
-    <div className="grid gap-4">
+    <div className="evidence-rail__stack">
       {notes.map((n) => (
         <Block key={n.ownerId} label={n.hostId === null ? "Engagement note" : `${name(n.hostId)} note`}>
           <NoteLines body={n.body} />
@@ -284,11 +285,11 @@ function NotesTab({ data, target, didWell }: { data: ReportData; target?: Report
       ))}
       {ruledOut.length > 0 && (
         <Block label="Ruled out">
-          <ul className="m-0 grid list-none gap-2 p-0">
+          <ul className="evidence-rail__list">
             {ruledOut.map((r) => (
-              <li key={r.id} className="grid gap-1">
-                <span className="text-body text-fg-2">{r.text}</span>
-                {r.reason && <span className="text-meta text-muted-2">{r.reason}</span>}
+              <li key={r.id} className="evidence-rail__list-item">
+                <span className="evidence-rail__text">{r.text}</span>
+                {r.reason && <span className="evidence-rail__meta">{r.reason}</span>}
               </li>
             ))}
           </ul>
@@ -296,11 +297,11 @@ function NotesTab({ data, target, didWell }: { data: ReportData; target?: Report
       )}
       {controls.length > 0 && (
         <Block label="What the targets did well">
-          <ul className="m-0 grid list-none gap-2 p-0">
+          <ul className="evidence-rail__list">
             {controls.map((a) => (
-              <li key={a.id} className="grid gap-1">
-                <span className="text-body text-fg-2">{a.title}</span>
-                {a.reason && <span className="text-meta text-muted-2">{a.reason}</span>}
+              <li key={a.id} className="evidence-rail__list-item">
+                <span className="evidence-rail__text">{a.title}</span>
+                {a.reason && <span className="evidence-rail__meta">{a.reason}</span>}
               </li>
             ))}
           </ul>
@@ -317,19 +318,19 @@ function CredsTab({ data, target }: { data: ReportData; target: ReportTarget }) 
   // Found here, local here, tried here and it worked (nxc, hydra), or used in a login here; and the access gained.
   const { credentials: creds, access: grants } = useMemo(() => targetCredentials(data, target.hostIds), [data, target.hostIds]);
   if (creds.length === 0 && grants.length === 0) {
-    return <p className="m-0 text-meta text-muted-2">No credential results or access recorded for this target.</p>;
+    return <p className="evidence-rail__empty">No credential results or access recorded for this target.</p>;
   }
   return (
-    <div className="grid gap-4">
+    <div className="evidence-rail__stack">
       {creds.length > 0 && (
         <Block label="Credentials">
-          <ul className="m-0 grid list-none gap-2 p-0">
+          <ul className="evidence-rail__list">
             {creds.map((c) => (
-              <li key={c.key} className="grid min-w-0 gap-1">
-                <span className="truncate text-code text-fg" title={who(c)}>
+              <li key={c.key} className="evidence-rail__list-item evidence-rail__list-item--clip">
+                <span className="evidence-rail__who" title={who(c)}>
                   {who(c)}
                 </span>
-                <span className="text-meta text-muted-2">
+                <span className="evidence-rail__meta">
                   {c.type}, {c.ties.join("; ")}
                 </span>
               </li>
@@ -339,13 +340,13 @@ function CredsTab({ data, target }: { data: ReportData; target: ReportTarget }) 
       )}
       {grants.length > 0 && (
         <Block label="Access">
-          <ul className="m-0 grid list-none gap-2 p-0">
+          <ul className="evidence-rail__list">
             {grants.map(({ grant: g, user }) => (
-              <li key={g.id} className="grid gap-1">
-                <span className="text-body text-fg-2">
+              <li key={g.id} className="evidence-rail__list-item">
+                <span className="evidence-rail__text">
                   {user ? who(user) : "Unknown user"} on {name(g.hostId)}: {g.level}
                 </span>
-                {g.via && <span className="text-meta text-muted-2">{g.via}</span>}
+                {g.via && <span className="evidence-rail__meta">{g.via}</span>}
               </li>
             ))}
           </ul>
@@ -383,7 +384,7 @@ export function EvidenceRail({
   const count = groups.reduce((n, g) => n + g.rows.length, 0);
   const active: RailTab = target ? tab : "notes";
   return (
-    <Tabs value={active} onValueChange={(v) => setTab(v as RailTab)} className="content-start">
+    <Tabs value={active} onValueChange={(v) => setTab(v as RailTab)} className="evidence-rail">
       <TabsList aria-label="Evidence">
         {target && <TabsTrigger value="unused">{`Unused (${count})`}</TabsTrigger>}
         <TabsTrigger value="notes">Notes</TabsTrigger>
@@ -458,13 +459,13 @@ export function EvidenceDrawer({
     <aside
       ref={ref}
       aria-label="Evidence"
-      className={`fixed ${BELOW_TITLE_BAR} right-0 z-30 grid w-80 max-w-[90vw] grid-rows-[auto_minmax(0,1fr)] border-l border-line-2 bg-surface`}
+      className={`evidence-drawer ${BELOW_TITLE_BAR}`}
     >
-      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-4 py-2">
-        <h2 className={cx(labelClass, "m-0")}>Evidence</h2>
+      <header className="evidence-drawer__header">
+        <h2 className={labelClass}>Evidence</h2>
         <IconButton icon={XIcon} label="Close" shortcut="Esc" onClick={onClose} />
       </header>
-      <div className="min-h-0 overflow-y-auto px-4 py-4">{children}</div>
+      <div className="evidence-drawer__body">{children}</div>
     </aside>
   );
 }

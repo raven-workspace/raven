@@ -27,6 +27,7 @@ import type { EditingExtension } from "./extension";
 import { fromPicker, LANGUAGE_OPTIONS, toPicker } from "./nodes/CodeBlockView";
 import { usePageActions } from "./pageActions";
 import { openEvidenceSearch } from "./SlashMenu";
+import "./FormatToolbar.scss";
 
 const SCRIPTS: MarkTool[] = [
   {
@@ -183,7 +184,7 @@ export function FormatToolbar({
         <Fragment key="block">
           <Select
             aria-label="Block type"
-            className="w-32"
+            className="format-toolbar__select"
             disabled={!ready || kind === null}
             // Where the cursor isn't in a block it sets (a selected block, a numbered page heading), the select names
             // what is there and stays off.
@@ -197,7 +198,7 @@ export function FormatToolbar({
           {inCode && (
             <Select
               aria-label="Code language"
-              className="w-32"
+              className="format-toolbar__select"
               options={LANGUAGE_OPTIONS}
               value={toPicker((editor.state.selection.$from.parent.attrs.language as string) ?? "")}
               onValueChange={(v) => {
@@ -332,11 +333,10 @@ export function FormatToolbar({
   const { inline, more } = fitItems(items, room);
 
   return (
-    // The pane's 24px top padding is part of the sticky inset, so -top-6 pins the bar to the pane's very top edge.
-    <div className={cx("sticky -top-6 z-20 -mx-6 grid border-b border-line bg-bg px-6", className)}>
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 py-1">
+    <div className={cx("format-toolbar", className)}>
+      <div className="format-toolbar__bar">
         {/* The row the groups share: the ones that fit, in order of use, then More with the rest (narrow panes). */}
-        <div ref={roomRef} role="toolbar" aria-label="Formatting" className="grid grid-flow-col items-center justify-start gap-4">
+        <div ref={roomRef} role="toolbar" aria-label="Formatting" className="format-toolbar__groups">
           {inline.map((g) => (
             <Toolbar key={g.group}>{g.items.map((i) => i.node)}</Toolbar>
           ))}
@@ -350,7 +350,7 @@ export function FormatToolbar({
                   align="start"
                   sideOffset={4}
                   aria-label="More formatting"
-                  className="z-50 grid gap-2 rounded-md border border-line-strong bg-surface p-2 shadow-[0_12px_32px_rgba(0,0,0,.6)]"
+                  className="format-toolbar__more"
                 >
                   {more.map((g) => (
                     <Toolbar key={g.group}>{g.items.map((i) => i.node)}</Toolbar>
@@ -363,7 +363,7 @@ export function FormatToolbar({
         {end}
       </div>
       {linkOpen && (
-        <div className="grid grid-cols-[minmax(0,320px)] border-t border-line py-1">
+        <div className="format-toolbar__link">
           <Input
             ref={inputRef}
             mono

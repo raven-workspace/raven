@@ -27,6 +27,7 @@ import { useEditor } from "prosekit/react";
 import { cx } from "../../../lib/cx";
 import { hasHeaderRow, toggleHeaderRow, type PageEditor } from "./commands";
 import type { EditingExtension } from "./extension";
+import "./TableHandles.scss";
 
 interface Action {
   icon: Icon;
@@ -48,12 +49,10 @@ const ROW: Action[] = [
   { icon: Trash, label: "Delete table", run: (e) => e.commands.deleteTable(), tone: "destructive" },
 ];
 
-const GRIP =
-  "grid h-6 min-w-6 cursor-default place-items-center rounded-sm border border-line-strong bg-surface text-fg-2 hover:bg-surface-hi hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
-const MENU = "z-40 block data-[state=closed]:hidden [&:not([data-state])]:hidden";
-const MENU_POPUP = "grid w-56 gap-1 rounded-md border border-line-strong bg-surface p-1 shadow-[0_12px_32px_rgba(0,0,0,.6)] outline-none";
-const ITEM =
-  "grid min-h-8 cursor-default grid-cols-[16px_minmax(0,1fr)] items-center gap-3 rounded-sm px-2 text-body text-fg-2 outline-none data-highlighted:bg-surface-hi data-highlighted:text-fg";
+const GRIP = "table-handles__grip";
+const MENU = "table-handles__menu-positioner";
+const MENU_POPUP = "table-handles__menu";
+const ITEM = "table-handles__item";
 
 function Items({ actions, editor, header }: { actions: Action[]; editor: PageEditor; header?: boolean }) {
   return (
@@ -65,7 +64,7 @@ function Items({ actions, editor, header }: { actions: Action[]; editor: PageEdi
         </MenuItem>
       )}
       {actions.map((a) => (
-        <MenuItem key={a.label} className={cx(ITEM, a.tone === "destructive" && "data-highlighted:text-warn")} onSelect={() => a.run(editor)}>
+        <MenuItem key={a.label} className={cx(ITEM, a.tone === "destructive" && "table-handles__item--destructive")} onSelect={() => a.run(editor)}>
           <a.icon size={16} aria-hidden />
           <span>{a.label}</span>
         </MenuItem>
@@ -82,12 +81,12 @@ function Items({ actions, editor, header }: { actions: Action[]; editor: PageEdi
 export function TableHandles() {
   const editor = useEditor<EditingExtension>({ update: true });
   return (
-    <TableHandleRoot className="contents">
+    <TableHandleRoot className="table-handles">
       <TableHandleDragPreview />
       <TableHandleDropIndicator className="report-table-drop" />
-      <TableHandleColumnPositioner placement="top" offset={-12} className="z-20 block data-[state=closed]:hidden [&:not([data-state])]:hidden">
-        <TableHandleColumnPopup className="block">
-          <TableHandleColumnMenuRoot className="contents">
+      <TableHandleColumnPositioner placement="top" offset={-12} className="table-handles__positioner">
+        <TableHandleColumnPopup className="table-handles__popup">
+          <TableHandleColumnMenuRoot className="table-handles">
             <TableHandleColumnMenuTrigger aria-label="Column" className={GRIP}>
               <DotsSix size={16} aria-hidden />
             </TableHandleColumnMenuTrigger>
@@ -99,9 +98,9 @@ export function TableHandles() {
           </TableHandleColumnMenuRoot>
         </TableHandleColumnPopup>
       </TableHandleColumnPositioner>
-      <TableHandleRowPositioner placement="left" offset={-12} className="z-20 block data-[state=closed]:hidden [&:not([data-state])]:hidden">
-        <TableHandleRowPopup className="block">
-          <TableHandleRowMenuRoot className="contents">
+      <TableHandleRowPositioner placement="left" offset={-12} className="table-handles__positioner">
+        <TableHandleRowPopup className="table-handles__popup">
+          <TableHandleRowMenuRoot className="table-handles">
             <TableHandleRowMenuTrigger aria-label="Row" className={GRIP}>
               <DotsSixVertical size={16} aria-hidden />
             </TableHandleRowMenuTrigger>

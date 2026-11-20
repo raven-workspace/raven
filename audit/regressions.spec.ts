@@ -1234,7 +1234,7 @@ test("Report: Esc closes the evidence drawer and stays on the report, in WebKit 
     await p.goto("/e/e-exam/s/report");
     await openGarnet(p);
     await p.locator("section[aria-label='Report']").getByRole("button", { name: "Evidence", exact: true }).click();
-    const drawer = p.locator("aside.fixed[aria-label='Evidence']");
+    const drawer = p.locator("aside.evidence-drawer[aria-label='Evidence']");
     await expect(drawer).toBeVisible();
     await p.keyboard.press("Escape");
     await expect(drawer).toHaveCount(0);

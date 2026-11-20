@@ -311,7 +311,8 @@ describe("Evidence rail: the log column", () => {
     expect(await screen.findByRole("tab", { name: /Unused/ })).toBeInTheDocument();
     const column = screen.getByRole("complementary", { name: "Evidence" });
     // A grid column beside the page, not the fixed drawer over it.
-    expect(column.className).not.toMatch(/\bfixed\b/);
+    expect(column).not.toHaveClass("evidence-drawer");
+    expect(column).toHaveClass("report-section__rail");
     expect(screen.getByRole("button", { name: "Evidence" })).toHaveAttribute("aria-pressed", "true");
 
     // Notes is a drawer of its own: the docked column stays.

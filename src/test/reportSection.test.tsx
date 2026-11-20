@@ -199,7 +199,7 @@ describe("Report view", () => {
     expect(screen.queryByRole("region", { name: "To do" })).toBeNull();
     const state = rowFor("lnx02").querySelector<HTMLElement>("[data-tab-state]")!;
     expect(state.textContent).toMatch(/^\d+ to do$/);
-    expect(state).toHaveClass("text-warn");
+    expect(state).toHaveClass("report-tab__state--todo");
     fireEvent.click(state);
     const panel = await screen.findByRole("region", { name: "To do" });
     await waitFor(() => expect(rowFor("lnx02")).toHaveAttribute("aria-selected", "true"));

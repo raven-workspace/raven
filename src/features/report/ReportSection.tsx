@@ -79,6 +79,7 @@ import { useDraftBuild, useEnsureSections, useOpenFlatten } from "./useSectionLi
 import { useSettings } from "../settings/queries";
 import { useEngagement } from "../engagements/queries";
 import { RavenError } from "../../types/errors";
+import "./ReportSection.scss";
 
 const HINTS: Hint[] = [
   { keys: "← →", label: "move along the tabs (J K from anywhere)", priority: 1 },
@@ -133,8 +134,8 @@ const EMPTY_DOC: ReportNode = { type: "doc", content: [] };
 /** A warning with its Retry, above the page. */
 function WarnLine({ text, retryLabel, onRetry }: { text: string; retryLabel: string; onRetry(): void }) {
   return (
-    <div role="alert" className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
-      <p className="m-0 text-meta text-warn">{text}</p>
+    <div role="alert" className="report-section__notice">
+      <p className="report-section__alert">{text}</p>
       <Button size="sm" aria-label={retryLabel} onClick={onRetry}>
         Retry
       </Button>
@@ -259,7 +260,7 @@ export function ReportSectionView() {
 }
 
 /** The section's states (loading, empty, error) keep the margins the shell gives other sections; the report itself runs edge to edge. */
-const Padded = ({ children }: { children: ReactNode }) => <div className="px-6 py-6">{children}</div>;
+const Padded = ({ children }: { children: ReactNode }) => <div className="report-section__padded">{children}</div>;
 
 /** Which tab a section sits under: Front matter's parts, the targets, Closing's parts, or a page of its own (a free
  *  page after the targets, an appendix page after the targets' appendices). */
@@ -808,7 +809,7 @@ function ReportBody({
   const machines = open?.target ? open.target.hostIds.map((id) => ({ hostId: id, name: data.hosts.find((h) => h.id === id)?.name ?? "Host" })) : [];
   const todoPanel = todoOpen ? (
     <TodoPanel
-      className="row-start-2"
+      className="report-section__todo"
       checks={openChecks}
       others={tabs.filter((t) => t.id !== openTabId && (t.todo ?? 0) > 0).map((t) => ({ id: t.id, label: t.label, todo: t.todo ?? 0 }))}
       onOpenTab={openTab}
@@ -846,7 +847,7 @@ function ReportBody({
   const parts = open?.item.group === "front" ? frontParts : open?.item.group === "closing" ? closingParts : null;
   const partRow =
     parts && open ? (
-      <div className="row-start-1 grid border-b border-line px-6 py-1">
+      <div className="report-section__parts">
         <PartTabs
           label={open.item.group === "front" ? "Front matter parts" : "Closing parts"}
           parts={parts.map((e) => {
@@ -885,15 +886,15 @@ function ReportBody({
     <>
       {ensureFailed && <WarnLine text={`Couldn't add the report's new sections: ${ensureFailed}`} retryLabel="Retry setting up sections" onRetry={retryEnsure} />}
       {saveRefused && (
-        <p role="alert" className="m-0 text-meta text-warn">
+        <p role="alert" className="report-section__alert">
           {`${entries.find((e) => e.section.id === saveRefused.sectionId)?.item.label ?? "A page"}: ${saveRefused.message}`}
         </p>
       )}
-      {saveFailed && <p className="m-0 text-meta text-warn">Some typing isn't saved yet. Raven keeps trying; keep Raven open until this goes.</p>}
+      {saveFailed && <p className="report-section__alert">Some typing isn't saved yet. Raven keeps trying; keep Raven open until this goes.</p>}
       {draftFailed && <WarnLine text={`Couldn't build this page's draft: ${draftFailed}`} retryLabel="Retry building the draft" onRetry={retryDraft} />}
       {draftBlocked && draftBlocked === openSection?.id && (
-        <div role="alert" className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-3">
-          <p className="m-0 text-meta text-warn">
+        <div role="alert" className="report-section__notice report-section__notice--two-actions">
+          <p className="report-section__alert">
             An earlier change to this page couldn't be saved, so Raven kept the old page and hasn't rebuilt it. Retry saves
             that change, then rebuilds. Rebuild anyway keeps the change in the old page, which Restore brings back.
           </p>
@@ -909,8 +910,8 @@ function ReportBody({
         </div>
       )}
       {openSectionMeta?.previousDoc && (
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-          <p className="m-0 text-meta text-muted-2">
+        <div className="report-section__notice report-section__notice--centred">
+          <p className="report-section__note">
             {openSectionMeta.restored
               ? "This is your page from before the new layout."
               : openSectionMeta.flattened
@@ -925,16 +926,16 @@ function ReportBody({
           )}
         </div>
       )}
-      {swapFailed && <p role="alert" className="m-0 text-meta text-warn">{`Couldn't restore the previous page: ${swapFailed}`}</p>}
+      {swapFailed && <p role="alert" className="report-section__alert">{`Couldn't restore the previous page: ${swapFailed}`}</p>}
       {flattenFailed && (
-        <p role="alert" className="m-0 text-meta text-warn">{`Couldn't convert this page to the new format, so it wasn't saved and the page as stored is unchanged: ${flattenFailed}`}</p>
+        <p role="alert" className="report-section__alert">{`Couldn't convert this page to the new format, so it wasn't saved and the page as stored is unchanged: ${flattenFailed}`}</p>
       )}
-      {notStarted && open?.target && <p className="m-0 text-meta text-muted-2">Nothing logged on {open.item.label} yet. The page fills in as you work.</p>}
+      {notStarted && open?.target && <p className="report-section__note">Nothing logged on {open.item.label} yet. The page fills in as you work.</p>}
     </>
   );
 
   return (
-    <section ref={sectionRef} aria-label="Report" className="@container/report grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)]">
+    <section ref={sectionRef} aria-label="Report" className="report-section">
       <ReportStrip
         fileName={reportFileName(report.osid.trim())}
         osidValid={isValidOsid(report.osid.trim())}
@@ -974,11 +975,11 @@ function ReportBody({
             exportSlot={null}
             listRef={navRef}
           />
-          <div className={cx("grid min-h-0", railBeside ? "grid-cols-[minmax(0,1fr)_320px]" : "grid-cols-[minmax(0,1fr)]")}>
-            <div className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)]">
+          <div className={cx("report-section__body", railBeside && "report-section__body--rail")}>
+            <div className="report-section__main">
               {partRow}
               {todoPanel}
-              <div ref={pageRef} className="row-start-3 grid min-h-0 content-start gap-4 overflow-y-auto px-6 py-6">
+              <div ref={pageRef} className="report-section__pane">
             {!editorShown && notices}
             {openSection?.kind === "details" ? (
               <ReportDetails
@@ -1000,7 +1001,7 @@ function ReportBody({
                     doc={openDoc(openSection)}
                     onChange={onChange}
                     onReady={(editor) => onEditorReady(openSection.id, editor)}
-                    toolbarClassName="-mt-6"
+                    toolbarClassName="report-section__toolbar"
                     notices={notices}
                     toolbarEnd={
                       open?.target && (
@@ -1032,7 +1033,7 @@ function ReportBody({
                 ref={railRef}
                 tabIndex={-1}
                 aria-label="Evidence"
-                className="grid min-h-0 content-start overflow-y-auto border-l border-line px-4 py-4 outline-none"
+                className="report-section__rail"
               >
                 {rail}
               </aside>
@@ -1048,7 +1049,7 @@ function ReportBody({
           setDeleteError(null);
         }}
         title={deleting ? `Delete ${pageTitleOf(deleting)}? Its text goes with it.` : ""}
-        description={deleteError ? <span role="alert" className="text-warn">{deleteError}</span> : undefined}
+        description={deleteError ? <span role="alert" className="report-section__delete-error">{deleteError}</span> : undefined}
         onCloseAutoFocus={(e) => {
           // Back to the tab row, on the open tab (the first target's after a delete of the open page).
           e.preventDefault();
@@ -1073,7 +1074,7 @@ function ReportBody({
             </Button>
           }
         >
-          <p className="m-0 text-muted">{`Deleted ${pageTitleOf(deleted)}`}</p>
+          <p className="report-section__deleted">{`Deleted ${pageTitleOf(deleted)}`}</p>
         </TimedNotice>
       )}
     </section>

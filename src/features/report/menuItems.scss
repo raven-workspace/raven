@@ -1,0 +1,53 @@
+@use "@/styles/abstracts" as *;
+@use "./popup" as *;
+
+@layer features {
+  // The report's small popover menus (a tab menu, the block handle's ⋯ menu).
+  .report-menu {
+    z-index: var(--z-popover);
+    @include report-popup;
+    min-width: 10rem;
+    gap: var(--space-xs);
+    padding: var(--space-xs);
+  }
+
+  // A text item in one of them.
+  .report-menu__item {
+    display: grid;
+    height: 1.75rem;
+    align-items: center;
+    padding-inline: var(--space-sm);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background-color: transparent;
+    @include type(body);
+    color: var(--fg-2);
+    text-align: left;
+    outline-style: none;
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--surface-hi);
+        color: var(--fg);
+      }
+    }
+
+    &:focus-visible {
+      background-color: var(--surface-hi);
+      color: var(--fg);
+    }
+  }
+
+  // Delete: amber on hover and keyboard focus.
+  .report-menu__item--destructive {
+    @media (hover: hover) {
+      &:hover {
+        color: var(--warn);
+      }
+    }
+
+    &:focus-visible {
+      color: var(--warn);
+    }
+  }
+}

@@ -5,6 +5,7 @@ import { draftedEntryBlocks, draftOf, entryIdsIn, joinsAStep, machinesInOrder, m
 import { Button, TimedNotice } from "../../ui";
 import { collectInserted, insertBlocksAt, insertEntry } from "./editor/pageActions";
 import { removeExact } from "./editor/ReportEditor";
+import "./AddEvidenceButton.scss";
 
 /** What the last run added: its words, and the blocks it put on the page (null when it added nothing). */
 interface Added {
@@ -99,7 +100,7 @@ export function AddEvidenceButton({
             ) : undefined
           }
         >
-          <p className={added.nodes ? "m-0 text-accent" : "m-0 text-muted"}>{added.text}</p>
+          <p className={added.nodes ? "add-evidence__result add-evidence__result--added" : "add-evidence__result"}>{added.text}</p>
         </TimedNotice>
       )}
     </>

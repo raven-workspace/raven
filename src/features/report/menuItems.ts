@@ -1,8 +1,12 @@
 import type { KeyboardEvent } from "react";
+import "./menuItems.scss";
 
-/** A text item in the report's small popover menus (tab menus, the block handle's ⋯ menu). */
-export const MENU_ITEM =
-  "grid h-7 items-center rounded-sm border-0 bg-transparent px-2 text-left text-body text-fg-2 outline-none hover:bg-surface-hi hover:text-fg focus-visible:bg-surface-hi focus-visible:text-fg";
+/** The report's small popover menus (tab menus, the block handle's ⋯ menu): the popover's own class. */
+export const MENU = "report-menu";
+/** A text item in one of them. */
+export const MENU_ITEM = "report-menu__item";
+/** A destructive item (Delete): amber on hover and keyboard focus. */
+export const MENU_ITEM_DESTRUCTIVE = "report-menu__item report-menu__item--destructive";
 
 /** ↑↓ walk a menu's items, wrapping. */
 export function walkMenuItems(e: KeyboardEvent<HTMLDivElement>) {

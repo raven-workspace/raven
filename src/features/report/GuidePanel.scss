@@ -1,0 +1,69 @@
+@use "@/styles/abstracts" as *;
+
+@layer features {
+  // The open page's guide notes, above the log column.
+  .guide-panel {
+    display: grid;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+  }
+
+  .guide-panel__list {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .guide-panel__item {
+    display: grid;
+  }
+
+  // The footer: the fold toggle at the start, Hide all at the end.
+  .guide-panel__footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-md);
+  }
+
+  // A text button in the footer: muted, fg on hover, the accent ring on keyboard focus.
+  .guide-panel__action {
+    min-height: 1.5rem;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background-color: transparent;
+    font-family: var(--font-ui);
+    @include type(meta);
+    color: var(--muted);
+    cursor: default;
+
+    @media (hover: hover) {
+      &:hover {
+        color: var(--fg);
+      }
+    }
+
+    &:focus-visible {
+      box-shadow: 0 0 0 2px var(--accent);
+      outline-style: none;
+    }
+  }
+
+  // Show N more notes / Show fewer notes: the caret, then the words.
+  .guide-panel__fold {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    justify-self: start;
+    gap: var(--space-xs);
+  }
+
+  .guide-panel__hide-all {
+    text-underline-offset: 2px;
+
+    @media (hover: hover) {
+      &:hover {
+        text-decoration-line: underline;
+      }
+    }
+  }
+}

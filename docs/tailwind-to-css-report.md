@@ -98,3 +98,42 @@
 
 ### Follow-up
 - src/ui outside shadcn has no utilities left. Features next (units 5–24, in parallel), then shadcn (25), then removal (26).
+
+## Unit: report
+
+### Changes
+- One sheet per component, all in `@layer features`: ReportSection.scss (`.report-section`; the `report` container kept
+  as `container-type: inline-size; container-name: report`), ReportStrip.scss, ReportTabs.scss (`.report-tabs`,
+  `.report-tab`, `.report-tab__state--ready|todo|selected`, `.part-tabs`), TodoPanel.scss (`.todo-panel`, `.check-list`,
+  `.expected-flags`), EvidenceRail.scss (`.evidence-rail`, `.evidence-drawer`), GuidePanel.scss, ReportDetails.scss,
+  AddEvidenceButton.scss, menuItems.scss (`.report-menu`, `.report-menu__item`, `--destructive`); editor/: FindBar,
+  FormatToolbar, BubbleMenu, SlashMenu, TableHandles, GuideNote, ReportEditor; editor/nodes/: CodeBlockView, FigureView.
+  page.css is untouched: it is unlayered, so it still beats every layered rule exactly as before.
+- `menuItems.ts` exports `MENU`, `MENU_ITEM` and `MENU_ITEM_DESTRUCTIVE` class names in place of the utility string.
+- A feature-local partial, `report/_popup.scss`: `report-popup` (hairline, surface, radius and the 0 12px 32px shadow the
+  six report popovers share) and `prosekit-positioner($z)` (block while open, hidden when `data-state="closed"` or unset).
+- Conditional strings became attributes or modifiers: the open tab and part tab key on `aria-selected="true"` (hover only
+  on the others, as before), the strip's To do on `aria-expanded="true"`, ProseKit menu items on `[data-highlighted]`.
+- Tooltip shortcut spans (`ml-2 font-mono text-muted`) use src/ui's identical `.tooltip__key`.
+- `toolbarClassName="-mt-6"` became `report-section__toolbar` (FormatToolbar sets only `margin-inline`, so no clash).
+- Audit: tiny-text accepts `.report-tab__state` (the 12px label role on a tab's state line, formerly `.text-label`).
+
+### Dead or no-op classes removed
+- `m-0`, `p-0`, `list-none`, `border-0` on fieldset/ul/p/h* (preflight restatements); buttons keep `border: 0` and a
+  transparent background, as units 3–4 did.
+- Callers passing `className` to report components (ReportSection → TodoPanel, FormatToolbar): none dead.
+
+### Verification
+- [x] Unit tests (reportSection: the tab state asserts `report-tab__state--todo`; reportRail: the docked column asserts
+  `report-section__rail` and not `evidence-drawer`, in place of "no `fixed`")
+- [x] Type check and lint
+- [x] Pixel diff: 297/297 (run over this unit and log together; one flaky screen outside both, see the log unit)
+- [x] Audit gate: 660/660, 0 failing checks; the drawer regression and the `report-dock` screen now select `.evidence-drawer`
+
+### Differences and risks
+- Hover, focus and highlighted states of the menus, table grips and slash/bubble menus are not in the pixel screens; they
+  follow Tailwind's emitted rules (hover inside `@media (hover: hover)`, then focus-visible, the destructive colour last).
+- `focus-visible:ring-N ring-accent` became `box-shadow: 0 0 0 Npx var(--accent)` (Tailwind's composed shadow with the
+  other layers empty); those elements carry no other shadow.
+- The visually-hidden rule is written out in EvidenceRail.scss and LogEntryRow.scss; a shared mixin in abstracts would
+  serve every feature (left out to avoid clashing with the parallel units).

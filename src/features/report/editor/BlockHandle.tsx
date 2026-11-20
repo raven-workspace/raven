@@ -9,7 +9,7 @@ import { refreshBlocks } from "../../../engines/report";
 import { Button, Dialog, Tooltip } from "../../../ui";
 import { currentRun, deleteBlockAt, isEdited, refreshLabel, refreshRun, sourceRun, type SourceRun } from "./pageActions";
 import { usePageContext } from "./ReportDataContext";
-import { MENU_ITEM, walkMenuItems } from "../menuItems";
+import { MENU, MENU_ITEM, MENU_ITEM_DESTRUCTIVE, walkMenuItems } from "../menuItems";
 
 type Hovered = { node: PMNode; pos: number } | null;
 
@@ -64,7 +64,7 @@ export function BlockHandle() {
               content={
                 <>
                   <span>Drag to move</span>
-                  <span className="ml-2 font-mono text-muted">⌥↑ ⌥↓</span>
+                  <span className="tooltip__key">⌥↑ ⌥↓</span>
                 </>
               }
             >
@@ -88,7 +88,7 @@ export function BlockHandle() {
                   role="menu"
                   aria-label="Block actions"
                   onKeyDown={walkMenuItems}
-                  className="z-50 grid min-w-40 gap-1 rounded-md border border-line-strong bg-surface p-1 shadow-[0_12px_32px_rgba(0,0,0,.6)]"
+                  className={MENU}
                 >
                   {canRefresh && (
                     <button
@@ -124,7 +124,7 @@ export function BlockHandle() {
                   <button
                     type="button"
                     role="menuitem"
-                    className={`${MENU_ITEM} hover:text-warn focus-visible:text-warn`}
+                    className={MENU_ITEM_DESTRUCTIVE}
                     onClick={() => {
                       if (menu) deleteBlockAt(editor, menu);
                       done();

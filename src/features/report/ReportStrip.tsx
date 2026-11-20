@@ -3,6 +3,7 @@ import { useNow } from "../../lib/keys";
 import { cx } from "../../lib/cx";
 import { IconButton, labelClass, Tooltip } from "../../ui";
 import { Cell, useFitStrip } from "../engagements/StatusStrip";
+import "./ReportStrip.scss";
 
 const HOUR = 3_600_000;
 const MIN = 60_000;
@@ -27,10 +28,10 @@ function TodoCell({ count, open, onToggle }: { count: number; open: boolean; onT
         aria-label={`To do ${count}`}
         aria-expanded={open}
         onClick={(e) => onToggle(e.currentTarget)}
-        className={cx("grid h-7 cursor-default grid-flow-col items-center gap-2 rounded-sm border-0 px-1", open ? "bg-surface-hi" : "bg-transparent hover:bg-surface-hi")}
+        className="report-strip__todo"
       >
         <span className={labelClass}>To do</span>
-        <span className={cx("font-mono text-meta", count > 0 ? "text-warn" : "text-fg")}>{count}</span>
+        <span className={cx("report-strip__count", count > 0 && "report-strip__count--todo")}>{count}</span>
       </button>
     </Tooltip>
   );
@@ -65,9 +66,9 @@ export function ReportStrip({
   const { outer, inner } = useFitStrip(LAST_STEP);
   // A group, not a live region: the countdown ticks and must not be announced each minute.
   return (
-    <div className="grid h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-line pl-6 pr-4">
-      <div ref={outer} role="group" aria-label="Report status" className="h-9 overflow-hidden text-meta text-muted-2">
-        <div ref={inner} className="grid h-full grid-flow-col auto-cols-max items-center justify-start gap-6 whitespace-nowrap">
+    <div className="report-strip">
+      <div ref={outer} role="group" aria-label="Report status" className="report-strip__status">
+        <div ref={inner} className="report-strip__cells">
           <Cell label="Report" value={fileName} tone={osidValid ? undefined : "warn"} />
           {dueAt !== null && <Cell label="Due in" value={dueIn(dueAt, now)} step={STEP.due} tone={dueAt <= now ? "warn" : undefined} />}
           <Cell label="Targets ready" value={`${ready}/${targets}`} step={STEP.ready} />

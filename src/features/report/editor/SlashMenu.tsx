@@ -29,6 +29,7 @@ import type { EditingExtension } from "./extension";
 import { insertEntry, usePageActions } from "./pageActions";
 import { usePageContext } from "./ReportDataContext";
 import { clockTime } from "../../engagements/format";
+import "./SlashMenu.scss";
 
 interface BlockItem {
   id: string;
@@ -167,8 +168,7 @@ function laterWordsMatch(query: string, text: string): boolean {
   return rest.every((w) => have.some((h) => h.startsWith(w)));
 }
 
-const ITEM =
-  "grid min-h-8 cursor-default grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-3 rounded-sm px-2 text-body text-fg-2 data-highlighted:bg-surface-hi data-highlighted:text-fg";
+const ITEM = "slash-menu__item";
 
 /**
  * The slash menu (ProseKit's autocomplete, Ink chrome): `/` at the start of a line lists the blocks to insert, each
@@ -222,7 +222,7 @@ export function SlashMenu() {
 
   return (
     <AutocompleteRoot
-      className="contents"
+      className="slash-menu"
       regex={SLASH}
       filter={null}
       queryBuilder={rawQuery}
@@ -245,12 +245,12 @@ export function SlashMenu() {
         if (opened && !picked.current) undoOpened(editor, opened);
       }}
     >
-      <AutocompletePositioner className="z-30 block data-[state=closed]:hidden [&:not([data-state])]:hidden">
+      <AutocompletePositioner className="slash-menu__positioner">
         <AutocompletePopup
           aria-label="Insert"
-          className="grid max-h-96 w-80 content-start gap-1 overflow-y-auto rounded-md border border-line-strong bg-surface p-1 shadow-[0_12px_32px_rgba(0,0,0,.6)]"
+          className="slash-menu__popup"
         >
-          <AutocompleteEmpty className="px-2 py-2 text-meta text-muted-2">
+          <AutocompleteEmpty className="slash-menu__empty">
             {onlyEvidence ? "Nothing logged on this target matches." : "Nothing matches. Esc to close."}
           </AutocompleteEmpty>
           {keepFirst && (
@@ -267,7 +267,7 @@ export function SlashMenu() {
               }}
             >
               <TextT size={16} aria-hidden />
-              <span className="truncate">{`Keep “/${query}” as text`}</span>
+              <span className="slash-menu__label">{`Keep “/${query}” as text`}</span>
               <span />
             </AutocompleteItem>
           )}
@@ -282,12 +282,12 @@ export function SlashMenu() {
               }}
             >
               <b.icon size={16} aria-hidden />
-              <span className="truncate">{b.label}</span>
-              {b.markdown ? <span className="font-mono text-code text-muted">{b.markdown}</span> : <span />}
+              <span className="slash-menu__label">{b.label}</span>
+              {b.markdown ? <span className="slash-menu__markdown">{b.markdown}</span> : <span />}
             </AutocompleteItem>
           ))}
           {entries.length > 0 && (
-            <div role="presentation" className={cx(labelClass, "px-2 pt-2 pb-1")}>
+            <div role="presentation" className={cx(labelClass, "slash-menu__heading")}>
               {q ? "From the log" : "Latest from the log"}
             </div>
           )}
@@ -297,18 +297,18 @@ export function SlashMenu() {
               <AutocompleteItem
                 key={e.id}
                 value={`entry:${e.id}`}
-                className="grid min-h-11 cursor-default grid-cols-[40px_minmax(0,1fr)] items-start gap-3 rounded-sm px-2 py-1 data-highlighted:bg-surface-hi"
+                className="slash-menu__entry"
                 onSelect={() => {
                   picked.current = true;
                   if (target) insertEntry(editor, data, target, e, true, reportMeta);
                 }}
               >
-                <span className="font-mono text-code text-muted tabular-nums">{clockTime(e.at)}</span>
-                <span className="grid min-w-0 gap-1">
-                  <span className="truncate text-body text-fg" title={e.title}>
+                <span className="slash-menu__time">{clockTime(e.at)}</span>
+                <span className="slash-menu__entry-text">
+                  <span className="slash-menu__entry-title" title={e.title}>
                     {e.title}
                   </span>
-                  <span className="truncate text-meta text-muted-2">{command ? <span className="font-mono text-code">{command}</span> : KIND_LABELS[e.kind]}</span>
+                  <span className="slash-menu__entry-detail">{command ? <span className="slash-menu__command">{command}</span> : KIND_LABELS[e.kind]}</span>
                 </span>
               </AutocompleteItem>
             );

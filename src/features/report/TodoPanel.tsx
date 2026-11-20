@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 import { groupChecks, type Check, type CheckGroup, type FlagKind } from "../../engines/report";
 import { cx } from "../../lib/cx";
 import { Button, Disclosure, IconButton, labelClass, Toggle, Tooltip } from "../../ui";
+import "./TodoPanel.scss";
 
 /** A check's one-press fix, offered under it (a long block's "Move to appendix"). */
 export interface CheckAction {
@@ -31,9 +32,9 @@ export function CheckList({
   const [fixOpen, setFixOpen] = useState(false);
   if (checks.length === 0) {
     return (
-      <ul aria-label="Checks" className="m-0 grid list-none p-0">
-        <li className="grid grid-cols-[16px_minmax(0,1fr)] items-start gap-2 py-1 pl-2 pr-2 text-meta text-muted-2">
-          <CheckIcon aria-label="pass" className="size-4 text-accent" />
+      <ul aria-label="Checks" className="check-list">
+        <li className="check-list__empty">
+          <CheckIcon aria-label="pass" className="check-list__icon check-list__icon--pass" />
           <span>Nothing to do on this tab</span>
         </li>
       </ul>
@@ -47,7 +48,7 @@ export function CheckList({
     onPick(g.checks[at]);
   };
   return (
-    <ul aria-label="Checks" className="m-0 grid list-none p-0">
+    <ul aria-label="Checks" className="check-list">
       {groups.map((g) => {
         const isPicked = picked?.key === g.key;
         // The group may have shrunk since the pick (a step got its explanation): stay inside it.
@@ -59,37 +60,34 @@ export function CheckList({
         // checks' words differ ("22/tcp on lnx02 is untested.").
         const ownText = !many || g.checks.some((c) => c.text !== g.checks[0].text);
         return (
-          <li key={g.key} className="grid">
+          <li key={g.key} className="check-list__item">
             <Tooltip content={g.full} side="right">
               <button
                 type="button"
                 onClick={() => pick(g)}
-                className={cx(
-                  "grid min-h-7 w-full cursor-default grid-cols-[16px_minmax(0,1fr)] items-center gap-2 rounded-sm border-0 py-1 pl-2 pr-2 text-left text-meta",
-                  isPicked ? "bg-surface text-fg" : "bg-transparent text-muted-2 hover:bg-surface hover:text-fg",
-                )}
+                className={cx("check-list__row", isPicked && "check-list__row--picked")}
               >
                 {g.level === "fail" ? (
-                  <WarningCircle aria-label="gap" className="size-4 text-warn" />
+                  <WarningCircle aria-label="gap" className="check-list__icon check-list__icon--gap" />
                 ) : (
-                  <Circle aria-label="worth a look" className="size-4 text-muted" />
+                  <Circle aria-label="worth a look" className="check-list__icon check-list__icon--look" />
                 )}
-                <span className="min-w-0 truncate">{g.text}</span>
+                <span className="check-list__text">{g.text}</span>
               </button>
             </Tooltip>
             {isPicked && (
-              <div className="grid grid-cols-[16px_minmax(0,1fr)] gap-x-2 gap-y-1 pb-2 pl-2 pr-2 text-meta text-muted-2">
+              <div className="check-list__detail">
                 <span aria-hidden />
-                <div className="grid gap-1">
-                  {many && <span className="font-mono tabular-nums">{`${at + 1} of ${g.checks.length}`}</span>}
+                <div className="check-list__detail-body">
+                  {many && <span className="check-list__count">{`${at + 1} of ${g.checks.length}`}</span>}
                   {ownText && <span>{check.text}</span>}
                   {check.fix && (
                     <Disclosure label="Fix" open={fixOpen} onOpenChange={setFixOpen}>
-                      <code className="block py-1 pl-6 font-mono text-meta text-fg-2 [overflow-wrap:anywhere]">{check.fix}</code>
+                      <code className="check-list__fix">{check.fix}</code>
                     </Disclosure>
                   )}
                   {(action || onDismiss) && (
-                    <div className="grid auto-cols-max grid-flow-col justify-start gap-2">
+                    <div className="check-list__actions">
                       {action && (
                         <Button size="sm" onClick={action.run}>
                           {action.label}
@@ -129,15 +127,15 @@ export function ExpectedFlags({
 }) {
   const many = machines.length > 1;
   return (
-    <div role="group" aria-label="Expected flags" className="grid gap-2 py-2 pl-2 pr-2">
-      <span className="text-meta text-muted-2">Expected flags</span>
+    <div role="group" aria-label="Expected flags" className="expected-flags">
+      <span className="expected-flags__label">Expected flags</span>
       {machines.map((m) => {
         const flags = flagsOf(m.hostId);
         const set = (kind: FlagKind, on: boolean) =>
           onChange(m.hostId, (["local", "proof"] as FlagKind[]).filter((k) => (k === kind ? on : flags.includes(k))));
         return (
-          <div key={m.hostId} className={cx("grid items-center gap-2", many ? "grid-cols-[minmax(0,1fr)_auto_auto]" : "grid-cols-[auto_auto] justify-start")}>
-            {many && <span className="truncate text-meta text-muted-2">{m.name}</span>}
+          <div key={m.hostId} className={cx("expected-flags__machine", many && "expected-flags__machine--named")}>
+            {many && <span className="expected-flags__name">{m.name}</span>}
             <Toggle on={flags.includes("local")} onChange={(on) => set("local", on)} aria-label={`${m.name} local.txt`}>
               local.txt
             </Toggle>
@@ -208,22 +206,22 @@ export function TodoPanel({
       aria-label="To do"
       tabIndex={-1}
       onKeyDown={onKeyDown}
-      className={cx("grid max-h-80 min-h-0 outline-none grid-rows-[auto_minmax(0,1fr)] border-b border-line bg-surface", className)}
+      className={cx("todo-panel", className)}
     >
-      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 py-1 pl-6 pr-4">
-        <h2 className={cx(labelClass, "m-0")}>To do</h2>
+      <header className="todo-panel__header">
+        <h2 className={labelClass}>To do</h2>
         <IconButton icon={X} label="Close To do" shortcut="Esc" onClick={onClose} />
       </header>
-      <div className="grid min-h-0 content-start overflow-y-auto pb-2 pl-4 pr-4">
+      <div className="todo-panel__body">
         <CheckList checks={checks} onPick={onPick} actionFor={actionFor} onDismiss={onDismiss} />
         {dismissed.length > 0 && onRestore && (
-          <div className="pt-2">
+          <div className="todo-panel__dismissed">
             <Disclosure label="Dismissed" count={dismissed.length} open={dismissedOpen} onOpenChange={setDismissedOpen}>
-              <ul aria-label="Dismissed checks" className="m-0 grid list-none p-0">
+              <ul aria-label="Dismissed checks" className="check-list">
                 {dismissed.map((c) => (
-                  <li key={c.id} className="grid min-h-7 grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 py-1 pl-2 pr-2 text-meta text-muted-2">
+                  <li key={c.id} className="todo-panel__dismissed-item">
                     <span aria-hidden />
-                    <span className="min-w-0">{c.text}</span>
+                    <span className="todo-panel__dismissed-text">{c.text}</span>
                     <IconButton icon={ArrowCounterClockwise} label="Bring back" onClick={() => onRestore([c.id])} />
                   </li>
                 ))}
@@ -232,11 +230,11 @@ export function TodoPanel({
           </div>
         )}
         {others.length > 0 && onOpenTab && (
-          <div className="grid gap-1 pt-2">
-            <span className="pl-2 text-meta text-muted-2">Still to do on</span>
-            <ul aria-label="Tabs with checks" className="m-0 grid list-none p-0">
+          <div className="todo-panel__others">
+            <span className="todo-panel__others-label">Still to do on</span>
+            <ul aria-label="Tabs with checks" className="check-list">
               {others.map((t) => (
-                <li key={t.id} className="grid">
+                <li key={t.id} className="check-list__item">
                   <button
                     type="button"
                     aria-label={`Open ${t.label}, ${t.todo} to do`}
@@ -244,11 +242,11 @@ export function TodoPanel({
                       onOpenTab(t.id);
                       setMoved((n) => n + 1);
                     }}
-                    className="grid min-h-7 w-full cursor-default grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 rounded-sm border-0 bg-transparent py-1 pl-2 pr-2 text-left text-meta text-muted-2 hover:bg-surface hover:text-fg"
+                    className="todo-panel__other"
                   >
-                    <WarningCircle aria-hidden className="size-4 text-warn" />
-                    <span className="min-w-0 truncate">{t.label}</span>
-                    <span className="font-mono tabular-nums">{`${t.todo} to do`}</span>
+                    <WarningCircle aria-hidden className="check-list__icon check-list__icon--gap" />
+                    <span className="check-list__text">{t.label}</span>
+                    <span className="check-list__count">{`${t.todo} to do`}</span>
                   </button>
                 </li>
               ))}

@@ -1,0 +1,203 @@
+@use "@/styles/abstracts" as *;
+
+@layer features {
+  // The evidence rail's tabs (shadcn Tabs: its own grid and gap stay).
+  .evidence-rail {
+    align-content: start;
+  }
+
+  // A line that says a tab has nothing to show.
+  .evidence-rail__empty {
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .evidence-rail__stack {
+    display: grid;
+    gap: var(--space-lg);
+  }
+
+  .evidence-rail__host {
+    display: grid;
+    gap: var(--space-md);
+  }
+
+  // "lnx02 log not in the report": the section label, its second half quieter.
+  .evidence-rail__host-label {
+    display: grid;
+    grid-auto-flow: column;
+    justify-content: start;
+    gap: var(--space-sm);
+  }
+
+  .evidence-rail__host-label-note {
+    color: var(--muted-2);
+  }
+
+  .evidence-rail__block {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .evidence-rail__phase {
+    @include type(body);
+    font-weight: 600;
+    color: var(--fg);
+  }
+
+  .evidence-rail__list {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .evidence-rail__list-item {
+    display: grid;
+    gap: var(--space-xs);
+  }
+
+  .evidence-rail__list-item--clip {
+    min-width: 0;
+  }
+
+  .evidence-rail__text {
+    @include type(body);
+    color: var(--fg-2);
+  }
+
+  .evidence-rail__meta {
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .evidence-rail__who {
+    @include truncate;
+    @include type(code);
+    color: var(--fg);
+  }
+
+  // An unused log entry: a rail-marked row with + add. Focusable; ↵ adds it, ↑↓ move.
+  .evidence-rail__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: var(--space-md);
+    padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-md);
+    border-left: 2px solid var(--line-2);
+    border-radius: var(--radius-sm);
+    outline-style: none;
+
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--surface-hi);
+      }
+    }
+
+    &:focus-visible {
+      background-color: var(--surface-hi);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+  }
+
+  .evidence-rail__row-body {
+    display: grid;
+    gap: var(--space-xs);
+    min-width: 0;
+  }
+
+  // Time, then what ran.
+  .evidence-rail__row-lead {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-sm);
+    @include type(code);
+    color: var(--muted);
+  }
+
+  .evidence-rail__row-time {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .evidence-rail__row-what {
+    @include truncate;
+  }
+
+  .evidence-rail__row-line {
+    @include truncate;
+    @include type(meta);
+    color: var(--fg-2);
+  }
+
+  .evidence-rail__row-note {
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  // A note's lines, read-only.
+  .evidence-rail__note {
+    display: grid;
+    gap: var(--space-xs);
+    @include type(body);
+    color: var(--fg-2);
+    user-select: text;
+  }
+
+  .evidence-rail__note-line {
+    display: grid;
+    grid-template-columns: 8px minmax(0, 1fr);
+    align-items: baseline;
+    gap: var(--space-sm);
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+
+  // The dot before a line; filled on an open thread (`? `).
+  .evidence-rail__dot {
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: var(--radius-full);
+  }
+
+  .evidence-rail__dot--thread {
+    background-color: var(--fg-2);
+  }
+
+  .evidence-rail__sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  // The rail as a drawer from the right edge, under the title bar (under 1200px).
+  .evidence-drawer {
+    position: fixed;
+    right: 0;
+    z-index: var(--z-drawer);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    width: 20rem;
+    max-width: 90vw;
+    border-left: 1px solid var(--line-2);
+    background-color: var(--surface);
+  }
+
+  .evidence-drawer__header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-lg);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .evidence-drawer__body {
+    min-height: 0;
+    padding: var(--space-lg);
+    overflow-y: auto;
+  }
+}

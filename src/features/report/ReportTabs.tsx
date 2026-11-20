@@ -5,7 +5,8 @@ import { cx } from "../../lib/cx";
 import { TAB_MARK } from "../../ui/shadcn/tabs";
 import { IconButton } from "../../ui/IconButton";
 import { TabMarker } from "../../ui/TabMarker";
-import { MENU_ITEM, walkMenuItems } from "./menuItems";
+import { MENU, MENU_ITEM, MENU_ITEM_DESTRUCTIVE, walkMenuItems } from "./menuItems";
+import "./ReportTabs.scss";
 
 /** One tab of the report's tab row (§10.1): Front matter, a target, Closing, an appendix or an owner-written page. */
 export interface TabItem {
@@ -81,14 +82,14 @@ function MenuPopover({ trigger, label, items }: { trigger: ReactNode; label: str
             if (focusMoved.current) e.preventDefault();
             focusMoved.current = false;
           }}
-          className="z-50 grid min-w-40 gap-1 rounded-md border border-line-strong bg-surface p-1 shadow-[0_12px_32px_rgba(0,0,0,.6)]"
+          className={MENU}
         >
           {items.map((it) => (
             <button
               key={it.label}
               type="button"
               role="menuitem"
-              className={cx(MENU_ITEM, it.destructive && "hover:text-warn focus-visible:text-warn")}
+              className={it.destructive ? MENU_ITEM_DESTRUCTIVE : MENU_ITEM}
               onClick={() => {
                 focusMoved.current = !!it.movesFocus;
                 setOpen(false);
@@ -125,12 +126,9 @@ function Tab({
       // Roving tabindex: Tab enters the row at the open tab; the arrows move from there.
       tabIndex={selected ? 0 : -1}
       onClick={onOpen}
-      className={cx(
-        "grid cursor-default content-end whitespace-nowrap rounded-sm border-0 bg-transparent px-3 py-1 text-left",
-        selected ? "text-fg" : "text-muted-2 hover:bg-surface hover:text-fg",
-      )}
+      className="report-tab"
     >
-      <span data-tab-label className="text-body">
+      <span data-tab-label className="report-tab__label">
         {tab.label}
       </span>
       <span
@@ -146,8 +144,8 @@ function Tab({
             : undefined
         }
         className={cx(
-          "text-label font-normal",
-          tab.state === "ready" ? "text-accent" : tab.state === "todo" ? "text-warn hover:underline" : selected ? "text-muted-2" : "text-faint",
+          "report-tab__state",
+          tab.state === "ready" ? "report-tab__state--ready" : tab.state === "todo" ? "report-tab__state--todo" : selected && "report-tab__state--selected",
         )}
       >
         {stateText || " "}
@@ -180,7 +178,7 @@ function RenameInput({ initial, onDone }: { initial: string; onDone(title: strin
         if (e.key === "Enter") finish(value, true);
         else if (e.key === "Escape") finish(null, true);
       }}
-      className="h-9 w-48 self-center rounded-sm border border-line-strong bg-bg px-2 text-body text-fg outline-none focus-visible:border-accent"
+      className="report-tabs__rename"
     />
   );
 }
@@ -264,10 +262,10 @@ export function ReportTabs({
   };
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center border-b border-line">
-      <div ref={scroller} className="min-w-0 overflow-x-auto overflow-y-hidden">
-        <div className="grid w-max min-w-full grid-flow-col auto-cols-max items-center justify-start gap-2 py-1 pl-4 pr-4">
-          <div ref={listRef} role="tablist" aria-label="Report pages" onKeyDown={onKeyDown} className="relative isolate grid grid-flow-col auto-cols-max items-stretch gap-1">
+    <div className="report-tabs">
+      <div ref={scroller} className="report-tabs__scroller">
+        <div className="report-tabs__row">
+          <div ref={listRef} role="tablist" aria-label="Report pages" onKeyDown={onKeyDown} className="report-tabs__list">
             <TabMarker className={TAB_MARK} />
             {tabs.map((t) =>
               t.id === renaming ? (
@@ -301,7 +299,7 @@ export function ReportTabs({
             <MenuPopover
               label="Add a page"
               trigger={
-                <button type="button" className="h-7 cursor-default rounded-sm border-0 bg-transparent px-2 text-body text-accent hover:bg-surface-hi">
+                <button type="button" className="report-tabs__add">
                   + Page
                 </button>
               }
@@ -313,7 +311,7 @@ export function ReportTabs({
           )}
         </div>
       </div>
-      {exportSlot != null && exportSlot !== false && <div className="grid grid-flow-col items-center gap-2 pl-2 pr-4">{exportSlot}</div>}
+      {exportSlot != null && exportSlot !== false && <div className="report-tabs__export">{exportSlot}</div>}
     </div>
   );
 }
@@ -328,7 +326,7 @@ export function PartTabs({ label, parts, openId, onOpen }: { label: string; part
       role="tablist"
       aria-label={label}
       onKeyDown={(e) => walkTabs(e, onOpen)}
-      className="relative isolate grid grid-flow-col auto-cols-max items-center justify-start gap-1"
+      className="part-tabs"
     >
       <TabMarker className={TAB_MARK} />
       {parts.map((p) => (
@@ -340,10 +338,7 @@ export function PartTabs({ label, parts, openId, onOpen }: { label: string; part
           aria-selected={p.id === openId}
           tabIndex={p.id === openId ? 0 : -1}
           onClick={() => onOpen(p.id)}
-          className={cx(
-            "h-7 cursor-default whitespace-nowrap rounded-sm border-0 bg-transparent px-2 text-body",
-            p.id === openId ? "text-fg" : "text-muted-2 hover:bg-surface hover:text-fg",
-          )}
+          className="part-tabs__tab"
         >
           {p.label}
         </button>

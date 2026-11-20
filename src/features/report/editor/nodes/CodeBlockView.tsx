@@ -1,6 +1,7 @@
 import type { ReactNodeViewProps } from "prosekit/react";
 import { Select } from "../../../../ui";
 import { CODE_LANGUAGES } from "../codeHighlight";
+import "./CodeBlockView.scss";
 
 /** Radix Select takes no empty value: plain text ("" on the node) is this in the picker. */
 const PLAIN = "text";
@@ -21,7 +22,7 @@ export function CodeBlockView({ node, contentRef, setAttrs }: ReactNodeViewProps
       <div contentEditable={false} className="report-codeblock-lang">
         <Select
           aria-label="Code language"
-          className="w-36"
+          className="code-block-view__language"
           options={LANGUAGE_OPTIONS}
           value={toPicker(language)}
           onValueChange={(v) => setAttrs({ language: fromPicker(v) })}

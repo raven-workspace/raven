@@ -19,6 +19,7 @@ import { usePageContext } from "./ReportDataContext";
 import { SlashMenu } from "./SlashMenu";
 import { TableHandles } from "./TableHandles";
 import "../page.css";
+import "./ReportEditor.scss";
 
 /** Each page's held positions (see `HeldPositions`), by its editor. */
 const heldPositions = new WeakMap<Editor, HeldPositions>();
@@ -373,7 +374,7 @@ export function ReportEditor({
         />
         {notices}
         {imageError && (
-          <p role="alert" className="m-0 text-meta text-warn">
+          <p role="alert" className="report-editor__alert">
             Couldn't save the image as a screenshot: {imageError}
           </p>
         )}

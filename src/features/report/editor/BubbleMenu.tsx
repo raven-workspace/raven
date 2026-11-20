@@ -23,6 +23,7 @@ import { copyPlain } from "../../../lib/clipboard";
 import { IconButton, Input, Toolbar } from "../../../ui";
 import { applyLink, blockKindAt, inPageHeading, linkAt, toggleHeading, type PageEditor } from "./commands";
 import type { EditingExtension } from "./extension";
+import "./BubbleMenu.scss";
 
 export interface MarkTool {
   icon: Icon;
@@ -95,8 +96,8 @@ export const HEADING_TOOLS: MarkTool[] = (
 /** Buttons keep the page's focus and selection: the press runs on the selection the owner made. */
 export const keepFocus = (e: MouseEvent) => e.preventDefault();
 
-const POPUP = "grid rounded-md border border-line-strong bg-surface p-1 shadow-[0_12px_32px_rgba(0,0,0,.6)]";
-const POSITIONER = "z-30 block data-[state=closed]:hidden [&:not([data-state])]:hidden";
+const POPUP = "bubble-menu__popup";
+const POSITIONER = "bubble-menu__positioner";
 
 /** The link address field: Enter applies (empty unlinks), Esc goes back to the page. */
 function LinkField({ initial, onDone }: { initial: string; onDone(href: string | null): void }) {
@@ -115,7 +116,7 @@ function LinkField({ initial, onDone }: { initial: string; onDone(href: string |
     <Input
       autoFocus
       mono
-      width="w-80"
+      width="bubble-menu__link-input"
       aria-label="Link address"
       placeholder="https://… then ↵, empty to unlink"
       value={href}
@@ -169,7 +170,7 @@ export function BubbleMenu() {
   return (
     <>
       <InlinePopoverRoot
-        className="contents"
+        className="bubble-menu"
         onOpenChange={(e) => {
           if (!e.detail) setEditing(false);
         }}
@@ -201,7 +202,7 @@ export function BubbleMenu() {
                 />
                 {editor.mounted && !inPageHeading(editor) && (
                   <>
-                    <span aria-hidden className="mx-1 h-5 w-px bg-line-2" />
+                    <span aria-hidden className="bubble-menu__divider" />
                     {HEADING_TOOLS.map((t) => (
                       <IconButton
                         key={t.label}
@@ -238,14 +239,14 @@ function LinkPopover({ anchor, href, editing, onEditing }: { anchor: HTMLElement
     editor.focus();
   };
   return (
-    <InlinePopoverRoot className="contents" anchor={anchor} open>
+    <InlinePopoverRoot className="bubble-menu" anchor={anchor} open>
       <InlinePopoverPositioner placement="bottom-start" offset={4} className={POSITIONER}>
         <InlinePopoverPopup aria-label="Link here" className={POPUP}>
           {editing ? (
             <LinkField initial={href} onDone={done} />
           ) : (
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 pl-2">
-              <span className="max-w-80 truncate font-mono text-code text-fg-2" title={href}>
+            <div className="bubble-menu__link">
+              <span className="bubble-menu__href" title={href}>
                 {href}
               </span>
               <Toolbar gap={2}>
