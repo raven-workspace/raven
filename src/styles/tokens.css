@@ -21,6 +21,14 @@
   --accent: #c6ff00;
   --warn: #e0a030;
 
+  /* Spacing (DESIGN.md: a 4px base, steps of 4, 8, 12, 16, 24 and 32; nothing else). */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.5rem;
+  --space-2xl: 2rem;
+
   color-scheme: dark;
 }
 

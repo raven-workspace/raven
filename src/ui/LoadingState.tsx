@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import "./states.scss";
 
 /** Blank for 150ms so quick loads never flash, then a plain line. */
 export function LoadingState({ label }: { label: string }) {
@@ -9,7 +10,7 @@ export function LoadingState({ label }: { label: string }) {
   }, []);
   if (!shown) return null;
   return (
-    <p role="status" className="m-0 text-meta text-muted-2">
+    <p role="status" className="loading-state">
       {`Loading ${label}…`}
     </p>
   );

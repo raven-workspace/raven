@@ -1,0 +1,4 @@
+// Cascade layers, lowest to highest. Component styles sit in `components`; while Tailwind remains, utilities a caller
+// passes through `className` live in `utilities` and still win, as they did before migration. Stating the order in
+// every component stylesheet keeps it right whichever stylesheet the browser sees first.
+@layer theme, base, components, utilities;

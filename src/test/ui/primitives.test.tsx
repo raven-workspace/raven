@@ -145,8 +145,8 @@ describe("CommandBlock placeholders inside a token", () => {
 describe("labels", () => {
   it("there is no uppercase Label component: field labels are sentence case (Field), sections use labelClass", () => {
     expect("Label" in ui).toBe(false);
-    expect(ui.labelClass).toMatch(/\btext-label\b/);
-    expect(ui.fieldLabelClass).toMatch(/\btext-meta\b/);
+    expect(ui.labelClass).toBe("section-label");
+    expect(ui.fieldLabelClass).toBe("field-label");
   });
 });
 

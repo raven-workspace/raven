@@ -54,7 +54,7 @@ export function FindingsSection() {
       ) : (
         // One grid for the header and the rows, so every column lines up with its name.
         <div className="grid grid-cols-[max-content_minmax(0,1fr)_max-content_max-content_max-content] gap-x-3">
-          <div aria-hidden className={`col-span-full grid grid-cols-subgrid border-b border-line px-2 pb-2 ${labelClass} text-faint`}>
+          <div aria-hidden className={`col-span-full grid grid-cols-subgrid border-b border-line px-2 pb-2 ${labelClass}`}>
             <span>Severity</span>
             <span>Finding</span>
             <span>Status</span>

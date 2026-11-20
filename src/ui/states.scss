@@ -1,0 +1,57 @@
+@use "@/styles/abstracts" as *;
+
+// EmptyState, ErrorState and LoadingState: what a pane shows when it has nothing, failed, or is still loading.
+@layer components {
+  .state {
+    display: grid;
+    justify-items: start;
+    gap: var(--space-sm);
+    border: 1px solid;
+    border-radius: var(--radius);
+  }
+
+  .state--empty {
+    padding: var(--space-xl);
+    border-style: dashed;
+    border-color: var(--line-2);
+  }
+
+  .state--error {
+    padding: var(--space-md) var(--space-lg);
+    border-color: var(--warn);
+  }
+
+  .state__title {
+    @include type(body);
+    font-weight: 600;
+    color: var(--fg);
+  }
+
+  .state__body {
+    @include type(meta);
+    color: var(--muted-2);
+  }
+
+  .state--empty .state__body {
+    max-width: 52ch;
+  }
+
+  .state__action {
+    margin-top: var(--space-sm);
+  }
+
+  .state__details {
+    width: 100%;
+  }
+
+  .state__detail-text {
+    @include type(code);
+    white-space: pre-wrap;
+    color: var(--muted);
+  }
+
+  .loading-state {
+    @include type(meta);
+    color: var(--muted-2);
+  }
+}

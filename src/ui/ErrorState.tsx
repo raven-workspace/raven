@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "./Button";
 import { Disclosure } from "./Disclosure";
+import "./states.scss";
 
 export interface ErrorStateProps {
   title: string;
@@ -12,16 +13,16 @@ export interface ErrorStateProps {
 export function ErrorState({ title, hint, onRetry, detail }: ErrorStateProps) {
   const [open, setOpen] = useState(false);
   return (
-    <div role="alert" className="grid justify-items-start gap-2 rounded border border-warn px-4 py-3">
-      <p className="m-0 text-body font-semibold text-fg">{title}</p>
-      <p className="m-0 text-meta text-muted-2">{hint}</p>
+    <div role="alert" className="state state--error">
+      <p className="state__title">{title}</p>
+      <p className="state__body">{hint}</p>
       <Button size="sm" onClick={onRetry}>
         Retry
       </Button>
       {detail && (
-        <div className="w-full">
+        <div className="state__details">
           <Disclosure label="Details" open={open} onOpenChange={setOpen}>
-            <pre className="m-0 font-mono text-code whitespace-pre-wrap text-muted">{detail}</pre>
+            <pre className="state__detail-text">{detail}</pre>
           </Disclosure>
         </div>
       )}
