@@ -31,6 +31,7 @@ import { capGroups, searchPalette, withoutSecrets, type EngagementItem, type Pal
 import { usePaletteStore } from "./usePaletteStore";
 import type { SuggestContext } from "./suggest";
 import { RavenError } from "../../types/errors";
+import "./Palette.scss";
 
 const MAX_RESULTS = 30;
 
@@ -268,8 +269,8 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
     [engagementId, host, hasUnfilled, onManual, onLookup],
   );
   return (
-    <div data-hint-surface="" className="grid gap-3" onKeyDown={onKey} onKeyDownCapture={onKeyCapture}>
-      <header className="grid gap-2">
+    <div data-hint-surface="" className="palette" onKeyDown={onKey} onKeyDownCapture={onKeyCapture}>
+      <header className="palette__header">
         <SearchBar
           label="Search"
           inputRef={searchRef}
@@ -287,22 +288,22 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
           {...(engagementId ? { trailing: null } : {})}
         />
         {engagementId && (
-          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] justify-items-start gap-3">
+          <div className="palette__chips">
             <HostChip
-              ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} align="start" className="max-w-full"
+              ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} align="start" className="palette__chip"
               {...(remembered && d.engagement ? { engagementName: d.engagement.name } : {})}
             />
             <CredChip
               ref={credRef} credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred}
-              onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} className="max-w-full"
+              onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} className="palette__chip"
             />
           </div>
         )}
       </header>
-      <div className="grid max-h-[44vh] overflow-y-auto">
+      <div className="palette__results">
         {/* One line for an empty list; with notes imported it says the Manual was searched too. */}
         {results.length === 0 && (
-          <p className="m-0 px-1 py-2 text-meta text-muted">
+          <p className="palette__empty">
             {notes.length > 0 && query.trim().length > 0 ? "Nothing matches, the Manual included" : "Nothing matches"}
           </p>
         )}
@@ -321,9 +322,9 @@ function PaletteBody({ engagementId, hostId: openedHostId, remembered, onClose }
           fieldRef={(t, el) => (el ? fieldEls.current.set(t, el) : fieldEls.current.delete(t))}
         />
       )}
-      {guard.hint && filled && guard.forKey === copyKey(filled.cmd) && <p role="status" className="m-0 text-meta text-warn">{guard.hint}</p>}
-      {status && <p role="alert" className="m-0 text-meta text-warn">{status}</p>}
-      <footer className="grid">
+      {guard.hint && filled && guard.forKey === copyKey(filled.cmd) && <p role="status" className="palette__notice">{guard.hint}</p>}
+      {status && <p role="alert" className="palette__notice">{status}</p>}
+      <footer className="palette__footer">
         <HintLine hints={hints} ariaLabel="Search shortcuts" />
       </footer>
     </div>

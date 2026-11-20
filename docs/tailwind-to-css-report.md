@@ -412,3 +412,21 @@
 ### Follow-up
 - stuck, notes, checklist, network and hosts have no Tailwind utilities left (the shadcn ToggleGroup and Tabs keep
   their own until unit 25).
+
+## Unit: palette
+
+### Changes
+- Palette.scss (`.palette`, `__header`, `__chips`, `__chip`, `__results`, `__empty`, `__notice`, `__footer`) and
+  TokenInput.scss (`.token-input`, `__list`, `__option`, `__value`, `__hint`, `__role`).
+- The suggestion list's placement and active option are keyed on the attributes already there (`data-placement`,
+  `aria-selected`) instead of conditional class strings.
+- The width the palette gives the arsenal HostChip and CredChip is a two-class rule (`.palette .palette__chip`).
+- Dropped as no-ops: `m-0` (preflight), `shadow-lg` (reset scale), `font-sans` (emits nothing under Raven's theme, so
+  the hint text stays mono-inherited as before).
+
+### Verification
+- [x] Unit tests (the active-option assertion reads the TokenInput.scss rule)
+- [x] Type check and lint
+- [x] Pixel diff: 297/297 (two manual-search shots passed on retry)
+- [x] Audit gate: 660/660 (dc-next@900 and host-findings@900 failed once on the status strip's width, unrelated to the
+      palette, and passed on rerun)

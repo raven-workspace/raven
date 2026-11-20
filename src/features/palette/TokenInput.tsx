@@ -2,6 +2,7 @@ import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type Ref 
 import { Input } from "../../ui";
 import type { Suggestion } from "./suggest";
 import { useEscapeWhile } from "../../lib/keys";
+import "./TokenInput.scss";
 
 const LIST_MAX = 224;
 const GAP = 4;
@@ -73,7 +74,7 @@ export function TokenInput({ name, value, onChange, suggestions, placeholder, cl
   };
 
   return (
-    <span ref={fieldRef} className="relative inline-grid">
+    <span ref={fieldRef} className="token-input">
       <Input
         ref={ref}
         mono
@@ -107,7 +108,7 @@ export function TokenInput({ name, value, onChange, suggestions, placeholder, cl
           data-placement={place.placement}
           style={{ maxHeight: place.maxHeight }}
           aria-label={`Suggestions for ${name}`}
-          className={`absolute left-0 z-50 m-0 grid w-max min-w-full max-w-md ${place.placement === "above" ? "bottom-full mb-1" : "top-full mt-1"} list-none overflow-y-auto rounded-sm border border-line-2 bg-surface p-1 shadow-lg`}
+          className="token-input__list"
         >
           {shown.map((s, i) => (
             <li
@@ -122,13 +123,13 @@ export function TokenInput({ name, value, onChange, suggestions, placeholder, cl
               }}
               title={s.value}
               onMouseMove={() => setActive(i)}
-              className={`grid cursor-default grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-sm px-2 py-1 font-mono text-code whitespace-nowrap ${i === active ? "bg-surface-hi text-fg shadow-[inset_2px_0_0_var(--accent)]" : "text-fg-2"}`}
+              className="token-input__option"
             >
-              <span className="min-w-0 truncate">{s.value}</span>
+              <span className="token-input__value">{s.value}</span>
               {(s.hint || s.role) && (
-                <span className="grid grid-flow-col items-baseline gap-2 font-sans text-meta text-muted">
+                <span className="token-input__hint">
                   {s.hint && <span>{s.hint}</span>}
-                  {s.role && <span className="text-faint">{s.role}</span>}
+                  {s.role && <span className="token-input__role">{s.role}</span>}
                 </span>
               )}
             </li>

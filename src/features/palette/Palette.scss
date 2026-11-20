@@ -1,0 +1,47 @@
+@use "@/styles/abstracts" as *;
+
+// ⌘K: search field and fill chips, the results, the filled command, then the hint line.
+@layer features {
+  .palette {
+    display: grid;
+    gap: var(--space-md);
+  }
+
+  .palette__header {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  // Host and credential chips share the row half and half, each as wide as its value.
+  .palette__chips {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    justify-items: start;
+    gap: var(--space-md);
+  }
+
+  .palette .palette__chip {
+    max-width: 100%;
+  }
+
+  .palette__results {
+    display: grid;
+    max-height: 44vh;
+    overflow-y: auto;
+  }
+
+  .palette__empty {
+    padding: var(--space-sm) var(--space-xs);
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .palette__notice {
+    @include type(meta);
+    color: var(--warn);
+  }
+
+  .palette__footer {
+    display: grid;
+  }
+}
