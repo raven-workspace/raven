@@ -11,9 +11,6 @@ export interface ParsedPort {
   state: string;
   service: string;
   version: string;
-  suggestedTools: string[];
-  cveNotes?: string;
-  scripts?: Record<string, string>;
 }
 
 export interface ParsedHost {
@@ -30,63 +27,6 @@ export interface ScanImportResult {
   detectedOs?: string;
   ports: ParsedPort[];
   hosts?: ParsedHost[];
-  warnings?: string[];
-  rawSummary?: string;
-}
-
-/**
- * Generate tactical offensive tool and CVE suggestions based on port and service/version
- */
-export function getServiceIntelligence(port: number, service: string, version: string = ''): { tools: string[]; cve?: string } {
-  const s = service.toLowerCase();
-  const v = version.toLowerCase();
-  const tools: string[] = [];
-  let cve: string | undefined;
-
-  if (s.includes('ftp') || port === 21) {
-    tools.push('ftp', 'hydra', 'nmap --script ftp-anon,ftp-vuln*');
-    if (v.includes('2.3.4')) cve = 'Possible: CVE-2011-2523 (vsftpd Backdoor RCE)';
-    else if (v.includes('proftpd 1.3.5')) cve = 'Possible: CVE-2015-3306 (mod_copy File Copy)';
-  } else if (s.includes('ssh') || port === 22) {
-    tools.push('ssh', 'ssh-audit', 'hydra');
-    if (v.includes('libssh 0.6')) cve = 'Possible: CVE-2018-10933 (Authentication Bypass)';
-  } else if (s.includes('http') || port === 80 || port === 443 || port === 8080 || port === 8443) {
-    tools.push('ffuf', 'gobuster', 'whatweb', 'nikto', 'feroxbuster');
-    if (v.includes('2.4.49')) cve = 'Possible: CVE-2021-41773 (Apache Path Traversal/RCE)';
-    else if (v.includes('2.4.50')) cve = 'Possible: CVE-2021-42013 (Apache RCE Bypass)';
-    else if (v.includes('tomcat') && v.includes('9.0.30')) cve = 'Possible: CVE-2020-1938 (Ghostcat)';
-  } else if (s.includes('smb') || s.includes('microsoft-ds') || s.includes('netbios') || port === 445 || port === 139) {
-    tools.push('crackmapexec smb', 'netexec smb', 'enum4linux-ng', 'smbclient -L', 'smbmap');
-    if (v.includes('3.0.20')) cve = 'Possible: CVE-2007-2447 (Samba usermap script RCE)';
-    else if (v.includes('samba')) cve = 'Samba Null Session / Share Enumeration';
-    else cve = 'MS17-010 (EternalBlue) / Signing Check';
-  } else if (s.includes('kerberos') || port === 88) {
-    tools.push('kerbrute userenum', 'GetNPUsers.py (AS-REP)', 'GetUserSPNs.py (Kerberoast)');
-    cve = 'Active Directory Kerberos KDC';
-  } else if (s.includes('ldap') || port === 389 || port === 636 || port === 3268) {
-    tools.push('ldapsearch -x', 'bloodhound-python', 'netexec ldap');
-    cve = 'Active Directory Domain Controller LDAP';
-  } else if (s.includes('dns') || s.includes('domain') || port === 53) {
-    tools.push('dig axfr', 'dnsrecon');
-  } else if (s.includes('mysql') || port === 3306) {
-    tools.push('mysql -h <IP> -u root -p', 'sqlmap');
-  } else if (s.includes('mssql') || s.includes('ms-sql') || port === 1433) {
-    tools.push('crackmapexec mssql', 'mssqlclient.py');
-    cve = 'xp_cmdshell Execution / Linked Database Abuse';
-  } else if (s.includes('winrm') || port === 5985 || port === 5986) {
-    tools.push('evil-winrm -i <IP> -u <USER> -p <PASS>');
-  } else if (s.includes('rdp') || port === 3389) {
-    tools.push('xfreerdp /v:<IP> /u:<USER>', 'rdesktop');
-    if (v.includes('5.1') || v.includes('6.0')) cve = 'Possible: CVE-2019-0708 (BlueKeep)';
-  } else if (s.includes('snmp') || port === 161) {
-    tools.push('snmpwalk -v2c -c public', 'onesixtyone');
-  } else if (s.includes('redis') || port === 6379) {
-    tools.push('redis-cli -h <IP>', 'redis-rogue-server');
-  } else {
-    tools.push('nc -nv', 'nmap -sC -sV');
-  }
-
-  return { tools, cve };
 }
 
 const isValidPort = (p: number): boolean => !isNaN(p) && p >= 1 && p <= 65535;
@@ -153,17 +93,7 @@ export function parseNmapXml(xmlContent: string): ScanImportResult | null {
         const extrainfo = serviceEl?.getAttribute('extrainfo') || '';
         const fullVersion = [product, versionNum, extrainfo].filter(Boolean).join(' ') || 'Unknown Version';
 
-        const { tools, cve } = getServiceIntelligence(portNum, service, fullVersion);
-
-        const parsedPort: ParsedPort = {
-          port: portNum,
-          protocol,
-          state,
-          service,
-          version: fullVersion,
-          suggestedTools: tools,
-          cveNotes: cve,
-        };
+        const parsedPort: ParsedPort = { port: portNum, protocol, state, service, version: fullVersion };
         hostPorts.push(parsedPort);
         allPorts.push(parsedPort);
       });
@@ -181,10 +111,6 @@ export function parseNmapXml(xmlContent: string): ScanImportResult | null {
     if (parsedHosts.length === 0) return null;
 
     const primaryHost = parsedHosts[0];
-    const warnings: string[] = [];
-    if (parsedHosts.length > 1) {
-      warnings.push(`Multi-host scan: ${parsedHosts.length} hosts detected — primary target ports mapped.`);
-    }
 
     return {
       format: 'nmap-xml',
@@ -193,10 +119,6 @@ export function parseNmapXml(xmlContent: string): ScanImportResult | null {
       detectedOs: primaryHost.os,
       ports: primaryHost.ports.length > 0 ? primaryHost.ports : allPorts,
       hosts: parsedHosts,
-      warnings: warnings.length > 0 ? warnings : undefined,
-      rawSummary: parsedHosts.length > 1
-        ? `Nmap XML scan parsed: ${parsedHosts.length} hosts discovered (${allPorts.length} total open ports).`
-        : `Nmap XML scan parsed with ${primaryHost.ports.length} open ports discovered.`,
     };
   } catch {
     return null;
@@ -246,16 +168,7 @@ function parseGrepableNmap(content: string): ScanImportResult | null {
 
             const isOpenState = state === 'open' || state === 'open|filtered';
             if (isOpenState && isValidPort(portNum)) {
-              const { tools, cve } = getServiceIntelligence(portNum, service, version);
-              const gnmapPort: ParsedPort = {
-                port: portNum,
-                protocol: proto,
-                state: state || 'open',
-                service,
-                version,
-                suggestedTools: tools,
-                cveNotes: cve,
-              };
+              const gnmapPort: ParsedPort = { port: portNum, protocol: proto, state: state || 'open', service, version };
               ports.push(gnmapPort);
               lineHost?.ports.push(gnmapPort);
             }
@@ -273,7 +186,6 @@ function parseGrepableNmap(content: string): ScanImportResult | null {
     detectedHost,
     ports,
     ...(hostsByIp.size > 1 ? { hosts: Array.from(hostsByIp.values()) } : {}),
-    rawSummary: `Grepable Nmap scan parsed with ${ports.length} open ports.`,
   };
 }
 
@@ -312,44 +224,31 @@ export function parseRustscan(content: string): ScanImportResult | null {
       detectedHost: nmapTextResult.detectedHost,
       detectedOs: nmapTextResult.detectedOs,
       ports: nmapTextResult.ports,
-      rawSummary: `Rustscan parsed: ${nmapTextResult.ports.length} open ports detected.`,
     };
   }
 
   if (discoveredPorts.length === 0) return null;
 
   const uniquePorts = Array.from(new Set(discoveredPorts)).sort((a, b) => a - b);
-  const ports: ParsedPort[] = uniquePorts.map((portNum) => {
-    const { tools, cve } = getServiceIntelligence(portNum, 'unknown', 'Unknown');
-    return {
-      port: portNum,
-      protocol: 'tcp',
-      state: 'open',
-      service: 'unknown',
-      version: 'Unknown',
-      suggestedTools: tools,
-      cveNotes: cve,
-    };
-  });
+  const ports: ParsedPort[] = uniquePorts.map((portNum) => ({
+    port: portNum,
+    protocol: 'tcp',
+    state: 'open',
+    service: 'unknown',
+    version: 'Unknown',
+  }));
 
-  return {
-    format: 'rustscan',
-    detectedIp,
-    ports,
-    rawSummary: `Rustscan parsed: ${ports.length} open ports detected on target.`,
-  };
+  return { format: 'rustscan', detectedIp, ports };
 }
 
 const IPV4_SRC = String.raw`(?:\d{1,3}\.){3}\d{1,3}`;
 const IPV6_SRC = String.raw`(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}(?:%\w+)?`;
 const HOST_REPORT_REGEX = new RegExp(`Nmap scan report for (?:([^\\s(]+)\\s\\()?(${IPV4_SRC}|${IPV6_SRC})?`, 'i');
 const PORT_LINE_REGEX = /^(\d{1,5})\/(tcp|udp)\s+(open(?:\|filtered)?)\s+(\S+)\s*([^\r\n]*)/i;
-const NSE_LINE_REGEX = /^\s*(?:\|_|[|_])\s*([\w-]+):\s*(.*)$/;
-const NSE_SUB_LINE_REGEX = /^\s*(?:\|_|[|_])\s+(.*)$/;
 
 /**
  * Parse Standard Nmap text output (.nmap / console output)
- * Supports IPv4/IPv6 target identification, service versioning, and NSE script capture
+ * Supports IPv4/IPv6 target identification and service versioning
  */
 function parseNmapText(content: string): ScanImportResult | null {
   // Also accept headerless snippets made of bare "22/tcp open ssh" port lines
@@ -380,62 +279,18 @@ function parseNmapText(content: string): ScanImportResult | null {
   const osMatch = content.match(/Service Info:[^\n\r]*?\bOSs?:\s*([^;\n\r]+)/i);
 
   const ports: ParsedPort[] = [];
-  let currentPort: ParsedPort | null = null;
-
   for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-
-    const pMatch = trimmed.match(PORT_LINE_REGEX);
-    if (pMatch) {
-      const portNum = parseInt(pMatch[1], 10);
-      if (!isValidPort(portNum)) {
-        currentPort = null;
-        continue;
-      }
-      const proto = pMatch[2].toLowerCase();
-      const state = pMatch[3].toLowerCase();
-      const service = pMatch[4].toLowerCase();
-      const version = pMatch[5].trim() || 'Unknown Version';
-
-      const { tools, cve } = getServiceIntelligence(portNum, service, version);
-
-      const newPort: ParsedPort = {
-        port: portNum,
-        protocol: proto,
-        state,
-        service,
-        version,
-        suggestedTools: tools,
-        cveNotes: cve,
-        scripts: {},
-      };
-      currentPort = newPort;
-      ports.push(newPort);
-      continue;
-    }
-
-    const nse = line.match(NSE_LINE_REGEX);
-    if (nse && currentPort) {
-      currentPort.scripts = currentPort.scripts || {};
-      const scriptName = nse[1];
-      const scriptData = nse[2].trim();
-      currentPort.scripts[scriptName] = scriptData;
-
-      if (scriptName.includes('anon') && /allowed|anonymous/i.test(scriptData)) {
-        currentPort.cveNotes = currentPort.cveNotes ? `${currentPort.cveNotes} | Anon Access` : 'Anonymous Access Allowed';
-      }
-      continue;
-    }
-
-    const nseSub = line.match(NSE_SUB_LINE_REGEX);
-    if (nseSub && currentPort && currentPort.scripts) {
-      const scriptKeys = Object.keys(currentPort.scripts);
-      if (scriptKeys.length > 0) {
-        const lastKey = scriptKeys[scriptKeys.length - 1];
-        currentPort.scripts[lastKey] += `\n${nseSub[1].trim()}`;
-      }
-    }
+    const pMatch = line.trim().match(PORT_LINE_REGEX);
+    if (!pMatch) continue;
+    const portNum = parseInt(pMatch[1], 10);
+    if (!isValidPort(portNum)) continue;
+    ports.push({
+      port: portNum,
+      protocol: pMatch[2].toLowerCase(),
+      state: pMatch[3].toLowerCase(),
+      service: pMatch[4].toLowerCase(),
+      version: pMatch[5].trim() || 'Unknown Version',
+    });
   }
 
   if (ports.length === 0 && !detectedIp) return null;
@@ -462,7 +317,6 @@ function parseNmapText(content: string): ScanImportResult | null {
     detectedOs: osMatch ? osMatch[1].trim() : undefined,
     ports,
     ...(hosts ? { hosts } : {}),
-    rawSummary: `Standard Nmap scan report: ${ports.length} open ports identified.`,
   };
 }
 
@@ -519,25 +373,15 @@ export function detectAndParseScan(rawInput: string): ScanImportResult | null {
 
   if (candidateMatches.length > 0) {
     const uniquePorts = Array.from(new Set(candidateMatches)).sort((a, b) => a - b);
-    const ports: ParsedPort[] = uniquePorts.map((p) => {
-      const { tools, cve } = getServiceIntelligence(p, 'tcp');
-      return {
-        port: p,
-        protocol: 'tcp',
-        state: 'open',
-        service: 'service',
-        version: 'Raw port intake',
-        suggestedTools: tools,
-        cveNotes: cve,
-      };
-    });
+    const ports: ParsedPort[] = uniquePorts.map((p) => ({
+      port: p,
+      protocol: 'tcp',
+      state: 'open',
+      service: 'service',
+      version: 'Raw port intake',
+    }));
 
-    return {
-      format: 'raw-ports',
-      detectedIp,
-      ports,
-      rawSummary: `Manual port intake: ${ports.length} ports extracted${detectedIp ? ` for ${detectedIp}` : ''}.`,
-    };
+    return { format: 'raw-ports', detectedIp, ports };
   }
 
   return null;
@@ -584,54 +428,19 @@ function addMultiHost(
 
 function parseMultiHostPortBlock(content: string): ParsedPort[] {
   const ports: ParsedPort[] = [];
-  let currentPort: ParsedPort | null = null;
   for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-
-    const pMatch = trimmed.match(PORT_LINE_REGEX);
-    if (pMatch) {
-      const portNum = parseInt(pMatch[1], 10);
-      if (!isValidPort(portNum)) {
-        currentPort = null;
-        continue;
-      }
-      if (ports.length >= MAX_PORTS_PER_MULTI_HOST) {
-        currentPort = null;
-        continue;
-      }
-      const proto = pMatch[2].toLowerCase();
-      const state = pMatch[3].toLowerCase();
-      const service = pMatch[4].toLowerCase();
-      const version = pMatch[5].trim() || 'Unknown Version';
-      const { tools, cve } = getServiceIntelligence(portNum, service, version);
-      const newPort: ParsedPort = {
-        port: portNum,
-        protocol: proto,
-        state,
-        service,
-        version,
-        suggestedTools: tools,
-        cveNotes: cve,
-        scripts: {},
-      };
-      currentPort = newPort;
-      ports.push(newPort);
-      continue;
-    }
-
-    const nse = line.match(NSE_LINE_REGEX);
-    if (nse && currentPort) {
-      currentPort.scripts = currentPort.scripts || {};
-      currentPort.scripts[nse[1]] = nse[2].trim();
-      continue;
-    }
-
-    const nseSub = line.match(NSE_SUB_LINE_REGEX);
-    if (nseSub && currentPort && currentPort.scripts) {
-      const keys = Object.keys(currentPort.scripts);
-      if (keys.length > 0) currentPort.scripts[keys[keys.length - 1]] += `\n${nseSub[1].trim()}`;
-    }
+    if (ports.length >= MAX_PORTS_PER_MULTI_HOST) break;
+    const pMatch = line.trim().match(PORT_LINE_REGEX);
+    if (!pMatch) continue;
+    const portNum = parseInt(pMatch[1], 10);
+    if (!isValidPort(portNum)) continue;
+    ports.push({
+      port: portNum,
+      protocol: pMatch[2].toLowerCase(),
+      state: pMatch[3].toLowerCase(),
+      service: pMatch[4].toLowerCase(),
+      version: pMatch[5].trim() || 'Unknown Version',
+    });
   }
   return ports;
 }
@@ -660,16 +469,7 @@ function normalizeJsonPort(raw: unknown): ParsedPort | null {
   if (!isValidPort(portNum)) return null;
   if (state && state !== 'open' && state !== 'open|filtered') return null;
 
-  const { tools, cve } = getServiceIntelligence(portNum, service, version);
-  return {
-    port: portNum,
-    protocol,
-    state: state || 'open',
-    service,
-    version,
-    suggestedTools: tools,
-    cveNotes: cve,
-  };
+  return { port: portNum, protocol, state: state || 'open', service, version };
 }
 
 function parseMultiHostJson(trimmed: string): ParsedMultiHost[] | null {
@@ -793,8 +593,7 @@ export function parseMultiHostScan(raw: string): ParsedMultiHost[] {
           const versionNum = serviceEl?.getAttribute('version') || '';
           const extrainfo = serviceEl?.getAttribute('extrainfo') || '';
           const fullVersion = [product, versionNum, extrainfo].filter(Boolean).join(' ') || 'Unknown Version';
-          const { tools, cve } = getServiceIntelligence(portNum, service, fullVersion);
-          ports.push({ port: portNum, protocol, state, service, version: fullVersion, suggestedTools: tools, cveNotes: cve });
+          ports.push({ port: portNum, protocol, state, service, version: fullVersion });
         });
 
         if (!ip && ports.length === 0) return;
@@ -844,8 +643,7 @@ export function parseMultiHostScan(raw: string): ParsedMultiHost[] {
             const version = (parts[6] || parts[5] || 'Unknown Version').trim();
             const isOpenState = state === 'open' || state === 'open|filtered';
             if (!isOpenState || !isValidPort(portNum)) continue;
-            const { tools, cve } = getServiceIntelligence(portNum, service, version);
-            ports.push({ port: portNum, protocol: proto, state: state || 'open', service, version, suggestedTools: tools, cveNotes: cve });
+            ports.push({ port: portNum, protocol: proto, state: state || 'open', service, version });
           }
         }
 

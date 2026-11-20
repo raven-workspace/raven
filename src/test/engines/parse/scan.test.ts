@@ -1,40 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
-  getServiceIntelligence,
   parseNmapXml,
   parseRustscan,
   detectAndParseScan,
 } from '../../../engines/parse/scan';
 
 describe('scanParserUtils', () => {
-  describe('getServiceIntelligence', () => {
-    it('returns FTP tools and detects vsftpd 2.3.4 backdoor CVE', () => {
-      const result = getServiceIntelligence(21, 'ftp', 'vsftpd 2.3.4');
-      expect(result.tools).toContain('ftp');
-      expect(result.tools).toContain('hydra');
-      expect(result.cve).toContain('CVE-2011-2523');
-    });
-
-    it('returns SMB tools and detects Samba 3.0.20 RCE', () => {
-      const result = getServiceIntelligence(445, 'microsoft-ds', 'Samba 3.0.20');
-      expect(result.tools.some((t) => t.includes('smb'))).toBe(true);
-      expect(result.cve).toContain('CVE-2007-2447');
-    });
-
-    it('returns web enumeration tools for HTTP ports', () => {
-      const result = getServiceIntelligence(80, 'http', 'Apache 2.4.49');
-      expect(result.tools).toContain('ffuf');
-      expect(result.tools).toContain('gobuster');
-      expect(result.cve).toContain('CVE-2021-41773');
-    });
-
-    it('returns generic fallback tools for unmapped services', () => {
-      const result = getServiceIntelligence(9999, 'custom-service', 'v1.0');
-      expect(result.tools).toContain('nc -nv');
-      expect(result.tools).toContain('nmap -sC -sV');
-    });
-  });
-
   describe('parseNmapXml', () => {
     it('parses valid Nmap XML output extracting host IP and open ports', () => {
       const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -191,7 +162,6 @@ Open 10.10.10.212:8080
       expect(res?.hosts).toHaveLength(2);
       expect(res?.hosts?.[0].ip).toBe('10.10.10.211');
       expect(res?.hosts?.[1].ip).toBe('10.10.10.162');
-      expect(res?.warnings?.[0]).toContain('Multi-host scan: 2 hosts detected');
     });
 
     it('parses IPv6 addresses in Nmap XML', () => {
@@ -233,7 +203,7 @@ Open 10.10.10.212:8080
       expect(res).toBeNull();
     });
 
-    it('parses IPv6 addresses and captures NSE script outputs in standard Nmap text mode', () => {
+    it('parses IPv6 addresses in standard Nmap text mode without reading NSE script lines as ports', () => {
       const nmapText = `
 Nmap scan report for ipv6.target.lab (fe80::1ff:fe23:4567:890a)
 Host is up (0.0020s latency).
@@ -252,10 +222,9 @@ PORT   STATE SERVICE VERSION
       expect(res?.detectedHost).toBe('ipv6.target.lab');
       expect(res?.ports).toHaveLength(2);
       expect(res?.ports[0].port).toBe(21);
-      expect(res?.ports[0].scripts?.['ftp-anon']).toContain('Anonymous FTP login allowed');
-      expect(res?.ports[0].cveNotes).toContain('CVE-2011-2523');
+      expect(res?.ports[0].version).toBe('vsftpd 2.3.4');
       expect(res?.ports[1].port).toBe(80);
-      expect(res?.ports[1].cveNotes).toContain('CVE-2021-41773');
+      expect(res?.ports[1].version).toBe('Apache httpd 2.4.49');
     });
   });
 
