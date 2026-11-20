@@ -10,7 +10,7 @@ import { hostLabel } from "../credentials/AccessGrants";
 import { FactsColumn } from "../hosts/facts/FactsColumn";
 import { LogEntryRow } from "../log/LogEntryRow";
 import { useLog } from "../log/queries";
-import { byOrder, usePersistedOrder } from "../log/usePersistedOrder";
+import { byOrder, useLogOrder } from "../log/useLogOrder";
 import { NoteEditor } from "../notes/NoteEditor";
 
 export type ContextTab = "log" | "facts" | "notes";
@@ -39,7 +39,7 @@ export function SplitLeftPane({ eid, hosts, hostIds, preferredHostId, tab, onTab
   onPick: (entryId: string) => void;
 }) {
   const log = useLog(eid);
-  const [order] = usePersistedOrder("raven.log.order", "oldest", "raven.story.order");
+  const [order] = useLogOrder("oldest", true);
   const [chosen, setChosen] = useState(preferredHostId);
   const [openEntry, setOpenEntry] = useState<string>();
   // The chosen host while it is still affected; else the first affected one; with none, the engagement.

@@ -1,6 +1,6 @@
 import { SortAscendingIcon, SortDescendingIcon } from "@phosphor-icons/react";
 import { IconButton } from "../../ui";
-import type { LogOrder } from "./usePersistedOrder";
+import type { LogOrder } from "./useLogOrder";
 
 /** Flips a list between newest-first and oldest-first. The icon and its name show the order the list is in now. */
 export function OrderButton({ order, onChange, className }: { order: LogOrder; onChange: (o: LogOrder) => void; className?: string }) {

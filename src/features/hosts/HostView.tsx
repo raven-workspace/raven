@@ -12,7 +12,7 @@ import { useLog } from "../log/queries";
 import { LogDays } from "../log/LogDays";
 import { LogEntryRow } from "../log/LogEntryRow";
 import { OrderButton } from "../log/OrderButton";
-import { byOrder, usePersistedOrder } from "../log/usePersistedOrder";
+import { byOrder, useLogOrder } from "../log/useLogOrder";
 import { useArsenalStore } from "../arsenal/useArsenalStore";
 import { usePayloadsStore } from "../payloads/usePayloadsStore";
 import { useNotesStore } from "../notes/useNotesStore";
@@ -64,7 +64,7 @@ export function HostView({ engagementId, hostId }: { engagementId: string; hostI
   // A Stuck check line arrives with the goal to open; the state is cleared below so back/forward does not repeat it.
   const arrivedGoal = (location.state as { goalId?: string } | null)?.goalId;
   const [tab, setTab] = useState<TabId>("next");
-  const [order, setOrder] = usePersistedOrder("raven.log.order", "oldest", "raven.story.order");
+  const [order, setOrder] = useLogOrder("oldest", true);
   const [openEntry, setOpenEntry] = useState<string>();
   const [focusGoal, setFocusGoal] = useState<{ id: string; n: number } | undefined>(arrivedGoal ? { id: arrivedGoal, n: 1 } : undefined);
   // A goal asked for (a Stuck check line) opens in the full checklist.
