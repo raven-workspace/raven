@@ -1,3 +1,5 @@
+@use "sass:list";
+
 // A type role from DESIGN.md (tokens: --text-<role>, --text-<role>--line-height, and --text-<role>--font-weight for
 // title, heading, read-title and label). `code` is the monospace role: it also sets the family and turns ligatures off.
 $weighted-roles: (title, heading, read-title, label);
@@ -19,7 +21,7 @@ $weighted-roles: (title, heading, read-title, label);
 @mixin type($role) {
   font-size: var(--text-#{$role});
   line-height: var(--text-#{$role}--line-height);
-  @if index($weighted-roles, $role) {
+  @if list.index($weighted-roles, $role) {
     font-weight: var(--text-#{$role}--font-weight);
   }
   @if $role == code {

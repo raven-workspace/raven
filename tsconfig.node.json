@@ -10,6 +10,7 @@
     "types": ["node"],
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "emitDeclarationOnly": true,
+    "allowImportingTsExtensions": true,
     "outDir": "node_modules/.tmp/tsc-node"
   },
   "include": ["vite.config.ts", "vitest.config.ts", "src/audit/vitePlugin.ts", "src/audit/fixtures.ts", "src/audit/examFixtures.ts", "src/audit/capturedHost.ts", "src/audit/examTexts.ts", "src/audit/images/index.ts", "src/test/fixtures/report-layout5-web01.json", "src/types/**/*.ts", "audit/**/*.ts", "src/engines/**/*.ts"]

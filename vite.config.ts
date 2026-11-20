@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { auditApiPlugin } from "./src/audit/vitePlugin";
+import { auditApiPlugin } from "./src/audit/vitePlugin.ts";
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
