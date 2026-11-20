@@ -58,7 +58,9 @@ describe("HostChip", () => {
     const user = userEvent.setup();
     const { chip } = setup();
     await user.click(chip());
-    expect(screen.getByRole("listbox").className).toContain("min-w-[max(100%,12rem)]");
+    // ChipPicker.scss: the list is at least as wide as the trigger (min-width: max(100%, 12rem)) unless `wide`.
+    expect(screen.getByRole("listbox")).toHaveClass("chip-picker__list");
+    expect(screen.getByRole("listbox")).not.toHaveClass("chip-picker__list--wide");
   });
 
   it("typing while focus is elsewhere never changes the host", async () => {

@@ -4,6 +4,7 @@ import { shortHostName } from "../../lib/hostName";
 import type { Host } from "../../types/host";
 import { ChipPicker } from "./ChipPicker";
 import type { ChipOption, ChipPickerHandle } from "./ChipPicker";
+import "./HostChip.scss";
 
 export type HostChipHandle = ChipPickerHandle;
 
@@ -11,7 +12,7 @@ export type HostChipHandle = ChipPickerHandle;
  * The host picker: a bordered "Host  dc01" trigger in the Tab order. A click, Enter or ⌥H (see `isHostPickKey`, `ref.open()`) opens a listbox of "No host" plus each host with its IP.
  * `engagementName` is added to the tooltip when the engagement is not the route's (full-screen Arsenal).
  */
-export function HostChip({ hosts, value, onChange, onMousePick, engagementName, align = "end", className = "max-w-2/5", ref }: {
+export function HostChip({ hosts, value, onChange, onMousePick, engagementName, align = "end", className = "host-chip--share", ref }: {
   hosts: Host[]; value: string | null; onChange: (hostId: string | null) => void; engagementName?: string;
   /** After a click on a host (not a key): where focus goes next (ChipPicker's `onMousePick`). */
   onMousePick?: (id: string | null) => void;
@@ -25,7 +26,7 @@ export function HostChip({ hosts, value, onChange, onMousePick, engagementName, 
   const shown = current ? (engagementName ? `${shortName} in ${engagementName}` : shortName) : "No host";
   const options: ChipOption[] = [{ id: null, name: "No host" }, ...hosts.map((h) => ({ id: h.id, name: h.name, detail: h.ip ?? "" }))];
   return (
-    <div className={cx("grid min-w-0", className)}>
+    <div className={cx("host-chip", className)}>
       <ChipPicker
         ref={ref}
         options={options}

@@ -1,6 +1,7 @@
 import type { HTMLAttributes, Ref } from "react";
 import { labelClass } from "../../ui";
-import { ON } from "./styles";
+import { cx } from "../../lib/cx";
+import "./ResultList.scss";
 
 /** What a result row shows: a title and a small tag at its right (a count, a card/tool, an engagement item's kind). */
 export interface ResultRow {
@@ -24,7 +25,7 @@ export interface ResultGroup<R extends ResultRow> {
 
 /**
  * The Arsenal drawer's and ⌘K's results: `role=listbox` of `role=group`s (named by a plain heading, never an h3)
- * holding `role=option` rows. Rows are numbered across the groups in order; `selected` is the row number on `ON`.
+ * holding `role=option` rows. Rows are numbered across the groups in order; `selected` is the row number (aria-selected).
  * Hover only tints a row: selection is set by click or keys, never by the pointer. Focus stays in the search field, which points at the row with `aria-activedescendant`.
  */
 export function ResultList<R extends ResultRow>({ id, label, groups, selected, onActivate, listRef, listProps }: {
@@ -44,29 +45,29 @@ export function ResultList<R extends ResultRow>({ id, label, groups, selected, o
         aria-selected={i === selected}
         onClick={() => onActivate(r, i)}
         title={r.title}
-        className={`grid cursor-default ${r.stack ? "grid-cols-[minmax(0,1fr)] gap-0" : "grid-cols-[minmax(0,1fr)_auto] items-center gap-2"} rounded-sm px-2 py-1 text-left text-body ${i === selected ? ON : "text-fg-2 hover:bg-surface-hi"}`}
+        className={cx("result-list__row", r.stack && "result-list__row--stack")}
       >
-        <span className="min-w-0 truncate">{r.title}</span>
-        {r.tag && <span className={`min-w-0 truncate text-meta text-muted ${r.mono ? "font-mono" : ""} ${r.stack ? "whitespace-pre" : "max-w-40"}`}>{r.tag}</span>}
+        <span className="result-list__title">{r.title}</span>
+        {r.tag && <span className={cx("result-list__tag", r.mono && "result-list__tag--mono", r.stack && "result-list__tag--stack")}>{r.tag}</span>}
       </div>
     );
   };
   return (
-    <div ref={listRef} id={id} role="listbox" aria-label={label} className="grid grid-cols-[minmax(0,1fr)] gap-2 outline-none" {...listProps}>
+    <div ref={listRef} id={id} role="listbox" aria-label={label} className="result-list" {...listProps}>
       {groups.map((g) => {
         if (g.label === undefined && g.lead === undefined) return g.rows.map(option);
         const headingId = `${id}-group-${g.key}`;
         return (
           <div
-            key={g.key} role="group" className="grid grid-cols-[minmax(0,1fr)] border-t border-line pt-2 first:border-t-0 first:pt-0"
+            key={g.key} role="group" className="result-list__group"
             // A lead names its group by key, then its line ("KRB_AP_ERR_SKEW The clocks…"), so the key is heard first.
             aria-labelledby={g.lead ? `${headingId}-code${g.lead.text ? ` ${headingId}-text` : ""}` : headingId}
           >
-            {g.label !== undefined && <div id={g.lead ? undefined : headingId} className={`px-2 pb-1 ${labelClass}`}>{g.label}</div>}
+            {g.label !== undefined && <div id={g.lead ? undefined : headingId} className={cx(labelClass, "result-list__label")}>{g.label}</div>}
             {g.lead && (
-              <div className="grid grid-cols-[minmax(0,1fr)] gap-0 px-2 pb-1">
-                <code id={`${headingId}-code`} className="min-w-0 truncate font-mono text-body text-fg">{g.lead.code}</code>
-                {g.lead.text && <span id={`${headingId}-text`} className="min-w-0 text-meta text-muted-2">{g.lead.text}</span>}
+              <div className="result-list__lead">
+                <code id={`${headingId}-code`} className="result-list__lead-code">{g.lead.code}</code>
+                {g.lead.text && <span id={`${headingId}-text`} className="result-list__lead-text">{g.lead.text}</span>}
               </div>
             )}
             {g.rows.map(option)}

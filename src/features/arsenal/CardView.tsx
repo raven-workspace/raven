@@ -18,6 +18,7 @@ import { WikiText } from "./WikiText";
 import { FillBar } from "./FillBar";
 import { autoFill, tokensOf } from "./fillTokens";
 import { RavenError } from "../../types/errors";
+import "./CardView.scss";
 
 const COPY_BUTTON = 'button[aria-label^="Copy command"]';
 const CRED_CHIP = '[aria-label^="Fill with credential"]';
@@ -224,10 +225,7 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
       key={c.id} id={`block-${c.id}`} data-block="" data-block-id={c.id} tabIndex={-1}
       // The ring stands 6px clear of the block as an outline: outlines take no room, so the block never widens its column,
       // and 6px plus the 1px line stays inside the reading pane's 8px left padding (which clips sideways).
-      className={cx(
-        "grid scroll-mt-14 gap-1 rounded-sm outline-offset-6 outline-accent",
-        marked === c.id ? "outline-1 outline-solid" : "outline-none focus:outline-1 focus:outline-solid",
-      )}
+      className={cx("command-pane__block", marked === c.id && "command-pane__block--marked")}
     >
       <CommandList
         commands={[fillLibraryCommand(c, input, msf.has(c.id))]} hostName={hostName} hideDcNote strongTitles
@@ -240,27 +238,27 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
           focusCredChip?.();
         }}
       />
-      {c.why && <p className="m-0 text-meta text-muted"><WikiText text={c.why} onOpenCard={onOpenCard} /></p>}
+      {c.why && <p className="command-pane__note"><WikiText text={c.why} onOpenCard={onOpenCard} /></p>}
     </div>
   );
 
   return (
-    <div ref={root} tabIndex={-1} onKeyDown={onKeyDown} className="grid grid-cols-[minmax(0,1fr)] gap-4 outline-none">
+    <div ref={root} tabIndex={-1} onKeyDown={onKeyDown} className="command-pane">
       {hasStrip && (
         // Even padding above and below: the labels and the scroll arrows share the strip's middle.
         <nav
           aria-label="On this card"
-          className={cx("sticky -top-3 z-10 grid items-center gap-1 border-b border-line bg-(--pane-bg,var(--surface)) py-2", overflowing ? "grid-cols-[28px_minmax(0,1fr)_28px]" : "grid-cols-[minmax(0,1fr)]")}
+          className={cx("command-pane__strip", overflowing && "command-pane__strip--overflowing")}
         >
           {overflowing && <IconButton icon={CaretLeft} label="Earlier blocks" disabled={!edges.start} onClick={() => scrollStrip(-1)} />}
           <div
             ref={stripRow} data-scroll-x="" onScroll={measureStrip} style={fade ? { maskImage: fade, WebkitMaskImage: fade } : undefined}
-            className="relative grid auto-cols-max grid-flow-col gap-4 overflow-x-auto px-1 py-1 text-meta [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="command-pane__strip-row"
           >
             {main.shown.map((c) => (
               <button
                 key={c.id} type="button" data-for={c.id} title={c.title} onClick={() => jump(c.id)} aria-current={inView === c.id ? "location" : undefined}
-                className={cx("max-w-48 cursor-pointer truncate border-0 bg-transparent px-0 py-1 text-meta hover:text-fg", inView === c.id ? "text-accent" : "text-muted-2")}
+                className="command-pane__strip-item"
               >
                 {c.title}
               </button>
@@ -274,11 +272,11 @@ export function CommandPane({ commands, also = [], engagementId, hostId, overrid
         os={host?.os === "linux" || host?.os === "windows" ? host.os : null}
         fieldRef={(t, el) => (el ? fieldEls.current.set(t, el) : fieldEls.current.delete(t))}
       />
-      <div className="grid gap-6">{main.shown.map((c) => block(c, main.msfMarker))}</div>
-      {main.shown.length === 0 && commands.length > 0 && <p className="m-0 text-meta text-muted">Nothing here is allowed in this exam.</p>}
+      <div className="command-pane__blocks">{main.shown.map((c) => block(c, main.msfMarker))}</div>
+      {main.shown.length === 0 && commands.length > 0 && <p className="command-pane__note">Nothing here is allowed in this exam.</p>}
       {extra.shown.length > 0 && (
         <Disclosure label="Also in Raven" count={extra.shown.length} open={alsoOpen} onOpenChange={setAlsoOpen}>
-          <div className="grid gap-6 pt-3">{extra.shown.map((c) => block(c, extra.msfMarker))}</div>
+          <div className="command-pane__blocks command-pane__blocks--also">{extra.shown.map((c) => block(c, extra.msfMarker))}</div>
         </Disclosure>
       )}
     </div>
@@ -307,7 +305,7 @@ export function CardView({ cardId, engagementId, hostId, overrides, onOverrides,
   }, [commands, version]);
   /* eslint-enable react-hooks/exhaustive-deps */
 
-  if (!card) return <p className="m-0 text-meta text-muted">That card is not in the library.</p>;
+  if (!card) return <p className="card-view__missing">That card is not in the library.</p>;
   const openInObsidian = () => {
     setObsidianError(undefined);
     api.openObsidian(card.file).catch((e: unknown) => {
@@ -316,18 +314,18 @@ export function CardView({ cardId, engagementId, hostId, overrides, onOverrides,
     });
   };
   return (
-    <article className="grid grid-cols-[minmax(0,1fr)] gap-3" aria-label={card.title}>
-      <header className="grid gap-1">
-        <h2 className="m-0 text-heading text-fg">{card.title}</h2>
-        <p className="m-0 grid grid-flow-col justify-start gap-2 text-meta text-muted"><span>{categoryLabel(card.category)}</span><span>{card.os}</span></p>
+    <article className="card-view" aria-label={card.title}>
+      <header className="card-view__header">
+        <h2 className="card-view__title">{card.title}</h2>
+        <p className="card-view__where"><span>{categoryLabel(card.category)}</span><span>{card.os}</span></p>
       </header>
       <CommandPane
         key={cardId} commands={commands} also={also} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={onOverrides}
         focusCred={focusCred} focusBlockId={focusBlockId} autoFocus={autoFocus} onOpenCard={onOpenCard} contents
       />
-      <div className="grid justify-items-start gap-1">
+      <div className="card-view__actions">
         <Button size="sm" onClick={openInObsidian}>Open in Obsidian</Button>
-        {obsidianError && <p role="alert" className="m-0 text-meta text-warn">{obsidianError}</p>}
+        {obsidianError && <p role="alert" className="card-view__error">{obsidianError}</p>}
       </div>
     </article>
   );

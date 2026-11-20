@@ -465,3 +465,33 @@
 - [x] Type check and lint
 - [x] Pixel diff: 297/297
 - [x] Audit gate: 660/660
+
+## Unit: arsenal
+
+### Changes
+- One sheet per component: SearchBar, ResultList, ChipPicker, HostChip, CredChip, WikiText, FillBar, CommandPreview,
+  CardView (`.command-pane`, `.card-view`), ArsenalBrowse, ArsenalDrawer.
+- State on existing attributes: result rows and picker options on `aria-selected`, browse category tabs on
+  `aria-selected` and `data-dim`, the card strip on `aria-current="location"`, the picker list's side as a
+  `--start|--end` modifier. The search bar's focus ring is `&:has(input:focus-visible)`.
+- Browse breakpoints are `@media (width >= 1100px)`, `(width >= 1280px)` and `(width < 1099px)`, exactly as Tailwind
+  emitted them.
+- HostChip and CredChip keep their "share of the row" default as a class (`host-chip--share`, 40%; `cred-chip--share`,
+  50%) used only when the caller passes no `className`, as the default prop did. Callers in other features use a
+  two-class rule (`.palette .palette__chip`).
+- FillBar's `border-warn!`, `text-fg!`, `text-fg-2!` become plain feature-layer modifiers on the Input primitive: the
+  features layer already beats every `.control` state rule, so the `!important` is not needed.
+- `rounded-md` emits `--radius-sm` under Raven's theme and is written as such.
+- `styles.ts` keeps exporting `ON` (a Tailwind string) for ManualRail, which is not migrated; ResultList no longer uses
+  it.
+
+### Verification
+- [x] Unit tests (hostChip, resultList, fillBar, cardView and arsenal assertions moved to the BEM classes or the
+      SearchBar.scss rule)
+- [x] Type check and lint
+- [x] Pixel diff: 297/297 (findings@900/1280 passed on retry)
+- [x] Audit gate: 660/660. Under this machine's load, palette:kbd, palette-lookup:kbd and the two payloads-drawer
+      regressions failed in the full run and passed on rerun with one worker. The same four fail on the base commit
+      (0034c4e) at the same load: the tab walks run close to the 30s test timeout, and the `open()` helper's
+      `getByRole("button", { name: /Search/ })` races a host page whose commands include "Copy command: Search
+      Exploit-DB…" (a strict-mode violation when the page renders before the wait).

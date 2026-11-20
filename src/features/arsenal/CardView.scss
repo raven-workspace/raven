@@ -1,0 +1,143 @@
+@use "@/styles/abstracts" as *;
+
+// A card's command pane (its strip of block titles, fill fields and blocks) and the card around it.
+@layer features {
+  .command-pane {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-lg);
+    outline-style: none;
+  }
+
+  // Sticks 12px above the pane's top, on the pane's own background (--pane-bg, the surface by default).
+  .command-pane__strip {
+    position: sticky;
+    top: -0.75rem;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-xs);
+    padding-block: var(--space-sm);
+    border-bottom: 1px solid var(--line);
+    background-color: var(--pane-bg, var(--surface));
+  }
+
+  // Scroll arrows either side once the titles overflow.
+  .command-pane__strip--overflowing {
+    grid-template-columns: 28px minmax(0, 1fr) 28px;
+  }
+
+  // The strip hides its scrollbar; a faded edge (set inline) says there is more that way.
+  .command-pane__strip-row {
+    position: relative;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    gap: var(--space-lg);
+    padding: var(--space-xs);
+    overflow-x: auto;
+    @include type(meta);
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  .command-pane__strip-item {
+    max-width: 12rem;
+    padding-block: var(--space-xs);
+    @include truncate;
+    @include type(meta);
+    color: var(--muted-2);
+    cursor: pointer;
+
+    &[aria-current="location"] {
+      color: var(--accent);
+    }
+
+    @media (hover: hover) {
+      &:hover {
+        color: var(--fg);
+      }
+    }
+  }
+
+  .command-pane__blocks {
+    display: grid;
+    gap: var(--space-xl);
+  }
+
+  .command-pane__blocks--also {
+    padding-top: var(--space-md);
+  }
+
+  // The ring stands 6px clear of the block as an outline: it shows while the block has focus, and on the block the
+  // card opened at until the next keypress (--marked).
+  .command-pane__block {
+    display: grid;
+    gap: var(--space-xs);
+    scroll-margin-top: 3.5rem;
+    border-radius: var(--radius-sm);
+    outline-style: none;
+    outline-color: var(--accent);
+    outline-offset: 6px;
+
+    &:focus {
+      outline-style: solid;
+      outline-width: 1px;
+    }
+  }
+
+  .command-pane__block--marked {
+    outline-style: solid;
+    outline-width: 1px;
+  }
+
+  .command-pane__note {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .card-view {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-md);
+  }
+
+  .card-view__header {
+    display: grid;
+    gap: var(--space-xs);
+  }
+
+  .card-view__title {
+    @include type(heading);
+    color: var(--fg);
+  }
+
+  .card-view__where {
+    display: grid;
+    grid-auto-flow: column;
+    justify-content: flex-start;
+    gap: var(--space-sm);
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .card-view__actions {
+    display: grid;
+    justify-items: start;
+    gap: var(--space-xs);
+  }
+
+  .card-view__error {
+    @include type(meta);
+    color: var(--warn);
+  }
+
+  .card-view__missing {
+    @include type(meta);
+    color: var(--muted);
+  }
+}

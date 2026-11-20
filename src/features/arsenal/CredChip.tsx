@@ -4,6 +4,7 @@ import { credLabel } from "../../engines/credentials/labels";
 import type { CredAttempt, Credential } from "../../types/credentials";
 import { ChipPicker } from "./ChipPicker";
 import type { ChipOption, ChipPickerHandle } from "./ChipPicker";
+import "./CredChip.scss";
 
 export type CredChipHandle = ChipPickerHandle;
 
@@ -22,7 +23,7 @@ export function testedState(credId: string, hostId: string | null | undefined, a
  * The credential in use, as a bordered "Credential  CORP\\bob (hash)" trigger in the Tab order (same interaction as `HostChip`).
  * The list shows each credential's kind and how it has fared on `hostId`. Callers write the pick to `useCredPickStore`.
  */
-export function CredChip({ credentials, value, onPick, attempts = [], hostId = null, align = "end", className = "max-w-1/2", ref }: {
+export function CredChip({ credentials, value, onPick, attempts = [], hostId = null, align = "end", className = "cred-chip--share", ref }: {
   credentials: Credential[]; value: Credential | null; onPick: (credId: string | null) => void;
   attempts?: CredAttempt[]; hostId?: string | null; align?: "start" | "end";
   /** Width limits for the chip as a whole (a share of its row by default). */
@@ -33,7 +34,7 @@ export function CredChip({ credentials, value, onPick, attempts = [], hostId = n
     ...credentials.map((c) => ({ id: c.id, name: who(c), detail: kind(c), detail2: testedState(c.id, hostId, attempts) })),
   ];
   return (
-    <div className={cx("grid min-w-0", className)}>
+    <div className={cx("cred-chip", className)}>
       <ChipPicker
         ref={ref}
         options={options}

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -311,7 +312,8 @@ describe("Arsenal", () => {
     // A leading search icon, decorative (hidden from assistive tech).
     expect(barEl.querySelector('[aria-hidden="true"] svg')).not.toBeNull();
     // Focusing the text field rings the whole bar in the accent, like every other input.
-    expect(barEl.className).toMatch(/has-\[input:focus-visible\]:outline-accent/);
+    expect(barEl).toHaveClass("search-bar");
+    expect(readFileSync("src/features/arsenal/SearchBar.scss", "utf8")).toMatch(/&:has\(input:focus-visible\) \{\s*outline: 1px solid var\(--accent\);/);
     expect(bar.queryByRole("button", { name: /^(Host |No host)/ })).not.toBeInTheDocument();
     expect(scopeText(hostChip(d))).toBe("Host dc01");
     const header = d.getByRole("banner");

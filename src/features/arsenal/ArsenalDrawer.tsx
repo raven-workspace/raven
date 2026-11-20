@@ -28,6 +28,7 @@ import type { ResultGroup, ResultRow } from "./ResultList";
 import { useArsenalStore } from "./useArsenalStore";
 import type { GeneratorId } from "../../engines/payloads/types";
 import { usePayloadsStore } from "../payloads/usePayloadsStore";
+import "./ArsenalDrawer.scss";
 import { useFillScope } from "./useFillScope";
 import { RavenError } from "../../types/errors";
 
@@ -279,17 +280,17 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
   return (
     <div
       // A results list keeps a fixed preview row under it: picking a longer or shorter command never moves the list.
-      className={`grid h-full min-h-0 ${previewRow ? "grid-rows-[auto_minmax(0,1fr)_minmax(0,40%)_auto]" : "grid-rows-[auto_minmax(0,1fr)_auto]"}`}
+      className={previewRow ? "arsenal-drawer__body arsenal-drawer__body--preview" : "arsenal-drawer__body"}
       onKeyDownCapture={onKeyCapture}
     >
-      <header className="grid shrink-0 gap-2 border-b border-line px-4 py-3">
-        <div className={`grid items-center gap-2 ${onList ? "grid-cols-[1fr_auto]" : "grid-cols-[auto_1fr_auto]"}`}>
+      <header className="arsenal-drawer__header">
+        <div className={onList ? "arsenal-drawer__bar" : "arsenal-drawer__bar arsenal-drawer__bar--back"}>
           {!onList && (
             <Button size="sm" onClick={back}>
               ← Back
             </Button>
           )}
-          <div className="grid min-w-28">
+          <div className="arsenal-drawer__search">
             <SearchBar
               label="Search the Arsenal"
               inputRef={searchRef}
@@ -319,21 +320,21 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
           </Button>
         </div>
         {engagementId && (
-          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] justify-items-start gap-3">
-            <HostChip ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} className="max-w-full" />
+          <div className="arsenal-drawer__chips">
+            <HostChip ref={pickerRef} hosts={d.hosts} value={host?.id ?? null} onChange={pickHost} className="arsenal-drawer__chip" />
             <CredChip
               ref={credRef} credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred}
-              onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} className="max-w-full"
+              onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} className="arsenal-drawer__chip"
             />
           </div>
         )}
       </header>
-      <div ref={viewRef} className="min-h-0 overflow-y-auto overflow-x-hidden px-4 py-3">
+      <div ref={viewRef} className="arsenal-drawer__view">
         {showing === "card" && cardId && <CardView onOpenCard={openLinkedCard} cardId={cardId} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} focusCred={focusCred} focusBlockId={blockId} />}
         {showing === "solo" && solo && <CommandPane key={solo.id} commands={[solo]} engagementId={engagementId} hostId={hostId} overrides={overrides} onOverrides={setOverrides} focusCred={focusCred} onOpenCard={openLinkedCard} />}
         {onList && (
           <>
-            {examReady && rows.length === 0 && <p className="m-0 px-1 py-2 text-meta text-muted">Nothing matches</p>}
+            {examReady && rows.length === 0 && <p className="arsenal-drawer__empty">Nothing matches</p>}
             <ResultList
               id="arsenal-results" label="Arsenal results" groups={listing ? rowGroups : [{ key: "categories", rows }]}
               selected={index} onActivate={activate}
@@ -342,7 +343,7 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
         )}
       </div>
       {previewRow && (
-        <div className="grid min-h-0 content-start gap-1 overflow-y-auto overflow-x-hidden border-t border-line px-4 py-3" onKeyDown={onPreviewKey}>
+        <div className="arsenal-drawer__preview" onKeyDown={onPreviewKey}>
           {filled ? (
             <>
             <CommandPreview
@@ -350,15 +351,15 @@ function DrawerBody({ engagementId, hostId: routeHostId }: { engagementId: strin
               overrides={overrides} onOverrides={setOverrides} rule={false}
               fieldRef={(t, el) => (el ? fieldEls.current.set(t, el) : fieldEls.current.delete(t))}
             />
-            {note && <p role="status" className={`m-0 text-meta ${guard.hint ? "text-warn" : "text-muted"}`}>{note}</p>}
-            {status && <p role="alert" className="m-0 text-meta text-warn">{status}</p>}
+            {note && <p role="status" className={guard.hint ? "arsenal-drawer__note arsenal-drawer__note--warn" : "arsenal-drawer__note"}>{note}</p>}
+            {status && <p role="alert" className="arsenal-drawer__note arsenal-drawer__note--warn">{status}</p>}
             </>
           ) : (
-            current && <p className="m-0 text-meta text-muted">↵ opens this {current.kind === "category" ? "category" : current.hit.type}</p>
+            current && <p className="arsenal-drawer__note">↵ opens this {current.kind === "category" ? "category" : current.hit.type}</p>
           )}
         </div>
       )}
-      <footer className="grid border-t border-line px-4 py-2">
+      <footer className="arsenal-drawer__footer">
         <HintLine hints={hints} ariaLabel="Arsenal shortcuts" />
       </footer>
     </div>
@@ -403,7 +404,7 @@ export function ArsenalDrawer() {
 
   if (!present) return null;
   return (
-    <aside ref={drawerRef} aria-label="Arsenal" data-hint-surface="" className={`fixed ${BELOW_TITLE_BAR} right-0 z-30 grid w-[500px] max-w-[70vw] border-l border-line-2 bg-surface text-fg-2`}>
+    <aside ref={drawerRef} aria-label="Arsenal" data-hint-surface="" className={`arsenal-drawer ${BELOW_TITLE_BAR}`}>
       <DrawerBody engagementId={engagementId} hostId={hostId} />
     </aside>
   );

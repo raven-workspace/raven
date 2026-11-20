@@ -61,13 +61,13 @@ describe("FillBar", () => {
     const filled = screen.getByRole("combobox", { name: "Value for LHOST" });
     expect(filled).toHaveValue("10.10.14.9");
     expect(filled).not.toHaveAttribute("placeholder", "10.10.14.9");
-    expect(filled).toHaveClass("text-fg-2!");
-    expect(filled).not.toHaveClass("border-warn!");
-    expect(screen.getByText("LHOST").closest("label")).not.toHaveClass("text-warn");
+    expect(filled).toHaveClass("fill-bar__input--auto");
+    expect(filled).not.toHaveClass("fill-bar__input--unfilled");
+    expect(screen.getByText("LHOST").closest("label")).not.toHaveClass("fill-bar__field--unfilled");
     const empty = screen.getByRole("combobox", { name: "Value for PORT" });
     expect(empty).toHaveValue("");
-    expect(empty).toHaveClass("border-warn!");
-    expect(screen.getByText("PORT").closest("label")).toHaveClass("text-warn");
+    expect(empty).toHaveClass("fill-bar__input--unfilled");
+    expect(screen.getByText("PORT").closest("label")).toHaveClass("fill-bar__field--unfilled");
   });
 
   it("typing over an auto value overrides it and clearing falls back to it", async () => {

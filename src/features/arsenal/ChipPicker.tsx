@@ -2,6 +2,8 @@ import { useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useStat
 import type { KeyboardEvent, Ref } from "react";
 import { PickerTrigger } from "../../ui";
 import { useEscapeWhile } from "../../lib/keys";
+import { cx } from "../../lib/cx";
+import "./ChipPicker.scss";
 
 export interface ChipPickerHandle { open(): void; focus(): void }
 export interface ChipOption {
@@ -32,7 +34,7 @@ export function ChipPicker({ options, value, onPick, onMousePick, label, listLab
   label: string; listLabel: string; title: string;
   /** Which edge of the chip the list lines up with. */
   align?: "start" | "end";
-  /** Allow the list to grow past min-w-48. */
+  /** A wider list (20rem), for options with two detail cells. */
   wide?: boolean;
   /** The trigger's small prefix ("Host"). */
   prefix: string;
@@ -130,7 +132,7 @@ export function ChipPicker({ options, value, onPick, onMousePick, label, listLab
   };
 
   return (
-    <div className="relative grid min-w-0">
+    <div className="chip-picker">
       <PickerTrigger
         ref={buttonRef}
         prefix={prefix}
@@ -152,7 +154,7 @@ export function ChipPicker({ options, value, onPick, onMousePick, label, listLab
           id={listId}
           role="listbox"
           aria-label={listLabel}
-          className={`absolute top-full z-30 ${side === "end" ? "right-0" : "left-0"} m-0 mt-1 grid max-h-60 ${wide ? "min-w-80" : "min-w-[max(100%,12rem)]"} list-none overflow-y-auto rounded-md border border-line-2 bg-surface p-1 text-body shadow-lg`}
+          className={cx("chip-picker__list", `chip-picker__list--${side}`, wide && "chip-picker__list--wide")}
         >
           {options.map((o, i) => (
             <li
@@ -164,11 +166,11 @@ export function ChipPicker({ options, value, onPick, onMousePick, label, listLab
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => pick(i, true)}
               onMouseMove={() => setActive(i)}
-              className={`grid cursor-default grid-cols-[minmax(0,1fr)_auto_auto] gap-4 rounded-sm px-2 py-1 whitespace-pre ${i === active ? "bg-accent/10 text-accent shadow-[inset_2px_0_0_var(--accent)]" : "text-fg-2"}`}
+              className="chip-picker__option"
             >
-              <span className="truncate">{o.name}</span>
-              <span className="text-meta text-muted">{o.detail ?? ""}</span>
-              <span className="text-meta text-muted">{o.detail2 ?? ""}</span>
+              <span className="chip-picker__name">{o.name}</span>
+              <span className="chip-picker__detail">{o.detail ?? ""}</span>
+              <span className="chip-picker__detail">{o.detail2 ?? ""}</span>
             </li>
           ))}
         </ul>

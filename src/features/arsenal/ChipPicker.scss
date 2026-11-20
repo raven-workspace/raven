@@ -1,0 +1,69 @@
+@use "@/styles/abstracts" as *;
+
+// A context picker: its trigger and the listbox under it, lined up with the trigger's start or end edge.
+@layer features {
+  .chip-picker {
+    position: relative;
+    display: grid;
+    min-width: 0;
+  }
+
+  // Over the page and the drawer's content.
+  .chip-picker__list {
+    position: absolute;
+    top: 100%;
+    z-index: 30;
+    display: grid;
+    min-width: max(100%, 12rem);
+    max-height: 15rem;
+    margin-top: var(--space-xs);
+    padding: var(--space-xs);
+    overflow-y: auto;
+    list-style-type: none;
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+    @include type(body);
+  }
+
+  .chip-picker__list--start {
+    left: 0;
+  }
+
+  .chip-picker__list--end {
+    right: 0;
+  }
+
+  // Room for each option's kind and how it fared (the credential picker).
+  .chip-picker__list--wide {
+    min-width: 20rem;
+  }
+
+  // The active option (pointer or arrow keys) has the accent wash and the 2px accent bar.
+  .chip-picker__option {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: var(--space-lg);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    color: var(--fg-2);
+    white-space: pre;
+    cursor: default;
+
+    &[aria-selected="true"] {
+      background-color: var(--accent);
+      background-color: color-mix(in oklab, var(--accent) 10%, transparent);
+      color: var(--accent);
+      box-shadow: inset 2px 0 0 var(--accent);
+    }
+  }
+
+  .chip-picker__name {
+    @include truncate;
+  }
+
+  .chip-picker__detail {
+    @include type(meta);
+    color: var(--muted);
+  }
+}

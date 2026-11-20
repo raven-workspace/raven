@@ -1,0 +1,20 @@
+@use "@/styles/abstracts" as *;
+
+// A `[[link]]` to a card: underlined text in a note, accent on hover.
+@layer features {
+  .wiki-link {
+    @include type(meta);
+    color: var(--fg-2);
+    text-decoration-line: underline;
+    text-decoration-color: var(--line-2);
+    text-underline-offset: 2px;
+    cursor: pointer;
+
+    @media (hover: hover) {
+      &:hover {
+        color: var(--accent);
+        text-decoration-color: var(--accent);
+      }
+    }
+  }
+}

@@ -4,7 +4,6 @@ import { filterForKind } from "../../engines/checklist";
 import { searchArsenal, type ArsenalHit } from "../../engines/library/arsenalSearch";
 import { allCategories, categoryLabel, categoryOf } from "../../engines/library/categories";
 import { getCards, getLibrary, useLibraryVersion } from "../../engines/library/store";
-import { cx } from "../../lib/cx";
 import { isDialogOpen, isTypingTarget, useEscapeBack, useKeydown } from "../../lib/keys";
 import { Button, HintLine, Select, type Hint } from "../../ui";
 import { useCredPickStore } from "../checklist/credPick";
@@ -22,6 +21,7 @@ import { SearchBar } from "./SearchBar";
 import { useArsenalStore } from "./useArsenalStore";
 import { useFillScope, useLastEngagementStore } from "./useFillScope";
 import { TabMarker } from "../../ui/TabMarker";
+import "./ArsenalBrowse.scss";
 
 type Row = ResultRow & { hit: ArsenalHit };
 type Kind = "card" | "command" | "generator";
@@ -255,10 +255,10 @@ export function ArsenalBrowse() {
     const common = { engagementId, hostId, overrides, onOverrides: setOverrides, focusCred, autoFocus: false, onOpenCard: fromCard };
     if (open.type === "generator") {
       return (
-        <article aria-label={open.title} className="grid content-start gap-2">
-          <h2 className="m-0 text-heading text-fg">{open.title}</h2>
-          <p className="m-0 text-meta text-muted">This generator is in Payloads, with the reverse shells and SQL injection.</p>
-          <Link to={payloadsPath(open.id)} className="justify-self-start text-body text-accent underline-offset-2 hover:underline">Open in Payloads ↵</Link>
+        <article aria-label={open.title} className="arsenal-browse__generator">
+          <h2 className="arsenal-browse__title">{open.title}</h2>
+          <p className="arsenal-browse__note">This generator is in Payloads, with the reverse shells and SQL injection.</p>
+          <Link to={payloadsPath(open.id)} className="arsenal-browse__link">Open in Payloads ↵</Link>
         </article>
       );
     }
@@ -266,14 +266,14 @@ export function ArsenalBrowse() {
     const c = open.command;
     const card = c.cardId ? cards.find((k) => k.id === c.cardId) : undefined;
     return (
-      <article aria-label={c.title} className="grid grid-cols-[minmax(0,1fr)] gap-3">
-        <header className="grid gap-1">
-          <h2 className="m-0 text-heading text-fg">{c.title}</h2>
-          <p className="m-0 grid grid-flow-col justify-start gap-2 text-meta text-muted"><span className="font-mono">{c.tool}</span><span>{categoryLabel(categoryOf(c, cards))}</span></p>
+      <article aria-label={c.title} className="arsenal-browse__article">
+        <header className="arsenal-browse__article-header">
+          <h2 className="arsenal-browse__title">{c.title}</h2>
+          <p className="arsenal-browse__where"><span className="arsenal-browse__tool">{c.tool}</span><span>{categoryLabel(categoryOf(c, cards))}</span></p>
         </header>
         <CommandPane key={c.id} commands={[c]} {...common} />
         {card && (
-          <div className="grid justify-items-start">
+          <div className="arsenal-browse__actions">
             <Button size="sm" onClick={() => fromCard(card.id)}>From card {card.title}</Button>
           </div>
         )}
@@ -291,18 +291,18 @@ export function ArsenalBrowse() {
   ];
 
   return (
-    <main aria-label="Arsenal" data-arsenal-browse="" data-hint-surface="" className="raven-page grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-6 py-6">
-      <header className="grid grid-cols-[minmax(200px,320px)_minmax(0,1fr)] items-center gap-x-4 gap-y-2">
+    <main aria-label="Arsenal" data-arsenal-browse="" data-hint-surface="" className="raven-page arsenal-browse">
+      <header className="arsenal-browse__header">
         <SearchBar
           label="Search the Arsenal" id={SEARCH_ID} inputRef={searchRef} placeholder="Search cards and commands" trailing={null}
           value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onSearchKey}
         />
-        <div className="grid grid-flow-col items-center justify-start gap-3 text-meta text-muted">
-          {d.engagement && <span title={d.engagement.name} className="min-w-0 max-w-48 truncate text-fg-2">{d.engagement.name}</span>}
+        <div className="arsenal-browse__scope">
+          {d.engagement && <span title={d.engagement.name} className="arsenal-browse__engagement">{d.engagement.name}</span>}
           {engagementId ? (
             <>
               <HostChip
-                ref={hostRef} align="start" hosts={d.hosts} value={host?.id ?? null} className="max-w-64"
+                ref={hostRef} align="start" hosts={d.hosts} value={host?.id ?? null} className="arsenal-browse__host"
                 onChange={(id) => {
                   setHostId(id);
                   setOverrides({});
@@ -310,7 +310,7 @@ export function ArsenalBrowse() {
               />
               <CredChip
                 ref={credRef} credentials={d.credentials ?? []} attempts={d.attempts ?? []} hostId={host?.id ?? null} value={cred}
-                onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} className="max-w-72"
+                onPick={(id) => useCredPickStore.getState().set(credOwnerId, id)} className="arsenal-browse__cred"
               />
             </>
           ) : (
@@ -318,17 +318,17 @@ export function ArsenalBrowse() {
           )}
         </div>
       </header>
-      <div className="grid min-h-0 grid-cols-[minmax(220px,260px)_minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-x-6 gap-y-3 min-[1100px]:grid-cols-[minmax(150px,180px)_minmax(220px,260px)_minmax(0,1fr)] min-[1280px]:grid-cols-[minmax(150px,180px)_minmax(260px,320px)_minmax(0,1fr)] min-[1100px]:grid-rows-[minmax(0,1fr)]">
-        <nav aria-label="Categories" className="col-start-1 row-start-1 min-h-0 min-[1100px]:overflow-y-auto min-[1100px]:overflow-x-hidden min-[1100px]:py-1 min-[1100px]:pl-1 min-[1100px]:pr-3">
-          <div className="grid min-[1100px]:hidden">
+      <div className="arsenal-browse__body">
+        <nav aria-label="Categories" className="arsenal-browse__categories">
+          <div className="arsenal-browse__category-picker">
             <Select
               aria-label="Category" ref={selectRef} value={current ?? ""} onValueChange={(c) => openCategory(c, false)}
               options={visible.map((c) => ({ value: c, label: `${categoryLabel(c)} (${searching ? (hits.get(c) ?? 0) : counts.get(c)})` }))}
-              className="w-full"
+              className="arsenal-browse__category-select"
             />
           </div>
-          <div ref={catsRef} role="tablist" aria-label="Categories" aria-orientation="vertical" onKeyDown={onCategoryKey} className="relative isolate hidden gap-0 min-[1100px]:grid">
-            <TabMarker className="rounded-sm bg-accent/10 shadow-[inset_2px_0_0_var(--accent)]" />
+          <div ref={catsRef} role="tablist" aria-label="Categories" aria-orientation="vertical" onKeyDown={onCategoryKey} className="arsenal-browse__tabs">
+            <TabMarker className="arsenal-browse__marker" />
             {visible.map((c) => {
               const n = searching ? (hits.get(c) ?? 0) : (counts.get(c) ?? 0);
               const on = c === current;
@@ -336,20 +336,17 @@ export function ArsenalBrowse() {
                 <button
                   key={c} type="button" role="tab" data-category={c} data-dim={searching && n === 0 ? "true" : undefined}
                   tabIndex={on ? 0 : -1} aria-selected={on} title={categoryLabel(c)} onClick={() => openCategory(c, true)}
-                  className={cx(
-                    "grid w-full cursor-default grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-sm border-0 bg-transparent px-2 py-1 text-left text-body",
-                    on ? "text-accent" : searching && n === 0 ? "text-muted hover:bg-surface-hi" : "text-fg-2 hover:bg-surface-hi",
-                  )}
+                  className="arsenal-browse__tab"
                 >
-                  <span className="truncate">{categoryLabel(c)}</span>
-                  <span className="text-meta text-muted">{n}</span>
+                  <span className="arsenal-browse__tab-name">{categoryLabel(c)}</span>
+                  <span className="arsenal-browse__tab-count">{n}</span>
                 </button>
               );
             })}
           </div>
         </nav>
-        <div className="col-start-1 row-start-2 min-h-0 overflow-y-auto overflow-x-hidden p-1 min-[1100px]:col-start-2 min-[1100px]:row-start-1">
-          {examReady && rows.length === 0 && <p className="m-0 px-2 py-1 text-meta text-muted">Nothing matches</p>}
+        <div className="arsenal-browse__results">
+          {examReady && rows.length === 0 && <p className="arsenal-browse__empty">Nothing matches</p>}
           <ResultList
             id="arsenal-results" label="Arsenal results" groups={resultGroups} selected={index}
             onActivate={(r) => {
@@ -363,12 +360,12 @@ export function ArsenalBrowse() {
         </div>
         <section
           id={READING_ID} ref={readingRef} tabIndex={-1} aria-label="Reading" onKeyDown={onReadingKey}
-          className="min-h-0 overflow-y-auto overflow-x-hidden pb-4 pl-2 pr-4 pt-3 outline-none [--pane-bg:var(--bg)] min-[1100px]:col-start-3 max-[1099px]:col-start-2 max-[1099px]:row-span-2 max-[1099px]:row-start-1"
+          className="arsenal-browse__reading"
         >
           {reading}
         </section>
       </div>
-      <footer className="grid border-t border-line pt-3">
+      <footer className="arsenal-browse__footer">
         <HintLine hints={hints} ariaLabel="Arsenal shortcuts" />
       </footer>
     </main>

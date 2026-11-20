@@ -10,6 +10,7 @@ import { fillLibraryCommand } from "../checklist/goalCommands";
 import type { SuggestContext } from "../palette/suggest";
 import { FillBar } from "./FillBar";
 import { autoFill, tokensOf } from "./fillTokens";
+import "./CommandPreview.scss";
 
 export interface FilledPreview {
   cmd: FilledCommand;
@@ -62,8 +63,8 @@ export function CommandPreview({ filled, hasCred, hostKey, suggest, os, override
     return () => clearTimeout(t);
   }, [hostKey]);
   return (
-    <div className={rule ? "grid gap-2 border-t border-line pt-3" : "grid gap-2"}>
-      <pre className={`${COMMAND_PRE} max-h-48 overflow-y-auto`} tabIndex={0} role="group" aria-label={`Command: ${filled.cmd.title}`} {...(flash ? { "data-flash": "" } : {})}><MarkedText text={filled.cmd.text} tokens={filled.cmd.tokens ?? []} /></pre>
+    <div className={rule ? "command-preview command-preview--rule" : "command-preview"}>
+      <pre className={`${COMMAND_PRE} command-preview__command`} tabIndex={0} role="group" aria-label={`Command: ${filled.cmd.title}`} {...(flash ? { "data-flash": "" } : {})}><MarkedText text={filled.cmd.text} tokens={filled.cmd.tokens ?? []} /></pre>
       {filled.cmd.msfMarker && <Chip>uses your one Metasploit host</Chip>}
       <FillBar tokens={filled.tokens} hasCred={hasCred} auto={filled.auto} suggest={suggest} os={os} overrides={overrides} onOverrides={onOverrides} fieldRef={fieldRef} />
     </div>

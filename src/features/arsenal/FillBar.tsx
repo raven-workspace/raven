@@ -1,6 +1,8 @@
 import { FilePicker, isFileToken } from "../generators/FilePicker";
 import { tokenSuggestions, type SuggestContext } from "../palette/suggest";
 import { TokenInput } from "../palette/TokenInput";
+import { cx } from "../../lib/cx";
+import "./FillBar.scss";
 
 /**
  * The fill fields of a command or card, in the order its templates first use them (editing never reorders). An
@@ -19,7 +21,7 @@ export function FillBar({ tokens: all, hasCred = false, auto, overrides, onOverr
   const tokens = hasCred ? all.filter((t) => !((t === "USER" || t === "DOMAIN") && auto[t] && !auto[t].unresolved)) : all;
   if (tokens.length === 0) return null;
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-x-4 gap-y-2" aria-label="Fill values">
+    <div className="fill-bar" aria-label="Fill values">
       {tokens.map((t) => {
         const a = auto[t] ?? { text: "", unresolved: true };
         const typed = overrides[t] ?? "";
@@ -36,7 +38,7 @@ export function FillBar({ tokens: all, hasCred = false, auto, overrides, onOverr
           name: t,
           value: typed || a.text,
           onChange: set,
-          className: `w-full min-w-0 ${unfilled ? "border-warn!" : typed ? "text-fg!" : "text-fg-2!"}`,
+          className: cx("fill-bar__input", unfilled ? "fill-bar__input--unfilled" : typed ? "fill-bar__input--typed" : "fill-bar__input--auto"),
           autoValue: !typed && !a.unresolved,
           ref: fieldRef ? (el: HTMLInputElement | null) => fieldRef(t, el) : undefined,
         };
@@ -44,11 +46,11 @@ export function FillBar({ tokens: all, hasCred = false, auto, overrides, onOverr
           <label
             key={t}
             {...(t === "DC_IP" && a.dcByName && !typed ? { title: "DC (by name): no Kerberos/LDAP seen, picked by its host name" } : {})}
-            className={`grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 text-meta ${unfilled ? "text-warn" : "text-muted-2"}`}
+            className={cx("fill-bar__field", unfilled && "fill-bar__field--unfilled")}
           >
             <span>
               {t}
-              {t === "DC_IP" && a.dcByName && !typed && <span className="ml-1 text-meta text-muted-2">(by name)</span>}
+              {t === "DC_IP" && a.dcByName && !typed && <span className="fill-bar__by-name">(by name)</span>}
             </span>
             {isFileToken(t) ? (
               <FilePicker {...shared} os={os} />

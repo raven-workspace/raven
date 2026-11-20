@@ -1,0 +1,252 @@
+@use "@/styles/abstracts" as *;
+
+// The full-screen Arsenal. Under 1100px: categories as a select over the results, the reading pane beside both. From
+// 1100px: three columns, categories as a vertical tab list; from 1280px the results column grows.
+@layer features {
+  .arsenal-browse {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: var(--space-lg);
+    height: 100%;
+    min-height: 0;
+    padding: var(--space-xl);
+  }
+
+  .arsenal-browse__header {
+    display: grid;
+    grid-template-columns: minmax(200px, 320px) minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--space-lg);
+    row-gap: var(--space-sm);
+  }
+
+  .arsenal-browse__scope {
+    display: grid;
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--space-md);
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .arsenal-browse__engagement {
+    min-width: 0;
+    max-width: 12rem;
+    @include truncate;
+    color: var(--fg-2);
+  }
+
+  .arsenal-browse__host {
+    max-width: 16rem;
+  }
+
+  .arsenal-browse__cred {
+    max-width: 18rem;
+  }
+
+  .arsenal-browse__body {
+    display: grid;
+    grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    column-gap: var(--space-xl);
+    row-gap: var(--space-md);
+    min-height: 0;
+
+    @media (width >= 1100px) {
+      grid-template-columns: minmax(150px, 180px) minmax(220px, 260px) minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
+    }
+
+    @media (width >= 1280px) {
+      grid-template-columns: minmax(150px, 180px) minmax(260px, 320px) minmax(0, 1fr);
+    }
+  }
+
+  .arsenal-browse__categories {
+    grid-column-start: 1;
+    grid-row-start: 1;
+    min-height: 0;
+
+    @media (width >= 1100px) {
+      padding-block: var(--space-xs);
+      padding-right: var(--space-md);
+      padding-left: var(--space-xs);
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+  }
+
+  .arsenal-browse__category-picker {
+    display: grid;
+
+    @media (width >= 1100px) {
+      display: none;
+    }
+  }
+
+  .arsenal-browse__category-select {
+    width: 100%;
+  }
+
+  .arsenal-browse__tabs {
+    position: relative;
+    isolation: isolate;
+    display: none;
+    gap: 0;
+
+    @media (width >= 1100px) {
+      display: grid;
+    }
+  }
+
+  .arsenal-browse__marker {
+    border-radius: var(--radius-sm);
+    background-color: var(--accent);
+    background-color: color-mix(in oklab, var(--accent) 10%, transparent);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+
+  // A category with no hits for the search is dimmed (data-dim); the selected one is accent and never tinted on hover.
+  .arsenal-browse__tab {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    @include type(body);
+    color: var(--fg-2);
+    text-align: left;
+    cursor: default;
+
+    &[data-dim] {
+      color: var(--muted);
+    }
+
+    &[aria-selected="true"] {
+      color: var(--accent);
+    }
+
+    @media (hover: hover) {
+      &[aria-selected="false"]:hover {
+        background-color: var(--surface-hi);
+      }
+    }
+  }
+
+  .arsenal-browse__tab-name {
+    @include truncate;
+  }
+
+  .arsenal-browse__tab-count {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .arsenal-browse__results {
+    grid-column-start: 1;
+    grid-row-start: 2;
+    min-height: 0;
+    padding: var(--space-xs);
+    overflow-x: hidden;
+    overflow-y: auto;
+
+    @media (width >= 1100px) {
+      grid-column-start: 2;
+      grid-row-start: 1;
+    }
+  }
+
+  .arsenal-browse__empty {
+    padding: var(--space-xs) var(--space-sm);
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  // The reading pane is on black: a card's sticky strip takes its background from --pane-bg.
+  .arsenal-browse__reading {
+    --pane-bg: var(--bg);
+    min-height: 0;
+    padding: var(--space-md) var(--space-lg) var(--space-lg) var(--space-sm);
+    overflow-x: hidden;
+    overflow-y: auto;
+    outline-style: none;
+
+    @media (width < 1099px) {
+      grid-column-start: 2;
+      grid-row: span 2 / span 2;
+      grid-row-start: 1;
+    }
+
+    @media (width >= 1100px) {
+      grid-column-start: 3;
+    }
+  }
+
+  .arsenal-browse__footer {
+    display: grid;
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--line);
+  }
+
+  .arsenal-browse__article {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-md);
+  }
+
+  // A generator lives in Payloads: its title, a line saying so, and a link there.
+  .arsenal-browse__generator {
+    display: grid;
+    align-content: flex-start;
+    gap: var(--space-sm);
+  }
+
+  .arsenal-browse__article-header {
+    display: grid;
+    gap: var(--space-xs);
+  }
+
+  .arsenal-browse__title {
+    @include type(heading);
+    color: var(--fg);
+  }
+
+  .arsenal-browse__where {
+    display: grid;
+    grid-auto-flow: column;
+    justify-content: flex-start;
+    gap: var(--space-sm);
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .arsenal-browse__tool {
+    @include mono;
+  }
+
+  .arsenal-browse__note {
+    @include type(meta);
+    color: var(--muted);
+  }
+
+  .arsenal-browse__link {
+    justify-self: flex-start;
+    @include type(body);
+    color: var(--accent);
+    text-underline-offset: 2px;
+
+    @media (hover: hover) {
+      &:hover {
+        text-decoration-line: underline;
+      }
+    }
+  }
+
+  .arsenal-browse__actions {
+    display: grid;
+    justify-items: start;
+  }
+}
